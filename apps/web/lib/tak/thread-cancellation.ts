@@ -52,6 +52,11 @@ export async function stopThreadTurn(threadId: string, userId: string): Promise<
   const thread = await prisma.agentThread.findUnique({ where: { id: threadId }, select: { id: true, userId: true } });
   if (!thread) throw new Error(`Thread ${threadId} not found.`);
   if (thread.userId !== userId) throw new Error("Unauthorized: thread is owned by another user.");
+  await prisma.taskRun.updateMany({
+    where: { threadId, userId, source: "coworker", status: { notIn: [...TERMINAL_TASK_STATE_LIST] },
+      a2aMetadata: { path: ["foregroundRequest", "schemaVersion"], equals: 1 } },
+    data: { status: "canceled", completedAt: new Date() },
+  });
   const children = await prisma.agentThread.findMany({ where: { parentThreadId: thread.id, cancelledAt: null }, select: { id: true } });
   const working = children.length === 0 ? [] : await prisma.taskRun.findMany({
     where: { threadId: { in: children.map((child) => child.id) }, status: { notIn: [...TERMINAL_TASK_STATE_LIST] } },

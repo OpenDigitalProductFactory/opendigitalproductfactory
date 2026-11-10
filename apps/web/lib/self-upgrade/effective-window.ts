@@ -22,6 +22,7 @@ import {
   type SelfUpgradeConfig,
 } from "@/lib/self-upgrade/config";
 import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/window";
+import { nextOpeningAfter, openingStartedAt } from "@/lib/self-upgrade/windows-eval";
 
 export type EffectiveWindowSource = "explicit" | "operating-hours" | "auto-overnight" | "needs-timezone";
 
@@ -77,4 +78,43 @@ export async function resolveEffectiveUpgradeWindow(args: {
   }
 
   return { source, open, nextWindowStart, windows, schedule, timezone };
+}
+
+function isOpenAt(window: EffectiveUpgradeWindow): (at: Date) => boolean {
+  return (at) => isUpgradeWindowOpen({
+    explicitWindows: window.windows,
+    schedule: window.schedule,
+    timeZone: window.timezone,
+    now: at,
+  });
+}
+
+/**
+ * BI-EF1AC111. When the opening the window is in right now began. The
+ * scheduled interval is anchored to it, so a check made before it (a daytime
+ * manual upgrade, last night's run) does not use it up. Null while closed, for
+ * `needs-timezone`, or when the window has no bounded opening.
+ */
+export function currentWindowOpenedAt(window: EffectiveUpgradeWindow, now: Date): Date | null {
+  if (!window.open || window.source === "needs-timezone") return null;
+  return openingStartedAt(isOpenAt(window), now);
+}
+
+/**
+ * BI-EF1AC111. Start of the opening after the current one, while the window is
+ * open (the status panel reports the next check, which may fall in it). Null
+ * while closed (use `nextWindowStart`) or when none is found.
+ */
+export function followingWindowStart(window: EffectiveUpgradeWindow, now: Date): Date | null {
+  if (!window.open || window.source === "needs-timezone") return null;
+  return nextOpeningAfter(isOpenAt(window), now);
+}
+
+/**
+ * BI-EF1AC111. The opening the next scheduled check would run in: the current
+ * one while open, otherwise the next one.
+ */
+export function schedulingWindowOpening(window: EffectiveUpgradeWindow, now: Date): Date | null {
+  if (window.source === "needs-timezone") return null;
+  return window.open ? currentWindowOpenedAt(window, now) : window.nextWindowStart;
 }

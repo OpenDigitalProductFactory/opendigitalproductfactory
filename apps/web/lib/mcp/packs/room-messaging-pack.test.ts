@@ -1,10 +1,10 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   item: vi.fn(), children: vi.fn(), updateItem: vi.fn(), messages: vi.fn(), access: vi.fn(), engagement: vi.fn(),
   ensureAgent: vi.fn(), syncUser: vi.fn(), appendPolicy: vi.fn(), persistAssignments: vi.fn(),
   postComment: vi.fn(), heartbeat: vi.fn(), loadMembers: vi.fn(), workrooms: vi.fn(), workroomByCapsule: vi.fn(), workroomAccess: vi.fn(),
   executeAppointment: vi.fn(), currentUser: vi.fn(), can: vi.fn(),
-  broadcastAsk: vi.fn(), broadcastAck: vi.fn(), mentionRoster: vi.fn(),
+  broadcastAsk: vi.fn(), broadcastAck: vi.fn(), setDataAccess: vi.fn(), mentionRoster: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   workItem: { findFirst: mocks.item, findMany: mocks.children, update: mocks.updateItem },
@@ -12,6 +12,7 @@ vi.mock("@dpf/db", () => ({ prisma: {
   workroom: { findMany: mocks.workrooms, findUnique: mocks.workroomByCapsule },
   notification: { create: vi.fn() },
   agent: { findUnique: vi.fn() },
+  backlogItem: { findFirst: vi.fn().mockResolvedValue(null) },
 } }));
 vi.mock("@/lib/identity/principal-linking", () => ({ ensureAgentPrincipalIdentity: mocks.ensureAgent, syncUserPrincipal: mocks.syncUser }));
 vi.mock("@/lib/work-management/coworker-room-engagement.server", () => ({ getCoworkerRoomEngagement: mocks.engagement }));
@@ -30,6 +31,10 @@ vi.mock("@/lib/operate/coo-broadcast.server", () => ({
   executeCooBroadcastAck: mocks.broadcastAck,
 }));
 vi.mock("@/lib/work-management/mention-roster.server", () => ({ loadWorkspaceMentionRoster: mocks.mentionRoster }));
+vi.mock("@/lib/identity/coworker-data-access", () => {
+  class CoworkerDataAccessError extends Error {}
+  return { setCoworkerDataAccess: mocks.setDataAccess, CoworkerDataAccessError };
+});
 vi.mock("@/lib/work-management/case-key", () => ({ decodeWorkCaseKey: (key: string) => ({ sourceType: "backlog-item", sourceId: key }) }));
 import { roomMessagingPack } from "./room-messaging-pack";
 
@@ -38,7 +43,7 @@ beforeEach(() => {
   mocks.item.mockImplementation(async ({ where }) => ({ id: where.OR[0].sourceId, evidence: [], assignedToUserId: "alice", assignedToAgentId: "agent" }));
   mocks.access.mockImplementation(async ({ workItem }) => ({ decision: { level: workItem.id === "parent" ? "content" : "none" }, agentPrincipalId: "PRN-agent" }));
   mocks.messages.mockResolvedValue([]);
-  mocks.ensureAgent.mockResolvedValue({ principalId: "PRN-other", displayName: "Other coworker" });
+  mocks.ensureAgent.mockResolvedValue({ principalId: "PRN-other", displayName: "Other coworker", sensitivityClearance: ["public", "internal"] });
   mocks.syncUser.mockResolvedValue({ principalId: "PRN-alice", displayName: "Alice" });
   mocks.appendPolicy.mockReturnValue([{ workroomPolicy: {} }]);
   mocks.loadMembers.mockResolvedValue([]);
@@ -300,4 +305,48 @@ it("resolves @mentions in an agent's post against the workspace mention roster",
 
   expect(result.success).toBe(true);
   expect(mocks.postComment).toHaveBeenCalledWith(expect.objectContaining({ roster }));
+});
+
+// BI-6AE64074: an approved invite that asks for a raise raises the invitee's data
+// access through the audited control first, and admits nobody if that is refused.
+describe("invite with a data access raise", () => {
+  const raiseInvite = () => roomMessagingPack.handlers.invite_room_participant(
+    { caseKey: "backlog-item:BI-ORG", agentId: "other", raiseClearanceTo: "internal" },
+    "alice",
+    { agentId: "agent" },
+  );
+
+  beforeEach(() => {
+    mocks.item.mockResolvedValue({ id: "room-item", itemId: "WI-ORG", sourceType: "workroom", sourceId: "WC-ORG", title: "Org room", evidence: [] });
+    mocks.access.mockResolvedValue({ decision: { level: "action", reason: "authorized" }, agentPrincipalId: "PRN-agent" });
+    mocks.ensureAgent.mockResolvedValue({ principalId: "PRN-other", displayName: "Other coworker", sensitivityClearance: ["public"] });
+  });
+
+  it("raises the invitee's data access to the room's level, then admits it", async () => {
+    mocks.setDataAccess.mockResolvedValue({ levels: ["public", "internal"] });
+    const result = await raiseInvite();
+    expect(mocks.setDataAccess).toHaveBeenCalledWith("alice", expect.objectContaining({
+      agentId: "other", expected: ["public"], levels: ["public", "internal"],
+      reason: expect.stringContaining("backlog-item:BI-ORG"),
+    }));
+    expect(mocks.updateItem).toHaveBeenCalled();
+    expect(result.success).toBe(true);
+  });
+
+  it("admits nobody when the person cannot grant that data access", async () => {
+    const { CoworkerDataAccessError } = await import("@/lib/identity/coworker-data-access");
+    mocks.setDataAccess.mockRejectedValue(new CoworkerDataAccessError("You need permission to manage coworkers."));
+    const result = await raiseInvite();
+    expect(result).toMatchObject({ success: false, error: "clearance_raise_refused", data: { membershipRecorded: false } });
+    expect(result.message).toContain("You need permission to manage coworkers.");
+    expect(mocks.updateItem).not.toHaveBeenCalled();
+  });
+
+  it("refuses before any write when the invitee cannot read the room and no raise was asked", async () => {
+    const result = await roomMessagingPack.handlers.invite_room_participant(
+      { caseKey: "backlog-item:BI-ORG", agentId: "other" }, "alice", { agentId: "agent" });
+    expect(result).toMatchObject({ success: false, error: "invitee_clearance_below_room" });
+    expect(mocks.setDataAccess).not.toHaveBeenCalled();
+    expect(mocks.updateItem).not.toHaveBeenCalled();
+  });
 });

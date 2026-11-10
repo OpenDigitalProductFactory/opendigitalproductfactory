@@ -170,6 +170,16 @@ ecosystem/inbound-issue-triage          ← NEW scheduled job on evolve-dpf inst
                                                                        EXISTS, unused for this
 ```
 
+**Peer demand comes from other organizations only (BI-F4866228, 2026-11-03).**
+The intake reads demand envelopes only from a live link (`trusted`, not
+revoked or quarantined) to another organization. A `same-org-peer` link sends
+its whole backlog as demand envelopes, and work sync already mirrors that
+backlog here. Before this rule, the first commissioned production run filed
+each envelope as a new item, about 4,000 duplicates. The untouched copies were
+retired, and recorded as duplicates where an original existed, by migration
+`20261103180000_retire_same_org_peer_demand_intake_copies`. An organization's
+own installations share work through work sync, never through intake.
+
 Almost every box is existing substrate. The genuinely new code is the **GitHub issue read path** and the two scheduled jobs. `dpf.demand.dispositioned` is already a declared activity with a handler — §3.5's writeback obligation is satisfied by using it rather than inventing a notification.
 
 ### 4.4 Ballot composition — every participant votes, but not on everything
@@ -648,6 +658,38 @@ approval timeout has changed, and runtime acceptance remains outstanding.
 - Integration: a report on a non-coding install reaches an upstream BacklogItem with submitter provenance intact and no PII in the envelope (`assertNoExcludedEgress` already enforces this — assert it in the test).
 - Negative: no opt-in → nothing leaves. Budget exhausted → the vote is refused, not silently dropped. Untrusted link → no transport.
 - Runtime: exercised on the canonical runtime per §4 of the rulebook; a gate that cannot run is recorded inconclusive, never passed.
+
+### 6.2 Remediating copies of same-organization demand (BI-39247CB8)
+
+The first commissioned production run, and the run of 2026-11-03, filed 4,138
+local copies from same-organization peer demand. These included envelopes from
+revoked links and envelopes the peer had withdrawn. BI-C7D95F7E and BI-F4866228
+fix the intake.
+
+WWMD DI-F7294B768E8D (high stakes) decides the remediation. It chooses one
+governed, reversible bulk retire over a SQL retire at upgrade, scoring 12.53
+against 7.47.
+
+The tool `retire_peer_demand_intake_copies` (apps/web/lib/backlog/peer-demand-intake-copies.ts
+and peer-demand-intake-copy-retirement.ts) implements it:
+
+- **Selector.** It takes every item that carries the `[origin:ecosystem-peer-demand:fdm_…]`
+  marker and whose mirror is on a same-org-peer link, a revoked link, or withdrawn.
+  Live cross-organization demand is out of scope.
+- **Kept for individual review.** Items not in triaging or open status; items
+  that are claimed, have a build, are in a Workroom, or have demand evidence;
+  items with any activity a person recorded, or with work activity beyond
+  filing, twinning, scoring and automated triage; items that absorbed a local
+  intake origin; items with a mutating tool call after filing; and items whose
+  body carries a work-sync marker.
+- **Governance.** The dry run is read-only and returns a selection digest. The
+  retire call is irreversible, so it opens one approval envelope. When the
+  envelope runs, the call re-derives the selection and refuses if the digest
+  has changed.
+- **Effect.** Each item goes through `retireBacklogItemTool`, with outcome
+  `duplicate` of the earliest same-title work-sync mirror, otherwise `discard`.
+  This writes a status_change activity. The item can be restored with
+  update_backlog_item_status, and repeating the call has no further effect.
 
 ## 7. Open decisions for WWMD / the operator
 

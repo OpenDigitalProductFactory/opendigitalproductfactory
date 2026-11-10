@@ -65,3 +65,21 @@ invocation. The roster reads retained successful dispatch activity and its recor
 agent from its original dispatch ledger. Lease-held and
 missing-owner observations are not dispatch evidence. A task's later reassignment
 does not change the historical agent shown.
+
+## The Work Atlas picture
+
+`list_workrooms` with `view: "atlas"` returns the Work Atlas picture instead of a
+paged observation:
+
+- **Counts:** every open Workroom, counted once in each of the six health states
+  (needs a person, stuck, working, waiting, no signal, finished).
+- **Rows:** up to `limit` compact rows, default 10 and maximum 400. `health` filters
+  them to one state, and `roomsMatching` says how many matched.
+
+Each row is the same row the portal's Work Atlas reads, so a person and an agent
+see the same room the same way. `truncated` is true when the installation has
+more open rooms than one picture reads (2,000). Counts then cover the rooms read.
+The atlas view takes `portfolioRole`, `health` and `limit`; it takes no cursor and
+no other instance filters.
+
+Design: [Work Atlas](../superpowers/specs/2026-10-27-work-atlas-design.md) §4.

@@ -236,17 +236,17 @@ function defined<T extends Record<string, unknown>>(value: T): T {
   ) as T;
 }
 
-function defaultDb(): CoworkerSelfAssessmentDb {
+export function assessmentDbForClient(db: Pick<Prisma.TransactionClient, "coworkerSelfAssessment" | "coworkerCapabilityNeed"> = prisma): CoworkerSelfAssessmentDb {
   return {
     createAssessment: (data) =>
-      prisma.coworkerSelfAssessment.create({
+      db.coworkerSelfAssessment.create({
         data: {
           ...data,
           rawPayload: data.rawPayload as Prisma.InputJsonValue,
         },
       }),
     createNeed: (data) =>
-      prisma.coworkerCapabilityNeed.create({
+      db.coworkerCapabilityNeed.create({
         data: {
           ...data,
           evidenceJson: data.evidenceJson as Prisma.InputJsonValue,
@@ -254,7 +254,7 @@ function defaultDb(): CoworkerSelfAssessmentDb {
         },
       }),
     listNeeds: (filters) =>
-      prisma.coworkerCapabilityNeed.findMany({
+      db.coworkerCapabilityNeed.findMany({
         where: defined({
           agentId: filters.agentId,
           status: filters.status,
@@ -264,7 +264,7 @@ function defaultDb(): CoworkerSelfAssessmentDb {
         orderBy: [{ severity: "asc" }, { createdAt: "desc" }],
       }),
     updateNeed: (needId, data) =>
-      prisma.coworkerCapabilityNeed.update({
+      db.coworkerCapabilityNeed.update({
         where: { needId },
         data,
       }),
@@ -275,7 +275,7 @@ function depsOrDefault(deps?: Partial<CoworkerSelfAssessmentDeps>): CoworkerSelf
   return {
     now: deps?.now ?? (() => new Date()),
     createId: deps?.createId ?? defaultCreateId,
-    db: deps?.db ?? defaultDb(),
+    db: deps?.db ?? assessmentDbForClient(),
     fileBacklogItem: deps?.fileBacklogItem ?? defaultFileBacklogItem(),
   };
 }

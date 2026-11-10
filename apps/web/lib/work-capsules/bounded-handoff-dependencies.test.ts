@@ -11,7 +11,8 @@ describe("bounded handoff dependency fence", () => {
   it.each(["queued", "active", "unknown-positive"])("refuses a %s lease even when its TTL elapsed", async status => {
     const db = fixture(); db.nonProductionEnvironmentLease.findFirst.mockResolvedValue({ leaseId: "NPEL-held", status, expiresAt: new Date(now.getTime()-1000), ownerSessionId: "receiver", environmentKey: "local-integration-ci" });
     await expect(check(db)).rejects.toMatchObject({ code: "handoff-lease-dependency" });
-    expect(db.nonProductionEnvironmentLease.findFirst.mock.calls[0][0].where).toMatchObject({ ownerSessionId: { in: ["source", "receiver"] }, status: { notIn: ["released", "expired", "cancelled"] } });
+    expect(db.nonProductionEnvironmentLease.findFirst.mock.calls[0][0].where).toMatchObject({ ownerSessionId: { in: ["source", "receiver"] }, status: { notIn: ["released", "expired", "cancelled"] },
+      OR: [{ branchName: room.headBranch }, { branchName: null }] });
   });
   it("refuses Build Studio associations before considering external destinations", async () => {
     await expect(check(fixture(), { ...room, featureBuildId: "build" } as never)).rejects.toMatchObject({ code: "handoff-build-dependency" });

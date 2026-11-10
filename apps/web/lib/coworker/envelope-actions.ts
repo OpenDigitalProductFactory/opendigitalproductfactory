@@ -22,6 +22,12 @@ import { isRecord } from "@/lib/shared/coerce";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { humanApprovalMarker } from "./human-approved-execution";
 import { labelOnBehalfDecision, readOnBehalfDecision, type OnBehalfDecision } from "./on-behalf-decision";
+import {
+  buildStandingRuling,
+  standingRulingEligibility,
+  standingRulingRefusalText,
+  type StandingRuling,
+} from "./standing-ruling-policy";
 
 import {
   describeTransitionError,
@@ -43,6 +49,7 @@ export interface EnvelopeRow {
   manifestActionId: string;
   argsJson: unknown;
   approvalBindingFingerprint?: string | null;
+  authorityDecisionId?: string | null;
   rationale: string;
   status: EnvelopeStatus;
   createdAt: Date;
@@ -54,7 +61,7 @@ export interface EnvelopeRow {
 // refusal contract (structured reason + status for the API routes), renamed so
 // the generic name has exactly one home (BI-1CED89B9, Simplify & Strengthen W6).
 export type EnvelopeActionResult<T = EnvelopeRow> =
-  | { ok: true; envelope: T }
+  | { ok: true; envelope: T; standing?: StandingRulingOutcome }
   | { ok: false; reason: string; httpStatus: number };
 
 /** Common load + validate prelude. Returns the row in a known-good shape
@@ -219,6 +226,37 @@ async function writeDecision(
   return { ok: true, envelope: { ...envelope, ...data } };
 }
 
+/** BI-E5631708: what became of a request to make this approval standing. */
+export type StandingRulingOutcome =
+  | { recorded: true; ruling: StandingRuling }
+  | { recorded: false; reason: string; message: string };
+
+/** The owner asked for a standing ruling: is it allowed, and what is stored? */
+async function standingRulingFor(
+  envelope: EnvelopeRow,
+  callerUserId: string,
+  onBehalf: boolean,
+): Promise<StandingRulingOutcome> {
+  if (!boundAuthorityArgs(envelope)) {
+    return { recorded: false, reason: "not-an-authority-request", message: standingRulingRefusalText("not-an-authority-request") };
+  }
+  const log = envelope.authorityDecisionId
+    ? await prisma.authorizationDecisionLog.findUnique({
+        where: { decisionId: envelope.authorityDecisionId },
+        select: { rationale: true },
+      }).catch(() => null)
+    : null;
+  const eligibility = standingRulingEligibility({
+    envelope,
+    decisionRationale: log?.rationale ?? null,
+    onBehalf,
+  });
+  if (!eligibility.eligible) {
+    return { recorded: false, reason: eligibility.reason, message: standingRulingRefusalText(eligibility.reason) };
+  }
+  return { recorded: true, ruling: buildStandingRuling(eligibility.actionClass, callerUserId, new Date()) };
+}
+
 /** User-side approve: proposed → approved. The actual underlying-tool
  *  execution happens in a follow-on call (markExecutedOnSuccess /
  *  markFailedOnExecutionError); they're split so the approval audit row
@@ -228,6 +266,7 @@ export async function approveEnvelope(
   envelopeId: string,
   callerUserId: string,
   onBehalf?: OnBehalfDecisionRequest,
+  options?: { makeStanding?: boolean },
 ): Promise<EnvelopeActionResult<EnvelopeRow>> {
   const load = await loadEnvelope(envelopeId);
   if (!load.ok) return load;
@@ -235,6 +274,11 @@ export async function approveEnvelope(
   if (authz.refusal) return authz.refusal;
   const lapsed = await refuseIfLapsed(load.envelope);
   if (lapsed) return lapsed;
+  // BI-E5631708: an owner's "don't ask again" rides on the same write as the
+  // approval, so a ruling never exists without the approval it came from.
+  const standing = options?.makeStanding === true
+    ? await standingRulingFor(load.envelope, callerUserId, authz.reason !== null)
+    : undefined;
 
   const transition = transitionOnApprove(load.envelope.status);
   if (!transition.ok) {
@@ -259,6 +303,7 @@ export async function approveEnvelope(
       humanApproval: authz.reason
         ? { ...marker, by: callerUserId, onBehalfOf: load.envelope.delegatingUserId, reason: authz.reason }
         : marker,
+      ...(standing?.recorded ? { standingRuling: standing.ruling } : {}),
     } as Prisma.InputJsonObject } : {}),
   };
   // Approving does NOT mark the waiting task working here, and must not.
@@ -273,7 +318,7 @@ export async function approveEnvelope(
   // re-checks freshness against the call's current classification.
   const decided = await writeDecision(load.envelope, data);
   if (decided.ok && authz.reason) await auditOnBehalf(load.envelope, callerUserId, authz.reason, "approve");
-  return decided;
+  return decided.ok && standing ? { ...decided, standing } : decided;
 }
 
 /** User-side deny: proposed → declined. Terminal — the envelope cannot

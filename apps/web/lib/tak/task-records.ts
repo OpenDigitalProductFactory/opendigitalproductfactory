@@ -1,8 +1,11 @@
 import { randomUUID } from "crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { prisma, type Prisma } from "@dpf/db";
 
 type TaskJson = Prisma.InputJsonValue | null;
 type TaskRunReader = { taskRun: Pick<Prisma.TransactionClient["taskRun"], "findUnique"> };
+type TaskArtifactWriter = TaskRunReader & { taskArtifact: Pick<Prisma.TransactionClient["taskArtifact"], "create" | "upsert"> };
+
 type TaskMessageWriter = TaskRunReader & { taskMessage: Pick<Prisma.TransactionClient["taskMessage"], "create"> };
 
 function toTaskJson(value: unknown): TaskJson {
@@ -69,6 +72,8 @@ export async function createTaskMessage(input: {
 }
 
 export async function createTaskArtifact(input: {
+  /** Server-derived identity for immutable, retry-safe publication. */
+  artifactId?: string;
   taskRunId: string;
   taskRunRecordId?: string | null;
   artifactType: string;
@@ -79,17 +84,16 @@ export async function createTaskArtifact(input: {
   metadata?: unknown;
   producerAgentId?: string | null;
   producerNodeId?: string | null;
-}): Promise<{ id: string; artifactId: string }> {
+}, db: TaskArtifactWriter = prisma): Promise<{ id: string; artifactId: string }> {
   const taskRun = await resolveTaskRunRecord({
     publicTaskRunId: input.taskRunId,
     taskRunRecordId: input.taskRunRecordId,
-  });
+  }, db);
   const metadata = toTaskJson(input.metadata);
 
-  const created = await prisma.taskArtifact.create({
-    data: {
+  const data = {
       id: randomUUID(),
-      artifactId: `ta_${randomUUID()}`,
+      artifactId: input.artifactId ?? `ta_${randomUUID()}`,
       taskRunId: taskRun.id,
       name: input.name,
       description: input.summary ?? null,
@@ -103,12 +107,17 @@ export async function createTaskArtifact(input: {
       producerAgentId: input.producerAgentId ?? null,
       producerNodeId: input.producerNodeId ?? null,
       ...(metadata !== null ? { metadata } : {}),
-    },
-    select: {
-      id: true,
-      artifactId: true,
-    },
-  });
-
-  return created;
+  };
+  const created = input.artifactId
+    ? await db.taskArtifact.upsert({ where: { artifactId: input.artifactId }, create: data, update: { artifactId: input.artifactId } })
+    : await db.taskArtifact.create({ data, select: { id: true, artifactId: true } });
+  if (input.artifactId) {
+    // Compare semantic JSON: database JSON objects need not preserve key order.
+    for (const key of ["taskRunId", "name", "description", "parts", "metadata", "producerAgentId", "producerNodeId"] as const) {
+      if (canonicalJson(created[key as keyof typeof created] ?? null) !== canonicalJson(data[key as keyof typeof data] ?? null)) {
+        throw new Error("TaskArtifact identity/content conflict: " + input.artifactId);
+      }
+    }
+  }
+  return { id: created.id, artifactId: created.artifactId };
 }

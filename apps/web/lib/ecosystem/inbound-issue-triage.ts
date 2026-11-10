@@ -24,11 +24,12 @@ import {
   type BacklogIngestOutcome,
 } from "@/lib/operate/backlog-ingest";
 import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
+import type { RepositoryAlert } from "./dependabot-reader";
 
 /** Where an inbound item came from. Part of the provenance marker, so a re-run
  *  matches the same origin instead of filing a second copy. Upstream issues
  *  are additionally qualified by repository (BI-952F08BA). */
-export type InboundSourceKind = "upstream-issue" | "peer-demand";
+export type InboundSourceKind = "upstream-issue" | "peer-demand" | "dependabot-alert";
 
 export interface InboundEcosystemItem {
   sourceKind: InboundSourceKind;
@@ -85,12 +86,23 @@ function isWorkType(value: unknown): value is BacklogWorkType {
 }
 
 /**
+ * A foreign summary (a peer item's body, an issue body) can carry the origin's
+ * own `[origin:kind:id]` markers. Left live, they give the filed item the same
+ * intake identity as unrelated local items and peer mirrors, so twin notes fan
+ * out across every copy (BI-C7D95F7E). Keep the text readable, make it inert:
+ * the item's only live marker is the one the front door appends.
+ */
+export function neutralizeOriginMarkers(text: string): string {
+  return text.replace(/\[origin:([^\]\r\n]*)\]/g, "(origin:$1)");
+}
+
+/**
  * Compose the body an operator reads, keeping the submitter and the link to the
  * origin visible. Provenance is the point of this slice: an item with no
  * attributable submitter cannot be weighted by submitter later.
  */
 export function composeInboundBody(item: InboundEcosystemItem): string {
-  const lines = [item.summary.trim()];
+  const lines = [neutralizeOriginMarkers(item.summary.trim())];
   const facts: string[] = [];
   if (item.submitter) facts.push(`Submitted by install \`${item.submitter}\``);
   if (typeof item.affectedOrganizations === "number") {
@@ -107,7 +119,9 @@ export function composeInboundBody(item: InboundEcosystemItem): string {
  * issue did not change, so the front door records nothing (BI-952F08BA).
  */
 export function inboundSourceFingerprint(item: InboundEcosystemItem): string {
-  const material = canonicalJson({ title: item.title, summary: item.summary, state: item.state ?? null });
+  const material = canonicalJson({ title: item.title, summary: item.summary, state: item.state ?? null,
+    occurrenceCount: item.occurrenceCount ?? null, archetypeRefs: item.archetypeRefs ?? null,
+    affectedOrganizations: item.affectedOrganizations ?? null });
   return createHash("sha256").update(material).digest("hex");
 }
 
@@ -118,7 +132,18 @@ export function inboundSourceFingerprint(item: InboundEcosystemItem): string {
  */
 function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin" | "reconcile"> {
   const kind = `ecosystem-${item.sourceKind}`;
-  if (item.sourceKind !== "upstream-issue") return { origin: { kind, id: item.sourceId } };
+  if (item.sourceKind === "peer-demand") return {
+    origin: { kind, id: item.sourceId },
+    reconcile: {
+      // A peer mirror has a globally unique identity, independent of a forge.
+      repository: "",
+      sourceUrl: item.url ?? null,
+      state: item.state ?? "open",
+      fingerprint: inboundSourceFingerprint(item),
+      title: item.title,
+      body: composeInboundBody(item),
+    },
+  };
   const repository = item.repository?.trim().toLowerCase();
   if (!repository) {
     // Refuse rather than fall back to the bare number: an unqualified origin is
@@ -132,8 +157,10 @@ function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin
       sourceUrl: item.url ?? null,
       state: item.state ?? "open",
       fingerprint: inboundSourceFingerprint(item),
+      title: item.title,
+      body: composeInboundBody(item),
       // Dual-read the pre-qualification marker until every legacy intake maps.
-      legacyId: item.sourceId,
+      ...(item.sourceKind === "upstream-issue" ? { legacyId: item.sourceId } : {}),
     },
   };
 }
@@ -154,7 +181,7 @@ export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestI
     // The origin really is a person at another install asking for something;
     // it merely ARRIVES by automation. Recording it as automated-detection
     // would erase the submitter the arbitration model depends on.
-    source: "user-request",
+    source: item.sourceKind === "dependabot-alert" ? "automated-detection" : "user-request",
     workType: isWorkType(item.workType) ? item.workType : "feature",
     // Provenance marker: a re-run of the sweep matches this same origin rather
     // than filing a duplicate.
@@ -164,6 +191,17 @@ export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestI
     ...(scope.archetypeIds.length > 0 ? { archetypeIds: scope.archetypeIds } : {}),
     lifecycleTags: ["ecosystem-inbound", item.sourceKind],
   };
+}
+
+/** Each provider finding becomes actionable work through the same intake front door. */
+export function mapDependabotAlerts(alerts: RepositoryAlert[], repo: { owner: string; name: string }): InboundEcosystemItem[] {
+  return alerts.map(alert => ({
+    sourceKind: "dependabot-alert", sourceId: String(alert.number),
+    repository: `${repo.owner}/${repo.name}`.toLowerCase(), state: alert.state,
+    title: `Address ${alert.severity} ${alert.packageName} advisory (${alert.manifest}, Dependabot #${alert.number})`,
+    summary: `${alert.summary}\n\nAdvisory: ${alert.advisory}\nSeverity: ${alert.severity}\nPackage: ${alert.packageName}\nManifest: ${alert.manifest}\nAffected range: ${alert.vulnerable}\nPatched release: ${alert.patched ?? "none published — assess exposure or patch/remove the dependency"}\n\nVerify the resolved dependency and existing vulnerability treatment before remediation. A provider finding is not proof of deployed reachability.`,
+    workType: "bug", url: alert.url,
+  }));
 }
 
 export async function runInboundIssueTriage(deps: InboundTriageDeps): Promise<InboundTriageResult> {
@@ -213,6 +251,8 @@ export function mapPeerDemandMirrors(
   return rows.flatMap((row) => {
     const decoded = decode(row.payload);
     if (!decoded) return [];
+    // Withdrawn at the origin: the peer closed it, so it is not open work here (BI-C7D95F7E).
+    if (isWithdrawnDemandPayload(row.payload)) return [];
     const envelope = decoded.envelope;
     return [{
       sourceKind: "peer-demand" as const,
@@ -227,6 +267,12 @@ export function mapPeerDemandMirrors(
       affectedOrganizations: envelope.signal?.affectedOrganizations ?? null,
     }];
   });
+}
+
+function isWithdrawnDemandPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const { activity, disposition } = payload as { activity?: unknown; disposition?: unknown };
+  return disposition === "withdrawn" || activity === "dpf.demand.withdrawn";
 }
 
 /** The envelope fields this mapper reads. Structural on purpose, so the mapper

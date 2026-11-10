@@ -26,6 +26,8 @@ export const RENEWAL_LEAD_MS = 2 * 60 * 60 * 1000;
 const RETRY_BASE_MS = 10 * 60 * 1000;
 const RETRY_MAX_MS = 2 * 60 * 60 * 1000;
 const RENEWABLE_AUTH_METHODS = ["oauth", "oauth2_authorization_code"];
+/** Operator choices. Every other connection status keeps background renewal. */
+const NON_RENEWABLE_STATUSES = ["disabled", "disconnected"] as const;
 
 export function subscriptionRenewalJobId(connectionId: string): string {
   return `${SUBSCRIPTION_RENEWAL_JOB_PREFIX}${connectionId}`;
@@ -69,7 +71,10 @@ export async function runSubscriptionOAuthRenewal(deps: {
   const candidates = await db.aiProviderConnection.findMany({
     where: {
       authMethod: { in: RENEWABLE_AUTH_METHODS },
-      status: { in: ["active", "degraded"] },
+      // BI-783EBEE6: routing status is not a reason to let a sign-in lapse. An
+      // account marked unconfigured by routing still holds its refresh token;
+      // only an operator's disable or disconnect stops renewal.
+      status: { notIn: [...NON_RENEWABLE_STATUSES] },
       credentialEntry: { is: { refreshToken: { not: null } } },
     },
     select: { connectionId: true, providerId: true },
@@ -81,7 +86,8 @@ export async function runSubscriptionOAuthRenewal(deps: {
     // Re-read each account: renewing one shared default (codex) renews its sibling.
     const current = await db.aiProviderConnection.findUnique({ where: { connectionId }, include: { credentialEntry: true } });
     const credential = current?.credentialEntry;
-    if (!current || !credential?.refreshToken || !RENEWABLE_AUTH_METHODS.includes(current.authMethod)) continue;
+    if (!current || !credential?.refreshToken || !RENEWABLE_AUTH_METHODS.includes(current.authMethod)
+      || (NON_RENEWABLE_STATUSES as readonly string[]).includes(current.status)) continue;
     const jobId = subscriptionRenewalJobId(connectionId);
     const prior = await db.scheduledJob.findUnique({ where: { jobId } });
     const write = (data: { lastStatus: string; nextRunAt: Date | null; lastError: string | null; lastRunSummary: string; failures: number }) => {

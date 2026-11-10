@@ -31,6 +31,14 @@ export type SystemLocalModelEvent = {
   observedAt: string;
 };
 
+export type SystemMapPackInstallEvent = {
+  /** The street-map install status changed (BI-43BBCC26); observers re-read the status projection. */
+  type: "system:map-pack-install";
+  packId: string | null;
+  state: "idle" | "planning" | "downloading" | "finalizing" | "done" | "failed";
+  observedAt: string;
+};
+
 export type AgentEvent =
   // Attention Surface (EP-ATTENTION-SURFACE, BI-094A124F): a new pending-human
   // item appeared. Broadcast system-wide so the "Needs you" inbox refreshes live.
@@ -49,7 +57,7 @@ export type AgentEvent =
   | { type: "plan:update"; goal: string; steps: Array<{ id: string; description: string; status: string }>; done: number; total: number }
   | { type: "test:step"; stepIndex: number; description: string; screenshot?: string; passed: boolean }
   | { type: "sync:progress"; totalFetched: number; totalUpserted: number; totalNew: number }
-  | { type: "done"; agentMessageId?: string; systemMessageId?: string; formAssistUpdate?: Record<string, unknown>; providerInfo?: { providerId: string; modelId: string }; error?: string }
+  | { type: "done"; agentMessageId?: string; systemMessageId?: string; formAssistUpdate?: Record<string, unknown>; formAssistFormId?: string; taskRunId?: string; providerInfo?: { providerId: string; modelId: string }; error?: string }
   // EP-ASYNC-COWORKER-001: error event for background execution failures
   | { type: "error"; message: string }
   // Sandbox lifecycle events
@@ -150,7 +158,8 @@ export type AgentEvent =
   // functions waiting on platform.quiescence-cleared. Spec §7.1.
   | SystemQuiescenceEvent
   | SystemSelfUpgradeEvent
-  | SystemLocalModelEvent;
+  | SystemLocalModelEvent
+  | SystemMapPackInstallEvent;
 
 type Handler = (event: AgentEvent) => void;
 

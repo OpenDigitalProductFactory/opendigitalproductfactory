@@ -82,6 +82,8 @@ export type AcumenGapNominationResult = {
 };
 
 export type AcumenGapNominationDeps = {
+  /** Server-bound prepared destination; never sourced from serialized tool arguments. */
+  targetAgentId?: string;
   submitAssessment?: typeof submitCoworkerSelfAssessment;
   listNeeds?: typeof listCoworkerCapabilityNeeds;
 };
@@ -141,36 +143,19 @@ export async function nominateAcumenCorpusGap(
     // The acumen's resident coworker owns the corpus when one is registered;
     // otherwise the coworker that asked does.
     const agentId =
-      getAcumenRoomShape(consult.professionKey)?.coworkerAgentId
+      deps.targetAgentId
+      ?? getAcumenRoomShape(consult.professionKey)?.coworkerAgentId
       ?? consult.fallbackAgentId?.trim()
       ?? null;
     if (!agentId) {
       return { nominated: false, reason: "unknown-acumen" };
     }
-    const need = acumenGapNeedText(consult.professionKey, consult.domainClass);
-    const fingerprints = new Set([
-      capabilityNeedOriginId(agentId, CORPUS_GAP_NEED_KIND, need),
-      capabilityNeedOriginId(
-        agentId,
-        CORPUS_GAP_NEED_KIND,
-        legacyNeedTextFor(consult.professionKey, consult.domainClass),
-      ),
-    ]);
-
-    const listNeeds = deps.listNeeds ?? listCoworkerCapabilityNeeds;
-    const existing = (await listNeeds({
-      agentId,
-      kind: CORPUS_GAP_NEED_KIND,
-    })) as Array<{ needId?: string; status?: string; need?: string }>;
-    const openDuplicate = existing.find(
-      (row) =>
-        OPEN_NEED_STATUSES.has(String(row.status ?? ""))
-        && fingerprints.has(capabilityNeedOriginId(agentId, CORPUS_GAP_NEED_KIND, String(row.need ?? ""))),
-    );
+    const openDuplicate = await findOpenAcumenCorpusGap(agentId, consult.professionKey, consult.domainClass, deps.listNeeds);
     if (openDuplicate) {
       return { nominated: false, reason: "duplicate-open-need", needId: openDuplicate.needId };
     }
 
+    const need = acumenGapNeedText(consult.professionKey, consult.domainClass);
     const routeContext = consult.routeContext?.trim() || "/build";
     const fromBuildStudio = routeContext === "/build";
     const submit = deps.submitAssessment ?? submitCoworkerSelfAssessment;
@@ -228,4 +213,28 @@ export async function nominateAcumenCorpusGap(
     );
     return { nominated: false, reason: "error" };
   }
+}
+
+/** Canonical current/legacy fingerprint and open-state reconciliation. Read only. */
+export async function findOpenAcumenCorpusGap(agentId: string, professionKey: string, domainClass: string, listNeeds: typeof listCoworkerCapabilityNeeds = listCoworkerCapabilityNeeds) {
+  const need = acumenGapNeedText(professionKey, domainClass);
+    const fingerprints = new Set([
+      capabilityNeedOriginId(agentId, CORPUS_GAP_NEED_KIND, need),
+      capabilityNeedOriginId(
+        agentId,
+        CORPUS_GAP_NEED_KIND,
+        legacyNeedTextFor(professionKey, domainClass),
+      ),
+    ]);
+
+    const existing = (await listNeeds({
+      agentId,
+      kind: CORPUS_GAP_NEED_KIND,
+    })) as Array<{ needId?: string; status?: string; need?: string }>;
+  return existing.find(
+      (row) =>
+        OPEN_NEED_STATUSES.has(String(row.status ?? ""))
+        && fingerprints.has(capabilityNeedOriginId(agentId, CORPUS_GAP_NEED_KIND, String(row.need ?? ""))),
+    );
+
 }

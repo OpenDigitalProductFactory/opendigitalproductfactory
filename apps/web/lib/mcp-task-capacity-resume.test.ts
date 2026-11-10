@@ -228,6 +228,7 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
       },
       data: {
         status: "working",
+        startedAt: expect.any(Date),
         lastHeartbeatAt: expect.any(Date),
         completedAt: null,
         progressPayload: expect.objectContaining({

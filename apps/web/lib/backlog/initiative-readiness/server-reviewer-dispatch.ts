@@ -333,19 +333,8 @@ export async function loadDesignPhaseOwedReviewRoutes(itemId: string, authorAgen
 
 /** The independent design-phase reviewer routes the implementation recovery issues now. */
 async function designPhaseOwedRecoveryRoutes(itemId: string, authorAgentId: string | null) {
-  const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
-  const item = await getBacklogItem({ itemId }, authorAgentId);
-  const decision = (item.data?.readiness as { decisions?: { implementation?: unknown } } | undefined)?.decisions?.implementation as
-    | import("@/lib/backlog/initiative-readiness").InitiativeReadinessDecision
-    | undefined;
-  if (!item.success || !decision) return null;
-  if (decision.verdict === "allowed") return [];
-  const { designPhaseReviewDecision } = await import("./design-phase-recovery");
-  const designPhase = designPhaseReviewDecision(decision);
-  if (!designPhase) return [];
-  const { resolveTerminalInitiativeRecovery } = await import("./terminal-recovery");
-  const recovery = await resolveTerminalInitiativeRecovery({ decision: designPhase, currentAgentId: authorAgentId, refusedWorkroomId: null });
-  return recovery.reviewerRoutes.filter((route) => route.independent);
+  const { designPhaseOwedRecoveryRoutes: load } = await import("./design-stage-review-issuer");
+  return load(itemId, authorAgentId);
 }
 
 type DispatchRecord = { id: string; recordedAt: Date; payload: Record<string, unknown> };
@@ -457,10 +446,10 @@ export async function dispatchReviewerRequest(args: {
   /** What the room records when no connection may carry the request. */
   noConnectionSummary?: string;
   /**
-   * BI-AA47C672: who readiness issued this packet for. With it, a post-
-   * implementation review no connection can carry goes to the platform's own
-   * reviewer; without it (a caller that did not read readiness as the author)
-   * nothing changes.
+   * BI-AA47C672 / BI-CAB5D233: who readiness issued this packet for. With it, a
+   * post-implementation or design-stage review no connection can carry goes to
+   * the platform's own reviewer; without it (a caller that did not read
+   * readiness as the author) nothing changes.
    */
   issuer?: ReviewIssuerIdentity;
   deps?: Pick<Deps, "findConnection" | "findUserConnection" | "execute" | "routeToPlatformReviewer" | "processStartedAt">;
@@ -564,8 +553,9 @@ export async function dispatchOwedIndependentReviews(deps: Deps = {}): Promise<R
         workroomId: route.workroomId, now, deps: { ...deps, findConnection, findUserConnection },
         ...(candidate.target === "implementation" ? { noConnectionSummary: BUILD_STUDIO_NO_CONNECTION_SUMMARY } : {}),
         // The identity owedRoutes read readiness as: the platform reviewer's
-        // writer re-derives the packet for exactly this issuer.
-        ...(candidate.target === "completion" && candidate.room.userId
+        // writer re-derives the packet for exactly this issuer. PIR already
+        // passed it; design-stage must too or the steward never opens (BI-CAB5D233).
+        ...((candidate.target === "completion" || candidate.target === "design") && candidate.room.userId
           ? { issuer: { userId: candidate.room.userId, agentId: candidate.room.agentId } } : {}),
       }));
     }

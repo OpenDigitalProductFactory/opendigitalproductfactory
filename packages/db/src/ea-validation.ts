@@ -22,12 +22,18 @@ export type DqViolation = {
 /** Check that (fromElementType, toElementType, relationshipType) is a permitted combination
  *  per EaRelationshipRule. Called before createEaRelationship. */
 // Relationship type slugs that ArchiMate defines as universal (no element-type constraints).
-const UNIVERSAL_REL_TYPE_SLUGS = new Set(["associated_with", "influences"]);
+// Association used to be here too; it let a generic edge join any two elements, so it now
+// needs a rule like every other type, plus a role naming what it means (BI-E487F6D9).
+const UNIVERSAL_REL_TYPE_SLUGS = new Set(["influences"]);
+
+/** Weak relationship types that are kept only with a qualifier naming the specific relation. */
+export const QUALIFIER_REQUIRED_REL_TYPE_SLUGS: Readonly<Record<string, string>> = { associated_with: "role" };
 
 export async function validateEaRelationship(
   fromElementId: string,
   toElementId: string,
   relationshipTypeId: string,
+  properties: Record<string, unknown> = {},
 ): Promise<ValidationResult> {
   const [from, to, relType] = await Promise.all([
     prisma.eaElement.findUnique({ where: { id: fromElementId }, select: { elementTypeId: true } }),
@@ -38,7 +44,15 @@ export async function validateEaRelationship(
   if (!from) return { valid: false, reason: `Source element "${fromElementId}" not found` };
   if (!to)   return { valid: false, reason: `Target element "${toElementId}" not found` };
 
-  // Universal relationship types (ArchiMate Association, Influence) may connect any two elements.
+  const qualifier = relType ? QUALIFIER_REQUIRED_REL_TYPE_SLUGS[relType.slug] : undefined;
+  if (qualifier) {
+    const value = properties[qualifier];
+    if (typeof value !== "string" || value.trim() === "") {
+      return { valid: false, reason: `A "${relType!.slug}" relationship needs a "${qualifier}" naming the specific relation` };
+    }
+  }
+
+  // Universal relationship types (ArchiMate Influence) may connect any two elements.
   if (relType && UNIVERSAL_REL_TYPE_SLUGS.has(relType.slug)) return { valid: true };
 
   const rule = await prisma.eaRelationshipRule.findFirst({

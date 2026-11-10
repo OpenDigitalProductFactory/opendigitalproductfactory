@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { capacityDeferralProof, capacityRecoveryMarker, hasProvenCapacityCheckpointSet, hasFinalReviewCheckpointSet } from "./semantic-review-capacity-recovery";
-import { readCapacityRecoveryWait, semanticReviewRecoveryObservation } from "./semantic-review-recovery-policy";
+import { SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS, readCapacityRecoveryWait, readSemanticReviewBudget, semanticReviewCapacityWaitMs,
+  semanticReviewEffectiveDeadline, semanticReviewRecoveryObservation } from "./semantic-review-recovery-policy";
 
 const digest = "a".repeat(64);
 const now = Date.parse("2026-10-16T06:00:00Z");
@@ -83,7 +84,29 @@ describe("bounded recovery observation", () => {
     expect(observation).toMatchObject({ classification: "capacity-wait", pollUseful: true, remainingAttempts: 3 });
     expect(observation.nextAction).toContain("server will recheck");
     expect(semanticReviewRecoveryObservation("completed", { semanticReview: state() }, now).classification).toBe("completed");
-    expect(semanticReviewRecoveryObservation("input-required", { semanticReview: state() }, now + 31 * 60_000).capacityRecovery).toBeNull();
+    // A proven wait is credited (BI-73D878A5), so the window outlasts 30 minutes of waiting but not the cap.
+    expect(semanticReviewRecoveryObservation("input-required", { semanticReview: state() }, now + 31 * 60_000).capacityRecovery).not.toBeNull();
+    expect(semanticReviewRecoveryObservation("input-required", { semanticReview: state() },
+      now + SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS + 31 * 60_000).capacityRecovery).toBeNull();
+  });
+
+  it("credits proven capacity wait to the deadline, bounded, without changing the packet deadline", () => {
+    const deadlineAt = new Date(now + 30 * 60_000).toISOString();
+    const waiting = { capacityRecovery: capacityRecoveryMarker(digest, now) };
+    expect(semanticReviewCapacityWaitMs(waiting, now + 45 * 60_000)).toBe(45 * 60_000);
+    expect(semanticReviewEffectiveDeadline(deadlineAt, waiting, now + 45 * 60_000)).toBe(new Date(now + 75 * 60_000).toISOString());
+    // A resumed wait keeps its credit; a later wait adds to it.
+    const resumed = { capacityWaitCreditMs: 20 * 60_000, capacityRecovery: capacityRecoveryMarker(digest, now + 60 * 60_000) };
+    expect(semanticReviewCapacityWaitMs(resumed, now + 70 * 60_000)).toBe(30 * 60_000);
+    expect(semanticReviewCapacityWaitMs(waiting, now + 10 * SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS)).toBe(SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS);
+    // Legacy markers, corrupt credit and a future start earn nothing.
+    expect(semanticReviewCapacityWaitMs({ capacityRecovery: { schemaVersion: 1, requestDigest: digest, checks: 0, nextCheckAt: deadlineAt } }, now + 60_000)).toBe(0);
+    expect(semanticReviewCapacityWaitMs({ capacityWaitCreditMs: -5 }, now)).toBe(0);
+    expect(semanticReviewCapacityWaitMs({ capacityWaitCreditMs: "9999999" }, now)).toBe(0);
+    expect(semanticReviewCapacityWaitMs(waiting, now - 60_000)).toBe(0);
+    expect(semanticReviewEffectiveDeadline("not-a-date", waiting, now)).toBeNull();
+    expect(readSemanticReviewBudget({ semanticReview: { schemaVersion: 1, deadlineAt, ...waiting } }, now + 45 * 60_000).deadlineAt)
+      .toBe(new Date(now + 75 * 60_000).toISOString());
   });
 
   it.each(["legacy", "foreign", "unknown", "eligibility", "counter", "version", "date"])(

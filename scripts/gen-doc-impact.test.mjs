@@ -4,10 +4,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
+import { gitText } from "./lib/git.mjs";
 import { fileURLToPath } from "node:url";
 import {
   applyFanoutCap,
   frontmatterList,
+  isTickEdgeExcluded,
   linkedCodePaths,
   tickedCodePaths,
 } from "./gen-doc-impact.mjs";
@@ -113,6 +117,26 @@ test("tickedCodePaths skips relative forms — those belong to the link source",
   assert.deepEqual(tickedCodePaths("`./gen-doc-impact.mjs` `../x.ts`", REPO_ROOT), []);
 });
 
+test("tickedCodePaths derives edges to agent-toolchain JSON and Python (BI-9B17E889)", () => {
+  // The hook-parity pages cite hooks.json and update_agent_toolchain.py in
+  // backticks; before the widening neither produced an edge, so a hook change
+  // never flagged the page that describes it (BI-742D707B).
+  const md = "`packages/dpf-skill-pack/hooks/hooks.json` and `packages/dpf-skill-pack/scripts/update_agent_toolchain.py`";
+  assert.deepEqual(tickedCodePaths(md, REPO_ROOT), [
+    "packages/dpf-skill-pack/hooks/hooks.json",
+    "packages/dpf-skill-pack/scripts/update_agent_toolchain.py",
+  ]);
+});
+
+test("tickedCodePaths skips derived artifacts and dependency manifests", () => {
+  // A generated file changes whenever its sources do, and manifests are landmarks
+  // the Docs Impact Gate already exempts: edges to either are noise, not coverage.
+  const md = "`apps/web/lib/docs/doc-impact.generated.json` `apps/web/package.json` `pnpm-lock.yaml`";
+  assert.deepEqual(tickedCodePaths(md, REPO_ROOT), []);
+  assert.equal(isTickEdgeExcluded("apps/web/lib/docs/doc-index.generated.json"), true);
+  assert.equal(isTickEdgeExcluded("packages/dpf-skill-pack/capability-packs.json"), false);
+});
+
 test("tickedCodePaths de-duplicates repeat citations of one file", () => {
   const md = "`scripts/gen-doc-impact.mjs` again `scripts/gen-doc-impact.mjs`";
   assert.deepEqual(tickedCodePaths(md, REPO_ROOT), ["scripts/gen-doc-impact.mjs"]);
@@ -148,4 +172,45 @@ test("applyFanoutCap counts fan-out globally, not per document", () => {
     { code: "x.ts", doc: "c.md" },
   ];
   assert.deepEqual(applyFanoutCap(candidates, 2), []);
+});
+
+
+test("inferred edges ignore local files but retain tracked and newly staged sources (BI-08FB9C25)", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dpf-doc-impact-"));
+  try {
+    gitText(["init", "--quiet"], { cwd: root });
+    fs.writeFileSync(path.join(root, ".gitignore"), ".claude/\n.codex/\n");
+    fs.writeFileSync(path.join(root, "tracked.toml"), "enabled = true\n");
+    fs.writeFileSync(path.join(root, "staged.json"), "{}\n");
+    gitText(["add", ".gitignore", "tracked.toml", "staged.json"], { cwd: root });
+    const paths = ["tracked.toml", "staged.json", "loose.ts", ".claude/settings.local.json", ".codex/config.toml"];
+    const markdown = paths.map(p => `[source](../${p}) and \`${p}\``).join("\n");
+    const readEdges = () => JSON.stringify({
+      linked: linkedCodePaths(markdown, "docs/example.md", root),
+      ticked: tickedCodePaths(markdown, root),
+    });
+    const before = readEdges();
+    assert.deepEqual(JSON.parse(before), { linked: ["staged.json", "tracked.toml"], ticked: ["staged.json", "tracked.toml"] });
+    for (const name of paths.slice(2)) {
+      fs.mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+      fs.writeFileSync(path.join(root, name), "local fixture\n");
+    }
+    assert.equal(readEdges(), before, "local configuration and untracked files must not alter inferred graph bytes");
+    for (const name of paths.slice(2)) fs.unlinkSync(path.join(root, name));
+    assert.equal(readEdges(), before);
+    fs.unlinkSync(path.join(root, "tracked.toml"));
+    assert.deepEqual(tickedCodePaths(markdown, root), ["staged.json"], "tracked but missing paths remain excluded");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("inferred edges fail explicitly when tracked inventory cannot be read", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "dpf-doc-impact-no-git-"));
+  try {
+    assert.throws(() => tickedCodePaths("`source.ts`", root), /git.*ls-files|not a git repository/i);
+    assert.throws(() => linkedCodePaths("[source](../source.ts)", "docs/example.md", root), /git.*ls-files|not a git repository/i);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -6,8 +6,8 @@ import { isRecord } from "../shared/coerce";
 
 export type CleanupLease = Pick<LeaseRow, "leaseId" | "claimKey" | "environmentKey" | "ownerProvider" | "ownerSessionId"
   | "worktreePath" | "branchName" | "buildId" | "url" | "ports" | "taskRunId" | "status" | "slotKey" | "activeKey"
-  | "ownerPid" | "ownerProcessIdentity" | "cleanupCommand" | "resourceClass" | "expectedMemoryBytes" | "slotManifestVersion">;
-export type LeaseCleanupStance = { environmentClass: string; primaryPurpose: string };
+  | "ownerPid" | "ownerProcessIdentity" | "cleanupCommand" | "resourceClass" | "expectedMemoryBytes" | "slotManifestVersion"
+  | "expiresAt">;
 export type LeaseCleanupProofReader = { taskRun?: { findUnique(args: unknown): Promise<{
   taskRunId: string; userId: string; initiatingAgentId?: string | null; progressPayload: unknown;
 } | null> } };
@@ -19,17 +19,9 @@ function previewBinding(lease: CleanupLease): Record<string, unknown> {
     url: lease.url, ports: lease.ports };
 }
 
-export async function loadLeaseCleanupStance(): Promise<LeaseCleanupStance> {
-  const [{ prisma }, { loadInstanceStance, prismaInstanceStanceStore }] = await Promise.all([
-    import("@dpf/db"), import("../install/instance-stance"),
-  ]);
-  return loadInstanceStance(prismaInstanceStanceStore(prisma));
-}
-
 /** One predicate for consent and locked execution. No ownership is inferred or repaired here. */
 async function previewWaitMatchesOwner(input: {
   db: LeaseCleanupProofReader; lease: CleanupLease; userId?: string; agentId?: string; ownerSessionId?: string;
-  loadStance?: () => Promise<LeaseCleanupStance>;
 }): Promise<boolean> {
   const { lease, userId, agentId } = input;
   if (!userId || !agentId || !input.ownerSessionId || !input.db.taskRun
@@ -58,20 +50,18 @@ async function previewWaitMatchesOwner(input: {
   return true;
 }
 
-async function ownsProcessFreePreview(input: Parameters<typeof previewWaitMatchesOwner>[0]): Promise<boolean> {
-  if (!await previewWaitMatchesOwner(input)) return false;
-  const stance = await (input.loadStance ?? loadLeaseCleanupStance)();
-  return stance.environmentClass === "development" && stance.primaryPurpose === "evolve-dpf";
-}
-
 /** The existing CI proof and fresh preview proof share one execution boundary.
- * A changed environment must not select an unchecked legacy branch. */
+ * A changed environment must not select an unchecked legacy branch.
+ *
+ * BI-88D51B8F: this no longer also requires a development/evolve-dpf
+ * installation. A nonproduction lease is a reservation on a shared test
+ * machine on every install, and the owner directed on 2026-11-04 that freeing
+ * one is not a decision for a person. */
 export async function ownsProcessFreeLease(input: {
   db: LeaseCleanupProofReader; lease: CleanupLease; userId?: string; agentId?: string; ownerSessionId?: string;
-  loadStance?: () => Promise<LeaseCleanupStance>;
 }): Promise<boolean> {
   const { lease, userId } = input;
-  if (lease.environmentKey === "active-candidate") return ownsProcessFreePreview(input);
+  if (lease.environmentKey === "active-candidate") return previewWaitMatchesOwner(input);
   if (!userId || !input.ownerSessionId || !input.db.taskRun
     || lease.environmentKey !== "local-integration-ci" || lease.slotManifestVersion !== 1
     || lease.ownerSessionId !== input.ownerSessionId || !lease.claimKey || !lease.worktreePath || !lease.branchName
@@ -90,25 +80,49 @@ export async function ownsProcessFreeLease(input: {
     || !["slot-0", "slot-1"].includes(lease.slotKey ?? "")
     || lease.activeKey !== `${lease.environmentKey}:${lease.slotKey}`))
     || (lease.status === "queued" && !["waiting", "capacity-available"].includes(wait.state))) return false;
-  const stance = await (input.loadStance ?? loadLeaseCleanupStance)();
-  return stance.environmentClass === "development" && stance.primaryPurpose === "evolve-dpf";
+  return true;
+}
+
+/**
+ * Why releasing this reservation is routine, or null when it is not
+ * (BI-88D51B8F). Routine means it frees nothing another session is using:
+ *  • ended-reservation — it already ended; the release changes nothing.
+ *  • lapsed-reservation — its holder stopped renewing past expiresAt, and a
+ *    lapsed lease cannot be renewed; the expiry janitor frees it with no person.
+ *  • owned-reservation — the caller's own process-free reservation.
+ * A live reservation another session holds is not routine: freeing it can let
+ * a second test run onto a machine the first is still using.
+ */
+export type RoutineLeaseRelease = "ended-reservation" | "lapsed-reservation" | "owned-reservation";
+
+export async function routineLeaseRelease(input: {
+  db: LeaseCleanupProofReader; lease: CleanupLease; userId?: string; agentId?: string; ownerSessionId?: string;
+  now: Date;
+}): Promise<RoutineLeaseRelease | null> {
+  const { lease } = input;
+  if (["released", "cancelled", "expired"].includes(lease.status) && lease.activeKey === null) {
+    return "ended-reservation";
+  }
+  if (["active", "queued"].includes(lease.status) && lease.expiresAt instanceof Date
+    && Number.isFinite(lease.expiresAt.getTime()) && lease.expiresAt < input.now) return "lapsed-reservation";
+  return await ownsProcessFreeLease(input) ? "owned-reservation" : null;
 }
 
 /** Reserved server execution context; none of these fields are public tool arguments. */
 export type LeaseReleaseContext = {
   authenticatedUserId?: string; authenticatedAgentId?: string;
   approvedAuthorityEnvelopeId?: string | null;
-  loadStance?: () => Promise<LeaseCleanupStance>;
 };
 
+/** Consent and locked execution run the same predicate on the current row. */
 export async function assertOwnedLeaseRelease(input: LeaseReleaseContext & {
-  db: LeaseCleanupProofReader; lease: CleanupLease; ownerSessionId?: string;
+  db: LeaseCleanupProofReader; lease: CleanupLease; ownerSessionId?: string; now: Date;
 }): Promise<void> {
   if (!input.authenticatedAgentId || input.approvedAuthorityEnvelopeId) return;
-  const owned = await ownsProcessFreeLease({ db: input.db, lease: input.lease,
+  const routine = await routineLeaseRelease({ db: input.db, lease: input.lease,
     userId: input.authenticatedUserId, agentId: input.authenticatedAgentId,
-    ownerSessionId: input.ownerSessionId, loadStance: input.loadStance }).catch(() => false);
-  if (!owned) throw new Error("nonprod_lease_cleanup_ownership_unproven");
+    ownerSessionId: input.ownerSessionId, now: input.now }).catch(() => null);
+  if (!routine) throw new Error("nonprod_lease_cleanup_ownership_unproven");
 }
 
 /** Fresh admission transaction only. Never backfill a legacy lease or adopt a caller Task. */

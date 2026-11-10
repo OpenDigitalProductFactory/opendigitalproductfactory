@@ -31,6 +31,7 @@ test("samples the host through injected cross-platform probes", async () => {
     sampleWindowMs: 1,
     deps: {
       now: () => new Date("2026-07-30T05:00:00.000Z"),
+      totalMemoryBytes: () => 64 * 1024 ** 3,
       freeMemoryBytes: () => 24 * 1024 ** 3,
       cpuTimes: () => cpuSnapshots.shift(),
       delay: async () => {},
@@ -44,6 +45,7 @@ test("samples the host through injected cross-platform probes", async () => {
 
   assert.deepEqual(observed, {
     observedAt: "2026-07-30T05:00:00.000Z",
+    totalMemoryBytes: 64 * 1024 ** 3,
     availableMemoryBytes: 24 * 1024 ** 3,
     sustainedCpuPercent: 75,
     diskFreeBytes: 120 * 1024 ** 3,

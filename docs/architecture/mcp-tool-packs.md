@@ -163,6 +163,12 @@ arities) and [`workbooks-pack`](../../apps/web/lib/mcp/packs/workbooks-pack.ts) 
 followed on the same lazy pattern as the third and fourth packs — **every sibling-module
 domain (static + lazy) is now extracted.**
 
+`claim_backlog_item_for_work` and `adopt_worktree` accept `baseSha`/`headSha` as a
+full SHA or a prefix of 7 or more hex characters (BI-DF34D948). The handlers expand a
+prefix through the repository provider, using `work-capsules/source-commit-resolution.ts`.
+They refuse an ambiguous or unknown prefix, name the recorded candidates, and return the
+caller's own call corrected. Both tool descriptions carry one complete worked call.
+
 `rebind_workroom_shape` (BI-CB5C0DCE) lives in this pack, but its handler is
 its own lazy module (`work-capsules/workroom-shape-rebind-handler.ts`), so
 `mcp-handlers.ts` does not grow. It is the governed way to move a room's
@@ -192,6 +198,14 @@ It reads no room records. Instance filters and cursors are refused, and a
 changed definition inventory requires a fresh traversal. Whole pages fit the
 existing result budget; a refusal never advances past unseen definitions.
 The full contract is in [Workroom review profiles](workroom-review-profile-contract.md).
+
+`list_workrooms(view="atlas")` returns the Work Atlas picture: health counts
+for every open Workroom and up to `limit` rows (default 10, maximum 400). Rows
+can be filtered by `health` or `portfolioRole`. It runs the same projection as
+the portal (`lib/work-management/atlas-projection.server.ts`), so the portal
+and agents report the same health for the same room. It takes no cursor or
+other instance filters. See
+[Enumerating Workrooms](../operations/workroom-pagination.md#the-work-atlas-picture).
 
 `get_workroom` also supports `continuationMode: "bounded"` under fresh room
 content admission. Use `continuationTaskId` for an exact scheduled task or

@@ -155,6 +155,7 @@
         "register_tech_debt",
         "report_quality_issue",
         "retire_backlog_item",
+        "retire_peer_demand_intake_copies",
         "save_phase_handoff",
         "submit_feedback",
         "update_backlog_item",

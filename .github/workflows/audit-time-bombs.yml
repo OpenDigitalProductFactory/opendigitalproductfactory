@@ -56,7 +56,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       # Pinned to a commit, not a tag: a mutable tag on a third-party action is a
       # supply-chain hole (CodeQL `actions/unpinned-tag`). Same pin as mobile-ci.yml.

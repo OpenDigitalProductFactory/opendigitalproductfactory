@@ -14,6 +14,7 @@
 // the gauntlet on the tree that will actually be published. A conflict is never
 // resolved here: the build stays in ship and the conflicted files are recorded.
 
+import { errorTail } from "./error-tail";
 import type { BuildBranchRefreshOutcome } from "./sandbox/build-branch";
 import type { SandboxSourceCurrencySnapshot } from "./sandbox/sandbox-source-currency";
 
@@ -52,12 +53,15 @@ function storedSourceCurrency(state: unknown): SandboxSourceCurrencySnapshot | n
 }
 
 /**
- * Whether a stored snapshot is the publication refusal this refresh exists for:
- * local source work AND missing upstream commits, on a clean tree. A dirty or
- * unknown snapshot is a different problem and is left to its own recovery.
+ * Whether a stored snapshot is a publication refusal this refresh can clear: a
+ * clean tree that is missing upstream commits, with local work (diverged) or
+ * without (behind). Both are cleared by the same rebase. A dirty or unknown
+ * snapshot is a different problem and is left to its own recovery.
  */
 export function isRefreshableDivergence(snapshot: SandboxSourceCurrencySnapshot | null): boolean {
-  return snapshot?.status === "diverged" && snapshot.recommendedAction === "pause" && snapshot.dirty !== true;
+  if (!snapshot || snapshot.dirty === true) return false;
+  return (snapshot.status === "diverged" && snapshot.recommendedAction === "pause")
+    || (snapshot.status === "behind" && snapshot.recommendedAction === "auto-refresh");
 }
 
 export async function refreshDivergedShipBuild(
@@ -75,7 +79,7 @@ export async function refreshDivergedShipBuild(
   const before = `${snapshot?.aheadBy ?? "?"} ahead / ${snapshot?.behindBy ?? "?"} behind ${snapshot?.targetRef ?? "its base"}`;
   const outcome = await deps.refresh(buildId).catch((err: unknown): BuildBranchRefreshOutcome => ({
     status: "unknown",
-    reason: err instanceof Error ? err.message.slice(0, 300) : String(err),
+    reason: errorTail(err),
   }));
 
   if (outcome.status === "conflict") {

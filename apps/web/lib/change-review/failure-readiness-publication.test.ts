@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 import { validateFailureAnalysis } from "./failure-analysis";
 import { CHANGE_REVIEW_POLICY_VERSION, CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "./semantic-change-review";
-const mocks = vi.hoisted(() => ({ room: vi.fn(), rows: vi.fn(), evidence: vi.fn(), exemption: vi.fn(), failed: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room }, externalEvidenceRecord: { findMany: mocks.rows } } }));
+const mocks = vi.hoisted(() => ({ room: vi.fn(), rows: vi.fn(), evidence: vi.fn(), exemption: vi.fn(), failed: vi.fn(), providers: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room }, externalEvidenceRecord: { findMany: mocks.rows }, modelProvider: { findMany: mocks.providers } } }));
 vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: mocks.evidence }));
 vi.mock("./semantic-review-policy-exemption", () => ({ resolveWorkroomReviewExemption: mocks.exemption, findCurrentSemanticFailure: mocks.failed }));
 import { checkWorkroomFailureReadiness } from "./failure-readiness-publication";
@@ -41,6 +41,46 @@ describe("server publication boundary", () => {
     mocks.rows.mockResolvedValue([{ id: "unrun", details: { ...receipt, disposition: "infrastructure-inconclusive", result: { decision: "inconclusive" } } }]);
     mocks.exemption.mockResolvedValue({ evidenceId: "exception", sourceHeadSha: receipt.sourceHeadSha });
     expect(await checkWorkroomFailureReadiness("room")).toMatchObject({ mayPublish: true, evidenceId: "exception" });
+  });
+  it("names the data class, exclusions and unavailable providers when no provider could run the review (BI-9F620FE1)", async () => {
+    mocks.rows.mockResolvedValue([{ id: "ineligible", details: { ...receipt, disposition: "infrastructure-inconclusive", result: {
+      decision: "inconclusive", inconclusiveReason: "review-endpoint-ineligible",
+      routingEligibility: [{ sensitivity: "confidential", residencyPolicy: "any_enabled", excludedCount: 8, exclusions: [{ bucket: "capability-floor", count: 8 }] }],
+    } } }]);
+    mocks.providers.mockResolvedValue([
+      { providerId: "local", status: "active", connections: [{ status: "paused" }] },
+      { providerId: "codex", status: "active", connections: [{ status: "unconfigured" }] },
+      { providerId: "chatgpt", status: "active", connections: [{ status: "active" }] },
+    ]);
+    const result = await checkWorkroomFailureReadiness("room");
+    expect(result).toMatchObject({ mayPublish: false, code: "failure_review_required" });
+    expect(result.reason).toMatch(/^No AI provider could run the required review \(data class confidential, residency any_enabled\)/);
+    expect(result.reason).toContain("8 endpoints excluded (8 capability-floor)");
+    expect(result.reason).toContain("Unavailable: codex not connected; local paused by an operator.");
+    expect(result.reason).not.toContain("chatgpt");
+  });
+  it("keeps the generic reason when an inconclusive review carries no routing evidence", async () => {
+    mocks.rows.mockResolvedValue([{ id: "unrun", details: { ...receipt, result: { decision: "inconclusive" } } }]);
+    expect((await checkWorkroomFailureReadiness("room")).reason).toBe("No failure-analysis review exists for this final change.");
+    expect(mocks.providers).not.toHaveBeenCalled();
+  });
+  it("publishes a passing repair round that follows a failure-analysis-only fail on the same change (BI-38C51AF2)", async () => {
+    const faFail = { ...receipt, result: { decision: "fail", failureAnalysisReview: { adequate: false, rationale: "Omits two disclosed measurement gaps." },
+      issues: [{ severity: "critical", description: "Independent failure-analysis challenge is missing or inadequate." }] } };
+    mocks.rows.mockResolvedValue([
+      { id: "repair", createdAt: new Date("2026-11-05T05:14:00Z"), details: receipt },
+      { id: "fa-fail", createdAt: new Date("2026-11-05T05:10:00Z"), details: faFail },
+    ]);
+    expect(await checkWorkroomFailureReadiness("room")).toMatchObject({ mayPublish: true, evidenceId: "repair" });
+  });
+  it("still blocks a code-finding fail on the same change after a later pass", async () => {
+    const codeFail = { ...receipt, result: { decision: "fail", failureAnalysisReview: receipt.result.failureAnalysisReview,
+      issues: [{ severity: "critical", description: "The refusal path writes state before checking authority." }] } };
+    mocks.rows.mockResolvedValue([
+      { id: "later-pass", createdAt: new Date("2026-11-05T05:14:00Z"), details: receipt },
+      { id: "code-fail", createdAt: new Date("2026-11-05T05:10:00Z"), details: codeFail },
+    ]);
+    expect(await checkWorkroomFailureReadiness("room")).toMatchObject({ mayPublish: false, code: "failure_review_required" });
   });
   it("never applies an exception to a failed current review", async () => {
     mocks.rows.mockResolvedValue([{ id: "fail", details: { ...receipt, result: { decision: "fail" } } }]);

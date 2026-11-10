@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
+import { executorRefForms } from "./local-ci-evidence-workroom";
 
 const now = new Date("2026-09-14T20:00:00Z");
 const gateKey = "a".repeat(64);
@@ -27,7 +28,7 @@ describe("canonical CI reuse Workroom reconciliation", () => {
   it("attaches only a null link to the unique canonical branch/SHA/session room", async () => {
     expect(await settle()).toMatchObject({ kind: "settled", projection: { status: "reused", evidenceRecordId: "evidence-1" } });
     expect(tx.workroom.findMany).toHaveBeenCalledWith({ where: {
-      headBranch: "fix/reviewer", executorRef: "task-1", archivedAt: null,
+      headBranch: "fix/reviewer", executorRef: { in: executorRefForms("task-1") }, archivedAt: null,
     }, select: { id: true, headSha: true }, take: 3 });
     expect(tx.externalEvidenceRecord.updateMany).toHaveBeenCalledWith({
       where: { id: "evidence-1", workCapsuleId: null }, data: { workCapsuleId: "room-1" },

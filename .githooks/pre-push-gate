@@ -362,10 +362,18 @@ fi
 # and expiry checks the legacy block below duplicates. Defer to it rather than
 # keeping a second reader that can drift from the writer again.
 if [ -f "scripts/pregate-status.mjs" ]; then
-  if node scripts/pregate-status.mjs; then
+  status_rc=0
+  node scripts/pregate-status.mjs || status_rc=$?
+  if [ "$status_rc" -eq 0 ]; then
     echo "[pre-push-gate] local-CI gate passed for $branch@$sha"
     completion_notice
     exit 0
+  fi
+  # BI-F039AA83: 75 = a pregate for this HEAD is still working. Its verdict is
+  # minutes away; no override or correction route should race it.
+  if [ "$status_rc" -eq 75 ]; then
+    echo "[pre-push-gate] a pregate for $branch@$sha is still running (status above). Not a failure — wait for its verdict, then push again." >&2
+    exit 1
   fi
   # A published correction has its own machine-bound affected-check contract.
   # This writes only an existing stage receipt and never a canonical gate PASS.

@@ -27,7 +27,7 @@ type ExtractedAssist = {
 
 const activeAssistByRoute = new Map<string, AgentFormAssistClientAdapter>();
 
-function sanitizeFieldUpdates(
+export function sanitizeFieldUpdates(
   raw: unknown,
   fields: AgentFormAssistField[],
 ): Record<string, unknown> | null {
@@ -131,4 +131,31 @@ export function registerActiveFormAssist(
 
 export function getActiveFormAssist(routeContext: string): AgentFormAssistClientAdapter | null {
   return activeAssistByRoute.get(routeContext) ?? null;
+}
+
+export type FormAssistDelivery = {
+  formAssistUpdate?: Record<string, unknown>; formAssistFormId?: string; taskRunId?: string; agentMessageId?: string;
+};
+export type FormAssistDeliveryState = { applied: Set<string>; pending: Map<string, FormAssistDelivery> };
+export function applyFormAssistDelivery(adapter: AgentFormAssistClientAdapter | null, delivery: FormAssistDelivery,
+  applied: Set<string>, expectedTaskRunId: string | null, pending?: Map<string, FormAssistDelivery>): boolean {
+  if (!delivery.formAssistUpdate && expectedTaskRunId) delivery = pending?.get(expectedTaskRunId) ?? delivery;
+  if (!adapter || !delivery.formAssistUpdate) return false;
+  if (delivery.formAssistFormId || delivery.taskRunId) {
+    if (delivery.formAssistFormId !== adapter.formId || !delivery.agentMessageId || !delivery.taskRunId) return false;
+    if (!expectedTaskRunId && pending) {
+      pending.set(delivery.taskRunId, delivery);
+      if (pending.size > 8) pending.delete(pending.keys().next().value!);
+      return false;
+    }
+    if (delivery.taskRunId !== expectedTaskRunId) return false;
+  }
+  const key = delivery.agentMessageId ? JSON.stringify([delivery.taskRunId ?? null, adapter.formId, delivery.agentMessageId]) : null;
+  if (key && applied.has(key)) return false;
+  const updates = sanitizeFieldUpdates(delivery.formAssistUpdate, adapter.fields);
+  if (!updates) return false;
+  adapter.applyFieldUpdates(updates);
+  if (key) applied.add(key);
+  if (delivery.taskRunId) pending?.delete(delivery.taskRunId);
+  return true;
 }

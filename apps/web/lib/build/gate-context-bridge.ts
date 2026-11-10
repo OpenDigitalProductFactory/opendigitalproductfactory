@@ -148,6 +148,7 @@ export async function computeChangeImpactContract(
   const instructions = [
     "Resolve every testImpact entry before Red and include the affected tests in the implementation loop.",
     "Exercise every guardObligation before treating the change as complete.",
+    "Update every docsImpact entry with status pending in this change, or record a docs-impact-disposition (updated | not-affected with a reason) before handing the Workroom off for review.",
     "CI remains authoritative; missing, stale, or unresolved advice expands to exhaustive verification.",
   ];
   const unresolvedPaths = gateContext?.unresolvedPaths ?? [];

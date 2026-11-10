@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 683,
+  "routeCount": 685,
   "routes": [
     {
       "routePath": "/",
@@ -654,6 +654,22 @@
       "exposure": "authenticated"
     },
     {
+      "routePath": "/api/agent/envelope/[envelopeId]/standing-ruling",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]",
+        "standing-ruling"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/standing-ruling/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/agent/health",
       "kind": "route",
       "segments": [
@@ -1205,6 +1221,18 @@
         "packId"
       ],
       "file": "apps/web/app/api/map-assets/[packId]/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/install-status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "install-status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/map-assets/install-status/route.ts",
       "exposure": "authenticated"
     },
     {

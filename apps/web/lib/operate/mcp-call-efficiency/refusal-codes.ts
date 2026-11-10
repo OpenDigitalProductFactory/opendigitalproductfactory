@@ -77,7 +77,12 @@ export type ToolLevelGovernedCode =
   | "gate_client_upgrade_required"
   // Invite refused because the caller is not admitted to the room. Generic
   // forbidden stays a fault: other tools use it for outcomes this scan has not seen.
-  | "room_not_admitted";
+  | "room_not_admitted"
+  // BI-E458A9CB: the independent-review request is stale, ineligible or its
+  // connection is no longer current. The refusal names the read that refreshes
+  // it; the same request unchanged cannot succeed. Live ledger, 21 days: 5,947
+  // identical repeats, the largest retry loop on the install.
+  | "independent_review_request_denied";
 
 /**
  * What kind of answer each tool-level governed code is — total by construction.
@@ -115,6 +120,7 @@ const TOOL_LEVEL_GOVERNED_DISPOSITION: Record<ToolLevelGovernedCode, OutcomeDisp
   lease_lost: "refused",
   gate_client_upgrade_required: "refused",
   room_not_admitted: "refused",
+  independent_review_request_denied: "awaiting-input",
 };
 
 /**

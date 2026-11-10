@@ -73,7 +73,7 @@ export async function __typecheckMirrorWrites(): Promise<void> {
 
   await prisma.viewpointDefinition.upsert({
     where: { name: "Data Model" },
-    update: { description: "d", allowedElementTypeSlugs: ["data_object"], allowedRelTypeSlugs: ["associated_with"] },
-    create: { name: "Data Model", description: "d", allowedElementTypeSlugs: ["data_object"], allowedRelTypeSlugs: ["associated_with"] },
+    update: { description: "d", allowedElementTypeSlugs: ["data_object"], allowedRelTypeSlugs: ["has_foreign_key_to", "composed_of"] },
+    create: { name: "Data Model", description: "d", allowedElementTypeSlugs: ["data_object"], allowedRelTypeSlugs: ["has_foreign_key_to", "composed_of"] },
   });
 }

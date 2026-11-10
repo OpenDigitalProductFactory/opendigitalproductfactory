@@ -15,6 +15,7 @@
 // revealing anything about the real user or organization.
 
 import { execInSandbox, isSandboxRunning } from "./sandbox";
+import { errorTail } from "../error-tail";
 import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
 import { prisma } from "@dpf/db";
 import { buildBuildStudioSandboxTargetInput } from "@/lib/runtime-coordination/build-studio-runtime";
@@ -528,7 +529,7 @@ async function inspectCurrentSandboxSourceCurrency(
   });
 }
 
-async function recordBuildSourceCurrency(
+async function recordBuildSourceCurrencyOnBuild(
   buildId: string,
   snapshot: SandboxSourceCurrencySnapshot,
   summaryPrefix?: string,
@@ -568,7 +569,17 @@ async function refreshCurrentBranchFromTarget(args: {
   blockUnknown: boolean;
   /** BI-8C6AA60E: skip hard-reset when build/* already has local work. */
   preserveExistingWork?: boolean;
+  /**
+   * BI-76BD65E6: false when the branch being refreshed is not the build's own
+   * (the ship refresh fast-forwards the shared client branch). Recording that
+   * snapshot onto the build replaced the build's real one, so a failed refresh
+   * left the build looking merely "behind" and it was never retried.
+   */
+  recordOnBuild?: boolean;
 }): Promise<SandboxSourceCurrencySnapshot> {
+  const recordBuildSourceCurrency: typeof recordBuildSourceCurrencyOnBuild = args.recordOnBuild === false
+    ? async () => {}
+    : recordBuildSourceCurrencyOnBuild;
   const before = await inspectCurrentSandboxSourceCurrency(args.targetRef);
 
   // Preserve ahead/dirty/source-delta build branches on resume (BI-8C6AA60E).
@@ -885,9 +896,10 @@ export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<B
       branchName: identity.clientBranch,
       targetRef: "origin/main",
       blockUnknown: true,
+      recordOnBuild: false,
     });
   } catch (err) {
-    return { status: "client-not-refreshable", reason: (err as Error).message.slice(0, 300) };
+    return { status: "client-not-refreshable", reason: errorTail(err) };
   }
   if (client.recommendedAction !== "allow") {
     return { status: "client-not-refreshable", reason: formatSandboxSourceCurrencySummary(client) };
@@ -947,7 +959,7 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
         targetRef: "origin/main",
         checkedAt: new Date().toISOString(),
       });
-      await recordBuildSourceCurrency(
+      await recordBuildSourceCurrencyOnBuild(
         buildId,
         snapshot,
         `Could not verify origin/main before Build Studio work starts: ${(err as Error).message?.slice(0, 200)}`,
@@ -1017,7 +1029,7 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
         checkedAt: new Date().toISOString(),
       })
     );
-    await recordBuildSourceCurrency(
+    await recordBuildSourceCurrencyOnBuild(
       buildId,
       snapshot,
       "Upstream remote is not configured; sandbox source currency is observe-only.",
@@ -1061,7 +1073,7 @@ export async function startBuildBranch(buildId: string): Promise<SandboxSourceCu
   const finalSourceCurrency = await inspectCurrentSandboxSourceCurrency(
     upstreamVerified ? "origin/main" : identity.clientBranch,
   );
-  await recordBuildSourceCurrency(buildId, finalSourceCurrency);
+  await recordBuildSourceCurrencyOnBuild(buildId, finalSourceCurrency);
 
   const updatedBuild = await prisma.featureBuild.update({
     where: { buildId },

@@ -16,6 +16,10 @@ import { prisma } from "@dpf/db";
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
 
 import { prismaHarnessEvolutionStore, type HarnessEvolutionStore } from "./harness-evolution-store";
+import type { ImprovementCriteria } from "./improvement-criteria";
+import { runProbeStage, type ProbeStageResult } from "./probe-stage";
+import { principleDecideScopeDecider } from "./scope-decider";
+import type { ScopeDecider } from "./scope-verdict";
 import {
   MS_PER_DAY,
   RING0_LAYER,
@@ -42,6 +46,8 @@ export type HarnessEvolutionSpend = {
   roomsScanned: number;
   candidatesRecorded: number;
   probeReplays: number;
+  /** principle_decide consults made in the candidates' owning scopes. */
+  scopeDecisions: number;
   tokens: number;
 };
 
@@ -54,7 +60,21 @@ export type HarnessEvolutionRunResult = {
   roomsWithCandidates: number;
   roomsDeferred: number;
   crossRoomRecurrences: number;
+  verdicts: { adopt: number; keepBase: number; kernelGap: number; unprobed: number };
 };
+
+const NO_VERDICTS = { adopt: 0, keepBase: 0, kernelGap: 0, unprobed: 0 };
+
+function countSkips(stage: ProbeStageResult): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const { reason } of stage.unprobed) counts[reason] = (counts[reason] ?? 0) + 1;
+  return counts;
+}
+
+function countVerdicts(stage: ProbeStageResult): HarnessEvolutionRunResult["verdicts"] {
+  const count = (v: string) => stage.verdicts.filter((x) => x.verdict === v).length;
+  return { adopt: count("ADOPT"), keepBase: count("KEEP_BASE"), kernelGap: count("KERNEL_GAP"), unprobed: stage.unprobed.length };
+}
 
 /** UTC calendar day: one aggregate per day, one record per room per day. */
 export function harnessEvolutionPeriodKey(now: Date): string {
@@ -69,18 +89,22 @@ function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V) {
 
 export async function runHarnessEvolutionLoop(
   store: HarnessEvolutionStore,
-  input: { ownerUserId: string; agentId: string; taskId: string; taskConfig: unknown; now: Date },
+  input: {
+    ownerUserId: string; agentId: string; taskId: string; taskConfig: unknown; now: Date; decide: ScopeDecider;
+    /** BI-CE564FBB operating criteria; the local defaults apply when omitted. */
+    criteria?: ImprovementCriteria;
+  },
 ): Promise<HarnessEvolutionRunResult> {
   const periodKey = harnessEvolutionPeriodKey(input.now);
   const repeatedPatternKey = `harness-evolution:${periodKey}`;
   const budget = resolveHarnessEvolutionBudget(input.taskConfig);
-  const spend: HarnessEvolutionSpend = { roomsScanned: 0, candidatesRecorded: 0, probeReplays: 0, tokens: 0 };
+  const spend: HarnessEvolutionSpend = { roomsScanned: 0, candidatesRecorded: 0, probeReplays: 0, scopeDecisions: 0, tokens: 0 };
 
   const existing = await store.findRun(repeatedPatternKey);
   if (existing) {
     return {
       periodKey, idempotent: true, taskRunId: existing.taskRunId, budget, spend,
-      roomsWithCandidates: 0, roomsDeferred: 0, crossRoomRecurrences: 0,
+      roomsWithCandidates: 0, roomsDeferred: 0, crossRoomRecurrences: 0, verdicts: NO_VERDICTS,
     };
   }
 
@@ -145,6 +169,36 @@ export async function runHarnessEvolutionLoop(
     recorded.push(...derived.candidates);
   }
 
+  // Slice 2: probe the recorded candidates within the replay budget, each judged by its owning scope.
+  const humanActivityByRoom = new Map<string, number>();
+  for (const room of rooms) {
+    const human = (activitiesByRoom.get(room.id) ?? []).filter((row) => room.layer.missKinds[row.kind]?.actor === "human").length;
+    humanActivityByRoom.set(room.id, human);
+  }
+  const windowWeeks = budget.lookbackDays / 7;
+  const shapeRunsPerWeek = new Map<string, number>();
+  for (const room of rooms) {
+    const key = shapeKeyOf(room.shapeRef);
+    shapeRunsPerWeek.set(key, (shapeRunsPerWeek.get(key) ?? 0) + 1 / windowWeeks);
+  }
+  const probeStage = await runProbeStage({
+    store,
+    decide: input.decide,
+    candidates: recorded,
+    rooms: new Map(rooms.map((room) => [room.capsuleId, room])),
+    humanActivityByRoom,
+    since,
+    windowWeeks,
+    shapeRunsPerWeek,
+    periodKey,
+    agentId: input.agentId,
+    maxProbeReplays: budget.maxProbeReplays,
+    criteria: input.criteria,
+  });
+  spend.probeReplays = probeStage.probeReplays;
+  spend.scopeDecisions = probeStage.scopeDecisions;
+  const verdicts = countVerdicts(probeStage);
+
   const crossRoomRecurrences = findCrossRoomRecurrences(recorded);
   const ring0ShapeKeys = new Set(rooms.map((room) => shapeKeyOf(room.shapeRef)));
   const shapeSignals = (await store.listShapeSignals(since)).flatMap((signal) => {
@@ -171,19 +225,22 @@ export async function runHarnessEvolutionLoop(
     periodKey,
     repeatedPatternKey,
     completedAt: input.now,
-    // Slice 1 derives and records only: no editor tokens, no probe replays.
-    // Recorded as zero, not omitted, so the line compares once slice 2 spends.
+    // Probes are deterministic replays and the scope consult is kernel scoring,
+    // so tokens stay zero until the slice-3 editor writes edits; recorded, not omitted.
     progressPayload: {
       periodKey, budget, spend, roomsWithCandidates, roomsDeferred,
-      crossRoomRecurrences: crossRoomRecurrences.length,
+      crossRoomRecurrences: crossRoomRecurrences.length, verdicts, skipped: countSkips(probeStage),
     },
-    artifactData: { periodKey, budget, spend, layers: LAYERS.map((layer) => layer.key), crossRoomRecurrences, shapeSignals, platformQueue },
+    artifactData: {
+      periodKey, budget, spend, layers: LAYERS.map((layer) => layer.key), crossRoomRecurrences, shapeSignals, platformQueue,
+      probes: { verdicts: probeStage.verdicts, unprobed: probeStage.unprobed },
+    },
     artifactDescription: `${roomsWithCandidates} rooms with candidates, ${crossRoomRecurrences.length} cross-room recurrences`,
   });
 
   return {
     periodKey, idempotent: false, taskRunId: run.taskRunId, budget, spend,
-    roomsWithCandidates, roomsDeferred, crossRoomRecurrences: crossRoomRecurrences.length,
+    roomsWithCandidates, roomsDeferred, crossRoomRecurrences: crossRoomRecurrences.length, verdicts,
   };
 }
 
@@ -193,7 +250,9 @@ export function describeHarnessEvolutionRun(result: HarnessEvolutionRunResult): 
   const recurrences = `${result.crossRoomRecurrences} cross-room recurrence${result.crossRoomRecurrences === 1 ? "" : "s"}`;
   const deferred = result.roomsDeferred ? `; ${result.roomsDeferred} rooms deferred by the cap` : "";
   return `${result.roomsWithCandidates} of ${result.spend.roomsScanned} ring-0 rooms hold ${result.spend.candidatesRecorded} candidates; `
-    + `${recurrences}${deferred}; spend ${result.spend.tokens} tokens, ${result.spend.probeReplays} probe replays`;
+    + `${recurrences}${deferred}; verdicts ${result.verdicts.adopt} adopt, ${result.verdicts.keepBase} keep-base, `
+    + `${result.verdicts.kernelGap} kernel-gap, ${result.verdicts.unprobed} unprobed; `
+    + `spend ${result.spend.tokens} tokens, ${result.spend.probeReplays} probe replays, ${result.spend.scopeDecisions} scope decisions`;
 }
 
 /** The scheduled-task fields this branch reads. */
@@ -207,7 +266,7 @@ export interface HarnessEvolutionLoopTask {
 
 export async function executeHarnessEvolutionLoopTask(
   task: HarnessEvolutionLoopTask,
-  deps: { now?: Date; store?: HarnessEvolutionStore } = {},
+  deps: { now?: Date; store?: HarnessEvolutionStore; decide?: ScopeDecider } = {},
 ): Promise<void> {
   const startedAt = deps.now ?? new Date();
   const nextRunAt = computeNextCronRun(task.schedule, startedAt);
@@ -218,6 +277,7 @@ export async function executeHarnessEvolutionLoopTask(
       taskId: task.taskId,
       taskConfig: task.taskConfig,
       now: startedAt,
+      decide: deps.decide ?? principleDecideScopeDecider(task.ownerUserId, task.agentId),
     });
     const summary = describeHarnessEvolutionRun(result);
     console.info("[harness-evolution-loop] %s", summary);

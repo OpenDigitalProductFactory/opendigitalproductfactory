@@ -23,6 +23,15 @@
       "safetyMarginBytes": 3758096384
     }
   },
+  "hostRemainingGrowthPolicy": {
+    "version": 1,
+    "admissionReserveBytes": 15042142208,
+    "admissionCalibration": {
+      "version": 1,
+      "safetyMarginBytes": 1073741824,
+      "maxSamples": 20
+    }
+  },
   "slots": {
     "slot-0": {
       "ordinal": 0,

@@ -5,5 +5,19 @@
     "missingLabel": "Missing roles",
     "platformOrchestrators": "platform orchestrators",
     "completeHint": "every required role is staffed"
+  },
+  "knowledgeCorpus": {
+    "heading": "Knowledge corpus",
+    "kernel": "Platform kernel",
+    "organization": "Organization knowledge",
+    "families": "Profession families",
+    "granted": "Granted",
+    "revoked": "Revoked",
+    "mapped": "Mapped",
+    "notMapped": "Not mapped",
+    "reportOnlyAll": "Every family while report-only; each read is recorded.",
+    "noFamily": "No profession family.",
+    "ownFamily": "Own family",
+    "mode": "Mode: {$mode}."
   }
 }

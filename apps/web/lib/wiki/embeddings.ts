@@ -12,6 +12,7 @@
 
 import { VECTOR_COLLECTIONS, upsertVectors, searchSimilar, deleteVectors, prisma } from "@dpf/db";
 import { generateEmbedding } from "@/lib/inference/embedding";
+import type { CorpusReadScope } from "@/lib/tak/corpus-read-scope";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -135,7 +136,31 @@ export type SearchWikiPagesInput = {
    * scope contains `universal-ring`, the filter is a no-op (caller is open).
    */
   principleRingScope?: string[];
+  /**
+   * The caller's corpus grants (BI-825D3487), from resolveCorpusReadScope. A
+   * corpus the caller does not hold runs no pass, and the profession pass is
+   * limited to the caller's families, its own first. Omitted = no limit.
+   */
+  corpusScope?: CorpusReadScope;
 };
+
+/** The passes a corpus scope leaves open; with no scope, every pass (today's contract). */
+function scopedPasses(input: SearchWikiPagesInput) {
+  const scope = input.corpusScope;
+  const requested = input.professionKeys?.length ? input.professionKeys : null;
+  const allowed = scope?.professionFamilies ?? null;
+  const professionKeys = allowed === null ? requested : (requested ?? [...allowed]).filter((key) => allowed.has(key));
+  return {
+    organizationId: scope && !scope.organization ? null : input.organizationId,
+    kernel: scope?.kernel ?? true,
+    includeProfession: Boolean(input.includeProfessionCorpus) && (professionKeys === null || professionKeys.length > 0),
+    /** Empty = every family. */
+    professionKeys: professionKeys ?? [],
+    /** The caller named a craft, so craft doctrine leads. */
+    callerScoped: requested !== null,
+    ownFamilyPrefix: scope?.familyKey ? `professions/${scope.familyKey}/` : null,
+  };
+}
 
 function lexicalTokens(value: string): string[] {
   return [...new Set(value.toLowerCase().match(/[a-z0-9]+/g) ?? [])]
@@ -153,22 +178,25 @@ export async function searchWikiPagesLexically(
 ): Promise<WikiSearchResult[]> {
   // The profession clause mirrors the semantic pass-C cohort: isKernel:false,
   // organizationId:null, slug under professions/ (optionally scoped to keys).
-  const professionClause = input.includeProfessionCorpus
-    ? (input.professionKeys?.length
-        ? input.professionKeys.map((key) => ({
+  const passes = scopedPasses(input);
+  const professionClause = passes.includeProfession
+    ? (passes.professionKeys.length
+        ? passes.professionKeys.map((key) => ({
             isKernel: false,
             organizationId: null,
             slug: { startsWith: `professions/${key}/` },
           }))
         : [{ isKernel: false, organizationId: null, slug: { startsWith: "professions/" } }])
     : [];
+  const corpusClauses = [
+    ...(passes.organizationId ? [{ organizationId: passes.organizationId }] : []),
+    ...(passes.kernel ? [{ isKernel: true }] : []),
+    ...professionClause,
+  ];
+  if (corpusClauses.length === 0) return [];
   const where: Record<string, unknown> = {
     status: "published",
-    ...(input.organizationId
-      ? { OR: [{ organizationId: input.organizationId }, { isKernel: true }, ...professionClause] }
-      : professionClause.length > 0
-        ? { OR: [{ isKernel: true }, ...professionClause] }
-        : { isKernel: true }),
+    ...(corpusClauses.length === 1 ? corpusClauses[0] : { OR: corpusClauses }),
     ...(input.pageKinds?.length
       ? { pageKind: { in: input.pageKinds } }
       : input.pageKind ? { pageKind: input.pageKind } : {}),
@@ -199,11 +227,13 @@ export async function searchWikiPagesLexically(
 
   // An org override masks its kernel source even if the lexical kernel score is higher.
   const maskedKernelIds = new Set(ranked
-    .filter(({ row }) => row.organizationId === input.organizationId && row.kernelPageId)
+    .filter(({ row }) => row.organizationId === passes.organizationId && row.kernelPageId)
     .map(({ row }) => row.kernelPageId));
+  const ownFamily = (slug: string) => Number(passes.ownFamilyPrefix !== null && slug.startsWith(passes.ownFamilyPrefix));
   return ranked
     .filter(({ row }) => !row.isKernel || !maskedKernelIds.has(row.id))
     .sort((a, b) => Number(Boolean(b.row.organizationId)) - Number(Boolean(a.row.organizationId))
+      || ownFamily(b.row.slug) - ownFamily(a.row.slug)
       || b.rank - a.rank || a.row.slug.localeCompare(b.row.slug))
     .slice(0, input.limit ?? 5)
     .map(({ row, rank }) => ({
@@ -355,6 +385,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
 
   const limit = input.limit ?? 5;
   const scoreThreshold = input.scoreThreshold ?? 0.55;
+  const passes = scopedPasses(input);
 
   // the vector store accepts richer match shapes than just `{value: scalar}` — the
   // ring-scope `should` clause below uses `match: {any: [...]}` for OR
@@ -427,11 +458,11 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
 
   // ── Pass A — org-scoped, only when an organization is in context ──
   let orgResults: WikiSearchResult[] = [];
-  if (input.organizationId !== null) {
+  if (passes.organizationId !== null) {
     const orgFilter: Record<string, unknown> = {
       must: [
         ...baseFilter,
-        { key: "organizationId", match: { value: input.organizationId } },
+        { key: "organizationId", match: { value: passes.organizationId } },
       ],
     };
     if (ringScopeShould.length > 0) orgFilter.should = ringScopeShould;
@@ -447,7 +478,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
 
   // With the profession pass opted in, a full pass-A page cannot short-circuit —
   // the caller asked for craft doctrine, which pass A can never contain.
-  if (orgResults.length >= limit && !input.includeProfessionCorpus) {
+  if (orgResults.length >= limit && !passes.includeProfession) {
     return orgResults.slice(0, limit);
   }
 
@@ -464,7 +495,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
   // profession pass is sliced away every time — which made the opt-in inert in
   // production even though the corpus was ingested and embedded.
   let professionResults: WikiSearchResult[] = [];
-  if (input.includeProfessionCorpus) {
+  if (passes.includeProfession) {
     const professionFilter: Record<string, unknown> = {
       must: [
         ...baseFilter,
@@ -480,11 +511,14 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
       limit,
       scoreThreshold,
     );
-    const keyPrefixes = (input.professionKeys ?? []).map((k) => `professions/${k}/`);
+    const keyPrefixes = passes.professionKeys.map((k) => `professions/${k}/`);
+    const own = passes.ownFamilyPrefix;
     professionResults = professionRaw
       .map((r) => projectResult(r, "profession"))
       .filter((r) => r.slug.startsWith("professions/"))
-      .filter((r) => keyPrefixes.length === 0 || keyPrefixes.some((p) => r.slug.startsWith(p)));
+      .filter((r) => keyPrefixes.length === 0 || keyPrefixes.some((p) => r.slug.startsWith(p)))
+      // The caller's own family ranks first; stable, so cosine order holds within each group.
+      .sort((a, b) => own === null ? 0 : Number(b.slug.startsWith(own)) - Number(a.slug.startsWith(own)));
   }
 
   // The share of `limit` the profession pass may claim before pass B is sized.
@@ -492,8 +526,8 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
   // craft doctrine leads and takes the larger share; the default broad include
   // takes a minority share so org and kernel doctrine still dominate. Unused
   // quota falls through to pass B — a thin profession corpus costs nothing.
-  const professionScoped = (input.professionKeys?.length ?? 0) > 0;
-  const professionQuota = input.includeProfessionCorpus
+  const professionScoped = passes.callerScoped;
+  const professionQuota = passes.includeProfession
     ? Math.max(1, Math.ceil((limit * (professionScoped ? 2 : 1)) / 3))
     : 0;
   const professionSlice = professionResults.slice(
@@ -524,7 +558,7 @@ export async function searchWikiPages(input: SearchWikiPagesInput): Promise<Wiki
   const orgSlice = orgResults.slice(0, nonProfessionBudget);
   const remaining = Math.max(0, nonProfessionBudget - orgSlice.length);
   const kernelRaw =
-    remaining > 0
+    remaining > 0 && passes.kernel
       ? await searchSimilar(
           VECTOR_COLLECTIONS.WIKI_PAGES,
           vector,

@@ -12,6 +12,7 @@ import { workroomRuntimeConsequence } from "@/lib/workroom-runtime/runtime-conse
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
+import { ATLAS_HEALTH_STATES } from "@/lib/work-management/atlas-health";
 import { PRINCIPAL_SENSITIVITIES } from "@dpf/db/principal-sensitivity";
 import type { ToolPack } from "../tool-pack";
 
@@ -89,14 +90,15 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        view: { type: "string", enum: ["instances", "definitions"], description: "Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
+        view: { type: "string", enum: ["instances", "definitions", "atlas"], description: "atlas returns the Work Atlas picture: health counts, plus up to limit (max 400) rows, optionally filtered by health. Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
+        health: { type: "string", enum: [...ATLAS_HEALTH_STATES], description: "view atlas only: rows in this health state." },
         status: { type: "string", enum: ENUMS.statuses, description: "Filter by Workroom status." },
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
         headBranch: { type: "string", maxLength: 255, description: "Find the room for this branch, including one another assistant made for you." },
         pullRequestNumber: { type: "integer", minimum: 1, description: "Find the room for this pull request, including one another assistant made for you." },
-        limit: { type: "integer", minimum: 1, maximum: 100, description: "Requested page size (default 5, maximum 100); whole rows are reduced to fit the client budget." },
+        limit: { type: "integer", minimum: 1, maximum: 400, description: "Requested page size (default 5, maximum 100; view atlas default 10, maximum 400); whole rows are reduced to fit the client budget." },
         cursor: { type: "string", maxLength: 1024, description: "Opaque continuation for the selected view. Instance and definition cursors cannot be mixed. Keep instance filters unchanged. Instance expiry or changed definition inventory requires a fresh traversal." },
       },
       required: [],
@@ -167,7 +169,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "adopt_worktree",
-    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. Pass backlogItemId to bind the work: the returned Workroom carries the binding or the call fails, never a partly-bound record. A branch has one durable workroom identity; a terminal Workroom with no backlog item is resumed and rebound rather than blocking the branch, while a foreign binding returns branch_occupied instead of overwriting history.",
+    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. Pass backlogItemId to bind the work: the returned Workroom carries the binding or the call fails, never a partly-bound record. A branch has one durable workroom identity; a terminal Workroom with no backlog item is resumed and rebound rather than blocking the branch, while a foreign binding returns branch_occupied instead of overwriting history. Worked example: adopt_worktree({\"title\":\"Fix short-SHA refusals\",\"objective\":\"Tools resolve short SHAs\",\"repositoryFullName\":\"OpenDigitalProductFactory/opendigitalproductfactory\",\"headBranch\":\"fix/short-sha\",\"worktreePath\":\"D:/DPF-source-root-worktrees/short-sha\",\"backlogItemId\":\"BI-XXXXXXXX\",\"baseSha\":\"7fb295c\",\"headSha\":\"7fb295c\",\"sessionRef\":\"<your session id>\"}).",
     inputSchema: {
       type: "object",
       properties: {
@@ -178,8 +180,8 @@ const definitions: ToolDefinition[] = [
         worktreePath: { type: "string", description: "Local worktree path for the branch." },
         backlogItemId: { type: "string", description: "BacklogItem this work delivers (BI-*). Bound onto the Workroom and read back; an unknown id is refused rather than dropped." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
-        baseSha: { type: "string", description: "Optional current base SHA." },
-        headSha: { type: "string", description: "Optional current head SHA." },
+        baseSha: { type: "string", description: "Optional current base SHA: full, or a prefix of 7+ hex characters the server expands against the repository." },
+        headSha: { type: "string", description: "Optional current head SHA: full, or a prefix of 7+ hex characters the server expands against the repository (an unpushed head must be full)." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor adopting the worktree." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef. Without it a claim can be shown to exist but not shown to be yours." },
         ...scopeProperties,
@@ -192,7 +194,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
+      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason. Worked example: claim_backlog_item_for_work({\"itemId\":\"BI-XXXXXXXX\",\"worktreePath\":\"D:/DPF-source-root-worktrees/short-sha\",\"branchName\":\"fix/short-sha\",\"provider\":\"claude\",\"sessionRef\":\"<your session id>\",\"baseSha\":\"7fb295c\",\"headSha\":\"7fb295c\",\"workIntent\":\"design\"}).",
     inputSchema: {
       type: "object",
       properties: {
@@ -201,8 +203,8 @@ const definitions: ToolDefinition[] = [
         branchName: { type: "string", description: "Branch (head) for this work — the workroom is keyed on (repo, branch)." },
         repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
-        baseSha: { type: "string", description: "Full 40-character SHA of the base commit. With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
-        headSha: { type: "string", description: "Full 40-character SHA of the branch head." },
+        baseSha: { type: "string", description: "SHA of the base commit: full, or a prefix of 7+ hex characters the server expands against the repository (an ambiguous prefix is refused with its candidates). With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
+        headSha: { type: "string", description: "SHA of the branch head: full, or a 7+ character prefix of a pushed commit. An unpushed head must be the full git rev-parse HEAD output." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workShape: {

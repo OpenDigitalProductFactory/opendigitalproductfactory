@@ -4,6 +4,8 @@
 
 import { isRecord } from "@dpf/validators";
 
+import { isInstallationEnvironmentClass, type InstallationEnvironmentClass } from "./installation-operating-intent";
+
 export const ORGANIZATION_JOIN_ACTION_TYPES = [
   "organization.join.issue",
   "organization.join.import",
@@ -31,6 +33,12 @@ export interface OrganizationJoinPackagePreview {
   rootFingerprint: string;
   intendedPeer: string;
   intendedSans: string[];
+  /**
+   * The class the authority attested for the joining installation, which the CA
+   * certifies as a URI SAN (BI-0716C8A8). Null for a file issued before classes
+   * were attested: unattested, never assumed production.
+   */
+  environmentClass: InstallationEnvironmentClass | null;
   expiresAt: Date;
 }
 
@@ -44,11 +52,12 @@ const PACKAGE_KEYS = [
   "root_fingerprint",
   "intended_hostname",
   "intended_sans",
+  "environment_class",
   "expires_at",
   "enrollment_token",
   "edge_client_enrollment_token",
 ] as const;
-const REQUIRED_PACKAGE_KEYS = PACKAGE_KEYS.filter((key) => key !== "intended_sans");
+const REQUIRED_PACKAGE_KEYS = PACKAGE_KEYS.filter((key) => key !== "intended_sans" && key !== "environment_class");
 const SAFE_PEER = /^[A-Za-z0-9._:-]{1,253}$/;
 const SAFE_TOKEN = /^[A-Za-z0-9._-]{1,4096}$/;
 const MAX_JOIN_PACKAGE_BYTES = 64 * 1024;
@@ -160,6 +169,11 @@ export function parseOrganizationJoinPackageMaterial(
   }
   const intendedSans = intendedSansRaw === "" ? [] : intendedSansRaw.split(",");
   if (intendedSans.some((value) => !SAFE_PEER.test(value))) return { ok: false, reason: "invalid-join-package" };
+  const environmentClassRaw = fields.get("environment_class");
+  if (environmentClassRaw !== undefined && !isInstallationEnvironmentClass(environmentClassRaw)) {
+    return { ok: false, reason: "invalid-environment-class" };
+  }
+  const environmentClass = environmentClassRaw ?? null;
   if (!isPrivateOrganizationCaUrl(caUrl)) return { ok: false, reason: "invalid-private-ca-url" };
   if (!/^\d{1,12}$/.test(expiresRaw)) return { ok: false, reason: "invalid-package-expiry" };
   const expiresAt = new Date(Number(expiresRaw) * 1000);
@@ -171,7 +185,7 @@ export function parseOrganizationJoinPackageMaterial(
   }
   return {
     ok: true,
-    value: { packageId, caUrl, rootFingerprint, intendedPeer, intendedSans, expiresAt, enrollmentToken: fields.get("enrollment_token")! },
+    value: { packageId, caUrl, rootFingerprint, intendedPeer, intendedSans, environmentClass, expiresAt, enrollmentToken: fields.get("enrollment_token")! },
   };
 }
 

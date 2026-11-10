@@ -55,7 +55,12 @@ function makeClient() {
   return {
     eaNotation: { findUnique: async () => ({ id: "n", slug: "archimate4" }) },
     eaElementType: { findUnique: async () => ({ id: "et", neoLabel: "ArchiMate__DataObject", slug: "data_object" }) },
-    eaRelationshipType: { findUnique: async () => ({ id: "rt", neoType: "ASSOCIATED_WITH", slug: "associated_with" }) },
+    eaRelationshipType: {
+      findUnique: async (args: Record<string, unknown>) => {
+        const slug = (args.where as { notationId_slug: { slug: string } }).notationId_slug.slug;
+        return { id: `rt-${slug}`, neoType: slug.toUpperCase(), slug };
+      },
+    },
     viewpointDefinition: { upsert: async () => ({ id: "vp" }) },
     eaView: { findFirst: async () => null, create: async () => ({ id: "view" }) },
     eaElement: store(elements, "el"),

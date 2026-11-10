@@ -118,6 +118,12 @@ function claimsAheadFromState(state) {
   return null;
 }
 
+/** The newest recorded queue position (1 = next in line), or null. */
+function queuePositionFromState(state) {
+  const ahead = claimsAheadFromState(state);
+  return ahead === null ? null : ahead + 1;
+}
+
 function rank(verdict) {
   const index = PREGATE_VERDICTS.indexOf(verdict);
   return index < 0 ? -1 : index;
@@ -401,7 +407,11 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
   const evidenceId = String(state?.evidenceRecordId || "");
   const recordedAt = String(state?.recordedAt || "");
   const expiresAt = String(state?.expiresAt || "");
-  const base = { boundSha, boundBranch, candidateSha, evidenceId, recordedAt, expiresAt, gateStatus: String(state?.status || ""), staleness: "" };
+  const base = {
+    boundSha, boundBranch, candidateSha, evidenceId, recordedAt, expiresAt,
+    gateStatus: String(state?.status || ""), staleness: "",
+    queuePosition: state?.status === "queued" ? queuePositionFromState(state) : null,
+  };
 
   if (!state) {
     return { ...base, verdict: "NO-RECORD", reason: "no gate record for this worktree — pregate has not run here" };
@@ -519,9 +529,112 @@ export function reconcileSlots(slots) {
   return { ...best, slot: best.slotKey ?? null };
 }
 
-/** Exit code contract: 0 ONLY for a PASS bound to the current HEAD. */
+/**
+ * BI-F039AA83. The words a gate that is still WORKING reports instead of a
+ * verdict. None of them is terminal: the right response to each is to wait and
+ * read again, never to stop, re-claim, or tell anyone the gate failed.
+ */
+export const PREGATE_LIVE_VERDICTS = Object.freeze(["PREFLIGHT", "QUEUED", "ADMITTED", "RUNNING"]);
+
+/** Exit code while a gate is still working — EX_TEMPFAIL, the same 75 pregate exits with when it queues. */
+export const LIVE_GATE_EXIT_CODE = 75;
+
+/**
+ * Exit code contract: 0 ONLY for a PASS bound to the current HEAD; 75 while a
+ * gate for HEAD is still working (wait, then read again); 1 for everything else.
+ */
 export function exitCodeForVerdict(verdict) {
-  return verdict === "PASS" ? 0 : 1;
+  if (verdict === "PASS") return 0;
+  return PREGATE_LIVE_VERDICTS.includes(verdict) ? LIVE_GATE_EXIT_CODE : 1;
+}
+
+const LIVE_STAGE_TEXT = Object.freeze({
+  preflight: "guard-parity preflight",
+  "reduced-tier": "reduced-tier verification",
+  gate: "local-CI admission",
+  queued: "waiting for a local-CI slot",
+  admitted: "admitted — sandbox run starting",
+  running: "sandbox run",
+});
+const LIVE_VERDICT_FOR_STATUS = Object.freeze({ queued: "QUEUED", admitted: "ADMITTED", running: "RUNNING" });
+
+/**
+ * BI-F039AA83. Overlay the LIVE process state onto the record verdict.
+ *
+ * The records say what the last run concluded; they cannot say a run is still
+ * going. Two facts can: the pregate live marker (written at pregate start, so
+ * it covers the preflight that precedes any record) and the local-CI queue
+ * observer the gate process registers for its whole lease. Either one, proven
+ * alive for HEAD, turns a record that would read NO-RECORD, FAIL or
+ * INCONCLUSIVE into PREFLIGHT / QUEUED / ADMITTED / RUNNING.
+ *
+ * A PASS for HEAD is never overlaid: it is already the answer. A live pregate
+ * gating a different commit does not stand in for HEAD; it is named in the
+ * reason so nobody starts a second run on top of it.
+ *
+ * HEAD's in-flight record is looked for in EVERY slot, not only the reconciled
+ * winner: a five-day-old record in the other slot reconciles as STALE and
+ * outranks a queued claim, which hid a live queue behind "STALE" (2026-11-03).
+ *
+ * @param {object} reconciled verdict (reconcileSlots or the NO-RECORD stub)
+ * @param {{ live?: ReturnType<import("./pregate-live.mjs").readLivePregate>,
+ *           queuedWaiter?: { checked?: boolean, alive?: boolean, pids?: number[], alivePids?: number[] } | null,
+ *           slots?: object[], headSha?: string, headBranch?: string }} input
+ */
+export function applyLiveGate(reconciled, { live = null, queuedWaiter = null, slots = [], headSha = "", headBranch = "" } = {}) {
+  if (!reconciled || reconciled.verdict === "PASS") return reconciled;
+  const sameBranch = (branch) => !headBranch || !branch || branch === headBranch;
+  const liveForHead = live && live.sha === headSha && sameBranch(live.branch) ? live : null;
+  const inFlightRecord = [reconciled, ...slots].find((record) => record?.boundSha === headSha
+    && sameBranch(record.boundBranch) && LIVE_VERDICT_FOR_STATUS[record.gateStatus]);
+  const result = inFlightRecord && inFlightRecord !== reconciled
+    ? { ...inFlightRecord, slot: inFlightRecord.slotKey ?? inFlightRecord.slot ?? null }
+    : reconciled;
+  const inFlightStatus = inFlightRecord ? inFlightRecord.gateStatus : "";
+  const waiterAlive = queuedWaiter?.checked === true && queuedWaiter.alive === true;
+  const waiterPid = (queuedWaiter?.alivePids ?? queuedWaiter?.pids ?? [])[0] ?? null;
+
+  let verdict = "";
+  let stage = "";
+  let pid = null;
+  if (inFlightStatus && (waiterAlive || liveForHead?.stage === "gate")) {
+    verdict = LIVE_VERDICT_FOR_STATUS[inFlightStatus];
+    stage = inFlightStatus;
+    pid = liveForHead?.pid ?? waiterPid;
+  } else if (liveForHead) {
+    verdict = { gate: "QUEUED", "reduced-tier": "RUNNING" }[liveForHead.stage] ?? "PREFLIGHT";
+    stage = liveForHead.stage;
+    pid = liveForHead.pid;
+  }
+
+  if (!verdict) {
+    if (live?.sha && live.sha !== headSha) {
+      return {
+        ...reconciled,
+        reason: `${reconciled.reason} (a pregate, pid ${live.pid}, is still running for ${live.sha.slice(0, 12)}, not HEAD ${String(headSha).slice(0, 12)} — let it finish before gating HEAD)`,
+      };
+    }
+    return reconciled;
+  }
+
+  const queuePosition = inFlightStatus === "queued" ? (result.queuePosition ?? null) : null;
+  const stageText = LIVE_STAGE_TEXT[stage] || stage;
+  let where = `${stageText} in progress`;
+  if (verdict === "QUEUED") {
+    where = queuePosition !== null
+      ? `queued for the local-CI pool at position ${queuePosition}`
+      : "requesting a local-CI slot (queue position not yet known)";
+  }
+  const prior = ["NO-RECORD", "INCONCLUSIVE"].includes(reconciled.verdict)
+    ? ""
+    : ` The ${reconciled.verdict} on disk belongs to an earlier attempt and is being replaced.`;
+  return {
+    ...result,
+    verdict,
+    priorVerdict: reconciled.verdict,
+    reason: `pregate is still working (pid ${pid ?? "unknown"}): ${where}. This is not a verdict and not a failure — wait, then read pregate:status again.${prior}`,
+    live: { pid, stage: stageText, queuePosition },
+  };
 }
 
 function ageText(iso, now) {
@@ -557,10 +670,19 @@ export function formatStatusReport(result, { headBranch, headSha, now = Date.now
   if (result.candidateSha && result.candidateSha !== result.boundSha) {
     lines.push(`  metadata    candidateSha ${result.candidateSha.slice(0, 12)}`);
   }
+  if (result.live) {
+    lines.push(`  pid         ${result.live.pid ?? "unknown"}`);
+    lines.push(`  stage       ${result.live.stage}`);
+    if (result.live.queuePosition !== null && result.live.queuePosition !== undefined) {
+      lines.push(`  queue       position ${result.live.queuePosition}`);
+    }
+  }
   if (result.slot) lines.push(`  slot        ${result.slot}`);
   if (result.evidenceId) lines.push(`  evidence    ${result.evidenceId}`);
   if (result.logFile) lines.push(`  full log    ${result.logFile}`);
-  if (result.rerun === false) {
+  if (PREGATE_LIVE_VERDICTS.includes(result.verdict)) {
+    lines.push("  next        wait, then re-read: pnpm run pregate:status   (exit 75 = still working; do not start another pregate)");
+  } else if (result.rerun === false) {
     lines.push(`  next        ${result.remedy || "restore the gate substrate"}`);
   } else if (result.verdict !== "PASS") {
     if (result.gateStatus && result.boundSha === headSha) {

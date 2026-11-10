@@ -204,6 +204,11 @@ export type GovernedExecuteResult = ToolResult & {
     precondition?: PreconditionOrderingDecision;
     approvalReplayOf?: string;
     /**
+     * BI-E458A9CB: this answer is a parked repeat of an identical refused call,
+     * returned without re-evaluation (lib/govern/authority/refusal-breaker.ts).
+     */
+    parked?: { refusals: number; parkedCalls: number; parkedUntil: string | null };
+    /**
      * GPP Phase 2 PR-D (BI-69415B68): the permit the reference monitor minted
      * for this call — `gpp1.<permitId>.<keyId>.<mac>`, or the bare permit id
      * when the install has no permit key — and its shadow verdict. Additive;

@@ -44,7 +44,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
       - name: Test the detector
         run: node --test scripts/build-docs-staleness.test.mjs
       - name: Test the coverage measurement

@@ -1,12 +1,23 @@
 import { createHash } from "node:crypto";
 import { chmodSync, closeSync, constants, copyFileSync, existsSync, fstatSync, linkSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { BASH_OK, GIT_OK, makeScratch, PROMOTE_TEST_TIMEOUT_MS, promoteDiagnostics, runPromote } from "./promote-script-functional.test-support";
 
 const KEY = "DPF_REMOTE_ACTION_DISPATCH_ENABLED";
 const CONFIGURED = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED";
 const FIXTURE_KEYS = ["INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY", "DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET", "DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET", "DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "DPF_DELIVERY_TASK_CURSOR_SECRET"];
+const MODES = ["source", "release"] as const;
+const ONE_SHOT_CASES = MODES.flatMap(mode => ["0", "1", "", "invalid"].map(override => ({ mode, override })));
+const DURABLE_CASES = MODES.flatMap(mode => [
+  { env: "", configuredOverride: undefined, expected: "0" },
+  { env: `${CONFIGURED}=0\n`, configuredOverride: undefined, expected: "0" },
+  { env: `${CONFIGURED}=1\n`, configuredOverride: "0", expected: "0" },
+  { env: `${CONFIGURED}=0\n`, configuredOverride: "1", expected: "1" },
+  { env: `${CONFIGURED}=1\n${KEY}=\n`, configuredOverride: undefined, expected: "0" },
+].map(input => ({ mode, ...input })));
+const QUOTED_FILE_CASES = MODES.flatMap(mode => ["0", "1"].map(value => ({ mode, value })));
 
 function fixtureEnvSnapshot(path: string) {
   const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
@@ -49,6 +60,11 @@ function setup(mode: "source" | "release", env = `${CONFIGURED}=1\n`) {
 }
 
 describe.skipIf(!BASH_OK || !GIT_OK)("same-promotion configured Edge dispatch", () => {
+  it("declares every full promotion as an individually bounded case", () => {
+    const source = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    expect(source).not.toMatch(/it\.each\([\s\S]*?=>\s*\{\s*for\s*\(const\s+/);
+  });
+
   it.each(["source", "release"] as const)("the first %s portal recreation receives its configured missing default", mode => {
     const f = setup(mode);
     try {
@@ -60,50 +76,41 @@ describe.skipIf(!BASH_OK || !GIT_OK)("same-promotion configured Edge dispatch", 
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
-  it.each(["source", "release"] as const)("%s keeps one-shot process values out of the persistent file", mode => {
-    for (const override of ["0", "1", "", "invalid"]) {
-      const f = setup(mode);
-      try {
-        const r = runPromote({ ...f, composeEnvFile: f.envPath, dispatchOverride: override });
-        expect(r.status, promoteDiagnostics(r)).toBe(0);
-        const calls = readFileSync(f.dockerLog, "utf8");
-        expect(calls.match(/^dispatch service=portal value=(\S+)/m)?.[1]).toBe(override || "0");
-        expect(readFileSync(f.envPath, "utf8")).not.toMatch(new RegExp(`^${KEY}=`, "m"));
-      } finally { rmSync(f.root, { recursive: true, force: true }); }
-    }
+  it.each(ONE_SHOT_CASES)("$mode keeps one-shot process value '$override' out of the persistent file", ({ mode, override }) => {
+    const f = setup(mode);
+    try {
+      const r = runPromote({ ...f, composeEnvFile: f.envPath, dispatchOverride: override });
+      expect(r.status, promoteDiagnostics(r)).toBe(0);
+      const calls = readFileSync(f.dockerLog, "utf8");
+      expect(calls.match(/^dispatch service=portal value=(\S+)/m)?.[1]).toBe(override || "0");
+      expect(readFileSync(f.envPath, "utf8")).not.toMatch(new RegExp(`^${KEY}=`, "m"));
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
-  it.each(["source", "release"] as const)("%s distinguishes durable configuration from one-shot configuration", mode => {
-    for (const input of [
-      { env: "", configuredOverride: undefined, expected: "0" },
-      { env: `${CONFIGURED}=0\n`, configuredOverride: undefined, expected: "0" },
-      { env: `${CONFIGURED}=1\n`, configuredOverride: "0", expected: "0" },
-      { env: `${CONFIGURED}=0\n`, configuredOverride: "1", expected: "1" },
-      { env: `${CONFIGURED}=1\n${KEY}=\n`, configuredOverride: undefined, expected: "0" },
-    ]) {
-      const f = setup(mode, input.env);
-      try {
-        const before = readFileSync(f.envPath, "utf8");
-        const r = runPromote({ ...f, composeEnvFile: f.envPath, configuredOverride: input.configuredOverride });
-        expect(r.status, promoteDiagnostics(r)).toBe(0);
-        expect(readFileSync(f.dockerLog, "utf8").match(/^dispatch service=portal value=(\S+)/m)?.[1]).toBe(input.expected);
-        const after = readFileSync(f.envPath, "utf8");
-        expect(after.match(new RegExp(`^${KEY}=.*$`, "m"))?.[0]).toBe(before.match(new RegExp(`^${KEY}=.*$`, "m"))?.[0]);
-      } finally { rmSync(f.root, { recursive: true, force: true }); }
-    }
+  it.each(DURABLE_CASES)("$mode distinguishes durable '$env' from one-shot '$configuredOverride' configuration", ({ mode, env, configuredOverride, expected }) => {
+    const f = setup(mode, env);
+    try {
+      const before = readFileSync(f.envPath, "utf8");
+      const r = runPromote({ ...f, composeEnvFile: f.envPath, configuredOverride });
+      expect(r.status, promoteDiagnostics(r)).toBe(0);
+      expect(readFileSync(f.dockerLog, "utf8").match(/^dispatch service=portal value=(\S+)/m)?.[1]).toBe(expected);
+      const after = readFileSync(f.envPath, "utf8");
+      expect(after.match(new RegExp(`^${KEY}=.*$`, "m"))?.[0]).toBe(before.match(new RegExp(`^${KEY}=.*$`, "m"))?.[0]);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
-  it.each(["source", "release"] as const)("%s preserves explicit quoted file settings and an overriding process value", mode => {
-    for (const value of ["0", "1"]) {
-      const line = `${KEY}="${value}"\r\n`;
-      const f = setup(mode, `${CONFIGURED}=1\r\n${line}`);
-      try {
-        const r = runPromote({ ...f, composeEnvFile: f.envPath });
-        expect(r.status, promoteDiagnostics(r)).toBe(0);
-        expect(readFileSync(f.dockerLog, "utf8").match(/^dispatch service=portal value=(\S+)/m)?.[1]).toBe(value);
-        expect(readFileSync(f.envPath, "utf8")).toContain(line);
-      } finally { rmSync(f.root, { recursive: true, force: true }); }
-    }
+  it.each(QUOTED_FILE_CASES)("$mode preserves explicit quoted file setting '$value'", ({ mode, value }) => {
+    const line = `${KEY}="${value}"\r\n`;
+    const f = setup(mode, `${CONFIGURED}=1\r\n${line}`);
+    try {
+      const r = runPromote({ ...f, composeEnvFile: f.envPath });
+      expect(r.status, promoteDiagnostics(r)).toBe(0);
+      expect(readFileSync(f.dockerLog, "utf8").match(/^dispatch service=portal value=(\S+)/m)?.[1]).toBe(value);
+      expect(readFileSync(f.envPath, "utf8")).toContain(line);
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it.each(MODES)("%s preserves the file setting when a process value overrides it", mode => {
     const f = setup(mode, `${CONFIGURED}=1\n${KEY}=0\n`);
     try {
       const r = runPromote({ ...f, composeEnvFile: f.envPath, dispatchOverride: "1" });

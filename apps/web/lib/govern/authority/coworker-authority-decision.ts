@@ -117,7 +117,7 @@ export type CoworkerAuthorityInput = {
     policyProjectionAllowed?: boolean;
     consequence?: ToolConsequence | null;
     /** How this call's consequence was narrowed from the tool's declaration (BI-2D65BD1B). */
-    consequenceRefinement?: { declared: ToolConsequence; reason: string };
+    consequenceRefinement?: { declared: ToolConsequence; reason: string; approverSummary?: string };
     /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
     workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;
@@ -134,6 +134,8 @@ export type CoworkerAuthorityInput = {
    * put a non-damaging, steered action in front of a human.
    */
   steering?: EscalationSteering;
+  /** BI-E5631708: the envelope carrying the standing ruling that steered this call. */
+  standingRulingEnvelopeId?: string;
   subject?: CoworkerAuthoritySubject | null;
   /** The Workroom the call runs in, for the receipt; null when unroomed. */
   room?: {

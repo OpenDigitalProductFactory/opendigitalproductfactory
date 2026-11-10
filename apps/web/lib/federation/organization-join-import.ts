@@ -15,13 +15,16 @@
 import { createPublicKey, X509Certificate } from "node:crypto";
 
 import { prisma } from "@dpf/db";
+import type { InstallationEnvironmentClass } from "@dpf/db/installation-operating-intent";
 import { parseOrganizationJoinPackageMaterial } from "@dpf/db/organization-join-action";
 
 import { resolveAppBaseUrl } from "@/lib/app-url";
+import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import { postToPeer } from "./client";
 import { buildCertificateSigningRequest, classifySan, generateMembershipKeypair } from "./csr";
+import { environmentClassSan } from "./environment-class-attestation";
 import { splitPemChain, verifyMembershipChain } from "./membership-proof";
 import { writeMembershipMaterial, type MembershipFactsV1 } from "./membership-material";
 import { MEMBERSHIP_SIGN_PATH, MEMBERSHIP_SIGN_SPEC } from "./membership-relay";
@@ -37,7 +40,10 @@ export type JoinImportRefusal =
   | "authority-unreachable"
   | "authority-refused"
   | "chain-untrusted"
-  | "material-not-writable";
+  | "material-not-writable"
+  | "environment-class-unattested"
+  | "environment-class-undeclared"
+  | "environment-class-mismatch";
 
 export type JoinImportResult =
   | { imported: true; authorityUrl: string; caUrl: string; intendedPeer: string; expiresAt: string; materialDir: string }
@@ -69,6 +75,13 @@ export async function ownAddresses(
   return out;
 }
 
+async function readLocalEnvironmentClass(db: JoinImportDb): Promise<{ environmentClass: InstallationEnvironmentClass; declared: boolean }> {
+  const resolution = await loadEnvironmentClassResolution({
+    readConfig: async (key) => (await db.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+  });
+  return { environmentClass: resolution.environmentClass, declared: resolution.declared };
+}
+
 /** The leaf must certify OUR key; a certificate for any other key is useless and suspect. */
 function certifiesKey(chainPems: readonly string[], publicKeyPem: string): boolean {
   try {
@@ -97,6 +110,8 @@ export async function importOrganizationJoinFile(
     post?: typeof postToPeer;
     write?: typeof writeMembershipMaterial;
     generateKeypair?: typeof generateMembershipKeypair;
+    /** This installation's own class and whether any authority declared it. */
+    readLocalEnvironmentClass?: () => Promise<{ environmentClass: InstallationEnvironmentClass; declared: boolean }>;
   } = {},
 ): Promise<JoinImportResult> {
   const db = deps.db ?? (prisma as unknown as JoinImportDb);
@@ -113,9 +128,32 @@ export async function importOrganizationJoinFile(
     return { imported: false, reason: "intended-for-another-host", detail: `the file is for ${pkg.intendedPeer}` };
   }
 
+  // The class the CA will certify (BI-0716C8A8). The authority attested it in
+  // the file; this installation must have declared the same class itself, so
+  // an install that never said what it is cannot be certified as anything —
+  // in particular not as the production it would otherwise default to.
+  if (!pkg.environmentClass) {
+    return { imported: false, reason: "environment-class-unattested", detail: "the join file names no environment class; issue a new one" };
+  }
+  const local = await (deps.readLocalEnvironmentClass ?? (() => readLocalEnvironmentClass(db)))();
+  if (!local.declared) {
+    return { imported: false, reason: "environment-class-undeclared", detail: "declare this installation's environment class before joining" };
+  }
+  if (local.environmentClass !== pkg.environmentClass) {
+    return {
+      imported: false,
+      reason: "environment-class-mismatch",
+      detail: `the file was issued for a ${pkg.environmentClass} installation, but this one is declared ${local.environmentClass}`,
+    };
+  }
+
   // 2. A key that never leaves this machine, and the request to certify it.
   const keypair = (deps.generateKeypair ?? generateMembershipKeypair)();
-  const csrPem = buildCertificateSigningRequest({ privateKeyPem: keypair.privateKeyPem, commonName: pkg.intendedPeer, extraSans: pkg.intendedSans });
+  const csrPem = buildCertificateSigningRequest({
+    privateKeyPem: keypair.privateKeyPem,
+    commonName: pkg.intendedPeer,
+    extraSans: [...pkg.intendedSans, environmentClassSan(pkg.environmentClass)],
+  });
 
   // 3. The authority's portal, derived from the CA URL exactly as enrolment does.
   const authorityUrls = deriveAuthorityPortalUrls(pkg.caUrl);

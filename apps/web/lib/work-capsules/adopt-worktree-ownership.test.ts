@@ -58,6 +58,16 @@ describe("adopt_worktree for backlog work", () => {
     }
   });
 
+  it("BI-DF34D948 stores the expanded full SHA when a short one is supplied", async () => {
+    const db = database();
+    const full = "7fb295cf3a01e502439c29b858fdcdbe28f4758e";
+    const result = await adoptWorktree({ db: db as unknown as CapsuleDb, userId: "user-1", context: undefined, bindingReader,
+      resolveActor: oauthActor, params: { ...params, baseSha: "7fb295c", headSha: full },
+      resolveCommitDeps: async () => ({ lookupProviderCommit: async () => ({ kind: "found" as const, sha: full }), recordedCandidates: async () => [] }) });
+    expect(result.success).toBe(true);
+    expect(db.workroom.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ baseSha: full, headSha: full }) }));
+  });
+
   it("makes the person the owner, admits the assistant, and asks for the missing SHAs", async () => {
     const db = database();
     const result = await adoptWorktree({

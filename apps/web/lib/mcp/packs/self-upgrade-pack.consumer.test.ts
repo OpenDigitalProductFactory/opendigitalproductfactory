@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   getLastCheckedAt: vi.fn(),
   getScheduledDecline: vi.fn(),
+  getWindowDecline: vi.fn(),
+  resolveEffectiveUpgradeWindow: vi.fn(),
   getDeferredUpgradeRequest: vi.fn(),
 }));
 
@@ -34,7 +36,13 @@ vi.mock("@/lib/self-upgrade/last-check", () => ({
 vi.mock("@/lib/self-upgrade/scheduled-gate", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/self-upgrade/scheduled-gate")>()),
   getScheduledDecline: mocks.getScheduledDecline,
+  getWindowDecline: mocks.getWindowDecline,
   recordScheduledDecline: vi.fn(),
+}));
+// Keep the real opening arithmetic; stub only the window resolution.
+vi.mock("@/lib/self-upgrade/effective-window", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/self-upgrade/effective-window")>()),
+  resolveEffectiveUpgradeWindow: mocks.resolveEffectiveUpgradeWindow,
 }));
 
 // Keep the real pending arithmetic; stub only the DB reader.
@@ -77,6 +85,9 @@ describe("self-upgrade MCP tools on consumer installs", () => {
     mocks.getLatestRun.mockResolvedValue(null);
     mocks.getLastCheckedAt.mockResolvedValue(null);
     mocks.getScheduledDecline.mockResolvedValue(null);
+    mocks.getWindowDecline.mockResolvedValue(null);
+    // No bounded window known: the plain interval applies.
+    mocks.resolveEffectiveUpgradeWindow.mockRejectedValue(new Error("no window in this test"));
   });
 
   it("returns the queued artifact-native dispatch result", async () => {
@@ -149,6 +160,34 @@ describe("self-upgrade MCP tools on consumer installs", () => {
     mocks.getLastCheckedAt.mockResolvedValue(new Date("2026-10-07T22:00:00.000Z"));
     const fulfilled = await call("get_self_upgrade_queue_status") as unknown as { data: { deferredRequest: unknown } };
     expect(fulfilled.data.deferredRequest).toBeNull();
+  });
+
+  it("BI-EF1AC111: a daytime manual upgrade does not hold back tonight's window, and a missed window is reported", async () => {
+    mocks.getSelfUpgradeConfig.mockResolvedValue({ enabled: true, sourceMode: "upstream", checkIntervalHours: 24 });
+    const lastCheckedAt = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    mocks.getLastCheckedAt.mockResolvedValue(lastCheckedAt);
+    mocks.resolveEffectiveUpgradeWindow.mockResolvedValue({
+      source: "explicit",
+      open: false,
+      nextWindowStart: new Date(Date.now() + 3 * 60 * 60 * 1000),
+    });
+    const missed = {
+      reason: "cooldown: x",
+      at: new Date(lastCheckedAt.getTime() - 12 * 60 * 60 * 1000).toISOString(),
+      windowOpenedAt: null,
+    };
+    mocks.getWindowDecline.mockResolvedValue(missed);
+
+    const result = await call("get_self_upgrade_queue_status") as unknown as {
+      data: { nextScheduledCheckAt: string | null; missedWindow: unknown };
+    };
+    expect(result.data.nextScheduledCheckAt).toBeNull();
+    // Recorded before the manual check, so the check has cleared it.
+    expect(result.data.missedWindow).toBeNull();
+
+    mocks.getWindowDecline.mockResolvedValue({ ...missed, at: new Date().toISOString() });
+    const after = await call("get_self_upgrade_queue_status") as unknown as { data: { missedWindow: unknown } };
+    expect(after.data.missedWindow).toMatchObject({ reason: "cooldown: x" });
   });
 
   it("reports that the promoter is release-managed", async () => {

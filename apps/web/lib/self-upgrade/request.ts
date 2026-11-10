@@ -15,6 +15,7 @@ import {
   withWindowBypass,
   type UpgradeDeferralReason,
   type UpgradeRequesterKind,
+  type UpgradeTimingDecision,
 } from "@/lib/self-upgrade/upgrade-timing";
 
 type RequestActorKind = UpgradeRequesterKind;
@@ -95,17 +96,24 @@ const ACTIVE_RUN_STATUSES = new Set(["running", "queued", "pending"]);
 const NEEDS_TIMEZONE_MESSAGE =
   "Self-upgrade cannot determine a safe off-hours window because the install needs a timezone. Use /ops/self-upgrade for a human override.";
 
-export async function requestSelfUpgrade(
+type SelfUpgradeAdmission =
+  | { kind: "terminal"; result: RequestSelfUpgradeResult }
+  | { kind: "ready"; now: Date; timing: Exclude<UpgradeTimingDecision, { kind: "needs-timezone" }> };
+
+/** Shared ordered admission observation. Never creates, defers or dispatches a run. */
+export async function readSelfUpgradeAdmission(
   input: RequestSelfUpgradeInput,
-): Promise<RequestSelfUpgradeResult> {
-  const requestedBy = input.requestedBy.trim() || input.actorKind;
+): Promise<SelfUpgradeAdmission> {
   const now = input.now ?? new Date();
   const latestRun = await getLatestRun();
   if (latestRun && ACTIVE_RUN_STATUSES.has(String(latestRun.status))) {
     return {
-      success: true,
-      status: "already_active",
-      runId: latestRun.runId,
+      kind: "terminal",
+      result: {
+        success: true,
+        status: "already_active",
+        runId: latestRun.runId,
+      },
     };
   }
   // The operator door's rule, not a second one (BI-CC9DB006): only a failure
@@ -116,10 +124,13 @@ export async function requestSelfUpgrade(
   if (latestRun?.status === "failed"
     && (latestRun.completedAt == null || isEligibleRecoveryPredecessor(latestRun as Parameters<typeof isEligibleRecoveryPredecessor>[0]))) {
     return {
-      success: true,
-      status: "human_override_required",
-      reason: "terminal-recovery-needs-operator-binding",
-      message: "A terminal upgrade can only be recovered from the operator page with the current authenticated release binding.",
+      kind: "terminal",
+      result: {
+        success: true,
+        status: "human_override_required",
+        reason: "terminal-recovery-needs-operator-binding",
+        message: "A terminal upgrade can only be recovered from the operator page with the current authenticated release binding.",
+      },
     };
   }
 
@@ -127,11 +138,14 @@ export async function requestSelfUpgrade(
   const support = await readSelfUpgradeSupport(config.enabled);
   if (!support.supported) {
     return {
-      success: true,
-      status: "unsupported_install_mode",
-      reason: support.reason,
-      targetKind: support.targetKind,
-      message: support.message,
+      kind: "terminal",
+      result: {
+        success: true,
+        status: "unsupported_install_mode",
+        reason: support.reason,
+        targetKind: support.targetKind,
+        message: support.message,
+      },
     };
   }
 
@@ -146,10 +160,13 @@ export async function requestSelfUpgrade(
   const timing = await decideUpgradeTiming({ requester: input.actorKind, config, now, instanceStance });
   if (timing.kind === "needs-timezone") {
     return {
-      success: true,
-      status: "human_override_required",
-      reason: "no-window-needs-timezone",
-      message: NEEDS_TIMEZONE_MESSAGE,
+      kind: "terminal",
+      result: {
+        success: true,
+        status: "human_override_required",
+        reason: "no-window-needs-timezone",
+        message: NEEDS_TIMEZONE_MESSAGE,
+      },
     };
   }
 
@@ -168,16 +185,30 @@ export async function requestSelfUpgrade(
     });
     if (batch.applicable && !batch.eligible) {
       return {
-        success: true,
-        status: "batch_below_threshold",
-        message: `${batch.summary} The routine upgrade will run once the batch is ready; wait for it before validating live, or ask the operator to use /ops/self-upgrade to deploy now.`,
-        pendingPrCount: batch.pendingCount,
-        batchMinPendingPrs: batch.minPendingPrs,
-        batchMaxWaitHours: batch.maxWaitHours,
-        oldestPendingAt: batch.oldestPendingAt?.toISOString() ?? null,
+        kind: "terminal",
+        result: {
+          success: true,
+          status: "batch_below_threshold",
+          message: `${batch.summary} The routine upgrade will run once the batch is ready; wait for it before validating live, or ask the operator to use /ops/self-upgrade to deploy now.`,
+          pendingPrCount: batch.pendingCount,
+          batchMinPendingPrs: batch.minPendingPrs,
+          batchMaxWaitHours: batch.maxWaitHours,
+          oldestPendingAt: batch.oldestPendingAt?.toISOString() ?? null,
+        },
       };
     }
   }
+
+  return { kind: "ready", now, timing };
+}
+
+export async function requestSelfUpgrade(
+  input: RequestSelfUpgradeInput,
+): Promise<RequestSelfUpgradeResult> {
+  const admissionCheck = await readSelfUpgradeAdmission(input);
+  if (admissionCheck.kind === "terminal") return admissionCheck.result;
+  const { now, timing } = admissionCheck;
+  const requestedBy = input.requestedBy.trim() || input.actorKind;
 
   // BI-2128872C AC-1: an agent outside the window is queued for the next one.
   if (timing.kind === "defer") {

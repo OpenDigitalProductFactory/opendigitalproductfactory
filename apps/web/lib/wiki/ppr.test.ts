@@ -387,3 +387,54 @@ describe("searchByPPR", () => {
     expect(results).toHaveLength(2);
   });
 });
+
+// ─── BI-825D3487 (AC-CRG-5): an ungranted family is outside the walk ────────
+
+describe("searchByPPR with a corpus scope", () => {
+  const scope = {
+    kernel: true, organization: true, professionFamilies: new Set(["mine"]), familyKey: "mine",
+    mapped: true, reportOnlyUnmapped: false,
+  };
+  const page = (id: string, slug: string, isKernel = false) => ({
+    id, slug, title: id, pageKind: "entity", isKernel, abstract: null, organizationId: null,
+  });
+  const readable = [page("K1", "principles/k1", true), page("K2", "principles/k2", true), page("M1", "professions/mine/craft")];
+  const foreign = page("F1", "professions/other/craft");
+  const readableLinks = [{ fromPageId: "K1", toPageId: "M1" }, { fromPageId: "M1", toPageId: "K2" }];
+  // F1 sits on a path between readable pages: K1 → F1 → K2 and K2 → F1.
+  const foreignLinks = [{ fromPageId: "K1", toPageId: "F1" }, { fromPageId: "F1", toPageId: "K2" }, { fromPageId: "K2", toPageId: "F1" }];
+  const db = (pages: unknown[], links: unknown[]): SubgraphDbClient => ({
+    wikiPage: { findMany: vi.fn().mockResolvedValue(pages) },
+    wikiPageLink: { findMany: vi.fn().mockResolvedValue(links) },
+  });
+  const seed = (pageId: string, slug: string, score: number) => ({
+    pageId, slug, title: pageId, pageKind: "entity", contentPreview: "", isKernel: !slug.startsWith("professions/"),
+    organizationId: null, kernelPageId: null, score, source: slug.startsWith("professions/") ? "profession" : "kernel",
+  });
+
+  it("AC-CRG-5: an ungranted family page neither appears nor changes any readable page's score", async () => {
+    searchWikiPagesStub.mockResolvedValue([seed("K1", "principles/k1", 0.9), seed("M1", "professions/mine/craft", 0.6)]);
+    const withForeign = await searchByPPR({
+      query: "q", organizationId: null, limit: 10, corpusScope: scope,
+      db: db([...readable, foreign], [...readableLinks, ...foreignLinks]),
+    });
+    const without = await searchByPPR({
+      query: "q", organizationId: null, limit: 10, corpusScope: scope,
+      db: db(readable, readableLinks),
+    });
+    expect(withForeign.some((r) => r.pageId === "F1")).toBe(false);
+    expect(withForeign.map((r) => [r.pageId, r.combinedScore])).toEqual(without.map((r) => [r.pageId, r.combinedScore]));
+    // The seed search was family-scoped, so the caller's family pages can seed the walk.
+    expect(searchWikiPagesStub).toHaveBeenCalledWith(expect.objectContaining({ corpusScope: scope, includeProfessionCorpus: true }));
+  });
+
+  it("without a scope the walk is unchanged (people)", async () => {
+    searchWikiPagesStub.mockResolvedValue([seed("K1", "principles/k1", 0.9)]);
+    const results = await searchByPPR({
+      query: "q", organizationId: null, limit: 10,
+      db: db([...readable, foreign], [...readableLinks, ...foreignLinks]),
+    });
+    expect(results.some((r) => r.pageId === "F1")).toBe(true);
+    expect(results.find((r) => r.pageId === "F1")?.source).toBe("profession");
+  });
+});

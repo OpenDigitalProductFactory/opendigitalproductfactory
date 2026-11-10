@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { parseUpstreamIssue, readUpstreamIssues } from "./upstream-issue-reader";
+import { parseUpstreamIssue, readUpstreamIssues, readControllerIssues } from "./upstream-issue-reader";
 
 const raw = (overrides: Record<string, unknown> = {}) => ({
   number: 412,
@@ -20,6 +20,24 @@ const jsonResponse = (body: unknown, status = 200) => ({
   json: async () => body,
   text: async () => JSON.stringify(body),
 }) as unknown as Response;
+
+describe("controller issue reconciliation", () => {
+  it("retains open review coverage and observes closures since the previous scan", async () => {
+    const closed = parseUpstreamIssue(raw({ state: "closed" }))!;
+    const read = vi.fn().mockResolvedValueOnce({ ok: true, issues: [parseUpstreamIssue(raw())] })
+      .mockResolvedValueOnce({ ok: true, issues: [closed] });
+    const cursor = "2026-11-02T12:00:00Z";
+    expect(await readControllerIssues({ owner: "acme", name: "widgets" }, cursor, read)).toEqual({ ok: true, issues: [closed] });
+    expect(read.mock.calls[1][0]).toMatchObject({ state: "all", since: new Date(cursor) });
+  });
+
+  it("does not hide a failed change read behind a successful open list", async () => {
+    const read = vi.fn().mockResolvedValueOnce({ ok: true, issues: [] })
+      .mockResolvedValueOnce({ ok: false, state: "incomplete", error: "page cap" });
+    expect(await readControllerIssues({ owner: "acme", name: "widgets" }, "2026-11-02T12:00:00Z", read))
+      .toMatchObject({ ok: false, state: "incomplete" });
+  });
+});
 
 describe("parseUpstreamIssue", () => {
   it("skips pull requests, which the GitHub issues endpoint also returns", () => {

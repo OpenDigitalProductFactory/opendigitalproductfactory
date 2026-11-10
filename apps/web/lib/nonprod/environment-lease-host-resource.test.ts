@@ -158,6 +158,57 @@ describe("host resource durable admission", () => {
     });
   });
 
+  it("queues a host-heavy claim behind an active local-CI byte reservation", async () => {
+    const mockDb = db();
+    const queued = lease();
+    mockDb.nonProductionEnvironmentLease.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(queued);
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(queued);
+    mockDb.nonProductionEnvironmentLease.findMany
+      .mockResolvedValueOnce([{
+        resourceClass: "docker-build",
+        expectedMemoryBytes: BigInt(16 * GiB),
+      }])
+      .mockResolvedValueOnce([queued])
+      .mockResolvedValueOnce([queued]);
+
+    const result = await claimNonprodEnvironmentLease({
+      db: mockDb as never,
+      environmentKey: "host-heavy-resource",
+      ownerProvider: "codex",
+      ownerSessionId: "s1",
+      claimKey: "host-resource:s1:42",
+      purpose: "host-resource:vitest",
+      url: "host://localhost",
+      ports: [],
+      expiresAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS),
+      resourceClass: "vitest",
+      expectedMemoryBytes: 8 * GiB,
+      ownerProcessId: 42,
+      ownerProcessIdentity: "win32:638917704000000000",
+      hostResource: {
+        totalMemoryBytes: 64 * GiB,
+        availableMemoryBytes: 24 * GiB,
+        inferenceResident: false,
+      },
+      now: NOW,
+    });
+
+    expect(result).toMatchObject({
+      status: "queued",
+      poolPolicy: { effectiveCapacity: 0, rollbackReason: "host-memory-reserve" },
+    });
+    expect(mockDb.nonProductionEnvironmentLease.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          environmentKey: { in: ["host-heavy-resource", "local-integration-ci"] },
+        }),
+      }),
+    );
+  });
+
   it("releases without promoting a waiter from stale memory evidence", async () => {
     const mockDb = db();
     const current = active();

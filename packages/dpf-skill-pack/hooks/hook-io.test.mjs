@@ -44,7 +44,7 @@ test("normalizePayload reads Claude/Codex snake_case envelope", () => {
 });
 
 test("normalizePayload is defensive on junk input", () => {
-  assert.deepEqual(normalizePayload(null), { toolName: undefined, toolInput: {}, cwd: undefined, sessionCwd: undefined, surface: "claude" });
+  assert.deepEqual(normalizePayload(null), { toolName: undefined, toolInput: {}, cwd: undefined, sessionCwd: undefined, surface: "claude", permissionMode: undefined });
   assert.deepEqual(normalizePayload({ tool_input: "notobj" }).toolInput, {});
 });
 

@@ -113,3 +113,15 @@ the seed engine pin. Workroom `.2`, scoped judgment `.1` and GPP `.1` admit
 exactly the tested Node 24.16.0 and 24.22.0; all exported APIs and emitted code
 bytes are unchanged. The new exact-archive receiving matrix passed with npm
 engine-strict installation and TypeScript 7.0.2.
+
+Workroom `0.1.0-candidate.5` (BI-827FA1C9, decision DI-89054A6F7D1A) replaces
+the exact receiving patch list with `engines.node` `>=24.16.0 <25`, derived from
+the component's 24.16.0 build pin. Each exact list refused the next Node patch;
+24.22.2 broke DPF CI on 2026-11-03 even though production `node:24-alpine`
+images already float on the major. The component's own CI now installs the
+packed tarball with engine-strict and runs the 13 installed cases on the newest
+Node 24 on every push and weekly. DPF's `.node-version` holds the major line
+`24`. `scripts/check-ci-node-qualified.mjs` reads the range from the vendored
+tarball and refuses a pin it does not admit, a literal setup-node version on
+that major, or a Dockerfile on another major. Emitted code and APIs are
+unchanged.

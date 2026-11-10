@@ -123,3 +123,9 @@ it("keeps authority for a retired agent", async () => {
   await expect(call({ caseKey: "backlog-item:BI-1", agentId: "change-reviewer" }))
     .resolves.toEqual({ consequence: "authority", reason: "outside-charter:invitee-inactive" });
 });
+
+// BI-6AE64074: raising a coworker's data access is always a person's decision.
+it("keeps authority for an invite that asks to raise the invitee's data access", async () => {
+  await expect(call({ caseKey: "backlog-item:BI-1", agentId: "change-reviewer", raiseClearanceTo: "internal" }))
+    .resolves.toEqual({ consequence: "authority", reason: "outside-charter:clearance-raise-requested" });
+});

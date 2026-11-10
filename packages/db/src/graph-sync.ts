@@ -613,6 +613,20 @@ export async function deleteEaElement(elementId: string): Promise<void> {
 }
 
 /** Remove a single EaRelationship edge by its relationshipId property. */
+/** Drop EA edges whose relationship row is gone or now carries another type (BI-28C22BE3).
+ *  The EA projection upserts by (src, dst, rel_type), so a retyped or deleted
+ *  EaRelationship would otherwise leave its old edge behind. Returns the count. */
+export async function pruneStaleEaRelationshipEdges(): Promise<number> {
+  return prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge e
+      WHERE e.props ? 'relationshipId'
+        AND NOT EXISTS (
+          SELECT 1 FROM "EaRelationship" r
+            JOIN "EaRelationshipType" t ON t.id = r."relationshipTypeId"
+           WHERE r.id = e.props->>'relationshipId' AND t."neoType" = e.rel_type)`,
+  );
+}
+
 export async function deleteEaRelationship(relationshipId: string): Promise<void> {
   // No rel-type filter — matches any type by relationshipId (low volume, intentional).
   await prisma.$executeRawUnsafe(

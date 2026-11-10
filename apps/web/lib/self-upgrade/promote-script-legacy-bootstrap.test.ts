@@ -16,7 +16,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { PROMOTE_TEST_TIMEOUT_MS, reassessmentCapabilityFixture, scopeWriterCapabilityFixture } from "./promote-script-functional.test-support";
+import { nodeDockerAdapterExports, PROMOTE_TEST_TIMEOUT_MS, reassessmentCapabilityFixture,
+  scopeWriterCapabilityFixture, writeNodeDockerAdapter } from "./promote-script-functional.test-support";
 
 const REPO_ROOT = resolve(__dirname, "../../../..");
 const SCRIPT = join(REPO_ROOT, "scripts", "promote.sh");
@@ -106,6 +107,7 @@ fi
   writeFileSync(join(bin, "git"), '#!/bin/sh\nprintf "git invoked: %s\\n" "$*" >> "$GIT_LOG"\nexit 97\n');
   writeFileSync(join(bin, "timeout"), '#!/bin/sh\n[ "$1" = "-k" ] || exit 64\nshift 3\n[ "$1" = "docker" ] || exit 64\nshift\nexec "$(dirname "$0")/docker" "$@"\n');
   for (const name of ["docker", "curl", "jq", "git", "timeout"]) chmodSync(join(bin, name), 0o755);
+  writeNodeDockerAdapter(bin, BASH, bashPath(join(bin, "docker")));
   return bin;
 }
 
@@ -204,6 +206,7 @@ function runCandidate(fixture: Fixture, options: {
   const exports = [
     "unset DPF_STATE_DIR DPF_PROMOTION_MODE DPF_RELEASE_TAG DPF_RELEASE_CONFIG_DIGEST GHCR_OWNER",
     `export PATH=${quote(bashPath(fixture.fakeBin))}:"$PATH"`,
+    ...nodeDockerAdapterExports(fixture.fakeBin),
     `export PROMOTE_SOURCE=${quote(bashPath(fixture.source))}`,
     `export PROMOTE_INSTALL_ROOT=${quote(bashPath(fixture.source))}`,
     `export PROMOTE_TARGET_SHA=${TARGET_SHA}`,

@@ -65,5 +65,14 @@
       "busy": "This computer is updating its agent tools now."
     },
     "hostAgentSince": "Since {$date}."
+  },
+  "missedWindow": {
+    "heading": "No upgrade check ran in the maintenance window that opened at",
+    "activeRun": "Another upgrade was still running.",
+    "cooldown": "A recent upgrade attempt was still in its wait period.",
+    "intervalNotElapsed": "The check interval had not passed yet.",
+    "promoterUnavailable": "The upgrade helper was not available.",
+    "unsupported": "This install cannot upgrade itself.",
+    "other": "The scheduler declined: {$reason}"
   }
 }

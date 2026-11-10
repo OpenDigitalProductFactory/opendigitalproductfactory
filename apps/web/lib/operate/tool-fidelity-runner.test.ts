@@ -10,7 +10,7 @@ import { expandGrants } from "@/lib/agent-grants";
 
 const mocks = vi.hoisted(() => ({ call: vi.fn(), manifests: vi.fn(), tools: vi.fn(), version: vi.fn(),
   proof: vi.fn(), create: vi.fn(), update: vi.fn(), audit: vi.fn(), provider: vi.fn(), grants: vi.fn(),
-  account: vi.fn(), budget: vi.fn(), budgetEvent: vi.fn(), executeAdapter: vi.fn(), admit: vi.fn(),
+  account: vi.fn(), budget: vi.fn(), budgetEvent: vi.fn(), spendClass: vi.fn(async () => "free"), executeAdapter: vi.fn(), admit: vi.fn(),
   checkpointRead: vi.fn(), user: vi.fn(), agent: vi.fn(), token: vi.fn(), authorityKey: vi.fn(),
   room: vi.fn(), roomAuthority: vi.fn(), access: vi.fn(), providerFetch: vi.fn() }));
 vi.mock("@/lib/routing/local-provider-capacity", () => ({ assertProviderDispatchCapacity: vi.fn() }));
@@ -39,7 +39,10 @@ vi.mock("@dpf/db", () => ({ prisma: { endpointTestRun: { create: mocks.create, u
   agent: { findUnique: mocks.agent }, mcpApiToken: { findUnique: mocks.token }, workroom: { findUnique: mocks.room },
   toolExecution: { findUnique: mocks.audit }, modelProvider: { findUnique: mocks.provider },
   aiProviderConnection: { findUnique: mocks.account } } }));
-vi.mock("@/lib/inference/budget-gate", () => ({ checkAgentBudgetFromRegistry: mocks.budget, writeBudgetEvent: mocks.budgetEvent }));
+vi.mock("@/lib/inference/budget-gate", async (importOriginal) => ({
+  AgentAllowanceExhaustedError: (await importOriginal<typeof import("@/lib/inference/budget-gate")>()).AgentAllowanceExhaustedError,
+  checkAgentBudgetFromRegistry: mocks.budget, writeBudgetEvent: mocks.budgetEvent, classifyProviderSpend: mocks.spendClass,
+}));
 vi.mock("@/lib/routing/execution-adapter-registry", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/routing/execution-adapter-registry")>(),
   getExecutionAdapter: () => ({ execute: mocks.executeAdapter }),
@@ -68,6 +71,7 @@ async function completeMatrix(ctx: ToolExecutionContext = context()) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.spendClass.mockResolvedValue("free");
   checkpointRow = null;
   mocks.user.mockResolvedValue({ platformRole: "ceo", platformRoles: ["ceo"], isSuperuser: true });
   mocks.agent.mockResolvedValue({ status: "active", archived: false });
@@ -389,7 +393,8 @@ describe("bounded local fidelity diagnostic", () => {
     expect((await pending).data).toMatchObject({ qualified: false });
     expect(mocks.call).toHaveBeenCalledTimes(1); expect(reads).toHaveBeenCalledTimes(1);
   });
-  it("honors the real provider's daily actor budget before adapter dispatch", async () => {
+  it("honors the daily paid AI allowance before adapter dispatch when the provider is priced per token (BI-F3B6713F)", async () => {
+    mocks.spendClass.mockResolvedValue("priced");
     const account = { connectionId: selection.providerConnectionId, providerId: "local", status: "active", authMethod: "local",
       executionChannel: "direct-api", credentialEntryId: null, credentialEntry: null, accessibleModelIds: ["ai/test"],
       modelsVerifiedAt: null, evidenceStatus: "unreviewed" };
@@ -405,6 +410,7 @@ describe("bounded local fidelity diagnostic", () => {
     expect(mocks.budget).toHaveBeenCalledWith("agent");
     expect(mocks.executeAdapter).not.toHaveBeenCalled(); expect(mocks.admit).not.toHaveBeenCalled();
     expect(reads).not.toHaveBeenCalled(); expect(mocks.call).toHaveBeenCalledTimes(1);
+    expect(mocks.spendClass).toHaveBeenCalledWith("local");
   });
   it.each([
     ["ai/test", true], ["docker.io/ai/test:latest", true], ["ai/other", false], [undefined, false],

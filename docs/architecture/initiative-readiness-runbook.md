@@ -195,7 +195,15 @@ still issues that exact packet. The run writes under the platform's own
 authority, recorded with token scope `organization`. The receipt repository's
 trunk and delivery-actor checks apply unchanged. The anchor room records the
 hand-off once as `platform-reviewer`, with a growing back-off, until the review
-lands. Design-stage reviews keep their author carrier.
+lands. When the author-assistant carrier is missing or credentials-kind, the
+same steward takes design-spec, spec-approval, and architecture-review packets
+in per-gate rooms (`WC-DSR-*`, `WC-SAR-*`, `WC-ARR-*`; see
+[design-stage platform reviewer](../superpowers/specs/2026-11-06-design-stage-platform-reviewer-design.md),
+BI-9CCB88C4). The dispatcher passes the same issuer identity PIR already uses
+(`liveReviewerDispatch` and `dispatchOwedIndependentReviews` when the candidate
+target is `design`; BI-CAB5D233); without it `routeToPlatformReviewer` is
+not-applicable and the steward never opens. Token-bound `request_coworker` from
+a credentials client stays refused.
 
 Build Studio plan rooms (BI-27519C1A): review admission asks the Build Studio
 issuer the dispatcher used whether a review is owed, never the item projection.
@@ -251,8 +259,13 @@ Cross-domain / archetype profiles add specialist review gates (data / ux / secur
 
 You do **not** choose the reviewer or hand-build the review call. The server issues a **recovery packet** naming, per unmet gate, the exact coworker and a ready-to-send handoff. The flow:
 
-**Native source identity.** Supplied `baseSha` and `headSha` must be full
-40-character commit IDs; malformed values are refused before claim or adoption
+**Native source identity.** Supplied `baseSha` and `headSha` may be full
+40-character commit IDs or a prefix of at least 7 hex characters. The server
+expands a prefix that the repository provider resolves to exactly one commit
+(BI-DF34D948). It refuses an ambiguous or unknown prefix, names the commits this
+installation already recorded with that prefix, and returns the caller's own
+call corrected. An unpushed head cannot be expanded server-side, so pass the full
+`git rev-parse HEAD`. Malformed values are refused before claim or adoption
 writes. Source-less design and planning remain valid. Implementation requires
 both usable persisted values even when the optional claim inputs are omitted.
 Exact claim readback returns `baseSha`, `headSha` and `sourceIdentityComplete`.
@@ -281,6 +294,13 @@ claim with the full values. No reviewer artifact lookup or dispatch uses an
 incomplete source identity. Never invent a base or substitute the running
 install's commit for unpublished work. Other readiness and authority gates
 still apply.
+
+**Repository artifacts from a path.** On an unbound `record_initiative_*` call,
+`artifactRef` may be just `{path, headSha}` for a pushed file. The server fills in
+`kind`, the canonical repository and the full commit. It also derives
+`providerBlobId` from the provider, the equivalent of `git rev-parse <head>:<path>`.
+A supplied `providerBlobId` is still verified. Every `malformed-receipt` refusal
+from these writers ends with `Retry: <tool>({...})`, the caller's own call corrected.
 
 1. **Bind a Workroom to the item, with a real base *and* head.** `adopt_worktree(title, objective, repositoryFullName, headBranch, headSha, baseBranch, baseSha, worktreePath, backlogItemId)`. Without **both** an immutable `baseSha` and `headSha`, no reviewer binding can be issued (`no-canonical-artifact`) — the review has nothing immutable to pin. The artifact commit must be **resolvable on the provider** (a squash-merged, deleted branch will not resolve — re-publish it).
 2. **Attempt the governed claim.** `claim_backlog_item_for_work(itemId, worktreePath, branchName, provider, sessionRef)`. When the item is not ready it *refuses* and returns `data.recovery`:

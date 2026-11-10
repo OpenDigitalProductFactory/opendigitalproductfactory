@@ -16,6 +16,14 @@ const invoke = () => (ecosystemInboundTriage as unknown as (context: unknown) =>
 });
 
 describe("ecosystem intake job reporting", () => {
+  it("advances the issue cursor from scan start without losing the commission metadata", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: false, issueReadComplete: true, scannedAt: "2026-11-02T12:00:00Z",
+      ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [{ source: "dependabot", error: "HTTP 403" }] });
+    await invoke();
+    expect(mocks.upsert.mock.calls[0][0].update).toMatchObject({ runCursor: "2026-11-02T12:00:00Z", lastStatus: "failed" });
+    expect(mocks.upsert.mock.calls[0][0].update).not.toHaveProperty("metadata");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.gate.mockResolvedValue({ proceed: true });
@@ -98,7 +106,7 @@ describe("ecosystem intake job reporting", () => {
   it("allows only one scan of the inbound queue at a time", () => {
     // Local single-run protection (spec §6.1): an overlapping cron and retry must
     // not ingest the same sources concurrently.
-    expect(mocks.config).toMatchObject({ concurrency: { limit: 1, scope: "fn" } });
+    expect(mocks.config).toMatchObject({ concurrency: { limit: 1, scope: "account", key: "'ecosystem-inbound-intake'" } });
   });
 
   it("does not report an uncommissioned installation as a successful scan", async () => {

@@ -5,6 +5,7 @@ import type { ResilientEventSourceStatus } from "@/lib/hooks/useResilientEventSo
 import type {
   SystemQuiescenceEvent,
   SystemLocalModelEvent,
+  SystemMapPackInstallEvent,
   SystemSelfUpgradeEvent,
 } from "@/lib/tak/agent-event-bus";
 
@@ -18,6 +19,7 @@ export type SystemEventMap = {
   "system:quiescence": SystemQuiescenceEvent;
   "system:self-upgrade": SystemSelfUpgradeEvent;
   "system:local-model": SystemLocalModelEvent;
+  "system:map-pack-install": SystemMapPackInstallEvent;
 };
 
 export type SystemEventType = keyof SystemEventMap;

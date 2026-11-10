@@ -45,7 +45,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       # Unit-test the pure classifier + the parser it shares with the guard.
       - name: Unit tests

@@ -19,6 +19,8 @@ import {
   type StrategyProfile,
 } from "@/lib/deliberation/external-review-activation";
 import { validateFailureAnalysis, type FailureVerificationEvidence } from "./failure-analysis";
+import { boundReviewEvidence } from "./semantic-review-evidence-budget";
+import { FAILURE_ANALYSIS_CHALLENGE_ISSUE } from "./semantic-review-supersession";
 
 export const SEMANTIC_CHANGE_REVIEW_MAX_REPAIR_ROUNDS = 2;
 
@@ -49,6 +51,8 @@ export interface SemanticChangeReviewDispatchContext {
   reviewerId: "change-reviewer";
   specialistIds: readonly string[];
   surface: SemanticChangeReviewSurface;
+  /** The reviewed Workroom; its own sensitivity sets the review's routing (BI-9F620FE1). */
+  capsuleId?: string;
 }
 
 export interface SemanticChangeReviewOperationDeps {
@@ -250,17 +254,18 @@ async function performReview(args: {
     requireFailureAnalysis: true,
     title: args.input.title,
     artifact: args.input.artifact,
-    verificationEvidence: `${args.input.verificationEvidence}\n\nFAILURE ANALYSIS:\n${JSON.stringify(args.input.failureAnalysis)}\n\nRESOLVED EVIDENCE:\n${JSON.stringify(args.input.resolvedFailureEvidence)}\n\nChallenge omitted failure modes and real business/user effects, claimed eliminations, prevention, containment, detection, recovery, final-change evidence and accountable residual risk. Scale depth to consequences. Missing credible analysis is blocking. Do not accept empty checkboxes or exhaustive zero-risk claims. Routine technical review recovery belongs to internal engineering; do not ask the business owner to select reviewers or approve technical details.`,
+    verificationEvidence: `${args.input.verificationEvidence}\n\nFAILURE ANALYSIS:\n${JSON.stringify(args.input.failureAnalysis)}\n\nRESOLVED EVIDENCE:\n${JSON.stringify(boundReviewEvidence(args.input.resolvedFailureEvidence))}\n\nChallenge omitted failure modes and real business/user effects, claimed eliminations, prevention, containment, detection, recovery, final-change evidence and accountable residual risk. Scale depth to consequences. Missing credible analysis is blocking. Do not accept empty checkboxes or exhaustive zero-risk claims. Routine technical review recovery belongs to internal engineering; do not ask the business owner to select reviewers or approve technical details.`,
   });
   const result = await args.deps.dispatch(prompt, {
     strategyProfile: args.activation.strategyProfile,
     reviewerId: "change-reviewer",
     specialistIds: args.identity.specialistIds,
     surface: args.input.surface,
+    capsuleId: args.identity.capsuleId,
   });
   if (result.decision === "pass" && (!result.failureAnalysisReview?.adequate || result.failureAnalysisReview.rationale.trim().length < 20)) {
     result.decision = "fail";
-    result.issues = [...result.issues, { severity: "critical", description: "Independent failure-analysis challenge is missing or inadequate." }];
+    result.issues = [...result.issues, { severity: "critical", description: FAILURE_ANALYSIS_CHALLENGE_ISSUE }];
   }
   return { ...createSemanticReviewReceipt({
     identity: args.identity,

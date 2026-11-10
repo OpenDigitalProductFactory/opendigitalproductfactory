@@ -1,0 +1,61 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-operations",
+  "affectedCopies": [
+    "PlatformDevConfig.paidInferenceDailyUsdAllowance / paidInferenceAllowanceReason / paidInferenceAllowanceSetAt / paidInferenceAllowanceSetById, written only by savePaidInferenceAllowance (apps/web/lib/actions/paid-inference-allowance.ts) and read by readPaidInferenceAllowance (apps/web/lib/inference/budget-gate.ts) and the Admin > Platform Development page"
+  ],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "Internal spending configuration. The only person-linked fact is the id of the user who last set the allowance (an existing User FK, the same pattern as configuredById and upstreamFeedbackOptInById); no content about a person.",
+    "dataSubjectRights": "The FK is ON DELETE SET NULL, so deleting the user clears the attribution without removing the setting. Visible only to people holding manage_platform and manage_finance.",
+    "reviewDisposition": "The facts follow the existing singleton row and its lifecycle; no new table, journal or retention copy."
+  },
+  "migration": {
+    "name": "20261103200000_paid_inference_allowance",
+    "backfill": "None. Existing rows read NULL, meaning no owner allowance is set, so the registry per-agent caps keep applying to paid usage until an owner records one.",
+    "rollback": "Forward-only additive columns. Older source never reads them and keeps the per-agent caps. Rolling back the code with an allowance set simply returns to the per-agent caps; the columns can stay."
+  },
+  "tests": [
+    "apps/web/lib/actions/paid-inference-allowance.test.ts",
+    "apps/web/lib/inference/budget-gate.test.ts",
+    "apps/web/components/admin/PaidInferenceAllowanceSettings.test.tsx"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:platform-dev-config",
+      "prismaModel": "PlatformDevConfig",
+      "lifecycleDisposition": "Existing installation singleton; the allowance and its attribution follow the row.",
+      "fields": [
+        {
+          "fieldId": "data:platform-dev-config#paidInferenceDailyUsdAllowance",
+          "resolution": "governed",
+          "reason": "Owner-set USD per UTC day for per-token-priced inference across the installation. NULL means not set (per-agent caps apply); 0 permits no paid calls.",
+          "provenance": "BI-F3B6713F / DI-666409F895C5",
+          "flags": []
+        },
+        {
+          "fieldId": "data:platform-dev-config#paidInferenceAllowanceReason",
+          "resolution": "governed",
+          "reason": "Required free-text reason recorded with each change.",
+          "provenance": "BI-F3B6713F",
+          "flags": []
+        },
+        {
+          "fieldId": "data:platform-dev-config#paidInferenceAllowanceSetAt",
+          "resolution": "governed",
+          "reason": "When the allowance last changed.",
+          "provenance": "BI-F3B6713F",
+          "flags": []
+        },
+        {
+          "fieldId": "data:platform-dev-config#paidInferenceAllowanceSetById",
+          "resolution": "governed",
+          "reason": "Who last changed the allowance; FK to User, ON DELETE SET NULL.",
+          "provenance": "BI-F3B6713F",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

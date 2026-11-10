@@ -118,6 +118,25 @@ test("docs changes report the doc-index derived artifact", () => {
   assert.ok(ctx.derivedArtifacts.some((d) => d.id === "doc-index"), JSON.stringify(ctx.derivedArtifacts));
 });
 
+test("a change to graph-linked code lists the doc it affects and the Docs Impact trailer (BI-9B17E889)", () => {
+  const ctx = build([{ path: "packages/dpf-skill-pack/hooks/hooks.json", status: "M" }]);
+  const parity = ctx.docsImpact.find((d) => d.doc === "docs/architecture/agent-client-capability-parity.md");
+  assert.ok(parity, JSON.stringify(ctx.docsImpact));
+  assert.equal(parity.status, "pending");
+  assert.deepEqual(parity.because, ["code packages/dpf-skill-pack/hooks/hooks.json"]);
+  assert.ok(ctx.trailers.some((t) => t.gate === "Docs Impact" && t.trailer === "Docs-Impact-Decision:"));
+  assert.match(formatGateContextMarkdown(ctx), /Docs this change affects/);
+});
+
+test("a doc updated in the same change is reported updated and no longer demands the trailer", () => {
+  const ctx = build([
+    { path: "packages/dpf-skill-pack/hooks/hooks.json", status: "M" },
+    { path: "docs/architecture/agent-client-capability-parity.md", status: "M" },
+  ]);
+  assert.equal(ctx.docsImpact.find((d) => d.doc === "docs/architecture/agent-client-capability-parity.md")?.status, "updated");
+  assert.ok(!ctx.trailers.some((t) => t.gate === "Docs Impact"));
+});
+
 test("a net-new route lists the absolute budgets and four-companion checklist", () => {
   const ctx = build([{ path: "apps/web/app/brand-new-surface/page.tsx", status: "A" }]);
   const route = ctx.routes.find((r) => r.route === "/brand-new-surface");

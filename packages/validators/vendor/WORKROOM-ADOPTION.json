@@ -2,9 +2,9 @@
   "backlogItem": "BI-FCDCAE98",
   "artifact": {
     "component": "@opendigitalproductfactory/dpf-workroom",
-    "version": "0.1.0-candidate.4",
-    "sourceCommit": "ac68638d02dc4cbcc1fcd5b730b055aa2dc999c9",
-    "sha256": "42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44"
+    "version": "0.1.0-candidate.5",
+    "sourceCommit": "4bf0818b280afa32ec1ca80890398be90d2b755d",
+    "sha256": "74f04029b39fad0dff0395edc4ca8e6445b961348adc76f8b376b794eb0fa987"
   },
   "realCaller": "apps/web/lib/work-management/workroom-shape-conformance.ts",
   "callerDisposition": "Graph, receipt and process-identity imports directly use public artifact exports.",
@@ -265,5 +265,12 @@
       "foundation-v5-node24.22.1-ts7-receiver-result.json"
     ],
     "previousCandidate": "0.1.0-candidate.3 remains immutable in component artifact archive"
+  },
+  "nodeLineCorrection": {
+    "reason": "Exact receiving patch lists made every Node 24 patch refuse strict install until a new candidate was cut; 24.22.2 broke CI on 2026-11-03 (BI-2FAE2E5C).",
+    "change": "Candidate.5 declares engines.node >=24.16.0 <25 derived from its build pin and tests the newest Node 24 receiver continuously upstream. No emitted code/API/source change.",
+    "decision": "DI-89054A6F7D1A",
+    "backlogItem": "BI-827FA1C9",
+    "previousCandidate": "0.1.0-candidate.4 remains immutable in component artifact archive"
   }
 }

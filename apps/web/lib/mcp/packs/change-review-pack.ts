@@ -4,6 +4,7 @@ import { recordExternalEvidence } from "@/lib/actions/external-evidence";
 import { enqueueSemanticReview, retryPersistedSemanticReview } from "@/lib/change-review/semantic-review-background";
 import { resolveFailureAnalysisEvidence } from "@/lib/change-review/failure-analysis-evidence";
 import { validateFailureAnalysis } from "@/lib/change-review/failure-analysis";
+import { parseReviewArtifactSource, readReviewArtifactFromSource } from "@/lib/change-review/review-artifact-source";
 import { createSemanticReviewRequest, REVIEW_ARTIFACT_TYPES, REVIEW_RISKS, REVIEW_PROFILES } from "@/lib/change-review/semantic-review-request";
 import {
   runSemanticChangeReview,
@@ -54,7 +55,14 @@ const definitions: ToolDefinition[] = [{
       authorSurface: { type: "string", description: "Authoring surface, for example codex-desktop, claude-desktop, or grok-desktop" },
       artifactType: { type: "string", enum: ARTIFACT_TYPES },
       title: { type: "string", description: "Human-readable committed change title" },
-      artifact: { type: "string", description: "Exact committed diff or equivalent immutable assembled-change artifact" },
+      artifact: { type: "string", description: "Exact committed diff or equivalent immutable assembled-change artifact. Supply this or artifactSource." },
+      artifactSource: {
+        type: "object",
+        description: "Instead of pasting artifact: the full base and head commit ids. The server reads `git diff --binary <baseSha> <headSha>` from its source checkout and reviews it only if its trees match baseTreeHash/headTreeHash, its sha256 matches diffDigest, and headSha is the Workroom's recorded head.",
+        properties: { baseSha: { type: "string" }, headSha: { type: "string" } },
+        required: ["baseSha", "headSha"],
+        additionalProperties: false,
+      },
       verificationEvidence: { type: "string", description: "Tests, typecheck, build, migration, or scoped verification evidence available before publication" },
       failureAnalysis: { type: "object", description: "Versioned failure analysis: design, scope, eliminated opportunities, scenarios with business effects and prevention/containment/detection/recovery, existing verification evidence IDs, accountable residual risks. See shared failure-analysis contract." },
       changedFiles: { type: "array", items: { type: "string" } },
@@ -70,7 +78,6 @@ const definitions: ToolDefinition[] = [{
       "authorSurface",
       "artifactType",
       "title",
-      "artifact",
       "verificationEvidence",
       "changedFiles",
       "baseTreeHash",
@@ -138,7 +145,8 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
   const authorSurface = stringParam(params, "authorSurface");
   const artifactType = stringParam(params, "artifactType") as DeliberationArtifactType;
   const title = stringParam(params, "title");
-  const artifact = typeof params.artifact === "string" ? params.artifact : "";
+  let artifact = typeof params.artifact === "string" ? params.artifact : "";
+  const artifactSource = params.artifactSource === undefined ? null : parseReviewArtifactSource(params.artifactSource);
   const verificationEvidence = stringParam(params, "verificationEvidence");
   const baseTreeHash = stringParam(params, "baseTreeHash");
   const headTreeHash = stringParam(params, "headTreeHash");
@@ -147,13 +155,14 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     ? params.changedFiles.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     : [];
   if (
-    !capsuleId || !authorSurface || !ARTIFACT_TYPES.includes(artifactType) || !title || !artifact ||
+    !capsuleId || !authorSurface || !ARTIFACT_TYPES.includes(artifactType) || !title || (!artifact && !artifactSource) ||
     !verificationEvidence || changedFiles.length === 0 || !baseTreeHash || !headTreeHash || !diffDigest
+    || (params.artifactSource !== undefined && !artifactSource) || (artifact && params.artifactSource !== undefined)
   ) {
     return {
       success: false,
       error: "invalid_input",
-      message: "A Work Capsule, committed tree identity, exact artifact, changed files, and verification evidence are required.",
+      message: "A Work Capsule, committed tree identity, changed files, verification evidence and exactly one of artifact or artifactSource (full baseSha and headSha) are required.",
     };
   }
 
@@ -163,6 +172,19 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
   });
   if (!capsule) {
     return { success: false, error: "capsule_not_found", message: `Work Capsule ${capsuleId} was not found.` };
+  }
+  if (artifactSource) {
+    // BI-FC2AF393: read the exact diff from source instead of trusting a paste of it.
+    if (artifactSource.headSha !== capsule.headSha) {
+      return { success: false, error: "review-source-head-mismatch",
+        message: `artifactSource.headSha must be the Workroom's recorded head (${capsule.headSha ?? "none"}); re-sync the Workroom first.` };
+    }
+    const read = await readReviewArtifactFromSource({ source: artifactSource, baseTreeHash, headTreeHash, diffDigest });
+    if (!read.ok) {
+      return { success: false, error: read.code, message: read.message,
+        ...(read.serverDigest ? { data: { serverDigest: read.serverDigest } } : {}) };
+    }
+    artifact = read.data.artifact;
   }
 
   const previousEvidence = await prisma.externalEvidenceRecord.findFirst({

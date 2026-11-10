@@ -39,6 +39,8 @@ export async function inviteRoomParticipantConsequence(call: ToolCallConsequence
   const inviteeAgentId = text(call.params, "agentId");
   // People are not admitted by charter in this slice: a person invite stays a person's decision.
   if (!inviteeAgentId || text(call.params, "userId")) return keepAuthority("invitee-kind-unknown");
+  // Raising a coworker's data access is always a person's decision (BI-6AE64074).
+  if (text(call.params, "raiseClearanceTo")) return keepAuthority("clearance-raise-requested");
   if (!caseKey) return keepAuthority("room-not-found");
 
   const item = await resolveRoomMessagingWorkItem(caseKey);

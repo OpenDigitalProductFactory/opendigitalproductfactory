@@ -17,7 +17,7 @@ import {
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
 import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { logTokenUsage } from "@/lib/ai-inference";
-import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
+import { buildCoworkerContextKey, buildCurrentTurnHistory, currentTurnInstruction } from "@/lib/agent-coworker-context";
 import { resolveWithheldHistory } from "@/lib/tak/thread-history-withholding";
 import { getKnowledgePointersForRoute } from "@/lib/actions/route-knowledge-pointers";
 import {
@@ -104,9 +104,14 @@ import { filterToolsForCoworkerRuntime, buildAdvisePromptSuffix } from "./cowork
 import { labelHistory, prependLabelled } from "@/lib/tak/message-origins";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { requireUser } from "./shared/guards";
+import { persistCoworkerResponseArtifact } from "@/lib/coworker/response-artifact";
+import { requireForegroundUser, foregroundExecutionFence, assertForegroundAgent } from "@/lib/agent/foreground-work-context";
+import { foregroundExecutionContext } from "@/lib/agent/foreground-work-context";
+import { publishForegroundMessage, withForegroundMutation } from "@/lib/agent/foreground-work-publication";
+import { FOREGROUND_BUILD_HANDOFF_BLOCKED } from "@/lib/agent/foreground-work-contract";
+import { preInferenceResourceWait, type ResourceWaitFailureKind } from "@/lib/mcp-task-capacity-contract";
 import {
   formatPortalContextPromptSection,
-  isSubstantiveCoworkerOutput,
   normalizePortalContextPathname,
   normalizePortalContextRoute,
   isPortalContextSupportedPath,
@@ -143,95 +148,6 @@ async function buildPortalContextPromptSection(input: {
   } catch (error) {
     console.warn("[portal-context] Failed to resolve coworker prompt context", error);
     return null;
-  }
-}
-
-async function persistCoworkerResponseArtifact(input: {
-  taskRunId: string | null;
-  responseContent: string;
-  routeContext: string;
-  threadId: string;
-  agentId: string;
-  agentName: string;
-  providerId: string | null;
-  modelId: string | null;
-  portalContext: PortalContextEnvelope | null;
-  userId: string;
-}): Promise<void> {
-  if (!input.taskRunId) return;
-  if (!isSubstantiveCoworkerOutput(input.responseContent)) return;
-
-  try {
-    const { createTaskArtifact } = await import("@/lib/tak/task-records");
-    await createTaskArtifact({
-      taskRunId: input.taskRunId,
-      artifactType: "coworker_response",
-      name: "Coworker response",
-      summary: input.responseContent.slice(0, 240),
-      content: {
-        routeContext: input.routeContext,
-        threadId: input.threadId,
-        response: input.responseContent,
-        providerId: input.providerId,
-        modelId: input.modelId,
-        anchors: input.portalContext?.anchors ?? [],
-      },
-      metadata: {
-        kind: "coworker-response",
-        deliveryState: "responded",
-        routeContext: input.routeContext,
-        envelopeId: input.portalContext?.envelopeId ?? null,
-      },
-      producerAgentId: input.agentId,
-    });
-
-    const capsuleId = input.portalContext?.work?.capsule?.capsuleId ?? null;
-    if (capsuleId) {
-      const { recordWorkCapsuleEvidence } = await import("@/lib/work-capsules/work-capsule-store");
-      await recordWorkCapsuleEvidence({
-        db: prisma,
-        capsuleId,
-        evidence: {
-          kind: "note",
-          summary: `${input.agentName} response captured for the current portal context.`,
-          result: {
-            taskRunId: input.taskRunId,
-            threadId: input.threadId,
-            agentId: input.agentId,
-            routeContext: input.routeContext,
-          },
-        },
-        actor: {
-          userId: input.userId,
-          agentId: input.agentId,
-          principalId: input.portalContext?.user?.principalId ?? null,
-        },
-      });
-    }
-
-    const backlogItemId = input.portalContext?.work?.backlogItem?.backlogItemId ?? null;
-    if (backlogItemId) {
-      const { recordPortalContextBacklogEvidence } = await import("@/lib/portal-context/evidence-recording");
-      await recordPortalContextBacklogEvidence({
-        db: prisma,
-        backlogItemId,
-        kind: "portal-context-coworker-response",
-        summary: `${input.agentName} response captured for the current portal context.`,
-        payload: {
-          taskRunId: input.taskRunId,
-          threadId: input.threadId,
-          agentId: input.agentId,
-          routeContext: input.routeContext,
-          envelopeId: input.portalContext?.envelopeId ?? null,
-        },
-        actor: {
-          userId: input.userId,
-          agentId: input.agentId,
-        },
-      });
-    }
-  } catch (error) {
-    console.warn("[portal-context] Failed to persist coworker response artifact", error);
   }
 }
 
@@ -372,10 +288,10 @@ export async function sendMessage(input: {
   /** Row already written by /api/agent/send before it acknowledged (BI-DEFA25EE). */
   acceptedUserMessageId?: string;
 }): Promise<
-  | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
+  | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown>; resourceWait?: ResourceWaitFailureKind; pendingApproval?: boolean }
   | { error: string }
 > {
-  const user = await requireUser();
+  const user = await requireForegroundUser();
 
   // Verify thread ownership
   const thread = await prisma.agentThread.findUnique({
@@ -391,7 +307,7 @@ export async function sendMessage(input: {
   if (validationError) return { error: validationError };
 
   const trimmedContent = input.content.trim();
-  const userMsgSelect = { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true } as const;
+  const userMsgSelect = { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true, taskRunId: true } as const;
   // BI-DEFA25EE: reuse the row the send route already persisted; the match on
   // thread, role and content keeps a caller from steering a turn with a stray id.
   const acceptedUserMsg = input.acceptedUserMessageId
@@ -410,27 +326,30 @@ export async function sendMessage(input: {
       select: { providerId: true, name: true },
     });
     if (reEnabled) {
-      await prisma.modelProvider.update({
+      const sysMsg = await publishForegroundMessage(async db => {
+      await db.modelProvider.update({
         where: { providerId: reEnabled.providerId },
         data: { status: "active" },
       });
       // Cancel the re-enable scheduled job if it exists
-      await prisma.scheduledJob.deleteMany({
+      await db.scheduledJob.deleteMany({
         where: { jobId: `provider-reenable-${reEnabled.providerId}` },
       }).catch(() => {});
 
-      const sysMsg = await prisma.agentMessage.create({
+      return db.agentMessage.create({
         data: {
           threadId: input.threadId,
+          ...(foregroundExecutionContext() ? { taskRunId: foregroundExecutionContext()!.taskRunId } : {}),
           role: "system",
           content: `${reEnabled.name} has been re-enabled. It may have reduced quota — try sending your message again.`,
           routeContext: input.routeContext,
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
+      }, { kind: "responded" });
 
       // Fire-and-forget: process observer
-      observeConversation(input.threadId, input.routeContext).catch((err) =>
+      if (!foregroundExecutionContext()) observeConversation(input.threadId, input.routeContext).catch((err) =>
         console.error("[process-observer]", err),
       );
 
@@ -458,10 +377,10 @@ export async function sendMessage(input: {
   // Link attachment to the user message if provided
   if (input.attachmentId) {
     if (!acceptedUserMsg) {
-      await prisma.agentAttachment.update({
+      await withForegroundMutation(db => db.agentAttachment.update({
         where: { id: input.attachmentId },
         data: { messageId: userMsg.id },
-      });
+      }));
     }
     // Re-fetch so the serialized response includes the attachment
     const linked = await prisma.agentAttachment.findMany({
@@ -509,6 +428,7 @@ export async function sendMessage(input: {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   }, useUnified);
+  assertForegroundAgent(agent.agentId);
   if (!agent.canAssist) return coworkerUnavailableResult();
 
   // Lifecycle gate (EP-COWORKER-LIFECYCLE Phase 3, BI-2C4056BF): a draft or
@@ -552,7 +472,7 @@ export async function sendMessage(input: {
     where: {
       threadId: input.threadId,
       role: { in: ["user", "assistant"] },
-      ...withheld.windowWhere,
+      AND: [withheld.windowWhere, { OR: [{ createdAt: { lt: userMsg.createdAt } }, { id: userMsg.id }] }],
     },
     orderBy: { createdAt: "desc" },
     take: RECENT_WINDOW,
@@ -572,7 +492,7 @@ export async function sendMessage(input: {
   }
   const windowMessageIds = new Set(trimmedMessages.map((m) => m.id));
   const withheldRecallExclusions = withheld.recallExclusions(windowMessageIds);
-  let chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
+  let chatHistory: ChatMessage[] = trimmedMessages.filter(m => m.id !== userMsg.id).map((m) => ({
     role: m.role as ChatMessage["role"],
     content: m.content,
   }));
@@ -587,7 +507,7 @@ export async function sendMessage(input: {
   }
 
   // Labels for what each message IS, moved with the messages (BI-40EF7C44).
-  let labelled = labelHistory(chatHistory);
+  let labelled = labelHistory(buildCurrentTurnHistory(chatHistory, trimmedContent, userMsg.id));
 
   // BI-FDECBE0A (EP-8C706944 P1): prepend the thread's durable rolling checkpoint
   // — a persisted running summary of every turn older than the recency window —
@@ -870,9 +790,12 @@ export async function sendMessage(input: {
     const wikiQuery = perspective.needsPageContext
       ? buildPerspectiveQuery(input.content, pageTopic)
       : input.content;
+    // BI-825D3487: recall skips a corpus whose grant this coworker does not hold.
+    const { resolveCorpusReadScope } = await import("@/lib/tak/corpus-read-scope");
     let wikiContext = await recallWikiContext({
       query: wikiQuery,
       organizationId: wikiOrg?.id ?? null,
+      corpusScope: await resolveCorpusReadScope(agent.agentId),
       limit: 4,
       preferredPageKinds: perspective.perspective
         ? PERSPECTIVE_PAGE_KINDS[perspective.perspective]
@@ -1268,6 +1191,8 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   });
 
+  populatedPrompt = `${populatedPrompt}\n\n${currentTurnInstruction(userMsg.id)}`;
+  systemPromptInstructionSpans.push(currentTurnInstruction(userMsg.id));
   // Merge and apply mode + build phase filtering
   const mergedTools = [...allPlatformTools, ...pageActions];
 
@@ -1292,10 +1217,10 @@ export async function sendMessage(input: {
     // Link build to this chat thread so the BuildStudio UI can live-refresh
     // via SSE when the AI updates the build phase, sandbox, or evidence.
     if (activeBuild && !activeBuild.threadId && input.threadId) {
-      prisma.featureBuild.update({
+      withForegroundMutation(db => db.featureBuild.update({
         where: { buildId: activeBuild.buildId },
         data: { threadId: input.threadId },
-      }).catch(() => {});
+      })).catch(() => {});
     }
   }
 
@@ -1739,6 +1664,7 @@ export async function sendMessage(input: {
   let responseProviderId: string | null = null;
   let responseModelId: string | null = null;
   let responseIsSystemFailure = false;
+  let foregroundResourceWait: ResourceWaitFailureKind | null = null;
   let formAssistUpdate: Record<string, unknown> | undefined;
   let systemMessage: AgentMessageRow | undefined;
   // Pre-allocate the assistant AgentMessage id so adapter telemetry rows
@@ -1748,7 +1674,7 @@ export async function sendMessage(input: {
   // always null and the per-turn provider/model badge degrades to provider
   // name only.
   const pendingAgentMessageId = randomUUID();
-  const currentTaskRun = await findCurrentAutonomousWorkRun({
+  const currentTaskRun = acceptedUserMsg?.taskRunId ? { taskRunId: acceptedUserMsg.taskRunId } : await findCurrentAutonomousWorkRun({
     userId: user.id!,
     threadId: input.threadId,
   }).catch(() => null);
@@ -1801,10 +1727,10 @@ export async function sendMessage(input: {
 
       // Auto-advance to review phase if still in build
       try {
-        await prisma.featureBuild.update({
+        await withForegroundMutation(db => db.featureBuild.update({
           where: { buildId: activeBuild!.buildId, phase: "build" },
           data: { phase: "review" },
-        });
+        }));
         const { revalidatePortalContextForBuild } = await import("@/lib/portal-context/invalidation");
         revalidatePortalContextForBuild(activeBuild!.buildId);
       } catch { /* already advanced or concurrent update — fine */ }
@@ -1838,6 +1764,7 @@ export async function sendMessage(input: {
     }
 
     if (activeBuild && buildPlan?.tasks?.length && !buildAlreadyComplete) {
+      if (foregroundExecutionContext()) return { error: FOREGROUND_BUILD_HANDOFF_BLOCKED };
       const { runBuildOrchestrator } = await import("@/lib/build/build-orchestrator");
 
       const orchestratorResult = await runBuildOrchestrator({
@@ -1950,6 +1877,10 @@ export async function sendMessage(input: {
         routeContext: input.routeContext,
         agentId: agent.agentId,
         threadId: input.threadId,
+        ...(foregroundExecutionFence() ? {
+          taskRunId: currentTaskRun?.taskRunId,
+          taskExecutionFence: foregroundExecutionFence(),
+        } : {}),
         taskType: taskTypeId,
         effortWarrant,
         agentDisplayName: agent.agentName,
@@ -1984,7 +1915,7 @@ export async function sendMessage(input: {
     // BI-7BCC87BB (spec D2 S1): a declared-proposal call raised approval requests bound to the
     // exact call; the turn ends on them and the message lists them inline (no AgentActionProposal).
     if (agenticResult.pendingApproval) {
-      const agentMsg = await prisma.agentMessage.create({
+      const agentMsg = await publishForegroundMessage(db => db.agentMessage.create({
         data: {
           id: pendingAgentMessageId,
           threadId: input.threadId, role: "assistant",
@@ -1998,10 +1929,10 @@ export async function sendMessage(input: {
           contextTrace, // BI-3E218D80 — pending-approval path (see also the plain-response write)
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-      });
+      }), { kind: "approval-required" });
       const approvalRequests = await loadInlineApprovalRequests([agentMsg]);
-      observeConversation(input.threadId, input.routeContext).catch((err) => console.error("[process-observer]", err));
-      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, undefined, undefined, approvalRequests.get(agentMsg.id)) };
+      if (!foregroundExecutionContext()) observeConversation(input.threadId, input.routeContext).catch((err) => console.error("[process-observer]", err));
+      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, undefined, undefined, approvalRequests.get(agentMsg.id)), pendingApproval: true };
     }
 
     // The Golden Triangle review already ran inside executeAutonomousAgenticLoop.
@@ -2018,6 +1949,7 @@ export async function sendMessage(input: {
       toolCalls: undefined as undefined, // already handled by loop
     };
     responseIsSystemFailure = Boolean(agenticResult.failure);
+    foregroundResourceWait = preInferenceResourceWait({ failure: agenticResult.failure, executedTools: agenticResult.executedTools });
 
     // Caveat blind local answers; preserve the loop's evidence provenance.
     responseContent = applyLocalDegradationCaveat(result.content, {
@@ -2038,6 +1970,7 @@ export async function sendMessage(input: {
       const scoutState = buildForScout?.buildExecState as Record<string, unknown> | null;
 
       if (scoutState?.scoutResearchRequested) {
+        if (foregroundExecutionContext()) return { error: FOREGROUND_BUILD_HANDOFF_BLOCKED };
         console.log(`[coworker] Scout research requested — dispatching scout dispatch`);
         const { agentEventBus } = await import("@/lib/agent-event-bus");
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "scout_research", iteration: 0 });
@@ -2070,7 +2003,7 @@ export async function sendMessage(input: {
         }
 
         // Clear flag regardless of success
-        await prisma.featureBuild.update({
+        await withForegroundMutation(db => db.featureBuild.update({
           where: { buildId: resolvedBuildId },
           data: {
             buildExecState: {
@@ -2078,7 +2011,7 @@ export async function sendMessage(input: {
               scoutResearchRequested: false,
             },
           },
-        });
+        }));
 
         agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "scout_research", success: true });
       }
@@ -2093,6 +2026,7 @@ export async function sendMessage(input: {
       });
       const execState = buildForResearch?.buildExecState as Record<string, unknown> | null;
       if (execState?.ideateResearchRequested) {
+        if (foregroundExecutionContext()) return { error: FOREGROUND_BUILD_HANDOFF_BLOCKED };
         responseProducer = undefined; // Operational research summary has no exact chat producer.
         const { agentEventBus } = await import("@/lib/agent-event-bus");
         agentEventBus.emit(input.threadId, { type: "tool:start", tool: "codebase_research", iteration: 0 });
@@ -2233,12 +2167,12 @@ export async function sendMessage(input: {
           }
 
           // Clear the research request
-          await prisma.featureBuild.update({
+          await withForegroundMutation(db => db.featureBuild.update({
             where: { buildId: resolvedBuildId },
             data: {
               buildExecState: { ideateResearchRequested: false },
             },
-          });
+          }));
         } catch (err) {
           console.error(`[coworker] Ideate research dispatch failed:`, err);
           agentEventBus.emit(input.threadId, { type: "tool:complete", tool: "codebase_research", success: false });
@@ -2268,16 +2202,18 @@ export async function sendMessage(input: {
         },
       });
       if (!recentDowngrade) {
-        const sysMsg = await prisma.agentMessage.create({
+        const downgradeMessage = result.downgradeMessage;
+        const sysMsg = await publishForegroundMessage(db => db.agentMessage.create({
           data: {
             threadId: input.threadId,
+            ...(foregroundExecutionContext() ? { taskRunId: foregroundExecutionContext()!.taskRunId } : {}),
             role: "system",
-            content: result.downgradeMessage,
+            content: downgradeMessage,
             agentId: agent.agentId,
             routeContext: input.routeContext,
           },
           select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-        });
+        }));
         systemMessage = serializeMessage(sysMsg);
       }
     }
@@ -2286,9 +2222,10 @@ export async function sendMessage(input: {
       responseContent = generateCannedResponse(agent.agentId, input.routeContext, user.platformRole);
       responseProducer = undefined;
 
-      const sysMsg = await prisma.agentMessage.create({
+      const sysMsg = await publishForegroundMessage(db => db.agentMessage.create({
         data: {
           threadId: input.threadId,
+          ...(foregroundExecutionContext() ? { taskRunId: foregroundExecutionContext()!.taskRunId } : {}),
           role: "system",
           content: e instanceof NoEligibleEndpointsError
             ? `No eligible AI endpoints for this task (${e.reason}). The coworker used a local fallback response.`
@@ -2297,7 +2234,7 @@ export async function sendMessage(input: {
           routeContext: input.routeContext,
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-      });
+      }));
       systemMessage = serializeMessage(sysMsg);
     } else if (e instanceof NoProvidersAvailableError) {
       const inactiveProviders = await prisma.modelProvider.findMany({
@@ -2314,16 +2251,17 @@ export async function sendMessage(input: {
         inactiveProviders,
       });
 
-      const sysMsg = await prisma.agentMessage.create({
+      const sysMsg = await publishForegroundMessage(db => db.agentMessage.create({
         data: {
           threadId: input.threadId,
+          ...(foregroundExecutionContext() ? { taskRunId: foregroundExecutionContext()!.taskRunId } : {}),
           role: "system",
           content: sysContent,
           agentId: agent.agentId,
           routeContext: input.routeContext,
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
-      });
+      }));
       systemMessage = serializeMessage(sysMsg);
     } else {
       throw e;
@@ -2337,28 +2275,33 @@ export async function sendMessage(input: {
     formAssistUpdate = extracted.fieldUpdates ?? undefined;
   }
 
-  const persistedResponse = await persistCoworkerResponse({
-    data: {
-      id: pendingAgentMessageId,
-      threadId: input.threadId,
-      role: responseIsSystemFailure ? "system" : "assistant",
-      taskRunId: currentTaskRun?.taskRunId ?? null,
-      content: responseContent,
-      agentId: responseIsSystemFailure ? null : agent.agentId,
-      routeContext: input.routeContext,
-      providerId: responseIsSystemFailure ? null : responseProviderId,
-      modelId: responseIsSystemFailure ? null : responseModelId,
-      taskType: taskTypeId !== "unknown" ? taskTypeId : null,
-      routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
-      contextTrace, // BI-3E218D80 — plain-response path (see also the pending-approval write)
-    },
-    responseProducer: responseIsSystemFailure ? undefined : responseProducer,
-    scope: { userId: user.id!, threadId: input.threadId, taskRunId: currentTaskRun?.taskRunId ?? null,
-      requestedWorkroomId: portalContextPromptContext?.envelope.work?.capsule?.capsuleId ?? roomAuthority.workroomId,
-      serverContextResolved: portalContextPromptContext !== null },
+  const agentMsg = await publishForegroundMessage(async db => {
+    const persisted = await persistCoworkerResponse({
+      data: {
+        id: pendingAgentMessageId,
+        threadId: input.threadId,
+        role: responseIsSystemFailure ? "system" : "assistant",
+        taskRunId: currentTaskRun?.taskRunId ?? null,
+        content: responseContent,
+        agentId: responseIsSystemFailure ? null : agent.agentId,
+        routeContext: input.routeContext,
+        providerId: responseIsSystemFailure ? null : responseProviderId,
+        modelId: responseIsSystemFailure ? null : responseModelId,
+        taskType: taskTypeId !== "unknown" ? taskTypeId : null,
+        routedEndpointId: null, // Routing remains per-iteration via routeAndCall.
+        contextTrace,
+      },
+      responseProducer: responseIsSystemFailure ? undefined : responseProducer,
+      scope: { userId: user.id!, threadId: input.threadId, taskRunId: currentTaskRun?.taskRunId ?? null,
+        requestedWorkroomId: portalContextPromptContext?.envelope.work?.capsule?.capsuleId ?? roomAuthority.workroomId,
+        serverContextResolved: portalContextPromptContext !== null },
+    }, db);
+    return persisted.message;
+  }, { kind: foregroundResourceWait ? "capacity-wait" : responseIsSystemFailure ? "blocked" : "responded",
+    ...(foregroundResourceWait ? { resourceWait: foregroundResourceWait } : {}),
+    ...(formAssistUpdate ? { formAssistUpdate } : {}), ...(systemMessage ? { systemMessageId: systemMessage.id } : {}),
   });
-  const agentMsg = persistedResponse.message;
-  responseContent = persistedResponse.content;
+  responseContent = agentMsg.content;
 
   await persistCoworkerResponseArtifact({
     taskRunId: currentTaskRun?.taskRunId ?? null,
@@ -2373,6 +2316,9 @@ export async function sendMessage(input: {
     userId: user.id!,
   });
 
+  // Optional learning/observer work must not outlive a retained execution's
+  // authority. The accepted message remains the durable source for later work.
+  if (!foregroundExecutionContext()) {
   const { resolveAIDocForAgent } = await import("@/lib/identity/aidoc-resolver");
   const memoryOperatingProfileFingerprint = (
     await resolveAIDocForAgent(agent.agentId).catch(() => null)
@@ -2404,7 +2350,7 @@ export async function sendMessage(input: {
   }).catch((e) => console.warn("[memory-store] import failed:", getErrorMessage(e)));
 
   // Fire-and-forget: extract user facts from substantive user messages
-  if (trimmedContent.length > 30) {
+  if (!responseIsSystemFailure && trimmedContent.length > 30) {
     import("@/lib/tak/user-facts").then(({ extractAndStoreFacts }) => {
       extractAndStoreFacts({
         userId: user.id!,
@@ -2443,10 +2389,12 @@ export async function sendMessage(input: {
   observeConversation(input.threadId, input.routeContext, mainMeta).catch((err) =>
     console.error("[process-observer]", err),
   );
+  }
 
   return {
     userMessage: serializeMessage(userMsg),
     agentMessage: serializeMessage(agentMsg),
+    ...(foregroundResourceWait ? { resourceWait: foregroundResourceWait } : {}),
     ...(formAssistUpdate !== undefined && { formAssistUpdate }),
     ...(systemMessage !== undefined && { systemMessage }),
     ...(responseProviderId && responseModelId && { providerInfo: { providerId: responseProviderId, modelId: responseModelId } }),

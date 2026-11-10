@@ -36,6 +36,14 @@ it("holds incomplete native work without declaring a settled profile or authoriz
  expect(JSON.stringify(hold)).not.toContain("knownSettled");expect(JSON.stringify(hold)).not.toContain("transportProfile");
 });
 
+it("BI-E458A9CB: a hold always records its failing check and a typed next action",async()=>{
+ const uncoded=await engagementIncompleteOutcome({policy:{toolNames:[],inspect:async()=>({complete:false,message:"missing"})},taskRunId:"TR-original",result:{content:"unverified",executedTools:[]},checkpoint:{},flags:{},skip:false});
+ expect(uncoded?.settlement.data.progressPayload).toMatchObject({engagementEvidenceWait:{code:"contribution-unverified",nextAction:{retry:"never",wakeBy:{kind:"person-decision",principal:"engagement-requester"}}}});
+ const corpus=await engagementIncompleteOutcome({policy:{toolNames:[],inspect:async()=>({complete:false,code:"calibration-corpus-unread",message:"m"})},taskRunId:"TR-original",result:{content:"x",executedTools:[]},checkpoint:{},flags:{},skip:false});
+ expect(corpus?.settlement.data.progressPayload).toMatchObject({engagementEvidenceWait:{code:"calibration-corpus-unread",nextAction:{retry:"after-input",call:{tool:"search_ux_critique_corpus",args:{calibratedOnly:true}}}}});
+ expect(JSON.stringify(corpus?.outcome)).toContain("search_ux_critique_corpus");
+});
+
 it("holds source-only output when the immutable request requires provided images",async()=>{
  const visualBinding={...binding,visualEvidenceRef:{kind:"document-version" as const,repositoryFullName:"owner/repo",versionId:"manifest",valueDigest:"f".repeat(64)}};
  expect((await engagementReadCompletion("TR-original",visualBinding).inspect(content)).complete).toBe(false);

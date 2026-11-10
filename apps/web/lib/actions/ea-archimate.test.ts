@@ -17,6 +17,7 @@ vi.mock("@/lib/ea/archimate-xml", () => ({
     modelName: "Test",
     elements: [{ archimateId: "a-1", name: "Actor", slug: "business_actor", folder: "Business" }],
     relationships: [],
+      unknownRelationships: [],
   }),
   generateArchimateXml: vi.fn().mockReturnValue("<?xml?>"),
 }));
@@ -68,6 +69,7 @@ describe("importArchimateFile", () => {
       modelName: "Test",
       elements: [{ archimateId: "u-1", name: "Unknown", slug: "object", folder: "Business", unknownArchimateType: "archimate:FutureThing" }],
       relationships: [],
+      unknownRelationships: [],
     });
     vi.mocked(prisma.eaNotation.findUnique).mockResolvedValue({ id: "n-1" } as never);
     vi.mocked(prisma.eaElementType.findMany).mockResolvedValue([{ id: "et-obj", slug: "object" }] as never);

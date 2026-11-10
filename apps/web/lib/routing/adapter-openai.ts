@@ -105,6 +105,10 @@ export const openAIAdapter: ProviderAdapter = {
 
     const capabilities = { ...EMPTY_CAPABILITIES };
     if (catalogModalities) capabilities.imageInput = catalogModalities.includes("image");
+    // BI-B76DC66C: chat-adapter's chatgpt branch sends `text.format` for a
+    // strict-schema plan, so the subscription backend really returns
+    // constrained JSON. Codex shares this discovery path but not that branch.
+    if (isChatGptSubscription) capabilities.structuredOutput = true;
     if (isChatGptDiscovery && raw.capabilities) {
       capabilities.streaming = raw.capabilities.streaming === true ? true : null;
       capabilities.imageInput = raw.capabilities.image_input === true

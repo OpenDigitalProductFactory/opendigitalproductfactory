@@ -13,6 +13,73 @@ const neutral = resolveOwnerVocabulary("retail-goods");
 const petRescue = resolveOwnerVocabulary("nonprofit-community", "pet-rescue");
 
 describe("buildCustomerOwnerSummary", () => {
+  it("identifies the customer when deal titles are the same", () => {
+    const input = {
+      pendingReservations: 0, pendingOrders: 0, newInquiries: 0,
+      unworkedEngagements: 0, overdueInvoices: 0, renewalsDueSoon: 0,
+      opportunityFollowups: [
+        { id: "alpha", title: "Support pilot", stage: "qualification", nextActivityAt: null, account: { name: "Alpha business" } },
+        { id: "beta", title: "Support pilot", stage: "qualification", nextActivityAt: null, account: { name: "Beta business" } },
+      ],
+    };
+    const summary = buildCustomerOwnerSummary(input, neutral);
+    expect(summary.actions.map((action) => action.title)).toEqual([
+      "Alpha business · Support pilot", "Beta business · Support pilot",
+    ]);
+    expect(summary.actions.map((action) => action.nextAction.href)).toEqual([
+      "/customer/opportunities?opportunity=alpha", "/customer/opportunities?opportunity=beta",
+    ]);
+  });
+
+  it("excludes closed and future-scheduled deals and bounds the primary list", () => {
+    const now = new Date("2026-10-30T00:00:00Z");
+    const summary = buildCustomerOwnerSummary({
+      pendingReservations: 0, pendingOrders: 0, newInquiries: 0,
+      unworkedEngagements: 0, overdueInvoices: 0, renewalsDueSoon: 0, now,
+      opportunityFollowups: [
+        { id: "won", title: "Won", stage: "closed_won", nextActivityAt: null, account: { name: "Example" } },
+        { id: "lost", title: "Lost", stage: "closed_lost", nextActivityAt: new Date("2026-10-01"), account: { name: "Example" } },
+        { id: "future", title: "Scheduled", stage: "proposal", nextActivityAt: new Date("2026-11-01"), account: { name: "Example" } },
+        ...[1, 2, 3, 4].map((id) => ({ id: String(id), title: `Open ${id}`, stage: "qualification", nextActivityAt: null, account: { name: "Example" } })),
+      ],
+    }, neutral);
+    expect(summary.actions.map((action) => action.title)).toEqual(["Example · Open 1", "Example · Open 2", "Example · Open 3"]);
+  });
+
+  it("surfaces recorded overdue and missing sales next steps even without inbound replies", () => {
+    const input = {
+      pendingReservations: 0, pendingOrders: 0, newInquiries: 0,
+      unworkedEngagements: 0, overdueInvoices: 0, renewalsDueSoon: 0,
+      now: new Date("2026-10-30T00:00:00Z"),
+      opportunityFollowups: [
+        { id: "missing", title: "New prospect", stage: "qualification", nextActivityAt: null, account: { name: "Example" } },
+        { id: "late", title: "Existing prospect", stage: "discovery", nextActivityAt: new Date("2026-10-01T00:00:00Z"), account: { name: "Example" } },
+      ],
+    };
+    const summary = buildCustomerOwnerSummary(input, neutral);
+    expect(summary.actions).toHaveLength(2);
+    expect(summary.actions[0].title).toContain("Existing prospect");
+    expect(summary.actions[0].why).toMatch(/overdue/i);
+    expect(summary.actions[1].why).toMatch(/no next step/i);
+    expect(summary.actions.map((action) => action.nextAction)).toEqual([
+      { label: "Set next step", href: "/customer/opportunities?opportunity=late" },
+      { label: "Set next step", href: "/customer/opportunities?opportunity=missing" },
+    ]);
+    expect(summary.subhead).toMatch(/reply|replies/i);
+    expect(summary.subhead).not.toMatch(/no.*follow.up.*needed/i);
+  });
+
+  it("describes the genuinely clear state in terms of replies and recorded sales steps", () => {
+    const summary = buildCustomerOwnerSummary({
+      pendingReservations: 0, pendingOrders: 0, newInquiries: 0,
+      unworkedEngagements: 0, overdueInvoices: 0, renewalsDueSoon: 0,
+      opportunityFollowups: [],
+    }, neutral);
+    expect(summary.actions).toHaveLength(0);
+    expect(summary.clearMessage).toMatch(/reply|replies/i);
+    expect(summary.clearMessage).toMatch(/sales.*next step/i);
+  });
+
   it("leads with guest follow-up in restaurant language and orders by urgency", () => {
     const summary = buildCustomerOwnerSummary(
       {

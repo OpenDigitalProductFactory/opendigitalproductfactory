@@ -284,6 +284,7 @@ describe("connection-delegation steering (BI-12E5DD91)", () => {
       expect(escalationReasonSentence(reason)).toMatch(/\w/);
     }
     expect(escalationReasonSentence("steered-by-connection-delegation")).toBeNull();
+    expect(escalationReasonSentence("steered-by-standing-ruling")).toBeNull();
   });
 });
 
@@ -292,7 +293,7 @@ describe("connection-delegation steering (BI-12E5DD91)", () => {
 // reproduces the diversion propose-interception makes today, before the
 // monitor, for every side-effecting call — and nothing else.
 describe("resolveEscalation — the propose boundary", () => {
-  const ALL_STEERING: EscalationSteering[] = [...STEERINGS, "scheduled-mandate", "connection-delegation", "none"];
+  const ALL_STEERING: EscalationSteering[] = [...STEERINGS, "scheduled-mandate", "connection-delegation", "standing-ruling", "none"];
 
   it("puts a side-effecting call under a propose boundary in front of a person, whatever could steer it", () => {
     for (const steering of ALL_STEERING) {

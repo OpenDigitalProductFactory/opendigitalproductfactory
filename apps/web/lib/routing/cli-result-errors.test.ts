@@ -1,8 +1,40 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseCliTerminalResultMetadata } from "./cli-result-errors";
+import { sanitizeNativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 const result = (fields: Record<string, unknown> = {}) => JSON.stringify({
   type: "result", subtype: "success", is_error: false, result: "Completed.", ...fields,
+});
+
+describe("dated quota verdict reset (BI-783EBEE6)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it.each([
+    "You've hit your weekly limit · resets Nov 3 at 10am (America/Chicago)",
+    "You've hit your weekly limit · resets Nov 3 at 10am America/Chicago",
+    "You've hit your weekly limit · resets Nov 3, 10am (America/Chicago)",
+  ])("keeps only the stated reset instant for %s", (text) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T01:30:00Z"));
+    // 10am CST (after the 2026-11-01 DST change) is 16:00Z.
+    expect(parseCliTerminalResultMetadata(result({ is_error: true, result: text })))
+      .toEqual({ status: "error", type: "result", subtype: "success", isError: true, hint: "quota", resetAt: "2026-11-03T16:00:00.000Z" });
+  });
+
+  it("states no reset when the verdict names none", () => {
+    expect(parseCliTerminalResultMetadata(result({ is_error: true, result: "You've hit your usage limit. try again in 99 hours" })))
+      .toEqual({ status: "error", type: "result", subtype: "success", isError: true, hint: "quota" });
+  });
+
+  it("sanitizes the carried reset to an instant and drops it off a non-quota hint", () => {
+    const base = { exitCode: 1, terminalResult: { status: "error", type: "result", subtype: "success", isError: true } };
+    expect(sanitizeNativeCliDiagnostics({ ...base, terminalResult: { ...base.terminalResult, hint: "quota", resetAt: "PRIVATE prompt text" } })?.terminalResult)
+      .not.toHaveProperty("resetAt");
+    expect(sanitizeNativeCliDiagnostics({ ...base, terminalResult: { ...base.terminalResult, hint: "auth", resetAt: "2026-11-03T16:00:00.000Z" } })?.terminalResult)
+      .not.toHaveProperty("resetAt");
+    expect(sanitizeNativeCliDiagnostics({ ...base, terminalResult: { ...base.terminalResult, hint: "quota", resetAt: "2026-11-03T16:00:00.000Z" } })?.terminalResult)
+      .toMatchObject({ resetAt: "2026-11-03T16:00:00.000Z" });
+  });
 });
 
 describe("native CLI terminal result metadata", () => {

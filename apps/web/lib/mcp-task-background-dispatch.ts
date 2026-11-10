@@ -355,20 +355,30 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
       { progressPayload: { path: ["terminalWriterWait", "attempt"], lt: TERMINAL_WRITER_MAX_ATTEMPTS } },
     ],
   };
-  const rows = await prisma.taskRun.findMany({
+  // BI-AF428359: one bounded, oldest-first read PER CATEGORY. A single shared
+  // window let rows the loop below never acts on (e.g. exhausted reviewer-receipt
+  // waits, whose updatedAt never moves) fill every slot, so no newer category —
+  // capacity waits included — was ever reached again.
+  const take = Math.min(Math.max(input?.limit ?? 25, 1), 100);
+  const categories: Prisma.TaskRunWhereInput[] = [
+    durableSubmitted,
+    durableAdmitting,
+    resourceWaitSubmitted,
+    missingReviewerReceipt,
+    ...(input?.includeOrdinary === false ? [] : [ordinarySubmitted]),
+  ];
+  const batches = await Promise.all(categories.map((category) => prisma.taskRun.findMany({
     where: {
       updatedAt: { lt: cutoff },
       ...(input?.taskRunId ? { taskRunId: input.taskRunId } : {}),
-      OR: [
-        durableSubmitted,
-        durableAdmitting,
-        resourceWaitSubmitted,
-        missingReviewerReceipt,
-        ...(input?.includeOrdinary === false ? [] : [ordinarySubmitted]),
-      ],
+      OR: [category],
     },
-    orderBy: { updatedAt: "asc" },
-    take: Math.min(Math.max(input?.limit ?? 25, 1), 100),
+    // Reviewer-receipt waits the loop cannot recover (a writer or envelope
+    // already exists, or the wait no longer parses) are never touched, so
+    // oldest-first would let them hold this category's window too. Newest
+    // first keeps fresh recoverable waits in reach while those age out.
+    orderBy: { updatedAt: category === missingReviewerReceipt ? "desc" : "asc" },
+    take,
     select: {
       id: true,
       taskRunId: true,
@@ -378,7 +388,11 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
       progressPayload: true,
       a2aMetadata: true,
     },
-  });
+  })));
+  const seen = new Set<string>();
+  const rows = batches.flat()
+    .filter((row) => (seen.has(row.id) ? false : (seen.add(row.id), true)))
+    .sort((left, right) => left.updatedAt.getTime() - right.updatedAt.getTime());
 
   let enqueued = 0;
   let exhausted = 0;

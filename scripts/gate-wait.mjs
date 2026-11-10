@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 import { classifyGateExit, GATE_EXIT } from "./lib/gate-exit-classification.mjs";
-import { PREGATE_VERDICTS } from "./lib/pregate-status.mjs";
+import { PREGATE_LIVE_VERDICTS, PREGATE_VERDICTS } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
@@ -44,7 +44,7 @@ export function delayForAttempt(attempt, { firstDelaySeconds, maxDelaySeconds } 
 export function parseGateStatus(output) {
   try {
     const result = JSON.parse(String(output));
-    return result && PREGATE_VERDICTS.includes(result.verdict) ? result : null;
+    return result && (PREGATE_VERDICTS.includes(result.verdict) || PREGATE_LIVE_VERDICTS.includes(result.verdict)) ? result : null;
   } catch { return null; }
 }
 
@@ -76,7 +76,9 @@ export async function waitForGate({
     }
 
     const currentClaim = status?.boundSha && status.boundSha === status.headSha;
-    const active = currentClaim && ["queued", "admitted", "running"].includes(status.gateStatus);
+    // BI-F039AA83: a live verdict is a gate proven to be working, even before its first record.
+    const active = PREGATE_LIVE_VERDICTS.includes(status?.verdict)
+      || (currentClaim && ["queued", "admitted", "running"].includes(status.gateStatus));
     if (active) watching = true;
     if (!status || status.verdict === "PENDING" || (currentClaim && status.gateStatus && !active)
         || (status.verdict === "INCONCLUSIVE" && !active)) {

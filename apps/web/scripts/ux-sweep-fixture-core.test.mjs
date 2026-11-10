@@ -405,3 +405,28 @@ test("fixture refresh preserves existing claim ownership and its epoch", async (
   assert.deepEqual(write.where.scopeClaims, { equals: [claim] });
   assert.equal(write.where.updatedAt, NOW);
 });
+
+test("foreground Finance fixture uses software context without animal data", async () => {
+  const fixture = fixtureDb({ setupComplete: true });
+  fixture.db.storefrontArchetype.findFirst = async ({ where }) => ({ id: `arch-${where.archetypeId}` });
+  const result = await convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL, storefrontArchetype: 'software-platform' });
+  assert.equal(fixture.calls.storefrontCreate[0].data.archetypeId, 'arch-software-platform');
+  assert.equal(result.storefront.animalsCreated, 0);
+  assert.equal(fixture.calls.sectionCreate.length, 0);
+  assert.equal(fixture.calls.animalCreate.length, 0);
+});
+
+test("foreground Finance refuses a foreign storefront rather than converting it", async () => {
+  const fixture = fixtureDb({ setupComplete: true, hasStorefront: true });
+  fixture.db.storefrontArchetype.findFirst = async () => ({ id: 'arch-software-platform' });
+  fixture.db.storefrontConfig.findFirst = async () => ({ id: 'foreign', archetypeId: 'arch-pet-rescue' });
+  await assert.rejects(convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL, storefrontArchetype: 'software-platform' }), /fixture.*context/);
+  assert.equal(fixture.calls.storefrontCreate.length, 0);
+  assert.equal(fixture.calls.animalCreate.length, 0);
+});
+
+test("foreground Finance refuses missing software seed and unknown fixture profiles", async () => {
+  const fixture = fixtureDb({ setupComplete: true, hasArchetype: false });
+  await assert.rejects(convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL, storefrontArchetype: 'software-platform' }), /fixture.*context/);
+  await assert.rejects(convergeUxSweepFixture(fixture.db, NOW, { dbNull: DB_NULL, storefrontArchetype: 'invented' }), /fixture.*context/);
+});

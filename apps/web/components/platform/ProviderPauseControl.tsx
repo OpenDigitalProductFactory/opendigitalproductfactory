@@ -24,6 +24,9 @@ export function ProviderPauseControl({ providerId, initialStatus, initialPause, 
   const [duration, setDuration] = useState("24");
   const [unit, setUnit] = useState<"hours" | "days">("hours");
   const [message, setMessage] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [recentResume, setRecentResume] = useState<{ resumedBy: string; resumedAt: string } | null>(null);
+  const [overrideResume, setOverrideResume] = useState(false);
   const [isPending, startTransition] = useTransition();
   const actionVersion = useRef(0);
   const id = useId();
@@ -52,10 +55,15 @@ export function ProviderPauseControl({ providerId, initialStatus, initialPause, 
       catch (error) { setMessage(error instanceof Error ? error.message : t("providerPause.updateFailed")); }
     });
   }
-  function pauseNow() {
+  // BI-1C36C88A: every pause states why; a pause right after an operator resume
+  // needs the explicit override the server asked for.
+  function pauseNow(duration?: { value: number; unit: "hours" | "days" }) {
+    if (!reason.trim()) { setEditing(true); setMessage(t("providerPause.reasonRequired")); return; }
     perform(async () => {
-      const result = await pauseProvider(providerId);
+      const result = await pauseProvider(providerId, reason, duration, recentResume !== null && overrideResume);
+      if (result.recentResume) { setRecentResume(result.recentResume); setOverrideResume(false); setMessage(result.warning); return; }
       setPause({ resumeAt: result.resumeAt }); setConnectionStatus("paused"); setEditing(false); setMessage(result.warning);
+      setReason(""); setRecentResume(null); setOverrideResume(false);
     });
   }
   function resumeNow() {
@@ -77,10 +85,7 @@ export function ProviderPauseControl({ providerId, initialStatus, initialPause, 
   function saveTime() {
     const value = Number(duration);
     if (!Number.isFinite(value) || value <= 0) { setMessage(t("providerPause.positiveDuration")); return; }
-    perform(async () => {
-      const result = await pauseProvider(providerId, { value, unit });
-      setPause({ resumeAt: result.resumeAt }); setConnectionStatus("paused"); setEditing(false); setMessage(result.warning);
-    });
+    pauseNow({ value, unit });
   }
 
   return (
@@ -89,7 +94,7 @@ export function ProviderPauseControl({ providerId, initialStatus, initialPause, 
         {!hideStatus && <StatusBadge size="md" variant="soft" uppercase={false}
           intent={stopped || unavailable || status === "degraded" ? "warning" : status === "unconfigured" ? "neutral" : "success"}
           label={pause || connectionStatus === "paused" ? t("providerPause.paused") : stopped ? t("providerPause.disabled") : unavailable ? t("providerPause.unavailable") : status === "unconfigured" ? t("providerPause.notSetUp") : status === "degraded" ? t("providerPause.degraded") : t("providerPause.active")} />}
-        <Button size="sm" variant="secondary" disabled={isPending || (!stopped && status === "unconfigured")} onClick={stopped ? resumeNow : pauseNow}>
+        <Button size="sm" variant="secondary" disabled={isPending || (!stopped && status === "unconfigured")} onClick={stopped ? resumeNow : () => setEditing(true)}>
           {isPending ? t("providerPause.updating") : stopped ? t("providerPause.resumeNow") : t("providerPause.pauseNow")}
         </Button>
         {stopped && <Button size="sm" variant="ghost" disabled={isPending} aria-expanded={editing} aria-controls={`${id}-time`} onClick={() => setEditing(!editing)}>
@@ -100,6 +105,9 @@ export function ProviderPauseControl({ providerId, initialStatus, initialPause, 
         {pause?.resumeAt ? <>{t("providerPause.resumes")} <time dateTime={pause.resumeAt}><LocalTime value={pause.resumeAt} /></time></> : t("providerPause.indefinite")}
       </p>}
       {editing && <fieldset id={`${id}-time`} disabled={isPending} className="flex max-w-full flex-wrap items-end gap-2">
+        <label htmlFor={`${id}-reason`} className="flex w-full flex-col gap-1">{t("providerPause.reason")}
+          <input id={`${id}-reason`} type="text" required maxLength={500} value={reason} onChange={event => setReason(event.target.value)} className={fieldControlClass} />
+        </label>
         <label htmlFor={`${id}-duration`} className="flex flex-col gap-1">{t("providerPause.duration")}
           <input id={`${id}-duration`} type="number" min="0" step="any" required value={duration} onChange={event => setDuration(event.target.value)} className={`${fieldControlClass} max-w-20`} />
         </label>
@@ -108,8 +116,12 @@ export function ProviderPauseControl({ providerId, initialStatus, initialPause, 
             <option value="hours" className={fieldOptionClass}>{t("providerPause.hours")}</option><option value="days" className={fieldOptionClass}>{t("providerPause.days")}</option>
           </select>
         </label>
-        <Button size="sm" onClick={saveTime}>{t("providerPause.save")}</Button>
-        {pause?.resumeAt && <Button size="sm" variant="ghost" onClick={pauseNow}>{t("providerPause.keepPaused")}</Button>}
+        {recentResume && <label className="flex w-full items-center gap-2">
+          <input type="checkbox" checked={overrideResume} onChange={event => setOverrideResume(event.target.checked)} />
+          {t("providerPause.overrideRecentResume")}
+        </label>}
+        <Button size="sm" onClick={saveTime}>{stopped ? t("providerPause.save") : t("providerPause.pauseForDuration")}</Button>
+        {(pause?.resumeAt || !stopped) && <Button size="sm" variant="ghost" onClick={() => pauseNow()}>{t("providerPause.keepPaused")}</Button>}
         <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>{t("providerPause.cancel")}</Button>
       </fieldset>}
       {message && <p role="alert" className="max-w-sm text-[var(--dpf-warning)]">{message}</p>}

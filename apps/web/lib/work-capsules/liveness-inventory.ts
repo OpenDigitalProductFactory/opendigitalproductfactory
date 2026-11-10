@@ -184,7 +184,7 @@ export async function loadCapsuleLivenessInventory(
       ...rest,
       ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
       ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
-        lastCycleKey: drive.lastCycleKey,
+        lastCycleKey: drive.lastCycleKey, stageKey: drive.currentStageKey,
         attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
       ...(args.portalSummary ? { decisions: decisionsById.get(row.capsuleId) ?? [] } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),

@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "scope": { "files": [
+    "apps/web/components/platform/ProviderPauseControl.tsx"
+  ] },
+  "decidedOption": "reason-fingerprint-override",
+  "decisionInteractionId": "DI-2EF2DCDA9F3B",
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["reason-fingerprint-override", "fingerprint-only", "admin-approval-card"] },
+  "authority": "Coordinator instruction (founder-relayed) on 2026-11-05 to make provider pauses attributable after four unattributed pauses of the local provider (BI-1C36C88A). DI-2EF2DCDA9F3B ranked reason-fingerprint-override first with high confidence (verdict proceed).",
+  "limitations": "The pause control keeps its existing fieldset; it adds one required text field and, only after a server refusal, one override checkbox. Pause now no longer pauses on the first click: it opens the fieldset so a reason can be given. Client headers are recorded for attribution only and are never an authorization signal. Not yet verified on the served portal."
+}

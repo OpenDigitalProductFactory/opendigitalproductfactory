@@ -384,6 +384,36 @@ describe("responsesAdapter", () => {
     expect(result.usage).toEqual({ inputTokens: 3, outputTokens: 2 });
   });
 
+  it("chains ChatGPT responses without enabling backend storage", async () => {
+    stubFetchText([
+      'data: {"type":"response.completed","response":{"id":"resp_next","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Continued."}]}]}}',
+      "data: [DONE]",
+    ].join("\n"));
+
+    await responsesAdapter.execute(makeRequest({
+      providerId: "chatgpt",
+      previousResponseId: "resp_prior",
+      provider: {
+        baseUrl: "https://chatgpt.com/backend-api",
+        headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+      },
+    }));
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(sentBody.previous_response_id).toBe("resp_prior");
+    expect(sentBody.store).toBe(false);
+  });
+
+  it("retains stored-response chaining for direct OpenAI Responses providers", async () => {
+    stubFetchOk({ id: "resp_next", output: [] });
+
+    await responsesAdapter.execute(makeRequest({ previousResponseId: "resp_prior" }));
+
+    const sentBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(sentBody.previous_response_id).toBe("resp_prior");
+    expect(sentBody.store).toBe(true);
+  });
+
   it("extracts function_call output items as tool calls", async () => {
     stubFetchOk({
       output: [

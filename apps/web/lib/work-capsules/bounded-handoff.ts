@@ -105,7 +105,7 @@ export async function assessBoundedHandoff(input: Input, options: { lock?: boole
   if (completion && request) return { capsule, request, proposed, authority, snapshot: request.snapshot, terminal: completion.handoff };
   await assertBoundedHandoffDependencies(db as unknown as Parameters<typeof assertBoundedHandoffDependencies>[0], { capsule, sourceExecutorRef: proposed.expectedExecutorRef, destinationExecutorRef: proposed.toExecutorRef });
   const now = await databaseWallTime(db);
-  const snapshot = snapshotHandoff(capsule, authority.boundary, now);
+  const snapshot = snapshotHandoff(capsule, authority.boundary, now, request?.ownerPrincipalId ?? actor.principalId ?? null);
   if (request) assertHandoffSnapshot(snapshot, request.snapshot);
   else assertRequestedSource(capsule, proposed, actor.principalId);
   return { capsule, request, proposed, authority, snapshot, terminal: null };
@@ -148,7 +148,7 @@ export async function executeBoundedHandoff(input: Input): Promise<ToolResult> {
   if (!request) return fail("handoff-request-invalid", "The stored handoff request could not be resolved.");
   const now = await databaseWallTime(db);
   // A long dependency/identity read cannot outlive the lease it validated.
-  snapshotHandoff(capsule, authority.boundary, now);
+  snapshotHandoff(capsule, authority.boundary, now, request.ownerPrincipalId);
   const updated = await reassignWorkCapsuleExecutor({ db, capsuleId: capsule.capsuleId,
     toExecutorKind: proposed.toExecutorKind as WorkCapsuleExecutorKind, toExecutorRef: proposed.toExecutorRef,
     actor, expectedLeaseHolderPrincipalId: snapshot.leaseHolderPrincipalId, reason: proposed.reason,
@@ -214,7 +214,9 @@ export async function readBoundedHandoffLineage(db: CapsuleDb, capsule: HandoffR
     ? "handoff-source-changed"
     : capsule.leaseHolderPrincipalId !== request.snapshot.leaseHolderPrincipalId || capsule.leaseExpiresAt?.toISOString() !== request.snapshot.leaseExpiresAt
       ? "handoff-lease-snapshot-changed"
-      : !capsule.leaseExpiresAt || capsule.leaseExpiresAt.getTime() <= (await databaseWallTime(db)).getTime() ? "handoff-lease-expired" : null;
+      // The lease still names the requesting owner here, so a lapse alone leaves
+      // the request acknowledgeable (BI-F1FC0B62).
+      : !capsule.leaseExpiresAt ? "handoff-lease-expired" : null;
   if (stale) return { state: "stale" as const, reason: stale, requestId: activityId };
   return { state: "pending" as const, requestId: activityId, requestDigest: handoffDigest(request),
     receiverRef: request.command.toExecutorRef, receivingAgentId: request.command.targetAgentId };

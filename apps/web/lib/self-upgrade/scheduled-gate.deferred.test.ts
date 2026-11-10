@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 vi.mock("@/lib/self-upgrade/effective-window", () => ({
   resolveEffectiveUpgradeWindow: mocks.resolveEffectiveUpgradeWindow,
+  // No bounded opening: these cases exercise the plain interval and the waiver.
+  currentWindowOpenedAt: () => null,
 }));
 vi.mock("@/lib/self-upgrade/blackout", () => ({
   getActiveSelfUpgradeBlackout: mocks.getActiveSelfUpgradeBlackout,

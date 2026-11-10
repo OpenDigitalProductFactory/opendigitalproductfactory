@@ -33,7 +33,7 @@ import {
 import { POLICY_GUARD_PROFILES, isPolicyGuardConformanceCommand } from "./lib/ci-policy-guards.mjs";
 import { RUNNER_FAILURE_EXIT_CODE } from "./check-guards.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
-import { shouldRunPreflight } from "./pregate.mjs";
+import { shouldCheckHostDisk, shouldRunPreflight } from "./pregate.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const preflightCli = join(repoRoot, "scripts", "pregate-preflight.mjs");
@@ -629,6 +629,27 @@ test("pregate.mjs --dry-run skips the preflight and still reaches gate routing",
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /pregate-preflight/);
   assert.match(result.stdout, /gate-worktree dry-run/);
+});
+
+// BI-D0C3F242: a dry run builds nothing, so the host-disk build floor must not
+// decide it — CI runners routinely carry less free disk than the floor.
+test("pregate.mjs --dry-run reaches gate routing on a host below the disk floor", () => {
+  const result = spawnSync(
+    process.execPath,
+    [pregateCli, "--dry-run", "--branch", "feat/x", "--worktree", repoRoot],
+    { encoding: "utf8", env: { ...process.env, DPF_PREGATE_FORCE_NODE: "1", DPF_MIN_DISK_GB: "1000000000" } },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /Build blocked: host disk/);
+  assert.match(result.stdout, /gate-worktree dry-run/);
+});
+
+test("only invocations that build are held to the host-disk floor", () => {
+  assert.equal(shouldCheckHostDisk([]), true);
+  assert.equal(shouldCheckHostDisk(["--force-rerun"]), true);
+  for (const flag of ["--dry-run", "--help", "-h", "--finalize-evidence"]) {
+    assert.equal(shouldCheckHostDisk([flag]), false, flag);
+  }
 });
 
 // BI-8CDA7F95: the preflight honours the change scope the cloud trusts. A guard

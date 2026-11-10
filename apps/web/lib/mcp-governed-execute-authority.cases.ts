@@ -2,12 +2,15 @@ import { expect, it, vi } from "vitest";
 
 import {
   buildCoworkerApprovalBinding,
+  evaluateCoworkerAuthority,
   type CoworkerAuthorityInput,
 } from "./govern/authority/coworker-authority-decision";
 import {
   governedExecuteTool,
   type _setGovernanceForTests,
 } from "./mcp-governed-execute";
+
+import { resolveSteering } from "./govern/authority/resolve-coworker-tool-authority";
 
 type AuditRow = Record<string, unknown>;
 type GovernanceOverrides = Parameters<typeof _setGovernanceForTests>[0];
@@ -283,6 +286,89 @@ export function registerCoworkerAuthorityCases(
         damaging: false,
       }),
     });
+    // A current-authority check inside the handler must see the same verified
+    // delegation. Losing it changes an already-authorized call to approval-required.
+    const forwarded = (harness.executeMock() as { mock: { calls: unknown[][] } }).mock.calls[0][3] as {
+      agentId?: string; connectionDelegation?: { authorityBindingId: string; agentId: string };
+      governedAuthorityTool?: () => { name: string; sideEffect?: boolean };
+    };
+    expect(forwarded.governedAuthorityTool?.()).toMatchObject({ name: "create_backlog_item", sideEffect: true });
+    const currentSteering = resolveSteering({ initiativeReviewBinding: null, roomAuthority: null,
+      agentId: forwarded.agentId, connectionDelegation: forwarded.connectionDelegation });
+    expect(evaluateCoworkerAuthority({ ...steered, steering: currentSteering })).toMatchObject({
+      outcome: "allow", escalation: { steering: "connection-delegation" },
+    });
+  });
+
+  it("runs the next equivalent write under the owner's standing ruling with no envelope, and names the ruling (BI-E5631708)", async () => {
+    const steered = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+      },
+      steering: "standing-ruling",
+      standingRulingEnvelopeId: "ENV-RULED",
+    });
+    harness.applyOverrides({ resolveCoworkerAuthorityInput: async () => steered });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "routine record the owner always approves" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result.success).toBe(true);
+    expect(harness.executeMock()).toHaveBeenCalledOnce();
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "allow",
+      rationale: expect.objectContaining({
+        escalationReason: "steered-by-standing-ruling",
+        escalationSteering: "standing-ruling",
+        damaging: false,
+        standingRulingEnvelopeId: "ENV-RULED",
+      }),
+    });
+  });
+
+  it("still puts a damaging call of the same class to a person under a standing ruling (BI-E5631708)", async () => {
+    const damaging = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "release_nonprod_environment_lease",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+        consequence: "authority",
+      },
+      steering: "standing-ruling",
+      standingRulingEnvelopeId: "ENV-RULED",
+    });
+    harness.applyOverrides({ resolveCoworkerAuthorityInput: async () => damaging });
+
+    const result = await governedExecuteTool({
+      toolName: "release_nonprod_environment_lease",
+      rawParams: { leaseId: "NPEL-FOREIGN" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "approval_required" });
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledOnce();
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "require-approval",
+      rationale: expect.objectContaining({ escalationReason: "damaging-consequence", damaging: true }),
+    });
+    expect(harness.authorityRows().at(-1)?.rationale).not.toHaveProperty("standingRulingEnvelopeId");
   });
 
   it("still puts an authority-changing write to a person under the same consent (BI-12E5DD91)", async () => {

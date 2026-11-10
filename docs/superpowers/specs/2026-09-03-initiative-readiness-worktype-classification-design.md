@@ -87,6 +87,30 @@ This is one atomic fix. The test and mapping are not independently shippable.
 
 ## Risks and rollback
 
+### Post-merge independent finding: invalid classification at completion
+
+Independent client assessment of immutable PR #5049 found that a malformed
+persisted work type returned no profile, which the terminal adapter treated as
+ungoverned legacy work. Completion could therefore mutate the item before
+examining the classification refusal. The repair keeps a present but invalid
+work type governed without assigning it a valid profile. Truly absent legacy
+classification retains its existing applicability behavior.
+
+The regression must exercise the real completion projector and transaction:
+padded, unknown and empty work types refuse with `CLASSIFICATION_REQUIRED`,
+even beside a feature build, and never call the terminal mutation. Projection
+controls must distinguish absent legacy values from malformed persisted ones.
+Run the adjacent backlog, build and epic terminal suites because they share
+the same readiness projection, then both web typechecks, guards, governed CI
+and independent reassessment before protected publication and live acceptance.
+
+The operator authorized this bounded follow-up as BI-293395E4, under the
+original epic EP-413F2602. Workroom WC-6E3D9D3F records this repair chat and
+its four edit paths through normal coordination. Before that registration,
+source-local tests ran under the documented coordination-outage recovery path;
+no passing implementation or delivery gate was inferred from them. The
+historical uncertain review remains unreplayed and unsettled.
+
 The initial change raised feature-shaped work from an accidental unclassified
 state to the already-supported `feature` profile. The closure hardening rejects
 only malformed persisted values that were previously masked; it does not

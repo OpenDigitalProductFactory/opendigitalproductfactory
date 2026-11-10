@@ -71,3 +71,30 @@ identity and a real screening/routing observation before review recovery.
 Rollback reverts the narrow shared pattern and its documentation through the
 normal delivery process; conservative false-positive routing then returns.
 No stored records, provider grants or policy packs change.
+
+## Amendment 2026-11-05: placeholder accounts on reserved domains (BI-08F526BA)
+
+This narrows the rejection above; it does not reverse it. Fixture accounts
+such as `admin@dpf.local` and `walk@dpf.local` matched contact-detail
+deterministically, attached a mask obligation and clamped whole review diffs
+to local-only inference (#6907, #6892).
+
+An address is now exempt only when all of these hold:
+
+- its domain is reserved under RFC 2606/6761 (`.invalid`, `.test`, `.example`,
+  `.localhost`, `example.com`, `example.net`, `example.org`, including their
+  subdomains), so it cannot be delivered to, or it is the platform's own
+  fixture domain `dpf.local`. Other `.local` domains are not exempt, because
+  organisations run real internal mail on them (`admin@corp.local`);
+- its local part is a role or placeholder token (`admin`, `test`, `user`,
+  `walk`, `noreply`, `ci`, `bot` and the others listed in
+  `source-contact-evidence.ts`), optionally followed by up to three digits,
+  so it names no person;
+- nothing follows the domain, and no customer, client, contact or similar
+  label precedes it, including a two-word label such as `contact email:`.
+
+Exempting every reserved-domain address stays rejected. A person-shaped local
+part (`jane@example.invalid`, `first.last@example.com`), a placeholder in a
+customer context (`Customer: test@example.invalid`), a suffix after the domain
+and a placeholder on a real domain (`admin@company.com`) remain contact
+evidence, and the tests pin each case. Decision: DI-2BE44401CCD2.

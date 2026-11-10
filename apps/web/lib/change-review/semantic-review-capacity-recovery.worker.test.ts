@@ -25,6 +25,7 @@ import { executePersistedSemanticReview, enqueueSemanticReview, reconcileSemanti
 vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: mocks.resolveFailureEvidence }));
 vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus: vi.fn() }));
 import { createSemanticReviewRequest } from "./semantic-review-request";
+import { SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS } from "./semantic-review-recovery-policy";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 vi.mock("@/lib/routing/local-provider-capacity", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>(),
@@ -219,13 +220,42 @@ describe("automatic semantic-review capacity recovery", () => {
     expect(providerCalls).toBe(0);
   });
 
-  it("rechecks the original deadline after capacity observation before admission", async () => {
+  it("resumes a capacity wait that outlasts the original window, crediting the wait rather than review time", async () => {
+    await persistedCapacityWait();
+    const start = Date.now();
+    const clock = vi.spyOn(Date, "now");
+    try {
+      vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({ available: false, reason: "local-ci-active-capacity-reservation" });
+      clock.mockReturnValue(start + 4 * 60_000);
+      await reconcileSemanticReviews(new Date(start + 4 * 60_000));
+      expect(row.status).toBe("input-required");
+      vi.mocked(inspectLocalProviderCapacity).mockResolvedValue({ available: true, reason: null });
+      clock.mockReturnValue(start + 45 * 60_000);
+      await reconcileSemanticReviews(new Date(start + 45 * 60_000));
+      expect(mocks.send).toHaveBeenCalledOnce();
+      expect(row.status).toBe("submitted");
+      const review = (row.progressPayload as { semanticReview: Record<string, unknown> }).semanticReview;
+      expect(review).toMatchObject({ deadlineAt: packet.deadlineAt, recoveryAttempt: 1, capacityRecovery: null });
+      expect(review.capacityWaitCreditMs).toBeGreaterThanOrEqual(45 * 60_000);
+      // Selected again because the packet's own window passed, but the credited window is open: no re-dispatch.
+      row.updatedAt = new Date(start + 45 * 60_000);
+      clock.mockReturnValue(start + 46 * 60_000);
+      await reconcileSemanticReviews(new Date(start + 46 * 60_000));
+      expect(mocks.send).toHaveBeenCalledOnce();
+      expect(row.status).toBe("submitted");
+      await executePersistedSemanticReview("TR-1");
+      expect(row.status).toBe("completed");
+      expect(providerCalls).toBe(1);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("rechecks the credited deadline after capacity observation before admission", async () => {
     await persistedCapacityWait();
     const now = new Date(Date.now() + 4 * 60_000);
     const clock = vi.spyOn(Date, "now");
     try {
       vi.mocked(inspectLocalGpuAdmission).mockImplementation(async () => {
-        clock.mockReturnValue(Date.parse(packet.deadlineAt) + 1);
+        clock.mockReturnValue(Date.parse(packet.deadlineAt) + SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS + 1);
         return { defer: null, unloadIdle: false };
       });
       await reconcileSemanticReviews(now);
@@ -253,7 +283,7 @@ describe("automatic semantic-review capacity recovery", () => {
       if (failure === "cancellation") vi.mocked(inspectLocalProviderCapacity).mockImplementation(async () => {
         row.status = "canceled"; return { available: true, reason: null };
       });
-      await reconcileSemanticReviews(new Date(Date.now() + (failure === "expired" ? 31 : 4) * 60_000));
+      await reconcileSemanticReviews(new Date(Date.now() + (failure === "expired" ? SEMANTIC_REVIEW_MAX_CAPACITY_WAIT_MS + 31 * 60_000 : 4 * 60_000)));
       expect(mocks.send).not.toHaveBeenCalled();
       expect(providerCalls).toBe(0);
       expect(row.status).not.toBe("completed");

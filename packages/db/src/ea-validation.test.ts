@@ -56,6 +56,39 @@ describe("validateEaRelationship", () => {
     expect(result.valid).toBe(false);
   });
 
+  it("refuses an association between element types no rule permits (BI-E487F6D9)", async () => {
+    mockPrisma.eaElement.findUnique
+      .mockResolvedValueOnce({ elementTypeId: "et-app" })
+      .mockResolvedValueOnce({ elementTypeId: "et-goal" });
+    mockPrisma.eaRelationshipType.findUnique.mockResolvedValueOnce({ slug: "associated_with" });
+    mockPrisma.eaRelationshipRule.findFirst.mockResolvedValueOnce(null);
+
+    const result = await validateEaRelationship("el-1", "el-2", "rt-assoc", { role: "supports" });
+    expect(result.valid).toBe(false);
+  });
+
+  it("refuses an association without a role naming what it means (BI-E487F6D9)", async () => {
+    mockPrisma.eaElement.findUnique
+      .mockResolvedValueOnce({ elementTypeId: "et-do" })
+      .mockResolvedValueOnce({ elementTypeId: "et-do" });
+    mockPrisma.eaRelationshipType.findUnique.mockResolvedValueOnce({ slug: "associated_with" });
+    mockPrisma.eaRelationshipRule.findFirst.mockResolvedValueOnce({ id: "rule-assoc" });
+
+    const result = await validateEaRelationship("el-1", "el-2", "rt-assoc");
+    expect(result).toEqual({ valid: false, reason: 'A "associated_with" relationship needs a "role" naming the specific relation' });
+  });
+
+  it("accepts a ruled association that carries a role", async () => {
+    mockPrisma.eaElement.findUnique
+      .mockResolvedValueOnce({ elementTypeId: "et-do" })
+      .mockResolvedValueOnce({ elementTypeId: "et-do" });
+    mockPrisma.eaRelationshipType.findUnique.mockResolvedValueOnce({ slug: "associated_with" });
+    mockPrisma.eaRelationshipRule.findFirst.mockResolvedValueOnce({ id: "rule-assoc" });
+
+    const result = await validateEaRelationship("el-1", "el-2", "rt-assoc", { role: "gap-of" });
+    expect(result).toEqual({ valid: true });
+  });
+
   it("returns valid:false when fromElement is not found", async () => {
     mockPrisma.eaElement.findUnique
       .mockResolvedValueOnce(null)

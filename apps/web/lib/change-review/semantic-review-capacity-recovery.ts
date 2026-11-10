@@ -76,8 +76,13 @@ export function hasProvenCapacityCheckpointSet(input: CheckpointInput): boolean 
   return deferred;
 }
 
-/** Local observation budget, never a new inference deadline or attempt allowance. */
-export function capacityRecoveryMarker(requestDigest: string, now: number, checks = 0) {
+/**
+ * Local observation budget, never an attempt allowance. waitStartedAt opens a
+ * bounded deadline credit (semanticReviewCapacityWaitMs); a recheck carries
+ * the original start forward so one wait is credited once.
+ */
+export function capacityRecoveryMarker(requestDigest: string, now: number, checks = 0,
+  waitStartedAt = new Date(now).toISOString()) {
   return { schemaVersion: 1, requestDigest, checks,
-    nextCheckAt: new Date(now + Math.min(30_000 * 2 ** Math.min(checks, 4), 300_000)).toISOString() };
+    nextCheckAt: new Date(now + Math.min(30_000 * 2 ** Math.min(checks, 4), 300_000)).toISOString(), waitStartedAt };
 }

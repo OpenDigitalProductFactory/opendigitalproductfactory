@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "decidedOption": "existing-owner-summary-above-crm-disclosure",
+  "scope": {
+    "files": ["apps/web/app/(shell)/customer/(crm)/page.tsx"]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/customer": {
+        "defaultVisibleWords": 109,
+        "leadBandWords": 0,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "sourceHead": "dbab7a784dc53c4d728dd83da9133bdcd5753482",
+    "previewLeaseId": "NPEL-83DE58ED0E",
+    "measurement": "auditUxBudget on served main DOM, Full view, 1280px; canonical generated route shell cockpit. Installed axe-core WCAG2A/2AA/21AA returned two serious violation rules (aria-prohibited-attr, color-contrast), matching baseline count; contrast also has an incomplete check. This is not a clean accessibility verdict.",
+    "functionalVerification": "Synthetic account/opportunity created through served UI; overdue date and description persisted after full reload; follow-up promoted above collapsed CRM detail and linked exact opportunity; future reschedule persisted and cleared fixture from overdue list. Simple view and 390x844 mobile checked; document width390, no horizontal overflow; override reset.",
+    "limitations": "Author measurement only. Independent UX engagement CE-98CCD5DB remains unfulfilled. No real mail, coworker/provider result, deployment or MSP acceptance. Historical prototype-first ordering was missed and is not retroactively claimed.",
+    "evidenceRef": "DOC-C108E048"
+  }
+}

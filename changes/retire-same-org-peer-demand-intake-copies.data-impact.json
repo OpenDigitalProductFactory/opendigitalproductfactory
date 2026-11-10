@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "Data-only status change on existing BacklogItem rows, BI-F4866228. No field is added, removed, retyped or repurposed, so the field resolution below is empty by construction. No data subject, provenance or policy vector changes. CAUSE: inbound issue triage read every peer demand-envelope mirror. A same-org-peer link sends its whole backlog as demand envelopes, and work sync already mirrors that backlog here, so the first commissioned production run filed each envelope as a new triaging item. SCOPE: rows with status 'triaging' whose body carries an [origin:ecosystem-peer-demand:fdm_...] marker resolving to a FederatedRecordMirror on a same-org-peer FederationLink. Rows anyone has already moved (open, deferred, awaiting-acceptance, done) are not touched. A read-only dry run of the same selection on the production install matched 3,968 rows: 2,756 have an earlier item with the same title filed through another path, and 1,212 do not. EFFECT: each matched row moves to status 'retired' with completedAt set. Where an original exists, triageOutcome is 'duplicate' with duplicateOfId pointing to it. Otherwise triageOutcome is 'discard' with the reason that the peer installation tracks the work. Resolution text names BI-F4866228. Nothing is deleted: every row stays inspectable and can be restored to triaging. Idempotent: a second run matches nothing, because the rows are no longer triaging. On an install that never commissioned the intake, it matches nothing.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "BacklogItem",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    }
+  ]
+}

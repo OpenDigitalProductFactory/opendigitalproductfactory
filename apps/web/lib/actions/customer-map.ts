@@ -62,3 +62,34 @@ export async function startGeocodingBackfillAction(): Promise<ActionResult> {
   revalidatePath("/customer");
   return ok();
 }
+
+/**
+ * Install the street-map pack the Street maps panel recommends (BI-43BBCC26).
+ * The recommendation is recomputed here, so the client names a pack id and
+ * never supplies bounds; only a pack recommended for an uncovered region can
+ * be installed, one at a time.
+ */
+export async function installRecommendedMapPackAction(packId: string): Promise<ActionResult> {
+  if (!(await allowed("manage_platform"))) return err("forbidden");
+  const { loadMapRegionRecommendation } = await import("@/lib/twin/map-region-recommendation.server");
+  const { isInstallRunning, readInstallStatus, writeInstallStatus } = await import("@/lib/twin/map-pack-install/status.server");
+  const { getLocaleContext } = await import("@/lib/i18n/locale-context.server");
+  const { jobs } = await import("@/lib/jobs");
+
+  const recommendation = await loadMapRegionRecommendation();
+  const group = recommendation.groups.find((g) => g.suggestedPackId === packId && !g.coveredBy);
+  if (!group || !group.suggestedPackId) return err("not-recommended");
+  if (isInstallRunning(await readInstallStatus())) return err("already-running");
+
+  const locale = await getLocaleContext();
+  await writeInstallStatus({
+    state: "planning", packId: group.suggestedPackId, region: group.label,
+    chunksDone: 0, chunkCount: 0, totalBytes: 0, error: null,
+  });
+  await jobs.send({
+    name: "map-pack/install.requested",
+    data: { packId: group.suggestedPackId, region: group.label, bounds: group.bounds, locale: locale.language },
+  });
+  revalidatePath("/customer");
+  return ok();
+}

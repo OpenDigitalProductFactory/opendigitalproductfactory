@@ -320,7 +320,10 @@ async function flagStaleKnowledgeHandler(params: Record<string, unknown>): Promi
 
 const handlers: Record<string, ToolPackHandler> = {
   search_knowledge: (params) => searchKnowledgeHandler(params),
-  search_knowledge_base: (params) => searchKnowledgeBaseHandler(params),
+  // BI-825D3487: KnowledgeArticle rows are the organization's knowledge (WWWD).
+  search_knowledge_base: async (params, _userId, context) =>
+    (await (await import("@/lib/tak/corpus-read-scope")).refuseWithoutCorpus(context?.agentId, "organization", "search_knowledge_base"))
+    ?? searchKnowledgeBaseHandler(params),
   create_knowledge_article: (params, userId) => createKnowledgeArticleHandler(params, userId),
   flag_stale_knowledge: (params) => flagStaleKnowledgeHandler(params),
 };

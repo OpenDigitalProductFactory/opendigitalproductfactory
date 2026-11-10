@@ -68,6 +68,10 @@ overrides:
   # which this repo does not use. c12 only calls dotenv.parse(). The selector
   # stays below 18 so the catalog: specifier on our own declarations is preserved.
   'dotenv@<18': '^18.0.5'
+  # GHSA-3g3m-2fjr-6pw4 (Dependabot #256): patched glob floor; rimraf consumer verified.
+  'glob@<14.0.2': '14.0.2'
+  # GHSA-g3hv-75wg-m249 (Dependabot #257): patched minimatch floor.
+  'minimatch@<11.0.1': '11.0.1'
   # brace-expansion <= 5.0.8: GHSA-mh99-v99m-4gvg / CVE-2026-14257, then
   # GHSA-rgw5-rvv9-x895 / CVE-2026-69152 (unbounded intermediate arrays,
   # bypassing the 5.0.8 mitigation — found on PR #3893's OSV scan). Floor

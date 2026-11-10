@@ -35,7 +35,12 @@ import type {
 } from "@/lib/self-upgrade/impact/types";
 import { isStoreOpen } from "@/lib/self-upgrade/window";
 import { describeWindows } from "@/lib/self-upgrade/auto-window";
-import { resolveEffectiveUpgradeWindow } from "@/lib/self-upgrade/effective-window";
+import {
+  currentWindowOpenedAt,
+  followingWindowStart,
+  resolveEffectiveUpgradeWindow,
+} from "@/lib/self-upgrade/effective-window";
+import { getWindowDecline, missedWindowDecline } from "@/lib/self-upgrade/scheduled-gate";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import {
@@ -589,6 +594,7 @@ export async function getSelfUpgradeStatus() {
     cooldownUntil,
     jobEngine,
     selfUpgradeBlackout,
+    windowDecline,
   ] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
@@ -610,6 +616,8 @@ export async function getSelfUpgradeStatus() {
     // Active operator blackout that pauses scheduled upgrades (BI-59591B14), so
     // the panel explains a paused schedule instead of leaving it opaque.
     getActiveSelfUpgradeBlackout(),
+    // BI-EF1AC111 (AC-3): why the last window passed without an upgrade check.
+    getWindowDecline(),
   ]);
   const support = await readSelfUpgradeSupport(config.enabled);
 
@@ -650,7 +658,11 @@ export async function getSelfUpgradeStatus() {
     lastCheckedAt,
     checkIntervalHours: config.checkIntervalHours,
     now,
+    // BI-EF1AC111: the interval is anchored to the window opening.
+    windowOpenedAt: currentWindowOpenedAt(effectiveWindow, now),
+    followingWindowStart: inMaintenanceWindow ? followingWindowStart(effectiveWindow, now) : null,
   });
+  const missedWindow = missedWindowDecline(windowDecline, lastCheckedAt);
   const {
     targetSha,
     targetTag,
@@ -698,6 +710,9 @@ export async function getSelfUpgradeStatus() {
     windowTimezone: timezone,
     nextWindowStart,
     nextScheduledCheckAt: nextScheduledCheckAt?.toISOString() ?? null,
+    // BI-EF1AC111 (AC-3): a window that went without a check, and why. Cleared
+    // by the next check.
+    missedWindow: missedWindow ? { reason: missedWindow.reason, at: missedWindow.at } : null,
     deployedSha,
     deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,

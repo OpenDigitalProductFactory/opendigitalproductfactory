@@ -236,6 +236,16 @@ export const buildReviewVerification = jobs.createFunction(
         });
         return { status: "finalize-incomplete", finalize: finalize.status, escalation: escalated };
       }
+      // BI-4F89896B: the grader runs the base commit's guard scripts, so a base
+      // that predates a guard fix keeps the gauntlet from running. Refresh onto
+      // upstream (DI-A9D0CC59F049) and review again; bounded to once an hour.
+      if (finalize.status === "gauntlet-not-run") {
+        const refreshed = await step.run("refresh-base-after-gauntlet-not-run", async () => {
+          const { refreshReviewBuildAfterGauntletNotRun } = await import("@/lib/build/review-source-refresh");
+          return refreshReviewBuildAfterGauntletNotRun(buildId, finalize.reason);
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, refresh: refreshed };
+      }
       return { status: "finalize-incomplete", finalize: finalize.status };
     }
 

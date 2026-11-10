@@ -7,6 +7,9 @@ vi.mock("@/lib/app-url", () => ({ resolveAppBaseUrl: () => null }));
 
 import { deriveDeviceId, generateInstanceSigningKeypair } from "./instance-identity";
 import {
+  ATTESTED_MEMBER_CERT_PEM,
+  ATTESTED_MEMBER_KEY_PKCS8_B64,
+  ATTESTED_ROOT_CERT_PEM,
   FOREIGN_ROOT_CERT_PEM,
   MEMBER_CERT_PEM,
   MEMBER_KEY_PKCS8_B64,
@@ -114,6 +117,27 @@ describe("acceptOrganizationEnrolment", () => {
     });
     expect((authority.created[0]!.metadata as { confirmationProvenance: string }).confirmationProvenance).toBe("organization-trust");
     expect(result.proof?.statement.audienceRootFingerprint).toBe(rootFingerprint);
+    // The fixture leaf certifies no class, so the link is unattested — never production (BI-0716C8A8 AC-4).
+    expect(authority.created[0]).toMatchObject({ peerEnvironmentClass: null, peerEnvironmentAttestedAt: null });
+  });
+
+  it("records the class the CA certified in the member's leaf, not anything the member says (BI-0716C8A8)", async () => {
+    // Inside the attested fixtures' validity window.
+    const attestedNow = new Date("2027-01-01T00:00:00.000Z");
+    const attestedRootFingerprint = new X509Certificate(ATTESTED_ROOT_CERT_PEM).fingerprint256.replaceAll(":", "").toLowerCase();
+    const member = installation("member");
+    const authority = installation("authority");
+    const built = await buildMembershipProof(member.db, {
+      material: { rootPem: ATTESTED_ROOT_CERT_PEM, rootFingerprint: attestedRootFingerprint, certPem: ATTESTED_MEMBER_CERT_PEM, keyPem: pem(ATTESTED_MEMBER_KEY_PKCS8_B64) },
+      audienceRootFingerprint: attestedRootFingerprint, authorityUrl: "http://192.168.0.200:3000",
+      callbackToken: "dpflink_member-callback", displayName: "Windows DEV", now: attestedNow,
+    });
+    const result = await acceptOrganizationEnrolment(authority.db, {
+      envelope: built, localAuthorityUrl: "http://192.168.0.152:3000", displayName: "Production", now: attestedNow,
+      readText: async (path) => { if (path.endsWith("root_ca.crt")) return ATTESTED_ROOT_CERT_PEM; throw new Error("missing"); },
+    });
+    expect(result.accepted).toBe(true);
+    expect(authority.created[0]).toMatchObject({ peerEnvironmentClass: "development", peerEnvironmentAttestedAt: attestedNow });
   });
 
   it("refuses a stranger's certificate, a wrong organization, a tampered statement, and an install without a root", async () => {

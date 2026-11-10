@@ -158,6 +158,18 @@ export const DAMAGING_SENSITIVITIES: readonly PrincipalSensitivity[] = ["restric
  *    had just asked for — reached `unsteered-side-effect` and parked on a card
  *    the human clicked through, while the same human on a PAT client was never
  *    asked at all. Damage still reaches a person: branch 4 precedes this one.
+ *  • standing-ruling — the person whose authority is lent approved this exact
+ *    action class before (this coworker, this tool, on their own authority)
+ *    and, in writing on that approval, made the answer standing (BI-E5631708).
+ *    Server-resolved from the approved envelope that carries the ruling, never
+ *    asserted by a caller, and recorded only when that envelope's own decision
+ *    was non-damaging and unsteered. Revocable by the same person.
+ *
+ *    Owner direction 2026-11-04 (BI-88D51B8F): an approval the owner "will
+ *    always" grant and cannot interpret adds delay with no decision value, so
+ *    a written approval must become a ruling the gate consults. Damage still
+ *    reaches a person (branch 4 precedes this one), and an operator HITL
+ *    policy of "always" still resolves no steering at all.
  */
 export const ESCALATION_STEERING = [
   "independent-reviewer",
@@ -165,6 +177,7 @@ export const ESCALATION_STEERING = [
   "wwmd",
   "scheduled-mandate",
   "connection-delegation",
+  "standing-ruling",
   "none",
 ] as const;
 export type EscalationSteering = (typeof ESCALATION_STEERING)[number];
@@ -177,6 +190,7 @@ export const ESCALATION_REASON_CODES = [
   "steered-by-wwmd",
   "steered-by-scheduled-mandate",
   "steered-by-connection-delegation",
+  "steered-by-standing-ruling",
   "damaging-consequence",
   "damaging-sensitivity",
   "damaging-work-case",
@@ -244,6 +258,7 @@ const STEERED_REASON: Record<
   wwmd: "steered-by-wwmd",
   "scheduled-mandate": "steered-by-scheduled-mandate",
   "connection-delegation": "steered-by-connection-delegation",
+  "standing-ruling": "steered-by-standing-ruling",
 };
 
 /**
@@ -310,7 +325,7 @@ const HUMAN_REASON_SENTENCES: Partial<Record<EscalationReasonCode, string>> = {
   "damaging-sensitivity": "It touches restricted data, so a person decides it.",
   "damaging-work-case": "Its Work Case marks this step as consequential.",
   "unsteered-side-effect":
-    "It changes a record, and no recorded delegation, room decision, schedule or independent review covers it.",
+    "It changes a record, and no recorded delegation, room decision, schedule, independent review or standing ruling covers it.",
 };
 
 export function escalationReasonSentence(reasonCode: EscalationReasonCode): string | null {
@@ -333,6 +348,7 @@ export function describeEscalationRule(): string[] {
     `Automated steering is a recorded, server-resolved fact about the action itself: ${ESCALATION_STEERING.filter((s) => s !== "none").join(", ")}.`,
     "A governed scheduled task steers only the tools its registry entry declares; it gets no licence for anything it did not declare.",
     "An external assistant steers only through its human's current OAuth consent, revalidated on the call and bounded by the consented scopes; a personal access token or an unbound connection steers nothing.",
+    "A standing ruling steers only the exact action class its owner approved in writing: the same coworker, the same tool, on that owner's authority; it is recorded only from a non-damaging approval and is revocable.",
     "A non-damaging action with steering is decided automatically and mints no approval envelope.",
     "A non-damaging action with no steering reaches a human only when it has a side effect; an immediate read never escalates.",
     "A tool declared as a proposal is always put to a person, because that is its declared shape.",

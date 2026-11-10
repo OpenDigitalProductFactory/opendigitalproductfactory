@@ -3,7 +3,8 @@ export const CODE_GRAPH_JOB_NAME = "Code Graph Reconcile";
 export const CODE_GRAPH_JOB_SCHEDULE = "every-15m";
 export const CODE_GRAPH_EVENT_NAME = "ops/code-graph.reconcile";
 export const CODE_GRAPH_GRAPH_KEY = "source-code";
-export const CODE_GRAPH_PROJECTION_VERSION = 3;
+// 4: Prisma relations are one HAS_FOREIGN_KEY_TO edge per FK, not two RELATES_TO (BI-28C22BE3).
+export const CODE_GRAPH_PROJECTION_VERSION = 4;
 
 export const CODE_GRAPH_FILE_EXTENSIONS = new Set([
   ".cjs",

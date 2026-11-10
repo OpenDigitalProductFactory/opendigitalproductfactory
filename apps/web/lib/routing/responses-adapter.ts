@@ -257,10 +257,13 @@ export const responsesAdapter: ExecutionAdapterHandler = {
 
     // Responses API conversation chaining: when we have a previous response ID
     // from an earlier iteration in the same agentic loop, chain to it.
-    // The ChatGPT backend supports this for within-session continuity.
+    // The ChatGPT backend supports this for within-session continuity but
+    // requires store=false. Direct Responses providers retain stored chaining.
     if (previousResponseId) {
       body.previous_response_id = previousResponseId;
-      body.store = true;  // chaining requires stored responses
+      if (!isChatGptBackend(providerId, provider.baseUrl)) {
+        body.store = true;
+      }
     }
 
     if (isChatGptBackend(providerId, provider.baseUrl)) {

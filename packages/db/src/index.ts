@@ -450,6 +450,7 @@ export {
   syncDocumentReference,
   syncEaElement,
   syncEaRelationship,
+  pruneStaleEaRelationshipEdges,
   replaceGraphEdgesFromSource,
   projectWikiLinksToGraph,
 } from "./graph-sync";

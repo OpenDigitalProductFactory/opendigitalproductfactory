@@ -104,7 +104,9 @@ export async function beginSelfUpgrade(params: SelfUpgradeRunEventData): Promise
     // declined unattended tick left NO trace at all — no row, no reason — and
     // the only evidence was the absence of a run, which reads like a broken
     // scheduler. Record it where the status tool can retrieve it.
-    else if (params.scheduled) await recordScheduledDecline(persistedReason, now);
+    // BI-EF1AC111: with the config, an in-window decline is also kept apart so
+    // the daytime ticks that follow cannot erase why the window was skipped.
+    else if (params.scheduled) await recordScheduledDecline(persistedReason, now, config);
     return done({
       skipped: true,
       reason,

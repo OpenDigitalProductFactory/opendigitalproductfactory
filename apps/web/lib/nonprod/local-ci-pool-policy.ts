@@ -30,6 +30,7 @@ export type LocalCiPoolPolicySource =
 
 export type LocalCiHostPressure = {
   observedAt?: string;
+  totalMemoryBytes?: number;
   availableMemoryBytes?: number;
   dockerAvailableMemoryBytes?: number;
   builderMemoryUsageBytes?: number[];
@@ -96,6 +97,14 @@ export type ResolvedLocalCiPoolPolicy = {
    * wall, and sessions reached for host maintenance that could not help.
    */
   headroom?: LocalCiHeadroomShortfall;
+  /** Server-derived reservation persisted with an exact runner lease. */
+  hostReservation?: {
+    resourceClass: "docker-build" | "typescript";
+    expectedMemoryBytes: number;
+    remainingGrowthReserveBytes: number;
+    builderReserveBytes: number;
+    hostStageReserveBytes: number;
+  };
 };
 
 export type LocalCiHeadroomShortfall = {
@@ -562,6 +571,8 @@ export function resolveLocalCiPoolPolicy(input: {
    * (BI-903FB5F9). Absent: the checked-in calibration applies, as before.
    */
   builderReserveBytes?: number;
+  /** Raise-only reserve derived from valid leased gate drawdowns. */
+  hostRemainingGrowthReserveBytes?: number;
 }): ResolvedLocalCiPoolPolicy {
   const manifestCapacity = Number.isFinite(input.manifestSlotCount)
     && input.manifestSlotCount >= LOCAL_CI_MIN_CAPACITY
@@ -654,6 +665,31 @@ export function resolveLocalCiPoolPolicy(input: {
       calibratedReserveBytes:
         localCiSlotResources.hostStagePolicy.admissionReserveBytes,
     });
+    const remainingGrowthReserveBytes = Math.max(
+      localCiSlotResources.hostRemainingGrowthPolicy.admissionReserveBytes,
+      input.hostRemainingGrowthReserveBytes ?? 0,
+    );
+    const remainingGrowthCapacity = localCiHostStageHeadroomCapacity({
+      availableMemoryBytes: input.host.availableMemoryBytes ?? Number.NaN,
+      minAvailableMemoryBytes: config.ceilings.minAvailableMemoryBytes,
+      hostStageMemoryBytes: remainingGrowthReserveBytes,
+      manifestCapacity,
+    });
+    if (remainingGrowthCapacity === 0) {
+      return unavailable({
+        source,
+        requestedCapacity,
+        manifestCapacity,
+        reason: "host-remaining-growth-headroom-low",
+        config,
+        headroom: localCiHeadroomShortfall({
+          measuredOn: "host",
+          availableBytes: input.host.availableMemoryBytes,
+          floorBytes: config.ceilings.minAvailableMemoryBytes,
+          reserveBytes: remainingGrowthReserveBytes,
+        }),
+      });
+    }
     const hostStageCapacity = localCiHostStageHeadroomCapacity({
       availableMemoryBytes: input.host.availableMemoryBytes ?? Number.NaN,
       minAvailableMemoryBytes: config.ceilings.minAvailableMemoryBytes,
@@ -690,6 +726,16 @@ export function resolveLocalCiPoolPolicy(input: {
         requestedCapacity,
         manifestCapacity,
         reason: "host-stage-capacity-one",
+        config,
+      });
+    }
+
+    if (requestedCapacity === 2 && remainingGrowthCapacity === 1) {
+      return singleton({
+        source,
+        requestedCapacity,
+        manifestCapacity,
+        reason: "host-remaining-growth-capacity-one",
         config,
       });
     }

@@ -183,6 +183,7 @@ export async function createTrustedOrganizationLink(
       peerOrganizationRef: input.statement.organizationRef,
       peerDeviceId: input.statement.deviceId,
       peerInstallationId: input.statement.installationId,
+      peerEnvironmentClass: input.chain.attestedEnvironmentClass,
       localOrganizationId: null,
       inboundToken: { hash: inbound.hash, prefix: inbound.prefix },
       callbackToken: input.statement.callbackToken,
@@ -371,6 +372,9 @@ export async function enrolWithOrganizationAuthority(
         peerOrganizationRef: peerStatement?.organizationRef ?? null,
         peerDeviceId: peerStatement?.deviceId ?? null,
         peerInstallationId: peerStatement?.installationId ?? null,
+        // Only the authority's verified proof can attest its class; a token
+        // exchange alone leaves the link unattested.
+        peerEnvironmentClass: peerChain?.attestedEnvironmentClass ?? null,
         localOrganizationId: null,
         inboundToken: { hash: callback.hash, prefix: callback.prefix },
         callbackToken: body.linkToken ?? null,

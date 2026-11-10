@@ -73,6 +73,14 @@ Confirm a real pass by the artifacts, not the exit code:
 
 Then push normally: with a valid record for the head SHA the pre-push hook admits the push, and `DPF_SKIP_PREPUSH_GATE` is **not** needed.
 
+**`pnpm run pregate:status` is the one read of where a gate stands**, and its exit code is enough:
+
+- **0 `PASS`** — a pass is recorded for HEAD; push.
+- **75 `PREFLIGHT` / `QUEUED` / `ADMITTED` / `RUNNING`** — a pregate for HEAD is still working; the output names its pid, stage and queue position. Wait and read again. It is not a failure, not a blocker, and not a reason to start another pregate (a second one in the same worktree is refused).
+- **1** — anything else. Only `FAIL` is a recorded failing verdict about the diff; `INCONCLUSIVE`, `STALE` and `NO-RECORD` mean the gate did not grade this HEAD — follow the `next` line.
+
+If a foreground pregate's console stops updating, read `pregate:status` before concluding anything: the gate keeps running when the console you watched does not.
+
 - **Never wrap `pregate` in `timeout`.** Interrupting it can abandon the local observer while its durable claim remains pending. Run it in the foreground, unpiped; use `pnpm gate:wait` for bounded observation without mistaking a queued exit for a verdict.
 - Queue contention is not a reason to override the gate. Waiting is correct; `DPF_SKIP_PREPUSH_GATE` is for a verified-clean push the gate structurally cannot cover, and it is recorded either way.
 - Resume a queued claim through its recorded taskRunId and owner identity. Terminal claims stop: do not scan old claim keys or retry a terminal claim. An explicitly new attempt follows reconciliation of the previous request and uses a distinct attempt identity.
@@ -122,7 +130,7 @@ correct answer for an outside contribution.
 ## Guardrails
 
 - Do not treat "passed in my worktree" as merge readiness.
-- Do not treat a pregate exit code as the verdict. The verdict is `gate passed` plus a metadata record whose `candidateSha` matches your commit.
+- Do not treat a pregate exit code as the verdict. The verdict is `pregate:status` (backed by `gate passed` plus a metadata record whose `candidateSha` matches your commit); its exit 75 means still working, never failed.
 - A stale sandbox is not a product failure. Never record a red build as product evidence while the freshness preflight is red or unrun — classify it `blocked_sandbox_drift` and converge first.
 - Never start a second dependency install while one is running, and never "fix" a stale sandbox by installing dependencies inside a topic worktree.
 - Do not run destructive Compose cleanup against the root `dpf` project.

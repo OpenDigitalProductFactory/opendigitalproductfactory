@@ -10,6 +10,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { isInstallationEnvironmentClass } from "@dpf/db/installation-operating-intent";
+
 import { auth } from "@/lib/auth";
 import { importOrganizationJoinFile } from "@/lib/federation/organization-join-import";
 import { issueOrganizationJoinFile } from "@/lib/federation/organization-join-issue";
@@ -46,15 +48,20 @@ export interface OrganizationJoinFileIssued {
  * The authority portal mints the join file itself — no edge node, no host
  * script. Returned once; the browser downloads it and it expires in 30 minutes.
  */
-export async function issueOrganizationJoinFileAction(input: { intendedPeer: string }): Promise<
+export async function issueOrganizationJoinFileAction(input: { intendedPeer: string; environmentClass: string }): Promise<
   ActionSuccess<OrganizationJoinFileIssued> | OrganizationJoinActionFailure
 > {
   const refused = await assertManagePlatform();
   if (refused) return refused;
   const intendedPeer = typeof input?.intendedPeer === "string" ? input.intendedPeer.trim() : "";
   if (!intendedPeer) return { ok: false, error: "invalid_input", message: "Choose the installation the file is for" };
+  // The class this authority attests for the joining installation (BI-0716C8A8).
+  const environmentClass = input?.environmentClass;
+  if (!isInstallationEnvironmentClass(environmentClass)) {
+    return { ok: false, error: "invalid_input", message: "Say whether the joining installation is production, development or test" };
+  }
   const requestHost = await resolveLocalFederationAuthorityUrl();
-  const result = await issueOrganizationJoinFile({ intendedPeer, requestHost });
+  const result = await issueOrganizationJoinFile({ intendedPeer, environmentClass, requestHost });
   if (!result.issued) return joinIssueFailure(result.reason, result.detail);
   revalidatePath(CONNECTIONS_PATH);
   return ok({ fileName: result.fileName, content: result.packageText, intendedPeer: result.intendedPeer, expiresAt: result.expiresAt });
@@ -99,6 +106,8 @@ function joinIssueFailure(reason: string, detail?: string): OrganizationJoinActi
       return { ok: false, error: "invalid_input", message: "The installation name is not a valid host name or address" };
     case "own-address-unknown":
       return { ok: false, error: "not_ready", message: "Open this page at the installation's network address (not localhost) so the file can name it" };
+    case "environment-class-required":
+      return { ok: false, error: "invalid_input", message: "Say whether the joining installation is production, development or test" };
     case "ca-unreachable":
     case "provisioner-missing":
     case "provisioner-key-locked":
@@ -122,6 +131,12 @@ function joinImportFailure(reason: string, detail?: string): OrganizationJoinAct
       return { ok: false, error: "conflict", message: "The certificate the organization installation returned does not match the join file's trust fingerprint" };
     case "material-not-writable":
       return { ok: false, error: "not_ready", message: `This installation's state directory is not writable${detail ? ` (${detail})` : ""}` };
+    case "environment-class-unattested":
+      return { ok: false, error: "invalid_input", message: "This join file does not say whether this installation is production, development or test. Create a new one on the organization installation" };
+    case "environment-class-undeclared":
+      return { ok: false, error: "not_ready", message: "Declare this installation's environment class before it joins the organization" };
+    case "environment-class-mismatch":
+      return { ok: false, error: "conflict", message: `The join file does not match this installation's environment class${detail ? ` (${detail})` : ""}. Create a new one with the right class` };
     default:
       return { ok: false, error: "invalid_input", message: "This is not a valid DPF organization join file" };
   }

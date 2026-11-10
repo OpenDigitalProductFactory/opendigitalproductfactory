@@ -104,7 +104,7 @@ describe("issueOrganizationJoinFile", () => {
     };
 
     const result = await issueOrganizationJoinFile(
-      { intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.200:3000", now },
+      { intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://192.168.0.200:3000", now },
       { db: db(), env: {}, readText: memberFiles, exists: async () => true, caRequest: ca, configuredBaseUrl: null },
     );
 
@@ -118,7 +118,7 @@ describe("issueOrganizationJoinFile", () => {
   it("still issues on the authority, which has no membership facts row", async () => {
     const ca = fakeCa([installer, edge]);
     const result = await issueOrganizationJoinFile(
-      { intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000", now },
+      { intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://192.168.0.152:3000", now },
       { db: db(), env: {}, readText: authorityFiles, exists: async () => true, caRequest: ca, configuredBaseUrl: null },
     );
     expect(result.issued).toBe(true);
@@ -127,7 +127,7 @@ describe("issueOrganizationJoinFile", () => {
   it("mints a V2 package the importer accepts, with tokens the CA's provisioner keys verify", async () => {
     const ca = fakeCa([installer, edge]);
     const result = await issueOrganizationJoinFile(
-      { intendedPeer: "192.168.0.200", extraSans: ["dev.internal"], requestHost: "http://192.168.0.152:3000", now },
+      { intendedPeer: "192.168.0.200", environmentClass: "development", extraSans: ["dev.internal"], requestHost: "http://192.168.0.152:3000", now },
       { db: db(), env: {}, readText: authorityFiles, exists: async () => true, caRequest: ca, configuredBaseUrl: null },
     );
     expect(result.issued).toBe(true);
@@ -140,11 +140,12 @@ describe("issueOrganizationJoinFile", () => {
     const parsed = parseOrganizationJoinPackageMaterial(result.packageText, now);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) throw new Error(parsed.reason);
-    expect(parsed.value).toMatchObject({ caUrl: "https://192.168.0.152:9000/", intendedPeer: "192.168.0.200", intendedSans: ["dev.internal"], rootFingerprint });
+    expect(parsed.value).toMatchObject({ caUrl: "https://192.168.0.152:9000/", intendedPeer: "192.168.0.200", intendedSans: ["dev.internal"], environmentClass: "development", rootFingerprint });
 
     const { payload, protectedHeader } = await jwtVerify(parsed.value.enrollmentToken, installer.publicKey, { issuer: "dpf-installer", audience: "https://localhost/1.0/sign", subject: "192.168.0.200", currentDate: now });
     expect(protectedHeader.kid).toBe("dpf-installer-kid");
-    expect(payload.sans).toEqual(["192.168.0.200", "dev.internal"]);
+    // The CA certifies only what the token names, so the class SAN is what makes it attested (BI-0716C8A8).
+    expect(payload.sans).toEqual(["192.168.0.200", "dev.internal", "urn:dpf:environment-class:development"]);
     expect(payload.sha).toBe(rootFingerprint);
     expect(payload.jti).toMatch(/^[a-f0-9]{64}$/);
     expect((payload.exp ?? 0) - (payload.iat ?? 0)).toBe(30 * 60);
@@ -157,12 +158,12 @@ describe("issueOrganizationJoinFile", () => {
   it("refuses on an installation that is not the authority, and never dials the CA for a bad peer name", async () => {
     const ca = fakeCa([installer]);
     const member = await issueOrganizationJoinFile(
-      { intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000", now },
+      { intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://192.168.0.152:3000", now },
       { db: db(), env: {}, readText: async (path) => { if (path.endsWith("root_ca.crt")) return ORG_ROOT_CERT_PEM; throw new Error("ENOENT"); }, exists: async () => false, caRequest: ca, configuredBaseUrl: null },
     );
     expect(member).toMatchObject({ issued: false, reason: "not-the-authority" });
     const bad = await issueOrganizationJoinFile(
-      { intendedPeer: "not a host!", requestHost: "http://192.168.0.152:3000", now },
+      { intendedPeer: "not a host!", environmentClass: "development", requestHost: "http://192.168.0.152:3000", now },
       { db: db(), env: {}, readText: authorityFiles, exists: async () => true, caRequest: ca, configuredBaseUrl: null },
     );
     expect(bad).toMatchObject({ issued: false, reason: "invalid-intended-peer" });
@@ -171,16 +172,26 @@ describe("issueOrganizationJoinFile", () => {
 
   it("reports an unknown own address, an unreachable CA, a missing provisioner and a wrong password as distinct outcomes", async () => {
     const base = { db: db(), env: {}, readText: authorityFiles, exists: async () => true, configuredBaseUrl: null };
-    expect(await issueOrganizationJoinFile({ intendedPeer: "192.168.0.200", requestHost: "http://localhost:3000", now }, { ...base, caRequest: fakeCa([installer]) })).toMatchObject({ issued: false, reason: "own-address-unknown" });
-    expect(await issueOrganizationJoinFile({ intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000", now }, { ...base, caRequest: async () => { throw new Error("ECONNREFUSED"); } })).toMatchObject({ issued: false, reason: "ca-unreachable", detail: "ECONNREFUSED" });
-    expect(await issueOrganizationJoinFile({ intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000", now }, { ...base, caRequest: fakeCa([edge]) })).toMatchObject({ issued: false, reason: "provisioner-missing" });
+    expect(await issueOrganizationJoinFile({ intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://localhost:3000", now }, { ...base, caRequest: fakeCa([installer]) })).toMatchObject({ issued: false, reason: "own-address-unknown" });
+    expect(await issueOrganizationJoinFile({ intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://192.168.0.152:3000", now }, { ...base, caRequest: async () => { throw new Error("ECONNREFUSED"); } })).toMatchObject({ issued: false, reason: "ca-unreachable", detail: "ECONNREFUSED" });
+    expect(await issueOrganizationJoinFile({ intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://192.168.0.152:3000", now }, { ...base, caRequest: fakeCa([edge]) })).toMatchObject({ issued: false, reason: "provisioner-missing" });
     const wrongPassword = async (path: string) => (path.endsWith("step-ca-password") ? "nope" : authorityFiles(path));
-    expect(await issueOrganizationJoinFile({ intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000", now }, { ...base, readText: wrongPassword, caRequest: fakeCa([installer]) })).toMatchObject({ issued: false, reason: "provisioner-key-locked" });
+    expect(await issueOrganizationJoinFile({ intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://192.168.0.152:3000", now }, { ...base, readText: wrongPassword, caRequest: fakeCa([installer]) })).toMatchObject({ issued: false, reason: "provisioner-key-locked" });
+  });
+
+  it("refuses to issue without an attested environment class, before any CA call (BI-0716C8A8)", async () => {
+    const ca = fakeCa([installer, edge]);
+    const result = await issueOrganizationJoinFile(
+      { intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000", now } as never,
+      { db: db(), env: {}, readText: authorityFiles, exists: async () => true, caRequest: ca, configuredBaseUrl: null },
+    );
+    expect(result).toMatchObject({ issued: false, reason: "environment-class-required" });
+    expect(ca.calls).toHaveLength(0);
   });
 
   it("falls back to the installer provisioner for the edge token when the CA has no edge-client provisioner", async () => {
     const result = await issueOrganizationJoinFile(
-      { intendedPeer: "192.168.0.200", requestHost: "http://192.168.0.152:3000", now },
+      { intendedPeer: "192.168.0.200", environmentClass: "development", requestHost: "http://192.168.0.152:3000", now },
       { db: db(), env: {}, readText: authorityFiles, exists: async () => true, caRequest: fakeCa([installer]), configuredBaseUrl: null },
     );
     expect(result.issued).toBe(true);
@@ -189,10 +200,10 @@ describe("issueOrganizationJoinFile", () => {
 
 describe("buildJoinPackageText", () => {
   it("writes the exact V2 layout the host script wrote", () => {
-    const text = buildJoinPackageText({ packageId: "a".repeat(32), caUrl: "https://192.168.0.152:9000/", rootFingerprint, intendedPeer: "192.168.0.200", intendedSans: [], expiresAtEpochSeconds: 1, enrollmentToken: "t1", edgeClientEnrollmentToken: "t2" });
+    const text = buildJoinPackageText({ packageId: "a".repeat(32), caUrl: "https://192.168.0.152:9000/", rootFingerprint, intendedPeer: "192.168.0.200", intendedSans: [], environmentClass: "test", expiresAtEpochSeconds: 1, enrollmentToken: "t1", edgeClientEnrollmentToken: "t2" });
     expect(text.split("\n")).toEqual([
       "DPF_ORGANIZATION_JOIN_V2", `package_id=${"a".repeat(32)}`, "ca_url=https://192.168.0.152:9000/", `root_fingerprint=${rootFingerprint}`,
-      "intended_hostname=192.168.0.200", "intended_sans=", "expires_at=1", "enrollment_token=t1", "edge_client_enrollment_token=t2", "",
+      "intended_hostname=192.168.0.200", "intended_sans=", "environment_class=test", "expires_at=1", "enrollment_token=t1", "edge_client_enrollment_token=t2", "",
     ]);
   });
 });

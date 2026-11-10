@@ -20,6 +20,7 @@ import { immutablePageReaderForArtifact } from "./terminal-tool-policy";
 import { ReassessmentExecutionError, currentReassessmentExecution, assertReassessmentToolCall } from "@/lib/routing/reassessment-execution-scope";
 import type { CanonicalReviewReceiptCheck } from "./reassessment-loop";
 import type { RemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
+import { foregroundExecutionContext } from "@/lib/agent/foreground-work-execution-scope";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -415,6 +416,8 @@ export async function executeAutonomousAgenticLoop(input: {
   effortWarrant?: import("@/lib/tak/effort-warrant").EffortWarrant;
   /** Evidence-first bounded workflow for an immutable initiative review. */
   terminalToolPolicy?: import("@/lib/tak/terminal-tool-policy").TerminalToolPolicy;
+  /** BI-A8679D84: force this one tool (provider tool_choice "required") until it is attempted. */
+  forcedToolName?: string;
   agentDisplayName?: string;
   buildPhase?: string | null;
   featureBuildId?: string | null;
@@ -594,6 +597,7 @@ export async function executeAutonomousAgenticLoop(input: {
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
         terminalToolPolicy: input.terminalToolPolicy,
+        ...(input.forcedToolName ? { forcedToolName: input.forcedToolName } : {}),
         agentDisplayName: input.agentDisplayName,
         buildPhase: input.buildPhase,
         featureBuildId: input.featureBuildId,
@@ -670,6 +674,10 @@ export async function executeAutonomousAgenticLoop(input: {
       authorizedGuidanceHighlights,
     );
   }
+
+  // These asynchronous hooks have no retained execution fence. Keep the saved
+  // request/result as evidence rather than starting writers outside its scope.
+  if (foregroundExecutionContext()) return { ...result, authoritativeSurfaceEvidence: surfaceGuidanceOnly };
 
   // Governed Hermes learning Slice 2: fire-and-forget reflection trigger.
   // Inspects PlatformIssueReport rows produced during this run and emits

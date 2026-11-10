@@ -62,7 +62,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
       - name: Resolve a trustworthy base SHA
         # Same reasoning as ci.yml's policy-guards-pr job (BI-9E5E6063):
         # github.event.pull_request.base.sha goes stale against a fast-moving main

@@ -18,8 +18,9 @@
 //   3. >= 10 counted calls in total with a served share below 50% is a platform
 //      collapse. It gets ONE platform row listing what is failing.
 //   4. Rows clear themselves: a later window that serves calls resolves them. A
-//      row whose provider got no calls this window is HELD, not resolved, because
-//      routing may simply have stopped sending to a dead provider.
+//      row whose provider served nothing this window (no calls, or only a few
+//      failures) is HELD, not resolved, because routing may simply have stopped
+//      sending to a dead provider.
 //
 // Thresholds and window: WWMD DI-E5208C7D1666 (window/threshold) and
 // DI-BA01CDC705DB (host and surface). The rows are `ai_capacity_loss`
@@ -298,7 +299,9 @@ export function assessAiCapacity(input: {
     const providerId = key.slice(aiCapacityProviderKey("").length);
     const provider = providerById.get(providerId);
     if (!provider || provider.status === "inactive") continue;
-    if (!byProvider.has(providerId)) held.push(key);
+    // Only a served call proves recovery. A window of a few failures (below the
+    // finding threshold) is still a dark provider (BI-783EBEE6).
+    if ((byProvider.get(providerId)?.served ?? 0) === 0) held.push(key);
   }
 
   return { total, providers: shares, findings, held: held.sort() };

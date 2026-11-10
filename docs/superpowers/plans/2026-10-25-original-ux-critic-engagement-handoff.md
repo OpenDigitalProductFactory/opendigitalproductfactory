@@ -28,6 +28,24 @@ Verification references: engagement-regression-suite; governed-integration-check
 original-ce-live-critic-result; attributable-routing-author-disposition.
 Requirement references: AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7.
 
+## November 2 authorization-context continuation
+
+Continue the same repair after a live pre-allocation authority refusal. First
+reproduce the outer-allow/inner-approval-required difference across the actual
+governed handler boundary and real steering evaluator. Forward only the
+server-owned OAuth delegation, preserve exact canonical tool/room metadata, and keep
+canonical current credential/consent and grant validation unchanged. Add negative
+regressions for missing trusted context, mismatched tools and current denial, and
+return the actual redacted refusal in structured data.
+
+Run affected authority, credential/consent, engagement and transport suites plus
+both web typechecks, guards, exact canonical integration and independent frozen
+review before protected publication. Refresh the served revision before any
+later execution. The prior no-allocation refusal and successful original dated
+pause restoration are separate runtime evidence, not a Critic contribution.
+Do not activate another provider, replay an old approval or retry an assessment
+as a side effect of this source correction.
+
 ## Current continuation sequence (October 26)
 
 The first request/dispatch repair is protected main. The first real CE1 run

@@ -125,6 +125,7 @@ export async function callWithFallbackChain(
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         inferenceMs: result.inferenceMs,
+        modelId: candidate.modelId,
       });
 
       return result;

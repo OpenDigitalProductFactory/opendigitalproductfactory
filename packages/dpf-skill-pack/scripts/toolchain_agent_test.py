@@ -97,7 +97,7 @@ class RunOnceTest(unittest.TestCase):
             self.assertIn("--from-portal", command)
             self.assertEqual(command[command.index("--from-portal") + 1], ORIGIN)
             self.assertEqual(command[command.index("--expect-installation") + 1], DID)
-            self.assertTrue(command[1].endswith("dpf-platform/scripts/update_agent_toolchain.py"))
+            self.assertTrue(Path(command[1]).as_posix().endswith("dpf-platform/scripts/update_agent_toolchain.py"))
             on_disk = json.loads(agent.state_path(home).read_text())
             self.assertEqual(on_disk["manifestDigest"], "1" * 64)
             self.assertEqual(on_disk["lastSuccessAt"], 1000.0)
@@ -220,6 +220,18 @@ class RunOnceTest(unittest.TestCase):
             fakes.run(home, now=1001.0)
             command = fakes.runs[0]
             self.assertEqual(command[command.index("--expect-installation") + 1], OTHER_DID)
+
+    def test_several_origins_for_one_installation_converge_over_https(self) -> None:
+        # BI-C20AD3F0: a dev host pins https://localhost and the plain-http loopback
+        # address under the same device id; that is one installation, not a choice.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp), pins={"http://127.0.0.1:3000": DID, ORIGIN: DID})
+            fakes = Fakes()
+            state = fakes.run(home, now=1000.0)
+            self.assertNotEqual(state.get("code"), "ambiguous-origin")
+            command = fakes.runs[0]
+            self.assertEqual(command[command.index("--from-portal") + 1], ORIGIN)
+            self.assertEqual(command[command.index("--expect-installation") + 1], DID)
 
     def test_a_concurrent_run_exits_busy_without_running(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

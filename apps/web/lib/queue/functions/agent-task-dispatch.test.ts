@@ -10,12 +10,14 @@ const mocks = vi.hoisted(() => ({
   level: vi.fn(),
   pools: vi.fn(),
   cliStats: vi.fn(),
+  reconcileForeground: vi.fn(),
 }));
 
 vi.mock("@/lib/jobs", () => ({
   jobs: { createFunction: (config: unknown, handler: unknown) => ({ config, handler }) },
 }));
 vi.mock("@/lib/jobs/triggers", () => ({ cron: (expr: string) => ({ cron: expr }) }));
+vi.mock("@/lib/agent/foreground-work-worker", () => ({ reconcileForegroundWork: mocks.reconcileForeground }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: async () => ({ proceed: true }) }));
 vi.mock("@/lib/backlog/acceptance-sweep/acceptance-upgrade-wakeup", () => ({
   reconcileAcceptanceUpgradeWakeupFromStore: async () => ({ outcome: "noop" }),
@@ -77,9 +79,16 @@ beforeEach(() => {
   mocks.cliStats.mockReturnValue({ inFlight: 0, queued: 0, max: 4 });
   mocks.findAgents.mockResolvedValue([]);
   mocks.execute.mockResolvedValue(undefined);
+  mocks.reconcileForeground.mockResolvedValue({ inspected: 0 });
 });
 
 describe("agent task dispatch", () => {
+  it("keeps unrelated scheduled work available when foreground reconciliation fails", async () => {
+    mocks.reconcileForeground.mockRejectedValueOnce(new Error("foreground store unavailable"));
+    mocks.findTasks.mockResolvedValue(tasks(["t1", "coo"]));
+    await handler({ step });
+    expect(mocks.execute).toHaveBeenCalledWith("t1");
+  });
   it("keeps the per-run bound of 20 due tasks", async () => {
     mocks.findTasks.mockResolvedValue([]);
     await handler({ step });

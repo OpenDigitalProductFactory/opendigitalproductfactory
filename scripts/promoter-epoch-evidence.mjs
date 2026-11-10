@@ -40,8 +40,20 @@ export async function finishMaintenanceEpoch({ baseline, secret, expected, runDo
   return envelope;
 }
 
-export async function runEpochDocker(args) {
-  const { stdout } = await exec('docker', args, { timeout: 15_000, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
+export function resolveEpochDockerInvocation(args, env = process.env) {
+  let prefix = [];
+  try { prefix = env.DPF_DOCKER_PREFIX_ARGS ? JSON.parse(env.DPF_DOCKER_PREFIX_ARGS) : []; }
+  catch { invalid(); }
+  if (!Array.isArray(prefix) || prefix.some(value => typeof value !== 'string')) invalid();
+  const command = env.DPF_DOCKER_BIN ?? 'docker';
+  if (typeof command !== 'string' || command.length === 0) invalid();
+  return { command, args: [...prefix, ...args] };
+}
+
+export async function runEpochDocker(args, { env = process.env, execute = exec } = {}) {
+  const invocation = resolveEpochDockerInvocation(args, env);
+  const { stdout } = await execute(invocation.command, invocation.args,
+    { timeout: 15_000, maxBuffer: 2 * 1024 * 1024, encoding: 'utf8' });
   return stdout;
 }
 

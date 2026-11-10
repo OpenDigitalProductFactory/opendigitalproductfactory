@@ -227,8 +227,12 @@ export const professionDecisionPack: ToolPack = {
   packId: "profession-decision",
   definitions,
   handlers: {
-    evaluate_profession_decision: (params, userId, context) =>
-      evaluateProfessionDecision(params, userId, context),
+    // BI-825D3487: a coworker reasons from its own family, so a revoked
+    // profession read refuses, naming the family. A declared borrow (no
+    // coworker identity) is a person's read and is not family-limited.
+    evaluate_profession_decision: async (params, userId, context) =>
+      (await (await import("@/lib/tak/corpus-read-scope")).refuseWithoutCorpus(context?.agentId, "own-family", "evaluate_profession_decision"))
+      ?? evaluateProfessionDecision(params, userId, context),
   },
   // Mirrors agent-grants.ts TOOL_TO_GRANTS, which stays the gating source;
   // tool-registry.test.ts asserts the two never drift. Advertising

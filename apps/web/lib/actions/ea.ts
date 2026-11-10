@@ -212,6 +212,7 @@ export async function createEaRelationship(
     input.fromElementId,
     input.toElementId,
     input.relationshipTypeId,
+    (input.properties ?? {}) as Record<string, unknown>,
   );
   if (!validation.valid) throw new Error(validation.reason);
 
@@ -895,14 +896,9 @@ export async function getDefaultRelTypeIdForView(
         });
         if (rule) return rt.id;
       }
-      // No specific rule found — fall back to associated_with if it's allowed
-      const fallbackSlug = allowedSlugs.includes("associated_with") ? "associated_with" : allowedSlugs[0];
-      if (!fallbackSlug) return null;
-      const fallback = await prisma.eaRelationshipType.findUnique({
-        where: { notationId_slug: { notationId, slug: fallbackSlug } },
-        select: { id: true },
-      });
-      return fallback?.id ?? null;
+      // No rule permits any allowed type between these two elements. Never fall back to a
+      // generic association: the caller reports that no relationship is permitted (BI-E487F6D9).
+      return null;
     }
   }
 

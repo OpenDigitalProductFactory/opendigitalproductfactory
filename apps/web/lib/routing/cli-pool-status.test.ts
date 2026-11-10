@@ -543,6 +543,40 @@ describe("dated Claude CLI weekly limit (BI-0319EE11)", () => {
   });
 });
 
+describe("observed native quota reset (BI-783EBEE6)", () => {
+  beforeEach(() => {
+    clearMockRows();
+    vi.clearAllMocks();
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([]);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T01:30:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("records a reset the adapter derived as the subscription's quota reset, not a 60s backoff", async () => {
+    const identity = { providerId: "anthropic-sub", providerConnectionId: "provider-default-anthropic-sub" };
+    const resetAt = new Date("2026-11-03T16:00:00.000Z");
+    await recordCliRateLimit("claude-cli", "anthropic-sub",
+      `The native CLI reported a usage limit that resets at ${resetAt.toISOString()}.`, identity, resetAt);
+    const capacity = vi.mocked(prisma.providerCapacityStatus.upsert).mock.calls[0]![0].create;
+    expect(capacity).toEqual(expect.objectContaining({ state: "quota_resets_at", action: "retry_at", confidence: "exact" }));
+    expect(new Date(capacity.retryAt!).toISOString()).toBe(resetAt.toISOString());
+
+    // Days on, routing still counts it unavailable; at the reset it returns on its own.
+    vi.setSystemTime(new Date("2026-11-01T00:00:00Z"));
+    expect((await getCliPoolStatus("claude-cli", identity))?.isExhausted).toBe(true);
+    vi.setSystemTime(new Date("2026-11-03T16:00:01Z"));
+    expect((await getCliPoolStatus("claude-cli", identity))?.isExhausted).toBe(false);
+  });
+
+  it("reads the 'resets Nov 3 at 10am' wording the CLI writes", () => {
+    expect(parseAbsoluteResetAt("You've hit your weekly limit · resets Nov 3 at 10am (America/Chicago)")?.toISOString())
+      .toBe("2026-11-03T16:00:00.000Z");
+    expect(parseAbsoluteResetAt("You've hit your weekly limit · resets Nov 3 at 10:30am America/Chicago")?.toISOString())
+      .toBe("2026-11-03T16:30:00.000Z");
+  });
+});
+
 describe("known quota reset projection (BI-0319EE11)", () => {
   beforeEach(() => {
     clearMockRows();

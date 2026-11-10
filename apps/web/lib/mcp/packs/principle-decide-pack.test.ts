@@ -29,6 +29,9 @@ vi.mock("@dpf/db", () => ({
     wikiPage: {
       findMany: (...a: unknown[]) => db.wikiPageFindMany(...a),
     },
+    // BI-825D3487: the corpus-grant check reads the caller's authority row; no
+    // row means the code baseline, which holds wiki_kernel_read.
+    agent: { findFirst: async () => null },
   },
   listPrinciplesByTier: (...a: unknown[]) => db.listPrinciplesByTier(...a),
   PRINCIPLE_DECIDE_DEFAULTS: {

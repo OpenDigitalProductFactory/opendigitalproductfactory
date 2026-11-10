@@ -83,13 +83,20 @@ describe("bounded receiver handoff", () => {
     expect(env.activities[0].payload.request.snapshot.leaseExpiresAt).toBe("2026-10-23T13:00:00.000Z"); env.room.leaseExpiresAt = new Date("2026-10-23T13:01:00Z");
     expect(await execute(env, ack(id), receiver)).toMatchObject({ success: false, error: "handoff-lease-snapshot-changed" });
   });
-  it("refuses expired or reacquired same-holder snapshots", async () => {
+  // BI-F1FC0B62: the lease holder is the owner, not a session, so a lapse
+  // between the two steps changes nothing another owner relies on.
+  it("acknowledges after the same owner's lease lapsed, but refuses a reacquired snapshot", async () => {
     const env = database(); const id = await pending(env); env.state.now = new Date("2026-10-23T12:31:00Z");
-    expect(await execute(env, ack(id), receiver)).toMatchObject({ success: false, error: "handoff-lease-expired" }); env.room.leaseExpiresAt = new Date("2026-10-23T13:00:00Z");
+    env.room.leaseExpiresAt = new Date("2026-10-23T12:30:00Z"); const lapsedLease = env.room.leaseExpiresAt;
+    env.room.leaseExpiresAt = new Date("2026-10-23T13:00:00Z");
     expect(await execute(env, ack(id, "ack-reacquired"), receiver)).toMatchObject({ success: false, error: "handoff-lease-snapshot-changed" }); expect(env.db.workroom.update).not.toHaveBeenCalled();
+    env.room.leaseExpiresAt = lapsedLease;
+    expect(await execute(env, ack(id), receiver)).toMatchObject({ success: true, data: { handoff: { state: "completed" } } });
   });
-  it("refuses expired request leases and altered stored request bytes", async () => {
-    const env = database(); env.room.leaseExpiresAt = NOW; expect(await execute(env, request)).toMatchObject({ success: false, error: "handoff-lease-expired" }); expect(env.activities).toHaveLength(0);
+  it("refuses a lapsed lease another owner holds and altered stored request bytes", async () => {
+    const env = database(); env.room.leaseExpiresAt = NOW; env.room.leaseHolderPrincipalId = "other-human";
+    expect(await execute(env, { ...request, expectedLeaseHolderPrincipalId: "other-human" })).toMatchObject({ success: false, error: "handoff-lease-expired" }); expect(env.activities).toHaveLength(0);
+    env.room.leaseHolderPrincipalId = "human";
     env.room.leaseExpiresAt = new Date("2026-10-23T13:00:00Z"); const id = await pending(env); env.activities[0].payload.request.command.toExecutorRef = "forged";
     expect(await execute(env, ack(id), receiver)).toMatchObject({ success: false, error: "handoff-request-invalid" });
   });
@@ -141,3 +148,40 @@ it("selects the same genuine viable request after protected source cycles H1 to 
 it("finds an authentic completed request even when a later obsolete request remains recorded",async()=>{const env=database();env.room.headSha="a".repeat(40);const a=await pendingRecovery(env);env.room.headSha="b".repeat(40);expect(await execute(env,{...request,commandId:"later-h2-request",handoffManifest:{...request.handoffManifest,priorFailure}})).toMatchObject({success:true});env.room.headSha="a".repeat(40);expect(await execute(env,ack(a),receiver)).toMatchObject({success:true});expect(await readBoundedHandoffLineage(env.db as unknown as CapsuleDb,env.room as never,failedOperation,{actor:source})).toMatchObject({state:"completed",requestId:a,toExecutorRef:"receiver-chat"});expect(env.db.workroom.update).toHaveBeenCalledTimes(1);});
 
 it("refuses overflow instead of selecting a misleading partial recovery history",async()=>{const env=database();env.db.workroomActivity.findMany.mockResolvedValue(Array.from({length:21},(_,i)=>({id:"unverified-"+i})) as never);await expect(readBoundedHandoffLineage(env.db as unknown as CapsuleDb,env.room as never,failedOperation,{actor:source})).rejects.toMatchObject({code:"handoff-history-over-budget"});expect(await execute(env,{...request,commandId:"overflow-preview",handoffManifest:{...request.handoffManifest,priorFailure}})).toMatchObject({success:false,error:"handoff-history-over-budget"});expect(env.activities).toHaveLength(0);expect(env.db.workroom.update).not.toHaveBeenCalled();});
+
+// BI-F1FC0B62: WC-CAD2A7C8 on production, 2026-11-04. Two sessions of the same
+// assistant (AGT-EXT-CLAUDE) act for the same human, who holds the room's lease.
+// The source session stood down and its lease lapsed; the request phase then
+// refused with handoff-lease-expired, and that refusal became an owner approval.
+describe("same-owner handover after the source session stood down", () => {
+  const lapsed = { ...request, targetAgentId: "AGT-EXT-CLAUDE", toExecutorKind: "claude-desktop", toExecutorRef: "receiver-chat" };
+  function stoodDown() { const env = database(); env.room.leaseExpiresAt = new Date(NOW.getTime() - 6.5 * 60 * 60_000); return env; }
+
+  it("classifies the production request as the same scope, with no approval", async () => {
+    const env = stoodDown();
+    await expect(assessBoundedHandoff({ db: env.db as unknown as CapsuleDb, actor: source, command: parseBoundedHandoffCommand(lapsed)! }))
+      .resolves.toMatchObject({ snapshot: { leaseHolderPrincipalId: "human" } });
+  });
+
+  it("requests, then the receiving session acknowledges and takes the room", async () => {
+    const env = stoodDown();
+    const requested = await execute(env, lapsed);
+    expect(requested).toMatchObject({ success: true, data: { handoff: { state: "pending-acknowledgement" } } });
+    expect(env.db.workroom.update).not.toHaveBeenCalled();
+    const id = (requested.data as any).handoff.requestId as string;
+    expect(await execute(env, ack(id), source)).toMatchObject({ success: true, data: { handoff: { state: "completed", receivingAgentId: "AGT-EXT-CLAUDE" } } });
+    expect(env.room).toMatchObject({ executorKind: "claude-desktop", executorRef: "receiver-chat", leaseHolderPrincipalId: "human" });
+    expect(env.room.leaseExpiresAt.getTime()).toBeGreaterThan(NOW.getTime());
+  });
+
+  it.each([
+    ["another owner holds the lapsed lease", (env: ReturnType<typeof database>) => { env.room.leaseHolderPrincipalId = "other-human"; }, "handoff-lease-expired"],
+    ["the room has no lease holder", (env: ReturnType<typeof database>) => { env.room.leaseHolderPrincipalId = null; }, "handoff-lease-expired"],
+    ["the receiver is not admitted", (env: ReturnType<typeof database>) => { env.roster.find((row) => row.principalId === "claude")!.roles = ["observer"]; }, "handoff-room-admission-required"],
+    ["the human no longer owns the room", (env: ReturnType<typeof database>) => { env.roster[0].roles = ["observer"]; }, "handoff-owner-required"],
+  ])("still refuses outside the room's ownership scope: %s", async (_, alter, code) => {
+    const env = stoodDown(); alter(env);
+    expect(await execute(env, lapsed)).toMatchObject({ success: false, error: code });
+    expect(env.activities.filter((row) => row.kind === "action")).toHaveLength(0);
+  });
+});

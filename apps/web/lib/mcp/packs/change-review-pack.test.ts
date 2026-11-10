@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   dispatchRoutedSemanticReview: vi.fn(),
   enqueueSemanticReview: vi.fn(),
   retryPersistedSemanticReview: vi.fn(),
+  readReviewArtifactFromSource: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
@@ -27,6 +28,10 @@ vi.mock("@/lib/change-review/routed-semantic-review", () => ({
 }));
 vi.mock("@/lib/work-capsules/work-capsule-store", () => ({ recordWorkCapsuleEvidence: mocks.recordWorkCapsuleEvidence }));
 vi.mock("@/lib/change-review/semantic-review-background", () => ({ enqueueSemanticReview: mocks.enqueueSemanticReview, retryPersistedSemanticReview: mocks.retryPersistedSemanticReview }));
+vi.mock("@/lib/change-review/review-artifact-source", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/change-review/review-artifact-source")>(),
+  readReviewArtifactFromSource: mocks.readReviewArtifactFromSource,
+}));
 
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { changeReviewPack } from "./change-review-pack";
@@ -181,16 +186,55 @@ describe("change-review MCP pack", () => {
     expect(mocks.enqueueSemanticReview).not.toHaveBeenCalled();
   });
 
-  it("requires an immutable tree identity and exact artifact", () => {
+  it("requires an immutable tree identity and accepts the artifact text or its commit range", () => {
     const definition = changeReviewPack.definitions[0]!;
     expect(definition.inputSchema.required).toEqual(expect.arrayContaining([
       "capsuleId",
       "baseTreeHash",
       "headTreeHash",
       "diffDigest",
-      "artifact",
       "verificationEvidence",
     ]));
+    expect(definition.inputSchema.properties).toHaveProperty("artifact");
+    expect(definition.inputSchema.properties).toHaveProperty("artifactSource");
+  });
+
+  // BI-FC2AF393: a diff too large to paste is read from the source checkout by commit range.
+  describe("artifactSource", () => {
+    const range = { baseSha: "1".repeat(40), headSha: "c".repeat(40) };
+    const withoutArtifact = (input: Record<string, unknown>) => {
+      const { artifact: _artifact, ...rest } = input;
+      return rest;
+    };
+    it("reads the artifact from source and reviews exactly those bytes", async () => {
+      const { input } = validReviewInput();
+      mocks.readReviewArtifactFromSource.mockResolvedValue({ ok: true, data: { artifact: input.artifact, root: "/host-dpf" } });
+      const out = await changeReviewPack.handlers.review_semantic_change!({ ...withoutArtifact(input), artifactSource: range }, "user-1", { agentId: "codex" });
+      expect(out).toMatchObject({ success: true, data: { disposition: "admitted" } });
+      expect(mocks.readReviewArtifactFromSource).toHaveBeenCalledWith(expect.objectContaining({
+        source: range, baseTreeHash: input.baseTreeHash, headTreeHash: input.headTreeHash, diffDigest: input.diffDigest }));
+      expect(taskRows[0]).toMatchObject({ artifacts: { create: { parts: [{ data: { input: { artifact: input.artifact } } }] } } });
+    });
+    it("returns a source refusal before reserving review work, with the server digest", async () => {
+      const { input } = validReviewInput();
+      mocks.readReviewArtifactFromSource.mockResolvedValue({ ok: false, code: "review-artifact-digest-mismatch",
+        message: "mismatch", serverDigest: "f".repeat(64) });
+      const out = await changeReviewPack.handlers.review_semantic_change!({ ...withoutArtifact(input), artifactSource: range }, "user-1", { agentId: "codex" });
+      expect(out).toMatchObject({ success: false, error: "review-artifact-digest-mismatch", data: { serverDigest: "f".repeat(64) } });
+      expect(mocks.prisma.taskRun.create).not.toHaveBeenCalled();
+      expect(mocks.enqueueSemanticReview).not.toHaveBeenCalled();
+    });
+    it.each([
+      ["both artifact and artifactSource", (input: Record<string, unknown>) => ({ ...input, artifactSource: range })],
+      ["a malformed range", (input: Record<string, unknown>) => ({ ...withoutArtifact(input), artifactSource: { baseSha: "x" } })],
+      ["a head other than the room's recorded head", (input: Record<string, unknown>) => ({ ...withoutArtifact(input), artifactSource: { ...range, headSha: "d".repeat(40) } })],
+    ])("refuses %s without reading source", async (_label, change) => {
+      const { input } = validReviewInput();
+      const out = await changeReviewPack.handlers.review_semantic_change!(change(input), "user-1", { agentId: "codex" });
+      expect(out.success).toBe(false);
+      expect(mocks.readReviewArtifactFromSource).not.toHaveBeenCalled();
+      expect(mocks.prisma.taskRun.create).not.toHaveBeenCalled();
+    });
   });
 
   it("persists one review before queueing and subscribes a concurrent caller without inline inference", async () => {

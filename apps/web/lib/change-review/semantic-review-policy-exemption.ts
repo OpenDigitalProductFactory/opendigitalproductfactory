@@ -12,6 +12,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { CHANGE_REVIEW_POLICY_VERSION } from "./semantic-change-review";
 import { SEMANTIC_REVIEW_EXEMPTION_SCHEMA_VERSION } from "./semantic-review-enforcement";
+import { blockingSemanticFailure, isFailureAnalysisOnlyFail } from "./semantic-review-supersession";
 
 const operationType = "semantic-change-review.exemption";
 const inputKeys = ["capsuleId", "sourceHeadSha", "baseTreeHash", "headTreeHash", "diffDigest", "reason", "expiresAt", "verificationEvidenceId", "clientAssessmentActivityId", "reviewBasis"];
@@ -33,8 +34,15 @@ const fingerprint = (value: unknown) => createHash("sha256").update(canonicalJso
 
 /** Query the revision itself; unrelated later receipts must not hide a failure. */
 export async function findCurrentSemanticFailure(roomId: string, headSha: string) {
-  return prisma.externalEvidenceRecord.findFirst({ where: { workCapsuleId: roomId, operationType: "semantic-change-review.receipt",
-    AND: [{ details: { path: ["sourceHeadSha"], equals: headSha } }, { details: { path: ["result", "decision"], equals: "fail" } }] }, select: { id: true } });
+  const failure = await prisma.externalEvidenceRecord.findFirst({ where: { workCapsuleId: roomId, operationType: "semantic-change-review.receipt",
+    AND: [{ details: { path: ["sourceHeadSha"], equals: headSha } }, { details: { path: ["result", "decision"], equals: "fail" } }] },
+    select: { id: true, details: true } });
+  if (!failure) return null;
+  // BI-38C51AF2: only a failure-analysis-only fail can be repaired by a later pass on the same change; anything else blocks.
+  if (!isFailureAnalysisOnlyFail(failure.details)) return { id: failure.id };
+  const rows = await prisma.externalEvidenceRecord.findMany({ where: { workCapsuleId: roomId, operationType: "semantic-change-review.receipt",
+    details: { path: ["sourceHeadSha"], equals: headSha } }, orderBy: { createdAt: "asc" }, take: 200, select: { id: true, createdAt: true, details: true } });
+  return blockingSemanticFailure(rows);
 }
 
 async function isEngineeringDevelopment() {

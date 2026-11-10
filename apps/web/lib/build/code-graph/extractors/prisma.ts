@@ -101,19 +101,24 @@ export function extractPrismaFacts(input: CodeGraphExtractorInput): CodeGraphExt
     }
   }
 
+  // One edge per foreign key, written from the model that holds it (BI-28C22BE3).
+  // The back-relation field carries no key, so it adds no second edge.
   for (const relation of facts.relations) {
+    if (relation.fkFields.length === 0) continue;
     const relationAttributes: CodeGraphAttributes = {
       cardinality: relation.cardinality,
       fieldName: relation.fieldName,
       isFkIndexed: relation.isFkIndexed,
+      isRequired: relation.isRequired,
+      fkFields: relation.fkFields.join(","),
     };
     if (relation.relationName) relationAttributes.relationName = relation.relationName;
-    if (relation.fkFields.length > 0) relationAttributes.fkFields = relation.fkFields.join(",");
     if (relation.references.length > 0) relationAttributes.references = relation.references.join(",");
+    if (relation.onDelete) relationAttributes.onDelete = relation.onDelete;
 
     edges.push({
       graphKey: input.graphKey,
-      kind: "RELATES_TO",
+      kind: "HAS_FOREIGN_KEY_TO",
       fromKey: modelKey(input.graphKey, relation.fromModel),
       toKey: modelKey(input.graphKey, relation.toModel),
       filePath: input.filePath,

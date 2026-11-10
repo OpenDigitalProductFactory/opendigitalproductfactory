@@ -12,21 +12,25 @@ import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
  * repair step instead of an opaque throw (BI-023EF164).
  */
 export class WorkCapsulePublicationRefusedError extends Error {
-  readonly code: "workroom_identity_incomplete" | "failure_review_required";
+  readonly code: "workroom_identity_incomplete" | "failure_review_required" | "docs_impact_disposition_required";
   readonly reason: string;
   /** BI-C9912C22: set when the refused room is already delivered. */
   readonly deliveredCloseout?: DeliveredCloseout;
+  /** BI-9B17E889: the affected docs still without a disposition. */
+  readonly undisposedDocs?: string[];
 
   constructor(input: {
     code: WorkCapsulePublicationRefusedError["code"];
     reason: string;
     deliveredCloseout?: DeliveredCloseout;
+    undisposedDocs?: string[];
   }) {
     super(input.reason);
     this.name = "WorkCapsulePublicationRefusedError";
     this.code = input.code;
     this.reason = input.reason;
     if (input.deliveredCloseout) this.deliveredCloseout = input.deliveredCloseout;
+    if (input.undisposedDocs) this.undisposedDocs = input.undisposedDocs;
   }
 }
 

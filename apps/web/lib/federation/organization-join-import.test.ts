@@ -18,6 +18,8 @@ const memberPublicKeyPem = new X509Certificate(MEMBER_CERT_PEM).publicKey.export
 /** The fixture leaf certifies the fixture key, so the "CA" can answer with it. */
 const fixtureKeypair = () => ({ privateKeyPem: memberKeyPem, publicKeyPem: memberPublicKeyPem });
 
+const declaredDevelopment = async () => ({ environmentClass: "development" as const, declared: true });
+
 function joinFile(overrides: Record<string, string> = {}): string {
   const fields = {
     package_id: "0123456789abcdef0123456789abcdef",
@@ -25,6 +27,7 @@ function joinFile(overrides: Record<string, string> = {}): string {
     root_fingerprint: rootFingerprint,
     intended_hostname: "192.168.0.200",
     intended_sans: "192.168.0.200",
+    environment_class: "development",
     expires_at: String(Math.floor(now.getTime() / 1000) + 600),
     enrollment_token: "one-time.token_1",
     edge_client_enrollment_token: "edge.token_1",
@@ -66,7 +69,7 @@ describe("importOrganizationJoinFile", () => {
     const store = db();
     const result = await importOrganizationJoinFile(
       { fileText: joinFile(), requestHost: "http://192.168.0.200:3000", now },
-      { db: store, post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, configuredBaseUrl: null },
+      { db: store, post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: declaredDevelopment, configuredBaseUrl: null },
     );
     expect(result).toEqual({
       imported: true, authorityUrl: "http://192.168.0.152:3000", caUrl: "https://192.168.0.152:9000", intendedPeer: "192.168.0.200",
@@ -89,14 +92,14 @@ describe("importOrganizationJoinFile", () => {
     const store = db({ [FEDERATION_REACHED_AT_CONFIG]: { schemaVersion: 1, hosts: { "192.168.0.200": now.toISOString() } } });
     const result = await importOrganizationJoinFile(
       { fileText: joinFile(), requestHost: "http://127.0.0.1:3000", now },
-      { db: store, post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, configuredBaseUrl: null },
+      { db: store, post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: declaredDevelopment, configuredBaseUrl: null },
     );
     expect(result.imported).toBe(true);
   });
 
   it("refuses a wrong-host, expired or tampered file before any network call", async () => {
     const store = db();
-    const deps = { db: store, post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, configuredBaseUrl: null };
+    const deps = { db: store, post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: declaredDevelopment, configuredBaseUrl: null };
     expect(await importOrganizationJoinFile({ fileText: joinFile(), requestHost: "http://127.0.0.1:3000", now }, deps)).toMatchObject({ imported: false, reason: "intended-for-another-host" });
     expect(await importOrganizationJoinFile({ fileText: joinFile({ expires_at: String(Math.floor(now.getTime() / 1000) - 1) }), requestHost: "http://192.168.0.200:3000", now }, deps)).toMatchObject({ imported: false, reason: "join-package-expired" });
     expect(await importOrganizationJoinFile({ fileText: joinFile({ root_fingerprint: "zz" }), requestHost: "http://192.168.0.200:3000", now }, deps)).toMatchObject({ imported: false, reason: "invalid-join-file" });
@@ -106,7 +109,7 @@ describe("importOrganizationJoinFile", () => {
 
   it("reports an authority that predates the relay, and a CA refusal, without writing anything", async () => {
     const store = db();
-    const base = { db: store, write: writeOk, generateKeypair: fixtureKeypair, configuredBaseUrl: null };
+    const base = { db: store, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: declaredDevelopment, configuredBaseUrl: null };
     const stale = await importOrganizationJoinFile({ fileText: joinFile(), requestHost: "http://192.168.0.200:3000", now }, { ...base, post: async () => ({ ok: false, status: 404, body: undefined }) });
     expect(stale).toMatchObject({ imported: false, reason: "authority-unreachable" });
     expect(String((stale as { detail?: string }).detail)).toContain("current release");
@@ -117,7 +120,7 @@ describe("importOrganizationJoinFile", () => {
 
   it("refuses a chain that ends at a root other than the one the file pins, or a leaf for another key", async () => {
     const store = db();
-    const base = { db: store, write: writeOk, generateKeypair: fixtureKeypair, configuredBaseUrl: null };
+    const base = { db: store, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: declaredDevelopment, configuredBaseUrl: null };
     const foreign = await importOrganizationJoinFile(
       { fileText: joinFile(), requestHost: "http://192.168.0.200:3000", now },
       { ...base, post: async () => ({ ok: true, status: 200, body: { accepted: true, certPem: STRANGER_CERT_PEM, chainPems: [STRANGER_CERT_PEM, FOREIGN_ROOT_CERT_PEM], rootPem: FOREIGN_ROOT_CERT_PEM } }) },
@@ -135,9 +138,51 @@ describe("importOrganizationJoinFile", () => {
     const store = db();
     const result = await importOrganizationJoinFile(
       { fileText: joinFile(), requestHost: "http://192.168.0.200:3000", now },
-      { db: store, post: authorityAccepts, generateKeypair: fixtureKeypair, configuredBaseUrl: null, write: async () => ({ written: false, reason: "federation state directory is not mounted" }) },
+      { db: store, post: authorityAccepts, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: declaredDevelopment, configuredBaseUrl: null, write: async () => ({ written: false, reason: "federation state directory is not mounted" }) },
     );
     expect(result).toEqual({ imported: false, reason: "material-not-writable", detail: "federation state directory is not mounted" });
     expect(store.rows[FEDERATION_MEMBERSHIP_CONFIG_KEY]).toBeUndefined();
+  });
+});
+
+describe("importOrganizationJoinFile — attested environment class (BI-0716C8A8)", () => {
+  const request = { requestHost: "http://192.168.0.200:3000", now };
+
+  it("asks the CA to certify the class the authority attested", async () => {
+    const result = await importOrganizationJoinFile(
+      { fileText: joinFile(), ...request },
+      { db: db(), post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: declaredDevelopment, configuredBaseUrl: null },
+    );
+    expect(result.imported).toBe(true);
+    const calls = authorityAccepts.mock.calls as unknown as Array<[{ cloudEvent: { csrPem: string } }]>;
+    const der = Buffer.from(calls[0]![0].cloudEvent.csrPem.replace(/-----[A-Z ]+-----/g, "").replace(/\s+/g, ""), "base64");
+    expect(der.includes(Buffer.from("urn:dpf:environment-class:development", "ascii"))).toBe(true);
+  });
+
+  it("refuses a file that attests no class, before any network call", async () => {
+    const result = await importOrganizationJoinFile(
+      { fileText: joinFile().replace("environment_class=development\n", ""), ...request },
+      { db: db(), post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: declaredDevelopment, configuredBaseUrl: null },
+    );
+    expect(result).toMatchObject({ imported: false, reason: "environment-class-unattested" });
+    expect(authorityAccepts).not.toHaveBeenCalled();
+  });
+
+  it("refuses when this installation never declared its class: undeclared is not production", async () => {
+    const result = await importOrganizationJoinFile(
+      { fileText: joinFile(), ...request },
+      { db: db(), post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: async () => ({ environmentClass: "production" as const, declared: false }), configuredBaseUrl: null },
+    );
+    expect(result).toMatchObject({ imported: false, reason: "environment-class-undeclared" });
+    expect(authorityAccepts).not.toHaveBeenCalled();
+  });
+
+  it("refuses when the attested class is not the class this installation declared", async () => {
+    const result = await importOrganizationJoinFile(
+      { fileText: joinFile(), ...request },
+      { db: db(), post: authorityAccepts, write: writeOk, generateKeypair: fixtureKeypair, readLocalEnvironmentClass: async () => ({ environmentClass: "production" as const, declared: true }), configuredBaseUrl: null },
+    );
+    expect(result).toMatchObject({ imported: false, reason: "environment-class-mismatch" });
+    expect(authorityAccepts).not.toHaveBeenCalled();
   });
 });

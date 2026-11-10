@@ -16,7 +16,9 @@ import type { RoomParticipantInvitationPreflight } from "./work-management/room-
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
 import { registerRefusalDurationCases } from "./mcp-governed-execute-refusal-duration.cases";
+import { registerUpgradeAdmissionCases } from "./mcp-governed-execute.upgrade-admission.cases";
 import { coworkerAuthorityInputFixture as authorityInput } from "../test-support/coworker-authority-input-fixture";
+import { registerRefusalBreakerCases } from "./mcp-governed-execute-refusal-breaker.cases";
 
 const preflightMocks = vi.hoisted(() => {
   const roomItem = {
@@ -28,7 +30,7 @@ const preflightMocks = vi.hoisted(() => {
     workroomTargetAccessRefusal: vi.fn(async () => null as ToolResult | null),
     preflightRoomParticipantInvitation: vi.fn<() => Promise<RoomParticipantInvitationPreflight>>(async () => ({
       verdict: "allow" as const, agentId: "AGT-100",
-      caseKey: "backlog-item:BI-1", item: roomItem,
+      caseKey: "backlog-item:BI-1", item: roomItem, clearanceRaise: null,
     })),
   };
 });
@@ -79,7 +81,7 @@ beforeEach(() => {
   preflightMocks.preflightRoomParticipantInvitation.mockReset();
   preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue({
     verdict: "allow", agentId: "AGT-100",
-    caseKey: "backlog-item:BI-1", item: preflightMocks.roomItem,
+    caseKey: "backlog-item:BI-1", item: preflightMocks.roomItem, clearanceRaise: null,
   });
   auditRows = []; receiptRows = []; authorityRows = [];
   executeMock = vi.fn(
@@ -137,6 +139,8 @@ describe("governedExecuteTool — happy path", () => {
     approvalEnvelopeCreate: () => approvalEnvelopeCreate, approvalTaskResume: () => approvalTaskResume,
     approvalEnvelopeFinalize: () => approvalEnvelopeFinalize,
   });
+  registerRefusalBreakerCases({ applyOverrides: applyAuthorityOverrides, authorityInput, normalUser: NORMAL_USER, executeMock: () => executeMock,
+    authorityRows: () => authorityRows, auditRows: () => auditRows, approvalEnvelopeCreate: () => approvalEnvelopeCreate });
   it("supports registering and unregistering lifecycle hooks", async () => {
     const calls: string[] = [];
     const unregister = registerToolLifecycleHook({
@@ -405,6 +409,7 @@ describe("governedExecuteTool — happy path", () => {
   });
 });
 registerRefusalDurationCases({ auditRows: () => auditRows, applyOverrides: applyAuthorityOverrides, normalUser: NORMAL_USER, executionCalls: () => executeMock.mock.calls });
+registerUpgradeAdmissionCases({ auditRows: () => auditRows, receiptRows: () => receiptRows, applyOverrides: applyAuthorityOverrides, executionCalls: () => executeMock.mock.calls, authorityInput });
 describe("governedExecuteTool — rejection paths", () => {
   registerWorkroomAliasCases({
     executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows,

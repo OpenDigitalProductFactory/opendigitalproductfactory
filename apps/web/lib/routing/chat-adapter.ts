@@ -376,6 +376,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       if (plan.temperature !== undefined) {
         (body as Record<string, unknown>).temperature = plan.temperature;
       }
+      if (plan.responsePolicy?.strictSchema) body.text = { format: { type: "json_object" } }; // BI-B76DC66C: Responses twin of BI-5C48438C
       // Convert OpenAI Chat Completions format tools to Responses API format
       // Responses API expects: tools: [{ type: "function", name, description, parameters }]
       if (tools && tools.length > 0) {

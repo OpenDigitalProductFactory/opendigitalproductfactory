@@ -1,7 +1,7 @@
 /**
  * Inbound ecosystem triage runner (BI-F47386ED) — the impure edge.
  *
- * Reads both inbound transports, maps them through the pure mappers, and files
+ * Reads issues, security alerts and peer demand through the pure mappers, and files
  * everything via the existing backlog front door. Kept separate from the cron so
  * the cron stays a thin trigger and this stays callable from a tool or a test.
  */
@@ -11,19 +11,21 @@ import type { RepoIdentity } from "@/lib/contributor-change-lanes/github-rest-re
 import type { IntakeControllerVerdict } from "./intake-controller-authority";
 import {
   mapPeerDemandMirrors,
+  mapDependabotAlerts,
   mapUpstreamIssues,
   runInboundIssueTriage,
   type InboundEcosystemItem,
   type InboundIngestOutcome,
   type InboundTriageResult,
 } from "./inbound-issue-triage";
+import type { RepositoryAlertRead } from "./dependabot-reader";
 
 export type InboundTriageOutcome =
-  | ({ ran: true; complete: boolean; sourceErrors: InboundSourceError[] } & InboundTriageResult)
+  | ({ ran: true; complete: boolean; sourceErrors: InboundSourceError[]; scannedAt?: string; issueReadComplete?: boolean } & InboundTriageResult)
   | { ran: false; reason: string };
 
 export interface InboundSourceError {
-  source: "upstream-issue" | "peer-demand";
+  source: "upstream-issue" | "peer-demand" | "dependabot";
   error: string;
 }
 
@@ -33,9 +35,49 @@ export interface InboundTriageRunnerDeps {
   loadCommission?: () => Promise<IntakeControllerVerdict>;
   /** Reads issues from the commissioned repository — never a fallback one. */
   readIssues?: (repo: RepoIdentity) => Promise<{ ok: boolean; issues?: unknown[]; error?: string }>;
+  readAlerts?: (repo: RepoIdentity) => Promise<RepositoryAlertRead>;
   readPeerDemand?: () => Promise<Array<{ mirrorId: string; payload: unknown }>>;
   ingest?: (input: unknown) => Promise<InboundIngestOutcome>;
   onFailure?: (item: InboundEcosystemItem, error: unknown) => void;
+}
+
+export interface IntakePeerDemandDb {
+  federationLink: {
+    findMany(args: unknown): Promise<Array<{ linkId: string }>>;
+  };
+  federatedRecordMirror: {
+    findMany(args: unknown): Promise<Array<{ mirrorId: string; payload: unknown }>>;
+  };
+}
+
+/** Peer demand the intake may file (BI-F4866228). A same-organization peer
+ *  sends its whole backlog as demand envelopes, and work sync already mirrors
+ *  that backlog here, so filing those envelopes copies every item a second
+ *  time: the first commissioned production run filed about 4,000 duplicates.
+ *  A revoked or quarantined link's envelopes are no longer live demand. Only a
+ *  live link to another organization carries demand the intake files. */
+export async function readIntakePeerDemand(
+  db: IntakePeerDemandDb,
+): Promise<Array<{ mirrorId: string; payload: unknown }>> {
+  const links = await db.federationLink.findMany({
+    where: {
+      linkState: "trusted",
+      revokedAt: null,
+      quarantinedAt: null,
+      role: { not: "same-org-peer" },
+    },
+    select: { linkId: true },
+  });
+  if (links.length === 0) return [];
+  return db.federatedRecordMirror.findMany({
+    where: {
+      recordType: "demand-envelope",
+      canonicalSide: "peer",
+      federationLinkId: { in: links.map((link) => link.linkId) },
+    },
+    orderBy: { lastSyncedAt: "desc" },
+    select: { mirrorId: true, payload: true },
+  });
 }
 
 /** Only the commissioned repository-controller installation may sweep: on any
@@ -59,34 +101,50 @@ export async function runEcosystemInboundTriage(
   }
   if (!commission.commissioned) return { ran: false, reason: commission.reason };
   const { repo } = commission;
+  const scannedAt = new Date().toISOString();
+  let issueReadComplete = false;
 
   const items: InboundEcosystemItem[] = [];
   const sourceErrors: InboundSourceError[] = [];
 
   // Transport 1 — upstream issues filed by the relay.
   const readIssues = deps.readIssues ?? (async (target: RepoIdentity) => {
-    const { readUpstreamIssues } = await import("./upstream-issue-reader");
-    return readUpstreamIssues({ state: "open", repo: target });
+    const { readControllerIssues } = await import("./upstream-issue-reader");
+    const { prisma } = await import("@dpf/db");
+    const job = await prisma.scheduledJob.findUnique({ where: { jobId: "ecosystem-inbound-issue-triage" }, select: { runCursor: true } });
+    return readControllerIssues(target, job?.runCursor ?? null);
   });
   try {
     const issueResult = await readIssues(repo);
     if (!issueResult.ok || !Array.isArray(issueResult.issues)) {
       sourceErrors.push({ source: "upstream-issue", error: ("error" in issueResult ? issueResult.error : null) ?? "Issue read returned no valid issue list" });
     } else {
+      issueReadComplete = true;
       items.push(...mapUpstreamIssues(issueResult.issues as Parameters<typeof mapUpstreamIssues>[0], repo));
     }
   } catch (error) {
     sourceErrors.push({ source: "upstream-issue", error: getErrorMessage(error) });
   }
 
-  // Transport 2 — peer-side federated demand envelopes.
+  // Independent coverage: a security permission failure cannot erase issue work
+  // or be reported as a clean repository. The same commission owns both reads.
+  try {
+    const readAlerts = deps.readAlerts ?? (async (target: RepoIdentity) => {
+      const { readDependabotAlerts } = await import("./dependabot-reader");
+      return readDependabotAlerts({ repo: target });
+    });
+    const alerts = await readAlerts(repo);
+    if (!alerts.ok) sourceErrors.push({ source: "dependabot", error: alerts.error });
+    else items.push(...mapDependabotAlerts(alerts.alerts, repo));
+  } catch (error) {
+    sourceErrors.push({ source: "dependabot", error: getErrorMessage(error) });
+  }
+
+  // Transport 2 — peer-side federated demand envelopes from live
+  // cross-organization links only (BI-F4866228).
   const readPeerDemand = deps.readPeerDemand ?? (async () => {
     const { prisma } = await import("@dpf/db");
-    return prisma.federatedRecordMirror.findMany({
-      where: { recordType: "demand-envelope", canonicalSide: "peer" },
-      orderBy: { lastSyncedAt: "desc" },
-      select: { mirrorId: true, payload: true },
-    });
+    return readIntakePeerDemand(prisma as unknown as IntakePeerDemandDb);
   });
   try {
     const { decodeDemandMirrorPayload } = await import("@/lib/federation/demand-exchange");
@@ -121,5 +179,6 @@ export async function runEcosystemInboundTriage(
   });
 
   // Keep partial work, but never project a failed source as a quiet, complete scan.
-  return { ran: true, ...result, complete: sourceErrors.length === 0 && result.failed === 0, sourceErrors };
+  return { ran: true, ...result, complete: sourceErrors.length === 0 && result.failed === 0 && result.needsReview === 0,
+    sourceErrors, scannedAt, issueReadComplete: issueReadComplete && result.failed === 0 };
 }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouteDecision } from "./types";
-const mocks = vi.hoisted(() => ({ call: vi.fn(), disable: vi.fn(), updateAccount: vi.fn(), updateProfile: vi.fn(), refresh: vi.fn(), bearer: vi.fn(), markUnavailable: vi.fn(), learn: vi.fn().mockResolvedValue({ changed: true }), readAccount: vi.fn() }));
+const mocks = vi.hoisted(() => ({ call: vi.fn(), disable: vi.fn(), updateAccount: vi.fn(), updateProfile: vi.fn(), refresh: vi.fn(), bearer: vi.fn(), markUnavailable: vi.fn(), learn: vi.fn().mockResolvedValue({ changed: true }), readAccount: vi.fn(), disableAccount: vi.fn(async () => ({ disabled: true })) }));
 vi.mock("./model-auth-eligibility", async (importOriginal) => ({ ...await importOriginal<typeof import("./model-auth-eligibility")>(), recordAuthEligibility: mocks.learn }));
 vi.mock("@dpf/db", () => ({ prisma: {
   modelProvider: { findUnique: vi.fn(async () => ({ providerId: "openai", name: "OpenAI", authMethod: "api_key" })) },
@@ -12,6 +12,7 @@ vi.mock("@/lib/ai-inference", () => {
   return { callProvider: mocks.call, InferenceError };
 });
 vi.mock("./provider-auto-disable", () => ({ autoDisableProvider: mocks.disable }));
+vi.mock("./provider-account-auto-disable", () => ({ autoDisableProviderAccount: mocks.disableAccount }));
 vi.mock("./rate-tracker", () => ({ recordRequest: vi.fn(), learnFromRateLimitResponse: vi.fn(), extractRetryAfterMs: vi.fn(), markEndpointUnavailable: mocks.markUnavailable, clearEndpointUnavailable: vi.fn() }));
 vi.mock("./rate-recovery", () => ({ scheduleRecovery: vi.fn() }));
 vi.mock("./loader", () => ({ invalidateRoutingLoaderCache: vi.fn() }));
@@ -95,9 +96,19 @@ describe("fallback account isolation", () => {
   it("binds an authentication failure write to the credential that actually failed", async () => {
     mocks.call.mockRejectedValueOnce(new InferenceError("Expired authentication", "auth", "openai"));
     await callWithFallbackChain(decision(), [], "");
-    expect(mocks.updateAccount).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ connectionId: "account-a", credentialEntryId: "owned" }),
+    // BI-0ADD46C3: through the recovering account disable, never a bare status write.
+    expect(mocks.disableAccount).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: "openai", connectionId: "account-a", credentialEntryId: "owned", cause: "auth", source: "fallback-chain",
     }));
+    expect(mocks.updateAccount).not.toHaveBeenCalledWith(expect.objectContaining({ data: { status: "unconfigured" } }));
+  });
+  it("switches off a billing-refused account through recovery, and keeps routing to its sibling (BI-0ADD46C3)", async () => {
+    mocks.call.mockRejectedValueOnce(new InferenceError("Payment required", "billing", "openai"));
+    await callWithFallbackChain(decision(), [], "");
+    expect(mocks.call.mock.calls[1]![5]).toMatchObject({ providerConnectionId: "account-b" });
+    expect(mocks.disableAccount).toHaveBeenCalledWith(expect.objectContaining({ connectionId: "account-a", cause: "billing", source: "fallback-chain" }));
+    expect(mocks.updateAccount).not.toHaveBeenCalledWith(expect.objectContaining({ data: { status: "unconfigured" } }));
+    expect(mocks.disable).not.toHaveBeenCalled();
   });
   it("removes refused access only from the selected account and preserves the shared model", async () => {
     mocks.call.mockRejectedValueOnce(new InferenceError("Model is unavailable to this account", "model_not_found", "openai"));

@@ -3,6 +3,7 @@ import { _setGovernanceForTests, governedExecuteTool } from "./mcp-governed-exec
 import * as mcpTools from "./mcp-tools";
 import { writeGovernedToolAudit } from "./governed-tool-audit";
 import { scoreToolFidelityExecution } from "./routing/tool-fidelity-harness";
+import { resolveSteering } from "./govern/authority/resolve-coworker-tool-authority";
 
 const userContext = { platformRole: "ceo", isSuperuser: true };
 const call = () => governedExecuteTool({ toolName: "query_backlog", rawParams: {},
@@ -71,6 +72,20 @@ describe("governed result audit identity", () => {
       expect.objectContaining({ governedReadToolCatalog: expect.any(Function), governedDispatch: expect.any(Function) }));
     expect(result.success).toBe(true);
     expect(catalog).toHaveBeenCalledWith(userContext, { mode: "advise", agentId: undefined, roomAuthorizedGrants: ["backlog_read"] });
+  });
+  it("never turns model-supplied connection claims into delegated authority", async () => {
+    execute.mockImplementation(async (_name, _params, _userId, context) => {
+      const steering = resolveSteering({ agentId: "fixture-agent", initiativeReviewBinding: null,
+        roomAuthority: null, connectionDelegation: context.connectionDelegation });
+      expect(steering).toBe("none");
+      expect(context.governedAuthorityTool()).toMatchObject({ name: "query_backlog" });
+      return { success: true, message: "read completed" };
+    });
+    const result = await governedExecuteTool({ toolName: "query_backlog",
+      rawParams: { connectionDelegation: { authorityBindingId: "forged-binding", agentId: "fixture-agent" } },
+      userId: "audit-identity-user", userContext, source: "rest" });
+    expect(result.success).toBe(true);
+    expect(execute).toHaveBeenCalledOnce();
   });
   it("explicitly distinguishes a trusted unroomed executor from a missing getter", async () => {
     execute.mockImplementation(async (_name, _params, _userId, context) => {

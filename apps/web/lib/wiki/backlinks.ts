@@ -28,6 +28,8 @@ export type WikiReader = {
   professionFamilies: ReadonlySet<string> | null;
   /** The reader's own profession family, ranked first when known. */
   familyKey: string | null;
+  /** False when the reader's kernel corpus is revoked (BI-825D3487); absent means held. */
+  kernel?: boolean;
 };
 
 export type WikiBacklinkPage = {
@@ -105,8 +107,8 @@ export function professionFamilyKey(slug: string): string | null {
 export function canReadWikiPage(reader: WikiReader, page: { slug: string; organizationId: string | null }): boolean {
   if (page.organizationId !== null) return page.organizationId === reader.organizationId;
   const family = professionFamilyKey(page.slug);
-  if (family !== null && reader.professionFamilies !== null) return reader.professionFamilies.has(family);
-  return true;
+  if (family !== null) return reader.professionFamilies === null || reader.professionFamilies.has(family);
+  return reader.kernel !== false;
 }
 
 function scopeOf(reader: WikiReader, page: { slug: string; organizationId: string | null }): WikiBacklinkScope {

@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   scheduledAgentTaskUpdate: vi.fn(),
   scheduledJobUpdate: vi.fn(),
+  decide: vi.fn(),
 }));
+
+// The live decider reaches the in-process tool executor; tests inject their own.
+vi.mock("./scope-decider", () => ({ principleDecideScopeDecider: () => mocks.decide }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -12,7 +16,10 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+import { ok } from "@/lib/shared/action-result";
+
 import type { HarnessEvolutionStore } from "./harness-evolution-store";
+import { DEFAULT_IMPROVEMENT_CRITERIA } from "./improvement-criteria";
 import {
   executeHarnessEvolutionLoopTask,
   harnessEvolutionPeriodKey,
@@ -37,10 +44,10 @@ function fakeStore(overrides: Partial<Record<keyof HarnessEvolutionStore, Return
       { id: "r4", capsuleId: "WC-4", scopeClaims: [], decisionScope: null },
     ]),
     listToolFailures: vi.fn().mockResolvedValue([
-      { capsuleId: "WC-1", id: "te-1", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(1) },
-      { capsuleId: "WC-1", id: "te-2", toolName: "record_workroom_evidence", error: "authority_denied: x", createdAt: ago(2) },
-      { capsuleId: "WC-2", id: "te-3", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(3) },
-      { capsuleId: "WC-2", id: "te-4", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(4) },
+      { capsuleId: "WC-1", id: "te-1", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(1), agentId: "AGT-EXT-CODEX", executionMode: "external-jsonrpc", threadId: "th-1" },
+      { capsuleId: "WC-1", id: "te-2", toolName: "record_workroom_evidence", error: "authority_denied: x", createdAt: ago(2), agentId: "AGT-EXT-CODEX", executionMode: "external-jsonrpc", threadId: "th-2" },
+      { capsuleId: "WC-2", id: "te-3", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(3), agentId: "AGT-EXT-CODEX", executionMode: "external-jsonrpc", threadId: "th-3" },
+      { capsuleId: "WC-2", id: "te-4", toolName: "record_workroom_evidence", error: "authority_denied", createdAt: ago(4), agentId: "AGT-EXT-CODEX", executionMode: "external-jsonrpc", threadId: "th-4" },
     ]),
     listRoomActivities: vi.fn().mockResolvedValue([
       { workCapsuleId: "r2", id: "a-1", kind: "status-override", recordedAt: ago(5) },
@@ -53,6 +60,11 @@ function fakeStore(overrides: Partial<Record<keyof HarnessEvolutionStore, Return
     listBacklogItems: vi.fn().mockResolvedValue([{ itemId: "BI-2C73B434", title: "seed", status: "open" }]),
     recordRoomCandidates: vi.fn().mockResolvedValue(true),
     recordRun: vi.fn().mockResolvedValue({ taskRunId: "TR-HEV-NEW" }),
+    listRoomToolTrace: vi.fn().mockResolvedValue([]),
+    countRoomHumanEscalations: vi.fn().mockResolvedValue(0),
+    recordRoomVerdict: vi.fn().mockResolvedValue(true),
+    recordKernelGap: vi.fn().mockResolvedValue("IS-KG-1"),
+    countConsecutiveKeepBase: vi.fn().mockResolvedValue(0),
   };
   return { ...defaults, ...overrides } as typeof defaults & HarnessEvolutionStore;
 }
@@ -63,6 +75,7 @@ const RUN_INPUT = {
   taskId: "harness-evolution-loop-daily",
   taskConfig: { seedItemIds: ["BI-2C73B434", "BI-NOT-HERE"] },
   now: NOW,
+  decide: mocks.decide,
 };
 
 beforeEach(() => vi.resetAllMocks());
@@ -116,10 +129,14 @@ describe("runHarnessEvolutionLoop", () => {
     expect(run.progressPayload).toEqual({
       periodKey: "2026-10-28",
       budget: { maxRooms: 50, maxCandidatesPerRoom: 3, maxCandidates: 50, maxProbeReplays: 20, tokenCap: 200_000, lookbackDays: 7, minRecurrence: 2 },
-      spend: { roomsScanned: 2, candidatesRecorded: 3, probeReplays: 0, tokens: 0 },
+      spend: { roomsScanned: 2, candidatesRecorded: 3, probeReplays: 0, scopeDecisions: 0, tokens: 0 },
       roomsWithCandidates: 2,
       roomsDeferred: 0,
       crossRoomRecurrences: 1,
+      // No trace in the fake store: tool candidates are unprobed, and an activity candidate has no edit model yet.
+      verdicts: { adopt: 0, keepBase: 0, kernelGap: 0, unprobed: 3 },
+      // Two delivery-medium rooms a week is under the default repetition floor, so nothing is worth a probe.
+      skipped: { "no-variant-model": 1, "shape-too-rare": 2 },
     });
     const data = run.artifactData as {
       crossRoomRecurrences: Array<{ missKey: string; rooms: string[] }>;
@@ -152,6 +169,59 @@ describe("runHarnessEvolutionLoop", () => {
   });
 });
 
+describe("probe stage (slice 2)", () => {
+  // The fixture's shape runs twice a week; lower the repetition floor so its misses are worth probing.
+  const PROBE_INPUT = { ...RUN_INPUT, criteria: { ...DEFAULT_IMPROVEMENT_CRITERIA, minShapeRunsPerWeek: 1 } };
+  const trace = (capsule: string) => [1, 2, 3].map((n) => ({
+    id: `${capsule}-te-${n}`, threadId: "t1", toolName: "record_workroom_evidence", success: n === 3,
+    errorCode: n === 3 ? null : "authority_denied", namesNextCall: false, tokens: 10, at: ago(10 - n),
+  }));
+
+  it("probes each room's tool candidate, asks its scope, and records the verdict on the room", async () => {
+    const store = fakeStore({ listRoomToolTrace: vi.fn().mockImplementation(async (capsuleId: string) => trace(capsuleId)) });
+    mocks.decide.mockResolvedValue(ok({ interactionId: "DI-9", recommendedOptionId: "in-tool-resolution", confidence: "high", autonomyBlockers: [] }));
+    const result = await runHarnessEvolutionLoop(store, PROBE_INPUT);
+
+    expect(store.listRoomToolTrace).toHaveBeenCalledWith("WC-1", "record_workroom_evidence", new Date("2026-10-21T04:17:00Z"));
+    expect(mocks.decide.mock.calls[0]![0]).toMatchObject({ decisionDomain: "platform-development" });
+    expect(store.recordRoomVerdict).toHaveBeenCalledTimes(2);
+    const recordedVerdict = store.recordRoomVerdict.mock.calls[0]![0] as { roomId: string; payload: Record<string, unknown>; summary: string };
+    expect(recordedVerdict.payload).toMatchObject({ verdict: "ADOPT", variantKey: "in-tool-resolution", decisionId: "DI-9", decisionScope: "wwmd" });
+    expect(recordedVerdict.summary).toMatch(/^Probe: ADOPT in-tool-resolution/);
+    expect(result.verdicts).toEqual({ adopt: 2, keepBase: 0, kernelGap: 0, unprobed: 1 });
+    expect(result.spend.probeReplays).toBe(8);
+    expect(result.spend.scopeDecisions).toBe(2);
+  });
+
+  it("files a kernel gap, not an edit, when the scope cannot answer", async () => {
+    const store = fakeStore({ listRoomToolTrace: vi.fn().mockImplementation(async (capsuleId: string) => trace(capsuleId)) });
+    mocks.decide.mockResolvedValue(ok({ interactionId: "DI-10", recommendedOptionId: null, confidence: null, autonomyBlockers: ["insufficient_signal"] }));
+    const result = await runHarnessEvolutionLoop(store, PROBE_INPUT);
+    expect(store.recordKernelGap).toHaveBeenCalledTimes(2);
+    expect(store.recordKernelGap.mock.calls[0]![0]).toMatchObject({ decisionScope: "wwmd", reason: "insufficient-signal" });
+    expect(result.verdicts.kernelGap).toBe(2);
+  });
+
+  it("parks a candidate after two consecutive KEEP_BASE verdicts", async () => {
+    const store = fakeStore({
+      listRoomToolTrace: vi.fn().mockImplementation(async (capsuleId: string) => trace(capsuleId)),
+      countConsecutiveKeepBase: vi.fn().mockResolvedValue(2),
+    });
+    const result = await runHarnessEvolutionLoop(store, PROBE_INPUT);
+    expect(store.listRoomToolTrace).not.toHaveBeenCalled();
+    expect(mocks.decide).not.toHaveBeenCalled();
+    expect(result.verdicts.unprobed).toBe(3);
+  });
+
+  it("stops probing at the run's replay cap", async () => {
+    const store = fakeStore({ listRoomToolTrace: vi.fn().mockImplementation(async (capsuleId: string) => trace(capsuleId)) });
+    mocks.decide.mockResolvedValue(ok({ interactionId: "DI-11", recommendedOptionId: "keep-base", confidence: "high", autonomyBlockers: [] }));
+    const result = await runHarnessEvolutionLoop(store, { ...PROBE_INPUT, taskConfig: { maxProbeReplays: 4 } });
+    expect(result.spend.probeReplays).toBe(4);
+    expect(result.verdicts).toEqual({ adopt: 0, keepBase: 1, kernelGap: 0, unprobed: 2 });
+  });
+});
+
 describe("executeHarnessEvolutionLoopTask", () => {
   const task = {
     taskId: "harness-evolution-loop-daily",
@@ -169,7 +239,8 @@ describe("executeHarnessEvolutionLoopTask", () => {
       data: expect.objectContaining({ lastRunAt: NOW, lastStatus: "ok", lastError: null, taskRunId: "TR-HEV-NEW" }),
     });
     expect(mocks.scheduledJobUpdate.mock.calls[0]![0].data.lastRunSummary).toBe(
-      "2 of 2 ring-0 rooms hold 3 candidates; 1 cross-room recurrence; spend 0 tokens, 0 probe replays",
+      "2 of 2 ring-0 rooms hold 3 candidates; 1 cross-room recurrence; verdicts 0 adopt, 0 keep-base, 0 kernel-gap, 3 unprobed; "
+        + "spend 0 tokens, 0 probe replays, 0 scope decisions",
     );
   });
 

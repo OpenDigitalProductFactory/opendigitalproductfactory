@@ -10,6 +10,18 @@ export type PauseDependencies = {
   probe?: (providerId: string) => Promise<boolean>;
 };
 export type PauseDuration = { value: number; unit: "hours" | "days" };
+/** Who asked, from where (BI-1C36C88A). Request headers are client-supplied and
+ * never authorize anything; they make a later pause attributable. */
+export type ClientProvenance = { userAgent: string | null; clientIp: string | null; sessionFingerprint: string | null; email: string | null };
+export type PauseProvenance = ClientProvenance & { reason: string };
+/** A pause this soon after an operator resume needs an explicit override. */
+export const RECENT_RESUME_WINDOW_MS = 15 * 60_000;
+export class RecentOperatorResumeError extends Error {
+  constructor(public readonly resumedBy: string, public readonly resumedAt: string) {
+    super(`This provider was resumed by ${resumedBy} at ${resumedAt}. Confirm the override to pause it again within 15 minutes of that resume.`);
+    this.name = "RecentOperatorResumeError";
+  }
+}
 export const PROVIDER_PAUSE_EXPIRY_EVENT = "ops/provider.pause-expire";
 const PAUSE_KIND = "operator-provider-pause";
 export const providerPauseJobId = (providerId: string) => `provider-pause-${providerId}`;
@@ -24,6 +36,7 @@ export type ProviderPauseState = {
   priorProviderStatus: string;
   priorConnectionStatus: string;
   restoredFromOperationId?: string;
+  reason?: string;
 };
 
 function assertProviderId(providerId: string) {
@@ -80,16 +93,25 @@ async function lockProvider(tx: Prisma.TransactionClient, providerId: string) {
   const connectionId = `provider-default-${providerId}`;
   await tx.$queryRaw`SELECT "id" FROM "AiProviderConnection" WHERE "connectionId" = ${connectionId} FOR UPDATE`;
 }
-async function auditPause(tx: Prisma.TransactionClient, pause: ProviderPauseState, action: string, now: Date, actorId?: string, automatic = false) {
+type AuditExtra = { client?: ClientProvenance | PauseProvenance; overrodeRecentResume?: boolean };
+async function auditPause(tx: Prisma.TransactionClient, pause: ProviderPauseState, action: string, now: Date, actorId?: string, automatic = false, extra: AuditExtra = {}) {
   // A timer executes the operator's instruction; its origin remains attributable
   // without claiming the operator personally performed the scheduled action.
   await tx.adminActivity.create({ data: {
     userId: actorId ?? pause.actorId, toolName: "provider_operator_pause", tier: 2, result: "success",
     parameters: { action, providerId: pause.providerId, operationId: pause.operationId, resumeAt: pause.resumeAt,
       ...(pause.restoredFromOperationId ? { restoredFromOperationId: pause.restoredFromOperationId } : {}),
-      authorizingOperatorId: pause.actorId, executedBy: automatic ? "timer" : actorId ?? "provider-account-control", executedAt: now.toISOString() },
+      authorizingOperatorId: pause.actorId, executedBy: automatic ? "timer" : actorId ?? "provider-account-control", executedAt: now.toISOString(),
+      ...extra.client, ...(extra.overrodeRecentResume ? { overrodeRecentResume: true } : {}) },
     summary: `${action}: ${pause.providerId}`,
   } });
+}
+/** The operator resume a new pause would undo, when it is still inside the window. */
+function recentOperatorResume(job: { lastStatus?: string | null; metadata?: unknown } | null, now: Date) {
+  const metadata = job?.metadata && typeof job.metadata === "object" ? job.metadata as Record<string, unknown> : {};
+  const resumedAt = typeof metadata.resumedAt === "string" ? Date.parse(metadata.resumedAt) : NaN;
+  if (job?.lastStatus !== "resumed" || !Number.isFinite(resumedAt) || now.getTime() - resumedAt >= RECENT_RESUME_WINDOW_MS) return null;
+  return { resumedBy: typeof metadata.resumedBy === "string" ? metadata.resumedBy : "an operator", resumedAt: new Date(resumedAt).toISOString() };
 }
 export async function getProviderControlState(providerId: string, db: Pick<PauseDatabase, "scheduledJob" | "aiProviderConnection"> = prisma) {
   assertProviderId(providerId);
@@ -139,9 +161,25 @@ export async function reconcileOverdueProviderPauses(deps: PauseDependencies = {
 }
 
 type PauseWriteResult = { operationId: string; resumeAt: string | null; deliveryPending?: boolean; outcome: "paused" | "restored" | "already-restored" };
-export async function pauseOperatorProvider(input: { providerId: string; actorId: string; duration?: PauseDuration }, deps: PauseDependencies = {}): Promise<{ operationId: string; resumeAt: string | null; deliveryPending: boolean }> {
-  const result = await writeOperatorPause(input, deps);
-  return { operationId: result.operationId, resumeAt: result.resumeAt, deliveryPending: result.deliveryPending === true };
+type OperatorPauseInput = { providerId: string; actorId: string; duration?: PauseDuration; provenance?: PauseProvenance; overrideRecentResume?: boolean };
+export async function pauseOperatorProvider(input: OperatorPauseInput, deps: PauseDependencies = {}): Promise<{ operationId: string; resumeAt: string | null; deliveryPending: boolean }> {
+  if (input.provenance && !input.provenance.reason.trim()) throw new Error("Enter a reason for pausing");
+  const provenance = input.provenance && { ...input.provenance, reason: input.provenance.reason.trim().slice(0, 500) };
+  try {
+    const result = await writeOperatorPause({ ...input, provenance }, deps);
+    return { operationId: result.operationId, resumeAt: result.resumeAt, deliveryPending: result.deliveryPending === true };
+  } catch (error) {
+    if (error instanceof RecentOperatorResumeError) {
+      // The refusal rolled the pause back; record the attempt on its own.
+      await (deps.db ?? prisma).adminActivity.create({ data: {
+        userId: input.actorId, toolName: "provider_operator_pause", tier: 2, result: "refused",
+        parameters: { action: "pause", providerId: input.providerId, refusal: "recent-operator-resume", resumedBy: error.resumedBy,
+          resumedAt: error.resumedAt, executedAt: (deps.now ?? new Date()).toISOString(), ...provenance },
+        summary: `pause refused: ${input.providerId} was resumed at ${error.resumedAt}`,
+      } });
+    }
+    throw error;
+  }
 }
 /** This narrows current routing eligibility; it never enables an account, accepts
  * a caller-selected deadline, or impersonates the original operator. */
@@ -150,7 +188,7 @@ export async function restoreOperatorProviderPause(input: { providerId: string; 
   if (typeof input.expectedOperationId !== "string" || !input.expectedOperationId.trim()) throw new Error("An exact persisted pause source is required");
   return writeOperatorPause({ providerId: input.providerId, actorId: input.actorId, restoreOperationId: input.expectedOperationId }, deps);
 }
-async function writeOperatorPause(input: { providerId: string; actorId: string; duration?: PauseDuration; restoreOperationId?: string }, deps: PauseDependencies): Promise<PauseWriteResult> {
+async function writeOperatorPause(input: Partial<OperatorPauseInput> & { providerId: string; actorId: string; restoreOperationId?: string }, deps: PauseDependencies): Promise<PauseWriteResult> {
   assertProviderId(input.providerId);
   if (!input.actorId) throw new Error("An operator identity is required");
   const db = deps.db ?? prisma;
@@ -175,6 +213,10 @@ async function writeOperatorPause(input: { providerId: string; actorId: string; 
     const restoration = input.restoreOperationId ? readProviderPauseRestoration({ providerId: input.providerId, expectedOperationId: input.restoreOperationId, account: connection, job: priorJob }, now) : null;
     if (input.restoreOperationId && !restoration) throw new Error("Provider pause source changed or expired; refresh before restoring");
     if (restoration?.alreadyRestored) return { outcome: "already-restored" as const, operationId: restoration.pause.operationId, resumeAt: restoration.pause.resumeAt };
+    // Only an operator request (it carries provenance) is held back; restoration
+    // and internal callers keep their existing contract.
+    const recent = restoration || !input.provenance ? null : recentOperatorResume(priorJob, now);
+    if (recent && !input.overrideRecentResume) throw new RecentOperatorResumeError(recent.resumedBy, recent.resumedAt);
     const prior = restoration?.pause ?? (connection.status === "paused" && priorJob?.lastStatus === "paused" ? readProviderPauseState(priorJob.metadata) : null);
     const operationId = (deps.newId ?? randomUUID)();
     const resumeAt = restoration ? restoration.pause.resumeAt : requestedExpiry;
@@ -182,6 +224,7 @@ async function writeOperatorPause(input: { providerId: string; actorId: string; 
       kind: PAUSE_KIND, version: 1, providerId: input.providerId, operationId, actorId: input.actorId,
       pausedAt: now.toISOString(), resumeAt,
       ...(restoration ? { restoredFromOperationId: restoration.pause.operationId } : {}),
+      ...(input.provenance ? { reason: input.provenance.reason } : {}),
       priorProviderStatus: prior?.priorProviderStatus ?? provider.status,
       priorConnectionStatus: prior?.priorConnectionStatus ?? connection.status,
     };
@@ -192,7 +235,8 @@ async function writeOperatorPause(input: { providerId: string; actorId: string; 
     const data = { schedule: "once", nextRunAt: resumeAt ? new Date(resumeAt) : null, lastStatus: "paused", lastError: null,
       metadata, enabled: true, category: "core", locked: true };
     await tx.scheduledJob.upsert({ where: { jobId }, create: { jobId, name: `Operator pause for ${input.providerId}`, ...data }, update: data });
-    await auditPause(tx, metadata, restoration ? "restore-pause" : prior ? "change-pause" : "pause", now, input.actorId);
+    await auditPause(tx, metadata, restoration ? "restore-pause" : prior ? "change-pause" : "pause", now, input.actorId, false,
+      { client: input.provenance, overrodeRecentResume: recent !== null });
     return { outcome: restoration ? "restored" as const : "paused" as const, operationId, resumeAt };
   });
   if (committed.outcome === "already-restored") return committed;
@@ -206,7 +250,7 @@ async function writeOperatorPause(input: { providerId: string; actorId: string; 
   return { ...committed, deliveryPending };
 }
 
-export async function resumeOperatorProvider(input: { providerId: string; operationId?: string; automatic?: boolean; actorId?: string }, deps: PauseDependencies = {}): Promise<{ outcome: "resumed" | "superseded" | "not-due"; status?: string; connectionStatus?: string }> {
+export async function resumeOperatorProvider(input: { providerId: string; operationId?: string; automatic?: boolean; actorId?: string; provenance?: ClientProvenance }, deps: PauseDependencies = {}): Promise<{ outcome: "resumed" | "superseded" | "not-due"; status?: string; connectionStatus?: string }> {
   assertProviderId(input.providerId);
   const db = deps.db ?? prisma;
   const now = deps.now ?? new Date();
@@ -261,7 +305,7 @@ export async function resumeOperatorProvider(input: { providerId: string; operat
       lastStatus: input.automatic ? "expired" : "resumed", nextRunAt: null, lastRunAt: now,
       metadata: { ...pause, resumedAt: now.toISOString(), resumedBy: input.automatic ? "timer" : input.actorId ?? null },
     } });
-    await auditPause(tx, pause, input.automatic ? "expire" : "resume", now, input.actorId, input.automatic);
+    await auditPause(tx, pause, input.automatic ? "expire" : "resume", now, input.actorId, input.automatic, { client: input.provenance });
     return { outcome: "resumed" as const, status, connectionStatus };
   });
 }

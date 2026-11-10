@@ -125,6 +125,17 @@ describe("recordFederatedTwins (AC-2)", () => {
     expect(await recordFederatedTwins(db, mirrors, now)).toBe(0);
   });
 
+  // BI-C7D95F7E: notes named retired peer items ("BI-CAP-F029FF76 (retired)") on production.
+  it("writes no twin for a peer item that no longer carries open work", async () => {
+    const db = {
+      backlogItem: { findMany: vi.fn().mockResolvedValue([local()]) },
+      backlogItemActivity: { findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
+    };
+    const closed = ["retired", "done", "deferred"].map((peerStatus, i) => ({ itemId: `BI-PEER-${i}`, peerStatus, body: mirror().body }));
+    expect(await recordFederatedTwins(db, closed, now)).toBe(0);
+    expect(db.backlogItemActivity.create).not.toHaveBeenCalled();
+  });
+
   it("never writes on a mirror and skips mirrors without an intake marker", async () => {
     const db = {
       backlogItem: { findMany: vi.fn().mockResolvedValue([mirror()]) },

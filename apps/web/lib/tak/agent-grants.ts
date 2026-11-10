@@ -127,6 +127,11 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
   // EP-WORKROOM-COMMS (BI-3F21C4D5): every coworker may read a room it is admitted
   // to (room admission is the real gate; this is the baseline capability).
   "work_room_read",
+  // BI-825D3487: the three knowledge corpora. Unlike the rest of this baseline,
+  // a revocation row removes one (lib/tak/corpus-read-scope.ts reads them).
+  "wiki_kernel_read",
+  "wiki_org_read",
+  "wiki_profession_read",
 ];
 /** Maps tools to grants. [] means identity-scoped universal access; absence means deny. */
 export const TOOL_TO_GRANTS: Record<string, string[]> = {
@@ -199,6 +204,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_backlog_item: ["backlog_read"],
   update_backlog_item_status: ["backlog_write"],
   retire_backlog_item: ["backlog_write"],
+  retire_peer_demand_intake_copies: ["backlog_write"],
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
   // Build-scoped evidence uses build_evidence; backlog_write implies it for compatibility (BI-B2F7ABF5).

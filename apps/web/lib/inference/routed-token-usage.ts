@@ -59,6 +59,8 @@ export async function persistRoutedTokenUsage(input: {
   // `compute` cost model can fire — it is the cost signal for a fully-local
   // install, and was previously dropped here, leaving inferenceMs ~99% empty.
   inferenceMs?: number;
+  /** Estimates cost for a provider with no recorded price; not stored. */
+  modelId?: string;
   /** Record an accepted provider dispatch even when completion usage is not yet known. */
   recordZeroUsage?: boolean;
   /** Fail the caller when this dispatch audit cannot be persisted. */

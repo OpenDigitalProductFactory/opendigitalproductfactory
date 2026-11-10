@@ -3,6 +3,7 @@ import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 import { semanticReviewMinimumContextTokens, SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS } from "./semantic-review-context-floor";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
+import { resolveSemanticReviewRoomSensitivity, type SemanticReviewRouteSensitivity } from "./semantic-review-source-sensitivity";
 import {
   describeSpecialistCraftContexts,
   layerCraftOntoSpecialistPrompt,
@@ -51,6 +52,8 @@ export async function dispatchRoutedSemanticReview(
   // client inside the function, not here, so importing this module does not
   // pull in the database client.
   craftDb?: SpecialistCraftClient,
+  resolveRoomSensitivity: (capsuleId: string | undefined) => Promise<SemanticReviewRouteSensitivity>
+    = resolveSemanticReviewRoomSensitivity,
 ): Promise<SemanticReviewResult> {
   if (context.specialistIds.some((id) => !Object.hasOwn(SPECIALIST_SYSTEM_PROMPTS, id))) {
     return { decision: "inconclusive", issues: [],
@@ -72,6 +75,10 @@ export async function dispatchRoutedSemanticReview(
   if (craft.contexts.length > 0) {
     console.info(`[semantic-review] specialist craft: ${describeSpecialistCraftContexts(craft.contexts)}`);
   }
+  // BI-9F620FE1: the Workroom dictates the type of work. A platform room is
+  // public source and routes like Build Studio's code turns; an unknown room
+  // keeps "internal", and a confidential room stays confidential.
+  const roomSensitivity = await resolveRoomSensitivity(context.capsuleId).catch(() => "internal" as const);
 
   const branches = [
     {
@@ -98,9 +105,7 @@ export async function dispatchRoutedSemanticReview(
     const response = await routeAndCall(
       [{ role: "user", content: prompt }],
       branch.systemPrompt,
-      // This context has no authoritative source classification. Ordinary
-      // private code may contain no sensitive patterns, so retain the floor.
-      "internal",
+      roomSensitivity,
       {
         taskType: "build-review",
         budgetClass: context.strategyProfile === "economy" ? "balanced" : "quality_first",

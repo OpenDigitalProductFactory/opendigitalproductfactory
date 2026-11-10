@@ -29,6 +29,8 @@ import {
 } from "@/lib/coworker-self-assessment/review-service";
 import { resolveInstallVariantContext } from "@/lib/decision-perspective/install-variant-context";
 import { knownGrantKeys } from "@/lib/tak/agent-grants";
+import { corpusGrantMode, resolveCorpusReadScope } from "@/lib/tak/corpus-read-scope";
+import { getT } from "@/lib/i18n/t.server";
 import {
   evaluateCoworkerServiceReadiness,
 } from "@/lib/coworker-service-catalog/service-readiness";
@@ -56,6 +58,7 @@ import {
   DecisionsPanel,
 } from "@/components/platform/coworker-record/panels";
 import { NeedsAndPlaybooksPanel } from "@/components/platform/coworker-record/NeedsAndPlaybooksPanel";
+import { KnowledgeCorpusPanel, knowledgeCorpusLabels } from "@/components/platform/coworker-record/KnowledgeCorpusPanel";
 import { CapabilityCompletenessPanel } from "@/components/platform/coworker-record/CapabilityCompletenessPanel";
 import { MySurfaceBacklogPanel } from "@/components/platform/coworker-record/MySurfaceBacklogPanel";
 import { CooConversationalNameCard } from "@/components/platform/coworker-record/CooConversationalNameCard";
@@ -142,9 +145,13 @@ export default async function AgentDetailPage({
   // for the Profession & Knowledge tab. Null when the coworker is unmapped.
   // The install's resolved archetype is shown so the operator sees which corpus
   // slice this coworker is served (the "noted at setup" surface).
-  const [corpusSignals, installVariant] = await Promise.all([
+  // BI-825D3487: the knowledge corpora this coworker may read, from the same
+  // resolver every read path uses (an unreadable authority shows as revoked).
+  const [corpusSignals, installVariant, corpusScope, tRecord] = await Promise.all([
     profession.family ? loadFamilyCorpusSignals(profession.family.professionKey) : null,
     resolveInstallVariantContext(prisma),
+    resolveCorpusReadScope(record.authority.agentId),
+    getT("coworkerRecord"),
   ]);
 
   // Model-routing card data (kept page-side: needs the live provider catalog).
@@ -630,6 +637,7 @@ export default async function AgentDetailPage({
             corpusSignals={corpusSignals}
             installArchetype={installVariant.archetype ?? null}
           />
+          <KnowledgeCorpusPanel scope={corpusScope} labels={knowledgeCorpusLabels(tRecord, corpusGrantMode())} />
           <CapabilitiesPanel
             record={record}
             routingCard={routingCard}

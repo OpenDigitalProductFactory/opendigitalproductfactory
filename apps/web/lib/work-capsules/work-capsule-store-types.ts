@@ -39,6 +39,7 @@ export type CapsuleDb = Omit<import("./delivery-agreement-capture").DeliveryAgre
   workroomActivity: {
     create(args: unknown): Promise<any>;
     findFirst?(args: unknown): Promise<any>;
+    findMany?(args: unknown): Promise<any[]>;
   };
   backlogItem?: {
     findFirst(args: unknown): Promise<any>;

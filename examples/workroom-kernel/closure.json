@@ -4,7 +4,7 @@
   "runtimeDependencies": [
     {
       "name": "@opendigitalproductfactory/dpf-workroom",
-      "version": "0.1.0-candidate.4",
+      "version": "0.1.0-candidate.5",
       "source": "exact local tarball"
     }
   ],
@@ -28,8 +28,8 @@
   "qualification": "Synthetic protocol fixture only; no execution, authentication, enforcement or business qualification.",
   "componentArtifact": {
     "name": "@opendigitalproductfactory/dpf-workroom",
-    "version": "0.1.0-candidate.4",
-    "path": "packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.4.tgz",
-    "sha256": "42e2a2e38d56b631d8cb8c15c412726efa63602dd550842549f90fb8069f7b44"
+    "version": "0.1.0-candidate.5",
+    "path": "packages/validators/vendor/opendigitalproductfactory-dpf-workroom-0.1.0-candidate.5.tgz",
+    "sha256": "74f04029b39fad0dff0395edc4ca8e6445b961348adc76f8b376b794eb0fa987"
   }
 }

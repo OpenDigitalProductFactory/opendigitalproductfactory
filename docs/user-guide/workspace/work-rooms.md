@@ -204,7 +204,7 @@ You are not asked to approve every invite. A room has a **charter**: the kinds o
 
 Every other invite still comes to you for approval. That includes inviting a person, inviting into a confidential or restricted room, inviting a retired coworker, and asking for more than the charter allows. The charter only decides whether you're asked. It never grants access: the invitee still needs the clearance and permissions the room requires.
 
-A room takes its sensitivity from the work it serves. Rooms for work on the open-source platform itself count as public, so any AI coworker can be invited to them. Rooms for your organization's own work are usually internal. A coworker joins one only once someone who manages coworkers has given it internal data access, under **Coworker data access**. Until then, an invite into such a room comes to you, and the coworker cannot read the room.
+A room takes its sensitivity from the work it serves. Rooms for work on the open-source platform itself count as public, so any AI coworker can be invited to them. Rooms for your organization's own work are usually internal. A coworker can read such a room only with internal data access. You don't have to find that setting first. When a coworker is invited into a room it can't read, you get one approval that asks whether to let it in and give it the room's level of data access. That access then applies in every room it is admitted to. If you approve, both happen together. If you decline, nothing changes. You can lower the access again under **Coworker data access**. A restricted room is the exception: its access must be granted there first, by someone who manages coworkers.
 
 Across rooms, you can see **where each AI coworker is engaged**—which active rooms it is in and its role in each (including where it coordinates). This 360 view helps manage how coworkers are used and recognise the routine patterns worth pre-positioning them for.
 
@@ -654,8 +654,9 @@ You can also inspect a reviewer under the room's **Observed execution**. Expand
 its request to see the recorded state, reason, next action, requester and history.
 Checkpoint rows identify the reviewing agents; completed checkpoints alone do not
 prove a successful verdict. The read time and heartbeat show how fresh the view is.
-For a waiting request, the shared recovery controls show its original deadline
-and attempts. Only the original requester can submit recovery, and the server
+For a waiting request, the shared recovery controls show its deadline and
+attempts. Time a review spends waiting for reviewer capacity, such as while
+local CI is using the shared runner, extends its deadline, by at most four hours. Only the original requester can submit recovery, and the server
 rechecks saved authority. An expired window or exhausted limit cannot be reset
 from the room. Intended steps remain separate from these execution observations.
 

@@ -39,7 +39,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
       - name: Flag PRs whose head received no check runs
         env:
           GH_TOKEN: ${{ github.token }}

@@ -55,7 +55,7 @@ export type ArchitectureSourceInspection = {
   symbol: string | null;
   version: string | null;
   implementationStatus: string | null;
-  href: string;
+  href: string | null;
 };
 
 type DecisionDescriptor = {
@@ -173,10 +173,7 @@ export function inspectArchitectureSource(
     symbol: parsed.symbol,
     version: stringValue(properties.sourceVersion),
     implementationStatus: stringValue(properties.implementationStatus),
-    href: `https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/${parsed.path
-      .split("/")
-      .map(encodeURIComponent)
-      .join("/")}`,
+    href: repositorySourceHref(parsed.path),
   };
 }
 
@@ -276,6 +273,23 @@ function notationRank(notationSlug: string): number {
   if (notationSlug === "sysml2") return 1;
   if (notationSlug === "bpmn20") return 2;
   return 3;
+}
+
+function repositorySourceHref(sourcePath: string): string | null {
+  // Registry keys and URIs identify sources; they are not repository file paths.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(sourcePath) || /[\\<>?":\u0000-\u001f]/.test(sourcePath)) {
+    return null;
+  }
+  const segments = sourcePath.split("/");
+  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
+    return null;
+  }
+  const fileName = segments[segments.length - 1]!;
+  if (!sourcePath.includes("/") && !fileName.includes(".")
+    && !/^(Dockerfile|Containerfile|Makefile|README|LICENSE|NOTICE|COPYING)$/.test(fileName)) {
+    return null;
+  }
+  return `https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/${segments.map(encodeURIComponent).join("/")}`;
 }
 
 function parseSourceKey(value: string | null): { path: string; symbol: string | null } {

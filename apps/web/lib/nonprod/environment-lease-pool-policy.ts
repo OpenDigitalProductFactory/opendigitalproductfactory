@@ -15,6 +15,10 @@ import {
   measuredBuilderReserve,
   type MeasuredBuilderReserve,
 } from "./local-ci-builder-memory-calibration";
+import {
+  loadLocalCiHostRemainingGrowthCalibration,
+  measuredHostRemainingGrowthReserve,
+} from "./local-ci-host-remaining-growth-calibration";
 import localCiSlotResources from "./local-ci-slot-resources.json" with {
   type: "json",
 };
@@ -106,6 +110,7 @@ export function resolveHostResourcePoolPolicy(input: {
   expectedMemoryBytes: number;
   hostResource: HostResourcePressure;
   activeReservations: ActiveHeavyReservation[];
+  expectedMemoryAuthority?: "caller" | "server-derived";
 }): ResolvedHostResourcePoolPolicy {
   const admission = resolveHostResourceAdmission({
     resourceClass: input.resourceClass,
@@ -114,6 +119,7 @@ export function resolveHostResourcePoolPolicy(input: {
     availableMemoryBytes: input.hostResource.availableMemoryBytes,
     inferenceResident: input.hostResource.inferenceResident,
     activeHeavyReservations: input.activeReservations,
+    expectedMemoryAuthority: input.expectedMemoryAuthority,
   });
   const admitted = admission.status === "admitted";
   const requestedCapacity = "capacity" in admission ? admission.capacity : 1;
@@ -180,6 +186,44 @@ export async function resolveNonprodPoolPolicy(input: {
       }).catch(() => null),
     })
     : undefined;
+  const remainingGrowthReserve = measuredHostRemainingGrowthReserve({
+    checkedInReserveBytes:
+      localCiSlotResources.hostRemainingGrowthPolicy.admissionReserveBytes,
+    safetyMarginBytes:
+      localCiSlotResources.hostRemainingGrowthPolicy.admissionCalibration.safetyMarginBytes,
+    calibration: input.platformConfig
+      ? await loadLocalCiHostRemainingGrowthCalibration({
+        platformConfig: input.platformConfig,
+      }).catch(() => null)
+      : null,
+  });
+  const withHostReservation = (
+    policy: ResolvedLocalCiPoolPolicy,
+  ): ResolvedLocalCiPoolPolicy => {
+    if (!input.reserveAdmissionHeadroom || policy.effectiveCapacity === 0) {
+      return policy;
+    }
+    const reserveBuilder = input.reserveBuilderHeadroom !== false;
+    const builderReserveBytes = reserveBuilder
+      ? builderReserve?.bytes ?? localCiSlotResources.builderPolicy.admissionReserveBytes
+      : 0;
+    const hostStageReserveBytes = localCiSlotResources.hostStagePolicy.admissionReserveBytes;
+    const remainingGrowthReserveBytes = remainingGrowthReserve.bytes;
+    return {
+      ...policy,
+      hostReservation: {
+        resourceClass: reserveBuilder ? "docker-build" : "typescript",
+        expectedMemoryBytes: Math.max(
+          remainingGrowthReserveBytes,
+          hostStageReserveBytes,
+          builderReserveBytes,
+        ),
+        remainingGrowthReserveBytes,
+        builderReserveBytes,
+        hostStageReserveBytes,
+      },
+    };
+  };
   const clientPressure = input.hostPressure ?? {};
   const preliminary = resolveLocalCiPoolPolicy({
     configValue,
@@ -191,12 +235,13 @@ export async function resolveNonprodPoolPolicy(input: {
     now: input.now,
     installation,
     builderReserveBytes: builderReserve?.bytes,
+    hostRemainingGrowthReserveBytes: remainingGrowthReserve.bytes,
   });
   // A missing/malformed config keeps the compatibility singleton and has no
   // broker contract to enforce. A valid configured singleton still requires
   // canonical pressure: "one requested" is not permission to admit on an
   // unsafe host.
-  if (preliminary.config === null) return preliminary;
+  if (preliminary.config === null) return withHostReservation(preliminary);
 
   const sampleServer = async (): Promise<LocalCiHostPressure> => {
     try {
@@ -227,7 +272,7 @@ export async function resolveNonprodPoolPolicy(input: {
   // caller only has its own client sample; recording that next to a
   // server-derived rollbackReason produced gate records that contradicted
   // themselves and sent operators looking for a bug in the wrong place.
-  return {
+  return withHostReservation({
     ...resolveLocalCiPoolPolicy({
       configValue,
       host: decidedHostPressure,
@@ -238,8 +283,9 @@ export async function resolveNonprodPoolPolicy(input: {
       now: input.now,
       installation,
       builderReserveBytes: builderReserve?.bytes,
+      hostRemainingGrowthReserveBytes: remainingGrowthReserve.bytes,
     }),
     ...(builderReserve ? { builderReserve } : {}),
     decidedHostPressure,
-  };
+  });
 }

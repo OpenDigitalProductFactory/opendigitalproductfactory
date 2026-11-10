@@ -206,6 +206,30 @@ describe("assessAiCapacity", () => {
     expect(result.held).toEqual([aiCapacityProviderKey("anthropic")]);
   });
 
+  it("holds an open item when the provider only failed a few calls this window (BI-783EBEE6)", () => {
+    // 2026-11-02 23:25Z: 4 failed anthropic-sub calls and none served resolved the
+    // usage-limit item while the provider stayed dark for 18 more hours.
+    const nativeQuota = { errorClass: "unknown", refusalReason: "Native CLI execution on anthropic-sub did not return a settled result." };
+    const result = assessAiCapacity({
+      rows: [...rows("anthropic-sub", 4, "error", nativeQuota), ...rows("local", 20, "success")],
+      providers,
+      now: NOW,
+      previouslyOpen: new Set([aiCapacityProviderKey("anthropic-sub")]),
+    });
+    expect(result.findings).toEqual([]);
+    expect(result.held).toEqual([aiCapacityProviderKey("anthropic-sub")]);
+  });
+
+  it("resolves an open item only once the provider serves a call", () => {
+    const result = assessAiCapacity({
+      rows: [...rows("anthropic-sub", 3, "error"), ...rows("anthropic-sub", 1, "success")],
+      providers,
+      now: NOW,
+      previouslyOpen: new Set([aiCapacityProviderKey("anthropic-sub")]),
+    });
+    expect(result.held).toEqual([]);
+  });
+
   it("does not hold an item for a provider the operator turned off", () => {
     const result = assessAiCapacity({
       rows: [],

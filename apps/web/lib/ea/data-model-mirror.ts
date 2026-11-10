@@ -56,13 +56,29 @@ export type DesiredElement = {
   descriptor: string;
 };
 
+/** The typed EA relationship a Prisma foreign key mirrors as (BI-28C22BE3). */
+export type MirrorRelationshipTypeSlug = "composed_of" | "has_foreign_key_to";
+
+/** The generic type the mirror wrote before BI-28C22BE3; rows still carrying it are retyped. */
+export const LEGACY_MIRROR_RELATIONSHIP_TYPE_SLUG = "associated_with";
+
 export type DesiredRelationship = {
   sourceKey: string;
   fromSourceKey: string;
   toSourceKey: string;
+  relationshipTypeSlug: MirrorRelationshipTypeSlug;
   properties: Record<string, unknown>;
   descriptor: string;
 };
+
+/**
+ * A required foreign key that cascades on delete is ArchiMate composition: the
+ * holder cannot outlive the row it points at. Every other key is a plain
+ * foreign-key reference.
+ */
+export function mirrorRelationshipTypeSlug(relation: Pick<PrismaRelationFact, "isRequired" | "onDelete">): MirrorRelationshipTypeSlug {
+  return relation.isRequired && relation.onDelete === "Cascade" ? "composed_of" : "has_foreign_key_to";
+}
 
 function modelElementProperties(model: PrismaModelFact): Record<string, unknown> {
   return {
@@ -94,6 +110,9 @@ function relationProperties(relation: PrismaRelationFact): Record<string, unknow
     relationName: relation.relationName,
     fkFields: relation.fkFields,
     references: relation.references,
+    onDelete: relation.onDelete,
+    isRequired: relation.isRequired,
+    relationshipTypeSlug: mirrorRelationshipTypeSlug(relation),
     isFkIndexed: relation.isFkIndexed,
   };
 }
@@ -177,14 +196,18 @@ export function buildDesiredState(
 
   const modelNames = new Set(facts.models.map((model) => model.name));
   const relationships: DesiredRelationship[] = facts.relations
-    // Only mirror relations whose endpoints are both mirrored models.
+    // Only mirror relations whose endpoints are both mirrored models, once per
+    // foreign key from the model that holds it; the back-relation field holds no
+    // key and would only duplicate the fact (BI-28C22BE3).
     .filter((relation) => modelNames.has(relation.fromModel) && modelNames.has(relation.toModel))
+    .filter((relation) => relation.fkFields.length > 0)
     .map((relation) => {
       const properties = relationProperties(relation);
       return {
         sourceKey: relationSourceKey(relation),
         fromSourceKey: modelSourceKey(relation.fromModel),
         toSourceKey: modelSourceKey(relation.toModel),
+        relationshipTypeSlug: mirrorRelationshipTypeSlug(relation),
         properties,
         descriptor: signature(properties),
       };
@@ -203,6 +226,10 @@ export type ExistingMirrorRow = {
   descriptor: string;
   /** True once a row has been marked removed by a prior reconcile. */
   removed: boolean;
+  /** Relationship rows only: the row's current EA relationship type slug. */
+  typeSlug?: string;
+  /** Relationship rows only: false when the row mirrors a back-relation that holds no key. */
+  ownsForeignKey?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -219,7 +246,9 @@ export type MirrorRelationshipOp =
   | { kind: "create"; desired: DesiredRelationship }
   | { kind: "update"; id: string; desired: DesiredRelationship }
   | { kind: "revive"; id: string; desired: DesiredRelationship }
-  | { kind: "remove"; id: string; sourceKey: string };
+  | { kind: "remove"; id: string; sourceKey: string; retypeLegacy: boolean }
+  /** A legacy back-relation row: it duplicates a fact the FK side still mirrors, so it is deleted. */
+  | { kind: "drop"; id: string; sourceKey: string };
 
 export type DuplicateConflict = {
   scope: "element" | "relationship";
@@ -305,14 +334,20 @@ function diffRelationships(
       ops.push({ kind: "create", desired: entry });
     } else if (match.removed) {
       ops.push({ kind: "revive", id: match.id, desired: entry });
-    } else if (match.descriptor !== entry.descriptor) {
+    } else if (match.descriptor !== entry.descriptor || (match.typeSlug && match.typeSlug !== entry.relationshipTypeSlug)) {
       ops.push({ kind: "update", id: match.id, desired: entry });
     }
   }
 
   for (const row of existing) {
-    if (!desiredKeys.has(row.sourceKey) && !row.removed) {
-      ops.push({ kind: "remove", id: row.id, sourceKey: row.sourceKey });
+    if (desiredKeys.has(row.sourceKey)) continue;
+    if (row.ownsForeignKey === false) {
+      ops.push({ kind: "drop", id: row.id, sourceKey: row.sourceKey });
+      continue;
+    }
+    const legacy = row.typeSlug === LEGACY_MIRROR_RELATIONSHIP_TYPE_SLUG;
+    if (!row.removed || legacy) {
+      ops.push({ kind: "remove", id: row.id, sourceKey: row.sourceKey, retypeLegacy: legacy });
     }
   }
 
@@ -371,7 +406,8 @@ export function summarizePlan(plan: MirrorPlan): MirrorChangeSummary {
     created: count(plan.elementOps, "create") + count(plan.relationshipOps, "create"),
     updated: count(plan.elementOps, "update") + count(plan.relationshipOps, "update"),
     revived: count(plan.elementOps, "revive") + count(plan.relationshipOps, "revive"),
-    removed: count(plan.elementOps, "remove") + count(plan.relationshipOps, "remove"),
+    removed:
+      count(plan.elementOps, "remove") + count(plan.relationshipOps, "remove") + count(plan.relationshipOps, "drop"),
   };
 }
 

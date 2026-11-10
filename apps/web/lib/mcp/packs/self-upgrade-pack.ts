@@ -226,15 +226,23 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
     ]);
   const config = await getSelfUpgradeConfig();
   const { getLastCheckedAt } = await import("@/lib/self-upgrade/last-check");
-  const { declineIsCurrent, nextScheduledCheckAt } = await import("@/lib/self-upgrade/scheduled-gate");
-  const { getScheduledDecline } = await import("@/lib/self-upgrade/scheduled-gate");
+  const { declineIsCurrent, getScheduledDecline, getWindowDecline, missedWindowDecline, nextScheduledCheckAt } =
+    await import("@/lib/self-upgrade/scheduled-gate");
+  const { resolveEffectiveUpgradeWindow, schedulingWindowOpening } = await import("@/lib/self-upgrade/effective-window");
   const { getDeferredUpgradeRequest, isDeferredRequestPending } = await import("@/lib/self-upgrade/deferred-request");
-  const [batch, latestRun, lastCheckedAt, decline, deferred] = await Promise.all([
+  const now = new Date();
+  const [batch, latestRun, lastCheckedAt, decline, deferred, windowDecline, windowOpening] = await Promise.all([
     resolveReleaseBatchStatus({ fresh: true, config }),
     getLatestRun(),
     getLastCheckedAt(),
     getScheduledDecline(),
     getDeferredUpgradeRequest(),
+    getWindowDecline(),
+    // BI-EF1AC111: the window opening the next check would run in, which the
+    // interval is anchored to. Unknown (null) falls back to the plain interval.
+    resolveEffectiveUpgradeWindow({ config, now })
+      .then((window) => schedulingWindowOpening(window, now))
+      .catch(() => null),
   ]);
   const support = batch.support;
   // BI-3CA18934: the unattended path is throttled by checkIntervalHours and
@@ -242,8 +250,9 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
   // reported routineUpgradeEligible:true while the next unattended check was 22
   // hours away, so a merged fix looked imminent and never arrived. Report the
   // schedule, and never call the routine path eligible while it would decline.
-  const nextScheduledCheck = nextScheduledCheckAt(lastCheckedAt, config.checkIntervalHours, new Date());
+  const nextScheduledCheck = nextScheduledCheckAt(lastCheckedAt, config.checkIntervalHours, now, windowOpening);
   const scheduledGate = declineIsCurrent(decline, lastCheckedAt) ? decline : null;
+  const missedWindow = missedWindowDecline(windowDecline, lastCheckedAt);
   const releaseBatchEligible = support.enabled && batch.eligible;
   return {
     success: true,
@@ -261,6 +270,11 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
       checkIntervalHours: config.checkIntervalHours,
       nextScheduledCheckAt: nextScheduledCheck?.toISOString() ?? null,
       scheduledGate: scheduledGate ? { reason: scheduledGate.reason, at: scheduledGate.at } : null,
+      // BI-EF1AC111 (AC-3): a window that went without a check, and why. The
+      // daytime ticks after it do not overwrite it; the next check clears it.
+      missedWindow: missedWindow
+        ? { reason: missedWindow.reason, at: missedWindow.at, windowOpenedAt: missedWindow.windowOpenedAt }
+        : null,
       // BI-2128872C: an agent request waiting for the next maintenance window.
       deferredRequest: isDeferredRequestPending(deferred, lastCheckedAt) ? deferred : null,
       reason: support.supported ? batch.reason : support.reason,

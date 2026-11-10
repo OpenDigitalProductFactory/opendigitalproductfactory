@@ -1,4 +1,5 @@
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { redactDiagnosticEvidenceText } from "@/lib/shared/diagnostic-evidence-redaction";
 import type { Prisma } from "@dpf/db";
 import type { RemoteTaskSubmitAuth } from "@/lib/mcp-task-submit-types";
 import { parseEngagementTaskBinding, engagementInputDigest, buildEngagementTaskPrompt, ENGAGEMENT_READ_TOOLS } from "@/lib/coworker-service-catalog/engagement-task-binding";
@@ -282,8 +283,9 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
     } catch (error) {
       const persisted = await prisma.coworkerEngagement.findUnique({ where: { engagementId } });
       if (record(persisted?.metadata).presentAssessment !== undefined) return fulfillCoworkerEngagement(engagementId, undefined, userId, context, db);
-      return { success: false, error: "engagement_present_refused", message: error instanceof Error ? error.message : "Current finite assessment authority could not be verified.",
-        data: { engagementId, executionRequested: false, action: "Inspect this original engagement's current native authority/configuration failure; do not create a replacement or replay the held task." } };
+      const reason = redactDiagnosticEvidenceText(error instanceof Error ? error.message : "Current finite assessment authority could not be verified.");
+      return { success: false, error: "engagement_present_refused", message: reason,
+        data: { engagementId, executionRequested: false, reason, action: "Inspect this original engagement's current native authority/configuration failure; do not create a replacement or replay the held task." } };
     }
   }
   if (Object.keys(supplied).some(key => !["workroomId", "stageKey", "artifactRef", "guidanceArtifacts", "visualEvidenceRef"].includes(key))) return { success: false, error: "engagement_locator_invalid", message: "Use the original artifact and current room stage; original request inputs cannot be replaced." };

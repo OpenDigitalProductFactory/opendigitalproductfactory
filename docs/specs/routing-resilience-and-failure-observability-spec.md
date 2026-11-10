@@ -180,12 +180,14 @@ Implementation shape:
    - `getExclusionReasonV2()` returns a clear reason such as `runtime_cooldown:rate_limit` when `unavailableUntilMs > now`.
 4. Preserve lifecycle writes only for durable conditions:
    - Auth/billing failures may disable provider lifecycle state after explicit classification.
+   - The platform's own daily paid AI allowance is not a provider billing failure. `AgentAllowanceExhaustedError` is skipped without a cooldown, degradation or lifecycle write, so a free endpoint can still serve; only when every endpoint refused does the chain surface it, typed (BI-F3B6713F).
    - For a subscription OAuth sign-in, the explicit classification is the renewal's answer: only a confirmed refusal (RFC 6749 `invalid_grant`, or no refresh token) takes the account out of routing. A bare 401/403 from the token endpoint, or a second auth error after a successful renewal, keeps it routable behind the runtime cooldown; background renewal (`ops/subscription-oauth-renewal`) retries with backoff and raises a "sign in again" attention item only on a confirmed refusal (BI-A53C594E).
    - Rate limit and transient provider overload should open the runtime circuit, not permanently mutate `ModelProvider.status`.
    - Existing `ModelProfile.modelStatus = "degraded"` can remain for model quality/profile degradation, but it is not sufficient as the circuit gate because degraded endpoints are intentionally eligible today.
 5. Recovery:
    - For rate limit/overload/transient: use retry headers where present; otherwise capped cooldown with jitter.
    - For auth/billing: open until manual remediation or a successful explicit provider test clears the condition.
+   - An account-bound auth/billing switch-off (`AiProviderConnection.status = "unconfigured"`, set from `callWithFallbackChain`) is recorded as automatic. It goes through `routing/provider-account-auto-disable.ts`, which writes a per-connection recovery job and sends `ops/provider.recover` with the `connectionId`. Recovery renews the OAuth sign-in through the guarded account path, then reopens the account half-open, with backoff from 15 minutes up to 6 hours. Before this, the account path wrote the status and nothing else: it never recovered, renewal skipped it, and the capacity watch never saw it (BI-0ADD46C3). At boot, default accounts already stranded this way are adopted into recovery.
    - Recovery probe clears runtime cooldown only after a successful provider/model call or provider-specific health check.
 
 Acceptance:

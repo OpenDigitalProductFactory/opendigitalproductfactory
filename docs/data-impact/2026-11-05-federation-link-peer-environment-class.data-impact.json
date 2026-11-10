@@ -1,0 +1,50 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-operations",
+  "affectedCopies": [
+    "FederationLink.peerEnvironmentClass / peerEnvironmentAttestedAt, written only by createFederationLinkRow (apps/web/lib/federation/enrollment.ts) from the CA-verified leaf certificate (verifyMembershipChain in apps/web/lib/federation/membership-proof.ts), and read by the instance stance (apps/web/lib/install/instance-stance.ts) through the pairing resolver"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "Operational trust metadata about a peer installation: one of production, development or test, and when it was attested. No content about a person.",
+    "dataSubjectRights": "Not personal data. The values follow the federation link row and are removed with it.",
+    "reviewDisposition": "Two nullable columns on the existing link row; no new table, journal or retention copy."
+  },
+  "migration": {
+    "name": "20261105060000_federation_link_peer_environment_class",
+    "backfill": "None. Existing links read NULL, meaning unattested, and are never treated as production; they become attested when the peer joins again with a join file that names its class.",
+    "rollback": "Forward-only additive columns. Older source never reads them and keeps its previous stance. The columns can stay."
+  },
+  "tests": [
+    "apps/web/lib/federation/environment-class-attestation.test.ts",
+    "apps/web/lib/federation/organization-membership.test.ts",
+    "apps/web/lib/install/instance-stance.test.ts",
+    "packages/db/src/installation-instance-stance.test.ts",
+    "packages/db/src/installation-peer-pairing.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:federation-link#peer-environment-class",
+      "prismaModel": "FederationLink",
+      "lifecycleDisposition": "cleared with the owning federation link",
+      "fields": [
+        {
+          "fieldId": "data:federation-link#peerEnvironmentClass",
+          "resolution": "governed",
+          "reason": "The peer's environment class as the organization CA certified it in the peer's member certificate. NULL means unattested. The stance reads it to decide what this installation may ask of the peer.",
+          "provenance": "BI-0716C8A8 / A2A design section 19.2 (DI-13CEFD0A8156)",
+          "flags": [],
+          "fieldPolicy": "learn only from a verified certificate chain to the pinned organization root; never from the peer's statement or an operator label"
+        },
+        {
+          "fieldId": "data:federation-link#peerEnvironmentAttestedAt",
+          "resolution": "governed",
+          "reason": "When the attested class was recorded; NULL when unattested.",
+          "provenance": "BI-0716C8A8",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

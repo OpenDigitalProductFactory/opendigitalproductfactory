@@ -47,6 +47,8 @@ describe("resolveInstallationPairing", () => {
       ref: "operator-production",
       source: "declared-intent",
       declaredButUnconfirmed: true,
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
     });
   });
 
@@ -55,6 +57,8 @@ describe("resolveInstallationPairing", () => {
       ref: null,
       source: "none",
       declaredButUnconfirmed: false,
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
     });
   });
 
@@ -131,5 +135,25 @@ describe("pairingSupportsWorkSync", () => {
 
   it("refuses when there is no pairing at all", () => {
     expect(pairingSupportsWorkSync(resolveInstallationPairing({ links: [] }))).toBe(false);
+  });
+});
+
+describe("resolveInstallationPairing — attested peer (BI-0716C8A8)", () => {
+  it("carries the link's attested class and the peer installation's own name", () => {
+    const result = resolveInstallationPairing({
+      links: [link({ peerEnvironmentClass: "development", peerInstallationLabel: "Windows DEV (did_ab12…9f0c)" })],
+    });
+    expect(result).toMatchObject({
+      ref: "operator-production",
+      peerEnvironmentClass: "development",
+      peerInstallationLabel: "Windows DEV (did_ab12…9f0c)",
+    });
+  });
+
+  it("knows no class or installation for a pairing that is only declared", () => {
+    expect(resolveInstallationPairing({ declaredRef: "operator-production", links: [] })).toMatchObject({
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
+    });
   });
 });

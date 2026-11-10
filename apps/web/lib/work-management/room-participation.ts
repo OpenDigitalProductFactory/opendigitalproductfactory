@@ -23,6 +23,19 @@ export function clearanceCovers(clearance: readonly string[], ceiling: string): 
   return Math.max(-1, ...clearance.map((value) => SENSITIVITY_RANK[value] ?? -1)) >= required;
 }
 
+const CLEARANCE_LEVELS = ["public", "internal", "confidential", "restricted"] as const;
+
+/** Every level from public up to and including `ceiling`; empty for an unknown ceiling. */
+export function clearanceLevelsUpTo(ceiling: string): string[] {
+  const index = (CLEARANCE_LEVELS as readonly string[]).indexOf(ceiling);
+  return index < 0 ? [] : CLEARANCE_LEVELS.slice(0, index + 1);
+}
+
+/** The highest level held, in the words a person reads; "public" when nothing known is held. */
+export function highestClearance(clearance: readonly string[]): string {
+  return [...CLEARANCE_LEVELS].reverse().find((level) => clearance.includes(level)) ?? "public";
+}
+
 export type WorkroomAccessDecision = {
   level: WorkroomAccessLevel;
   reason: "authorized" | "discover-only" | "not-admitted" | "insufficient-clearance";

@@ -61,6 +61,23 @@ Related live items to reconcile, not duplicate:
 - `BI-7245485A`, federated MCP identity challenge;
 - `BI-50136281`, companion funding fails closed.
 
+## 2a. Traceability
+
+Each deliverable of this initiative traces to the design's objectives (§12) and acceptance checks. P0a, P0b, P0d, P6, P9 and P10 are dependencies with their own acceptance and are not deliverables of this coverage.
+
+| Key | Backlog item | Objectives | Contracts | Flows | Acceptance |
+| --- | --- | --- | --- | --- | --- |
+| P0c | `BI-0716C8A8` | OBJ-PAC5 | contract:attested-environment-class | flow:pairing-attestation | AC-PAC-15 |
+| P1 | `BI-B50BE189` | OBJ-PAC5 | contract:authority-companion-relationship | flow:stance-briefing | AC-PAC-16 |
+| P2 | `BI-981AE847` | OBJ-PAC5 | contract:companion-declaration | flow:operator-repurposing | AC-PAC-15, AC-PAC-16 |
+| P3 | `BI-1B165D02` | OBJ-PAC1 | contract:guidance-snapshot | flow:guidance-delivery | AC-PAC-01, AC-PAC-02, AC-PAC-04 |
+| P4 | `BI-32EB31FD` | OBJ-PAC1 | contract:companion-funding-binding | flow:spend-reporting | AC-PAC-03, AC-PAC-05 |
+| P5 | `BI-30EDDB7F` | OBJ-PAC2 | contract:home-claim | flow:claim-request | AC-PAC-06, AC-PAC-07, AC-PAC-08, AC-PAC-09 |
+| P7 | `BI-7E73D523` | OBJ-PAC4 | contract:agent-identity-document | flow:trust-bundle-delivery | AC-PAC-13, AC-PAC-14 |
+| P8 | `BI-0F8CEAD4` | OBJ-PAC3 | contract:room-membership-event | flow:cross-install-thread | AC-PAC-10, AC-PAC-11, AC-PAC-12 |
+
+Dependencies inside the coverage: P1 on P0c; P2, P3 and P5 on P1; P4 on P3; P7 on P0c; P8 on P7. P8 also needs P0d, which ships on its own.
+
 ## 3. Phase detail
 
 Every phase starts with a failing test reproducing the gap at the cited line on `origin/main`.
