@@ -12,7 +12,7 @@ export const createRecurringScheduleSchema = z.object({
   endDate: z.string().optional(),
   autoSend: z.boolean().default(true),
   templateNotes: z.string().optional(),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).optional(), // absent = the org base currency, filled by the writer (BI-6030131C)
   lineItems: z
     .array(
       z.object({

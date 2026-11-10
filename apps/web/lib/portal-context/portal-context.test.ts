@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const roomAccess = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveHumanWorkroomAccess: roomAccess }));
+beforeEach(() => { roomAccess.mockReset().mockResolvedValue({ decision: { level: "none" } }); });
 
 // Keep the envelope hermetic: the queue-attention resolver reads QueueMetricSnapshot
 // via the live client; stub it so this suite never touches an ambient DB.
@@ -186,7 +190,9 @@ describe("resolvePortalContextEnvelopeUncached", () => {
     );
   });
 
-  it("lets the capsule executor principal act on the active capsule without broad platform role", async () => {
+  it.each(["allowed", "denied", "unavailable"])("uses canonical room action admission: %s", async scenario => {
+    if (scenario === "allowed") roomAccess.mockResolvedValue({ decision: { level: "action" } });
+    if (scenario === "unavailable") roomAccess.mockRejectedValue(new Error("access unavailable"));
     const db = createDbMock({
       user: {
         id: "user-1",
@@ -228,7 +234,9 @@ describe("resolvePortalContextEnvelopeUncached", () => {
     );
 
     expect(envelope.work.capsule?.capsuleId).toBe("WC-123");
-    expect(envelope.authority.canActOnCapsule).toBe(true);
+    expect(envelope.authority.canActOnCapsule).toBe(scenario === "allowed");
+    expect(roomAccess).toHaveBeenCalledWith({ userId: "user-1", workroomId: "capsule-row-1", requested: "action" }, db);
+    if (scenario === "unavailable") expect(envelope.attention).toContainEqual(expect.objectContaining({ kind: "source_unavailable", message: expect.stringContaining("room-authority") }));
   });
 
   it("keeps proposal mode inactive for an anchored build when the current task is not in proposal mode", async () => {

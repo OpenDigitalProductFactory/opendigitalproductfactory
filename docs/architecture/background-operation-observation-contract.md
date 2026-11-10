@@ -77,6 +77,7 @@ the browser free to navigate immediately.
 | Concern | Canonical primitive |
 | --- | --- |
 | Shared shell connection and fan-out | `apps/web/components/platform/SystemEventProvider.tsx` |
+| System event context and consumer hooks (`useSystemEvent`, `useSystemEventConnectionStatus`) | `apps/web/lib/hooks/system-events.ts` |
 | Resilient SSE transport | `apps/web/lib/hooks/useResilientEventSource.ts` |
 | Targeted observation lifecycle | `apps/web/lib/hooks/useBackgroundOperationObserver.ts` |
 | Durable system event types | `apps/web/lib/tak/agent-event-bus.ts` |

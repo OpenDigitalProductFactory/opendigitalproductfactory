@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { prisma } from "@dpf/db";
+import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
 
 import { decodeDemandMirrorPayload, type DemandDisposition } from "./demand-exchange";
 import { decodeDemandResponseMirrorPayload } from "./demand-response";
@@ -178,7 +179,21 @@ export const getDemandShareContext = cache(async (): Promise<DemandShareContext>
     prisma.backlogItem.findMany({
       where: {
         status: { in: ["open", "in-progress"] },
-        NOT: { body: { contains: "[origin:federatedDemand:" } },
+        // `body` is nullable, and NOT (body LIKE '...') is NULL - not TRUE - for
+        // a NULL body, so the bare NOT silently dropped every demand item nobody
+        // wrote prose for. Same defect, same column, same feature as the one that
+        // cost 29 epics their sync (#5007); the null companion is the fix, and
+        // check-no-unguarded-not-contains.mjs now holds the shape.
+        OR: [
+          { body: null },
+          {
+            NOT: [
+              { body: { contains: "[origin:federatedDemand:" } },
+              // A work-sync mirror is not local demand to share (BI-FF8A57EF).
+              { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } },
+            ],
+          },
+        ],
       },
       select: { itemId: true, title: true, status: true },
       orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],

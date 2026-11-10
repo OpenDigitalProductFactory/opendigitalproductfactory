@@ -14,7 +14,18 @@
 
 import { describe, expect, it } from "vitest";
 
-import { diffSchemas, parseSchema } from "./schema-regression-guard.mjs";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  INTENTIONAL_FIELD_REMOVALS,
+  INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS,
+  INTENTIONAL_MODEL_REMOVALS,
+  INTENTIONAL_MODEL_RENAMES,
+  diffSchemas,
+  parseSchema,
+} from "./schema-regression-guard.mjs";
 
 // A minimal schema we can mutate per-test. Kept narrow so the diffs are easy
 // to reason about; real schema.prisma is thousands of lines but the algorithm
@@ -372,5 +383,73 @@ model NewThing {
 `);
     const regressions = diffSchemas(base, head, new Set(), RENAMES);
     expect(regressions).toContain("model Holder removed entirely");
+  });
+});
+
+describe("intentional model retirements", () => {
+  const base = parseSchema(`
+model Parent {
+  id   String  @id
+  kids Gone[]
+}
+
+model Gone {
+  id       String @id
+  parentId String
+  parent   Parent @relation(fields: [parentId], references: [id])
+}
+`);
+  const head = parseSchema(`
+model Parent {
+  id String @id
+}
+`);
+
+  it("accepts a steward-reviewed model retirement and its back-relation", () => {
+    expect(
+      diffSchemas(base, head, new Set(["Parent.kids"]), new Map(), new Set(), new Set(["Gone"])),
+    ).toEqual([]);
+  });
+
+  it("still blocks an unlisted model removal", () => {
+    expect(
+      diffSchemas(base, head, new Set(["Parent.kids"]), new Map(), new Set(), new Set(["Other"])),
+    ).toEqual(["model Gone removed entirely"]);
+  });
+
+  it("does not let a model retirement excuse its back-relation field", () => {
+    expect(
+      diffSchemas(base, head, new Set(), new Map(), new Set(), new Set(["Gone"])),
+    ).toEqual(["model Parent: removed `kids Gone[]`"]);
+  });
+
+  // BI-911840CB: the contraction cited by the PortfolioBudgetPeriod and
+  // BudgetReservation raises retires two models no live code reads.
+  it("retires VoiceTrainingJob and ExamVoucher, and they are gone from the schema", () => {
+    expect(INTENTIONAL_MODEL_REMOVALS.has("VoiceTrainingJob")).toBe(true);
+    expect(INTENTIONAL_MODEL_REMOVALS.has("ExamVoucher")).toBe(true);
+    expect(INTENTIONAL_FIELD_REMOVALS.has("VoiceProfile.trainingJobs")).toBe(true);
+    expect(INTENTIONAL_FIELD_REMOVALS.has("CourseRegistration.examVoucher")).toBe(true);
+
+    const schemaDir = resolve(dirname(fileURLToPath(import.meta.url)), "../prisma/schema");
+    const schema = parseSchema(
+      readdirSync(schemaDir)
+        .filter((name) => name.endsWith(".prisma"))
+        .map((name) => readFileSync(resolve(schemaDir, name), "utf8"))
+        .join("\n"),
+    );
+    for (const retired of INTENTIONAL_MODEL_REMOVALS) {
+      expect(schema.models.has(retired), `${retired} is retired but still declared`).toBe(false);
+    }
+  });
+
+  it("keeps the default allowlists wired into the default diff", () => {
+    const withDefaults = diffSchemas(
+      parseSchema("model VoiceTrainingJob {\n  id String @id\n}\n"),
+      parseSchema(""),
+    );
+    expect(withDefaults).toEqual([]);
+    expect(INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS.size).toBeGreaterThan(0);
+    expect(INTENTIONAL_MODEL_RENAMES.size).toBeGreaterThan(0);
   });
 });

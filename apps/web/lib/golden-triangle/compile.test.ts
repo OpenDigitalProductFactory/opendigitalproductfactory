@@ -66,6 +66,32 @@ describe("compileGoldenTrianglePolicy — presets", () => {
   });
 });
 
+describe("compileGoldenTrianglePolicy — verification policy floor", () => {
+  it("makes a deep PolicyConstraints floor load-bearing even for Fast", () => {
+    const out = compileGoldenTrianglePolicy(
+      input(pref("fast"), { policyConstraints: { verificationDepthFloor: "deep" } }),
+    );
+    expect(out.orchestrationBudget.verificationDepth).toBe("deep");
+    expect(out.adjustments).toContainEqual(
+      expect.objectContaining({
+        field: "verificationDepth",
+        reasonCode: "verification_depth_floor",
+        to: "deep",
+      }),
+    );
+  });
+
+  it("never lets a shallower policy floor reduce an already-deep posture", () => {
+    const out = compileGoldenTrianglePolicy(
+      input(pref("assured"), { policyConstraints: { verificationDepthFloor: "shallow" } }),
+    );
+    expect(out.orchestrationBudget.verificationDepth).toBe("deep");
+    expect(out.adjustments).not.toContainEqual(
+      expect.objectContaining({ reasonCode: "verification_depth_floor" }),
+    );
+  });
+});
+
 describe("compileGoldenTrianglePolicy — custom positions", () => {
   it("cost-dominant (0.6/0.3/0.1) → minimize_cost (frugal-leaning)", () => {
     const out = compileGoldenTrianglePolicy(

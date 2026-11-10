@@ -3,7 +3,7 @@
 // ratchet refuses to grandfather a NEW route, so the identity surface arrives
 // ratified. Shape mirrors right-now.ts.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const COWORKER_IDENTITY_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

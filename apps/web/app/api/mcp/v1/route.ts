@@ -1,3 +1,4 @@
+import { reviewTaskTransportRefusal } from "@/lib/mcp-task-reassessment-transport";
 // Real MCP JSON-RPC 2.0 transport for external coding agents (Claude Code,
 // Codex CLI, VS Code MCP) on the user's host. Spec snapshot in
 // docs/Reference/mcp/spec/ (version 2025-11-25).
@@ -18,13 +19,8 @@
 //                              AS, same scope vocabulary, same revocation
 //                              surface. A grant type, not a side door.
 //
-// This file previously read: "We do NOT implement OAuth 2.1 resource-server
-// discovery (the GitHub-PAT pattern, intentionally)." That was right for a
-// single-operator loopback surface and stopped being right once (a) five
-// external clients connect and all of them perform RFC 9728 discovery,
-// (b) `2025-11-25` made Protected Resource Metadata a server MUST while we
-// advertise that revision on the wire, and (c) consumer installs have no
-// operator with a portal habit to mint a token by hand.
+// RFC 9728 resource discovery serves external clients and installs whose
+// operators have no portal session from which to provision a token.
 //
 // The `dpfmcp_` PAT still resolves, and every configured client keeps working.
 // It is on a deprecation horizon: issuance closes first, resolution survives
@@ -33,30 +29,35 @@
 // surfaces and two audit shapes — and the second is the one nobody keeps
 // current.
 import {
-  resolveMcpApiToken,
   type McpTokenCapability,
   type McpTokenScope,
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
+import { observeConnection } from "@/lib/agent-toolchain/connection-observation";
+import { toolchainNoticeFor } from "@/lib/agent-toolchain/toolchain-notice";
+import { refuseBelowToolchainFloor } from "@/lib/mcp/toolchain-floor";
+import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
+import { normalizeTokenScope, requiredTokenScopeForTool, tokenAdmitsTool, tokenScopeSatisfies } from "@/lib/mcp/token-tool-scope";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
-import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
-import { buildUnauthorizedChallenge, resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
-import { resolveOAuthAccessToken } from "@/lib/auth/oauth-tokens";
-import { isPatResolutionDisabled } from "@/lib/auth/oauth-policy";
-import { type PublicScope } from "@/lib/auth/oauth-scope-map";
+import { oauthSetupRequiredResult } from "@/lib/auth/oauth-setup-required";
+import { resolveResourceOrigin } from "@/lib/auth/oauth-metadata";
 import { buildStepUpChallenge, type StepUpContext } from "@/lib/auth/oauth-step-up";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
-import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
+import { PLATFORM_TOOLS, resolveAnnotations } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { isToolAllowedDuringQuiescence, QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS } from "@/lib/mcp/quiescence-safe-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
-import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
+import { getToolGrantMapping, expandGrants, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
+import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import {
   resolveListingAuthorityForToken,
   filterListableTools,
 } from "@/lib/mcp/listing-authority-resolver";
-import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
+import { resolveToolResultProvenance, untrustedResultLabel } from "@/lib/tak/tool-result-provenance";
 import {
   resolveEffectiveTierForAuthSource,
   selectToolsForListing,
@@ -64,7 +65,6 @@ import {
   mergeLoadedToolNames,
   LOAD_TOOLS_TOOL_NAME,
   type McpToolTier,
-  type McpAuthSource,
 } from "@/lib/mcp/tool-tier";
 import { getLoadedToolNames, loadToolsForSession } from "@/lib/mcp/tool-session-store";
 import { SUPPORTED_PROTOCOL_VERSIONS } from "@/lib/mcp/protocol-versions";
@@ -76,21 +76,18 @@ import {
   handleTasksCancel,
   type TaskLifecycleResult,
 } from "@/lib/mcp/tasks-lifecycle";
-import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildUnknownToolResult, loadToolsSseResponse } from "@/lib/mcp/load-tools";
+import {
+  authenticateMcpRequest,
+  type ResolvedMcpTransportAuth as ResolvedAuth,
+} from "@/lib/mcp/transport-auth";
+import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
+import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveLoadToolsRequest, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
-import { prisma } from "@dpf/db";
-
-/** Resolved auth — either a persistent PAT or a short-lived internal session.
- * The route-side handlers consume this single shape; the only difference is
- * what `threadId`/`routeContext` populate audit rows with. */
-type ResolvedAuth = ResolvedMcpToken & {
-  threadId?: string | null;
-  routeContext?: string | null;
-  /** Where the auth came from — populates `ToolExecution.executionMode` so we can
-   *  tell internal cli-adapter calls from external coding-agent calls.
-   *  `oauth` is the default external door; `pat` is on a deprecation horizon. */
-  source: McpAuthSource;
-};
+import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
+import { sanitizeForLog } from "@/lib/security/safe-log";
+import { workroomBindingRefusal } from "@/lib/auth/workroom-session-token";
+// GPP Phase 2 PR-C: a replayed permit handle rides in tools/call params._meta.
+import { permitResultMeta, presentedPermitHandle } from "@/lib/gpp/permit-carriage";
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
@@ -158,127 +155,9 @@ function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
   return scope === "read" ? "read" : "write";
 }
 
-function normalizeTokenScope(token: Pick<ResolvedMcpToken, "scope" | "capability">): McpTokenScope {
-  if (token.scope === "admin" || token.scope === "write" || token.scope === "read") {
-    return token.scope;
-  }
-  return token.capability === "write" ? "write" : "read";
-}
-
-// The 401 is the entry point to the whole authorization flow, not just a
-// refusal: `resource_metadata` tells a conformant client where to discover the
-// authorization server, and `scope` tells it the least-privilege floor to ask
-// for. Without those two parameters a client that performs RFC 9728 discovery
-// — Claude Code, Codex and VS Code all do — has nothing to act on, which is
-// exactly why connecting used to require a human minting a token by hand.
-function unauthorizedResponse(detail: string, request: Request): Response {
-  return new Response(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id: null,
-      error: { code: JSONRPC_INVALID_REQUEST, message: `unauthorized: ${detail}` },
-    }),
-    {
-      status: 401,
-      headers: {
-        "Content-Type": "application/json",
-        "WWW-Authenticate": buildUnauthorizedChallenge(resolveResourceOrigin(request), detail),
-      },
-    },
-  );
-}
-
-function forbiddenResponse(detail: string, host: string | null): Response {
-  return new Response(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id: null,
-      error: { code: JSONRPC_INVALID_REQUEST, message: `forbidden: ${detail}` },
-    }),
-    {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    },
-  );
-}
-
-// Spec MUST: validate Origin header to prevent DNS rebinding attacks.
-function isOriginAllowed(origin: string | null): boolean {
-  if (!origin) return true; // non-browser clients (Claude Code, Codex CLI) don't send Origin
-  try {
-    const url = new URL(origin);
-    const host = url.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "::1") return true;
-    // Same-host as the portal (when a browser-based MCP client is on the same domain).
-    if (process.env.MCP_ALLOWED_ORIGIN_HOSTS) {
-      const allowed = process.env.MCP_ALLOWED_ORIGIN_HOSTS.split(",").map((h) => h.trim().toLowerCase());
-      if (allowed.includes(host)) return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-// Spec safety: refuse non-TLS requests except for localhost (Mode 1 / dev).
-//
-// When the portal runs behind a proxy or inside a container, `request.url`
-// reflects the *internal* bind address (e.g. 0.0.0.0) and protocol, not what
-// the client actually connected to. We trust X-Forwarded-Proto only for the
-// proxy's TLS termination signal. Host authorization for plain HTTP must use
-// the actual Host/request URL because X-Forwarded-Host is caller-controlled in
-// direct CLI/container traffic.
-//
-// MCP_INSECURE_INTERNAL_HOSTS — comma-separated hostnames that are trusted
-// to call the MCP transport over plain HTTP. Required for sandbox→portal
-// MCP traffic on the internal Docker bridge (`portal`, `host.docker.internal`,
-// etc.) where TLS termination is not available. Operator opt-in: empty/unset
-// means localhost-only. Bearer-token auth, origin check, scope/grant checks
-// are all still enforced — this only relaxes the transport-layer TLS gate.
-function isTransportAllowed(request: Request): boolean {
-  const xfProto = request.headers.get("x-forwarded-proto");
-  const url = new URL(request.url);
-  const proto = (xfProto?.split(",")[0]?.trim() || url.protocol.replace(/:$/, "")).toLowerCase();
-  if (proto === "https") return true;
-
-  const hostHeader = request.headers.get("host");
-  const rawHost = (hostHeader || url.host).toLowerCase();
-  // Strip port; bracketed IPv6 retains brackets after URL.host parsing.
-  const hostname = rawHost.replace(/^\[(.+)\]:?\d*$/, "$1").replace(/:\d+$/, "");
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
-    return true;
-  }
-  const internalAllowlist = process.env.MCP_INSECURE_INTERNAL_HOSTS;
-  if (internalAllowlist) {
-    const allowed = internalAllowlist
-      .split(",")
-      .map((h) => h.trim().toLowerCase())
-      .filter((h) => h.length > 0);
-    if (allowed.includes(hostname)) return true;
-  }
-  return false;
-}
-
 async function loadUserContext(userId: string): Promise<UserContext> {
-  const row = await prisma.user
-    .findUnique({
-      where: { id: userId },
-      select: {
-        isSuperuser: true,
-        // ALL groups, not `take: 1`: a human in more than one group has their
-        // platform role under-determined by the first row (which may even carry
-        // a null platformRole). Resolve it exactly as the web session does
-        // (resolveWorkforcePlatformRole — first group with a non-null role) so
-        // the agent's role matches what the human sees logged in.
-        groups: { include: { platformRole: true } },
-      },
-    })
-    .catch(() => null);
-  return {
-    userId,
-    platformRole: row ? resolveWorkforcePlatformRole(row.groups) : null,
-    isSuperuser: row?.isSuperuser ?? false,
-  };
+  return await currentUserContext(userId).catch(() => null)
+    ?? { userId, platformRole: null, isSuperuser: false };
 }
 
 // Tool is included in tools/list iff:
@@ -293,46 +172,20 @@ function tokenCanUseTool(
   userContext: UserContext,
   grantMap: Record<string, string[]>,
 ): boolean {
-  if (tool.requiredCapability && !can(userContext, tool.requiredCapability as CapabilityKey)) {
-    return false;
-  }
-  const required = grantMap[tool.name];
-  if (!required) return false; // default-deny tools without a grant entry
-  const requiredScope = requiredTokenScopeForTool(tool, required);
-  if (!tokenScopeSatisfies(normalizeTokenScope(token), requiredScope)) {
-    return false;
-  }
-  // Expand through GRANT_IMPLICATIONS so an implying grant (e.g. build_promote)
-  // surfaces the finer-grant tools it implies (e.g. build_lifecycle). Mirrors
-  // the call-time check below and the agent-grant layer.
-  return required.some((g) => expandGrants(token.scopes).includes(g));
+  return roleAllowsTool(tool, userContext) && tokenScopesAllowTool(tool, token, grantMap);
 }
 
-function requiredTokenScopeForTool(
-  tool: ToolDefinition | undefined,
-  requiredGrants: readonly string[],
-): McpTokenScope {
-  if (requiredGrants.some((grant) => grant.startsWith("admin_"))) return "admin";
-  return tool?.sideEffect ? "write" : "read";
+function roleAllowsTool(tool: ToolDefinition, userContext: UserContext): boolean {
+  return !tool.requiredCapability || can(userContext, tool.requiredCapability as CapabilityKey);
 }
 
-function tokenScopeSatisfies(actual: McpTokenScope, required: McpTokenScope): boolean {
-  if (required === "read") return true;
-  if (required === "write") return actual === "write" || actual === "admin";
-  return actual === "admin";
+// The token half on its own, so load_tools can tell a token gap from a role gap.
+// Default-deny a tool with no grant entry; scope and expanded grants both admit
+// it, the same rule the call-time check and the agent-grant layer use.
+function tokenScopesAllowTool(tool: ToolDefinition, token: ResolvedMcpToken, grantMap: Record<string, string[]>): boolean {
+  return tokenAdmitsTool(tool, grantMap[tool.name], token);
 }
 
-const QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS = new Set([
-  // Releasing a lease is cleanup, and is what prevents quiescence-blocked
-  // local-CI evidence writes from leaking scarce nonprod environments.
-  "release_nonprod_environment_lease",
-]);
-
-function isToolAllowedDuringQuiescence(toolName: string, tool: ToolDefinition | undefined): boolean {
-  if (toolName === "get_quiescence_status") return true;
-  if (tool?.sideEffect === false) return true;
-  return QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS.has(toolName);
-}
 
 async function quiescenceRefusalResult(
   toolName: string,
@@ -354,7 +207,7 @@ async function quiescenceRefusalResult(
     readOperationsAllowed: true,
     cleanupOperationsAllowed: [...QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS],
     implications:
-      "Mutating MCP writes are refused while the portal is quiescing. Retry after quiescence clears; cleanup-safe lease release remains available.",
+      "Mutating MCP writes are refused while the portal is quiescing. Retry after quiescence clears; lease release and renewal remain available.",
   };
   return {
     content: [
@@ -447,11 +300,15 @@ async function handleLoadTools(
   const granted = PLATFORM_TOOLS.filter((t) => tokenCanUseTool(t, token, userContext, grantMap));
   // Same authority filter as tools/list: a token can never load (and so never
   // call) a tool the agent's grants / the human's clearance would reject.
-  const authorized = filterListableTools(
-    granted,
-    await resolveListingAuthorityForToken(token, userContext),
-  );
-  const selected = resolveLoadToolsSelection(authorized, args);
+  const authority = await resolveListingAuthorityForToken(token, userContext);
+  const authorized = filterListableTools(granted, authority);
+  const toolByName = new Map(PLATFORM_TOOLS.map((tool) => [tool.name, tool]));
+  const knownNames = new Set(toolByName.keys());
+  const authorizedNames = new Set(authorized.map((tool) => tool.name));
+  const discovery = resolveLoadToolsRequest(args, granted);
+  const selected = resolveLoadToolsSelection(authorized, { names: discovery.names });
+  // Judge against what selection drew from (agent-filtered), not the token-only list.
+  const noMatch = classifyLoadToolsNoMatch(discovery, knownNames, authorizedNames, new Set(selected.map((t) => t.name)));
   // W12 (BI-EE64547B): internal session-JWT calls are per-call stateless — the
   // result still carries the selected definitions inline, but no per-token
   // session row is written (internal lists are full-tier; nothing to append).
@@ -459,9 +316,17 @@ async function handleLoadTools(
     token.source === "session-jwt"
       ? mergeLoadedToolNames([], selected.map((t) => t.name))
       : await loadToolsForSession(token.tokenId, selected.map((t) => t.name));
+  const status = buildLoadToolsStatus(discovery, {
+    knownNames, authorizedNames, loadedToolNames, authority, isAllowedByGrants: isToolAllowedByGrants,
+    tokenGrants: (name) => tokenScopesAllowTool(toolByName.get(name)!, token, grantMap),
+    roleAllows: (name) => roleAllowsTool(toolByName.get(name)!, userContext),
+    requiredGrants: (name) => grantMap[name] ?? [],
+  });
   const result = buildLoadToolsResult(
     selected.map((t) => ({ name: t.name, description: t.description })),
     loadedToolNames,
+    noMatch,
+    status,
   );
   return acceptsEventStream && selected.length > 0
     ? loadToolsSseResponse(id, result)
@@ -480,13 +345,30 @@ async function handleTasksLifecycle(
   if (!tasksLifecycleEnabled()) {
     return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
   }
+  if (
+    method === "tasks/cancel"
+    && !tokenScopeSatisfies(normalizeTokenScope(token), "write")
+  ) {
+    return jsonRpcError(
+      id,
+      JSONRPC_INVALID_REQUEST,
+      "insufficient_scope: tasks/cancel requires a write-scoped MCP token",
+      {
+        error: "insufficient_token_scope",
+        method,
+        requiredScope: "write",
+        tokenScope: normalizeTokenScope(token),
+      },
+      403,
+    );
+  }
   let result: TaskLifecycleResult;
   switch (method) {
     case "tasks/get":
       result = await handleTasksGet(token.userId, params);
       break;
     case "tasks/result":
-      result = await handleTasksResult(token.userId, params);
+      result = await handleTasksResult(token.userId, params, { actingAgentId: token.agentId ?? null, tokenGrantScopes: token.scopes });
       break;
     case "tasks/list":
       result = await handleTasksList(token.userId, params);
@@ -524,6 +406,7 @@ async function handleTasksSubmit(
 }
 
 async function handleInitialize(
+  request: Request,
   id: JsonRpcId,
   token: ResolvedAuth,
   params?: Record<string, unknown>,
@@ -532,6 +415,7 @@ async function handleInitialize(
     id,
     await buildMcpInitializeResult({
       params,
+      toolchainNotice: await toolchainNoticeFor(request, token),
       authority: {
         scope: normalizeTokenScope(token),
         scopes: token.scopes,
@@ -589,8 +473,9 @@ async function handleToolsCall(
   if (!params || typeof params["name"] !== "string") {
     return jsonRpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name (string)");
   }
-  const toolName = params["name"];
+  const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+  const permitHandle = presentedPermitHandle(params["_meta"]);
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:
   // handle it inline (it manages per-token discovery state) and never route it
@@ -664,13 +549,17 @@ async function handleToolsCall(
     });
   }
 
+  const setupRefusal = oauthSetupRequiredResult(token, toolName, requiredScope, required);
+  if (setupRefusal) return jsonRpcOk(id, setupRefusal);
   const quiescenceRefusal = await quiescenceRefusalResult(toolName, toolDef);
   if (quiescenceRefusal) {
     return jsonRpcOk(id, quiescenceRefusal);
   }
 
+  const roomRefusal = workroomBindingRefusal(token, args); // BI-05715F4C
+  if (roomRefusal) return jsonRpcOk(id, roomRefusal);
   const userContext = await loadUserContext(token.userId);
-  const result = await governedExecuteTool({
+  const executed = await governedExecuteTool({
     toolName,
     rawParams: args,
     userId: token.userId,
@@ -680,12 +569,35 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
+      // Resolve the immutable review binding from the authenticated TaskRun.
+      ...(token.taskRunId ? { taskRunId: token.taskRunId } : {}),
+      ...(token.taskExecutionFence ? { taskExecutionFence: token.taskExecutionFence } : {}),
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
+      ...connectionDelegationFor(token),
+      ...(permitHandle ? { permitHandle } : {}),
     },
     source: token.source === "session-jwt" ? "internal-mcp-session" : "external-jsonrpc",
   });
+
+  // External CLIs feed this result straight into their model, so hidden
+  // Unicode is removed here exactly as the native loop removes it in
+  // clampToolResultForModel (BI-7AD0DA3D). The audited ToolResult stays whole.
+  const cleaned = sanitizeUntrustedValue({ message: executed.message, error: executed.error, data: executed.data });
+  const smugglingSuspected = looksLikeSmuggling(cleaned);
+  if (smugglingSuspected) {
+    console.warn("[mcp/v1] hidden-unicode payload removed from tool result tool=%s removed=%d", sanitizeForLog(toolName), cleaned.total);
+  }
+  // Spotlighting label (BI-1045525F): untrusted provenance is named in the text.
+  const label = untrustedResultLabel(resolveToolResultProvenance(toolName, PLATFORM_TOOLS));
+  const prefix = [label, smugglingSuspected ? invisibleRemovalNotice(cleaned) : ""].filter(Boolean).join("\n");
+  const result = {
+    ...executed,
+    message: prefix ? `${prefix}\n${cleaned.value.message ?? ""}` : cleaned.value.message,
+    error: cleaned.value.error,
+    data: cleaned.value.data,
+  };
 
   // Convert ToolResult into MCP tools/call response shape:
   //   - content[]: a single text block carrying a JSON serialization of the
@@ -723,7 +635,8 @@ async function handleToolsCall(
       dataForText = marker;
     }
   }
-  const text = JSON.stringify(
+  // BI-05715F4C: Claude's --permission-prompt-tool parses the text as the bare {behavior, ...} answer.
+  const text = toolName === "approve_runtime_permission" ? JSON.stringify(dataForText ?? {}) : JSON.stringify(
     {
       success: result.success,
       message: result.message,
@@ -741,87 +654,15 @@ async function handleToolsCall(
   if (structured !== undefined) {
     responseBody["structuredContent"] = structured;
   }
+  const meta = permitResultMeta({ data: result.data, governance: executed.governance }); // GPP PR-G, additive
+  if (meta) responseBody["_meta"] = meta;
   return jsonRpcOk(id, responseBody);
 }
 
 export async function POST(request: Request): Promise<Response> {
-  // Transport guards
-  if (!isTransportAllowed(request)) {
-    return forbiddenResponse(
-      "TLS required (HTTPS only outside localhost)",
-      new URL(request.url).hostname,
-    );
-  }
-  const origin = request.headers.get("origin");
-  if (!isOriginAllowed(origin)) {
-    return forbiddenResponse(`Origin ${origin} not allowed`, origin);
-  }
-
-  // Auth — two paths:
-  //   X-MCP-Session: <jwt>      — short-lived internal session (Claude CLI
-  //                                adapter, future internal callers). JWT
-  //                                carries userId/agentId/threadId/scopes.
-  //   Authorization: Bearer ... — persistent dpfmcp_* PAT for external
-  //                                coding agents (Mark's laptop, VS Code).
-  // Session JWT wins when both are present so the adapter's narrow per-call
-  // scope cannot accidentally be widened by a stale operator PAT in the same
-  // sandbox shell environment.
-  const sessionHeader = request.headers.get("x-mcp-session");
-  let token: ResolvedAuth;
-  // Public scopes actually consented for an OAuth caller. Empty for PAT and
-  // session-JWT callers, which is what keeps the step-up 403 scoped to OAuth
-  // and leaves the existing insufficient_token_scope contract byte-identical
-  // for everyone else.
-  let oauthGrantedScopes: PublicScope[] = [];
-  if (sessionHeader) {
-    const session = await verifyMcpSessionToken(sessionHeader.trim());
-    if (!session) {
-      return unauthorizedResponse("invalid or expired MCP session", request);
-    }
-    token = {
-      tokenId: `session:${session.userId}:${session.agentId ?? "no-agent"}`,
-      userId: session.userId,
-      agentId: session.agentId ?? null,
-      scopes: session.scopes,
-      scope: session.capability === "write" ? "write" : "read",
-      capability: session.capability,
-      threadId: session.threadId ?? null,
-      routeContext: session.routeContext ?? null,
-      source: "session-jwt",
-    };
-  } else {
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
-      return unauthorizedResponse("missing Bearer token or X-MCP-Session header", request);
-    }
-    const plaintext = authHeader.slice("bearer ".length).trim();
-
-    // OAuth access token first — it is the default door. Audience binding is
-    // enforced inside the resolver: a token minted for another install's
-    // canonical resource URI is refused here rather than honoured, which is
-    // what stops cross-install replay (`authorization.mdx:469-483`).
-    const oauth = await resolveOAuthAccessToken(plaintext, resolveResourceOrigin(request));
-    if (oauth) {
-      token = { ...oauth.resolved, source: "oauth" };
-      oauthGrantedScopes = oauth.publicScopes;
-    } else {
-      // Falling back to the dpfmcp_ PAT. This path is on a deprecation
-      // horizon (design §9.5): issuance closes first, resolution survives
-      // until the operator sets the horizon, so no configured client breaks
-      // mid-flight.
-      if (isPatResolutionDisabled()) {
-        return unauthorizedResponse(
-          "personal access tokens are retired on this install; connect over OAuth",
-          request,
-        );
-      }
-      const pat = await resolveMcpApiToken(plaintext);
-      if (!pat) {
-        return unauthorizedResponse("invalid or expired token", request);
-      }
-      token = { ...pat, source: "pat" };
-    }
-  }
+  const authentication = await authenticateMcpRequest(request);
+  if (!authentication.ok) return authentication.response;
+  const { token, oauthGrantedScopes } = authentication;
 
   // Parse JSON-RPC envelope
   let body: JsonRpcRequest;
@@ -837,9 +678,11 @@ export async function POST(request: Request): Promise<Response> {
       "request must have jsonrpc='2.0' and method string",
     );
   }
-
+  observeConnection({ request, token, method: body.method, params: body.params });
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
+  const floorRefusal = isNotification ? null : await refuseBelowToolchainFloor(request, token, body); // BI-DFC0270C
+  if (floorRefusal) return floorRefusal;
 
   // MCP 2025-11-25 protocol negotiation: a non-initialize request MAY carry an
   // MCP-Protocol-Version header. When present it must be a version we speak;
@@ -861,12 +704,17 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    const callbackRefusal = isNotification ? null : await reviewTaskTransportRefusal({
+      token, method: body.method, params: body.params,
+    });
+    if (callbackRefusal) return jsonRpcError(body.id ?? null, JSONRPC_INVALID_REQUEST,
+      callbackRefusal.message, { error: callbackRefusal.error }, 403);
     switch (body.method) {
       case "initialize":
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleInitialize(body.id ?? null, token, body.params);
+        return await handleInitialize(request, body.id ?? null, token, body.params);
 
       case "notifications/initialized":
         return new Response(null, { status: 202 });
@@ -938,12 +786,13 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
-// GET on the MCP endpoint is reserved for SSE in the Streamable HTTP spec.
-// We don't implement SSE (single-POST flow is sufficient for tool calls);
-// clients that try GET should get a clean 405.
-export function GET(): Response {
-  return new Response("Method Not Allowed — use POST", {
-    status: 405,
-    headers: { Allow: "POST" },
-  });
+/**
+ * Streamable HTTP server-to-client lane. A notification is only a wake-up:
+ * each frame carries the complete current Task projection, while TaskRun and
+ * tasks/get/list remain the durable reconciliation path after disconnects.
+ */
+export async function GET(request: Request): Promise<Response> {
+  const authentication = await authenticateMcpRequest(request);
+  if (!authentication.ok) return authentication.response;
+  return openMcpTaskStatusStream(request, authentication.token);
 }

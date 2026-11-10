@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AiReadinessSummary } from "@/lib/ai-readiness/readiness-summary";
+import type { AiReadinessSummary } from "@/lib/ai-readiness/readiness-summary-types";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),

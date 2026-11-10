@@ -13,6 +13,19 @@ function review(decision: string, sizeDecision?: string) {
   } as never;
 }
 
+function reviewWithOverride(sizeDecision: string) {
+  return {
+    decision: "pass",
+    sizeAssessment: { decision: sizeDecision },
+    decompositionOverride: {
+      rationale: "One read-only page; splitting would ship fragments nobody can use.",
+      recordedAt: "2026-08-28T19:26:04.554Z",
+      recordedByUserId: "usr_1",
+      recordedByAgentId: null,
+    },
+  } as never;
+}
+
 describe("deriveSizeGateDecompositionAffordance", () => {
   // The live repro: FB-41EA43C5 passed design review, was assessed xlarge, and
   // was offered "Advance to Plan" — which the gate then refused.
@@ -76,6 +89,41 @@ describe("deriveSizeGateDecompositionAffordance", () => {
         designDoc,
       }),
     ).toEqual({ kind: "none" });
+  });
+
+  // BI-181E8776 — the live repro: FB-1EBDEBAD was assessed decompose-required,
+  // the owner took the "Keep as one build (explain why)" lever and recorded a
+  // rationale, and the card went on offering "Split into smaller builds" as the
+  // only next action. The gate had already unblocked; only this surface had not.
+  it("stops asking once the owner has recorded an override", () => {
+    expect(
+      deriveSizeGateDecompositionAffordance({
+        phase: "ideate",
+        designReview: reviewWithOverride("decompose-required"),
+        designDoc,
+      }),
+    ).toEqual({ kind: "none" });
+  });
+
+  it("stops asking on the advisory side too — an answered question stays answered", () => {
+    expect(
+      deriveSizeGateDecompositionAffordance({
+        phase: "ideate",
+        designReview: reviewWithOverride("decompose-recommended"),
+        designDoc,
+      }),
+    ).toEqual({ kind: "none" });
+  });
+
+  // Guards the inverse: absent an override the split is still the right ask.
+  it("still offers the split when no override has been recorded", () => {
+    expect(
+      deriveSizeGateDecompositionAffordance({
+        phase: "ideate",
+        designReview: review("pass", "decompose-required"),
+        designDoc,
+      }),
+    ).toMatchObject({ kind: "decompose-now", required: true });
   });
 
   it("disables the action when there is no design to split", () => {

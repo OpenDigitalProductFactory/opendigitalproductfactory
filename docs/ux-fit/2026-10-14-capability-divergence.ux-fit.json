@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "decidedOption": "count-and-native-disclosure",
+  "decisionInteractionId": "DI-891A7B41052A",
+  "scope": { "files": ["apps/web/app/(shell)/platform/ai/runtime-health/page.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["all-disagreements-visible", "count-and-native-disclosure", "generic-unavailable"]
+  }
+}

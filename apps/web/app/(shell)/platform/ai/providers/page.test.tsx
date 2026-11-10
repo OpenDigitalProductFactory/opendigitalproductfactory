@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
+const policy = vi.hoisted(() => ({ read: vi.fn().mockResolvedValue(false) }));
+vi.mock("@/lib/inference/local-only", () => ({ getLocalOnlyInference: policy.read }));
+
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue({
     user: { platformRole: "admin", isSuperuser: true },
@@ -11,17 +14,41 @@ vi.mock("@/lib/permissions", () => ({
   can: vi.fn().mockReturnValue(true),
 }));
 
+vi.mock("@/lib/actions/provider-account-setup", () => ({
+  getProviderAccountSetupState: vi.fn().mockResolvedValue({ firstRun: false }),
+  completeProviderAccountSetup: vi.fn(),
+}));
+vi.mock("@/lib/inference/provider-account-overview.server", async () => {
+  const { SOURCE_CATALOG } = await import("@dpf/i18n");
+  return {
+    getProviderAccountCopy: vi.fn().mockResolvedValue(SOURCE_CATALOG.providerAccounts),
+    loadProviderAccountOverview: vi.fn().mockResolvedValue([]),
+  };
+});
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 vi.mock("@dpf/db", () => ({
   prisma: {
+    cliPoolStatus: { findMany: vi.fn().mockResolvedValue([]) },
+    agentBudgetEvent: { findMany: vi.fn().mockResolvedValue([]) },
     scheduledJob: {
       findMany: vi.fn().mockResolvedValue([
         {
           jobId: "provider-registry-sync",
           schedule: "daily",
           lastRunAt: new Date("2026-06-28T12:00:00.000Z"),
-          nextRunAt: new Date("2099-01-01T00:00:00.000Z"),
+          nextRunAt: new Date(Date.now() + 86_400_000),
           lastStatus: "ok",
           lastError: null,
+        },
+        {
+          jobId: "model-discovery-refresh",
+          schedule: "daily",
+          lastRunAt: new Date("2026-09-08T03:10:00.000Z"),
+          nextRunAt: new Date(Date.now() + 86_400_000),
+          lastStatus: "partial",
+          lastError: "codex: app-server unavailable",
         },
       ]),
       update: vi.fn(),
@@ -41,9 +68,17 @@ vi.mock("@/lib/ai-provider-data", () => ({
       jobId: "provider-registry-sync",
       schedule: "daily",
       lastRunAt: new Date("2026-06-28T12:00:00.000Z"),
-      nextRunAt: new Date("2099-01-01T00:00:00.000Z"),
+      nextRunAt: new Date(Date.now() + 86_400_000),
       lastStatus: "ok",
       lastError: null,
+    },
+    {
+      jobId: "model-discovery-refresh",
+      schedule: "daily",
+      lastRunAt: new Date("2026-09-08T03:10:00.000Z"),
+      nextRunAt: new Date(Date.now() + 86_400_000),
+      lastStatus: "partial",
+      lastError: "codex: app-server unavailable",
     },
   ]),
   groupByEndpointTypeAndCategory: vi.fn().mockReturnValue([]),
@@ -140,6 +175,16 @@ vi.mock("next/link", () => ({
 }));
 
 describe("ProvidersPage", () => {
+  it("does not render a permissive setting when the policy cannot be read", async () => {
+    policy.read.mockRejectedValueOnce(new Error("policy unavailable"));
+    const { default: ProvidersPage } = await import("./page");
+    const { SOURCE_CATALOG } = await import("@dpf/i18n");
+    const html = renderToStaticMarkup(await ProvidersPage());
+    expect(html).toContain(SOURCE_CATALOG.providerAccounts.policyUnavailable);
+    expect(html).not.toContain('type="radio"');
+    expect(html).toContain("Providers &amp; Routing");
+  });
+
   it("renders provider and routing content without MCP service operations or tool inventory", async () => {
     const { default: ProvidersPage } = await import("./page");
     const html = renderToStaticMarkup(await ProvidersPage());
@@ -170,5 +215,17 @@ describe("ProvidersPage", () => {
     expect(html).toContain("Last updated");
     expect(html).not.toContain("Refresh Provider Catalog");
     expect(html).not.toContain("Sync Provider Registry");
+    expect(html).toMatch(/Provider catalog[\s\S]*Last updated[\s\S]*Sep 8, 2026/);
+  });
+
+  it("surfaces unavailable routing policy instead of presenting an editable safe default", async () => {
+    const { getLocalOnlyInference } = await import("@/lib/inference/local-only");
+    vi.mocked(getLocalOnlyInference).mockRejectedValueOnce(new Error("policy read unavailable"));
+    const { SOURCE_CATALOG } = await import("@dpf/i18n");
+    const { default: ProvidersPage } = await import("./page");
+    const html = renderToStaticMarkup(await ProvidersPage());
+    expect(html).toContain(SOURCE_CATALOG.providerAccounts.policyUnavailable);
+    expect(html).not.toContain("local-only-inference-toggle");
+    expect(html).toContain("Providers &amp; Routing");
   });
 });

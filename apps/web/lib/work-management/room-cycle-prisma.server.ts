@@ -1,4 +1,7 @@
 import { Prisma, prisma } from "@dpf/db";
+import { cycleHistoryAfter, readCycleHistory } from "./room-cycle-pagination";
+import { workroomCycleSourceKey, workroomOutcomeMessageId } from "./room-cycle-store";
+import { parseStoredWorkroomCycle, parseStoredWorkroomOutcome, WORKROOM_OUTCOME_MESSAGE_TYPE } from "./room-cycle-adapter";
 
 import type {
   WorkroomCycleParentRecord,
@@ -8,6 +11,52 @@ import type {
 
 function txAdapter(tx: Prisma.TransactionClient): WorkroomCycleStoreTx {
   return {
+    findOutcome: async (workItemId, cycleKey, carrierId) => {
+      const where = { workItemId, messageType: WORKROOM_OUTCOME_MESSAGE_TYPE };
+      const exact = await tx.workItemMessage.findFirst({ where: {
+        ...where, messageId: workroomOutcomeMessageId(workItemId, cycleKey, carrierId),
+      } });
+      const matches = (row: { structuredPayload: unknown }) => {
+        const stored = parseStoredWorkroomOutcome(row.structuredPayload);
+        return stored?.cycleKey === cycleKey && stored.carrierId === carrierId;
+      };
+      if (exact) {
+        if (!matches(exact)) throw new Error("Outcome identity does not match its stored boundary");
+        return exact;
+      }
+      const legacy = await readCycleHistory(({ after, take }) => tx.workItemMessage.findMany({
+        where: { ...where, ...cycleHistoryAfter(after) }, take,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }));
+      return legacy.find(matches) ?? null;
+    },
+    findCycle: async (workItemId, lookup) => {
+      if ("carrierId" in lookup) return tx.workItem.findFirst({
+        where: { parentItemId: workItemId, itemId: lookup.carrierId },
+      });
+      if ("cycleKey" in lookup) {
+        const exact = await tx.workItem.findFirst({ where: {
+          parentItemId: workItemId, sourceKey: workroomCycleSourceKey(workItemId, lookup.cycleKey),
+        } });
+        if (exact) {
+          if (parseStoredWorkroomCycle(exact.evidence)?.cycleKey !== lookup.cycleKey) {
+            throw new Error("Cycle identity does not match its stored boundary");
+          }
+          return exact;
+        }
+      }
+      // New cycle keys use the existing indexed adapter identity. Legacy rows
+      // retain their evidence; a bounded fallback cannot silently miss a cycle.
+      const candidates = await readCycleHistory(({ after, take }) => tx.workItem.findMany({
+        where: { parentItemId: workItemId, ...cycleHistoryAfter(after),
+          ...("active" in lookup ? { status: { notIn: ["completed", "cancelled"] } } : { sourceKey: null }),
+        }, take, orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      }));
+      return candidates.find(row => {
+        const boundary = parseStoredWorkroomCycle(row.evidence);
+        return boundary && ("active" in lookup || boundary.cycleKey === lookup.cycleKey);
+      }) ?? null;
+    },
     getRoom: async (workItemId) => tx.workItem.findUnique({
       where: { id: workItemId },
       select: {
@@ -26,8 +75,9 @@ function txAdapter(tx: Prisma.TransactionClient): WorkroomCycleStoreTx {
         assignedToAgentId: true,
       },
     }) as Promise<WorkroomCycleParentRecord | null>,
-    listCycles: (workItemId) => tx.workItem.findMany({
-      where: { parentItemId: workItemId },
+    listCycles: (workItemId) => readCycleHistory(({ after, take }) => tx.workItem.findMany({
+      where: { parentItemId: workItemId, ...cycleHistoryAfter(after) },
+      take,
       select: {
         id: true,
         itemId: true,
@@ -43,13 +93,14 @@ function txAdapter(tx: Prisma.TransactionClient): WorkroomCycleStoreTx {
         createdAt: true,
         completedAt: true,
       },
-      orderBy: [{ createdAt: "asc" }, { itemId: "asc" }],
-    }),
-    listMessages: (workItemId) => tx.workItemMessage.findMany({
-      where: { workItemId },
-      select: { messageId: true, messageType: true, structuredPayload: true },
-      orderBy: [{ createdAt: "asc" }, { messageId: "asc" }],
-    }),
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    })),
+    listMessages: (workItemId) => readCycleHistory(({ after, take }) => tx.workItemMessage.findMany({
+      where: { workItemId, ...cycleHistoryAfter(after) },
+      take,
+      select: { id: true, createdAt: true, messageId: true, messageType: true, structuredPayload: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    })),
     findWorkItemBySource: (sourceType, sourceId) => tx.workItem.findFirst({
       where: { sourceType, sourceId },
       select: {

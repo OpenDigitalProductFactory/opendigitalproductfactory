@@ -1,0 +1,50 @@
+{
+  "sensitivity": "BacklogItem is internal in packages/db/src/table-classification.ts; no new model or sensitivity class.",
+  "accountableOwner": "platform-architecture",
+  "changes": [
+    {
+      "assetId": "data:backlog-item",
+      "kind": "model",
+      "fields": [
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#demandInputSource",
+          "provenance": "BI-00C68162; docs/superpowers/specs/2026-07-10-demand-management-design.md \u00a75.2a",
+          "flags": [],
+          "reason": "Closed-set provenance (existing EstimateSource enum: ai|human|agreed) saying who supplied the value inputs; internal operational state inherited from the owning model."
+        },
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#demandInputActorRef",
+          "provenance": "BI-00C68162; docs/superpowers/specs/2026-07-10-demand-management-design.md \u00a75.2a",
+          "flags": [],
+          "reason": "An internal Agent id or User id reference, the same shape as the existing estimateAiById/estimateHumanById; no name, email or other personal data is stored."
+        },
+        {
+          "resolution": "inherited",
+          "fieldId": "data:backlog-item#demandInputAt",
+          "provenance": "BI-00C68162; docs/superpowers/specs/2026-07-10-demand-management-design.md \u00a75.2a",
+          "flags": [],
+          "reason": "Timestamp of the attributed write; internal operational state inherited from the owning model."
+        }
+      ],
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "Follows the BacklogItem domain lifecycle. The proposal's basis lives in the demand_scored BacklogItemActivity payload, which stays bounded to 365 days; the columns on the item are the durable record of who supplied the inputs."
+    }
+  ],
+  "tests": [
+    "apps/web/lib/demand/scoring-steward.test.ts",
+    "apps/web/lib/demand/score-proposal.test.ts",
+    "apps/web/lib/mcp/packs/demand-scoring-pack.test.ts",
+    "apps/web/lib/demand/demand-data.test.ts"
+  ],
+  "migration": {
+    "backfill": "None: three nullable columns on an existing enum. Rows scored before this migration stay NULL (unattributed), which is the honest value. ADD COLUMN IF NOT EXISTS, so a re-run is a no-op.",
+    "name": "20261007120000_demand_input_provenance",
+    "rollback": "Forward-only: older code ignores the additive columns; preserve recorded state."
+  },
+  "generatedFrom": [
+    "packages/db/prisma/schema/work-coordination.prisma"
+  ],
+  "version": "1"
+}

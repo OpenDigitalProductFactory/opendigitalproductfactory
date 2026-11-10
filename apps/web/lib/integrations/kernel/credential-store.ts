@@ -98,7 +98,7 @@ export interface ConnectorSafeError {
 }
 
 export type ConnectorHealthProbeOutcome =
-  | { succeeded: true }
+  | { succeeded: true; safeProjectionPatch?: ConnectorSafeProjection }
   | { succeeded: false; error: ConnectorSafeError };
 
 export interface FailedConnectorCredential extends Omit<SuccessfulConnectorCredential, "safeProjection"> {
@@ -356,6 +356,41 @@ export function createConnectorCredentialStore<TTransactionContext = ConnectorCr
         const existing = await transaction.findUnique({ integrationId });
         if (!existing) throw new Error("Connector credential is not configured.");
         const testedAt = currentTime();
+        if (outcome.succeeded && outcome.safeProjectionPatch) {
+          const envelope = parseFieldsEnvelope(credentialCrypto.decryptJson(existing.fieldsEnc));
+          const tokens = existing.tokenCacheEnc
+            ? parseTokenEnvelope(credentialCrypto.decryptJson(existing.tokenCacheEnc))
+            : { schemaVersion: 1 as const, tokenEnvelope: {} };
+          if (!envelope || !tokens) throw new Error(UNREADABLE_CREDENTIAL_MESSAGE);
+          const mergedProjection = { ...envelope.safeProjection, ...outcome.safeProjectionPatch };
+          if (!isCredentialRecord(mergedProjection)) {
+            throw new Error("Connector safe projection is not bounded.");
+          }
+          const safeProjection = redactSafeProjection(
+            mergedProjection,
+            envelope.secretFields,
+            tokens.tokenEnvelope,
+          );
+          if (JSON.stringify(safeProjection) !== JSON.stringify(mergedProjection)) {
+            throw new Error("Connector safe projection cannot contain credential secrets.");
+          }
+          if (!readinessAlreadyChecked) await credentialCrypto.assertReadyForWrite();
+          const fieldsEnc = credentialCrypto.encryptJson({
+            ...envelope,
+            safeProjection,
+          } satisfies StoredCredentialFieldsEnvelope);
+          await transaction.update({
+            integrationId,
+            data: {
+              fieldsEnc,
+              status: "connected",
+              lastTestedAt: testedAt,
+              lastErrorAt: null,
+              lastErrorMsg: null,
+            },
+          });
+          return;
+        }
         await transaction.update({
           integrationId,
           data: outcome.succeeded
@@ -407,7 +442,13 @@ export function createConnectorCredentialStore<TTransactionContext = ConnectorCr
     },
 
     async recordHealthProbe(integrationId: string, outcome: ConnectorHealthProbeOutcome): Promise<void> {
-      await runTransactionWithRetry((transaction) => boundStore(transaction).recordHealthProbe(integrationId, outcome));
+      if (outcome.succeeded && outcome.safeProjectionPatch) {
+        await credentialCrypto.assertReadyForWrite();
+      }
+      await runTransactionWithRetry((transaction) =>
+        boundStore(transaction, outcome.succeeded && Boolean(outcome.safeProjectionPatch))
+          .recordHealthProbe(integrationId, outcome),
+      );
     },
 
     async updateSafeProjection(
@@ -457,6 +498,12 @@ export function createConnectorCredentialStore<TTransactionContext = ConnectorCr
         );
       }
 
+      const latestProbeFailed = health.latestProbeFailed ?? (
+        credential.status === "connected" &&
+        credential.lastErrorAt !== null &&
+        (credential.lastTestedAt === null || credential.lastErrorAt >= credential.lastTestedAt)
+      );
+
       return projectConnectorSetupState(
         {
           integrationId,
@@ -467,7 +514,7 @@ export function createConnectorCredentialStore<TTransactionContext = ConnectorCr
           lastTestedAt: credential.lastTestedAt,
         },
         integrationId,
-        health,
+        { ...health, latestProbeFailed },
       );
     },
   };

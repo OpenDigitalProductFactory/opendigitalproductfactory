@@ -31,23 +31,6 @@ type Props = {
   onCreateSkill: () => void;
 };
 
-const categoryLabels: Record<string, string> = {
-  universal: "Universal",
-  portfolio: "Portfolio",
-  inventory: "Inventory",
-  ea: "Architecture",
-  employee: "Employee",
-  customer: "Customer",
-  ops: "Operations",
-  build: "Build Studio",
-  platform: "Platform",
-  admin: "Administration",
-  compliance: "Compliance",
-  storefront: "Storefront",
-  workspace: "Workspace",
-  docs: "Documentation",
-};
-
 const taskTypeIcons: Record<string, string> = {
   conversation: "",
   code_generation: "[code]",

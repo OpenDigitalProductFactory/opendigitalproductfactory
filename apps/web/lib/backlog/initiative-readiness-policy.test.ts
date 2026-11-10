@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
+import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
+
 import {
   evaluateInitiativeReadiness,
   deriveAuthoritativeReadinessProfile,
   selectStrongestReadinessProfile,
   type InitiativeReadinessFacts,
   type ReadinessCode,
+  type ReadinessProfile,
 } from "./initiative-readiness";
 
 const subject = { kind: "backlog-item" as const, id: "BI-FEATURE" };
@@ -127,6 +130,19 @@ describe("evaluateInitiativeReadiness", () => {
     expect(evaluateInitiativeReadiness(facts(), "plan")).toMatchObject({ verdict: "input-required" });
     expect(evaluateInitiativeReadiness(facts(), "implementation")).toMatchObject({ verdict: "input-required" });
     expect(evaluateInitiativeReadiness(facts(), "completion")).toMatchObject({ verdict: "input-required" });
+  });
+
+  it("closes documentation-only work from delivery and acceptance evidence without inventing an objective baseline", () => {
+    const decision = evaluateInitiativeReadiness(facts({
+      profile: "doc-only",
+      deliveryEvidence: "pass",
+      acceptanceEvidence: "pass",
+      objectiveBaseline: "missing",
+      objectiveReconciliation: "missing",
+    }), "completion");
+
+    expect(decision.verdict).toBe("allowed");
+    expect(codes(decision)).toEqual([]);
   });
 
   it("allows planning after canonical approved design evidence", () => {
@@ -300,6 +316,32 @@ describe("evaluateInitiativeReadiness", () => {
 });
 
 describe("selectStrongestReadinessProfile", () => {
+  const expectedWorkTypeProfiles = {
+    bug: "fix",
+    chore: "fix",
+    refactor: "feature",
+    feature: "feature",
+    tool: "feature",
+    skill: "feature",
+    doc: "doc-only",
+  } satisfies Record<BacklogWorkType, ReadinessProfile>;
+
+  it.each(BACKLOG_WORK_TYPE_VALUES)("maps closed work type %s to its authoritative profile", (workType) => {
+    expect(deriveAuthoritativeReadinessProfile({ workType })).toBe(expectedWorkTypeProfiles[workType]);
+  });
+
+  it.each(["unknown-work", "", " refactor ", "Refactor"])(
+    "fails closed when work type %j is unknown or malformed even if permissive aliases are present",
+    (workType) => {
+      expect(deriveAuthoritativeReadinessProfile({
+        workType,
+        type: "feature",
+        source: "build",
+        activeBuildKind: "feature",
+      })).toBeNull();
+    },
+  );
+
   it("is monotonic and cannot downgrade structured archetype evidence", () => {
     expect(selectStrongestReadinessProfile(["fix", "feature", "archetype"])).toBe("archetype");
     expect(selectStrongestReadinessProfile(["archetype", "doc-only"])).toBe("archetype");
@@ -341,4 +383,5 @@ describe("selectStrongestReadinessProfile", () => {
   ] as const)("maps canonical scopeKind %s to %s", (scopeKind, expected) => {
     expect(deriveAuthoritativeReadinessProfile({ type: "feature", scopeKind })).toBe(expected);
   });
+
 });

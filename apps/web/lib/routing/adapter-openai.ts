@@ -6,9 +6,9 @@ import type {
 import type { ModelCard } from "./model-card-types";
 import {
   EMPTY_CAPABILITIES,
-  EMPTY_PRICING,
   DEFAULT_DIMENSION_SCORES,
 } from "./model-card-types";
+import { referenceCardPricing } from "./model-pricing-reference";
 import { classifyModel } from "./model-classifier";
 import { computeMetadataHash } from "./metadata-hash";
 
@@ -84,6 +84,8 @@ export const openAIAdapter: ProviderAdapter = {
       title?: string;
       description?: string;
       max_tokens?: number;
+      // The authenticated Codex model/list catalog publishes these directly.
+      inputModalities?: unknown;
       capabilities?: Record<string, unknown>;
       tags?: string[];
       // Which provider ran the discovery (codex vs chatgpt share the same path)
@@ -91,12 +93,22 @@ export const openAIAdapter: ProviderAdapter = {
     };
 
     const isChatGptDiscovery = raw.source === "chatgpt_backend_discovery";
+    const catalogModalities = raw.source === "codex_cli_model_list"
+      && Array.isArray(raw.inputModalities) && raw.inputModalities.length > 0
+      && raw.inputModalities.every(value => value === "text" || value === "image")
+      ? [...new Set(raw.inputModalities)] as Array<"text" | "image"> : null;
+    const inputModalities = catalogModalities ?? ["text"];
     // codex provider routes to api.openai.com/v1/responses and supports custom
     // function tools. chatgpt provider routes to chatgpt.com/backend-api and
     // only supports built-in Codex tools (apply_patch, shell, etc.).
     const isChatGptSubscription = isChatGptDiscovery && raw.discoveredForProvider === "chatgpt";
 
     const capabilities = { ...EMPTY_CAPABILITIES };
+    if (catalogModalities) capabilities.imageInput = catalogModalities.includes("image");
+    // BI-B76DC66C: chat-adapter's chatgpt branch sends `text.format` for a
+    // strict-schema plan, so the subscription backend really returns
+    // constrained JSON. Codex shares this discovery path but not that branch.
+    if (isChatGptSubscription) capabilities.structuredOutput = true;
     if (isChatGptDiscovery && raw.capabilities) {
       capabilities.streaming = raw.capabilities.streaming === true ? true : null;
       capabilities.imageInput = raw.capabilities.image_input === true
@@ -117,18 +129,23 @@ export const openAIAdapter: ProviderAdapter = {
 
       modelFamily: null,
       modelClass: classifyModel(modelId, {
-        input: ["text"],
+        input: inputModalities,
         output: ["text"],
       }),
 
       maxInputTokens: raw.max_tokens ?? null,
       maxOutputTokens: null,
 
-      inputModalities: ["text"],
+      inputModalities,
       outputModalities: ["text"],
 
       capabilities,
-      pricing: { ...EMPTY_PRICING },
+      // BI-B5071C36: the API gives no prices here, so consult the researched
+      // reference rather than writing nulls. Nulls are not neutral — the router
+      // falls back to the provider's one flat rate, collapsing every model under
+      // it to a single number, and a re-discovery erases any price a backfill had
+      // already recorded.
+      pricing: referenceCardPricing(modelId),
 
       supportedParameters: [],
       defaultParameters: null,

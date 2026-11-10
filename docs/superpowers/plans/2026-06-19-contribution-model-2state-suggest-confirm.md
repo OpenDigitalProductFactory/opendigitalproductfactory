@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Plan — Contribution Model Refactor: 2 States + Suggest-Then-Confirm
 
 **Date:** 2026-06-19
@@ -66,3 +70,15 @@ AGENTS.md §1 (commons wording if it cites modes), `docs/user-guide/ai-workforce
 
 ## Verification substrate note
 Migration apply, `next build`, and all UX verification run on the **canonical local install or the shared local-CI sandbox** (AGENTS.md §5) — never the source-only worktree. Source-local gates (vitest, typecheck) run via the root-clone overlay until the worktree is compile-ready.
+
+## Amendment 2026-09-25 — the question is re-asked from state, not from setup history (BI-D3342020)
+Founder requirement: anyone who codes can contribute, and the UX leads them to the one place that sets it up. Setup asks once, but an install can pass setup with half of it done. An operator development install, set up by automation, recorded `contributing` and never connected a GitHub account, so every Build Studio pull request would have failed at ship with nobody asked.
+
+- **The attention source `contribution-setup`** (`apps/web/lib/attention/sources/contribution-setup.ts`) projects one Needs-you item from the install's **current state**:
+  - **decide:** no `PlatformDevConfig` row, or only the seed's `private` default (`configuredById` null). The item links to Admin > Platform Development.
+  - **connect:** `contributing` with no contribution credential (env token, `hive-contribution` or `git-backup`). The item links to `#connect-github`, the existing device-flow card.
+- `github-pr-sync` does not count as a contribution identity. Build Studio may fall back to it for the token, but a person never chose it, so it must not hide the question.
+- The item clears itself once a person keeps changes private or contribution is fully set up.
+- **Still open (BI-D3342020):**
+  - the ship-time prompt, where a build that reaches ship on an unconfigured install waits in a named state and asks, instead of failing;
+  - the fork path for contributors without upstream write access (BI-D75B87B1).

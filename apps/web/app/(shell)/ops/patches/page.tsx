@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@dpf/db";
 
-import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { StatusBadge } from "@/components/ui/report-kit";
 import {
   getPatchPosture,
@@ -45,13 +45,13 @@ export default async function PatchesPage({ searchParams }: Props) {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Operations</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Patches</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           Estate patch posture — what is out of date or exposed across discovered software.
         </p>
       </div>
 
-      <OpsTabNav />
+      <PlatformTabNav />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-6">
         <SummaryTile label="Open findings" value={totals.findings} />

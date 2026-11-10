@@ -1,0 +1,9 @@
+{
+  "scope": "Plan 2026-09-08 M9 (BI-B1977CEE) retired-substrate sweep. The flagged projection and ai-context surfaces (graph-sync, graph projection, pgvector store, semantic memory, wiki embeddings, principle recall, coworker prompts) change only in identifier names (QDRANT_COLLECTIONS -> VECTOR_COLLECTIONS, QdrantFilter -> VectorFilter, module renames onto pgvector-store / pg-graph), comments, log prefixes, and prompt wording that named the retired Neo4j/Qdrant stores. Collection names, payload keys, graph labels, edge types, table writes and retention are byte-identical in behaviour.",
+  "approver": "Pending: the maintainer reviewing this PR. Filed by an external coding agent in a cloud sandbox without DPF MCP access; this exception is not yet approved.",
+  "rationale": "No persistent asset, field, policy, lifecycle or derived-copy contract changes. A DataImpactManifest would have to invent change kinds for surfaces whose stored data does not change. The one renamed contract id (agent-conversation->qdrant-agent-memory -> agent-conversation->pgvector-agent-memory) is an in-code registry id with no persisted reference and no non-test reader.",
+  "compensatingControl": "Typecheck of web and @dpf/db, the related web unit suites (751 files) and the @dpf/db unit suite pass; scripts/check-retired-substrate.mjs now forbids the retired names repo-wide with a closed allowlist.",
+  "expiry": "2026-10-26T00:00:00.000Z",
+  "remediationBI": "BI-B1977CEE",
+  "waives": []
+}

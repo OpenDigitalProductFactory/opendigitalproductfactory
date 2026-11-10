@@ -18,7 +18,11 @@ vi.mock("next/link", () => ({
 }));
 
 import { AccountantWorkLanePanel } from "./AccountantWorkLanePanel";
-import { buildBookkeeperAccountantWorkLane } from "@/lib/finance/accountant-work-lane";
+import {
+  buildBookkeeperAccountantWorkLane,
+  type ResolvedAccountantWorkLane,
+} from "@/lib/finance/accountant-work-lane";
+import { resolveNextStep } from "@/lib/backlog/next-step-pointer";
 import type { QuickBooksReadinessConnection } from "@/lib/integrations/quickbooks/readiness";
 
 const CONNECTED: QuickBooksReadinessConnection = {
@@ -30,7 +34,22 @@ const CONNECTED: QuickBooksReadinessConnection = {
   environment: "sandbox",
 };
 
-const lane = buildBookkeeperAccountantWorkLane(CONNECTED);
+// The page resolves declared next steps before rendering. Nothing is filed for
+// this lane today, so resolve against an empty backlog — the state the panel
+// must render honestly rather than as a dead identifier (BI-5BF97BAA).
+const declared = buildBookkeeperAccountantWorkLane(CONNECTED);
+const noneFiled = new Map();
+const lane: ResolvedAccountantWorkLane = {
+  ...declared,
+  providerBoundaries: declared.providerBoundaries.map((boundary) => ({
+    ...boundary,
+    nextStep: resolveNextStep(boundary.nextStep, noneFiled),
+  })),
+  nextWorkflow: {
+    ...declared.nextWorkflow,
+    nextStep: resolveNextStep(declared.nextWorkflow.nextStep, noneFiled),
+  },
+};
 
 describe("AccountantWorkLanePanel", () => {
   it("renders the bookkeeper accountant lane with current DPF finance routes", () => {
@@ -65,9 +84,10 @@ describe("AccountantWorkLanePanel", () => {
     expect(html).toContain("Vendors");
     expect(html).toContain("Bank transactions");
     expect(html).toContain("QuickBooks reconciliation");
-    expect(html).toContain("BI-4025EF5F");
-    expect(html).toContain("BI-2DB52EAB");
-    expect(html).toContain("BI-47366954");
+    expect(html).toContain("Entity links and review queue");
+    expect(html).toContain("Fee and payout reconciliation");
+    expect(html).toContain("Provider ownership decision");
+    expect(html).not.toMatch(/BI-[0-9A-F]{8}/);
     expect(html).toContain("source-attributed");
   });
 });

@@ -15,6 +15,7 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
+import { CheckboxField } from "@/components/ui/form/CheckboxField";
 import { SelectField } from "@/components/ui/form/SelectField";
 import { TextField } from "@/components/ui/form/TextField";
 import { ExpandableCard, Notice, StatusBadge } from "@/components/ui/report-kit";
@@ -30,6 +31,7 @@ import {
   ENVIRONMENT_CLASS_LABEL,
   ENVIRONMENT_OPTIONS,
   PURPOSE_OPTIONS,
+  SECONDARY_PURPOSES_COPY,
   type InstallationIdentityImpact,
   type InstallationIdentityView,
 } from "@/lib/installation-journey/identity-presentation";
@@ -59,6 +61,9 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
   const [environmentClass, setEnvironmentClass] = useState<InstallationEnvironmentClass>(
     view.declaration.environmentClass,
   );
+  const [secondary, setSecondary] = useState<InstallationOperatingPurpose[]>(
+    view.secondaryPurposes ?? [],
+  );
   const [pairedRef, setPairedRef] = useState(
     view.declaration.pairedProductionInstallationRef ?? "",
   );
@@ -68,11 +73,21 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
   const [isPending, startTransition] = useTransition();
 
   const confirmation = CONFIRMATION_PRESENTATION[view.confirmationStatus];
+  // The main job is never also an "other" job; the server drops it too.
+  const otherJobs = secondary.filter((value) => value !== purpose);
   const input = {
     primaryPurpose: purpose,
     environmentClass,
     pairedProductionInstallationRef: pairedRef,
+    secondaryPurposes: otherJobs,
   };
+  const toggleOtherJob = edited((change: { value: InstallationOperatingPurpose; checked: boolean }) =>
+    setSecondary((current) =>
+      change.checked
+        ? [...current.filter((value) => value !== change.value), change.value]
+        : current.filter((value) => value !== change.value),
+    ),
+  );
 
   // Any edit invalidates a preview the operator has already seen, so the
   // confirm step disappears until the new shape has been previewed again.
@@ -241,6 +256,24 @@ export function InstallationIdentityPanel({ view }: { view: InstallationIdentity
               className="sm:col-span-2"
               disabled={isPending}
             />
+            <fieldset className="grid gap-2 sm:col-span-2" aria-describedby="installation-other-jobs-hint">
+              <legend className="text-sm font-medium text-[var(--dpf-text)]">
+                {SECONDARY_PURPOSES_COPY.legend}
+              </legend>
+              <p id="installation-other-jobs-hint" className="text-xs text-[var(--dpf-muted)]">
+                {SECONDARY_PURPOSES_COPY.hint}
+              </p>
+              {PURPOSE_OPTIONS.filter((option) => option.value !== purpose).map((option) => (
+                <CheckboxField
+                  key={option.value}
+                  name={`installation-other-job-${option.value}`}
+                  label={option.label}
+                  checked={otherJobs.includes(option.value)}
+                  onCheckedChange={(checked) => toggleOtherJob({ value: option.value, checked })}
+                  disabled={isPending}
+                />
+              ))}
+            </fieldset>
           </div>
 
           {impact ? <IdentityImpactPreview impact={impact} /> : null}

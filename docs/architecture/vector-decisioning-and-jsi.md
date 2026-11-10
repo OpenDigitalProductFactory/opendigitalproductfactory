@@ -111,7 +111,7 @@ without inflating the one space every decision reasons over.
 ### 2.2 The scoring formula
 
 For an option `o` with numeric features `f_d` and a principle `p` with signed weights `v_d` over
-the same dimension set `D`, `computeStructuredAlignment` (`apps/web/lib/decision/option-scoring.ts`)
+the same dimension set `D`, `computeStructuredAlignment` (`packages/validators/src/judgment/option-scoring.ts`)
 computes:
 
 ```
@@ -199,6 +199,21 @@ would mean the business only ever does what it already does; reviewing an unalig
 is exactly where a new idea surfaces. The goal is better-sorted escalations, not fewer. The `decline`
 direction is unaffected — saying no to an off-stance idea is low-consequence and does not need the
 owner's live call.
+
+Sorting escalations also means separating the ones the operator can act on from the ones they cannot.
+Every scored consult carries `decidability` (BI-5843CD9C): the highest confidence this material could
+reach at this risk tier, whether that clears the 0.7 band, and which weighting factor caps it when it
+does not. A sub-band escalation is then either `material-below-confidence` — more or better material
+would help — or `ceiling-below-recommendation-band`, where nothing authored can help because the
+ceiling itself sits under the band.
+
+That second case is common and was previously invisible. `effectiveWeight` is a product, so one low
+factor caps an entire set: seeded doctrine lands as `candidate` (0.45), giving ceilings of 0.35 at
+medium risk and 0.20 at high against a 0.7 band. BI-0F3D5F94 measured exactly those figures across
+five acumens holding between 3 and 12 rows — volume changed nothing. Reported as a plain escalation,
+it read as considered judgement, and the natural operator response was to author more material, which
+was the one action guaranteed not to work. Whether seeded doctrine *should* be able to recommend is a
+governance question that BI-0F3D5F94 owns; `decidability` makes it visible enough to ask.
 
 The recent-override penalty counts times the owner OVERRULED the profile in that class — the gate
 recommended one option and the human chose another. It deliberately does not count answering an
@@ -340,8 +355,8 @@ already-designed gap).
 |---|---|---|---|
 | Authority scope partition | `docs/design/golden-triangle-design.md` §5 | Subsidiarity (*Quadragesimo Anno* 1931; TEU Art. 5(3)) | Shipped |
 | Dimension registry, spine/profession-local split | `packages/db/src/wiki-taxonomy.ts` | AHP's hierarchical problem-structuring (Saaty 1980) — decomposition only, not weight derivation | Shipped (BI-AA7D80FE) |
-| Structured alignment scoring | `apps/web/lib/decision/option-scoring.ts` | Simple Additive Weighting / Weighted Sum Model (Churchman & Ackoff 1954; Hwang & Yoon 1981) | Shipped |
-| Semantic alignment fallback | `apps/web/lib/decision/option-scoring.ts` | Vector space model (Salton et al. 1975) | Shipped |
+| Structured alignment scoring | `packages/validators/src/judgment/option-scoring.ts` | Simple Additive Weighting / Weighted Sum Model (Churchman & Ackoff 1954; Hwang & Yoon 1981) | Shipped |
+| Semantic alignment fallback | `packages/validators/src/judgment/option-scoring.ts` | Vector space model (Salton et al. 1975) | Shipped |
 | Evidence-coverage confidence discounting | `apps/web/lib/decision-perspective/material.ts` | GRADE evidence-quality discounting (Guyatt et al. 2008) | Shipped |
 | Material authority ladder | `apps/web/lib/decision-perspective/stance-promotion.ts` | Revealed preference (Samuelson 1938) | Shipped |
 | Medium-timescale weight inference | `apps/web/lib/decision-perspective/weight-inference.ts` | Bradley-Terry (1952); LinUCB/Thompson sampling; ADWIN/DDM | Engine shipped and unit-tested; **zero live callers** (fluid-weight design §2) |

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { encryptSecret } from "@/lib/govern/credential-crypto";
 import { decryptPeerToken, enrollWithPeer } from "./outbound";
 import { incidentPayloadHash, pushIncidentsToManagingPeer, type OutboundPushDb } from "./push";
+import { sendDeploymentDeclarationToPeer } from "./client";
+import { buildDeploymentDeclaration } from "./deployment-declaration-exchange";
 
 function mockFetch(res: { ok?: boolean; status?: number; json?: unknown }) {
   return vi.fn().mockResolvedValue({
@@ -80,6 +82,30 @@ describe("pushIncidentsToManagingPeer", () => {
     // The minimum-necessary contract dropped both the off-list and forbidden fields.
     expect(sent.internalCustomerName).toBeUndefined();
     expect(sent.patientId).toBeUndefined();
+  });
+});
+
+describe("deployment declaration egress (BI-06EA3167, AC-DCD-MINIMAL-1)", () => {
+  it("sends only the country and record identity — never an address or coordinates", async () => {
+    const f = mockFetch({ ok: true, json: { ok: true } });
+    const { record } = buildDeploymentDeclaration({
+      identity: { installationId: "inst_x" } as never,
+      state: "declared",
+      countryCode: "NZ",
+      now: new Date("2026-10-01T00:00:00Z"),
+    });
+    await sendDeploymentDeclarationToPeer(
+      { peerAuthorityUrl: "https://vendor.example", linkToken: "dpflink_t", linkId: "link_1", fetchImpl: f },
+      "dpf.deployment-declaration.reported",
+      record,
+    );
+    const [url, init] = (f as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0];
+    expect(url).toBe("https://vendor.example/api/v1/federation/inbox");
+    const sent = JSON.parse(init.body as string).data as Record<string, unknown>;
+    expect(Object.keys(sent).sort()).toEqual(
+      ["countryCode", "declaredAt", "originInstallationId", "originVersion", "payloadDigest", "specVersion", "state"],
+    );
+    expect(sent.countryCode).toBe("NZ");
   });
 });
 

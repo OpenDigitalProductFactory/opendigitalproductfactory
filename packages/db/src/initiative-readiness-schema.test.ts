@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
-import { TABLE_CLASSIFICATION } from "./table-classification";
+import { getTableSensitivity } from "./table-classification";
 import { readCanonicalPrismaSchema } from "./schema-source";
 
 const schema = readCanonicalPrismaSchema();
@@ -49,7 +49,7 @@ describe("initiative readiness persistence", () => {
   });
 
   it("classifies the permanent retention-pin metadata as confidential", () => {
-    expect(TABLE_CLASSIFICATION.InitiativeArtifactRetentionPin).toBe("confidential");
+    expect(getTableSensitivity("InitiativeArtifactRetentionPin")).toBe("confidential");
   });
 
   it("keeps governance records and pins append-only while ordinary activity remains deletable", () => {

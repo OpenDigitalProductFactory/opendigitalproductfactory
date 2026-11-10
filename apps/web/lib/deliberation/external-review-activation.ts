@@ -22,13 +22,10 @@
 // capsule/evidence-recording path and the start_deliberation dispatch (selecting
 // an independent surface, enforcing the budget) is the follow-up slice.
 
-export type DeliberationArtifactType =
-  | "spec"
-  | "plan"
-  | "code-change"
-  | "architecture-decision"
-  | "policy"
-  | "research-question";
+export const DELIBERATION_ARTIFACT_TYPES = [
+  "spec", "plan", "code-change", "architecture-decision", "policy", "research-question",
+] as const;
+export type DeliberationArtifactType = (typeof DELIBERATION_ARTIFACT_TYPES)[number];
 export type DeliberationRisk = "low" | "medium" | "high" | "critical";
 export type DeliberationPattern = "review" | "debate";
 export type StrategyProfile = "economy" | "balanced" | "high-assurance" | "document-authority";

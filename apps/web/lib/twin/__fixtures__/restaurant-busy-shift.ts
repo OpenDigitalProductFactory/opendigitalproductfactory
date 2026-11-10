@@ -1,4 +1,4 @@
-import type { TwinSnapshot } from "@/components/twin";
+import type { TwinSnapshot } from "../twin-snapshot";
 
 /**
  * Contract-level pressure fixture for the shared Operations hot path.

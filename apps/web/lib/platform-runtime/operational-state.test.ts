@@ -65,6 +65,30 @@ describe("createOperationalCapabilityState", () => {
     expect(degraded.serviceStates["browser-use"]).toBe("optional_degraded");
   });
 
+  // BI-E2763038: the catalog declares dpf-tts for linux/windows only (macOS speaks
+  // through the host-native Chatterbox service), and the promoter filters by the
+  // install-state platform. The portal projection must agree, or a macOS install
+  // reports a Docker service it never runs as degraded and owes it a backup.
+  it("projects services for the install's own host platform", () => {
+    const enabled = ["runtime:core", "runtime:local-speech"];
+    const onHost = (platform: string) => createOperationalCapabilityState({
+      installSnapshot: { ...snapshot(enabled), platform },
+      capabilityStates: catalogStates(enabled),
+      observedServices: {},
+      observedProviders: {},
+    });
+
+    const macos = onHost("darwin");
+    expect(macos.serviceRequirements.map((item) => item.service)).not.toContain("dpf-tts");
+    expect(macos.backupServices).not.toContain("dpf-tts");
+    expect(macos.serviceStates["dpf-tts"]).toBe("optional_inactive");
+
+    const linux = onHost("linux");
+    expect(linux.serviceRequirements.map((item) => item.service)).toContain("dpf-tts");
+    expect(linux.serviceStates["dpf-tts"]).toBe("optional_degraded");
+    expect(onHost("win32").backupServices).toContain("dpf-tts");
+  });
+
   it("loads live capability state and the persisted install snapshot", async () => {
     const state = await loadOperationalCapabilityState({
       observedServices: {},
@@ -95,11 +119,28 @@ describe("createOperationalCapabilityState", () => {
   });
 
   it("observes only the current Compose project through Docker Engine labels", async () => {
-    vi.stubEnv("HOSTNAME", "portal-id");
     const observed = await observeDockerProjectServices(async (path) => path.includes("portal-id")
       ? { Config: { Labels: { "com.docker.compose.project": "dpf" } } }
-      : [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "postgres" } }, { State: "running", Status: "Up (health: starting)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "starting" } }, { State: "running", Status: "Up (unhealthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "unhealthy" } }, { State: "exited", Status: "Exited", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "browser-use" } }, { State: "running", Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "postgres" } }]);
+      : [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "postgres" } }, { State: "running", Status: "Up (health: starting)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "starting" } }, { State: "running", Status: "Up (unhealthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "unhealthy" } }, { State: "exited", Status: "Exited", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "browser-use" } }, { State: "running", Labels: { "com.docker.compose.project": "other", "com.docker.compose.service": "postgres" } }], "portal-id");
     expect(observed).toEqual({ postgres: { composePresent: true, healthy: true }, starting: { composePresent: true, healthy: false }, unhealthy: { composePresent: true, healthy: false }, "browser-use": { composePresent: true, healthy: false } });
+  });
+
+  // BI-3925A700: Dockerfile sets ENV HOSTNAME=0.0.0.0 (the Next.js bind address),
+  // so the env var is never the container id. Looking up /containers/0.0.0.0
+  // failed, the observer returned {}, and every service read "unavailable".
+  it("finds its own container by the OS hostname, not the HOSTNAME env the image repurposes", async () => {
+    vi.stubEnv("HOSTNAME", "0.0.0.0");
+    const paths: string[] = [];
+    const observed = await observeDockerProjectServices(async (path) => {
+      paths.push(path);
+      if (path.startsWith("/containers/json")) {
+        return [{ State: "running", Status: "Up (healthy)", Labels: { "com.docker.compose.project": "dpf", "com.docker.compose.service": "portal" } }];
+      }
+      if (path === "/containers/9f38be6f3fe8/json") return { Config: { Labels: { "com.docker.compose.project": "dpf" } } };
+      throw new Error(`no such container: ${path}`);
+    }, "9f38be6f3fe8");
+    expect(paths[0]).toBe("/containers/9f38be6f3fe8/json");
+    expect(observed).toEqual({ portal: { composePresent: true, healthy: true } });
   });
 
   it.each(["timeout", "oversize"])("bounds Docker socket %s failures and observer falls back without hanging", async (mode) => {

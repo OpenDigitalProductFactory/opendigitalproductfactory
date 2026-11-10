@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { ChatMessage, InferenceResult } from "./ai-inference";
+import type { ChatMessage } from "../routing/chat-message-types";
+import type { InferenceResult } from "./ai-inference";
 
 describe("ChatMessage type", () => {
   it("accepts plain string content (backward compat)", () => {

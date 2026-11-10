@@ -10,7 +10,10 @@
 
 import { attributeBacklogPortfolio, prisma } from "@dpf/db";
 import { BACKLOG_SCOPE_KIND_VALUES } from "@/lib/explore/backlog";
-import type { ToolResult } from "@/lib/mcp-tools";
+import { BACKLOG_SENSITIVITY_VALUES, isBacklogSensitivity } from "@/lib/federation/cross-org-sharing";
+import type { ToolResult } from "@/lib/mcp-tool-types";
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
+import { OUTCOME_MAX_LENGTH } from "@/lib/backlog/intake-outcome";
 import {
   resolveProductManagementScopeRefs,
   type ProductManagementScope,
@@ -36,6 +39,11 @@ export async function handleUpdateBacklogItem(
   const data: Record<string, unknown> = {};
   if (typeof params["title"] === "string") data["title"] = params["title"];
   if (typeof params["status"] === "string") {
+    // BI-C5794F1D: a work-sync mirror's status belongs to its origin installation.
+    const peerOwned = peerOwnedStatusRefusal(existing.itemId, existing.body);
+    if (peerOwned) {
+      return { success: false, error: peerOwned.error, message: peerOwned.message, data: { originInstallationId: peerOwned.originInstallationId } };
+    }
     // Block direct status mutations that should go through dedicated tools.
     // - Setting status='triaging' on an already-triaged item: use the retriage flow.
     // - Leaving triaging without going through triage_backlog_item: skips rationale + audit.
@@ -53,11 +61,11 @@ export async function handleUpdateBacklogItem(
         message: "Items in triaging must be moved out via triage_backlog_item so the decision is recorded with rationale.",
       };
     }
-    if (params["status"] === "deferred" || params["status"] === "retired") {
+    if (params["status"] === "deferred" || params["status"] === "retired" || params["status"] === "awaiting-acceptance") {
       return {
         success: false,
         error: "use_update_backlog_item_status",
-        message: "Use update_backlog_item_status for deferred or retired lifecycle decisions so required evidence and deferral metadata are audited.",
+        message: "Use update_backlog_item_status for deferred, retired, or awaiting-acceptance lifecycle decisions so required evidence is audited. PR submit is the server actuator for awaiting-acceptance.",
       };
     }
     data["status"] = params["status"];
@@ -75,6 +83,13 @@ export async function handleUpdateBacklogItem(
   if (typeof params["workType"] === "string") data["workType"] = params["workType"];
   if (typeof params["source"] === "string") data["source"] = params["source"];
   if (typeof params["proposedOutcome"] === "string") data["proposedOutcome"] = params["proposedOutcome"];
+  // BI-8DE5429B: a person or agent correcting the outcome states it, which
+  // replaces a derived draft. An empty value cannot clear it: every item keeps one.
+  const statedOutcome = cleanOptionalString(params["outcome"]);
+  if (statedOutcome) {
+    data["outcome"] = statedOutcome.slice(0, OUTCOME_MAX_LENGTH);
+    data["outcomeSource"] = "stated";
+  }
   if (typeof params["scopeKind"] === "string") {
     const scopeKind = params["scopeKind"].trim();
     if (!(BACKLOG_SCOPE_KIND_VALUES as readonly string[]).includes(scopeKind)) {
@@ -85,6 +100,22 @@ export async function handleUpdateBacklogItem(
       };
     }
     data["scopeKind"] = scopeKind;
+  }
+  // BI-0A5EE9C1: platform work reads as public; marking an item confidential or
+  // restricted is how an operator keeps it closed. Every change is audited.
+  let sensitivityChange: { from: string; to: string } | null = null;
+  if (params["sensitivity"] !== undefined) {
+    if (!isBacklogSensitivity(params["sensitivity"])) {
+      return {
+        success: false,
+        error: "invalid_sensitivity",
+        message: `sensitivity must be one of ${BACKLOG_SENSITIVITY_VALUES.join("|")}`,
+      };
+    }
+    if (params["sensitivity"] !== existing.sensitivity) {
+      data["sensitivity"] = params["sensitivity"];
+      sensitivityChange = { from: existing.sensitivity, to: params["sensitivity"] };
+    }
   }
   const archetypeCategories = cleanStringArray(params["archetypeCategories"]);
   if (archetypeCategories) data["archetypeCategories"] = archetypeCategories;
@@ -187,6 +218,18 @@ export async function handleUpdateBacklogItem(
       where: { itemId: String(params["itemId"]) },
       data,
     });
+    if (sensitivityChange) {
+      await tx.backlogItemActivity.create({
+        data: {
+          backlogItemId: existing.id,
+          kind: "sensitivity_changed",
+          summary: `Sensitivity changed from ${sensitivityChange.from} to ${sensitivityChange.to}`,
+          payload: sensitivityChange,
+          recordedById: userId ?? null,
+          recordedByAgentId: context?.agentId ?? null,
+        },
+      });
+    }
     if (classifiedAtProductBoundary) {
       await tx.backlogItemActivity.create({
         data: {

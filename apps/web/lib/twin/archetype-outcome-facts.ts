@@ -1,13 +1,20 @@
+import { loadCanonicalAnimalPopulation, countCanonicalAdoptions, type AnimalOperatingFactsClient } from "@/lib/animal-welfare/operating-facts";
+import { summarizeCanonicalAnimalPopulation } from "@dpf/storefront-templates/operations";
+import { can, type UserContext } from "@/lib/permissions";
 import { moneyToNumber } from "./operations-format";
-import { buildArchetypeOutcomes } from "./archetype-outcomes";
+import {
+  buildArchetypeOutcomes,
+  type AnimalsInCare,
+  type DonationTotal,
+} from "./archetype-outcomes";
+import { summarizeKennelCapacity } from "@/lib/ward/ward-occupancy";
+import { loadWardBoard, type WardStoreClient } from "@/lib/ward/ward-store";
 
 type FindMany = (args: unknown) => Promise<unknown>;
-type Count = (args: unknown) => Promise<number>;
 type Money = number | string | { toString(): string } | null;
 
-export interface ArchetypeOutcomeFactsClient {
+export interface ArchetypeOutcomeFactsClient extends AnimalOperatingFactsClient {
   storefrontDonation?: { findMany: FindMany };
-  adoptableAnimal?: { count: Count };
 }
 
 interface OutcomeFactsRuntime {
@@ -21,8 +28,12 @@ interface DonationRow {
 }
 
 export interface ArchetypeOutcomeFacts {
+  /** `null` when no housing is recorded — never rendered as "0 free". */
+  kennelCapacity: ReturnType<typeof summarizeKennelCapacity>;
+  kennelSourceUnavailable: boolean;
   donationRows: DonationRow[] | null;
-  animalsPlaced: number | null;
+  animalsInCare: AnimalsInCare | null;
+  adoptionOutcomes: number | null;
 }
 
 function isRescue(archetypeId: string): boolean {
@@ -33,15 +44,19 @@ function isRescue(archetypeId: string): boolean {
 export async function loadArchetypeOutcomeFacts(input: {
   archetypeId: string;
   storefrontId: string;
+  /** Absent on a caller that cannot resolve it; capacity then reads as
+   *  unrecorded rather than as a confident zero. */
+  organizationId?: string | null;
+  viewer?: UserContext;
   since: Date;
   db: ArchetypeOutcomeFactsClient;
   runtime: OutcomeFactsRuntime;
 }): Promise<ArchetypeOutcomeFacts> {
   if (!isRescue(input.archetypeId)) {
-    return { donationRows: null, animalsPlaced: null };
+    return { kennelCapacity: null, kennelSourceUnavailable: false, donationRows: null, animalsInCare: null, adoptionOutcomes: null };
   }
 
-  const [donationRows, animalsPlaced] = await Promise.all([
+  const [donationRows, population, adoptionOutcomes] = await Promise.all([
     input.db.storefrontDonation?.findMany
       ? input.runtime.read(
           "donations",
@@ -55,46 +70,67 @@ export async function loadArchetypeOutcomeFacts(input: {
           null,
         )
       : (input.runtime.unavailable("donations"), Promise.resolve(null)),
-    input.db.adoptableAnimal?.count
-      ? input.runtime.read(
-          "adoptions",
-          input.db.adoptableAnimal.count({
-            where: {
-              storefrontId: input.storefrontId,
-              status: "adopted",
-              adoptedAt: { gte: input.since },
-            },
-          }),
-          null,
-        )
+    input.organizationId && input.viewer && can(input.viewer, "view_animal_welfare")
+      ? input.runtime.read("animals-in-care", loadCanonicalAnimalPopulation(input.db, input.organizationId), null)
+      : (input.runtime.unavailable("animals-in-care"), Promise.resolve(null)),
+    input.organizationId && input.viewer && can(input.viewer, "view_animal_welfare")
+      ? input.runtime.read("adoptions", countCanonicalAdoptions(input.db, input.organizationId, input.since), null)
       : (input.runtime.unavailable("adoptions"), Promise.resolve(null)),
   ]);
 
-  return { donationRows, animalsPlaced };
+  // Housing is org-scoped, not storefront-scoped: a kennel is not a listing.
+  const housing = input.organizationId && input.viewer && can(input.viewer, "view_animal_welfare")
+    ? await input.runtime.read(
+        "kennels",
+        loadWardBoard({
+          organizationId: input.organizationId,
+          db: input.db as unknown as WardStoreClient,
+        }).then((board) => ({ board })),
+        null,
+      )
+    : (input.runtime.unavailable("kennels"), null);
+
+  return {
+    kennelCapacity: summarizeKennelCapacity(housing?.board ?? null),
+    kennelSourceUnavailable: housing == null,
+    donationRows,
+    animalsInCare: summarizeCanonicalAnimalPopulation(population),
+    adoptionOutcomes,
+  };
 }
 
-/** Never combine currencies into a misleading headline total. */
+/**
+ * Total the gifts per currency. Currencies are never added together — a
+ * headline that silently combined them would be a plausible wrong number, and
+ * that is the failure this refusal exists to prevent.
+ *
+ * What it must not do is refuse when there is nothing to refuse. This counted
+ * ROWS, not currencies: `matching.length !== rows.length` is true whenever the
+ * gifts are in a currency other than the workspace's, so a rescue whose two
+ * gifts were both stamped GBP on a USD install read "Multiple donation
+ * currencies are not combined" and showed no number at all (BI-685ADDCD). One
+ * currency is one currency wherever it came from, and it totals.
+ *
+ * A row with no currency recorded belongs to the workspace's own — the column
+ * carries a default and the donate page only ever offered one symbol.
+ */
 export function summarizeDonations(
   rows: DonationRow[] | null,
   currency: string,
-): {
-  aggregate: { amount: number; count: number } | null;
-  unavailableHint?: string;
-} {
-  if (rows == null) return { aggregate: null };
-  const matching = rows.filter((row) => row.currency === currency);
-  if (matching.length !== rows.length) {
-    return {
-      aggregate: null,
-      unavailableHint: "Multiple donation currencies are not combined",
-    };
+): { totals: DonationTotal[] | null } {
+  if (rows == null) return { totals: null };
+
+  const byCurrency = new Map<string, DonationTotal>();
+  for (const row of rows) {
+    const code = row.currency?.trim() ? row.currency.trim() : currency;
+    const running = byCurrency.get(code) ?? { currency: code, amount: 0, count: 0 };
+    running.amount += moneyToNumber(row.amount);
+    running.count += 1;
+    byCurrency.set(code, running);
   }
-  return {
-    aggregate: {
-      amount: matching.reduce((sum, row) => sum + moneyToNumber(row.amount), 0),
-      count: matching.length,
-    },
-  };
+
+  // Largest first, so a genuine mix leads with the currency carrying the money.
+  return { totals: [...byCurrency.values()].sort((a, b) => b.amount - a.amount) };
 }
 
 /** Join source facts to the pure presentation projection at one boundary. */
@@ -103,7 +139,7 @@ export function buildOutcomeProjectionFromFacts(input: {
   currency: string;
   locale: string;
   paidRevenue: number;
-  deliveredJobs: number;
+  deliveredJobs: number | null;
   facts: ArchetypeOutcomeFacts;
 }) {
   const donations = summarizeDonations(input.facts.donationRows, input.currency);
@@ -113,9 +149,11 @@ export function buildOutcomeProjectionFromFacts(input: {
     locale: input.locale,
     paidRevenue: input.paidRevenue,
     deliveredJobs: input.deliveredJobs,
-    donations: donations.aggregate,
-    donationsUnavailableHint: donations.unavailableHint,
-    animalsPlaced: input.facts.animalsPlaced,
+    donationTotals: donations.totals,
+    animalsInCare: input.facts.animalsInCare,
+    kennelCapacity: input.facts.kennelCapacity,
+    kennelSourceUnavailable: input.facts.kennelSourceUnavailable,
+    adoptionOutcomes: input.facts.adoptionOutcomes,
     // There is no governed foster entity yet. Preserve that fact in the UI.
     fostersActive: null,
   });

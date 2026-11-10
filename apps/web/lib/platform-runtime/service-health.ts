@@ -1,4 +1,11 @@
 import type { OperationalCapabilityState, ObservedServiceState } from "./operational-state";
+import { MONITORING_SERVICES } from "./monitoring-switch-state";
+
+// BI-8BBFE50B: an optional monitoring service's existing action text links to
+// the monitoring switch, so the operator can act where the state is shown.
+const MONITORING_SWITCH_HREF = "/admin/settings/monitoring";
+const monitoringActionHref = (key: string) =>
+  (MONITORING_SERVICES as readonly string[]).includes(key) ? { actionHref: MONITORING_SWITCH_HREF } : {};
 
 export type CapabilityHealthState =
   | "required"
@@ -83,6 +90,7 @@ export function projectCapabilityServiceHealth(
         availability: "inactive",
         label: "Optional — inactive",
         action: "Enable its runtime capability when this service is needed.",
+        ...monitoringActionHref(key),
         tone: "neutral",
         healthSemantics: requirement?.healthSemantics ?? "capability-state",
       });
@@ -97,6 +105,7 @@ export function projectCapabilityServiceHealth(
         availability: "unavailable",
         label: "Optional — degraded",
         action: "Restore the enabled optional service or disable its runtime capability.",
+        ...monitoringActionHref(key),
         tone: "warning",
         healthSemantics: requirement!.healthSemantics,
       });

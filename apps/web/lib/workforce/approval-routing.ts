@@ -28,7 +28,21 @@ export type ApproverRow = {
 };
 
 /** Why a level of the chain could not act. */
-export type SkipReason = "inactive" | "offboarding" | "suspended" | "on-leave" | "offer" | "onboarding";
+export type SkipReason =
+  | "inactive"
+  | "offboarding"
+  | "suspended"
+  | "on-leave"
+  | "offer"
+  | "onboarding"
+  /**
+   * The approver referred this candidate (BI-D78DC392). Conflict of interest:
+   * a referrer may not approve their own referral, whether or not a bonus is
+   * attached. This is one more skip reason in the existing walk rather than a
+   * second router - the chain-exhausted and reporting-loop failures below still
+   * fail loud, so excluding the referrer can never silently produce no approver.
+   */
+  | "referred-this-candidate";
 
 /**
  * Statuses that cannot approve.
@@ -97,6 +111,13 @@ export type ApprovalRouting =
 export function resolveAccountableApprover(
   rows: ApproverRow[],
   employeeProfileId: string,
+  /**
+   * Employee ids excluded from approving THIS decision for conflict of interest
+   * — currently the referrer of the candidate under consideration
+   * (BI-D78DC392). Excluded like any other unable-to-act level, so the walk
+   * continues upward rather than failing at the conflicted hop.
+   */
+  conflictedApproverIds: readonly string[] = [],
 ): ApprovalRouting {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const employee = byId.get(employeeProfileId);
@@ -116,6 +137,15 @@ export function resolveAccountableApprover(
   for (const ancestorId of ancestorIds) {
     const candidate = byId.get(ancestorId);
     if (!candidate) continue;
+
+    const conflicted = conflictedApproverIds.includes(ancestorId);
+    if (conflicted) {
+      // A conflict is NOT transient: a deputy does not act "on behalf of" a
+      // referrer, because the whole point is that this person's judgement is
+      // excluded from this decision.
+      path.push({ employeeProfileId: ancestorId, skipped: true, reason: "referred-this-candidate" });
+      continue;
+    }
 
     const blocked = CANNOT_ACT[candidate.status];
     if (!blocked) {

@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "refactor-existing-inventory",
+  "decisionInteractionId": "DI-B79D1F597C08",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/workrooms/page.tsx",
+      "apps/web/components/ops/workrooms/HeldWorkroomsList.tsx",
+      "apps/web/components/ops/workrooms/WorkroomActivitySection.tsx",
+      "apps/web/components/ops/workrooms/WorkroomInventory.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["refactor-existing-inventory", "add-separate-dashboard", "rename-live-only"]
+  },
+  "notes": "Recorded WWMD option decision recommends existing inventory refactor with high confidence. Source tests cover honest waiting, recorded holds, accountability, shared-cause grouping and demand-mounted history. Prototype built before plan; local file rendering was security-policy refused, with no workaround. This manifest is an actual option decision, not a claim of rendered route measurements. Canonical runtime desktop/narrow acceptance remains required."
+}

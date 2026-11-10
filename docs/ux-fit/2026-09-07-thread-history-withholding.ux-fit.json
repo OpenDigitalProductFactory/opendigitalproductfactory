@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "redact-the-span-from-the-payload",
+  "decisionInteractionId": "DI-B60AD9E7746F",
+  "scope": {
+    "files": [
+      "apps/web/components/agent/ThreadSensitivityNotice.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "redact-the-span-from-the-payload",
+      "keep-full-history-evidence",
+      "age-the-evidence-recency-window"
+    ],
+    "note": "BI-706530B2 structural half (spec docs/superpowers/specs/2026-09-06-thread-sensitivity-visibility-design.md). No control is added: the single existing control in the already-shipped notice strip changes what it does, from 'Start a fresh conversation' (which discarded the thread) to 'Continue without the earlier messages' (which keeps the thread and its visible record and narrows only what is dispatched). It still renders only on a history-only pin, where the remedy actually works. The kernel scored the payload-redaction shape 11.84 against 11.94 for changing nothing and 3.04 for a recency window over still-transmitted evidence; the top two fell inside the tie band (margin 0.099, confidence low, autonomyEligible false), so per the tool's own advisory the choice was ratified by the operator on 2026-09-07 rather than auto-executed. The recency window was rejected outright and is struck from the item. No new route, field or choice control; --dpf tokens only; the button gains a disabled in-flight label."
+  }
+}

@@ -13,7 +13,8 @@ const mocks = vi.hoisted(() => ({
     $transaction: vi.fn(),
   },
   promoteBacklogItemToBuildDraft: vi.fn(),
-  wipCapReached: vi.fn(),
+  evaluateItemAdmission: vi.fn(),
+  recordAdmissionOutcome: vi.fn(),
   dispatchIdeateForApprovedBuild: vi.fn(),
 }));
 
@@ -21,9 +22,10 @@ vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/governed-backlog-tee-up", () => ({
   promoteBacklogItemToBuildDraft: mocks.promoteBacklogItemToBuildDraft,
 }));
-vi.mock("@/lib/build/wip-cap", () => ({
-  wipCapReached: mocks.wipCapReached,
-  TERMINAL_BUILD_PHASES: ["shipped", "abandoned"],
+vi.mock("@/lib/build/investment-admission", async (importOriginal) => ({
+  blocksStart: (await importOriginal<typeof import("@/lib/build/investment-admission")>()).blocksStart,
+  evaluateItemAdmission: mocks.evaluateItemAdmission,
+  recordAdmissionOutcome: mocks.recordAdmissionOutcome,
 }));
 vi.mock("@/lib/build/ideate-on-approval", () => ({
   dispatchIdeateForApprovedBuild: mocks.dispatchIdeateForApprovedBuild,
@@ -35,7 +37,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.prisma.platformDevConfig.findUnique.mockResolvedValue({ governedBacklogEnabled: true });
   mocks.prisma.featureBuild.count.mockResolvedValue(0);
-  mocks.wipCapReached.mockReturnValue(false);
+  mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
   mocks.prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn({}));
   mocks.prisma.agent.findFirst.mockResolvedValue({
     agentId: "AGT-SW-ENG",
@@ -96,21 +98,23 @@ describe("dispatchConsolidationBet", () => {
     expect(mocks.promoteBacklogItemToBuildDraft).not.toHaveBeenCalled();
   });
 
-  it("reports the WIP cap instead of promoting past it", async () => {
+  it("refuses by points in flight instead of promoting past the allowance (BI-3430B3A4)", async () => {
     mocks.prisma.backlogItem.findUnique.mockResolvedValue({
       itemId: "BI-B72328D5",
       status: "open",
       triageOutcome: "build",
       activeBuildId: null,
     });
-    mocks.wipCapReached.mockReturnValue(true);
+    mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "refuse", reason: "Starting this takes the portfolio to 11 of 8 points in flight (3 over)." });
 
     const result = await dispatchConsolidationBet({ betKey: "BET-11", userId: "u1" });
     if ("error" in result) throw new Error("unexpected error result");
 
     expect(result.skipped).toEqual([
-      { itemId: "BI-B72328D5", reason: "promotion-error", detail: "wip_cap_reached" },
+      { itemId: "BI-B72328D5", reason: "promotion-error", detail: expect.stringContaining("wip_allowance_reached") },
     ]);
+    expect(mocks.evaluateItemAdmission).toHaveBeenCalledWith(expect.anything(), { itemId: "BI-B72328D5", startKind: "autonomous" });
+    expect(mocks.recordAdmissionOutcome).toHaveBeenCalled();
   });
 
   it("surfaces promotion-core errors per item", async () => {

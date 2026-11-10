@@ -31,7 +31,7 @@ export default async function WorkControlPage() {
 
   return (
     <WorkControlPanel
-      capsules={data.capsules}
+      deliveryHub={data.deliveryHub}
       adoptable={data.adoptable}
       livenessSummary={data.livenessSummary}
       createAction={createGovernedWorkAction}

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPrisma = {
+  $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(mockPrisma)),
+  $executeRawUnsafe: vi.fn(),
+  authorizationDecisionLog: { findUnique: vi.fn() },
   workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
@@ -10,6 +13,12 @@ const mockPrisma = {
   },
   workroomActivity: {
     create: vi.fn(),
+    findMany: vi.fn(),
+  },
+  // adopt_worktree resolves a supplied backlogItemId before binding it, so an
+  // unknown id is refused rather than silently dropped (BI-D526F72C).
+  backlogItem: {
+    findFirst: vi.fn(),
   },
 };
 
@@ -18,6 +27,9 @@ vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
 }));
 
+// These tool fixtures represent a qualified canonical writer cohort.
+vi.mock("@/lib/work-capsules/scope-epoch-enrollment.server", () => ({ assertScopeEpochEnrollmentReady: async () => ({ assertCurrent() {} }) }));
+
 vi.mock("@/lib/identity/principal-linking", () => ({
   ensureAgentPrincipalIdentity: vi.fn(async () => ({ id: "principal-agent" })),
   syncUserPrincipal: vi.fn(async () => ({ id: "principal-user" })),
@@ -25,6 +37,14 @@ vi.mock("@/lib/identity/principal-linking", () => ({
 
 describe("work capsule MCP tools", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("keeps classification correction behind administrator grants and authority governance", async () => {
+    const { workCapsulesPack } = await import("./work-capsules-pack");
+    const correction = workCapsulesPack.definitions.find(tool => tool.name === "correct_workroom_sensitivity");
+    expect(correction).toMatchObject({ requiredCapability: "manage_platform", executionMode: "proposal", sideEffect: true, consequence: "authority" });
+    expect(workCapsulesPack.grants.correct_workroom_sensitivity).toEqual(["admin_write"]);
+    expect(workCapsulesPack.grants.review_workroom_sensitivity).toEqual(["admin_read"]);
+  });
 
   it("imports mcp-tools without runtime error under the @dpf/db mock", async () => {
     await expect(import("@/lib/mcp-tools")).resolves.toBeDefined();
@@ -43,7 +63,7 @@ describe("work capsule MCP tools", () => {
     ]);
 
     const { executeTool } = await import("@/lib/mcp-tools");
-    const result = await executeTool("list_workrooms", { status: "ready" }, "user-1");
+    const result = await executeTool("list_workrooms", { status: "ready" }, "user-1", { userContext: { platformRole: "HR-000", isSuperuser: true } });
 
     expect(result.success).toBe(true);
     expect(result.data?.capsules).toEqual([
@@ -52,6 +72,22 @@ describe("work capsule MCP tools", () => {
     // read tool — must never touch lease fields
     expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
     expect(mockPrisma.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("finds a stale Workroom beyond the old 100-row cutoff through either public name", async () => {
+    const rows = Array.from({ length: 251 }, (_, i) => ({
+      capsuleId: `WC-CUTOFF-${i}`, title: "Room", status: "ready", source: "external-adoption",
+      executorKind: "codex-desktop", leaseHolderPrincipalId: "u", executorRef: "session",
+      updatedAt: new Date(), leaseExpiresAt: i === 200 ? new Date(0) : new Date(Date.now() + 3600000),
+    }));
+    mockPrisma.workroom.findMany.mockImplementation(async ({ take }: { take: number }) => rows.slice(0, take));
+    const { executeTool } = await import("@/lib/mcp-tools");
+    for (const name of ["list_workrooms", "list_work_capsules"]) {
+      const result = await executeTool(name, { staleOnly: true, limit: 1 }, "u", { userContext: { platformRole: "HR-000", isSuperuser: true } });
+      expect(result.success).toBe(true);
+      expect(result.data?.capsules).toEqual([expect.objectContaining({ capsuleId: "WC-CUTOFF-200" })]);
+      expect(result.data?.page).toMatchObject({ populationCount: 1, pageCount: 1, nextCursor: null });
+    }
   });
 
   it("list_workrooms filters by decision scope and portfolio role", async () => {
@@ -73,6 +109,7 @@ describe("work capsule MCP tools", () => {
       "list_workrooms",
       { decisionScope: "wwwd", portfolioRole: "productsAndServicesSold" },
       "user-1",
+      { userContext: { platformRole: "HR-000", isSuperuser: true } },
     );
 
     expect(result.success).toBe(true);
@@ -89,6 +126,30 @@ describe("work capsule MCP tools", () => {
         portfolioRole: "productsAndServicesSold",
       }),
     ]);
+  });
+
+  // BI-62514632: read the room's ordered log from a position the caller holds.
+  it("get_workroom returns the log after afterSequence, oldest first", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-LOG", title: "Log", activities: [] });
+    mockPrisma.workroomActivity.findMany.mockResolvedValue([{ id: "a5", sequence: 5 }, { id: "a6", sequence: 6 }]);
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("get_workroom", { capsuleId: "WC-LOG", afterSequence: 4 }, "user-1", { agentId: "codex" });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { log: { afterSequence: 4, activity: [{ sequence: 5 }, { sequence: 6 }], hasMore: false } },
+    });
+    expect(mockPrisma.workroomActivity.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workCapsuleId: "row-1", sequence: { gt: 4 } },
+      orderBy: { sequence: "asc" },
+    }));
+  });
+
+  it("get_workroom refuses a malformed afterSequence", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("get_workroom", { capsuleId: "WC-LOG", afterSequence: -3 }, "user-1", { agentId: "codex" });
+    expect(result).toMatchObject({ success: false, error: "invalid_input" });
   });
 
   it("get_workroom does not renew leases for read-only hydration", async () => {
@@ -179,7 +240,29 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
   });
 
+  it("heartbeat_workroom refuses while another principal holds a live lease (BI-A7601AED)", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-1",
+      leaseHolderPrincipalId: "principal-someone-else",
+      leaseExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("heartbeat_workroom", { capsuleId: "WC-1" }, "user-1", {
+      agentId: "codex",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "lease_held_by_other",
+      data: { holderPrincipalId: "principal-someone-else" },
+    });
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+  });
+
   it("heartbeat_workroom renews a lease", async () => {
+    mockPrisma.workroom.findUnique.mockResolvedValue({ id: "row-1", capsuleId: "WC-1", leaseHolderPrincipalId: null });
     mockPrisma.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-1" });
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
 
@@ -315,8 +398,13 @@ describe("work capsule MCP tools", () => {
 
   it("adopt_worktree persists scope metadata", async () => {
     mockPrisma.workroom.findFirst.mockResolvedValue(null);
-    mockPrisma.workroom.create.mockResolvedValue({ id: "row-1", capsuleId: "WC-ADOPTSCOPE" });
+    mockPrisma.workroom.create.mockResolvedValue({
+      id: "row-1",
+      capsuleId: "WC-ADOPTSCOPE",
+      backlogItemId: "BI-5F70A7DA",
+    });
     mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+    mockPrisma.backlogItem.findFirst.mockResolvedValue({ itemId: "BI-5F70A7DA" });
 
     const { executeTool } = await import("@/lib/mcp-tools");
     const result = await executeTool("adopt_worktree", {
@@ -373,9 +461,99 @@ describe("work capsule MCP tools", () => {
         backlogItemId: "BI-OTHER",
       },
     });
-    expect(result.message).toMatch(/Resume that capsule.*or use a different branch/i);
+    expect(result.message).toMatch(/Resume BI-OTHER on that capsule, or use a different branch/i);
     expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
     expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
+  });
+
+  // BI-D526F72C: the schema advertised no `backlogItemId`, so the argument every
+  // caller reached for was dropped and the capsule came back with
+  // backlogItemId: null while reporting success.
+  describe("adopt_worktree binds the backlog item it was given", () => {
+    it("declares backlogItemId in its input schema", async () => {
+      const { workCapsulesPack } = await import("./work-capsules-pack");
+      const adopt = workCapsulesPack.definitions.find((tool) => tool.name === "adopt_worktree");
+      expect(adopt?.inputSchema.properties).toHaveProperty("backlogItemId");
+    });
+
+    it("binds the item and reads the binding back", async () => {
+      mockPrisma.workroom.findFirst.mockResolvedValue(null);
+      mockPrisma.backlogItem.findFirst.mockResolvedValue({ itemId: "BI-47ACE2C7" });
+      mockPrisma.workroom.create.mockResolvedValue({
+        id: "row-1",
+        capsuleId: "WC-BOUND",
+        backlogItemId: "BI-47ACE2C7",
+      });
+      mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+      const { executeTool } = await import("@/lib/mcp-tools");
+      const result = await executeTool("adopt_worktree", {
+        title: "Adopt the impl branch",
+        objective: "Deliver the routing fix.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "fix/prompt-only-semantic-review-routing-impl",
+        worktreePath: "D:/DPF-worktrees/psr-impl",
+        backlogItemId: "BI-47ACE2C7",
+      }, "user-1", { agentId: "claude" });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.capsule).toMatchObject({ backlogItemId: "BI-47ACE2C7" });
+      expect(mockPrisma.workroom.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ backlogItemId: "BI-47ACE2C7" }) }),
+      );
+    });
+
+    it("refuses an unknown item rather than adopting unbound", async () => {
+      // Adopting anyway is what produced WC-8DB317F7: a capsule that occupied
+      // the branch and could be neither claimed nor released.
+      mockPrisma.backlogItem.findFirst.mockResolvedValue(null);
+
+      const { executeTool } = await import("@/lib/mcp-tools");
+      const result = await executeTool("adopt_worktree", {
+        title: "Adopt with a typo'd id",
+        objective: "Deliver something.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "fix/typo",
+        worktreePath: "D:/DPF-worktrees/typo",
+        backlogItemId: "BI-NOPE",
+      }, "user-1", { agentId: "claude" });
+
+      expect(result).toMatchObject({ success: false, error: "unknown_backlog_item" });
+      expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
+    });
+
+    it("reports a mismatch rather than success when the branch bound something else", async () => {
+      // A live capsule on the branch with no item is reused and late-bound; the
+      // readback is what proves the binding actually landed.
+      mockPrisma.backlogItem.findFirst.mockResolvedValue({ itemId: "BI-47ACE2C7" });
+      mockPrisma.workroom.findFirst.mockResolvedValue({
+        id: "row-1",
+        capsuleId: "WC-DRIFT",
+        status: "ready",
+        backlogItemId: null,
+        executorRef: null,
+        headBranch: "fix/drift",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      });
+      mockPrisma.workroom.update.mockResolvedValue({
+        id: "row-1",
+        capsuleId: "WC-DRIFT",
+        backlogItemId: null,
+      });
+      mockPrisma.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
+
+      const { executeTool } = await import("@/lib/mcp-tools");
+      const result = await executeTool("adopt_worktree", {
+        title: "Adopt drifted branch",
+        objective: "Deliver the fix.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "fix/drift",
+        worktreePath: "D:/DPF-worktrees/drift",
+        backlogItemId: "BI-47ACE2C7",
+      }, "user-1", { agentId: "claude" });
+
+      expect(result).toMatchObject({ success: false, error: "backlog_item_not_bound" });
+    });
   });
 
   it("plan_workroom_worktree persists the planned workspace", async () => {
@@ -440,7 +618,8 @@ describe("work capsule MCP tools", () => {
   it("claim_workroom_scope stores typed scope claims", async () => {
     let capsule = {
       id: "row-1",
-      capsuleId: "WC-SCOPE",
+      capsuleId: "WC-SCOPE", status: "working", archivedAt: null, updatedAt: new Date(),
+      leaseHolderPrincipalId: "principal-agent", leaseExpiresAt: new Date(Date.now() + 600_000),
       scopeClaims: [],
     } as Record<string, unknown>;
     mockPrisma.workroom.findUnique.mockImplementation(async () => capsule);
@@ -536,6 +715,10 @@ describe("work capsule MCP tools", () => {
   });
 
   it("release_workroom_scope removes matching scope claims", async () => {
+    mockPrisma.authorizationDecisionLog.findUnique.mockResolvedValue({
+      actionKey: "release_workroom_scope", actorRef: "codex", humanContextRef: "user-1",
+      agentContextRef: "codex", decision: "allow", rationale: {},
+    });
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-RELEASE",
@@ -545,14 +728,14 @@ describe("work capsule MCP tools", () => {
           value: "apps/web/lib/work-capsules.ts",
           intent: "edit",
           recordedAt: "2026-05-14T00:00:00.000Z",
-          recordedByPrincipalId: "principal-1",
+          recordedByPrincipalId: "principal-1", releaseEpoch: "00000000-0000-4000-8000-000000000001",
         },
         {
           kind: "route",
           value: "/build/work",
           intent: "read",
           recordedAt: "2026-05-14T00:00:00.000Z",
-          recordedByPrincipalId: "principal-1",
+          recordedByPrincipalId: "principal-1", releaseEpoch: "00000000-0000-4000-8000-000000000001",
         },
       ],
     });
@@ -561,9 +744,9 @@ describe("work capsule MCP tools", () => {
 
     const { executeTool } = await import("@/lib/mcp-tools");
     const result = await executeTool("release_workroom_scope", {
-      capsuleId: "WC-RELEASE",
-      claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts" }],
-    }, "user-1", { agentId: "codex" });
+      capsuleId: "WC-RELEASE", expectedRoomId: "row-1",
+      claims: [{ kind: "path", value: "apps/web/lib/work-capsules.ts", intent: "edit", recordedByPrincipalId: "principal-1", releaseEpoch: "00000000-0000-4000-8000-000000000001" }],
+    }, "user-1", { agentId: "codex", authorityDecisionId: "AUTH-release" });
 
     expect(result.success).toBe(true);
     expect(mockPrisma.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -582,5 +765,20 @@ describe("work capsule MCP tools", () => {
     expect(mockPrisma.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ kind: "lease-renewed", recordedByAgentId: "codex" }),
     }));
+  });
+});
+
+
+describe("bounded handoff tool contract", () => {
+  it("exposes request and acknowledgement while retaining authority as the default", async () => {
+    const { workCapsulesPack } = await import("./work-capsules-pack");
+    const tool = workCapsulesPack.definitions.find(t => t.name === "reassign_workroom_executor")!;
+    expect(tool.consequence).toBe("authority");
+    expect(tool.consequenceForCall).toBeTypeOf("function");
+    expect(tool.inputSchema.properties).toMatchObject({ phase: { enum: ["request", "acknowledge"] }, requestId: { type: "string" }, targetAgentId: { type: "string" }, expectedExecutorRef: { type: "string" } });
+    // One room by capsuleId, or a batched set by capsuleIds (BI-D4144471); the handler requires one.
+    expect(tool.inputSchema.required).toBeUndefined();
+    expect(tool.inputSchema.properties).toMatchObject({ capsuleIds: { type: "array", maxItems: 20 }, dryRun: { type: "boolean" }, planDigest: { type: "string" } });
+    expect(workCapsulesPack.grants.reassign_workroom_executor).toEqual(["work_capsule_write"]);
   });
 });

@@ -1,6 +1,6 @@
 // packages/db/src/index.ts
-export { prisma } from "./client";
-export { ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners } from "./provider-connection";
+export { prisma, createDatabaseClient } from "./client";
+export { ensureDefaultProviderConnection, refreshDefaultProviderConnectionOwners, setProviderStatusWithDefaultConnection } from "./provider-connection";
 export {
   PROVIDER_COMPLIANCE_SOURCE_REGISTRY,
   validateProviderComplianceSourceRegistry,
@@ -13,6 +13,7 @@ export {
 // Prisma.DbNull) and a type (for input/output type aliases).
 export { Prisma } from "../generated/client/client";
 export type {
+  AutomationPersonaProfile,
   PrismaClient,
   PayRunStatus,
   PayslipDisbursementStatus,
@@ -24,16 +25,46 @@ export type {
   CapacityAllocationState,
 } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
+export type { InvestmentWorkClass, InvestmentWorkPurpose } from "../generated/client/client";
 // Worker classification: the legally-consequential axis, distinct from the
 // organisation's EmploymentType label (BI-C61CEEA9). Exported as a value so the
 // app composes from the generated enum instead of re-typing its members.
 export { WorkerClassification } from "../generated/client/client";
+// Document rendition kinds (BI-9D43CBEF): exported as a value so the app
+// composes from the generated enum instead of re-typing its members.
+export { DocumentRenditionKind } from "../generated/client/client";
+// Discovered external MCP tool policy (BI-8B7B2FE9): exported as values so the
+// app composes from the generated enums instead of re-typing their members.
+export {
+  McpToolEffect,
+  McpToolExecutionMode,
+  McpToolPolicyStatus,
+} from "../generated/client/client";
+// GPP Phase 2 permit vocabulary (BI-69415B68). Exported as values so the app
+// composes from the generated enums instead of re-typing their members.
+export {
+  GppObservationPath,
+  GppPermitEnforcement,
+  GppPermitVerdict,
+} from "../generated/client/client";
 // Decision-resolution proposal vocabulary (BI-3D0FB84B). Exported as values so
 // the app composes from the generated enum instead of re-typing its members.
 export {
   DecisionProposalAction,
   DecisionProposalScope,
   DecisionProposalStatus,
+} from "../generated/client/client";
+// What a governed decision is ABOUT (BI-01F8F06D). Exported as a TYPE, not a
+// value: under vitest `@dpf/db` aliases to src/client.ts, which exports only
+// `prisma`, so a value import of a generated enum resolves to undefined there.
+// The type still closes the set at compile time, and Postgres closes it at
+// write time, so a writer spells the member as a literal and TS rejects any
+// member the schema does not define.
+export type { DecisionSubjectKind, DecisionEscalationRoute, BacklogTriageAssessmentOutcome } from "../generated/client/client";
+export {
+  WorkroomParticipantRole,
+  WorkroomParticipantAssignmentSource,
+  WorkroomRelationKind,
 } from "../generated/client/client";
 export {
   PRINCIPAL_SENSITIVITIES,
@@ -44,6 +75,7 @@ export {
 export * from "./healthcare-patient-authority";
 export * from "./healthcare-care-intake";
 export * from "./subject-reference";
+export * from "./agent-principal-convergence";
 
 // Quality-issue lifecycle governance (BI-0B420A1D): the registry is the
 // compile-time contract; the drift sweep is the runtime half.
@@ -64,20 +96,21 @@ export {
   type QualityIssueDriftReport,
 } from "./quality-issue-drift-sweep";
 
-// Qdrant vector database
+// Vector store (pgvector in Postgres)
 export {
-  ensureCollections as ensureQdrantCollections,
+  ensureCollections as ensureVectorCollections,
   ensurePayloadIndexes,
   upsertVectors,
   searchSimilar,
+  searchLexical,
   scrollPoints,
   deleteVectors,
-  isQdrantHealthy,
+  isVectorStoreHealthy,
   hashToNumber,
-  QDRANT_COLLECTIONS,
+  VECTOR_COLLECTIONS,
   type MatchClause,
-  type QdrantFilter,
-} from "./qdrant";
+  type VectorFilter,
+} from "./pgvector-store";
 
 // EP-WIKI-001 Phase 1a: wiki kernel + per-org overlay store helpers
 // Phase 2.1 adds the raw-source ingest helpers (upsertRawSource,
@@ -142,7 +175,20 @@ export {
   type PrincipleAppliesTo,
   type PrincipleDimension,
 } from "./wiki-taxonomy";
-export { initNeo4jSchema, backfillOsiLayers, NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
+export { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
+export {
+  RELATION_TYPES,
+  RelationTypeError,
+  assertRelationWrite,
+  getRelationType,
+  isGenericRelationName,
+  lintRelationVocabulary,
+  toRelationType,
+  type RelationClass,
+  type RelationStatus,
+  type RelationType,
+  type RelationTypeDef,
+} from "./relation-vocabulary";
 export {
   getDownstreamImpact,
   getUpstreamDependencies,
@@ -158,14 +204,14 @@ export {
   getLayeredDependencyStack,
   getNetworkTopologyAtLayer,
   getNetworkTopologyAtLayerForScope,
-  type Neo4jTopologyScope,
+  type GraphTopologyScope,
   pruneStaleInfraCIs,
   type GraphNode,
   type GraphEdge,
   type ImpactResult,
   type LayeredDependency,
   type PruneResult,
-} from "./neo4j-graph";
+} from "./pg-graph";
 export {
   buildDiscoveryScopeKey,
   buildScopedInventoryEntityKey,
@@ -265,6 +311,22 @@ export {
   type DemandRouteHopV1,
   type DemandSchemaVersion,
 } from "./federated-demand-contract";
+export {
+  OPERATIONAL_POSTURE_FIELDS,
+  OPERATIONAL_POSTURE_PROJECTION_TEMPLATE,
+  OPERATIONAL_POSTURE_SCHEMA_VERSIONS,
+  POSTURE_HEALTH_STATUSES,
+  computeOperationalPosturePayloadDigest,
+  validateOperationalPostureV1,
+  type OperationalPostureSchemaVersion,
+  type OperationalPostureV1,
+  type OperationalPostureValidationContext,
+  type PostureHealthRollupV1,
+  type PostureHealthStatus,
+  type PosturePatchSummaryV1,
+  type PostureResourceFootprintV1,
+  type PostureRuntimeSummaryV1,
+} from "./federated-operational-posture-contract";
 export {
   assertNoExcludedEgress,
   isForbiddenField,
@@ -388,7 +450,19 @@ export {
   syncDocumentReference,
   syncEaElement,
   syncEaRelationship,
+  pruneStaleEaRelationshipEdges,
+  replaceGraphEdgesFromSource,
+  projectWikiLinksToGraph,
 } from "./graph-sync";
+// BI-23900D0A: the one writer for a wiki page's out-links, and its backfill.
+export {
+  replaceWikiPageOutLinks,
+  reconcileWikiPageLinks,
+  type WikiLinkClient,
+  type ProjectWikiLinks,
+  type ReplaceWikiPageOutLinksResult,
+  type ReconcileWikiPageLinksResult,
+} from "./wiki-links";
 export {
   CODE_GRAPH_KEY,
   DOC_GRAPH_KEY,
@@ -425,6 +499,15 @@ export {
 export { DATA_MODEL_MIRROR_TASK_ID } from "./data-model-mirror-config";
 export { SYSML_PROJECTION_TASK_ID } from "./sysml-projection-config";
 export { SELF_OPTIMIZATION_SWEEP_TASK_ID } from "./self-optimization-sweep-config";
+export {
+  ACCEPTANCE_AGED_DAYS,
+  ACCEPTANCE_SWEEP_AGENT_ID,
+  ACCEPTANCE_SWEEP_PAGE_SIZE,
+  ACCEPTANCE_SWEEP_ROUTE_LIMIT,
+  ACCEPTANCE_SWEEP_ROUTING,
+  ACCEPTANCE_SWEEP_TASK_KIND,
+  ACCEPTANCE_TREND_DAYS,
+} from "./acceptance-sweep-config";
 // Canonical SysML projection applier — shared by seed-time views (packages/db
 // seed-ea-sysml-*.ts) and runtime extractors (apps/web/lib/ea, via this barrel).
 export {
@@ -617,6 +700,10 @@ export * from "./discovery-fingerprint-store";
 export * from "./installation-operating-intent";
 export * from "./installation-instance-stance";
 export * from "./reference-freshness";
+export * from "./performer-allocation";
+export * from "./workforce-staffing-posture";
+export * from "./coworker-job-definition";
+export * from "./archetype-job-definition-projection";
 
 // Contributor-inventory-sync ScheduledJob constants — shared between the
 // seed helper and the apps/web Inngest runner so the heartbeat row's name +

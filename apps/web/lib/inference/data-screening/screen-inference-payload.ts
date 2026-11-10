@@ -1,4 +1,6 @@
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { createHash } from "node:crypto";
+import { observeLocalNativeContinuationPolicy } from "@/lib/routing/local-native-continuation";
 import type {
   DestinationClass,
   ProcessingPurposeKey,
@@ -6,7 +8,8 @@ import type {
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { ActivityContract } from "@/lib/routing/activity-contract";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
-import { classifyInferencePayload } from "./classify-payload";
+import { classifyInferencePayload, isVocabularyOnlyEvidence } from "./classify-payload";
+import type { MessageOrigin } from "./types";
 import { evaluateInferenceDispatchPolicy } from "./evaluate-inference-policy";
 import type {
   GovernedPayloadHint,
@@ -28,7 +31,7 @@ function dedupeMatchProvenance(
 ): InferenceMatchProvenance[] {
   const seen = new Map<string, InferenceMatchProvenance>();
   for (const row of rows) {
-    const key = `${row.dataClass}|${row.path}|${row.reason}|${row.confidence}`;
+    const key = `${row.dataClass}|${row.path}|${row.reason}|${row.confidence}|${row.origin ?? ""}`;
     if (!seen.has(key)) seen.set(key, row);
   }
   return [...seen.values()].sort((a, b) =>
@@ -50,6 +53,8 @@ export type ScreenInferencePayloadInput = {
   systemPrompt: string;
   /** Platform-authored instruction spans within `systemPrompt` (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
+  /** Positional labels for `messages` — what each one IS, never its content. */
+  messageOrigins?: readonly MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   routeContext?: ScreenRouteContextInput;
@@ -77,6 +82,21 @@ export type ScreenInferencePayloadInput = {
   >;
 };
 
+/**
+ * The payload index at which the exchange under way starts: the last user-role
+ * message. Everything below it is history the owner may not remember writing.
+ *
+ * -1 when the payload carries no user message at all (a system-initiated
+ * screen), which reads as "no message is current" and keeps every match in
+ * history — the conservative side, since it never claims the owner caused it.
+ */
+function currentTurnStartIndex(messages: readonly { role: string }[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") return index;
+  }
+  return -1;
+}
+
 export function screenInferencePayload(
   input: ScreenInferencePayloadInput,
 ): InferenceDataScreenResult {
@@ -84,20 +104,22 @@ export function screenInferencePayload(
     input.governedData,
     hintsFromActivity(input.activityContract),
   );
-  const classification = classifyInferencePayload({
+  const classify = () => classifyInferencePayload({
     messages: input.messages,
     systemPrompt: input.systemPrompt,
     systemPromptInstructionSpans: input.systemPromptInstructionSpans,
+    messageOrigins: input.messageOrigins,
     tools: input.tools,
     taskType: input.taskType,
     governedData,
   });
+  let classification = classify();
   const destinationClass = input.destinationClass ?? "external-service";
   const policyVersions = input.policyVersionSource?.();
   const prior = input.appliedTransformationSource?.() ?? input.appliedTransformation;
-  const policy = evaluateInferenceDispatchPolicy({
+  const evaluate = (current: typeof classification) => evaluateInferenceDispatchPolicy({
     organizationId: input.organizationId ?? DEFAULT_ORGANIZATION_ID,
-    classification,
+    classification: current,
     governedData,
     destinationClass,
     purpose: input.purpose,
@@ -107,6 +129,20 @@ export function screenInferencePayload(
     policyBundleVersion: policyVersions?.policyBundleVersion,
     transformation: prior?.transformation ?? "none",
   });
+  let policy = evaluate(classification);
+  // A receipt's default classificationVersion is its PAYLOAD hash. Observe
+  // actual policy versions instead, so appending a turn does not erase replay.
+  const policyDigest = createHash("sha256").update(JSON.stringify({
+    asset: policyVersions?.assetVersion ?? null,
+    classification: policyVersions?.classificationVersion ?? null,
+    authority: policyVersions?.authorityVersion ?? null,
+    bundle: policyVersions?.policyBundleVersion ?? null,
+    packs: [...policy.policyPackVersions].sort(),
+  })).digest("hex");
+  if (observeLocalNativeContinuationPolicy(policyDigest)) {
+    classification = classify();
+    policy = evaluate(classification);
+  }
 
   const originalSensitivity = normalizeRoutingSensitivity(input.routeContext?.sensitivity);
   const declaredPayloadSensitivity = originalSensitivity === "development"
@@ -124,9 +160,21 @@ export function screenInferencePayload(
       : classification.overallSensitivity;
   const sensitivity = strongestSensitivity(originalSensitivity, routedPayloadSensitivity);
   const maskRequired = policy.obligations.some((obligation) => obligation.kind === "mask");
+  // A mask obligation clamps the turn local so nothing leaves unredacted. That
+  // is right whenever there is something to redact — and a no-op when the only
+  // evidence is corroboration-gated vocabulary, because a domain was named and
+  // no value was found. Clamping then protects nothing and makes a coworker
+  // unreachable for its own subject: asking for help with payroll measured
+  // confidential, attached a mask with nothing to mask, and fenced the turn
+  // (BI-67CAF494, RouteDecisionLog screen_2781e0797c3307ed).
+  //
+  // Narrow by construction. One precise match, any declared governed hint, or a
+  // deny/review effect and the clamp stands.
+  const maskHasNothingToRedact =
+    maskRequired && isVocabularyOnlyEvidence(classification.matches, input.governedData);
   const routeEffect = policy.effect === "deny" ||
     policy.effect === "review" ||
-    (maskRequired && !prior)
+    (maskRequired && !prior && !maskHasNothingToRedact)
     ? "local-only"
     : "allow";
   const residencyPolicy = routeEffect === "local-only"
@@ -190,6 +238,10 @@ export function screenInferencePayload(
           path: match.path,
           reason: match.reason,
           confidence: match.confidence,
+          // A label saying WHAT the message was, so `messages[0].content` stops
+          // being ambiguous between a real turn and a block the coworker path
+          // prepended. Still no values (BI-40EF7C44).
+          ...(match.origin ? { origin: match.origin } : {}),
         })),
       ),
       // The declared route label is a floor (strongestSensitivity above), so a
@@ -203,6 +255,12 @@ export function screenInferencePayload(
       // here because it is not itself a business-data confidentiality level.
       measuredSensitivity: routedPayloadSensitivity,
       declaredSensitivity: declaredPayloadSensitivity,
+      // Where the exchange under way begins, so a local-only verdict can be
+      // attributed to history rather than to the message the owner just sent
+      // (BI-706530B2). An index, never content. The provenance paths already
+      // carry indices; without this anchor there is nothing to compare them
+      // against, and "something earlier pinned this thread" is underivable.
+      currentTurnStartIndex: currentTurnStartIndex(input.messages),
       sensitivityFloorApplied: sensitivity !== routedPayloadSensitivity,
       rawPayloadStored: false,
     },

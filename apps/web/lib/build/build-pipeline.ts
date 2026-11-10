@@ -190,6 +190,8 @@ export async function runBuildPipeline(params: {
           }
           break; // step succeeded — move on
         } catch (err) {
+          const { describeCapacityDeferral } = await import("./capacity-deferral");
+          if (describeCapacityDeferral(err)) throw err;
           attempt++;
           let errorMsg = getErrorMessage(err);
           const { getAutonomousPlaybookMode } = await import(
@@ -278,18 +280,28 @@ export async function runBuildPipeline(params: {
  * Inngest function runs each step as its own journaled step.run via
  * build-execute-helpers.runPipelineStepDurable.
  */
+async function requireCurrentBuildHuman(buildId: string) {
+  const { prisma } = await import("@dpf/db");
+  const { currentOperationAuthority } = await import("@/lib/govern/operation-authority");
+  const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { createdById: true } });
+  const user = build?.createdById ? await currentOperationAuthority(build.createdById, "start_build") : null;
+  if (!user || !build?.createdById) throw new Error("The initiating user no longer has permission to run this build.");
+  return { ...user, userId: build.createdById };
+}
+
 export async function executeStep(
   step: BuildExecStep,
   buildId: string,
   state: BuildExecutionState,
   emit: (event: import("@/lib/agent-event-bus").AgentEvent) => void,
 ): Promise<BuildExecutionState> {
+  const user = STEP_ORDER.includes(step) && step !== "complete" ? await requireCurrentBuildHuman(buildId) : null;
   switch (step) {
-    case "pending":              return stepCreateSandbox(buildId, state, emit);
+    case "pending":              return stepCreateSandbox(buildId, state, emit, user!.userId);
     case "sandbox_created":      return stepInitWorkspace(buildId, state);
     case "workspace_initialized":return stepInitDb(buildId, state);
     case "db_ready":             return stepInstallDeps(buildId, state);
-    case "deps_installed":       return stepGenerateCode(buildId, state);
+    case "deps_installed":       return stepGenerateCode(buildId, state, user!);
     case "code_generated":       return stepRunTests(buildId, state);
     case "tests_run":            return stepComplete(buildId, state);
     default:                     return state;
@@ -302,6 +314,7 @@ async function stepCreateSandbox(
   buildId: string,
   state: BuildExecutionState,
   emit: (event: import("@/lib/agent-event-bus").AgentEvent) => void,
+  userId: string,
 ): Promise<BuildExecutionState> {
   const { isSandboxAvailable, startBuildBranch } = await import("./sandbox/build-branch");
   const { waitForSandboxSlot } = await import("./sandbox/sandbox-pool");
@@ -314,7 +327,7 @@ async function stepCreateSandbox(
   // Acquire a slot from the pool — waits up to 30 min if all slots are busy.
   // Emits "slot_queued" progress events so Build Studio shows a waiting state
   // rather than appearing stuck at "Pending".
-  const slot = await waitForSandboxSlot(buildId, "system", {
+  const slot = await waitForSandboxSlot(buildId, userId, {
     pollIntervalMs: 30_000,
     timeoutMs: 1_800_000,
     onWaiting: (attempt) => {
@@ -349,7 +362,6 @@ async function stepInitDb(
 
   // Pool sandboxes use a shared sandbox-postgres managed by compose.
   // Per-build DB containers are only created for dynamic sandboxes.
-  // BET-5 (BI-28D31FB7): Postgres only — Neo4j/Qdrant sidecars retired.
   const dbContainer = state.dbContainerId ?? "dpf-sandbox-postgres-1";
 
   await waitForSandboxDb(dbContainer);
@@ -408,11 +420,12 @@ async function stepInstallDeps(
 async function stepGenerateCode(
   buildId: string,
   state: BuildExecutionState,
+  userContext: Awaited<ReturnType<typeof requireCurrentBuildHuman>>,
 ): Promise<BuildExecutionState> {
   const { prisma } = await import("@dpf/db");
   const { runAgenticLoop } = await import("@/lib/agentic-loop");
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
-  const { getBuildPhasePrompt, getBuildContextSection } = await import("./build-agent-prompts");
+  const { getBuildContextSection } = await import("./build-agent-prompts");
   const { agentEventBus } = await import("@/lib/agent-event-bus");
 
   const build = await prisma.featureBuild.findUniqueOrThrow({ where: { buildId } });
@@ -477,8 +490,7 @@ async function stepGenerateCode(
   //
   // Tools with no buildPhases tag (null/undefined) are platform-wide utilities
   // that are safe to include regardless of phase.
-  const adminContext = { userId: "system", platformRole: "HR-000", isSuperuser: true } as Parameters<typeof getAvailableTools>[0];
-  const allTools = await getAvailableTools(adminContext, { mode: "act", unifiedMode: true });
+  const allTools = await getAvailableTools(userContext, { mode: "act", unifiedMode: true });
   const tools = allTools.filter(
     (t) => !t.buildPhases || t.buildPhases.includes("build"),
   );
@@ -618,7 +630,7 @@ async function stepGenerateCode(
     sensitivity: "development", // code clearance; payload screening still applies
     tools,
     toolsForProvider,
-    userId: "system",
+    userId: userContext.userId,
     routeContext: `/build/${buildId}`,
     agentId: "build-architect",
     threadId,
@@ -736,97 +748,11 @@ async function stepComplete(
     );
   }
 
-  const { prisma } = await import("@dpf/db");
-  const { extractDiff, execInSandbox, listSandboxCommitsAheadOfBase } = await import(
-    "./sandbox/sandbox"
-  );
-  const { getClientIdentity, resolveBuildWorkdir, buildSandboxCommitInFlightWorkCommand } =
-    await import("./sandbox/build-branch");
-
-  const identity = await getClientIdentity();
-  const baseRef = identity.clientBranch;
-  // Extract the diff from the build's working dir: its own worktree when
-  // isolation is on, else /workspace (default — byte-identical). BI-98B723C0 2c.
-  const buildWorkdir = resolveBuildWorkdir(buildId);
-
-  // BI-53C14D19: the per-task coding agents WRITE files into the working tree
-  // but do not COMMIT them, so listSandboxCommitsAheadOfBase() below would
-  // capture 0 commits and the build would strand at deploy/ship with "no
-  // releasable source changes" (working tree dirty) — the generated code sat
-  // uncommitted and was lost on the next branch scrub. Commit any in-flight
-  // task output onto the build branch here, before capture. Best-effort and
-  // build/-branch-scoped (the helper no-ops off a build/ branch and excludes
-  // generated artifacts), so a no-op or failure never blocks completion.
-  await execInSandbox(
-    state.containerId,
-    buildSandboxCommitInFlightWorkCommand(buildWorkdir),
-  ).catch((err: unknown) => {
-    console.warn(
-      "[build-pipeline] pre-capture in-flight commit failed (best-effort):",
-      (err as Error)?.message,
-    );
+  const { captureAssembledChange } = await import("./capture-assembled-change");
+  const { sourceCurrency } = await captureAssembledChange({
+    buildId,
+    containerId: state.containerId,
   });
-
-  const [fullDiff, commitHashes] = await Promise.all([
-    extractDiff(state.containerId, { baseRef, workspace: buildWorkdir }),
-    listSandboxCommitsAheadOfBase(state.containerId, baseRef, buildWorkdir),
-  ]);
-
-  // Branch-start currency is stale once task output is committed.
-  const { refreshCommittedSourceCurrency } = await import("./sandbox/refresh-source-currency");
-  const sourceCurrency = await refreshCommittedSourceCurrency({
-    workspace: buildWorkdir,
-    targetRef: baseRef,
-    exec: (command) => execInSandbox(state.containerId!, command),
-  });
-  // BI-D93CF6C0 — generate the plain-language change narrative (Band 2 of the
-  // overseer layer) from the goal + plan + diff. Best-effort: a null result just
-  // falls back to the raw diffSummary dive-in, so this never blocks completion.
-  let changeNarrative:
-    | import("@/lib/feature-build-types").BuildChangeNarrative
-    | null = null;
-  try {
-    const buildRow = await prisma.featureBuild.findUnique({
-      where: { buildId },
-      select: { title: true, designDoc: true, buildPlan: true },
-    });
-    if (buildRow) {
-      const designDoc = buildRow.designDoc as
-        | { problemStatement?: string; proposedApproach?: string }
-        | null;
-      const { generateChangeNarrative } = await import("./change-narrative");
-      changeNarrative = await generateChangeNarrative({
-        title: buildRow.title,
-        goal: designDoc?.problemStatement ?? designDoc?.proposedApproach ?? null,
-        planText: buildRow.buildPlan ? JSON.stringify(buildRow.buildPlan) : null,
-        diff: fullDiff,
-      });
-    }
-  } catch (err) {
-    console.warn(
-      "[build-pipeline] change-narrative generation skipped:",
-      (err as Error)?.message,
-    );
-  }
-
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: {
-      diffPatch: fullDiff,
-      diffSummary: fullDiff.slice(0, 500),
-      gitCommitHashes: commitHashes,
-      ...(changeNarrative
-        ? {
-            changeNarrative:
-              changeNarrative as unknown as import("@dpf/db").Prisma.InputJsonValue,
-          }
-        : {}),
-    },
-  });
-
-  console.log(
-    `[build-pipeline] stepComplete: captured ${fullDiff.length} bytes diff + ${commitHashes.length} commits for ${JSON.stringify(buildId)}`,
-  );
 
   return { ...state, sourceCurrency };
 }

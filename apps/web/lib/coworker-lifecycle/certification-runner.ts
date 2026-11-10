@@ -140,6 +140,8 @@ export type CertificationDeps = {
   fetchAgentGrants: (agentId: string) => Promise<string[]>;
   db: typeof prisma;
   now: () => Date;
+  /** Who certification runs as; defaults to the scheduled-work owner (BI-87AE4BF6). */
+  resolveOwnerUserId?: () => Promise<string>;
 };
 
 async function defaultRunLoop(
@@ -523,17 +525,29 @@ async function persistCoworkerRun(
   return { agentId, status, runId, journeys };
 }
 
-/** Resolve the operator identity certification runs execute as. */
+/**
+ * Resolve the identity certification runs execute as: the same owner every
+ * proactive job resolves (the Foundational portfolio's accountable person, then
+ * the organization's), with that person's real permissions. It used to be the
+ * oldest superuser, the seeded setup account nobody uses (BI-87AE4BF6).
+ */
 export async function resolveCertificationUserContext(
   db: typeof prisma = prisma,
+  resolveOwnerUserId: () => Promise<string> = async () => {
+    const { resolveScheduledOwnerUserId } = await import("@/lib/queue/scheduled-owner");
+    return resolveScheduledOwnerUserId();
+  },
 ): Promise<(AutonomousWorkUserContext & { userId: string }) | null> {
-  const owner = await db.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) return null;
-  return { userId: owner.id, platformRole: null, isSuperuser: true };
+  let userId: string;
+  try {
+    userId = await resolveOwnerUserId();
+  } catch {
+    return null;
+  }
+  const { currentUserContext } = await import("@/lib/govern/current-user-context");
+  const context = await currentUserContext(userId, db as never);
+  if (!context) return null;
+  return { userId, platformRole: context.platformRole, isSuperuser: context.isSuperuser };
 }
 
 export async function runCoworkerCertificationSweep(options?: {
@@ -547,7 +561,7 @@ export async function runCoworkerCertificationSweep(options?: {
     (agentId) => !options?.agentIds || options.agentIds.includes(agentId),
   );
 
-  const userContext = await resolveCertificationUserContext(deps.db);
+  const userContext = await resolveCertificationUserContext(deps.db, deps.resolveOwnerUserId);
   if (!userContext) {
     return { startedAt, completedAt: deps.now(), results: [], passed: 0, failed: 0, inconclusive: 0 };
   }

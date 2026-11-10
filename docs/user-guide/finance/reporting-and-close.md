@@ -75,9 +75,33 @@ review, reconciliation results, approval completion, recurring and asset
 checks, tax evidence, identified caveats, reviewer, and the external
 accounting-system sign-off when one is used.
 
+## Ask For A Branded Report, Workbook Or Letter
+
+The Finance Controller coworker can turn figures you give it, or figures it
+has read, into a branded document saved under **Workspace > Documents**:
+
+- a **report** or board pack, as a Word file and a PDF;
+- a **workbook** of tables, with totals as formulas, as an Excel file and a
+  PDF;
+- a **letter** to a named supplier, donor or funder, as a Word file and a
+  PDF.
+
+Each one uses your organization's brand and shows a preview of its pages on
+the document page. Ask for changes in the conversation: the coworker
+regenerates the document as the next version of the same document, and the
+version history keeps the earlier ones. The coworker never sends a letter;
+sending it stays your decision. The Admin Assistant can produce reports and
+letters the same way, and the EA Architect can draw a process diagram.
+
 ## Related Help
 
 - [Banking and reconciliation](banking-and-reconciliation.md)
 - [Accounts payable](accounts-payable.md)
 - [Accounts receivable](accounts-receivable.md)
 - [Controls and automation](controls-and-automation.md)
+
+## Recorded General Ledger And Software Results
+
+General Ledger now reads one explicitly scoped organization and either a valid UTC month or the existing all-recorded selection. Both use the same bounded source validation. Invalid periods never silently select all records. Missing chart or eligible records, incompatible currency or precision, incomplete reversals and oversized or failed reads stay unavailable.
+
+The software-platform Performance view saves the same validated ledger income, expenses and net result through the existing metric refresh. This is a recorded management-ledger view, distinct from the cash-basis summaries described above. A selected month shows movements; prior capital does not become current-month income. All recorded includes the complete available supported ledger history. Neither selection proves complete books, bank cash or an as-of position. Existing Finance read permission and current-organization context apply before any source read.

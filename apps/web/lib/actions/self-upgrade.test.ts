@@ -32,6 +32,10 @@ vi.mock("@/lib/self-upgrade/request", () => ({
   requestSelfUpgrade: vi.fn(),
 }));
 
+vi.mock("@/lib/govern/automation-sign-in", () => ({
+  AUTOMATION_PERSONA_EMAIL: "automation@dpf.local",
+}));
+
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -66,6 +70,19 @@ describe("requestPortalSelfUpgradeAction", () => {
       actorKind: "human",
     });
     expect(revalidatePath).toHaveBeenCalledWith("/ops/self-upgrade");
+  });
+
+  it("BI-2128872C: a browser signed in as the automation persona requests as an agent", async () => {
+    vi.mocked(auth).mockResolvedValue({
+      user: { id: "user-automation", email: "automation@dpf.local", platformRole: "owner", isSuperuser: false },
+    } as never);
+
+    await requestPortalSelfUpgradeAction();
+
+    expect(requestSelfUpgrade).toHaveBeenCalledWith({
+      requestedBy: "manual:user-automation",
+      actorKind: "agent",
+    });
   });
 
   it.each(["running", "queued", "pending"])(

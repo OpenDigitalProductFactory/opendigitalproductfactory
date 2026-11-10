@@ -6,8 +6,9 @@
  * result appears when the job completes (via page revalidation).
  */
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
+import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 
 // BI-C8164664: how long a "running" eval slot blocks a duplicate GPU eval for
 // the same model. runDimensionEval already skips when the model was EVALUATED
@@ -44,19 +45,24 @@ export async function claimEvalSlot(modelId: string, now: Date = new Date()): Pr
   // No row yet (first-ever eval for this model) → create and claim it.
   const existing = await prisma.scheduledJob.findUnique({ where: { jobId }, select: { jobId: true } });
   if (existing) return false; // row exists with a fresh lastRunAt → claim lost.
-  await prisma.scheduledJob
-    .create({
+  try {
+    await prisma.scheduledJob.create({
       data: { jobId, name: `Eval: ${modelId}`, schedule: "manual", lastStatus: "running", lastRunAt: now, nextRunAt: null },
-    })
-    .catch(() => {});
-  return true;
+    });
+    return true;
+  } catch (error) {
+    // Another worker created the unique job row after our read. Only the
+    // successful creator owns the reservation; storage failures stop work.
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") return false;
+    throw error;
+  }
 }
 
 /**
  * Background dimension eval for a single model.
  * Triggered by the "Run Eval" button on ModelCard / RoutingProfilePanel.
  */
-export const evalBackground = inngest.createFunction(
+export const evalBackground = jobs.createFunction(
   {
     id: "ai/eval-background",
     retries: 1,
@@ -64,10 +70,16 @@ export const evalBackground = inngest.createFunction(
     triggers: [{ event: "ai/eval.run" }],
   },
   async ({ event, step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ai/eval-background");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    const { endpointId, modelId, userId, force } = event.data;
+    const { endpointId, modelId, userId, force, calibrationRunId } = event.data;
+    if (calibrationRunId) {
+      return step.run("run-commissioned-calibration", async () => {
+        const { runSubscriptionCalibration } = await import("@/lib/routing/subscription-calibration-execution");
+        return withInferenceOrigin("autonomous", () => runSubscriptionCalibration({ runId: calibrationRunId, endpointId, modelId, userId }));
+      });
+    }
 
     // BI-C8164664: claim the GPU eval slot BEFORE the work. A retry/lease-storm
     // re-invocation within the cooldown loses the claim and skips, so the GPU is
@@ -85,7 +97,9 @@ export const evalBackground = inngest.createFunction(
 
     const result = await step.run("run-dimension-eval", async () => {
       const { runDimensionEval } = await import("@/lib/routing/eval-runner");
-      return runDimensionEval(endpointId, modelId, userId, { force: force === true });
+      return withInferenceOrigin("autonomous", () =>
+        runDimensionEval(endpointId, modelId, userId, { force: force === true }),
+      );
     });
 
     // BI-C8164664: don't stamp ScheduledJob as completed when the eval was
@@ -95,6 +109,9 @@ export const evalBackground = inngest.createFunction(
       // Record completion in ScheduledJob for UI visibility
       await step.run("record-completion", async () => {
         const { prisma } = await import("@dpf/db");
+        const actual = await prisma.endpointTestRun.findUnique({ where: { runId: result.testRunId },
+          select: { status: true, endpointId: true, modelId: true } });
+        if (!actual || actual.endpointId !== endpointId || actual.modelId !== modelId || actual.status === "running") return;
         await prisma.scheduledJob.upsert({
           where: { jobId: `eval-${modelId}` },
           create: {
@@ -102,12 +119,12 @@ export const evalBackground = inngest.createFunction(
             name: `Eval: ${modelId}`,
             schedule: "manual",
             lastRunAt: new Date(),
-            lastStatus: "completed",
+            lastStatus: actual.status,
             nextRunAt: null,
           },
           update: {
             lastRunAt: new Date(),
-            lastStatus: "completed",
+            lastStatus: actual.status,
           },
         });
       });
@@ -121,7 +138,7 @@ export const evalBackground = inngest.createFunction(
  * Background endpoint probes / full tests.
  * Triggered by "Run Probes" and "Run Full Tests" buttons.
  */
-export const probeBackground = inngest.createFunction(
+export const probeBackground = jobs.createFunction(
   {
     id: "ai/probe-background",
     retries: 1,
@@ -129,19 +146,19 @@ export const probeBackground = inngest.createFunction(
     triggers: [{ event: "ai/probe.run" }],
   },
   async ({ event, step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ai/probe-background");
     if (!gate.proceed) return { skipped: true, reason: gate.reason, tested: 0 };
 
     const { endpointId, modelId, probesOnly, userId } = event.data;
 
     const results = await step.run("run-endpoint-tests", async () => {
       const { runEndpointTests } = await import("@/lib/operate/endpoint-test-runner");
-      return runEndpointTests({
+      return withInferenceOrigin("autonomous", () => runEndpointTests({
         endpointId,
         modelId,
         probesOnly,
         triggeredBy: userId,
-      });
+      }));
     });
 
     await step.run("record-completion", async () => {

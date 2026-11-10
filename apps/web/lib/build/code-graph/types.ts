@@ -9,22 +9,22 @@ export type CodeGraphNodeKind =
   | "TestFile"
   | "ExternalModule";
 
+// Every kind is a key in the relation vocabulary (packages/db/src/relation-vocabulary-entries.ts).
 export type CodeGraphEdgeKind =
   | "DEFINES"
   | "IMPORTS"
-  | "REFERENCES"
   | "IMPLEMENTS_ROUTE"
   | "EXPOSES_TOOL"
   | "USES_MODEL"
   | "USES_PROMPT"
   | "TESTED_BY"
   | "HAS_FIELD"
-  | "RELATES_TO";
+  | "HAS_FOREIGN_KEY_TO";
 
 export type CodeGraphConfidence = "exact" | "heuristic";
 
 /**
- * Optional primitive metadata projected onto a node/edge (Neo4j `SET n += map`).
+ * Optional primitive metadata projected onto a node/edge (shallow-merged into the graph node props).
  * Values are limited to primitives so they map cleanly to graph properties.
  */
 export type CodeGraphAttributes = Record<string, string | number | boolean>;

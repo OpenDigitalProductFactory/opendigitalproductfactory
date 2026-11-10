@@ -11,7 +11,7 @@
 //   element      prisma:model:<ModelName>
 //   relationship prisma:relation:<FromModel>:<fieldName>:<ToModel>
 //
-// The core diff (`planMirror`) is pure and fully unit-tested; DB/Neo4j writes
+// The core diff (`planMirror`) is pure and fully unit-tested; DB/graph writes
 // are a thin applier layered on top.
 
 import type {
@@ -19,7 +19,14 @@ import type {
   PrismaModelFact,
   PrismaRelationFact,
 } from "../build/code-graph/extractors/prisma-schema-adapter";
+import { formatRetentionValue, parseModelMetadataSource, type ModelMetadata } from "@dpf/db/model-metadata";
+
 import { DATA_ASSET_REGISTRY, lookupAssetByPrismaModel } from "../govern/data/assets";
+
+/** /// @dpf declarations keyed by model name, parsed from the same schema text the facts came from. */
+export function declarationsFromSchemaSource(source: string): Map<string, ModelMetadata> {
+  return new Map(parseModelMetadataSource(source, "schema").entries.map((e) => [e.model, e.metadata]));
+}
 
 export const DATA_MODEL_MIRROR_VERSION = "data-model-mirror-v1";
 export const MODEL_SOURCE_KEY_PREFIX = "prisma:model:";
@@ -49,13 +56,29 @@ export type DesiredElement = {
   descriptor: string;
 };
 
+/** The typed EA relationship a Prisma foreign key mirrors as (BI-28C22BE3). */
+export type MirrorRelationshipTypeSlug = "composed_of" | "has_foreign_key_to";
+
+/** The generic type the mirror wrote before BI-28C22BE3; rows still carrying it are retyped. */
+export const LEGACY_MIRROR_RELATIONSHIP_TYPE_SLUG = "associated_with";
+
 export type DesiredRelationship = {
   sourceKey: string;
   fromSourceKey: string;
   toSourceKey: string;
+  relationshipTypeSlug: MirrorRelationshipTypeSlug;
   properties: Record<string, unknown>;
   descriptor: string;
 };
+
+/**
+ * A required foreign key that cascades on delete is ArchiMate composition: the
+ * holder cannot outlive the row it points at. Every other key is a plain
+ * foreign-key reference.
+ */
+export function mirrorRelationshipTypeSlug(relation: Pick<PrismaRelationFact, "isRequired" | "onDelete">): MirrorRelationshipTypeSlug {
+  return relation.isRequired && relation.onDelete === "Cascade" ? "composed_of" : "has_foreign_key_to";
+}
 
 function modelElementProperties(model: PrismaModelFact): Record<string, unknown> {
   return {
@@ -87,6 +110,9 @@ function relationProperties(relation: PrismaRelationFact): Record<string, unknow
     relationName: relation.relationName,
     fkFields: relation.fkFields,
     references: relation.references,
+    onDelete: relation.onDelete,
+    isRequired: relation.isRequired,
+    relationshipTypeSlug: mirrorRelationshipTypeSlug(relation),
     isFkIndexed: relation.isFkIndexed,
   };
 }
@@ -112,11 +138,31 @@ function signature(value: unknown): string {
  * carry a `governance` block; unregistered models (still in the legacy coverage
  * baseline) carry none until a coverage wave classifies them.
  */
-function governanceProperties(modelName: string): Record<string, unknown> {
+function governanceProperties(modelName: string, declared?: ModelMetadata): Record<string, unknown> {
   const asset = lookupAssetByPrismaModel(DATA_ASSET_REGISTRY, modelName);
-  if (!asset) return {};
+  // EP-A33A5C61 slice 4d-ii: the schema's /// @dpf declaration is projected as
+  // `governance.declared` — lifecycle class, retention disposition, sensitivity,
+  // categories, regulated scope, owner, steward, time axis — so the ERD carries
+  // exactly what the catalog carries. The registry fields below stay for the
+  // field-level asset / coverage concerns the registry still owns.
+  const declaredBlock = declared
+    ? {
+        declared: {
+          lifecycle: declared.lifecycle,
+          retention: formatRetentionValue(declared.retention),
+          sensitivity: declared.sensitivity ?? null,
+          categories: declared.categories ?? [],
+          scope: declared.scope ?? null,
+          owner: declared.owner ?? null,
+          steward: declared.steward ?? null,
+          timeAxis: declared.timeAxis ?? null,
+        },
+      }
+    : {};
+  if (!asset) return declared ? { governance: declaredBlock } : {};
   return {
     governance: {
+      ...declaredBlock,
       assetId: asset.id,
       domain: asset.domain,
       sensitivity: asset.sensitivity,
@@ -131,12 +177,15 @@ function governanceProperties(modelName: string): Record<string, unknown> {
   };
 }
 
-export function buildDesiredState(facts: PrismaSchemaFacts): {
+export function buildDesiredState(
+  facts: PrismaSchemaFacts,
+  declarations: ReadonlyMap<string, ModelMetadata> = new Map(),
+): {
   elements: DesiredElement[];
   relationships: DesiredRelationship[];
 } {
   const elements: DesiredElement[] = facts.models.map((model) => {
-    const properties = { ...modelElementProperties(model), ...governanceProperties(model.name) };
+    const properties = { ...modelElementProperties(model), ...governanceProperties(model.name, declarations.get(model.name)) };
     return {
       sourceKey: modelSourceKey(model.name),
       name: model.name,
@@ -147,14 +196,18 @@ export function buildDesiredState(facts: PrismaSchemaFacts): {
 
   const modelNames = new Set(facts.models.map((model) => model.name));
   const relationships: DesiredRelationship[] = facts.relations
-    // Only mirror relations whose endpoints are both mirrored models.
+    // Only mirror relations whose endpoints are both mirrored models, once per
+    // foreign key from the model that holds it; the back-relation field holds no
+    // key and would only duplicate the fact (BI-28C22BE3).
     .filter((relation) => modelNames.has(relation.fromModel) && modelNames.has(relation.toModel))
+    .filter((relation) => relation.fkFields.length > 0)
     .map((relation) => {
       const properties = relationProperties(relation);
       return {
         sourceKey: relationSourceKey(relation),
         fromSourceKey: modelSourceKey(relation.fromModel),
         toSourceKey: modelSourceKey(relation.toModel),
+        relationshipTypeSlug: mirrorRelationshipTypeSlug(relation),
         properties,
         descriptor: signature(properties),
       };
@@ -173,6 +226,10 @@ export type ExistingMirrorRow = {
   descriptor: string;
   /** True once a row has been marked removed by a prior reconcile. */
   removed: boolean;
+  /** Relationship rows only: the row's current EA relationship type slug. */
+  typeSlug?: string;
+  /** Relationship rows only: false when the row mirrors a back-relation that holds no key. */
+  ownsForeignKey?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -189,7 +246,9 @@ export type MirrorRelationshipOp =
   | { kind: "create"; desired: DesiredRelationship }
   | { kind: "update"; id: string; desired: DesiredRelationship }
   | { kind: "revive"; id: string; desired: DesiredRelationship }
-  | { kind: "remove"; id: string; sourceKey: string };
+  | { kind: "remove"; id: string; sourceKey: string; retypeLegacy: boolean }
+  /** A legacy back-relation row: it duplicates a fact the FK side still mirrors, so it is deleted. */
+  | { kind: "drop"; id: string; sourceKey: string };
 
 export type DuplicateConflict = {
   scope: "element" | "relationship";
@@ -275,14 +334,20 @@ function diffRelationships(
       ops.push({ kind: "create", desired: entry });
     } else if (match.removed) {
       ops.push({ kind: "revive", id: match.id, desired: entry });
-    } else if (match.descriptor !== entry.descriptor) {
+    } else if (match.descriptor !== entry.descriptor || (match.typeSlug && match.typeSlug !== entry.relationshipTypeSlug)) {
       ops.push({ kind: "update", id: match.id, desired: entry });
     }
   }
 
   for (const row of existing) {
-    if (!desiredKeys.has(row.sourceKey) && !row.removed) {
-      ops.push({ kind: "remove", id: row.id, sourceKey: row.sourceKey });
+    if (desiredKeys.has(row.sourceKey)) continue;
+    if (row.ownsForeignKey === false) {
+      ops.push({ kind: "drop", id: row.id, sourceKey: row.sourceKey });
+      continue;
+    }
+    const legacy = row.typeSlug === LEGACY_MIRROR_RELATIONSHIP_TYPE_SLUG;
+    if (!row.removed || legacy) {
+      ops.push({ kind: "remove", id: row.id, sourceKey: row.sourceKey, retypeLegacy: legacy });
     }
   }
 
@@ -304,8 +369,9 @@ function diffRelationships(
 export function planMirror(
   facts: PrismaSchemaFacts,
   existing: { elements: ExistingMirrorRow[]; relationships: ExistingMirrorRow[] },
+  declarations: ReadonlyMap<string, ModelMetadata> = new Map(),
 ): MirrorPlan {
-  const desired = buildDesiredState(facts);
+  const desired = buildDesiredState(facts, declarations);
   const elementDiff = diffElements(desired.elements, existing.elements);
   const relationshipDiff = diffRelationships(desired.relationships, existing.relationships);
 
@@ -340,7 +406,8 @@ export function summarizePlan(plan: MirrorPlan): MirrorChangeSummary {
     created: count(plan.elementOps, "create") + count(plan.relationshipOps, "create"),
     updated: count(plan.elementOps, "update") + count(plan.relationshipOps, "update"),
     revived: count(plan.elementOps, "revive") + count(plan.relationshipOps, "revive"),
-    removed: count(plan.elementOps, "remove") + count(plan.relationshipOps, "remove"),
+    removed:
+      count(plan.elementOps, "remove") + count(plan.relationshipOps, "remove") + count(plan.relationshipOps, "drop"),
   };
 }
 

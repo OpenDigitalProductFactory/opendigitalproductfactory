@@ -1,0 +1,56 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "WorkCapsule.activitySequence, advanced only by the workcapsule_activity_assign_sequence trigger on each WorkCapsuleActivity insert",
+    "WorkCapsuleActivity.sequence on every row written after the migration; read by get_workroom (afterSequence) through readActivityAfter (apps/web/lib/work-capsules/activity-log-read.ts)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: integer counters and positions only",
+    "dataSubjectRights": "No personal content.",
+    "reviewDisposition": "Columns follow their rows: the room's operational lifecycle and the activity log's existing 180-day telemetry retention."
+  },
+  "migration": {
+    "name": "20261013180000_workroom_activity_sequence",
+    "backfill": "None: existing activity rows keep a NULL sequence (the reader treats the log as starting at the first numbered row); the counter starts at 0. Trigger and function are created with CREATE OR REPLACE / DROP IF EXISTS, so the migration is re-runnable.",
+    "rollback": "Forward-only. Older code never reads the columns; the trigger keeps numbering harmlessly. Rollback means reverting the code, never dropping the trigger mid-flight."
+  },
+  "tests": [
+    "apps/web/lib/work-capsules/activity-log-read.test.ts",
+    "apps/web/lib/work-capsules/activity-sequence.pg.test.ts",
+    "apps/web/lib/mcp/packs/work-capsules-pack.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:workroom",
+      "prismaModel": "Workroom",
+      "lifecycleDisposition": "Existing model; the counter follows the row.",
+      "fields": [
+        {
+          "fieldId": "data:workroom#activitySequence",
+          "resolution": "governed",
+          "reason": "Highest log position handed out for the room; advanced by the insert trigger under the room's row lock.",
+          "provenance": "BI-62514632",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:workroom-activity",
+      "prismaModel": "WorkroomActivity",
+      "lifecycleDisposition": "Existing model (telemetry-bounded, 180d on recordedAt); the column follows the row.",
+      "fields": [
+        {
+          "fieldId": "data:workroom-activity#sequence",
+          "resolution": "governed",
+          "reason": "The row's position in its room's log, unique per room, assigned on insert.",
+          "provenance": "BI-62514632",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

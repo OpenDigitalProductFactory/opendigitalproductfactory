@@ -11,7 +11,7 @@ import {
   buildOptionScores,
   type DecisionOption,
   type DecisionPrinciple,
-} from "./principle-decide";
+} from "@dpf/validators/judgment/option-scoring";
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -267,7 +267,7 @@ describe("buildOptionScores", () => {
 
 describe("decide: tie-margin guardrail", () => {
   it("flags confidence=low when the winning margin is below the configured tieMargin", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     const principles = [
       principle("p", {
         tier: "core",
@@ -292,7 +292,7 @@ describe("decide: tie-margin guardrail", () => {
   });
 
   it("flags confidence=high when the margin exceeds tieMargin by a comfortable amount", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     const principles = [
       principle("p", {
         tier: "core",
@@ -317,7 +317,7 @@ describe("decide: tie-margin guardrail", () => {
 
 describe("decide: commandment-conflict guardrail", () => {
   it("flags commandmentConflict=true when a commandment contributes strongly negatively to the top option", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     // Setup: one commandment opposes B; TWO core principles strongly
     // favor B with high override weights. The cores outweigh the
     // commandment so B still wins the composite, but the conflict must
@@ -359,7 +359,7 @@ describe("decide: commandment-conflict guardrail", () => {
   });
 
   it("does NOT flag commandmentConflict when commandments only weakly oppose the top option", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     const principles = [
       principle("p", {
         tier: "commandment",
@@ -383,7 +383,7 @@ describe("decide: commandment-conflict guardrail", () => {
 
 describe("decide: structured-coverage guardrail", () => {
   it("flags structuredCoverage=weak when more than 40% of contributions are semantic-mode", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     // 3 principles, 2 of which lack dimension vectors → semantic mode
     const principles = [
       principle("p1", { dimensionVector: { schema_grounding: 1.0 } }),
@@ -399,7 +399,7 @@ describe("decide: structured-coverage guardrail", () => {
   });
 
   it("flags structuredCoverage=strong when semantic-mode ratio stays under the threshold", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     const principles = [
       principle("p1", { dimensionVector: { schema_grounding: 1.0 } }),
       principle("p2", { dimensionVector: { speed_to_value: 1.0 } }),
@@ -414,7 +414,7 @@ describe("decide: structured-coverage guardrail", () => {
   });
 
   it("reports the semantic-fallback ratio in flags for inspectability", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     const principles = [
       principle("p1", { dimensionVector: { schema_grounding: 1.0 } }),
       principle("p2", { dimensionVector: {}, directionEmbedding: [1, 0] }),
@@ -430,14 +430,14 @@ describe("decide: structured-coverage guardrail", () => {
 
 describe("decide: empty / degenerate cases", () => {
   it("returns recommendation=null and confidence=low when no principles apply", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     const result = decide([option("a", {}), option("b", {})], []);
     expect(result.recommendation).toBeNull();
     expect(result.reasoning).toMatch(/no .*principles/i);
   });
 
   it("returns recommendation=null when no options are supplied", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     const result = decide(
       [],
       [principle("p", { dimensionVector: { schema_grounding: 1.0 } })],
@@ -447,7 +447,7 @@ describe("decide: empty / degenerate cases", () => {
   });
 
   it("returns reasoning naming the winning option and the top contributing principles", async () => {
-    const { decide } = await import("./principle-decide");
+    const { decide } = await import("@dpf/validators/judgment/option-scoring");
     const principles = [
       principle("arch", {
         name: "Architecture Over Shortcuts",

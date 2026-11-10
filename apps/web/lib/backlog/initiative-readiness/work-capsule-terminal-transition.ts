@@ -1,18 +1,26 @@
 import { createHash } from "node:crypto";
+import { finishDeliveryAgreement, readDeliveryAgreement } from "@/lib/work-management/delivery-agreement";
 
 import { prisma } from "@dpf/db";
 
 import { STATUS_OVERRIDE_TTL_MS } from "@/lib/work-capsules";
 import type { WorkCapsuleActor } from "@/lib/work-capsules/work-capsule-store-types";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
+import {
+  persistedTerminalCompletionDecision,
+  projectBacklogItemReadiness,
+  type InitiativeReadinessActivity,
+} from "./entry-adapter";
 import { reconcileInitiativeObjectives, type ObjectiveReconciliationActivity } from "./objective-reconciliation";
 import {
   executeGovernedTerminalTransition,
   type GovernedTerminalTransitionResult,
   type TerminalTransitionDb,
 } from "./terminal-transition-repository";
+import { readinessRequirement } from "./readiness-guidance";
+import { bodyBaselineDigest } from "./body-baseline-version";
+import type { InitiativeReadinessDecision } from "./types";
 
 type TerminalCapsule = {
   id: string;
@@ -29,6 +37,7 @@ type TerminalCapsule = {
 type CapsuleSubject = {
   id: string;
   itemId: string;
+  status: string;
   type: string | null;
   source: string | null;
   workType: string | null;
@@ -92,12 +101,12 @@ function passedEvidenceIds(activities: CapsuleEvidenceActivity[]): string[] {
 
 async function resolveSubject(tx: CapsuleTerminalClient, capsule: TerminalCapsule): Promise<CapsuleSubject | null> {
   const select = {
-    id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true,
+    id: true, itemId: true, status: true, type: true, source: true, workType: true, scopeKind: true,
     archetypeCategories: true, archetypeIds: true, organizationId: true,
     activities: {
       where: { kind: { in: [
         "initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage",
-        "initiative_objective_mapping", "evidence",
+        "initiative_objective_mapping", "initiative_readiness_decision", "evidence",
       ] } },
       orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
       take: 500,
@@ -124,6 +133,45 @@ function capsuleIdentityState(capsule: TerminalCapsule, actor: WorkCapsuleActor)
   return "pass" as const;
 }
 
+const WORKROOM_LOCAL_REQUIREMENTS = new Set([
+  "CAPSULE_IDENTITY_MISMATCH",
+  "DELIVERY_EVIDENCE_REQUIRED",
+]);
+
+function rebindAllowedItemCompletion(args: {
+  persisted: InitiativeReadinessDecision;
+  transitionObject: InitiativeReadinessDecision["transitionObject"];
+  capsuleId: string;
+  deliveryEvidenceRefs: readonly string[];
+  evaluatedAt: string;
+}): InitiativeReadinessDecision {
+  return {
+    ...args.persisted,
+    decisionId: "unpersisted",
+    transitionObject: args.transitionObject,
+    evaluatedAt: args.evaluatedAt,
+    satisfied: [
+      ...args.persisted.satisfied.filter((requirement) => !WORKROOM_LOCAL_REQUIREMENTS.has(requirement.code)),
+      readinessRequirement({
+        code: "CAPSULE_IDENTITY_MISMATCH",
+        state: "pass",
+        accountableRole: "delivery-coordinator",
+        profile: args.persisted.profile,
+        evidenceRefs: [args.capsuleId],
+      }),
+      readinessRequirement({
+        code: "DELIVERY_EVIDENCE_REQUIRED",
+        state: "pass",
+        accountableRole: "delivery-coordinator",
+        profile: args.persisted.profile,
+        evidenceRefs: args.deliveryEvidenceRefs,
+      }),
+    ],
+    unmet: [],
+    blockers: [],
+  };
+}
+
 /** Complete a governed Workroom through the shared audited terminal boundary. */
 export async function completeWorkCapsuleTransition(args: {
   db?: TerminalTransitionDb;
@@ -141,6 +189,7 @@ export async function completeWorkCapsuleTransition(args: {
   const evaluatedAt = args.evaluatedAt ?? new Date().toISOString();
   let lockedCapsule: TerminalCapsule | null = null;
   let nextWorkspaceState: Record<string, unknown> = {};
+  let handoffEvidence: { baselineId: string | null; evidenceRefs: string[]; followOnRefs: string[] } | null = null;
   const actor = {
     actorType: args.actor.agentId ? "agent" as const : "human" as const,
     actorRef: args.actor.agentId ?? args.actor.userId,
@@ -205,14 +254,29 @@ export async function completeWorkCapsuleTransition(args: {
         itemRowId: subject.id,
         activities: subject.activities,
       });
+      handoffEvidence = { baselineId: reconciliation.baselineId,
+        evidenceRefs: [...new Set([...deliveryEvidenceRefs, ...reconciliation.evidenceRefs])],
+        followOnRefs: [...new Set(evidence.flatMap(activity => {
+          const refs = object(object(activity.payload).result).followOnRefs;
+          return Array.isArray(refs) ? refs.filter((ref): ref is string => typeof ref === "string" && /^BI-[A-Z0-9-]+$/i.test(ref)) : [];
+        }))] };
+      const agreement = readDeliveryAgreement(capsule.workspaceState);
+      const baseline = object(subject.activities.find(activity => activity.kind === "initiative_scope_baseline"
+        && object(activity.payload).baselineId === reconciliation.baselineId)?.payload);
+      const baselineStatements = Array.isArray(baseline.acceptanceStatements)
+        ? baseline.acceptanceStatements.map(statement => object(statement).statementDigest).sort() : [];
+      const agreedStatements = agreement?.acceptance?.criteria.map(bodyBaselineDigest).sort();
+      const agreementChanged = Boolean(agreedStatements && baseline.origin === "item-body"
+        && canonicalJson(baselineStatements) !== canonicalJson(agreedStatements));
       const identity = capsuleIdentityState(capsule, args.actor);
-      const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
+      const transitionObject = {
+        kind: "work-capsule" as const, id: capsule.id, expectedVersion: args.expectedStatus, targetState: "complete" as const,
+      };
+      const currentProjection = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
         item: subject,
         activities: subject.activities as InitiativeReadinessActivity[],
         target: "completion",
-        transitionObject: {
-          kind: "work-capsule", id: capsule.id, expectedVersion: args.expectedStatus, targetState: "complete",
-        },
+        transitionObject,
         authorization: "pass",
         capsuleIdentity: identity,
         completion: {
@@ -230,6 +294,28 @@ export async function completeWorkCapsuleTransition(args: {
         },
         evaluatedAt,
       });
+      const persistedCompletion = persistedTerminalCompletionDecision(subject.activities, subject);
+      const canReuseItemCompletion = !agreementChanged && persistedCompletion !== null
+        && persistedCompletion.transitionObject.kind === "backlog-item"
+        && persistedCompletion.transitionObject.id === subject.id
+        && identity === "pass"
+        && deliveryEvidenceRefs.length > 0;
+      const projected = canReuseItemCompletion
+        ? {
+            ...currentProjection,
+            decision: rebindAllowedItemCompletion({
+              persisted: persistedCompletion,
+              transitionObject,
+              capsuleId: capsule.capsuleId,
+              deliveryEvidenceRefs,
+              evaluatedAt,
+            }),
+          }
+        : currentProjection;
+      if (agreementChanged) projected.decision = { ...projected.decision,
+        verdict: projected.decision.verdict === "allowed" ? "input-required" : projected.decision.verdict,
+        unmet: [...projected.decision.unmet, readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing",
+          accountableRole: "acceptance-reviewer", profile: projected.decision.profile, evidenceRefs: [agreement!.acceptance!.digest] })] };
       return {
         governed: projected.governed,
         decision: projected.decision,
@@ -241,9 +327,11 @@ export async function completeWorkCapsuleTransition(args: {
           subjectId: subject.itemId,
           baselineId: reconciliation.baselineId,
           objectiveState: reconciliation.state,
+          agreedCriteriaDigest: agreement?.acceptance?.digest ?? null, agreementChanged,
           objectiveEvidenceRefs: reconciliation.evidenceRefs,
           deliveryEvidenceRefs,
           capsuleIdentity: identity,
+          reusedItemCompletionDecisionId: canReuseItemCompletion ? persistedCompletion.decisionId : null,
           evaluatedAt,
         }),
       };
@@ -251,6 +339,9 @@ export async function completeWorkCapsuleTransition(args: {
     mutate: async (genericTx) => {
       const tx = genericTx as unknown as CapsuleTerminalClient;
       if (!lockedCapsule) throw new Error("Terminal readiness did not resolve a Work Capsule.");
+      if (handoffEvidence) nextWorkspaceState = finishDeliveryAgreement(nextWorkspaceState, {
+        ...handoffEvidence, completedAt: evaluatedAt, summary: args.reason,
+      });
       const updated = await tx.workroom.updateMany({
         where: { id: lockedCapsule.id, status: args.expectedStatus },
         data: { status: "complete", workspaceState: nextWorkspaceState },
@@ -260,7 +351,8 @@ export async function completeWorkCapsuleTransition(args: {
           workCapsuleId: lockedCapsule.id,
           kind: "status-override",
           summary: args.reason,
-          payload: { status: "complete", statusOverride: nextWorkspaceState.statusOverride },
+          payload: { status: "complete", statusOverride: nextWorkspaceState.statusOverride,
+            ...(nextWorkspaceState.deliveryHandoff ? { deliveryHandoff: nextWorkspaceState.deliveryHandoff } : {}) },
           recordedById: args.actor.userId,
           recordedByAgentId: args.actor.agentId,
         } });

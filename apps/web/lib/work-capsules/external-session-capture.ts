@@ -30,6 +30,8 @@ export function providerToExecutorKind(provider: string): WorkCapsuleExecutorKin
   if (normalized.includes("codex")) return "codex-desktop";
   if (normalized.includes("grok")) return "grok-desktop";
   if (normalized.includes("antigravity")) return "antigravity-desktop";
+  if (normalized.includes("build-studio")) return "build-studio";
+  if (normalized.includes("dpf-native")) return "dpf-native";
   return "human";
 }
 

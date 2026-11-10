@@ -9,7 +9,7 @@ import {
   type TwinTemplate,
 } from "@dpf/storefront-templates";
 
-import { buildDemoTwinSnapshot } from "./demo-snapshot";
+import { buildDemoTwinSnapshot } from "@/lib/twin/demo-twin-snapshot";
 import { TwinView } from "./TwinView";
 
 // Every one of the 12 templates must render through the single `TwinView`.

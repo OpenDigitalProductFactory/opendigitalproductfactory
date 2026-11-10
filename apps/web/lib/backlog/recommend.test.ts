@@ -81,6 +81,15 @@ describe("rankCandidates — eligibility", () => {
     expect(result.map((r) => r.itemId)).toEqual(["BI-3"]);
   });
 
+  it("does not offer awaiting-acceptance as implementation-ready or design-candidate work", () => {
+    const items = [
+      candidate({ itemId: "BI-PRed", status: "awaiting-acceptance", implementationReadinessVerdict: "allowed" }),
+      candidate({ itemId: "BI-Open", status: "open", implementationReadinessVerdict: "allowed" }),
+    ];
+    expect(rankCandidates(items).map((r) => r.itemId)).toEqual(["BI-Open"]);
+    expect(rankCandidates(items, { mode: "implementation-ready" }).map((r) => r.itemId)).toEqual(["BI-Open"]);
+  });
+
   it("includes triaging items (they are pickable for triage work)", () => {
     const items = [candidate({ itemId: "BI-T", status: "triaging" })];
     expect(rankCandidates(items)).toHaveLength(1);

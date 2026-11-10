@@ -70,14 +70,6 @@ Describe "pre-destructive-snapshot.ps1 — routing table" {
         $entry.strategy | Should -Be 'pg_dump'
     }
 
-    It "routes 'docker volume rm dpf_neo4jdata' to neo4j strategy" {
-        $exit = Invoke-Dispatcher -Dispatcher $script:Fixture.Dispatcher -BackupsDir $script:Fixture.BackupsDir `
-            -BinName 'docker' -DispatcherArgs @('volume','rm','dpf_neo4jdata')
-        $exit | Should -BeIn @(0, 1)
-        $entry = Get-LatestLogEntry -LogFile $script:Fixture.LogFile
-        $entry.strategy | Should -Be 'neo4j'
-    }
-
     It "routes 'docker volume rm <other>' to pg_dump strategy (best-effort)" {
         $exit = Invoke-Dispatcher -Dispatcher $script:Fixture.Dispatcher -BackupsDir $script:Fixture.BackupsDir `
             -BinName 'docker' -DispatcherArgs @('volume','rm','dpf_unknownvolume')
@@ -86,7 +78,7 @@ Describe "pre-destructive-snapshot.ps1 — routing table" {
         $entry.strategy | Should -Be 'pg_dump'
     }
 
-    It "routes 'docker compose down --volumes' to both pg_dump + neo4j strategies" {
+    It "routes 'docker compose down --volumes' to the pg_dump strategy" {
         $exit = Invoke-Dispatcher -Dispatcher $script:Fixture.Dispatcher -BackupsDir $script:Fixture.BackupsDir `
             -BinName 'docker' -DispatcherArgs @('compose','down','--volumes')
         $exit | Should -BeIn @(0, 1)
@@ -96,7 +88,6 @@ Describe "pre-destructive-snapshot.ps1 — routing table" {
             ($j | ConvertFrom-Json).strategy
         }
         $strategies | Should -Contain 'pg_dump'
-        $strategies | Should -Contain 'neo4j'
     }
 
     It "routes 'prisma migrate reset' to pg_dump strategy" {

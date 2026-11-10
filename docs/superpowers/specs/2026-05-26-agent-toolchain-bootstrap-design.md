@@ -1,6 +1,6 @@
 ---
 title: Agent Toolchain Bootstrap - DPF-kernel-aware contributor sessions on first run
-status: revised-for-implementation
+status: active
 author: Claude (Opus 4.7)
 reviewers:
   - Codex (chief architect + UX review, 2026-05-27)
@@ -109,7 +109,7 @@ The repo already contains most of the substrate this design depends on. The work
 - `scripts/ensure-dpf-skill-pack.ps1` — Validates and installs the Claude plugin via `claude plugin install dpf-platform@dpf-platform-local --scope local`. Acknowledges the Codex repo marketplace but does not enable the Codex plugin in user config.
 - `scripts/ensure-dpf-skill-pack.sh` — POSIX sibling with the same shape: Claude install if `claude` exists; Codex marketplace presence check only.
 - `scripts/seed-worktree-mcp.ps1` / `.sh` — Per-worktree MCP config copier + `COMPOSE_PROJECT_NAME` setter + `.dpf-worktree-readiness.json` classifier + calls the `ensure-dpf-skill-pack` script family.
-- `scripts/sync-mcp-worktrees.ps1` / `.sh` — Refreshes MCP config, preserves non-root `COMPOSE_PROJECT_NAME`, stamps `.dpf-worktree-readiness.json`, optionally rotates the bearer token in the PowerShell path, and re-registers user-scope MCP in `~/.claude.json` when Claude is present.
+- `scripts/sync-mcp-worktrees.ps1` / `.sh` — Refreshes MCP config, preserves non-root `COMPOSE_PROJECT_NAME`, stamps `.dpf-worktree-readiness.json`, optionally rotates the bearer token in the PowerShell path and re-registers user-scope MCP in `~/.claude.json` when Claude is present. Since BI-81B0A3BE the rotation is skipped while the dpf-platform plugin is installed, and `update_agent_toolchain.py` retires a leftover user-scope `dpf` server (backup to `~/.claude/dpf-user-mcp.legacy-bak.json`).
 - `scripts/installer/install-state.schema.json` — `~/.dpf/install-state.json` schema (Contract 2). Currently models docker / compose / autostart / health state; **does not yet model agent-toolchain state.**
 - `scripts/installer/lib/{logging,platform,prompts,compose,preflight,state,doctor,docker,autostart}.sh` — Bash 3.2 helpers for the POSIX installer.
 
@@ -304,10 +304,14 @@ Architectural rule: installer scripts are orchestration adapters, not config par
 | 3 | Windows installer wiring | `install-dpf.ps1`, `fresh-install.ps1`, and `setup.ps1` converge a clean Windows worktree; second run is a no-op |
 | 4 | macOS/Linux installer wiring | `install-dpf.sh --dry-run` shows planned writes; live run on macOS arm64 + Ubuntu 22 LXD seeds and probes |
 | 5 | Smoke test surface | Probe transcript saved to state file; CLI-absent path marks `skipped` cleanly |
-| 6 | Re-run / upgrade reconciliation | Stale `installed_plugins.json` entry removed; `superpowers` version bump triggers re-pin |
+| 6 | Re-run / upgrade reconciliation | Stale `installed_plugins.json` entry removed; `superpowers` version bump triggers re-pin. A development connection already in use follows grants appended to the development template on its next use (BI-E9F1C116); see the addendum below. |
 | 7 | Docs | `README.md` and `docs/operations/install.md` updated with the single quick-start sentence; no contributor-visible plugin references |
 
 The first three phases are the minimum viable contract for Windows contributors (the platform Mark uses today). Phase 4 brings macOS/Linux to parity. Phases 5-7 are not optional; if implementation pressure demands sequencing, ship earlier phases behind a visible `partial` readiness state rather than declaring the bootstrap complete.
+
+### Development-connection grant follow-through (BI-E9F1C116)
+
+Re-run reconciliation for a coding connection is not a second grant store. The development template in `apps/web/lib/mcp-token-scopes.ts` stays the list. On the next use, `resolveMcpApiToken` and `acknowledgeMcpTokenRefresh` append grants that template gained later when an active operator write connection's stored grants are an earlier prefix of that list. The secret stays the same, and the row is rewritten only when a grant is missing. A read connection, an admin connection, an OAuth connection, an ephemeral ship token, and a custom set with a hole or a grant outside the template stay as issued. Independent review grants stay off the template. The running install applies this only after it picks up the release.
 
 ## Acceptance Criteria
 

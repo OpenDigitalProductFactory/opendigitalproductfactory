@@ -32,6 +32,7 @@ function workspaceSnapshot(): MarketingWorkspaceSnapshot {
       tagline: null,
       description: null,
       ctaType: "booking",
+      ownOffer: null,
     },
     strategy: {
       strategyId: "st-1",

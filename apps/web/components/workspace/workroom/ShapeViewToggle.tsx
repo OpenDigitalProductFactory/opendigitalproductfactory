@@ -61,7 +61,7 @@ export function ShapeViewToggle({
           type="button"
           onClick={() => onChange(value)}
           aria-pressed={mode === value}
-          className={`min-h-9 rounded-md px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] ${
+          className={`min-h-11 min-w-11 rounded-md px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] ${
             mode === value
               ? "bg-[var(--dpf-surface-2)] font-medium text-[var(--dpf-text)]"
               : "text-[var(--dpf-muted)]"

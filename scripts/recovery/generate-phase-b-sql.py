@@ -22,8 +22,7 @@ ROOT = Path("D:/")
 sys.path.insert(0, str(Path(__file__).parent))
 from importlib import import_module
 clusters_mod = import_module("phase-b-clusters")
-CLUSTERS = clusters_mod.CLUSTERS
-APRIL27_STALE_DEFER = clusters_mod.APRIL27_STALE_DEFER
+CLUSTERS, APRIL27_STALE_DEFER = clusters_mod.load_phase_b_tables()
 
 OUTPUT_SQL = ROOT / "Backups" / "pre-recovery" / "phase-b.sql"
 OUTPUT_JSON = ROOT / "Backups" / "pre-recovery" / "phase-b.json"

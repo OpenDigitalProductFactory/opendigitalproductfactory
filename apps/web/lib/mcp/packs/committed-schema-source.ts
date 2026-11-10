@@ -28,6 +28,9 @@ import {
   OFF_DEFAULT_BRANCH_FRESHNESS_CAP,
   isOffDefaultBranch,
 } from "@/lib/trust-vector/default-branch";
+// One definition of "which ref is the default branch", shared with the code
+// graph indexer rather than restated here (BI-6CFC5429).
+import { resolveDefaultBranchRef } from "@/lib/build/code-graph/default-branch-source";
 
 /** Directory holding the split Prisma schema (there is no monolithic schema.prisma). */
 export const SCHEMA_DIR_RELATIVE = "packages/db/prisma/schema";
@@ -74,15 +77,36 @@ export function resolveSourceRoot(): string {
 
 export type GitReader = (root: string, args: string) => Promise<string | null>;
 
-/** Default git reader. Injected in tests (RunDeps idiom) so the unit suite
- *  never shells out — a real `git` call in a unit test is a 10s timeout, not a
- *  test. */
+/**
+ * Default git reader. Injected in tests (RunDeps idiom) so the unit suite never
+ * shells out — a real `git` call in a unit test is a 10s timeout, not a test.
+ *
+ * Carries the scoped `-c safe.directory=<root>` exception, for the same reason
+ * every other git call in the platform does: the portal container runs as a
+ * different uid than the checkout it mounts, so an unprefixed git dies with
+ * "fatal: detected dubious ownership in repository at '/sandbox-workspace'".
+ *
+ * SHIPPED DEFECT (this fix). #4951 made this reader prefer the default branch,
+ * importing resolveDefaultBranchRef — which DOES carry the flag. So the ref
+ * resolved fine, and then `ls-tree` / `show` went through THIS reader, which did
+ * not, failed, and fell back to the working tree on every production call. The
+ * live tool went on answering from whatever branch the sandbox was parked on
+ * (observed: pr-4917-head) while reporting medium trust — correct about the
+ * tree it read, and not the tree anyone asked about.
+ */
+export function buildCommittedSchemaGitCommand(root: string, args: string): string {
+  return `git -c safe.directory=${JSON.stringify(root)} ${args}`;
+}
+
 const defaultReadGit: GitReader = async (root, args) => {
   try {
     const { promisify } = await import("node:util");
     const { exec: nodeExec } = await import("node:child_process");
     const exec = promisify(nodeExec);
-    const { stdout } = await exec(`git ${args}`, { cwd: root, timeout: 10_000 });
+    const { stdout } = await exec(buildCommittedSchemaGitCommand(root, args), {
+      cwd: root,
+      timeout: 10_000,
+    });
     const trimmed = stdout.trim();
     return trimmed.length > 0 ? trimmed : null;
   } catch {
@@ -223,7 +247,49 @@ export type LoadCommittedSchemaDeps = {
   readGit?: GitReader;
   /** Injected in tests; defaults to reading `.git/HEAD` off disk. */
   readBranchFallback?: (root: string) => Promise<string | null>;
+  /** Test hook: skip the default-branch read and exercise the working-tree path. */
+  skipDefaultBranch?: boolean;
 };
+
+/**
+ * Read the schema files straight out of a git ref, without checking anything out.
+ *
+ * BI-6CFC5429. The reader answered from whatever PROJECT_ROOT's working tree was
+ * parked on. On the live install that is /sandbox-workspace, a Build Studio
+ * sandbox whose branch MOVES — observed on client/5727856b-… one day and
+ * pr-4917-head the next. The same question got different answers on different
+ * days, and a model absent from today's sandbox branch read as absent from the
+ * platform: the exact false absence this reader exists to prevent. It answered
+ * correctly for MileageRate only because that PR branch happened to contain it.
+ *
+ * Only ~26 files are needed, so `git show <ref>:<path>` per file is cheap and
+ * needs no worktree — unlike the code graph's 14k-file case, which earns one.
+ */
+async function readSchemaAtRef(
+  root: string,
+  ref: string,
+  readGit: GitReader,
+): Promise<{ count: number; parts: string[] } | null> {
+  const listing = await readGit(root, `ls-tree --name-only ${ref} ${SCHEMA_DIR_RELATIVE}/`);
+  if (!listing) return null;
+
+  const paths = listing
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.endsWith(".prisma"))
+    .sort();
+  if (paths.length === 0) return null;
+
+  const parts: string[] = [];
+  for (const path of paths) {
+    const content = await readGit(root, `show ${ref}:${path}`);
+    // A ref we cannot fully read is not a partial schema, it is no schema.
+    // Returning some of it would silently under-report models.
+    if (content === null) return null;
+    parts.push(content);
+  }
+  return { count: paths.length, parts };
+}
 
 export async function loadCommittedSchema(
   deps: LoadCommittedSchemaDeps = {},
@@ -235,6 +301,42 @@ export async function loadCommittedSchema(
   const root = resolveSourceRoot();
   const schemaDir = resolve(root, SCHEMA_DIR_RELATIVE);
 
+  // Prefer the DEFAULT BRANCH over the working tree. Which tree this process
+  // happens to sit in is a deployment detail; the merge target is what a caller
+  // asking "does this model exist" actually means.
+  const defaultRef = deps.skipDefaultBranch ? null : await resolveDefaultBranchRef(root);
+  if (defaultRef) {
+    const atRef = await readSchemaAtRef(root, defaultRef.ref, readGit);
+    if (atRef) {
+      const refProvenance: CommittedSchemaProvenance = {
+        root,
+        branch: defaultRef.branch,
+        headSha: defaultRef.sha,
+        schemaFileCount: atRef.count,
+        tree: "committed",
+        identified: true,
+      };
+      return {
+        schema: atRef.parts.join("\n"),
+        provenance: refProvenance,
+        trust: buildTrust(refProvenance, asOfDate.toISOString()),
+      };
+    }
+  }
+
+  // Fall back to the working tree, and let the existing scoring say so — an
+  // off-default or unidentifiable tree is capped and named, never authoritative.
+  //
+  // Say WHY. The scoring already makes an off-default read visible, but "which
+  // branch" is not "why not the merge target": a silent fallback is how #4951
+  // looked deployed-and-working while every call was degrading. The code-graph
+  // reader logs its fallback reason; this one did not, and that asymmetry cost a
+  // full deploy cycle to notice.
+  console.warn(
+    `[committed-schema] Could not read the schema from ${
+      defaultRef ? `the default branch (${defaultRef.ref})` : "any default-branch ref"
+    }; falling back to the working tree at ${root}.`,
+  );
   let names: string[];
   try {
     names = (await readdir(schemaDir)).filter((n) => n.endsWith(".prisma")).sort();

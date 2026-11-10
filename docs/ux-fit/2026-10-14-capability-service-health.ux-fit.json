@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "active-visible-inactive-disclosed",
+  "decisionInteractionId": "DI-1324C595409A",
+  "scope": {
+    "files": [
+      "apps/web/components/monitoring/CapabilityServiceHealth.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["all-visible", "active-visible-inactive-disclosed", "aggregate-only"]
+  }
+}

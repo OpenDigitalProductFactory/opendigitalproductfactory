@@ -9,9 +9,10 @@
 
 import { prisma } from "@dpf/db";
 
-import { resolveCoworkerIdentity } from "@/lib/coworker-identity";
+import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 
 import { knownGrantKeys } from "./agent-grants";
+import { isCorpusGrantKey, isExtraFamilyGrantKey } from "./corpus-read-scope";
 
 export type CoworkerToolGrantAction = "grant" | "revoke";
 
@@ -24,16 +25,34 @@ export type ResolvedCoworker = {
   displayName: string;
 };
 
-/** True iff the grant key is one the runtime actually understands. */
+/** True iff the grant key is one the runtime actually understands. An extra
+ *  profession family (`wiki_profession_read:<key>`, BI-825D3487) is known only
+ *  for a family registered in docs/professions/registry.json. */
 export function isKnownGrantKey(grantKey: string): boolean {
-  return knownGrantKeys().includes(grantKey);
+  return knownGrantKeys().includes(grantKey) || isExtraFamilyGrantKey(grantKey);
+}
+
+type GrantAuditDb = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/** BI-825D3487 (AC-CRG-6): a corpus grant change leaves an authority-trail row,
+ *  the same writer coworker grant reconciliation uses. */
+async function recordCorpusGrantChange(db: GrantAuditDb, agentCuid: string, grantKey: string, action: CoworkerToolGrantAction, by: string) {
+  if (!isCorpusGrantKey(grantKey)) return;
+  // The trail is keyed by the business agentId, as the identity page reads it.
+  const row = (await db.agent.findFirst({ where: { id: agentCuid }, select: { agentId: true } })) as { agentId: string } | null;
+  const agentId = row?.agentId ?? agentCuid;
+  await db.toolExecution.create({ data: {
+    threadId: `coworker-corpus-grant:${agentId}`, agentId, userId: by,
+    toolName: "manage_coworker_tool_grant", executionMode: "human", auditClass: "authority-trail",
+    routeContext: `/platform/ai/agent/${agentId}`, parameters: { agentCuid, grantKey, action }, result: {}, success: true,
+    summary: `Knowledge corpus grant ${grantKey} ${action === "grant" ? "granted" : "revoked"}.`,
+  } });
 }
 
 /**
  * Resolve a caller-supplied coworker reference (business agentId, slugId,
- * displayName, or a registry alias) to the DB Agent row. Tries a direct DB
- * match first, then canonicalises through the registry (which understands
- * display names and aliases) and retries.
+ * displayName, or a registry alias) to its canonical authority row. Unknown
+ * references may identify an install-authored coworker or a database cuid.
  */
 export async function resolveCoworkerAgent(ref: string): Promise<ResolvedCoworker | null> {
   const trimmed = (ref ?? "").trim();
@@ -41,19 +60,22 @@ export async function resolveCoworkerAgent(ref: string): Promise<ResolvedCoworke
 
   const select = { id: true, agentId: true, slugId: true, displayName: true } as const;
 
+  const canonical = coworkerAuthorityAgentId(trimmed);
   let agent = await prisma.agent.findFirst({
-    where: { OR: [{ agentId: trimmed }, { slugId: trimmed }] },
+    where: { agentId: canonical },
     select,
   });
 
   if (!agent) {
-    const canonical = resolveCoworkerIdentity(trimmed)?.agentId;
-    if (canonical && canonical !== trimmed) {
-      agent = await prisma.agent.findFirst({
-        where: { OR: [{ agentId: canonical }, { slugId: canonical }] },
-        select,
-      });
-    }
+    // Known aliases never fall back to another row's authority. Unknown refs
+    // may be a cuid or an install-authored slug; normalize the row before use.
+    if (canonical !== trimmed) return null;
+    const row = await prisma.agent.findFirst({
+      where: { OR: [{ id: trimmed }, { slugId: trimmed }] }, select,
+    });
+    if (!row) return null;
+    const owner = coworkerAuthorityAgentId(row.agentId);
+    agent = owner === row.agentId ? row : await prisma.agent.findFirst({ where: { agentId: owner }, select });
   }
 
   return agent;
@@ -72,14 +94,17 @@ export async function applyCoworkerToolGrant(
   if (!isKnownGrantKey(grantKey)) {
     return { ok: false, error: `Unknown grant key: ${grantKey}` };
   }
-  await prisma.agentToolGrant.upsert({
+  await prisma.$transaction(async (db) => {
+  await db.agentToolGrant.upsert({
     where: { agentId_grantKey: { agentId: agentCuid, grantKey } },
     update: {}, // already held — keep the original grantedBy/grantedAt
     create: { agentId: agentCuid, grantKey, grantedBy },
   });
   // BI-4FA040D5: a (re-)grant clears any durable revocation tombstone, so the
   // key is no longer skipped by the boot seed and the grant survives restarts.
-  await prisma.agentToolGrantRevocation.deleteMany({ where: { agentId: agentCuid, grantKey } });
+  await db.agentToolGrantRevocation.deleteMany({ where: { agentId: agentCuid, grantKey } });
+  await recordCorpusGrantChange(db, agentCuid, grantKey, "grant", grantedBy);
+  }, { isolationLevel: "Serializable" });
   return { ok: true };
 }
 
@@ -96,12 +121,18 @@ export async function removeCoworkerToolGrant(
   grantKey: string,
   revokedBy: string | null = null,
 ): Promise<{ ok: boolean; error?: string }> {
-  await prisma.agentToolGrant.deleteMany({ where: { agentId: agentCuid, grantKey } });
-  await prisma.agentToolGrantRevocation.upsert({
+  if (!isKnownGrantKey(grantKey)) return { ok: false, error: `Unknown grant key: ${grantKey}` };
+  await prisma.$transaction(async (db) => {
+  await db.agentToolGrant.deleteMany({ where: { agentId: agentCuid, grantKey } });
+  await db.agentToolGrantRevocation.upsert({
     where: { agentId_grantKey: { agentId: agentCuid, grantKey } },
     update: { revokedBy },
     create: { agentId: agentCuid, grantKey, revokedBy },
   });
+  // Both governed doors pass the acting user. An actorless revoke (no caller today) has no User to
+  // attribute, and there is no "system" user, so its tombstone row is its record.
+  if (revokedBy) await recordCorpusGrantChange(db, agentCuid, grantKey, "revoke", revokedBy);
+  }, { isolationLevel: "Serializable" });
   return { ok: true };
 }
 
@@ -116,8 +147,8 @@ export function isGrantRevoked(revoked: ReadonlySet<string>, agentCuid: string, 
 
 /** True iff two coworker references resolve to the same canonical identity. */
 function isSameCoworker(a: string, b: string): boolean {
-  const ca = resolveCoworkerIdentity(a)?.agentId ?? a;
-  const cb = resolveCoworkerIdentity(b)?.agentId ?? b;
+  const ca = coworkerAuthorityAgentId(a);
+  const cb = coworkerAuthorityAgentId(b);
   return ca === cb;
 }
 

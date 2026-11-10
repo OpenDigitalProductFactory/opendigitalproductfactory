@@ -1,5 +1,4 @@
 import {
-  Boxes,
   BriefcaseBusiness,
   CheckCircle2,
   ClipboardList,

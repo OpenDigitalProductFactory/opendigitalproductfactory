@@ -1,0 +1,48 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "WorkCapsuleActivity rows of kind command-accepted | command-rejected, written only by runReceiptedCommand (apps/web/lib/work-capsules/command-receipts.ts) when a Workroom MCP write carries a commandId",
+    "Read by the same function to replay a retry, and by every existing reader of the room's activity timeline, which now shows the receipt as an ordinary activity row"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: command ids and the tool results or refusals already returned to the caller; the scope key holds user and agent ids, never names or contact data",
+    "dataSubjectRights": "No new personal content; a receipt echoes what the Workroom tool already returned to the same caller.",
+    "reviewDisposition": "Rows follow WorkroomActivity's existing 180-day telemetry retention and cascade with their Workroom."
+  },
+  "migration": {
+    "name": "20261013090000_workroom_command_receipts",
+    "backfill": "None: two nullable columns and a unique index, added with IF NOT EXISTS. Existing rows read NULL and NULLs never collide in a unique index, so no existing row can conflict.",
+    "rollback": "Forward-only. Older code ignores the columns; rollback means reverting the code, never dropping them."
+  },
+  "tests": [
+    "apps/web/lib/work-capsules/command-receipts.test.ts",
+    "apps/web/lib/work-capsules/command-receipts.pg.test.ts",
+    "apps/web/lib/work-capsules/receipted-tool.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:workroom-activity",
+      "prismaModel": "WorkroomActivity",
+      "lifecycleDisposition": "Existing model (telemetry-bounded, 180d on recordedAt); the new columns follow the row and add no retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:workroom-activity#commandScopeKey",
+          "resolution": "governed",
+          "reason": "Caller scope user:<userId>|agent:<agentId> of a command receipt row; keeps one principal's command ids apart.",
+          "provenance": "BI-763D6E01",
+          "flags": []
+        },
+        {
+          "fieldId": "data:workroom-activity#commandKey",
+          "resolution": "governed",
+          "reason": "Idempotency key the client chose for one Workroom write; unique with commandScopeKey.",
+          "provenance": "BI-763D6E01",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

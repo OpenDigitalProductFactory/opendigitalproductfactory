@@ -13,7 +13,7 @@
 // three code-graph read tools shared one local result-shaping helper in
 // mcp-tools.ts (codeGraphReadToolResult); it moves here with them.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 /** Coerce an optional string param, trimming and nulling empties. */

@@ -40,9 +40,6 @@ async function lastResponse(page) {
 
 async function sendMsg(page, msg, timeoutMs = 300000) {
   const panel = page.locator('[data-agent-panel="true"]');
-  const countBefore = await page.evaluate(() =>
-    document.querySelectorAll('[data-agent-panel="true"] [data-testid="agent-message"][data-message-role="assistant"]').length
-  );
 
   const ta = panel.locator('textarea');
   await ta.fill(msg);
@@ -57,11 +54,6 @@ async function sendMsg(page, msg, timeoutMs = 300000) {
   // Wait for response
   await waitIdle(page, timeoutMs);
   await page.waitForTimeout(2000);
-
-  // Check for new message
-  const countAfter = await page.evaluate(() =>
-    document.querySelectorAll('[data-agent-panel="true"] [data-testid="agent-message"][data-message-role="assistant"]').length
-  );
 
   const resp = await lastResponse(page);
   console.log(`[recv] <<< ${resp.slice(0, 200)}`);

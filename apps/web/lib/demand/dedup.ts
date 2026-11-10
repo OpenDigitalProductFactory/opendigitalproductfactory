@@ -73,6 +73,63 @@ export function findDuplicateCandidates(
     .sort((a, b) => b.similarity - a.similarity);
 }
 
+/**
+ * Threshold for the advisory shown at filing time.
+ *
+ * Higher than `findDuplicateCandidates`' 0.5 default on purpose. That default
+ * serves a deliberate sweep, where a human is already looking and a loose net
+ * costs one glance. This runs on EVERY filing, so a false prompt is paid by
+ * someone who did not ask for it, and an advisory people learn to skip is worse
+ * than none. 0.6 matches `findDuplicatePairs`, which has the same all-comers
+ * exposure.
+ */
+export const FILING_DUPLICATE_THRESHOLD = 0.6;
+
+/** Candidates shown at filing time, most similar first. */
+export const FILING_DUPLICATE_LIMIT = 3;
+
+export type FilingDuplicateCandidate = DuplicateCandidate & {
+  /** So the filer can tell "already being fixed" from "was fixed and regressed". */
+  status: string;
+  /**
+   * Which signal found it. `lexical` shares vocabulary; `semantic` shares
+   * meaning. They catch different misses and neither subsumes the other,
+   * so the filer is told which one spoke.
+   */
+  matchedBy: "lexical" | "semantic" | "both";
+};
+
+/**
+ * One advisory for the filer, phrased as a question rather than a verdict.
+ *
+ * The scan advisory next to this one (implementation-scan.ts) settled the
+ * wording contract: asserting a duplicate trains people to ignore the line,
+ * because the similarity score cannot know whether two items are the same
+ * defect or adjacent ones. That judgment stays with the filer; this only
+ * guarantees they see the other item before spending the investigation.
+ */
+export function renderFilingDuplicateAdvisory(
+  candidates: readonly FilingDuplicateCandidate[],
+  semanticUnavailableReason?: string | null,
+): string | null {
+  const lines = candidates.map(
+    (c) => `  - ${c.itemId} [${c.status}] ${c.title} (${c.matchedBy})`,
+  );
+  // A search that could not run is not a clean result. Saying so costs one
+  // line and stops a filer reading silence as "nothing similar exists" —
+  // the rule AGENTS.md §4 states for gates, applied to an advisory.
+  const degraded = semanticUnavailableReason
+    ? `Meaning-based matching did not run (${semanticUnavailableReason}), so only shared wording was compared.`
+    : null;
+  if (lines.length === 0) return degraded;
+  return [
+    "Similar item(s) already filed — read them before starting, and absorb rather than re-diagnose:",
+    ...lines,
+    ...(degraded ? [degraded] : []),
+    "If this is genuinely a different defect, say so in the body and carry on.",
+  ].join("\n");
+}
+
 export type DuplicatePair = {
   a: string;
   b: string;

@@ -46,6 +46,8 @@ const CONVENE_TOOLS = [
   "summon_coworker",
   "invite_room_participant",
   "post_room_message",
+  "broadcast_workroom_ask",
+  "acknowledge_workroom_broadcast",
   "spawn_work_thread",
   "start_deliberation",
 ] as const;

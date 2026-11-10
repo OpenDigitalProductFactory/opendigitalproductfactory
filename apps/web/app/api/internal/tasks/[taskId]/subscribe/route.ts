@@ -6,6 +6,7 @@ import {
 } from "@/lib/tak/task-stream-projection";
 import { createSseResponse } from "@/lib/sse/sse-stream";
 import { prisma } from "@dpf/db";
+import { TASK_STATES, type TaskState } from "@/lib/tak/task-states";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ type RouteContext = {
 function toReplayEvents(task: {
   taskRunId: string;
   contextId: string | null;
+  status: string;
   progressPayload: unknown;
   artifacts: Array<{
     artifactId: string;
@@ -26,7 +28,16 @@ function toReplayEvents(task: {
     parts: unknown;
   }>;
 }): AgentEvent[] {
-  const replayed: AgentEvent[] = [];
+  const state = TASK_STATES.includes(task.status as TaskState)
+    ? task.status as TaskState
+    : "working";
+  const replayed: AgentEvent[] = [{
+    type: "task:status",
+    taskId: task.taskRunId,
+    contextId: task.contextId,
+    state,
+    sourceEvent: "task-run.snapshot",
+  }];
   replayed.push(
     ...projectPersistedTaskProgressEvents(task.progressPayload, {
       contextId: task.contextId,
@@ -81,6 +92,7 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
       taskRunId: true,
       threadId: true,
       contextId: true,
+      status: true,
       progressPayload: true,
       artifacts: {
         select: {

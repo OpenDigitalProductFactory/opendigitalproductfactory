@@ -27,6 +27,20 @@ function draft(overrides: Record<string, unknown> = {}) {
 }
 
 describe("WordPress outbound adapter", () => {
+  it("accepts the closed canonical and legacy WordPress channel ids", () => {
+    const adapter = createWordPressOutboundAdapter({ createClient: vi.fn() as never });
+    expect(adapter.validateDraft(draft())).toEqual({ ok: true });
+    expect(adapter.validateDraft({ ...draft(), channelId: "wordpress" })).toEqual({ ok: true });
+    expect(adapter.validateDraft({ ...draft(), channelId: "wordpress-other" })).toEqual({
+      ok: false,
+      reason: "Draft is not routed to WordPress.",
+    });
+    expect(adapter.projectionIntent?.({ ...draft(), channelId: "wordpress" }, credential)).toMatchObject({
+      connectorKey: "wordpress-self-hosted",
+      connectionId: "wordpress-self-hosted",
+    });
+  });
+
   it("previews a stable projection and defaults even a requested publish to remote draft", () => {
     const adapter = createWordPressOutboundAdapter({ createClient: vi.fn() as never });
     expect(adapter.validateDraft(draft({ requestedStatus: "publish" }))).toEqual({ ok: true });

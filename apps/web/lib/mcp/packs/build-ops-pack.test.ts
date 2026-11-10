@@ -37,36 +37,18 @@ vi.mock("@/lib/governed-backlog-tee-up", () => teeUp);
 const routeCtx = vi.hoisted(() => ({ inferProviderIdFromRouteContext: vi.fn() }));
 vi.mock("@/lib/ai-provider-route-context", () => routeCtx);
 
-const wipCap = vi.hoisted(() => ({
-  wipCapReached: vi.fn(() => false),
-  // BI-937128F6: the promote gate now derives from the unified, pool-aware model.
-  decideUnifiedWip: vi.fn(() => ({
-    pool: "bs-sandbox",
-    pressure: 0,
-    capacity: 3,
-    admitted: true,
-  })),
-  BUILD_WIP_CAP: 8,
-  BuildWipCapError: class extends Error {
-    constructor() {
-      super("wip cap reached");
-    }
-  },
-  TERMINAL_BUILD_PHASES: ["ship"],
+// BI-3430B3A4: the promote gate is admission by points in flight.
+const admission = vi.hoisted(() => ({
+  evaluateItemAdmission: vi.fn(),
+  recordAdmissionOutcome: vi.fn(async () => undefined),
 }));
-vi.mock("@/lib/build/wip-cap", () => wipCap);
-
-const unifiedWipQuery = vi.hoisted(() => ({
-  loadActiveUnifiedWip: vi.fn(async () => ({
-    total: 0,
-    perSurface: {},
-    bsSandboxContending: 0,
-    sharedLeaseContending: 0,
-    hostWorktreeOnly: 0,
-  })),
-  poolPressure: vi.fn(() => 0),
+vi.mock("@/lib/build/investment-admission", async (importOriginal) => ({
+  blocksStart: (await importOriginal<typeof import("@/lib/build/investment-admission")>()).blocksStart,
+  ...admission,
 }));
-vi.mock("@/lib/build/unified-wip-query", () => unifiedWipQuery);
+vi.mock("@/lib/portfolio/budget-reservation", () => ({
+  isAutonomousCaller: (context?: { taskRunId?: string }) => Boolean(context?.taskRunId),
+}));
 
 const ideateOnApproval = vi.hoisted(() => ({ dispatchIdeateForApprovedBuild: vi.fn() }));
 vi.mock("@/lib/build/ideate-on-approval", () => ideateOnApproval);
@@ -92,6 +74,8 @@ const gitUtils = vi.hoisted(() => ({
 vi.mock("@/lib/git-utils", () => gitUtils);
 
 const endpointRunner = vi.hoisted(() => ({ runEndpointTests: vi.fn() }));
+const fidelityRunner = vi.hoisted(() => ({ runLocalToolFidelityDiagnostic: vi.fn() }));
+vi.mock("@/lib/operate/tool-fidelity-runner", () => fidelityRunner);
 vi.mock("@/lib/endpoint-test-runner", () => endpointRunner);
 
 const selfAbandon = vi.hoisted(() => ({ abandonOwnStalledBuild: vi.fn() }));
@@ -125,21 +109,7 @@ const EXPECTED_GRANTS: Record<string, string[]> = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  wipCap.wipCapReached.mockReturnValue(false);
-  wipCap.decideUnifiedWip.mockReturnValue({
-    pool: "bs-sandbox",
-    pressure: 0,
-    capacity: 3,
-    admitted: true,
-  });
-  unifiedWipQuery.loadActiveUnifiedWip.mockResolvedValue({
-    total: 0,
-    perSurface: {},
-    bsSandboxContending: 0,
-    sharedLeaseContending: 0,
-    hostWorktreeOnly: 0,
-  });
-  unifiedWipQuery.poolPressure.mockReturnValue(0);
+  admission.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
   routeCtx.inferProviderIdFromRouteContext.mockReturnValue(null);
   gitUtils.isGitAvailable.mockResolvedValue(false);
 });
@@ -268,6 +238,67 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
     );
   });
 
+  it("uses the existing diagnostic entry for an explicit fidelity selection and original context", async () => {
+    const context = { agentId: "agent", threadId: "thread" };
+    fidelityRunner.runLocalToolFidelityDiagnostic.mockResolvedValue({ success: true, message: "observed" });
+    const selection = { endpointId: "local", modelId: "ai/model", providerConnectionId: "local-account",
+      fidelityObservationIndex: 3, fidelityRunId: "fidelity-server-issued" };
+    const result = await buildOpsPack.handlers.run_endpoint_tests({ ...selection, fidelityOnly: true }, "u1", context);
+    expect(result.success).toBe(true);
+    expect(fidelityRunner.runLocalToolFidelityDiagnostic).toHaveBeenCalledWith(selection, "u1", context);
+    expect(endpointRunner.runEndpointTests).not.toHaveBeenCalled();
+    expect(db.modelProfileFindFirst).not.toHaveBeenCalled();
+  });
+
+  it.each([{ allModels: true }, { allEndpoints: true }, { concurrencyOnly: true },
+    { probesOnly: true }, { taskType: "code-gen" }])("rejects fidelity mode mixed with other diagnostic scopes", async option => {
+    const result = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "local", modelId: "ai/model",
+      providerConnectionId: "local-account", fidelityOnly: true, ...option }, "u1", {});
+    expect(result.success).toBe(false);
+    expect(endpointRunner.runEndpointTests).not.toHaveBeenCalled();
+    expect(fidelityRunner.runLocalToolFidelityDiagnostic).not.toHaveBeenCalled();
+  });
+
+  it("reports an unverified sign-in probe without inventing a capacity hold", async () => {
+    endpointRunner.runEndpointTests.mockResolvedValue([
+      { endpointId: "chatgpt", probes: [{ name: "p", outcome: "deferred", reason: "Deferred: Auth failed" }], scenarios: [], instructionFollowing: null },
+    ]);
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "chatgpt", modelId: "selected" }, "u1", {});
+    expect(res.message).toContain("unverified");
+    expect(res.message).toContain("Auth failed");
+    expect(res.message).not.toContain("capacity held");
+  });
+
+  it.each([
+    { modelId: "selected" }, { endpointId: "local" },
+    { endpointId: "openai", modelId: "selected" },
+    { endpointId: "local", modelId: "default" },
+    { endpointId: "local", modelId: "selected", allModels: true },
+    { endpointId: "local", modelId: "selected", allEndpoints: true },
+    { endpointId: "local", modelId: "selected", taskType: "code-gen" },
+    { endpointId: "local", modelId: "selected", probesOnly: true },
+  ])("refuses incompatible concurrency mode without calls: %j", async selection => {
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ ...selection, concurrencyOnly: true }, "u1", { routeContext: "/operate/ai/providers/local" });
+    expect(res.success).toBe(false);
+    expect(res.message).toContain("Concurrency diagnostics");
+    expect(endpointRunner.runEndpointTests).not.toHaveBeenCalled();
+    expect(db.modelProfileFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("passes explicit concurrency selection and reports deferred evidence without ordinary probe claims", async () => {
+    endpointRunner.runEndpointTests.mockResolvedValue([{ endpointId: "local", modelId: "selected",
+      probes: [], scenarios: [], instructionFollowing: null, codingCapability: null,
+      concurrency: { outcome: "deferred", reason: "Contention unverified", contentionObserved: false, callers: [], events: [] },
+    }]);
+    const res = await buildOpsPack.handlers.run_endpoint_tests({ endpointId: "local", modelId: "selected", concurrencyOnly: true }, "u1", {});
+    expect(res.success).toBe(true);
+    expect(endpointRunner.runEndpointTests).toHaveBeenCalledWith({ endpointId: "local", modelId: "selected", concurrencyOnly: true, triggeredBy: "u1" });
+    expect(res.message).toContain("Concurrency: deferred");
+    expect(res.message).toContain("Contention unverified");
+    expect(res.message).not.toContain("Probes 0/0 passed");
+    expect(db.modelProfileFindFirst).not.toHaveBeenCalled();
+  });
+
   it("promote_to_build_studio promotes a triaged item through the transaction", async () => {
     db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
     db.backlogItemFindFirst.mockResolvedValue({
@@ -324,26 +355,35 @@ describe("build-ops pack — handler behavior (delegation preserved)", () => {
     expect(res.entityId).toBe("FB-FORCE");
   });
 
-  it("promote_to_build_studio refuses when the WIP cap is reached", async () => {
+  it("promote_to_build_studio refuses an autonomous start past the points allowance (BI-3430B3A4)", async () => {
     db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
-    db.backlogItemFindFirst.mockResolvedValue({
-      title: "Add invoice CSV export",
-      body: "Customer feature",
-      workType: "feature",
-    });
-    db.featureBuildCount.mockResolvedValue(99);
-    // BI-937128F6: the bs-sandbox pool is saturated across all surfaces.
-    unifiedWipQuery.poolPressure.mockReturnValue(3);
-    wipCap.decideUnifiedWip.mockReturnValue({
-      pool: "bs-sandbox",
-      pressure: 3,
-      capacity: 3,
-      admitted: false,
-    });
-    const res = await buildOpsPack.handlers.promote_to_build_studio({ itemId: "BI-1" }, "u1");
+    db.backlogItemFindFirst.mockResolvedValue({ title: "Add invoice CSV export", body: "Customer feature", workType: "feature" });
+    admission.evaluateItemAdmission.mockResolvedValue({ verdict: "refuse", reason: "Starting this takes the portfolio to 11 of 8 points in flight (3 over)." });
+    const res = await buildOpsPack.handlers.promote_to_build_studio({ itemId: "BI-1" }, "u1", { taskRunId: "TR-1" });
     expect(res.success).toBe(false);
-    expect(res.error).toBe("wip_cap_reached");
+    expect(res.error).toBe("wip_allowance_reached");
+    expect(admission.evaluateItemAdmission).toHaveBeenCalledWith(expect.anything(), { itemId: "BI-1", startKind: "autonomous" });
     expect(teeUp.promoteBacklogItemToBuildDraft).not.toHaveBeenCalled();
+  });
+
+  it("promote_to_build_studio lets a refused autonomous start proceed in shadow mode, recording the refusal (WWMD DI-D83D9C13686B)", async () => {
+    db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
+    db.backlogItemFindFirst.mockResolvedValue({ title: "Add invoice CSV export", body: "Customer feature", workType: "feature" });
+    const shadow = { verdict: "refuse", mode: "shadow", reason: "Starting this takes the portfolio to 11 of 8 points in flight (3 over)." };
+    admission.evaluateItemAdmission.mockResolvedValue(shadow);
+    const res = await buildOpsPack.handlers.promote_to_build_studio({ itemId: "BI-1" }, "u1", { taskRunId: "TR-1" });
+    expect(res.error).not.toBe("wip_allowance_reached");
+    expect(admission.recordAdmissionOutcome).toHaveBeenCalledWith(expect.anything(), shadow, expect.objectContaining({ source: "promote_to_build_studio" }));
+  });
+
+  it("promote_to_build_studio lets a person start past the allowance with a recorded warning (BI-3430B3A4 AC-3)", async () => {
+    db.platformDevConfigFindUnique.mockResolvedValue({ governedBacklogEnabled: false });
+    db.backlogItemFindFirst.mockResolvedValue({ title: "Add invoice CSV export", body: "Customer feature", workType: "feature" });
+    const warned = { verdict: "warn", reason: "Starting this takes the portfolio to 11 of 8 points in flight (3 over). Started by a person anyway; this warning is recorded." };
+    admission.evaluateItemAdmission.mockResolvedValue(warned);
+    await buildOpsPack.handlers.promote_to_build_studio({ itemId: "BI-1" }, "u1");
+    expect(admission.evaluateItemAdmission).toHaveBeenCalledWith(expect.anything(), { itemId: "BI-1", startKind: "human" });
+    expect(admission.recordAdmissionOutcome).toHaveBeenCalledWith(expect.anything(), warned, expect.objectContaining({ source: "promote_to_build_studio", userId: "u1" }));
   });
 
   it("abandon_stalled_build requires a buildId", async () => {

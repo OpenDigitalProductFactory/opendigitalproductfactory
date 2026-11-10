@@ -7,6 +7,7 @@
 //  - Labels use service-level language, not infrastructure language
 
 import { MonitoringProvider, useMonitoringStatus } from "./MonitoringContext";
+import { MonitoringOffNotice } from "./MonitoringOffNotice";
 import { AlertBanner } from "./AlertBanner";
 import { ServiceStatusGrid } from "./ServiceStatusGrid";
 import { MetricGauge } from "./MetricGauge";
@@ -26,6 +27,8 @@ import { useMetricQuery } from "./useMetricQuery";
 
 import type { ReleaseHealthCardData } from "./health-summary";
 import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
+import { inactiveCapabilityServices } from "@/lib/platform-runtime/inactive-scrape-targets";
+import { useT } from "@/lib/i18n/use-t";
 
 type ServiceHealthDashboardProps = {
   capabilityHealth: CapabilityServiceHealthProjection | null;
@@ -48,7 +51,7 @@ function ServiceHealthContent({
   releaseHealth,
   capabilityHealth,
 }: ServiceHealthDashboardProps) {
-  const { online, checked } = useMonitoringStatus();
+  const { online, checked, off } = useMonitoringStatus();
   const { data: upTargets, loading: upTargetsLoading } = useMetricQuery("up");
   const { alerts } = useAlertQuery();
 
@@ -59,6 +62,15 @@ function ServiceHealthContent({
         <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-6 text-center">
           <p className="text-sm text-[var(--dpf-muted)]">Checking platform health...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (off) {
+    return (
+      <div className="space-y-6">
+        <CapabilityAuthoritySection capabilityHealth={capabilityHealth} />
+        <MonitoringOffNotice />
       </div>
     );
   }
@@ -90,6 +102,10 @@ function ServiceHealthContent({
       };
   const suppressBannerSummaries =
     platform.tone === "critical" ? [platform.detail] : [];
+  // BI-36DE938C — scrape targets owned by an inactive runtime capability are
+  // intentionally absent; the banner and tiles defer to the capability
+  // projection instead of reporting them down.
+  const inactiveServices = inactiveCapabilityServices(capabilityHealth);
 
   const showHostResources = isHostTelemetryConfigured(upTargets);
 
@@ -107,12 +123,15 @@ function ServiceHealthContent({
       <CapabilityAuthoritySection capabilityHealth={capabilityHealth} />
 
       {/* Active alerts (deduped against the Platform Status StatCard above) */}
-      <AlertBanner suppressSummaries={suppressBannerSummaries} />
+      <AlertBanner
+        suppressSummaries={suppressBannerSummaries}
+        inactiveServices={inactiveServices}
+      />
 
       {/* Service status — targets-driven, so adding a Prometheus scrape job
           automatically adds a tile (no UI change required) and three sandbox
           targets render as three tiles instead of collapsing onto one row. */}
-      <ServiceStatusGrid />
+      <ServiceStatusGrid inactiveServices={inactiveServices} />
 
       {/* Platform resource utilization — only rendered on substrates that ship
           a host telemetry exporter (Linux node-exporter, Windows windows_exporter).
@@ -207,17 +226,18 @@ function CapabilityAuthoritySection({
 }: {
   capabilityHealth: CapabilityServiceHealthProjection | null;
 }) {
-  if (capabilityHealth) return <CapabilityServiceHealth projection={capabilityHealth} />;
+  const t = useT("admin");
+  if (capabilityHealth) return <CapabilityServiceHealth projection={capabilityHealth} t={t} />;
   return (
     <section
       aria-labelledby="capability-service-health-title"
       className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
     >
       <h2 id="capability-service-health-title" className="text-sm font-semibold text-[var(--dpf-text)]">
-        Capability service requirements
+        {t("runtimeHealth.capabilityServices.heading")}
       </h2>
       <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
-        Capability authority is unavailable, so service requirements cannot be classified safely.
+        {t("runtimeHealth.capabilityServices.authorityUnavailable")}
       </p>
     </section>
   );

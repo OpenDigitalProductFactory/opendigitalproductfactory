@@ -1,6 +1,6 @@
 // Ratified page-purpose contract for /ops/teardown (BI-2E9887D2).
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const GOVERNED_TEARDOWN_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

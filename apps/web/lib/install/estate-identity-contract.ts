@@ -26,6 +26,7 @@ import {
   isInstallationEnvironmentClass,
   type InstallationEnvironmentClass,
 } from "@dpf/db/installation-operating-intent";
+import { slugify } from "../shared/slugify";
 
 /** PlatformConfig key holding the portal-recorded estate declaration. */
 export const ESTATE_IDENTITY_CONFIG_KEY = "installation.estate-identity.v1";
@@ -44,6 +45,7 @@ export const ESTATE_NAME_TIERS = [
   "process-override",
   "installer-state",
   "portal-declaration",
+  "organization-name",
   "unset",
 ] as const;
 export type EstateNameTier = (typeof ESTATE_NAME_TIERS)[number];
@@ -98,12 +100,7 @@ export function normalizeEstateName(value: unknown): string | null {
  * equality between installations — the Ed25519 device id is the identity, this
  * is a label (see `lib/federation/instance-identity`).
  */
-export function slugifyEstateName(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+export { slugify as slugifyEstateName } from "../shared/slugify";
 
 /**
  * The normal form used when two installations compare trust roots.
@@ -148,6 +145,8 @@ export interface EstateNameResolution {
   tier: EstateNameTier;
   /** The installer-state value, when installer state supplied one. */
   installerStateValue?: string;
+  /** The Organization row's name, when setup recorded one (BI-CA54ACC8). */
+  organizationNameValue?: string;
   /** The portal declaration, whether or not it is the value in force. */
   portalDeclaration?: PortalEstateIdentityDeclarationV1;
   /**
@@ -197,14 +196,23 @@ export function resolveEstateNamePrecedence(input: {
   processOverride?: string | null;
   installerState?: string | null;
   portalDeclaration?: PortalEstateIdentityDeclarationV1 | null;
+  /**
+   * The Organization row's name — the answer the operator gave at setup. The
+   * lowest speaking tier (BI-CA54ACC8): an install that predates the estate
+   * name, or never opened the installation page, is still the company it was
+   * set up as, and its peers compare that name.
+   */
+  organizationName?: string | null;
 }): EstateNameResolution {
   const portalDeclaration = input.portalDeclaration ?? undefined;
   const override = normalizeEstateName(input.processOverride);
   const installerState = normalizeEstateName(input.installerState);
+  const organizationName = normalizeEstateName(input.organizationName);
 
   const base = {
     ...(installerState ? { installerStateValue: installerState } : {}),
     ...(portalDeclaration ? { portalDeclaration } : {}),
+    ...(organizationName ? { organizationNameValue: organizationName } : {}),
   };
 
   const shadowedBy = (
@@ -245,6 +253,10 @@ export function resolveEstateNamePrecedence(input: {
       tier: "portal-declaration",
       ...base,
     };
+  }
+
+  if (organizationName) {
+    return { estateName: organizationName, tier: "organization-name", ...base };
   }
 
   return { estateName: null, tier: "unset", ...base };
@@ -292,7 +304,7 @@ export function formatMcpServerName(input: {
   const role = ENVIRONMENT_ROLE_WORD[input.environmentClass];
   const name = normalizeEstateName(input.estateName);
   if (!name) return `dpf-${role}`;
-  const slug = slugifyEstateName(name);
+  const slug = slugify(name);
   return slug ? `dpf-${slug}-${role}` : `dpf-${role}`;
 }
 

@@ -1,4 +1,4 @@
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import {
   formatMarketingLabel,
   type MarketingWorkspaceSnapshot,
@@ -203,6 +203,7 @@ export function buildMarketingCampaignsView(
   const pendingReviewCount = snapshot.pendingDrafts.length;
   const approvedCount = snapshot.approvedDrafts.length;
   const category = snapshot.storefront.category;
+  const ownOffer = snapshot.storefront.ownOffer;
 
   const campaigns = briefs.map((brief) => {
     const matchedTasks = tasks.filter((task) => taskMatchesBrief(task, brief));
@@ -241,6 +242,7 @@ export function buildMarketingCampaignsView(
           .filter(Boolean)
           .join("\n"),
         category,
+        ownOffer,
       }),
     };
   });
@@ -257,6 +259,7 @@ export function buildMarketingCampaignsView(
     archetypeFit: assessArchetypeFit({
       text: [task.title, task.brief].filter(Boolean).join("\n"),
       category,
+      ownOffer,
     }),
   }));
 

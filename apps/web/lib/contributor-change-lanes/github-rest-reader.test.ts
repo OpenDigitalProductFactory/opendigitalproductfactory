@@ -34,7 +34,18 @@ vi.mock("@/lib/credential-crypto", () => ({
   decryptSecret: mocks.decryptSecret,
 }));
 
-import { parseRepoFromUrl, readGithubPullRequests } from "./github-rest-reader";
+import {
+  createGithubReadTransport,
+  parseRepoFromUrl,
+  readGithubPullRequests,
+  resolveGithubToken,
+} from "./github-rest-reader";
+
+it("creates a GitHub transport isolated from the framework-global fetch", async () => {
+  const transport = createGithubReadTransport();
+  expect(transport.fetch).not.toBe(globalThis.fetch);
+  await expect(transport.close()).resolves.toBeUndefined();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -118,6 +129,7 @@ describe("readGithubPullRequests", () => {
     }
     // First fetch carried no If-None-Match (initial etag from prior run is empty {})
     const firstCallHeaders = fetchImpl.mock.calls[0]?.[1].headers as Record<string, string>;
+    expect(fetchImpl.mock.calls[0]?.[0]).toContain("state=all");
     expect(firstCallHeaders["If-None-Match"]).toBeUndefined();
     expect(firstCallHeaders.Authorization).toBe("Bearer ghp_decrypted_xxxxxxxxx");
     // Etag persisted to metadata, preserving sibling keys
@@ -126,6 +138,61 @@ describe("readGithubPullRequests", () => {
         data: { metadata: { other: "preserved", githubPrEtag: '"new-etag-abc"' } },
       }),
     );
+  });
+
+  it("persists exact authored-head and squash-merge provenance", async () => {
+    mocks.credentialFindUnique.mockResolvedValueOnce({
+      secretRef: "enc:xxx",
+      status: "active",
+    });
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      makeResponse([
+        makeRawPr(5090, {
+          state: "closed",
+          head: { ref: "fix/squash", sha: "a".repeat(40) },
+          merge_commit_sha: "b".repeat(40),
+          merged_at: "2026-09-06T04:00:00.000Z",
+          updated_at: "2026-09-06T04:00:01.000Z",
+        }),
+      ]),
+    );
+
+    const result = await readGithubPullRequests({
+      fetchImpl: fetchImpl as never,
+      now: () => new Date("2026-09-06T04:01:00.000Z"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({
+      sourceKey: "5090",
+      payload: {
+        repositoryFullName: "o/r",
+        number: 5090,
+        state: "merged",
+        headSha: "a".repeat(40),
+        mergeCommitSha: "b".repeat(40),
+        mergedAt: "2026-09-06T04:00:00.000Z",
+        providerUpdatedAt: "2026-09-06T04:00:01.000Z",
+        observedAt: "2026-09-06T04:01:00.000Z",
+        providerApiVersion: "github-rest/2022-11-28",
+        observationFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
+    });
+  });
+
+  it("drops an unknown provider state instead of projecting it as open", async () => {
+    mocks.credentialFindUnique.mockResolvedValueOnce({
+      secretRef: "enc:xxx",
+      status: "active",
+    });
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(makeResponse([makeRawPr(5092, { state: "future-state" })]));
+
+    const result = await readGithubPullRequests({ fetchImpl: fetchImpl as never });
+
+    expect(result).toMatchObject({ ok: true, rows: [] });
   });
 
   it("sends If-None-Match from ScheduledJob.metadata.githubPrEtag on the first page", async () => {
@@ -234,14 +301,95 @@ describe("parseRepoFromUrl", () => {
   });
 });
 
-function makeRawPr(n: number) {
+function makeRawPr(n: number, overrides: Record<string, unknown> = {}) {
   return {
     number: n,
     html_url: `https://github.com/o/r/pull/${n}`,
     title: `PR ${n}`,
-    head: { ref: `feat/branch-${n}` },
+    head: { ref: `feat/branch-${n}`, sha: n.toString(16).padStart(40, "0") },
     state: "open",
     draft: false,
     mergeable_state: "CLEAN",
+    updated_at: "2026-09-06T03:00:00.000Z",
+    merged_at: null,
+    merge_commit_sha: null,
+    ...overrides,
   };
 }
+
+
+// BI-69BBC446. resolveGithubToken read exactly one credential row,
+// "github-pr-sync", which nothing in the product writes — the Contributor MCP
+// card its comment named does not exist. So it returned null on every install,
+// callers fell back to unauthenticated requests, and against a private repo
+// those fail. That killed repository provenance, and with it plan-coverage
+// receipts, spec-approval baselines and independent design review — while an
+// active "hive-contribution" credential sat one row away.
+describe("resolveGithubToken credential chain", () => {
+  function prismaWith(rows: Record<string, { secretRef: string; status: string } | null>) {
+    return {
+      credentialEntry: {
+        findUnique: vi.fn(async ({ where }: { where: { providerId: string } }) =>
+          rows[where.providerId] ?? null),
+      },
+    } as never;
+  }
+
+  it("prefers the dedicated github-pr-sync credential when one exists", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "github-pr-sync": { secretRef: "dedicated-token", status: "active" },
+      "hive-contribution": { secretRef: "hive-token", status: "active" },
+    }));
+    expect(token).toBe("dedicated-token");
+  });
+
+  it("falls back to hive-contribution when github-pr-sync is absent", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "hive-contribution": { secretRef: "hive-token", status: "active" },
+    }));
+    expect(token).toBe("hive-token");
+  });
+
+  it("falls back to git-backup when neither of the first two is active", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "hive-contribution": { secretRef: "stale", status: "revoked" },
+      "git-backup": { secretRef: "backup-token", status: "active" },
+    }));
+    expect(token).toBe("backup-token");
+  });
+
+  // BI-985F4EC9: issue intake prefers the managed-repository login.
+  it("prefers the repository-controller credential when asked, ahead of github-pr-sync", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "github-repository-controller": { secretRef: "controller-token", status: "active" },
+      "github-pr-sync": { secretRef: "dedicated-token", status: "active" },
+    }), { preferRepositoryController: true });
+    expect(token).toBe("controller-token");
+  });
+
+  it("falls back to the existing chain when the controller credential is missing or inactive", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "github-repository-controller": { secretRef: "old", status: "unconfigured" },
+      "hive-contribution": { secretRef: "hive-token", status: "active" },
+    }), { preferRepositoryController: true });
+    expect(token).toBe("hive-token");
+  });
+
+  it("does not read the controller credential for other callers", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "github-repository-controller": { secretRef: "controller-token", status: "active" },
+      "hive-contribution": { secretRef: "hive-token", status: "active" },
+    }));
+    expect(token).toBe("hive-token");
+  });
+
+  it("returns null when the store genuinely holds nothing usable", async () => {
+    const previous = process.env.GITHUB_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    try {
+      expect(await resolveGithubToken(prismaWith({}))).toBeNull();
+    } finally {
+      if (previous !== undefined) process.env.GITHUB_TOKEN = previous;
+    }
+  });
+});

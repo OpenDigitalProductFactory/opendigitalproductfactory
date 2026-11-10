@@ -1,10 +1,12 @@
 import type { GraphData } from "@/lib/actions/graph";
+import { computeLayeredPositions } from "./elk-runner";
 import type { LayoutResult, PositionedNode } from "./types";
 
 export type PartitionFn = (nodeId: string) => number | string | null;
 
 /**
- * Swimlane layout using ELK.js with partitioning.
+ * Swimlane layout on ELK `layered` with partitioning: each partition is a band of ranks,
+ * ordered top to bottom. Returns ELK top-left positions.
  * Supports OSI layer partitioning (numeric) and subnet partitioning (string).
  * Falls back to simple band layout if ELK is unavailable.
  */
@@ -51,49 +53,15 @@ export async function computeSwimLaneLayout(
   sortedPartitions.forEach((key, idx) => partitionIndex.set(key, idx));
 
   try {
-    const ELK = (await import("elkjs/lib/elk.bundled.js")).default;
-    const elk = new ELK();
-
-    const nodeIds = new Set(data.nodes.map((n) => n.id));
-
-    const children = data.nodes.map((node) => {
-      const partition = getPartition(node.id);
-      const idx = partition != null ? partitionIndex.get(partition) : undefined;
-      return {
-        id: node.id,
-        width: nodeWidth,
-        height: nodeHeight,
-        ...(idx != null
-          ? { layoutOptions: { "elk.partitioning.partition": String(idx) } }
-          : {}),
-      };
-    });
-
-    const edges = data.links
-      .filter((l) => nodeIds.has(l.source) && nodeIds.has(l.target))
-      .map((link, i) => ({
-        id: `e${i}`,
-        sources: [link.source],
-        targets: [link.target],
-      }));
-
-    const graph = await elk.layout({
-      id: "root",
-      layoutOptions: {
-        "elk.algorithm": "layered",
-        "elk.direction": "DOWN",
-        "elk.partitioning.activate": "true",
-        "elk.layered.spacing.nodeNodeBetweenLayers": String(layerSpacing),
-        "elk.spacing.nodeNode": String(nodeSpacing),
-      },
-      children,
-      edges,
-    });
-
-    const posMap = new Map<string, { x: number; y: number }>();
-    for (const child of graph.children ?? []) {
-      posMap.set(child.id, { x: child.x ?? 0, y: child.y ?? 0 });
-    }
+    const posMap = await computeLayeredPositions(
+      data.nodes.map((node) => {
+        const partition = getPartition(node.id);
+        const idx = partition != null ? partitionIndex.get(partition) : undefined;
+        return { id: node.id, width: nodeWidth, height: nodeHeight, partition: idx };
+      }),
+      data.links,
+      { direction: "TB", rankSep: layerSpacing, nodeSep: nodeSpacing },
+    );
 
     const nodes: PositionedNode[] = data.nodes.map((node) => {
       const pos = posMap.get(node.id) ?? { x: 0, y: 0 };

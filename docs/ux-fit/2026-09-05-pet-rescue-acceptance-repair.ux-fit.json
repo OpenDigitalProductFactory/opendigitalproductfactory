@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "decidedOption": "three-column-narrow-grid-with-compact-desktop-row",
+  "scope": {
+    "files": [
+      "apps/web/components/animal-welfare/RescueCockpit.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/workspace/rescue": {
+        "defaultVisibleWords": 136,
+        "leadBandWords": 27,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "RescueCockpit.test.tsx renders the overview with six canonical animals and representative care, adoption, stewardship, and unavailable-housing states. It measures that DOM with lib/ux-budget's measureUxBudget and axe-core; the committed route baseline has no /workspace/rescue row yet.",
+    "responsiveFit": "The same test fixes the narrow contract at three columns below sm, the compact flex row at sm and above, seven source-ordered links, explicit 44px minimum height, min-width zero, wrappable narrow labels, and no horizontal navigation scroller. Exact 390x844 served-DOM acceptance remains required after release.",
+    "themeAndAccess": "The change preserves the existing Link elements, hrefs, aria-current state, keyboard order, focus system, and DPF theme tokens; axe reports zero detectable violations with color contrast excluded in jsdom."
+  }
+}

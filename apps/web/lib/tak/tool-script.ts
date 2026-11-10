@@ -38,7 +38,7 @@ import { createMcpSessionToken } from "@/lib/mcp/session-token";
 import { buildDockerExecSandboxCommand } from "@/lib/build/sandbox/sandbox";
 import { lazyExec } from "@/lib/shared/lazy-node";
 import { clampToolResultForModel } from "@/lib/tak/tool-result-budget";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 
 // ─── Feature flag (default OFF) — mirrors lib/self-upgrade/config.ts ──────────
 

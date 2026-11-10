@@ -41,6 +41,25 @@ export type SizeGateBuildInput = {
   designDoc: BuildDesignDoc | null;
 };
 
+/**
+ * True when the owner has already answered this gate with an override.
+ *
+ * `record_decomposition_override` writes the owner's rationale into
+ * `designReview.decompositionOverride` (decomposition-override.ts). The gate
+ * itself has always honoured that field — `isParkedAtDecomposeGate`
+ * (resume-pre-build-phase.ts) treats a build with an override as NOT parked,
+ * and build-design-review-handler carries a prior override across re-reviews.
+ * This affordance did not read it, so an owner who took the "Keep as one build
+ * (explain why)" lever recorded their rationale and was then shown the same
+ * "Split into smaller builds" ask, with no other move offered (BI-181E8776).
+ * The decision surface has to read the same field the gate does.
+ */
+function hasDecompositionOverride(designReview: ReviewResult | null): boolean {
+  return (
+    (designReview as { decompositionOverride?: unknown } | null)?.decompositionOverride != null
+  );
+}
+
 function sizeDecisionOf(designReview: ReviewResult | null): string | null {
   const assessment = (designReview as { sizeAssessment?: { decision?: unknown } } | null)
     ?.sizeAssessment;
@@ -63,6 +82,10 @@ export function deriveSizeGateDecompositionAffordance(
 
   const decision = sizeDecisionOf(build.designReview);
   if (decision === null || !DECOMPOSING_DECISIONS.has(decision)) return { kind: "none" };
+
+  // The owner already answered this. Keep the recorded rationale on the card —
+  // the banner renders it separately — but stop asking a settled question.
+  if (hasDecompositionOverride(build.designReview)) return { kind: "none" };
 
   return {
     kind: "decompose-now",

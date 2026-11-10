@@ -1,21 +1,21 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { ModelSelectionOverview } from "@/lib/inference/phase-model-resolution";
 
 vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock("@/lib/i18n/locale-context.server", () => ({
+  getLocaleContext: vi.fn().mockResolvedValue({ language: "en-US" }),
+}));
+
 vi.mock("@/lib/inference/phase-model-resolution", () => ({
-  resolveModelSelectionByPhase: vi.fn().mockResolvedValue({
-    verdict: "all-cloud",
-    summary: "All phases route to cloud providers.",
-    buildEngine: "codex",
-    buildEngineLabel: "Codex CLI",
-    generatedAt: "2026-06-29T00:00:00.000Z",
-    notes: ["Provider routing resolves the model supply."],
-    phases: [],
-    flags: [],
-  }),
+  resolveModelSelectionByPhase: vi.fn().mockResolvedValue(routingOverview([false, false, false, false, false])),
+}));
+
+vi.mock("@/lib/coworker-service-catalog/routing-reachability-preflight", () => ({
+  computeCoworkerRoutingReachability: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/lib/platform-runtime/service-health-loader", () => ({
@@ -59,6 +59,59 @@ vi.mock("next/link", () => ({
 }));
 
 describe("RuntimeHealthPage", () => {
+  it.each([
+    { locations: [false, null, null, null, false], summary: "2 resolved: 0 local, 2 cloud." },
+    { locations: [true, null, null, null, true], summary: "2 resolved: 2 local, 0 cloud." },
+    { locations: [true, null, null, null, false], summary: "2 resolved: 1 local, 1 cloud." },
+  ])("leads with unresolved availability when resolved locations are $locations", async ({ locations, summary }) => {
+    const { resolveModelSelectionByPhase } = await import("@/lib/inference/phase-model-resolution");
+    vi.mocked(resolveModelSelectionByPhase).mockResolvedValueOnce(routingOverview(locations));
+    const { default: RuntimeHealthPage } = await import("./page");
+
+    const html = renderToStaticMarkup(await RuntimeHealthPage());
+
+    expect(html).toContain("3 of 5 phases unresolved");
+    expect(html).toContain(summary);
+    expect(html).not.toContain("All phases route to cloud");
+    expect(html).not.toContain("All phases run locally");
+    expect(html).toMatch(/color:var\(--dpf-error\)[^>]*>3 of 5 phases unresolved/);
+  });
+
+  it("reports unavailable phase evidence without repeating a healthy location summary", async () => {
+    const { resolveModelSelectionByPhase } = await import("@/lib/inference/phase-model-resolution");
+    vi.mocked(resolveModelSelectionByPhase).mockResolvedValueOnce(routingOverview([]));
+    const { default: RuntimeHealthPage } = await import("./page");
+
+    const html = renderToStaticMarkup(await RuntimeHealthPage());
+
+    expect(html).toContain("Phase routing unavailable");
+    expect(html).not.toContain("All phases route to cloud");
+  });
+
+  it.each([
+    { locations: [true, true, true, true, true], title: "All phases run locally" },
+    { locations: [false, false, false, false, false], title: "All phases route to cloud" },
+    { locations: [true, false, true, false, false], title: "Mixed: local + cloud" },
+  ])("preserves complete routing location: $title", async ({ locations, title }) => {
+    const { resolveModelSelectionByPhase } = await import("@/lib/inference/phase-model-resolution");
+    vi.mocked(resolveModelSelectionByPhase).mockResolvedValueOnce(routingOverview(locations));
+    const { default: RuntimeHealthPage } = await import("./page");
+    const html = renderToStaticMarkup(await RuntimeHealthPage());
+    expect(html).toContain(title);
+    expect(html).not.toContain("phases unresolved");
+  });
+
+  it("keeps errors prominent even when a location was selected for every phase", async () => {
+    const { resolveModelSelectionByPhase } = await import("@/lib/inference/phase-model-resolution");
+    const overview = routingOverview([true, true, true, true, true]);
+    overview.flags = [{ phase: "build", severity: "error", code: "context-too-small", message: "Context too small", remediation: "Review serving configuration" }];
+    vi.mocked(resolveModelSelectionByPhase).mockResolvedValueOnce(overview);
+    const { default: RuntimeHealthPage } = await import("./page");
+    const html = renderToStaticMarkup(await RuntimeHealthPage());
+    expect(html).toContain("Phase routing needs attention");
+    expect(html).not.toContain("All phases run locally");
+  });
+
   it("links operators back to the AI readiness console", async () => {
     const { default: RuntimeHealthPage } = await import("./page");
     const html = renderToStaticMarkup(await RuntimeHealthPage());
@@ -66,7 +119,7 @@ describe("RuntimeHealthPage", () => {
     expect(html).toContain("Model Selection &amp; Runtime Health");
     expect(html).toContain("All phases route to cloud providers.");
     expect(html).toContain('href="/platform/ai/readiness"');
-    expect(html).toContain("Capability service requirements");
+    expect(html).toContain("Service requirements");
     expect(html).toContain("Optional — inactive");
     expect(html).toContain('data-testid="phase-routing-table-scroll"');
     expect(html).toContain('min-width:0');
@@ -76,20 +129,64 @@ describe("RuntimeHealthPage", () => {
   it("does not infer service requirements when capability authority is unavailable", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { loadCapabilityServiceHealth } = await import("@/lib/platform-runtime/service-health-loader");
-    vi.mocked(loadCapabilityServiceHealth).mockRejectedValueOnce(new Error("install_catalog_stale"));
+    vi.mocked(loadCapabilityServiceHealth).mockRejectedValueOnce(Object.assign(new Error("install_catalog_stale"), {
+      divergence: { divergences: [{ capabilityId: "private-diagnostic", liveState: "active" }], summary: "private-diagnostic" },
+    }));
     const { default: RuntimeHealthPage } = await import("./page");
 
     const html = renderToStaticMarkup(await RuntimeHealthPage());
 
     expect(html).toContain("Capability authority is unavailable");
-    expect(html).toContain("Service requirements cannot be classified safely right now.");
+    expect(html).toContain("service requirements cannot be classified safely.");
     expect(html).not.toContain("install_catalog_stale");
+    expect(html).not.toContain("private-diagnostic");
     expect(html).not.toContain("Optional — inactive");
     expect(JSON.stringify(log.mock.calls)).not.toContain("install_catalog_stale");
     expect(log).toHaveBeenCalledWith("[runtime-health] read unavailable", expect.objectContaining({
       event: "runtime_health_read_unavailable",
       source: "capability-authority",
     }));
+    log.mockRestore();
+  });
+
+  it("preserves every diagnosed disagreement without exposing the underlying error or claiming healthy services", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { createOperationalCapabilityState } = await import("@/lib/platform-runtime/operational-state");
+    let divergenceError: unknown;
+    try {
+      createOperationalCapabilityState({
+        installSnapshot: { enabledRuntimeCapabilities: ["runtime:core", "runtime:build"] },
+        capabilityStates: [
+          { capabilityId: "runtime:adp-integration", state: "disabled" },
+          { capabilityId: "runtime:browser-automation", state: "disabled" },
+          { capabilityId: "runtime:core", state: "active" },
+          { capabilityId: "runtime:build", state: "disabled" },
+          { capabilityId: "runtime:deep-observability", state: "active" },
+          { capabilityId: "runtime:development", state: "disabled" },
+          { capabilityId: "runtime:durable-automation", state: "disabled" },
+          { capabilityId: "runtime:external-ai", state: "disabled" },
+          { capabilityId: "runtime:local-speech", state: "disabled" },
+        ],
+        observedServices: {}, observedProviders: {},
+      });
+    } catch (error) { divergenceError = error; }
+    expect(divergenceError).toBeInstanceOf(Error);
+    expect((divergenceError as Error).message).toMatch(/^capability_state_stale:/);
+    const { loadCapabilityServiceHealth } = await import("@/lib/platform-runtime/service-health-loader");
+    vi.mocked(loadCapabilityServiceHealth).mockRejectedValueOnce(divergenceError);
+    const { default: RuntimeHealthPage } = await import("./page");
+    const html = renderToStaticMarkup(await RuntimeHealthPage());
+    expect(html).toContain("capabilities disagree with the installation");
+    expect(html).toMatch(/<details[^>]*><summary/);
+    expect(html).not.toMatch(/<details[^>]*\bopen/);
+    expect(html).toContain("runtime:build");
+    expect(html).toContain("runtime:deep-observability");
+    expect(html).toContain("Installation: enabled; recorded state: disabled");
+    expect(html).toContain("Installation: disabled; recorded state: active");
+    expect(html).not.toContain("capability_state_stale");
+    expect(html).not.toContain("Optional — inactive");
+    expect(html).not.toContain("Required services available");
+    expect(JSON.stringify(log.mock.calls)).not.toContain("capability_state_stale");
     log.mockRestore();
   });
 
@@ -117,14 +214,7 @@ describe("RuntimeHealthPage", () => {
     expect(vi.mocked(readQueueSnapshots)).toHaveBeenCalled();
     expect(vi.mocked(getJobEngineHealth)).toHaveBeenCalled();
 
-    model.resolve({
-      verdict: "all-cloud",
-      summary: "All phases route to cloud providers.",
-      buildEngine: "codex",
-      buildEngineLabel: "Codex CLI",
-      generatedAt: "2026-06-29T00:00:00.000Z",
-      notes: [], phases: [], flags: [],
-    });
+    model.resolve(routingOverview([false, false, false, false, false]));
     capability.resolve({ aggregate: { value: "Operational", tone: "success", detail: "Ready" }, items: [] });
     queues.resolve([]);
     jobs.resolve({
@@ -161,6 +251,25 @@ describe("RuntimeHealthPage", () => {
     expect(html).toContain("portal requires attention");
   });
 });
+
+function routingOverview(locations: (boolean | null)[]): ModelSelectionOverview {
+  const phaseIds = ["ideate", "plan", "design-review", "plan-review", "build"] as const;
+  const local = locations.filter((location) => location === true).length;
+  const cloud = locations.filter((location) => location === false).length;
+  return {
+    verdict: local > 0 ? (cloud > 0 ? "mixed" : "all-local") : "all-cloud",
+    summary: local > 0 ? (cloud > 0 ? `Mixed: ${local} local, ${cloud} cloud.` : "All phases run locally.") : "All phases route to cloud providers.",
+    buildEngine: "codex", buildEngineLabel: "Codex CLI",
+    generatedAt: "2026-06-29T00:00:00.000Z", notes: [], flags: [],
+    phases: locations.map((isLocal, index) => ({
+      phase: phaseIds[index], label: phaseIds[index], governedBy: "providers-routing",
+      mechanism: "routed", engine: "Portal routing", isLocal,
+      providerId: isLocal === null ? null : isLocal ? "local" : "codex",
+      modelId: isLocal === null ? null : "test-model", providerTier: null,
+      contextTokens: null, rationale: "Test routing evidence", flags: [],
+    })),
+  };
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

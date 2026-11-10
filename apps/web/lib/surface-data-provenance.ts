@@ -72,10 +72,13 @@ const KIND_TONES: Record<DataSourceKind, DataSourceTone> = {
       "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-warning)]",
     dotClassName: "bg-[var(--dpf-warning)]",
   },
+  // Provenance names where data comes from, not whether anything is healthy.
+  // An absent optional source is neutral; the error tone belongs to health
+  // signals. Red here sat beside working API keys on every install (BI-986B9DEB).
   "not-connected": {
     className:
-      "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-error)]",
-    dotClassName: "bg-[var(--dpf-error)]",
+      "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
+    dotClassName: "bg-[var(--dpf-muted)]",
   },
 };
 

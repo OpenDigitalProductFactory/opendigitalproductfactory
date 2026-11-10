@@ -43,6 +43,14 @@ export function loadEvidencePolicy(path = DEFAULT_POLICY_PATH) {
       + `expected ${CI_EVIDENCE_PLAN_SCHEMA_VERSION}.`,
     );
   }
+  if (!Array.isArray(policy.runtimeScenarios) || policy.runtimeScenarios.length === 0
+    || policy.runtimeScenarios.some(scenario => typeof scenario.id !== "string"
+      || !Array.isArray(scenario.requiredCaseIds) || scenario.requiredCaseIds.length === 0
+      || new Set(scenario.requiredCaseIds).size !== scenario.requiredCaseIds.length
+      || scenario.requiredCaseIds.some(id => typeof id !== "string" || !/^[a-z][a-z0-9-]+$/.test(id))
+      || !Array.isArray(scenario.patterns) || scenario.patterns.length === 0)) {
+    throw new Error("Invalid runtime scenario inventory in CI evidence policy");
+  }
   return policy;
 }
 
@@ -61,9 +69,9 @@ function classifyPath(path, compiled) {
   return "other";
 }
 
-function documentationDerivedArtifacts(changedFiles, compiled) {
+function documentationDerivedArtifacts(changedFiles, compiled, registry = DERIVED_ARTIFACTS) {
   const artifacts = new Set();
-  for (const definition of DERIVED_ARTIFACTS) {
+  for (const definition of registry) {
     const changedArtifacts = changedFiles.filter((path) => (
       matchesAnyGlob(path, definition.artifactPaths)
     ));
@@ -82,6 +90,42 @@ function documentationDerivedArtifacts(changedFiles, compiled) {
   return artifacts;
 }
 
+function docsOnlyVerdict(changedFiles, compiled, registry) {
+  const documentationArtifacts = documentationDerivedArtifacts(changedFiles, compiled, registry);
+  const isDocs = (path) => documentationArtifacts.has(path) || classifyPath(path, compiled) === "docs";
+  const nonDocFiles = changedFiles.filter((path) => !isDocs(path));
+  const workspaceRequiredFiles = changedFiles.filter((path) => (
+    matchesAny(path, compiled.workspaceRequiredDocs)
+  ));
+  return {
+    docsOnly: changedFiles.length > 0 && nonDocFiles.length === 0 && workspaceRequiredFiles.length === 0,
+    nonDocFiles,
+    workspaceRequiredFiles,
+    documentationArtifacts,
+  };
+}
+
+/**
+ * BI-78176241. The one answer to "is this diff docs-only?" for the evidence
+ * planner, the pre-push exemption, pregate's sandbox admission and the
+ * documentation evidence lane. Three predicates used to disagree, so a diff
+ * one path exempted could be refused evidence by another. A registered
+ * derived artifact counts as docs only when every changed source it is
+ * derived from is docs (BI-AC48D79F); its freshness is the caller's check.
+ *
+ * @returns {{ docsOnly: boolean, nonDocFiles: string[], workspaceRequiredFiles: string[] }}
+ */
+export function classifyDocsOnlyDiff(changedFiles, { policy = loadEvidencePolicy(), registry = DERIVED_ARTIFACTS } = {}) {
+  const files = sortedUnique((changedFiles ?? []).map(normalizePath));
+  const { docsOnly, nonDocFiles, workspaceRequiredFiles } = docsOnlyVerdict(files, {
+    docs: compilePatterns(policy.patterns.docs),
+    tests: compilePatterns(policy.patterns.tests),
+    production: compilePatterns(policy.patterns.production),
+    workspaceRequiredDocs: compilePatterns(policy.patterns.workspaceRequiredDocs),
+  }, registry);
+  return { docsOnly, nonDocFiles, workspaceRequiredFiles };
+}
+
 function packageOwner(path, packageRoots) {
   return Object.entries(packageRoots)
     .sort(([left], [right]) => right.length - left.length)
@@ -89,16 +133,29 @@ function packageOwner(path, packageRoots) {
 }
 
 function testStem(path) {
-  return path.replace(/\.[cm]?[jt]sx?$/, "");
+  return path.replace(/\.([cm]?[jt]sx?|py)$/, "");
 }
+
+// A few CI-owned guards keep their conformance test beside the executable
+// entrypoint rather than under lib/. Keep that relationship declarative so a
+// published correction can derive it without an operator-supplied map.
+export const RELATED_TESTS_BY_SOURCE = Object.freeze({
+  "scripts/lib/ci-policy-guards.mjs": ["scripts/ci-policy-guards.test.mjs"],
+  "packages/dpf-skill-pack/hooks/lib/published-correction.mjs": ["scripts/published-correction.test.mjs"],
+});
 
 function colocatedTests(path, knownTests) {
   const stem = testStem(path);
   const basename = stem.split("/").at(-1);
   const directory = stem.includes("/") ? stem.slice(0, stem.lastIndexOf("/")) : "";
   return knownTests.filter((testPath) => (
-    testPath.startsWith(`${stem}.test.`)
+    RELATED_TESTS_BY_SOURCE[path]?.includes(testPath)
+    || testPath.startsWith(`${stem}.test.`)
     || testPath.startsWith(`${stem}.spec.`)
+    // Python colocates as `<stem>_test.py` rather than `<stem>.test.py`, so the
+    // JS-shaped prefixes above never match it. Without this a Python source file
+    // is production-with-no-tests, which escalates the whole run.
+    || testPath === `${stem}_test.py`
     || (
       basename
       && testPath.startsWith(`${directory ? `${directory}/` : ""}__tests__/${basename}.`)
@@ -200,19 +257,16 @@ export function createEvidencePlan(input) {
     code: rule.code,
     patterns: compilePatterns(rule.patterns),
   }));
-  const documentationArtifacts = documentationDerivedArtifacts(changedFiles, compiled);
+  const docsVerdict = docsOnlyVerdict(changedFiles, compiled, DERIVED_ARTIFACTS);
+  const documentationArtifacts = docsVerdict.documentationArtifacts;
   const kinds = new Map(changedFiles.map((path) => [
     path,
     documentationArtifacts.has(path) ? "docs" : classifyPath(path, compiled),
   ]));
   const productionFiles = changedFiles.filter((path) => kinds.get(path) === "production");
   const changedTests = changedFiles.filter((path) => kinds.get(path) === "test");
-  const workspaceRequired = changedFiles.some((path) => (
-    matchesAny(path, compiled.workspaceRequiredDocs)
-  ));
-  const docsOnly = !workspaceRequired
-    && changedFiles.length > 0
-    && changedFiles.every((path) => kinds.get(path) === "docs");
+  const workspaceRequired = docsVerdict.workspaceRequiredFiles.length > 0;
+  const docsOnly = docsVerdict.docsOnly;
   const mobileOnly = !workspaceRequired
     && !docsOnly
     && changedFiles.length > 0
@@ -284,7 +338,7 @@ export function createEvidencePlan(input) {
         tests,
         routes,
       });
-    } else if (kind === "production" && tests.length > 0) {
+    } else if (tests.length > 0) {
       fileDispositions.push({
         path,
         kind,
@@ -378,6 +432,9 @@ export function createEvidencePlan(input) {
       ...expandAffectedPackages(affectedPackages, input.packageDependencies),
     ]),
     affectedTests: selectedTests,
+    runtimeScenarios: (policy.runtimeScenarios ?? []).filter(scenario => escalations.length > 0
+      || changedFiles.some(path => matchesAny(path, compilePatterns(scenario.patterns))))
+      .map(({ id, requiredCaseIds }) => ({ id, requiredCaseIds })),
     affectedRoutes: routes,
     routeFamilies: sortedUnique(routes.map(routeFamily)),
     globalGuards: sortedUnique(policy.globalGuards),

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  loadEndpointManifests,
+  loadEndpointManifests as readEndpointManifests,
+  loadEnableCandidateManifests as readEnableCandidateManifests,
   loadOverrides,
   loadPolicyRules,
   invalidateRoutingLoaderCache,
@@ -9,9 +10,12 @@ import {
 import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/types";
 import type { RouteDecision } from "./types";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
+import { getExclusionReasonV2 } from "./pipeline-v2";
+import type { RequestContract } from "./request-contract";
 
-const { mockPrisma, mockProviderHasConfiguredCredential } = vi.hoisted(() => ({
+const { mockPrisma, mockProviderHasConfiguredCredential, mockServedContext } = vi.hoisted(() => ({
   mockPrisma: {
+    aiProviderConnection: { findMany: vi.fn().mockResolvedValue([]) },
     routeDecisionLog: {
       create: vi.fn().mockResolvedValue({ id: "decision-log-1" }),
     },
@@ -26,12 +30,15 @@ const { mockPrisma, mockProviderHasConfiguredCredential } = vi.hoisted(() => ({
     },
   },
   mockProviderHasConfiguredCredential: vi.fn(),
+  mockServedContext: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/ai-provider-internals", () => ({
   providerHasConfiguredCredential: mockProviderHasConfiguredCredential,
 }));
+const loadEndpointManifests = (now?: number) => readEndpointManifests(now, mockServedContext);
+const loadEnableCandidateManifests = () => readEnableCandidateManifests(mockServedContext);
 
 describe("persistRouteDecision", () => {
   beforeEach(() => {
@@ -210,6 +217,171 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
     description: "demo",
     condition: { kind: "noop" },
   };
+  const localProfile = (output: number | null = null) => ({
+    ...profileRow, providerId: "local", modelId: "ai/qwen3.8:27b", maxOutputTokens: output,
+    maxContextTokens: 262144,
+    provider: { ...profileRow.provider, providerId: "local", authMethod: "none",
+      baseUrl: null, endpoint: "http://model-runner.docker.internal/v1", maxOutputTokens: null },
+  });
+
+
+
+  it("uses a live captured native image observation only for an unknown local capability and never carries it across frames", async () => {
+    const { withCapturedProviderTransportOnly, createCapturedNativeImageInputEvidence } = await import("../shared/captured-effect-store");
+    const profile = { ...localProfile(), capabilities: { imageInput: null }, inputModalities: ["text"] };
+    mockPrisma.modelProfile.findMany.mockResolvedValue([profile]);
+    let heldReader!: Parameters<typeof readEndpointManifests>[1];
+    await withCapturedProviderTransportOnly(async () => {
+      const evidence = createCapturedNativeImageInputEvidence({ modelId: profile.modelId, modelDigest: "sha256:" + "a".repeat(64), observationDigest: "b".repeat(64) });
+      heldReader = async () => ({ contextTokens: 40960, imageInputEvidence: evidence });
+      const [manifest] = await readEndpointManifests(100000, heldReader);
+      expect(manifest).toMatchObject({ capabilities: { imageInput: true, streaming: true }, supportsStreaming: true, inputModalities: ["text", "image"] });
+      expect(profile.capabilities.imageInput).toBeNull(); expect(profile.inputModalities).toEqual(["text"]);
+      const [copy] = await readEndpointManifests(100001, async () => ({ contextTokens: 40960, imageInputEvidence: JSON.parse(JSON.stringify(evidence)) }));
+      expect(copy?.capabilities.imageInput).not.toBe(true);
+      for (const changed of [{ ...profile, capabilities: { imageInput: false } }, { ...profile, capabilityOverrides: { imageInput: false } }]) {
+        mockPrisma.modelProfile.findMany.mockResolvedValue([changed]);
+        const [vetoed] = await readEndpointManifests(100002, async () => ({ contextTokens: 40960, imageInputEvidence: evidence }));
+        expect(vetoed?.capabilities.imageInput).not.toBe(true);
+      }
+      mockPrisma.modelProfile.findMany.mockResolvedValue([profile]);
+    });
+    const [expired] = await readEndpointManifests(100003, heldReader);
+    expect(expired?.capabilities.imageInput).not.toBe(true);
+  });
+
+  it.each([null, {}, { streaming: null }])("admits a streaming subscription model when discovery omitted streaming: %j", async capabilities => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{
+      ...profileRow, providerId: "chatgpt", modelId: "gpt-6.1-sol", capabilities,
+      provider: { ...profileRow.provider, endpointType: "responses", supportsStreaming: true },
+    }]);
+    const [manifest] = await loadEndpointManifests();
+    const interactive = {
+      contractId: "streaming-regression", contractFamily: "sync.conversation",
+      taskType: "conversation", interactionMode: "sync", sensitivity: "internal",
+      modality: { input: ["text"], output: ["text"] }, requiresTools: true,
+      requiresStrictSchema: false, requiresStreaming: true, estimatedInputTokens: 1000,
+      estimatedOutputTokens: 100, reasoningDepth: "low", budgetClass: "balanced",
+    } satisfies RequestContract;
+    expect(getExclusionReasonV2(manifest!, interactive)).toBeNull();
+    expect(manifest?.supportsStreaming).toBe(true);
+  });
+
+  it.each([
+    { providerStreaming: true, modelStreaming: false },
+    { providerStreaming: false, modelStreaming: true },
+    { providerStreaming: false, modelStreaming: null },
+  ])("preserves an explicit streaming refusal: %j", async ({ providerStreaming, modelStreaming }) => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{
+      ...profileRow, capabilities: { streaming: modelStreaming },
+      provider: { ...profileRow.provider, supportsStreaming: providerStreaming },
+    }]);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest?.capabilities.streaming).toBe(false);
+    expect(manifest?.supportsStreaming).toBe(false);
+  });
+
+  it.each(["embedding", "image", "audio"])('does not infer text streaming for a %s model', async modelClass => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ ...profileRow, modelClass }]);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest?.capabilities.streaming).toBeNull();
+    expect(manifest?.supportsStreaming).toBe(false);
+  });
+
+  it("leaves streaming unknown without positive provider or model evidence", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{
+      ...profileRow, provider: { ...profileRow.provider, supportsStreaming: null },
+    }]);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest?.capabilities.streaming).toBeNull();
+  });
+
+  it("preserves other model capabilities when resolving transport streaming", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{
+      ...profileRow, capabilities: { streaming: null, imageInput: false, toolUse: true },
+    }]);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest?.capabilities).toMatchObject({ streaming: true, imageInput: false, toolUse: true });
+  });
+
+  it("reconciles streaming in the same way for enable-candidate previews", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([profileRow]);
+    const [manifest] = await loadEnableCandidateManifests();
+    expect(manifest?.capabilities.streaming).toBe(true);
+
+  });
+
+  it("bounds local completion by the observed shared window instead of rejecting absent output metadata", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    mockServedContext.mockResolvedValue(40960);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest).toMatchObject({ maxContextTokens: 40960, maxOutputTokens: 40960 });
+    expect(mockServedContext).toHaveBeenCalledWith(undefined, expect.objectContaining({
+      modelId: "ai/qwen3.8:27b", provider: expect.objectContaining({ providerId: "local" }),
+    }));
+  });
+
+  it("does not reuse another reader's local capacity or invent capacity without a reader", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    mockServedContext.mockResolvedValue(40960);
+    expect((await loadEndpointManifests(100000))[0]?.maxOutputTokens).toBe(40960);
+    expect((await readEndpointManifests(100001))[0]?.maxOutputTokens).toBeNull();
+    const unavailableReader = vi.fn().mockResolvedValue(null);
+    expect((await readEndpointManifests(100002, unavailableReader))[0]?.maxContextTokens).toBeNull();
+  });
+
+  it("carries selected runtime support alongside observed capacity without trusting stored parameters", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    const evidence = { dialect: "llama.cpp-b9879" as const, modelDigest: "digest", engineIdentity: "engine", templateDigest: "template", configDigest: "config", observedAt: Date.now() };
+    const [manifest] = await readEndpointManifests(Date.now(), async () => ({ contextTokens: 131072, thinkingBudgetEvidence: evidence }));
+    expect(manifest).toMatchObject({ maxContextTokens: 131072, localThinkingBudgetEvidence: evidence });
+    const [unknown] = await readEndpointManifests(Date.now(), async () => ({ contextTokens: 131072 }));
+    expect(unknown?.localThinkingBudgetEvidence).toBeUndefined();
+  });
+
+  it("leaves embedding capacity on its existing metadata path", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ ...localProfile(8192), modelClass: "embedding" }]);
+    expect((await loadEndpointManifests())[0]).toMatchObject({ maxContextTokens: 262144, maxOutputTokens: 8192 });
+    expect(mockServedContext).not.toHaveBeenCalled();
+  });
+
+  it("preserves a lower explicit local output cap", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile(8192)]);
+    mockServedContext.mockResolvedValue(40960);
+    expect((await loadEndpointManifests())[0]).toMatchObject({ maxContextTokens: 40960, maxOutputTokens: 8192 });
+  });
+
+  it("drops expired observed capacity when the runtime becomes unreadable", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    mockServedContext.mockResolvedValueOnce(40960).mockResolvedValueOnce(null);
+    expect((await loadEndpointManifests(100000))[0]?.maxContextTokens).toBe(40960);
+    expect((await loadEndpointManifests(129999))[0]?.maxContextTokens).toBe(40960);
+    expect((await loadEndpointManifests(130000))[0]?.maxContextTokens).toBeNull();
+    expect(mockServedContext).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the same observed bounds for enable-candidate previews", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    mockServedContext.mockResolvedValue(40960);
+    expect((await loadEnableCandidateManifests())[0]).toMatchObject({
+      status: "active", maxContextTokens: 40960, maxOutputTokens: 40960,
+    });
+  });
+
+  it.each([null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, 40960.5])(
+    "does not substitute advertised context when served capacity is invalid: %s", async (served) => {
+      mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+      mockServedContext.mockResolvedValue(served);
+      expect((await loadEndpointManifests())[0]).toMatchObject({ maxContextTokens: null, maxOutputTokens: null });
+    },
+  );
+
+  it("does not derive cloud output capacity from a context limit", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ ...profileRow, maxOutputTokens: null,
+      provider: { ...profileRow.provider, maxOutputTokens: null } }]);
+    expect((await loadEndpointManifests())[0]?.maxOutputTokens).toBeNull();
+    expect(mockServedContext).not.toHaveBeenCalled();
+  });
   const overrideRow = {
     endpointId: "anthropic:claude-sonnet",
     taskType: "code-gen",
@@ -248,6 +420,29 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
     const manifests = await loadEndpointManifests(900_001);
     expect(manifests).toHaveLength(1);
     expect(mockProviderHasConfiguredCredential).toHaveBeenCalledWith("docker-model-runner", "none");
+  });
+
+  it("marks unsupported ChatGPT-subscription models ineligible without hiding supported fallbacks", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([
+      {
+        ...profileRow,
+        providerId: "codex",
+        modelId: "gpt-5.3-codex",
+        provider: { ...profileRow.provider, authMethod: "oauth2_authorization_code" },
+      },
+      {
+        ...profileRow,
+        id: "mp-2",
+        providerId: "codex",
+        modelId: "gpt-5.4",
+        provider: { ...profileRow.provider, authMethod: "oauth2_authorization_code" },
+      },
+    ]);
+
+    const manifests = await loadEndpointManifests(900_002);
+    expect(manifests).toHaveLength(2);
+    expect(manifests[0]?.eligibilityExclusionReason).toMatch(/not supported.*ChatGPT account/i);
+    expect(manifests[1]?.eligibilityExclusionReason).toBeUndefined();
   });
 
   it("loads each loader's DB rows exactly once across a 200-iteration turn", async () => {

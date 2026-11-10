@@ -14,10 +14,13 @@
 import { prisma } from "@dpf/db";
 
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import { buildStartApprovalRefusal, requiresBuildStartApproval } from "@/lib/build/build-start-approval";
 import { extractBuildIdHint, logBuildActivity, resolveActiveBuildId } from "@/lib/mcp/build-tool-helpers";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { handleGuardOutcomesPayload, hasGuardOutcomesPayload } from "@/lib/gpp/efficacy/guard-outcome-intake";
 
 /**
  * Local copy of mcp-tools.ts `resolveSavePhaseHandoffTransition` (left inline
@@ -111,6 +114,10 @@ const definitions: ToolDefinition[] = [
         localIntegration: { type: "object", description: "Local merged-code integration result summary" },
         unresolvedQuestions: { type: "array", items: { type: "string" }, description: "Open questions that still need decision or founder review" },
         skillIds: { type: "array", items: { type: "string" }, description: "DPF skill ids used by the external contributor" },
+        guardOutcomes: {
+          type: "object",
+          description: "Guard outcome runs from pregate, pre-push-gate or the guard loop (BI-FEDD8F45): { records: guard-outcome-run.v1[] (max 20), declarations?: string }. Recorded as guard-outcome.run evidence; returns acknowledged and refused runIds.",
+        },
       },
       required: ["provider", "externalSessionId", "summary", "routeContext"],
     },
@@ -120,6 +127,8 @@ const definitions: ToolDefinition[] = [
     buildPhases: ["ideate", "plan", "build", "review", "ship"],
   },
 ];
+
+const SAVE_PHASE_HANDOFF_DEFINITION = definitions.find((d) => d.name === "save_phase_handoff")!;
 
 const saveBuildNotes: ToolPackHandler = async (params, userId) => {
   const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
@@ -163,9 +172,23 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
   if (!buildId) return { success: false, error: "No active build", message: "No active build found" };
   const latestBuild = await prisma.featureBuild.findUnique({
     where: { buildId },
-    select: { buildId: true, phase: true, kind: true, threadId: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
+    select: { buildId: true, phase: true, kind: true, threadId: true, originatingBacklogItemId: true, draftApprovedAt: true, designDoc: true, designReview: true, buildPlan: true, planReview: true, verificationOut: true, acceptanceMet: true, uxTestResults: true, uxVerificationStatus: true, brief: true, plan: true },
   });
   if (!latestBuild) return { success: false, error: "No active build", message: "No active build found" };
+
+  // BI-BDB63485: the tool's own `buildPhases` tag is the single source of the
+  // phases it may act in. The native coworker filters its tool list by it, but
+  // the external MCP route does not, so the handler enforces it: a build in
+  // ship (or a terminal phase) is refused before anything is written, and
+  // completion stays with reconcileBuildCompletion.
+  const handoffPhases: readonly string[] = SAVE_PHASE_HANDOFF_DEFINITION.buildPhases ?? [];
+  if (!handoffPhases.includes(latestBuild.phase)) {
+    return {
+      success: false,
+      error: "phase_out_of_scope",
+      message: `save_phase_handoff works in the ${handoffPhases.join(", ")} phases; build ${latestBuild.buildId} is in ${latestBuild.phase}. Nothing was saved.`,
+    };
+  }
 
   // Determine the next phase. Hidden task-handoff controls are accepted
   // only from the build orchestrator context; public callers keep the
@@ -235,73 +258,98 @@ const savePhaseHandoff: ToolPackHandler = async (params, userId, context) => {
   // passes happyPathState (intake anchors) so the gate's intake check
   // evaluates against the real build state rather than default-null.
   try {
-    const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
+    const { canTransitionPhase, normalizeHappyPathState } = await import("@/lib/feature-build-types");
+    const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
     if (canTransitionPhase(latestBuild.phase as import("@/lib/feature-build-types").BuildPhase, toPhase as import("@/lib/feature-build-types").BuildPhase)) {
       const plan = (latestBuild.plan as Record<string, unknown> | null) ?? {};
       const happyPathState = normalizeHappyPathState(plan.happyPathState);
       const handoffBrief = latestBuild.brief as { acceptanceCriteria?: string[]; fixContext?: import("@/lib/feature-build-types").FixContext } | null;
-      const gate = checkPhaseGate(
-        latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
-        toPhase as import("@/lib/feature-build-types").BuildPhase,
-        {
-          kind: latestBuild.kind,
-          // Right-sizing matrix: persisted on plan.processSize at promote time.
-          processSize: (plan.processSize as string | undefined) ?? "medium",
-          fixContext: handoffBrief?.fixContext,
-          designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
-          buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
-          verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
-          uxTestResults: latestBuild.uxTestResults,
-          uxVerificationStatus: latestBuild.uxVerificationStatus,
-          acceptanceCriteria: handoffBrief?.acceptanceCriteria ?? [],
-          happyPathState,
-        },
-      );
-      // Record the gate outcome on the handoff (the gate that allowed —
-      // or blocked — advancement). Best-effort; never fail the handoff.
-      await prisma.phaseHandoff
-        .update({
-          where: { id: createdHandoff.id },
-          data: {
-            gateResult: {
-              allowed: gate.allowed,
-              reason: gate.reason ?? null,
-              fromPhase: latestBuild.phase,
-              toPhase,
-            } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+      // Structural phase gate, then record its outcome on the handoff (the gate
+      // that allowed — or blocked — advancement). Best-effort; never fail the
+      // handoff. One body, used by plan→build through transitionPlanToBuild and
+      // by every other transition below.
+      const evaluateStructuralGate = async () => {
+        const gate = await checkBuildPhaseGate({
+          buildId,
+          from: latestBuild.phase as import("@/lib/feature-build-types").BuildPhase,
+          to: toPhase as import("@/lib/feature-build-types").BuildPhase,
+          evidence: {
+            kind: latestBuild.kind,
+            // Right-sizing matrix: persisted on plan.processSize at promote time.
+            processSize: (plan.processSize as string | undefined) ?? "medium",
+            fixContext: handoffBrief?.fixContext,
+            designDoc: latestBuild.designDoc, designReview: latestBuild.designReview,
+            buildPlan: latestBuild.buildPlan, planReview: latestBuild.planReview,
+            verificationOut: latestBuild.verificationOut, acceptanceMet: latestBuild.acceptanceMet,
+            uxTestResults: latestBuild.uxTestResults,
+            uxVerificationStatus: latestBuild.uxVerificationStatus,
+            acceptanceCriteria: handoffBrief?.acceptanceCriteria ?? [],
+            happyPathState,
           },
-        })
-        .catch(() => {});
-      if (gate.allowed) {
-        if (toPhase === "complete") {
-          const { completeFeatureBuildTransition } = await import(
-            "@/lib/backlog/initiative-readiness/build-terminal-transition"
-          );
-          const terminal = await completeFeatureBuildTransition({
-            buildId: latestBuild.buildId,
-            expectedPhase: latestBuild.phase,
-          });
-          if (!terminal.ok) {
-            return {
-              success: false,
-              error: "initiative_not_ready",
-              message: `Build completion is blocked by ${terminal.code}.`,
-              data: { code: terminal.code, readiness: terminal.decision },
-            };
-          }
-        } else {
-          await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
-        }
-        if (toPhase === "review") {
-          const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
-          await queueBuildReviewVerification(latestBuild.buildId);
-        }
-        const { agentEventBus } = await import("@/lib/agent-event-bus");
-        if (latestBuild.threadId) agentEventBus.emit(latestBuild.threadId, { type: "phase:change", buildId: latestBuild.buildId, phase: toPhase } as import("@/lib/agent-event-bus").AgentEvent);
-        logBuildActivity(latestBuild.buildId, "phase:advance", `Phase advanced: ${latestBuild.phase} → ${toPhase}`);
-        return { success: true, message: `Phase advanced: ${latestBuild.phase} → ${toPhase}` };
+        });
+        await prisma.phaseHandoff
+          .update({
+            where: { id: createdHandoff.id },
+            data: {
+              gateResult: {
+                allowed: gate.allowed,
+                reason: gate.reason ?? null,
+                fromPhase: latestBuild.phase,
+                toPhase,
+              } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+            },
+          })
+          .catch(() => {});
+        return gate;
+      };
+      const gateBlocked = (reason: string | undefined) =>
+        ({ success: true, message: `Phase handoff saved but gate blocked advance: ${reason}. Evidence may be incomplete.` });
+
+      // BI-BDB63485: Approve Start, the caller check the canonical
+      // advance-build-phase profile runs before ideate → plan and plan → build
+      // (PLAN_TO_BUILD_GATE_PROFILES["save-phase-handoff"].callerChecksBefore).
+      if (requiresBuildStartApproval(latestBuild, latestBuild.phase, toPhase)) {
+        return gateBlocked(buildStartApprovalRefusal(latestBuild.phase).replace(/\.$/, ""));
       }
-      return { success: true, message: `Phase handoff saved but gate blocked advance: ${gate.reason}. Evidence may be incomplete.` };
+
+      if (latestBuild.phase === "plan" && toPhase === "build") {
+        // GPP C-8 (PR-F, BI-45F9CB7A). The gate order, the phase write and the
+        // PR-B shadow record ("gpp-c8-transition-gate-skipped") live in the
+        // shared transition; this path's gates are declared in
+        // PLAN_TO_BUILD_GATE_PROFILES["save-phase-handoff"]. It still evaluates
+        // the structural gate only: enforcing the WWMD plan-advancement gate
+        // here awaits the recorded C-8 decision on the shadow evidence. Imported
+        // from the leaf core so this pack stays out of the web import cycle.
+        const { PLAN_TO_BUILD_PASS, refusePlanToBuild, transitionPlanToBuild } = await import(
+          "@/lib/build/plan-to-build-transition-core"
+        );
+        const transition = await transitionPlanToBuild<"save-phase-handoff", string | undefined>({
+          buildId: latestBuild.buildId,
+          path: "save-phase-handoff",
+          logActivity: logBuildActivity,
+          steps: {
+            "structural-phase-gate": async () => {
+              const gate = await evaluateStructuralGate();
+              return gate.allowed ? PLAN_TO_BUILD_PASS : refusePlanToBuild(gate.reason);
+            },
+          },
+        });
+        if (transition.kind === "refused") return gateBlocked(transition.refusal);
+      } else {
+        const gate = await evaluateStructuralGate();
+        if (!gate.allowed) return gateBlocked(gate.reason);
+        // The phase scope above keeps this handler out of ship, so it never
+        // reaches `complete` (BI-BDB63485).
+        await prisma.featureBuild.update({ where: { buildId: latestBuild.buildId }, data: { phase: toPhase } });
+      }
+      if (toPhase === "review") {
+        const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
+        await queueBuildReviewVerification(latestBuild.buildId);
+      }
+      const { agentEventBus } = await import("@/lib/agent-event-bus");
+      if (latestBuild.threadId) agentEventBus.emit(latestBuild.threadId, { type: "phase:change", buildId: latestBuild.buildId, phase: toPhase } as import("@/lib/agent-event-bus").AgentEvent);
+      logBuildActivity(latestBuild.buildId, "phase:advance", `Phase advanced: ${latestBuild.phase} → ${toPhase}`);
+      return { success: true, message: `Phase advanced: ${latestBuild.phase} → ${toPhase}` };
     }
   } catch (err) {
     console.error("[save_phase_handoff] auto-advance failed:", err);
@@ -335,6 +383,11 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
       error: "missing_required",
       message: `Missing required external development evidence field(s): ${missing.join(", ")}`,
     };
+  }
+
+  // BI-FEDD8F45: guard outcome runs ride this existing evidence lane.
+  if (hasGuardOutcomesPayload(params)) {
+    return handleGuardOutcomesPayload({ params, userId, context, db: prisma });
   }
 
   const buildId = stringValue("buildId") || undefined;
@@ -402,7 +455,7 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
       externalSessionId,
       provider,
       summary,
-      actor: { userId, agentId: context?.agentId ?? null, principalId: null },
+      actor: await workCapsuleActor(userId, context),
       backlogItemId: stringValue("backlogItemId") || null,
       worktreePath: stringValue("worktreePath") || null,
       branchName: stringValue("branchName") || null,

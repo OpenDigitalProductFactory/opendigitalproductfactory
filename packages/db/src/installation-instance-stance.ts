@@ -59,6 +59,10 @@ export interface InstanceStanceProfile {
   peerWrite: PeerWriteStance;
   workSync: WorkSyncStance;
   pairedProductionInstallationRef?: string;
+  /** The paired peer installation as an operator recognises it; display only. */
+  pairedInstallationLabel?: string;
+  /** The paired peer's CA-attested class; null when unattested. */
+  pairedEnvironmentClass?: InstallationEnvironmentClass | null;
   rationale: {
     credentials: string;
     teardown: string;
@@ -83,6 +87,21 @@ export interface InstanceStanceHostFacts {
    * a declared name is intent and a link is evidence.
    */
   pairingIsEstablished?: boolean;
+  /**
+   * The one federation health sentence (EP-ZERO-CONFIG-FEDERATION §5.7):
+   * "In step …", "Behind by …" or "Broken because …". When present it IS the
+   * work-sync rationale, so the briefing states what is happening, not what
+   * is supposed to happen.
+   */
+  workSyncHealthLine?: string;
+  /**
+   * The paired peer's environment class as the organization CA certified it
+   * (BI-0716C8A8, A2A design §19.2). Null or absent means unattested: a peer is
+   * never assumed to share this installation's class.
+   */
+  peerEnvironmentClass?: InstallationEnvironmentClass | null;
+  /** The linked peer installation's own name and DID suffix, for display (AC-3). */
+  peerInstallationLabel?: string;
 }
 
 function resolveCredentials(
@@ -117,7 +136,7 @@ function resolveTeardown(
     return {
       stance: "capture-required",
       rationale:
-        `This ${environmentClass} installation holds work that exists nowhere else, so capture a durable backlog bundle before any teardown.`,
+        `This ${environmentClass} installation holds work that exists nowhere else, so capture a durable backlog and Workroom bundle before any teardown.`,
     };
   }
   return {
@@ -147,6 +166,7 @@ function resolveSourceAuthority(
 function resolvePeerWrite(
   environmentClass: InstallationEnvironmentClass,
   pairedRef: string | undefined,
+  peerEnvironmentClass: InstallationEnvironmentClass | null | undefined,
 ): { stance: PeerWriteStance; rationale: string } {
   if (!pairedRef) {
     return {
@@ -155,10 +175,24 @@ function resolvePeerWrite(
     };
   }
   if (environmentClass === "production") {
+    if (!peerEnvironmentClass) {
+      return {
+        stance: "none",
+        rationale:
+          `The organization CA has not attested ${pairedRef}'s environment class, so it is neither written to nor asked to run anything until its membership is re-issued with a class.`,
+      };
+    }
+    if (peerEnvironmentClass === "production") {
+      return {
+        stance: "governed-write",
+        rationale:
+          "Both installations are attested production, so peer writes follow the approved federation link and its projection contract.",
+      };
+    }
     return {
-      stance: "governed-write",
+      stance: "read-only",
       rationale:
-        "Both installations are production, so peer writes follow the approved federation link and its projection contract.",
+        `${pairedRef} is an attested ${peerEnvironmentClass} installation, so ask it only for read-only validation and never mutate a record it owns.`,
     };
   }
   return {
@@ -180,6 +214,7 @@ function resolvePeerWrite(
 function resolveWorkSync(
   pairedRef: string | undefined,
   pairingIsEstablished: boolean,
+  healthLine?: string,
 ): { stance: WorkSyncStance; rationale: string } {
   if (!pairedRef) {
     return {
@@ -199,8 +234,8 @@ function resolveWorkSync(
   }
   return {
     stance: "same-organization",
-    rationale:
-      `Mirror the backlog this installation owns to ${pairedRef} so the work survives a teardown; only this side may change those records.`,
+    rationale: healthLine
+      ?? `Mirror the backlog this installation owns to ${pairedRef} so the work survives a teardown; only this side may change those records.`,
   };
 }
 
@@ -223,11 +258,13 @@ export function resolveInstanceStance(
   const sourceAuthority = resolveSourceAuthority(host.sourceCapable);
   const peerWrite = resolvePeerWrite(
     snapshot.environmentClass,
-    snapshot.pairedProductionInstallationRef,
+    snapshot.pairedProductionInstallationRef ? host.peerInstallationLabel ?? snapshot.pairedProductionInstallationRef : undefined,
+    host.peerEnvironmentClass,
   );
   const workSync = resolveWorkSync(
     snapshot.pairedProductionInstallationRef,
     host.pairingIsEstablished ?? false,
+    host.workSyncHealthLine,
   );
 
   return {
@@ -241,6 +278,8 @@ export function resolveInstanceStance(
     peerWrite: peerWrite.stance,
     workSync: workSync.stance,
     pairedProductionInstallationRef: snapshot.pairedProductionInstallationRef,
+    ...(host.peerInstallationLabel ? { pairedInstallationLabel: host.peerInstallationLabel } : {}),
+    ...(snapshot.pairedProductionInstallationRef ? { pairedEnvironmentClass: host.peerEnvironmentClass ?? null } : {}),
     rationale: {
       credentials: credentials.rationale,
       teardown: teardown.rationale,
@@ -276,7 +315,11 @@ export function formatInstanceStanceBriefing(
     `INSTALLATION IDENTITY: ${stance.environmentClass} installation, purpose ${stance.primaryPurpose}.`,
   );
   if (stance.pairedProductionInstallationRef) {
-    lines.push(`Paired installation: ${stance.pairedProductionInstallationRef}.`);
+    const peer = stance.pairedInstallationLabel ?? stance.pairedProductionInstallationRef;
+    const attestation = stance.pairedEnvironmentClass
+      ? `, an attested ${stance.pairedEnvironmentClass} installation`
+      : stance.pairedEnvironmentClass === null ? ", class not attested" : "";
+    lines.push(`Paired installation: ${peer}${attestation}.`);
   }
   lines.push(`Credentials — ${stance.credentials}: ${stance.rationale.credentials}`);
   lines.push(`Teardown — ${stance.teardown}: ${stance.rationale.teardown}`);

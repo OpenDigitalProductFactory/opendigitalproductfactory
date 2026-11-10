@@ -16,7 +16,7 @@ function displayRank(ciType: string | null | undefined) {
 /**
  * Compact top-down layout for the physical network projection.
  *
- * Dagre puts every client on one rank-wide row, which makes a normal site
+ * A generic layered layout puts every client on one rank-wide row, which makes a normal site
  * thousands of pixels wide. This layout keeps the infrastructure spine in
  * hierarchy order and wraps leaf clients beneath the AP/switch that observed
  * them. It changes display coordinates only; canonical relationship direction

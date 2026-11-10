@@ -115,6 +115,10 @@ export function ProposalCard({ proposal }: { proposal: PresentedProposal }) {
 
       {standingOfTheAdvice}
 
+      {proposal.panelNote ? (
+        <p className="mt-1 text-xs text-[var(--dpf-muted)]">{proposal.panelNote}</p>
+      ) : null}
+
       {proposal.confidence ? (
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">{proposal.confidence}</p>
       ) : null}

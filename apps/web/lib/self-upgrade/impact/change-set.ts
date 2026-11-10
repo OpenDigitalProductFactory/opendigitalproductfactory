@@ -3,9 +3,10 @@
 // Collect the upstream change set as RawCommit[] from `git log <a>..<b>` over
 // the host clone — mirrors the no-auth read pattern used by
 // resolveTargetSha in apps/web/lib/self-upgrade/version.ts (same execFile
-// dep injection, same HOST_SOURCE_PATH default). No git fetch here — the
-// caller is expected to have already run buildFetchCommand before
-// resolveTargetSha, so the upstream ref is fresh.
+// dep injection, same HOST_SOURCE_PATH default). No git fetch here —
+// resolveTargetSha freshens the local ref itself whenever the remote head is
+// ahead of it (BI-4746F2A9), so the target's objects are present by the time
+// this range is walked.
 
 import type { RawCommit } from "./types";
 

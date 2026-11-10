@@ -1,53 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { splitMarkdownSections, splitWikilinks, WikiBodyRenderer } from "./WikiBodyRenderer";
+import { splitMarkdownSections, WikiBodyRenderer } from "./WikiBodyRenderer";
 
-describe("splitWikilinks", () => {
-  it("returns the whole string when no wikilinks are present", () => {
-    expect(splitWikilinks("plain text without brackets")).toEqual([
-      { kind: "text", value: "plain text without brackets" },
-    ]);
+describe("WikiBodyRenderer wikilinks", () => {
+  const render = (body: string) => renderToStaticMarkup(WikiBodyRenderer({ body }));
+
+  it("links a bare [[slug]] with the slug as its label", () => {
+    expect(render("see [[entities/digital-product]] now")).toContain(
+      '<a href="/coworker-decisions/entities/digital-product" class="text-[var(--dpf-accent)] hover:underline">entities/digital-product</a>',
+    );
   });
 
-  it("recognises a bare [[slug]]", () => {
-    expect(splitWikilinks("see [[entities/digital-product]] now")).toEqual([
-      { kind: "text", value: "see " },
-      { kind: "wikilink", slug: "entities/digital-product", label: "entities/digital-product" },
-      { kind: "text", value: " now" },
-    ]);
+  it("links [[slug|label]] with the label", () => {
+    expect(render("see [[entities/digital-product|the DP page]]")).toContain(">the DP page</a>");
   });
 
-  it("recognises [[slug|label]]", () => {
-    expect(splitWikilinks("see [[entities/digital-product|the DP page]]")).toEqual([
-      { kind: "text", value: "see " },
-      { kind: "wikilink", slug: "entities/digital-product", label: "the DP page" },
-    ]);
+  it("links several wikilinks in one paragraph, and inside list items", () => {
+    const html = render("[[a]] then [[b|Label B]]\n\n- item [[c]]");
+    expect(html).toContain('href="/coworker-decisions/a"');
+    expect(html).toContain(">Label B</a>");
+    expect(html).toContain('href="/coworker-decisions/c"');
   });
 
-  it("handles multiple wikilinks in one string", () => {
-    expect(splitWikilinks("[[a]] then [[b|Label B]] and [[c]]")).toEqual([
-      { kind: "wikilink", slug: "a", label: "a" },
-      { kind: "text", value: " then " },
-      { kind: "wikilink", slug: "b", label: "Label B" },
-      { kind: "text", value: " and " },
-      { kind: "wikilink", slug: "c", label: "c" },
-    ]);
+  it("leaves malformed and single brackets as text", () => {
+    const html = render("not a [[ link with spaces ]] here, a [link] only");
+    expect(html).not.toContain("<a ");
+    expect(html).toContain("[[ link with spaces ]]");
   });
 
-  it("leaves malformed brackets as plain text", () => {
-    expect(splitWikilinks("not a [[ link with spaces ]] here")).toEqual([
-      { kind: "text", value: "not a [[ link with spaces ]] here" },
-    ]);
-  });
-
-  it("does not match a single-bracket [link]", () => {
-    expect(splitWikilinks("a [link] only")).toEqual([
-      { kind: "text", value: "a [link] only" },
-    ]);
-  });
-
-  it("returns an empty array for an empty string", () => {
-    expect(splitWikilinks("")).toEqual([]);
+  it("does not link inside code", () => {
+    expect(render("`[[a]]`")).not.toContain("<a ");
   });
 });
 

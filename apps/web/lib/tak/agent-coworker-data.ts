@@ -1,9 +1,11 @@
+import { RESPONSE_FEEDBACK_BINDING_SELECT } from "../routing/response-producer";
 import { cache } from "react";
 import { prisma } from "@dpf/db";
 import type {
   AgentMessageProvider,
   AgentMessageRow,
   AttachmentInfo,
+  InlineApprovalRequest,
 } from "@/lib/agent-coworker-types";
 
 type AttachmentRow = {
@@ -15,6 +17,7 @@ type AttachmentRow = {
 };
 
 type TelemetryRow = {
+  id?: string;
   agentMessageId: string | null;
   providerId: string;
   modelId: string;
@@ -36,6 +39,10 @@ function serializeMessage(
     createdAt: Date;
     providerId?: string | null;
     modelId?: string | null;
+    responseAttemptId?: string | null;
+    responseContentDigest?: string | null;
+    responseScope?: string | null;
+    responseWorkroomId?: string | null;
     attachments?: AttachmentRow[];
   },
   proposal?: {
@@ -47,6 +54,7 @@ function serializeMessage(
     resultError: string | null;
   } | null,
   provider?: AgentMessageProvider,
+  approvalRequests?: InlineApprovalRequest[],
 ): AgentMessageRow {
   const row: AgentMessageRow = {
     id: m.id,
@@ -57,6 +65,8 @@ function serializeMessage(
     agentId: m.agentId,
     routeContext: m.routeContext,
     createdAt: m.createdAt.toISOString(),
+    responseFeedbackEligible: m.role === "assistant" && Boolean(m.responseAttemptId && m.responseContentDigest
+      && ((m.responseScope === "known_unroomed" && !m.responseWorkroomId) || (m.responseScope === "workroom" && m.responseWorkroomId))),
   };
   if (m.attachments && m.attachments.length > 0) {
     row.attachments = m.attachments.map((a): AttachmentInfo => ({
@@ -68,35 +78,81 @@ function serializeMessage(
     }));
   }
   if (proposal) {
+    // A still-proposed row carries a resultError only when the reference
+    // monitor refused its approval (convert-and-run, BI-04E5A511): it can no
+    // longer run as proposed, so the card offers Decline only, even after a reload.
+    const refusedReason = proposal.status === "proposed" && proposal.resultError ? proposal.resultError : null;
     row.proposal = {
       proposalId: proposal.proposalId,
       actionType: proposal.actionType,
       parameters: proposal.parameters as Record<string, unknown>,
       status: proposal.status,
       ...(proposal.resultEntityId ? { resultEntityId: proposal.resultEntityId } : {}),
-      ...(proposal.resultError ? { resultError: proposal.resultError } : {}),
+      ...(refusedReason ? { noLongerRunnable: refusedReason }
+        : proposal.resultError ? { resultError: proposal.resultError } : {}),
     };
   }
   if (provider) {
     row.provider = provider;
   }
+  if (approvalRequests && approvalRequests.length > 0) {
+    row.approvalRequests = approvalRequests;
+  }
   return row;
+}
+
+/**
+ * BI-C8EC05C9: the approval requests each assistant message raised, keyed by
+ * message id. No envelope carries a chatMessageId before PR-B, so this is
+ * empty and every message renders as before.
+ */
+async function loadInlineApprovalRequests(
+  messages: Array<{ id: string; role: string }>,
+): Promise<Map<string, InlineApprovalRequest[]>> {
+  const assistantIds = messages.filter((m) => m.role === "assistant").map((m) => m.id);
+  const byMessage = new Map<string, InlineApprovalRequest[]>();
+  if (assistantIds.length === 0) return byMessage;
+  const envelopes = await prisma.coworkerActionEnvelope.findMany({
+    where: { chatMessageId: { in: assistantIds } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, chatMessageId: true, manifestActionId: true, status: true, expiresAt: true, rationale: true },
+  });
+  for (const envelope of envelopes) {
+    if (!envelope.chatMessageId) continue;
+    const list = byMessage.get(envelope.chatMessageId) ?? [];
+    list.push({
+      envelopeId: envelope.id,
+      toolName: envelope.manifestActionId,
+      status: envelope.status,
+      expiresAt: envelope.expiresAt?.toISOString() ?? null,
+      rationale: envelope.rationale,
+    });
+    byMessage.set(envelope.chatMessageId, list);
+  }
+  return byMessage;
 }
 
 /**
  * Pick the user-visible telemetry row for each agentMessageId.
  *
  * Multiple rows can exist per message in race/shadow modes; only the
- * primary/single rows are what the user actually saw. Most-recent wins for
- * the rare case of replays.
+ * primary/single rows are what the user actually saw. Saved producer bindings
+ * win exactly; legacy messages without a binding retain the latest-row display.
  */
-function selectVisibleTelemetry(rows: TelemetryRow[]): Map<string, TelemetryRow> {
+function selectVisibleTelemetry(rows: TelemetryRow[], messages: ReadonlyArray<{ id: string; providerId?: string | null; modelId?: string | null; responseAttemptId?: string | null }> = []): Map<string, TelemetryRow> {
   const sorted = [...rows].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
   const out = new Map<string, TelemetryRow>();
   for (const r of sorted) {
     if (!r.agentMessageId) continue;
     if (!VISIBLE_EXEC_MODES.has(r.executionMode)) continue;
     if (!out.has(r.agentMessageId)) out.set(r.agentMessageId, r);
+  }
+  const byAttempt = new Map(rows.filter(row => row.id).map(row => [row.id, row]));
+  for (const message of messages) {
+    if (!message.responseAttemptId) continue;
+    out.delete(message.id);
+    const exact = byAttempt.get(message.responseAttemptId);
+    if (exact?.agentMessageId === message.id && exact.providerId === message.providerId && exact.modelId === message.modelId && VISIBLE_EXEC_MODES.has(exact.executionMode)) out.set(message.id, exact);
   }
   return out;
 }
@@ -109,7 +165,7 @@ function selectVisibleTelemetry(rows: TelemetryRow[]): Map<string, TelemetryRow>
  * pre-telemetry rows.
  */
 async function loadProviderInfo(
-  messages: Array<{ id: string; role: string; providerId?: string | null; modelId?: string | null }>,
+  messages: Array<{ id: string; role: string; providerId?: string | null; modelId?: string | null; responseAttemptId?: string | null }>,
 ): Promise<Map<string, AgentMessageProvider>> {
   const assistantIds = messages
     .filter((m) => m.role === "assistant")
@@ -119,7 +175,7 @@ async function loadProviderInfo(
   const telemetry = (await prisma.adapterRunTelemetry.findMany({
     where: { agentMessageId: { in: assistantIds } },
     select: {
-      agentMessageId: true,
+      id: true, agentMessageId: true,
       providerId: true,
       modelId: true,
       adapterKind: true,
@@ -128,14 +184,14 @@ async function loadProviderInfo(
     },
   })) as TelemetryRow[];
 
-  const visible = selectVisibleTelemetry(telemetry);
+  const visible = selectVisibleTelemetry(telemetry, messages);
 
   // Gather provider ids to resolve display names — from telemetry first, then
   // from AgentMessage.providerId for messages without telemetry.
   const providerIds = new Set<string>();
   for (const r of visible.values()) providerIds.add(r.providerId);
   for (const m of messages) {
-    if (m.role === "assistant" && m.providerId && !visible.has(m.id)) {
+    if (m.role === "assistant" && m.providerId) {
       providerIds.add(m.providerId);
     }
   }
@@ -188,7 +244,7 @@ export const getRecentMessages = cache(
         routeContext: true,
         providerId: true,
         modelId: true,
-        createdAt: true,
+        ...RESPONSE_FEEDBACK_BINDING_SELECT, createdAt: true,
         attachments: {
           select: { id: true, fileName: true, mimeType: true, sizeBytes: true, parsedContent: true },
         },
@@ -209,11 +265,14 @@ export const getRecentMessages = cache(
         },
       },
     });
-    const providerInfo = await loadProviderInfo(messages);
+    const [providerInfo, approvalRequests] = await Promise.all([
+      loadProviderInfo(messages),
+      loadInlineApprovalRequests(messages),
+    ]);
     return messages
       .reverse()
-      .map((m) => serializeMessage(m, m.proposal, providerInfo.get(m.id)));
+      .map((m) => serializeMessage(m, m.proposal, providerInfo.get(m.id), approvalRequests.get(m.id)));
   },
 );
 
-export { serializeMessage, loadProviderInfo, selectVisibleTelemetry };
+export { serializeMessage, loadProviderInfo, loadInlineApprovalRequests, selectVisibleTelemetry };

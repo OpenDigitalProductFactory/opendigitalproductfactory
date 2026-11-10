@@ -19,6 +19,7 @@ function run(partial: Partial<PreflightInput>): PreflightResult {
     servedImage: gitSha(SERVED),
     featureSha: FEATURE,
     featureContainedInServed: null,
+    installHostKind: "unknown",
     ...partial,
   });
 }
@@ -68,6 +69,70 @@ describe("computePreflightVerdict", () => {
     const r = run({ featureContainedInServed: null });
     expect(r.verdict).toBe("BLOCKED");
     expect(r.nextAction.kind).toBe("file-blocker-bi");
+  });
+
+  it("CAN-TEST when the full served and feature SHAs are identical without ancestry IO", () => {
+    const r = run({
+      servedImage: gitSha(FEATURE),
+      featureContainedInServed: null,
+    });
+    expect(r.verdict).toBe("CAN-TEST");
+    expect(r.nextAction.kind).toBe("drive-happy-path");
+  });
+
+  it("CAN-TEST when a validated git SHA is the unambiguous prefix of the other identity", () => {
+    const r = run({
+      servedImage: gitSha(FEATURE),
+      featureSha: FEATURE.slice(0, 12),
+      featureContainedInServed: null,
+    });
+    expect(r.verdict).toBe("CAN-TEST");
+  });
+
+  it("MUST-ADVANCE when ancestry is unavailable on a validated consumer install", () => {
+    const r = run({
+      featureContainedInServed: null,
+      installHostKind: "consumer",
+      ancestryUncomputableDetail: "No git repository found. Set DPF_REPO_ROOT.",
+    });
+    expect(r.verdict).toBe("MUST-ADVANCE");
+    expect(r.nextAction.kind).toBe("trigger-self-upgrade");
+    expect(r.nextAction.detail).toContain("/ops/self-upgrade");
+    expect(`${r.reason} ${r.nextAction.detail}`).not.toMatch(
+      /DPF_REPO_ROOT|mount(?:ing)?\s+\.git|git fetch/i,
+    );
+  });
+
+  it.each(["source", "unknown"] as const)(
+    "keeps uncomputable ancestry BLOCKED for a %s install",
+    (installHostKind) => {
+      const r = run({
+        featureContainedInServed: null,
+        installHostKind,
+      });
+      expect(r.verdict).toBe("BLOCKED");
+      expect(r.nextAction.kind).toBe("file-blocker-bi");
+    },
+  );
+
+  it("does not trust an arbitrarily short SHA prefix as exact identity", () => {
+    const r = run({
+      servedImage: gitSha(FEATURE),
+      featureSha: FEATURE.slice(0, 7),
+      featureContainedInServed: null,
+      installHostKind: "unknown",
+    });
+    expect(r.verdict).toBe("BLOCKED");
+  });
+
+  it("does not trust two abbreviated identities as an exact match", () => {
+    const r = run({
+      servedImage: gitSha(FEATURE.slice(0, 13)),
+      featureSha: FEATURE.slice(0, 12),
+      featureContainedInServed: null,
+      installHostKind: "unknown",
+    });
+    expect(r.verdict).toBe("BLOCKED");
   });
 
   it("never points at the forbidden redeploy-portal path on any advance", () => {

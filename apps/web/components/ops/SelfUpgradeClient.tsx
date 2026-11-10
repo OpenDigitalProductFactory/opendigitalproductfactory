@@ -3,6 +3,7 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { rollbackSelfUpgrade, repairPromoterImage } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { MissedWindowNotice, type MissedWindow } from "@/components/ops/MissedWindowNotice";
 import { CoworkerActivityInspectionLink } from "./CoworkerActivityInspectionLink";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
@@ -16,12 +17,7 @@ import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
 import { BuildStamps } from "@/components/ops/BuildStamps";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProvider";
-
-type RecoveryPointSummary = {
-  status: string;
-  members: Array<{ target: string; runId: string | null; status: string }>;
-  rollbackStatus: string | null;
-};
+import { getSelfUpgradeRecoveryState } from "@/lib/self-upgrade/recovery-eligibility";
 
 type ImageVersionSource = "git-sha" | "content-hash" | "unknown";
 
@@ -52,6 +48,8 @@ type Props = {
   windowTimezone?: string;
   nextWindowStart?: string | null;
   nextScheduledCheckAt?: string | null;
+  /** BI-EF1AC111: last window that went without an upgrade check, and why. */
+  missedWindow?: MissedWindow | null;
   deployedSha: string | null;
   deployedShaSource?: ImageVersionSource;
   targetSha: string | null;
@@ -192,32 +190,8 @@ const QUIESCENCE_LEVEL_STYLES: Record<string, string> = {
   normal: "bg-[var(--dpf-muted)]/20 text-[var(--dpf-muted)] border-[var(--dpf-muted)]/30",
 };
 
-function record(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function recoveryPointSummary(run: LatestRun | null): RecoveryPointSummary | null {
-  const evidence = record(run?.completionEvidence);
-  const point = record(evidence?.recoveryPoint);
-  if (!point || !Array.isArray(point.members)) return null;
-  const rollback = record(evidence?.rollback);
-  return {
-    status: String(point.status ?? "unknown"),
-    members: point.members.map((member) => {
-      const m = record(member);
-      return {
-        target: String(m?.target ?? "unknown"),
-        runId: typeof m?.runId === "string" ? m.runId : null,
-        status: String(m?.status ?? "unknown"),
-      };
-    }),
-    rollbackStatus: typeof rollback?.status === "string" ? rollback.status : null,
-  };
-}
-
-// Operator-facing label for a recovery-point member. The derived stores
-// (neo4j, qdrant) are INTENTIONALLY not backed up — they re-derive from
+// Operator-facing label for a recovery-point member. Derived-store members
+// recorded by runs before BET-5 were INTENTIONALLY not backed up — they re-derive from
 // postgres + source — so a "skipped" member must read as a deliberate choice,
 // not as a "missing" backup (which looks like a failure sitting next to a
 // "Recovery point: ok" header). And a successful backup's internal runId/cuid
@@ -247,6 +221,7 @@ export default function SelfUpgradeClient({
   windowTimezone,
   nextWindowStart,
   nextScheduledCheckAt,
+  missedWindow,
   deployedSha,
   deployedShaSource,
   targetSha,
@@ -265,7 +240,7 @@ export default function SelfUpgradeClient({
 }: Props) {
   const router = useRouter();
   const live = useOptionalSelfUpgradeLive();
-  const latestRun = live?.snapshot.latestRun ?? initialLatestRun;
+  const latestRun = live ? live.snapshot.latestRun : initialLatestRun;
   const quiescence = live?.snapshot.quiescence ?? initialQuiescence;
   const cooldownUntil = live?.snapshot.cooldownUntil ?? initialCooldownUntil;
   const [isRollbackPending, startRollbackTransition] = useTransition();
@@ -289,12 +264,8 @@ export default function SelfUpgradeClient({
     status: "idle" | "ok" | "error";
     message: string;
   }>({ status: "idle", message: "" });
-  const latestRecoveryPoint = recoveryPointSummary(latestRun);
-  const canRollbackLatest =
-    latestRun &&
-    latestRun.status !== "running" &&
-    latestRecoveryPoint?.status === "ok" &&
-    latestRecoveryPoint.rollbackStatus !== "ok";
+  const recovery = getSelfUpgradeRecoveryState(latestRun);
+  const latestRecoveryPoint = recovery.point;
 
   // Live upgrade activity: is the portal draining for a swap right now, is it
   // backing off after a defer/fail, and what work is/was holding the drain?
@@ -789,6 +760,7 @@ export default function SelfUpgradeClient({
               Maintenance window configured.
             </span>
           )}
+          <MissedWindowNotice missedWindow={missedWindow} />
           {windowSource === "auto-overnight" && autoWindowSummary && (
             <div className="mt-1 text-[var(--dpf-muted)]" data-window-source="auto-overnight">
               Your business runs 24/7, so upgrades run overnight (around{" "}
@@ -976,15 +948,20 @@ export default function SelfUpgradeClient({
                   .map((member) => recoveryMemberLabel(member))
                   .join(" · ")}
               </div>
-              {latestRecoveryPoint.rollbackStatus && (
+              {recovery.rollbackStatus && (
                 <div
                   className="mt-1 text-[var(--dpf-muted)]"
-                  data-rollback-status={latestRecoveryPoint.rollbackStatus}
+                  data-rollback-status={recovery.rollbackStatus}
                 >
-                  Rollback: {latestRecoveryPoint.rollbackStatus}
+                  Rollback: {recovery.rollbackStatus}
                 </div>
               )}
-              {canRollbackLatest && (
+              {!recovery.available && (
+                <p className="mt-2 text-[var(--dpf-text)]" data-recovery-unavailable-reason={recovery.reason}>
+                  {recovery.detail}
+                </p>
+              )}
+              {recovery.available && latestRun && (
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     type="text"

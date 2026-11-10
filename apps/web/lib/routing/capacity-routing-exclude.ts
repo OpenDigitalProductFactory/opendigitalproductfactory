@@ -5,12 +5,36 @@
 // soft-excludes endpoints whose *in-memory* runtime circuit is open; this
 // module is the same idea for the *persisted* capacity snapshot so a 401-dead
 // or API-rate-limited provider is skipped while a healthy local floor remains.
+import { accountRuntimeKey } from "./provider-account-candidates";
+import { isAccountCapacityState } from "./provider-capacity/scopes";
+import { isProviderQuotaState } from "./provider-capacity/types";
+import { currentExecutionProof, type ExecutionProof } from "./provider-capacity/execution-proof";
 
 export type CapacitySnapshot = {
   state: string;
   /** Epoch ms when a temporary limit lifts; null/undefined = unknown. */
   retryAtMs?: number | null;
+  /** Epoch ms when this snapshot was last observed; null/undefined = unknown. */
+  observedAtMs?: number | null;
+  /** Most recent completed inference on this exact observation scope. */
+  lastSuccessAtMs?: number | null;
+  observationSource?: string;
+  /** Safe operator-facing recovery facts from the same validated observation. */
+  safeSummary?: string | null;
+  action?: string | null;
+  isHumanActionRequired?: boolean;
+  /** Supplied only after the capacity reader revalidates current persisted bindings. */
+  executionProof?: ExecutionProof;
 };
+
+/**
+ * A temporary limit (rate_limited / cooling_down) recorded WITHOUT a retryAt
+ * stops blocking once its observation is this old. Without a bound, a provider
+ * that is never selected never gets a success observation, so a stale snapshot
+ * locks it out of routing forever (observed: a July rate limit still excluding
+ * the codex engine in September while the local floor timed out every ideate).
+ */
+export const STALE_TEMPORARY_CAPACITY_MS = 24 * 60 * 60 * 1000;
 
 /** Capacity states that should not win routing while a healthier option exists. */
 export const BLOCKING_CAPACITY_STATES = new Set([
@@ -29,8 +53,9 @@ export const BLOCKING_CAPACITY_STATES = new Set([
  * select it. Pure — no DB, no Date.now (pass `nowMs`).
  *
  * Temporary states (rate_limited / cooling_down / quota_resets_at) only block
- * while retryAt is in the future (or missing — fail closed so a stale
- * rate_limited without retryAt still defers to healthier peers).
+ * while retryAt is in the future. When retryAt is missing they fail closed
+ * (defer to healthier peers) only while the observation is younger than
+ * STALE_TEMPORARY_CAPACITY_MS; an unknown observation time stays fail-closed.
  */
 export function capacityRoutingExclusionReason(
   snapshot: CapacitySnapshot | null | undefined,
@@ -50,8 +75,15 @@ export function capacityRoutingExclusionReason(
 
   if (state === "rate_limited" || state === "cooling_down") {
     const retry = snapshot.retryAtMs;
-    if (typeof retry === "number" && retry <= nowMs) return null;
-    return `provider capacity ${state}${formatRetry(retry)}`;
+    if (typeof retry === "number") {
+      if (retry <= nowMs) return null;
+      return `provider capacity ${state}${formatRetry(retry)}`;
+    }
+    const observed = snapshot.observedAtMs;
+    if (typeof observed === "number" && nowMs - observed > STALE_TEMPORARY_CAPACITY_MS) {
+      return null;
+    }
+    return `provider capacity ${state}`;
   }
 
   // Human-action / structural: always soft-block while a peer is healthy.
@@ -63,7 +95,8 @@ function formatRetry(retryAtMs: number | null | undefined): string {
   return ` until ${new Date(retryAtMs).toISOString()}`;
 }
 
-export type CapacitySoftExcludeInput<T extends { providerId: string }> = {
+type CapacityCandidate = { providerId: string; providerConnectionId?: string; providerConnectionVersion?: string; modelId?: string };
+export type CapacitySoftExcludeInput<T extends CapacityCandidate> = {
   endpoints: readonly T[];
   /** providerId → latest capacity snapshot (missing ⇒ available). */
   capacityByProvider: ReadonlyMap<string, CapacitySnapshot>;
@@ -81,7 +114,7 @@ export type CapacitySoftExcludeResult<T extends { providerId: string }> = {
  * at least one non-blocked peer remains (same degrade-not-lockout contract as
  * the runtime circuit breaker). Pure.
  */
-export function applyCapacitySoftExclusion<T extends { providerId: string }>(
+export function applyCapacitySoftExclusion<T extends CapacityCandidate>(
   input: CapacitySoftExcludeInput<T>,
 ): CapacitySoftExcludeResult<T> {
   const blocked: Array<{ endpoint: T; reason: string }> = [];
@@ -89,7 +122,15 @@ export function applyCapacitySoftExclusion<T extends { providerId: string }>(
 
   for (const ep of input.endpoints) {
     const snap = input.capacityByProvider.get(ep.providerId);
-    const reason = capacityRoutingExclusionReason(snap, input.nowMs);
+    const owned = ep.providerConnectionId ? input.capacityByProvider.get(accountRuntimeKey(ep.providerId, ep.providerConnectionId)) : null;
+    const proof = owned?.executionProof;
+    // This observation used Responses, not the separately constrained Codex CLI.
+    const checked = ep.providerId === "chatgpt" && owned?.state === "available" && proof
+      && currentExecutionProof(proof, proof, input.nowMs) && proof.providerId === ep.providerId
+      && proof.connectionId === ep.providerConnectionId && proof.modelId === ep.modelId && proof.accountVersion === ep.providerConnectionVersion;
+    const inheritedAccountHealth = ep.providerConnectionId && ep.providerConnectionId !== `provider-default-${ep.providerId}` && snap && isAccountCapacityState(snap.state);
+    const reason = capacityRoutingExclusionReason(inheritedAccountHealth || checked && snap && isProviderQuotaState(snap.state) ? null : snap, input.nowMs)
+      ?? capacityRoutingExclusionReason(owned, input.nowMs);
     if (reason) blocked.push({ endpoint: ep, reason });
     else live.push(ep);
   }

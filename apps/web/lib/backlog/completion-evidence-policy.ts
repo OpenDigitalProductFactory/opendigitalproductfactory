@@ -75,10 +75,24 @@ export type CompletionEvidenceBlocker = {
   evidenceActivityId?: string;
 };
 
+/** A failure that is still the newest evidence in its dimension (BI-4A222439). */
+export type CurrentEvidenceFailure = {
+  dimension: ExecutionEvidenceDimension;
+  evidenceActivityId: string;
+  evidenceKind: ExecutionEvidenceKind;
+};
+
 export type CompletionEvidenceVerdict = {
   allowed: boolean;
   noOp: boolean;
   normalizedManifest: CompletionEvidenceManifest | null;
+  acceptanceEvidenceRefs?: string[];
+  /**
+   * Every dimension whose newest in-window evidence is a failure, whatever the
+   * manifest says (or whether there is one). The completion gate blocks on
+   * these on every path, including closes merge recognition would allow.
+   */
+  currentFailures?: CurrentEvidenceFailure[];
   blockers: CompletionEvidenceBlocker[];
   nextAction: string | null;
 };
@@ -213,6 +227,35 @@ function nextActionFor(blockers: CompletionEvidenceBlocker[]): string | null {
   return "Correct completionEvidence so it matches this backlog item's work type, then retry.";
 }
 
+/**
+ * BI-4A222439: the failures that are still the newest in-window word in their
+ * dimension for this item. Only the newest row counts, so a later pass
+ * supersedes a failure; rows outside the completion window are not current.
+ */
+export function currentEvidenceFailures(
+  input: Pick<CompletionEvidencePolicyInput, "item" | "evidence" | "evidenceCutoff" | "now">,
+): CurrentEvidenceFailure[] {
+  const latestByDimension = new Map<ExecutionEvidenceDimension, CompletionEvidenceFact>();
+  for (const evidence of input.evidence) {
+    if (
+      evidence.itemId !== input.item.id
+      || evidence.recordedAt < input.evidenceCutoff
+      || evidence.recordedAt > input.now
+      || !isExecutionEvidenceKind(evidence.evidenceKind)
+    ) {
+      continue;
+    }
+    const dimension = evidenceKindMetadata(evidence.evidenceKind).dimension;
+    const current = latestByDimension.get(dimension);
+    if (!current || current.recordedAt < evidence.recordedAt) {
+      latestByDimension.set(dimension, evidence);
+    }
+  }
+  return [...latestByDimension.entries()]
+    .filter(([, evidence]) => evidenceKindMetadata(evidence.evidenceKind).polarity === "fail")
+    .map(([dimension, evidence]) => ({ dimension, evidenceActivityId: evidence.id, evidenceKind: evidence.evidenceKind }));
+}
+
 export function evaluateCompletionEvidence(
   input: CompletionEvidencePolicyInput,
 ): CompletionEvidenceVerdict {
@@ -221,11 +264,13 @@ export function evaluateCompletionEvidence(
       allowed: true,
       noOp: true,
       normalizedManifest: null,
+      acceptanceEvidenceRefs: [],
       blockers: [],
       nextAction: null,
     };
   }
 
+  const currentFailures = currentEvidenceFailures(input);
   const manifest = normalizeCompletionEvidenceManifest(input.rawManifest);
   if (!manifest) {
     const blockers = [
@@ -239,6 +284,8 @@ export function evaluateCompletionEvidence(
       allowed: false,
       noOp: false,
       normalizedManifest: null,
+      acceptanceEvidenceRefs: [],
+      currentFailures,
       blockers,
       nextAction: nextActionFor(blockers),
     };
@@ -251,6 +298,7 @@ export function evaluateCompletionEvidence(
 
   const byId = new Map(input.evidence.map((entry) => [entry.id, entry]));
   const satisfied = new Set<ExecutionEvidenceDimension>();
+  const acceptanceEvidenceRefsByDimension = new Map<ExecutionEvidenceDimension, string[]>();
   for (const evidenceActivityId of manifest.evidenceActivityIds) {
     const evidence = byId.get(evidenceActivityId);
     if (!evidence) {
@@ -291,6 +339,11 @@ export function evaluateCompletionEvidence(
       continue;
     }
     satisfied.add(metadata.dimension);
+    if (metadata.dimension === "manual" || metadata.dimension === "ux") {
+      const refs = acceptanceEvidenceRefsByDimension.get(metadata.dimension) ?? [];
+      refs.push(evidence.id);
+      acceptanceEvidenceRefsByDimension.set(metadata.dimension, refs);
+    }
   }
 
   if (manifest.useActiveBuildEvidence) {
@@ -319,38 +372,28 @@ export function evaluateCompletionEvidence(
     }
   }
 
-  const latestByDimension = new Map<ExecutionEvidenceDimension, CompletionEvidenceFact>();
-  for (const evidence of input.evidence) {
-    if (
-      evidence.itemId !== input.item.id
-      || evidence.recordedAt < input.evidenceCutoff
-      || evidence.recordedAt > input.now
-      || !isExecutionEvidenceKind(evidence.evidenceKind)
-    ) {
-      continue;
-    }
-    const dimension = evidenceKindMetadata(evidence.evidenceKind).dimension;
-    const current = latestByDimension.get(dimension);
-    if (!current || current.recordedAt < evidence.recordedAt) {
-      latestByDimension.set(dimension, evidence);
-    }
-  }
-  for (const dimension of new Set(required)) {
-    const latest = latestByDimension.get(dimension);
-    if (latest && evidenceKindMetadata(latest.evidenceKind).polarity === "fail") {
-      blockers.push(blocker(
-        "newer-failure",
-        `A newer ${dimension} failure invalidates the prior pass`,
-        dimension,
-        latest.id,
-      ));
-    }
+  // BI-4A222439: a failure that is still the newest word in ANY dimension
+  // blocks, not only in the dimensions this manifest requires. Declaring ux
+  // not-applicable does not erase a ux_fail recorded against the item.
+  for (const failure of currentFailures) {
+    acceptanceEvidenceRefsByDimension.delete(failure.dimension);
+    blockers.push(blocker(
+      "newer-failure",
+      `A newer ${failure.dimension} failure invalidates the prior pass`,
+      failure.dimension,
+      failure.evidenceActivityId,
+    ));
   }
 
   return {
     allowed: blockers.length === 0,
     noOp: false,
     normalizedManifest: manifest,
+    acceptanceEvidenceRefs: [
+      ...(acceptanceEvidenceRefsByDimension.get("manual") ?? []),
+      ...(acceptanceEvidenceRefsByDimension.get("ux") ?? []),
+    ],
+    currentFailures,
     blockers,
     nextAction: nextActionFor(blockers),
   };

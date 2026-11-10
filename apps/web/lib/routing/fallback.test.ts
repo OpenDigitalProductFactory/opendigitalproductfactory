@@ -21,6 +21,11 @@ vi.mock("@/lib/ai-inference", () => {
       public readonly providerId: string,
       public readonly statusCode?: number,
       public readonly headers?: Record<string, string>,
+      public readonly rawBody?: string,
+      public readonly capacity?: unknown,
+      // Mirrors the real signature. Omitting it silently dropped the flag and
+      // made a fall-through test look like a fix that had not worked.
+      public readonly localPoolExhausted?: boolean,
     ) {
       super(message);
     }
@@ -30,6 +35,9 @@ vi.mock("@/lib/ai-inference", () => {
     InferenceError,
   };
 });
+
+const { mockAutoDisableProvider } = vi.hoisted(() => ({ mockAutoDisableProvider: vi.fn().mockResolvedValue({ attempt: 0, nextRunAt: new Date() }) }));
+vi.mock("./provider-auto-disable", () => ({ autoDisableProvider: mockAutoDisableProvider }));
 
 vi.mock("./rate-tracker", () => ({
   recordRequest: vi.fn(),
@@ -129,8 +137,8 @@ it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fa
       executionAdapter: "chat",
       maxTokens: 1024,
       providerSettings: {},
-      toolPolicy: {},
-      responsePolicy: {},
+      toolPolicy: { toolChoice: "required" },
+      responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
       openRouterObligations: {
         requireProviderAllowlist: true,
         requireProviderBlocklist: true,
@@ -148,13 +156,14 @@ it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fa
       },
     },
   );
+  expect(plan.toolPolicy.toolChoice).toBe("required");
+  expect(plan.responsePolicy.terminalWriterToolName).toBe("record_initiative_evidence");
   expect(plan.openRouterPolicy).toMatchObject({
     posture: "restricted",
     providerSettings: { only: ["anthropic"], allow_fallbacks: false, zdr: true },
     requireUnderlyingProviderEvidence: true,
   });
 });
-
 const mockPrisma = prisma as unknown as {
   modelProvider: {
     findUnique: ReturnType<typeof vi.fn>;
@@ -164,7 +173,6 @@ const mockPrisma = prisma as unknown as {
     updateMany: ReturnType<typeof vi.fn>;
   };
 };
-
 const mockCallProvider = callProvider as ReturnType<typeof vi.fn>;
 const mockRecordRequest = recordRequest as ReturnType<typeof vi.fn>;
 const mockLearnFromRateLimitResponse = learnFromRateLimitResponse as ReturnType<typeof vi.fn>;
@@ -270,34 +278,23 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       );
     });
 
-    it("uses provider-specific execution plans for fallback endpoints", async () => {
+    it("routes a required writer past a non-enforcing adapter without declaring an outage", async () => {
       mockCallProvider
-        .mockRejectedValueOnce(new Error("primary unavailable"))
-        .mockResolvedValueOnce({
-          content: "fallback ok",
-          inputTokens: 10,
-          outputTokens: 5,
-          inferenceMs: 100,
-        });
+        .mockRejectedValueOnce(new InferenceError("required-terminal-writer-not-enforceable: codex-cli cannot require record_initiative_evidence", "required_terminal_writer_not_enforceable", "codex"))
+        .mockResolvedValueOnce({ content: "fallback ok", inputTokens: 10, outputTokens: 5, inferenceMs: 100 });
 
-      const tools = [
-        {
-          type: "function",
-          function: {
-            name: "read_project_file",
-            description: "Read a project file",
-            parameters: { type: "object", properties: {} },
-          },
-        },
-      ];
+      const tools = [{ type: "function", function: {
+        name: "record_initiative_evidence", description: "Persist the governed receipt",
+        parameters: { type: "object", properties: {} },
+      } }];
       const decision: RouteDecision = {
-        ...makeDecision("openai", "gpt-4.1"),
-        selectedEndpoint: "openai-ep",
-        selectedModelId: "gpt-4.1",
-        fallbackChain: ["codex-ep"],
+        ...makeDecision("codex", "gpt-5.4"),
+        selectedEndpoint: "codex-ep",
+        selectedModelId: "gpt-5.4",
+        fallbackChain: ["openai-ep"],
         candidates: [
-          makeCandidate("openai-ep", "openai", "gpt-4.1"),
           makeCandidate("codex-ep", "codex", "gpt-5.4"),
+          makeCandidate("openai-ep", "openai", "gpt-4.1"),
         ],
       };
 
@@ -306,22 +303,31 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         [{ role: "user", content: "hi" }],
         "system",
         tools,
+        {
+          providerId: "codex", modelId: "gpt-5.4", recipeId: null,
+          contractFamily: "initiative-review", executionAdapter: "codex-cli",
+          maxTokens: 4096, providerSettings: {}, toolPolicy: { toolChoice: "required" },
+          responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+        },
       );
       await vi.runAllTimersAsync();
-      await expect(pending).resolves.toMatchObject({
-        providerId: "codex",
-        modelId: "gpt-5.4",
-        content: "fallback ok",
-        downgraded: true,
+      const result = await pending;
+      expect(result).toMatchObject({
+        providerId: "openai", modelId: "gpt-4.1", content: "fallback ok",
+        downgraded: true, downgradeReason: "not-eligible",
       });
+      expect(result.downgradeMessage).toMatch(/cannot enforce.*required governed writer/i);
 
-      const fallbackPlan = mockCallProvider.mock.calls[1]?.[5];
-      expect(fallbackPlan).toMatchObject({
-        providerId: "codex",
-        modelId: "gpt-5.4",
-        executionAdapter: "codex-cli",
-        toolPolicy: { toolChoice: "auto" },
+      expect(mockCallProvider.mock.calls[1]?.[5]).toMatchObject({
+        providerId: "openai", modelId: "gpt-4.1", executionAdapter: "chat",
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
       });
+      expect(mockRecordRequest).toHaveBeenCalledTimes(1);
+      expect(mockRecordRequest).toHaveBeenCalledWith("openai", "gpt-4.1", 15);
+      expect(mockRecordRouteOutcome).toHaveBeenCalledTimes(1);
+      expect(mockMarkEndpointUnavailable).not.toHaveBeenCalled();
+      expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -361,6 +367,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       // Provider NOT updated
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     // BI-OPT-ROUTING-CACHE: degrading a model changes what loadEndpointManifests
@@ -503,6 +510,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("triggers provider reconciliation after retirement", async () => {
@@ -570,10 +578,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     it("does NOT change model status", async () => {
@@ -612,16 +617,17 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
       expect(mockCallProvider).toHaveBeenCalledTimes(2);
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(result.content).toBe("hello");
     });
 
-    it("disables the OAuth provider when the token refresh fails", async () => {
+    it("disables the OAuth provider when the renewal confirms the sign-in was refused", async () => {
       mockPrisma.modelProvider.findUnique.mockResolvedValue({
         providerId: "prov1",
         name: "Claude Subscription",
         authMethod: "oauth2_authorization_code",
       });
-      mockRefreshOAuthToken.mockResolvedValue({ error: "refresh token expired" });
+      mockRefreshOAuthToken.mockResolvedValue({ error: "OAuth token expired — admin must re-authenticate" });
       throwAuth();
 
       await expect(
@@ -633,35 +639,23 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
-    it("disables the OAuth provider if the retry still auth-fails (refresh once, then give up)", async () => {
-      mockPrisma.modelProvider.findUnique.mockResolvedValue({
-        providerId: "prov1",
-        name: "Claude Subscription",
-        authMethod: "oauth2_authorization_code",
-      });
-      // Refresh succeeds but the retried call still auth-fails → disable.
+    // BI-5FE164B4 / BI-A53C594E: only a refused sign-in leaves routing. A renewed
+    // sign-in whose retry still auth-fails, or a renewal that merely failed, stays.
+    it.each([
+      ["a renewed sign-in whose retried call still auth-fails", undefined, 2],
+      ["a renewal that failed without refusing the sign-in", { error: "OAuth token renewal failed (HTTP 403)" }, 1],
+    ])("keeps %s in routing", async (_case, refresh, calls) => {
+      mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "prov1", name: "Claude Subscription", authMethod: "oauth2_authorization_code" });
+      if (refresh) mockRefreshOAuthToken.mockResolvedValue(refresh);
       throwAuth();
-
-      await expect(
-        callWithFallbackChain(
-          makeDecision("prov1", "model1"),
-          [{ role: "user", content: "hi" }],
-          "system",
-        ),
-      ).rejects.toThrow();
-
+      await expect(callWithFallbackChain(makeDecision("prov1", "model1"), [{ role: "user", content: "hi" }], "system")).rejects.toThrow();
       expect(mockRefreshOAuthToken).toHaveBeenCalledTimes(1);
-      expect(mockCallProvider).toHaveBeenCalledTimes(2);
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockCallProvider).toHaveBeenCalledTimes(calls);
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
+      expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
     });
 
     // ── BI-F4D3B9E9(a): a LOCAL serving engine has no credentials, so an
@@ -682,6 +676,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
         where: { providerId: "local", modelId: "docker.io/ai/qwen3-coder:latest" },
         data: { modelStatus: "degraded" },
@@ -702,6 +697,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
         where: { providerId: "local", modelId: "docker.io/ai/qwen3-coder:latest" },
         data: { modelStatus: "degraded" },
@@ -721,10 +717,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "billing" }));
     });
   });
 
@@ -752,6 +745,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
   });
 
@@ -796,6 +790,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("does not retry transient on a fallback endpoint", async () => {
@@ -862,10 +857,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "billing" }));
     });
 
     it("does not degrade the model", async () => {
@@ -942,6 +934,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("retries the pinned endpoint once after 15 s on overload then succeeds", async () => {
@@ -1173,5 +1166,121 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(result.content).toBe("ok");
       expect(mockCallProvider).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// ── local pool exhaustion must fall through, not wait ────────────────────────
+
+describe("callWithFallbackChain — local pool exhaustion (BI-52C6FE5A)", () => {
+  const PINNED_WAIT_LOG = /Rate limited on pinned provider/;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockCallProvider.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function poolExhausted() {
+    // EP-COST pool check shape: refused locally, before the call left process.
+    return new InferenceError(
+      "codex-cli pool exhausted — resets in ~30s (EP-COST pool check)",
+      "rate_limit",
+      "codex",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+  }
+
+  function twoEndpointDecision(): RouteDecision {
+    return {
+      ...makeDecision("codex", "gpt-5.4"),
+      selectedEndpoint: "codex-ep",
+      selectedModelId: "gpt-5.4",
+      fallbackChain: ["gemini-ep"],
+      candidates: [
+        makeCandidate("codex-ep", "codex", "gpt-5.4"),
+        makeCandidate("gemini-ep", "gemini", "gemini-3-pro"),
+      ],
+    };
+  }
+
+  // Spec: routing-resilience-and-failure-observability-spec.md 4.1a
+  it("does not sleep on the pinned endpoint; it falls through to the next provider", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockCallProvider
+      .mockRejectedValueOnce(poolExhausted())
+      .mockResolvedValueOnce({ content: "reviewed", providerId: "gemini", modelId: "gemini-3-pro" });
+
+    const pending = callWithFallbackChain(
+      twoEndpointDecision(),
+      [{ role: "user", content: "review" }],
+      "system",
+      [],
+    );
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toMatchObject({ content: "reviewed" });
+    // Regression: the chain slept 30s on a locally-saturated pool while a
+    // healthy provider sat at index 1, burning the caller's whole budget.
+    expect(log.mock.calls.flat().join(" ")).not.toMatch(PINNED_WAIT_LOG);
+    expect(mockCallProvider).toHaveBeenCalledTimes(2);
+    log.mockRestore();
+  });
+
+  it("still waits when the saturated pool is the ONLY provider", async () => {
+    // Fleet safety: where the saturated pool IS the whole chain, the wait is
+    // the only recovery. Skipping it unconditionally would turn a 30s delay
+    // into an immediate hard failure on every single-provider install.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockCallProvider
+      .mockRejectedValueOnce(poolExhausted())
+      .mockResolvedValueOnce({ content: "recovered", providerId: "codex", modelId: "gpt-5.4" });
+
+    const soleProvider: RouteDecision = {
+      ...makeDecision("codex", "gpt-5.4"),
+      selectedEndpoint: "codex-ep",
+      selectedModelId: "gpt-5.4",
+      fallbackChain: [],
+      candidates: [makeCandidate("codex-ep", "codex", "gpt-5.4")],
+    };
+
+    const pending = callWithFallbackChain(
+      soleProvider,
+      [{ role: "user", content: "review" }],
+      "system",
+      [],
+    );
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toMatchObject({ content: "recovered" });
+    expect(log.mock.calls.flat().join(" ")).toMatch(PINNED_WAIT_LOG);
+    log.mockRestore();
+  });
+
+  it("still waits and retries on a genuine upstream 429", async () => {
+    // Correct for an upstream 429: the provider was asked and may answer on
+    // retry. Only the local pool refusal is exempt; this must not regress.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    mockCallProvider
+      .mockRejectedValueOnce(new InferenceError("Rate limited", "rate_limit", "codex", 429, { "retry-after": "30" }))
+      .mockResolvedValueOnce({ content: "ok", providerId: "codex", modelId: "gpt-5.4" });
+
+    const pending = callWithFallbackChain(
+      twoEndpointDecision(),
+      [{ role: "user", content: "review" }],
+      "system",
+      [],
+    );
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toMatchObject({ content: "ok" });
+    expect(log.mock.calls.flat().join(" ")).toMatch(PINNED_WAIT_LOG);
+    log.mockRestore();
   });
 });

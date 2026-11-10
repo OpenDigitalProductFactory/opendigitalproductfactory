@@ -1,3 +1,4 @@
+import type { NextStepPointer } from "@/lib/backlog/next-step-pointer";
 import { createHash } from "crypto";
 import type {
   IntegrationImportDisplayField,
@@ -44,7 +45,7 @@ export interface IntegrationImportReviewPosture {
   status: "not-started" | "ready-to-review" | "blocked";
   sourceProvider: string;
   readOnly: true;
-  nextBacklogItemId: string;
+  nextStep: NextStepPointer;
   families: string[];
   guardrail: string;
 }

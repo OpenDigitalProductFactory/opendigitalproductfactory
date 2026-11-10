@@ -29,9 +29,13 @@ describe("build-tool-helpers", () => {
   it("extractBuildIdHint accepts only FB- prefixed strings", () => {
     expect(extractBuildIdHint({ buildId: "FB-ABC123" })).toBe("FB-ABC123");
     expect(extractBuildIdHint({ buildId: "  FB-TRIM  " })).toBe("FB-TRIM");
-    expect(extractBuildIdHint({ buildId: "nope" })).toBeNull();
-    expect(extractBuildIdHint({ buildId: 42 })).toBeNull();
+    expect(() => extractBuildIdHint({ buildId: "nope" })).toThrow("valid build");
+    expect(() => extractBuildIdHint({ buildId: 42 })).toThrow("valid build");
     expect(extractBuildIdHint({})).toBeNull();
+  });
+
+  it("does not replace a malformed explicit target with a route hint", () => {
+    expect(() => extractBuildIdHint({ buildId: "invalid", routeContext: "/build/FB-OTHER" })).toThrow("valid build");
   });
 
   it("extractBuildIdHint also reads featureBuildId and FB tokens in routeContext (BI-PIR-9a75015d)", () => {
@@ -53,12 +57,21 @@ describe("build-tool-helpers", () => {
     expect(db.prisma.featureBuild.count).not.toHaveBeenCalled();
   });
 
-  it("resolveActiveBuildId ignores a hint owned by another user and falls back to the single active build", async () => {
+  it("refuses an explicit foreign build without falling back to another task", async () => {
     db.prisma.featureBuild.findUnique.mockResolvedValue({ buildId: "FB-OTHER", createdById: "other" });
     db.prisma.featureBuild.findFirst.mockResolvedValue({ buildId: "FB-FALLBACK" });
     db.prisma.featureBuild.count.mockResolvedValue(1);
     const id = await resolveActiveBuildId("u1", "FB-OTHER");
-    expect(id).toBe("FB-FALLBACK");
+    expect(id).toBeNull();
+    expect(db.prisma.featureBuild.findFirst).not.toHaveBeenCalled();
+  });
+
+  it.each(["FB-MISSING", "malformed", ""])("refuses an explicit missing or malformed target: %s", async (hint) => {
+    db.prisma.featureBuild.findUnique.mockResolvedValue(null);
+    db.prisma.featureBuild.findFirst.mockResolvedValue({ buildId: "FB-FALLBACK" });
+    db.prisma.featureBuild.count.mockResolvedValue(1);
+    expect(await resolveActiveBuildId("u1", hint)).toBeNull();
+    expect(db.prisma.featureBuild.findFirst).not.toHaveBeenCalled();
   });
 
   it("resolveActiveBuildId returns null when the user has no non-terminal build", async () => {

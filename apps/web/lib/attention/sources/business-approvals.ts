@@ -6,6 +6,7 @@
 // Spec §1 (queues 3-7), §4.1, §4.4. Partially delivers BI-8EA88797.
 
 import type { prisma } from "@dpf/db";
+import { LEAVE_DECISION_ROUTE } from "@/lib/workforce/leave/leave-decision-proposal-contract";
 import type { AttentionItem } from "../types";
 import { timeToActFromDeadline } from "../triage";
 
@@ -246,4 +247,60 @@ export async function loadResearchItems(db: Db): Promise<AttentionItem[]> {
     select: { proposalId: true, topic: true, query: true, proposedAt: true },
   });
   return rows.map(researchToAttentionItem);
+}
+
+// ─── Time off — the manager's own approval (BI-7BCC87BB) ─────────────────────
+//
+// A time-off decision is the manager's act under HR approval authority; the
+// advisor only recommends (spec D2 S5). It used to reach Needs-you only as an
+// AgentActionProposal. Now there is one item per pending request, keyed by its
+// requestId, so a legacy proposal and the request never double up (the
+// proposal source leaves leave.decide rows out). A guard-only recommendation
+// leaves no record, so every pending request is listed, as bills and expense
+// claims are. Audience unchanged (operator view); FU-8 records the scoping gap.
+
+export type LeaveApprovalRow = {
+  requestId: string;
+  leaveType: string;
+  days: number;
+  startDate: Date;
+  createdAt: Date;
+  decisionInteractionId: string | null;
+  employeeName: string;
+};
+
+export function leaveApprovalToAttentionItem(row: LeaveApprovalRow): AttentionItem {
+  const recommended = row.decisionInteractionId ? " The time-off advisor has a recommendation." : "";
+  return {
+    id: `approval-leave:${row.requestId}`,
+    source: "approval-leave",
+    title: `Decide time off for ${row.employeeName}`,
+    context: `${row.days} day(s) of ${row.leaveType} from ${row.startDate.toISOString().slice(0, 10)}.${recommended}`,
+    decisionClass: { scorability: "unscorable" },
+    riskClass: "bounded-write",
+    triage: {
+      timeToAct: "none",
+      residueReason: "policy-approval",
+      blastRadius: `time-off request ${row.requestId}`,
+      decideEffort: "review",
+      irreversible: false,
+    },
+    createdAtIso: row.createdAt.toISOString(),
+    actions: [{ kind: "open-in-context", label: "Review time off", href: LEAVE_DECISION_ROUTE }],
+    deepLink: LEAVE_DECISION_ROUTE,
+    audience: { operator: true },
+  };
+}
+
+export async function loadLeaveApprovalItems(db: Db): Promise<AttentionItem[]> {
+  const rows = await db.leaveRequest.findMany({
+    where: { status: "pending" },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      requestId: true, leaveType: true, days: true, startDate: true, createdAt: true, decisionInteractionId: true,
+      employeeProfile: { select: { displayName: true } },
+    },
+  });
+  return rows.map((r) => leaveApprovalToAttentionItem({ ...r, employeeName: r.employeeProfile.displayName }));
 }

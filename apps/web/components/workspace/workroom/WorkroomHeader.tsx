@@ -5,6 +5,14 @@ import { Notice, StatusBadge } from "@/components/ui/report-kit";
 import { WorkroomStructurePanel } from "@/components/workspace/workroom/WorkroomStructurePanel";
 import type { WorkspaceWorkCaseListItem } from "@/lib/work-management/workspace-case-loader";
 import type { WorkroomView } from "@/lib/work-management/room-types";
+import type { RoomWorkforce } from "@/lib/work-management/room-workforce.server";
+import type { WorkroomStageDecisionView } from "@/lib/work-management/workroom-stage-decision";
+import type { WorkroomShapeRebindView } from "@/lib/work-management/workroom-shape-rebind";
+import { AccountabilityStatement } from "./RoomWorkforcePanel";
+import { WorkroomStageDecision } from "./WorkroomStageDecision";
+import { WorkroomShapeRebind } from "./WorkroomShapeRebind";
+import { WorkroomBlockerInspectionLink } from "./NestedRoomCoordinationPanel";
+import { WorkroomDeliveryAgreement } from "./WorkroomDeliveryAgreement";
 
 import {
   roomLabel,
@@ -13,6 +21,10 @@ import {
 type Props = {
   room: WorkroomView;
   summary: WorkspaceWorkCaseListItem;
+  workforce?: Pick<RoomWorkforce, "accountability" | "accountableDisplayName"> | null;
+  /** The governed decision this room is waiting on, when a person records it here. */
+  stageDecision?: WorkroomStageDecisionView | null;
+  shapeRebind?: WorkroomShapeRebindView | null;
 };
 
 function accountableName(room: WorkroomView): string {
@@ -29,7 +41,7 @@ function participantSummary(room: WorkroomView): string {
   return `${count} ${count === 1 ? "participant" : "participants"} · ${names.join(", ")}${remainder > 0 ? ` +${remainder}` : ""}`;
 }
 
-export function WorkroomHeader({ room, summary }: Props) {
+export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeRebind }: Props) {
   const health = room.outcome.health;
   const purposeNeedsDisclosure = (room.purpose?.length ?? 0) > 280;
   const dueAt = room.boundary.timeBoundary.reviewAt
@@ -54,7 +66,7 @@ export function WorkroomHeader({ room, summary }: Props) {
 
       <header
         aria-labelledby="work-room-title"
-        className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 sm:p-5"
+        className="min-w-0 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 [overflow-wrap:anywhere] sm:p-5"
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -116,31 +128,38 @@ export function WorkroomHeader({ room, summary }: Props) {
             ) : null}
           </div>
           <p className="mt-2 text-base font-semibold leading-6 text-[var(--dpf-text)]">
-            {room.outcome.statement ?? "Outcome not defined"}
+            {room.delivery?.originalObjective ?? room.outcome.statement ?? "Outcome not defined"}
           </p>
+          {room.delivery ? <WorkroomDeliveryAgreement view={room.delivery} /> : null}
         </section>
 
         <WorkroomStructurePanel structure={room.structure} />
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <section aria-label="Attention" className="rounded-lg border border-[var(--dpf-border)] p-3">
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <section aria-label="Attention" className={`rounded-lg border border-[var(--dpf-border)] p-3${stageDecision || shapeRebind ? " md:col-span-2" : ""}`}>
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
-              {room.work.attentionRequired ? <AlertTriangle className="size-4 text-[var(--dpf-warning)]" aria-hidden="true" /> : null}
+              {room.work.attentionRequired || stageDecision || shapeRebind ? <AlertTriangle className="size-4 text-[var(--dpf-warning)]" aria-hidden="true" /> : null}
               Attention
             </p>
-            <p className="mt-2 text-sm font-medium text-[var(--dpf-text)]">
-              {room.work.attentionRequired
-                ? room.work.attentionReason ?? "Attention is required."
-                : "No immediate attention needed."}
-            </p>
+            {stageDecision ? <WorkroomStageDecision view={stageDecision} /> : null}
+            {shapeRebind ? <WorkroomShapeRebind view={shapeRebind} /> : null}
+            {stageDecision || shapeRebind ? null : (
+              <p className="mt-2 text-sm font-medium text-[var(--dpf-text)]">
+                {room.work.attentionRequired
+                  ? room.work.attentionReason ?? "Attention is required."
+                  : "No immediate attention needed."}
+              </p>
+            )}
           </section>
           <section aria-label="Next action" className="rounded-lg border border-[var(--dpf-accent)] p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">Next action</p>
             <p className="mt-2 text-sm font-semibold text-[var(--dpf-text)]">{room.work.nextAction}</p>
+            {room.work.recordedBlocker ? <WorkroomBlockerInspectionLink /> : null}
           </section>
           <section aria-label="Accountability" className="rounded-lg border border-[var(--dpf-border)] p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">Accountable</p>
-            <p className="mt-2 text-sm font-medium text-[var(--dpf-text)]">{accountableName(room)}</p>
+            {workforce ? <div className="mt-2"><AccountabilityStatement accountability={workforce.accountability} displayName={workforce.accountableDisplayName} /></div>
+              : <p className="mt-2 text-sm font-medium text-[var(--dpf-text)]">{accountableName(room)}</p>}
           </section>
           <section aria-label="Participant summary" className="rounded-lg border border-[var(--dpf-border)] p-3">
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">

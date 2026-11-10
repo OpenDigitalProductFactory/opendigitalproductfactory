@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -9,7 +9,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * and high-volume/failure tools; then closes the loop by filing critical BIs
  * and dispatching a one-shot platform-engineer (AI Ops) review task.
  */
-export const mcpCallEfficiencyScan = inngest.createFunction(
+export const mcpCallEfficiencyScan = jobs.createFunction(
   {
     id: "ops/mcp-call-efficiency-scan",
     retries: 1,
@@ -17,7 +17,7 @@ export const mcpCallEfficiencyScan = inngest.createFunction(
     triggers: [cron("15 6 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/mcp-call-efficiency-scan");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("analyze-notify-and-dispatch-aiops", async () => {
@@ -33,13 +33,14 @@ export const mcpCallEfficiencyScan = inngest.createFunction(
         ownerUserId,
       });
       console.log(
-        `[mcp-call-efficiency] calls=${report.totalCalls} findings=${report.findings.length} notified=${notified} usable=${report.ledgerSufficiency.usable}` +
+        `[mcp-call-efficiency] coverage=${report.coverage.complete ? "complete" : "partial"} calls=${report.totalCalls}/${report.coverage.populationCount} findings=${report.findings.length} notified=${notified} usable=${report.ledgerSufficiency.usable}` +
           (aiOps
             ? ` aiOps=${aiOps.skipped ? `skip:${aiOps.reason}` : `task=${aiOps.agentTaskId} bis=${aiOps.backlogItemsFiled.length}`}`
             : ""),
       );
       return {
         totalCalls: report.totalCalls,
+        coverage: report.coverage,
         findingCount: report.findings.length,
         notified,
         aiOps,

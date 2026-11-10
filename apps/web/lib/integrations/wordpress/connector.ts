@@ -3,6 +3,7 @@ import { z } from "zod";
 import { parseConnectorDefinition } from "../kernel/definition";
 import type { SuccessfulConnectorCredential } from "../kernel/credential-store";
 import { ConnectorError } from "../kernel/error";
+import type { ConnectorSafeProjection } from "../kernel/setup-state";
 
 import { createWordPressClient, type WordPressProbe } from "./client";
 
@@ -44,6 +45,20 @@ export interface WordPressCredential {
   siteUrl: string;
   username: string;
   applicationPassword: string;
+}
+
+export function projectWordPressProbe(probe: WordPressProbe): ConnectorSafeProjection {
+  return {
+    siteName: probe.siteName,
+    origin: probe.origin,
+    authenticatedUserName: probe.authenticatedUser.name,
+    supportedResourceKinds: probe.supportedResourceKinds.join(","),
+    supportedTaxonomies: probe.supportedTaxonomies?.join(",") ?? "",
+    unsupportedResourceTypes: probe.unsupportedResourceTypes?.join(",") ?? "",
+    canCreateDrafts: probe.canCreateDrafts,
+    canPublishLive: probe.canPublishLive,
+    canUploadMedia: probe.canUploadMedia,
+  };
 }
 
 export async function parseWordPressCredential(input: unknown): Promise<{
@@ -107,15 +122,7 @@ export function createWordPressConnectorAdapter(dependencies: {
           tokenEnvelope: {},
           safeProjection: {
             ...parsed.serialized.safeProjection,
-            siteName: probe.siteName,
-            origin: probe.origin,
-            authenticatedUserName: probe.authenticatedUser.name,
-            supportedResourceKinds: probe.supportedResourceKinds.join(","),
-            supportedTaxonomies: probe.supportedTaxonomies?.join(",") ?? "",
-            unsupportedResourceTypes: probe.unsupportedResourceTypes?.join(",") ?? "",
-            canCreateDrafts: probe.canCreateDrafts,
-            canPublishLive: probe.canPublishLive,
-            canUploadMedia: probe.canUploadMedia,
+            ...projectWordPressProbe(probe),
             publicPublicationEnabled: false,
           },
         },

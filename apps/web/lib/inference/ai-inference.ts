@@ -1,8 +1,14 @@
+import { randomUUID } from "node:crypto";
+import { createResponseProducer, type ResponseProducer } from "../routing/response-producer";
 // apps/web/lib/ai-inference.ts
 // Shared inference module — plain server-only module (NOT "use server").
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { transferLocalNativeContinuation } from "../routing/local-native-continuation";
+import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
+import { getOllamaBaseUrl } from "./ollama-url";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
   aiInferenceDuration,
@@ -20,6 +26,8 @@ import {
   ANTHROPIC_OAUTH_BETA_HEADERS,
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
+import type { ChatMessage, ToolCallEntry } from "../routing/chat-message-types";
+import { readEnabledRoutingProvider } from "./provider-routing-admission";
 import { resolveDefaultExecutionAdapter } from "../routing/execution-plan";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
@@ -27,18 +35,17 @@ import {
   parseExecutionAdapterSelector,
   type ExecutionAdapterSelector,
 } from "../routing/execution-adapter-types";
+import { applyRequiredToolChoiceGuard } from "./terminal-writer-dispatch-guard";
 import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
 import { getCliPoolStatus } from "../routing/cli-pool-status";
 import {
-  classifyProviderCapacity,
-  type ProviderCapacityClassification,
-} from "../routing/provider-capacity";
-import {
   clearProviderCapacityStatus,
+  capacityAccountIdentity,
   recordProviderCapacityStatus,
 } from "../routing/provider-capacity/store";
-import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
-import "../routing/responses-adapter"; // side-effect: registers "responses" adapter
+import { chatAdapter } from "../routing/chat-adapter";
+import { responsesAdapter } from "../routing/responses-adapter";
+import { reassessmentMessagesAdapter } from "../routing/reassessment-messages-adapter";
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
 import "../routing/embedding-adapter"; // EP-INF-009c: registers "embedding" adapter
 import "../routing/transcription-adapter"; // EP-INF-009c: registers "transcription" adapter
@@ -48,79 +55,40 @@ import "../routing/codex-cli-adapter"; // codex: registers "codex-cli" adapter
 import {
   acquireInferenceSlot,
   currentInferenceOrigin,
+  currentInferenceSignal,
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { nativeCliTelemetryErrorClass } from "@/lib/routing/cli-owned-runner";
+import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
+import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+import { InferenceError } from "../routing/inference-error";
+import { accountAuthMethod, providerAccountExecutionBlock, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
+import { assertReassessmentActive, assertReassessmentPlan, currentFiniteReassessmentExecution, refuseReassessmentExecution,
+  runReassessmentEffect, validateReassessmentToolCalls } from "../routing/reassessment-execution-scope";
+import { assertReassessmentQualificationCurrent, refreshReassessmentNativeRuntime } from "./reassessment-execution-qualification";
+import { readReassessmentProviderAuthHeaders } from "./provider-account-credentials";
+import { captureReassessmentHttpResponse, withReassessmentHttpTransport } from "./reassessment-http-capture";
+import { reassessmentNativeMessagesFetch } from "./reassessment-native-runtime";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-/** Anthropic-style content blocks for structured tool-calling messages */
-export type ContentBlock =
-  | { type: "text"; text: string }
-  /**
-   * Image input for multimodal models. Carried in OpenAI Chat Completions wire
-   * form (`image_url` with a data: URL or http(s) URL); converted to the
-   * Anthropic `image` source block by formatMessageForAnthropic. Enables vision
-   * models (e.g. local Gemma 4 via Docker Model Runner) to receive screenshots.
-   */
-  | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
-  /**
-   * Audio input for multimodal models (ASR / diarization / audio understanding).
-   * OpenAI Chat Completions wire form (`input_audio` with base64 data + format).
-   * Verified on-machine (2026-06-15): local Gemma 4 12B transcribes a wav via
-   * Docker Model Runner through this exact block. Anthropic has no audio-input
-   * block, so this is OpenAI-compatible only — routing sends audio to an
-   * audio-capable endpoint via the `audioInput` floor, never to Anthropic.
-   */
-  | { type: "input_audio"; input_audio: { data: string; format: "wav" | "mp3" } }
-  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string };
-
-/** True when content carries only text/image blocks — the subset both the OpenAI
- *  AND Anthropic formatters can pass through (Anthropic has no audio block). */
-function isMultimodalInputContent(content: ContentBlock[]): boolean {
-  return content.length > 0 && content.every((b) => b.type === "text" || b.type === "image_url");
-}
-
-/** True when content carries only model-facing input blocks the OpenAI Chat
- *  Completions API accepts natively (text / image / audio). Superset of the
- *  Anthropic predicate — used only by the OpenAI formatter passthrough. */
-function isOpenAIInputContent(content: ContentBlock[]): boolean {
-  return (
-    content.length > 0 &&
-    content.every((b) => b.type === "text" || b.type === "image_url" || b.type === "input_audio")
-  );
-}
-
-/** Convert an OpenAI-style image_url (data: URL) to an Anthropic image source block. */
-function imageUrlToAnthropicBlock(url: string): Record<string, unknown> {
-  const m = /^data:([^;]+);base64,(.*)$/s.exec(url);
-  if (m) {
-    return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
-  }
-  // Anthropic also accepts URL image sources.
-  return { type: "image", source: { type: "url", url } };
-}
-
-export type ChatMessage = {
-  role: "user" | "assistant" | "system" | "tool";
-  content: string | ContentBlock[];
-  /** Tool calls the assistant made (present when role=assistant and model called tools) */
-  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-  /** For role=tool messages: which tool call this result responds to */
-  toolCallId?: string;
-};
-
 export type InferenceResult = {
+  responseProducer?: ResponseProducer;
   content: string;
   inputTokens: number;
   outputTokens: number;
   inferenceMs: number;
-  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  asyncOperation?: import("../routing/adapter-types").AsyncOperationStartResult;
+  toolCalls?: ToolCallEntry[];
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
   /** True when the provider stopped at the output-token ceiling (BI-1D144CC1). */
   truncated?: boolean;
+  /** Actual provider completion reason; never inferred from content or truncation. */
+  finishReason?: string;
   /**
    * Verbatim provider response body (matches AdapterResult.raw). Optional —
    * adapters may leave it undefined when nothing useful exists beyond `content`.
@@ -134,74 +102,10 @@ export type InferenceResult = {
 };
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
+// Defined in the leaf routing/inference-error and re-exported here (spec 2026-09-30
+// §4.2): the adapters import the leaf, which keeps module load order acyclic.
 
-export class InferenceError extends Error {
-  constructor(
-    message: string,
-    public readonly code: "network" | "auth" | "rate_limit" | "overloaded" | "model_not_found" | "provider_error" | "transient" | "billing" | "request_too_large",
-    public readonly providerId: string,
-    public readonly statusCode?: number,
-    public readonly headers?: Record<string, string>,
-    public readonly rawBody?: string,
-    public readonly capacity?: ProviderCapacityClassification,
-  ) {
-    super(message);
-    this.name = "InferenceError";
-  }
-}
-
-export function classifyHttpError(
-  status: number,
-  providerId: string,
-  body: string,
-  responseHeaders?: Headers,
-): InferenceError {
-  // Extract rate-limit-relevant headers
-  const rateLimitHeaders: Record<string, string> | undefined = responseHeaders
-    ? Object.fromEntries(
-        [...responseHeaders.entries()].filter(
-          ([k]) =>
-            k.startsWith("x-ratelimit") ||
-            k.startsWith("anthropic-ratelimit") ||
-            k === "retry-after",
-        ),
-      )
-    : undefined;
-
-  const headers = rateLimitHeaders && Object.keys(rateLimitHeaders).length > 0
-    ? rateLimitHeaders
-    : undefined;
-  const capacity = classifyProviderCapacity({
-    providerId,
-    statusCode: status,
-    headers: responseHeaders ?? headers,
-    bodyText: body,
-    now: new Date(),
-  });
-
-  if (status === 401 || status === 403) {
-    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers, body, capacity);
-  }
-  if (status === 402 || capacity.state === "billing_action_required" || capacity.state === "unsupported_plan") {
-    return new InferenceError(`Billing error on ${providerId}: ${body.slice(0, 200)}`, "billing", providerId, status, headers, body, capacity);
-  }
-  if (status === 413) {
-    return new InferenceError(`Request too large for ${providerId}: ${body.slice(0, 200)}`, "request_too_large", providerId, status, headers, body, capacity);
-  }
-  if (status === 429) {
-    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers, body, capacity);
-  }
-  if (status === 529 || /\b529\b|overloaded/i.test(body)) {
-    return new InferenceError(`Provider overloaded on ${providerId}: ${body.slice(0, 300)}`, "overloaded", providerId, status, headers, body, capacity);
-  }
-  if (status === 404) {
-    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers, body, capacity);
-  }
-  if (status === 408 || status === 500 || status === 502 || status === 503 || status === 504) {
-    return new InferenceError(`Transient error (${status}) from ${providerId}: ${body.slice(0, 200)}`, "transient", providerId, status, headers, body, capacity);
-  }
-  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers, body, capacity);
-}
+export { InferenceError, classifyHttpError } from "../routing/inference-error";
 
 // ─── Build Auth Headers ──────────────────────────────────────────────────────
 
@@ -209,22 +113,30 @@ async function buildAuthHeaders(
   providerId: string,
   authMethod: string | null,
   authHeader: string | null,
+  connectionId?: string,
+  expectedExecutionVersion?: string,
 ): Promise<Record<string, string>> {
+  if (assertReassessmentActive()) return {
+    ...getProviderExtraHeaders(providerId),
+    ...await readReassessmentProviderAuthHeaders({ providerId, authMethod, authHeader,
+      connectionId, expectedExecutionVersion }),
+  };
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...getProviderExtraHeaders(providerId),
   };
 
   if (authMethod === "api_key") {
-    const cred = await getDecryptedCredential(providerId);
+    const cred = connectionId ? await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion) : await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
+    Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
     headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
   } else if (authMethod === "oauth2_client_credentials") {
-    const tokenResult = await getProviderBearerToken(providerId);
+    const tokenResult = connectionId ? await getProviderBearerToken(providerId, connectionId, expectedExecutionVersion) : await getProviderBearerToken(providerId);
     if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
   } else if (authMethod === "oauth2_authorization_code") {
-    const tokenResult = await getProviderBearerToken(providerId);
+    const tokenResult = connectionId ? await getProviderBearerToken(providerId, connectionId, expectedExecutionVersion) : await getProviderBearerToken(providerId);
     if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
     if (isAnthropicProvider(providerId)) {
@@ -236,10 +148,28 @@ async function buildAuthHeaders(
   return headers;
 }
 
+async function readSelectedProviderAccount(providerId: string, modelId: string, plan: RoutedExecutionPlan) {
+  if (plan.providerConnectionId === undefined) return null;
+  if (!plan.providerConnectionId.trim()) throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account identity is invalid");
+  if (plan.providerId !== providerId || plan.modelId !== modelId) throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account plan does not match the request");
+  const [account, lifecycle] = await Promise.all([
+    prisma.aiProviderConnection.findUnique({ where: { connectionId: plan.providerConnectionId, providerId },
+      select: { id: true, connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+        credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } },
+        accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, updatedAt: true, accountClass: true, supplierContractId: true, lastReviewedAt: true } }),
+    prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } }),
+  ]);
+  const block = providerAccountExecutionBlock(account, plan);
+  if (block) throw new ProviderAccountSelectionChangedError(providerId, block);
+  if (!lifecycle || !["active", "degraded"].includes(lifecycle.status)) throw new ProviderAccountSelectionChangedError(providerId, "Provider account is not enabled for routing");
+  return account;
+}
+
 async function resolveExecutionBaseUrl(
   providerId: string,
   provider: { authMethod: string | null; baseUrl: string | null; endpoint: string | null },
 ): Promise<string | null> {
+  if (providerId === "local") return getOllamaBaseUrl({ ...provider, providerId });
   // Route codex through the ChatGPT backend (flat-rate subscription billing).
   // The Responses API SSE parser now handles function call events.
   if (providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {
@@ -252,187 +182,65 @@ async function resolveExecutionBaseUrl(
   return provider.baseUrl ?? provider.endpoint;
 }
 
-// ─── Tool Call Extraction Helpers ─────────────────────────────────────────────
+// ─── Tool Call Extraction & Message Formatting ──────────────────────────────
+// Pure helpers, defined in the leaf routing/provider-message-format.
 
-/** Extract tool calls from Anthropic content blocks, preserving IDs */
-export function extractAnthropicToolCalls(
-  contentBlocks: Array<{ type?: string; id?: string; name?: string; input?: Record<string, unknown> }>,
-): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
-  return contentBlocks
-    .filter((b) => b.type === "tool_use" && b.name)
-    .map((b) => ({
-      id: b.id ?? `synth_${Math.random().toString(36).slice(2, 9)}`,
-      name: b.name!,
-      arguments: b.input ?? {},
-    }));
-}
+export {
+  extractAnthropicToolCalls,
+  extractOpenAIToolCalls,
+  extractTextualToolCalls,
+  formatMessageForAnthropic,
+  formatMessageForOpenAI,
+  formatMessageForResponses,
+} from "../routing/provider-message-format";
 
-/** Extract tool calls from OpenAI-compatible tool_calls array, preserving IDs */
-export function extractOpenAIToolCalls(
-  rawToolCalls: Array<{ id?: string; function?: { name?: string; arguments?: string } }>,
-): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
-  return rawToolCalls
-    .filter((tc) => tc.function?.name)
-    .map((tc) => ({
-      id: tc.id ?? `synth_${Math.random().toString(36).slice(2, 9)}`,
-      name: tc.function!.name!,
-      arguments: tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {},
-    }));
-}
-
-/**
- * Extract tool calls embedded as text when the model runner doesn't translate
- * them to structured `tool_calls`. Handles two formats:
- *
- * 1. Standard Gemma/Llama JSON:  <tool_call>{"name":"fn","arguments":{...}}</tool_call>
- * 2. Gemma template variant:     <|tool_call>call: fn{key: "value"}<tool_call|>
- *
- * Returns { toolCalls, cleanText } where cleanText has the markers stripped.
- */
-export function extractTextualToolCalls(
-  text: string,
-): { toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; cleanText: string } {
-  const toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [];
-  let cleanText = text;
-
-  // Format 1: <tool_call>{"name":"fn","arguments":{...}}</tool_call>
-  const jsonPattern = /<tool_call>([\s\S]*?)<\/tool_call>/g;
-  cleanText = cleanText.replace(jsonPattern, (_, inner) => {
-    try {
-      const parsed = JSON.parse(inner.trim()) as { name?: string; arguments?: Record<string, unknown> };
-      if (parsed.name) {
-        toolCalls.push({
-          id: `text_${Math.random().toString(36).slice(2, 9)}`,
-          name: parsed.name,
-          arguments: parsed.arguments ?? {},
-        });
+/** The capture boundary wraps the actual transport, so adapter retries consume starts. */
+function reassessmentFetch(fetchImpl: typeof fetch, plan: RoutedExecutionPlan,
+  tools?: Array<Record<string, unknown>>): typeof fetch {
+  if (!assertReassessmentActive()) return fetchImpl;
+  return async (input, init) => {
+    const context = assertReassessmentPlan({ providerId: plan.providerId, modelId: plan.modelId, plan, tools });
+    if (!context) return refuseReassessmentExecution("reassessment-context-missing");
+    if (init?.method !== "POST" || typeof init.body !== "string" || !(typeof input === "string" || input instanceof URL)) {
+      return refuseReassessmentExecution("reassessment-transport-not-qualified");
+    }
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    const generation = body.generationConfig as Record<string, unknown> | undefined;
+    const limits = [body.max_tokens, body.max_output_tokens, body.max_completion_tokens, generation?.maxOutputTokens]
+      .filter(value => value !== undefined);
+    if (!limits.length || limits.some(value => typeof value !== "number" || !Number.isSafeInteger(value)
+      || value <= 0 || value > context.qualification.bounds.maxOutputTokens)) {
+      return refuseReassessmentExecution("reassessment-provider-output-unbounded");
+    }
+    const expected = tools?.map(tool => (tool.function as { name?: unknown } | undefined)?.name ?? tool.name).sort();
+    const names = Array.isArray(body.tools) ? body.tools.flatMap((tool: Record<string, unknown>) => {
+      if (Array.isArray(tool.functionDeclarations) && Object.keys(tool).length === 1) {
+        return tool.functionDeclarations.map((declaration: { name?: unknown }) => declaration.name);
       }
-    } catch {
-      // malformed — skip
+      if (tool.type !== undefined && tool.type !== "function") return [null];
+      return [(tool.function as { name?: unknown } | undefined)?.name ?? tool.name];
+    }).sort() : [];
+    if (names.length !== 2 || expected?.length !== 2 || names.some((name, index) => typeof name !== "string" || name !== expected[index])) {
+      return refuseReassessmentExecution("reassessment-provider-tools-changed");
     }
-    return "";
-  });
-
-  // Format 2: <|tool_call>call: fn{key: "value", ...}<tool_call|>
-  // Also covers <|tool_call>fn({"key":"value"})<tool_call|> variants.
-  const templatePattern = /<\|tool_call\>(?:call:\s*)?(\w+)\s*[\({]([\s\S]*?)[\)}]?\s*<tool_call\|>/g;
-  cleanText = cleanText.replace(templatePattern, (_, name: string, argsRaw: string) => {
-    try {
-      // argsRaw may be JS-like object literal — attempt JSON parse after key-quoting
-      const jsonified = argsRaw
-        .trim()
-        // Add quotes around unquoted keys: word: → "word":
-        .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":')
-        // Ensure leading brace
-        .replace(/^([^{])/, '{$1')
-        .replace(/([^}])$/, '$1}');
-      const args = JSON.parse(jsonified) as Record<string, unknown>;
-      toolCalls.push({
-        id: `text_${Math.random().toString(36).slice(2, 9)}`,
-        name,
-        arguments: args,
-      });
-    } catch {
-      // fallback: treat entire argsRaw as a single "query" param
-      toolCalls.push({
-        id: `text_${Math.random().toString(36).slice(2, 9)}`,
-        name,
-        arguments: { query: argsRaw.trim() },
-      });
-    }
-    return "";
-  });
-
-  // Strip any leftover <eos> tokens from local models
-  cleanText = cleanText.replace(/<eos>/g, "").trim();
-
-  return { toolCalls, cleanText };
-}
-
-// ─── Message Formatting Helpers ──────────────────────────────────────────────
-
-/** Format a ChatMessage for the Anthropic Messages API */
-export function formatMessageForAnthropic(msg: ChatMessage): Record<string, unknown> {
-  // Tool result messages → Anthropic uses role=user with tool_result content block
-  if (msg.role === "tool" && msg.toolCallId) {
-    return {
-      role: "user",
-      content: [{ type: "tool_result", tool_use_id: msg.toolCallId, content: typeof msg.content === "string" ? msg.content : "" }],
-    };
-  }
-  // Assistant messages with tool calls → content block array with text + tool_use blocks
-  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
-    const textContent = typeof msg.content === "string" ? msg.content : "";
-    return {
-      role: "assistant",
-      content: [
-        ...(textContent ? [{ type: "text" as const, text: textContent }] : []),
-        ...msg.toolCalls.map((tc) => ({ type: "tool_use" as const, id: tc.id, name: tc.name, input: tc.arguments })),
-      ],
-    };
-  }
-  // Multimodal user input (text + image blocks) → Anthropic content array.
-  if (Array.isArray(msg.content) && isMultimodalInputContent(msg.content)) {
-    return {
-      role: msg.role,
-      content: msg.content.map((b) => {
-        if (b.type === "image_url") return imageUrlToAnthropicBlock(b.image_url.url);
-        // isMultimodalInputContent guarantees the only other member is text.
-        return { type: "text", text: b.type === "text" ? b.text : "" };
-      }),
-    };
-  }
-  // Plain messages — pass through with string content
-  return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
-}
-
-/** Format a ChatMessage for the OpenAI Chat Completions API */
-export function formatMessageForOpenAI(msg: ChatMessage): Record<string, unknown> {
-  // Tool result messages → role=tool with tool_call_id
-  if (msg.role === "tool" && msg.toolCallId) {
-    return { role: "tool", tool_call_id: msg.toolCallId, content: typeof msg.content === "string" ? msg.content : "" };
-  }
-  // Assistant messages with tool calls → tool_calls field
-  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
-    return {
-      role: "assistant",
-      content: typeof msg.content === "string" ? msg.content : "",
-      tool_calls: msg.toolCalls.map((tc) => ({
-        id: tc.id, type: "function",
-        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-      })),
-    };
-  }
-  // Multimodal user input (text + image_url + input_audio blocks) → pass through
-  // as-is; this is already the OpenAI Chat Completions multimodal wire format.
-  if (Array.isArray(msg.content) && isOpenAIInputContent(msg.content)) {
-    return { role: msg.role, content: msg.content };
-  }
-  // Plain messages — pass through with string content
-  return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
-}
-
-/** Format a ChatMessage for the OpenAI Responses API input array */
-export function formatMessageForResponses(msg: ChatMessage): Array<Record<string, unknown>> {
-  const textContent = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-
-  if (msg.role === "tool" && msg.toolCallId) {
-    return [{ type: "function_call_output", call_id: msg.toolCallId, output: textContent }];
-  }
-
-  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
-    return [
-      ...(textContent ? [{ role: "assistant", content: textContent }] : []),
-      ...msg.toolCalls.map((tc) => ({
-        type: "function_call",
-        call_id: tc.id,
-        name: tc.name,
-        arguments: JSON.stringify(tc.arguments),
-      })),
-    ];
-  }
-
-  return [{ role: msg.role, content: textContent }];
+    await assertReassessmentQualificationCurrent(context.qualification);
+    const url = new URL(input.toString());
+    if (url.username || url.password || url.search || url.hash) return refuseReassessmentExecution("reassessment-transport-not-qualified");
+    return runReassessmentEffect({ kind: "provider", name: `${plan.providerId}/${plan.modelId}`,
+      input: { providerId: plan.providerId, modelId: plan.modelId, providerConnectionId: plan.providerConnectionId,
+        url: `${url.origin}${url.pathname}`, method: "POST", body, bodyUtf8: init.body } },
+    () => {
+      // Capture reservation and current-config reads consume the original
+      // window; neither can restart its HTTP cancellation allowance.
+      const remaining = Date.parse(context.deadlineAt) - Date.now();
+      if (!Number.isSafeInteger(remaining) || remaining <= 0 || remaining > 2_147_483_647) {
+        return refuseReassessmentExecution("reassessment-deadline-exhausted");
+      }
+      const deadline = AbortSignal.timeout(remaining);
+      return fetchImpl(input, { ...init, redirect: "error", signal: init.signal ? AbortSignal.any([init.signal, deadline]) : deadline });
+    },
+    captureReassessmentHttpResponse);
+  };
 }
 
 // ─── callProvider ────────────────────────────────────────────────────────────
@@ -455,24 +263,88 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
+  currentInferenceSignal()?.throwIfAborted();
+  await assertGovernedInferenceAuthority(currentInferenceSignal());
+  currentInferenceSignal()?.throwIfAborted();
+  // Resolve adapter enforceability before capacity or budget accounting. A
+  // plan/adapter capability miss is not a provider request and must not consume
+  // budget, wait on host capacity, or mutate provider health through fallback.
+  let effectivePlan: RoutedExecutionPlan = plan ?? {
+    providerId,
+    modelId,
+    recipeId: null,
+    contractFamily: "unknown",
+    executionAdapter: resolveDefaultExecutionAdapter(providerId),
+    maxTokens: 4096,
+    providerSettings: {},
+    toolPolicy: (tools?.length ?? 0) > 0 ? { toolChoice: "auto" } : {},
+    responsePolicy: {},
+  };
+  const reassessment = assertReassessmentPlan({ providerId, modelId, plan: effectivePlan, tools });
+  const finite = currentFiniteReassessmentExecution();
+  if ((reassessment?.qualification.budgetConfiguration?.configuredPerTaskLimit ?? 0) > 0 && !finite) return refuseReassessmentExecution("reassessment-finite-execution-unproven");
+  const executionAdapterRaw = effectivePlan.executionAdapter;
+  let selector: ExecutionAdapterSelector | null;
+  try {
+    selector = parseExecutionAdapterSelector(executionAdapterRaw);
+  } catch (e) {
+    if (typeof executionAdapterRaw !== "string") throw e;
+    selector = null;
+  }
+  if (selector?.kind === "claude-code-cli" && messages.some(message => Array.isArray(message.content) && message.content.some(block => block.type === "image_url"))) {
+    // Local transport refusal: no provider request or health mutation occurred.
+    throw new Error("image_input_transport_unavailable: Claude CLI cannot deliver supplied pixels; select an image-capable transport");
+  }
+  let providedImageHashes:string[]|null=null;
+  if(mcpSession?.recordImageInputDelivery&&messages.some(m=>Array.isArray(m.content)&&m.content.some(b=>b.type==="image_url"))){
+    const {codexImageInput}=await import("../routing/codex-image-input"),{createHash}=await import("node:crypto");
+    providedImageHashes=codexImageInput(messages,"/tmp/unused-input-hash").images.map(i=>createHash("sha256").update(Buffer.from(i.base64,"base64")).digest("hex"));
+  }
+  const isCliAdapter = selector !== null
+    && (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
+  if (reassessment && (selector ? !selector.kind.startsWith("http-") : executionAdapterRaw !== "responses")) {
+    return refuseReassessmentExecution("reassessment-requires-in-process-HTTP");
+  }
+  if (reassessment && (effectivePlan.providerSettings.providerTools !== undefined
+    || effectivePlan.providerSettings.thinking_budget_tokens !== undefined || !finite && effectivePlan.localThinkingBudgetEvidence !== undefined)) {
+    return refuseReassessmentExecution("reassessment-hidden-tools-or-runtime-probe");
+  }
+  // Required tool choice on an adapter that cannot force it: refuse, or — for a
+  // bound terminal writer reachable through a governed MCP session — dispatch
+  // under the receipt-verified contract (BI-C35576A9). See the guard module.
+  const guard = applyRequiredToolChoiceGuard({
+    plan: effectivePlan,
+    selector,
+    tools,
+    providerId,
+    hasGovernedMcpSession: Boolean(mcpSession),
+  });
+  if (guard.kind === "refuse") throw new InferenceError(guard.message, guard.code, providerId);
+  effectivePlan = guard.plan;
+
   // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
   // the shared adapter boundary so direct, agentic, evaluation and fallback
   // callers cannot start a local model while governed local CI owns the host.
-  await assertProviderDispatchCapacity(providerId);
-
+  // Revalidate an older routing selection before waiting for or using local capacity.
+  // Transcription uses its registry adapter and has no model-routing connection.
+  const needsModelConnection = executionAdapterRaw !== "transcription";
+  const selectedAccount = needsModelConnection ? await readSelectedProviderAccount(providerId, modelId, effectivePlan) : null;
+  const capacityAccount = selectedAccount ? capacityAccountIdentity(selectedAccount) : undefined;
+  const localProvider = needsModelConnection && (!selectedAccount || isLocalProviderId(providerId)) ? await readEnabledRoutingProvider(providerId) : null;
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
-  // Check the agent's daily token budget before dispatching. If the agent has
-  // consumed ≥100% of its registry limit today, throw a billing error so the
-  // caller can surface a clear "budget exceeded" message rather than burning
-  // more tokens. At 80–95% log a warning; at ≥95% also write a budget event.
-  // The check is non-blocking: any DB error is swallowed so a budget-gate DB
-  // failure never breaks inference.
-  if (attribution?.agentId) {
+  // Only paid calls are governed: a local engine or a flat-rate subscription
+  // costs nothing extra, so it is never refused here (BI-F3B6713F). The
+  // owner-set installation allowance decides when recorded; the registry
+  // per-agent cap is the fallback. A paid provider with no recorded price is
+  // charged an estimate in logTokenUsage, so the allowance sees it. A used allowance throws
+  // AgentAllowanceExhaustedError, which routing skips without penalising the
+  // endpoint. Any other gate failure is swallowed: the gate never breaks inference.
+  if (attribution?.agentId && !reassessment) {
     try {
-      const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
-      const budget = await checkAgentBudgetFromRegistry(attribution.agentId);
+      const { AgentAllowanceExhaustedError, checkAgentBudgetFromRegistry, classifyProviderSpend, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
+      const budget = await classifyProviderSpend(providerId) === "free" ? null : await checkAgentBudgetFromRegistry(attribution.agentId);
 
-      if (budget.status === "rejected") {
+      if (budget?.status === "rejected") {
         void writeBudgetEvent({
           agentId: attribution.agentId,
           eventKind: "rejected",
@@ -481,18 +353,13 @@ export async function callProvider(
           modelId,
           providerId,
         });
-        throw new InferenceError(
-          `Daily token budget exceeded for agent "${attribution.agentId}" ` +
-          `(${budget.actualTokens.toLocaleString()} / ${budget.limitTokens.toLocaleString()} tokens used today)`,
-          "billing",
-          providerId,
-        );
+        throw new AgentAllowanceExhaustedError({ agentId: attribution.agentId, budget });
       }
 
-      if (budget.status === "warning_95" || budget.status === "warning_80") {
+      if (budget && (budget.status === "warning_95" || budget.status === "warning_80")) {
         console.warn(
-          "[budget-gate] Agent approaching daily token limit:",
-          { agentId: attribution.agentId, ratioPercent: budget.ratioPercent, status: budget.status },
+          "[budget-gate] Agent approaching daily paid allowance:",
+          { agentId: attribution.agentId, ratioPercent: budget.ratioPercent, status: budget.status, governedBy: budget.governedBy },
         );
         if (budget.status === "warning_95") {
           void writeBudgetEvent({
@@ -506,80 +373,56 @@ export async function callProvider(
         }
       }
     } catch (err) {
-      // Re-throw billing errors; swallow everything else (budget gate is advisory)
-      if (err instanceof InferenceError && err.code === "billing") throw err;
+      if (err instanceof Error && err.name === "AgentAllowanceExhaustedError") throw err;
       console.warn("[budget-gate] Budget check failed (non-fatal):", { agentId: attribution.agentId }, err);
     }
   }
 
+  // An exclusive host reservation refuses promptly; ordinary local runner
+  // contention waits for admission below. Recheck the reservation at dispatch.
+  await assertProviderDispatchCapacity(providerId);
+
   // 1. Resolve provider (DB lookup + auth headers)
-  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+  const provider = localProvider ?? await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
-
-  // 2. Build minimal plan if none provided (backward compat)
-  const effectivePlan: RoutedExecutionPlan = plan ?? {
-    providerId,
-    modelId,
-    recipeId: null,
-    contractFamily: "unknown",
-    executionAdapter: resolveDefaultExecutionAdapter(providerId),
-    maxTokens: 4096,
-    providerSettings: {},
-    toolPolicy: (tools?.length ?? 0) > 0 ? { toolChoice: "auto" } : {},
-    responsePolicy: {},
-  };
-
-  // Phase A6: route the executionAdapter through the structured selector +
-  // capability-aware resolver. Legacy string values for CLI/chat kinds round-trip
-  // through parseExecutionAdapterSelector; legacy strings outside the structured
-  // taxonomy (responses, embedding, image_gen, async, transcription) fall through
-  // to the registry directly so existing routes are unchanged.
-  const executionAdapterRaw = effectivePlan.executionAdapter;
-  let selector: ExecutionAdapterSelector | null;
-  try {
-    selector = parseExecutionAdapterSelector(executionAdapterRaw);
-  } catch (e) {
-    if (typeof executionAdapterRaw !== "string") {
-      // Object input that failed validation — propagate.
-      throw e;
-    }
-    selector = null;
-  }
 
   // CLI adapters (anthropic-sub, codex) resolve their own auth and spawn CLI
   // binaries — they do not need HTTP base URL or auth headers.
-  const isCliAdapter =
-    selector !== null &&
-    (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
-
   // EP-COST Phase 4: consult CliPoolStatus before dispatching a CLI-backed call.
   // If the pool is known-exhausted (resetAt is in the future), throw rate_limit
   // so routed-inference.ts falls back to the next provider in the priority list
   // rather than firing into an already-saturated CLI pool.
   if (isCliAdapter && selector !== null) {
     const cliAdapterType = selector.kind === "claude-code-cli" ? "claude-cli" : "codex-cli";
-    const poolState = await getCliPoolStatus(cliAdapterType);
+    const poolState = await getCliPoolStatus(cliAdapterType, plan?.providerConnectionId ? { providerId, providerConnectionId: plan.providerConnectionId } : undefined);
     if (poolState?.isExhausted) {
       const waitSecs = poolState.secondsUntilReset ?? "unknown";
       throw new InferenceError(
         `${cliAdapterType} pool exhausted — resets in ~${waitSecs}s (EP-COST pool check)`,
         "rate_limit",
         providerId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true, // localPoolExhausted — fall through, do not wait on this endpoint
       );
     }
   }
 
   const baseUrl = isCliAdapter ? "cli://local" : await resolveExecutionBaseUrl(providerId, provider);
   if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
-  const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
+  const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, selectedAccount ? accountAuthMethod(selectedAccount.authMethod) : provider.authMethod, provider.authHeader, effectivePlan.providerConnectionId, effectivePlan.providerConnectionVersion);
 
   // 3. Dispatch to adapter (instrumented for Prometheus metrics)
   const adapter =
-    selector !== null
+    finite ? reassessmentMessagesAdapter : reassessment ? executionAdapterRaw === "responses" ? responsesAdapter : chatAdapter
+    : selector !== null
       ? await resolveExecutionAdapter(selector, effectivePlan.capabilityRequirements)
       : getExecutionAdapter(executionAdapterRaw as string);
   const endTimer = aiInferenceDuration.startTimer({ provider: providerId, model: modelId, agent: "unknown" });
   const telemetryStartedAt = new Date();
+  const telemetryAttemptId = randomUUID();
   // Phase A7: telemetry kind derived from the structured selector when
   // present; legacy-string paths land as "legacy:<adapter>" so analytics can
   // distinguish unrouted traffic from structured-selector traffic.
@@ -587,39 +430,83 @@ export async function callProvider(
     selector !== null
       ? selector.kind
       : `legacy:${typeof executionAdapterRaw === "string" ? executionAdapterRaw : "unknown"}`;
-  // Admission gate: bound concurrent inference per engine so a fleet of
-  // autonomous coworkers can't overload a scarce backend (local model ≈ 1-2
-  // concurrent before latency collapses; remote = provider rate limit / cost).
-  // Interactive turns take priority over autonomous/background work, so a human
-  // waiting on a reply never queues behind a scheduled brief. Held only across
-  // the actual inference call, released in `finally`. See inference-admission.ts.
-  const engineKey = engineKeyForProvider(providerId);
-  const releaseInferenceSlot = await acquireInferenceSlot(engineKey, currentInferenceOrigin(), {
-    providerId,
-    modelId,
-  });
+  // Local HTTP and sandbox inference share the one compute:local-inference
+  // ResourceLane. Remote providers retain the multi-slot provider semaphore.
+  // Keeping these paths disjoint prevents local HTTP from holding one admission
+  // slot while it waits on another queue.
+  const origin = currentInferenceOrigin();
+  let releaseInferenceSlot: (() => void) | null = null;
   let result;
+  let investment: import("../routing/adapter-telemetry-writer").InvestmentAttemptSnapshot | null = null;
+  let investmentGuidance = "";
+  const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
+  const actualFetch = parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch;
   try {
-    result = await adapter.execute({
-      providerId,
-      modelId,
-      plan: effectivePlan,
-      provider: { baseUrl, headers },
-      messages,
-      systemPrompt,
-      tools,
-      previousResponseId,
-      mcpSession,
-    });
+    const execute = async () => {
+      await assertProviderDispatchCapacity(providerId);
+      if (!isLocalProviderId(providerId)) {
+        const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+        await assertLocalGpuFree({ providerId, modelId });
+      }
+      // Queued work has not started inference yet. A disable during admission
+      // invalidates its earlier selection before any provider bytes are sent.
+      if (needsModelConnection) {
+        if (selectedAccount) await readSelectedProviderAccount(providerId, modelId, effectivePlan);
+        if (!selectedAccount || isLocalProviderId(providerId)) await readEnabledRoutingProvider(providerId);
+      }
+      if (attribution?.buildId) {
+        const { loadBuildInvestmentContext, UNRESOLVED_INVESTMENT_GUIDANCE } = await import("../portfolio/investment-balance-server");
+        const context = await loadBuildInvestmentContext(prisma, attribution.buildId).catch(() => ({ snapshot: null, guidance: UNRESOLVED_INVESTMENT_GUIDANCE }));
+        investment = context.snapshot;
+        investmentGuidance = context.guidance;
+      }
+      await assertGovernedInferenceAuthority(currentInferenceSignal());
+      currentInferenceSignal()?.throwIfAborted();
+      if (reassessment) await assertReassessmentQualificationCurrent(reassessment.qualification);
+      if (finite) await refreshReassessmentNativeRuntime(finite.qualification, actualFetch);
+      return adapter.execute({
+        providerId,
+        modelId,
+        plan: effectivePlan,
+        provider: { baseUrl, headers },
+        readLocalThinkingBudgetEvidence: getLocalThinkingBudgetEvidence,
+        fetchImpl: finite ? reassessmentNativeMessagesFetch(effectivePlan, tools) : reassessmentFetch(actualFetch, effectivePlan, tools),
+        messages,
+        systemPrompt: investmentGuidance ? `${systemPrompt}\n\n${investmentGuidance}` : systemPrompt,
+        tools,
+        previousResponseId,
+        mcpSession,
+      });
+    };
+    if (isLocalProviderId(providerId)) {
+      const admitted = () => withLocalInferenceLock(execute, { modelId, origin,
+        signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal) });
+      result = finite ? await withReassessmentHttpTransport({ fetchImpl: actualFetch,
+        assertCurrent: () => assertReassessmentQualificationCurrent(finite.qualification) }, admitted) : await admitted();
+    } else {
+      releaseInferenceSlot = await acquireInferenceSlot(engineKeyForProvider(providerId), origin, {
+        providerId,
+        modelId,
+        signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal),
+      });
+      result = await execute();
+    }
+    validateReassessmentToolCalls(result.toolCalls);
+    // Receipt persistence cannot authorize another provider call after actual inference.
+    if (providedImageHashes && mcpSession?.recordImageInputDelivery) await mcpSession.recordImageInputDelivery({sha256:providedImageHashes,providerId,modelId,adapterKind:selector?.kind??String(executionAdapterRaw)}).catch(()=>console.warn("[image-input] delivery receipt unavailable; specialist completion remains held"));
     endTimer();
   } catch (err) {
     endTimer();
-    const errorType = err instanceof InferenceError ? err.code : "unknown";
+    const cancelled = currentInferenceSignal()?.aborted && err === currentInferenceSignal()?.reason;
+    const errorType = cancelled ? "cancelled" : err instanceof InferenceError ? err.code
+      : nativeCliTelemetryErrorClass(err) ?? "unknown";
     aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
     // Phase A7: telemetry write before re-throw. Fire-and-forget — the writer
     // swallows its own errors so we never mask the original throw.
     const finishedAt = new Date();
     void writeAdapterTelemetry({
+      id: telemetryAttemptId,
+      investment,
       traceId: attribution?.traceId ?? undefined,
       adapterKind: telemetryAdapterKind,
       adapterVersion: selector?.version ?? "unknown",
@@ -630,7 +517,7 @@ export async function callProvider(
       finishedAt,
       durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
       status: "error",
-      errorClass: err instanceof InferenceError ? err.code : "unknown",
+      errorClass: errorType,
       httpStatus: err instanceof InferenceError ? err.statusCode : undefined,
       refusalReason: err instanceof InferenceError
         ? (err.rawBody ?? err.message)
@@ -641,9 +528,10 @@ export async function callProvider(
       skillId: attribution?.skillId ?? undefined,
       agentMessageId: attribution?.agentMessageId ?? undefined,
     });
-    if (err instanceof InferenceError && err.capacity) {
+    if (err instanceof InferenceError && err.capacity && (!selectedAccount || capacityAccount || localProvider)) {
       void recordProviderCapacityStatus({
         providerId,
+        ...(capacityAccount ? { account: capacityAccount } : {}),
         classification: err.capacity,
         source: "api",
         rawSnippet: err.rawBody ?? err.message,
@@ -653,10 +541,10 @@ export async function callProvider(
     }
     throw err;
   } finally {
-    releaseInferenceSlot();
+    releaseInferenceSlot?.();
   }
 
-  void clearProviderCapacityStatus({ providerId, source: "api" }).catch((capacityErr) => {
+  if (!selectedAccount || capacityAccount || localProvider) void clearProviderCapacityStatus({ providerId, source: "api", ...(capacityAccount ? { account: capacityAccount } : {}) }).catch((capacityErr) => {
     console.warn("[ai-inference] Failed to clear provider capacity:", capacityErr);
   });
 
@@ -674,6 +562,8 @@ export async function callProvider(
   // can't break the user's reply.
   const telemetryFinishedAt = new Date();
   void writeAdapterTelemetry({
+    id: telemetryAttemptId,
+    investment,
     traceId: attribution?.traceId ?? undefined,
     adapterKind: telemetryAdapterKind,
     adapterVersion: selector?.version ?? "unknown",
@@ -687,6 +577,7 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     cacheCreationInputTokens: result.usage.cacheCreationInputTokens,
+    cachedInputTokens: result.usage.cacheReadInputTokens,
     toolCallsTotal: result.toolCalls.length,
     agentId: attribution?.agentId ?? undefined,
     threadId: attribution?.threadId ?? undefined,
@@ -696,31 +587,59 @@ export async function callProvider(
   });
 
   // 5. Map AdapterResult → InferenceResult
-  return {
+  return transferLocalNativeContinuation<InferenceResult>(result, {
     content: result.text,
+    responseProducer: result.asyncOperation ? undefined : createResponseProducer({ attemptId: telemetryAttemptId, providerId, modelId, content: result.text }),
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     inferenceMs: result.inferenceMs,
+    ...(result.asyncOperation !== undefined && { asyncOperation: result.asyncOperation }),
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
     truncated: result.truncated ?? false,
+    ...(result.finishReason !== undefined && { finishReason: result.finishReason }),
     // Adapters may set result.raw (e.g. transcription adapter for Whisper
     // verbose_json segments). Passed through verbatim; undefined when absent.
     ...(result.raw !== undefined && { raw: result.raw }),
-  };
+  });
 }
 
 // ─── Token Usage Logging ─────────────────────────────────────────────────────
+
+/**
+ * A paid provider with no recorded price is never free (BI-F3B6713F). Estimate
+ * from what the install knows: the model's profiled price, else the platform's
+ * conservative $3/MTok blended rate, so the owner's paid AI allowance sees it.
+ */
+const ESTIMATED_BLENDED_PER_MTOKEN = 3;
+
+async function estimatedTokenRates(providerId: string, modelId: string | undefined): Promise<{ input: number; output: number }> {
+  if (modelId) {
+    const profile = await prisma.modelProfile.findUnique({
+      where: { providerId_modelId: { providerId, modelId } },
+      select: { inputPricePerMToken: true, outputPricePerMToken: true },
+    }).catch(() => null);
+    if (profile?.inputPricePerMToken != null && profile.outputPricePerMToken != null) {
+      return { input: profile.inputPricePerMToken, output: profile.outputPricePerMToken };
+    }
+  }
+  return { input: ESTIMATED_BLENDED_PER_MTOKEN, output: ESTIMATED_BLENDED_PER_MTOKEN };
+}
 
 export async function logTokenUsage(input: {
   traceId?: string | null;
   agentId: string;
   providerId: string;
+  providerConnectionId?: string;
+  quotaScopeKey?: string;
   contextKey: string;
   inputTokens: number;
   outputTokens: number;
   inferenceMs?: number;
+  /** Used only to estimate a cost when the provider has no recorded price; not stored. */
+  modelId?: string;
 }): Promise<void> {
+  const { modelId, ...row } = input;
   const provider = await prisma.modelProvider.findUnique({ where: { providerId: input.providerId } });
 
   let costUsd = 0;
@@ -731,16 +650,15 @@ export async function logTokenUsage(input: {
         provider.computeWatts ?? 150,
         provider.electricityRateKwh ?? 0.12,
       );
-    } else if (provider.costModel === "token") {
-      costUsd = computeTokenCost(
-        input.inputTokens,
-        input.outputTokens,
-        provider.inputPricePerMToken ?? 0,
-        provider.outputPricePerMToken ?? 0,
-      );
+    } else if (provider.costModel !== "compute") {
+      // Any cost model other than compute is paid to the budget gate, so it is
+      // priced or estimated here, never recorded as $0.
+      const rates = provider.inputPricePerMToken != null && provider.outputPricePerMToken != null
+        ? { input: provider.inputPricePerMToken, output: provider.outputPricePerMToken }
+        : await estimatedTokenRates(input.providerId, modelId);
+      costUsd = computeTokenCost(input.inputTokens, input.outputTokens, rates.input, rates.output);
     }
   }
-
   // Record cost metric for Prometheus
   if (costUsd > 0) {
     aiInferenceCostUsd.inc({ provider: input.providerId }, costUsd);
@@ -748,13 +666,14 @@ export async function logTokenUsage(input: {
 
   await prisma.tokenUsage.create({
     data: {
-      traceId:      input.traceId ?? null,
-      agentId:      input.agentId,
-      providerId:   input.providerId,
-      contextKey:   input.contextKey,
-      inputTokens:  input.inputTokens,
-      outputTokens: input.outputTokens,
-      ...(input.inferenceMs !== undefined && { inferenceMs: input.inferenceMs }),
+      traceId:      row.traceId ?? null,
+      agentId:      row.agentId,
+      providerId:   row.providerId,
+      ...(row.providerConnectionId ? { recordedProviderConnectionRef: row.providerConnectionId, quotaScopeKey: row.quotaScopeKey ?? null } : {}),
+      contextKey:   row.contextKey,
+      inputTokens:  row.inputTokens,
+      outputTokens: row.outputTokens,
+      ...(row.inferenceMs !== undefined && { inferenceMs: row.inferenceMs }),
       costUsd,
     },
   });

@@ -37,7 +37,6 @@ export function NewOpportunityButton({
           title: title.trim(),
           accountId,
           expectedValue: Number.isFinite(value) && value > 0 ? value : undefined,
-          currency: "GBP",
         });
         setTitle("");
         setExpectedValue("");

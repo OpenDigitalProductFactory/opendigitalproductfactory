@@ -6,9 +6,9 @@ import type {
 import type { ModelCard, ModelCardCapabilities } from "./model-card-types";
 import {
   EMPTY_CAPABILITIES,
-  EMPTY_PRICING,
   DEFAULT_DIMENSION_SCORES,
 } from "./model-card-types";
+import { referenceCardPricing } from "./model-pricing-reference";
 import { geminiInputModalities, geminiOutputModalities } from "./gemini-modalities";
 import { classifyModel } from "./model-classifier";
 import { computeMetadataHash } from "./metadata-hash";
@@ -72,6 +72,15 @@ function isEmbeddingOnly(methods: string[]): boolean {
   return methods.includes("embedContent") && !methods.includes("generateContent");
 }
 
+function classifyGeminiModel(modelId: string, methods: string[]) {
+  if (isEmbeddingOnly(methods)) return "embedding" as const;
+  const output = geminiOutputModalities(modelId);
+  // Image generators may return accompanying text; that does not make them
+  // general chat/review models. Keep one classification for discovery and cards.
+  if (output.includes("image")) return "image_gen" as const;
+  return classifyModel(modelId, { input: geminiInputModalities(modelId), output });
+}
+
 /**
  * Extract capabilities from Gemini model metadata.
  * toolUse is approximated from supportedGenerationMethods including "generateContent".
@@ -81,12 +90,15 @@ function extractCapabilities(raw: GeminiModel): ModelCardCapabilities {
   const modelId = stripModelsPrefix(raw.name);
   const supportsGenerate = methods.includes("generateContent");
 
-  const toolUse = supportsGenerate ? true : null;
+  const imageOutput = geminiOutputModalities(modelId).includes("image");
+  // https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image
+  const proImage = /^gemini-3-pro-image(?:-preview)?$/.test(modelId);
+  const toolUse = proImage ? false : imageOutput ? null : supportsGenerate ? true : null;
   // All generateContent-capable models also support streaming
   const streaming = supportsGenerate || methods.includes("streamGenerateContent") ? true : null;
 
   // Code execution: Gemini 2.0+ models that support generateContent
-  const codeExecution = supportsGenerate && /^gemini-2/.test(modelId) ? true : null;
+  const codeExecution = supportsGenerate && !imageOutput && /^gemini-2/.test(modelId) ? true : null;
 
   // Web search grounding: Gemini 1.5+ models that support generateContent
   const webSearch = supportsGenerate && /^gemini-(1\.5|2)/.test(modelId) ? true : null;
@@ -94,6 +106,7 @@ function extractCapabilities(raw: GeminiModel): ModelCardCapabilities {
   return {
     ...EMPTY_CAPABILITIES,
     toolUse,
+    structuredOutput: proImage ? false : null,
     streaming,
     codeExecution,
     webSearch,
@@ -118,23 +131,14 @@ export const geminiAdapter: ProviderAdapter = {
     const raw = rawMetadata as GeminiModel;
     const methods = raw.supportedGenerationMethods ?? [];
 
-    if (isEmbeddingOnly(methods)) {
-      return "embedding";
-    }
-
-    return classifyModel(modelId, {
-      input: ["text"],
-      output: ["text"],
-    });
+    return classifyGeminiModel(modelId, methods);
   },
 
   extractModelCard(modelId: string, rawMetadata: unknown): ModelCard {
     const raw = rawMetadata as GeminiModel;
     const methods = raw.supportedGenerationMethods ?? [];
 
-    const modelClass = isEmbeddingOnly(methods)
-      ? "embedding"
-      : classifyModel(modelId, { input: ["text"], output: ["text"] });
+    const modelClass = classifyGeminiModel(modelId, methods);
 
     return {
       providerId: "gemini",
@@ -153,7 +157,12 @@ export const geminiAdapter: ProviderAdapter = {
       outputModalities: geminiOutputModalities(modelId),
 
       capabilities: extractCapabilities(raw),
-      pricing: { ...EMPTY_PRICING },
+      // BI-B5071C36: the API gives no prices here, so consult the researched
+      // reference rather than writing nulls. Nulls are not neutral — the router
+      // falls back to the provider's one flat rate, collapsing every model under
+      // it to a single number, and a re-discovery erases any price a backfill had
+      // already recorded.
+      pricing: referenceCardPricing(modelId),
 
       supportedParameters: [],
       defaultParameters: null,

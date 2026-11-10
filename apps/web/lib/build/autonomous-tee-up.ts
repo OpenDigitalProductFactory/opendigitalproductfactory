@@ -49,6 +49,7 @@ export async function resolveAutonomousTeeUpStart(input: {
     const {
       deriveDeliverableSensitivity,
       getModelTier,
+      mapBuildDeliverableToRoutingSensitivity,
     } = await import("@/lib/explore/build-process-matrix");
     const sensitivity = deriveDeliverableSensitivity({
       text: `${item.title}\n${item.body ?? ""}`,
@@ -62,7 +63,7 @@ export async function resolveAutonomousTeeUpStart(input: {
       modelTier === "robust" ? "frontier-coding" : "local-coding";
     const config = await getBuildStudioConfig({
       modelTier,
-      sensitivity: sensitivity === "high" ? "confidential" : "internal",
+      sensitivity: mapBuildDeliverableToRoutingSensitivity(sensitivity),
     });
     const { resolveRuntimeRegulatoryAutonomyCeiling } = await import(
       "@/lib/autonomy/regulatory-autonomy-runtime"

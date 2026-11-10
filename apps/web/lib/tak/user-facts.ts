@@ -6,7 +6,14 @@
 // decisions, and constraints without relying on vector similarity.
 
 import { prisma } from "@dpf/db";
-import { countTokens } from "@/lib/tak/context-arbitrator";
+
+import { ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY } from "@/lib/routing/activity-harness-approval-source";
+
+/**
+ * Categories kept in UserFact as platform configuration, not as something the
+ * coworker learned about a person. Recall into a prompt never includes them.
+ */
+const CONFIGURATION_FACT_CATEGORIES = [ACTIVITY_ROUTING_OVERRIDE_FACT_CATEGORY];
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -60,6 +67,7 @@ export async function loadUserFacts(
   const where: Record<string, unknown> = {
     userId,
     supersededAt: null,
+    category: { notIn: CONFIGURATION_FACT_CATEGORIES },
   };
   // If route domain provided, prefer facts from that domain but include global facts too
   // Global facts have sourceRoute that doesn't match any specific domain
@@ -125,6 +133,7 @@ export async function loadOrgSharedFacts(
       sensitivity: "normal",
       supersededAt: null,
       userId: { not: excludeUserId },
+      category: { notIn: CONFIGURATION_FACT_CATEGORIES },
     },
     orderBy: [{ confidence: "desc" }, { createdAt: "desc" }],
     take: limit,

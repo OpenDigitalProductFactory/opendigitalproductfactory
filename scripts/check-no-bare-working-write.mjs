@@ -48,7 +48,24 @@ const ALLOWLIST = new Set([
   // currentAgentId, AND lastHeartbeatAt. That's the invariant the helper
   // exists to enforce; this file just inlines it because it also needs to
   // set other dispatcher-only fields in the same atomic write.
-  "apps/web/lib/actions/agent-thread-dispatcher-runtime.ts",
+  "apps/web/lib/tak/child-thread-runtime.ts",
+  // Retained foreground work compares the exact status/updatedAt generation
+  // and writes startedAt, lastHeartbeatAt and its dispatch fence in the SAME
+  // conditional claim. The general helper cannot preserve this full claim.
+  "apps/web/lib/agent/foreground-work-worker.ts",
+  // Publication only FILTERS on working before atomically settling the run
+  // out of that state under its row lock/fence; it never enters working.
+  "apps/web/lib/agent/foreground-work-publication.ts",
+  // Creates a server-authorized Workroom TaskRun in the "working" state at
+  // birth and sets lastHeartbeatAt in that same atomic create before the
+  // provider operation can be admitted or dispatched.
+  "apps/web/lib/inference/async-operation-workroom-runtime.ts",
+
+  // Bootstraps a deliberation TaskRun in "working" at birth only when it runs
+  // the branches in-process (dispatcher supplied), setting startedAt and
+  // lastHeartbeatAt in that same create; otherwise it is born "submitted" and
+  // deliberation-run.ts calls markTaskRunWorking (BI-CB4A6435).
+  "apps/web/lib/deliberation/orchestrator.ts",
 
   // Writes Workroom.status, not TaskRun.status — a durable maintenance room has
   // no heartbeat and no stall watchdog, so markTaskRunWorking does not apply

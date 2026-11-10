@@ -60,6 +60,7 @@ export async function authenticateRequest(
 
     const sessionUser: DpfSession["user"] = {
       id: user.id,
+      principalId: null,
       email: user.email,
       type: "admin",
       platformRole: user.groups[0]?.platformRole.roleId ?? null,

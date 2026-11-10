@@ -1,6 +1,7 @@
 "use client";
 
 import type { RestoreRunListItem } from "@/lib/operate/backups/restore-types";
+import { formatTimestamp } from "@/lib/datetime";
 
 interface Props {
   runs: RestoreRunListItem[];
@@ -26,11 +27,6 @@ function StatusPill({ status }: { status: string }) {
       {style.label}
     </span>
   );
-}
-
-function formatTimestamp(s: string | null): string {
-  if (!s) return "—";
-  return new Date(s).toLocaleString();
 }
 
 function formatDurationMs(ms: number | null): string {

@@ -12,9 +12,21 @@
 // when no link exists yet to confirm it.
 
 import type { FederationRelationshipPreset } from "./federation-link-types";
+import type { InstallationEnvironmentClass } from "./installation-operating-intent";
+import type { TrustState } from "./trust-link-lifecycle";
 
-/** Link states that represent a peer this installation may actually work with. */
-const USABLE_LINK_STATES = new Set(["active", "approved"]);
+/**
+ * Link states that represent a peer this installation may actually work with.
+ *
+ * `trusted` is the only usable state by design: `pending` means the dual
+ * approval the handshake exists to obtain has not completed, and `quarantined` /
+ * `revoked` are explicit operator withdrawals. Typed as `Set<TrustState>` so a
+ * member outside the closed vocabulary is a compile error — the previous set
+ * held `active` / `approved`, which `resolveLinkTrust` never produces, so no
+ * link could ever count and work sync reported "nowhere to mirror" while
+ * mirroring succeeded (BI-D92A50F4).
+ */
+const USABLE_LINK_STATES: ReadonlySet<string> = new Set<TrustState>(["trusted"]);
 
 /** Where the resolved pairing came from. Never inferred beyond these. */
 export const PAIRING_SOURCES = ["federation-link", "declared-intent", "none"] as const;
@@ -27,6 +39,13 @@ export interface PairingLink {
   relationshipPreset: FederationRelationshipPreset | string;
   /** Operator-facing name of the peer, when the link records one. */
   peerLabel?: string | null;
+  /**
+   * The peer's class as the organization CA certified it (BI-0716C8A8); null
+   * when unattested.
+   */
+  peerEnvironmentClass?: InstallationEnvironmentClass | null;
+  /** The peer installation itself, e.g. `Windows DEV (did_ab12…9f0c)`. Display only. */
+  peerInstallationLabel?: string | null;
   revokedAt?: Date | null;
   quarantinedAt?: Date | null;
 }
@@ -43,6 +62,10 @@ export interface ResolvedPairing {
    * intent, not evidence that a peer is reachable and trusted.
    */
   declaredButUnconfirmed: boolean;
+  /** The linked peer's attested class; null for a declared-only or unattested pairing. */
+  peerEnvironmentClass: InstallationEnvironmentClass | null;
+  /** The linked peer installation's display label; null when no link names it. */
+  peerInstallationLabel: string | null;
 }
 
 function isUsable(link: PairingLink): boolean {
@@ -82,14 +105,16 @@ export function resolveInstallationPairing(input: {
       source: "federation-link",
       linkId: chosen.linkId,
       declaredButUnconfirmed: declared !== null && declared !== ref,
+      peerEnvironmentClass: chosen.peerEnvironmentClass ?? null,
+      peerInstallationLabel: chosen.peerInstallationLabel?.trim() || null,
     };
   }
 
   if (declared) {
-    return { ref: declared, source: "declared-intent", declaredButUnconfirmed: true };
+    return { ref: declared, source: "declared-intent", declaredButUnconfirmed: true, peerEnvironmentClass: null, peerInstallationLabel: null };
   }
 
-  return { ref: null, source: "none", declaredButUnconfirmed: false };
+  return { ref: null, source: "none", declaredButUnconfirmed: false, peerEnvironmentClass: null, peerInstallationLabel: null };
 }
 
 /**

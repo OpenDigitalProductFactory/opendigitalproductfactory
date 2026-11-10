@@ -25,9 +25,13 @@ function formatMoney(amount: number): string {
 export function RecentInvoicesTable({
   rows,
   currencySymbol,
+  accountHeader = "Account",
+  emptyLabel = "No invoices yet.",
 }: {
   rows: RecentInvoiceRow[];
   currencySymbol: string;
+  accountHeader?: string;
+  emptyLabel?: string;
 }) {
   const columns: Column<RecentInvoiceRow>[] = [
     {
@@ -45,7 +49,7 @@ export function RecentInvoicesTable({
     },
     {
       key: "account",
-      header: "Account",
+      header: accountHeader,
       cell: (inv) => (
         <Link href={`/finance/invoices/${inv.id}`} className="text-[var(--dpf-text)] hover:underline">
           {inv.accountName}
@@ -83,7 +87,7 @@ export function RecentInvoicesTable({
 
   return (
     <div className="rounded-lg border border-[var(--dpf-border)] p-1">
-      <DataTable columns={columns} rows={rows} getRowKey={(inv) => inv.id} empty="No invoices yet." />
+      <DataTable columns={columns} rows={rows} getRowKey={(inv) => inv.id} empty={emptyLabel} />
     </div>
   );
 }

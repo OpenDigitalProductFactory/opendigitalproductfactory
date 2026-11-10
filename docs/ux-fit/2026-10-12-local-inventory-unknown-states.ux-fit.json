@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "decidedOption": "honest-existing-boundary",
+  "decisionInteractionId": "DI-9D1CD571EEBD",
+  "scope": { "files": ["apps/web/components/platform/OllamaManagement.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-9D1CD571EEBD",
+    "consideredOptions": ["honest-existing-boundary", "expand-read-access"]
+  },
+  "rationale": {
+    "honest-existing-boundary": "Chosen by the platform kernel: proceed, high confidence. Preserve the existing management authorization and render permission, unknown, unavailable, stale and successful-empty states explicitly. Reuse the current panel, observer and actions; no navigation or control is added.",
+    "expand-read-access": "Rejected for this bounded repair: changing authority would supersede R10 and requires review of operation metadata and runtime-diagnostic exposure. It does not itself fix false emptiness on failed reads."
+  },
+  "notes": "BI-A50B677E. Native DMR inventory owns model facts. The restricted wrapper does not mount the observer. Five regression fixtures cover permission, first load, failed first read, stale inventory and successful empty. These are component behavior checks, not live runtime acceptance. UX specialist engagement CE-3925EA14 is requested; no completed specialist critique is claimed. Provider enable and inference remain outside this UI fix."
+}

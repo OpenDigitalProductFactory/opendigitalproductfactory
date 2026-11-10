@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect } from "react";
 import {
-  FlatList,
   SectionList,
   StyleSheet,
   Text,
@@ -8,7 +7,7 @@ import {
   ActivityIndicator,
   View,
 } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { colors, spacing } from "@/src/lib/theme";
 import { Card } from "@/src/components/ui/Card";
 import { useComplianceStore } from "@/src/features/compliance/compliance.store";
 

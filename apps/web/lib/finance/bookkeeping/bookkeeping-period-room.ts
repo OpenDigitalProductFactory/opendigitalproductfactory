@@ -98,6 +98,8 @@ export function buildBookkeepingCycleInput(args: {
         receiptPolicy: { required: true, kind: "governed-action" },
       },
     },
+    // This standing WorkItem does not yet declare a WorkShapeDefinition.
+    shapeConformance: { hasDeclaredWorkShape: false, result: null },
     now: args.now,
   };
 }

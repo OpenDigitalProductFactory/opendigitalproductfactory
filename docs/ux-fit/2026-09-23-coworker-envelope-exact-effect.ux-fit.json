@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "inline-facts-on-card",
+  "decisionInteractionId": "DI-0F2158C47F0A",
+  "scope": {
+    "files": ["apps/web/components/attention/CoworkerEnvelopeApproval.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["inline-facts-on-card", "content-behind-disclosure", "separate-detail-page"]
+  }
+}

@@ -34,7 +34,7 @@ const markerFor = (branch, expiresAt, capsuleId = "WC-0FF5B0E9") =>
 // ── what counts as work ──────────────────────────────────────────────────────
 
 test("edit tools count as work", () => {
-  for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
+  for (const tool of ["Write", "Edit", "MultiEdit", "NotebookEdit", "write", "search_replace"]) {
     assert.equal(isWorkInvocation(tool, {}), true, tool);
   }
 });
@@ -299,5 +299,97 @@ test("the refusal names the terminal-capsule dead end, so a leftover worktree is
   // send them into a refusal loop.
   const text = denyGuidance(classifyClaim({ branch: "fix/a", marker: null, nowMs: NOW }));
   assert.match(text, /branch_occupied/);
-  assert.match(text, /reap it or start a new branch/);
+  // Was /reap it or start a new branch/ until 2026-08-28. That wording assumed a
+  // terminal capsule meant the work was done; eleven branches proved otherwise.
+  // The guidance now routes to the check instead of to the destructive action.
+  assert.match(text, /rev-list --count/);
+});
+
+// ── the refusal must not assert more than the evidence carries ───────────────
+
+test("branch_occupied guidance never claims the work is finished", () => {
+  // The original wording said a terminal capsule meant "that branch's work is
+  // finished and this worktree is a leftover — reap it". Measured 2026-08-28:
+  // ELEVEN branches sat behind terminal capsules carrying unmerged commits, one
+  // with 13. The sentence stated as fact something the evidence did not
+  // establish, and pointed at the destructive reading of two possible ones.
+  const text = denyGuidance(classifyClaim({ branch: "fix/a", marker: null, nowMs: NOW }));
+  assert.doesNotMatch(text, /work is finished/, "a closed capsule does not prove the branch work is done");
+  assert.doesNotMatch(text, /reap it or start a new branch/, "must not steer to reaping before the branch is checked");
+});
+
+test("branch_occupied guidance tells the operator how to tell the two cases apart", () => {
+  const text = denyGuidance(classifyClaim({ branch: "fix/a", marker: null, nowMs: NOW }));
+  assert.match(text, /rev-list --count/, "must name the check that distinguishes leftover from unresolved");
+  assert.match(text, /unresolved, not finished/, "must name the case where the capsule closed over live work");
+});
+
+// BI-144E4F92 / BI-4BEEC539: a branch claimed over MCP, or a lease renewed by
+// heartbeat_workroom, leaves no local marker. The refusal must name the one
+// command that re-caches the caller's own claim.
+test("the refusal names the command that re-caches an existing claim", () => {
+  for (const marker of [null, { capsuleId: "WC-1", branch: "fix/a", leaseExpiresAt: "2026-08-27T03:00:00.000Z" }]) {
+    const text = denyGuidance(classifyClaim({ branch: "fix/a", marker, nowMs: NOW }));
+    assert.match(text, /node scripts\/bind-worktree-cli\.mjs/);
+  }
+});
+
+// ── BI-6145A168: git global options before the subcommand, and Grok's envelope ──
+
+test("git global options before the subcommand do not hide work", () => {
+  const C = ["git", "-C"].join(" ");
+  for (const cmd of [
+    `${C} D:/wt commit -m x`,
+    `${C} "D:/my wt" commit -m x`,
+    "git -c user.name=x commit -m x",
+    "git --no-pager -C /d/wt rebase main",
+    `cd D:/DPF && ${C} D:/wt merge origin/main`,
+  ]) {
+    assert.equal(isWorkCommand(cmd), true, cmd);
+  }
+  for (const cmd of [`${C} D:/wt status`, `${C} D:/wt log --grep commit`, "git -c core.pager=cat diff"]) {
+    assert.equal(isWorkCommand(cmd), false, cmd);
+  }
+});
+
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+/** A throwaway repo on an unclaimed feature branch: the guard must refuse here. */
+function unclaimedRepo() {
+  const dir = mkdtempSync(join(tmpdir(), "claim-guard-"));
+  const g = (...a) => execFileSync("git", ["-C", dir, ...a], { stdio: "ignore" });
+  g("init", "-q");
+  g("checkout", "-q", "-b", "feat/unclaimed-probe");
+  return dir;
+}
+
+test("a Grok both-casings commit in an unclaimed worktree is refused on Grok's channel", () => {
+  const dir = unclaimedRepo();
+  try {
+    const cmd = ["git", "commit", "-m", "probe"].join(" ");
+    const out = runGuard({
+      hookEventName: "PreToolUse", hook_event_name: "PreToolUse",
+      toolName: "run_terminal_command", tool_name: "run_terminal_command",
+      toolInput: { command: cmd }, tool_input: { command: cmd },
+      cwd: dir, workspaceRoot: dir,
+    }, { DPF_WORKROOM_CLAIM_ENFORCE: undefined, DPF_ALLOW_UNCLAIMED_WORK: undefined });
+    assert.equal(JSON.parse(out).decision, "deny", out);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("git -C <unclaimed worktree> commit from another folder is refused", () => {
+  const dir = unclaimedRepo();
+  try {
+    const cmd = `${["git", "-C"].join(" ")} "${dir.replace(/\\/g, "/")}" commit -m probe`;
+    const out = runGuard(
+      { tool_name: "Bash", tool_input: { command: cmd }, cwd: tmpdir() },
+      { DPF_WORKROOM_CLAIM_ENFORCE: undefined, DPF_ALLOW_UNCLAIMED_WORK: undefined },
+    );
+    assert.match(out, /"permissionDecision":"deny"/, out);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

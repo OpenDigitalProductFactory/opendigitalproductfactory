@@ -1,6 +1,6 @@
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -8,7 +8,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * current and prior local-business day makes the job idempotent and lets a
  * missed run self-heal without deleting the last valid snapshot.
  */
-export const businessMetricsAggregator = inngest.createFunction(
+export const businessMetricsAggregator = jobs.createFunction(
   {
     id: "business/metrics-aggregator",
     retries: 2,
@@ -16,7 +16,7 @@ export const businessMetricsAggregator = inngest.createFunction(
     triggers: [cron("17 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "business/metrics-aggregator");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("aggregate-business-metrics", async () => {
@@ -29,8 +29,13 @@ export const businessMetricsAggregator = inngest.createFunction(
       const result = await aggregateBusinessMetrics(
         defaultBusinessMetricRollupDeps(),
       );
+      // Distinguish "did nothing because no install matched the engine" from a
+      // real refresh, so an operator auditing scheduled jobs is not misled by a
+      // green run that produced zero rollups. BI-F359E1E9.
       console.log(
-        `[business-metrics] refreshed ${result.upserted} rollups across ${result.organizations} organization(s)`,
+        result.organizations === 0
+          ? "[business-metrics] no storefronts matched the metrics engine (covers hospitality); nothing to refresh"
+          : `[business-metrics] refreshed ${result.upserted} rollups across ${result.organizations} organization(s)`,
       );
       return result;
     });

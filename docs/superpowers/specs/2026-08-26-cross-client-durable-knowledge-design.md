@@ -161,6 +161,34 @@ Enforcement therefore needs either a client-side hook (`PreToolUse`, per AGENTS.
 today, aliased on Codex, unproven elsewhere) or an MCP-side signal. This is the load-bearing
 unknown in the design and the reason it is filed for review rather than implemented.
 
+#### 5.4.1 Resolved 2026-09-22 (BI-1281A164) — the server-side signal, shipped
+
+The open question is settled by AGENTS.md §1: platform function never depends on a client, so a
+hook may accelerate this but can never own it, and a guarantee that lives in one client is not a
+guarantee for the other 57,000 installs. Option (1) therefore ships first, server-side, as
+`ops/local-only-knowledge-sweep` (`apps/web/lib/process-spine/local-only-knowledge-sweep.ts`).
+
+It does not try to see client memory. It reads the signal the platform already owns:
+`ImprovementProposal.contributionStatus`, which defaults to `local` and is only ever moved to
+`contributed` by the hive delivery path, keyed on a build id. A finding raised by an external
+session has no build, so it can never leave — which is why 239 proposals sat unrouted on an
+install explicitly configured to contribute. No migration; the column was already there.
+
+Weekly, it classifies the unrouted population into the four lanes this document and
+`dpf-route-learning-to-commons` define, and files ONE standing backlog item naming the governed
+route for each. It never contributes anything itself: picking a lane is a judgment call and an
+unattended sweep must not make it.
+
+Not a nag, per EP-C00F61F4's constraint that an always-red signal is worse than none.
+`ingestBacklogItem` dedupes on a stable origin marker against non-terminal items, so later sweeps
+increment an occurrence count rather than filing again. **Closing the item is the event that
+clears the signal and re-arms the sweep.**
+
+What this does NOT cover, stated plainly so it is not mistaken for the whole fix: a finding
+written straight to a client memory file, and never captured as a proposal, is still invisible to
+the platform. That is option (2) or (3) and remains open. This closes AC 3 for findings the
+platform captured; it does not close it for findings it never saw.
+
 ### 5.5 Staleness and contradiction
 
 `flag_stale_knowledge` already exists and `commons-are-curated-not-just-appended` already sets the

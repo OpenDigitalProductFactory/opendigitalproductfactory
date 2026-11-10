@@ -150,17 +150,9 @@ describe("runAcumenPhaseConsults", () => {
     warn.mockRestore();
   });
 
-  it("hands each consult outcome to the injectable nomination hook", async () => {
+  it("forwards the nomination hook into the profession gate, which owns nomination", async () => {
     const gate = vi.fn().mockImplementation(async (input: { declaredBorrow: { professionKey: string } }) =>
-      fakeGateResult({
-        professionKey: input.declaredBorrow.professionKey,
-        evaluation: {
-          ...fakeGateResult({ professionKey: input.declaredBorrow.professionKey }).evaluation,
-          outcomeType: "escalate",
-          confidenceScore: 0.35,
-          coverageGap: false,
-        },
-      }),
+      fakeGateResult({ professionKey: input.declaredBorrow.professionKey }),
     );
     const nominate = vi.fn().mockResolvedValue({ nominated: true, needId: "CWN-1" });
 
@@ -171,36 +163,24 @@ describe("runAcumenPhaseConsults", () => {
       nominateGap: nominate,
     });
 
-    expect(nominate).toHaveBeenCalledWith({
-      professionKey: "data-architect",
-      interactionId: "DI-data-architect",
-      outcomeType: "escalate",
-      confidenceScore: 0.35,
-      professionProfileSelected: true,
-      coverageGap: false,
-      domainClass: ACUMEN_CONSULT_DOMAIN_CLASS,
-      question: baseInput.question,
-    });
+    // BI-F6FD946F: one nomination per consult, raised inside the gate, never a
+    // second one here.
+    expect(gate).toHaveBeenCalledWith(expect.objectContaining({ nominateGap: nominate }));
+    expect(nominate).not.toHaveBeenCalled();
   });
 
-  it("swallows nomination failures with a structured log (audit-only contract)", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("disables gate nomination when no hook is registered", async () => {
     const gate = vi.fn().mockImplementation(async (input: { declaredBorrow: { professionKey: string } }) =>
       fakeGateResult({ professionKey: input.declaredBorrow.professionKey }),
     );
-    const nominate = vi.fn().mockRejectedValue(new Error("inbox down"));
 
-    const results = await runAcumenPhaseConsults({
+    await runAcumenPhaseConsults({
       ...baseInput,
       filePaths: ["packages/db/src/a.ts"],
       professionGate: gate as never,
-      nominateGap: nominate,
     });
 
-    expect(results.length).toBe(1);
-    expect(results[0]!.error).toBeUndefined();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("acumen.gap.nomination-failed"));
-    warn.mockRestore();
+    expect(gate).toHaveBeenCalledWith(expect.objectContaining({ nominateGap: null }));
   });
 });
 

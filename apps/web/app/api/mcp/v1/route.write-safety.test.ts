@@ -60,12 +60,53 @@ beforeEach(() => {
   });
   userMock.mockResolvedValue({
     isSuperuser: true,
+    isActive: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
   } as never);
 });
 
 describe("POST — mutating tool safety", () => {
-  it("allows write-scoped tokens to call create_workroom", async () => {
+  it("rejects tasks/cancel from a read token before any TaskRun mutation", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_read",
+      userId: "u1",
+      agentId: null,
+      scopes: ["backlog_read"],
+      capability: "read",
+      scope: "read",
+    });
+
+    const res = await POST(new Request("http://localhost:3000/api/mcp/v1", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer dpfmcp_READ",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 701,
+        method: "tasks/cancel",
+        params: { taskId: "TR-MCP-DURABLE" },
+      }),
+    }));
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toMatchObject({
+      error: {
+        code: -32600,
+        message: expect.stringContaining("write-scoped MCP token"),
+        data: {
+          error: "insufficient_token_scope",
+          method: "tasks/cancel",
+          requiredScope: "write",
+          tokenScope: "read",
+        },
+      },
+    });
+    expect(prisma.taskRun.update).not.toHaveBeenCalled();
+  });
+
+  it.each(["create_workroom", "create_work_capsule"])("allows write-scoped tokens to call %s", async (name) => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_write",
       userId: "u1",
@@ -82,7 +123,7 @@ describe("POST — mutating tool safety", () => {
     });
 
     const res = await POST(
-      toolRequest("create_workroom", {
+      toolRequest(name, {
         title: "Token scope test",
         objective: "Verify write-token acceptance",
         source: "operator",
@@ -132,13 +173,15 @@ describe("POST — mutating tool safety", () => {
       runId: "QR-MCP-DRAIN",
       retryAfterSeconds: 30,
       writesRefused: true,
-      cleanupOperationsAllowed: ["release_nonprod_environment_lease"],
+      cleanupOperationsAllowed: ["release_nonprod_environment_lease", "renew_nonprod_environment_lease", "heartbeat_workroom", "heartbeat_runtime_target"],
     });
     expect(body.result.content[0].text).toContain("Mutating MCP write refused");
     expect(govMock).not.toHaveBeenCalled();
   });
 
-  it("allows cleanup-safe lease release during quiescence", async () => {
+  // Renewal joined release on 2026-09-24: refusing it during a drain lapsed the
+  // lease of a gate that was already running, and its verdict was lost.
+  it.each(["release_nonprod_environment_lease", "renew_nonprod_environment_lease", "heartbeat_workroom", "heartbeat_runtime_target"])("allows %s during quiescence", async (toolName) => {
     getQuiescenceConfigMock.mockResolvedValue({
       level: "draining",
       runId: "QR-MCP-DRAIN",
@@ -154,16 +197,12 @@ describe("POST — mutating tool safety", () => {
     });
     govMock.mockResolvedValue({
       success: true,
-      message: "Released lease NPEL-TEST.",
+      message: "Lease NPEL-TEST handled.",
       entityId: "NPEL-TEST",
       data: { leaseId: "NPEL-TEST" },
     });
 
-    const res = await POST(
-      toolRequest("release_nonprod_environment_lease", {
-        leaseId: "NPEL-TEST",
-      }),
-    );
+    const res = await POST(toolRequest(toolName, { leaseId: "NPEL-TEST" }));
 
     const body = await res.json();
     expect(body.result.isError).toBe(false);

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildTreeFileReader,
   createBranchAndPR,
   openPullRequest,
   publishBranchCommit,
@@ -334,5 +335,59 @@ describe("createBranchAndPR head/base split", () => {
       "https://api.github.com/repos/OpenDigitalProductFactory/opendigitalproductfactory/issues/42/labels",
     );
     expect(labelPost!.body!.labels).toEqual(["ai-contributed", "build-studio"]);
+  });
+});
+
+// BI-6B57D85F: a modified file published the shared sandbox mount's copy (the
+// client branch), not the build's. The ship path now passes the build's own
+// committed tree.
+describe("published content comes from the build's own tree", () => {
+  const MODIFY_DIFF = `diff --git a/src/a.ts b/src/a.ts
+index 1111111..2222222 100644
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1 +1 @@
+-export const a = "client";
++export const a = "build";
+`;
+
+  it("publishes a modified file with the content the reader returns", async () => {
+    const { calls } = setupFetchMock();
+    const readFile = vi.fn(async (path: string) => (path === "src/a.ts" ? 'export const a = "build";\n' : null));
+    await publishBranchCommit({
+      headOwner: "o", headRepo: "r", baseBranch: "main", branchName: "feat/x",
+      commitMessage: SIGNED_COMMIT_MESSAGE, diff: MODIFY_DIFF, token: "t", readFile,
+    });
+    expect(readFile).toHaveBeenCalledWith("src/a.ts");
+    const blob = calls.find((c) => c.method === "POST" && c.url.endsWith("/git/blobs"));
+    expect(blob?.body?.content).toBe('export const a = "build";\n');
+  });
+});
+
+describe("buildTreeFileReader", () => {
+  const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64");
+
+  it("reads the committed file from the build workdir", async () => {
+    const exec = vi.fn(async (_containerId: string, _command: string) => b64("hello\n"));
+    const read = buildTreeFileReader({ containerId: "c1", workdir: "/workspace/.builds/FB-1", exec });
+    expect(await read("src/a.ts")).toBe("hello\n");
+    const [, cmd] = exec.mock.calls[0]!;
+    expect(cmd).toContain("git -C '/workspace/.builds/FB-1' cat-file -e 'HEAD:src/a.ts'");
+    expect(cmd).toContain("show 'HEAD:src/a.ts'");
+  });
+
+  it("returns an empty file as empty, and a path missing from the commit as null", async () => {
+    const empty = buildTreeFileReader({ containerId: "c", workdir: "/w", exec: vi.fn(async () => "") });
+    expect(await empty("empty.txt")).toBe("");
+    const missing = buildTreeFileReader({ containerId: "c", workdir: "/w", exec: vi.fn(async () => { throw new Error("exit 128"); }) });
+    expect(await missing("gone.ts")).toBeNull();
+  });
+
+  it("refuses paths that leave the tree", async () => {
+    const exec = vi.fn(async (_containerId: string, _command: string) => "");
+    const read = buildTreeFileReader({ containerId: "c", workdir: "/w", exec });
+    expect(await read("../etc/passwd")).toBeNull();
+    expect(await read("/etc/passwd")).toBeNull();
+    expect(exec).not.toHaveBeenCalled();
   });
 });

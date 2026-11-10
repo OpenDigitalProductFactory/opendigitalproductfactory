@@ -1,84 +1,49 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-vi.mock("@dpf/db", () => ({
-  prisma: {
-    modelProvider: {
-      findFirst: vi.fn(),
-      findMany: vi.fn(),
-    },
-  },
-}));
+import { describeCloudReadinessForSetup } from "./onboarding-prompt";
 
-import { prisma } from "@dpf/db";
-import { resolveLocalModelLabel, buildOnboardingPrompt } from "./onboarding-prompt";
-import type { SetupContext, SetupStep, StepStatus } from "../actions/setup-constants";
+// BI-575F0046 Slice 2. Setup guidance used to ask "has cloud provider: yes/no".
+// That called a connected-but-uncleared provider "yes" — and since a new
+// connection is cleared for `public` while no route is ever public, the owner
+// was told cloud AI was available while every coworker ran on the local model.
+// The field driving it (`hasCloudProvider`) was also never written by anything,
+// so the answer was always "no".
+describe("describeCloudReadinessForSetup", () => {
+  it("distinguishes connected-but-uncleared from working", () => {
+    const publicOnly = describeCloudReadinessForSetup("public-only");
+    const ready = describeCloudReadinessForSetup("ready");
 
-const mockProvider = prisma.modelProvider as unknown as {
-  findFirst: ReturnType<typeof vi.fn>;
-  findMany: ReturnType<typeof vi.fn>;
-};
-
-beforeEach(() => {
-  mockProvider.findFirst.mockReset();
-  mockProvider.findMany.mockReset();
-  mockProvider.findMany.mockResolvedValue([]); // no pricing rows by default
-});
-
-describe("resolveLocalModelLabel", () => {
-  it("returns the general conversational family, title-cased, skipping coder/embed", async () => {
-    mockProvider.findFirst.mockResolvedValue({
-      families: ["qwen3", "qwen2.5-coder", "gemma4", "mistral", "nomic-embed"],
-      enabledFamilies: [],
-    });
-    expect(await resolveLocalModelLabel()).toBe("Qwen3");
+    expect(publicOnly).not.toBe(ready);
+    expect(publicOnly).toMatch(/not yet cleared/);
+    expect(ready).toMatch(/cleared for everyday work/);
   });
 
-  it("prefers enabledFamilies over the full catalog when set", async () => {
-    mockProvider.findFirst.mockResolvedValue({
-      families: ["qwen3", "gemma4"],
-      enabledFamilies: ["gemma4"],
-    });
-    expect(await resolveLocalModelLabel()).toBe("Gemma4");
+  it("names the action and its cost for the uncleared state", () => {
+    const text = describeCloudReadinessForSetup("public-only");
+
+    expect(text).toMatch(/about a minute/);
+    expect(text).toMatch(/Platform > AI > Providers/);
+    // The consequence is what makes it worth doing, and it was the invisible part.
+    expect(text).toMatch(/every coworker runs on the local model/);
   });
 
-  it("falls back past coder/embed-only pools to the first available family", async () => {
-    mockProvider.findFirst.mockResolvedValue({
-      families: ["qwen2.5-coder", "nomic-embed"],
-      enabledFamilies: [],
-    });
-    expect(await resolveLocalModelLabel()).toBe("Qwen2.5-coder");
+  it("tells the coworker not to move on as if cloud AI were available", () => {
+    expect(describeCloudReadinessForSetup("public-only")).toMatch(/do not move on/);
   });
 
-  it("returns null when no local provider is configured", async () => {
-    mockProvider.findFirst.mockResolvedValue(null);
-    expect(await resolveLocalModelLabel()).toBeNull();
+  it("treats local-only as a valid choice rather than a defect", () => {
+    expect(describeCloudReadinessForSetup("none")).toMatch(/valid choice/);
   });
 
-  it("returns null when the local provider has no families", async () => {
-    mockProvider.findFirst.mockResolvedValue({ families: [], enabledFamilies: [] });
-    expect(await resolveLocalModelLabel()).toBeNull();
-  });
-});
-
-describe("buildOnboardingPrompt — local model honesty (BI-0CED314D)", () => {
-  const steps = {} as Record<string, StepStatus>;
-  const context = { industry: null, hasCloudProvider: false } as unknown as SetupContext;
-
-  it("names the actual local model and never hardcodes Ollama/Gemma", async () => {
-    mockProvider.findFirst.mockResolvedValue({
-      families: ["qwen3", "qwen2.5-coder"],
-      enabledFamilies: [],
-    });
-    const prompt = await buildOnboardingPrompt("welcome" as SetupStep, steps, context);
-    expect(prompt).toContain("small local AI model (Qwen3)");
-    expect(prompt).not.toMatch(/Ollama/i);
-    expect(prompt).not.toMatch(/\(Gemma\)/i);
+  it("says so when it does not know, rather than guessing", () => {
+    expect(describeCloudReadinessForSetup(undefined)).toMatch(/not known/);
   });
 
-  it("uses a generic phrase when no local model is configured", async () => {
-    mockProvider.findFirst.mockResolvedValue(null);
-    const prompt = await buildOnboardingPrompt("welcome" as SetupStep, steps, context);
-    expect(prompt).toContain("small local AI model on the user's own hardware");
-    expect(prompt).not.toMatch(/Ollama/i);
+  // Zero-Click Provider Setup scores AGAINST adding friction here
+  // (DI-5C13155815D2), so the guidance points at one action and stays short.
+  it("keeps the guidance to one action", () => {
+    const text = describeCloudReadinessForSetup("public-only");
+
+    expect(text.split(".").filter((s) => s.trim()).length).toBeLessThanOrEqual(4);
   });
 });

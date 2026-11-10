@@ -1,4 +1,4 @@
-import { isIP } from "node:net";
+import { isFederationScopedEndpoint } from "@dpf/validators";
 
 import { normalizeOrganizationRef } from "@/lib/install/estate-identity-contract";
 
@@ -48,43 +48,16 @@ const candidates =
   globalCandidateCache.__dpfNearbyFederationCandidates ??
   (globalCandidateCache.__dpfNearbyFederationCandidates = new Map());
 
-export function isLinkLocalFederationEndpoint(value: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.username !== "" ||
-    url.password !== "" ||
-    (url.pathname !== "" && url.pathname !== "/") ||
-    url.search !== "" ||
-    url.hash !== ""
-  ) {
-    return false;
-  }
-  const host = url.hostname
-    .toLowerCase()
-    .replace(/^\[|\]$/g, "")
-    .replace(/\.$/, "");
-  if (host.endsWith(".local")) return true;
-  const ipVersion = isIP(host);
-  if (ipVersion === 4) {
-    if (/^10\./.test(host) || /^192\.168\./.test(host)) return true;
-    const match172 = /^172\.(\d{1,3})\./.exec(host);
-    if (match172 && Number(match172[1]) >= 16 && Number(match172[1]) <= 31) return true;
-    return /^169\.254\./.test(host);
-  }
-  if (ipVersion !== 6) return false;
-  const firstHextet = Number.parseInt(host.split(":", 1)[0] ?? "", 16);
-  return (
-    host === "::1" ||
-    (firstHextet >= 0xfe80 && firstHextet <= 0xfebf) ||
-    (firstHextet >= 0xfc00 && firstHextet <= 0xfdff)
-  );
-}
+/**
+ * Whether an endpoint is inside the scope discovery may report.
+ *
+ * The rule itself lives in `@dpf/validators` because the Edge Node that PRODUCES
+ * candidates has to apply the same one the Authority accepts by — a scanner and
+ * an acceptor that disagreed about scope would either drop good peers or submit
+ * batches the route refuses. Re-exported under the name this module has always
+ * used so its callers are unaffected.
+ */
+export const isLinkLocalFederationEndpoint = isFederationScopedEndpoint;
 
 function normalizedAuthorityUrl(value: string): string {
   const url = new URL(value);

@@ -8,6 +8,8 @@
  * separately observed live.
  */
 
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { pathToFileURL } from "node:url";
@@ -18,6 +20,20 @@ export const CLIENT_PROFILES = Object.freeze([
   { name: "Claude Code", userAgent: "claude-code/conformance", expectedDefault: "full" },
   { name: "Generic MCP", userAgent: "generic-mcp-client/conformance", expectedDefault: "core" },
 ]);
+
+/** Wire measurements only; hosts may repeat, defer or cache this context. */
+export function measureDisclosure(instructions, tools) {
+  const initializeBytes = Buffer.byteLength(instructions ?? "", "utf8");
+  const catalogBytes = Buffer.byteLength(JSON.stringify(tools), "utf8");
+  return {
+    initializeBytes, initializeBudgetBytes: 4096, initializeWithinBudget: initializeBytes <= 4096,
+    catalogBytes, toolCount: tools.length,
+    composedOnceBytes: initializeBytes + catalogBytes,
+    repeatedInitializationBytesIfPerTool: initializeBytes * tools.length,
+    attachedTokens: null, cachedTokens: null, billedTokens: null,
+    measurementBoundary: "MCP wire bytes; per-tool repetition is a scenario, not observed host attachment or billing",
+  };
+}
 
 export function parseMcpMessages(contentType, body) {
   if (/text\/event-stream/i.test(contentType ?? "")) {
@@ -115,6 +131,9 @@ async function runProfile(profile, mcpUrl, bearerToken) {
     assert(preamble.includes(required), `${profile.name}: initialize preamble is missing ${required}`);
   }
 
+  assert(measureDisclosure(initialize.reply?.result?.instructions, []).initializeWithinBudget,
+    `${profile.name}: composed initialize exceeds 4096 UTF-8 bytes`);
+
   const defaultList = await rpc(mcpUrl, bearerToken, profile.userAgent, "tools/list");
   const coreList = await rpc(withTier(mcpUrl, "core"), bearerToken, profile.userAgent, "tools/list");
   const fullList = await rpc(withTier(mcpUrl, "full"), bearerToken, profile.userAgent, "tools/list");
@@ -194,6 +213,7 @@ async function runProfile(profile, mcpUrl, bearerToken) {
     profile: profile.name,
     defaultTier: profile.expectedDefault,
     coreCount: coreNames.size,
+    disclosure: measureDisclosure(initialize.reply?.result?.instructions, fullTools),
     exactTool: exactCandidate.name,
     sseTool: sseCandidate.name,
     intentTool: "claim_backlog_item_for_work",
@@ -235,8 +255,9 @@ export async function runConformance({ mcpUrl, bearerToken }) {
 const invokedDirectly = process.argv[1]
   && pathToFileURL(process.argv[1]).href === import.meta.url;
 if (invokedDirectly) {
-  const urlArgIndex = process.argv.indexOf("--url");
-  const mcpUrl = urlArgIndex >= 0 ? process.argv[urlArgIndex + 1] : process.env.DPF_MCP_URL;
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: scriptArgv(), strict: false, allowPositionals: true, options: { url: { type: "string" } } });
+  const mcpUrl = values.url === undefined ? process.env.DPF_MCP_URL : typeof values.url === "string" ? values.url : undefined;
   try {
     const results = await runConformance({
       mcpUrl,

@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { ISSUE_REPORT_STATUS, type IssueReportStatus } from "./issue-report-status";
 import { classifyIssueReportStream, isResponderStream } from "./issue-report-stream";
 import { shouldPromoteIssueReport } from "./issue-report-promotion";
@@ -289,7 +289,7 @@ export async function createPlatformIssueReport(
   // once they cross the bar (or ages out the ones that stopped recurring).
   if (promoteOnCreate) {
     try {
-      await inngest.send({ name: "quality/issue-report.created", data: { reportId } });
+      await jobs.send({ name: "quality/issue-report.created", data: { reportId } });
     } catch (err) {
       console.error("[platform-issue-reports] immediate-projection event send failed", err);
     }

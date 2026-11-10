@@ -8,6 +8,7 @@ import { prisma } from "@dpf/db";
 import { resolveAgentForRoute } from "./agent-routing";
 import { coworkerIdFromRecordRoute } from "./selected-coworker-route";
 import { loadPrompt } from "./prompt-loader";
+import { loadCoworkerJobDescription } from "./coworker-job-description";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
@@ -20,7 +21,12 @@ import {
 } from "@/lib/coworker-record/selectable-coworker";
 
 async function loadPromptBackplane(agentId: string, fallbackPrompt: string): Promise<string> {
-  const dbPrompt = await loadPrompt("route-persona", agentId, fallbackPrompt);
+  // BI-5CCBF85B: this used to be loadPrompt("route-persona", agentId), which
+  // missed for 101 of 130 selectable coworkers because no persona file's
+  // basename equals its agent id and 60 of them live under the `specialist`
+  // category. Resolution now goes through the file's declared agent id, and a
+  // miss is reported rather than silently swallowed.
+  const { content: dbPrompt } = await loadCoworkerJobDescription(agentId, fallbackPrompt);
   const dbIdentity = await loadPrompt("platform-identity", "identity-block");
   const dbPreamble = await loadPrompt("platform-preamble", "platform-preamble");
   const dbMission = await loadPrompt("platform-mission", "company-mission");

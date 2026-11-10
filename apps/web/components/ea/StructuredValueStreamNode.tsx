@@ -2,7 +2,7 @@
 
 import type { SerializedViewElement } from "@/lib/ea-types";
 
-import { buildValueStreamGroupLayout } from "./value-stream-layout";
+import { buildValueStreamGroupLayout } from "@/lib/ea/value-stream-layout";
 
 type Props = {
   data: SerializedViewElement;

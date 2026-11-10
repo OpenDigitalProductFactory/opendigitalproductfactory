@@ -15,8 +15,8 @@ import {
 import {
   syncEaElement,
   syncEaRelationship,
-  deleteEaElement as neo4jDeleteEaElement,
-  deleteEaRelationship as neo4jDeleteEaRelationship,
+  deleteEaElement as graphDeleteEaElement,
+  deleteEaRelationship as graphDeleteEaRelationship,
 } from "@dpf/db/graph-sync";
 import {
   assertCoverageStatus,
@@ -83,7 +83,7 @@ export async function createEaElement(input: CreateEaElementInput): Promise<void
     },
   });
 
-  // Fire-and-forget Neo4j sync
+  // Fire-and-forget graph sync
   const et = await prisma.eaElementType.findUnique({
     where: { id: input.elementTypeId },
     select: { neoLabel: true, slug: true, notation: { select: { slug: true } } },
@@ -173,7 +173,7 @@ export async function updateEaElement(id: string, input: UpdateEaElementInput): 
 export async function deleteEaElement(id: string): Promise<void> {
   await requireManageEaModel();
   await prisma.eaElement.delete({ where: { id } });
-  void Promise.resolve(neo4jDeleteEaElement(id)).catch(console.error);
+  void Promise.resolve(graphDeleteEaElement(id)).catch(console.error);
 }
 
 // ─── Relationship actions ─────────────────────────────────────────────────────
@@ -212,6 +212,7 @@ export async function createEaRelationship(
     input.fromElementId,
     input.toElementId,
     input.relationshipTypeId,
+    (input.properties ?? {}) as Record<string, unknown>,
   );
   if (!validation.valid) throw new Error(validation.reason);
 
@@ -249,7 +250,7 @@ export async function createEaRelationship(
 export async function deleteEaRelationship(id: string): Promise<void> {
   await requireManageEaModel();
   await prisma.eaRelationship.delete({ where: { id } });
-  void Promise.resolve(neo4jDeleteEaRelationship(id)).catch(console.error);
+  void Promise.resolve(graphDeleteEaRelationship(id)).catch(console.error);
 }
 
 // ─── Lifecycle advance ────────────────────────────────────────────────────────
@@ -895,14 +896,9 @@ export async function getDefaultRelTypeIdForView(
         });
         if (rule) return rt.id;
       }
-      // No specific rule found — fall back to associated_with if it's allowed
-      const fallbackSlug = allowedSlugs.includes("associated_with") ? "associated_with" : allowedSlugs[0];
-      if (!fallbackSlug) return null;
-      const fallback = await prisma.eaRelationshipType.findUnique({
-        where: { notationId_slug: { notationId, slug: fallbackSlug } },
-        select: { id: true },
-      });
-      return fallback?.id ?? null;
+      // No rule permits any allowed type between these two elements. Never fall back to a
+      // generic association: the caller reports that no relationship is permitted (BI-E487F6D9).
+      return null;
     }
   }
 

@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import type { DataEffect, DestinationClass } from "@/lib/govern/data/taxonomy";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { DataPolicyDecision } from "@/lib/govern/data/policy-decision";
@@ -31,7 +31,27 @@ export type InferencePayloadMatch = {
   path: string;
   reason: string;
   confidence: "deterministic" | "inferred" | "governed";
+  /** Where the matched message came from. Absent for non-message probes. */
+  origin?: MessageOrigin;
 };
+
+/**
+ * What a message in the payload IS, as a label — never its content.
+ *
+ * A receipt can already say a match landed at `messages[0].content`, which is
+ * useless for deciding what to do about it: index 0 may be a real user turn, or
+ * a platform-generated block the coworker path prepended. Those imply opposite
+ * fixes, and `rawPayloadStored` is false by design, so the payload cannot be
+ * read back to tell them apart (BI-40EF7C44).
+ *
+ * A label is safe to persist where the content is not. `turn` is the default:
+ * anything the caller does not label is treated as a real turn, so an unlabelled
+ * path reads exactly as it did before this existed.
+ */
+export type MessageOrigin =
+  | "turn"
+  | "thread-checkpoint"
+  | "user-briefing";
 
 export type InferencePayloadReceipt = {
   screenId: string;
@@ -93,6 +113,14 @@ export type InferenceDataScreenReceipt = {
    */
   measuredSensitivity?: InferencePayloadSensitivity;
   /**
+   * Payload index where the exchange under way begins — the last user-role
+   * message. Lets a consumer separate "your current question is governed" from
+   * "something earlier in this thread is", which imply different remedies
+   * (BI-706530B2). An index, never content. Absent on receipts written before
+   * this existed, and -1 when the payload carried no user message.
+   */
+  currentTurnStartIndex?: number;
+  /**
    * What the ROUTE declared, independent of the payload — the static
    * `sensitivity` on its route-context entry. Absent when the caller supplied
    * no route context.
@@ -119,6 +147,8 @@ export type InferenceMatchProvenance = {
   /** The rule that fired, e.g. "contact-detail" or "employee-record-text". */
   reason: string;
   confidence: InferencePayloadMatch["confidence"];
+  /** What the matched message was, when the match came from one. A label, never a value. */
+  origin?: MessageOrigin;
 };
 
 export type InferenceDataScreenResult = {
@@ -153,6 +183,15 @@ export type InferencePayloadClassificationInput = {
    * assembly is data by default. Fail-closed by construction.
    */
   systemPromptInstructionSpans?: string[];
+  /**
+   * What each entry of `messages` is, positionally (BI-40EF7C44).
+   *
+   * Labels only — this never carries content and never changes classification.
+   * It exists so a receipt can say WHICH message a match came from when the
+   * payload itself cannot be stored. Short or absent arrays are fine: any index
+   * without a label is `turn`.
+   */
+  messageOrigins?: readonly MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   governedData?: GovernedPayloadHint[];

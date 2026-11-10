@@ -153,3 +153,102 @@ test("actual CLI entrypoint parses injected paths and enforces update/check/json
   assert.equal(invalid.status,1); assert.match(invalid.stderr,/manifest/i);
   assert.equal(await readFile(baselinePath,"utf8"),preserved);
 }));
+
+// ── BI-24A1264B: per-metric budgets survive a baseline rewrite ──────────────
+// The expansion/contraction cycle is only visible if a RAISE is recorded as
+// owned debt. --update is where a raise happens, so it is where the obligation
+// is taken; the asymmetry (raise costs, hold is free, fall discharges) is the
+// whole design.
+
+const { reconcileMetricBudgets } = await import("./measure-platform-substrate.mjs");
+
+const LIVE_BUDGET = { owner: "platform-architecture", expiry: "2026-12-31", contraction: "EP-8B9B50D5" };
+const TODAY_FOR_RECONCILE = "2026-09-16";
+
+test("a raised ratchet with no budget is refused, naming what to supply", () => {
+  const { failures, metrics } = reconcileMetricBudgets({
+    priorMetrics: { defaultRequiredServiceCount: { direction: "non-increasing", value: 5 } },
+    metrics: { defaultRequiredServiceCount: { direction: "non-increasing", value: 7 } },
+    today: TODAY_FOR_RECONCILE,
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /5 -> 7 is a RAISE/);
+  assert.match(failures[0], /--owner/);
+  assert.match(failures[0], /--contraction/);
+  // Refused, so the row is written without a budget it never earned.
+  assert.equal(metrics.defaultRequiredServiceCount.owner, undefined);
+});
+
+test("a raised ratchet with owner, expiry and contraction is stamped", () => {
+  const { failures, metrics } = reconcileMetricBudgets({
+    priorMetrics: { defaultRequiredServiceCount: { direction: "non-increasing", value: 5 } },
+    metrics: { defaultRequiredServiceCount: { direction: "non-increasing", value: 7 } },
+    budget: LIVE_BUDGET,
+    today: TODAY_FOR_RECONCILE,
+  });
+  assert.deepEqual(failures, []);
+  assert.deepEqual(metrics.defaultRequiredServiceCount, {
+    direction: "non-increasing",
+    value: 7,
+    ...LIVE_BUDGET,
+  });
+});
+
+test("a raise with owner and expiry but no contraction obligation is refused", () => {
+  const { failures } = reconcileMetricBudgets({
+    priorMetrics: { m: { direction: "non-increasing", value: 1 } },
+    metrics: { m: { direction: "non-increasing", value: 2 } },
+    budget: { owner: "platform-architecture", expiry: "2026-12-31" },
+    today: TODAY_FOR_RECONCILE,
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /no contraction obligation/);
+});
+
+test("an unchanged ratchet carries its existing budget forward untouched", () => {
+  const { failures, metrics } = reconcileMetricBudgets({
+    priorMetrics: { m: { direction: "non-increasing", value: 7, ...LIVE_BUDGET } },
+    metrics: { m: { direction: "non-increasing", value: 7 } },
+    today: TODAY_FOR_RECONCILE,
+  });
+  assert.deepEqual(failures, []);
+  assert.deepEqual(metrics.m, { direction: "non-increasing", value: 7, ...LIVE_BUDGET });
+});
+
+test("a LOWERED ratchet drops its budget — the contraction discharged the debt", () => {
+  const { failures, metrics } = reconcileMetricBudgets({
+    priorMetrics: { m: { direction: "non-increasing", value: 7, ...LIVE_BUDGET } },
+    metrics: { m: { direction: "non-increasing", value: 5 } },
+    today: TODAY_FOR_RECONCILE,
+  });
+  assert.deepEqual(failures, []);
+  assert.deepEqual(metrics.m, { direction: "non-increasing", value: 5 });
+});
+
+test("contraction is frictionless: falling to a natural floor needs no ceremony", () => {
+  const { failures } = reconcileMetricBudgets({
+    priorMetrics: { m: { direction: "non-increasing", value: 3 } },
+    metrics: { m: { direction: "non-increasing", value: 0 } },
+    today: TODAY_FOR_RECONCILE,
+  });
+  assert.deepEqual(failures, []);
+});
+
+test("an informational row rising is not a raise — it is a measurement", () => {
+  const { failures, metrics } = reconcileMetricBudgets({
+    priorMetrics: { prismaSchemaLines: { direction: "informational", value: 19700 } },
+    metrics: { prismaSchemaLines: { direction: "informational", value: 21000 } },
+    today: TODAY_FOR_RECONCILE,
+  });
+  assert.deepEqual(failures, []);
+  assert.equal(metrics.prismaSchemaLines.owner, undefined);
+});
+
+test("a brand-new metric with no prior value is not a raise", () => {
+  const { failures } = reconcileMetricBudgets({
+    priorMetrics: {},
+    metrics: { brandNew: { direction: "non-increasing", value: 42 } },
+    today: TODAY_FOR_RECONCILE,
+  });
+  assert.deepEqual(failures, []);
+});

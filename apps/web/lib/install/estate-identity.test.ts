@@ -63,6 +63,23 @@ describe("readInstallEstateName", () => {
 });
 
 describe("loadEstateNameResolution", () => {
+  // BI-CA54ACC8: a store that can read the Organization row supplies the
+  // lowest tier; a failing read drops only that tier.
+  it("falls back to the organization named at setup, and drops that tier alone when its read fails", async () => {
+    const resolved = await loadEstateNameResolution(
+      { readConfig: async () => null, readOrganizationName: async () => "Fabrikam" },
+      { env: {}, readText: async () => "{}" },
+    );
+    expect(resolved).toMatchObject({ estateName: "Fabrikam", tier: "organization-name", organizationNameValue: "Fabrikam" });
+
+    const failing = await loadEstateNameResolution(
+      { readConfig: async () => declaration(), readOrganizationName: async () => { throw new Error("db down"); } },
+      { env: {}, readText: async () => "{}" },
+    );
+    expect(failing).toMatchObject({ estateName: "Northwind", tier: "portal-declaration" });
+    expect(failing.organizationNameValue).toBeUndefined();
+  });
+
   it("resolves the portal declaration when it is the only tier", async () => {
     const resolved = await loadEstateNameResolution(storeOf(declaration()), {
       env: {},

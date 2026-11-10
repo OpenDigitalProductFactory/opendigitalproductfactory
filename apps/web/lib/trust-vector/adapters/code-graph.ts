@@ -229,7 +229,7 @@ function buildFreshnessDimension(
     label: "Freshness",
     score: 0.2,
     weight: 2,
-    rationale: `Code graph index is ${ageDays} ${ageDays === 1 ? "day" : "days"} old.`,
+    rationale: `Code graph index is ${ageDays} days old.`,
     measuredAt: indexedAt.toISOString(),
     evidenceRefs: [],
   };

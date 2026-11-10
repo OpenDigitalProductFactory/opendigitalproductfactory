@@ -1,4 +1,4 @@
-import { QDRANT_COLLECTIONS, searchSimilar, upsertVectors, type MatchClause } from "@dpf/db";
+import { VECTOR_COLLECTIONS, searchSimilar, upsertVectors, type MatchClause } from "@dpf/db";
 import { generateEmbedding } from "@/lib/inference/embedding";
 
 const ENTITY_TYPE = "document";
@@ -46,7 +46,7 @@ export async function storeDocumentVector(input: StoreDocumentVectorInput): Prom
   const vector = await generateEmbedding(embeddingInput);
   if (!vector) return false;
 
-  await upsertVectors(QDRANT_COLLECTIONS.DOCUMENTS, [
+  await upsertVectors(VECTOR_COLLECTIONS.DOCUMENTS, [
     {
       id: `document-${input.id}`,
       vector,
@@ -85,7 +85,7 @@ export async function searchDocumentVectors(input: DocumentSemanticSearchInput):
   }
 
   const raw = await searchSimilar(
-    QDRANT_COLLECTIONS.DOCUMENTS,
+    VECTOR_COLLECTIONS.DOCUMENTS,
     vector,
     { must },
     input.limit ?? 10,

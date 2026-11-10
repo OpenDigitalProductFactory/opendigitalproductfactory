@@ -122,6 +122,12 @@ describe("resolveAgentForRoute", () => {
     expect(result.skills.some((skill) => skill.label === "Retrieve billing portal costs")).toBe(true);
   });
 
+  it("describes the finance specialist without forcing commercial billing or tax language", () => {
+    const result = resolveAgentForRoute("/finance", superuser);
+    expect(result.agentDescription).toBe("Money in, money out, cash position, reporting, and execution control");
+    expect(result.agentDescription).not.toMatch(/recurring billing|tax remittance/i);
+  });
+
   it("returns canAssist=false when platformRole is null on gated route", () => {
     const result = resolveAgentForRoute("/portfolio", noRole);
     expect(result.agentId).toBe("portfolio-advisor");
@@ -147,7 +153,15 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
     expect(result.systemPrompt).toContain("jurisdictional readiness");
     expect(result.systemPrompt).toContain("Never guess legal facts");
-    expect(result.modelRequirements?.preferredProviderId).toBe("anthropic");
+    // BI-8CFA1CA8: this asserted `preferredProviderId === "anthropic"`, which
+    // codified the pin rather than the need. The route's actual requirement is
+    // a model that honours "Never guess legal facts" and reasons carefully;
+    // routing picks whichever model meets it. Kernel: `no-provider-pinning`.
+    expect(result.modelRequirements?.preferredProviderId).toBeUndefined();
+    expect(result.modelRequirements?.instructionFollowing).toBe("excellent");
+    expect(result.modelRequirements?.minimumDimensions).toMatchObject({
+      instructionFollowing: 85,
+    });
   });
 
   it("keeps licensing route access gated by compliance permissions", () => {
@@ -280,7 +294,8 @@ describe("generateCannedResponse", () => {
     const response = generateCannedResponse("finance-agent", "/finance/settings/tax", "HR-000");
 
     expect(response).toContain("Finance Specialist");
-    expect(response).toContain("tax");
+    expect(response).toContain("cash position");
+    expect(response).not.toMatch(/recurring billing|tax remittance/i);
   });
 
   it("uses licensing-oriented canned copy for the licensing specialist", () => {

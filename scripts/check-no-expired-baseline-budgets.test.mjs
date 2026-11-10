@@ -86,6 +86,7 @@ test("an unclassified baseline without a budget fails; a budgeted one passes", (
     readFile: (rel) => files[rel] ?? null,
     exempt: {},
     deferred: [],
+    perRow: {},
     today: TODAY,
   });
   assert.equal(failures.length, 2); // missing owner + missing expiry, only for the txt file
@@ -99,6 +100,7 @@ test("an expired budget fails even when classified nowhere else", () => {
     readFile: () => '{"owner":"o","expiry":"2026-01-01","files":{}}',
     exempt: {},
     deferred: [],
+    perRow: {},
     today: TODAY,
   });
   assert.match(failures.join("\n"), /EXPIRED on 2026-01-01/);
@@ -110,6 +112,7 @@ test("deferred legacy files are inventoried, not enforced — until they gain a 
     readFile: () => "foo\t1\n",
     exempt: {},
     deferred: ["scripts/legacy-baseline.txt"],
+    perRow: {},
     today: TODAY,
   });
   assert.deepEqual(clean.failures, []);
@@ -119,6 +122,7 @@ test("deferred legacy files are inventoried, not enforced — until they gain a 
     readFile: () => "# owner: o\n# expiry: 2026-11-16\nfoo\t1\n",
     exempt: {},
     deferred: ["scripts/legacy-baseline.txt"],
+    perRow: {},
     today: TODAY,
   });
   assert.match(converted.failures.join("\n"), /remove its DEFERRED row/);
@@ -130,6 +134,7 @@ test("stale EXEMPT / DEFERRED rows for deleted files fail", () => {
     readFile: () => null,
     exempt: { "scripts/gone-baseline.json": "why" },
     deferred: ["scripts/also-gone-baseline.txt"],
+    perRow: {},
     today: TODAY,
   });
   assert.equal(failures.length, 2);
@@ -146,4 +151,80 @@ test("the LIVE repo passes the guard (the conversion actually happened)", () => 
     readFile: (rel) => (existsSync(join(repoRoot, rel)) ? readFileSync(join(repoRoot, rel), "utf8") : null),
   });
   assert.deepEqual(failures, []);
+});
+
+// ── BI-24A1264B: per-metric budgets on the substrate baseline ───────────────
+// The substrate baseline was EXEMPT as a "generated measurement snapshot",
+// which is true of its informational rows and false of its ratchets. A
+// non-increasing metric becomes owned debt the moment it is RAISED, so the
+// budget lives per row rather than per file.
+
+const { checkPerMetricBudgets, PER_ROW_BUDGETS } = await import("./check-no-expired-baseline-budgets.mjs");
+
+const substrateBaseline = (metrics) => JSON.stringify({ version: 1, metrics });
+
+test("an unraised ratchet carries no budget and is not a finding", () => {
+  const text = substrateBaseline({
+    defaultRequiredServiceCount: { direction: "non-increasing", value: 5 },
+    prismaSchemaLines: { direction: "informational", value: 19700 },
+  });
+  assert.deepEqual(checkPerMetricBudgets("scripts/platform-substrate-baseline.json", text, "2026-09-16"), []);
+});
+
+test("a raised ratchet with a live budget passes", () => {
+  const text = substrateBaseline({
+    defaultRequiredServiceCount: {
+      direction: "non-increasing",
+      value: 7,
+      owner: "platform-architecture",
+      expiry: "2026-12-31",
+      contraction: "EP-8B9B50D5",
+    },
+  });
+  assert.deepEqual(checkPerMetricBudgets("scripts/platform-substrate-baseline.json", text, "2026-09-16"), []);
+});
+
+test("an EXPIRED per-metric budget fails — the freeze must not outlive its mandate", () => {
+  const text = substrateBaseline({
+    defaultRequiredServiceCount: {
+      direction: "non-increasing",
+      value: 7,
+      owner: "platform-architecture",
+      expiry: "2026-08-01",
+      contraction: "EP-8B9B50D5",
+    },
+  });
+  const failures = checkPerMetricBudgets("scripts/platform-substrate-baseline.json", text, "2026-09-16");
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /defaultRequiredServiceCount/);
+  assert.match(failures[0], /EXPIRED/);
+});
+
+test("a raised ratchet with no contraction obligation fails — an expansion nobody owns reducing", () => {
+  const text = substrateBaseline({
+    defaultRequiredServiceCount: {
+      direction: "non-increasing",
+      value: 7,
+      owner: "platform-architecture",
+      expiry: "2026-12-31",
+    },
+  });
+  const failures = checkPerMetricBudgets("scripts/platform-substrate-baseline.json", text, "2026-09-16");
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /no contraction obligation/);
+});
+
+test("a budget on an informational row is a category error", () => {
+  const text = substrateBaseline({
+    prismaSchemaLines: { direction: "informational", value: 19700, owner: "x", expiry: "2026-12-31", contraction: "EP-1" },
+  });
+  const failures = checkPerMetricBudgets("scripts/platform-substrate-baseline.json", text, "2026-09-16");
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /only a non-increasing ratchet can hold owned debt/);
+});
+
+test("the substrate baseline is governed per-row, not exempt", async () => {
+  const { EXEMPT } = await import("./check-no-expired-baseline-budgets.mjs");
+  assert.ok(!("scripts/platform-substrate-baseline.json" in EXEMPT), "must no longer be whole-file exempt");
+  assert.ok("scripts/platform-substrate-baseline.json" in PER_ROW_BUDGETS);
 });

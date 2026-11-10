@@ -5,14 +5,7 @@
  */
 
 import type { RoutedExecutionPlan } from "./recipe-types";
-import type { ChatMessage } from "../ai-inference";
-
-/** Named type for tool call entries (matches InferenceResult.toolCalls shape) */
-export type ToolCallEntry = {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-};
+import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
 
 /** Pre-resolved provider connection info — callProvider resolves before dispatch */
 export interface ResolvedProvider {
@@ -26,11 +19,26 @@ export interface ResolvedProvider {
  * (currently only the Claude CLI execution adapter, for `--mcp-config`)
  * read this. Other adapters ignore it.
  */
+export type ImageInputDelivery = {sha256:string[];providerId:string;modelId:string;adapterKind:string};
 export interface AdapterMcpSession {
+  recordImageInputDelivery?: (delivery:ImageInputDelivery)=>Promise<void>;
+  /** Server-owned exact native read lane; original task authority still gates every call. */
+  readOnlyToolNames?: readonly string[];
+  /** Execution layer prebinds exact identity/fence and fixed read scopes. */
+  mintReadOnlySession?: () => Promise<string>;
   userId: string;
   agentId?: string | null;
   threadId?: string | null;
   routeContext?: string | null;
+  /**
+   * BI-B949993E: the governed TaskRun this turn executes for, when any. The
+   * MCP route resolves the TaskRun's server-validated initiativeReviewBinding
+   * from it, so a governed writer called natively from the CLI is admitted on
+   * the same terms as one executed in-process — never from caller-supplied
+   * binding data.
+   */
+  taskRunId?: string | null;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
 }
 
 /** Input to an execution adapter */
@@ -39,6 +47,17 @@ export interface AdapterRequest {
   modelId: string;
   plan: RoutedExecutionPlan;
   provider: ResolvedProvider;
+  /**
+   * Server-owned provider transport. HTTP adapters must use this instead of
+   * process-global fetch so long-lived inference never re-enters the libuv
+   * getaddrinfo queue. CLI adapters accept the common request shape but do not
+   * use this field.
+   */
+  fetchImpl: typeof fetch;
+  /** Outer runtime layer supplies read-only evidence without reversing the routing dependency. */
+  readLocalThinkingBudgetEvidence?: (
+    apiRoot: string, modelId: string, fetchImpl: typeof fetch,
+  ) => Promise<import("./types").LocalThinkingBudgetEvidence | undefined>;
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;
@@ -51,6 +70,17 @@ export interface AdapterRequest {
    * those keep the legacy text-described tool path.
    */
   mcpSession?: AdapterMcpSession;
+}
+
+/**
+ * Provider-owned identity returned when an adapter accepts a long-running
+ * operation. The platform creates its own durable AsyncInferenceOp identity
+ * from this value; keeping the two names distinct prevents callers from
+ * accidentally treating a provider handle as the platform record id.
+ */
+export interface AsyncOperationStartResult {
+  status: "accepted";
+  providerOperationId: string;
 }
 
 /** Normalized output from an execution adapter */
@@ -66,6 +96,8 @@ export interface AdapterResult {
     cacheReadInputTokens?: number;
   };
   inferenceMs: number;
+  /** Present only when this dispatch started a provider-side async operation. */
+  asyncOperation?: AsyncOperationStartResult;
   raw?: Record<string, unknown>;
   /** Responses API: the response ID for chaining subsequent calls. */
   responseId?: string;
@@ -78,6 +110,8 @@ export interface AdapterResult {
    * returning the fragment (BI-1D144CC1). Absent/false means a clean stop.
    */
   truncated?: boolean;
+  /** Actual provider completion reason, absent when the provider did not supply one. */
+  finishReason?: string;
   /**
    * The model's own reasoning/scratchpad for this turn, when the provider emits
    * it as a channel SEPARATE from the answer — llama.cpp / Docker Model Runner

@@ -67,6 +67,19 @@ the page intentionally hides **Upgrade now** and queues nothing until it can pro
 A current state also has no upgrade action because the running config digest already equals the
 verified channel candidate. Both states are safe and non-mutating.
 
+### Ordinary restart after a consumer upgrade
+
+Release promotion writes the verified tag and managed assets to the canonical install directory,
+not to the temporary candidate workspace. On Windows, `dpf-start.ps1` then reads the consumer
+install's recorded `imageTag` before Compose interpolation. That immutable recorded tag overrides a
+contradictory process or root `.env` value such as `latest`, so an ordinary restart cannot silently
+replace the deployed release with older cached bytes.
+
+The start command stops before Docker mutation if a known consumer install has a missing, mutable,
+malformed, or wrong-install-path release identity. Repair that state with the governed consumer
+installer or Upgrade Center; do not edit `.env` or install-state by hand. Contributor/source installs
+retain their existing local-image behavior.
+
 ## Preconditions — capture current state first
 
 Run these and record the output before doing anything:
@@ -141,6 +154,14 @@ Key checkpoints:
   `CREATE EXTENSION vector` succeeds. (A prior failed attempt is auto-healed via P3009 resolve.)
 - Portal boot logs (`docker logs dpf-portal-1`) show `[bet5-backfill] ... done.` with counts, then the
   server starts (`✓ Ready`). With #2981 the backfill exits cleanly — **no manual intervention needed.**
+- **`cleanup`** — runs only after every verify passed, best-effort. Besides dangling images and the
+  bounded build cache, it now untags superseded version images: for each of `dpf-portal`,
+  `dpf-postgres`, `dpf-promoter` and `dpf-sandbox` it keeps every tag a container still references
+  plus the `PROMOTE_IMAGE_KEEP` (default 3) newest others, and removes the rest (BI-1172E86A). Before
+  this, every upgrade left its ~5 GB tag triple behind; a dev install reached 388 GB reclaimable in
+  16 days. Volumes are never touched. To retain more rollback candidates, set `PROMOTE_IMAGE_KEEP` in
+  the promoter environment; `docker images ghcr.io/opendigitalproductfactory/dpf-portal` should
+  show at most in-use + `PROMOTE_IMAGE_KEEP` version tags after a run.
 - **decommission** — Neo4j + Qdrant containers **and** volumes are removed.
 
 ## Step 4 — verify Postgres-only (done criteria)
@@ -158,6 +179,43 @@ curl -s http://localhost:3000/api/health   # 200; the sha should now differ from
 The self-upgrade swap **recreates the portal container**, which drops any open browser tab and clears
 your session. After it completes, hard-refresh the portal and sign in again — this is expected, not a
 fault.
+
+## First question after any failed upgrade: how far did it get?
+
+`promote.sh` appends every step it announces to a durable trail on the shared state
+mount, so the answer survives the thing that destroyed it before — the orchestrating
+portal dying mid-upgrade, whether from a Docker restart, a host reboot or a power cut.
+
+```powershell
+# on the host (DPF_STATE_DIR, default %USERPROFILE%\.dpf)
+Get-Content "$env:USERPROFILE\.dpf\self-upgrade-steps.log" -Tail 20
+```
+
+```bash
+# or through the portal, which mounts the same directory read-only
+docker exec dpf-portal-1 tail -20 /dpf-state/self-upgrade-steps.log
+```
+
+Each line is `<utc>\t<mode>\t<step>\t<target-sha>`. Read the **last** line whose target
+matches the failed run, and whose mode is `real` (a `dry-run` line never touched the
+install):
+
+| Last step reached | What it means |
+| --- | --- |
+| `prepare` … `migrate` | The container swap never started. The install is untouched and still on its pre-upgrade image; re-trigger the upgrade normally. |
+| `docker-up` or later | The swap had begun. Check what is actually running (`docker ps`, `/api/health`) before re-triggering. |
+| nothing for that target | The promotion died before its first step, or this install's promoter predates the trail. Treat the outcome as unknown. |
+
+`migrate` counts as pre-swap: schema migrations run before the container is replaced and
+are forward-only, so a re-run after an interruption there re-applies nothing.
+
+The portal records the same verdict on the run itself
+(`SelfUpgradeRun.completionEvidence.interruption`) the next time an upgrade is
+requested, including an explicit indeterminate verdict with its basis. If the trail is
+missing entirely the answer is "unknown" — never assume the install was untouched.
+
+The file is bounded at 2000 lines and rotated to the newest 1000, so an old incident may
+have aged out. Copy it before a long investigation.
 
 ## If it fails anyway (recovery)
 
@@ -293,6 +351,20 @@ docker run --rm --read-only -v "$PWD:/host-source:ro" -v "$HOME/.dpf:/dpf-state:
   -e PROMOTE_COMPOSE_PROJECT=dpf -e PROMOTE_BACKUP_PATH=/backups/recovery \
   dpf-promoter:<target> --readiness
 ```
+
+## Failure class: reassessment-compatibility-unproven (portal could not probe the candidate)
+
+The **deployed** portal probes the candidate portal image's packaged reassessment owners before quiescence. It runs `docker run --pull never <engine id> … reassessment-capability-probe.mjs`. A refusal fails the run before any drain or swap:
+
+```
+reassessment-compatibility-unproven: <subcode>: <detail>
+```
+
+The subcode names the cause. `release-image-unresolved` lists every immutable reference tried and Docker's answer for each. `probe-exit-<n>` carries the probe's stderr tail. The other subcodes are `probe-output-invalid`, `probe-source-mismatch`, `source-image-unresolved`, `image-moved` and `proof-unrecorded`.
+
+Canonical case **SUR-F2A0D477 (2026-10-27)**. The failure log held only the bare code. The cause was image addressing, not the release. Docker's **containerd image store** (the Docker Desktop default, `docker info` → `driver-type io.containerd.snapshotter.v1`) names a pulled image by its *index* digest, so `docker run <config digest>` returned `No such image` (BI-A9BA9583). Every release-image reference must go through `apps/web/lib/self-upgrade/release-image-reference.ts`. `scripts/release-image-reference.docker.test.mjs` proves that against a real daemon on both stores in the acceptance workflow (BI-578131A3).
+
+**Recovery:** none is needed for the install itself, because nothing was deployed. The check runs in the *deployed* portal, so a release that carries a fix cannot unwedge an install whose own preflight is the defect. That hop needs the independent recovery route (BI-7A4E70E9).
 
 ## Failure class: migration-unique-violation (P3018 + 23505)
 

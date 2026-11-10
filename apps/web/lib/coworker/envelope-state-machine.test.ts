@@ -24,7 +24,13 @@ import {
 } from "./envelope-state-machine";
 
 describe("ENVELOPE_STATUSES + TERMINAL_STATUSES", () => {
-  it("exposes the six lifecycle statuses", () => {
+  it("exposes the seven lifecycle statuses", () => {
+    // "expired" joined in BI-410ACCB8. envelope-observability.ts had been
+    // deriving it for some time and declining to write it, on the grounds that
+    // "the state machine owns that transition" — which it did not, so every
+    // lapsed envelope sat in `proposed` forever (139 of them on the reference
+    // install). It is deliberately not `cancelled`: cancelled says a person
+    // acted, expired says nobody did, and telling those apart is the point.
     expect(ENVELOPE_STATUSES).toEqual([
       "proposed",
       "approved",
@@ -32,13 +38,24 @@ describe("ENVELOPE_STATUSES + TERMINAL_STATUSES", () => {
       "executed",
       "failed",
       "cancelled",
+      "expired",
     ]);
   });
 
-  it("terminal statuses are exactly the four end-of-life states", () => {
+  it("terminal statuses are exactly the five end-of-life states", () => {
     expect([...TERMINAL_STATUSES].sort()).toEqual(
-      ["cancelled", "declined", "executed", "failed"].sort(),
+      ["cancelled", "declined", "executed", "expired", "failed"].sort(),
     );
+  });
+
+  it("a lapse can settle a pending or an approved envelope, and nothing else", () => {
+    // Approval is not execution: an approved call whose window closed before it
+    // ran has expired, not failed.
+    expect(canTransition("proposed", "expired")).toBe(true);
+    expect(canTransition("approved", "expired")).toBe(true);
+    for (const settled of ["declined", "executed", "failed", "cancelled"] as const) {
+      expect(canTransition(settled, "expired"), settled).toBe(false);
+    }
   });
 });
 

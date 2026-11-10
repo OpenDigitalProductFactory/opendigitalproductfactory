@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "move-mode-control-outside-the-disclosure",
+  "decisionInteractionId": "DI-CC9EBBF5BBED",
+  "scope": {
+    "files": [
+      "apps/web/components/storefront-admin/MediaUploader.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "move-mode-control-outside-the-disclosure",
+      "expand-the-menu-by-default-on-tablet",
+      "duplicate-the-toggle-into-the-header"
+    ],
+    "note": "Measured with fresh browser profiles at each width so no saved mode preference could confound the reading: at 1440px the toggle is BUTTON 101x44 and clickable with its mode note present; at 768px it is BUTTON 0x0 with offsetParent=null and the note absent (BI-6395DA89). It sat inside #primary-navigation-menu, which is `hidden` below `lg`. The worker Simple mode exists for - a kennel technician walking rounds on a tablet - was the one worker who could not reach it, and §7 of the pet-rescue operating model credits Simple mode with solving exactly that density problem. move-mode-control-outside-the-disclosure won at composite 10.702 with a 4.729 margin, high confidence, no commandment conflict. expand-the-menu-by-default-on-tablet scored 5.973: it restores the control but unfolds twenty destinations on the smallest screen, which is the density problem itself - 'human_cognitive_load' penalises it and 'Optimize for the Whole' drops to 0.076. duplicate-the-toggle-into-the-header scored 4.468 and is opposed by 'One home per capability', which goes negative: two controls writing the same nav-mode cookie can drift in label, state and busy handling. The navigation destinations still collapse below lg - only the mode control moved - and a test asserts the menu keeps `hidden` / `lg:flex` with its links inside. Both new test suites were run against the re-introduced defect and fail 2 of the new assertions, so the tests are verified to catch it rather than merely to pass beside it. The same commit gives the photo remove control a 44px target and a two-step confirmation, matching the animal Delete shipped on 2026-08-27; 156 tests across components/shell and components/storefront-admin pass, with style-drift and prose-lint ratchets clean."
+  }
+}

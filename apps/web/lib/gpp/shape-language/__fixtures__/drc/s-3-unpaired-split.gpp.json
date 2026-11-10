@@ -1,0 +1,103 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "soundness-unpaired-split",
+  "version": "1.0.0",
+  "title": "Soundness fixture soundness-unpaired-split",
+  "description": "Seeded S-3: a parallel split that no join pairs.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage a recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    },
+    {
+      "key": "b",
+      "title": "Stage b",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage b recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    },
+    {
+      "key": "c",
+      "title": "Stage c",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage c recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    }
+  ],
+  "flow": {
+    "nodes": [
+      {
+        "id": "p",
+        "type": "parallel-split"
+      }
+    ],
+    "edges": [
+      {
+        "from": "a",
+        "to": "p"
+      },
+      {
+        "from": "p",
+        "to": "b"
+      },
+      {
+        "from": "p",
+        "to": "c"
+      },
+      {
+        "from": "b",
+        "to": "stop:success:1"
+      },
+      {
+        "from": "c",
+        "to": "stop:success:1"
+      }
+    ]
+  },
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

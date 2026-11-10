@@ -1,0 +1,49 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-A73A7DA3 (slice 2 of EP-PORTFOLIO-BUDGET-WIP). EpicPortfolio gains nullable confirmation columns (confirmedById, confirmedByAgentId, confirmationReason, confirmedAt, proposalConfidence) and a new enum EpicPortfolioConfidence (high|low), so an epic's portfolio attribution records who confirmed it, why, and how confident the proposal was. The only writer that fills them is confirm_epic_portfolios, which refuses without a reason and a confirming person. Existing writers (the epic edit form, the ops epics API, auto-intake) are unchanged and leave the columns null, which reads as 'no confirmation recorded'. Additive and non-destructive: no backfill, no existing column changes meaning. Migration: 20260925160000_epic_portfolio_confirmation.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "EpicPortfolio",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        {
+          "name": "confirmedById",
+          "resolution": "governed",
+          "reason": "The person who confirmed the attribution: a User id from the tool's authenticated context. The design forbids an attribution without an actor, so this is the audit anchor. It is an internal account identifier, not free-text personal data.",
+          "provenance": "Set only by confirm_epic_portfolios from the authenticated caller; never client-supplied.",
+          "flags": []
+        },
+        {
+          "name": "confirmedByAgentId",
+          "resolution": "governed",
+          "reason": "The AI coworker that carried the confirmation for the person, when one did, so a delegated confirmation is distinguishable from a direct one.",
+          "provenance": "Set only by confirm_epic_portfolios from the tool execution context.",
+          "flags": []
+        },
+        {
+          "name": "confirmationReason",
+          "resolution": "governed",
+          "reason": "Why the attribution is right, stated by the confirming person. Required by the write, so every confirmed row explains itself.",
+          "provenance": "Operator-entered at confirmation.",
+          "flags": []
+        },
+        {
+          "name": "confirmedAt",
+          "resolution": "governed",
+          "reason": "When the attribution was confirmed; distinguishes a confirmed row from a legacy unconfirmed one.",
+          "provenance": "Server clock at confirmation.",
+          "flags": []
+        },
+        {
+          "name": "proposalConfidence",
+          "resolution": "governed",
+          "reason": "The confidence of the proposal the person accepted (high or low); null when the person chose a portfolio other than the proposal. Lets a reviewer see which attributions rest on item evidence and which on judgment.",
+          "provenance": "Derived server-side from the epic's own items at confirmation time; never client-supplied.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

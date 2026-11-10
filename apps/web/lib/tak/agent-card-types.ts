@@ -52,6 +52,15 @@ export type RuntimeSupervisorDecisionState = {
     proposedAt: string;
     decisionEndpoint: string;
   } | null;
+  /**
+   * BI-7BCC87BB (founder decision DI-FFD78D222548): pending approval requests
+   * (CoworkerActionEnvelope) beside legacy proposals. Optional so card
+   * projections built before PR-B still type-check; the service always sets them.
+   */
+  pendingEnvelopeCount?: number;
+  latestPendingEnvelope?: SupervisorPendingEnvelope | null;
+  /** Which of the two is newest, for the card to show; null when nothing is pending. */
+  latestPendingKind?: "proposal" | "envelope" | null;
   recentReceiptCount: number;
   latestReceipt: {
     receiptId: string;
@@ -98,4 +107,19 @@ export type InternalAgentCard = {
       validationState: InternalAIDoc["validation_state"] | "unlinked";
     };
   };
+};
+
+/** A pending approval request on the supervisor card, decided with the shared envelope buttons. */
+export type SupervisorPendingEnvelope = {
+  envelopeId: string;
+  /** The person whose authority it lends: the only one who decides, unless an admin decides on their behalf. */
+  delegatingUserId: string;
+  ownerLabel: string;
+  toolName: string;
+  actionLabel: string;
+  rationale: string;
+  proposedAt: string;
+  expiresAt: string | null;
+  approveHref: string;
+  declineHref: string;
 };

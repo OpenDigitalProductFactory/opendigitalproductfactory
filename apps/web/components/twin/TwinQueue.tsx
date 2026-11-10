@@ -7,7 +7,7 @@
 
 import { Bot } from "lucide-react";
 
-import type { QueueItemData } from "./types";
+import type { QueueItemData } from "@/lib/twin/kit-types";
 
 export interface TwinQueueProps {
   label: string;
@@ -44,9 +44,9 @@ export function TwinQueue({ label, items, emptyLabel, className = "" }: TwinQueu
                   <span className="text-[10px] tabular-nums text-[var(--dpf-muted)]">
                     {i + 1}
                   </span>
-                  <span className="text-xs font-medium text-[var(--dpf-text)]">
-                    {item.label}
-                  </span>
+                  {item.action ? (
+                    <a href={item.action.href} aria-label={`${item.action.label}: ${item.label}`} className="text-xs font-medium text-[var(--dpf-text)] underline focus-visible:outline-2 focus-visible:outline-offset-2">{item.label}</a>
+                  ) : <span className="text-xs font-medium text-[var(--dpf-text)]">{item.label}</span>}
                 </span>
                 {item.waiting ? (
                   <span className="text-[10px] tabular-nums text-[var(--dpf-muted)]">

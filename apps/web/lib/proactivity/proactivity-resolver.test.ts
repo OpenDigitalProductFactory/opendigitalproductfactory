@@ -11,9 +11,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 
 import { getProactivityLevelCopy } from "./proactivity-copy";
-import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "./proactivity-resolver";
+import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "@dpf/validators/workroom-policy/proactivity-resolver";
 import { resolveUserAwareProactivityPlan } from "./proactivity-resolver.server";
-import { PROACTIVITY_ACTIVITY_FAMILIES, PROACTIVITY_LEVELS, isProactivityLevel } from "./proactivity-types";
+import { PROACTIVITY_ACTIVITY_FAMILIES, PROACTIVITY_LEVELS, isProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 describe("proactivity types", () => {
   it("keeps the persisted level enum closed and stable", () => {
@@ -108,7 +108,12 @@ describe("resolveUserAwareProactivityPlan", () => {
     vi.clearAllMocks();
   });
 
-  it("applies the most specific acknowledged user override over rule defaults", async () => {
+  // BI-87C9C91C — proactivity belongs to the outcome-specific Workroom, not to a
+  // coworker identity. This fixture is the PREVIOUS test's fixture unchanged: an
+  // agent-scoped "quiet" fact alongside an activity-family "assertive" one. It
+  // used to resolve quiet because `agent:` outranked everything. It must now
+  // resolve assertive, because the agent scope no longer participates at all.
+  it("ignores a legacy agent-scoped override and resolves from the activity family", async () => {
     mocks.prisma.userFact.findMany.mockResolvedValue([
       {
         id: "fact-agent",
@@ -137,6 +142,105 @@ describe("resolveUserAwareProactivityPlan", () => {
       input: {
         activityFamily: "field-dispatch-appointment",
         agentId: "dispatcher",
+        archetype: { demandSignature: "emergency-reactive", capacityUnit: "slot-hours" },
+      },
+    });
+
+    expect(plan).toMatchObject({
+      resolvedLevel: "assertive",
+      preferenceSource: "user-override",
+      userOverrideScopeKey: "activity-family:field-dispatch-appointment",
+    });
+    // The legacy fact is inert rather than migrated: it must not be cited as
+    // evidence for a posture it no longer influences.
+    expect(plan.evidenceRefs).not.toContainEqual({ kind: "user-fact", id: "fact-agent" });
+    expect(plan.evidenceRefs).toContainEqual({ kind: "user-fact", id: "fact-family" });
+  });
+
+  // The ownership boundary, asserted directly: who is staffed to the work cannot
+  // change how persistently the work is pursued.
+  it("resolves the same plan for two different coworkers in the same context", async () => {
+    mocks.prisma.userFact.findMany.mockResolvedValue([
+      {
+        id: "fact-agent-a",
+        key: "aiCoworkerProactivity:agent:coworker-a",
+        value: JSON.stringify({ scopeKey: "agent:coworker-a", level: "quiet" }),
+        createdAt: new Date("2026-06-30T18:30:00.000Z"),
+      },
+      {
+        id: "fact-agent-b",
+        key: "aiCoworkerProactivity:agent:coworker-b",
+        value: JSON.stringify({ scopeKey: "agent:coworker-b", level: "assertive" }),
+        createdAt: new Date("2026-06-30T18:30:00.000Z"),
+      },
+    ]);
+
+    const forCoworker = (agentId: string) =>
+      resolveUserAwareProactivityPlan({
+        userId: "user-1",
+        input: { activityFamily: "todo-follow-up", agentId },
+      });
+
+    const [a, b] = await Promise.all([forCoworker("coworker-a"), forCoworker("coworker-b")]);
+
+    expect(a.resolvedLevel).toBe(b.resolvedLevel);
+    expect(a.actionBoundary).toBe(b.actionBoundary);
+    expect(a.policyId).toBe(b.policyId);
+    // Neither coworker's saved identity preference reached the plan.
+    expect(a.userOverrideScopeKey).toBeUndefined();
+    expect(b.userOverrideScopeKey).toBeUndefined();
+  });
+
+  // Unroomed work must be byte-compatible with the platform/activity-family
+  // default rather than acquiring a new one (BI-87C9C91C acceptance).
+  it("resolves an agent-less caller identically to one carrying an agentId", async () => {
+    mocks.prisma.userFact.findMany.mockResolvedValue([]);
+
+    const withAgent = await resolveUserAwareProactivityPlan({
+      userId: "user-1",
+      input: { activityFamily: "todo-follow-up", agentId: "dispatcher" },
+    });
+    const withoutAgent = await resolveUserAwareProactivityPlan({
+      userId: "user-1",
+      input: { activityFamily: "todo-follow-up" },
+    });
+
+    expect(withAgent.resolvedLevel).toBe(withoutAgent.resolvedLevel);
+    expect(withAgent.policyId).toBe(withoutAgent.policyId);
+    expect(withAgent.actionBoundary).toBe(withoutAgent.actionBoundary);
+  });
+
+  // Specificity still applies across the scopes that SURVIVE: a route context is
+  // more specific than an activity family and outranks it.
+  it("applies the most specific acknowledged user override over rule defaults", async () => {
+    mocks.prisma.userFact.findMany.mockResolvedValue([
+      {
+        id: "fact-route",
+        key: "aiCoworkerProactivity:route-context:/field-service/dispatch",
+        value: JSON.stringify({
+          scopeKey: "route-context:/field-service/dispatch",
+          level: "quiet",
+          acknowledgedAt: "2026-06-30T18:30:00.000Z",
+        }),
+        createdAt: new Date("2026-06-30T18:30:00.000Z"),
+      },
+      {
+        id: "fact-family",
+        key: "aiCoworkerProactivity:activity-family:field-dispatch-appointment",
+        value: JSON.stringify({
+          scopeKey: "activity-family:field-dispatch-appointment",
+          level: "assertive",
+          acknowledgedAt: "2026-06-30T18:00:00.000Z",
+        }),
+        createdAt: new Date("2026-06-30T18:00:00.000Z"),
+      },
+    ]);
+
+    const plan = await resolveUserAwareProactivityPlan({
+      userId: "user-1",
+      input: {
+        activityFamily: "field-dispatch-appointment",
+        routeContext: "/field-service/dispatch",
         archetype: {
           demandSignature: "emergency-reactive",
           capacityUnit: "slot-hours",
@@ -147,11 +251,11 @@ describe("resolveUserAwareProactivityPlan", () => {
     expect(plan).toMatchObject({
       resolvedLevel: "quiet",
       preferenceSource: "user-override",
-      userOverrideScopeKey: "agent:dispatcher",
+      userOverrideScopeKey: "route-context:/field-service/dispatch",
       policyId: "proactivity:field-dispatch-appointment:quiet",
       actionBoundary: "advise",
     });
-    expect(plan.evidenceRefs).toContainEqual({ kind: "user-fact", id: "fact-agent" });
+    expect(plan.evidenceRefs).toContainEqual({ kind: "user-fact", id: "fact-route" });
   });
 
   it("surfaces active cooldown facts so repeat proactivity suggestions can be suppressed", async () => {
@@ -237,5 +341,48 @@ describe("marketing-campaign proactivity (BI-C26FE785)", () => {
 
     expect(plan.explanation).toContain("only when asked");
     expect(plan.actionBoundary).toBe("advise");
+  });
+});
+
+describe("ecosystem-participation proactivity (BI-784D20FD)", () => {
+  it("is a declarable family, so the resolver can govern the cadence at all", () => {
+    // Without a family the coworker cannot be described to the resolver, so no
+    // posture could govern it and it would never act unprompted — the same
+    // reason marketing-campaign exists.
+    expect(PROACTIVITY_ACTIVITY_FAMILIES).toContain("ecosystem-participation");
+  });
+
+  it("never lets an assertive posture cast a vote unreviewed", () => {
+    const plan = resolveProactivityPlanForLevel({ activityFamily: "ecosystem-participation" }, "assertive");
+    expect(plan.actionBoundary).not.toBe("preauthorized");
+  });
+
+  it("routes an unanswered nudge to the owner, not a queue", () => {
+    const plan = resolveProactivityPlanForLevel({ activityFamily: "ecosystem-participation" }, "balanced");
+    expect(plan.escalationTarget).toBe("owner");
+  });
+
+  it("never spends the urgent channel on a ballot", () => {
+    for (const level of PROACTIVITY_LEVELS) {
+      const plan = resolveProactivityPlanForLevel({ activityFamily: "ecosystem-participation" }, level);
+      expect(plan.channelPolicy).not.toBe("urgent-channel");
+    }
+  });
+
+  it("stays balanced for the routine weekly digest and only escalates for a closing ballot", () => {
+    expect(resolveProactivityPlan({ activityFamily: "ecosystem-participation" }).resolvedLevel).toBe("balanced");
+    expect(resolveProactivityPlan({
+      activityFamily: "ecosystem-participation", deadlineWindowDays: 1,
+    }).resolvedLevel).toBe("assertive");
+    expect(resolveProactivityPlan({
+      activityFamily: "ecosystem-participation", deadlineWindowDays: 9,
+    }).resolvedLevel).toBe("balanced");
+  });
+
+  it("explains itself in each posture", () => {
+    for (const level of PROACTIVITY_LEVELS) {
+      const plan = resolveProactivityPlanForLevel({ activityFamily: "ecosystem-participation" }, level);
+      expect(plan.explanation.length).toBeGreaterThan(20);
+    }
   });
 });

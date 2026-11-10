@@ -47,23 +47,41 @@ If no shared environment is available and the canonical local install is the rig
 2. Choose a shared environment that matches the task's verification need.
 3. Request admission with branch, worktree, task, expected release context, and
    a stable `claimKey` for this exact attempt.
-4. If the result is `queued`, do not touch the runtime. Re-observe the same
-   claim with bounded backoff; reusing `claimKey` preserves FIFO position.
-5. Only an `admitted` result authorizes verification against the provided URL.
-6. Release an admitted lease when verification is complete or blocked. Release
-   a queued lease to cancel the request when the task stops waiting.
+4. If the result is `queued`, do not touch the runtime and do not call claim
+   again. Stop. The returned TaskRun resumes the wait. Reusing `claimKey`
+   only preserves FIFO position for that one wait; it is not a poll loop.
+5. If the result is `lease_terminal` (`retryable: false`), stop. That claimKey
+   is finished. Do not call again with it, and do not walk `:rerun-1`,
+   `:rerun-2`, and onward. A new admission needs a new claimKey, and only
+   when the work is still wanted.
+6. Only an `admitted` result authorizes verification against the provided URL.
+7. Release by `leaseId` — the exact id the claim returned (`NPEL-…`). Release an
+   admitted lease when verification is complete or blocked, and release a queued
+   lease to cancel the request when the task stops waiting.
+   - `environmentKey` does NOT release anything. It names the environment, not
+     your claim on it, and the release call rejects it: `missing_required`,
+     `retryable: false`. Keep the `leaseId` from step 3; if you no longer have
+     it, list the leases and read it back.
+   - `claimKey` (step 3) is not the `leaseId` either. It names the one wait;
+     only the returned `leaseId` releases. Do not re-call claim to "check".
 
 ## Guardrails
 
 - Do not start a thread-owned preview server when a shared environment is available.
 - A successful queued response is not runtime ownership; only `admitted` is.
 - Do not hold a lease after the thread is complete, blocked, or handed off.
+- `nonprod_lease_not_owner` on release means the lease is someone else's, or it
+  is a durable queue task that outlives your process. It is not a transient
+  error and re-calling cannot fix it (`retryable: false`) — list the leases and
+  leave it alone. Blind-retrying it is how a healthy queued run gets reported as
+  a failure.
 - Do not show lease IDs or raw tool names in the default UI. Show "Shared environment ready", "in use", or "blocked."
 - Don't treat this skill as optional when runtime-bound verification is needed in a thread worktree — it IS the runtime path; the worktree is not.
 
 ## Worked example
 
 A Build Studio UX check needs `localhost`. This skill requests durable FIFO
-admission and quietly waits on the same claim identity. Once admitted it
-returns an "Open environment" link and records the lease in audit details. The
-operator sees readiness and one action, not the MCP lease payload.
+admission once. A queued result stops the caller; the TaskRun resumes the
+wait. A terminal result stops the caller too. Once admitted it returns an
+"Open environment" link and records the lease in audit details. The operator
+sees readiness and one action, not the MCP lease payload.

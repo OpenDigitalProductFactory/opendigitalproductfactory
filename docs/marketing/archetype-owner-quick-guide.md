@@ -12,6 +12,8 @@ The core promise across the catalog is:
 
 > Keep doing the work customers pay you for. Give the work around the work to governed AI coworkers.
 
+**Product source of truth:** the in-product buyer value for each category — what the marketing coworker and drafter actually use when the business sells the platform — lives in `apps/web/lib/marketing/buyer-archetype-value.ts`, which covers every category (including fabric care, warehousing and manufacturing, not yet tabled below). Change the product data there; keep this table as the readable summary.
+
 This guide is category-first because that is how customers, marketers, and testers usually need to think. The leaf archetypes are listed so the current source coverage stays visible.
 
 ## Quick Category Map

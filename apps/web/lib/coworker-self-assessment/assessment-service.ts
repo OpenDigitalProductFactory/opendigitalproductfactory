@@ -11,6 +11,7 @@ import {
   type BacklogIngestResult,
 } from "@/lib/operate/backlog-ingest";
 import type { BacklogWorkType } from "@/lib/explore/backlog";
+import { toolDefectOrigin } from "@/lib/operate/tool-defect-origin";
 import type {
   CoworkerCapabilityNeedInput,
   CoworkerNeedFilters,
@@ -69,6 +70,7 @@ type FileCapabilityNeedFn = (input: {
   severity: string;
   need: string;
   blocks: string;
+  evidenceJson?: unknown;
 }) => Promise<{ itemId: string } | null>;
 
 type WorkforceBacklogLinks = {
@@ -163,6 +165,8 @@ export function buildCapabilityNeedBacklogInput(
     severity: string;
     need: string;
     blocks: string;
+    /** Observer evidence; a repeated tool failure files under its tool (BI-891E4E11). */
+    evidenceJson?: unknown;
   },
   links: WorkforceBacklogLinks,
 ): BacklogIngestInput {
@@ -182,7 +186,10 @@ export function buildCapabilityNeedBacklogInput(
     agentId: n.agentId,
     digitalProductId: links.digitalProductId,
     taxonomyNodeId: links.taxonomyNodeId,
-    origin: { kind: "capability-need", id: capabilityNeedOriginId(n.agentId, n.kind, n.need) },
+    origin: toolDefectOrigin(n.evidenceJson) ?? {
+      kind: "capability-need",
+      id: capabilityNeedOriginId(n.agentId, n.kind, n.need),
+    },
   };
 }
 
@@ -200,6 +207,8 @@ export async function fileCapabilityNeedToBacklog(
     severity: string;
     need: string;
     blocks: string;
+    /** Observer evidence; a repeated tool failure files under its tool (BI-891E4E11). */
+    evidenceJson?: unknown;
   },
   deps: FileCapabilityNeedToBacklogDeps = {},
 ): Promise<{ itemId: string } | null> {
@@ -227,17 +236,17 @@ function defined<T extends Record<string, unknown>>(value: T): T {
   ) as T;
 }
 
-function defaultDb(): CoworkerSelfAssessmentDb {
+export function assessmentDbForClient(db: Pick<Prisma.TransactionClient, "coworkerSelfAssessment" | "coworkerCapabilityNeed"> = prisma): CoworkerSelfAssessmentDb {
   return {
     createAssessment: (data) =>
-      prisma.coworkerSelfAssessment.create({
+      db.coworkerSelfAssessment.create({
         data: {
           ...data,
           rawPayload: data.rawPayload as Prisma.InputJsonValue,
         },
       }),
     createNeed: (data) =>
-      prisma.coworkerCapabilityNeed.create({
+      db.coworkerCapabilityNeed.create({
         data: {
           ...data,
           evidenceJson: data.evidenceJson as Prisma.InputJsonValue,
@@ -245,7 +254,7 @@ function defaultDb(): CoworkerSelfAssessmentDb {
         },
       }),
     listNeeds: (filters) =>
-      prisma.coworkerCapabilityNeed.findMany({
+      db.coworkerCapabilityNeed.findMany({
         where: defined({
           agentId: filters.agentId,
           status: filters.status,
@@ -255,7 +264,7 @@ function defaultDb(): CoworkerSelfAssessmentDb {
         orderBy: [{ severity: "asc" }, { createdAt: "desc" }],
       }),
     updateNeed: (needId, data) =>
-      prisma.coworkerCapabilityNeed.update({
+      db.coworkerCapabilityNeed.update({
         where: { needId },
         data,
       }),
@@ -266,7 +275,7 @@ function depsOrDefault(deps?: Partial<CoworkerSelfAssessmentDeps>): CoworkerSelf
   return {
     now: deps?.now ?? (() => new Date()),
     createId: deps?.createId ?? defaultCreateId,
-    db: deps?.db ?? defaultDb(),
+    db: deps?.db ?? assessmentDbForClient(),
     fileBacklogItem: deps?.fileBacklogItem ?? defaultFileBacklogItem(),
   };
 }
@@ -334,6 +343,7 @@ export async function submitCoworkerSelfAssessment(
       severity: need.severity,
       need: need.need.trim(),
       blocks: need.blocks.trim(),
+      evidenceJson: need.evidenceJson,
     });
     if (filed?.itemId) {
       backlogItemIds.push(filed.itemId);

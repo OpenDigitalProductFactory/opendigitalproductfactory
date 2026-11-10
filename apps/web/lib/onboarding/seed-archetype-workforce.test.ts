@@ -19,12 +19,20 @@ function client(overrides: {
   const employmentTypes = new Set(overrides.existingEmploymentTypes ?? []);
   const workLocations = new Set(overrides.existingWorkLocations ?? []);
   const created = { employmentTypes: [] as unknown[], workLocations: [] as unknown[] };
+  const selects: string[] = [];
 
   const db: SeedArchetypeWorkforceClient = {
     storefrontConfig: {
-      findFirst: vi.fn(async () =>
-        overrides.archetypeId === null ? null : { archetypeId: overrides.archetypeId ?? "pet-rescue" },
-      ),
+      // The real row shape. `StorefrontConfig.archetypeId` is a cuid FK to
+      // `StorefrontArchetype.id`; the SLUG lives on the related row. The first
+      // version of this fake returned `{ archetypeId: "pet-rescue" }` — the
+      // shape the caller assumed rather than the one the database has — so nine
+      // tests passed against a seeder that could never match (BI-A30152B6).
+      findFirst: vi.fn(async (args: unknown) => {
+        selects.push(JSON.stringify((args as { select?: unknown }).select ?? {}));
+        if (overrides.archetypeId === null) return null;
+        return { archetype: { archetypeId: overrides.archetypeId ?? "pet-rescue" } };
+      }),
     },
     employmentType: {
       findUnique: vi.fn(async (args: unknown) => {
@@ -47,7 +55,7 @@ function client(overrides: {
       }),
     },
   };
-  return { db, created };
+  return { db, created, selects };
 }
 
 describe("the rescue's declared workforce", () => {
@@ -146,5 +154,30 @@ describe("backfillArchetypeWorkforceOnBoot", () => {
   it("is exported so instrumentation can run it beside the sibling reconcilers", async () => {
     const module = await import("./seed-archetype-workforce");
     expect(typeof module.backfillArchetypeWorkforceOnBoot).toBe("function");
+  });
+});
+
+// The bug this file did not catch the first time: the seeder read the cuid
+// foreign key and matched it against a slug, so it seeded nothing on every real
+// install while every test passed (BI-A30152B6).
+describe("reading the archetype", () => {
+  it("resolves the slug through the relation, never the raw foreign key", async () => {
+    const { db, selects } = client({ archetypeId: "pet-rescue" });
+
+    await seedArchetypeWorkforce({ organizationId: "org-1", db });
+
+    expect(selects).toHaveLength(1);
+    const select = JSON.parse(selects[0]!);
+    expect(select).toEqual({ archetype: { select: { archetypeId: true } } });
+    // `archetypeId` at the top level is the cuid FK — selecting it is the bug.
+    expect(Object.keys(select)).not.toContain("archetypeId");
+  });
+
+  it("seeds nothing rather than guessing when a cuid arrives where a slug belongs", async () => {
+    const { db } = client({ archetypeId: "cmt6ejtsj09rr6mnw0ds02g58" });
+
+    const result = await seedArchetypeWorkforce({ organizationId: "org-1", db });
+
+    expect(result).toMatchObject({ employmentTypesAdded: [], workLocationsAdded: [] });
   });
 });

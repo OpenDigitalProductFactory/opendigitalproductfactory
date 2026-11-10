@@ -118,6 +118,10 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   "/storefront/units": "storefront-setup-required",
 
   "/setup": "setup-phase-only",
+  // The storefront setup wizard navigates away the moment a StorefrontConfig
+  // exists, and the sweep fixture now provisions one (BI-899D7F00), so the
+  // page cannot be measured in the owner-fixture context.
+  "/storefront/setup": "setup-phase-only",
   "/welcome": "setup-phase-only",
 
   // Wall-clock collections (BI-0C6C2153): these routes derive the SET of
@@ -224,11 +228,36 @@ export type RouteShellPolicy = {
   sweepExclusionReason?: RouteSweepExclusionReason;
 };
 
+/**
+ * Where the sweep fixture publishes the concrete paths it minted for dynamic
+ * routes. Repo-relative so the fixture (cwd apps/web) and the sweep (cwd repo
+ * root) name the same file.
+ */
+export const SWEEP_ROUTE_PARAMS_REL = "apps/web/test-results/ux-route-sweep/route-params.json";
+
+/**
+ * BI-DE67A3EC — dynamic routes the sweep fixture can resolve to a real path.
+ *
+ * Every route with a `[param]` used to be excluded outright, because nothing
+ * produced an id to substitute. That excluded 87 routes, 53 of them owner-facing
+ * — the DETAIL surfaces where an operator reads state and acts, which is exactly
+ * where a word or field budget matters most. A gate that measures only list
+ * pages reports a green it has not earned.
+ *
+ * A route earns a place here only once the fixture mints a deterministic row for
+ * it. Listing one the fixture does not mint makes the sweep fail loudly rather
+ * than measure the literal "[param]" path — see resolveSweepPath in the runner.
+ */
+export const SWEEP_RESOLVABLE_DYNAMIC_ROUTES: readonly string[] = [
+  "/workspace/cases/[caseKey]",
+];
+
 export function shellPolicyFor(routePath: string, c: ShellClassifiable): RouteShellPolicy {
   const migrated = MIGRATED_ROUTES.has(routePath);
-  const sweepExclusionReason = routePath.includes("[")
-    ? "dynamic-fixture-required"
-    : ROUTE_SWEEP_EXCLUSIONS[routePath as keyof typeof ROUTE_SWEEP_EXCLUSIONS];
+  const sweepExclusionReason =
+    routePath.includes("[") && !SWEEP_RESOLVABLE_DYNAMIC_ROUTES.includes(routePath)
+      ? "dynamic-fixture-required"
+      : ROUTE_SWEEP_EXCLUSIONS[routePath as keyof typeof ROUTE_SWEEP_EXCLUSIONS];
   return {
     routePath,
     shell: shellForRoute(c),

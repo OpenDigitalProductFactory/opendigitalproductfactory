@@ -1,9 +1,11 @@
+import { installScheduledTaskTransactionFixture } from "@/test-support/scheduled-task-transaction-fixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   prisma: {
     $transaction: vi.fn(),
+    agent: { findFirst: vi.fn() },
     scheduledAgentTask: {
       create: vi.fn(),
       findMany: vi.fn(),
@@ -36,7 +38,7 @@ const mocks = vi.hoisted(() => ({
       create: vi.fn(),
     },
     toolExecution: {
-      findFirst: vi.fn(),
+      findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]),
     },
     marketingCampaignBrief: {
       findFirst: vi.fn(),
@@ -58,10 +60,7 @@ vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWor
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@dpf/db", () => ({
   prisma: mocks.prisma,
-  // executeScheduledAgentTask short-circuits to the deterministic data-model
-  // mirror when task.taskId === DATA_MODEL_MIRROR_TASK_ID (EP-DATA-ARCH, #1618).
-  // The const must be exported from the mock or vitest throws on access; none of
-  // these tests use the mirror task id, so any non-matching value is fine.
+  // Scheduler special-task constants must exist; these fixtures do not use them.
   DATA_MODEL_MIRROR_TASK_ID: "data-model-mirror-nightly",
   SYSML_PROJECTION_TASK_ID: "sysml-projection-nightly",
   SELF_OPTIMIZATION_SWEEP_TASK_ID: "self-optimization-sweep-weekly",
@@ -99,10 +98,10 @@ import {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.prisma.$transaction.mockImplementation(async (callback: (tx: typeof mocks.prisma) => Promise<unknown>) => callback(mocks.prisma));
+  mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [], toolGrantRevocations: [] });
+  installScheduledTaskTransactionFixture(mocks.prisma);
   // BI-D1CD3A11: the idempotent claim (updateMany) runs before execution;
-  // default to a WON claim so existing tests exercise the work. Per-test
-  // overrides simulate losing the claim.
+  // Default to a won claim; individual cases simulate losing it.
   mocks.prisma.scheduledAgentTask.updateMany.mockResolvedValue({ count: 1 });
   mocks.prisma.scheduledJob.updateMany.mockResolvedValue({ count: 1 });
 });
@@ -268,6 +267,7 @@ describe("extractHiveScoutSummary", () => {
 });
 
 function arrangeScheduledTask() {
+  mocks.prisma.agent.findFirst.mockResolvedValue({ toolGrants: [{ grantKey: "web_search" }], toolGrantRevocations: [] });
   mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
     taskId: "discovery-taxonomy-gap-triage-daily",
     agentId: "inventory-specialist",
@@ -911,7 +911,7 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
         chatHistory: [
           {
             role: "user",
-            content: "[Scheduled task: Discovery Taxonomy Gap Triage]\n\nTriage taxonomy gaps.",
+            content: "[Scheduled task: Discovery Taxonomy Gap Triage]\n\nCall the tool that does the next step in your first response. Do not write a plan or a status essay before that call. If the step is already done, say so in one sentence and stop.\n\nTriage taxonomy gaps.",
           },
         ],
       }),
@@ -950,7 +950,7 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
 describe("executeScheduledAgentTask — SysML projection reconcile branch", () => {
   it("runs the deterministic reconcile directly (no LLM loop) and records ok status", async () => {
     mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
-      taskId: "sysml-projection-nightly",
+      taskId: "sysml-projection-nightly", ownerUserId: "user-1",
       isActive: true,
       schedule: "0 4 * * *",
     });
@@ -982,7 +982,7 @@ describe("executeScheduledAgentTask — SysML projection reconcile branch", () =
 
   it("records error status when the reconcile throws", async () => {
     mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
-      taskId: "sysml-projection-nightly",
+      taskId: "sysml-projection-nightly", ownerUserId: "user-1",
       isActive: true,
       schedule: "0 4 * * *",
     });
@@ -1081,7 +1081,7 @@ describe("scheduleAgentTask UTC-only timezone", () => {
 describe("executeScheduledAgentTask — self-optimization sweep branch", () => {
   it("runs the deterministic sweep directly (no LLM loop) and records ok status", async () => {
     mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
-      taskId: "self-optimization-sweep-weekly",
+      taskId: "self-optimization-sweep-weekly", ownerUserId: "user-1",
       isActive: true,
       schedule: "0 5 * * 1",
     });
@@ -1111,7 +1111,7 @@ describe("executeScheduledAgentTask — self-optimization sweep branch", () => {
 
   it("records error status when the sweep throws", async () => {
     mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({
-      taskId: "self-optimization-sweep-weekly",
+      taskId: "self-optimization-sweep-weekly", ownerUserId: "user-1",
       isActive: true,
       schedule: "0 5 * * 1",
     });

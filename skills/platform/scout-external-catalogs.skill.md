@@ -3,7 +3,7 @@ name: scout-external-catalogs
 description: "Scan external open-source agent catalogs and file backlog items for archetype gaps"
 category: platform
 assignTo: ["external-catalog-scout"]
-capability: "scout_external_catalogs"
+capability: "view_platform"
 taskType: "analysis"
 triggerPattern: "scout|catalog|external agents|archetypes"
 userInvocable: true

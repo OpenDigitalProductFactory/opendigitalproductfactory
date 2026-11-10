@@ -24,6 +24,8 @@ function det(overrides: Partial<DetectionForGrouping>): DetectionForGrouping {
     severity: "medium",
     groupingKey: deriveGroupingKey({ scopeKey: "customer:acct_1", entityKey: "HOST1", family: "credential-access" }),
     title: "Suspicious logon",
+    ruleName: "Suspicious logon",
+    entityKey: "HOST1",
     firstSeenAt: T0,
     lastSeenAt: T0,
     ...overrides,
@@ -113,6 +115,30 @@ describe("detectionFamily / detectionRowToGroupingInput (the sweep bridge)", () 
     expect(g.title).toBe("Windows audit log cleared — HOST-1");
     expect(g.severity).toBe("high");
     expect(g.detectionKey).toBe("dpf-kernel:windows-audit-log-cleared:e1");
+    // BI-7D1EC4B9: rule name + raw entity are carried separately so a persist
+    // step can re-render the title with a resolved actor label.
+    expect(g.ruleName).toBe("Windows audit log cleared");
+    expect(g.entityKey).toBe("HOST-1");
+  });
+
+  it("carries the winning detection's ruleName + entityKey onto the candidate (BI-7D1EC4B9)", () => {
+    // Same actor + family (so they group into one case), different rule + severity.
+    const base = {
+      mitreTechniques: ["T1070.001"],
+      entityKey: "cmuser0000000000000000000",
+    };
+    const low = detectionRowToGroupingInput(
+      row({ detectionKey: "k:e1", severity: "low", enrichment: { ...base, ruleKey: "r-low", ruleName: "Low signal" } }),
+    );
+    const high = detectionRowToGroupingInput(
+      row({ detectionKey: "k:e2", severity: "critical", enrichment: { ...base, ruleKey: "r-high", ruleName: "Internal authorization denied" } }),
+    );
+    const cands = groupDetectionsIntoCases([low, high]);
+    // Same entity + family → one candidate; the critical detection's title wins,
+    // so its ruleName + the carried entityKey win with it.
+    expect(cands).toHaveLength(1);
+    expect(cands[0]!.ruleName).toBe("Internal authorization denied");
+    expect(cands[0]!.entityKey).toBe("cmuser0000000000000000000");
   });
 
   it("falls back to entity 'unknown' (group by scope+family) when entity is absent", () => {

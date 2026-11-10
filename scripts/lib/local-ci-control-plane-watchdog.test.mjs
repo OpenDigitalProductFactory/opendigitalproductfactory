@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_BUILD_WATCHDOG_FAILURE_LIMITS,
   classifyControlPlaneSample,
   establishHealthyControlPlane,
   monitorControlPlane,
@@ -87,6 +88,76 @@ test("publishes every control-plane sample for durable stage heartbeats", async 
   assert.equal(result.status, "healthy");
   assert.equal(observed.length, 1);
   assert.equal(observed[0].healthy, true);
+  assert.deepEqual(observed[0].consecutiveFailureLimits, {
+    portal: 3,
+    mcp: 3,
+    docker: 2,
+    postgres: 2,
+  });
+});
+
+test("default request-surface limits allow two misses followed by recovery", async (t) => {
+  for (const surface of ["portal", "mcp"]) {
+    await t.test(surface, async () => {
+      const rounds = [
+        { ...healthy, [surface]: { healthy: false, reason: "timeout" } },
+        { ...healthy, [surface]: { healthy: false, reason: "timeout" } },
+        healthy,
+      ];
+      let complete = false;
+      const result = await monitorControlPlane({
+        sample: async () => {
+          const value = rounds.shift();
+          if (rounds.length === 0) complete = true;
+          return value;
+        },
+        isComplete: () => complete,
+        wait: async () => {},
+      });
+      assert.equal(result.status, "healthy");
+      assert.equal(result.samples.length, 3);
+    });
+  }
+});
+
+test("default request-surface limits fence a third consecutive miss", async (t) => {
+  for (const surface of ["portal", "mcp"]) {
+    await t.test(surface, async () => {
+      const result = await monitorControlPlane({
+        sample: async () => ({
+          ...healthy,
+          [surface]: { healthy: false, reason: "timeout" },
+        }),
+        isComplete: () => false,
+        wait: async () => {},
+      });
+      assert.equal(result.status, "blocked_control_plane_starvation");
+      assert.equal(result.samples.length, 3);
+      assert.deepEqual(result.failures, [`${surface}:timeout`]);
+    });
+  }
+});
+
+test("default process-local surface limits remain fail-closed at two misses", async (t) => {
+  for (const surface of ["docker", "postgres"]) {
+    await t.test(surface, async () => {
+      const result = await monitorControlPlane({
+        sample: async () => ({
+          ...healthy,
+          [surface]: { healthy: false, reason: "timeout" },
+        }),
+        isComplete: () => false,
+        wait: async () => {},
+      });
+      assert.equal(result.status, "blocked_control_plane_starvation");
+      assert.equal(result.samples.length, 2);
+      assert.deepEqual(result.failures, [`${surface}:timeout`]);
+    });
+  }
+});
+
+test("the default build-watchdog policy is immutable", () => {
+  assert.equal(Object.isFrozen(DEFAULT_BUILD_WATCHDOG_FAILURE_LIMITS), true);
 });
 
 test("two consecutive unhealthy rounds form a sustained starvation breach", async () => {

@@ -60,13 +60,9 @@ export function pointToWeights(x: number, y: number): Weights {
 }
 
 // ── Presets ───────────────────────────────────────────────────────────────
-// [quality, cost, time] — mirrors the Slice 1 compiler's canonical postures.
-export const PRESET_WEIGHTS: Record<Exclude<GoldenTrianglePreset, "custom">, [number, number, number]> = {
-  fast: [0.1, 0.1, 0.8],
-  balanced: [0.34, 0.33, 0.33],
-  assured: [0.8, 0.1, 0.1],
-  frugal: [0.1, 0.8, 0.1],
-};
+// The weight table lives in lib/golden-triangle/presets.ts so server-side
+// resolvers (Workroom shape defaults) share one source with this UI.
+export { PRESET_WEIGHTS, preferenceFromPreset } from "@/lib/golden-triangle/presets";
 
 export const PRESET_ORDER: Array<Exclude<GoldenTrianglePreset, "custom">> = [
   "fast",
@@ -81,11 +77,6 @@ export const PRESET_META: Record<Exclude<GoldenTrianglePreset, "custom">, { labe
   assured: { label: "Assured", icon: "diamond", effect: "Most checking." },
   frugal: { label: "Frugal", icon: "coin", effect: "Spends the least." },
 };
-
-export function preferenceFromPreset(preset: Exclude<GoldenTrianglePreset, "custom">): GoldenTrianglePreference {
-  const [qualityWeight, costWeight, timeWeight] = PRESET_WEIGHTS[preset];
-  return { preset, qualityWeight, costWeight, timeWeight };
-}
 
 // ── Posture label (dominant axis → a short, meaningful name) ─────────────────
 function dominantAxis(p: GoldenTrianglePreference): { axis: "quality" | "cost" | "time"; weight: number } {

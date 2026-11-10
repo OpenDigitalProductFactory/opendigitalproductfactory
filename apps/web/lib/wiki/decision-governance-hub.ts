@@ -5,9 +5,39 @@
 // The page does the Prisma I/O and passes the counts in, so this is unit
 // testable and does no DB work itself.
 
-import type {
-  DisciplineCardModel,
-} from "@/components/wiki/DecisionDisciplineHub";
+// Card models rendered by components/wiki/DecisionDisciplineHub.tsx. They live
+// here, beside the builder, so lib never imports components/** (M11 layering).
+export type DisciplineKey = "wwmd" | "wwwd" | "wsid";
+
+export type DisciplineChipTone = "neutral" | "warning" | "success";
+
+export type DisciplineChip = {
+  label: string;
+  tone?: DisciplineChipTone;
+};
+
+export type DisciplineAction = {
+  label: string;
+  href: string;
+  /** Accent the action (used for the discipline's primary "Adjust"/owner action). */
+  emphasis?: boolean;
+};
+
+export type DisciplineCardModel = {
+  key: DisciplineKey;
+  /** Short code shown as the card title, e.g. "WWMD". */
+  code: string;
+  /** What the acronym expands to, e.g. "What would Mark do". */
+  expansion: string;
+  /** One-line, plain-language subtitle of what this discipline governs. */
+  blurb: string;
+  /** Derived health chips (counts, coverage, open gaps). */
+  chips: DisciplineChip[];
+  /** See / Adjust / Review action links. */
+  actions: DisciplineAction[];
+  /** Accent this card (WWWD — the discipline the business most owns). */
+  featured?: boolean;
+};
 
 /** Live signals the page derives and feeds to the card builder. */
 export type DisciplineHealthInput = {

@@ -36,8 +36,8 @@ Creates are covered by [`dpf-worktree-per-session`](../dpf-worktree-per-session/
 
 | Path | Owner | Agent freestyle? |
 |------|--------|------------------|
-| **Primary reaper** — this session's worktree on **SessionEnd** when Tier-A (merged + clean). Never on `Stop`: that fires every turn, and a live tree becomes Tier-A the moment its own PR merges (BI-E5D810B8) | Client hooks (`worktree-session-hygiene.mjs`) | No — automatic when dpf-platform / global hooks are installed |
-| **Fleet soak** — scheduled observe / optional Tier-A, sandbox leftover GC | Portal Inngest (`ops/worktree-janitor`, `ops/sandbox-build-gc`) + env flags | No — enable flags; do not hand-cron |
+| **Primary reaper** — daily observe, Tier-A reap above `DPF_WORKTREE_JANITOR_MAX` or with `AUTO_REAP=1`; fails closed when liveness is unreadable. Runs with no AI client present (BI-99395B29) | Portal Inngest (`ops/worktree-janitor`) + env flags | No — enable flags; do not hand-cron |
+| **Accelerators** — merged-PR reap of one branch (`pull-request-merged-reap`), sandbox leftover GC (`ops/sandbox-build-gc`), and this session's own tree on **SessionEnd** when Tier-A. Never on `Stop`: that fires every turn, and a live tree becomes Tier-A the moment its own PR merges (BI-E5D810B8) | Portal Inngest + client hook (`worktree-session-hygiene.mjs`) | No — automatic; the hook only speeds things up, nothing depends on it |
 | **Workroom reaper** — transition dead workroom *records* (lease expired / build terminal / idle) `working`→`abandoned`; the DB half of hygiene (WS9) | Portal Inngest (`ops/taskrun-watchdog` tick) + `DPF_WORKCAPSULE_REAPER_*` flags | No — enable flags; observe via `list_work_capsules staleOnly=true` |
 | **Exceptional reclaim** — live Tier-A bulk prune, force-delete locked dirs, kill locking shells | Operator + explicit "go" | Only after dry-run report + operator approval |
 
@@ -51,8 +51,8 @@ Primary design: multi-client governance parity (BI-42FA7DD8, BI-8BD61C30, BI-A4B
 | `DPF_WORKTREE_JANITOR_AUTO_REAP` | off | When `1` **and** ENABLED, live **Tier A only** |
 | `DPF_SANDBOX_BUILD_GC_ENABLED` | off | When `1`, daily GC for terminal/orphan `.builds/*` |
 | `DPF_SANDBOX_BUILD_GC_DELETE_BRANCHES` | off | When `1` **and** ENABLED, also age-delete `build/*` past grace |
-| `DPF_WORKCAPSULE_REAPER_ENABLED` | off | When `1`, the taskrun-watchdog tick **scans** for dead Workrooms (observe-only unless AUTO_REAP) |
-| `DPF_WORKCAPSULE_REAPER_AUTO_REAP` | off | When `1` **and** ENABLED, live-transition dead workrooms `working`→`abandoned` (reversible; DB-only) |
+| `DPF_WORKCAPSULE_REAPER_ENABLED` | off | When `1`, the taskrun-watchdog tick **scans** for dead Workrooms and **archives merged ones** (unmerged ones are observe-only unless AUTO_REAP) |
+| `DPF_WORKCAPSULE_REAPER_AUTO_REAP` | off | When `1` **and** ENABLED, also live-transition dead unmerged workrooms to `abandoned` (reversible; DB-only) |
 
 Wire via host `.env` and/or gitignored `docker-compose.override.yml` on the **portal** service, then recreate portal so `printenv` shows the flags. Do not set AUTO_REAP or BRANCH delete until observe-only soak looks clean.
 
@@ -159,7 +159,7 @@ Disk hygiene reaps *worktrees and sandboxes*; this reaps the **Workroom row** �
 **`updatedAt` is not liveness.** True liveness (`apps/web/lib/work-capsules/liveness.ts`) is derived from signals that only advance with real work: an open PR, a lease-backed executor's `leaseExpiresAt` (external Claude/Codex/Grok), the linked build's phase + activity (a null-lease BS workroom's only real signal), and `lastSyncedAt`. The board, `list_work_capsules` (see its `livenessSummary` and `staleOnly=true`), and the reaper all share that one classifier.
 
 - **Observe (always safe):** `list_work_capsules staleOnly=true` — the reap-candidate set, each with a `liveness` verdict and the `trueLivenessAt` that proves it. No writes.
-- **Governed reaper** (`apps/web/lib/work-capsules/work-capsule-reaper.ts`) runs on the taskrun-watchdog tick: observe-only when `DPF_WORKCAPSULE_REAPER_ENABLED=1`, live only with `DPF_WORKCAPSULE_REAPER_AUTO_REAP=1`. It transitions dead workrooms `working`→`abandoned`.
+- **Governed reaper** (`apps/web/lib/work-capsules/work-capsule-reaper.ts`) runs on the taskrun-watchdog tick. With `DPF_WORKCAPSULE_REAPER_ENABLED=1` it archives every Workroom whose PR merged; abandoning dead unmerged workrooms stays observe-only until `DPF_WORKCAPSULE_REAPER_AUTO_REAP=1`.
 - **DB-only, so junction-safe:** the reaper never touches the filesystem. Reaping the workroom record does **not** delete the worktree — that stays for `worktree-janitor` / section C after its own explicit go. Abandon is reversible: re-promote the backlog item or re-adopt the branch.
 - A terminal build now abandons its attached workroom in the same watchdog tick (no zombie `working` workroom left behind).
 
@@ -194,7 +194,7 @@ Remove that junction with `cmd /c rmdir generated` — **never `rm -rf`**, which
 - **No freestyle `rm -rf` / mass process kill** as hygiene.
 - **Junction-safe only** for worktree directory removal on Windows.
 - **Hide complexity from lay users** — report outcomes (how many reaped, flags on/off), not raw flag names unless the operator is in ops mode.
-- **Primary reaper remains session hooks** — this skill does not replace SessionEnd hygiene.
+- **The platform owns reaping** — `ops/worktree-janitor` is the primary reaper; client session hooks only accelerate it (`platform-function-never-depends-on-a-client`).
 
 ## Output template
 

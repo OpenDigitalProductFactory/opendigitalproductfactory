@@ -1,3 +1,4 @@
+import { outcomeUnlessStated } from "@/lib/backlog/intake-outcome";
 import { createHash } from "node:crypto";
 
 import {
@@ -263,9 +264,15 @@ export async function adoptIncomingDemand(
   }
   if (!mirror.peerRecordRef) throw new Error("Federated demand origin is missing.");
 
+  // BI-458CCA8D: keep the peer's own outcome; derive one only when it stated none.
+  const outcome = outcomeUnlessStated(
+    current.envelope.summary,
+    `The installation that shared this demand gets "${current.envelope.title.trim()}", or a clear answer.`,
+  );
   const result = await ingest({
     title: current.envelope.title,
     body: current.envelope.summary,
+    ...(outcome ? { outcome } : {}),
     workType: demandWorkType(current.envelope.workType),
     source: "user-request",
     type: "portfolio",

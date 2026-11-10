@@ -10,8 +10,9 @@ import {
   DISCOVERY_TRIAGE_TASK_ID,
   DISCOVERY_TRIAGE_TASK_TITLE,
 } from "./discovery-triage-config";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -50,13 +51,9 @@ export async function ensureDiscoveryTriageScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean; ownerUserId: string }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
+  const ownerId = await findTaskOwnerUserId(prisma);
 
-  if (!owner) {
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed discovery triage scheduled task");
   }
 
@@ -66,9 +63,10 @@ export async function ensureDiscoveryTriageScheduledTask(
 
   const existingTask = await prisma.scheduledAgentTask.findUnique({
     where: { taskId: DISCOVERY_TRIAGE_TASK_ID },
-    select: { taskId: true, nextRunAt: true },
+    select: { taskId: true, nextRunAt: true, ownerUserId: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existingTask) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: DISCOVERY_TRIAGE_TASK_ID },
@@ -79,7 +77,6 @@ export async function ensureDiscoveryTriageScheduledTask(
         routeContext: DISCOVERY_TRIAGE_ROUTE_CONTEXT,
         schedule: DISCOVERY_TRIAGE_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existingTask.nextRunAt ?? nextRunAt,
       },
@@ -94,7 +91,7 @@ export async function ensureDiscoveryTriageScheduledTask(
         routeContext: DISCOVERY_TRIAGE_ROUTE_CONTEXT,
         schedule: DISCOVERY_TRIAGE_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });
@@ -117,6 +114,6 @@ export async function ensureDiscoveryTriageScheduledTask(
 
   return {
     created: !existingTask,
-    ownerUserId: owner.id,
+    ownerUserId: existingTask?.ownerUserId ?? ownerId,
   };
 }

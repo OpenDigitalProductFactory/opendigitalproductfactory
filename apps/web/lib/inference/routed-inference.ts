@@ -1,3 +1,4 @@
+import type { ResponseProducer } from "../routing/response-producer";
 /**
  * EP-INF-009b: Unified V2 routing + inference dispatch.
  *
@@ -8,7 +9,11 @@
  * champion/challenger, rate tracking, and outcome telemetry.
  */
 
-import type { ChatMessage } from "@/lib/ai-inference";
+import { assertOrdinaryProviderTransportAllowed } from "../shared/captured-effect-store";
+import { resolveLocalRoutingRuntime } from "@/lib/inference/local-model-context-reconcile";
+import { currentInferenceSignal } from "./inference-admission";
+import { transferLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
+import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import type {
   RouteDecision,
   EndpointManifest,
@@ -26,21 +31,32 @@ import {
   persistFailedRouteDecision,
 } from "@/lib/routing/loader";
 import { withProviderReconciliationRetry } from "@/lib/inference/provider-reconciliation";
+import { NoEligibleEndpointsError } from "@/lib/routing/inference-error";
+export { NoEligibleEndpointsError } from "@/lib/routing/inference-error";
+import { routingEligibilitySummary } from "./routing-exclusion-buckets";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import {
-  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
-  activityHarnessOverridesFromProposalRows,
+  loadApprovedActivityHarnessOverrides,
 } from "@/lib/routing/activity-harness-approval-source";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
+import { bindProviderAccountSuitability } from "@/lib/routing/provider-account-candidates";
+import { accountAffinityKey } from "@/lib/routing/provider-account-allocation";
+import { conservativeQuotaScope } from "@/lib/routing/provider-capacity/scopes";
 import { prisma } from "@dpf/db";
-import { getLocalOnlyInference } from "@/lib/inference/local-only";
+import { getLocalOnlyInference, getLocalOnlyInferenceFresh } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
 import {
   buildEffectiveRequestContract,
   buildInitialRouteContext,
 } from "@/lib/inference/route-contract-builder";
-import { logTokenUsage } from "@/lib/ai-inference";
+import { assertDurableExecutionConstraint } from "./durable-execution-constraint";
+import { persistAcceptedRoutedTokenUsage, persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
+import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
+import type { RoutedExecutionPlan } from "@/lib/routing/recipe-types";
+import { currentReassessmentExecution, currentFiniteReassessmentExecution, assertReassessmentPlan, ReassessmentExecutionError } from "@/lib/routing/reassessment-execution-scope";
+import { spendAwareBudgetClass, type BudgetClass } from "./spend-aware-routing";
+import { assertReassessmentNativeScreenUnchanged, reassessmentNativePlansEqual, type ReassessmentNativeRoutingFacts } from "./reassessment-native-runtime";
 import {
   applyObservedRouterEvidence,
   attachProviderSuitabilityReceipt,
@@ -59,15 +75,22 @@ import { soleCapabilityFloorFailure } from "@/lib/inference/routing-exclusion-at
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 import type { EndpointPreferences } from "@/lib/routing/preference-finalization";
-import { buildLocalFallbackBanner, extractLocalFallbackFacts } from "./downgrade-explanation";
+import { describeLocalFallback, type DowngradeCause } from "./downgrade-explanation";
+import {
+  admitRoutedAsyncOperation,
+  routeUsesDurableAsyncAdapter,
+} from "./async-operation-routed-admission";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
 export interface RoutedInferenceResult {
+  responseProducer?: ResponseProducer;
   providerId: string;
+  providerConnectionId?: string;
+  quotaScopeKey?: string;
   modelId: string;
   content: string;
-  toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  toolCalls: ToolCallEntry[];
   inputTokens: number;
   outputTokens: number;
   downgraded: boolean;
@@ -80,6 +103,7 @@ export interface RoutedInferenceResult {
    * assert both at once. See ./downgrade-explanation.ts (BI-F4D3B9E9d).
    */
   downgradeReason: "provider-unavailable" | "not-eligible" | null;
+  downgradeCause?: DowngradeCause | null;
   /** True when tools were stripped due to capability degradation (local model). */
   toolsStripped: boolean;
   /**
@@ -102,32 +126,11 @@ export interface RoutedInferenceResult {
    *  compaction + the context-pressure gauge to the real window (BI-9679EB1A). */
   resolvedMaxContextTokens?: number | null;
 }
-// ─── Error ──────────────────────────────────────────────────────────────────
-
-export class NoEligibleEndpointsError extends Error {
-  constructor(
-    public readonly taskType: string,
-    public readonly reason: string,
-    public readonly excludedCount: number,
-    /** EP-AGENT-CAP-002: Which capability the agent required but no endpoint satisfied. */
-    public readonly missingCapability?: string,
-    /** EP-AGENT-CAP-002: The agent that triggered the error (for admin UI correlation). */
-    public readonly agentId?: string,
-  ) {
-    super(
-      `No eligible endpoints for task '${taskType}': ${reason}` +
-      (excludedCount > 0 ? ` (${excludedCount} endpoint(s) excluded)` : ""),
-    );
-    this.name = "NoEligibleEndpointsError";
-  }
-}
-
-// ─── Options ────────────────────────────────────────────────────────────────
-
 // ─── Route preparation (shared by routeAndCall + previewRoute) ───────────────
 
 interface PreparedRoute {
   contract: RequestContract;
+  requestedBudgetClass?: BudgetClass;
   decision: RouteDecision;
   manifests: EndpointManifest[];
   policies: PolicyRuleEval[];
@@ -151,25 +154,18 @@ function endpointPreferencesFromOptions(
     ...(options?.preferredModelId
       ? { preferredModelId: options.preferredModelId }
       : {}),
+    ...(options?.preferredModelFamily
+      ? { preferredModelFamily: options.preferredModelFamily }
+      : {}),
   };
 }
 
-/**
- * The routing half of routeAndCall: contract inference → routing-data load →
- * V2 endpoint selection. Produces the RouteDecision WITHOUT dispatching. Both
- * the live path (routeAndCall) and the side-effect-free preview (previewRoute)
- * go through here, so a prediction can never drift from what actually runs.
- *
- * `skipRecipe` (preview) makes routeEndpointV2 deterministic and skips the
- * challenger Math.random() roll; the live path leaves it false so the
- * executionPlan is built for dispatch.
- */
 async function prepareRoute(
   messages: ChatMessage[],
   systemPrompt: string,
   sensitivity: RouteSensitivity,
   options: RouteAndCallOptions | undefined,
-  prep?: { skipRecipe?: boolean },
+  prep?: { skipRecipe?: boolean; reassessment?: boolean; nativeRuntime?: ReassessmentNativeRoutingFacts },
 ): Promise<PreparedRoute> {
   const taskType = options?.taskType ?? "conversation";
 
@@ -179,16 +175,14 @@ async function prepareRoute(
   // authoritative over a task requirement's residency, and the guarantee the
   // "disable cloud" admin toggle promises (no silent per-phase cloud fallback).
   // Computed in prepareRoute so the per-phase preview (previewRoute) reflects it too.
-  const localOnlyInference = await getLocalOnlyInference();
+  const localOnlyInference = await (prep?.reassessment ? getLocalOnlyInferenceFresh() : getLocalOnlyInference());
 
-  // EP-GOLDEN-TRIANGLE Slice 3: resolve the saved Cost/Quality/Time posture and
-  // feed it into routing as DEFAULTS (caller options + the local-only sovereignty
-  // switch below still win). Fail-open + Balanced-inert: null when no non-Balanced
-  // default is set, so this is byte-identical to flag-off until a posture is chosen.
-  // The calling coworker's own posture (if any) layers above org/platform, so a
-  // per-coworker priority actually tunes that coworker's runs. Single-org install
-  // → null org id; non-coworker runs pass null agentId (platform default).
-  const posture = await resolveDispatchPosture(options?.agentId ?? null, taskType);
+  // Durable exact plans outrank ambient saved posture.
+  const posture = options?.durableAsyncOperation?.expectedExecution
+    ? null
+    : await resolveDispatchPosture(options?.agentId ?? null, taskType, null, undefined, {
+        workroomPriority: options?.workroomPriority ?? null,
+      });
   const initialRouteContext = buildInitialRouteContext({
     sensitivity,
     options,
@@ -199,6 +193,7 @@ async function prepareRoute(
     messages,
     systemPrompt,
     systemPromptInstructionSpans: options?.systemPromptInstructionSpans,
+    messageOrigins: options?.messageOrigins,
     tools: options?.tools,
     taskType,
     routeContext: initialRouteContext,
@@ -235,17 +230,20 @@ async function prepareRoute(
     },
   });
 
-  const [manifests, policies, overrides] = await Promise.all([
-    loadEndpointManifests(),
+  const requestedBudgetClass = contract.budgetClass;
+  if (prep?.nativeRuntime) contract = { ...contract, budgetClass: spendAwareBudgetClass(contract.budgetClass, prep.nativeRuntime.budgetStatus) };
+  const [loadedManifests, policies, overrides] = await Promise.all([
+    prep?.nativeRuntime ? loadEndpointManifests(Date.now(), prep.nativeRuntime.reader) : prep?.reassessment ? loadEndpointManifests(Date.now()) : loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);
 
-  if (manifests.length === 0) {
+  if (loadedManifests.length === 0) {
     throw new NoEligibleEndpointsError(
       taskType,
       "No active endpoint manifests found. Configure at least one AI provider with a profiled model.",
       0,
+      undefined, options?.agentId, routingEligibilitySummary(contract.sensitivity, contract.residencyPolicy, 0, []),
     );
   }
 
@@ -258,28 +256,25 @@ async function prepareRoute(
     });
     contract = preparedSuitability.contract;
     suitability = preparedSuitability.suitability;
+    if (prep?.reassessment && !suitability) throw new ReassessmentExecutionError("reassessment-suitability-unproven");
   }
+  if (prep?.reassessment) {
+    const allowed = [...new Set(loadedManifests.filter(endpoint => endpoint.providerConnectionId
+      && endpoint.providerConnectionVersion && (endpoint.executionChannel === "direct-api" && ["api_key", "none"].includes(endpoint.accountAuthMethod ?? "")
+        || prep.nativeRuntime && endpoint.providerId === "local" && endpoint.executionChannel === "local-runtime" && endpoint.accountAuthMethod === "none"))
+      .map(endpoint => endpoint.providerConnectionId!))];
+    if (allowed.length === 0) throw new ReassessmentExecutionError("reassessment-composition-unavailable");
+    contract.allowedProviderConnectionIds = allowed.filter(id => contract.allowedProviderConnectionIds === undefined
+      || contract.allowedProviderConnectionIds.includes(id));
+  }
+  const manifests = suitability?.mode === "enforced"
+    ? bindProviderAccountSuitability(loadedManifests, contract.sensitivity, suitability.policy.allowedProviderConnectionIds)
+    : loadedManifests;
 
   const activityHarnessConfidenceOverrides =
     options?.activityContract && !prep?.skipRecipe
-      ? activityHarnessOverridesFromProposalRows(
-          await prisma.agentActionProposal.findMany({
-            where: {
-              actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
-              status: { in: ["approve", "approved", "executed"] },
-            },
-            orderBy: { decidedAt: "desc" },
-            take: 40,
-            select: {
-              proposalId: true,
-              actionType: true,
-              parameters: true,
-              status: true,
-              decidedById: true,
-              decidedAt: true,
-            },
-          }),
-        )
+      // Facts and legacy approved proposals (dual read, BI-C8EC05C9).
+      ? await loadApprovedActivityHarnessOverrides(prisma, { take: 40 })
       : [];
 
   const decision = await routeEndpointV2(manifests, contract, policies, overrides, {
@@ -287,6 +282,7 @@ async function prepareRoute(
     activityContract: options?.activityContract,
     activityHarnessConfidenceOverrides,
     preferences: endpointPreferencesFromOptions(options),
+    accountAffinityKey: accountAffinityKey(options?.agentId, options?.threadId),
   });
   decision.inferenceDataScreenReceipt = screen.receipt;
   if (!decision.policyRulesApplied.includes("inference-dispatch")) {
@@ -295,6 +291,7 @@ async function prepareRoute(
 
   return {
     contract,
+    requestedBudgetClass,
     decision,
     manifests,
     policies,
@@ -307,6 +304,30 @@ async function prepareRoute(
   };
 }
 
+/** Normal V2 ranking constrained before selection to existing restricted HTTP accounts. */
+export async function prepareReassessmentRoute(messages: ChatMessage[], systemPrompt: string,
+  sensitivity: RouteSensitivity, options?: RouteAndCallOptions, nativeRuntime?: ReassessmentNativeRoutingFacts): Promise<RoutePreview & { executionPlan: RoutedExecutionPlan; requestedBudgetClass?: BudgetClass }> {
+  if (options?.interactionMode && options.interactionMode !== "sync" || options?.durableAsyncOperation
+    || options?.requiresCodeExecution || options?.requiresWebSearch || options?.requiresComputerUse) {
+    throw new ReassessmentExecutionError("reassessment-composition-unsupported");
+  }
+  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options, { reassessment: true, nativeRuntime });
+  const { contract, decision, manifests } = prepared;
+  const selectedManifest = manifests.find(endpoint => endpoint.id === decision.selectedEndpoint) ?? null;
+  if (!selectedManifest || !decision.executionPlan) throw new ReassessmentExecutionError("reassessment-composition-unavailable");
+  const executionPlan = applyCallerExecutionPlanOverrides(decision.executionPlan, {
+    maxOutputTokens: options?.activityContract?.tokenEnvelope.maxOutputTokens,
+    effort: options?.effort ?? prepared.posture?.effort, toolChoice: options?.toolChoice,
+    terminalWriterToolName: options?.terminalWriterToolName,
+  });
+  return { contract, decision, selectedManifest, executionPlan, requestedBudgetClass: prepared.requestedBudgetClass };
+}
+
+/** Source-only candidate facts; the reader explicitly preserves UNKNOWN. */
+export const prepareReassessmentNativeStaticRoute = (messages: ChatMessage[], systemPrompt: string, sensitivity: RouteSensitivity,
+  options: RouteAndCallOptions, nativeRuntime: ReassessmentNativeRoutingFacts) =>
+  prepareRoute(messages, systemPrompt, sensitivity, options, { reassessment: true, nativeRuntime });
+
 /** Result of a side-effect-free routing dry-run. */
 export interface RoutePreview {
   /** The endpoint the live router would select first (selectedEndpoint=null → none eligible). */
@@ -317,21 +338,6 @@ export interface RoutePreview {
   contract: RequestContract;
 }
 
-/**
- * Side-effect-free dry-run of V2 routing: resolves the endpoint that WOULD be
- * selected for a given task contract, without dispatching, persisting a route
- * decision, rolling the challenger arm, or building an executionPlan.
- *
- * This is the primitive the Model Selection & Runtime Health resolver uses to
- * predict, per build phase, which provider/model the live routeAndCall path
- * will pick — answering "local or cloud, per phase?" BEFORE a run rather than
- * discovering it after the GPU has sat idle. It mirrors routeAndCall's routing
- * inputs (taskType, sensitivity, budgetClass, tools→requiresTools) so the
- * predicted winner matches the live one.
- *
- * Throws NoEligibleEndpointsError when no providers are configured at all —
- * callers should catch and surface that as a configuration gap.
- */
 export async function previewRoute(
   messages: ChatMessage[],
   sensitivity: RouteSensitivity = "internal",
@@ -352,25 +358,26 @@ export async function previewRoute(
 
 // ─── Main function ──────────────────────────────────────────────────────────
 
-/**
- * Route and execute an LLM inference call through the V2 pipeline.
- *
- * This is the sole inference entry point after EP-INF-009b: contract,
- * manifests, V2 routing, then fallback dispatch.
- *
- * Throws `NoEligibleEndpointsError` if no endpoints qualify — no silent
- * degradation to a different routing mechanism.
- */
 export async function routeAndCall(
   messages: ChatMessage[],
   systemPrompt: string,
   sensitivity: RouteSensitivity = "internal",
   options?: RouteAndCallOptions,
 ): Promise<RoutedInferenceResult> {
-  return withProviderReconciliationRetry(
-    () => routeAndCallAttempt(messages, systemPrompt, sensitivity, options),
-    invalidateRoutingLoaderCache,
-  );
+  assertOrdinaryProviderTransportAllowed();
+  if (currentReassessmentExecution()) return routeAndCallAttempt(messages, systemPrompt, sensitivity, options, () => {});
+  let reconciled = false;
+  let dispatchStarted = false;
+  try {
+    return await withProviderReconciliationRetry(
+      () => routeAndCallAttempt(messages, systemPrompt, sensitivity, options, () => { dispatchStarted = true; }),
+      () => { reconciled = true; invalidateRoutingLoaderCache(); },
+    );
+  } catch (error) {
+    // A preceding reconciliation attempt may already have called a provider.
+    if (error instanceof NoEligibleEndpointsError) error.providerDispatch = !reconciled && !dispatchStarted ? "not-started" : "unknown";
+    throw error;
+  }
 }
 
 async function routeAndCallAttempt(
@@ -378,13 +385,16 @@ async function routeAndCallAttempt(
   systemPrompt: string,
   sensitivity: RouteSensitivity,
   options: RouteAndCallOptions | undefined,
+  onDispatch: () => void,
 ): Promise<RoutedInferenceResult> {
-  // 1-3. Contract inference, routing-data load, and V2 endpoint selection —
-  // shared with previewRoute() via prepareRoute() so a model-selection
-  // prediction can never drift from what this live path actually picks. The
-  // live path keeps recipe selection (skipRecipe defaults false) so the
-  // executionPlan is built for dispatch below.
-  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options);
+  // Shared preparation retains normal eligibility, ranking and preferences.
+  const cancellation = currentInferenceSignal();
+  cancellation?.throwIfAborted();
+  const restricted = currentReassessmentExecution();
+  const finite = currentFiniteReassessmentExecution(), original = finite ? structuredClone({ messages, systemPrompt, tools: options?.tools }) : null;
+  const nativeRuntime = finite ? await (await import("./reassessment-execution-qualification")).prepareCurrentReassessmentNativeRouting() : undefined;
+  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options, restricted ? { reassessment: true, nativeRuntime } : undefined);
+  if (original) assertReassessmentNativeScreenUnchanged(original, prepared.screenInput);
   const { contract, manifests, policies, overrides, taskType } = prepared;
   messages = prepared.screenInput.messages;
   systemPrompt = prepared.screenInput.systemPrompt;
@@ -399,20 +409,36 @@ async function routeAndCallAttempt(
   // through callWithFallbackChain into every adapter in the fallback chain.
   // Caller-set effort wins; otherwise the resolved posture's effort applies
   // (EP-GOLDEN-TRIANGLE Slice 3). Balanced/no posture leaves effort untouched.
-  const effort = options?.effort ?? prepared.posture?.effort;
-  if (effort && decision.executionPlan) {
-    decision.executionPlan = {
-      ...decision.executionPlan,
-      providerSettings: {
-        ...decision.executionPlan.providerSettings,
-        effort,
-      },
-    };
+  if (decision.executionPlan) {
+    decision.executionPlan = applyCallerExecutionPlanOverrides(decision.executionPlan, {
+      maxOutputTokens: options?.activityContract?.tokenEnvelope.maxOutputTokens,
+      effort: options?.effort ?? prepared.posture?.effort,
+      toolChoice: options?.toolChoice,
+      terminalWriterToolName: options?.terminalWriterToolName,
+    });
+  }
+  if (restricted) {
+    const frozen = restricted.qualification;
+    if (finite && (decision.routingConfidence?.qualityFloorRelaxed || prepared.requestedBudgetClass !== frozen.nativeRuntime!.requestedBudgetClass || contract.budgetClass !== frozen.nativeRuntime!.spendAwareBudgetClass
+      || !decision.executionPlan || !reassessmentNativePlansEqual(decision.executionPlan, frozen.executionPlan))) throw new ReassessmentExecutionError("reassessment-native-normal-plan-changed");
+    const endpoint = manifests.find(manifest => manifest.id === decision.selectedEndpoint);
+    if (options?.interactionMode === "background" || options?.durableAsyncOperation || !endpoint
+      || endpoint.providerId !== frozen.providerId || endpoint.modelId !== frozen.modelId
+      || endpoint.providerConnectionId !== frozen.providerConnectionId
+      || endpoint.providerConnectionVersion !== frozen.providerConnectionVersion) {
+      throw new ReassessmentExecutionError("reassessment-route-changed");
+    }
+    decision = { ...decision, executionPlan: frozen.executionPlan, fallbackChain: [endpoint.id] };
+    assertReassessmentPlan({ providerId: endpoint.providerId, modelId: endpoint.modelId,
+      plan: frozen.executionPlan, tools: options?.tools });
   }
 
   // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing so the
   // excludedTrace survives for diagnosis (see persistFailedRouteDecision).
   const persistFailedDecision = () => persistFailedRouteDecision(decision, options);
+  const noEligible = (reason: string, missingCapability?: string) => new NoEligibleEndpointsError(
+    taskType, reason, decision.excludedCount, missingCapability, options?.agentId,
+    routingEligibilitySummary(contract.sensitivity, contract.residencyPolicy, decision.excludedCount, decision.excludedReasons));
 
   // EP-AGENT-CAP-002: Agent capability floor — hard block, no graceful degradation.
   // Only throw if the routing evidence shows the capability floor was the ACTUAL cause
@@ -424,37 +450,26 @@ async function routeAndCallAttempt(
     if (floorFailure) {
       const missingCap = floorFailure.missingCapability;
       persistFailedDecision();
-      throw new NoEligibleEndpointsError(
-        taskType,
+      throw noEligible(
         `No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). ` +
         `Missing: ${missingCap ?? "unknown"}. ` +
         `Configure a capable provider at Platform > AI > Model Assignment.`,
-        decision.excludedCount,
         missingCap,
-        options?.agentId,
       );
     }
   }
 
-  // Graceful degradation: if all endpoints were excluded because they lack tool
-  // support, retry without the tools requirement. The model can still converse —
-  // it just won't have tool calling. This is critical for Ollama-only setups
-  // where the coworker injects tools but the local model can't use them.
-  //
-  // EXCEPTION: When requireTools is set (Build Studio, coding agents), tool
-  // stripping destroys task semantics. Fail fast instead of silently degrading.
+  // Ordinary calls may relax tool capability; governed callers require their tools.
   if (!decision.selectedEndpoint && contract.requiresTools) {
-    if (options?.requireTools) {
+    if (options?.requireTools || contract.toolChoice === "required") {
       const fix = contract.residencyPolicy === "local_only"
         ? `Local-only inference is ON (cloud disabled), so routing will not fall back to a cloud provider. ` +
           `Enable a tool-capable LOCAL model (or run the build through the opencode engine, which supplies the tool loop), ` +
           `or turn off local-only inference in Admin > AI > Providers & Routing.`
         : `Configure a tool-capable provider (OpenAI, Anthropic, Gemini) or check that existing providers are active.`;
       persistFailedDecision();
-      throw new NoEligibleEndpointsError(
-        taskType,
+      throw noEligible(
         `No tool-capable endpoint available. Build Studio requires tool support — cannot fall back to generic chat. ${fix}`,
-        decision.excludedCount,
       );
     }
     const allToolExclusions = decision.candidates.every(
@@ -468,7 +483,7 @@ async function routeAndCallAttempt(
         relaxedContract,
         policies,
         overrides,
-        { preferences: endpointPreferencesFromOptions(options) },
+        { preferences: endpointPreferencesFromOptions(options), accountAffinityKey: accountAffinityKey(options?.agentId, options?.threadId) },
       );
       const strippedScreen = rescreenRoutedInferenceWithoutTools(prepared.screenInput);
       dispatchScreenInput = strippedScreen.screenInput;
@@ -495,22 +510,16 @@ async function routeAndCallAttempt(
     // no local model qualified for this task's tier/capability/context).
     if (contract.residencyPolicy === "local_only") {
       const screenedBlockReason = screenedLocalOnlyBlockReason(decision, taskType);
-      throw new NoEligibleEndpointsError(
-        taskType,
+      throw noEligible(
         screenedBlockReason ??
           `No eligible LOCAL model for task '${taskType}' (sensitivity '${sensitivity}'). ` +
           `Local-only inference is ON, so cloud providers are excluded and routing will NOT silently fall back to cloud. ` +
           `Pull or enable a local model that meets this task's requirements (tool support, context window, quality tier), ` +
           `raise the model's context window in Build Runtime, or turn off local-only inference in Admin > AI > Providers & Routing. ` +
           `Router detail: ${decisionReason}`,
-        decision.excludedCount,
       );
     }
-    throw new NoEligibleEndpointsError(
-      taskType,
-      decisionReason,
-      decision.excludedCount,
-    );
+    throw noEligible(decisionReason);
   }
 
   // 3a. When tools are stripped, REPLACE the system prompt entirely.
@@ -596,38 +605,45 @@ async function routeAndCallAttempt(
   }
 
   // 5. Dispatch — background (async) or foreground (sync)
+  // An async adapter performs a side-effecting provider start. It may only be
+  // reached through the durable background admission/worker path, where the
+  // provider handle cannot be discarded by a foreground response boundary.
+  if (routeUsesDurableAsyncAdapter(decision)
+    && options?.interactionMode !== "background") {
+    throw new Error("ASYNC_OPERATION_BACKGROUND_REQUIRED");
+  }
+  // Supplying durable authority is an explicit at-most-once provider boundary,
+  // not a hint. A missing/mis-seeded async recipe must fail before the generic
+  // background branch can call a provider directly and discard its handle.
+  if (options?.durableAsyncOperation && !routeUsesDurableAsyncAdapter(decision)) {
+    throw new Error("ASYNC_OPERATION_EXECUTION_PLAN_REQUIRED");
+  }
+  const expectedExecution = options?.durableAsyncOperation?.expectedExecution;
+  if (expectedExecution) assertDurableExecutionConstraint(decision, expectedExecution);
   if (options?.interactionMode === "background") {
-    // EP-INF-009d: Start async operation, return immediately
-    const result = await callWithFallbackChain(
-      decision,
-      messages,
-      systemPrompt,
-      toolsStripped ? undefined : dispatchScreenInput.tools,
-      decision.executionPlan,
-      options?.previousResponseId,
-      options?.mcpSession,
-      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
-      dispatchScreenInput,
-    );
-    applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
-
-    // If the adapter returned an operation ID (async adapter), create tracking record
-    const operationId = (result as any).raw?.operationId as string | undefined;
-    if (operationId) {
-      const { createAsyncOperation } = await import("@/lib/async-inference");
-      const asyncOpId = await createAsyncOperation({
-        providerId: result.providerId,
-        modelId: result.modelId,
-        operationId,
-        contractFamily: contract.contractFamily,
-        requestContext: { taskType, sensitivity, messages: messages.length },
-        threadId: options?.threadId,
-        maxDurationMs: options?.maxDurationMs,
+    if (routeUsesDurableAsyncAdapter(decision)) {
+      onDispatch();
+      const admitted = await admitRoutedAsyncOperation({
+        decision,
+        messages,
+        systemPrompt,
+        tools: toolsStripped ? undefined : dispatchScreenInput.tools,
+        screeningInput: dispatchScreenInput,
+        options,
+        traceId,
       });
-
+      await persistAcceptedRoutedTokenUsage({
+        traceId,
+        agentId: options.agentId ?? "unknown",
+        providerId: admitted.providerId,
+        providerConnectionId: decision.executionPlan?.providerConnectionId,
+        contextKey: routedContextKey(options),
+      });
       return {
-        providerId: result.providerId,
-        modelId: result.modelId,
+        providerId: admitted.providerId,
+        providerConnectionId: decision.executionPlan?.providerConnectionId,
+        quotaScopeKey: decision.executionPlan?.providerConnectionId ? conservativeQuotaScope(admitted.providerId) : undefined,
+        modelId: admitted.modelId,
         content: "",
         toolCalls: [],
         inputTokens: 0,
@@ -637,41 +653,63 @@ async function routeAndCallAttempt(
         downgradeReason: null,
         toolsStripped,
         routeDecision: decision,
-        asyncOperationId: asyncOpId,
+        asyncOperationId: admitted.operationId,
         ...routedRehydrationHandle(prepared.rehydrationHandle),
       };
     }
+
+    // EP-INF-009d: Start async operation, return immediately
+    onDispatch();
+    const result = await callWithFallbackChain(
+      decision,
+      messages,
+      systemPrompt,
+      toolsStripped ? undefined : dispatchScreenInput.tools,
+      decision.executionPlan,
+      options?.previousResponseId,
+      options?.mcpSession,
+      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null, previousResponseProviderConnectionId: options?.previousResponseProviderConnectionId },
+      dispatchScreenInput,
+      ...(cancellation ? [cancellation] as [AbortSignal] : [] as []),
+    );
+    applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
     // Every adapter dispatch persists TokenUsage (BI-28858D2F).
     void persistRoutedTokenUsage({
       traceId,
       agentId: options?.agentId ?? "unknown",
       providerId: result.providerId,
-      contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+      contextKey: routedContextKey(options),
+      ...(result.providerConnectionId ? { providerConnectionId: result.providerConnectionId, quotaScopeKey: result.quotaScopeKey } : {}),
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
-      inferenceMs: result.inferenceMs,
+      inferenceMs: result.inferenceMs, modelId: result.modelId,
     });
 
-    return {
+    return transferLocalNativeContinuation<RoutedInferenceResult>(result, {
       providerId: result.providerId,
+      providerConnectionId: result.providerConnectionId,
+      quotaScopeKey: result.quotaScopeKey,
       modelId: result.modelId,
       content: result.content,
+      responseProducer: result.responseProducer,
       toolCalls: result.toolCalls,
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
       downgraded: result.downgraded,
       downgradeMessage: result.downgradeMessage,
       // Background path: only a real dispatch failure downgrades here.
-      downgradeReason: result.downgraded ? "provider-unavailable" : null,
+      downgradeReason: result.downgradeReason
+        ?? (result.downgraded ? "provider-unavailable" : null),
       toolsStripped,
       truncated: result.truncated ?? false,
       routeDecision: decision,
       ...routedRehydrationHandle(prepared.rehydrationHandle),
-    };
+    });
   }
 
   // 5b. Foreground: standard sync dispatch via fallback chain
+  onDispatch();
   const result = await callWithFallbackChain(
     decision,
     messages,
@@ -680,8 +718,9 @@ async function routeAndCallAttempt(
     decision.executionPlan,
     options?.previousResponseId,
     options?.mcpSession,
-    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
+    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null, previousResponseProviderConnectionId: options?.previousResponseProviderConnectionId },
     dispatchScreenInput,
+    ...(cancellation ? [cancellation] as [AbortSignal] : [] as []),
   );
   applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
@@ -703,15 +742,16 @@ async function routeAndCallAttempt(
   // "is active" — wrong whenever a stronger provider is disabled and a weaker one
   // is not. Both facts are already in scope, so ./downgrade-explanation.ts reads
   // them instead of guessing.
-  const localFallbackBanner = fellToLocal
-    ? buildLocalFallbackBanner(
-      extractLocalFallbackFacts({
-        manifests,
-        candidates: decision.candidates,
-        sensitivity: decision.sensitivity,
-      }),
-    )
+  const localFallback = fellToLocal
+    ? describeLocalFallback({
+      manifests,
+      candidates: decision.candidates,
+      sensitivity: decision.sensitivity,
+      matchProvenance: decision.inferenceDataScreenReceipt?.matchProvenance,
+      messageCount: messages.length,
+    })
     : null;
+  const localFallbackBanner = localFallback?.banner ?? null;
 
   // 6. Persist TokenUsage row for the cost ledger (Phase J).
   // Fire-and-forget because metering must not block the response. A loud log
@@ -721,77 +761,39 @@ async function routeAndCallAttempt(
     traceId,
     agentId: options?.agentId ?? "unknown",
     providerId: result.providerId,
-    contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
+    ...(result.providerConnectionId ? { providerConnectionId: result.providerConnectionId, quotaScopeKey: result.quotaScopeKey } : {}),
+    contextKey: routedContextKey(options),
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
-    inferenceMs: result.inferenceMs,
+    inferenceMs: result.inferenceMs, modelId: result.modelId,
   });
 
   // 7. Normalize result to RoutedInferenceResult
-  return {
+  return transferLocalNativeContinuation<RoutedInferenceResult>(result, {
     providerId: result.providerId,
+    providerConnectionId: result.providerConnectionId,
+    quotaScopeKey: result.quotaScopeKey,
     modelId: result.modelId,
     content: result.content,
+    responseProducer: result.responseProducer,
     toolCalls: result.toolCalls,
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
     downgraded: result.downgraded || fellToLocal,
     downgradeMessage: result.downgradeMessage ?? localFallbackBanner,
     // Opposite causes; never both for one turn (BI-F4D3B9E9d).
-    downgradeReason: result.downgraded
-      ? "provider-unavailable"
-      : fellToLocal
-        ? "not-eligible"
-        : null,
+    downgradeReason: result.downgradeReason
+      ?? (result.downgraded
+        ? "provider-unavailable"
+        : fellToLocal
+          ? "not-eligible"
+          : null),
+    downgradeCause: localFallback?.cause ?? null,
     toolsStripped,
     truncated: result.truncated ?? false,
     routeDecision: decision,
     responseId: result.responseId,
     resolvedMaxContextTokens: selectedManifest?.maxContextTokens ?? null,
     ...routedRehydrationHandle(prepared.rehydrationHandle),
-  };
-}
-
-// ─── Phase J: routed-call token usage persistence ──────────────────────────
-//
-// Every routed inference call must produce a `TokenUsage` row regardless of
-// which adapter served it. Before this fix, only the direct HTTP path
-// (`callProvider` in `ai-inference.ts`) wrote metering — the CLI subprocess
-// adapters (claude-cli, codex-cli) silently bypassed it. The result was a
-// $0 cost tally for ~100% of subscription-served traffic on a typical install.
-//
-// This wrapper is the *convenience* enforcement; the durable enforcement is
-// the OutcomeEvent-bus detector "outcome event without metering row" listed
-// in the routing-architecture spec §10.2. That bus check makes new dispatch
-// paths (future adapters) loud about forgetting to meter; this wrapper makes
-// it easy to satisfy by default.
-//
-// Errors are logged but never thrown — metering must never block the response.
-async function persistRoutedTokenUsage(input: {
-  traceId?: string | null;
-  agentId: string;
-  providerId: string;
-  contextKey: string;
-  inputTokens: number;
-  outputTokens: number;
-  // BI-105E8A1E: carry the adapter's measured latency so logTokenUsage's
-  // `compute` cost model can fire — it is the cost signal for a fully-local
-  // install, and was previously dropped here, leaving inferenceMs ~99% empty.
-  inferenceMs?: number;
-}): Promise<void> {
-  // Skip rows with zero tokens both ways. A successful call always reports at
-  // least the input prompt tokens; zero/zero usually means the adapter
-  // returned an error or stub. The audit row would be misleading.
-  if (input.inputTokens === 0 && input.outputTokens === 0) {
-    return;
-  }
-  try {
-    await logTokenUsage(input);
-  } catch (err) {
-    console.error(
-      `[routed-inference] token usage persistence failed: provider=${input.providerId} ` +
-      `agent=${input.agentId} in=${input.inputTokens} out=${input.outputTokens}`,
-      err,
-    );
-  }
+  });
 }

@@ -97,7 +97,7 @@ describe("bookkeeper accountant work lane", () => {
       ]),
     );
     expect(quickBooks?.writeBoundary).toContain("source-attributed");
-    expect(quickBooks?.nextBacklogItemId).toBe("BI-4025EF5F");
+    expect(quickBooks?.nextStep).toEqual({ kind: "open", intent: "Entity links and review queue" });
   });
 
   it("shows NO QuickBooks read coverage when the install has no real connection", () => {
@@ -118,9 +118,9 @@ describe("bookkeeper accountant work lane", () => {
     const bankFeeds = lane.providerBoundaries.find((boundary) => boundary.provider === "bank-feed-provider");
 
     expect(stripe?.missingCoverage).toContain("QuickBooks reconciliation");
-    expect(stripe?.nextBacklogItemId).toBe("BI-2DB52EAB");
+    expect(stripe?.nextStep).toEqual({ kind: "open", intent: "Fee and payout reconciliation" });
     expect(bankFeeds?.posture).toBe("not-mapped");
-    expect(bankFeeds?.nextBacklogItemId).toBe("BI-47366954");
+    expect(bankFeeds?.nextStep).toEqual({ kind: "open", intent: "Provider ownership decision" });
     expect(lane.promotionGuardrail).toContain("dual-run");
   });
 });

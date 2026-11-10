@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 
 const db = vi.hoisted(() => ({
   capsuleFindFirst: vi.fn(),
@@ -8,6 +10,7 @@ const db = vi.hoisted(() => ({
   taskRunFindUnique: vi.fn(),
   taskRunCreate: vi.fn(),
   taskRunUpdate: vi.fn(),
+  taskRunUpdateMany: vi.fn(async (..._args: unknown[]) => ({ count: 1 })),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -21,6 +24,7 @@ vi.mock("@dpf/db", () => ({
       findUnique: (...args: unknown[]) => db.taskRunFindUnique(...args),
       create: (...args: unknown[]) => db.taskRunCreate(...args),
       update: (...args: unknown[]) => db.taskRunUpdate(...args),
+      updateMany: (...args: unknown[]) => db.taskRunUpdateMany(...args),
     },
   },
 }));
@@ -31,10 +35,16 @@ const recordWorkCapsuleEvidence = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/work-capsules/work-capsule-store", () => ({ recordWorkCapsuleEvidence }));
 const dispatchRoutedSemanticReview = vi.hoisted(() => vi.fn());
 vi.mock("./routed-semantic-review", () => ({ dispatchRoutedSemanticReview }));
+const resolvedEvidence = vi.hoisted(() => vi.fn());
+vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: resolvedEvidence }));
+const publishFailureReadinessStatus = vi.hoisted(() => vi.fn());
+const isWorkroomStatusPublishable = vi.hoisted(() => vi.fn());
+vi.mock("./failure-readiness-status", () => ({ publishFailureReadinessStatus, isWorkroomStatusPublishable }));
 
 import { reviewBuildStudioAssembledChange } from "./build-studio-semantic-review";
 
 const taskRows: Array<Record<string, unknown>> = [];
+const fixture = failureAnalysisFixture({ capsuleId: "WC-BUILD", headTreeHash: "b".repeat(40), diffDigest: createHash("sha256").update("diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts").digest("hex") });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -63,19 +73,72 @@ beforeEach(() => {
   });
   recordExternalEvidence.mockResolvedValue({ id: "evidence-1" });
   recordWorkCapsuleEvidence.mockResolvedValue({ id: "activity-1" });
-  dispatchRoutedSemanticReview.mockResolvedValue({ decision: "pass", issues: [], summary: "Pass." });
+  dispatchRoutedSemanticReview.mockResolvedValue({ decision: "pass", issues: [], summary: "Pass.", failureAnalysisReview: { adequate: true, rationale: "Challenged the missing and stale evidence cases against the executed tests." } });
+  resolvedEvidence.mockResolvedValue(fixture.resolvedFailureEvidence);
+  isWorkroomStatusPublishable.mockResolvedValue({ publishable: true });
 });
 
 describe("Build Studio assembled semantic review", () => {
-  it("reviews and records the same receipt before verification", async () => {
+  // A Build Studio room reaches its review before its branch is pushed, so it
+  // has no GitHub commit to carry a status. The review must still complete and
+  // be recorded; the status is published by the ship lane once the commit exists.
+  it("completes the review without publishing a commit status when the room has no pushed commit", async () => {
+    isWorkroomStatusPublishable.mockResolvedValue({ publishable: false, reason: "the Workroom has no immutable source commit yet" });
+
     const result = await reviewBuildStudioAssembledChange({
+      build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },
+      sandboxState: { sourceCurrency: { headTreeSha: "b".repeat(40), targetTreeSha: "c".repeat(40), dirty: false }, sourceDiffstat: [{ path: "apps/web/lib/a.ts" }], headSha: "d".repeat(40) } as never,
+    });
+
+    expect(result.kind).toBe("reviewed");
+    expect(recordExternalEvidence).toHaveBeenCalled();
+    expect(publishFailureReadinessStatus).not.toHaveBeenCalled();
+  });
+
+  // BI-941C1F83 (live, 2026-09-25, FB-D671B016): the finalize stage stamps the Workroom's
+  // head SHA before review so evidence can bind, which made the room look
+  // publishable. GitHub answered 422 for a commit only the sandbox has, the
+  // step threw, and every retry failed the review-verification run.
+  it("completes the review when GitHub does not have the commit yet (422)", async () => {
+    publishFailureReadinessStatus.mockRejectedValueOnce(
+      new Error("Failure readiness status publication failed (422); retry the same committed verdict."),
+    );
+
+    const result = await reviewBuildStudioAssembledChange({
+      build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },
+      sandboxState: { sourceCurrency: { headTreeSha: "b".repeat(40), targetTreeSha: "c".repeat(40), dirty: false }, sourceDiffstat: [{ path: "apps/web/lib/a.ts" }], headSha: "d".repeat(40) } as never,
+    });
+
+    expect(result.kind).toBe("reviewed");
+  });
+
+  it("still fails loudly on a publication error that is not a missing commit", async () => {
+    publishFailureReadinessStatus.mockRejectedValueOnce(new Error("Failure readiness status publication failed (401); retry the same committed verdict."));
+    await expect(reviewBuildStudioAssembledChange({
+      build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },
+      sandboxState: { sourceCurrency: { headTreeSha: "b".repeat(40), targetTreeSha: "c".repeat(40), dirty: false }, sourceDiffstat: [{ path: "apps/web/lib/a.ts" }], headSha: "d".repeat(40) } as never,
+    })).rejects.toThrow("401");
+  });
+
+  it("publishes the commit status when the room is bound to a pushed commit", async () => {
+    const result = await reviewBuildStudioAssembledChange({
+      build: { id: "build-row", buildId: "FB-1", title: "Change", createdById: "user-1", diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts", verificationOut: null },
+      sandboxState: { sourceCurrency: { headTreeSha: "b".repeat(40), targetTreeSha: "c".repeat(40), dirty: false }, sourceDiffstat: [{ path: "apps/web/lib/a.ts" }], headSha: "d".repeat(40) } as never,
+    });
+
+    expect(result.kind).toBe("reviewed");
+    expect(publishFailureReadinessStatus).toHaveBeenCalledWith("WC-BUILD");
+  });
+
+  it("reviews and records the same receipt before verification", async () => {
+    const args: Parameters<typeof reviewBuildStudioAssembledChange>[0] = {
       build: {
         id: "build-row",
         buildId: "FB-1",
         title: "Assembled change",
         createdById: "user-1",
         diffPatch: "diff --git a/apps/web/lib/a.ts b/apps/web/lib/a.ts",
-        verificationOut: { testsPassed: 1, testsFailed: 0 },
+        verificationOut: { testsPassed: 1, testsFailed: 0, failureAnalysis: fixture.failureAnalysis },
       },
       sandboxState: {
         source: "sandbox-git",
@@ -108,16 +171,26 @@ describe("Build Studio assembled semantic review", () => {
           reason: null,
         },
       },
-    });
+    };
+    const result = await reviewBuildStudioAssembledChange(args);
 
     expect(result.kind).toBe("reviewed");
     expect(dispatchRoutedSemanticReview).toHaveBeenCalledOnce();
     const externalReceipt = recordExternalEvidence.mock.calls[0]![0].details;
     const activityReceipt = recordWorkCapsuleEvidence.mock.calls[0]![0].evidence.result;
     expect(activityReceipt).toEqual(externalReceipt);
+    expect(externalReceipt).toMatchObject({
+      schemaVersion: "semantic-change-review-receipt.v3", artifactType: "code-change",
+    });
+    db.evidenceFindMany.mockResolvedValue([{ id: "evidence-1", details: externalReceipt }]);
+    db.evidenceFindUnique.mockResolvedValue({ workCapsuleId: "capsule-row", details: externalReceipt });
+    const reused = await reviewBuildStudioAssembledChange(args);
+    expect(reused.kind).toBe("reviewed");
+    expect(dispatchRoutedSemanticReview).toHaveBeenCalledOnce();
+    expect(recordExternalEvidence).toHaveBeenCalledOnce();
   });
 
-  it("does not block an older build missing a stable tree while policy is shadow-only", async () => {
+  it("requires an older build to refresh missing evidence even in shadow mode", async () => {
     const result = await reviewBuildStudioAssembledChange({
       build: {
         id: "build-row",
@@ -130,7 +203,7 @@ describe("Build Studio assembled semantic review", () => {
       sandboxState: null,
     });
 
-    expect(result).toMatchObject({ kind: "unavailable", mayContinue: true });
+    expect(result).toMatchObject({ kind: "unavailable", mayContinue: false });
     expect(dispatchRoutedSemanticReview).not.toHaveBeenCalled();
   });
 });

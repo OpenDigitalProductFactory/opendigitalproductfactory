@@ -1,13 +1,25 @@
 import { assertSafeOutboundUrl } from "@/lib/security/safe-fetch";
 import type {
+  CloseIssueInput,
+  CloseIssueOutcome,
+  CloseIssueResult,
+  CommentOnIssueInput,
+  CommentOnIssueResult,
   CreateIssueInput,
   ForgeCapabilities,
   ForgeFailure,
   ForgeRepository,
+  RemoteIssue,
   RemoteIssueResult,
 } from "./types";
 
 export type {
+  CloseIssueInput,
+  CloseIssueOutcome,
+  CloseIssueReason,
+  CloseIssueResult,
+  CommentOnIssueInput,
+  CommentOnIssueResult,
   CreateIssueInput,
   EgressClass,
   ForgeCapabilities,
@@ -189,7 +201,25 @@ function githubHeaders(token: string): Record<string, string> {
 interface GitHubIssueResponse {
   number?: number;
   html_url?: string;
+  state?: string;
   message?: string;
+}
+
+/** The one success literal for issue operations; create and close both spread it. */
+function issueSuccess(remote: RemoteIssue): Exclude<RemoteIssueResult, ForgeFailure> {
+  return { ok: true, remote };
+}
+
+function invalidResponse(status: number | undefined, message: string): ForgeFailure {
+  return {
+    ok: false,
+    adapter: "github",
+    category: "invalid-response",
+    retryable: false,
+    freshness: "unavailable",
+    status,
+    message,
+  };
 }
 
 export class GitHubForgeAdapter {
@@ -254,14 +284,114 @@ export class GitHubForgeAdapter {
       };
     }
 
+    return issueSuccess({
+      adapter: "github",
+      id: String(data.number),
+      number: data.number,
+      url: data.html_url,
+    });
+  }
+
+  /**
+   * Posts one comment on an existing issue, and nothing else: no state change.
+   * Not idempotent on its own; the caller keys it (the acceptance sweep records
+   * a submitter_confirmation activity and never asks twice).
+   */
+  async commentOnIssue(input: CommentOnIssueInput): Promise<CommentOnIssueResult> {
+    const pathOwner = encodeURIComponent(input.repository.owner);
+    const pathRepo = encodeURIComponent(input.repository.repo);
+    const url = `https://${GITHUB_API_HOST}/repos/${pathOwner}/${pathRepo}/issues/${input.number}/comments`;
+    assertSafeOutboundUrl(url, { allowedHosts: [GITHUB_API_HOST] });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { ...githubHeaders(this.config.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ body: input.body }),
+      });
+    } catch (err) {
+      return classifyGitHubFailure(err);
+    }
+    let data: { id?: unknown; html_url?: unknown };
+    try {
+      data = (await response.json()) as { id?: unknown; html_url?: unknown };
+    } catch {
+      return classifyGitHubFailure(response, { message: "GitHub returned an unparseable comment response" });
+    }
+    if (!response.ok) return classifyGitHubFailure(response, data);
+    if ((typeof data.id !== "number" && typeof data.id !== "string") || typeof data.html_url !== "string") {
+      return invalidResponse(response.status, "GitHub comment response missing id/html_url");
+    }
+    const issueUrl = data.html_url.replace(/#.*$/, "");
     return {
-      ok: true,
-      remote: {
-        adapter: "github",
-        id: String(data.number),
-        number: data.number,
-        url: data.html_url,
-      },
+      ...issueSuccess({ adapter: "github", id: String(input.number), number: input.number, url: issueUrl }),
+      commentId: String(data.id),
+      commentUrl: data.html_url,
     };
+  }
+
+  /**
+   * Closes an existing issue, posting `comment` first when given. Idempotent:
+   * an issue that is already closed is reported as `already-closed` and is
+   * neither commented on nor patched, so a retrying caller never doubles the
+   * resolution comment.
+   */
+  async closeIssue(input: CloseIssueInput): Promise<CloseIssueResult> {
+    const pathOwner = encodeURIComponent(input.repository.owner);
+    const pathRepo = encodeURIComponent(input.repository.repo);
+    const issueUrl = `https://${GITHUB_API_HOST}/repos/${pathOwner}/${pathRepo}/issues/${input.number}`;
+    assertSafeOutboundUrl(issueUrl, { allowedHosts: [GITHUB_API_HOST] });
+    const headers = { ...githubHeaders(this.config.token), "Content-Type": "application/json" };
+
+    const request = async (url: string, init: RequestInit): Promise<{ response: Response; data: GitHubIssueResponse } | ForgeFailure> => {
+      let response: Response;
+      try {
+        response = await fetch(url, init);
+      } catch (err) {
+        return classifyGitHubFailure(err);
+      }
+      let data: GitHubIssueResponse;
+      try {
+        data = (await response.json()) as GitHubIssueResponse;
+      } catch {
+        return classifyGitHubFailure(response, { message: "GitHub returned an unparseable issue response" });
+      }
+      if (!response.ok) return classifyGitHubFailure(response, data);
+      return { response, data };
+    };
+
+    const current = await request(issueUrl, { method: "GET", headers });
+    if ("ok" in current) return current;
+    if (typeof current.data.number !== "number" || typeof current.data.html_url !== "string") {
+      return invalidResponse(current.response.status, "GitHub response missing number/html_url");
+    }
+    const remote = {
+      adapter: "github" as const,
+      id: String(current.data.number),
+      number: current.data.number,
+      url: current.data.html_url,
+    };
+    const success = (outcome: CloseIssueOutcome): CloseIssueResult => ({ ...issueSuccess(remote), outcome });
+    if (current.data.state === "closed") return success("already-closed");
+
+    if (input.comment) {
+      const commented = await request(`${issueUrl}/comments`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ body: input.comment }),
+      });
+      if ("ok" in commented) return commented;
+    }
+
+    const closed = await request(issueUrl, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ state: "closed", state_reason: input.reason }),
+    });
+    if ("ok" in closed) return closed;
+    if (closed.data.state !== "closed") {
+      return invalidResponse(closed.response.status, "GitHub did not report the issue as closed");
+    }
+    return success("closed");
   }
 }

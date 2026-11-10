@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isSameWorkCase,
   toWorkUnitFromCapsule,
+  toWorkUnitFromCoworkerEngagement,
   toWorkUnitFromWorkItem,
   toWorkUnitFromTaskRun,
 } from "./work-unit";
@@ -79,6 +80,28 @@ describe("WorkUnit adapters", () => {
       contributorRefs: ["ops-coordinator"],
     });
     expect(unit.currentState.status).toBe("input-required");
+  });
+
+  it("adapts a CoworkerEngagement without inventing a second lifecycle", () => {
+    const unit = toWorkUnitFromCoworkerEngagement({
+      engagementId: "CE-1",
+      requestedOutcome: "Prepare launch readiness.",
+      status: "needs-approval",
+      requestedByUserId: "user-1",
+      providerAgentId: "agent-launch",
+    });
+
+    expect(unit.identity).toMatchObject({
+      carrier: "coworker-engagement",
+      carrierId: "CE-1",
+      title: "Prepare launch readiness.",
+      caseRef: { sourceType: "coworker-engagement", sourceId: "CE-1" },
+      workItemId: null,
+    });
+    expect(unit.participants).toEqual({
+      accountableRef: "user-1",
+      contributorRefs: ["agent-launch"],
+    });
   });
 
   it("recognizes a capsule and a work-item as the same case via the shared anchor", () => {

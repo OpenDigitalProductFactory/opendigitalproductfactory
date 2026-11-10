@@ -55,6 +55,10 @@ export interface TrustAnchorStoreDb {
       { value: unknown } | null
     >;
   };
+  /** The Organization row named at setup — the lowest estate-name tier (BI-CA54ACC8). */
+  organization?: {
+    findFirst(args: { select: { name: true } }): Promise<{ name: string } | null>;
+  };
 }
 
 /**
@@ -89,6 +93,8 @@ export function createOrganizationTrustAnchorStore(
           readConfig: async (key: string) =>
             (await db.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ??
             null,
+          readOrganizationName: async () =>
+            (await db.organization?.findFirst({ select: { name: true } }))?.name ?? null,
         },
         options,
       );

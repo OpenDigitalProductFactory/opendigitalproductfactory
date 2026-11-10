@@ -31,10 +31,13 @@ function render(path: string) {
 }
 
 describe("OpsTabNav", () => {
-  it("renders a Self-upgrade tab linking to /ops/self-upgrade", () => {
+  it("keeps /ops to delivery work: platform upkeep lives under Platform, Updates & health (BI-811C588E)", () => {
     const html = render("/ops");
-    expect(html).toContain('href="/ops/self-upgrade"');
-    expect(html).toContain(">Self-upgrade<");
+    for (const href of ["/ops/self-upgrade", "/ops/patches", "/ops/teardown", "/ops/dev-loop", "/ops/security"]) {
+      expect(html).not.toContain(`href="${href}"`);
+    }
+    expect(html).toContain(">Requests<");
+    expect(html).toContain(">Work in progress<");
   });
 
   it("does not render the retired Improvements tab (converged into /ops)", () => {
@@ -42,28 +45,14 @@ describe("OpsTabNav", () => {
     expect(html).not.toContain('href="/ops/improvements"');
   });
 
-  it("marks Self-upgrade tab active when pathname is /ops/self-upgrade", () => {
-    const html = render("/ops/self-upgrade");
-    expect(html).toContain("border-[var(--dpf-accent)]");
+  it("marks Work in progress active on /ops/workrooms", () => {
+    const html = render("/ops/workrooms");
+    const idx = html.indexOf('href="/ops/workrooms"');
+    const tag = html.slice(html.lastIndexOf("<a ", idx), html.indexOf(">", idx));
+    expect(tag).toContain("border-[var(--dpf-accent)]");
   });
 
-  it("marks Self-upgrade tab active on sub-routes of /ops/self-upgrade", () => {
-    const html = render("/ops/self-upgrade/history");
-    expect(html).toContain("border-[var(--dpf-accent)]");
-  });
-
-  it("does not mark Self-upgrade tab active on /ops", () => {
-    const html = render("/ops");
-    // Only Backlog should be active — extract the class for the self-upgrade link
-    const selfUpgradeIdx = html.indexOf('href="/ops/self-upgrade"');
-    // Walk back to find the opening <a
-    const aStart = html.lastIndexOf("<a ", selfUpgradeIdx);
-    const aEnd = html.indexOf(">", aStart);
-    const tag = html.slice(aStart, aEnd);
-    expect(tag).not.toContain("border-b-2");
-  });
-
-  it("marks Backlog tab active only on exact /ops match", () => {
+  it("marks Requests tab active only on exact /ops match", () => {
     const html = render("/ops");
     expect(html).toContain("border-[var(--dpf-accent)]");
     // Backlog link tag should have the active class

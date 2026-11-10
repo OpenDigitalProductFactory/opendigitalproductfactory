@@ -104,6 +104,26 @@ describe("classifyOutcome", () => {
     expect(classifyOutcome(result, "software-engineer")).toBe("BLOCKED");
   });
 
+  // BI-38B82F67: a specialist that called no tool at all changed nothing, however
+  // long its reply. FB-2FE91CD3 recorded "11/11 tasks complete" from replies that
+  // described the work — or wrote tool calls out as text — with no file touched.
+  it("returns BLOCKED for a long reply that called no tool at all", () => {
+    const result = mockResult({
+      content: "Okay, I will now add the standard. ```json { \"tool\": \"file_read\", \"args\": { \"path\": \"docs/x.md\" } } ``` That completes the task as described.",
+    });
+    expect(classifyOutcome(result, "software-engineer")).toBe("BLOCKED");
+  });
+
+  it("flags a read-only investigation that changed nothing instead of counting it done", () => {
+    const result = mockResult({
+      content: "I inspected the module; the requested behaviour already exists, so no change is needed here.",
+      executedTools: [
+        { name: "read_sandbox_file", args: { path: "a.ts" }, result: { success: true, message: "ok" } },
+      ],
+    });
+    expect(classifyOutcome(result, "software-engineer")).toBe("DONE_WITH_CONCERNS");
+  });
+
   it("returns BLOCKED when no tools called at all (stalled)", () => {
     const result = mockResult({ content: "I need to think about this." });
     expect(classifyOutcome(result, "frontend-engineer")).toBe("BLOCKED");
@@ -427,7 +447,7 @@ describe("parseQAVerification", () => {
   it("parses alternate format: '12 passing, 3 failing'", () => {
     const result = parseQAVerification("12 passing, 3 failing");
     expect(result).toEqual({
-      typecheckPassed: true,
+      typecheckPassed: false,
       testsPassed: 12,
       testsFailed: 3,
       parseConfidence: "high",
@@ -437,7 +457,7 @@ describe("parseQAVerification", () => {
   it("parses 'N tests passed, M failures' format", () => {
     const result = parseQAVerification("5 tests passed, 1 failure");
     expect(result).toEqual({
-      typecheckPassed: true,
+      typecheckPassed: false,
       testsPassed: 5,
       testsFailed: 1,
       parseConfidence: "high",
@@ -491,9 +511,11 @@ describe("parseQAVerification", () => {
     expect(result.typecheckPassed).toBe(false);
   });
 
-  it("typecheck passes when only test results present (no typecheck keywords)", () => {
+  it("does not treat test counts with no typecheck signal as a typecheck pass", () => {
     const result = parseQAVerification("8 pass, 0 fail");
-    expect(result.typecheckPassed).toBe(true);
+    expect(result.typecheckPassed).toBe(false);
+    expect(result.testsPassed).toBe(8);
+    expect(result.testsFailed).toBe(0);
     expect(result.parseConfidence).toBe("high");
   });
 
@@ -508,6 +530,7 @@ describe("parseQAVerification", () => {
     const result = parseQAVerification(multiPkg);
     expect(result.testsPassed).toBe(180);
     expect(result.testsFailed).toBe(0);
+    expect(result.typecheckPassed).toBe(false);
   });
 
   it("flags a failure in a LATER package that a first-match parse would miss", () => {
@@ -578,12 +601,14 @@ describe("classifyOutcome — false positive fixes", () => {
     expect(classifyOutcome(result, "qa-engineer")).toBe("DONE_WITH_CONCERNS");
   });
 
-  it("AgenticResult with long text, no tools, no blocking language returns DONE", () => {
+  // BI-38B82F67: a recommendation with no tool call wrote nothing, so the build
+  // task is not done — this used to count as DONE.
+  it("AgenticResult with long text, no tools, no blocking language returns BLOCKED", () => {
     const result = mockResult({
       content: "I analyzed the schema and here is my recommendation for the data model structure that would best support the complaint tracking feature with proper indexes and relations.",
       executedTools: [],
     });
-    expect(classifyOutcome(result, "data-architect")).toBe("DONE");
+    expect(classifyOutcome(result, "data-architect")).toBe("BLOCKED");
   });
 
   it("AgenticResult with short content, no tools returns BLOCKED", () => {

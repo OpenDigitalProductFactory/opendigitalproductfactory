@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   BUILD_PROCESS_TYPE_VALUES,
   BUILD_PROCESS_SIZES,
+  GATE_REQUIREMENTS,
+  checkPhaseGate,
+  checkRequirement,
   DELIVERABLE_SENSITIVITIES,
   deriveBuildProcessSize,
   deriveBuildProcessType,
@@ -15,7 +18,8 @@ import {
   type BuildProcessSize,
   type BuildProcessType,
 } from "./build-process-matrix";
-import { checkPhaseGate, normalizeHappyPathState, type FixContext } from "./feature-build-types";
+import { evaluateVerificationDepthShadow } from "./verification-depth-shadow";
+import { normalizeHappyPathState, type FixContext } from "./feature-build-types";
 
 // The right-sizing matrix maps (type, size) -> a LifecyclePolicy. These tests
 // pin three contracts the spec calls out:
@@ -118,6 +122,13 @@ describe("deriveBuildProcessSize", () => {
   it("defaults to medium for null / unknown", () => {
     expect(deriveBuildProcessSize({ effortSize: null })).toBe("medium");
     expect(deriveBuildProcessSize({ effortSize: "huge" })).toBe("medium");
+  });
+
+  it("lets a bound delivery shape win over the triage size (BI-D03BE728)", () => {
+    expect(deriveBuildProcessSize({ effortSize: "large", workShape: "delivery-small@1.0.0" })).toBe("small");
+    expect(deriveBuildProcessSize({ effortSize: null, workShape: "delivery-break-fix@1.0.0" })).toBe("small");
+    expect(deriveBuildProcessSize({ effortSize: "small", workShape: "delivery-xlarge@1.0.0" })).toBe("xlarge");
+    expect(deriveBuildProcessSize({ effortSize: "large", workShape: "dependency-advisory-watch@1.0.0" })).toBe("large");
   });
 });
 
@@ -230,6 +241,173 @@ describe("checkPhaseGate via the matrix — back-compat invariant", () => {
 
   it("allows review->build backward transition (no gate)", () => {
     expect(checkPhaseGate("review", "build", {}).allowed).toBe(true);
+  });
+});
+
+describe("verification-typecheck-passed (BI-E4E70B9A)", () => {
+  const fb041879cd = {
+    typecheckPassed: true,
+    typecheck: "not_run",
+    tests: { failed: 0, passed: 0, note: "Sandbox command execution blocked" },
+    errors: ["Sandbox tools returned 'No active build'"],
+  };
+
+  it("refuses a typecheck that did not run even when typecheckPassed is true", () => {
+    const result = checkRequirement("verification-typecheck-passed", { verificationOut: fb041879cd });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.reason).toContain("did not run");
+      expect(result.reason).toContain("not a pass");
+    }
+    expect(checkPhaseGate("build", "review", { verificationOut: fb041879cd }).allowed).toBe(false);
+  });
+
+  it("refuses other not-run status strings the same way", () => {
+    for (const typecheck of ["skipped", "not-run", "pending", "blocked"]) {
+      const result = checkRequirement("verification-typecheck-passed", {
+        verificationOut: { typecheckPassed: true, typecheck },
+      });
+      expect(result.allowed, typecheck).toBe(false);
+    }
+  });
+
+  it("still passes an explicit typecheckPassed true with no contradicting typecheck field", () => {
+    expect(checkRequirement("verification-typecheck-passed", {
+      verificationOut: { typecheckPassed: true },
+    })).toEqual({ allowed: true });
+    expect(checkPhaseGate("build", "review", {
+      verificationOut: { typecheckPassed: true },
+    }).allowed).toBe(true);
+  });
+
+  it("still passes when the typecheck string says the check passed", () => {
+    expect(checkRequirement("verification-typecheck-passed", {
+      verificationOut: { typecheckPassed: true, typecheck: "pass" },
+    })).toEqual({ allowed: true });
+  });
+});
+
+describe("verification-depth-satisfied — shadow requirement", () => {
+  const greenVerification = {
+    testsPassed: 12,
+    testsFailed: 0,
+    typecheckPassed: true,
+    fullOutput: "green",
+    timestamp: "2026-08-29T00:00:00.000Z",
+  };
+
+  it("keeps absent and none byte-identical across absent, present, and failed evidence", () => {
+    const failedVerification = { ...greenVerification, testsFailed: 2, typecheckPassed: false };
+    for (const verificationDepth of [undefined, "none"] as const) {
+      expect(checkRequirement("verification-depth-satisfied", { verificationDepth })).toEqual({ allowed: true });
+      expect(checkRequirement("verification-depth-satisfied", {
+        verificationDepth,
+        verificationOut: greenVerification,
+      })).toEqual({ allowed: true });
+      expect(checkRequirement("verification-depth-satisfied", {
+        verificationDepth,
+        verificationOut: failedVerification,
+        uxVerificationStatus: "failed",
+      })).toEqual({ allowed: true });
+    }
+  });
+
+  it("requires a green typecheck and zero failed tests at shallow depth", () => {
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "shallow",
+      verificationOut: greenVerification,
+    })).toEqual({ allowed: true });
+    expect(checkRequirement("verification-depth-satisfied", { verificationDepth: "shallow" })).toMatchObject({ allowed: false });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "shallow",
+      verificationOut: { typecheckPassed: true },
+    })).toMatchObject({ allowed: false });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "shallow",
+      verificationOut: { ...greenVerification, testsFailed: 1 },
+    })).toMatchObject({ allowed: false });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "shallow",
+      verificationOut: { ...greenVerification, typecheckPassed: false },
+    })).toMatchObject({ allowed: false });
+  });
+
+  it("requires shallow evidence plus a mechanical real-path verdict at deep depth", () => {
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "deep",
+      verificationOut: greenVerification,
+      uxVerificationStatus: "complete",
+      uxTestResults: [{ step: "Open the affected route", passed: true }],
+    })).toEqual({ allowed: true });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "deep",
+      verificationOut: greenVerification,
+    })).toMatchObject({ allowed: false });
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "deep",
+      verificationOut: greenVerification,
+      uxVerificationStatus: "failed",
+      uxTestResults: [{ step: "Open the affected route", passed: false }],
+    })).toMatchObject({ allowed: false });
+  });
+
+  it("accepts a passing golden-journey result as deep real-path evidence", () => {
+    expect(checkRequirement("verification-depth-satisfied", {
+      verificationDepth: "deep",
+      verificationOut: greenVerification,
+      goldenJourneyResult: { journeyId: "journey-1", passed: true },
+    })).toEqual({ allowed: true });
+  });
+
+  it("evaluates every transition in shadow without adding the requirement to a policy", () => {
+    for (const type of BUILD_PROCESS_TYPE_VALUES) {
+      for (const size of BUILD_PROCESS_SIZES) {
+        const policy = getProcessPolicy(type, size);
+        for (const requirements of Object.values(policy.gates)) {
+          expect(requirements).not.toContain("verification-depth-satisfied");
+        }
+      }
+    }
+    expect(GATE_REQUIREMENTS).toContain("verification-depth-satisfied");
+
+    const decision = evaluateVerificationDepthShadow("review", "ship", {
+      kind: "feature",
+      processSize: "medium",
+      verificationDepth: "shallow",
+      verificationOut: { ...greenVerification, testsFailed: 3 },
+    });
+    expect(decision).toMatchObject({
+      transition: "review->ship",
+      kind: "feature",
+      processSize: "medium",
+      declaredDepth: "shallow",
+      wouldBlock: true,
+    });
+  });
+
+  it("does not alter the default gate verdict for absent or none depth", () => {
+    const evidence = {
+      designDoc: { problemStatement: "x" },
+      buildPlan: { tasks: [] },
+      acceptanceMet: true,
+      verificationOut: { ...greenVerification, testsFailed: 4 },
+      uxVerificationStatus: "failed",
+    };
+    const today = checkPhaseGate("review", "ship", evidence);
+    for (const kind of [undefined, "feature"] as const) {
+      for (const processSize of [undefined, "medium"] as const) {
+        for (const verificationDepth of [undefined, "none"] as const) {
+          const result = checkPhaseGate("review", "ship", {
+            ...evidence,
+            kind,
+            processSize,
+            verificationDepth,
+          });
+          expect(JSON.stringify(result)).toBe(JSON.stringify(today));
+        }
+      }
+    }
+    expect(today).toEqual({ allowed: true });
   });
 });
 
@@ -388,6 +566,24 @@ describe("deriveDeliverableSensitivity", () => {
     expect(deriveDeliverableSensitivity({ text: "OAuth token" }, "conservative")).toBe("high");
     expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "balanced")).toBe("low");
     expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "progressive")).toBe("low");
+  });
+
+  // BI-BD60DC91: the bare word "token" belonged to the HIGH list, so an item about
+  // LLM tokens was gated as if it were about auth tokens. BI-CCF1ACBB ("Per-thread
+  // cumulative token/cost ledger", a two-site attribution fix) was raised small→large
+  // on that word alone and could neither be claimed nor closed through its gate.
+  it("does not treat LLM \"token\" prose as a credential (BI-BD60DC91)", () => {
+    expect(deriveDeliverableSensitivity({
+      text: "Per-thread cumulative token/cost ledger\nanthropic-sub reports avg 17 input tokens per run; fold cache tokens into inputTokens",
+    })).toBe("low");
+    expect(deriveDeliverableSensitivity({ text: "token budget for the coworker context window" })).toBe("low");
+  });
+
+  it("still treats credential tokens as high", () => {
+    expect(deriveDeliverableSensitivity({ text: "Rotate the bearer token on refresh" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "Issue an API token from the admin page" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "session tokens expire after 5 minutes" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "OAuth access-token exchange" })).toBe("high");
   });
 });
 

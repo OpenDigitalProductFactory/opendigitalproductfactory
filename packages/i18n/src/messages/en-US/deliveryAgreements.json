@@ -1,0 +1,20 @@
+{
+  "details": "Delivery details",
+  "delivered": "Delivered",
+  "handoffMissing": "Completion handoff missing",
+  "inProgress": "In progress",
+  "agreed": "Agreed",
+  "changed": "The outcome text changed later. This agreement stays as recorded.",
+  "acceptance": "Acceptance criteria",
+  "acceptanceAria": "Agreed acceptance criteria",
+  "sourceIdentity": "Source identity: {$digest}",
+  "noAcceptance": "No acceptance criteria were captured at the start. The delivery owner must check the canonical requirements.",
+  "contextAria": "Linked installation context",
+  "context": "Linked context",
+  "unresolvedPeer": "Paired installation unresolved",
+  "checked": "Checked",
+  "handoff": "Completion handoff",
+  "completed": "Completed",
+  "evidence": "Evidence: {$refs}",
+  "followOn": "Tracked separately; the agreed delivery is complete."
+}

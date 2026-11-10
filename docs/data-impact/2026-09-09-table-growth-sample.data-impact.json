@@ -1,0 +1,52 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror (EaConformanceIssue rows of type growth-without-disposition / payload-anatomy)",
+    "Backlog (fingerprinted corrective items with source data-growth)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal operational telemetry",
+    "dataSubjectRights": "not-applicable — rows hold table names and byte/row counts from pg_class and pg_stat_user_tables; no row content, no identifiers of people",
+    "reviewDisposition": "No data-subject workflow is introduced. The sample table is itself declared telemetry-bounded with a 90-day purge window in the schema tag, so the steward's own telemetry is governed by the same mechanism it enforces."
+  },
+  "migration": {
+    "name": "20260909230000_table_growth_sample",
+    "backfill": "Additive: one new, initially empty table with two indexes. No existing row, column or enum is touched. The first nightly run populates it; detectors need two samples before a growth rate exists and PERSISTENT_NIGHTS (3) before a backlog item is filed, so nothing is asserted from a single night.",
+    "rollback": "Forward-only; a corrective migration would drop the table. Nothing else references it."
+  },
+  "tests": [
+    "apps/web/lib/ea/table-growth.test.ts",
+    "packages/db/src/model-metadata.test.ts",
+    "apps/web/lib/ea/run-data-model-mirror.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:table-growth-sample#nightly-size-sample",
+      "prismaModel": "TableGrowthSample",
+      "lifecycleDisposition": "Declared in the schema: /// @dpf lifecycle=telemetry-bounded retention=90d timeAxis=sampledAt. The retention sweep reads that declaration from the catalog and purges samples older than 90 days; industry floors do not lengthen the telemetry bucket beyond one year.",
+      "fields": [
+        {
+          "fieldId": "data:table-growth-sample#table",
+          "resolution": "governed",
+          "reason": "Physical table name from pg_class — the join key to the model's catalog declaration and its EA data_object element.",
+          "provenance": "BI-592F1E7E; spec docs/superpowers/specs/2026-09-08-data-lifecycle-stewardship-convergence-design.md §5 slice 5; table-growth.test.ts"
+        },
+        {
+          "fieldId": "data:table-growth-sample#rowsLast24h",
+          "resolution": "governed",
+          "reason": "Row growth on the model's declared time axis; the input the growth-without-disposition detector thresholds on.",
+          "provenance": "BI-592F1E7E; table-growth.test.ts"
+        },
+        {
+          "fieldId": "data:table-growth-sample#declaredRetention",
+          "resolution": "governed",
+          "reason": "The disposition the schema declared at sample time, so a finding can be reproduced after a tag changes.",
+          "provenance": "BI-592F1E7E; table-growth.test.ts"
+        }
+      ]
+    }
+  ]
+}

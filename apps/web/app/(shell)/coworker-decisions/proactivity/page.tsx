@@ -10,7 +10,6 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
-import { getCoworkerProactivityPreferences } from "@/lib/actions/proactivity";
 import {
   deriveProactivityRoster,
   type ProactivityRosterAgent,
@@ -48,8 +47,7 @@ export default async function CoworkerProactivityPage() {
     role: agent.role ?? agent.kind,
     portfolioSlug: agent.portfolio?.slug ?? null,
   }));
-  const overrides = await getCoworkerProactivityPreferences(roster.map((r) => r.agentId));
-  const rows = deriveProactivityRoster(roster, overrides);
+  const rows = deriveProactivityRoster(roster);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">

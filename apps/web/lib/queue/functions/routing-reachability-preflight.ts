@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // jobId of the catalog ScheduledJob row this cron corresponds to.
@@ -36,7 +36,7 @@ async function recordRun(status: "ok" | "error", error?: string): Promise<void> 
  * issue accordingly. Both routing dead-ends this BI documents sat invisible
  * for weeks because nothing asked until a human typed a message.
  */
-export const routingReachabilityPreflight = inngest.createFunction(
+export const routingReachabilityPreflight = jobs.createFunction(
   {
     id: "inference/routing-reachability-preflight",
     retries: 1,
@@ -44,7 +44,7 @@ export const routingReachabilityPreflight = inngest.createFunction(
     triggers: [cron("37 */6 * * *")], // every 6h, offset to avoid the :00/:10 batches
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "inference/routing-reachability-preflight");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     try {
@@ -56,6 +56,7 @@ export const routingReachabilityPreflight = inngest.createFunction(
         return {
           checked: result.checked,
           blocked: result.blocked.map((b) => b.agentId),
+          escalationBlocked: result.escalationBlocked.map((b) => b.agentId),
         };
       });
       await step.run("record-success", () => recordRun("ok"));

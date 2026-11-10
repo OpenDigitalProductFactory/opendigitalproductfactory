@@ -10,6 +10,13 @@ import {
 } from "./discovery-triage-config";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage";
 
+// No accountable owner recorded: the seed falls back to the superuser guess (BI-F0E946D2).
+const noAccountableOwner = {
+  portfolio: { findUnique: async () => null },
+  organization: { findFirst: async () => null },
+  principalAlias: { findFirst: async () => null },
+};
+
 describe("discovery triage seed helper", () => {
   const user = {
     findFirst: vi.fn(),
@@ -47,7 +54,7 @@ describe("discovery triage seed helper", () => {
     scheduledAgentTask.findUnique.mockResolvedValue(null);
 
     const result = await ensureDiscoveryTriageScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       new Date("2026-04-25T12:00:00Z"),
     );
 
@@ -76,23 +83,24 @@ describe("discovery triage seed helper", () => {
     scheduledAgentTask.findUnique.mockResolvedValue({
       taskId: DISCOVERY_TRIAGE_TASK_ID,
       nextRunAt: new Date("2026-04-26T08:00:00Z"),
+      ownerUserId: "user-mark",
     });
 
     const result = await ensureDiscoveryTriageScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       new Date("2026-04-25T12:00:00Z"),
     );
 
-    expect(result).toEqual({ created: false, ownerUserId: "user-admin" });
+    expect(result).toEqual({ created: false, ownerUserId: "user-mark" });
     expect(scheduledAgentTask.update).toHaveBeenCalledWith({
       where: { taskId: DISCOVERY_TRIAGE_TASK_ID },
       data: expect.objectContaining({
         agentId: DISCOVERY_TRIAGE_AGENT_ID,
         timezone: "America/Chicago",
-        ownerUserId: "user-admin",
         nextRunAt: new Date("2026-04-26T08:00:00Z"),
       }),
     });
+    expect(scheduledAgentTask.update.mock.calls[0][0].data).not.toHaveProperty("ownerUserId");
   });
 
   it("fails loudly when no superuser exists", async () => {
@@ -100,7 +108,7 @@ describe("discovery triage seed helper", () => {
 
     await expect(
       ensureDiscoveryTriageScheduledTask(
-        { user, scheduledAgentTask, scheduledJob } as never,
+        { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
         new Date("2026-04-25T12:00:00Z"),
       ),
     ).rejects.toThrow("seed: no superuser found");

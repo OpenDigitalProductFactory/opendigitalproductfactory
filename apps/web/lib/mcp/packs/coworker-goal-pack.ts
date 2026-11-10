@@ -12,7 +12,7 @@
 // coworker setting or checking its own completion condition cannot exceed its
 // authority. A non-agent caller (no context.agentId) is rejected.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

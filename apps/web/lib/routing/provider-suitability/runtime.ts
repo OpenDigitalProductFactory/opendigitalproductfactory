@@ -41,7 +41,7 @@ export async function prepareProviderSuitabilityRuntime(input: {
       activity: input.activity,
     });
     const providerFacts = source.connections
-      .filter((connection) => connection.status === "active")
+      .filter((connection) => ["active", "degraded"].includes(connection.status))
       .map((connection) => connection.facts);
     const policy = compileAiProviderSuitabilityPolicy({
       businessProfile: source.businessProfile,
@@ -58,6 +58,7 @@ export async function prepareProviderSuitabilityRuntime(input: {
       policy,
       rollout,
       archetypeCategory: source.businessProfile.archetypeCategory,
+      accountCandidates: providerFacts.map(facts => ({ providerId: facts.providerId, connectionId: facts.providerConnectionId })),
     });
     return {
       contract: binding.contract,
@@ -87,6 +88,7 @@ export function attachProviderSuitabilityReceipt(
   if (!selected) return;
   const connections = suitability.providerFacts.filter(
     (facts) => facts.providerId === selected.providerId &&
+      (!selected.providerConnectionId || facts.providerConnectionId === selected.providerConnectionId) &&
       suitability.policy.allowedProviderConnectionIds.includes(facts.providerConnectionId),
   );
   if (connections.length !== 1) return;

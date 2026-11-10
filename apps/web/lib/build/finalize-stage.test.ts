@@ -1,0 +1,160 @@
+// BI-A0521CB0 — Build Studio's finalize stage. Live, FB-D671B016 (2026-09-25):
+// correct code (57/57 tests, clean typecheck) stopped in review because its
+// commits carried no decision trailers (Docs-Impact, Seed-Fit,
+// Convergence-Impact) and nothing wrote the failure analysis review requires.
+import { describe, expect, it, vi } from "vitest";
+
+import { validateFailureAnalysis } from "@/lib/change-review/failure-analysis";
+import {
+  authorFailureAnalysis,
+  authorGateDecisions,
+  composeFailureAnalysis,
+  explainRetryReason,
+  type FailureAnalysisNarrative,
+  parseTrailerLines,
+  trailerKeysForFailedGuards,
+} from "./finalize-stage";
+
+describe("trailerKeysForFailedGuards", () => {
+  it("names the decision trailer each failed guard needs", () => {
+    expect(trailerKeysForFailedGuards(["Docs Impact Gate", "Seed Contribution Fit Gate", "Convergence-Impact Gate"])).toEqual([
+      "Docs-Impact-Decision", "Seed-Fit-Decision", "Convergence-Impact-Decision",
+    ]);
+  });
+  it("refuses when any failure is not a trailer decision, so real defects are never papered over", () => {
+    expect(trailerKeysForFailedGuards(["Docs Impact Gate", "Repo Guard Loop"])).toBeNull();
+    expect(trailerKeysForFailedGuards([])).toBeNull();
+  });
+});
+
+describe("parseTrailerLines", () => {
+  const keys = ["Docs-Impact-Decision", "Seed-Fit-Decision"];
+  it("keeps exactly one well-formed line per required key and drops everything else", () => {
+    const text = "Here you go:\nDocs-Impact-Decision: internal seed validation, no user-visible change\nSeed-Fit-Decision: global-default\nSigned-off-by: x <y>\n";
+    expect(parseTrailerLines(text, keys)).toEqual({
+      kind: "ok",
+      lines: ["Docs-Impact-Decision: internal seed validation, no user-visible change", "Seed-Fit-Decision: global-default"],
+    });
+  });
+  it("reports a missing or empty key instead of guessing one", () => {
+    expect(parseTrailerLines("Docs-Impact-Decision: fine reason here", keys)).toEqual({ kind: "missing", missing: ["Seed-Fit-Decision"] });
+    expect(parseTrailerLines("Docs-Impact-Decision:\nSeed-Fit-Decision: global-default", keys)).toEqual({ kind: "missing", missing: ["Docs-Impact-Decision"] });
+  });
+});
+
+describe("authorGateDecisions", () => {
+  it("asks once, retries once naming what was missing, then gives up honestly", async () => {
+    const llm = vi.fn()
+      .mockResolvedValueOnce("Docs-Impact-Decision: internal seed validation only")
+      .mockResolvedValueOnce("Docs-Impact-Decision: internal seed validation only\nSeed-Fit-Decision: global-default");
+    const out = await authorGateDecisions({ llm, keys: ["Docs-Impact-Decision", "Seed-Fit-Decision"], guardOutput: "[seed-fit-gate] FAILED", diffSummary: "M seed.ts" });
+    expect(out).toEqual({ kind: "ok", lines: ["Docs-Impact-Decision: internal seed validation only", "Seed-Fit-Decision: global-default"] });
+    expect(llm).toHaveBeenCalledTimes(2);
+    expect(llm.mock.calls[1][0]).toContain("Seed-Fit-Decision");
+
+    const never = vi.fn().mockResolvedValue("I cannot decide.");
+    expect(await authorGateDecisions({ llm: never, keys: ["Seed-Fit-Decision"], guardOutput: "", diffSummary: "" }))
+      .toEqual({ kind: "missing", missing: ["Seed-Fit-Decision"] });
+    expect(never).toHaveBeenCalledTimes(2);
+  });
+});
+
+const identity = { capsuleId: "WC-1E7C7DC8", headTreeHash: "a".repeat(40), diffDigest: "b".repeat(64) };
+const evidence = [
+  { id: "ev-gauntlet", capsuleId: identity.capsuleId, headTreeHash: identity.headTreeHash, diffDigest: identity.diffDigest, status: "passed", expected: "node scripts/pregate-preflight.mjs", observed: "all guards clean", completedAt: "2026-09-25T03:00:00Z" },
+  { id: "ev-tests", capsuleId: identity.capsuleId, headTreeHash: identity.headTreeHash, diffDigest: identity.diffDigest, status: "passed", expected: "vitest run seed-wiki-kernel.test.ts", observed: "57 passed", completedAt: "2026-09-25T03:01:00Z" },
+];
+const narrative: FailureAnalysisNarrative = {
+  designAnalysis: "Out-of-enum principleTier values silently mis-rank kernel principles for every decision.",
+  scope: "Seed-time validation of kernel principle frontmatter and three corrected pages.",
+  affectedPeople: "Coworkers and owners whose decisions consult kernel principles.",
+  invariants: "Every seeded principle carries a principleTier from the enum.",
+  boundaries: "Seeding rejects bad frontmatter; runtime readers are unchanged.",
+  noEliminationRationale: "The change detects and refuses bad input rather than removing its source.",
+  scenarios: [{
+    key: "bad-tier-seeded", trigger: "A page is authored with a principleTier outside the enum",
+    effect: "Decisions weigh the principle wrongly without anyone noticing",
+    severity: "medium", exposure: "Any install that seeds the kernel from the repository",
+    prevention: "Seed validation rejects the unknown tier", containment: "The seed run fails before writing the page",
+    detection: "The seed error names the page and the value", recovery: "Correct the frontmatter and reseed",
+    residualRisk: { owner: "platform-architecture", disposition: "mitigated", rationale: "Validation and the corrected pages remove the known cases" },
+  }],
+};
+
+describe("composeFailureAnalysis", () => {
+  it("builds an analysis the platform's own validator accepts, with identity and evidence owned by code", () => {
+    const fa = composeFailureAnalysis({ identity, designReference: `featureBuild/FB-D671B016/designDoc@${"c".repeat(40)}`, evidenceIds: ["ev-gauntlet", "ev-tests"], narrative });
+    expect(fa.scenarios[0]!.evidenceIds).toEqual(["ev-gauntlet", "ev-tests"]);
+    expect(validateFailureAnalysis(fa, identity, evidence)).toMatchObject({ valid: true });
+  });
+});
+
+describe("authorFailureAnalysis", () => {
+  it("parses the narrative, composes, validates, and retries once with the validator's reasons", async () => {
+    const llm = vi.fn()
+      .mockResolvedValueOnce("not json at all")
+      .mockResolvedValueOnce("```json\n" + JSON.stringify(narrative) + "\n```");
+    const out = await authorFailureAnalysis({
+      llm, identity, designReference: `featureBuild/FB-D671B016/designDoc@${"c".repeat(40)}`,
+      evidence, diffSummary: "M packages/db/src/seed-wiki-kernel.ts",
+    });
+    expect(out.kind).toBe("ok");
+    expect(llm).toHaveBeenCalledTimes(2);
+    if (out.kind === "ok") expect(validateFailureAnalysis(out.failureAnalysis, identity, evidence).valid).toBe(true);
+  });
+
+  // FB-D671B016 (2026-09-25): the model marked risks "accepted", the validator
+  // refused both attempts with an opaque code, and finalize stopped every round.
+  it("states the disposition rule up front and restates a refused disposition in words", async () => {
+    const accepted = { ...narrative, scenarios: narrative.scenarios.map((s) => ({ ...s, residualRisk: { ...s.residualRisk, disposition: "accepted" as const } })) };
+    const llm = vi.fn()
+      .mockResolvedValueOnce(JSON.stringify(accepted))
+      .mockResolvedValueOnce(JSON.stringify(narrative));
+    const out = await authorFailureAnalysis({
+      llm, identity, designReference: `featureBuild/FB-D671B016/designDoc@${"c".repeat(40)}`,
+      evidence, diffSummary: "M packages/db/src/seed-wiki-kernel.ts",
+    });
+    expect(out.kind).toBe("ok");
+    expect(llm.mock.calls[0]![0]).toContain("Never mark a risk \"accepted\" or \"deferred\"");
+    const key = narrative.scenarios[0]!.key;
+    expect(llm.mock.calls[1]![0]).toContain(`scenario "${key}" used a disposition other than "mitigated"`);
+  });
+});
+
+// BI-83E1ADF8 (2026-10-01): FB-8AB05E04 marked a real risk "blocked" as the
+// prompt asks, finalize called it malformed, and the sweep re-ran it 8 times.
+describe("an unmitigated risk is a verdict, not a malformed answer", () => {
+  const withDisposition = (disposition: "blocked" | "accepted") => ({
+    ...narrative, scenarios: narrative.scenarios.map((s) => ({ ...s, residualRisk: { ...s.residualRisk, disposition } })),
+  });
+  const run = (llm: (p: string) => Promise<string>) => authorFailureAnalysis({
+    llm, identity, designReference: `featureBuild/FB-8AB05E04/designDoc@${"c".repeat(40)}`,
+    evidence, diffSummary: "M apps/web/lib/routing/adapter-telemetry-writer.ts",
+  });
+
+  it("returns a blocked risk at once, without asking the model to relabel it", async () => {
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(withDisposition("blocked")));
+    const out = await run(llm);
+    expect(llm).toHaveBeenCalledTimes(1);
+    expect(out).toEqual({ kind: "risk-blocked", risks: [expect.objectContaining({ key: "bad-tier-seeded", disposition: "blocked", severity: "medium" })] });
+  });
+
+  it("retries an accepted risk once, then returns it as unmitigated", async () => {
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(withDisposition("accepted")));
+    const out = await run(llm);
+    expect(llm).toHaveBeenCalledTimes(2);
+    expect(out.kind).toBe("risk-blocked");
+  });
+
+  it("keeps other validation failures invalid", async () => {
+    const blockedAndStale = vi.fn().mockResolvedValue(JSON.stringify({ ...withDisposition("blocked"), noEliminationRationale: undefined }));
+    const out = await run(blockedAndStale);
+    expect(out).toMatchObject({ kind: "invalid", reasons: expect.arrayContaining(["elimination-rationale-missing"]) });
+  });
+});
+
+describe("explainRetryReason", () => {
+  it("passes through a reason it has no wording for", () => {
+    expect(explainRetryReason("stale-evidence:abc")).toBe("stale-evidence:abc");
+  });
+});

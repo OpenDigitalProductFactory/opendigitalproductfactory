@@ -485,11 +485,17 @@ spec carries the matrix):
 - The MCP route (`apps/web/app/api/mcp/v1/route.ts:120-142`)
   reads `MCP_ALLOWED_ORIGIN_HOSTS`, `x-forwarded-proto`, and
   `x-forwarded-host`. Wrappers must:
-  - set `MCP_PUBLIC_URL` and `MCP_ALLOWED_ORIGIN_HOSTS`
-    deliberately;
-  - set `TRUST_PROXY_HEADERS=true` only when the ingress is
-    actually a trusted proxy that strips client-supplied
-    `X-Forwarded-*` before forwarding;
+  - set `MCP_ALLOWED_ORIGIN_HOSTS` deliberately (implemented), and
+    `MCP_INSECURE_INTERNAL_HOSTS` only for internal-network callers
+    that cannot use TLS;
+  - `MCP_PUBLIC_URL` and `TRUST_PROXY_HEADERS` are **planned, not
+    implemented** — nothing reads them today, so setting them has no
+    effect. The matrix row below has always said Planned; see
+    `2026-05-09-cloud-deployment-design.md` for which half ships.
+    Until `TRUST_PROXY_HEADERS` exists, `X-Forwarded-Proto` is
+    honoured unconditionally, so a trusted proxy that strips
+    client-supplied `X-Forwarded-*` is the only thing preventing a
+    caller from asserting `https` for itself (`BI-1AE9D368`);
   - configure Caddy (TAPPaaS) / ALB (AWS) / Application Gateway
     (Azure) / Cloud Run frontend / k8s Ingress to forward
     `X-Forwarded-Proto` and `X-Forwarded-Host` correctly.
@@ -527,8 +533,9 @@ GA on a given substrate:
 - `/.well-known/assetlinks.json` returns 200, unauthenticated,
   JSON, no redirects.
 - OAuth callback URL generation correctly honors trusted proxy
-  headers when `TRUST_PROXY_HEADERS=true` (returns
-  `https://${PUBLIC_HOST}/...` rather than internal scheme/host).
+  headers (returns `https://${PUBLIC_HOST}/...` rather than internal
+  scheme/host). Stated without `TRUST_PROXY_HEADERS`, which is planned
+  rather than implemented; verify the resulting URL, not the flag.
 - CORS pre-flight responses per surface match the policy:
   - `/api/storefront/**` allows the configured tenant origins
     (anonymous), no credentials by default.

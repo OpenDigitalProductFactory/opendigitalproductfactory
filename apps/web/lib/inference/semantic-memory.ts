@@ -1,14 +1,16 @@
 // apps/web/lib/semantic-memory.ts
-// Store and recall conversation memories using Qdrant vector database.
+// Store and recall conversation memories using pgvector.
 
 import { generateEmbedding, generateEmbeddingDetailed } from "./embedding";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   upsertVectors,
   searchSimilar,
+  searchLexical,
   scrollPoints,
-  QDRANT_COLLECTIONS,
+  VECTOR_COLLECTIONS,
   type MatchClause,
-  type QdrantFilter,
+  type VectorFilter,
 } from "@dpf/db";
 import {
   semanticMemoryOps,
@@ -167,7 +169,7 @@ export async function storeConversationMemory(params: {
       return;
     }
 
-    await upsertVectors(QDRANT_COLLECTIONS.AGENT_MEMORY, [
+    await upsertVectors(VECTOR_COLLECTIONS.AGENT_MEMORY, [
       {
         id: params.messageId,
         vector: embedding,
@@ -270,23 +272,23 @@ export async function recallGovernedContext(params: {
     // Pass 1: Route-scoped search (if routeContext provided)
     if (params.routeContext) {
       const domain = extractRouteDomain(params.routeContext);
-      const scopedFilter: QdrantFilter = {
+      const scopedFilter: VectorFilter = {
         must: [...baseMust, { key: "routeDomain", match: { value: domain } }],
         ...(baseMustNot.length > 0 ? { must_not: baseMustNot } : {}),
       };
       results = await searchSimilar(
-        QDRANT_COLLECTIONS.AGENT_MEMORY, embedding, scopedFilter, limit, threshold,
+        VECTOR_COLLECTIONS.AGENT_MEMORY, embedding, scopedFilter, limit, threshold,
       );
     }
 
     // Pass 2: Global fallback if scoped returned fewer than 3 results
     if (results.length < 3) {
-      const globalFilter: QdrantFilter = {
+      const globalFilter: VectorFilter = {
         must: baseMust,
         ...(baseMustNot.length > 0 ? { must_not: baseMustNot } : {}),
       };
       const globalResults = await searchSimilar(
-        QDRANT_COLLECTIONS.AGENT_MEMORY, embedding, globalFilter, limit, threshold,
+        VECTOR_COLLECTIONS.AGENT_MEMORY, embedding, globalFilter, limit, threshold,
       );
       // Merge, deduplicating by id, scoped results take priority
       const seen = new Set(results.map((r) => String(r.id)));
@@ -392,7 +394,7 @@ export async function storePlatformKnowledge(params: {
   const embedding = await generateEmbedding(text);
   if (!embedding) return;
 
-  await upsertVectors(QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, [
+  await upsertVectors(VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE, [
     {
       id: `${params.entityType}-${params.entityId}`,
       vector: embedding,
@@ -436,14 +438,25 @@ export type PlatformKnowledgeHit = {
  */
 export type PlatformKnowledgeSearch =
   | { status: "ok"; results: PlatformKnowledgeHit[] }
-  | { status: "unavailable"; reason: string; results: [] };
+  | {
+      status: "unavailable";
+      /** search_deferred is capacity, not a broken model. search_unavailable is a real embedding failure. */
+      code: "search_deferred" | "search_unavailable";
+      reason: string;
+      results: [];
+    };
 
 export async function searchPlatformKnowledge(params: {
   query: string;
   entityType?: string;
   limit?: number;
+  /** Query-time deadline for embedding the query; indexing keeps the default. */
+  embedTimeoutMs?: number;
 }): Promise<PlatformKnowledgeSearch> {
-  const embedded = await generateEmbeddingDetailed(params.query);
+  const embedded = await generateEmbeddingDetailed(
+    params.query,
+    params.embedTimeoutMs === undefined ? undefined : { timeoutMs: params.embedTimeoutMs },
+  );
   if (embedded.status !== "ok") {
     // The reason matters. A capacity deferral is retryable and says nothing
     // about the corpus or the model; a failure is neither. Reporting the
@@ -452,10 +465,12 @@ export async function searchPlatformKnowledge(params: {
     console.warn(
       `[semantic-memory] searchPlatformKnowledge did not query the corpus — ${embedded.status}: ${embedded.reason}`,
     );
+    const deferred = embedded.status === "deferred";
     return {
       status: "unavailable",
-      reason: embedded.status === "deferred"
-        ? `semantic search is deferred while local CI holds host capacity (${embedded.reason}) — retryable`
+      code: deferred ? "search_deferred" : "search_unavailable",
+      reason: deferred
+        ? `semantic search is deferred (${embedded.reason}) — retryable`
         : `the embedding step failed (${embedded.reason})`,
       results: [],
     };
@@ -467,7 +482,7 @@ export async function searchPlatformKnowledge(params: {
     : undefined;
 
   const results = await searchSimilar(
-    QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
+    VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE,
     embedding,
     filter,
     params.limit ?? 5,
@@ -483,6 +498,57 @@ export async function searchPlatformKnowledge(params: {
       score: r.score,
     })),
   };
+}
+
+/** Words worth matching: lowercased, de-duplicated, at least two characters. */
+function lexicalTerms(query: string): string[] {
+  const words = query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2);
+  return [...new Set(words)].slice(0, 12);
+}
+
+/**
+ * Term match over the same platform-knowledge rows, with no embedding step
+ * (BI-MCP-EFF-4F823E5B). For a caller that would otherwise have nothing to
+ * say while the embedding backend is stalled. Its scores are the fraction of
+ * query terms matched, not similarities, so it is deliberately a separate
+ * function: callers that threshold on cosine scores (duplicate detection,
+ * epic overlap) must never receive these.
+ */
+export async function searchPlatformKnowledgeLexical(params: {
+  query: string;
+  entityType?: string;
+  limit?: number;
+}): Promise<PlatformKnowledgeSearch> {
+  const terms = lexicalTerms(params.query);
+  if (terms.length === 0) return { status: "ok", results: [] };
+  const filter = params.entityType
+    ? { must: [{ key: "entityType", match: { value: params.entityType } }] }
+    : undefined;
+  try {
+    const rows = await searchLexical(
+      VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE,
+      terms,
+      ["title", "contentPreview"],
+      filter,
+      params.limit ?? 5,
+    );
+    return {
+      status: "ok",
+      results: rows.map((r) => ({
+        entityId: String(r.payload["entityId"] ?? ""),
+        entityType: String(r.payload["entityType"] ?? ""),
+        title: String(r.payload["title"] ?? ""),
+        score: r.score,
+      })),
+    };
+  } catch (e) {
+    return {
+      status: "unavailable",
+      code: "search_unavailable",
+      reason: `the lexical fallback query failed (${getErrorMessage(e)})`,
+      results: [],
+    };
+  }
 }
 
 // ─── Store Capability Knowledge ────────────────────────────────────────────
@@ -507,14 +573,14 @@ export async function storeCapabilityKnowledge(params: {
   const embedding = await generateEmbedding(text);
   if (!embedding) return;
 
-  await upsertVectors(QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, [
+  await upsertVectors(VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE, [
     {
       id: `capability-${params.specRef}-${params.actionName}`,
       vector: embedding,
       // Shared fields (entityId, entityType, title, contentPreview) use camelCase
       // for backward compatibility with searchPlatformKnowledge() results.
-      // Capability-specific fields use snake_case to match Qdrant payload indexes
-      // created by ensurePayloadIndexes() — Qdrant requires exact field name matches.
+      // Capability-specific fields use snake_case to match vector payload indexes
+      // created by ensurePayloadIndexes() — the filter requires exact field name matches.
       payload: {
         entityId: params.actionName,
         entityType: "capability",
@@ -536,7 +602,7 @@ export async function storeCapabilityKnowledge(params: {
 // ─── Store Knowledge Article ──────────────────────────────────────────────
 
 /**
- * Index a knowledge article into Qdrant platform-knowledge collection.
+ * Index a knowledge article into the platform-knowledge vector collection.
  * Embeds title+body for semantic search. Stores structured payload fields
  * for filter-based discovery by product, portfolio, category, value stream.
  */
@@ -556,7 +622,7 @@ export async function storeKnowledgeArticle(params: {
   const embedding = await generateEmbedding(embeddingText);
   if (!embedding) return;
 
-  await upsertVectors(QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE, [
+  await upsertVectors(VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE, [
     {
       id: `knowledge-article-${params.articleId}`,
       vector: embedding,
@@ -582,7 +648,7 @@ export async function storeKnowledgeArticle(params: {
 /**
  * Semantic search for knowledge articles with optional payload filters.
  * Only returns published articles by default. Combines embedding similarity
- * with Qdrant payload filters for product, portfolio, category, value stream.
+ * with vector payload filters for product, portfolio, category, value stream.
  */
 export async function searchKnowledgeArticles(params: {
   query: string;
@@ -611,7 +677,7 @@ export async function searchKnowledgeArticles(params: {
   if (params.valueStream) must.push({ key: "value_streams", match: { value: params.valueStream } });
 
   const results = await searchSimilar(
-    QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
+    VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE,
     embedding,
     { must },
     params.limit ?? 5,
@@ -651,7 +717,7 @@ export async function lookupCapabilityByFilter(filter: {
   conditions.unshift({ key: "entityType", match: { value: "capability" } });
 
   const points = await scrollPoints(
-    QDRANT_COLLECTIONS.PLATFORM_KNOWLEDGE,
+    VECTOR_COLLECTIONS.PLATFORM_KNOWLEDGE,
     { must: conditions },
     100,
   );

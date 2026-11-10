@@ -1,0 +1,56 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-4CB2EF76. Migration 20260901040000_add_workroom_participant_assignments adds WorkCapsuleParticipant as the canonical Workroom roster. Explicit policy-named assignments are distinguishable from legacy WorkItem assignee backfill. Derived coordinator membership is not written. Additive; existing WorkCapsule and WorkItem rows keep their current columns. Backfill is idempotent ON CONFLICT DO NOTHING against live-shaped WorkItem.evidence and PrincipalAlias rows.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "WorkroomParticipant",
+      "lifecycleDisposition": "retain-with-workroom",
+      "fields": [
+        {
+          "name": "principalId",
+          "resolution": "inherited",
+          "reason": "FK to the existing Principal row. Creates no second identity home; the roster points at the canonical principal.",
+          "provenance": "Resolved from workroomPolicy.participants.principalRef, invite principalRef, or PrincipalAlias for a legacy WorkItem assignee.",
+          "flags": []
+        },
+        {
+          "name": "roles",
+          "resolution": "not-applicable",
+          "reason": "Closed collaboration-role set for this room (accountable, coordinator, contributor, specialist, approver, reviewer, observer). Operational membership, not a data-subject attribute.",
+          "provenance": "Named in the room policy or invite; legacy backfill copies only accountable/contributor from WorkItem assignment and never invents coordinator.",
+          "flags": []
+        },
+        {
+          "name": "assignmentSource",
+          "resolution": "not-applicable",
+          "reason": "Provenance of the membership row (explicit vs legacy). Operational metadata used to refuse autonomous drive on a derived or legacy-only Process Overseer.",
+          "provenance": "Set to explicit for policy/invite writes; legacy for WorkItem assignee backfill.",
+          "flags": []
+        },
+        {
+          "name": "enteredReason",
+          "resolution": "not-applicable",
+          "reason": "Short operational explanation of why the principal is in the room.",
+          "provenance": "Copied from the policy snapshot or the invite writer.",
+          "flags": []
+        },
+        {
+          "name": "currentWorkSummary",
+          "resolution": "not-applicable",
+          "reason": "Optional current-work label for the room surface. Not a data-subject attribute.",
+          "provenance": "Copied from the policy snapshot or WorkItem.title for legacy assignees.",
+          "flags": []
+        },
+        {
+          "name": "lifecycle",
+          "resolution": "not-applicable",
+          "reason": "Platform record-lifecycle convention. Marks whether this membership row is currently active.",
+          "provenance": "Defaults to active; archived when membership is withdrawn.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

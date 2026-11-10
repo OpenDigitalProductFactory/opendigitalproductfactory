@@ -1,7 +1,6 @@
 // scripts/check-ci-build-cache.test.mjs
-// node --test (no vitest). Keeps the production-build Turbopack cache exact-key
-// only: broad restore fallbacks can hydrate stale multi-GB caches and push PR
-// builds past the hosted runner's practical budget.
+// node --test (no vitest). Keeps production builds on the standard cache-off
+// profile while preserving their bounded execution and typecheck warm state.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -26,12 +25,19 @@ function jobBlock(jobName, nextJobName) {
   return ciWorkflow.slice(start, next);
 }
 
-test("Production Build Turbopack cache uses exact keys only", () => {
-  const block = stepBlock("Cache Turbopack build cache");
+test("Production Build does not restore experimental filesystem state", () => {
+  const block = jobBlock("build", "ux-route-sweep-runtime");
 
-  assert.match(block, /path:\s*\$\{\{\s*github\.workspace\s*\}\}\/apps\/web\/\.next\/cache/);
-  assert.match(block, /key:\s*nextjs-/);
-  assert.doesNotMatch(block, /\n\s+restore-keys:/);
+  assert.doesNotMatch(block, /Cache Turbopack build cache/);
+  assert.doesNotMatch(block, /apps\/web\/\.next\/cache/);
+});
+
+test("Production Build uses the standard cache-off profile for every event", () => {
+  const block = stepBlock("Build web (Next.js production)");
+
+  assert.match(block, /DPF_TURBOPACK_BUILD_CACHE:\s*["']0["']/);
+  assert.match(block, /turbopack_cache=0 timeout=/);
+  assert.doesNotMatch(block, /github\.event_name\s*==/);
 });
 
 test("Production Build is bounded and identifies timed-out evidence", () => {
@@ -42,8 +48,6 @@ test("Production Build is bounded and identifies timed-out evidence", () => {
   assert.match(buildStep, /production-build.*run=\$\{\{ github\.run_id \}\}/);
   assert.match(buildStep, /tree=\$\{\{ github\.sha \}\}/);
   assert.match(buildStep, /timeout=15m\/step 45m\/job/);
-  // Turbopack FS cache only on pull_request — merge_group must not hard-pin "1".
-  assert.match(buildStep, /DPF_TURBOPACK_BUILD_CACHE:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'/);
   assert.match(buildStep, /pnpm --filter web build/);
   assert.doesNotMatch(buildStep, /continue-on-error:\s*true/);
 });
@@ -64,4 +68,50 @@ test("the production compile fails fast on its own step timeout (BI-F75AADB7)", 
   // ceiling the bound would fail honest cold compiles; far above it, it stops
   // being fail-fast and the job cap does the work again.
   assert.ok(minutes >= 12 && minutes < 45, `step timeout ${minutes}m must sit between the healthy ceiling and the 45m job cap`);
+});
+
+// Spec 2026-09-30 web-runtime-import-cycle §6 PR-1: the web tsbuildinfo
+// warm-start cache. PRs and merge_group restore; only a push to main writes, so
+// no branch can plant build info another run trusts.
+const tsbuildinfoAction = readFileSync(".github/actions/web-tsbuildinfo-cache/action.yml", "utf8");
+const TSBUILDINFO_PATHS = /path: \|\n\s+apps\/web\/tsconfig\.tsbuildinfo\n\s+apps\/web\/tsconfig\.test\.tsbuildinfo\n/;
+
+test("web tsbuildinfo action restores only, keyed on inputs + TypeScript version + SHA", () => {
+  assert.match(tsbuildinfoAction, /uses: actions\/cache\/restore@v6/);
+  assert.doesNotMatch(tsbuildinfoAction, /actions\/cache(?:\/save)?@/);
+  assert.match(tsbuildinfoAction, TSBUILDINFO_PATHS);
+  assert.match(
+    tsbuildinfoAction,
+    /hashFiles\('pnpm-lock\.yaml', 'tsconfig\.base\.json', 'apps\/web\/tsconfig\.json', 'apps\/web\/tsconfig\.test\.json'\)/,
+  );
+  assert.match(tsbuildinfoAction, /require\('typescript\/package\.json'\)\.version/);
+  assert.match(tsbuildinfoAction, /key=\$\{prefix\}\$\{GITHUB_SHA\}/);
+  assert.match(tsbuildinfoAction, /restore-keys: \$\{\{ steps\.key\.outputs\.prefix \}\}/);
+});
+
+test("both Typecheck jobs restore the web tsbuildinfo before compiling and never save it", () => {
+  for (const [job, next, compileStep] of [
+    ["typecheck", "typecheck-tests", "Typecheck all workspaces"],
+    ["typecheck-tests", "typecheck-cache", "Typecheck the web test program"],
+  ]) {
+    const block = jobBlock(job, next);
+    const restore = block.indexOf("uses: ./.github/actions/web-tsbuildinfo-cache");
+    assert.notEqual(restore, -1, `${job} must restore the web tsbuildinfo`);
+    assert.ok(restore < block.indexOf(`- name: ${compileStep}`), `${job} must restore before it compiles`);
+    assert.doesNotMatch(block, /actions\/cache(?:\/save)?@/, `${job} must not write the cache`);
+  }
+});
+
+test("only a push to main saves the web tsbuildinfo, under the action's exact key", () => {
+  const writers = ciWorkflow.match(/uses: actions\/cache\/save@v6/g) ?? [];
+  assert.equal(writers.length, 1, "exactly one tsbuildinfo writer");
+  const block = jobBlock("typecheck-cache", "policy-guards-source");
+  assert.match(block, /\n\s{4}if: github\.event_name == 'push' &&/);
+  assert.match(block, /uses: actions\/cache\/save@v6/);
+  assert.match(block, TSBUILDINFO_PATHS);
+  assert.match(block, /key: \$\{\{ steps\.tsbuildinfo\.outputs\.key \}\}/);
+  // A compile that fails here is not a verdict (merge_group already checked
+  // this tree); its build info is still valid warm state.
+  assert.match(stepBlock("Refresh the production program build info"), /continue-on-error: true/);
+  assert.match(stepBlock("Refresh the test program build info"), /continue-on-error: true/);
 });

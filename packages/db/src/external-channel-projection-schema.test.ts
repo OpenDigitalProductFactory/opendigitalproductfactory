@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { TABLE_CLASSIFICATION } from "./table-classification";
+import { getTableSensitivity } from "./table-classification";
 
 const root = resolve(import.meta.dirname, "..");
 const schema = readFileSync(resolve(root, "prisma/schema/integrations.prisma"), "utf8");
@@ -31,15 +31,15 @@ describe("ExternalChannelProjection schema", () => {
   });
 
   it("uses governed closed sets and the canonical record lifecycle convention", () => {
-    expect(schema).toContain("sourceType        ExternalChannelProjectionSourceType");
-    expect(schema).toContain("lifecycle         RecordLifecycle");
-    expect(schema).toContain("lifecycleAt       DateTime?");
+    expect(schema).toMatch(/\bsourceType\s+ExternalChannelProjectionSourceType\b/);
+    expect(schema).toMatch(/\blifecycle\s+RecordLifecycle\b/);
+    expect(schema).toMatch(/\blifecycleAt\s+DateTime\?/);
     expect(schema).not.toContain("retiredAt");
     expect(migration).toContain('CREATE TYPE "ExternalChannelProjectionSourceType"');
     expect(migration).toContain('"lifecycle" "RecordLifecycle" NOT NULL DEFAULT \'active\'');
   });
 
   it("classifies compact projection identity and drift metadata as internal", () => {
-    expect(TABLE_CLASSIFICATION.ExternalChannelProjection).toBe("internal");
+    expect(getTableSensitivity("ExternalChannelProjection")).toBe("internal");
   });
 });

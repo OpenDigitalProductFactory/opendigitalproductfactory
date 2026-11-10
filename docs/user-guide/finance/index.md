@@ -8,6 +8,19 @@ order: 1
 
 The Finance area handles your organization's core financial operations: billing customers, managing supplier relationships, and processing purchases. It is not a full accounting system, but covers the transactional layer that connects to your products and services.
 
+For a **Pet Rescue** or **Animal Shelter**, the overview is titled **Funding &
+stewardship**. It emphasizes donations, grants, sponsorship pledges, overdue
+commitments, animal-care bills, and cash available for care. **Record
+contribution** is the primary entry point, with donation, grant, sponsorship,
+and other contribution contexts. The underlying finance records, controls, and
+permissions remain canonical; the archetype changes the operator vocabulary,
+not the accounting truth. Foreground totals therefore count **contributions**
+and **commitments**, and recent records identify the **supporter or funder**;
+the internal invoice record type remains available only as accounting detail.
+The setup prompt and Finance Specialist summary use the same funding,
+stewardship, cash-position, and reporting language instead of assuming a
+commercial invoicing or tax-remittance workflow.
+
 ```mermaid
 flowchart TB
     event["Confirm the external business event"] --> source["Create the right source record<br/>Invoice, purchase order and bill, or expense claim"]

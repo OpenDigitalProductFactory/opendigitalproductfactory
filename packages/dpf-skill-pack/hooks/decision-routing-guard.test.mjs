@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { decide } from "./decision-routing-guard.mjs";
 
@@ -141,4 +146,30 @@ test("ignores other tools and malformed payloads (fails open)", () => {
   assert.equal(decide("Bash", { command: "which architecture" }).block, false);
   assert.equal(decide("AskUserQuestion", {}).block, false);
   assert.equal(decide("AskUserQuestion", { questions: "nope" }).block, false);
+});
+
+// ── BI-310949BC: agent sessions run from the INSTALL folder, not a checkout ────
+// The founder's sessions start in the installed consumer runtime (D:/DPF), which
+// has no packages/dpf-skill-pack. The guard used to exit there, so the rule it
+// enforces was silently off exactly where it was needed.
+const GUARD = join(dirname(fileURLToPath(import.meta.url)), "decision-routing-guard.mjs");
+const escaped = {
+  tool_name: "AskUserQuestion",
+  tool_input: q("How should points-in-flight admission take effect?", "Admission", ["Shadow", "Enforce"]),
+};
+const runGuard = (cwd) => {
+  const env = { ...process.env };
+  delete env.DPF_GUARDS_WORKSPACE_ANY;
+  delete env.DPF_ALLOW_DIRECT_ASK;
+  return execFileSync("node", [GUARD], { input: JSON.stringify({ ...escaped, cwd }), env, encoding: "utf8" });
+};
+
+test("BI-310949BC: denies the escaped question when the session runs from a DPF install folder", () => {
+  const install = mkdtempSync(join(tmpdir(), "dpf-install-"));
+  writeFileSync(join(install, ".install-mode"), "consumer\n");
+  assert.match(runGuard(install), /"permissionDecision":"deny"/);
+});
+
+test("BI-310949BC: stays inert outside any DPF checkout or install", () => {
+  assert.equal(runGuard(mkdtempSync(join(tmpdir(), "not-dpf-"))).trim(), "");
 });

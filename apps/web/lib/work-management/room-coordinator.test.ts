@@ -24,6 +24,8 @@ function participant(
     sponsorPrincipalRef: null,
     authoritySummary: "",
     sourceRefs: [],
+    assignmentSource: "explicit",
+    coordinatorSource: "none",
   };
 }
 

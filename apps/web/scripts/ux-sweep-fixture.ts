@@ -18,14 +18,38 @@
  *
  *   pnpm --filter web ux:sweep-fixture
  */
-import { Prisma, prisma } from "@dpf/db";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
-import { convergeUxSweepFixture } from "./ux-sweep-fixture-core.mjs";
+import { Prisma, prisma, loadDiscoveryAttributionInputs, normalizeDiscoveredFacts, persistBootstrapDiscoveryRun } from "@dpf/db";
+import { flagUnconfiguredGateways } from "../../../packages/db/src/discovery-runner";
+
+import { convergeUxSweepFixture, convergeUxSweepEstate } from "./ux-sweep-fixture-core.mjs";
+import { assertForegroundFixtureRuntime } from "./foreground-work-recovery-fixtures";
+import { SWEEP_ROUTE_PARAMS_REL } from "@/lib/ux-budget/route-shells";
 
 void (async () => {
   try {
+    const profile = process.env.DPF_UX_FIXTURE_PROFILE || "route-sweep";
+    if (!["route-sweep", "foreground-finance"].includes(profile)) throw new Error("Unknown UX fixture profile");
+    if (profile === "foreground-finance") assertForegroundFixtureRuntime(process.env);
+    // The estate represents a declared test scenario, never the developer's
+    // live observations. Both existing CI passes run before authentication.
+    if (process.env.CI === "true" && process.env.UX_SWEEP_BASE_URL) {
+      const estate = await convergeUxSweepEstate(prisma, new Date(), async (facts, meta) => {
+        const inputs = await loadDiscoveryAttributionInputs(prisma);
+        return persistBootstrapDiscoveryRun(prisma, normalizeDiscoveredFacts(facts, inputs), meta);
+      });
+      // Complete the same gateway follow-up as bootstrap, including replay.
+      // A real discovery context is preserved by convergeUxSweepEstate.
+      if (estate) await flagUnconfiguredGateways(prisma);
+      console.error(estate
+        ? `[ux-sweep-fixture] canonical estate ${estate.reused ? "reused" : "populated"}: ${estate.runId}`
+        : "[ux-sweep-fixture] preserved existing discovery context");
+    }
     const result = await convergeUxSweepFixture(prisma, new Date(), {
       dbNull: Prisma.DbNull,
+      storefrontArchetype: profile === "foreground-finance" ? "software-platform" : "pet-rescue",
     });
     console.error(
       result.setupChanged
@@ -34,6 +58,21 @@ void (async () => {
     );
     console.error(
       `[ux-sweep-fixture] refreshed ${result.refreshedRuntimeTargets} running root-portal heartbeat(s)`,
+    );
+    // BI-DE67A3EC: publish the ids this fixture minted so the sweep can resolve a
+    // dynamic route's path. Written even when empty, so a stale file from an
+    // earlier run can never make an unminted route look resolvable.
+    const params: Record<string, string> = {};
+    if (result.workCase?.caseKey) {
+      params["/workspace/cases/[caseKey]"] = `/workspace/cases/${result.workCase.caseKey}`;
+    }
+    const paramsPath = join(process.cwd(), "..", "..", SWEEP_ROUTE_PARAMS_REL);
+    mkdirSync(dirname(paramsPath), { recursive: true });
+    writeFileSync(paramsPath, `${JSON.stringify({ routes: params }, null, 2)}\n`);
+    console.error(
+      result.workCase?.caseKey
+        ? `[ux-sweep-fixture] resolved ${Object.keys(params).length} dynamic route(s)`
+        : `[ux-sweep-fixture] no dynamic route resolved (${result.workCase?.reason ?? "unknown"})`,
     );
     console.error(
       "[ux-sweep-fixture] converged weekly-digest inputs " +

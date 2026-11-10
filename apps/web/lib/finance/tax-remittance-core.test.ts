@@ -108,7 +108,7 @@ describe("buildInvoiceLiabilityDrafts", () => {
           { id: "li-2", description: "Zero rated", lineTotal: 50, taxRate: 0, taxAmount: 0 },
         ],
       },
-    ]);
+    ], "USD");
 
     expect(drafts).toHaveLength(1);
     const draft = drafts[0]!;
@@ -127,7 +127,7 @@ describe("buildInvoiceLiabilityDrafts", () => {
         issueDate: new Date("2026-01-15T00:00:00Z"),
         lineItems: [{ id: "li-1", description: "Consulting", lineTotal: 120, taxRate: 20, taxAmount: 20 }],
       },
-    ]);
+    ], "USD");
     expect(again[0]!.entryId).toBe(draft.entryId);
     expect(again[0]!.snapshotId).toBe(draft.snapshotId);
   });
@@ -142,7 +142,7 @@ describe("buildInvoiceLiabilityDrafts", () => {
         issueDate: new Date("2026-01-20T00:00:00Z"),
         lineItems: [{ id: "li-9", description: "Refund", lineTotal: 60, taxRate: 20, taxAmount: 10 }],
       },
-    ]);
+    ], "USD");
     expect(drafts).toHaveLength(1);
     expect(drafts[0]!.taxAmount).toBe(-10);
     expect(drafts[0]!.taxCode).toBe("credit_note");
@@ -153,7 +153,7 @@ describe("buildInvoiceLiabilityDrafts", () => {
 });
 
 describe("buildBillLiabilityDrafts", () => {
-  it("produces input-direction drafts and defaults currency to GBP", () => {
+  it("produces input-direction drafts and defaults currency to the org base currency", () => {
     const drafts = buildBillLiabilityDrafts(makeRegistration(), [
       {
         id: "bill-1",
@@ -165,10 +165,10 @@ describe("buildBillLiabilityDrafts", () => {
           { id: "bl-2", description: "No tax", lineTotal: 10, taxRate: 0, taxAmount: 0 },
         ],
       },
-    ]);
+    ], "USD");
     expect(drafts).toHaveLength(1);
     expect(drafts[0]!.direction).toBe("input");
-    expect(drafts[0]!.currency).toBe("GBP");
+    expect(drafts[0]!.currency).toBe("USD");
     expect(drafts[0]!.taxableAmount).toBe(200);
     expect(drafts[0]!.taxAmount).toBe(40);
   });

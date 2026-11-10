@@ -9,7 +9,7 @@ import type {
   WorkroomCycleStoreMessage,
 } from "@/lib/work-management/room-cycle-store";
 import type { WorkroomCycleWorkItemRecord } from "@/lib/work-management/room-cycle-adapter";
-import { parseStoredWorkroomCycle } from "@/lib/work-management/room-cycle-adapter";
+import { parseStoredWorkroomCycle, parseStoredWorkroomOutcome } from "@/lib/work-management/room-cycle-adapter";
 import type { RoomChannelIngressDb } from "@/lib/work-management/room-channel-ingress";
 
 import {
@@ -50,7 +50,9 @@ function cycleHarness(seed: WorkroomCycleWorkItemRecord[] = []) {
       callback({
         getRoom: async () => room,
         listCycles: async () => cycles,
+      findCycle: async (_roomId, lookup) => cycles.find(row => "carrierId" in lookup ? row.itemId === lookup.carrierId : "cycleKey" in lookup ? parseStoredWorkroomCycle(row.evidence)?.cycleKey === lookup.cycleKey : !["completed", "cancelled"].includes(row.status) && Boolean(parseStoredWorkroomCycle(row.evidence))) ?? null,
         listMessages: async () => messages,
+      findOutcome: async (_roomId, cycleKey, carrierId) => messages.find(message => { const stored = parseStoredWorkroomOutcome(message.structuredPayload); return stored?.cycleKey === cycleKey && stored.carrierId === carrierId; }) ?? null,
         findWorkItemBySource: async (sourceType, sourceId) =>
           cycles.find((c) => c.sourceType === sourceType && c.sourceId === sourceId) ?? null,
         createWorkItem: async (data) => {

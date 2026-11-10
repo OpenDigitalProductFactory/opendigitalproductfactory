@@ -1,5 +1,12 @@
 # Prompt — A2A Coworker Communication & Background-Work Substrate
 
+**Current source extension:** foreground conversation recovery now reuses the
+existing interactive TaskRun, queue, capacity projection and execution fence.
+The scheduled dispatcher reconciles lost wakes; uncertain effects never authorize
+replay. Consult the
+[foreground implementation record](../superpowers/specs/2026-10-29-foreground-recovery-implementation.md)
+before proposing another ledger or retry path. Its served acceptance remains unrun.
+
 **Use this in a fresh thread.** Paste everything below the line.
 
 ---
@@ -63,7 +70,7 @@ Every A2A message is a tool call from one principal to another. It must carry th
 ## Constraints / context to honor
 
 - DPF is **single-org per install** (no multi-tenancy). All coworkers in one install share one DB. Don't design for cross-org messaging.
-- Inngest, Postgres, Neo4j, Qdrant are already in the stack. Prefer them over new infra.
+- Inngest and Postgres (with pgvector and the graph mirror) are already in the stack. Prefer them over new infra.
 - Memory: `feedback_research_standards_first.md` — A2A AgentCard is an emerging standard; cite the source you're drawing from and recommend it unless there's a project-specific reason not to.
 - Memory: `feedback_proper_fix_over_quick_fix.md` — design the architecturally correct substrate, not a shim on top of the in-memory bus.
 - Memory: `feedback_consult_specs_first.md` — read the routing control-plane spec and the IT4IT references before designing; don't reinvent.

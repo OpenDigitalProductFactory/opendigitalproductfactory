@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { captureBuildPrOntoCapsule } from "./capture-build-pr";
+import { createBuildPrDeliveryState } from "./build-pr-delivery-state";
+import { captureBuildPrOntoCapsule, persistBuildPrDeliveryStateForBuild } from "./capture-build-pr";
 
 function mkDb(count = 1) {
   const findMany = vi.fn().mockResolvedValue(
@@ -30,18 +31,38 @@ describe("captureBuildPrOntoCapsule (delivery visibility — PR capture onto the
         pullRequestNumber: 2145,
         workspaceState: expect.objectContaining({
           retained: true,
-          buildStudio: expect.objectContaining({
-            delivery: expect.objectContaining({
-              schemaVersion: 1,
-              status: "created",
-              repository: "o/r",
-              prNumber: 2145,
-            }),
+          // BI-88341B5D: one room-generic PR delivery record for every room.
+          prDelivery: expect.objectContaining({
+            schemaVersion: 1,
+            status: "created",
+            repository: "o/r",
+            prNumber: 2145,
           }),
         }),
       }),
     });
     expect(out).toEqual({ captured: 1 });
+  });
+
+  // BI-ECA50241: a Build Studio PR is an API-minted commit, never the sandbox
+  // commit the gauntlet stamped on the room; the poller skips a room whose head
+  // differs from its PR, so the capture binds the room to the published head.
+  it("binds the room's head to the commit the PR was published at", async () => {
+    const { db, updateMany } = mkDb(1);
+    await captureBuildPrOntoCapsule({
+      db, featureBuildId: "ckcuid123", prNumber: 7, prUrl: "https://github.com/o/r/pull/7", headSha: "f".repeat(40),
+    });
+    expect(updateMany.mock.calls[0]?.[0]?.data).toMatchObject({ headSha: "f".repeat(40) });
+  });
+
+  it("prefers the observed PR head over the published one, and never erases a head it does not know", async () => {
+    const observed = { ...createBuildPrDeliveryState({ repository: "o/r", prNumber: 7, prUrl: "u" }), lastObservedHeadSha: "e".repeat(40) };
+    const a = mkDb(1);
+    await persistBuildPrDeliveryStateForBuild({ db: a.db, featureBuildId: "c", delivery: observed, publishedHeadSha: "f".repeat(40) });
+    expect(a.updateMany.mock.calls[0]?.[0]?.data.headSha).toBe("e".repeat(40));
+    const b = mkDb(1);
+    await persistBuildPrDeliveryStateForBuild({ db: b.db, featureBuildId: "c", delivery: createBuildPrDeliveryState({ repository: "o/r", prNumber: 7, prUrl: "u" }) });
+    expect(b.updateMany.mock.calls[0]?.[0]?.data).not.toHaveProperty("headSha");
   });
 
   it("reports captured 0 (not an error) when the build has no capsule yet", async () => {

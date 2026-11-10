@@ -1,8 +1,8 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
-export const workPatternProfileReview = inngest.createFunction(
+export const workPatternProfileReview = jobs.createFunction(
   {
     id: "quality/work-pattern-profile-review",
     retries: 1,
@@ -10,7 +10,7 @@ export const workPatternProfileReview = inngest.createFunction(
     triggers: [cron("17 7 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "quality/work-pattern-profile-review");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("review-agent-work-patterns", async () => {

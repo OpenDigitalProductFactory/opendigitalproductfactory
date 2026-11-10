@@ -6,9 +6,11 @@ import type {
   WorkCaseSourceRef,
   WorkCaseState,
 } from "./case-types";
+import type { RecordedWorkroomBlocker } from "@/lib/work-capsules/workroom-recovery-projection";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureView } from "./room-posture";
+import type { WorkroomShapeConformance } from "./workroom-shape-conformance";
 
 export type WorkroomMode = "finite" | "standing";
 
@@ -54,14 +56,21 @@ export type WorkroomActivityKind =
   | "cycle-closed"
   | "cycle-carried-over";
 
-export type WorkroomParticipantRole =
-  | "accountable"
-  | "coordinator"
-  | "contributor"
-  | "specialist"
-  | "approver"
-  | "reviewer"
-  | "observer";
+export const WORKROOM_PARTICIPANT_ROLES = [
+  "accountable",
+  "coordinator",
+  "contributor",
+  "specialist",
+  "approver",
+  "reviewer",
+  "observer",
+] as const;
+
+export type WorkroomParticipantRole = (typeof WORKROOM_PARTICIPANT_ROLES)[number];
+
+export type WorkroomParticipantAssignmentSource = "explicit" | "legacy" | "conversation";
+
+export type WorkroomCoordinatorSource = "explicit" | "derived" | "none";
 
 export type WorkroomParticipantWorkState =
   | "working"
@@ -162,6 +171,14 @@ export interface WorkroomParticipantView {
   sponsorDisplayName?: string | null;
   authoritySummary: string;
   sourceRefs: WorkCaseSourceRef[];
+  /** How this principal entered the roster. Conversation overlay is never persisted. */
+  assignmentSource: WorkroomParticipantAssignmentSource;
+  /**
+   * Explicit = coordinator role was persisted. Derived = read-model default from
+   * the sole accountable. None = not coordinating. Only explicit qualifies a
+   * standing room for autonomous drive (BI-3913EB49).
+   */
+  coordinatorSource: WorkroomCoordinatorSource;
 }
 
 export interface WorkroomActivityView {
@@ -179,6 +196,9 @@ export interface WorkroomActivityView {
 }
 
 export interface WorkroomWorkView {
+  /** Authorized current-room coordination; never an execution grant or inferred repair owner. */
+  recordedBlocker?: RecordedWorkroomBlocker;
+  failedHandoffRecovery?: import("@/lib/work-capsules/workroom-recovery-projection").FailedHandoffRecovery | null;
   nextAction: string;
   attentionRequired: boolean;
   attentionReason: string | null;
@@ -203,6 +223,14 @@ export interface WorkroomOutcomeView {
 }
 
 export interface WorkroomView {
+  delivery?: import("./delivery-agreement").DeliveryAgreementView | null;
+  /** Source requirements are read through the room's existing access boundary.
+   * They do not establish organization applicability or qualification. */
+  reviewProfile?: {
+    source: ReturnType<typeof import("./room-review-profile").composeRoomReviewProfile>;
+    applicability: "unknown";
+    assessment: "not-exercised";
+  };
   roomKey: string;
   caseRef: WorkCaseRef;
   identity: WorkroomIdentityView;
@@ -213,12 +241,16 @@ export interface WorkroomView {
   outcome: WorkroomOutcomeView;
   boundary: WorkroomBoundaryView;
   currentCycle: WorkroomCycleView | null;
+  /** Why the cycle could not be projected, when it could not. Distinguishes a
+   *  room that is genuinely idle from one whose cycle failed (BI-97B24FB5). */
+  cycleProjectionError: string | null;
   completedCycles: WorkroomCycleView[];
   participants: WorkroomParticipantView[];
   activity: WorkroomActivityView[];
   work: WorkroomWorkView;
   context: WorkroomContextView;
   receipts: ReceiptEnvelope[];
+  reviewerRuns?: import("./semantic-review-room-projection").ReviewerExecutionObservation[];
   sourceRefs: WorkCaseSourceRef[];
   /**
    * The value stream + lifecycle the room's SUBJECT sits in — the structure the
@@ -237,6 +269,8 @@ export interface WorkroomView {
    * default: a surface must say "we don't know" rather than imply a decision.
    */
   posture: WorkroomPostureView | null;
+  /** Executable-shape reconciliation projected for the room at read time. */
+  processOverseer: WorkroomShapeConformance;
   projection: {
     confidence: WorkCaseProjectionConfidence;
     incompleteBoundary: boolean;

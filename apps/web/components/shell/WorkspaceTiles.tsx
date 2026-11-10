@@ -1,18 +1,7 @@
 // apps/web/components/shell/WorkspaceTiles.tsx
 import Link from "next/link";
 import type { WorkspaceTile } from "@/lib/permissions";
-
-export type TileMetric = {
-  label: string;
-  value: string | number;
-  color?: string;
-};
-
-export type TileStatus = {
-  metrics?: TileMetric[];
-  badge?: string;
-  badgeColor?: string;
-};
+import type { TileStatus } from "@/lib/workspace-home/types";
 
 type Props = {
   tiles: WorkspaceTile[];

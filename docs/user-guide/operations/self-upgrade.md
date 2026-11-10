@@ -26,19 +26,92 @@ is unavailable and does not offer or queue an upgrade.
 
 ## Workflow
 
-1. Confirm the status card shows a resolved immutable update. If it says current
-   or unavailable, there is no upgrade action to trigger.
+1. Confirm the status card shows a resolved immutable update. The card reports
+   **You’re current** only when nothing newer is waiting; if it says that, or
+   says updates are unavailable on this install, there is no upgrade action to
+   trigger.
+
+   A waiting update stays named on the card while an upgrade is running
+   (**Installing now**) and after one fails (**Update still pending**). If an
+   update was installed but its resumed completion step reported that the
+   drain had already ended, the card checks that the failed attempt's target
+   is actually running before disregarding that specific reporting error.
+   Other failures remain visible, even when the install is current.
 2. Review the pending upgrade and what it will change before triggering anything.
-3. Trigger the upgrade only inside an approved deployment window. Normal changes
-   respect the window; only an emergency change may override it.
-4. Watch the deployment status — the page updates automatically while the build
-   and swap are in progress. A normal upgrade completes in a few minutes.
+   **What's in this update?** compares the running build with the resolved
+   update. Consumer installs read published source changes without needing a
+   local source checkout; source-backed installs read their configured clone.
+   If change details are temporarily unavailable, retry the summary. That
+   does not mean the known update target is missing and does not apply an update.
+   Published comparisons use commit descriptions and available PR details;
+   they do not attribute the comparison's combined file list to individual changes.
+3. Trigger the upgrade inside an approved deployment window when you can. The
+   server durably admits the request and assigns its `SUR-*` run identity before
+   queue dispatch begins. Normal changes respect the window; pressing
+   **Upgrade now** outside it is an operator override, and the run records it
+   (see below).
+4. Watch the deployment status — the page distinguishes a request waiting for
+   dispatch, active dispatch, indeterminate dispatch reconciliation, and a
+   definite dispatch failure. It updates automatically while the build and swap
+   are in progress. A normal upgrade completes in a few minutes.
 5. Confirm the health check passed after the swap, and read the deployment log if
    it did not.
+
+### Who can upgrade outside the maintenance window
+
+Upgrades are meant to run in the nightly maintenance window. Each one pauses
+new work and builds, so the portal does not let AI coworkers or agents start
+one whenever they like:
+
+- **You, pressing Upgrade now**, run immediately, even outside the window.
+  That is a deliberate operator choice. The run history records it: the run's
+  trigger ends in `+outside-window`, and so does the change record.
+- **An agent or coworker asking for an upgrade** does not run outside the
+  window. The request is held for the next window instead, and the answer says
+  when the scheduled upgrade will pick it up. This applies to the
+  `request_self_upgrade` tool and to a browser signed in as the platform
+  automation persona that presses **Upgrade now**. Agent requests also wait
+  for the release batch and respect operator blackouts. A held request shows as
+  `deferredRequest` in `get_self_upgrade_queue_status` until it has run.
+- **An urgent or security release** is deployed by you. Press **Upgrade now**,
+  and tick **Emergency override** if it must not wait for running work. Releases
+  carry no urgency flag that would let an agent skip the window for you.
+
+### When the scheduled upgrade runs
+
+The scheduler wakes every hour, but it checks for an upgrade only inside the
+maintenance window. Each time the window opens, the portal makes one check, and
+it does not count the hours since your last upgrade before that check:
+
+- **Upgrading by hand during the day does not skip that night.** If you press
+  **Upgrade now** in the afternoon, the scheduled check still runs when the
+  window opens that night.
+- **The nightly time does not drift.** A check that ran at 23:02 last night does
+  not delay tonight's 23:00 check.
+- **Check interval** (`checkIntervalHours`, default 24) limits how often a long
+  window is checked, such as a store that is closed all weekend. An interval
+  longer than a day, such as a week, is still respected: the check runs at the
+  window opening nearest to when the interval ends.
+
+If a window goes by without a check, the Upgrade Center says so and gives the
+reason. For example, another upgrade was still running, or a failed upgrade
+attempt was still in its wait period. The message stays during the day that
+follows and goes away after the next check. Agents see the same information as
+`missedWindow` in `get_self_upgrade_queue_status`. Blackouts and switched-off
+scheduled upgrades already show their own notice, so they do not add a missed
+window message.
+
+An agent working in your browser, signed in as you, looks the same to the
+portal as you do. Agents are told to request upgrades through
+`request_self_upgrade` instead of pressing the button for you.
 
 You may navigate away after the upgrade has been accepted. Leaving the page stops
 only that page's live status reads; it does not cancel or pause the durable upgrade.
 When you return, the page reloads the current run state and resumes live updates.
+If the browser loses the trigger response, do not click again. The action remains
+disabled until the server reports a durable disposition for the admitted run.
+The same `SUR-*` identity is reconciled after a delayed or ambiguous dispatch, so
+a page reload or process restart cannot create a second physical upgrade.
 
 The owner status card and upgrade action stay visible on arrival. Open
 **Deploy controls & history** only when you need technical controls, run
@@ -49,6 +122,25 @@ MCP writes. Delivery agents can still read quiescence status and release an
 owned nonproduction lease, then retry evidence publication after the portal
 returns to normal.
 
+### When work is still running
+
+An upgrade no longer gives up because work is in progress. When you press
+**Upgrade now**, or the hourly check starts one, the portal stops accepting
+new work and waits for builds and coworker tasks that are already running to
+finish. It does not interrupt them. The upgrade installs as soon as they are
+done. The wait lasts up to 60 minutes by default (`drainWaitBudgetMs` in the
+self-upgrade settings). If work is still running after that, the upgrade
+pauses as **awaiting operator**: new work stays paused and nothing is
+interrupted. The upgrade page then offers three choices:
+
+- **Keep waiting** gives the running work another 60 minutes.
+- **Force now** installs immediately, interrupting whatever is still running.
+- **Abort** cancels this upgrade and reopens the portal to new work.
+
+While it waits, the page shows how long it has waited and the limit. Force
+now and Abort are also available during the wait itself. These controls keep
+working while the portal refuses other changes.
+
 ## What Happens If You Do Nothing
 
 The install stays on its current version. The consumer channel keeps being
@@ -57,22 +149,39 @@ upgrade. Nothing is lost by waiting.
 
 ## What Is Reversible
 
-- A failed upgrade is **automatically rolled back** and its promoter container is
-  force-removed, so a broken build cannot leave the install in a half-swapped
-  state.
+- Saving a recovery point does not make restoration available. The page keeps
+  the backup and run history visible and explains why restoration is unavailable.
+  Canonical database restoration is currently blocked until the platform can
+  prove that review history remains intact.
+- A failed upgrade can use the previous version only when that version is
+  compatible with the retained history. Read the deployment details after a
+  failure; automatic restoration is not guaranteed.
 - Candidate promoter preparation and the application build use Docker BuildKit
   and the same bounded wall-clock budget (default **25 minutes**). If either
   build stalls, it is killed and the deployment is marked failed with a
   retryable `promoter-timeout` diagnosis instead of hanging. Candidate
-  preparation finishes before the platform begins quiescing.
+  preparation finishes before the platform begins quiescing, and so does the
+  application build itself: the portal keeps accepting work while the new
+  version builds, and pauses new work only for the swap.
 - A periodic watchdog force-removes any promoter container orphaned by a
   mid-deployment restart, so a stalled build can never linger and cause an
   unexpected later swap.
 
 ## Recovery And Help
 
-- If an upgrade fails, open the deployment log for the retryable diagnosis, then
-  re-run the upgrade.
+- If an upgrade fails, the status card states the cause in plain language — for
+  example **The server ran out of memory** or **A software download failed** —
+  along with whether re-running is likely to help. Some causes (your changes
+  clashing with the update, uncommitted local edits) will not clear on a retry
+  and say so; those need a decision rather than another attempt.
+- A failure recorded after the target version starts does not prove a rollback
+  occurred. The card identifies when that version is running and the failure
+  still needs review; it does not claim the previous version is running.
+- The deployment log remains the full diagnosis behind that summary. Read it
+  when the stated cause is not enough, not to discover what the cause was.
+- If dispatch is indeterminate, leave the action alone while the server
+  reconciles the admitted `SUR-*` run. A definite pre-dispatch refusal is shown
+  against that same run identity and means no upgrade mutation began.
 - If update status is unavailable, read the technical reason under **Deploy
   controls & history**. Repair registry access or install identity before
   retrying; the unavailable state has not queued or mutated anything.
@@ -81,9 +190,66 @@ upgrade. Nothing is lost by waiting.
 - Deployment windows and change-request lifecycle are managed from the wider
   Operations area.
 
+## Connected agent clients
+
+This section lists the AI coding tools, such as Claude Code, Codex and Grok,
+that connect to this install. For each one it shows the version of the DPF
+agent tools it loaded, how it signs in, and when it was last seen. The
+fingerprint next to a version identifies the exact files that client loaded.
+
+Each client gets one of these labels:
+
+- **Up to date**: it loaded the tools this update ships.
+- **Behind**: it loaded an older copy. It is told on its next connection and
+  asked to update itself.
+- **Too old**: its copy is older than this install accepts. It can still
+  read, but changes will be refused once the grace period ends.
+- **Version unknown**: it did not say which tools it loaded, usually because
+  its copy predates this check.
+- **Not seen this week**: it has not connected in the last 7 days.
+
+When a client is behind, a **Why** line says what differs, for example that the files it loaded differ from the released ones.
+
+Each computer that runs these tools also keeps them current on its own. A background job checks hourly and at login, and the card shows how that job last did:
+- it updates on its own;
+- it has been failing, and since when;
+- it is waiting for a person;
+- it is turned off;
+- it could not reach the portal;
+- it runs a newer copy from its own source checkout.
+
+If a computer has been failing, or waiting for a person, for more than a day, one item appears in your attention list. It names the single thing needed, for example confirming that the portal's new identity is yours. A computer that is up to date, turned off or simply quiet raises nothing.
+
+When a client such as Grok or Codex updates itself and the DPF tools stop working with the new version, the item names that client and version. The fix is a DPF update for that version. It arrives like any other update, and you do not need to do anything on the computer.
+
+Each update also looks for agent tools installed since the last one. A tool DPF does not support yet, such as VS Code or the Gemini CLI, is listed in the update's report rather than skipped without a word. Old Claude Code records for project folders that no longer exist are removed once, through Claude Code itself, after a backup.
+
+After an update that ships new agent tools, the portal posts one notification
+that names the clients still behind. Restarting the portal without an update
+posts nothing. You do not need to run anything.
+
 ## What To Watch
 
 - triggering an upgrade outside an approved deployment window
 - treating a failed, rolled-back deployment as if the swap had succeeded
-- re-running an upgrade without first reading the failure diagnosis in the log
+- re-running an upgrade the card has already said a retry will not fix
 - starting expensive local-CI work while the portal reports active quiescence
+
+
+## When required services are degraded
+
+A completed portal upgrade can still show **Degraded** when required supporting
+services could not start. The banner lists the failed services; it does not mean
+those capabilities are working. A later upgrade retries missing containers and
+containers whose first startup never succeeded. Services that have run before
+and were subsequently stopped are left alone.
+
+Monitoring configuration paths are resolved for the Docker host, including when
+an upgrade runs inside a separate container. The sandbox installs the dependencies
+for its current source before starting its preview server; dependency failures
+remain visible in container logs and health status.
+
+On Apple Silicon Macs, speech runs as the native Chatterbox service. It is checked
+through its speech endpoint, not by requiring a Docker speech container. If voice
+is unavailable, the platform maintainer can restore it through the existing
+native speech setup procedure, `scripts/tts/setup-chatterbox-tts-macos.sh`.

@@ -115,13 +115,13 @@ test("honors the deliberate escape hatch", () => {
 
 // ── runtime envelope + fail-open contract ────────────────────────────────────
 
-test("emits a dual-envelope deny that every surface honors", () => {
+test("emits the deny envelope the sending surface honors (BI-E5C45F61)", () => {
   const r = runGuard({ tool_name: "Bash", tool_input: { command: "pnpm run pregate | head -5" }, cwd: process.cwd() });
   assert.equal(r.status, 0, "a deny is delivered on stdout with exit 0");
   const out = JSON.parse(r.stdout);
-  assert.equal(out.decision, "deny", "Grok reads the top-level decision");
+  assert.equal("decision" in out, false, "Claude discards the whole output when a top-level decision is not approve|block");
   assert.equal(out.hookSpecificOutput.permissionDecision, "deny", "Claude/Codex read hookSpecificOutput");
-  assert.match(out.reason, /BI-B1065D41/);
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /BI-B1065D41/);
 });
 
 test("reads Grok's camelCase envelope, not just Claude's snake_case", () => {
@@ -135,7 +135,7 @@ test("denies run_in_background delivered through the tool input", () => {
     tool_input: { command: "pnpm run pregate", run_in_background: true },
     cwd: process.cwd(),
   });
-  assert.match(JSON.parse(r.stdout).reason, /CAPS and KILLS/);
+  assert.match(JSON.parse(r.stdout).hookSpecificOutput.permissionDecisionReason, /CAPS and KILLS/);
 });
 
 test("stays silent on the canonical form", () => {

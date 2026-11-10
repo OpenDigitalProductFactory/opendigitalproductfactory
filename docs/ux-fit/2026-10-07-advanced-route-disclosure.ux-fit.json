@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "named-diagnostics-more-tools",
+  "decisionInteractionId": "DI-0267645F146B",
+  "scope": {
+    "files": [
+      "apps/web/components/shell/MoreTools.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "named-diagnostics-more-tools",
+      "wire-heuristic-as-is",
+      "leave-tabs-flat"
+    ]
+  }
+}

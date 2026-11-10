@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "accountableOwner": "developer-platform",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260829160000_self_upgrade_recovery_successor",
+    "backfill": "fail-closed bootstrap only - when exactly one authenticated manual release admission is in flight, link it to the immediately preceding failed pre-dispatch run; otherwise leave every historical row unchanged"
+  },
+  "tests": [
+    "apps/web/lib/self-upgrade/admission.test.ts",
+    "apps/web/lib/self-upgrade/run-store.test.ts",
+    "apps/web/lib/actions/promotions.self-upgrade.test.ts",
+    "apps/web/lib/self-upgrade/request.test.ts",
+    "packages/db/src/self-upgrade-recovery-successor-migration.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "platform:self-upgrade-run",
+      "prismaModel": "SelfUpgradeRun",
+      "lifecycleDisposition": "operational recovery linkage retained with immutable self-upgrade history",
+      "fields": [
+        {
+          "fieldId": "platform:self-upgrade-run#recoveryOfRunId",
+          "resolution": "governed",
+          "reason": "audit-only linkage to the independently authorized successor admission; never grants dispatch authority or reopens/rebinds the predecessor",
+          "provenance": "serialized self-upgrade admission transaction"
+        }
+      ]
+    }
+  ]
+}

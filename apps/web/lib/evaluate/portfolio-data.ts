@@ -3,6 +3,10 @@
 // Both layout.tsx and page.tsx call getPortfolioTree() — React deduplicates automatically.
 import { cache } from "react";
 import { prisma } from "@dpf/db";
+import {
+  SELECTABLE_COWORKER_STATE,
+  dropDualSeedAliasAgents,
+} from "@/lib/coworker-record/selectable-coworker";
 import { buildPortfolioTree, PORTFOLIO_OWNER_ROLES, type OwnerRoleInfo } from "./portfolio";
 import {
   getPortfolioBudgetMetric,
@@ -151,7 +155,7 @@ export const getPortfolioSummary = cache(async (): Promise<PortfolioSummary> => 
     statusGroups,
     backlogCounts,
     epicCounts,
-    agentCounts,
+    selectableAgentRows,
   ] = await Promise.all([
     prisma.digitalProduct.groupBy({
       by: ["lifecycleStage"],
@@ -169,11 +173,16 @@ export const getPortfolioSummary = cache(async (): Promise<PortfolioSummary> => 
       by: ["status"],
       _count: { id: true },
     }),
-    prisma.agent.groupBy({
-      by: ["status"],
-      _count: { id: true },
+    // BI-B939790B: count the SAME canonical roster the /workforce cockpit shows —
+    // selectable coworkers (active · production · not-archived) with dual-seed alias
+    // twins collapsed — instead of raw Agent rows. A raw groupBy summed alias twins,
+    // draft, and retired rows into "114 total / 97 active" beside /workforce's 76.
+    prisma.agent.findMany({
+      where: SELECTABLE_COWORKER_STATE,
+      select: { agentId: true },
     }),
   ]);
+  const rosterAgentCount = dropDualSeedAliasAgents(selectableAgentRows).length;
 
   const lifecycleStages: LifecycleStageCounts = {};
   let totalProducts = 0;
@@ -185,7 +194,6 @@ export const getPortfolioSummary = cache(async (): Promise<PortfolioSummary> => 
   const statusByName = new Map(statusGroups.map(g => [g.lifecycleStatus, g._count.id]));
   const backlogByStatus = new Map(backlogCounts.map(g => [g.status, g._count.id]));
   const epicByStatus = new Map(epicCounts.map(g => [g.status, g._count.id]));
-  const agentByStatus = new Map(agentCounts.map(g => [g.status, g._count.id]));
 
   return {
     totalProducts,
@@ -196,7 +204,7 @@ export const getPortfolioSummary = cache(async (): Promise<PortfolioSummary> => 
     openBacklogItems: backlogByStatus.get("open") ?? 0,
     inProgressBacklogItems: backlogByStatus.get("in-progress") ?? 0,
     openEpics: epicByStatus.get("open") ?? 0,
-    totalAgents: agentCounts.reduce((s, g) => s + g._count.id, 0),
-    activeAgents: agentByStatus.get("active") ?? 0,
+    totalAgents: rosterAgentCount,
+    activeAgents: rosterAgentCount,
   };
 });

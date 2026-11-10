@@ -2,6 +2,7 @@ import {
   COWORKER_CAPABILITY_NEED_KINDS,
   type CoworkerCapabilityNeedKind,
 } from "@/lib/coworker-self-assessment/types";
+import { isRecord } from "@/lib/shared/coerce";
 
 export const WORK_PATTERN_STATUSES = [
   "observed",
@@ -94,12 +95,6 @@ const AUTHORITY_MODES = [
   "authenticated-inbound",
 ] as const;
 const RECEIPT_POLICIES = ["governed-action", "observed-event"] as const;
-
-type JsonRecord = Record<string, unknown>;
-
-function isRecord(value: unknown): value is JsonRecord {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;

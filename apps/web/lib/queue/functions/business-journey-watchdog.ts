@@ -20,8 +20,8 @@
 // raises, and notifies. Remediation goes through the governed backlog flow at
 // the operator's initiative.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   BUSINESS_JOURNEY_WATCHDOG_CRON,
@@ -52,7 +52,7 @@ export async function runBusinessJourneyWatchdogJob(): Promise<BusinessJourneyWa
   };
 }
 
-export const businessJourneyWatchdogScheduled = inngest.createFunction(
+export const businessJourneyWatchdogScheduled = jobs.createFunction(
   {
     id: BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID,
     retries: 1,
@@ -62,13 +62,13 @@ export const businessJourneyWatchdogScheduled = inngest.createFunction(
     triggers: [cron(BUSINESS_JOURNEY_WATCHDOG_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("business-journey-watchdog", () => runBusinessJourneyWatchdogJob());
   },
 );
 
-export const businessJourneyWatchdogRunNow = inngest.createFunction(
+export const businessJourneyWatchdogRunNow = jobs.createFunction(
   {
     id: BUSINESS_JOURNEY_WATCHDOG_RUN_NOW_INNGEST_ID,
     retries: 0,
@@ -76,7 +76,7 @@ export const businessJourneyWatchdogRunNow = inngest.createFunction(
     triggers: [{ event: BUSINESS_JOURNEY_WATCHDOG_REQUESTED_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, BUSINESS_JOURNEY_WATCHDOG_RUN_NOW_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("business-journey-watchdog", () => runBusinessJourneyWatchdogJob());
   },

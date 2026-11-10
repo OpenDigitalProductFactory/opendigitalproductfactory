@@ -7,9 +7,10 @@
 // UX-Fit proves cognitive-load review happened. This gate closes the seam
 // between them: "what existing spec and code did you ground against?"
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
+import { requireChangedFiles } from "./lib/git-changed-files.mjs";
+import { runGit } from "./lib/git.mjs";
 
 export const DESIGN_GROUNDING_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?Design[ -]Grounding(?:-Decision)?:/i;
 export const DESIGN_GROUNDING_HEADING_RE = /(?:^|\n)\s*#{1,6}\s+Design grounding\b/i;
@@ -68,13 +69,8 @@ function assertSafePath(path) {
   return path;
 }
 
-function git(...args) {
-  try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (e) {
-    return (e.stdout && e.stdout.toString()) || "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: process.cwd() }).stdout;
 
 // Break the evidence check into its three independent conditions so the gate can
 // tell an author exactly which one is unmet instead of a single opaque failure.
@@ -179,11 +175,7 @@ function main() {
   // BI-1ADD56FC: never write .git/shallow into a full shared clone.
   fetchOriginMainSharedSafe((args) => git(...args));
 
-  const changedFiles = git("diff", "--name-only", `${base}...HEAD`)
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map(assertSafePath);
+  const changedFiles = requireChangedFiles(base, "design-grounding-gate").map(assertSafePath);
 
   const commits = git("log", `${base}..HEAD`, "--format=%B");
   const prBody = process.env.PR_BODY || "";

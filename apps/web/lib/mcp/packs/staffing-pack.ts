@@ -11,7 +11,7 @@
 //
 // Handlers lazy-import Prisma so the pack stays a thin, tree-shakeable module.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   getStaffingCoverage as loadStaffingCoverage,
   type StaffingCoverageClient,

@@ -19,6 +19,8 @@ export function parseComposeServices(source) {
   let inServices = false;
   let current;
   let inDependsOn = false;
+  let inLabels = false;
+  let inProfiles = false;
   for (const line of source.replace(/\r\n/g, "\n").split("\n")) {
     if (!inServices) {
       if (line === "services:") inServices = true;
@@ -27,17 +29,38 @@ export function parseComposeServices(source) {
     if (/^[^\s#][^:]*:/.test(line)) break;
     const serviceMatch = /^  ([a-zA-Z0-9][a-zA-Z0-9_-]*):\s*$/.exec(line);
     if (serviceMatch) {
-      current = { service: serviceMatch[1], profiles: [], dependsOn: [], hasProfiles: false, hasDependsOn: false };
+      current = { service: serviceMatch[1], profiles: [], dependsOn: [], labels: {}, hasProfiles: false, hasDependsOn: false };
       services.set(current.service, current);
       inDependsOn = false;
+      inLabels = false;
+      inProfiles = false;
       continue;
     }
     if (!current) continue;
     const propertyMatch = /^    ([a-zA-Z0-9_-]+):(?:\s*(.*))?$/.exec(line);
     if (propertyMatch) {
       inDependsOn = propertyMatch[1] === "depends_on";
-      if (propertyMatch[1] === "profiles") { current.profiles = parseInlineList(propertyMatch[2] ?? ""); current.hasProfiles = true; }
+      inLabels = propertyMatch[1] === "labels";
+      inProfiles = false;
+      if (propertyMatch[1] === "profiles") {
+        current.hasProfiles = true;
+        // Inline `[a, b]` or a block list on the following lines.
+        if ((propertyMatch[2] ?? "").trim() === "") { current.profiles = []; inProfiles = true; }
+        else current.profiles = parseInlineList(propertyMatch[2]);
+      }
       if (propertyMatch[1] === "depends_on") current.hasDependsOn = true;
+      continue;
+    }
+    if (inProfiles) {
+      const profileMatch = /^      - ['"]?([^'"#\s]+)['"]?\s*(?:#.*)?$/.exec(line);
+      if (profileMatch) current.profiles.push(profileMatch[1]);
+      continue;
+    }
+    if (inLabels) {
+      // Map-form labels only (`key: value`); the repo writes no list-form labels.
+      const labelMatch = /^      ([a-zA-Z0-9][a-zA-Z0-9_.-]*):\s*["']?([^"'#]*?)["']?\s*(?:#.*)?$/.exec(line);
+      if (labelMatch) current.labels[labelMatch[1]] = labelMatch[2];
+      else if (/^    \S/.test(line)) inLabels = false;
       continue;
     }
     if (inDependsOn) {

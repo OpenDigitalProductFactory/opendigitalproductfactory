@@ -13,6 +13,7 @@
 // Phase 3b; this PR is the passive path only.
 
 import { searchWikiPages, type WikiSearchResult } from "./embeddings";
+import type { CorpusReadScope } from "@/lib/tak/corpus-read-scope";
 import {
   recallPrincipleContext,
   type PrincipleAppliesToPopulation,
@@ -63,6 +64,7 @@ async function runSeedSearch(
       organizationId: input.organizationId,
       limit: input.limit ?? 4,
       db: prisma,
+      corpusScope: input.corpusScope,
     });
   }
 
@@ -78,6 +80,7 @@ async function runSeedSearch(
       organizationId: input.organizationId,
       limit,
       scoreThreshold: input.scoreThreshold,
+      corpusScope: input.corpusScope,
       pageKinds: input.preferredPageKinds,
     });
     if (preferred.length >= limit) return preferred;
@@ -87,6 +90,7 @@ async function runSeedSearch(
       organizationId: input.organizationId,
       limit,
       scoreThreshold: input.scoreThreshold,
+      corpusScope: input.corpusScope,
     });
     const seen = new Set(preferred.map((r) => r.pageId));
     const merged = [...preferred];
@@ -105,6 +109,7 @@ async function runSeedSearch(
     organizationId: input.organizationId,
     limit,
     scoreThreshold: input.scoreThreshold,
+    corpusScope: input.corpusScope,
   });
 }
 
@@ -128,6 +133,8 @@ export type RecallWikiContextInput = {
    * No effect on the PPR path (graph traversal isn't kind-filtered).
    */
   preferredPageKinds?: string[];
+  /** The coworker's corpus grants (BI-825D3487); a corpus it does not hold is skipped. */
+  corpusScope?: CorpusReadScope;
 };
 
 // ─── Pure formatter ─────────────────────────────────────────────────────────
@@ -188,7 +195,7 @@ export type RecallWikiContextWithPrinciplesInput = RecallWikiContextInput & {
   /**
    * Population whose principles should apply. Drives the principle recall
    * branch — commandments are always injected for in-scope rows; relevant
-   * core and contextual principles are pulled from Qdrant.
+   * core and contextual principles are pulled from the vector store.
    */
   callingPopulation: PrincipleAppliesToPopulation;
 };

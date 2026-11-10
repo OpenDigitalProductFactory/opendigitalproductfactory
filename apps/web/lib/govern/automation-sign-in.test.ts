@@ -1,0 +1,313 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SignJWT, decodeJwt } from "jose";
+
+import {
+  AUTOMATION_PERSONA_EMAIL,
+  AUTOMATION_SIGN_IN_AUDIENCE,
+  AUTOMATION_SIGN_IN_CONSUMED_KEY,
+  AUTOMATION_SIGN_IN_GRANT_KEY,
+  AUTOMATION_SIGN_IN_PATH,
+  consumeAutomationSignIn,
+  ensureAutomationPersona,
+  mintAutomationSignIn,
+  resolveAutomationSignInPermission,
+  sanitizeNextPath,
+  type AutomationSignInDb,
+} from "./automation-sign-in";
+
+vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@/lib/govern/password", () => ({ hashPassword: async (value: string) => `hashed:${value.length}` }));
+vi.mock("@/lib/identity/authentication", () => ({ authorizePrincipalForSession: vi.fn() }));
+vi.mock("@/lib/identity/principal-linking", () => ({ syncUserPrincipal: vi.fn() }));
+
+// Built at runtime so the fixture never looks like a real credential to a scanner.
+const env = { AUTH_SECRET: `unit-${"x".repeat(40)}` };
+const at = new Date("2026-09-03T03:00:00.000Z");
+
+type FakeState = {
+  users: Map<string, { id: string; email: string; isActive: boolean; isSuperuser: boolean; groups: Array<{ platformRole: { roleId: string } | null }> }>;
+  employees: Map<string, { id: string }>;
+  config: Map<string, unknown>;
+};
+
+function fakeDb(state: FakeState): AutomationSignInDb & { state: FakeState } {
+  let tail: Promise<unknown> = Promise.resolve();
+  const db: AutomationSignInDb & { state: FakeState } = {
+    $transaction: body => {
+      const next = tail.then(() => body(db));
+      tail = next.catch(() => undefined);
+      return next;
+    },
+    $executeRaw: async () => 0,
+    state,
+    user: {
+      findUnique: async (args: unknown) => {
+        const where = (args as { where: { email?: string; id?: string } }).where;
+        for (const user of state.users.values()) {
+          if ((where.email && user.email === where.email) || (where.id && user.id === where.id)) return user;
+        }
+        return null;
+      },
+      create: async (args: unknown) => {
+        const data = (args as { data: { email: string; isSuperuser: boolean } }).data;
+        const id = `user_${state.users.size + 1}`;
+        state.users.set(id, { id, email: data.email, isActive: true, isSuperuser: data.isSuperuser, groups: [{ platformRole: { roleId: "HR-000" } }] });
+        return { id };
+      },
+    },
+    platformRole: { findUnique: async () => ({ id: "role_hr000" }) },
+    employeeProfile: {
+      findUnique: async (args: unknown) => state.employees.get((args as { where: { userId: string } }).where.userId) ?? null,
+      create: async (args: unknown) => {
+        const data = (args as { data: { userId: string } }).data;
+        const row = { id: `emp_${state.employees.size + 1}` };
+        state.employees.set(data.userId, row);
+        return row;
+      },
+    },
+    platformConfig: {
+      findUnique: async (args: unknown) => {
+        const key = (args as { where: { key: string } }).where.key;
+        return state.config.has(key) ? { value: state.config.get(key) } : null;
+      },
+      upsert: async (args: unknown) => {
+        const { where, create } = args as { where: { key: string }; create: { value: unknown } };
+        state.config.set(where.key, create.value);
+        return {};
+      },
+    },
+  };
+  return db;
+}
+
+function installState(environmentClass: string) {
+  return async () => JSON.stringify({ environmentClass });
+}
+
+function depsFor(db: AutomationSignInDb, environmentClass = "development") {
+  return {
+    db,
+    env,
+    now: () => at,
+    readText: installState(environmentClass),
+    syncPrincipal: vi.fn(async () => ({})),
+    authorizeSession: vi.fn(async () => ({ authorized: true })),
+  };
+}
+
+let state: FakeState;
+beforeEach(() => {
+  state = { users: new Map(), employees: new Map(), config: new Map() };
+  vi.spyOn(console, "info").mockImplementation(() => {});
+});
+
+describe("resolveAutomationSignInPermission", () => {
+  it("permits a development installation by default", async () => {
+    await expect(resolveAutomationSignInPermission(depsFor(fakeDb(state)))).resolves.toMatchObject({ permitted: true });
+  });
+
+  it("refuses a production installation unless an operator recorded the grant", async () => {
+    const db = fakeDb(state);
+    await expect(resolveAutomationSignInPermission(depsFor(db, "production"))).resolves.toMatchObject({
+      permitted: false,
+      because: expect.stringContaining("production"),
+    });
+    state.config.set(AUTOMATION_SIGN_IN_GRANT_KEY, { enabled: true });
+    await expect(resolveAutomationSignInPermission(depsFor(db, "production"))).resolves.toMatchObject({
+      permitted: true,
+      because: expect.stringContaining(AUTOMATION_SIGN_IN_GRANT_KEY),
+    });
+  });
+});
+
+describe("ensureAutomationPersona", () => {
+  it("creates the persona once with an unusable password, a principal and an employee profile", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const first = await ensureAutomationPersona(deps);
+    const second = await ensureAutomationPersona(deps);
+    expect(first.email).toBe(AUTOMATION_PERSONA_EMAIL);
+    expect(second.userId).toBe(first.userId);
+    expect(state.users.size).toBe(1);
+    expect(state.employees.size).toBe(1);
+    expect(deps.syncPrincipal).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("mint + consume", () => {
+  it("issues a one-time link that exchanges for admin session claims and lands on nextPath", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn(
+      { nextPath: "/platform/federation-links", baseUrl: "http://127.0.0.1:3000/", requestedBy: "mcp:test" },
+      deps,
+    );
+    expect(minted.issued).toBe(true);
+    if (!minted.issued) return;
+    expect(minted.url.startsWith(`http://127.0.0.1:3000${AUTOMATION_SIGN_IN_PATH}?token=`)).toBe(true);
+    expect(minted.persona).toBe(AUTOMATION_PERSONA_EMAIL);
+
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+    const consumed = await consumeAutomationSignIn(token, deps);
+    expect(consumed).toMatchObject({
+      accepted: true,
+      nextPath: "/platform/federation-links",
+      claims: { email: AUTOMATION_PERSONA_EMAIL, type: "admin", isSuperuser: true, platformRole: "HR-000" },
+    });
+    expect(deps.authorizeSession).toHaveBeenCalledTimes(1);
+    expect(state.config.get(AUTOMATION_SIGN_IN_CONSUMED_KEY)).toBeTruthy();
+  });
+
+  it("mints a link token for the automation audience only (BI-7B4B5F5D)", async () => {
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, depsFor(fakeDb(state)));
+    if (!minted.issued) throw new Error("expected a link");
+    const claims = decodeJwt(decodeURIComponent(minted.path.split("token=")[1]!));
+    expect(claims.aud).toBe(AUTOMATION_SIGN_IN_AUDIENCE);
+  });
+
+  it("refuses a correctly signed token without the automation audience (BI-7B4B5F5D)", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const persona = await ensureAutomationPersona(deps);
+    const nowSeconds = Math.floor(at.getTime() / 1000);
+    const noAudience = await new SignJWT({ purpose: "dpf.automation-sign-in/1", next: "/" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject(persona.userId)
+      .setJti("jti-without-audience")
+      .setIssuedAt(nowSeconds)
+      .setExpirationTime(nowSeconds + 600)
+      .sign(new TextEncoder().encode(env.AUTH_SECRET));
+    await expect(consumeAutomationSignIn(noAudience, deps)).resolves.toMatchObject({
+      accepted: false,
+      reason: "token-invalid-or-expired",
+    });
+    expect(state.config.get(AUTOMATION_SIGN_IN_CONSUMED_KEY)).toBeUndefined();
+  });
+
+  it("refuses the same link a second time", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+    await expect(consumeAutomationSignIn(token, deps)).resolves.toMatchObject({ accepted: true });
+    await expect(consumeAutomationSignIn(token, deps)).resolves.toMatchObject({ accepted: false, reason: "token-already-used" });
+  });
+  it("accepts at most one of two concurrent exchanges", async () => {
+    const db = fakeDb(state);
+    const read = db.platformConfig.findUnique;
+    let reads = 0;
+    let release!: () => void;
+    const bothReading = new Promise<void>(resolve => { release = resolve; });
+    db.platformConfig.findUnique = async args => {
+      const row = await read(args);
+      if ((args as { where: { key: string } }).where.key === AUTOMATION_SIGN_IN_CONSUMED_KEY) {
+        if (++reads === 2) release();
+        await Promise.race([bothReading, new Promise(resolve => setTimeout(resolve, 30))]);
+      }
+      return row;
+    };
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+    const results = await Promise.all([consumeAutomationSignIn(token, deps), consumeAutomationSignIn(token, deps)]);
+    expect(results.filter(result => result.accepted)).toHaveLength(1);
+  });
+
+  it("tells the caller which session an already-used link belongs to, so the redirect can be replayed", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn(
+      { nextPath: "/platform/federation-links", baseUrl: "http://portal:3000", requestedBy: "mcp:test" },
+      deps,
+    );
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+
+    const first = await consumeAutomationSignIn(token, deps);
+    if (!first.accepted) throw new Error("expected the first exchange to be accepted");
+
+    const second = await consumeAutomationSignIn(token, deps);
+    expect(second).toMatchObject({
+      accepted: false,
+      reason: "token-already-used",
+      replay: { sub: first.claims.sub, nextPath: "/platform/federation-links" },
+    });
+  });
+
+  it("offers no replay for any refusal other than an already-used link", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+
+    const expired = await consumeAutomationSignIn(token, { ...deps, now: () => new Date(at.getTime() + 11 * 60 * 1000) });
+    const tampered = await consumeAutomationSignIn(`${token}x`, deps);
+    const production = await consumeAutomationSignIn(token, { ...deps, readText: installState("production") });
+    for (const refusal of [expired, tampered, production]) {
+      expect(refusal.accepted).toBe(false);
+      if (refusal.accepted) continue;
+      expect(refusal.replay).toBeUndefined();
+    }
+  });
+
+  it("refuses an expired link, a tampered link and a link for a production installation", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+
+    const later = { ...deps, now: () => new Date(at.getTime() + 11 * 60 * 1000) };
+    await expect(consumeAutomationSignIn(token, later)).resolves.toEqual({ accepted: false, reason: "token-invalid-or-expired" });
+    await expect(consumeAutomationSignIn(`${token}x`, deps)).resolves.toEqual({ accepted: false, reason: "token-invalid-or-expired" });
+    const production = { ...deps, readText: installState("production") };
+    await expect(consumeAutomationSignIn(token, production)).resolves.toMatchObject({ accepted: false, reason: expect.stringContaining("production") });
+  });
+
+  it("refuses to mint on a production installation and refuses when the identity spine says no", async () => {
+    const db = fakeDb(state);
+    await expect(mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, depsFor(db, "production"))).resolves.toMatchObject({
+      issued: false,
+    });
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+    const refusing = { ...deps, authorizeSession: vi.fn(async () => ({ authorized: false, reason: "principal-inactive" })) };
+    await expect(consumeAutomationSignIn(token, refusing)).resolves.toEqual({ accepted: false, reason: "principal-refused:principal-inactive" });
+  });
+});
+
+describe("sanitizeNextPath", () => {
+  it("keeps same-origin paths and sends anything else home", () => {
+    expect(sanitizeNextPath("/ops/demand")).toBe("/ops/demand");
+    expect(sanitizeNextPath("//evil.example")).toBe("/");
+    expect(sanitizeNextPath("https://evil.example/")).toBe("/");
+    expect(sanitizeNextPath(undefined)).toBe("/");
+  });
+});
+
+// BI-F586F8A5 — a persona session may consent only to the authorization request it was minted for.
+describe("automation OAuth consent binding", () => {
+  async function exchange(nextPath: string) {
+    const deps = depsFor(fakeDb(state));
+    const minted = await mintAutomationSignIn({ nextPath, baseUrl: "http://127.0.0.1:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    return consumeAutomationSignIn(decodeURIComponent(minted.path.split("token=")[1]!), deps);
+  }
+
+  it("binds the session to the exact authorization request named by nextPath", async () => {
+    const consumed = await exchange("/api/oauth/authorize?client_id=dpfoc_acc&code_challenge=abc123&response_type=code");
+    expect(consumed).toMatchObject({ accepted: true, claims: { automationOAuthConsent: { clientId: "dpfoc_acc", codeChallenge: "abc123" } } });
+  });
+
+  it("grants no OAuth consent to a session minted for any other page", async () => {
+    for (const nextPath of ["/platform/federation-links", "/api/oauth/authorize?client_id=dpfoc_acc", "/api/oauth/authorizex?client_id=a&code_challenge=b"]) {
+      const consumed = await exchange(nextPath);
+      expect(consumed.accepted && consumed.claims.automationOAuthConsent).toBeFalsy();
+    }
+  });
+});

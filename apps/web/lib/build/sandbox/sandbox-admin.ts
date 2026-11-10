@@ -9,6 +9,7 @@ import {
   type SandboxSourceCurrencyStatus,
 } from "./sandbox-source-currency";
 import { execInSandbox } from "./sandbox";
+import { isBuildWorktreeIsolationEnabled, resolveBuildWorkdir } from "./build-branch";
 import {
   parseDockerInspectJson,
   type DockerComposeContainerInfo,
@@ -82,6 +83,7 @@ export type DiagnoseSandboxReadinessArgs = {
 };
 
 const PHASE_STUCK_AFTER_MS = 45 * 60 * 1000;
+const BUILD_WORKTREE_MISSING = "build-worktree-missing";
 
 const exec = lazyExec();
 
@@ -347,11 +349,26 @@ export async function inspectSandboxGit(
 ): Promise<SandboxGitProbe> {
   try {
     const targetRef = "origin/main";
-    const workspace = "/workspace";
+    // BI-5C4933EB: probe the build's own worktree when isolation is on; the
+    // shared /workspace stays on client/<id> and would always mismatch.
+    const workspace = resolveBuildWorkdir(build.buildId);
+    const missingProbe = isBuildWorktreeIsolationEnabled()
+      ? `if [ ! -d '${workspace}' ]; then printf 'reason=${BUILD_WORKTREE_MISSING}\\n'; exit 0; fi; `
+      : "";
     const output = await execInSandbox(
       containerId,
-      buildSandboxSourceCurrencyProbeCommand({ workspace, targetRef }),
+      missingProbe + buildSandboxSourceCurrencyProbeCommand({ workspace, targetRef }),
     );
+    // A missing worktree has no branch: it surfaces as branch_mismatch, whose
+    // checkout_registered_branch recovery re-materializes the worktree.
+    if (output.includes(`reason=${BUILD_WORKTREE_MISSING}`)) {
+      return {
+        branchName: null,
+        dirty: false,
+        sourceCurrencyStatus: "unverified",
+        sourceCurrencySummary: `Build worktree ${workspace} is missing.`,
+      };
+    }
     const sourceSnapshot = parseSandboxSourceCurrencyProbeOutput(output, {
       targetRef,
       workspace,

@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+import { createElement } from "react";
+import { renderToStaticMarkup, renderToString } from "react-dom/server";
 import { describe, it, expect } from "vitest";
 import {
   auditOwnerFirst,
@@ -15,6 +18,35 @@ import {
 } from "./ux-audit";
 
 describe("owner-first UX metrics", () => {
+  it("counts the same rendered words across React server text separators", () => {
+    const content = createElement("p", null, 4, " item", "s ", 2, " device", "s ", 100, "%");
+    const server = renderToString(content);
+    const staticMarkup = renderToStaticMarkup(content);
+    const dom = document.createElement("div");
+    dom.innerHTML = server;
+    expect(server).toContain("<!-- -->");
+    expect(dom.textContent).toBe("4 items 2 devices 100%");
+    expect(visibleText(server)).toBe(dom.textContent);
+    expect(visibleText(server)).toBe(visibleText(staticMarkup));
+    expect(countWords(server)).toBe(5);
+    expect(visibleUtterances(server)).toEqual(["4 items 2 devices 100%"]);
+  });
+
+  it("omits complete comment contents without inventing a word boundary", () => {
+    const html = "<p>item<!-- ignored >\n still ignored -->s</p>";
+    expect(visibleText(html)).toBe("items");
+    expect(visibleUtterances(html)).toEqual(["items"]);
+  });
+
+  it("retains authored whitespace and distinct controls around comments", () => {
+    const html = "<p>one <!-- --> two</p><button>Save</button><!-- --><button>Cancel</button>";
+    expect(visibleText(html)).toBe("one two Save Cancel");
+    expect(countWords(html)).toBe(4);
+    expect(visibleUtterances(html)).toEqual(["one two", "Save", "Cancel"]);
+    expect(countControls(html)).toBe(2);
+    expect(visibleText("<code>&lt;!-- visible copy --&gt;</code>")).toBe("<!-- visible copy -->");
+  });
+
   it("counts visible words, decoding entities and ignoring tags", () => {
     // renderToStaticMarkup escapes apostrophes to &#x27; — the count must not
     // split a word on the entity.

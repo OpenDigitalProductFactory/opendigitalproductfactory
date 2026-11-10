@@ -11,15 +11,19 @@ import type {
 import { computeDemandPayloadDigest } from "@dpf/db/federated-demand-contract";
 import type { ProjectionContractSpec } from "@dpf/db/projection-serialization";
 
-import { sendDemandToPeer, type PeerPostResult } from "./client";
+import { sendDemandToPeer, sendDeploymentDeclarationToPeer, sendOperationalPostureToPeer, type PeerPostResult } from "./client";
+import { decodeDeploymentDeclarationOutboxPayload } from "./deployment-declaration-exchange";
 import { buildDemandEnvelope, type ProjectableDemandSource } from "./demand-projection";
 import type { FederationIdentity } from "./demand-identity";
+import { decodeOperationalPostureOutboxPayload } from "./operational-posture-delivery";
 import { decryptPeerToken } from "./outbound";
 import { incrementVersionVector, isVersionVector, type VersionVector } from "./version-vector";
 import {
   ensureFederationDeliveryJob,
+  ensureFederationDeliveryQueue,
   claimFederationDeliveryJob,
   finishFederationDeliveryJob,
+  holdFederationDeliveryJob,
   scheduleFederationDeliveryJob,
   type FederationDeliveryQueueDb,
 } from "./delivery-queue";
@@ -43,6 +47,7 @@ export interface DemandOutboxPayload {
 interface DemandOutboxRow {
   mirrorId: string;
   federationLinkId: string;
+  recordType?: string;
   canonicalSide?: string;
   localRecordRef?: string | null;
   version: bigint;
@@ -58,7 +63,12 @@ export interface DemandDeliveryDb extends FederationDeliveryQueueDb {
       peerAuthorityUrl: string;
       peerTokenEnc: string | null;
       role: string;
+      linkState?: string;
+      revokedAt?: Date | null;
+      quarantinedAt?: Date | null;
     }>>;
+    /** Quarantine a link the peer itself is refusing (see quarantineRejectedLink). */
+    updateMany?(args: unknown): Promise<{ count: number }>;
   };
   federatedRecordMirror: {
     findUnique(args: unknown): Promise<Partial<DemandOutboxRow> & { mirrorId: string; version: bigint; syncStatus: string; payload: unknown; versionVector?: unknown } | null>;
@@ -88,6 +98,25 @@ function eventId(linkId: string, envelope: DemandEnvelopeV1, activity: OutboundD
     .digest("hex").slice(0, 24)}`;
 }
 
+/**
+ * Whether a fresh projection carries the same content as the stored envelope.
+ * The version is set aside: an envelope advanced past its item's updatedAt
+ * (BI-3B0657C2) must still read as unchanged on the next cycle, or every cycle
+ * would advance it again.
+ */
+function sameDemandContent(prior: DemandOutboxPayload["envelope"], next: DemandEnvelopeV1): boolean {
+  if (prior.payloadDigest === next.payloadDigest) return true;
+  if (prior.specVersion !== "dpf.demand/1") return false;
+  return computeDemandPayloadDigest({ ...next, originVersion: prior.originVersion }) === prior.payloadDigest;
+}
+
+/** A dpf.demand/1 envelope re-stamped at a version past both sides' copies. */
+function advanceDemandEnvelope(envelope: DemandEnvelopeV1, pastVersion: number): DemandEnvelopeV1 {
+  const advanced = { ...envelope, originVersion: pastVersion + 1, payloadDigest: "sha256:pending" };
+  advanced.payloadDigest = computeDemandPayloadDigest(advanced);
+  return advanced;
+}
+
 export function decodeDemandOutboxPayload(value: unknown): DemandOutboxPayload | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const payload = value as Partial<DemandOutboxPayload>;
@@ -111,8 +140,15 @@ export async function queueDemandProjection(db: DemandDeliveryDb, input: {
   const where = localWhere(input.link.linkId, input.source.localRecordRef);
   const existing = await db.federatedRecordMirror.findUnique({ where });
   const prior = decodeDemandOutboxPayload(existing?.payload);
-  if (existing && prior?.envelope.payloadDigest === built.envelope.payloadDigest) {
+  if (existing && prior && sameDemandContent(prior.envelope, built.envelope)) {
     return { action: "noop", mirrorId: existing.mirrorId, originVersion: Number(existing.version) };
+  }
+  // BI-3B0657C2: originVersion is the item's updatedAt, and content can change
+  // without updatedAt moving. Re-sending new content at a version the peer
+  // already holds is refused as origin-version-not-advancing on every retry, so
+  // a content change always takes a version past the one already queued or sent.
+  if (existing && built.envelope.originVersion <= Number(existing.version)) {
+    built.envelope = advanceDemandEnvelope(built.envelope, Number(existing.version));
   }
 
   // Real content change → advance THIS installation's counter in the causal vector,
@@ -241,12 +277,100 @@ const BASE_RETRY_MS = 30_000;
 const MAX_RETRY_MS = 30 * 60_000;
 const MAX_ATTEMPTS = 8;
 
+/**
+ * Why a delivery attempt failed, in the only two shapes that should be treated
+ * differently: the peer was never reached, or the peer answered and refused.
+ *
+ * `postToPeer` already encodes this — `status: 0` is set on BOTH the transport
+ * catch and the SSRF-guard reject, and any other status is a real HTTP reply —
+ * so this is a reading of existing evidence, not new plumbing.
+ *
+ * The distinction is load-bearing (BI observed 2026-09-15). Both kinds shared one
+ * retry budget: MAX_ATTEMPTS 8 with a 30s..30m backoff exhausts in about an hour,
+ * so an install that simply could not see its peer — a laptop away from the home
+ * LAN for a few days — dead-lettered every queued item roughly an hour after it
+ * was enqueued. Distance was being recorded as permanent failure.
+ *
+ * Meanwhile the opposite error was also wrong: a peer answering 401/403 is a
+ * settled "no" that retrying cannot change, and that path burned 1,083 attempts
+ * across the same outbox without ever quarantining the link.
+ */
+export type DeliveryFailureKind = "unreachable" | "unavailable" | "rejected-auth" | "rejected-other";
+
+/**
+ * Replies that mean "not now", not "no" (RFC 9110 §15.6.3–15.6.5): a gateway or
+ * the peer itself is temporarily not serving. BI-2DE1002F: a 25-minute 503
+ * window on 2026-10-28 dead-lettered 12 envelopes and spent their re-heals.
+ */
+const TEMPORARILY_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
+
+export function classifyDeliveryFailure(status: number): DeliveryFailureKind {
+  // postToPeer returns 0 for a network error and for a URL the SSRF guard
+  // refused to dial. Neither reached the peer, so neither is evidence about it.
+  if (status === 0) return "unreachable";
+  if (TEMPORARILY_UNAVAILABLE_STATUSES.has(status)) return "unavailable";
+  if (status === 401 || status === 403) return "rejected-auth";
+  return "rejected-other";
+}
+
+/**
+ * Prior attempts an item must already carry before an auth rejection quarantines
+ * its link. One, so a token caught mid-rotation gets exactly one retry, and a
+ * standing refusal stops the outbox on the next pass rather than after hundreds.
+ */
+export const AUTH_REJECTION_QUARANTINE_MIN_ATTEMPTS = 1;
+
 export function retryDelayMs(attempt: number, random: () => number = Math.random): number {
   const bounded = Math.min(MAX_RETRY_MS, BASE_RETRY_MS * 2 ** Math.max(0, attempt - 1));
   return Math.round(bounded * (0.5 + random()));
 }
 
 type SendDemand = typeof sendDemandToPeer;
+type SendPosture = typeof sendOperationalPostureToPeer;
+
+/** Every local-canonical record type that rides the shared federation outbox. */
+export const FEDERATION_OUTBOX_RECORD_TYPES = [
+  "demand-envelope", "demand-response", "demand-disposition", "operational-posture", "deployment-declaration",
+] as const;
+
+/**
+ * Stop dialing a link whose peer is actively refusing us.
+ *
+ * `FederationLink.quarantinedAt` already exists and the drain's own selector
+ * already excludes a quarantined link — but nothing ever set it. On the observed
+ * install eight links had accumulated 1,083 consecutive 401/403 rejections and
+ * not one was quarantined, so every cycle re-dialed peers that had already
+ * settled the question. The column was a mechanism with no trigger.
+ *
+ * Idempotent and narrow: it only ever moves a link that is currently trusted and
+ * unquarantined, so a concurrent cycle cannot double-apply it and it can never
+ * resurrect or revoke anything.
+ */
+/**
+ * The version the peer reported when it refused an envelope as
+ * origin-version-not-advancing (a 409 from handleIncomingDemand), or null for
+ * any other reply, including a concurrent-update conflict.
+ */
+export function notAdvancingRefusalVersion(result: PeerPostResult): number | null {
+  if (result.status !== 409 || typeof result.body !== "object" || result.body === null) return null;
+  const body = result.body as { reason?: unknown; originVersion?: unknown };
+  if (body.reason !== "origin-version-not-advancing") return null;
+  const version = Number(body.originVersion);
+  return Number.isSafeInteger(version) && version > 0 ? version : null;
+}
+
+export async function quarantineRejectedLink(
+  db: DemandDeliveryDb,
+  linkId: string,
+  now: Date,
+): Promise<boolean> {
+  if (!db.federationLink.updateMany) return false;
+  const { count } = await db.federationLink.updateMany({
+    where: { linkId, linkState: "trusted", quarantinedAt: null },
+    data: { quarantinedAt: now },
+  });
+  return count > 0;
+}
 
 export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   now?: Date;
@@ -254,18 +378,57 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   random?: () => number;
   decryptToken?: typeof decryptPeerToken;
   send?: SendDemand;
-} = {}): Promise<{ attempted: number; delivered: number; deferred: number; deadLettered: number }> {
+  sendPosture?: SendPosture;
+  sendDeclaration?: typeof sendDeploymentDeclarationToPeer;
+} = {}): Promise<{
+  attempted: number;
+  delivered: number;
+  deferred: number;
+  deadLettered: number;
+  /** Attempts that never reached the peer — held, never aged out. */
+  unreachable: number;
+  /** Links quarantined this cycle because the peer itself refused us. */
+  quarantinedLinks: string[];
+  /** Jobs closed because their link is revoked or their envelope is no longer pending. */
+  withdrawn: number;
+  /** Envelopes re-stamped past a version the peer refused as not advancing. */
+  rebased: number;
+}> {
   const now = options.now ?? new Date();
+  if (!db.workItem.findMany) throw new Error("Federation delivery queue reader is unavailable.");
   // Safe rolling migration: every legacy pending mirror gets one idempotent
   // canonical queue job. Existing jobs retain their own retry clock.
+  //
+  // BI-5993AE7F: this bridge used to call ensureFederationDeliveryJob for EVERY
+  // pending mirror on EVERY sweep, and each call re-upserted the same single
+  // WorkQueue row. Against a backlog that cannot drain while the peer is offline
+  // (~2,000 items) that measured ~708 writes/sec on a five-row table and ~1,800
+  // txn/sec, enough to pin two cores. Two changes make it a true one-shot:
+  // resolve the queue ONCE per sweep, and only bridge mirrors that do not
+  // already have a job — so in steady state the loop below is empty.
   const pendingMirrors = await db.federatedRecordMirror.findMany({
     where: {
-      recordType: { in: ["demand-envelope", "demand-response", "demand-disposition"] }, canonicalSide: "local", syncStatus: "pending",
+      recordType: { in: [...FEDERATION_OUTBOX_RECORD_TYPES] }, canonicalSide: "local", syncStatus: "pending",
     },
     select: { mirrorId: true },
   });
-  for (const row of pendingMirrors) await ensureFederationDeliveryJob(db, row.mirrorId, now);
-  if (!db.workItem.findMany) throw new Error("Federation delivery queue reader is unavailable.");
+  if (pendingMirrors.length > 0) {
+    const bridged = await db.workItem.findMany({
+      where: {
+        sourceType: "federation-demand-delivery",
+        sourceId: { in: pendingMirrors.map((row) => row.mirrorId) },
+      },
+      select: { sourceId: true },
+    });
+    const haveJob = new Set(bridged.flatMap((row) => (row.sourceId ? [row.sourceId] : [])));
+    const unbridged = pendingMirrors.filter((row) => !haveJob.has(row.mirrorId));
+    if (unbridged.length > 0) {
+      const queue = await ensureFederationDeliveryQueue(db);
+      for (const row of unbridged) {
+        await ensureFederationDeliveryJob(db, row.mirrorId, now, queue.id);
+      }
+    }
+  }
   const jobs = await db.workItem.findMany({
     where: {
       sourceType: "federation-demand-delivery",
@@ -293,43 +456,124 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   const linkById = new Map(links.map((link) => [link.linkId, link]));
   const deliverableRows = rows.filter((row) => linkById.has(row.federationLinkId));
   let delivered = 0;
+  let unreachable = 0;
+  const quarantinedLinks: string[] = [];
   let deferred = 0;
   let deadLettered = 0;
+  let withdrawn = 0;
+  let rebased = 0;
+
+  // BI-26E3B9C9: every due job this sweep selected must leave the due window,
+  // delivered or not. A job whose link was not deliverable used to be skipped
+  // without being finished, so it stayed `queued` and due and was selected again
+  // by every later sweep. Once the oldest-first window filled with revoked-link
+  // jobs, no trusted-link job was ever attempted (observed 2026-10-27: 3,493
+  // queued jobs, nothing attempted since 2026-09-03).
+  const rowByMirrorId = new Map(rows.map((row) => [row.mirrorId, row]));
+  const heldLinkIds = [...new Set(rows
+    .filter((row) => !linkById.has(row.federationLinkId))
+    .map((row) => row.federationLinkId))];
+  const heldLinks = heldLinkIds.length === 0 ? [] : await db.federationLink.findMany({
+    where: { linkId: { in: heldLinkIds } },
+    select: { linkId: true, linkState: true, revokedAt: true, quarantinedAt: true },
+  });
+  const heldLinkById = new Map(heldLinks.map((link) => [link.linkId, link]));
+  for (const job of jobs) {
+    const row = job.sourceId ? rowByMirrorId.get(job.sourceId) : undefined;
+    if (row && linkById.has(row.federationLinkId)) continue;
+    if (row) {
+      const held = heldLinkById.get(row.federationLinkId);
+      const revoked = !held || held.linkState === "revoked" || Boolean(held.revokedAt);
+      if (!revoked) {
+        // Quarantined or not yet trusted: the envelope stays pending for the
+        // day the link is usable again; only the job's turn moves back.
+        deferred++;
+        await holdFederationDeliveryJob(db, {
+          itemId: job.itemId,
+          nextAttemptAt: new Date(now.getTime() + retryDelayMs(job.attemptCount + 1, options.random)),
+        });
+        continue;
+      }
+      await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: { syncStatus: "withdrawn" } });
+    }
+    withdrawn++;
+    await finishFederationDeliveryJob(db, {
+      itemId: job.itemId,
+      attemptCount: job.attemptCount,
+      outcome: "withdrawn",
+      error: row ? "federation link revoked" : "envelope no longer pending",
+      now,
+    });
+  }
   for (const row of deliverableRows) {
     const job = jobByMirrorId.get(row.mirrorId);
     if (!job) continue;
     if (!await claimFederationDeliveryJob(db, job.itemId, now)) continue;
     const link = linkById.get(row.federationLinkId)!;
-    const payload = decodeDemandOutboxPayload(row.payload);
+    const target = {
+      peerAuthorityUrl: link.peerAuthorityUrl,
+      linkToken: "",
+      linkId: link.linkId,
+      sameOrgLan: link.role === "same-org-peer",
+    };
     const token = (options.decryptToken ?? decryptPeerToken)(link.peerTokenEnc);
     let result: PeerPostResult;
-    if (!payload) result = { ok: false, status: 0, error: "invalid outbox payload" };
-    else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
-    else result = await (options.send ?? sendDemandToPeer)(
-      {
-        peerAuthorityUrl: link.peerAuthorityUrl,
-        linkToken: token,
-        linkId: link.linkId,
-        sameOrgLan: link.role === "same-org-peer",
-      },
-      payload.activity,
-      payload.envelope,
-      { eventId: payload.eventId, now },
-    );
+    let payload: DemandOutboxPayload | null = null;
+    let acknowledged = false;
+    if (row.recordType === "deployment-declaration") {
+      // BI-06EA3167: a country declaration rides the posture path unchanged.
+      const declaration = decodeDeploymentDeclarationOutboxPayload(row.payload);
+      if (!declaration) result = { ok: false, status: 0, error: "invalid outbox payload" };
+      else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
+      else result = await (options.sendDeclaration ?? sendDeploymentDeclarationToPeer)(
+        { ...target, linkToken: token },
+        declaration.activity,
+        declaration.record,
+        { eventId: declaration.eventId, now },
+      );
+      acknowledged = result.ok
+        && typeof result.body === "object" && result.body !== null
+        && Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version);
+    } else if (row.recordType === "operational-posture") {
+      // A posture report rides the same outbox and retry clock as demand; only
+      // the payload shape, the send helper and the acknowledgment differ.
+      const posture = decodeOperationalPostureOutboxPayload(row.payload);
+      if (!posture) result = { ok: false, status: 0, error: "invalid outbox payload" };
+      else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
+      else result = await (options.sendPosture ?? sendOperationalPostureToPeer)(
+        { ...target, linkToken: token },
+        posture.activity,
+        posture.record,
+        { eventId: posture.eventId, now },
+      );
+      acknowledged = result.ok
+        && typeof result.body === "object" && result.body !== null
+        && Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version);
+    } else {
+      payload = decodeDemandOutboxPayload(row.payload);
+      if (!payload) result = { ok: false, status: 0, error: "invalid outbox payload" };
+      else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
+      else result = await (options.send ?? sendDemandToPeer)(
+        { ...target, linkToken: token },
+        payload.activity,
+        payload.envelope,
+        { eventId: payload.eventId, now },
+      );
 
-    const responseId = payload?.envelope.specVersion === "dpf.demand-response/1"
-      ? payload.envelope.responseId
-      : null;
-    const noticeId = payload?.envelope.specVersion === "dpf.demand-disposition/1"
-      ? payload.envelope.noticeId
-      : null;
-    const acknowledged = result.ok
-      && typeof result.body === "object" && result.body !== null
-      && (noticeId
-        ? (result.body as { noticeId?: unknown }).noticeId === noticeId
-        : responseId
-        ? (result.body as { responseId?: unknown }).responseId === responseId
-        : Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version));
+      const responseId = payload?.envelope.specVersion === "dpf.demand-response/1"
+        ? payload.envelope.responseId
+        : null;
+      const noticeId = payload?.envelope.specVersion === "dpf.demand-disposition/1"
+        ? payload.envelope.noticeId
+        : null;
+      acknowledged = result.ok
+        && typeof result.body === "object" && result.body !== null
+        && (noticeId
+          ? (result.body as { noticeId?: unknown }).noticeId === noticeId
+          : responseId
+          ? (result.body as { responseId?: unknown }).responseId === responseId
+          : Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version));
+    }
     if (acknowledged) {
       delivered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
@@ -341,12 +585,75 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
       continue;
     }
 
+    // BI-3B0657C2: the peer already holds this version with other content, so
+    // the same envelope is refused on every retry and only ages toward the dead
+    // letter. Re-stamp it past the version the peer reported and send it on the
+    // next sweep. The refusal said nothing wrong about the content, so no attempt
+    // is spent. Only a reported version is trusted: without one, advancing could
+    // not be shown to end the refusal, and the ordinary retry path applies.
+    const refusedVersion = notAdvancingRefusalVersion(result);
+    if (refusedVersion !== null && payload?.envelope.specVersion === "dpf.demand/1") {
+      const activity = payload.activity as OutboundDemandActivity;
+      const envelope = advanceDemandEnvelope(payload.envelope, Math.max(Number(row.version), refusedVersion));
+      await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
+        syncStatus: "pending",
+        version: envelope.originVersion,
+        payload: { ...payload, envelope, eventId: eventId(row.federationLinkId, envelope, activity) },
+      } });
+      await holdFederationDeliveryJob(db, { itemId: job.itemId, nextAttemptAt: now });
+      rebased++;
+      continue;
+    }
+
     const attempts = job.attemptCount + 1;
     const error = (result.error ?? `peer responded ${result.status}`).slice(0, 1_000);
+    const failureKind = classifyDeliveryFailure(result.status);
+
+    // A peer we never reached tells us nothing about the payload, so it must not
+    // spend the dead-letter budget. An install away from its peer for days holds
+    // its outbox intact and drains it on return; previously the same budget
+    // covered both kinds and everything queued was written off within the hour.
+    // A peer that answered "temporarily unavailable" has said nothing about the
+    // payload either, so it holds the same way (BI-2DE1002F).
+    if (failureKind === "unreachable" || failureKind === "unavailable") {
+      unreachable++;
+      await finishFederationDeliveryJob(db, {
+        itemId: job.itemId,
+        // The attempt is still counted — one was genuinely made — so the backoff
+        // keeps widening and the row records how long the peer has been out of
+        // contact. What changes is that this count can no longer reach the
+        // dead-letter branch above: an unreachable peer defers forever rather
+        // than aging the item out.
+        attemptCount: job.attemptCount,
+        outcome: "retry",
+        error,
+        now,
+        nextAttemptAt: new Date(now.getTime() + retryDelayMs(attempts, options.random)),
+      });
+      continue;
+    }
+
+    // A peer answering 401/403 has settled the question; retrying cannot change
+    // a credential decision. Quarantine the link so the whole outbox stops
+    // dialing it, and surface ONE fault instead of thousands of identical ones.
+    if (failureKind === "rejected-auth" && job.attemptCount >= AUTH_REJECTION_QUARANTINE_MIN_ATTEMPTS) {
+      // Persisted state, not an in-memory tally. A cycle usually carries one item
+      // per link, so counting within a single invocation would never reach a
+      // threshold across cycles — the first draft of this did exactly that and
+      // could not have fired. `attemptCount` is the durable record of "we have
+      // already tried this at least once", so a token caught mid-rotation gets
+      // its retry while a standing refusal quarantines on the next pass.
+      if (await quarantineRejectedLink(db, link.linkId, now)) {
+        quarantinedLinks.push(link.linkId);
+      }
+    }
+
     if (attempts >= MAX_ATTEMPTS) {
       deadLettered++;
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
-        syncStatus: "dead-letter", deadLetteredAt: now,
+        // The cause travels with the record, so digest re-heal can tell a refusal
+        // apart from a dead letter it has no explanation for (BI-2DE1002F).
+        syncStatus: "dead-letter", deadLetteredAt: now, lastDeliveryError: error,
       } });
       await finishFederationDeliveryJob(db, { itemId: job.itemId, attemptCount: job.attemptCount, outcome: "dead-letter", error, now });
     } else {
@@ -361,5 +668,8 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
       });
     }
   }
-  return { attempted: deliverableRows.length, delivered, deferred, deadLettered };
+  return {
+    attempted: deliverableRows.length, delivered, deferred, deadLettered, unreachable,
+    quarantinedLinks, withdrawn, rebased,
+  };
 }

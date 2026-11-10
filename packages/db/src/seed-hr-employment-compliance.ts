@@ -26,6 +26,11 @@ type ObligationSeed = {
   frequency: string;
   applicability: string;
   penaltySummary: string | null;
+  // EP-A33A5C61 slice 6: the STRUCTURED form of a retention duration this
+  // obligation already states in prose, so the retention sweep can read it.
+  // Floors only lengthen, so omitting it simply leaves the base window.
+  retentionMinimumDays?: number;
+  retentionFloorBuckets?: string[];
 };
 
 type RegulationSeed = {
@@ -92,6 +97,10 @@ export const HR_EMPLOYMENT_REGULATIONS: RegulationSeed[] = [
         description:
           "Maintain hours-worked and wage records for non-exempt employees for at least three years.",
         category: "records",
+        // 29 CFR 516.5: three years. Binds the audit bucket — the platform's
+        // audit trail is where a wage-hour record's provenance lives.
+        retentionMinimumDays: 3 * 365,
+        retentionFloorBuckets: ["audit"],
         frequency: "continuous",
         applicability: "All employers with non-exempt employees",
         penaltySummary: null,
@@ -417,6 +426,8 @@ export async function seedHrEmploymentCompliance(prisma: PrismaClient): Promise<
           frequency: obl.frequency,
           applicability: obl.applicability,
           penaltySummary: obl.penaltySummary,
+          retentionMinimumDays: obl.retentionMinimumDays ?? null,
+          retentionFloorBuckets: obl.retentionFloorBuckets ?? [],
         },
       });
       oblCreated++;

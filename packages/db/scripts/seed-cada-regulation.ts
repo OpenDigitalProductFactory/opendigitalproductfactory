@@ -203,7 +203,7 @@ const CONTROLS: Array<{
   {
     title: "Self-hosted, single-tenant deployment on EU infrastructure",
     description:
-      "Run the platform on customer-controlled or EU-owned infrastructure (Postgres/Neo4j/Qdrant on the customer's " +
+      "Run the platform on customer-controlled or EU-owned infrastructure (Postgres on the customer's " +
       "Docker host or EU cloud account). Keeps data in the EU by construction.",
     controlType: "preventive",
     implementationStatus: "implemented",

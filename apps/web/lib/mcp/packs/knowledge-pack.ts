@@ -11,7 +11,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -89,7 +89,11 @@ const definitions: ToolDefinition[] = [
       required: ["title", "body", "category"],
     },
     requiredCapability: "manage_backlog",
-    executionMode: "proposal",
+    // Immediate, not a proposal (BI-0073DE6A): the article is only ever created
+    // as a draft, and publishing is a separate act. Declaring it a proposal
+    // stacked a second approval that no unattended cadence could clear. An
+    // unsteered call still goes to a person through the escalation gate.
+    executionMode: "immediate",
     sideEffect: true,
   },
   {
@@ -108,24 +112,45 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
+// A search answers within this, or falls back. Observed successful embeds
+// stay under 5 s; reloads of an idled embedder took 10-15 s, and the stalls
+// that produced this tool's failures ran past 30 s (BI-MCP-EFF-4F823E5B).
+const QUERY_EMBED_TIMEOUT_MS = 15_000;
+
 async function searchKnowledgeHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { searchPlatformKnowledge } = await import("@/lib/semantic-memory");
-  const search = await searchPlatformKnowledge({
-    query: String(params["query"] ?? ""),
-    entityType: typeof params["type"] === "string" ? params["type"] : undefined,
-    limit: typeof params["limit"] === "number" ? params["limit"] : 5,
-  });
-  // BI-339C441F: never report "nothing matched" when we could not look. A
-  // caller told to search before creating will read an empty array as
-  // permission to proceed, so the difference has to reach them.
+  const { searchPlatformKnowledge, searchPlatformKnowledgeLexical } = await import("@/lib/semantic-memory");
+  const query = String(params["query"] ?? "");
+  const entityType = typeof params["type"] === "string" ? params["type"] : undefined;
+  const limit = typeof params["limit"] === "number" ? params["limit"] : 5;
+  const search = await searchPlatformKnowledge({ query, entityType, limit, embedTimeoutMs: QUERY_EMBED_TIMEOUT_MS });
   if (search.status === "unavailable") {
+    // The query could not be embedded, but the stored corpus is intact. Match
+    // its terms instead of failing, which is what sent callers into retries.
+    const lexical = await searchPlatformKnowledgeLexical({ query, entityType, limit });
+    if (lexical.status === "ok") {
+      const caveat =
+        `Semantic search is unavailable (${search.reason}), so these are LEXICAL matches on titles and ` +
+        "previews; scores are the share of query terms found, not similarity.";
+      const lines = lexical.results.map((r) => `${r.entityType}:${r.entityId} — ${r.title} (${Math.round(r.score * 100)}% of terms)`);
+      return {
+        success: true,
+        message: lines.length > 0
+          ? `${caveat}\n${lines.join("\n")}`
+          : `${caveat} No lexical match — this is not evidence that nothing related exists.`,
+        data: { results: lexical.results, searchStatus: "lexical-fallback", code: search.code },
+      };
+    }
+    // BI-339C441F: never report "nothing matched" when we could not look. A
+    // caller told to search before creating will read an empty array as
+    // permission to proceed, so the difference has to reach them.
     return {
       success: false,
+      error: search.code,
       message:
         `Semantic search is unavailable — ${search.reason}. This is NOT "no results": ` +
         "the corpus was never queried. Do not treat this as evidence that nothing matches. " +
         "Fall back to list_backlog_items or query_backlog and say the check was lexical only.",
-      data: { results: [], searchStatus: "unavailable" },
+      data: { results: [], searchStatus: "unavailable", code: search.code },
     };
   }
   const results = search.results;
@@ -218,7 +243,7 @@ async function createKnowledgeArticleHandler(params: Record<string, unknown>, us
       },
     });
 
-    // Index into Qdrant
+    // Index into the vector store
     await storeKnowledgeArticle({
       articleId,
       title,
@@ -295,7 +320,10 @@ async function flagStaleKnowledgeHandler(params: Record<string, unknown>): Promi
 
 const handlers: Record<string, ToolPackHandler> = {
   search_knowledge: (params) => searchKnowledgeHandler(params),
-  search_knowledge_base: (params) => searchKnowledgeBaseHandler(params),
+  // BI-825D3487: KnowledgeArticle rows are the organization's knowledge (WWWD).
+  search_knowledge_base: async (params, _userId, context) =>
+    (await (await import("@/lib/tak/corpus-read-scope")).refuseWithoutCorpus(context?.agentId, "organization", "search_knowledge_base"))
+    ?? searchKnowledgeBaseHandler(params),
   create_knowledge_article: (params, userId) => createKnowledgeArticleHandler(params, userId),
   flag_stale_knowledge: (params) => flagStaleKnowledgeHandler(params),
 };

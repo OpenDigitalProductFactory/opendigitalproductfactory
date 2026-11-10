@@ -67,7 +67,33 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
    - `decomposed`: every independent deliverable maps to a live new or existing BI;
    - `atomic`: no deliverable is independently shippable, with a substantive operator rationale explaining why one BI is correct.
 
+   The server selects the receipt contract from the current delivery shape and
+   sensitivity. Schema v3 binds break-fix, small and medium work to the actual
+   item and declared scope; it does not invent a spec-approval prerequisite.
+   Medium work must have acceptance criteria in the BI body and quote every
+   criterion verbatim in the immutable plan. For v3, all four reference lists
+   must be non-empty and each reference must appear verbatim in the plan.
+   Existing baseline history always retains schema v2 traceability, including
+   smaller work; malformed baseline history must be repaired, never bypassed.
+   Larger and unshaped work also retain schema v2 scope-baseline traceability.
+   Never choose or downgrade the receipt schema in the client. A changed scope,
+   classification or acceptance criterion requires new coverage.
+
    Copy the returned receipt, parent BI, deliverable-to-BI mappings, and dependencies into a `## Backlog coverage` plan section. `mcp__dpf__check_plan_backlog_coverage` is the resumability check. If MCP is unavailable, the tool is missing, or the token lacks scope, stop and report that condition; Markdown checkboxes are not a fallback and planning/backlog completeness cannot be claimed.
+
+   This is the decomposition-pack contract, not the initiative-readiness review contract. The minimum shape is:
+
+   ```json
+   {
+     "itemId": "BI-...",
+     "planPath": "docs/superpowers/plans/YYYY-MM-DD-feature.md",
+     "planArtifactRef": { "kind": "repo-blob-at-commit", "repo": "owner/repo", "commitSha": "...", "path": "docs/superpowers/plans/YYYY-MM-DD-feature.md", "providerBlobId": "..." },
+     "decision": "decomposed",
+     "deliverables": [{ "title": "...", "requirementRefs": ["..."], "contractRefs": ["..."], "flowRefs": ["..."], "verificationRefs": ["..."] }]
+   }
+   ```
+
+   Use decision: `decomposed` when independently shippable deliverables map to live BIs, or decision: `atomic` with a substantive rationale when they do not. Do not send `gate`, `findings`, or `resolvedFindingRefs` from the readiness lane. Do not send `pass` or `fail` as the decision; those belong to review writers, not plan coverage. Do not send the literal `pass` decision value in this contract. Make one corrected coverage call after verifying the BI and immutable plan. If the server returns `traceability-incomplete`, change only the named prerequisite and retry once; never blind-retry. If the tool is unavailable or shadowed, record the exact refusal and stop rather than calling another lane or fabricating a receipt.
 
    Treat a rejected coverage write as a remediation contract, not a blind retry:
    - When the result is `traceability-incomplete`, add or repair the initiative baseline and mappings named by the response before making one corrected call. Do not repeat identical arguments.
@@ -76,7 +102,7 @@ The order is fixed: **BI first, then plan.** [`dpf-file-backlog-item`](../dpf-fi
 
 6. **Name the risks and the rollback.** What could break (blast radius), and how to back out. A plan that only describes the happy path is half a plan.
 
-7. **Save it.** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, cross-referencing the BI id and the coverage receipt. This path is where `search_specs_and_plans` and reviewers expect plans to live. **Format is opt-in:** Markdown is the default and stays fully supported, but when the plan leans on a flow/state diagram, a multi-column table, or side-by-side option fan-out, an HTML artifact often reads better and keeps the operator in the loop — see [`html-artifacts-guide.md`](../../../../docs/superpowers/html-artifacts-guide.md) and the `_templates/spec.template.html` starting point. If you ship HTML-only, leave a short Markdown stub carrying the canonical coverage section so `search_specs_and_plans` and the guard can find it.
+7. **Save it.** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`, cross-referencing the BI id and the coverage receipt. This path is where `search_specs_and_plans` and reviewers expect plans to live. **Format is opt-in:** Markdown is the default and stays fully supported, but when the plan leans on a flow/state diagram, a multi-column table, or side-by-side option fan-out, an HTML artifact often reads better and keeps the operator in the loop — see [`html-artifacts-guide.md`](../../../../docs/superpowers/html-artifacts-guide.md) and the `_templates/spec.template.html` starting point. If you ship HTML-only, leave a short Markdown stub carrying the canonical coverage section so `search_specs_and_plans` and the guard can find it. A design needs marked objectives: lines like **OBJ-1:** and acceptance rows that name the objective.
 
 ## Guardrails
 

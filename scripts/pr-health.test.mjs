@@ -6,7 +6,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { evaluatePrHealth } from "./pr-health.mjs";
+import {
+  evaluatePrHealth,
+  parsePrHealthArgs,
+  PR_HEALTH_EXIT,
+  selectLocalCiStateRecord,
+  waitForPrHealth,
+} from "./pr-health.mjs";
 
 const okMeta = { number: 1, title: "x", state: "OPEN", mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", isDraft: false };
 const pass = (name) => ({ name, bucket: "pass" });
@@ -351,4 +357,291 @@ test("absent baseRefName does not invent a blocker", () => {
   // Older callers and fixtures omit the field; missing evidence is not a failure.
   const r = evaluatePrHealth({ meta: okMeta, checks: [pass("Typecheck")], threads: [] });
   assert.equal(r.ready, true);
+});
+
+// BI-5529B5AC: pr:health used to read ONE hard-coded state file (slot-0). Gate
+// state is written per slot, so it now chooses across every slot record for
+// the worktree: a PASS bound to HEAD on any slot wins; failing that, a recorded
+// override for HEAD; failing that, whatever slot-0 says (legacy behaviour).
+const HEAD_SHA = "abc123def456abc123def456abc123def456abc1";
+const future = new Date(Date.now() + 3600_000).toISOString();
+
+test("selectLocalCiStateRecord: a slot-1 PASS for HEAD beats a stale slot-0 override", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, skipped: true, skipReason: "operator-emergency: hook could not see slot-1" } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: true, status: "passed", expiresAt: future } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-1");
+  assert.equal(picked.state.gatePassed, true);
+});
+
+test("selectLocalCiStateRecord: an expired PASS does not win; the recorded override for HEAD is next", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, skipped: true, skipReason: "docs-adjacent: only" } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: true, status: "passed", expiresAt: "2020-01-01T00:00:00.000Z" } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-0");
+  assert.equal(picked.state.skipped, true);
+});
+
+test("selectLocalCiStateRecord: with nothing bound to HEAD, slot-0 is reported as before", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "feat/x", sha: "older000", gatePassed: true } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: "older111", gatePassed: false } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-0");
+  assert.equal(selectLocalCiStateRecord({ headSha: HEAD_SHA, records: [] }), null);
+});
+
+test("evaluatePrHealth: a slot-1 PASS for head is a note and READY (end to end through selection)", () => {
+  const stateRecord = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, status: "queued" } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: true, status: "passed", expiresAt: future } },
+    ],
+  }).state;
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: { headSha: HEAD_SHA, docsOnly: false, attestation: null, stateRecord },
+  });
+  assert.equal(r.ready, true);
+  assert.match(r.notes.join("\n"), /local-CI sandbox gate passed/);
+});
+
+// BI-02E5F2A1: gate-infrastructure-unavailable is evidence-gated and reads as gate-UNRUN.
+const INFRA_EVIDENCE = {
+  code: "gate-infrastructure-unavailable",
+  tool: "claim_nonprod_environment_lease",
+  kind: "credential-rejected",
+  message: "unauthorized: invalid or expired token",
+  statusCode: 401,
+  probedAt: "2026-09-18T00:00:00.000Z",
+  durationMs: 12,
+};
+
+test("localCi: gate-infrastructure-unavailable WITH captured evidence is ready but reported gate-UNRUN, never passed", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: {
+        branch: "feat/x", sha: HEAD, gatePassed: false, skipped: true, gateUnrun: true, status: "gate-unrun",
+        skipReason: "gate-infrastructure-unavailable: contributor token dead",
+        infrastructureEvidence: INFRA_EVIDENCE,
+      },
+    },
+  });
+  assert.equal(r.ready, true);
+  const notes = r.notes.join("\n");
+  assert.match(notes, /gate UNRUN/);
+  assert.match(notes, /credential-rejected: unauthorized: invalid or expired token/);
+  assert.match(notes, /NOT a pass/);
+  assert.doesNotMatch(notes, /gate passed/);
+});
+
+test("localCi: gate-infrastructure-unavailable WITHOUT captured evidence is a blocker (prose is not evidence)", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: {
+        branch: "feat/x", sha: HEAD, gatePassed: false, skipped: true,
+        skipReason: "gate-infrastructure-unavailable: I promise the portal was down",
+      },
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.match(r.blockers.join("\n"), /requires machine-captured evidence/);
+});
+
+test("localCi: gate-infrastructure-unavailable as a PR-body trailer is a blocker", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD, docsOnly: false, stateRecord: null,
+      attestation: { kind: "override", value: "gate-infrastructure-unavailable: portal down" },
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.match(r.blockers.join("\n"), /a trailer is prose, not evidence/);
+});
+
+// BI-53B189C8. A DPF_ALLOW_LOCAL_CI_STUB run records gatePassed:true without
+// building anything. It is marked testStub, and it must never clear the
+// local-CI requirement for a PR.
+test("selectLocalCiStateRecord: a test-stub PASS for HEAD is not the live pass", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "fix/admitted-owner-recovery", sha: HEAD_SHA, gatePassed: true, status: "passed", testStub: true, expiresAt: future } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, skipped: true, skipReason: "docs-adjacent: only" } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-1");
+});
+
+test("localCi: a test-stub record for the head SHA is a blocker, not a pass", () => {
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD_SHA,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: { branch: "fix/admitted-owner-recovery", sha: HEAD_SHA, gatePassed: true, status: "passed", testStub: true },
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.doesNotMatch(r.notes.join("\n"), /local-CI sandbox gate passed/);
+  assert.match(r.blockers.join("\n"), /DPF_ALLOW_LOCAL_CI_STUB/);
+});
+
+// ── BI-F197C997: the exit code alone tells waiting from failed from blocked ──
+
+test("verdict: pending checks with mergeStateStatus BLOCKED is WAITING (75), not a failure", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, mergeStateStatus: "BLOCKED" },
+    checks: [pass("Typecheck"), { name: "Unit Tests", bucket: "pending" }],
+    threads: [],
+  });
+  assert.equal(r.verdict, "WAITING");
+  assert.equal(r.exitCode, 75);
+  assert.equal(r.ready, false);
+  assert.deepEqual(r.waitingOn, ["Unit Tests"]);
+});
+
+test("verdict: a failed check is FAILED (1) and names the check, even while others are pending", () => {
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [{ name: "Module Size Guard", bucket: "fail" }, { name: "Unit Tests", bucket: "pending" }],
+    threads: [],
+  });
+  assert.equal(r.verdict, "FAILED");
+  assert.equal(r.exitCode, 1);
+  assert.deepEqual(r.failingChecks, ["Module Size Guard"]);
+});
+
+test("verdict: an unresolved thread is BLOCKED-ACTION (2) and names who must act", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, author: { login: "codex-bot" } },
+    checks: [pass("Typecheck"), { name: "Unit Tests", bucket: "pending" }],
+    threads: [{ isResolved: false, path: "a.ts", line: 3 }],
+  });
+  assert.equal(r.verdict, "BLOCKED-ACTION");
+  assert.equal(r.exitCode, 2);
+  assert.match(r.actions[0].actor, /PR author \(@codex-bot\)/);
+});
+
+test("verdict: CONFLICTING and draft are BLOCKED-ACTION for the author", () => {
+  assert.equal(evaluatePrHealth({ meta: { ...okMeta, mergeable: "CONFLICTING" }, checks: [], threads: [] }).verdict, "BLOCKED-ACTION");
+  assert.equal(evaluatePrHealth({ meta: { ...okMeta, isDraft: true }, checks: [], threads: [] }).exitCode, 2);
+});
+
+test("verdict: MERGED exits 0 as MERGED; READY exits 0 as READY", () => {
+  const merged = evaluatePrHealth({ meta: { ...okMeta, state: "MERGED" }, checks: [], threads: [] });
+  assert.equal(merged.verdict, "MERGED");
+  assert.equal(merged.exitCode, 0);
+  const ready = evaluatePrHealth({ meta: okMeta, checks: [pass("Typecheck")], threads: [] });
+  assert.equal(ready.verdict, "READY");
+  assert.equal(ready.exitCode, 0);
+});
+
+test("verdict: a closed, unmerged PR needs its owner to act", () => {
+  const r = evaluatePrHealth({ meta: { ...okMeta, state: "CLOSED" }, checks: [], threads: [] });
+  assert.equal(r.verdict, "BLOCKED-ACTION");
+  assert.match(r.actions[0].actor, /owner/i);
+});
+
+test("WAITING carries an ETA when the pending check's workflow has a typical duration", () => {
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [{ name: "Unit Tests", bucket: "pending", workflow: "CI", startedAt: "2026-10-28T11:50:00Z" }],
+    threads: [],
+    typicalDurationsMs: { CI: 25 * 60_000 },
+    now,
+  });
+  assert.equal(r.verdict, "WAITING");
+  assert.equal(r.etaMs, 15 * 60_000);
+  const unknown = evaluatePrHealth({ meta: okMeta, checks: [{ name: "Unit Tests", bucket: "pending" }], threads: [], now });
+  assert.equal(unknown.etaMs, null);
+});
+
+test("--wait polls until the verdict is terminal and returns it", async () => {
+  const verdicts = ["WAITING", "WAITING", "READY"];
+  let reads = 0;
+  const slept = [];
+  const r = await waitForPrHealth({
+    read: async () => ({ verdict: verdicts[reads++], exitCode: verdicts[reads - 1] === "READY" ? 0 : 75 }),
+    sleep: async (ms) => { slept.push(ms); },
+    now: () => 0,
+    timeoutMs: 60_000,
+    intervalMs: 1_000,
+  });
+  assert.equal(r.verdict, "READY");
+  assert.equal(r.exitCode, 0);
+  assert.equal(reads, 3);
+  assert.deepEqual(slept, [1_000, 1_000]);
+});
+
+test("--wait stops at a FAILED or BLOCKED-ACTION verdict immediately", async () => {
+  let reads = 0;
+  const r = await waitForPrHealth({
+    read: async () => { reads++; return { verdict: "FAILED", exitCode: 1 }; },
+    sleep: async () => assert.fail("must not sleep on a terminal verdict"),
+    now: () => 0,
+    timeoutMs: 60_000,
+    intervalMs: 1_000,
+  });
+  assert.equal(r.exitCode, 1);
+  assert.equal(reads, 1);
+});
+
+test("--wait --timeout returns WAITING (75) with timedOut when checks never finish", async () => {
+  let clock = 0;
+  const r = await waitForPrHealth({
+    read: async () => ({ verdict: "WAITING", exitCode: 75 }),
+    sleep: async (ms) => { clock += ms; },
+    now: () => clock,
+    timeoutMs: 5_000,
+    intervalMs: 2_000,
+  });
+  assert.equal(r.verdict, "WAITING");
+  assert.equal(r.exitCode, 75);
+  assert.equal(r.timedOut, true);
+});
+
+test("argument parsing: PR number, --wait, --timeout minutes, and pnpm's literal --", () => {
+  assert.deepEqual(parsePrHealthArgs(["6718"]), { pr: "6718", wait: false, timeoutMinutes: 30, intervalSeconds: 30 });
+  assert.deepEqual(parsePrHealthArgs(["--", "6718", "--wait", "--timeout", "10"]),
+    { pr: "6718", wait: true, timeoutMinutes: 10, intervalSeconds: 30 });
+  assert.deepEqual(parsePrHealthArgs([]), { pr: "", wait: false, timeoutMinutes: 30, intervalSeconds: 30 });
+  assert.throws(() => parsePrHealthArgs(["--timeout", "soon"]), /--timeout/);
+});
+
+test("exit-code table is the documented contract", () => {
+  assert.deepEqual({ ...PR_HEALTH_EXIT }, { READY: 0, MERGED: 0, FAILED: 1, "BLOCKED-ACTION": 2, UNREADABLE: 3, WAITING: 75 });
 });

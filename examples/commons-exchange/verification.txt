@@ -1,0 +1,26 @@
+{
+  "passed": 6,
+  "groups": [
+    "legacy serialization and digest parity",
+    "bounded hostile intake and safe projection",
+    "real finding plan and refused/failed/duplicate distinctions",
+    "exact content, independent review, destination and current authority",
+    "reservation, uncertain effects and duplicate/conflicting receipts",
+    "accepted receipt ordering, failed digest ports and legacy retry"
+  ],
+  "qualification": "synthetic reference ports only; no production authority, durable effects, tenant isolation or adoption qualification"
+}
+{
+  "node": "v24.16.0",
+  "typescript": "6.0.3",
+  "runtimeDependencies": [],
+  "copiedSourceSha256": {
+    "packages/validators/src/bounded-trusted-json.ts": "3d2db6c2090e5ac3b8250936c1203eebef05271c082dbbe4852379e7c2879daa",
+    "packages/validators/src/decision-scopes.ts": "17dea1d50d55298ccbca2259c3e8a8953fdf102bb07374db91b8c4036403e349",
+    "packages/validators/src/commons/finding-contribution.ts": "21a3ae17498816c50d7fbad2485ba92d7ac11a49e872adcd149527b61977d79f",
+    "packages/validators/src/commons/result-projection.ts": "7275e624f11683603419053944694cca1de90071e021226b606d8ac2aac1feb2",
+    "packages/validators/src/commons/result-intake.ts": "a2f11cc24a74af6353c2b038f45799b919fde239ff621271d6667607523614cf",
+    "packages/validators/src/commons/exchange.ts": "0a68a3c141b81b513eaaa6789eea645b0e7c0d346f59cc1ca460a88b7075a640",
+    "packages/validators/src/commons/index.ts": "8fd4e530fd034bdcaa10328d3f899bf68c998ee67b2e8a675f7b35d0487cf984"
+  }
+}

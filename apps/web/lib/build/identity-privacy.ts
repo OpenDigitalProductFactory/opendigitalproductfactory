@@ -166,7 +166,7 @@ export function generatePrivateBranchName(
  * write lands a count=0 no-op rather than double-encrypting.
  */
 async function maybeReencryptInPlace(
-  providerId: "hive-contribution" | "git-backup",
+  providerId: "hive-contribution" | "git-backup" | "github-pr-sync",
   storedValue: string,
   decryptedValue: string,
 ): Promise<void> {
@@ -241,6 +241,24 @@ export async function resolveHiveToken(): Promise<string | null> {
     const decrypted = stored.startsWith("enc:") ? decryptSecret(stored) : stored;
     if (decrypted === null) return null;
     await maybeReencryptInPlace("git-backup", stored, decrypted);
+    return decrypted;
+  }
+
+  // 5. github-pr-sync credential. The read side already falls back to it
+  // (BI-69BBC446), and assurance auto-merge already writes through it; this
+  // resolver was the one caller that never looked, so an install whose only
+  // GitHub credential was this row could never open a Build Studio PR
+  // (FB-D671B016, 2026-09-25: "No GitHub token available").
+  const prSyncCred = await prisma.credentialEntry.findUnique({
+    where: { providerId: "github-pr-sync" },
+    select: { secretRef: true, status: true },
+  });
+  if (prSyncCred?.status === "active" && prSyncCred.secretRef) {
+    const stored = prSyncCred.secretRef;
+    const { decryptSecret } = await import("@/lib/govern/credential-crypto");
+    const decrypted = stored.startsWith("enc:") ? decryptSecret(stored) : stored;
+    if (decrypted === null) return null;
+    await maybeReencryptInPlace("github-pr-sync", stored, decrypted);
     return decrypted;
   }
 

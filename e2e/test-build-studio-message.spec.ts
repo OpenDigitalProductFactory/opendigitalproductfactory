@@ -27,7 +27,6 @@ test("Build Studio: Answer to coworker question should persist", async ({ page, 
   test.setTimeout(180_000);
 
   // Try to use existing auth state first, fall back to login if needed
-  const authStatePath = "e2e/.auth/state.json";
   try {
     await context.addInitScript(() => {
       // Pre-populate auth from state

@@ -145,3 +145,92 @@ describe("deriveDemandNetworkRefs", () => {
     expect(JSON.stringify(first)).not.toContain("BI-PRIVATE-123");
   });
 });
+
+describe("durable identity (EP-ZERO-CONFIG-FEDERATION §5.1)", () => {
+  const kp = generateInstanceSigningKeypair();
+  const durable = {
+    schemaVersion: 1 as const,
+    installationId: `inst_${"d".repeat(32)}`,
+    projectionSecret: "e".repeat(64),
+    deviceId: deriveDeviceId(kp.signingPublicKey),
+    signingPublicKey: kp.signingPublicKey,
+    signingPrivateKey: kp.signingPrivateKey,
+    writtenAt: "2026-09-02T10:00:00.000Z",
+  };
+
+  it("the file wins: a database row that disagrees is corrected to the durable identity", async () => {
+    const { createMemoryFederationStore } = await import("./durable-state");
+    const store = createMemoryFederationStore({ identity: durable });
+    const other = generateInstanceSigningKeypair();
+    const stale = {
+      installationId: `inst_${"1".repeat(32)}`, projectionSecret: "2".repeat(64),
+      deviceId: deriveDeviceId(other.signingPublicKey), signingPublicKey: other.signingPublicKey,
+      signingPrivateKeyEnc: "enc:" + other.signingPrivateKey,
+    };
+    const upsert = vi.fn().mockResolvedValue({ value: stale });
+    const update = vi.fn().mockResolvedValue({ value: null });
+
+    const identity = await resolveFederationIdentity(
+      { platformConfig: { upsert, update } } as FederationIdentityDb,
+      { store, decryptSecret: (v) => v.replace("enc:", "") },
+    );
+
+    expect(identity.installationId).toBe(durable.installationId);
+    expect(identity.deviceId).toBe(durable.deviceId);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect((update.mock.calls[0]![0] as { data: { value: { installationId: string } } }).data.value.installationId).toBe(durable.installationId);
+  });
+
+  it("without a file, the database identity is used and then written to the file", async () => {
+    const { createMemoryFederationStore } = await import("./durable-state");
+    const store = createMemoryFederationStore();
+    const existing = {
+      installationId: `inst_${"3".repeat(32)}`, projectionSecret: "4".repeat(64),
+      deviceId: deriveDeviceId(kp.signingPublicKey), signingPublicKey: kp.signingPublicKey,
+      signingPrivateKeyEnc: "enc:" + kp.signingPrivateKey,
+    };
+    const upsert = vi.fn().mockResolvedValue({ value: existing });
+    const update = vi.fn();
+
+    const identity = await resolveFederationIdentity(
+      { platformConfig: { upsert, update } } as FederationIdentityDb,
+      { store, decryptSecret: (v) => v.replace("enc:", "") },
+    );
+
+    expect(identity.installationId).toBe(existing.installationId);
+    expect(update).not.toHaveBeenCalled();
+    expect(store.identity).toMatchObject({ installationId: existing.installationId, signingPrivateKey: kp.signingPrivateKey });
+  });
+
+  it("keeps the ids peers hold and mints a fresh keypair when the stored key cannot be decrypted", async () => {
+    const { createMemoryFederationStore } = await import("./durable-state");
+    const store = createMemoryFederationStore();
+    const existing = {
+      installationId: `inst_${"5".repeat(32)}`, projectionSecret: "6".repeat(64),
+      deviceId: deriveDeviceId(kp.signingPublicKey), signingPublicKey: kp.signingPublicKey,
+      signingPrivateKeyEnc: "enc:rotated-away",
+    };
+    const upsert = vi.fn().mockResolvedValue({ value: existing });
+    const update = vi.fn().mockResolvedValue({ value: null });
+
+    const { persistFederationIdentityDurably } = await import("./demand-identity");
+    // A plain read never changes the keypair...
+    const read = await resolveFederationIdentity(
+      { platformConfig: { upsert, update } } as FederationIdentityDb,
+      { store, decryptSecret: () => null },
+    );
+    expect(read.deviceId).toBe(existing.deviceId);
+    expect(update).not.toHaveBeenCalled();
+    expect(store.identity).toBeNull();
+    // ...the explicit boot persist repairs it, keeping the ids peers hold.
+    const held = await persistFederationIdentityDurably(
+      { platformConfig: { upsert, update } } as FederationIdentityDb,
+      { store, decryptSecret: () => null },
+    );
+    expect(held).toBe("durable");
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(store.identity).toMatchObject({ installationId: existing.installationId, projectionSecret: existing.projectionSecret });
+    expect(store.identity?.deviceId).not.toBe(existing.deviceId);
+    expect(store.identity?.deviceId).toMatch(DEVICE_ID_RE);
+  });
+});

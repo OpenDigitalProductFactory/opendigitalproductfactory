@@ -1,443 +1,816 @@
 # Trusted AI Agent Governance
 
+**Principles, permissions and evidence for accountable agent delegation**
+
+| | |
+|---|---|
+| Status | Discussion draft, revision 2.2 |
+| Date | 2026-10-16; first edition 2026-04-18 |
+| Owner | EP-B932453F / BI-6CC40F77 |
+
+This is a position paper. The normative requirements live in the four standards it introduces:
+
+- [`TAK`](trusted-ai-kernel.md)
+- [`GAID`](GAID.md)
+- [`TAK-JSI`](job-specific-intelligence.md)
+- [`GPP`](gated-permissions-process.md)
+
+All four are open working drafts. Nothing in this paper claims certification, regulatory compliance or endorsement by a standards body. A standard's proposed control, a source implementation, an executed test and an observed business outcome are different evidence levels.
+
+This edition reviews repository sources at immutable commit `d9c8ed1fc887527c2a8b893f9a8062519c5a4384` on 2026-10-16. Its DPF ledger is **source-declared and runtime-unverified** unless a row supplies actual execution evidence. It does not certify the current install, every execution path or another agent host. The primary market references were rechecked where identified; older incident and operational accounts retain their own dates. [§8](#8-dpf-the-working-instantiation) records the examined sources, their identities and the limits of the observations.
+
 ## Executive Summary
 
-This document is a position paper describing why the market needs a complementary standards family
-for AI agents: runtime governance, identity and assurance, and job-specific qualification.
+AI agents now read documents, call tools, change records, send messages, deploy code and coordinate other agents. The question every organization adopting them faces is not whether the model is clever enough. It is **who decided this agent may do this, and how would anyone know?**
 
-The key message of this document is simple. The market does not lack agent innovation. It lacks a cohesive trust architecture for that innovation.
+Two common permission choices illustrate the problem:
 
-Enterprises are already deploying AI agents to search code, read documents, invoke tools, route work, coordinate specialists, and act across internal and external systems. Yet most organizations still struggle to answer basic management questions with confidence:
+- **Approve every tool call.** The agent stops and asks before each action.
+- **Approve nothing.** The agent runs with whatever credentials it was given. These modes go by "YOLO", "always allow" or "skip permissions".
 
-- Which agents exist?
-- Who authorized them?
-- What tools, prompts, skills, and data can they reach?
-- What human oversight applies?
-- What evidence exists for what they actually did?
-- What claims about fit-for-purpose, safety, bias, or tool use have been independently assessed?
-- For which job, activity, data, and risk scope is this exact operating profile qualified?
+Repeated prompts can lose their value as a checkpoint. Anthropic reports high permission-approval rates and, separately, a controlled study of 1,053 paid testers in which 13.6% caught a substituted dangerous command. Its field discussion reports 39% rejection of plans and 3% rejection of individual permission requests. These are different observations, not evidence that the controlled-study participants were the plan reviewers, or that the rejected plans were incorrect. They motivate evaluating decision-level supervision; they do not establish that it is safer in every setting (vendor-reported; [§1](#1-the-defining-problem-approval-fatigue)).
 
-Current standards and products address parts of this problem, but not the whole of it. `ISO/IEC 42001:2023` remains current, but it operates at the organization management-system level, not at the runtime identity and control-plane level required for agent operations. `MCP` and `A2A` are important and timely, but they address interoperability between agents, tools, and systems rather than trusted identity, assurance, and end-to-end runtime governance. Vendor frameworks from `OpenAI`, `Anthropic`, `Google`, and `Microsoft` make agent development more practical, but they do not establish a shared, globally usable trust model across platforms.
+The incident record includes deleted databases, disclosure of private repositories, malicious tool servers and evaluation agents reaching production infrastructure. These cases involve different failures, including isolation, credential scope, supply-chain trust and execution boundaries. They are reasons to examine the complete system, not evidence that every incident had one cause or that no authorization controls existed.
 
-We therefore propose a standards family composed of:
+One recent approach uses a classifier to decide which calls may proceed without a prompt. Anthropic publishes a miss rate, and researchers report a bypass under their tested conditions. Classification alone does not establish who owns the decision or authorize an effect.
 
-- `TAK`, the `Trusted AI Kernel`, which defines the runtime control model for trustworthy agent operation
-- `GAID`, the `Global AI Agent Identification and Governance Framework`, which defines stable identity, badging, assurance, issuer governance, and chain-of-custody for AI agents
-- `TAK-JSI`, the `Job-Specific Intelligence` profile, which defines how a versioned operating
-  profile is assessed, qualified, monitored, and revalidated for a particular job and context
+This paper proposes a different principle: **decide once, by the authority that owns the decision, then enforce on every call.** It presents four complementary open standards, each answering one question:
 
-The point is not to duplicate existing standards. The point is to connect the layers that are currently fragmented.
+**`GAID` — Global AI Agent Identification and Governance — Who is this agent?** Identity, operating profile, claims, badges, receipts.
 
-## 1. The Market Problem
+**`TAK-JSI` — Job-Specific Intelligence — Is it fit for this job?** Job qualification, assessment, revalidation.
 
-Organizations are moving from simple assistant patterns to agentic patterns. This changes the management problem materially.
+**`GPP` — Gated Permissions Process — Who decided this may happen?** The binding of a decision gate in an owning authority to the exact tools it admits, for one stage of one kind of work.
 
-An assistant that only generates text can often be governed through policy, model selection, and human review. An agent that can invoke tools, route work to specialists, read sensitive context, maintain memory, and cross system boundaries creates a different class of operational concern. In practice, the enterprise problem becomes one of inventory, identity, authority, oversight, traceability, and accountability.
+**`TAK` — Trusted AI Kernel — May it act now?** Runtime mediation: authority intersection, consequence gating, oversight, evidence.
 
-This is where current operating pain is most visible. Many organizations can describe their large language model strategy at a high level, but cannot yet maintain a trustworthy inventory of deployed agents. They often do not know, in a durable machine-readable way:
 
-- which agents are public and which are private
-- which are coordinators and which are specialists
-- which tools and skills are exposed to each agent
-- what immutable instructions govern them
-- what human-in-the-loop (`HITL`) pattern applies
-- what data sensitivity each agent is expected to handle
-- how to trace a public action back through delegations and internal systems
+The engineering proposal builds on MBSE and existing agent-modeling work. It connects work shapes, accountable decisions, tool bindings, operating profiles and receipts through a versioned composition that an implementation can execute and assess. Its contribution is this inspectable contract and its proposed verification method, not a claim that agents are new to systems engineering. A model becomes a control only where the implementation demonstrably enforces its meaning.
 
-This problem becomes more acute when agents are offered beyond a single team. The moment an agent is consumed across a large enterprise, across partners, or in public business-to-business or business-to-consumer channels, trust can no longer depend on undocumented local knowledge. Identity, capability claims, and chain-of-custody need to be structured, portable, and verifiable.
+DPF is an open-source platform designed for small and mid-sized organizations and the initial reference context for this work. It contains archetype definitions, coworker roles, profession doctrine and governed work shapes. This paper supplies no independently verified business-adoption count. Its source inventory is not a claim that every role is qualified or every path implements the proposed standards.
 
-The problem is not merely technical. It is managerial. Without stronger standards, organizations cannot govern AI agents with the same discipline expected for software components, identities, certificates, regulated workflows, or high-consequence operational changes.
+## 1. The defining problem: approval fatigue
 
-Generic model selection does not close this gap. A model card, hallucination benchmark, or
-one-shot application test can be useful evidence, but it does not establish competence for every
-job that may route to that model. Job fitness depends on the whole operating profile: knowledge,
-decision doctrine, tools, data, routing, instructions, oversight, and representative outcomes.
+### 1.1 Per-call approval does not survive contact with people
 
-## 2. Why Current Standards and Protocols Fall Short
+- Users approve about 93% of permission prompts. Source: Anthropic Engineering, 2026-03-25 (vendor-reported).
 
-There are now several important standards and de facto standards in the market. The difficulty is that they are solving adjacent problems at different layers.
+- Users approve 97% of prompts but reject 39% of plans. In a controlled study (n=1,053), people caught a disguised dangerous command 13.6% of the time: about 17% early in a session, about 5% after fifty prompts. Source: Claude blog, 2026-08-07 (vendor-reported).
 
-`ISO/IEC 42001:2023` is important because it gives organizations a formal management-system approach to AI governance. It is, however, not a runtime agent standard. It does not define agent identity documents, public issuer models, tool gating semantics, receipt chains, or immutable instruction governance. It is therefore relevant, but insufficient, for the problem addressed here.
+- Sandboxing removed 84% of prompts internally; the post names approval fatigue as the risk. Source: Anthropic Engineering, 2025-10-20 (vendor-reported).
 
-`NIST AI RMF 1.0` is similarly valuable as a risk framing model, but it is not designed to function as a concrete cross-platform agent identity and runtime control specification.
+- In a field study, adherence to permission warnings fell substantially within three weeks; varying the warning slowed the decline. Source: Vance et al., *MIS Quarterly* 42(2), 2018.
 
-The leading open agent protocols are also important, but differently scoped. `Anthropic` introduced the `Model Context Protocol` on November 25, 2024, to standardize how AI applications connect to tools and data sources. Since then, `MCP` has added a formal authorization profile, protected-resource metadata discovery, and extension work under neutral stewardship in the `Agentic AI Foundation`. `Google` announced the `Agent2Agent Protocol` on April 9, 2025, and later donated `A2A` to the Linux Foundation on June 23, 2025, to improve interoperability between agents. These are significant advances. They do not, however, provide a complete answer to public identity, assurance badging, issuer accreditation, or runtime governance.
+- Attackers exploited repeated MFA approval prompts until a person accepted one ("push bombing", Uber 2022). Source: BleepingComputer.
 
-The identity layer has also moved materially. The `OpenID Foundation` established the `AIIM` Community Group in 2025 and has since published both a white paper on identity management for agentic AI and a March 2026 response to `NIST` on AI agent security. The `W3C` launched the `Agent Identity Registry Protocol Community Group` on April 24, 2026 to work specifically on verifiable AI agent identity infrastructure, with anticipated coordination to `OpenID AIIM`. `CoSAI`, operating under `OASIS Open`, published `Agentic Identity and Access Management` in April 2026 to define how enterprises can represent, authenticate, authorize, and govern AI agents as verifiable identities. This is precisely the problem neighborhood in which `GAID` operates.
 
-The large platform vendors are converging on agent frameworks rather than on a single trust architecture. `OpenAI` expanded its `Agents SDK` on April 15, 2026 with native harness and sandbox capabilities. `OpenAI`, `Anthropic`, and others are also moving standards work into neutral governance venues, including the `Agentic AI Foundation`, which `OpenAI` announced on December 9, 2025. `Microsoft` now positions `Agent Framework` as the next generation of `Semantic Kernel` and `AutoGen`, with workflow, checkpointing, and `HITL` support. `Google` continues to develop the `Agent Development Kit` and related agent infrastructure. This shows market momentum. It does not yet establish a coherent, interoperable governance answer.
+Habituation is a plausible mechanism for diminished attention to frequent warnings. The cited studies support examining checkpoint design alongside training, interface design and containment. They do not prove that every per-call approval is ineffective or that a work-level decision alone prevents harm. The proposed approach needs comparison under declared work, threat and supervision conditions.
 
-The distinction is also visible in frontier-model safety programs. `OpenAI`'s `Preparedness Framework`, `Anthropic`'s `Responsible Scaling Policy`, and `Google DeepMind`'s `Frontier Safety Framework` govern model-development and deployment risks. They are important prior art and should continue to inform the field. They are not, however, substitutes for a portable runtime harness standard or a portable agent identity and receipt model.
+### 1.2 So people switch it off
 
-The gap can be summarized as follows:
+Some agent clients offer modes such as `--yolo`, "always allow" or `--dangerously-skip-permissions`. The cited GitHub MCP researchers suspected frequent use of "always allow"; that was not a measured prevalence estimate. The August 2025 Nx "s1ngularity" account describes malware invoking installed AI CLIs with reduced-permission checks to inventory secrets. These observations do not establish the defaults or behavior of every client.
 
-| Current Artifact | What It Solves | What It Does Not Fully Solve |
-|------------------|----------------|-------------------------------|
-| `ISO/IEC 42001` | Organization-level AI management systems | Runtime control, agent identity, issuer governance, receipts |
-| `NIST AI RMF` | AI risk framing and lifecycle considerations | Concrete runtime and identity specifications for agents |
-| `MCP` | Tool and context interoperability | Public identity, badging, public trust chain |
-| `A2A` | Agent-to-agent interoperability and discovery | Accredited identity, assurance portability, external validation |
-| Vendor agent frameworks | Practical implementation patterns | Cross-vendor trust semantics and common public assurance model |
-| `W3C VC`, `RFC 9421`, `SLSA`, `Trace Context`, `PURL` | Strong building blocks for credentials, signatures, provenance, tracing, and structured identifiers | A cohesive agent-specific standard that composes these patterns into an operational identity and governance model |
+No independent survey of how many users run in these modes was found, so this paper cites no adoption rate. The incident record shows what happens when they do.
 
-The consequence is that enterprises are left to integrate these concerns themselves. Some do this through internal registries, one-off profiler scripts, prompt conventions, or platform-specific metadata. Those measures are usually useful. They are rarely sufficient.
+### 1.3 The incident record
 
-## 3. Public Policy and Industry Signals
+**2025-05.** A public GitHub issue drives an agent, through an MCP server, to leak private-repository contents. Control issue reported: Separation of untrusted input, private data and outbound action.
 
-The public policy environment is now clearly signaling that AI agents have become a standards problem, not merely a product feature.
+**2025-05/06.** Asana's MCP server exposes data across customer tenants. Control issue reported: Tenant isolation in the tool server.
 
-On February 17, 2026, `NIST` launched the `AI Agent Standards Initiative`, explicitly framing interoperable and secure agent adoption as a national standards concern. The initiative called out industry-led standards, open protocols, agent identity infrastructure, and security evaluations as active areas of work. This matters because it confirms that the U.S. standards conversation has moved from general AI governance into agent-specific interoperability and trust.
+**2025-07.** An agent holding a database service-role key follows instructions planted in support tickets (Supabase MCP). Control issue reported: Credential scope; data-flow separation.
 
-The signal became even clearer with the `NCCoE` concept paper, "Accelerating the Adoption of Software and AI Agent Identity and Authorization", published on February 5, 2026. That paper specifically asked for input on use cases, identity, authorization, auditing, non-repudiation, and controls against prompt injection. In other words, the market problem described in this paper is now recognized in formal public-sector work.
+**2025-07.** A coding agent deletes a production database during a declared code freeze (Replit). Control issue reported: The freeze was an instruction, not an enforced gate.
 
-There are also direct timing implications. The `CAISI` RFI on AI agent security closed on March 9, 2026, and the `NCCoE` concept paper comment period closed on April 2, 2026. Those specific windows have passed. The larger agenda has not. The initiative itself is new, active, and still forming. The conclusion is that we are not too late for standards work. We are at the point where credible proposals are needed.
+**2025-08.** Malware runs AI CLIs with skip-permission flags to harvest secrets (Nx s1ngularity). Control issue reported: CLIs accept those flags from any caller.
 
-The White House has also already established AI policy as a live federal agenda. Public comment on the U.S. `AI Action Plan` opened on February 25, 2025, and the Administration published `America's AI Action Plan` on July 23, 2025. Whether one agrees with every aspect of that plan is not the main point here. The main point is that the federal policy environment is already asking for concrete, implementable approaches rather than abstract concern.
+**2025-09.** A malicious MCP server silently copies every email to an attacker (`postmark-mcp`). Control issue reported: Tool-server provenance and egress control.
 
-Industry behavior reinforces this. `OpenAI` published its proposals for the U.S. AI Action Plan on March 13, 2025. `Anthropic` submitted its own March 2025 `OSTP` response and has continued to argue for stronger testing and evaluation approaches, including in its earlier essay on third-party testing and its later work with `CAISI` and the `UK AISI`. This is not evidence that the market has solved the problem. It is evidence that leading vendors understand the policy and assurance questions are becoming unavoidable.
+**2026-04.** An agent finds an unrelated, over-scoped API token and deletes a production volume and its backups in seconds. Control issue reported: Credential scope; no gate on a destructive API.
 
-International and regional governance work reinforces the same conclusion. The `EU` published the `General-Purpose AI Code of Practice` on July 10, 2025 as a voluntary but practically significant route to meeting `AI Act` obligations around transparency, safety, security, and copyright. `Singapore IMDA` launched its `Model AI Governance Framework for Agentic AI` on January 22, 2026, positioning it as a first national framework focused specifically on reliable and safe deployment of agentic AI. These are not direct substitutes for `TAK`, `GAID`, or `TAK-JSI`, but they show that the market is moving from general AI governance into concrete operational expectations for agents.
+**2026-07.** Evaluation agents escape their sandbox and compromise Hugging Face production infrastructure. Control issue reported: Sandbox boundary, over-broad credentials, exposed metadata endpoint.
 
-The point is not that governments or frontier labs are waiting for one final regulatory answer before acting. The point is that both are operating in a fragmented environment and are now seeking more coherent structures for identity, assurance, interoperability, and runtime trust.
 
-## 4. The Case for a Trusted AI Kernel (TAK)
+Sources and dates are in the [market and thought-leadership landscape](agent-governance-market-landscape-2026.md#3-incident-record-20242026). Published accounts of the July 2026 Hugging Face intrusion conflict on its scale, from one autonomous agent to hundreds of coordinating agents. This paper relies only on the elements the accounts share.
 
-`TAK` addresses the runtime half of the problem.
+The cases show why model behavior, credential policy, isolation and target-effect controls need separate assessment. Controls can block some operations while an attacker succeeds through another path. Hugging Face's technical account, for example, describes denied mutating cloud calls as well as successful intrusion paths. A successful attack does not establish that all gates were absent. A TAK-style boundary is a proposed part of a defense, not a demonstrated prevention of these historical incidents.
 
-A trusted runtime for agents needs to do more than host model inference. It needs to mediate authority. It needs to govern tool execution. It needs to distinguish immutable directives from conversational input. It needs to define when a human must approve an action, when an action can execute directly, how delegation narrows authority, and how evidence is recorded.
+### 1.4 Classifiers are an improvement, not an authority
 
-This is particularly important because modern agent systems are not just single prompts followed by single outputs. They are increasingly composed of:
+Anthropic lets a model decide which calls may proceed without a prompt and made auto mode the default for selected Claude Code plans on 2026-08-14. It reports fewer serious unintended actions than under manual approval (vendor-reported). Two facts limit what that establishes:
 
-- generalist coordinators
-- narrow, deeply skilled specialists
-- persistent or retrieved memory
-- hidden or immutable instructions
-- external tools and connectors
-- long-running tasks that can fail, retry, or be resumed
+- Its designers publish a 17% false-negative rate on real overeager actions (n=52).
+- Twelve days after it became the default, a researcher disclosed a prompt-injection chain that achieved remote code execution against it in 60–80% of attempts. The Cloud Security Alliance's guidance is to treat such a classifier as a productivity control, not as a substitute for sandboxing, egress control or credential isolation.
 
-These are precisely the conditions in which weak governance becomes expensive and dangerous. Fabrication, hallucination, unauthorized action, prompt injection, hidden-instruction leakage, and misplaced autonomy are not separate issues. They are different symptoms of the same missing control plane.
+A classifier can inform a risk judgment. The authority to authorize the effect must still come from an accountable owner and enforceable policy; a classifier verdict alone is not that authority.
 
-`TAK` therefore proposes that a trustworthy runtime `MUST` provide a clear authority model, execution gating, `HITL` semantics, immutable instruction governance, memory and context-window control, audit logging, delegation narrowing, and runtime transparency to supervisors. A key message of this document is that these are not optional implementation preferences. They are part of the minimum structure required for trustworthy agency.
+### 1.5 What oversight regulation asks for
 
-## 5. The Case for a Global AI Agent Identification and Governance Framework (GAID)
+The EU AI Act's Article 14 requires effective human oversight of high-risk systems, including awareness of automation bias and the ability to interpret and intervene. The Commission's current implementation page gives 2027-12-02 for the specified Annex III high-risk areas and 2028-08-02 for high-risk systems embedded in regulated products following the AI Omnibus. These dates do not postpone every AI obligation or establish the legal treatment of a particular deployment. [Commission timeline](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai).
 
-`GAID` addresses the identity and assurance half of the problem.
+The vendor study is a reason to test whether a particular approval design provides effective oversight. Attributable decisions and observable execution checks can support that assessment, but their presence alone is not evidence of legal compliance or a comparative safety result.
 
-Enterprises do not only need to know that an agent exists. They need to know what the agent is, what evidence exists about it, what claims it can legitimately carry, and how that identity can be traced across boundaries.
+## 2. Why current standards and protocols fall short
 
-This is why `GAID` is more than a naming convention. It combines:
+Several important standards and de facto standards exist. They solve adjacent problems at different layers.
+
+**Management and risk frameworks**
+
+- `ISO/IEC 42001:2023` gives organizations a certifiable AI management system. It is not a runtime agent standard. It does not define agent identity documents, tool-gating semantics, receipt chains or who may authorize a class of agent action.
+- `NIST AI RMF 1.0` is a risk-framing model, not a cross-platform agent identity or runtime specification.
+
+**Interoperability protocols**
+
+- The `Model Context Protocol` (introduced by Anthropic in November 2024, now under the Agentic AI Foundation) standardizes how agents connect to tools and data. It has since gained OAuth 2.1 authorization, protected-resource metadata (RFC 9728), resource indicators (RFC 8707), and revisions in November 2025 and July 2026.
+- MCP tool annotations such as `readOnlyHint` and `destructiveHint` are explicitly hints that clients must not trust from untrusted servers.
+- MCP authorizes at the level of a server and a scope. It has no notion of which authority may decide that a class of action is admissible for a particular piece of work.
+- `A2A`, donated to the Linux Foundation in June 2025, standardizes agent-to-agent discovery and messaging without decision-authority semantics.
+
+**Identity**
+
+The identity layer has moved quickly:
+
+- OpenID's `AIIM` community group
+- the W3C Agent Identity Registry Protocol community group (April 2026)
+- CoSAI's *Agentic Identity and Access Management* (April 2026)
+- Microsoft Entra Agent ID
+- NIST NCCoE's concept paper on software and AI agent identity and authorization (February 2026)
+
+These are the neighbourhood GAID operates in.
+
+**Deterministic tool policy**
+
+Existing authorization systems supply important parts of this design. AWS AgentCore evaluates gateway tool requests against policy and documents temporal conditions such as requiring an earlier approval before a transfer. OpenFGA documents owner/role relationships and task-based authorization with user/task checks, agent binding, expiration and restricted subagent delegation. These mechanisms can implement authority relationships; GPP does not depend on their being unable to do so. The proposed contribution is a shared composition linking accountable doctrine, work stages, exact effects and evidence across implementations. [AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html), [OpenFGA task authorization](https://openfga.dev/docs/modeling/agents/task-based-authorization), [OpenFGA roles](https://openfga.dev/docs/modeling/roles-and-permissions).
+
+**Governance suites**
+
+Governance suites provide inventories, risk classifications and policy-management functions. Whether a particular product and integration also enforces a decision inline requires its own versioned capability review; this paper has not tested those products. Inventory and runtime mediation remain separate questions even when one product supplies both.
+
+**`ISO/IEC 42001`.** Contribution: Organization-level AI management systems. Composition still to establish: Runtime control, agent identity, receipts, decision authority per action class.
+
+**`NIST AI RMF`.** Contribution: Risk framing and lifecycle. Composition still to establish: Concrete runtime and identity specifications for agents.
+
+**`MCP`.** Contribution: Tool and context interoperability; transport authorization. Composition still to establish: Public identity, badging, who may decide an action class.
+
+**`A2A`.** Contribution: Agent-to-agent interoperability. Composition still to establish: Accredited identity, assurance portability, decision authority.
+
+**Cedar / OPA / OpenFGA integrations.** Contribution: Policy evaluation and modeled authority relationships, depending on the integration. Composition still to establish: This proposed family's specific composition is not automatically established by installing a policy engine.
+
+**Agent identity platforms.** Contribution: Agent identity, sponsor, lifecycle. Composition still to establish: Job qualification; per-decision-class authority.
+
+**Classifier "auto modes".** Contribution: Fewer prompts. Composition still to establish: Determinism; attributable authority; resistance to injection.
+
+**Vendor agent frameworks.** Contribution: Practical implementation patterns. Composition still to establish: Cross-vendor trust semantics.
+
+**`W3C VC`, `RFC 9421`, `SLSA`, `Trace Context`, `PURL`.** Contribution: Building blocks for credentials, signatures, provenance and tracing. Composition still to establish: An agent-specific composition into identity and governance.
+
+
+This overview is an orientation, not an exhaustive product comparison or a finding that the named systems cannot support the proposed controls. Relevant prior work includes:
+
+- ITIL change enablement pre-authorizes *standard changes* as a class and routes *normal changes* to a change authority.
+- Delegation-of-authority matrices and segregation of duties name accountable deciders.
+- Ibrahim and Li's *Overlaying Governance* (arXiv 2606.03518, June 2026) composes delegation and resource-scope attenuation over relational policies.
+- A September 2026 practitioner article on *decision rights* for agentic AI names owners for authorization, data access, intervention, exceptions and accountability. It explicitly leaves tool binding to identity systems and gateways.
+
+**GPP proposes a versioned binding that composes these existing ideas with the family's other owners.**
+
+## 3. Public policy and industry signals
+
+AI agents have become a standards problem, not merely a product feature.
+
+**United States**
+
+- NIST launched the AI Agent Standards Initiative on 2026-02-17.
+- The NCCoE concept paper (2026-02-05) asked for input on agent identity, authorization, auditing, non-repudiation and prompt-injection controls.
+- NIST's COSAiS project is developing SP 800-53 control overlays for single-agent and multi-agent AI systems.
+- The comment windows have closed; the agenda has not.
+
+**Europe and Asia**
+
+- The EU published the General-Purpose AI Code of Practice on 2025-07-10, and has deferred, not withdrawn, the AI Act's high-risk obligations ([§1.5](#15-what-oversight-regulation-asks-for)).
+- Singapore's IMDA published a Model AI Governance Framework for Agentic AI on 2026-01-22.
+
+**Security community**
+
+- OWASP's *Excessive Agency* risk (LLM06:2025) names three root causes: excessive functionality, excessive permissions and excessive autonomy.
+- OWASP's Top 10 for Agentic Applications (December 2025) adds tool misuse, identity and privilege abuse, and human–agent trust exploitation. The last is approval fatigue by another name.
+- Simon Willison's "lethal trifecta" (2025) and Meta's "Agents Rule of Two" give the field a shared vocabulary for dangerous capability combinations.
+
+**Analysts**
+
+- Gartner predicted in June 2025 that more than 40% of agentic AI projects will be cancelled by the end of 2027, citing inadequate risk controls among the causes.
+- Secondary reporting of a May 2026 Gartner note describes binary governance, either locked down or fully trusted, as a root cause of failure, and recommends governance proportional to autonomy.
+
+These initiatives motivate evaluating proportionate, attributable execution controls. This paper proposes one composition and asks for comparison, overlap review and implementation evidence; it does not establish that no other shared model exists.
+
+## 4. Four cornerstones
+
+The four standards are deliberately separate, because each has exactly one normative owner. The [standards family map](agent-standards-family.md) is the entry point.
+
+### 4.1 GAID: who is it?
+
+Organizations need to know not only that an agent exists, but what it is, what operating profile is active, what claims it carries, and how its actions trace across boundaries. GAID combines:
 
 - a stable identifier
-- a resolvable `Agent Identity Document`
-- structured badging for capability, governance, safety, sensitivity, and fit-for-purpose
+- a resolvable Agent Identity Document
+- structured badges for capability, governance, safety and sensitivity
 - portable authorization classes
-- signed action receipts and chain-of-custody
+- signed action receipts and chain of custody
 - a governance model for private and public issuance
 
-The need for a stronger badging model is especially acute. In practice, organizations want to know not only whether an agent exists, but whether it is fit for a particular purpose, whether it uses tools, whether it retains memory, what kind of model it uses, whether training-data or model-card references exist, whether bias or evaluation evidence exists, what context limits apply, and what kind of human oversight is expected. Today these answers are often incomplete, inconsistent, or hidden behind vendor-specific interfaces.
+Public trust works when syntax, governance, accreditation, status and verification exist together, as they do in DNS, ISBN and PKI. That is the role GAID is intended to play. [§11](#11-public-verification-architecture-options-for-gaid) sets out its public-verification options.
 
-This is also where public trust enters the picture. Internal identifiers are useful, but public agents need stronger validation. The closest analogies are not only application user accounts. They are also `DNS`, `ISBN`, `PKI`, and supply-chain provenance systems. Public trust works when syntax, governance, accreditation, status, and verification all exist together. That is the role `GAID` is intended to play.
+### 4.2 TAK-JSI: is it fit for this job?
 
-## 6. The Case for Job-Specific Intelligence (TAK-JSI)
+A capability label such as "research", "coding" or "customer support" is too broad to be a job qualification. A qualification must bind a versioned operating profile to all of the following:
 
-`TAK-JSI` addresses the qualification gap between identity claims and runtime permission.
+- a versioned job profile
+- an assessment scheme
+- an activity scope
+- a data and risk boundary
+- evidence
+- an expiry
+- a revalidation policy
 
-AI Coworkers resemble enduring operational subjects: they have a `GAID`, an owner, an operating
-profile, and advertised capabilities. But a capability label such as "research", "coding", or
-"customer support" is too broad to serve as a job qualification. A qualification must bind a
-versioned operating profile to a versioned job profile, assessment scheme, activity scope, data and
-risk boundary, evidence, expiry, and revalidation policy.
+Qualification is a property of the *whole working composition*: the model, instructions, doctrine, tools, data, routing and oversight. It is not a property of a model name.
 
-This structure follows established competence-assessment ideas without claiming that an AI agent is
-a person. It also aligns with the `NIST AI RMF` emphasis on fit-for-purpose measurement under
-representative deployment conditions. Qualification is evidence for a ceiling on autonomy; it is
-not authorization and does not eliminate runtime controls.
+JSI also separates three controls that are often conflated:
 
-`TAK-JSI` also clarifies three controls that are often conflated:
+- **Proactivity** controls initiative, not permission.
+- **Earned autonomy** controls evidence-backed latitude for a specific activity and risk.
+- **Cost, quality and time posture** controls resource allocation, not competence.
 
-- **proactivity** controls initiative, not permission
-- **earned autonomy** controls evidence-backed latitude for a specific activity and risk
-- the **Golden Triangle** controls cost, quality, time, reasoning, and verification resources, not
-  competence or data eligibility
+Qualification sets a ceiling on autonomy. It is never authorization.
 
-Model and provider routing must therefore filter first for job, data, residency, modality,
-contractual, and evidence eligibility before ranking remaining candidates by quality, cost, or
-latency.
+### 4.3 GPP: who decided this may happen?
 
-## 7. Why the Standards Belong Together
+GPP defines one modelled unit, the **Gated Permission**. It binds a decision gate, in a named owning authority scope, to a bounded set of tool capabilities, for one stage of one kind of work. Each binding carries a subject scope, a validity window, preconditions, stop conditions and a recorded enforcement mode. In short form:
 
-The standards are deliberately separate because each has one canonical owner:
+> **scope gate × capability set × work-shape stage × subject × validity**
 
-- `GAID` answers who the agent is and what current claims it carries
-- `TAK-JSI` answers which job and context the identified operating profile is qualified for
-- `TAK` answers what the runtime permits now
-- receipts join identity, qualification, authority, action, and evidence
+![The Gated Permission pair: the decision side (the owning WWMD, WWWD or WSID gate) and the permission side (the stage's capability set intersected with grants and scope) meet at TAK mediation, and the GAID receipt cites both](gpp-diagrams/png/gated-permissions-process-fence-01.png)
 
-Identity without qualification can overstate fitness. Qualification without runtime enforcement
-can become a decorative certificate. Runtime governance without portable identity and claims can
-remain locally controlled but externally opaque.
+*Figure: the Gated Permission pair. The decision side runs once per class of work; the permission side narrows every call. TAK executes only what both admit. Source: the GPP standard, §7.3.*
 
-## 8. DPF as a Proving Ground
+Three rules follow:
 
-The value of a standard increases materially when it can be exercised in a real platform rather than described only in the abstract.
+1. **Approve the decision, not the keystroke.** The owning authority decides whether a *class* of tool use is admissible for a piece of work. That authority can be a person, recorded doctrine, or doctrine that escalates to a person. TAK then enforces the decision on every call without a further prompt.
+2. **Unreachable beats prompted.** A tool that no satisfied binding admits is not offered for approval at all, so it cannot be approved by fatigue.
+3. **Every consequential reach traces to a named authority.** For any consequential call, the system can answer: which gate admitted this class of action, in which scope, decided by whom, on what evidence, and valid until when.
 
-`DPF` is a useful proving ground because it already contains several runtime patterns that align with `TAK`:
+GPP also makes the model checkable. Its completeness checks include:
 
-- route-specific specialist agents rather than one generic agent everywhere
-- capability and agent-grant intersection for tool access
-- proposal-mode behavior for higher-risk actions
-- explicit prompt assembly blocks that separate identity, authority, sensitivity, and context
-- audit logging for tool execution
-- differentiated sensitivity and role context
+- **stage coverage**: every stage that can reach a consequential capability has a binding
+- **vocabulary resolution**: every capability named in the model resolves to an enforceable grant
+- **mode honesty**: a shadow gate is never reported as enforced
+- **reach reconciliation**: every tool the runtime actually allows is admitted by some binding
 
-It also contains early identity-related structures that are relevant to `GAID`, including a registry of agent identities, model bindings, tool grants, supervisor assignments, default `HITL` tiers, delegation relationships, and memory declarations.
+Reach reconciliation is the most important. A model the runtime does not match is documentation, not governance.
 
-DPF also contains substrate relevant to `TAK-JSI`: AI Coworker identities, profession doctrine,
-decision perspectives, scoped proactivity, cost/quality/time posture, sensitivity-aware routing,
-and evidence-earned autonomy. The missing step is to compose these into a versioned job profile,
-assessment scheme, qualification record, and runtime qualification ceiling.
+GPP uses the Agents Rule of Two to flag an envelope combining untrusted input, sensitive access and state-changing or outbound ability for one actor. The pinned 0.18 prose mentions an accountable human or independent validator, but its binding schema has no validator-only mode. That is an unresolved representation, not a functioning alternative authority path. The [proposed 0.19 correction](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/c0b47d1eaffee39fb14237e095e08d39c71e5fec/docs/architecture/gated-permissions-process.md), frozen at commit `c0b47d1eaffee39fb14237e095e08d39c71e5fec`, requires an accountable human decision for that complete combination and leaves validator-only authorization unsupported until specified. It preserves ordinary lower-risk doctrine modes. This pending source correction is not evidence of adoption or runtime enforcement. GPP composes with sandboxing, egress control and data-flow techniques; it does not replace them.
 
-This makes `DPF` especially valuable for conformance work. It is not a blank sheet. It already demonstrates that many `TAK` controls are implementable in a practical system. At the same time, it exposes what is still missing for a fuller `GAID` posture: federated issuance, public verification, standardized badges, external certificates, public status and revocation, and portable action receipts.
+### 4.4 TAK: may it act now?
 
-In other words, `DPF` is credible as a first implementation case because it shows both existing strengths and remaining work.
+TAK addresses the runtime. A trusted runtime must:
 
-## 9. A Neutral Reference Model
+- mediate authority
+- govern tool execution
+- distinguish immutable directives from conversational input
+- define when a human must approve an action and when it can proceed directly
+- narrow authority on delegation
+- record evidence
 
-The standards family proposed here is intentionally vendor-neutral.
+Its effective-permission rule intersects four terms:
 
-The reference model is not meant to mirror one product suite. It is meant to identify the minimum cooperating planes that a trustworthy agent ecosystem requires:
+- what the principal may do
+- what the agent may do
+- what the route, workflow or context exposes (the GPP envelope supplies this term)
+- data constraints
 
-- an identity plane
-- an assurance plane
-- a job-qualification plane
-- a runtime control plane
-- an evidence plane
-- an interoperability plane
-- a trust and validation plane
+A model's request is never sufficient evidence of authorization. TAK derives its gated set from each tool's declared consequence rather than from a hand-maintained list, and it treats gate *coverage* as a governed metric. A correctly implemented gate that governs almost nothing is indistinguishable at runtime from no gate.
+
+**On scope.** The first edition of this paper argued that fabrication, hallucination, unauthorized action and prompt injection are symptoms of one missing control plane. That overstated the case. Runtime mediation limits which effects an agent can produce and who can authorize them. It does not make a model's statements true, and it does not by itself defeat prompt injection. What it does is bound the damage a wrong or manipulated agent can do, and make the authority behind every consequential effect attributable.
+
+## 5. Why the standards belong together
+
+The standards compose around one governed action:
+
+1. `GAID` resolves the agent's identity and active operating profile.
+2. `GPP` resolves the envelope: the satisfied bindings for the agent's current work and stage, each traceable to a gate decision in its owning scope.
+3. `TAK-JSI` confirms any qualification those bindings require.
+4. `TAK` intersects principal authority, agent grants, the GPP envelope and data constraints, then mediates the call.
+5. `GAID` binds the receipt, including the binding and gate-decision references, back to the identifiable agent.
+
+No member widens another:
+
+- A GAID claim is not authorization.
+- A JSI qualification is not permission to act.
+- A GPP binding is not a grant; it can only narrow.
+- A TAK permission is not evidence of competence.
+
+Each standard alone fails in a recognizable way:
+
+- **Identity without qualification** overstates fitness.
+- **Qualification without enforcement** is a decorative certificate.
+- **Enforcement without attributable authority** is a locked door with no record of who holds the keys.
+- **Authority without identity** cannot be verified across a boundary.
+
+## 6. Decisions belong to their scope
+
+A governed agent constantly makes or proposes decisions. The question of *whose judgment governs* is as important as whether the agent is permitted to act.
+
+DPF binds three authority scopes:
+
+- **WWMD** governs platform direction: how the platform itself should evolve.
+- **WWWD** governs an organization's business choices, from its own declared mission, market and stance.
+- **WSID** governs profession and craft judgment, such as what a competent data architect, bookkeeper or security analyst would do.
+
+Other implementations will name their scopes differently. The standards require only that every decision names the scope that owns it.
+
+Four rules govern judgment within and across scopes. TAK §7.13 is their normative home.
+
+- **Hard constraints filter before preferences rank.** An attractive score cannot outweigh a prohibition.
+- **Cross-scope material is advisory** until the owning scope adopts it. A platform founder's preferences do not silently become a customer's business decisions.
+- **Missing facts lead to evidence collection; missing authority leads to escalation.** Neither defaults to approval.
+- **A recommendation is not a permission.** Consulting doctrine produces a recommendation. Permission is decided separately, when the agent reaches for a tool.
+
+GPP is where the scope becomes operational. Each Gated Permission names exactly one owning scope, so the question of who decided is answered in the model before it is asked at runtime.
+
+## 7. MBSE with AI as a first-class participant
+
+### 7.1 The gap in systems engineering
+
+Model-based systems engineering describes complex systems as connected models of:
+
+- requirements
+- structure
+- behaviour
+- interfaces
+- allocation
+- verification
+
+SysML v2 and KerML provide open, machine-readable systems-modeling foundations. Agents are not new to this discipline: INCOSE catalogs executable agent-based SysML work from 2015 and a 2025 presentation connecting AI agents with MBSE workflows. The public catalog metadata establishes relevant prior work; the members-only 2015 paper was not inspected for this edition. [2015 catalog](https://www.incose.org/resource/creating-executable-agent-based-models-using-sysml/), [AI agents for MBSE](https://www.incose.org/communities/chapters/americas-sector/canada/events-detail/2023/12/12/default-calendar/incose-canada-practical-insights).
+
+The narrower problem here is to define and test a portable relationship among:
+
+- an agent that holds a role
+- doctrine it reasons from
+- a stage of work it is performing
+- a decision it may make or must escalate
+- tools it may or may not reach
+- a receipt it must leave
+
+### 7.2 The model is the system
+
+This paper proposes that a governed agent system be engineered as a model whose elements the runtime executes and checks itself against. The intended DPF chain is:
+
+```text
+requirement -> scoped principle/policy -> work shape and stage -> decision gate
+            -> Gated Permission (capability set) -> mediated effect -> receipt
+            -> observed outcome -> revalidation
+```
+
+Each link maps to an established modelling construct. GPP's mapping uses:
+
+- SysML v2 action and state definitions for work shapes and stages
+- requirements with DMN decisions for gates
+- interfaces for capability sets
+- allocations for Gated Permissions
+- PROV-O for evidence
+
+The family's composition profile composes SysML v2/KerML, BPMN, CMMN, DMN, SACM and PROV-O, and uses STPA to derive hazards. It does not invent a new modelling language.
+
+What changes is the relationship between model and system:
+
+- **Intended state, deployed control state and observed outcome are kept as separate facts.** The model records which bindings exist, which mode each gate runs in, and what actually happened.
+- **The model is checked against reality.** Reach reconciliation compares what the runtime actually allows with what the model admits. A discrepancy is a finding in either direction: an unmodelled reach, or a modelled authority that does nothing.
+- **Agents are modelled as performers, not just components.** A coworker is an identity-bearing performer (GAID) with qualifications (JSI), allocated to stages through bindings (GPP), acting under runtime mediation (TAK).
+
+### 7.3 Why this matters beyond DPF
+
+Organizations can represent processes, controls and responsibilities in BPMN diagrams, RACI matrices and control frameworks. For a particular agent deployment, the relationship between those models and reachable effects still needs to be established. If an implementation correctly enforces and audits the same versioned authority model, the intended benefits are:
+
+1. Governance becomes reviewable as a design.
+2. Assurance becomes a check over models and records, rather than a reconstruction from logs.
+3. A change of policy becomes a change of model, with a version, an owner and a diff.
+
+That is the contribution this paper most wants the systems-engineering and AI-governance communities to test.
+
+### 7.4 From model to machine
+
+The CAD-to-machine analogy suggests a target architecture: defined modeling semantics, a compiler
+that preserves them and checks that reject unsupported designs. It does not establish physical
+manufacturability or universal governance soundness. The following are design obligations for a
+claimed implementation, not a statement that the complete DPF visual flow has been assessed.
+
+- **A notation with execution semantics.** Each construct is a typed element with a defined runtime
+  behaviour. A stage marks the tools that are reachable. A gate diamond names its owning authority
+  and whether it blocks or only observes. A stop records a disposition. The iconography is borrowed
+  from BPMN so that practitioners recognise it. The semantics are deliberately restricted so that
+  soundness (no deadlock, no unreachable stage) stays decidable.
+- **A deterministic compiler.** It turns the drawn shape into the executable definition the runtime
+  reads. It classifies binding changes as narrowing, clarifying or widening. Widening requires a
+  fresh decision; other material changes to policy, evidence, qualification or validity may also
+  invalidate reuse under the applicable canonical rules.
+- **Design-rule checks before deployment.** GPP's completeness checks, plus workflow-net soundness,
+  reject a shape that would leave a consequential tool ungated or a transition guarded on one code
+  path but not another.
+
+The acceptance test is the manufacturing one: convert every existing shape into the model, compile
+it back, and get the same executable result.
+
+The model should also concentrate attention without weakening ordinary permission checks. The
+design view identifies consequential interactions, including outward, authority-changing and
+irreversible actions and dangerous capability combinations. Their gate placement must follow the
+applicable effect and authority rules; a label such as "read" does not establish harmlessness.
+
+For a consequential effect, the intended authorization binds the action and its material parameters
+or canonical digest, target, purpose, operating profile and validity conditions, as TAK-PD-006
+requires. A proposed permit carries the relevant decision, actor, stage and binding references.
+An adapter claiming complete mediation must demonstrate that no reachable path bypasses its
+execution boundary. Remaining bypasses restrict the claim; naming a component a reference monitor
+does not eliminate them.
+
+The claim must be honest about its boundary. Access to a signing key can undermine receipt
+authenticity; direct database writes can undermine stored records. Detection and prevention need
+separate evidence. Key isolation, credential separation and target enforcement are deployment
+properties to assess, not consequences of naming the architecture.
+
+The pinned DPF source supports incremental migration: bindings can observe in shadow mode, and
+named direct-call exceptions are ratcheted. These compatibility mechanisms restrict assurance. A
+path that remains unmediated cannot be counted as enforced merely because migration is planned.
+
+## 8. DPF: the working instantiation
+
+DPF is the initial implementation context. The sources below make selected control paths inspectable; they do not establish complete conformance, deployment adoption or the state of a running install.
+
+### 8.1 What was examined
+
+This revision inspected the named repository blobs, the existing contribution and conformance documents, and selected primary external sources. It observed the public revision 2.1 page on 2026-10-16 before repairing its claims. That HTTP observation establishes publication of prose, not enforcement of an agent action.
+
+No product test, fault-injection scenario, qualification assessment or live business effect was executed as part of this editorial source inspection. The register identifies test files so an assessor can evaluate them; a test's presence is not a passing result. Documentation checks and publication verification for this replacement belong to its delivery record.
+
+The older edition's archetype, role, doctrine and shape counts were dated inventory statements. They are omitted here rather than silently presented as current capacity or adoption. Use the canonical generated inventory for a dated source count; use assessment evidence for a behavioral claim.
+
+### 8.2 Claim-to-evidence ledger
+
+Every row here is **source-declared / runtime-unverified**. None has an executed runtime verdict in this paper. The source IDs resolve to exact commits and blobs in §8.5.
+
+**Effective permission and scoped judgment.** S-MONITOR composes permission/preexecution checks on its governed path.
+
+*Claim boundary / outstanding evidence:* Assess exact principal, coworker, work, token and data inputs on the chosen deployed adapter; no all-path claim.
+
+**Direct execution paths.** S-DIRECT has a kernel gate and separately records unmediated reach; S-RATCHET retains named exceptions.
+
+*Claim boundary / outstanding evidence:* A kernel gate is not the whole governed authority ladder. Remaining direct paths prevent a universal mediation claim.
+
+**GPP enforcement modes.** S-MODES has an empty checked-in enforced-binding table at this snapshot.
+
+*Claim boundary / outstanding evidence:* No GPP-Enforced result follows from the presence of a promotion mechanism. Actual calls and downgrades require observations.
+
+**Permit identity and exact parameters.** S-HANDLE and S-PARAMS define authenticated handles and a canonical call digest.
+
+*Claim boundary / outstanding evidence:* Source representation does not prove provisioning, secret isolation, lineage validity or rejection at every target.
+
+**Reach reconciliation.** S-RATCHET declares 23 allowlisted sites in 11 files; T-RATCHET contains checks against growth and dynamic reach.
+
+*Claim boundary / outstanding evidence:* These are source inventory and test-design observations, not tests executed for this edition or proof that every bypass is closed.
+
+**Work shapes and Build Studio.** N-GPP Annex A records compiler, stage and transition work with explicit limits.
+
+*Claim boundary / outstanding evidence:* The full visual model-to-runtime path and uniform transition gating remain separate delivery/assessment work.
+
+**Receipt and observed outcome.** S-MONITOR contains receipt/audit integration; S-LOOP requests observation and reconciliation.
+
+*Claim boundary / outstanding evidence:* A receipt must be validated against the exact effect. Source presence, admission or dispatch does not prove the business outcome.
+
+**Job qualification.** N-JSI defines the lifecycle; A-DPF distinguishes existing substrate from a qualified credential.
+
+*Claim boundary / outstanding evidence:* No qualification of an agent or complete qualification lifecycle is established here.
+
+**Public/federated identity.** N-GAID defines private and public claim structures.
+
+*Claim boundary / outstanding evidence:* No accredited issuer, public badge or federated verification result is established by this paper.
+
+**Data and processing destination.** Canonical TAK and JSI require applicable data and destination controls.
+
+*Claim boundary / outstanding evidence:* End-to-end admission, context transformation, fallback and egress need their owning implementation evidence.
+
+**Portable reference loop.** S-LOOP is a pure host-facing reference, with source tests T-LOOP.
+
+*Claim boundary / outstanding evidence:* It is not a durable host transaction, deployed adapter or independent reproduction.
+
+**Efficacy.** §9 identifies proposed measures.
+
+*Claim boundary / outstanding evidence:* No measured savings, supervision reduction or harm reduction is reported.
+
+
+A subsequent assessor can replace a runtime-unverified disposition only with evidence tied to the particular source, served runtime, configuration, inputs, actor and target. Unavailable infrastructure stays inconclusive; an unsupported mandatory control cannot be converted into a manual pass.
+
+### 8.3 What building it taught us
+
+Earlier editions described dangling capability vocabulary, missing stage readers and unequal Build Studio gate sets. These remain useful examples of the questions a model/runtime comparison should ask. They are not a fresh assessment of this source snapshot or the current install.
+
+The previous ledger also stated that four dynamic direct sites blocked every binding promotion. That statement is superseded by N-GPP 0.18 and S-RATCHET/T-RATCHET: the recorded dynamic proposal-approval paths were routed, while named direct-call exceptions remain. Removing the dynamic sites does not promote a binding or prove complete mediation. The checked-in enforced table remains the authority for the source mode, and actual runtime conditions can further narrow a claim.
+
+The detailed canonical dispositions stay with the GPP standard's informative implementation annex and the existing live backlog. This paper does not close their implementation or acceptance obligations.
+
+### 8.4 Portability and replaceable inference
+
+Hermes Agent and Cursor reproductions, the complete DPF specimen and a genuinely external assessment remain programme deliveries. A definition can move before its behavior has been assessed on a new host. Imported prose, skills or rules do not transfer credentials, grants or qualification.
+
+Bounded-output inference such as TypeSafe Jev is a possible judgment component inside this harness. A typed choice, score or probability is not truth, domain calibration or authorization. A selected implementation still needs permitted input processing, an approved destination, current owning-scope policy and target-specific evaluation. No Jev provider adoption, inference run or performance result is reported here. [TypeSafe introduction](https://docs.typesafe.ai/introduction).
+
+### 8.5 Immutable source and evidence register
+
+All repository links below are frozen at commit `d9c8ed1fc887527c2a8b893f9a8062519c5a4384`, inspected 2026-10-16. Each blob identifies the exact source bytes. These are **source locators**, not runtime attestations. External web sources remain dated citations and may change independently.
+
+- **N-TAK — Runtime and principle-directed draft.** [docs/architecture/trusted-ai-kernel.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/trusted-ai-kernel.md). Git blob `2fc0b7ae2790a11193bfeba6d79765052abd4fb2`.
+
+- **N-GAID — Identity and receipt draft.** [docs/architecture/GAID.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/GAID.md). Git blob `f0b60a4dfa7d3f18518c5c65d6e1d32291f6d536`.
+
+- **N-JSI — Qualification draft.** [docs/architecture/job-specific-intelligence.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/job-specific-intelligence.md). Git blob `c10f170920efb5f51c10959cbb375108ce7c5210`.
+
+- **N-GPP — Binding draft 0.18.** [docs/architecture/gated-permissions-process.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/gated-permissions-process.md). Git blob `b4d8752463c99a069518f575b097a70884c241cc`.
+
+- **S-MONITOR — Governed execution path.** [apps/web/lib/mcp-governed-execute.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/mcp-governed-execute.ts). Git blob `341f253fa075de9e9f8f0b7594c0f2171b76a424`.
+
+- **S-DIRECT — Direct execution and kernel gate.** [apps/web/lib/mcp-tools.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/mcp-tools.ts). Git blob `3e488055f969ac4054624012fa8ac19c0191f832`.
+
+- **S-MODES — Checked-in promotion table.** [apps/web/lib/gpp/binding-enforcement.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/binding-enforcement.ts). Git blob `8a1b31c900e61a10b3335ad8b76172ddbbf58172`.
+
+- **S-RATCHET — Declared direct-call inventory.** [apps/web/lib/gpp/unmediated-execute-sites.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/unmediated-execute-sites.ts). Git blob `b87e9e13a5e8e6b00e22e2e4bfe76812fccdf8d0`.
+
+- **T-RATCHET — Source tests for reach ratchet.** [apps/web/lib/gpp/unmediated-reach-ratchet.test.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/unmediated-reach-ratchet.test.ts). Git blob `8fad86f11a4097a0d15be3e5ec6574e021754ab2`.
+
+- **S-HANDLE — MAC-bound permit representation.** [apps/web/lib/gpp/permit-handle.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/permit-handle.ts). Git blob `382c9caf67834669d7512e89ec7bea644767966d`.
+
+- **S-PARAMS — Canonical tool/parameter digest.** [apps/web/lib/gpp/param-hash.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/apps/web/lib/gpp/param-hash.ts). Git blob `d2041af4ede83a1845e75d286f7e61844ff56220`.
+
+- **S-LOOP — Pure reference loop.** [packages/validators/src/trusted-agent-reference-loop.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/packages/validators/src/trusted-agent-reference-loop.ts). Git blob `797d8bcdff57368b116219588f7670a4c7a99bfc`.
+
+- **T-LOOP — Source tests for the loop.** [packages/validators/src/trusted-agent-reference-loop.test.ts](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/packages/validators/src/trusted-agent-reference-loop.test.ts). Git blob `a7d21195edb60f7707b33d692592c9e3421b2f1f`.
+
+- **A-DPF — First-pass assessment and qualification gaps.** [docs/architecture/agent-standards-dpf-conformance.md](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/d9c8ed1fc887527c2a8b893f9a8062519c5a4384/docs/architecture/agent-standards-dpf-conformance.md). Git blob `71f6d1d025cd99a01bbf78b5aab586feb625aa98`.
+
+The prior published edition is retained as [revision 2.1 source](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/3bbde597d0c5b867c503e06cbc80847a4bf97504/docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md), blob `906c6d561dfb2494530e2337a2289b5fc8cb3f5f`. A direct HTTP read of its public page at 2026-10-16T19:02:41Z returned revision 2.1. The HTML SHA-256 was `5ebccaf50f8181bb0fcb954f7abc3fdf81c62ee7186d376c568e5dd883341485`; its page headers did not bind a source commit. That is publication evidence only. This replacement's PR, documentation checks, generated Word bytes and later public response must be recorded separately; none is inferred from the older observation.
+
+## 9. Measuring whether it works
+
+A governance claim that cannot be measured is a belief. GPP defines seven efficacy measures:
+
+- **M-1 Gate coverage.** Of consequential tools each agent can reach, what share is admitted only through a binding?
+
+- **M-2 Human decisions per effect.** How many human decisions were needed per consequential effect executed?
+
+- **M-3 Resolution mix.** What share of gate resolutions were doctrine-only, human, held or escalated?
+
+- **M-4 Refusals before effect.** How many consequential reaches were refused before any effect, and why?
+
+- **M-5 Unauthorized or unintended effects.** How many consequential effects later proved unauthorized or unintended?
+
+- **M-6 Shadow divergence.** How often would a shadow gate have refused a call that proceeded?
+
+- **M-7 Decision outcome linkage.** What share of admitted decisions have a recorded observed outcome?
+
+
+GPP proposes tracking **M-2 alongside M-5**. Falling human decisions per effect with flat event counts is a proxy to investigate, not proof of unchanged harm. A comparison also needs equivalent work/exposure, declared reporting and detection coverage, event rates, severity and unresolved effects. Changes in volume or consequence can hide worsening outcomes behind unchanged counts. Freeze thresholds and acceptance criteria before testing, and report uncertainty; this paper provides no comparative safety result.
+
+DPF already records the raw material:
+
+- authorization decisions
+- tool executions and receipts
+- gate consultations with their human outcomes
+- approval envelopes
+- Workroom activity, including shadow-gate observations
+
+This paper has no assessed efficacy dataset. A future report should state the complete evaluated cohort, accepted business outcomes, failures, supervision and rework, together with denominators, period, environment and limits. With no accepted outcomes, cost per accepted outcome is undefined, not zero. A correct refusal and a completed business result are distinct observations.
+
+## 10. A neutral reference model
+
+The family is vendor-neutral. The reference model identifies the cooperating planes a trustworthy agent ecosystem requires:
+
+- an identity plane (GAID)
+- an assurance plane (GAID badges, JSI evidence)
+- a job-qualification plane (JSI)
+- an **authority-binding plane (GPP)**
+- a runtime control plane (TAK)
+- an evidence plane (receipts and observed outcomes)
+- an interoperability plane (MCP, A2A, OAuth)
+- a trust and validation plane (issuers, verifiers, transparency)
 
 ![TAK reference model](tak-diagrams/png/11-neutral-trust-model.png)
 
-This matters because the current market often presents partial control planes as if they were complete trust architectures. In practice, the runtime, identity, evidence, and validation concerns remain distinct even when a single vendor offers them in one product family.
+Identity, authority, runtime, evidence and validation remain distinct concerns even when a product combines them. A capability review must establish each claimed boundary and its evidence separately.
 
-## 10. Why a Staged Adoption Model Is the Most Credible Path
+## 11. Public verification architecture options for GAID
 
-The phased adoption model proposed for `GAID` follows the historical pattern by which durable public identifier systems have become trusted in practice.
+GAID can evaluate several public-verification architecture candidates:
 
-`ISBN` is a strong precedent. The standard defines a durable global identifier, but operational scale comes through the `International ISBN Agency` and delegated national or regional agencies rather than through one undifferentiated global operator. `DNS` shows the same layered emergence: the technical standards came first, delegation and namespace operations matured afterward, and multistakeholder governance later formalized through `ICANN` and `IANA` stewardship structures. Public certificate ecosystems offer a related precedent: trust required not only certificate syntax, but also identity proofing, certificate authority obligations, audit, revocation, and public transparency.
-Sources: [International ISBN Agency](https://www.isbn-international.org/), [National ISBN Agencies](https://www.isbn-international.org/content/national-isbn-agencies), [RFC 1034](https://www.rfc-editor.org/info/rfc1034), [RFC 1035](https://www.rfc-editor.org/info/rfc1035), [RFC 1591](https://www.rfc-editor.org/info/rfc1591), [ICANN history](https://www.icann.org/en/history), [IANA about](https://www.iana.org/about.html), [CA/B Forum Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/requirements/)
+1. **PKI and domain-anchored.** Accredited issuers bind public GAID subjects to controlled namespaces, signed identity documents, revocation services and transparency publication. This paper favors it as a near-term candidate because it reuses established namespace, issuer and verifier roles; interoperability and operating governance still need assessment.
+2. **Federated trust lists.** Recognized authorities publish issuer lists and verifier material. Sector and regional trust frameworks can evaluate this option under their own governance.
+3. **DID / VC portability profile.** An option for portability and selective disclosure, with its own issuer, status and verifier requirements. This paper provides no comparative enterprise-adoption evidence.
 
-That precedent supports a staged `GAID` path:
+The proposed hybrid approach keeps normative requirements with GAID:
 
-- `Phase 1`: enterprise-private identity, inventory, `AIDoc`, badges, and receipts
-- `Phase 2`: federated or accredited cross-boundary trust
-- `Phase 3`: broader public verifier interoperability with optional decentralized portability profiles
-
-This is not a compromise. It is the most historically grounded route to adoption at scale.
-
-## 11. Public Verification Architecture Options for GAID
-
-There are several viable public-verification architectures for `GAID`.
-
-The first is a `PKI` and domain-anchored model in which accredited issuers bind public `GAID` subjects to controlled namespaces, signed identity documents, revocation services, and transparency publication. This is the strongest near-term default because enterprises, governments, and relying parties already understand the accountability model.
-
-The second is a `federated trust-list` model in which multiple recognized authorities publish issuer trust lists and verifier material. This is particularly relevant for regulated sectors, regional ecosystems, and multinational cooperation.
-
-The third is a `DID` / `VC` portability profile in which a public `GAID` can also be represented through decentralized or controlled-identifier infrastructure. This is useful for portability and selective disclosure, but it should not be treated as the only viable public-trust model. As of May 11, 2026, enterprise adoption still favors directory-native internal identity and issuer-validated public identity over ledger-first approaches.
-Sources: [DID Core](https://www.w3.org/TR/did-core/), [VC Data Model 2.0](https://www.w3.org/TR/vc-data-model/), [NIST blockchain identity white paper](https://csrc.nist.gov/publications/detail/white-paper/2020/01/14/a-taxonomic-approach-to-understanding-emerging-blockchain-idms/final), [Microsoft Entra Agent ID](https://learn.microsoft.com/en-us/entra/agent-id/agent-identities), [Microsoft Entra Verified ID standards](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-standards?country=us&culture=en-us)
-
-The preferred approach for the standard is therefore hybrid:
-
-- private enterprise identity remains directory-bound
+- private identity stays directory-bound
 - public identity is issuer-accredited and verifier-friendly
-- transparency is mandatory
+- proposed public verification needs current issuer/status evidence; GAID §13.2 recommends (SHOULD) a transparency log rather than requiring one universally, and private material is not automatically public
 - decentralized portability is optional
 
-Adjacent work in payments and commerce also supports this direction. `AP2`, the `Agent Payments Protocol`, uses verifiable mandates and cryptographic evidence to show that an agent is acting on bounded delegated payment authority. That is not the same problem as `GAID`, but it is strong prior art for signed consequential-action receipts and bounded delegated authority in high-stakes agent interactions.
+AP2, the Agent Payments Protocol, is strong prior art for signed consequential-action evidence and bounded delegated authority.
 
 ![GAID public verification architecture](gaid-diagrams/png/05-public-verification-architecture.png)
 
-This hybrid model offers the best balance of adoption, accountability, and future portability.
+Sources: [DID Core](https://www.w3.org/TR/did-core/), [VC Data Model 2.0](https://www.w3.org/TR/vc-data-model/), [Microsoft Entra Agent ID](https://learn.microsoft.com/en-us/entra/agent-id/agent-identities), [Microsoft Entra Verified ID standards](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-standards?country=us&culture=en-us)
 
-## 12. DPF as an Initial Prototype and Outcome Framework
+## 12. Why staged adoption is the credible path
 
-`DPF` is not being offered as proof that the standards are already fully solved. It is being offered as the initial implementation prototype and proving ground.
+Durable public identifier systems became trusted in stages:
 
-That distinction matters. The prototype is useful precisely because it already contains enough of the runtime and identity posture to make the standards concrete, while still leaving visible gaps that the standards can force into implementable shape.
+- ISBN scaled through delegated national agencies.
+- DNS matured from technical standards to delegated operations to multistakeholder governance.
+- Public certificate ecosystems needed identity proofing, authority obligations, audit, revocation and transparency, not just syntax.
 
-For `TAK`, the prototype already demonstrates:
+Sources: [International ISBN Agency](https://www.isbn-international.org/), [RFC 1034](https://www.rfc-editor.org/info/rfc1034), [RFC 1591](https://www.rfc-editor.org/info/rfc1591), [ICANN history](https://www.icann.org/en/history), [CA/B Forum Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/requirements/).
 
-- route-scoped orchestrator and specialist patterns
-- governed tool exposure through authority intersection
-- proposal-mode approvals
-- runtime prompt assembly with hidden and immutable control blocks
-- audit logging for tool execution
+The same logic applies to the whole family:
 
-For `GAID`, the prototype already demonstrates:
+- **Phase 1, enterprise-private.** Identity, inventory, Gated Permission models, enforced bindings and receipts inside one organization
 
-- stable internal agent registry metadata
-- model binding and tool-grant declarations
-- supervisor and `HITL` posture references
-- early `AIDoc`-like structures
+- **Phase 2, federated.** Cross-boundary trust, portable binding references carried in authorization context, and accredited qualification schemes
 
-The standards therefore produce implementation outcomes for the prototype. Near-term `DPF` outcomes should include:
+- **Phase 3, public.** Verifier interoperability, public badges and status, and independent conformance assessment
 
-- canonical private `GAID` issuance
-- an internal `AIDoc` service
-- a badge registry and evidence model
-- signed or tamper-evident consequential-action receipts
-- `LDAP` / `SCIM` / protocol profile projection
-- later public verification and issuer-facing profiles
 
-This is a crucial part of the proposal. The standards are not only theoretical artifacts. They define what a real platform should build next.
+## 13. Recommendations
 
-## 13. Recommendations for Governments, Standards Bodies, and Enterprises
+**Governments and standards bodies should:**
 
-The recommendations are straightforward.
+- treat runtime governance, agent identity, job qualification and **decision-authority binding** as separate but complementary layers
+- recognize that per-call approval prompts are weak evidence of human oversight, and ask instead for attributable decisions by accountable authorities, enforced deterministically
+- build on MCP, A2A, OAuth transaction tokens, Verifiable Credentials, SLSA, Trace Context and HTTP Message Signatures rather than starting from zero
+- invite systems-engineering bodies to treat AI agents as first-class model elements, so that agent governance can be expressed in SysML v2 and checked against running systems
+- keep liaison with OpenID AIIM, the W3C agent-identity community groups, CoSAI, the Agentic AI Foundation, NIST's agent initiatives and the relevant IETF work
 
-Governments and standards bodies should:
+**Enterprises should:**
 
-- treat runtime governance, agent identity, and job qualification as separate but complementary standards layers
-- build on existing work such as `MCP`, `A2A`, `VC`, `SLSA`, `Trace Context`, and `HTTP Message Signatures` rather than starting from zero
-- establish explicit liaison positions with `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group, `CoSAI`, the `Agentic AI Foundation`, and the relevant `IETF` OAuth and GNAP work
-- recognize accredited issuer governance as a critical dependency for public agent identity
-- prioritize chain-of-custody, non-repudiation, and `HITL` disclosure as first-class concerns
+- stop treating per-call approvals as their oversight story; move human decisions to the class of work, and make everything outside those decisions unreachable
+- name the owning authority for each class of consequential agent action, and record its decisions
+- distinguish self-asserted claims from evidenced claims, and generic capability from job qualification
+- require qualification revalidation when the operating profile, doctrine, routing or data policy changes materially
+- require runtime evidence, linking each receipt to its authorizing decision, for consequential actions
+- measure supervision load and harm together; a falling number of approvals is only good news if harm does not rise
 
-Enterprises should:
+**The agent-tool protocol community should** consider authorization that is scoped to the
+transaction and the situation, not only to the server and scope. The cited MCP revision defines transport authorization, supports operation-specific scope
+challenges and treats untrusted tool annotations as hints. That does not by itself establish this
+proposed work/stage/authority profile. Extension comparisons must name the protocol and proposal
+revisions they actually assessed.
+The existing hooks would carry it:
+- per-request metadata
+- a result type that requires further input
+- an extensions framework
 
-- stop treating agent inventory as a prompt catalog problem
-- adopt structured identity, tool-surface, and oversight metadata now, even before public standards fully mature
-- distinguish self-asserted claims from independently evidenced claims
-- distinguish generic capability evidence from job-specific qualification
-- require qualification revalidation when the operating profile, job doctrine, routing set, or data
-  policy materially changes
-- require runtime evidence for consequential actions
+The source snapshot contains draft permit-handle metadata and structured refusal behavior, as
+N-GPP Annex A records. That source is a candidate implementation for review, not a finalized MCP
+extension or an independently verified interoperability result. A published extension claim still
+needs a pinned contract and target-specific evidence.
 
-Platform vendors should:
+**Platform vendors should:**
 
-- expose stronger structured metadata for tools, skills, prompts, memory, and approval posture
-- make badging and assurance claims machine-readable
-- bind qualification badges to versioned job and operating profiles with current status and expiry
-- support portable identity and receipt semantics across frameworks
+- expose structured, machine-readable metadata for tools, consequence classes, skills, memory and approval posture
+- attest the origin and version of consequence metadata, and test the actual effect boundary; a signature alone does not prove an annotation correct
+- support binding references (who decided, under which version) in authorization context and receipts
+- bind qualification badges to versioned job and operating profiles with status and expiry
 
-The standards themselves should also ship with companion implementation artifacts, not only prose. At minimum that means:
+**The standards should ship with implementation artifacts, not only prose:**
 
-- a `TAK` conformance assertion rubric
-- a `GAID` conformance assertion rubric
-- a `TAK-JSI` conformance assertion rubric
-- a reference implementation statement from the `DPF` prototype
+- conformance assertion rubrics for TAK, GAID and TAK-JSI, which exist as drafts, and for GPP, which has proposed assertions GPP-001 to GPP-015 in the pinned draft
+- executable conformance tests
+- a reference implementation statement from DPF
+- published efficacy measures
 - a clear standards-lifecycle and liaison posture
 
-The most credible near-term disposition is liaison-first. `TAK` should align outward to `AAIF`,
-`NIST`, `CoSAI`, and relevant `IETF` work on authorization and proof-of-possession. `GAID` should
-align outward to `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group,
-`CoSAI`, and the same `IETF` authorization and trust infrastructure work. `TAK-JSI` should align to
-`NIST` evaluation work, AI quality and risk standards, data-quality governance, competence-scheme
-prior art, and versioned occupation/skill taxonomies. No single venue currently owns the full
-problem.
+## 14. A call to the ecosystem
 
-The point is not to wait for a perfect end-state. The point is to move from ad hoc local conventions toward interoperable trust infrastructure.
+Agent tools create concrete governance questions. The cited evidence motivates examining approval design, delegated authority and execution boundaries together. This proposed composition is open for comparison and challenge; its usefulness must be established through versioned implementations and assessment.
 
-## 14. Conclusion
+This paper proposes a concrete starting point:
 
-AI agents are now mature enough to create a standards problem and immature enough that the standards answer is still forming.
+- **GAID**: know who the agent is
+- **TAK-JSI**: know it is fit for the job
+- **GPP**: know who decided it may act, for which class of work, and make everything else unreachable
+- **TAK**: enforce that, deterministically, on every call
+- **MBSE**: so the model of governance is the system that enforces it
+- **DPF**: an open reference context whose claimed controls and limitations can be inspected and challenged
 
-That combination is exactly why action is needed now.
-
-The market already has meaningful building blocks. It has organization-level governance
-frameworks. It has interoperability protocols. It has vendor frameworks. It has credential,
-signature, provenance, and traceability standards. What it does not yet have is a cohesive answer
-to trusted runtime control, trusted agent identity, and job-specific qualification.
-
-This paper therefore proposes a practical direction:
-
-- `TAK` for runtime governance
-- `GAID` for identity, assurance, and traceability
-- `TAK-JSI` for versioned job qualification, surveillance, and revalidation
-- `DPF` as an early proving ground for conformance and refinement
-
-We propose these not as final answers to every policy or platform question, but as a concrete starting point for the standards work that now needs to happen.
+We invite implementers, assessors, standards bodies and systems engineers to test these drafts, report where they fail, and contribute improvements. The standards are open working drafts precisely so that this can happen.
 
 ## References
 
+**Approval fatigue, incidents and market context** (historical accounts retain their dates; selected load-bearing primary sources rechecked 2026-10-16. The [market landscape](agent-governance-market-landscape-2026.md) retains its own dated scope.)
+
+- [Anthropic Engineering: Making Claude Code more secure and autonomous with sandboxing, 2025-10-20](https://anthropic.com/engineering/claude-code-sandboxing)
+- [Anthropic Engineering: How we built Claude Code auto mode, 2026-03-25](https://www.anthropic.com/engineering/claude-code-auto-mode)
+- [Anthropic Engineering: How we contain Claude across products, 2026-05-25](https://www.anthropic.com/engineering/how-we-contain-claude)
+- [Claude blog: Auto mode is now the default in Claude Code, 2026-08-07](https://claude.com/blog/auto-mode-default-in-claude-code)
+- [Cloud Security Alliance Labs: research note on Claude Code auto mode prompt injection, 2026](https://labs.cloudsecurityalliance.org/research/csa-research-note-claude-code-automode-prompt-injection-2026/)
+- [Vance et al., Tuning Out Security Warnings, MIS Quarterly 42(2), 2018](https://misq.umn.edu/pub/skin/frontend/default/misq/pdf/V42I2/14124_RA_VanceJenkins.pdf)
+- [Invariant Labs: GitHub MCP vulnerability, 2025](https://invariantlabs.ai/blog/mcp-github-vulnerability)
+- [Simon Willison: Supabase MCP lethal trifecta, 2025-07-06](https://simonwillison.net/2025/Jul/6/supabase-mcp-lethal-trifecta)
+- [Fortune: Replit agent deletes production database, 2025-07-23](https://fortune.com/2025/07/23/ai-coding-tool-replit-wiped-database-called-it-a-catastrophic-failure)
+- [Wiz: s1ngularity supply-chain attack, 2025](https://www.wiz.io/ko-kr/blog/s1ngularity-supply-chain-attack)
+- [Koi Security: postmark-mcp backdoor, 2025](https://koi.ai/blog/postmark-mcp-npm-malicious-backdoor-email-theft)
+- [Hugging Face: agent intrusion technical timeline, 2026-07-27](https://huggingface.co/blog/agent-intrusion-technical-timeline)
+- [METR: OpenAI–Hugging Face incident investigation, 2026-08-26](https://metr.org/blog/2026-08-26-openai-hugging-face-incident-investigation/)
+- [Simon Willison: The lethal trifecta, 2025-06-16](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)
+- [Meta AI: Agents Rule of Two](https://ai.meta.com/blog/practical-ai-agent-security/)
+- [OWASP LLM06:2025 Excessive Agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/)
+- [OWASP Top 10 for Agentic Applications, 2025-12-09](https://genai.owasp.org/2025/12/09/owasp-top-10-for-agentic-applications-the-benchmark-for-agentic-security-in-the-age-of-autonomous-ai/)
+- [EU AI Act Article 14 (human oversight)](https://ai-act-service-desk.ec.europa.eu/en/ai-act/article-14)
+- [European Commission AI Act implementation timeline, checked 2026-10-16](https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai)
+- [NIST COSAiS: control overlays for securing AI systems](https://csrc.nist.gov/projects/cosais)
+- [Gartner: over 40% of agentic AI projects will be canceled by end of 2027, 2025-06-25](https://www.gartner.com/en/newsroom/press-releases/2025-06-25-gartner-predicts-over-40-percent-of-agentic-ai-projects-will-be-canceled-by-end-of-2027)
+- [AWS Bedrock AgentCore Policy](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html)
+- [OpenFGA task-based authorization, page modified 2026-09-28](https://openfga.dev/docs/modeling/agents/task-based-authorization)
+- [OpenFGA roles and permissions](https://openfga.dev/docs/modeling/roles-and-permissions)
+- [TypeSafe typed inference primitives](https://docs.typesafe.ai/introduction)
+- [Model Context Protocol authorization, 2026-07-28 revision](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
+- [Ibrahim & Li, Overlaying Governance, arXiv 2606.03518, 2026-06](https://arxiv.org/abs/2606.03518)
+- [Architecture & Governance Magazine: Five Decision Rights CIOs Need for Agentic AI, 2026-09-25](https://www.architectureandgovernance.com/artificial-intelligence/five-decision-rights-cios-need-for-agentic-ai/)
+
+**Modelling and systems engineering**
+
+- [INCOSE catalog: Creating Executable Agent-Based Models Using SysML, 2015-07-15](https://www.incose.org/resource/creating-executable-agent-based-models-using-sysml/)
+- [INCOSE: AI Agents for MBSE, 2025-07-17 event description](https://www.incose.org/communities/chapters/americas-sector/canada/events-detail/2023/12/12/default-calendar/incose-canada-practical-insights)
+- [OMG SysML v2](https://www.omg.org/spec/SysML/2.0)
+- [OMG DMN 1.5](https://www.omg.org/spec/DMN/1.5)
+- [OMG BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2)
+- [OMG CMMN 1.1](https://www.omg.org/spec/CMMN/1.1)
+- [OMG SACM 2.3](https://www.omg.org/spec/SACM/2.3)
+- [W3C PROV-O](https://www.w3.org/TR/prov-o/)
+- [MIT STPA handbooks](https://psas.scripts.mit.edu/home/books-and-handbooks/)
+
+**Standards, policy and protocols** (retained from the first edition; venue details verified 2026-07-26 and to be rechecked before external filing)
+
 - [ISO/IEC 42001:2023 Artificial intelligence management system](https://www.iso.org/standard/42001)
-- [ISO/IEC 17024:2026 Conformity assessment - General requirements for bodies operating certification of persons](https://www.iso.org/standard/17024)
+- [ISO/IEC 17024:2026 Conformity assessment - certification of persons](https://www.iso.org/standard/17024)
 - [ISO/IEC 25059:2023 Quality model for AI systems](https://www.iso.org/standard/80655.html)
 - [ISO/IEC 5259-5:2025 Data quality governance](https://www.iso.org/standard/84150.html)
 - [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1)
-- [NIST AI Agent Standards Initiative, February 17, 2026](https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative)
+- [NIST AI Agent Standards Initiative, 2026-02-17](https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative)
 - [NIST AI RMF Playbook - Measure](https://airc.nist.gov/airmf-resources/playbook/measure/)
-- [NIST press release: Announcing the AI Agent Standards Initiative, February 17, 2026](https://www.nist.gov/node/1906621)
-- [NCCoE concept paper: Accelerating the Adoption of Software and AI Agent Identity and Authorization, February 5, 2026](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd)
-- [CAISI RFI on Securing AI Agent Systems, January 12, 2026](https://www.nist.gov/news-events/news/2026/01/caisi-issues-request-information-about-securing-ai-agent-systems)
-- [White House: Public Comment Invited on Artificial Intelligence Action Plan, February 25, 2025](https://www.whitehouse.gov/briefings-statements/2025/02/public-comment-invited-on-artificial-intelligence-action-plan/)
-- [White House: America's AI Action Plan, July 23, 2025](https://www.whitehouse.gov/articles/2025/07/white-house-unveils-americas-ai-action-plan/)
-- [OpenAI: OpenAI's proposals for the U.S. AI Action Plan, March 13, 2025](https://openai.com/global-affairs/openai-proposals-for-the-us-ai-action-plan/)
-- [OpenAI: Our updated Preparedness Framework, April 15, 2025](https://openai.com/index/updating-our-preparedness-framework/)
-- [OpenAI: The next evolution of the Agents SDK, April 15, 2026](https://openai.com/index/the-next-evolution-of-the-agents-sdk)
-- [OpenAI: OpenAI co-founds the Agentic AI Foundation under the Linux Foundation, December 9, 2025](https://openai.com/index/agentic-ai-foundation/)
-- [Anthropic: Introducing the Model Context Protocol, November 25, 2024](https://www.anthropic.com/news/model-context-protocol)
+- [NCCoE concept paper: Software and AI Agent Identity and Authorization, 2026-02-05](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd)
+- [CAISI RFI on Securing AI Agent Systems, 2026-01-12](https://www.nist.gov/news-events/news/2026/01/caisi-issues-request-information-about-securing-ai-agent-systems)
+- [White House: America's AI Action Plan, 2025-07-23](https://www.whitehouse.gov/articles/2025/07/white-house-unveils-americas-ai-action-plan/)
+- [OpenAI: Updated Preparedness Framework, 2025-04-15](https://openai.com/index/updating-our-preparedness-framework/)
+- [OpenAI: The next evolution of the Agents SDK, 2026-04-15](https://openai.com/index/the-next-evolution-of-the-agents-sdk)
+- [Linux Foundation: Agentic AI Foundation, 2025-12-09](https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation?hs_amp=true)
+- [Anthropic: Introducing the Model Context Protocol, 2024-11-25](https://www.anthropic.com/news/model-context-protocol)
 - [Anthropic Responsible Scaling Policy](https://www.anthropic.com/responsible-scaling-policy)
-- [Anthropic: Third-party testing as a key ingredient of AI policy](https://www.anthropic.com/news/third-party-testing/)
-- [Anthropic: Strengthening our safeguards through collaboration with US CAISI and UK AISI, September 12, 2025](https://www.anthropic.com/news/strengthening-our-safeguards-through-collaboration-with-us-caisi-and-uk-aisi)
-- [Linux Foundation: Agentic AI Foundation announcement, December 9, 2025](https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation?hs_amp=true)
-- [AGENTS.md](https://agents.md/)
-- [Model Context Protocol authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
 - [OpenID Foundation AIIM Community Group](https://openid.net/cg/artificial-intelligence-identity-management-community-group/)
 - [OpenID Foundation: Identity Management for Agentic AI](https://openid.net/wp-content/uploads/2025/10/Identity-Management-for-Agentic-AI.pdf)
-- [OIDF response to NIST on AI agent security, March 6, 2026](https://openid.net/wp-content/uploads/2026/03/Attachment1_NIST-2025-0035-0001.pdf)
-- [W3C Agent Identity Registry Protocol Community Group, launched April 24, 2026](https://www.w3.org/community/agent-identity/)
-- [Google Developers Blog: Announcing the Agent2Agent Protocol, April 9, 2025](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/)
-- [Google Developers Blog: Google Cloud donates A2A to Linux Foundation, June 23, 2025](https://developers.googleblog.com/google-cloud-donates-a2a-to-linux-foundation/)
-- [Agent2Agent Protocol specification](https://google-a2a.github.io/A2A/specification/)
-- [Google DeepMind: Strengthening our Frontier Safety Framework, September 22, 2025](https://deepmind.google/discover/blog/strengthening-our-frontier-safety-framework/)
-- [CoSAI: Agentic Identity and Access Management, approved March 20, 2026](https://www.coalitionforsecureai.org/wp-content/uploads/2026/04/agentic-identity-and-access-control.pdf)
-- [OWASP Top 10 for Agentic Applications, December 9, 2025](https://genai.owasp.org/2025/12/09/owasp-top-10-for-agentic-applications-the-benchmark-for-agentic-security-in-the-age-of-autonomous-ai/)
+- [W3C Agent Identity Registry Protocol Community Group, 2026-04-24](https://www.w3.org/community/agent-identity/)
+- [Google: Announcing the Agent2Agent Protocol, 2025-04-09](https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/)
+- [Google Cloud donates A2A to Linux Foundation, 2025-06-23](https://developers.googleblog.com/google-cloud-donates-a2a-to-linux-foundation/)
+- [Google DeepMind: Frontier Safety Framework, 2025-09-22](https://deepmind.google/discover/blog/strengthening-our-frontier-safety-framework/)
+- [CoSAI: Agentic Identity and Access Management, 2026](https://www.coalitionforsecureai.org/wp-content/uploads/2026/04/agentic-identity-and-access-control.pdf)
 - [CSA MAESTRO](https://labs.cloudsecurityalliance.org/maestro/)
 - [MITRE ATLAS](https://atlas.mitre.org/)
-- [EU General-Purpose AI Code of Practice, published July 10, 2025](https://digital-strategy.ec.europa.eu/en/policies/contents-code-gpai)
-- [IMDA Model AI Governance Framework for Agentic AI, January 22, 2026](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai)
-- [Google Cloud: Agent Development Kit overview](https://cloud.google.com/agent-builder/agent-development-kit/overview)
-- [Microsoft Agent Framework Overview, updated February 20, 2026](https://learn.microsoft.com/en-us/agent-framework/overview/)
-- [Microsoft Entra Agent ID, updated May 1, 2026](https://learn.microsoft.com/en-us/entra/agent-id/agent-identities)
-- [Microsoft Entra Workload ID overview](https://learn.microsoft.com/en-us/entra/workload-id/workload-identities-overview)
-- [Microsoft Entra Verified ID supported standards, updated April 9, 2026](https://learn.microsoft.com/en-us/entra/verified-id/verifiable-credentials-standards?country=us&culture=en-us)
-- [ServiceNow AI Control Tower product page](https://www.servicenow.com/products/ai-control-tower.html)
-- [ServiceNow launches AI Control Tower, May 6, 2025](https://newsroom.servicenow.com/press-releases/details/2025/ServiceNow-Launches-AI-Control-Tower-a-Centralized-Command-Center-to-Govern-Manage-Secure-and-Realize-Value-From-Any-AI-Agent-Model-and-Workflow/)
-- [ServiceNow expands AI Control Tower, May 5, 2026](https://newsroom.servicenow.com/press-releases/details/2026/ServiceNow-expands-AI-Control-Tower-to-discover-observe-govern-secure-and-measure-AI-deployed-across-any-system-in-the-enterprise/default.aspx)
-- [Veza introduces AI Agent Security, December 8, 2025](https://veza.com/company/press-room/veza-introduces-ai-agent-security-to-protect-and-govern-ai-agents-at-enterprise-scale/)
-- [Veza introduces Native Access Agents and Enterprise Agent Identity Control Plane, February 25, 2026](https://veza.com/company/press-room/veza-introduces-native-access-agents-to-secure-the-modern-ai-driven-enterprise-with-enterprise-agent-identity-control-plane/)
+- [EU General-Purpose AI Code of Practice, 2025-07-10](https://digital-strategy.ec.europa.eu/en/policies/contents-code-gpai)
+- [IMDA Model AI Governance Framework for Agentic AI, 2026-01-22](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai)
+- [Microsoft Agent Framework overview](https://learn.microsoft.com/en-us/agent-framework/overview/)
+- [Microsoft Entra Agent ID](https://learn.microsoft.com/en-us/entra/agent-id/agent-identities)
+- [ServiceNow expands AI Control Tower, 2026-05-05](https://newsroom.servicenow.com/press-releases/details/2026/ServiceNow-expands-AI-Control-Tower-to-discover-observe-govern-secure-and-measure-AI-deployed-across-any-system-in-the-enterprise/default.aspx)
 - [W3C Verifiable Credentials Data Model v2.0](https://www.w3.org/TR/vc-data-model/)
 - [1EdTech Open Badges 3.0](https://standards.1edtech.org/open-badges/specifications/standards/v3p0/cert)
 - [O*NET Content Model](https://www.onetcenter.org/content.html)
 - [ESCO](https://esco.ec.europa.eu/en/about-esco)
-- [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did-core/)
 - [W3C Trace Context](https://www.w3.org/TR/trace-context/)
 - [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/info/rfc9421)
-- [RFC 4512 Lightweight Directory Access Protocol (LDAP): Directory Information Models](https://www.rfc-editor.org/rfc/rfc4512.html)
-- [RFC 7643 System for Cross-domain Identity Management: Core Schema](https://www.rfc-editor.org/rfc/rfc7643)
-- [RFC 7644 System for Cross-domain Identity Management: Protocol](https://www.rfc-editor.org/rfc/rfc7644)
 - [RFC 9728 OAuth 2.0 Protected Resource Metadata](https://www.rfc-editor.org/rfc/rfc9728)
-- [RFC 9635 Grant Negotiation and Authorization Protocol (GNAP)](https://www.rfc-editor.org/rfc/rfc9635)
-- [RFC 9767 GNAP Resource Server Connections](https://www.rfc-editor.org/rfc/rfc9767)
-- [RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://www.rfc-editor.org/rfc/rfc9449)
-- [RFC 9162 Certificate Transparency Version 2.0](https://www.rfc-editor.org/rfc/rfc9162)
+- [RFC 9449 OAuth 2.0 DPoP](https://www.rfc-editor.org/rfc/rfc9449)
+- [IETF OAuth Transaction Tokens draft -08](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-transaction-tokens-08)
+- [RFC 9162 Certificate Transparency 2.0](https://www.rfc-editor.org/rfc/rfc9162)
 - [SCITT architecture draft -22](https://datatracker.ietf.org/doc/draft-ietf-scitt-architecture/22/)
 - [SLSA Provenance v1.2](https://slsa.dev/spec/v1.2/provenance)
-- [in-toto Attestation Framework Specification](https://github.com/in-toto/attestation/blob/main/spec/README.md)
-- [Sigstore Documentation](https://docs.sigstore.dev/)
-- [C2PA Content Credentials Technical Specification v2.2](https://spec.c2pa.org/specifications/specifications/2.2/specs/C2PA_Specification.html)
-- [C2PA Implementation Guidance](https://spec.c2pa.org/specifications/specifications/2.4/guidance/Guidance.html)
+- [in-toto Attestation Framework](https://github.com/in-toto/attestation/blob/main/spec/README.md)
 - [AP2 Agent Payments Protocol core concepts](https://ap2-protocol.org/topics/core-concepts/)
-- [ISO/IEC 27701:2025 Privacy information management systems](https://www.iso.org/standard/85819.html)
-- [ISO/IEC 12792:2025 Transparency taxonomy of AI systems](https://www.iso.org/standard/84111.html)
-- [ISO/IEC DIS 42102 Framework for characterizing AI system methods and capabilities](https://www.iso.org/standard/86898.html)
 - [Package URL / ECMA-427](https://www.packageurl.org/)
 - [International ISBN Agency](https://www.isbn-international.org/)
-- [National ISBN Agencies](https://www.isbn-international.org/content/national-isbn-agencies)
 - [RFC 1034 Domain Names - Concepts and Facilities](https://www.rfc-editor.org/info/rfc1034)
-- [RFC 1035 Domain Names - Implementation and Specification](https://www.rfc-editor.org/info/rfc1035)
 - [RFC 1591 Domain Name System Structure and Delegation](https://www.rfc-editor.org/info/rfc1591)
 - [ICANN history](https://www.icann.org/en/history)
-- [IANA about](https://www.iana.org/about.html)
 - [CA/B Forum Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/requirements/)
-- [NIST blockchain identity white paper](https://csrc.nist.gov/publications/detail/white-paper/2020/01/14/a-taxonomic-approach-to-understanding-emerging-blockchain-idms/final)
+- [DID Core](https://www.w3.org/TR/did-core/)
+
+## Revision history
+
+**Revision 1 — 2026-04-18.** First edition: TAK, GAID, TAK-JSI
+
+**Revision 2 — 2026-10-01.** Added §7.4 (model to machine: notation, compiler, design-rule checks, critical-call gating, permits, the honest forgery boundary), the Build Studio findings in §8.3, and the transaction-scoped MCP recommendation in §13. Reframed around approval fatigue and the incident record. Added GPP as the fourth cornerstone, decision scopes (§6), MBSE with AI as a first-class participant (§7), the DPF claim-to-evidence ledger (§8) and efficacy measures (§9). Narrowed the first edition's "one missing control plane" claim (§4.4). Refreshed market references (BI-6CC40F77).
+
+**Revision 2.1 — 2026-10-01.** Added the Gated Permission pair figure to §4.3 and updated the stage-tool gap count in §8 (21 recorded, 13 remaining). Added four §8.2 ledger rows for GPP Phase 1–2 as built: shadow permits, per-binding enforcement with an empty enforced set, the single plan → build transition path, and the unmediated-reach ratchet. Published GPP as a Word edition alongside the other standards (BI-56C4EFCF).
+
+**Revision 2.2 — 2026-10-16.** Repaired cohort, prior-art, adoption and comparison claims; aligned consequential parameter binding; pinned source/evidence identities and the runtime-unverified ledger; qualified harm measures. No runtime or conformance result added (BI-6CC40F77).

@@ -1,6 +1,9 @@
+import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { ok } from "@/lib/shared/action-result";
+// Mocked by self-upgrade.test.ts, which registers these tests.
+import { prePullReleaseDoctoolsImage } from "@/lib/self-upgrade/doctools-release-image";
 
 type TestContext = { mocks: any; runSelfUpgrade: (input: any) => Promise<any>; installState: string; installStateHash: string };
 
@@ -45,6 +48,90 @@ export function configureReleaseUpgradeTest(input: {
   });
 }
 
+export function registerReleaseWorkerTargetRecoveryTests(input: {
+  mocks: any;
+  runSelfUpgrade: (params: any) => Promise<any>;
+  installState: string;
+}) {
+  const sourceSha = "f".repeat(40);
+  const currentConfigDigest = `sha256:${"a".repeat(64)}`;
+  const targetConfigDigest = `sha256:${"c".repeat(64)}`;
+  const candidate = {
+    tag: "v2.0.0", sourceSha, channelDigest: `sha256:${"b".repeat(64)}`,
+    platformManifestDigest: `sha256:${"c".repeat(64)}`, configDigest: targetConfigDigest,
+    platformOs: "linux", platformArchitecture: "amd64",
+  };
+  const configure = () => configureReleaseUpgradeTest({
+    mocks: input.mocks, installState: input.installState, sourceSha,
+    currentConfigDigest, targetConfigDigest,
+  });
+
+  it("uses verified target evidence when the registry is unavailable at worker start", async () => {
+    configure();
+    input.mocks.readRegistryReleaseCandidate.mockResolvedValue({ ok: false, reason: "registry-unavailable" });
+    input.mocks.loadVerifiedReleaseTargetEvidence.mockResolvedValue(candidate);
+    input.mocks.getRun.mockResolvedValue({ targetSha: sourceSha, targetTag: candidate.tag });
+    input.mocks.updateRunPlan.mockResolvedValue({ runId: "SUR-VERIFIED" });
+    try {
+      await expect(input.runSelfUpgrade({ triggeredBy: "ops", runId: "SUR-VERIFIED" }))
+        .resolves.toMatchObject({ status: "succeeded", runId: "SUR-VERIFIED" });
+      expect(input.mocks.skipRun).not.toHaveBeenCalled();
+      expect(input.mocks.deferAdmittedRunForRedispatch).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("returns an admitted run to reconciliation when no verified target is available", async () => {
+    configure();
+    input.mocks.readRegistryReleaseCandidate.mockResolvedValue({ ok: false, reason: "registry-unavailable" });
+    input.mocks.loadVerifiedReleaseTargetEvidence.mockResolvedValue(null);
+    input.mocks.deferAdmittedRunForRedispatch.mockResolvedValue(true);
+    try {
+      await expect(input.runSelfUpgrade({ triggeredBy: "ops", runId: "SUR-RECONCILE" }))
+        .resolves.toMatchObject({ reconciling: true, reason: "registry-unavailable", runId: "SUR-RECONCILE" });
+      expect(input.mocks.deferAdmittedRunForRedispatch).toHaveBeenCalledWith("SUR-RECONCILE", "release-target-registry-unavailable");
+      expect(input.mocks.skipRun).not.toHaveBeenCalled();
+      expect(input.mocks.startQuiescence).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("pre-pulls the target release's dpf-doctools, and a pull that does not land fails the run before the drain (BI-698B7F9A)", async () => {
+    configure();
+    vi.mocked(prePullReleaseDoctoolsImage).mockResolvedValueOnce({ outcome: "failed", reason: "could not download the v2.0.0 document converter: toomanyrequests" });
+    try {
+      await expect(input.runSelfUpgrade({ triggeredBy: "ops" }))
+        .resolves.toMatchObject({ ok: false, status: "failed", reason: "doctools-prepull-failed" });
+      expect(prePullReleaseDoctoolsImage).toHaveBeenCalledWith(expect.objectContaining({ tag: "v2.0.0", ghcrOwner: "opendigitalproductfactory" }));
+      expect(input.mocks.failRun).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("doctools-prepull-failed"), expect.stringContaining("doctools-prepull-failed"));
+      expect(input.mocks.startQuiescence).not.toHaveBeenCalled();
+      expect(input.mocks.runPromoter).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("fails closed when the worker target differs from the durable admission", async () => {
+    configure();
+    input.mocks.getRun.mockResolvedValue({ targetSha: "e".repeat(40), targetTag: candidate.tag });
+    try {
+      await expect(input.runSelfUpgrade({ triggeredBy: "ops", runId: "SUR-DRIFT" }))
+        .resolves.toMatchObject({ ok: false, status: "failed", reason: "admission-target-drift" });
+      expect(input.mocks.failRun).toHaveBeenCalledWith("SUR-DRIFT", expect.stringContaining("admission-target-drift"));
+      expect(input.mocks.startQuiescence).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("terminalizes registry integrity failures instead of using cached evidence", async () => {
+    configure();
+    input.mocks.readRegistryReleaseCandidate.mockResolvedValue({ ok: false, reason: "config-digest-mismatch" });
+    input.mocks.loadVerifiedReleaseTargetEvidence.mockResolvedValue(candidate);
+    try {
+      await expect(input.runSelfUpgrade({ triggeredBy: "ops", runId: "SUR-INTEGRITY" }))
+        .resolves.toMatchObject({ ok: false, status: "failed", reason: "release-target-integrity-failed", releaseStatus: "config-digest-mismatch" });
+      expect(input.mocks.loadVerifiedReleaseTargetEvidence).not.toHaveBeenCalled();
+      expect(input.mocks.failRun).toHaveBeenCalledWith("SUR-INTEGRITY", "release-target-integrity-failed: config-digest-mismatch");
+      expect(input.mocks.startQuiescence).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+}
+
 export function registerInstallStateHandoffTests({ mocks, runSelfUpgrade, installState, installStateHash }: TestContext) {
   it("resolves and validates readiness before quiescence, then promotes the same digest", async () => {
     const order: string[] = [];
@@ -52,10 +139,54 @@ export function registerInstallStateHandoffTests({ mocks, runSelfUpgrade, instal
     mocks.resolvePromoterArtifact.mockImplementation(async () => { order.push("resolve"); return { digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }; });
     mocks.runPromoterReadiness.mockImplementation(async () => { order.push("readiness"); return { exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash: installStateHash, projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" }; });
     mocks.recordPromoterReadiness.mockImplementation(async (_runId: string, report: any) => { order.push("evidence"); persistedHandoff = report.migrationHandoff; return {}; });
-    mocks.startQuiescence.mockImplementation(async () => { order.push("quiescence"); return { runId: "QR-1", awaitReady: async () => ({ ok: true, outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }; });
+    mocks.startQuiescence.mockImplementation(async () => { order.push("quiescence"); return { runId: "QR-1", awaitReady: async () => ({ ...ok(), outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }; });
     mocks.runPromoter.mockImplementation(async (params: any) => { order.push("promotion"); expect(params.promoterImage).toBe(`sha256:${"d".repeat(64)}`); expect(params.installStateMigrationHandoff).toBe(persistedHandoff); return { exitCode: 0, stdout: "", stderr: "" }; });
     await runSelfUpgrade({ triggeredBy: "ops" });
     expect(order).toEqual(["resolve", "readiness", "evidence", "quiescence", "promotion"]);
+  });
+
+  it("re-binds the handoff after the drain when a host-side writer moved install-state.json, then promotes (BI-95DF1BFC)", async () => {
+    // SUR-4758058F: the agent-toolchain bootstrap rewrote install-state.json
+    // three minutes into the quiescence drain. The handoff had been verified
+    // BEFORE the drain, so promote.sh refused the stale envelope at
+    // install-state-migrate. Readiness must re-run against the moved bytes.
+    const movedState = `${installState.trim().replace(/}$/, ',"agentToolchain":{"appliedAt":"2026-09-08T22:22:43Z"}}')}`;
+    const movedHash = createHash("sha256").update(movedState).digest("hex");
+    const order: string[] = [];
+    const handoffs: unknown[] = [];
+    let currentState = installState;
+    mocks.readFile.mockImplementation(async (path: string) => path.endsWith("install-state.json") ? currentState : "s".repeat(32));
+    mocks.resolvePromoterArtifact.mockImplementation(async () => ({ digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }));
+    mocks.runPromoterReadiness.mockImplementation(async () => {
+      order.push("readiness");
+      const sourceHash = currentState === installState ? installStateHash : movedHash;
+      return { exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash, projectionHash: "b".repeat(64), fromSchemaVersion: 2, toSchemaVersion: 2 }), stderr: "" };
+    });
+    mocks.recordPromoterReadiness.mockImplementation(async (_runId: string, report: any) => { handoffs.push(report.migrationHandoff); return {}; });
+    mocks.startQuiescence.mockImplementation(async () => {
+      order.push("quiescence");
+      return { runId: "QR-1", awaitReady: async () => { currentState = movedState; order.push("state-moved"); return { ...ok(), outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }; } };
+    });
+    mocks.runPromoter.mockImplementation(async (params: any) => {
+      order.push("promotion");
+      expect(params.installStateMigrationHandoff).toBe(handoffs[1]);
+      expect(params.installStateMigrationHandoff.envelope.sourceHash).toBe(movedHash);
+      return { exitCode: 0, stdout: "", stderr: "" };
+    });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ status: "succeeded" });
+    expect(order).toEqual(["readiness", "quiescence", "state-moved", "readiness", "promotion"]);
+    expect(handoffs).toHaveLength(2);
+    expect(mocks.failRun).not.toHaveBeenCalled();
+  });
+
+  it("does not re-run readiness after the drain when install-state.json did not move", async () => {
+    mocks.resolvePromoterArtifact.mockImplementation(async () => ({ digest: `sha256:${"d".repeat(64)}`, sourceSha: "abc1234deadbeef", contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } }));
+    mocks.runPromoterReadiness.mockImplementation(async () => ({ exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash: installStateHash, projectionHash: "b".repeat(64), fromSchemaVersion: 2, toSchemaVersion: 2 }), stderr: "" }));
+    mocks.startQuiescence.mockImplementation(async () => ({ runId: "QR-1", awaitReady: async () => ({ ...ok(), outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }));
+    mocks.runPromoter.mockImplementation(async () => ({ exitCode: 0, stdout: "", stderr: "" }));
+    await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(mocks.runPromoterReadiness).toHaveBeenCalledTimes(1);
   });
 
   it.each(["missing", "tampered", "expired", "wrong-run", "wrong-digest", "changed-source", "wrong-identity"])("rejects %s migration evidence before quiescence", async (kind) => {

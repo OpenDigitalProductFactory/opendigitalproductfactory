@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "contextual-reconnect",
+  "decisionInteractionId": "DI-55FE7792E84B",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ProviderDetailForm.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "contextual-reconnect",
+      "disconnect-first"
+    ]
+  },
+  "notes": "Governed option scoring after source reproduction: preserve credentials, reuse OAuth action and quiescence probe. 16 affected regression tests passed. Browser/live validation pending canonical deployment."
+}

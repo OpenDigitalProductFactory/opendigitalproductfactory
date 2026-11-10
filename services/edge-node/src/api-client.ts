@@ -5,6 +5,8 @@
 
 import { request } from "undici";
 
+import type { FederationCandidateSnapshot } from "@dpf/validators";
+
 export type EnrollRequest = {
   displayName: string;
   platform: "darwin" | "win32" | "linux";
@@ -152,6 +154,26 @@ export class AuthorityApiClient {
   ): Promise<Record<string, unknown>> {
     return this.post<Record<string, unknown>>(
       "/api/v1/edge/discovery-runs",
+      nodeToken,
+      body,
+    );
+  }
+
+  /**
+   * POST /api/v1/edge/federation-candidates — report the nearby DPF installs
+   * this node found on its segment.
+   *
+   * The body is a `FederationCandidateSnapshot`; the scan loop validates against
+   * that schema before calling, and the Authority parses with the same one. A
+   * candidate is an untrusted setup suggestion — pairing is decided at the
+   * Authority against the pinned organization root, never here.
+   */
+  async submitFederationCandidates(
+    nodeToken: string,
+    body: FederationCandidateSnapshot,
+  ): Promise<Record<string, unknown>> {
+    return this.post<Record<string, unknown>>(
+      "/api/v1/edge/federation-candidates",
       nodeToken,
       body,
     );

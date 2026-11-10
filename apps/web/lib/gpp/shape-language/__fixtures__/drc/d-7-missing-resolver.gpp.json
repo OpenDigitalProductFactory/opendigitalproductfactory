@@ -1,0 +1,60 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-d7-missing-resolver",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-d7-missing-resolver",
+  "description": "Seeded D-7: an enforced gate names a resolver that is not an exported function.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "governed-decision",
+        "condition": "The accountable owner decides stage a.",
+        "decisionScope": "drc-missing-resolver-scope",
+        "gate": {
+          "authority": "wwmd",
+          "mode": "enforced",
+          "blocking": true,
+          "resolution": "doctrine",
+          "resolver": {
+            "module": "lib/gpp/binding-enforcement",
+            "exportName": "noSuchResolver"
+          }
+        }
+      },
+      "evidence": [
+        "decision-record"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

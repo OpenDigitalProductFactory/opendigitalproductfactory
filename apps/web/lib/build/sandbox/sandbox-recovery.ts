@@ -7,6 +7,8 @@ import {
   buildSandboxBranchSwitchPrepCommand,
   buildSandboxCommitInFlightWorkCommand,
   buildSandboxGitCleanCommand,
+  ensureBuildWorktree,
+  isBuildWorktreeIsolationEnabled,
   wrapSandboxGitCommand,
 } from "./build-branch";
 import type {
@@ -54,6 +56,7 @@ export type RecoverSandboxArgs = {
   diagnose?: (buildId: string) => Promise<SandboxReadinessSnapshot>;
   runCommand?: (command: string, args: string[]) => Promise<string>;
   recordActivity?: (buildId: string, summary: string) => Promise<void>;
+  ensureWorktree?: (buildId: string) => Promise<unknown>;
   db?: SandboxRecoveryDb;
   now?: Date;
 };
@@ -173,6 +176,19 @@ async function checkoutRegisteredBranch(args: RecoverSandboxArgs & {
       message: "Sandbox recovery cannot checkout the registered branch because this build has no buildBranch on record.",
       snapshot: args.before,
     };
+  }
+
+  // BI-5C4933EB: with per-build worktree isolation the build branch lives in
+  // /workspace/.builds/<buildId>; never check it out in the shared root (which
+  // stays on client/<id>). Re-materialize the build's worktree instead.
+  if (isBuildWorktreeIsolationEnabled()) {
+    await (args.ensureWorktree ?? ensureBuildWorktree)(args.buildId);
+    await recordRecoveryActivity(
+      args,
+      args.db,
+      `sandbox_recovery: checkout_registered_branch ${branchName}`,
+    );
+    return successWithSnapshot(args.buildId, "Registered build worktree materialized.", args.diagnose);
   }
 
   const command = wrapSandboxGitCommand([

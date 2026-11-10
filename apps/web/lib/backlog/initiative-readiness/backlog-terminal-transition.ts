@@ -2,18 +2,16 @@ import { createHash } from "node:crypto";
 
 import { prisma } from "@dpf/db";
 
-import {
-  resolveCompletionEvidence,
-  type CompletionEvidenceRuntimeDb,
-  type ResolveCompletionEvidenceResult,
-} from "@/lib/backlog/completion-evidence-runtime";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-import { projectBacklogItemReadiness, type InitiativeReadinessActivity } from "./entry-adapter";
 import {
-  reconcileInitiativeObjectives,
-  type ObjectiveReconciliationActivity,
-} from "./objective-reconciliation";
+  BACKLOG_COMPLETION_ITEM_SELECT,
+  evaluateBacklogItemCompletion,
+  type BacklogCompletionDb,
+  type BacklogCompletionDependencies,
+  type BacklogCompletionItem,
+} from "./backlog-completion-evaluation";
+import type { DeploymentClosureProof } from "./deployment-closure";
 import {
   executeGovernedTerminalTransition,
   type GovernedTerminalTransitionResult,
@@ -21,59 +19,43 @@ import {
   type TerminalAuthority,
   type TerminalTransitionDb,
 } from "./terminal-transition-repository";
+import { refreshMergeSignalTrunk } from "./merge-delivery-signal";
+import { prepareCurrentDesignObservation } from "./canonical-artifact-discovery";
 
-type BacklogTerminalItem = {
-  id: string;
-  itemId: string;
-  status: string;
-  workType: string | null;
-  type: string | null;
-  source: string | null;
-  scopeKind: string | null;
-  archetypeCategories: string[];
-  archetypeIds: string[];
-  organizationId: string | null;
-  epicId: string | null;
-  claimedAt: Date | null;
-  createdAt: Date;
-  activeBuild: { kind: string; verificationOut: unknown; uxVerificationStatus: string | null } | null;
-};
-
-type BacklogTerminalActivity = ObjectiveReconciliationActivity & {
-  gateKey: string | null;
-  backlogItemId: string;
-};
-
-type BacklogTerminalClient = {
+type BacklogTerminalClient = BacklogCompletionDb & {
   $queryRawUnsafe(query: string, ...values: unknown[]): Promise<unknown>;
   backlogItem: {
-    findFirst(args: unknown): Promise<BacklogTerminalItem | null>;
-    findUnique(args: unknown): Promise<BacklogTerminalItem | null>;
+    findFirst(args: unknown): Promise<BacklogCompletionItem | null>;
+    findUnique(args: unknown): Promise<BacklogCompletionItem | null>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
-  backlogItemActivity: {
-    findMany(args: unknown): Promise<BacklogTerminalActivity[]>;
+  backlogItemActivity: BacklogCompletionDb["backlogItemActivity"] & {
     create(args: unknown): Promise<unknown>;
   };
   authorizationDecisionLog: { create(args: unknown): Promise<unknown> };
 };
 
 type BacklogTerminalDb = TerminalTransitionDb;
-type ProjectReadiness = typeof projectBacklogItemReadiness;
-type ReconcileObjectives = typeof reconcileInitiativeObjectives;
-type ResolveEvidence = typeof resolveCompletionEvidence;
 
 function factsDigest(value: unknown) {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
 }
 
-function deliveryState(result: ResolveCompletionEvidenceResult) {
-  if (result.kind !== "evaluated") return "missing" as const;
-  if (result.verdict.allowed) return "pass" as const;
-  return result.verdict.blockers.some((entry) => ["newer-failure", "invalid-evidence", "foreign-evidence"].includes(entry.code))
-    ? "fail" as const
-    : "missing" as const;
-}
+// The merge-through-gates signal lives in ./merge-delivery-signal (BI-B04A0203);
+// re-exported so existing importers keep one entry point.
+export {
+  mergeSignalRoots,
+  mergeSignalUnavailableReason,
+  pullRequestNumbersFromActivities,
+  refreshMergeSignalTrunk,
+  resolveMergeSignalFromRefs,
+  type MergeDeliverySignal,
+  type ResolveMergeDelivery,
+} from "./merge-delivery-signal";
+
+// The completion evaluation lives in ./backlog-completion-evaluation
+// (BI-094B41AC), shared with the read projection; re-exported for importers.
+export { isDirectMergePlatformWork, type ResolveHasDesignSpec } from "./backlog-completion-evaluation";
 
 export async function completeBacklogItemTransition(args: {
   db?: BacklogTerminalDb;
@@ -85,15 +67,23 @@ export async function completeBacklogItemTransition(args: {
   actor: TerminalActor;
   authority: TerminalAuthority;
   evaluatedAt?: string;
-  dependencies?: {
-    resolveCompletionEvidence?: ResolveEvidence;
-    reconcileObjectives?: ReconcileObjectives;
-    projectReadiness?: ProjectReadiness;
-  };
+  dependencies?: BacklogCompletionDependencies;
+  /** Records the delivered work's outcome observation (BI-42399593); injectable for tests. */
+  recordDeliveredOutcome?: RecordDeliveredOutcome;
 }): Promise<GovernedTerminalTransitionResult> {
   const db = args.db ?? (prisma as unknown as BacklogTerminalDb);
   const evaluatedAt = args.evaluatedAt ?? new Date().toISOString();
-  let lockedItem: BacklogTerminalItem | null = null;
+  let lockedItem: BacklogCompletionItem | null = null;
+  let deployment: DeploymentClosureProof | null = null;
+  let acceptanceState = "missing";
+  let closureFollowsDelivery = false;
+  let customerReported = false;
+  // BI-DC2758DE: refresh the trunk the merge signal reads before the
+  // transaction opens; the signal itself never touches the network.
+  if (!args.dependencies?.resolveMergeDelivery) await refreshMergeSignalTrunk();
+  const currentDesign = await (args.dependencies?.prepareCurrentDesign ?? prepareCurrentDesignObservation)({
+    itemId: args.itemId, db: db as never,
+  });
   return executeGovernedTerminalTransition({
     db,
     actor: args.actor,
@@ -105,79 +95,67 @@ export async function completeBacklogItemTransition(args: {
         select: {
           id: true, itemId: true, status: true, workType: true, type: true, source: true,
           scopeKind: true, archetypeCategories: true, archetypeIds: true, organizationId: true,
-          epicId: true, claimedAt: true, createdAt: true,
+          epicId: true, claimedAt: true, createdAt: true, digitalProductId: true,
           activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
+          productObjectiveWork: { select: { id: true }, take: 1 },
         },
       });
       if (!found) throw new Error(`Backlog item ${args.itemId} not found.`);
       await tx.$queryRawUnsafe('SELECT "id" FROM "BacklogItem" WHERE "id" = $1 FOR UPDATE', found.id);
-      lockedItem = await tx.backlogItem.findUnique({ where: { id: found.id }, select: {
-        id: true, itemId: true, status: true, workType: true, type: true, source: true,
-        scopeKind: true, archetypeCategories: true, archetypeIds: true, organizationId: true,
-        epicId: true, claimedAt: true, createdAt: true,
-        activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
-      } });
+      lockedItem = await tx.backlogItem.findUnique({ where: { id: found.id }, select: BACKLOG_COMPLETION_ITEM_SELECT });
       if (!lockedItem) throw new Error(`Backlog item ${args.itemId} disappeared during terminal evaluation.`);
       if (lockedItem.status !== args.expectedStatus) {
         throw new Error(`Backlog item ${lockedItem.itemId} expected status=${args.expectedStatus}, got ${lockedItem.status}.`);
       }
-      const activities = await tx.backlogItemActivity.findMany({
-        where: { backlogItemId: lockedItem.id, kind: { in: [
-          "initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage",
-          "initiative_objective_mapping", "evidence",
-        ] } },
-        orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-        take: 500,
-        select: { id: true, backlogItemId: true, kind: true, gateKey: true, recordedAt: true, payload: true },
-      });
-      const completion = await (args.dependencies?.resolveCompletionEvidence ?? resolveCompletionEvidence)(
-        tx as unknown as CompletionEvidenceRuntimeDb,
-        { itemId: lockedItem.itemId, rawManifest: args.completionEvidence, now: new Date(evaluatedAt) },
-      );
-      const reconciliation = (args.dependencies?.reconcileObjectives ?? reconcileInitiativeObjectives)({
-        itemId: lockedItem.itemId,
-        itemRowId: lockedItem.id,
-        activities,
-      });
-      const delivery = deliveryState(completion);
-      const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
-        item: { ...lockedItem, activeBuildKind: lockedItem.activeBuild?.kind ?? null },
-        activities: activities as InitiativeReadinessActivity[],
-        target: "completion",
+      let evaluated = await evaluateBacklogItemCompletion({
+        currentDesign: await currentDesign.admissionGuard(tx as never),
+        db: tx,
+        item: lockedItem,
+        rawManifest: args.completionEvidence,
         transitionObject: { kind: "backlog-item", id: lockedItem.id, expectedVersion: args.expectedStatus, targetState: "done" },
-        authorization: "pass",
-        capsuleIdentity: "pass",
-        completion: {
-          deliveryEvidence: delivery,
-          acceptanceEvidence: reconciliation.state === "pass" ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
-          objectiveReconciliation: reconciliation.state === "pass" ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
-          objectiveBaselineConflict: reconciliation.state === "conflict",
-          projectionError: reconciliation.state === "malformed",
-          evidenceRefs: {
-            DELIVERY_EVIDENCE_REQUIRED: completion.kind === "evaluated"
-              ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
-              : [],
-            ACCEPTANCE_EVIDENCE_REQUIRED: reconciliation.evidenceRefs,
-            OBJECTIVE_RECONCILIATION_REQUIRED: reconciliation.evidenceRefs,
-          },
-        },
         evaluatedAt,
+        ...(args.dependencies ? { dependencies: args.dependencies } : {}),
       });
+      // Body criteria are scoped facts, not a spec-approval or acceptance receipt.
+      // Mint only on the existing authorized mutation; read projections stay pure.
+      if (evaluated.decision.shapeDecision?.effective === "medium" && evaluated.delivery === "pass"
+        && [...evaluated.decision.blockers, ...evaluated.decision.unmet]
+          .some((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED")) {
+        const { ensureItemBodyBaseline } = await import("./body-baseline-persistence");
+        await ensureItemBodyBaseline(tx as never, { item: lockedItem, profile: evaluated.decision.profile,
+          effectiveShape: evaluated.decision.shapeDecision.effective,
+          actor: args.actor, authority: args.authority });
+        evaluated = await evaluateBacklogItemCompletion({ db: tx, item: lockedItem,
+          currentDesign: await currentDesign.admissionGuard(tx as never),
+          rawManifest: args.completionEvidence,
+          transitionObject: { kind: "backlog-item", id: lockedItem.id, expectedVersion: args.expectedStatus, targetState: "done" },
+          evaluatedAt, ...(args.dependencies ? { dependencies: args.dependencies } : {}) });
+      }
+      deployment = evaluated.deployment;
+      acceptanceState = evaluated.acceptanceState;
+      closureFollowsDelivery = evaluated.closureFollowsDelivery;
+      customerReported = evaluated.customerReported;
       return {
-        governed: projected.governed,
-        decision: projected.decision,
+        completionInputContext: evaluated.completionInputContext ?? null,
+        governed: evaluated.governed,
+        decision: evaluated.decision,
         anchorBacklogItemId: lockedItem.id,
         factsDigest: factsDigest({
           itemId: lockedItem.itemId,
           rowId: lockedItem.id,
           expectedStatus: args.expectedStatus,
-          baselineId: reconciliation.baselineId,
-          objectiveState: reconciliation.state,
-          objectiveEvidenceRefs: reconciliation.evidenceRefs,
-          deliveryState: delivery,
-          deliveryEvidenceRefs: completion.kind === "evaluated"
-            ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
-            : [],
+          baselineId: evaluated.reconciliation.baselineId,
+          objectiveState: evaluated.reconciliation.state,
+          objectiveEvidenceRefs: evaluated.reconciliation.evidenceRefs,
+          deliveryState: evaluated.delivery,
+          mergedThroughGates: evaluated.mergedThroughGates,
+          deployment,
+          acceptanceState,
+          // No longer a gate (DI-273E6E15C8EB) but still worth recording: a
+          // reader reconciling a receipt can tell whether this merge carried a
+          // design spec or was recognised on the merge alone.
+          hasDesignSpec: evaluated.hasDesignSpec,
+          deliveryEvidenceRefs: evaluated.deliveryEvidenceRefs,
           evaluatedAt,
         }),
       };
@@ -185,27 +163,106 @@ export async function completeBacklogItemTransition(args: {
     mutate: async (genericTx) => {
       const tx = genericTx as unknown as BacklogTerminalClient;
       if (!lockedItem) throw new Error("Terminal readiness did not resolve a backlog item.");
+      const closure = deliveryClosureRecord({ deployment, closureFollowsDelivery, acceptanceState, customerReported });
+      const resolution = closure
+        ? `${args.resolution}\n${closure.summary}`
+        : args.resolution;
       const updated = await tx.backlogItem.updateMany({
         where: { id: lockedItem.id, status: args.expectedStatus },
         data: {
           ...args.additionalData,
           status: "done",
-          completedAt: new Date(evaluatedAt),
-          resolution: args.resolution,
+          ...(args.expectedStatus === "done" ? {} : { completedAt: new Date(evaluatedAt) }),
+          resolution,
           claimStatus: "released",
         },
       });
-      if (updated.count === 1) {
+      if (updated.count === 1 && args.expectedStatus !== "done") {
         await tx.backlogItemActivity.create({ data: {
           backlogItemId: lockedItem.id,
           kind: "status_change",
-          summary: `${args.expectedStatus} → done`,
-          payload: { from: args.expectedStatus, to: "done", resolution: args.resolution },
+          summary: `${args.expectedStatus} → done${closure ? ` (${closure.payload.closureBasis}; acceptance ${closure.payload.acceptanceObligation})` : ""}`,
+          payload: { from: args.expectedStatus, to: "done", resolution, ...(closure?.payload ?? {}) },
           recordedById: args.actor.humanContextRef,
           recordedByAgentId: args.actor.agentContextRef,
         } });
+        await recordDeliveredOutcomeIsolated(genericTx, {
+          itemId: lockedItem.itemId,
+          backlogItemRowId: lockedItem.id,
+          observedAt: new Date(evaluatedAt),
+        }, args.recordDeliveredOutcome ?? defaultRecordDeliveredOutcome);
       }
       return updated.count;
     },
   });
+}
+
+export type RecordDeliveredOutcome = (
+  tx: unknown,
+  input: { backlogItemRowId: string; observedAt: Date },
+) => Promise<unknown>;
+
+const defaultRecordDeliveredOutcome: RecordDeliveredOutcome = async (tx, input) => {
+  const { recordDeliveredWorkOutcome } = await import("@/lib/product-management/delivered-work-outcomes-repository");
+  return recordDeliveredWorkOutcome(tx as never, input);
+};
+
+/**
+ * BI-42399593: record the delivered work's outcome observation in the same
+ * transaction as the delivery, so the two commit together, but behind a
+ * savepoint: a recording failure rolls back only the recording and never
+ * blocks or reverses the delivery. A client that cannot open a savepoint
+ * records nothing rather than risk the delivery.
+ */
+async function recordDeliveredOutcomeIsolated(
+  tx: unknown,
+  input: { itemId: string; backlogItemRowId: string; observedAt: Date },
+  record: RecordDeliveredOutcome,
+): Promise<void> {
+  const raw = tx as { $executeRawUnsafe?: (query: string) => Promise<unknown> };
+  if (typeof raw.$executeRawUnsafe !== "function") return;
+  await raw.$executeRawUnsafe("SAVEPOINT delivered_work_outcome");
+  try {
+    await record(tx, { backlogItemRowId: input.backlogItemRowId, observedAt: input.observedAt });
+    await raw.$executeRawUnsafe("RELEASE SAVEPOINT delivered_work_outcome");
+  } catch (error) {
+    await raw.$executeRawUnsafe("ROLLBACK TO SAVEPOINT delivered_work_outcome");
+    await raw.$executeRawUnsafe("RELEASE SAVEPOINT delivered_work_outcome");
+    console.warn(`[delivered-work-outcome] ${input.itemId}: outcome observation not recorded; the delivery stands.`, error);
+  }
+}
+
+/**
+ * What a delivery closure records on its status_change (BI-C899BB40). Every
+ * obligation is bounded: `not-owed` ends it, `pending-submitter-confirmation`
+ * is one question with a window (acceptance-sweep/submitter-confirmation.ts).
+ * `pending-independent-verification` is no longer written.
+ */
+export type AcceptanceObligation = "satisfied" | "corrective-work-required" | "not-owed" | "pending-submitter-confirmation";
+
+export function deliveryClosureRecord(input: {
+  deployment: DeploymentClosureProof | null;
+  closureFollowsDelivery: boolean;
+  acceptanceState: string;
+  customerReported: boolean;
+}): { summary: string; payload: Record<string, unknown> & { closureBasis: string; acceptanceObligation: AcceptanceObligation } } | null {
+  if (!input.deployment && !input.closureFollowsDelivery) return null;
+  const acceptanceObligation: AcceptanceObligation = input.acceptanceState === "pass" ? "satisfied"
+    : input.acceptanceState === "fail" ? "corrective-work-required"
+      : input.customerReported ? "pending-submitter-confirmation" : "not-owed";
+  const closureBasis = input.deployment ? "canonical-deployment" : "delivery-evidence";
+  const on = input.deployment ? `Delivery closed on ${input.deployment.runId}` : "Delivery closed on merged delivery evidence";
+  const next = acceptanceObligation === "pending-submitter-confirmation"
+    ? " The submitter is asked once whether it is fixed."
+    : acceptanceObligation === "not-owed" ? " No further acceptance is owed." : "";
+  return {
+    summary: `${on}; acceptance ${acceptanceObligation}.${next}`,
+    payload: {
+      closureBasis,
+      ...(input.deployment ? { deployment: input.deployment } : {}),
+      acceptanceState: input.acceptanceState,
+      acceptanceObligation,
+      customerReported: input.customerReported,
+    },
+  };
 }

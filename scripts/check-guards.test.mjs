@@ -9,6 +9,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  formatChildOutput,
   RUNNER_FAILURE_EXIT_CODE,
   SPAWN_OUTCOME,
   classifySpawnResult,
@@ -132,6 +133,32 @@ test("runGuards treats a killed guard SELF-TEST as a runner failure, not a broke
   assert.match(runnerFailures[0], /self-test/);
 });
 
+// ── runGuards — per-guard results for the outcome record (BI-FEDD8F45) ───────
+
+test("runGuards returns one result per guard: passed, refused, self-test-failed, runner-failed", () => {
+  const guards = ["check-no-alpha.mjs", "check-no-beta.mjs", "check-no-gamma.mjs", "check-no-delta.mjs"];
+  const tests = new Set(["check-no-gamma.test.mjs"]);
+  const spawn = (argv) => {
+    const file = String(argv[argv.length - 1]);
+    if (file.includes("check-no-alpha")) return { status: 0 };
+    if (file.includes("check-no-beta")) return { status: 1 };
+    if (file.includes("check-no-gamma.test")) return { status: 1, stdout: "not ok 1" };
+    return { status: null, signal: "SIGKILL" };
+  };
+  let clock = 0;
+  const { results } = runGuards({ guards, tests, spawn, maxRetries: 0, now: () => (clock += 10) });
+  assert.deepEqual(
+    results.map(({ guard, verdict }) => [guard, verdict]),
+    [
+      ["check-no-alpha.mjs", "passed"],
+      ["check-no-beta.mjs", "refused"],
+      ["check-no-gamma.mjs", "self-test-failed"],
+      ["check-no-delta.mjs", "runner-failed"],
+    ],
+  );
+  assert.ok(results.every((r) => r.durationMs >= 0));
+});
+
 // ── summarizeGuardRun — distinguishable in exit code AND message ─────────────
 
 test("a violation exits 1 and names it a violation", () => {
@@ -181,4 +208,46 @@ test("a violation and a runner failure together still exit 1 but report both", (
   assert.equal(s.exitCode, 1); // a real violation dominates
   assert.ok(s.lines.some((l) => /found violations/.test(l)));
   assert.ok(s.lines.some((l) => /could not RUN/.test(l))); // but the runner failure is not lost
+});
+
+// BI-C5FFCCDA — a violation that names only a file cannot be root-caused.
+test("a violating child's own output is carried with the verdict", () => {
+  const classified = classifySpawnResult({
+    status: 1,
+    stdout: "not ok 3 - scans the tree\n  AssertionError: expected 4 to equal 5\n",
+    stderr: "",
+  });
+  assert.equal(classified.outcome, SPAWN_OUTCOME.VIOLATION);
+  assert.match(classified.output, /AssertionError: expected 4 to equal 5/);
+});
+
+test("a clean or killed child carries no output payload", () => {
+  assert.equal(classifySpawnResult({ status: 0, stdout: "ok\n", stderr: "" }).output, undefined);
+  assert.equal(classifySpawnResult({ status: null, signal: "SIGKILL" }).output, undefined);
+});
+
+test("runGuards replays a failing self-test's assertion under its name", () => {
+  const spawn = (argv) =>
+    argv[0] === "--test"
+      ? { status: 1, stdout: "not ok 1 - guard logic\n  AssertionError: boom\n", stderr: "" }
+      : { status: 0, stdout: "", stderr: "" };
+  const { violations } = runGuards({
+    guards: ["check-no-thing.mjs"],
+    tests: new Set(["check-no-thing.test.mjs"]),
+    spawn,
+  });
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /check-no-thing\.test\.mjs \(guard self-test\)/);
+  // The point: the assertion travels with the verdict.
+  assert.match(violations[0], /AssertionError: boom/);
+});
+
+test("formatChildOutput keeps the tail, where node --test puts the failure", () => {
+  const many = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`).join("\n");
+  const rendered = formatChildOutput(many, 5);
+  assert.match(rendered, /line 40/);
+  assert.match(rendered, /35 earlier line\(s\)/);
+  assert.ok(!rendered.includes("line 1\n"), "early lines are elided");
+  assert.equal(formatChildOutput(""), "");
+  assert.equal(formatChildOutput(undefined), "");
 });

@@ -8,7 +8,6 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { McpSyncButton } from "@/components/platform/McpSyncButton";
 import { ScheduledJobsTable } from "@/components/platform/ScheduledJobsTable";
 import { getScheduledJobs } from "@/lib/ai-provider-data";
-import { runInfraPruneIfDue } from "@/lib/actions/infra-prune";
 
 export default async function IntegrationsSyncPage() {
   const session = await auth();
@@ -19,9 +18,6 @@ export default async function IntegrationsSyncPage() {
       { platformRole: user.platformRole, isSuperuser: user.isSuperuser },
       "manage_provider_connections"
     );
-
-  // Ensure the infra prune job exists and kick it off if due
-  await runInfraPruneIfDue();
 
   const [recentSyncs, allJobs] = await Promise.all([
     prisma.mcpCatalogSync.findMany({

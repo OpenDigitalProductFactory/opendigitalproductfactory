@@ -1544,11 +1544,6 @@
       "spacing": 0,
       "motion": 0
     },
-    "apps/web/components/monitoring/CapabilityServiceHealth.tsx": {
-      "type": 5,
-      "spacing": 0,
-      "motion": 0
-    },
     "apps/web/components/monitoring/LogIssuesPanel.tsx": {
       "type": 1,
       "spacing": 0,

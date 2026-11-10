@@ -9,6 +9,8 @@ relatedCode:
   - packages/db/src/seed-platform-backup.ts
   - scripts/backup-postgres.sh
   - scripts/restore-postgres.sh
+  - dpf-reinstall.ps1
+  - scripts/fresh-install.ps1
 ---
 
 # Disaster recovery runbook
@@ -36,6 +38,8 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Postgres rows (current state) | `$DPF_BACKUPS_HOST_PATH/postgres/<YYYY-MM-DDTHH-MM-SSZ>/dpf.dump` — nightly at 03:00 UTC | Admin UI `/admin/backups` → "Restore" wizard, OR `docker exec -i dpf-postgres-1 pg_restore --clean --if-exists -U dpf -d dpf < <dump>` |
 | Graph topology + vector/semantic memory | **Inside the Postgres dump above** — since BET-5 these are the `graph_node` / `graph_edge` tables and `pgvector` embeddings, not separate stores | Same Postgres restore; there is no separate graph or vector member to restore |
 | Postgres state from JUST BEFORE a destructive action | `$DPF_BACKUPS_HOST_PATH/pre-destructive/<date>/docker-volume-rm-pgdata-<ts>.dump` (or similar fingerprint per action) | Same restore wizard; treats it as any other dump |
+| Postgres state from JUST BEFORE `dpf-reinstall.ps1` or `scripts/fresh-install.ps1` ran `docker compose down -v` | `$DPF_BACKUPS_HOST_PATH/pre-destructive/<date>/dpf-reinstall-<ts>/dpf.dump` (or `fresh-install-<ts>/`), with `dpf.dump.sha256` and `manifest.json` beside it. Both scripts refuse to destroy the database if this dump fails; `-SkipPreDestructiveDump` is the only way past, and it says what it costs. This is what keeps Workrooms, decisions and unmirrored backlog rows alive across a reinstall (BI-F9939341). | Same restore wizard, or `docker exec -i dpf-postgres-1 pg_restore --clean --if-exists -U dpf -d dpf < dpf.dump` |
+| Workrooms after a reinstall, when you have a backlog bundle rather than a dump | `workrooms.json` beside the epic bundles, written by `pnpm --filter @dpf/db backlog:capture` | `pnpm --filter @dpf/db workrooms:restore -- --from <dir> --apply`. Dry run without `--apply`. A room whose worktree is gone returns as archived with the reason; a room already present is untouched, so it is safe to re-run (BI-E2507972). |
 | Uncommitted git work before `git reset --hard` | `git stash list` shows entries named `pre-destructive-snapshot <ts> <fingerprint>` | `git stash pop stash@{N}` |
 | `.env` + `.claude/settings.local.json` before install-dir rm | `$DPF_BACKUPS_HOST_PATH/pre-destructive/<date>/remove-item-recurse-*.essentials.zip` | `Expand-Archive <zip> -DestinationPath $DPF_DIR` |
 | Recent Claude Code session transcripts | `$DPF_BACKUPS_HOST_PATH/session-transcripts/<YYYY-MM-DD>/<session-id>.jsonl` — every PostToolUse (throttled to 2 min) + every SessionEnd | Copy back to `~/.claude/projects/D--DPF/<session-id>.jsonl`, then `/resume <session-id>` in Claude Code |
@@ -43,13 +47,14 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Branches + commits after install-dir rm | GitHub `origin` IS the source of truth; clone fresh | `git clone https://github.com/OpenDigitalProductFactory/opendigitalproductfactory $DPF_DIR` |
 | Docker images | Pull-on-demand from registries | `docker compose pull` or `install-dpf.{ps1,sh}` |
 | Docker volumes (any) | NOT recoverable from Docker layer — the daily backup IS the durable copy | See dump-restore rows above |
+| Map region packs (`map_data` volume, `/var/lib/dpf/maps`) | Not backed up: packs are public OpenStreetMap-derived files, re-obtainable from their source | Re-copy each `<pack-id>.pmtiles` and `<pack-id>.manifest.json` into the volume; maps draw without a street layer until then |
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
 | Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/postgres/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member directly |
 
 > **BET-5 changed this table.** Neo4j and Qdrant were retired onto PostgreSQL
-> (BI-A1E864A5). Their nightly backup jobs are **deactivated** and
-> `scripts/{backup,restore}-{neo4j,qdrant}.sh` only apply to pre-BET-5 archives
-> you may still hold — do not reach for them during a current-day incident. One
+> (BI-A1E864A5). Their nightly backup jobs are **deactivated** and their backup
+> and restore scripts were deleted (BI-B1977CEE); a pre-BET-5 archive you may
+> still hold needs a pre-BET-5 release to restore it. One
 > Postgres dump now carries relational state, graph topology and vectors
 > together, which also removes the old hazard of restoring three members to
 > three different points in time.
@@ -69,8 +74,8 @@ not a backup of record. Use it to prove that a recovery point can restore and
 boot before production state is touched. The Postgres trial-restore path is
 shipped end-to-end, and since BET-5 that single path also rehearses graph and
 vector recovery — they are tables in the same dump, and `sandbox-postgres` is
-isolated, so the old caveat about the sandbox pointing at shared Neo4j/Qdrant no
-longer applies. Never use the dev-against-live-DB compose overlay for recovery
+isolated, so the old caveat about the sandbox pointing at shared graph and vector
+stores no longer applies. Never use the dev-against-live-DB compose overlay for recovery
 rehearsal because it can write to live data.
 
 **Key principle:** if you can't find your loss in this table, that means there's no automatic recovery for it. Stop and ask for help BEFORE doing anything destructive — the action you take next may be the difference between a 1-hour and 6-hour recovery.
@@ -160,6 +165,7 @@ Steps:
 - Redis backs the Inngest job queue and its state, so a Redis outage stops scheduled and event-driven work while leaving platform data intact.
 - Restart first: `docker compose logs redis`, then `docker compose restart redis`.
 - Redis holds **no system of record**. If its volume is gone, bring it back empty — in-flight job state is lost and Inngest re-establishes from its own durable records. There is nothing to restore from a backup.
+- `loki_data` and `alloy_data` hold **no system of record** either. If either volume is gone, bring it back empty: you lose up to 14 days of captured container logs, and capture resumes on the next discovery refresh. Detected log issues already promoted to `PlatformIssueReport` / `PortfolioQualityIssue` rows live in Postgres and survive independently — the log volume is the evidence trail, not the finding.
 
 ### 3.4 Graph or vector data looks wrong (Postgres OK)
 

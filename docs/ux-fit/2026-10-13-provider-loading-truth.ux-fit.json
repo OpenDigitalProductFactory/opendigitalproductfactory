@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "pending-status",
+  "decisionInteractionId": "DI-DD7F720E88E3",
+  "scope": {
+    "files": ["apps/web/app/(shell)/platform/ai/providers/loading.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["pending-status", "elapsed-failure", "indefinite-skeleton"]
+  }
+}

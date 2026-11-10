@@ -10,7 +10,7 @@
 
 > **Current standards authority (2026-08-01).** This document remains the detailed operational and
 > audit profile for the six-stage archetype backbone. The
-> [Four-Portfolio Archetype and AI Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
+> [Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
 > now owns the distinction among industry value streams, local DigitalProduct lifecycle keys,
 > portfolios, work, performers, evidence, and candidate external mappings. External equivalence
 > requires the complete authorized mapping envelope in that standard.
@@ -49,9 +49,9 @@ This document is about the other sense: the **operational value stream of the cu
 | Whose flow | Any organization managing a DigitalProduct lifecycle | The archetype business serving its customers |
 | Canonical slugs | `evaluate … consume` | leaf-defined stage slugs, or `attract · capture · qualify · deliver · settle · retain` as the fallback (Section 3) |
 | Example | "Voice STT slice moves Explore→Integrate→Deploy" | "A vet clinic moves a pet from booking → exam → invoice → recall" |
-| Standards posture | local lifecycle vocabulary; IT4IT™ is a future authorized comparison target | FPAW Stage contract; BACM/ArchiMate® are future representation-review targets |
+| Standards posture | local lifecycle vocabulary; IT4IT™ is a future authorized comparison target | PAAW Stage contract; BACM/ArchiMate® are future representation-review targets |
 
-> **Current semantic authority:** FPAW defines a Stage as a measurable stakeholder-value state
+> **Current semantic authority:** PAAW defines a Stage as a measurable stakeholder-value state
 > transition with acceptance, capability/work realization, evidence and measures. BACM and
 > ArchiMate® are reference-only targets for future authorized representation mappings; this document
 > does not use their publications to substantiate the local contract.
@@ -62,7 +62,7 @@ The bridge is a typed, many-to-many relationship—not containment. An industry 
 own because it describes stakeholder value whether the work is digital, human, physical, or mixed.
 When a DigitalProduct enables or constitutes part of that stage, the implementation maps the exact
 touchpoint to a named DigitalProduct and local lifecycle key with relationship, rationale, evidence,
-and binding state. An external stream identifier may be added only through the authorized FPAW
+and binding state. An external stream identifier may be added only through the authorized PAAW
 mapping contract. A consumption interaction never contains the customer's complete operational
 value stream.
 
@@ -99,11 +99,11 @@ The commercial backbone recurs across most of the 106 archetypes. It is the subj
 
 > **Reading guide:** a stage is *load-bearing* for an archetype when a defect there makes the business non-functional, not merely inconvenient. The per-category profiles (Section 6) name the load-bearing stage(s) for each archetype. Audit severity should track this: a defect in a load-bearing stage is `critical`/`important`; the same class of defect in a non-load-bearing stage is `minor`.
 
-### 2.1 Leaf process profiles replace the fallback when the business works differently
+### 2.1 Leaf process profiles compose with the backbone when the business works differently
 
-`ActivationProfile.processProfile.valueStreams` is the canonical seam for a leaf-authored operating model. When populated, `deriveOperationalValueStream` projects those streams and does not append the commercial fallback. Each stream and stage carries its input, output, responsible role, trust gates, load-bearing status, and handoff target. The same derived model feeds Enterprise Architecture and the generated public archetype drill-down.
+`ActivationProfile.processProfile.valueStreams` is the canonical seam for a leaf-authored operating model. When populated, `deriveOperationalValueStream` projects those streams **and retains every backbone stage they do not cover**. A leaf stage names the backbone work it already does in `coversBackboneStages`; an archetype that genuinely does not run a stage declares it in `omittedBackboneStages` with a reason, surfaced as `declaredBackboneOmissions`. A stage is therefore covered, declared absent with a reason, or present — silent loss is not expressible. Each stream and stage carries its input, output, responsible role, trust gates, load-bearing status, and handoff target. The same derived model feeds Enterprise Architecture and the generated public archetype drill-down.
 
-Pet Rescue is the first leaf profile on this seam. It defines three primary streams — **Intake and safe placement**, **Health and welfare**, and **Adoption and placement** — plus Fundraising, Volunteer Coordination, Supplies, Compliance, and Reporting as supporting capabilities. Its capacity-full decision, welfare exception, custody transfer, and failed-placement return are explicit stages. `Capture Demand` is therefore not presented as Pet Rescue's operating model.
+Pet Rescue is the first leaf profile on this seam. It defines three primary streams — **Intake and safe placement**, **Health and welfare**, and **Adoption and placement** — plus Fundraising, Volunteer Coordination, Supplies, Compliance, and Reporting as supporting capabilities. Its capacity-full decision, welfare exception, custody transfer, and failed-placement return are explicit stages. Its leaf stages declare that they cover `qualify`, `deliver` and `retain`; `attract`, `capture`, `settle`, `trust-compliance` and `operate-improve` are retained from the backbone, because a donor-funded rescue still has to be found, take demand in, account for money, meet its statutory obligations, and review how it is doing.
 
 The committed public projection is generated with `pnpm docs:business-types`; `public-process-projection.test.ts` fails if it drifts from the canonical archetype definition.
 
@@ -168,7 +168,7 @@ That metadata is a migration input, not a conformance assertion: a generic
 `request-to-fulfill` value cannot prove an external correspondence. The standards-grade seam is an
 explicit mapping from a specific industry stage or work definition to a specific DigitalProduct and
 local lifecycle key, with relationship, rationale, confidence, evidence and BindingState. External
-identifiers additionally require FPAW's authorized source and complete mapping envelope.
+identifiers additionally require PAAW's authorized source and complete mapping envelope.
 
 ### 5.1 Architecture and usability invariants
 
@@ -821,6 +821,7 @@ read from `consumptionChannel: onsite-plus-portal` (and `episode-of-care` provis
   Field Dispatch, and assigned HVAC-specific capacity evidence to `hvac-contractor` rather than the
   mixed-trade `facilities-maintenance` leaf.
 
+- **2026-08-28** — **Leaf profiles now compose with the backbone rather than replacing it** (BI-4B11F98E). `deriveOperationalValueStream` retains every backbone stage a leaf profile does not declare it covers, and an archetype that does not run a stage must say so with a reason. Measured before landing across the whole catalog: **107 archetypes / 25 categories**, of which exactly one — `pet-rescue` — was losing core stages; the other 106 derive identically. Pet Rescue goes from 16 stages to 21, recovering `attract`, `capture`, `settle`, `trust-compliance` and `operate-improve`. `animal-shelter` sets `valueStreams: undefined` deliberately and was never affected. A sibling projection (`archetype-room-definition-projection.ts`) compiles the same derived model into room definitions, so the EA canvas and the rooms read one source.
 - **2026-07-22** — Added **§6.23 `fabric-care-services`** (`dry-cleaning-plant-network`, `wash-and-fold-laundry`, `alterations-tailoring`) and updated the source catalog baseline to **103 archetypes / 23 categories**. The category models garment custody and ready-promise throughput without adding a new provisioning enum in this slice.
 - **2026-07-18** — Re-grounded the active text against the current source catalog: **95 archetypes / 21 categories**. Added §6.20 `media-production` and §6.21 `live-events-venues`, moved `medical-practice`/`optician` under healthcare-wellness, corrected fitness/education/nonprofit category headings, and added `production-equipment-rental` to the rental/shared-asset loop.
 - **2026-07-17** — Closed the **`real-estate-construction`** coverage gap: added **§6.19** (`new-home-builder`, `custom-home-builder`) and a §7.2 demand–capacity row for the builders + a field-dispatch capacity row. These two builders (EP-GRID-BUILDER) were seeded but never given a value-stream profile — the 2026-06-13 "87 archetypes" count folded in the 17 Gap-A + 12 Gap-B leaves (= 85) and silently omitted them. Inventory re-grounded against `origin/main` `packages/storefront-templates/src/archetypes/` (enumerated `ALL_ARCHETYPES`, cross-checked `archetypes.test.ts`): **87 archetypes / 19 categories** confirmed (real-estate-construction is the 19th category, 2 leaves). Surfaced by the [archetype audit plan](../testing/archetype-audit-plan.md) 87/19 re-grounding (BI-186FFCA7, EP-ARCH-8D4F2A).

@@ -35,7 +35,6 @@
  *
  * Run: node scripts/check-finding-substrate.mjs
  */
-import { readFileSync } from "node:fs";
 import { readPrismaSchemaText } from "./lib/prisma-schema-source.mjs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";

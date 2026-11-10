@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 
 
 > **⇢ Coordination — Unified Work Graph.** This spec is a design input to the **Collaborative Work Management × Build Studio convergence**. Before starting work traced here, read the governing memo [`2026-07-11-collaborative-work-management-convergence-memo.md`](./2026-07-11-collaborative-work-management-convergence-memo.md) and backlog epic **EP-WORK-CONVERGENCE** (9 items, write-model-first). The target is one substrate — `WorkCapsule` / `WorkItem` → `WorkCase` projection → plain approve/revise — so efforts stay coordinated and don't diverge.
@@ -153,6 +157,58 @@ The common contract is only real if each tool's actual client config enforces it
 
 **Net:** Claude's client is already near-conformant; Codex's is the drift source (generic plugins/MCP servers → orphaned sidecars → blocked upgrades). The bootstrap script converges both to one DPF-scoped baseline (DPF MCP only + dpf-platform only + worktree trust + worktree base + reaping hooks); anything outside that baseline is reported, not silently tolerated.
 
+### 4.4 Contributor preview browser-session isolation (BI-A8183B4B)
+
+The governed preview and installed portal can share localhost with different
+ports and signing secrets. Cookie scope excludes ports. The existing sandbox
+cookie namespace therefore needs the same bounded extension for the preview.
+At fbe8c75ca511701a93a89103f7324aea84c4fb75, `govern/auth.ts` selects a distinct
+name only for sandbox; `scripts/lib/dev-preview-runtime.mjs` supplies the
+preview's development class and nonempty `DPF_PREVIEW_LEASE_ID`. The automation
+sign-in route already imports the exported cookie name and secure policy.
+
+**AC1:** An admitted development preview uses `dpf-preview.authjs.session-token`;
+ordinary portal and sandbox names stay unchanged. A lease marker alone outside
+the development class does not change production authentication.
+**AC2:** Auth.js and automation sign-in retain one cookie-name source of truth,
+including encoding salt, HTTPS-derived secure flag, httpOnly and sameSite=lax.
+No identity, credential, grant, redirect or CSRF policy is loosened.
+**AC3:** Prove preview/portal/sandbox coexistence and a preview next-step
+save/readback under the existing governed runtime. Source tests alone do not
+establish runtime recovery or complete BI-3C34D453.
+
+Ordered atomic repair plan (all delivered by BI-A8183B4B):
+
+1. **REPRODUCE:** Import the actual Auth.js configuration with isolated envs;
+   fail the preview/portal namespace comparison. Retain controls for sandbox,
+   ordinary development, production with stray lease marker and HTTPS policy.
+2. **ISOLATE:** Extend the existing name selection only when development class
+   and the canonical nonempty preview lease marker agree; keep sandbox first.
+   The preview name must not begin with either existing session name: Auth.js
+   groups chunks by prefix, so a suffix alone does not isolate the sessions.
+3. **VERIFY:** Run auth configuration, automation sign-in, auth utilities and
+   graph-related tests, both web typechecks, affected guards and exact gate.
+4. **ACCEPT:** On a governed preview, authenticate with the existing automation
+   persona, coexist with the installed portal, save a future next step and
+   verify persisted readback. Release the preview and record partial/unrun
+   results explicitly. Merge through a protected DCO PR; no live manual build.
+
+Observed Save failure in NPEL-9E16DBBD9A had no session cookie and redirected
+to /welcome without persistence. The shared cookie name is source-confirmed;
+cross-tab causality remains a hypothesis until controlled runtime verification.
+
+The first suffix-based repair passed configuration tests but the governed
+preview still lost its session on navigation. Real Auth.js session-handler
+regressions now reproduce two source failures: the portal deletes the preview
+cookie as a chunk, and simultaneous portal/preview JWTs make the portal session
+unreadable. Both fail with the suffix and pass with the separate prefix;
+legitimate preview chunking remains covered. This establishes the library
+interaction, not a new served coexistence or next-step save acceptance pass.
+No independent phase ships useful behavior, so this plan is deliberately atomic.
+Related completed BI-6B109903 concerns generated declarations; BI-10AC904B
+concerns source/dependency binding. BI-94C4722B concerns deployment renders.
+None supplies browser-cookie isolation; their controls remain intact.
+
 ## 5. Research & Benchmarking (per AGENTS.md §10)
 
 - **Claude Code execution model.** Native git-worktree support defaults to a managed worktrees dir; subagents/sidecars are child processes; MCP servers configured per-project via `.mcp.json`. *Adopted:* worktree-per-session, MCP-per-worktree. *Gap it creates:* default nesting + no reaping → sprawl + orphaned children. Doctrine must align to the real default, not an idealized path.
@@ -176,6 +232,56 @@ Scored via `principle_decide` against the `mark-dpf-platform` profile (20 comman
 3. **Layman front → the AI Coworker panel** (delivery status only; plumbing stays admin-only). *Kernel: high, margin 0.86; single-source-of-truth / agent-as-conduit.*
 4. **BS engine vs. process → engine-first.** Stabilize the embedded BS runtime engine now; the common process + MCP plane remain the contract all three surfaces share. *Kernel returned a sub-threshold tie (margin 0.027, low confidence) nominally tipping engine-first on single-source-of-truth + ship-real-functionality; **operator decided engine-first**.*
 5. **`:3001` disposition → fold into the `local-integration-ci` lease** (one lease-gated shared-runtime model; no standalone singleton, no silent re-bind). *Kernel: high, margin 0.63; single-source-of-truth.*
+
+## 9. Addendum (2026-08-25, BI-81780B4A): a gate refusal declares which kind of no it is
+
+**Operator directive.** The product behaviour is the workroom and its shape, with
+gates and actions. Every gate requirement and definition — now and for those
+built later — carries this as an implementation mechanic.
+
+**The shape.** A gate exists to make the right thing happen: proceed when the
+case is clear, escalate when it is ambiguous, refuse when it is wrong. A
+coworker may RESHAPE a decision and try again, bounded; where it holds several
+valid options, scoring them against each other is how it picks. Ceiling for both
+axes: **5** (operator's call).
+
+**What was wrong.** `evaluateWorkCasePolicy` is the single chokepoint every
+governed workroom action passes through, and it returned a binary allow/deny
+across twelve denial reasons. Every no read the same, so a coworker could not
+tell "attach the receipt policy and retry" from "this case is sealed forever"
+from "a person must approve this envelope". Both failure modes follow: stopping
+on something fixable in one move, or grinding against a stop that was never
+going to yield — the forever-loop wearing the costume of diligence.
+
+**The mechanic.**
+
+| Disposition | Meaning | Example |
+| --- | --- | --- |
+| `shape` | the caller holds the missing input and may retry, bounded | missing verification evidence, missing decision interaction |
+| `escalate` | nothing the caller controls will fix it; a person rules | an envelope awaiting approval |
+| `hard-no` | never yields | sealed case, unsupported transition, **tripped stop condition** |
+
+Four rules make it hold:
+
+1. **The classification is a closed `Record` keyed by the denial union**, in
+   `apps/web/lib/work-management/gate-shaping.ts`. Adding a reason without
+   deciding what kind of no it is **does not compile**. That is the
+   "and for those built in the future" clause — the next gate requirement
+   inherits the contract by construction, not by its author remembering.
+2. **A shapeable denial names what to change.** A hint-free "shape" is just a
+   retry, and a retry that changes nothing is refused upstream already.
+3. **Budget exhaustion converts to `escalate`, never to `hard-no`.** Running out
+   of attempts says nothing about whether the action is allowed — only that this
+   coworker could not shape it. The attempt history is the human's context.
+4. **A tripped stop stays a hard no** (§1 of AGENTS.md: an enforcement refusal
+   is a stop, not a workaround). Shaping against one *is* the workaround.
+
+**Still open, tracked on BI-81780B4A.** The no-progress trip: today the retry
+loop refuses only *identical* inputs, so a coworker can declare five different
+changes and thrash at the same margin. And option dedupe before scoring: margin
+is top-1 against the runner-up, so adding a near-clone of the leader collapses
+the margin and manufactures an escalation on a decision that was clear — five
+real options, not five variants.
 
 ## 8. Acceptance
 

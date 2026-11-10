@@ -1,28 +1,33 @@
-// BI-42FA7DD8 — Worktree Tier-A FLEET BACKSTOP (optional schedule).
+// BI-42FA7DD8 / BI-99395B29 — PRIMARY, platform-owned worktree reaper.
 //
-// PRIMARY path is transactional, not this cron:
-//   packages/dpf-skill-pack/hooks/worktree-session-hygiene.mjs on SessionStart
-//   (observe) + SessionEnd/Stop (reap THIS session's worktree when Tier-A).
-// That fires on every client that loaded dpf-platform (Claude plugin / Grok
-// global hooks / Codex hooks) — no per-client cron to configure, no "schedule
-// went dark" failure mode for the common case.
+// This portal Inngest job OWNS worktree reaping on every install. It runs
+// server-side whether or not any AI client is installed, connected or ending its
+// session cleanly — `platform-function-never-depends-on-a-client`. Many clients
+// and threads share one install; none of them owns its upkeep.
 //
-// THIS module is an optional fleet sweeper for leftovers (abandoned worktrees
-// after crashes, clients without hooks). It is server-side Inngest (portal),
-// NOT a CLI client cron. It still may not see host worktrees when the portal
-// container lacks a host git view — then it no-ops.
+// ACCELERATORS (never owners; the guarantee holds with all of them absent):
+//   * pull-request-merged-reap.ts — server-side, reaps the one merged branch
+//     on the merge event instead of waiting for the daily sweep.
+//   * packages/dpf-skill-pack/hooks/worktree-session-hygiene.mjs — client
+//     SessionEnd hook; may reap THIS session's Tier-A tree sooner. A client
+//     that lacks the hook, crashes or never ends loses nothing.
 //
 // Spec: docs/superpowers/specs/2026-07-26-multi-client-governance-parity-design.md § D4
-// Kernel: worktree-selection-and-reaping, destructive-actions-require-explicit-go
+// Kernel: platform-function-never-depends-on-a-client, worktree-selection-and-reaping,
+//         destructive-actions-require-explicit-go
 //
-// SAFETY DOCTRINE (backstop)
+// SAFETY DOCTRINE
 //   * Default OFF (DPF_WORKTREE_JANITOR_ENABLED not set) — no scan.
-//   * When ENABLED without AUTO_REAP: dry-run observe only.
-//   * When AUTO_REAP=1: live **Tier A only**. Tier B never auto-deleted here.
+//   * ENABLED without AUTO_REAP: observe, plus the bounded Tier-A reap above
+//     DPF_WORKTREE_JANITOR_MAX.
+//   * AUTO_REAP=1: live **Tier A only**. Tier B is never auto-deleted here.
+//   * FAIL CLOSED: every live run is preceded by an observation. A blind
+//     observation reports UNHEALTHY; an observation that kept anything because
+//     liveness was unreadable stays an observation. No flag reaps on a guess.
 //   * Removals use junction-safe-worktree-remove.mjs via the CLI.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { resolveManagedScriptPath } from "@/lib/operate/backups/managed-script-path";
 
@@ -34,6 +39,34 @@ export const WORKTREE_JANITOR_ENABLED_FLAG = "DPF_WORKTREE_JANITOR_ENABLED";
  * Default OFF — soak with dry-run first.
  */
 export const WORKTREE_JANITOR_AUTO_REAP_FLAG = "DPF_WORKTREE_JANITOR_AUTO_REAP";
+
+/**
+ * Upper bound on retained worktrees, above which Tier-A reaping runs WITHOUT a
+ * human decision. This is the operative half of
+ * `platform-function-never-depends-on-a-client`: a default that requires a
+ * technical action from a non-technical owner is not a safe default, it is a
+ * deferred outage.
+ *
+ * Bounded rather than absolute — the excess is reaped oldest-first, and only
+ * Tier A, which `classifyWorktree` already defines as merged, clean, unpinned,
+ * without an open PR and without a live session heartbeat. Tier B and anything
+ * unmerged or unpushed keep explicit-go; that constraint is load-bearing, since
+ * a sweep of the development install found ~137 branches with commits never
+ * pushed and one abandoned worktree holding a finished, signed, tested commit.
+ */
+export const WORKTREE_JANITOR_MAX_FLAG = "DPF_WORKTREE_JANITOR_MAX";
+
+/** Generous enough that ordinary concurrent work never trips it; far below the
+ *  193 observed when nothing reaped at all. */
+export const DEFAULT_MAX_WORKTREES = 40;
+
+export function resolveMaxWorktrees(env: Record<string, string | undefined>): number {
+  const raw = (env[WORKTREE_JANITOR_MAX_FLAG] ?? "").trim();
+  if (raw.length === 0) return DEFAULT_MAX_WORKTREES;
+  const parsed = Number.parseInt(raw, 10);
+  // A malformed bound must not silently disable the bound.
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_WORKTREES;
+}
 
 const JANITOR_SCRIPT = "worktree-janitor.mjs";
 const SCAN_TIMEOUT_MS = 300_000;
@@ -69,6 +102,13 @@ export type ScanOutcome =
 
 export type RunResult =
   | { skipped: true; reason: string }
+  /**
+   * Enabled, scheduled, and unable to see what it is responsible for. This is
+   * NOT a skip: a backstop that cannot reach its subject must never report
+   * success. Returning `skipped` here is how 528 GB accumulated behind a job
+   * that ran on time and found nothing (BI-99395B29).
+   */
+  | { skipped: false; healthy: false; reason: string }
   | {
       skipped: false;
       mode: "dry-run" | "live";
@@ -165,30 +205,44 @@ async function defaultRunScan(mode: "dry-run" | "live"): Promise<ScanOutcome> {
   }
 }
 
-export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunResult> {
-  const env = options.env ?? process.env;
+/**
+ * Worktrees this install is holding on to. Counts every decision the scan
+ * returned rather than only the reapable ones: the bound is about how much is
+ * accumulating, not about how much happens to be safe to delete right now.
+ */
+/**
+ * Did this scan keep anything only because it could not read the Workroom claim
+ * record? If so its liveness picture is incomplete and no bound may act on it.
+ */
+export function scanKeptForUnknownLiveness(scan: WorktreeJanitorScan): boolean {
+  return (scan.decisions ?? []).some(
+    (d) => d.verdict === "KEEP" && /absent evidence|unreadable/i.test(d.reason ?? ""),
+  );
+}
 
-  if (!envFlagEnabled(env, WORKTREE_JANITOR_ENABLED_FLAG)) {
-    return {
-      skipped: true,
-      reason: `disabled (${WORKTREE_JANITOR_ENABLED_FLAG} not set)`,
-    };
+export function countRetained(scan: WorktreeJanitorScan): number {
+  // An EMPTY decisions array is "not populated", not "zero worktrees" — a scan
+  // may report only a summary. Reading empty as zero would put the install
+  // permanently under any bound, which is the same silent-success failure this
+  // whole change exists to remove.
+  if (Array.isArray(scan.decisions) && scan.decisions.length > 0) {
+    return scan.decisions.length;
   }
+  const counts = scan.summary?.counts ?? {};
+  return Object.values(counts).reduce((sum, n) => sum + (typeof n === "number" ? n : 0), 0);
+}
 
-  const autoReap =
-    envFlagEnabled(env, WORKTREE_JANITOR_AUTO_REAP_FLAG) &&
-    envFlagEnabled(env, WORKTREE_JANITOR_ENABLED_FLAG);
-  const mode: "dry-run" | "live" = autoReap ? "live" : "dry-run";
+/** A backstop that cannot reach its subject reports UNHEALTHY, never success. */
+function unhealthy(reason: string): RunResult {
+  console.error(
+    `[worktree-janitor] UNHEALTHY — enabled but cannot see its worktree base: ${reason}. ` +
+      "Nothing was scanned, so nothing being found is not evidence that nothing is there.",
+  );
+  return { skipped: false, healthy: false, reason };
+}
 
-  const runScan = options.runScan ?? defaultRunScan;
-  const outcome = await runScan(mode);
-
-  if (!outcome.available) {
-    console.warn(`[worktree-janitor] scan unavailable: ${outcome.reason}`);
-    return { skipped: true, reason: outcome.reason };
-  }
-
-  const { scan } = outcome;
+/** Shared reporting for both the observation and the live run. */
+function summarize(scan: WorktreeJanitorScan, mode: "dry-run" | "live"): RunResult {
   if (mode === "dry-run" && scan.mode !== "dry-run") {
     console.error(
       `[worktree-janitor] REFUSING unexpected scan mode "${scan.mode}" for observe run`,
@@ -232,7 +286,76 @@ export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunR
   return result;
 }
 
-export const worktreeJanitor = inngest.createFunction(
+export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunResult> {
+  const env = options.env ?? process.env;
+
+  if (!envFlagEnabled(env, WORKTREE_JANITOR_ENABLED_FLAG)) {
+    return {
+      skipped: true,
+      reason: `disabled (${WORKTREE_JANITOR_ENABLED_FLAG} not set)`,
+    };
+  }
+
+  const explicitAutoReap =
+    envFlagEnabled(env, WORKTREE_JANITOR_AUTO_REAP_FLAG) &&
+    envFlagEnabled(env, WORKTREE_JANITOR_ENABLED_FLAG);
+
+  const runScan = options.runScan ?? defaultRunScan;
+
+  // Observe first, always. AUTO_REAP is the owner's standing go for Tier A,
+  // not a go to act on evidence this run could not gather, so it fails closed
+  // through the same observation the bound uses.
+  const observed = await runScan("dry-run");
+  if (!observed.available) return unhealthy(observed.reason);
+
+  if (explicitAutoReap) {
+    if (scanKeptForUnknownLiveness(observed.scan)) {
+      console.error(
+        "[worktree-janitor] AUTO_REAP on, but Workroom claims were unreadable this run — " +
+          "staying in observe mode. The reaper must not reap on absent evidence.",
+      );
+      return summarize(observed.scan, "dry-run");
+    }
+    const live = await runScan("live");
+    if (!live.available) return unhealthy(live.reason);
+    return summarize(live.scan, "live");
+  }
+
+  const retained = countRetained(observed.scan);
+  const max = resolveMaxWorktrees(env);
+
+  if (retained <= max) {
+    return summarize(observed.scan, "dry-run");
+  }
+
+  // A bound must never drive deletion on evidence the scan could not gather.
+  // The observation reports how many worktrees it had to KEEP because the
+  // Workroom claim record was unreadable; if it kept anything for that reason,
+  // liveness is unknown for this run and going live would reap on a guess. This
+  // is the half that turned a dormant classifier flaw into automatic damage
+  // when the bound shipped in #4987 — the bound is only safe once liveness is
+  // platform-owned AND actually readable.
+  if (scanKeptForUnknownLiveness(observed.scan)) {
+    console.error(
+      "[worktree-janitor] over bound, but Workroom claims were unreadable this run — " +
+        "staying in observe mode. A bound must not reap on absent evidence.",
+    );
+    return summarize(observed.scan, "dry-run");
+  }
+
+  console.warn(
+    `[worktree-janitor] over bound: ${retained} worktrees retained, bound ${max} ` +
+      `(${WORKTREE_JANITOR_MAX_FLAG}). Reaping Tier-A excess without waiting for a decision — ` +
+      "Tier B and anything unmerged or unpushed still require an explicit go.",
+  );
+
+  const live = await runScan("live");
+  if (!live.available) return unhealthy(live.reason);
+  return summarize(live.scan, "live");
+
+}
+
+export const worktreeJanitor = jobs.createFunction(
   {
     id: "ops/worktree-janitor",
     retries: 1,

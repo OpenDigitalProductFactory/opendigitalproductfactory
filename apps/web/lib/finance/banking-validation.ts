@@ -12,7 +12,7 @@ export const createBankAccountSchema = z.object({
   sortCode: z.string().optional(),
   iban: z.string().optional(),
   swift: z.string().optional(),
-  currency: z.string().length(3).default("GBP"),
+  currency: z.string().length(3).optional(), // absent = the org base currency, filled by the writer (BI-6030131C)
   accountType: z.enum(ACCOUNT_TYPES).default("current"),
   openingBalance: z.number().default(0),
 });

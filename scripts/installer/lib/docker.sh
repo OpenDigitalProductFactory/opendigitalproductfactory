@@ -196,51 +196,90 @@ dpf_docker_install_darwin() {
 
   fail "Docker Desktop did not become reachable within ${wait_seconds}s. On first launch, Docker Desktop may show a Welcome / Privacy prompt that requires manual confirmation. Open Docker.app from /Applications, complete the first-run flow, then re-run install-dpf.sh."
 }
-# manager. Refuses gracefully on unsupported distros; the caller
-# (install-dpf.sh) preflight already weeded out older / unsupported
-# distros, so this function trusts that gate.
-#
-# Args: none. Reads /etc/os-release.
+# Compose is a separate package on Engine hosts. An Engine-only installation
+# cannot run DPF. Check the CLI without requiring daemon access (the freshly
+# added docker-group member may still need to log in again).
+dpf_docker_require_compose() {
+  local version major
+  if ! version="$(docker compose version --short 2>/dev/null)"; then
+    fail "Docker Compose plugin is missing. Install the Compose plugin from the same package source as Docker Engine, then re-run install-dpf.sh (https://docs.docker.com/compose/install/linux/)."
+  fi
+  version="${version#v}"
+  major="${version%%.*}"
+  case "$major" in
+    ''|*[!0-9]*) fail "Cannot determine Docker Compose version: $version. Repair the Compose plugin and re-run." ;;
+  esac
+  if [ "$major" -lt 2 ]; then
+    fail "Docker Compose $version is unsupported; the 'docker compose' plugin version 2 or newer is required."
+  fi
+  ok "Docker Compose $version present"
+}
+
+# Fresh-host setup uses one package family from Docker's signed repository.
+# Existing working engines never enter this path. Refuse conflicting packages
+# instead of removing another workload's runtime. Every mutation handles its
+# error explicitly: the caller captures status 75 in an if, disabling errexit
+# throughout the called function in Bash.
+# Optional os-release path is for host-isolated verification.
 dpf_docker_install_linux() {
   dpf_platform
   if [ "$DPF_PLATFORM" != "linux" ]; then
     fail "dpf_docker_install_linux: not on Linux"
   fi
 
-  if [ ! -r /etc/os-release ]; then
-    fail "Cannot read /etc/os-release; can't determine Linux distro for Docker install."
+  local os_release="${1:-/etc/os-release}"
+  if [ ! -r "$os_release" ]; then
+    fail "Cannot read $os_release; can't determine Linux distro for Docker install."
   fi
 
-  local distro_id
-  # shellcheck disable=SC1091
-  distro_id="$(. /etc/os-release && echo "${ID:-}")"
+  local distro_id codename arch package
+  # shellcheck disable=SC1090
+  distro_id="$(. "$os_release" && echo "${ID:-}")"
 
   case "$distro_id" in
     ubuntu|debian)
-      info "Installing Docker Engine via apt-get (Debian / Ubuntu)"
-      # Use the official Docker apt repo per docs.docker.com/engine/install
-      # We don't manage the keyring file directly here — distros 22.04+ /
-      # 12+ already package docker.io which is functionally equivalent for
-      # our purposes (Docker Engine 20.10+ with compose plugin available).
-      # Customers who want the upstream `docker-ce` build can install it
-      # themselves and re-run; preflight will detect the version.
-      sudo apt-get update -y
-      sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-plugin || \
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io
+      for package in docker.io docker-compose docker-compose-v2 docker-doc docker-buildx podman-docker containerd runc; do
+        if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q '^install ok installed$'; then
+          fail "Existing package '$package' conflicts with fresh Docker Engine setup. Have the host administrator reconcile the runtime packages using https://docs.docker.com/engine/install/$distro_id/ and re-run; DPF will not remove them."
+        fi
+      done
+      # shellcheck disable=SC1090
+      codename="$(. "$os_release" && echo "${UBUNTU_CODENAME:-${VERSION_CODENAME:-}}")"
+      case "$codename" in
+        ''|*[!a-z0-9-]*) fail "Cannot determine a valid $distro_id release codename for Docker's repository." ;;
+      esac
+      arch="$(dpkg --print-architecture)" || fail "Failed to determine the host package architecture."
+      info "Installing Docker Engine and Compose from Docker's $distro_id repository"
+      sudo apt-get update -y || fail "Failed to refresh apt package indexes."
+      sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl || fail "Failed to install Docker repository prerequisites."
+      sudo install -m 0755 -d /etc/apt/keyrings || fail "Failed to create Docker's keyring directory."
+      sudo curl -fsSL "https://download.docker.com/linux/$distro_id/gpg" -o /etc/apt/keyrings/docker.asc || fail "Failed to download Docker's repository key."
+      sudo chmod a+r /etc/apt/keyrings/docker.asc || fail "Failed to set Docker repository key permissions."
+      printf 'Types: deb\nURIs: https://download.docker.com/linux/%s\nSuites: %s\nComponents: stable\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/docker.asc\n' "$distro_id" "$codename" "$arch" \
+        | sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null || fail "Failed to configure Docker's apt repository."
+      sudo apt-get update -y || fail "Failed to refresh Docker's apt repository."
+      sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || fail "Failed to install Docker Engine and Compose; no Engine-only fallback was attempted."
       ;;
     fedora|rhel|centos)
-      info "Installing Docker Engine via dnf (Fedora / RHEL / CentOS)"
-      sudo dnf install -y docker docker-compose-plugin || sudo dnf install -y moby-engine
+      for package in docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine podman-docker moby-engine containerd runc; do
+        if rpm -q "$package" >/dev/null 2>&1; then
+          fail "Existing package '$package' conflicts with fresh Docker Engine setup. Have the host administrator reconcile the runtime packages using https://docs.docker.com/engine/install/$distro_id/ and re-run; DPF will not remove them."
+        fi
+      done
+      info "Installing Docker Engine and Compose from Docker's $distro_id repository"
+      # Fetch the official repo file directly to work with both dnf4 and dnf5.
+      sudo curl -fsSL "https://download.docker.com/linux/$distro_id/docker-ce.repo" -o /etc/yum.repos.d/docker-ce.repo || fail "Failed to configure Docker's RPM repository."
+      sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || fail "Failed to install Docker Engine and Compose; no Engine-only fallback was attempted."
       ;;
     *)
       fail "Unsupported Linux distro for automated Docker install: $distro_id. Install Docker Engine manually (https://docs.docker.com/engine/install/) and re-run."
       ;;
   esac
 
-  # Enable and start the daemon.
-  if command -v systemctl >/dev/null 2>&1; then
-    sudo systemctl enable --now docker || true
-  fi
+  dpf_docker_require_compose
+  command -v systemctl >/dev/null 2>&1 || fail "systemctl is required for automated Docker service setup."
+  sudo systemctl enable --now docker || fail "Failed to enable and start Docker's system service."
+  sudo docker info >/dev/null 2>&1 || fail "Docker daemon is not reachable after starting its system service."
 
   # Add the invoking user to the docker group so non-sudo docker
   # commands work in the subsequent session. We DO NOT call newgrp
@@ -248,12 +287,13 @@ dpf_docker_install_linux() {
   # unless tested"). The installer reports the requirement explicitly.
   local target_user="${SUDO_USER:-$USER}"
   if [ -n "$target_user" ] && [ "$target_user" != "root" ]; then
-    sudo usermod -aG docker "$target_user" || true
+    sudo usermod -aG docker "$target_user" || fail "Failed to add '$target_user' to the docker group."
     warn "Added '$target_user' to the docker group."
     info "  Log out and back in (or run 'newgrp docker') before continuing,"
     info "  then re-run install-dpf.sh to complete the install."
     return 75  # EX_TEMPFAIL-ish: caller should exit and ask operator to re-run
   fi
+  return 0
 }
 
 # Ensure Docker is present at acceptable version. Installs on Linux
@@ -297,6 +337,7 @@ dpf_docker_ensure_installed() {
         local elapsed=0
         while [ "$elapsed" -lt "$wait_seconds" ]; do
           if docker info >/dev/null 2>&1; then
+            dpf_docker_require_compose
             ok "Docker daemon reachable after ${elapsed}s"
             return 0
           fi
@@ -306,8 +347,9 @@ dpf_docker_ensure_installed() {
         fail "Docker Desktop did not become reachable within ${wait_seconds}s. Open Docker.app, complete any first-run prompts, and re-run install-dpf.sh."
       fi
       # No Docker.app — install via .dmg.
-      dpf_docker_install_darwin
-      return $?
+      dpf_docker_install_darwin || return $?
+      dpf_docker_require_compose
+      return 0
     fi
     fail "Unsupported platform for Docker install: $DPF_PLATFORM"
   fi
@@ -317,6 +359,7 @@ dpf_docker_ensure_installed() {
   fi
 
   ok "Docker $version present"
+  dpf_docker_require_compose
 
   # Verify the daemon is reachable.
   if ! docker info >/dev/null 2>&1; then

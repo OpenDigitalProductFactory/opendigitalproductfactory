@@ -28,7 +28,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-import { clearCodeGraph, syncTrackedFile } from "./neo4j-projection";
+import { clearCodeGraph, syncTrackedFile } from "./graph-projection";
 
 /** Every statement the projection issued, whitespace-collapsed for matching. */
 function statements(): string[] {

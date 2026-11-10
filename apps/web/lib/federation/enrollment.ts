@@ -18,6 +18,7 @@ import { prisma } from "@dpf/db";
 import {
   FEDERATION_PEER_ALIAS_TYPE,
   FEDERATION_PEER_PRINCIPAL_KIND,
+  federationPeerPrincipalId,
   inverseRole,
   isFederationRole,
   linkStateFromRow,
@@ -147,42 +148,24 @@ export async function enrollFederationLink(
       where: { id: tokenRow.id, consumedAt: null },
       data: { consumedAt: now },
     });
-
-    const principal = await tx.principal.create({
-      data: {
-        principalId: `principal_${linkId}`,
-        kind: FEDERATION_PEER_PRINCIPAL_KIND,
-        displayName: input.displayName,
-      },
-    });
-    await tx.principalAlias.create({
-      data: { principalId: principal.id, aliasType: FEDERATION_PEER_ALIAS_TYPE, aliasValue: linkId },
-    });
-
-    const link = await tx.federationLink.create({
-      data: {
-        linkId,
-        principalId: principal.id,
-        role: ourRole,
-        peerAuthorityUrl: input.peerAuthorityUrl,
-        peerOrganizationRef: input.peerOrganizationRef ?? null,
-        peerDeviceId: input.peerDeviceId ?? null,
-        localOrganizationId: input.localOrganizationId ?? null,
-        // Dual approval: both null at enrollment; trusted only after both approve.
-        linkState: "pending",
-        tokenHash: linkToken.hash,
-        tokenPrefix: linkToken.prefix,
-        tokenRotatedAt: now,
-        // Mutual handshake: the connector's inbound token becomes OUR outbound
-        // token, so the inviter can relay its approval and push demand back.
-        // Absent (older connector) → one-directional link, as before.
-        peerTokenEnc: input.callbackToken ? encryptSecret(input.callbackToken) : null,
-        enrolledAt: now,
-        metadata: {
-          ...(input.metadata ?? {}),
-          proposedProjection: tokenRow.proposedProjection ?? null,
-          proposedAuthorityBand: tokenRow.proposedAuthorityBand ?? null,
-        } as never,
+    const link = await createFederationLinkRow(tx, {
+      linkId,
+      role: ourRole,
+      peerAuthorityUrl: input.peerAuthorityUrl,
+      displayName: input.displayName,
+      peerOrganizationRef: input.peerOrganizationRef ?? null,
+      peerDeviceId: input.peerDeviceId ?? null,
+      localOrganizationId: input.localOrganizationId ?? null,
+      inboundToken: linkToken,
+      callbackToken: input.callbackToken ?? null,
+      // Dual approval: both null at enrollment; trusted only after both approve.
+      approvedAtLocal: null,
+      approvedAtPeer: null,
+      now,
+      metadata: {
+        ...(input.metadata ?? {}),
+        proposedProjection: tokenRow.proposedProjection ?? null,
+        proposedAuthorityBand: tokenRow.proposedAuthorityBand ?? null,
       },
     });
 
@@ -193,6 +176,155 @@ export async function enrollFederationLink(
   });
 
   return { ok: true, linkId, linkToken: linkToken.plaintext, role: ourRole, linkState: "pending" };
+}
+
+export interface FederationLinkRowInput {
+  linkId: string;
+  role: FederationRole;
+  peerAuthorityUrl: string;
+  displayName: string;
+  peerOrganizationRef: string | null;
+  peerDeviceId: string | null;
+  peerInstallationId?: string | null;
+  /**
+   * The peer's environment class as the organization CA certified it in the
+   * peer's member certificate (BI-0716C8A8). Absent or null: unattested.
+   */
+  peerEnvironmentClass?: string | null;
+  localOrganizationId: string | null;
+  /** Our inbound token (the peer authenticates to us with it); we keep the hash. */
+  inboundToken: { hash: string; prefix: string };
+  /** The peer's inbound token in clear; stored encrypted as our outbound token. */
+  callbackToken: string | null;
+  approvedAtLocal: Date | null;
+  approvedAtPeer: Date | null;
+  approvedByPrincipalId?: string | null;
+  now: Date;
+  metadata: Record<string, unknown>;
+}
+
+interface FederationLinkTx {
+  principal: { create(args: unknown): Promise<{ id: string }> };
+  principalAlias: { create(args: unknown): Promise<unknown> };
+  federationLink: {
+    create(args: unknown): Promise<{ id: string }>;
+    findMany?(args: unknown): Promise<Array<{ linkId: string }>>;
+  };
+  federatedRecordMirror?: {
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
+}
+
+/** Mirror states that still have somewhere to go. `synced` and `withdrawn` are
+ *  done; these three are work the peer has not taken yet. */
+export const NON_TERMINAL_MIRROR_STATUSES = ["pending", "dead-letter", "conflict"] as const;
+
+/**
+ * Re-point undelivered mirrors from this peer's PREVIOUS links onto the new one.
+ *
+ * BI-6C33AF7C. The digest exchange walks mirrors by `federationLinkId` for the
+ * CURRENT link only, so anything still owed on a link that was later revoked is
+ * never visited again by any cycle -- not dead, just unreachable. Re-enrolling a
+ * peer therefore silently orphaned that peer's whole in-flight backlog.
+ *
+ * Matched on `peerInstallationId`, NOT on peerAuthorityUrl. The URL is an
+ * address, not an identity: on this install three revoked links share one
+ * address but carry two different installation ids plus a null, because the peer
+ * was reinstalled. Migrating by address would hand records addressed to one
+ * installation to a different one. A link with no recorded installation id, or a
+ * different one, is deliberately left alone for an operator to decide -- see the
+ * stranded-mirror report.
+ *
+ * Returns how many mirrors moved so the caller can log it: resuming delivery is
+ * a real change of who receives data and should never be silent.
+ */
+export async function migrateMirrorsFromPriorLinks(
+  tx: FederationLinkTx,
+  input: { newLinkId: string; peerInstallationId: string | null | undefined },
+): Promise<{ movedMirrors: number; fromLinkIds: string[] }> {
+  const { peerInstallationId } = input;
+  if (!peerInstallationId || !tx.federationLink.findMany || !tx.federatedRecordMirror) {
+    return { movedMirrors: 0, fromLinkIds: [] };
+  }
+  const priorLinks = await tx.federationLink.findMany({
+    where: { peerInstallationId, linkId: { not: input.newLinkId } },
+    select: { linkId: true },
+  });
+  const fromLinkIds = priorLinks.map((link) => link.linkId);
+  if (fromLinkIds.length === 0) return { movedMirrors: 0, fromLinkIds: [] };
+
+  const moved = await tx.federatedRecordMirror.updateMany({
+    where: {
+      federationLinkId: { in: fromLinkIds },
+      syncStatus: { in: [...NON_TERMINAL_MIRROR_STATUSES] },
+    },
+    data: { federationLinkId: input.newLinkId },
+  });
+  return { movedMirrors: moved.count, fromLinkIds };
+}
+
+/**
+ * The token-independent half of enrolment: principal, alias and link row.
+ * Shared by the invitation path (born pending) and the organization-membership
+ * path (born trusted, EP-ZERO-CONFIG-FEDERATION §5.6) so the two can never
+ * drift in what a link row carries.
+ */
+export async function createFederationLinkRow(tx: FederationLinkTx, input: FederationLinkRowInput): Promise<{ id: string }> {
+  const principal = await tx.principal.create({
+    data: {
+      principalId: federationPeerPrincipalId(input.linkId),
+      kind: FEDERATION_PEER_PRINCIPAL_KIND,
+      displayName: input.displayName,
+    },
+  });
+  await tx.principalAlias.create({
+    data: { principalId: principal.id, aliasType: FEDERATION_PEER_ALIAS_TYPE, aliasValue: input.linkId },
+  });
+  const linkState = linkStateFromRow({
+    approvedAtLocal: input.approvedAtLocal,
+    approvedAtPeer: input.approvedAtPeer,
+    revokedAt: null,
+    quarantinedAt: null,
+  });
+  const created = await tx.federationLink.create({
+    data: {
+      linkId: input.linkId,
+      principalId: principal.id,
+      role: input.role,
+      peerAuthorityUrl: input.peerAuthorityUrl,
+      peerOrganizationRef: input.peerOrganizationRef,
+      peerDeviceId: input.peerDeviceId,
+      peerInstallationId: input.peerInstallationId ?? null,
+      peerEnvironmentClass: input.peerEnvironmentClass ?? null,
+      peerEnvironmentAttestedAt: input.peerEnvironmentClass ? input.now : null,
+      localOrganizationId: input.localOrganizationId,
+      linkState,
+      tokenHash: input.inboundToken.hash,
+      tokenPrefix: input.inboundToken.prefix,
+      tokenRotatedAt: input.now,
+      peerTokenEnc: input.callbackToken ? encryptSecret(input.callbackToken) : null,
+      approvedAtLocal: input.approvedAtLocal,
+      approvedAtPeer: input.approvedAtPeer,
+      approvedByPrincipalId: input.approvedByPrincipalId ?? null,
+      enrolledAt: input.now,
+      metadata: input.metadata as never,
+    },
+  });
+
+  // Re-enrolling a peer must not orphan what we still owe it (BI-6C33AF7C).
+  const migrated = await migrateMirrorsFromPriorLinks(tx, {
+    newLinkId: input.linkId,
+    peerInstallationId: input.peerInstallationId,
+  });
+  if (migrated.movedMirrors > 0) {
+    // Not silent: this resumes delivery of records that had stopped moving.
+    console.info(
+      `[federation] link ${input.linkId} adopted ${migrated.movedMirrors} undelivered `
+        + `mirror(s) from prior link(s) ${migrated.fromLinkIds.join(", ")} for the same `
+        + `peer installation.`,
+    );
+  }
+  return created;
 }
 
 // ── Dual approval + lifecycle (operator / peer actions) ──────────────────────

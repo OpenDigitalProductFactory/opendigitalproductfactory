@@ -14,6 +14,16 @@ status: active
 
 Increase delivery throughput without reducing evidence quality by moving wait state into the platform, selecting verification work before heavyweight admission, and coalescing equivalent immutable work. The measured starting point is four pull requests in seven hours and 1,222 estimated waiting calls among 1,297 nonproduction lease calls.
 
+## Consolidated delivery status — 2026-08-30
+
+This PR completes the server-owned slices that remained open:
+
+- `BI-MCP-EFF-0285909C`: deterministic TaskRun checkpoint, bounded queued lease lifetime, exact FIFO capacity event, duplicate suppression, five-minute reconciliation, and one-fresh-claim settlement are implemented. Canonical local-CI and host-resource runners now exit on the typed durable wait without releasing or polling.
+- `BI-114C1F40`: durable wait participates in true Workroom liveness, queued work is separated into executing/next-ready/dormant lanes, and canonical inventory/queue health exposes oldest wait, maximum no-transition age, zero-throughput backlog, p95 wait, and existing abandonment metrics.
+- `BI-47ACE2C7`: the prompt-only semantic-review route repair is carried in the same delivery candidate and derives its context requirement from the request actually sent.
+
+The event remains advisory: exact lease state is authority, and a resumed client must make one fresh claim. The five-minute reconciler is the correctness backstop when event delivery is unavailable.
+
 ## Invariants
 
 - A pass is valid only for its exact integration tree, evidence-plan digest, toolchain fingerprint, and gate kind.
@@ -79,12 +89,14 @@ Increase delivery throughput without reducing evidence quality by moving wait st
 
 ### Implementation
 
-1. Project lease admission as an MCP Task and expose full task state.
-2. Emit queue transition events from release, expiry, capacity change, and reconciliation paths.
-3. Suspend native workflows with Inngest `step.waitForEvent()` keyed to the task/claim.
-4. Publish MCP task status notifications over the existing Streamable HTTP/SSE path.
-5. Add a Codex host adapter that wakes the owning task; fall back to a five-minute reconciliation, never a 10-second claim loop.
-6. Move queued liveness to server-owned state and retain one fresh host-pressure claim after wake-up.
+1. **Delivered.** Add `nonprod/durable-wait.ts` as the single projection service. Derive a deterministic task identity per lease/subscriber, persist `nonprod-lease-wait.v1` in `TaskRun.progressPayload`, bind the lease to its owner task, and make capacity-event updates idempotent. No Prisma migration.
+2. **Delivered for queued/admitted/terminal transitions.** Extend `claim_nonprod_environment_lease` with a bounded `waitDeadlineAt`. When a claim is queued, return the MCP task and checkpoint the wait; when its fresh claim admits or becomes terminal, settle that task.
+3. **Delivered.** After release/expiry, select only the FIFO head of each capacity lane and emit a typed event carrying task, lease, claim, owner session, immutable candidate, and event identity. A five-minute scheduled reconciliation repairs a lost wake; the checkpointed wait deadline owns queued liveness.
+4. **Delivered using persist-before-publish.** The exact TaskRun transition is persisted before advisory Inngest delivery; the registered function idempotently consumes the same event, while reconciliation remains the recovery path.
+5. Extend the MCP task projection with wait metadata and add authenticated Streamable HTTP GET/SSE. One connection replays all durable `capacity-available` tasks for the token's user, then publishes `notifications/tasks/status`; it does not create one connection per waiter.
+6. **Delivered for canonical runners.** `gate-worktree.mjs` records the lease/TaskRun/claim wake identity and terminates on the server-owned queued result without release or renewal. `host-resource-runner.mjs` does the same. Active-lease supervision remains unchanged after admission.
+7. Add one host adapter process for the contributor toolchain. It consumes the SSE stream, deduplicates event ids in a bounded local ledger, and invokes the provider's supported session-resume command. Codex is the first executable adapter; unsupported providers surface the durable task and recovery command instead of polling.
+8. Update contributor bootstrap and operations documentation so the adapter is installed, health-checked, and visible. Record queue/task/event ids in gate evidence for later throughput attribution.
 
 ### Verification
 
@@ -92,6 +104,19 @@ Increase delivery throughput without reducing evidence quality by moving wait st
 - One release produces one wake-up and one fresh claim.
 - Dropped SSE still resumes through reconciliation.
 - Waiting lease-call volume falls at least 95% in a soak test.
+- A duplicated release/event does not launch a second resume.
+- A queued host-resource claim survives the intentional death of its original PID and safely rebinds only on the same owner/claim/resource contract.
+- A reconnecting singleton adapter replays an unconsumed wake without one resident process per task.
+
+### Exact implementation sequence
+
+1. **Red — projection and idempotency:** add focused tests for deterministic task ids, queued checkpointing, duplicate event suppression, task settlement, and deadline expiry.
+2. **Green — server state:** implement the projection service and wire claim/release/reap paths. Run the environment-lease and nonprod MCP pack suites.
+3. **Red/green — transport:** add route tests for authenticated GET/SSE replay, live task notification, disconnect cleanup, and task metadata; then implement the singleton stream.
+4. **Red/green — durable event:** add Inngest function tests for exact correlation, timeout, duplicate delivery, and reconciliation; register the function and five-minute catalog entry.
+5. **Red/green — host:** change the gate and resource-runner fixtures so queueing exits quickly, preserves its claim, writes a descriptor, and performs only one claim after a simulated wake. Add adapter tests for replay, dedupe, Codex invocation, and unsupported-provider fallback.
+6. **Functional soak:** hold a capacity lease, enqueue at least ten synthetic waiters, release once, drop/reconnect the stream, and run reconciliation. Assert zero resident waiter processes, FIFO-head wake, no duplicate execution, and at most one normal claim plus one five-minute recovery read per wait interval (at least 95% fewer waiting MCP calls than the recorded baseline).
+7. **Documentation and handoff:** update install/contributor operations, regenerate the documentation index, record before/after telemetry, run the impacted suites plus typecheck and policy guards, then ship through independent semantic review, exact-tree CI, DCO, and the protected merge queue.
 
 ## Slice 4 — Governed host resource lanes (`BI-30EDD4B0`)
 
@@ -161,6 +186,18 @@ the PID so liveness cannot be fooled by OS PID reuse.
 | `BI-MCP-EFF-0285909C` | `REQ-WAIT-1..3` | Durable admission flow | Queue → suspend → event → fresh claim | Slice 3 disconnect/drop/soak tests | `BI-6A5AB570` |
 | `BI-30EDD4B0` | `REQ-RES-1..3` | Resource lanes | Declare → admit → supervise → release | Slice 4 memory/fence tests | `BI-B2E9FC9D` |
 | `BI-114C1F40` | `REQ-WIP-1..4` | Workroom identity and liveness | Active ↔ waiting → promotion | Slice 5 identity/SLO tests | `BI-6A5AB570`, `BI-MCP-EFF-0285909C` |
+
+### Baseline objective and acceptance traceability
+
+The canonical design baseline names the outcome and acceptance identifiers that
+the implementation slices deliver. This plan keeps those identifiers verbatim
+so the governed coverage record can prove that every baseline statement has an
+owner, flow, contract, and verification path.
+
+| Deliverable | Baseline objectives | Contract | Flow | Baseline acceptance |
+| --- | --- | --- | --- | --- |
+| `BI-MCP-EFF-0285909C` | `OBJ-FLOW-001`, `OBJ-FLOW-002`, `OBJ-FLOW-003` | `CONTRACT-WAIT-001`: the lease and TaskRun remain authority; events are advisory and a resumed client makes one fresh claim | `FLOW-WAIT-001`: queue → durable checkpoint → exact FIFO wake → fresh claim → settle | `AC-FLOW-001`, `AC-FLOW-002`, `AC-FLOW-003`, `AC-FLOW-006` |
+| `BI-114C1F40` | `OBJ-FLOW-004`, `OBJ-FLOW-005` | `CONTRACT-WIP-001`: durable waiting is live Workroom progress but never executing WIP | `FLOW-WIP-001`: active ↔ waiting → ready-for-promotion or terminal, with SLO projection | `AC-FLOW-004`, `AC-FLOW-005` |
 
 ## Rollout and rollback
 

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Routine project work; client ergonomics never grants DPF or provider authority.",
+  "commandPrefixes": [
+    ["git", "status"], ["git", "diff"], ["git", "show"], ["git", "log"],
+    ["git", "rev-parse"], ["git", "fetch"], ["git", "add"], ["git", "commit"],
+    ["git", "push"], ["git", "worktree"], ["git", "switch"], ["git", "merge"],
+    ["rg"], ["pnpm", "run"], ["pnpm", "exec"], ["pnpm", "--filter"],
+    ["pnpm", "pr:ready"], ["pnpm", "pr:health"], ["pnpm", "gate:context"],
+    ["node", "scripts/"], ["python", "-m", "unittest"], ["gh", "pr"], ["gh", "run", "view"],
+    ["gh", "run", "list"], ["gh", "run", "watch"], ["git", "branch"], ["git", "ls-remote"],
+    ["git", "rev-list"], ["git", "merge-base"], ["Get-Content"], ["Get-ChildItem"]
+  ],
+  "reviewedPrefixes": [
+    ["git", "push", "--force"], ["git", "push", "-f"], ["git", "push", "--force-with-lease"],
+    ["git", "push", "--delete"], ["git", "push", "--mirror"],
+    ["git", "worktree", "remove"], ["git", "worktree", "prune"],
+    ["git", "branch", "-D"], ["git", "branch", "--delete"],
+    ["gh", "pr", "merge"], ["gh", "pr", "close"]
+  ],
+  "claudeTools": ["Read", "Edit", "Write", "Glob", "Grep", "Agent"],
+  "claudeMcpServers": ["dpf", "plugin_dpf-platform_dpf"],
+  "grokTools": ["Read", "Edit", "Grep"],
+  "grokMcpServers": ["dpf"]
+}

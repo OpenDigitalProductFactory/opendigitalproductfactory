@@ -23,7 +23,6 @@ export default async function IncidentDetailPage({ params }: Props) {
     notFound();
   }
 
-  const isOpen = incident.status === "open" || incident.status === "investigating";
   const deadlinePassed = incident.notificationDeadline && new Date(incident.notificationDeadline) < new Date();
 
   return (

@@ -1,12 +1,16 @@
+---
+status: active
+---
+
 # Town-Informed Company Work Loop
 
 | Field | Value |
 | --- | --- |
-| Status | Design approved for spec; implementation not started |
+| Status | Design approved; implementation resumed 2026-09-06 under live BI-0EA09322 |
 | Date | 2026-07-24 |
 | Trigger | Founder asked to research Town.com-style assistant/workflow lessons and land the useful parts in DPF company scope, not as a standalone prototype. |
 | Governing epic | EP-2984B02B - Work Case / Company Work Management |
-| Primary backlog | BI-F309BB95 - Exercise multi-coworker Work Case capture with municipal services launch-readiness scenario |
+| Primary backlog | BI-0EA09322 - Project coworker service engagements into Work Case company work |
 | Related surfaces | Workspace, Needs You inbox, Work Case, Work Capsule, Coworker Service Catalog, coworker memory, Authority/Audit |
 | Extends | 2026-06-27-work-management-architecture-design.md; 2026-06-23-human-attention-surface-design.md; 2026-06-29-layer-scoped-work-capsules-design.md; 2026-06-30-coworker-service-offer-catalog-design.md; 2026-07-21-memory-trust-and-evidence-currency-design.md |
 
@@ -15,7 +19,9 @@
 >
 > - Tracked by `BI-3B01B725` (recovered tail designs). Read it before acting on this document.
 > - Preserved implementation: `doc/town-company-work-loop` @ `d903bac20cad8297e68ae5e54f010805c68719d5`, pinned at `refs/salvage/2026-08-15/doc/town-company-work-loop` and listed in `~/dpf-deleted-remote-branch-tips-2026-08-15.txt`. Restore with `git push origin d903bac20cad8297e68ae5e54f010805c68719d5:refs/heads/doc/town-company-work-loop`.
-> - Backlog ids cited below that do **not** resolve in this install: `BI-F309BB95`. Treat them as labels, not links.
+> - Backlog labels cited below that do **not** resolve in this install: `historic-F309BB95`. Treat them as historic labels, not links.
+> - Live implementation item for the DPF-native projection gap: `BI-0EA09322` (Project coworker service engagements into Work Case company work).
+> - Current exercise evidence: `docs/superpowers/evidence/2026-09-06-town-informed-company-work-loop-exercise.md`.
 > - No coverage receipt is recorded and none should be until a thread actually starts — a receipt bound to unstarted work would be fiction. This document is deliberately outside the plan-backlog-coverage gate (it carries no bolded backlog-item metadata line).
 
 ## 1. Thesis
@@ -52,7 +58,7 @@ The previous standalone prototype was correctly rejected because it created a se
 
 The right question is not "Where do we put a Townie?" It is "Can one DPF company outcome stay coherent while multiple coworkers, routines, approvals, memory notes, and build work all contribute?"
 
-BI-F309BB95 is the right proof point because it already asks for a multi-coworker municipal services launch-readiness exercise with strategy, architecture, compliance, storefront, finance, operations, Build Studio, and QA coworkers. That is a company setting, not a personal productivity setting.
+The historic-F309BB95 exercise label is the right proof point because it already asks for a multi-coworker municipal services launch-readiness exercise with strategy, architecture, compliance, storefront, finance, operations, Build Studio, and QA coworkers. That is a company setting, not a personal productivity setting.
 
 ## 3. Non-Goals
 
@@ -122,7 +128,7 @@ Reject:
 
 ## 5. DPF Landing Decision
 
-Land Town.com-style lessons as **an exercise-backed Work Case addendum** under EP-2984B02B and BI-F309BB95.
+Land Town.com-style lessons as **an exercise-backed Work Case addendum** under EP-2984B02B and BI-0EA09322.
 
 The municipal services launch-readiness exercise becomes the proving run:
 
@@ -357,7 +363,7 @@ No implementation should begin until the exercise has converted "possible gaps" 
 The design is successful when:
 
 1. Town.com research is captured as lessons mapped to DPF primitives, not as a standalone assistant.
-2. BI-F309BB95 has a concrete exercise path grounded in the Work Case architecture.
+2. BI-0EA09322 has a concrete exercise path grounded in the Work Case architecture.
 3. The municipal services scenario can be described as one Work Case with multiple coworker contributions.
 4. Needs You remains the only owner decision surface.
 5. Repeat work is routed toward coworker service offers/playbooks, not new dashboard widgets.

@@ -1,10 +1,22 @@
 import crypto from "node:crypto";
-import { prisma, type Prisma } from "@dpf/db";
+import { prisma, type DocumentRenditionKind, type Prisma } from "@dpf/db";
 import { syncDocumentReference } from "@dpf/db/graph-sync";
 import { DOCUMENT_TEXT_INLINE_LIMIT_BYTES } from "./blob-storage";
 import { searchDocumentVectors, storeDocumentVector } from "./embeddings";
+import { requestDocumentRenditions } from "./rendition-trigger";
+import { needsRenditions } from "./rendition-rules";
+import {
+  canManageDocumentAccess,
+  isDocumentReadable,
+  readableDocumentWhere,
+  type DocumentViewer,
+} from "./document-access";
 
 export const DOCUMENT_STATES = ["draft", "published", "archived"] as const;
+
+/** A collection is a document of this kind; its members are "contains" references (BI-957915CB). */
+export const COLLECTION_DOCUMENT_KIND = "collection";
+export const COLLECTION_MEMBER_REF_TYPE = "contains";
 export type DocumentState = typeof DOCUMENT_STATES[number];
 
 export type DocumentReferenceInput = {
@@ -32,6 +44,15 @@ export type SaveManagedDocumentInput = {
   ownerPrincipalId?: string | null;
   createdByPrincipalId?: string | null;
   actorPrincipalId?: string | null;
+  /** Owner of a NEW document when ownerPrincipalId is not given; ignored for an existing one. */
+  defaultOwnerPrincipalId?: string | null;
+  /**
+   * Who is saving (BI-957915CB). When set and the document exists, the viewer
+   * must be able to read it, and only its owner or creator may change a
+   * restricted document's scope or owner. Omitted only by platform-internal
+   * writers that create their own documents.
+   */
+  viewer?: DocumentViewer;
 };
 
 export type DocumentSearchInput = {
@@ -43,6 +64,12 @@ export type DocumentSearchInput = {
   ownerPrincipalId?: string | null;
   tags?: string[];
   limit?: number;
+  /** Only members of this collection; an unreadable collection has none (BI-957915CB). */
+  collectionId?: string | null;
+  /** Leave out documents of these kinds unless documentKind names one. */
+  excludeKinds?: string[];
+  /** Who is searching: only documents this viewer may read are returned (BI-957915CB). */
+  viewer: DocumentViewer;
 };
 
 export type ManagedDocument = {
@@ -81,6 +108,16 @@ export type ManagedDocumentVersion = {
   summary: string | null;
   sizeBytes: number | null;
   createdAt: Date;
+  /** Derived renditions (BI-9D43CBEF), without their text. */
+  renditions: ManagedDocumentRendition[];
+};
+
+export type ManagedDocumentRendition = {
+  id: string;
+  kind: DocumentRenditionKind;
+  mimeType: string | null;
+  blobId: string | null;
+  createdAt: Date;
 };
 
 export type ManagedDocumentLifecycleEvent = {
@@ -94,9 +131,18 @@ export type ManagedDocumentLifecycleEvent = {
 
 type DocumentStoreDb = typeof prisma;
 
+// Rendition text can run to the inline limit, so projections carry the
+// rendition's identity and never its text.
+const VERSION_RENDITIONS = {
+  renditions: {
+    select: { id: true, renditionKind: true, mimeType: true, blobId: true, createdAt: true },
+    orderBy: { renditionKind: "asc" as const },
+  },
+};
+
 const DOCUMENT_INCLUDE = {
-  currentVersion: true,
-  versions: { orderBy: { version: "desc" as const } },
+  currentVersion: { include: VERSION_RENDITIONS },
+  versions: { orderBy: { version: "desc" as const }, include: VERSION_RENDITIONS },
   tags: true,
   ownerPrincipal: { select: { id: true, displayName: true } },
   createdByPrincipal: { select: { id: true, displayName: true } },
@@ -142,6 +188,11 @@ async function resolveOrganizationId(db: DocumentStoreDb, organizationId?: strin
   return org.id;
 }
 
+/** The organization a new document belongs to when the caller names none: the install's own. */
+export async function resolveDocumentOrganizationId(organizationId?: string | null, db: DocumentStoreDb = prisma): Promise<string> {
+  return resolveOrganizationId(db, organizationId);
+}
+
 function projectDocument(row: any, scores?: { semanticScore?: number; fullTextScore?: number }): ManagedDocument {
   return {
     id: row.id,
@@ -181,6 +232,13 @@ function projectVersion(row: any): ManagedDocumentVersion {
     summary: row.summary ?? null,
     sizeBytes: row.sizeBytes ?? null,
     createdAt: row.createdAt,
+    renditions: (row.renditions ?? []).map((rendition: any) => ({
+      id: rendition.id,
+      kind: rendition.renditionKind,
+      mimeType: rendition.mimeType ?? null,
+      blobId: rendition.blobId ?? null,
+      createdAt: rendition.createdAt,
+    })),
   };
 }
 
@@ -203,13 +261,26 @@ async function searchDocumentIdsByFullText(
   if (!query.trim()) return new Map();
   try {
     const rows = await db.$queryRawUnsafe<Array<{ documentId: string; rank: number | string | null }>>(
+      // Version text (title, summary, inline content) and, for office files,
+      // the plain-text rendition's text (BI-9D43CBEF).
       `
-        SELECT d."documentId",
-               MAX(ts_rank_cd(v."searchVector", websearch_to_tsquery('english', $1)))::float AS rank
-        FROM "Document" d
-        JOIN "DocumentVersion" v ON v."documentId" = d."id"
-        WHERE v."searchVector" @@ websearch_to_tsquery('english', $1)
-        GROUP BY d."documentId"
+        SELECT hits."documentId", MAX(hits.rank)::float AS rank
+        FROM (
+          SELECT d."documentId",
+                 ts_rank_cd(v."searchVector", websearch_to_tsquery('english', $1)) AS rank
+          FROM "Document" d
+          JOIN "DocumentVersion" v ON v."documentId" = d."id"
+          WHERE v."searchVector" @@ websearch_to_tsquery('english', $1)
+          UNION ALL
+          SELECT d."documentId",
+                 ts_rank_cd(r."searchVector", websearch_to_tsquery('english', $1)) AS rank
+          FROM "Document" d
+          JOIN "DocumentVersion" v ON v."documentId" = d."id"
+          JOIN "DocumentRendition" r ON r."documentVersionId" = v."id"
+          WHERE r."renditionKind" = 'plain_text'
+            AND r."searchVector" @@ websearch_to_tsquery('english', $1)
+        ) hits
+        GROUP BY hits."documentId"
         ORDER BY rank DESC
         LIMIT $2
       `,
@@ -249,7 +320,7 @@ async function projectDocumentReferencesToGraph(documentDbId: string, db: Docume
       refType: reference.refType,
       anchor: reference.anchor,
     }).catch((err: unknown) => {
-      console.warn("[document-store] Neo4j document reference projection failed:", err);
+      console.warn("[document-store] graph document reference projection failed:", err);
     });
   }
 }
@@ -273,8 +344,28 @@ export async function saveManagedDocument(input: SaveManagedDocumentInput, db: D
   const saved = await db.$transaction(async (tx) => {
     const existing = await tx.document.findUnique({
       where: { documentId: stableDocumentId },
-      select: { id: true, documentId: true, currentState: true },
+      select: {
+        id: true,
+        documentId: true,
+        currentState: true,
+        accessScope: true,
+        ownerPrincipalId: true,
+        createdByPrincipalId: true,
+        accessGrants: { select: { principalId: true, expiresAt: true } },
+      },
     });
+    const requestedScope = input.accessScope?.trim() || null;
+    const requestedOwner = input.ownerPrincipalId ?? null;
+    if (existing && input.viewer) {
+      // A refused write answers like a missing document, as a refused read does.
+      if (!isDocumentReadable(existing, input.viewer)) throw new Error(`Document not found: ${stableDocumentId}`);
+      const changesAccess =
+        (requestedScope !== null && requestedScope !== existing.accessScope)
+        || (requestedOwner !== null && requestedOwner !== existing.ownerPrincipalId);
+      if (changesAccess && !canManageDocumentAccess(existing, input.viewer)) {
+        throw new Error(`Only the owner or creator of ${stableDocumentId} can change who may read it.`);
+      }
+    }
     const latest = existing
       ? await tx.documentVersion.findFirst({
           where: { documentId: existing.id },
@@ -290,11 +381,12 @@ export async function saveManagedDocument(input: SaveManagedDocumentInput, db: D
             title,
             documentKind,
             contentFormat,
-            accessScope: input.accessScope?.trim() || "organization",
+            // A new version keeps the document's scope, owner and creator
+            // unless the caller changes them explicitly (BI-957915CB).
+            accessScope: requestedScope ?? undefined,
             sourceKind: input.sourceKind?.trim() || "managed",
             externalLocator: input.externalLocator ?? undefined,
-            ownerPrincipalId: input.ownerPrincipalId ?? input.actorPrincipalId ?? null,
-            createdByPrincipalId: input.createdByPrincipalId ?? input.actorPrincipalId ?? null,
+            ownerPrincipalId: requestedOwner ?? undefined,
             fullTextIndexedAt: contentText ? new Date() : undefined,
           },
           select: { id: true },
@@ -306,11 +398,11 @@ export async function saveManagedDocument(input: SaveManagedDocumentInput, db: D
             title,
             documentKind,
             contentFormat,
-            accessScope: input.accessScope?.trim() || "organization",
+            accessScope: requestedScope ?? "organization",
             sourceKind: input.sourceKind?.trim() || "managed",
             externalLocator: input.externalLocator ?? undefined,
             currentState: "draft",
-            ownerPrincipalId: input.ownerPrincipalId ?? input.actorPrincipalId ?? null,
+            ownerPrincipalId: requestedOwner ?? input.defaultOwnerPrincipalId ?? input.actorPrincipalId ?? null,
             createdByPrincipalId: input.createdByPrincipalId ?? input.actorPrincipalId ?? null,
             fullTextIndexedAt: contentText ? new Date() : undefined,
           },
@@ -349,9 +441,12 @@ export async function saveManagedDocument(input: SaveManagedDocumentInput, db: D
     await tx.documentReference.deleteMany({ where: { sourceDocumentId: document.id, sourceVersionId: version.id } });
     for (const ref of input.references ?? []) {
       const refType = requireText(ref.refType, "refType");
+      // A target the saver cannot read is not linked as a managed document.
       const target = ref.targetDocumentId
-        ? await tx.document.findUnique({
-            where: { documentId: ref.targetDocumentId },
+        ? await tx.document.findFirst({
+            where: input.viewer
+              ? { AND: [{ documentId: ref.targetDocumentId }, readableDocumentWhere(input.viewer)] }
+              : { documentId: ref.targetDocumentId },
             select: { id: true, currentVersionId: true },
           })
         : null;
@@ -401,13 +496,38 @@ export async function saveManagedDocument(input: SaveManagedDocumentInput, db: D
 
   await projectDocumentReferencesToGraph(projected.id, db).catch(() => null);
 
+  // An office file is a blob nothing can search or preview until the rendition
+  // job derives its PDF and text (BI-9D43CBEF). Best effort: never fails the save.
+  if (projected.currentVersion && needsRenditions(projected.currentVersion)) {
+    await requestDocumentRenditions(projected.currentVersion.id);
+  }
+
   return projected;
 }
 
-export async function loadManagedDocument(input: { documentId: string; version?: number | null }, db: DocumentStoreDb = prisma): Promise<ManagedDocument | null> {
+/** Which of these stable document ids the viewer may read (missing ids are absent too). */
+export async function readableDocumentIds(
+  documentIds: readonly string[],
+  viewer: DocumentViewer,
+  db: DocumentStoreDb = prisma,
+): Promise<Set<string>> {
+  const ids = [...new Set(documentIds.map((id) => id.trim()).filter(Boolean))];
+  if (ids.length === 0) return new Set();
+  const rows = await db.document.findMany({
+    where: { AND: [{ documentId: { in: ids } }, readableDocumentWhere(viewer)] },
+    select: { documentId: true },
+  });
+  return new Set(rows.map((row) => row.documentId));
+}
+
+/** Load a document the viewer may read; an unreadable one is null, like a missing one. */
+export async function loadManagedDocument(
+  input: { documentId: string; version?: number | null; viewer: DocumentViewer },
+  db: DocumentStoreDb = prisma,
+): Promise<ManagedDocument | null> {
   const documentId = requireText(input.documentId, "documentId");
-  const row = await db.document.findUnique({
-    where: { documentId },
+  const row = await db.document.findFirst({
+    where: { AND: [{ documentId }, readableDocumentWhere(input.viewer)] },
     include: DOCUMENT_INCLUDE,
   });
   if (!row) return null;
@@ -442,6 +562,17 @@ export async function searchManagedDocuments(input: DocumentSearchInput, db: Doc
   if (input.organizationId) where.organizationId = input.organizationId;
   if (state) where.currentState = state;
   if (input.documentKind) where.documentKind = input.documentKind;
+  else if (input.excludeKinds?.length) where.documentKind = { notIn: input.excludeKinds };
+  if (input.collectionId) {
+    where.incomingReferences = {
+      some: {
+        refType: COLLECTION_MEMBER_REF_TYPE,
+        sourceDocument: {
+          is: { AND: [{ documentId: input.collectionId, documentKind: COLLECTION_DOCUMENT_KIND }, readableDocumentWhere(input.viewer)] },
+        },
+      },
+    };
+  }
   if (input.ownerPrincipalId) where.ownerPrincipalId = input.ownerPrincipalId;
   if (tags.length > 0) where.tags = { some: { tag: { in: tags } } };
   if (query) {
@@ -452,13 +583,16 @@ export async function searchManagedDocuments(input: DocumentSearchInput, db: Doc
       { tags: { some: { tag: { contains: query, mode: "insensitive" } } } },
       { versions: { some: { contentText: { contains: query, mode: "insensitive" } } } },
       { versions: { some: { summary: { contains: query, mode: "insensitive" } } } },
+      { versions: { some: { renditions: { some: { renditionKind: "plain_text", contentText: { contains: query, mode: "insensitive" } } } } } },
       ...(fullTextRank.size > 0 ? [{ documentId: { in: [...fullTextRank.keys()] } }] : []),
       ...(semanticResults.length > 0 ? [{ documentId: { in: semanticResults.map((result) => result.documentId) } }] : []),
     ];
   }
 
+  // Full-text and semantic hits only nominate ids for this query, so the
+  // viewer clause filters them with everything else (BI-957915CB).
   const rows = await db.document.findMany({
-    where: where as never,
+    where: { AND: [where as Prisma.DocumentWhereInput, readableDocumentWhere(input.viewer)] },
     orderBy: [{ updatedAt: "desc" }],
     take: limit,
     include: DOCUMENT_INCLUDE,
@@ -483,15 +617,18 @@ export async function linkManagedDocuments(input: {
   refType: string;
   anchor?: string | null;
   actorPrincipalId?: string | null;
+  viewer: DocumentViewer;
 }, db: DocumentStoreDb = prisma): Promise<{ referenceId: string }> {
-  const source = await db.document.findUnique({
-    where: { documentId: requireText(input.sourceDocumentId, "sourceDocumentId") },
+  const readable = readableDocumentWhere(input.viewer);
+  const source = await db.document.findFirst({
+    where: { AND: [{ documentId: requireText(input.sourceDocumentId, "sourceDocumentId") }, readable] },
     select: { id: true, currentVersionId: true },
   });
   if (!source) throw new Error(`Source document not found: ${input.sourceDocumentId}`);
+  // A target the viewer cannot read is recorded like a missing one: no edge to it.
   const target = input.targetDocumentId
-    ? await db.document.findUnique({
-        where: { documentId: input.targetDocumentId },
+    ? await db.document.findFirst({
+        where: { AND: [{ documentId: input.targetDocumentId }, readable] },
         select: { id: true, currentVersionId: true },
       })
     : null;
@@ -517,9 +654,13 @@ export async function linkManagedDocuments(input: {
   return { referenceId: reference.id };
 }
 
-export async function listManagedDocumentVersions(documentId: string, db: DocumentStoreDb = prisma): Promise<ManagedDocumentVersion[]> {
-  const doc = await db.document.findUnique({
-    where: { documentId: requireText(documentId, "documentId") },
+export async function listManagedDocumentVersions(
+  documentId: string,
+  viewer: DocumentViewer,
+  db: DocumentStoreDb = prisma,
+): Promise<ManagedDocumentVersion[]> {
+  const doc = await db.document.findFirst({
+    where: { AND: [{ documentId: requireText(documentId, "documentId") }, readableDocumentWhere(viewer)] },
     select: { id: true },
   });
   if (!doc) return [];
@@ -545,13 +686,14 @@ export async function changeManagedDocumentState(input: {
   reason?: string | null;
   actorPrincipalId?: string | null;
   toolExecutionId?: string | null;
+  viewer: DocumentViewer;
 }, db: DocumentStoreDb = prisma): Promise<ManagedDocument> {
   const toState = normalizeState(input.toState);
   if (!toState) throw new Error("toState is required.");
 
   const row = await db.$transaction(async (tx) => {
-    const current = await tx.document.findUnique({
-      where: { documentId: requireText(input.documentId, "documentId") },
+    const current = await tx.document.findFirst({
+      where: { AND: [{ documentId: requireText(input.documentId, "documentId") }, readableDocumentWhere(input.viewer)] },
       select: { id: true, currentState: true },
     });
     if (!current) throw new Error(`Document not found: ${input.documentId}`);
@@ -583,15 +725,20 @@ export async function changeManagedDocumentState(input: {
   return projectDocument(row);
 }
 
-export async function listManagedDocumentReferences(documentId: string, db: DocumentStoreDb = prisma) {
-  const doc = await db.document.findUnique({
-    where: { documentId: requireText(documentId, "documentId") },
+/**
+ * A readable document's references. A referenced document the viewer cannot
+ * read is left out, so its title never travels through someone else's edge.
+ */
+export async function listManagedDocumentReferences(documentId: string, viewer: DocumentViewer, db: DocumentStoreDb = prisma) {
+  const readable = readableDocumentWhere(viewer);
+  const doc = await db.document.findFirst({
+    where: { AND: [{ documentId: requireText(documentId, "documentId") }, readable] },
     select: { id: true },
   });
   if (!doc) return { inbound: [], outbound: [] };
   const [outbound, inbound] = await Promise.all([
     db.documentReference.findMany({
-      where: { sourceDocumentId: doc.id },
+      where: { sourceDocumentId: doc.id, OR: [{ targetDocumentId: null }, { targetDocument: { is: readable } }] },
       orderBy: { createdAt: "desc" },
       include: {
         targetDocument: { select: { documentId: true, title: true, currentState: true } },
@@ -600,7 +747,7 @@ export async function listManagedDocumentReferences(documentId: string, db: Docu
       },
     }),
     db.documentReference.findMany({
-      where: { targetDocumentId: doc.id },
+      where: { targetDocumentId: doc.id, sourceDocument: { is: readable } },
       orderBy: { createdAt: "desc" },
       include: {
         sourceDocument: { select: { documentId: true, title: true, currentState: true } },

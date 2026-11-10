@@ -52,6 +52,132 @@ function escalationCodes(plan) {
 }
 
 describe("createEvidencePlan", () => {
+  it("selects foreground recovery for each covered execution boundary", () => {
+    for (const path of [
+      "apps/web/app/api/agent/send/route.ts",
+      "apps/web/lib/agent/foreground-work-publication.ts",
+      "apps/web/lib/agent/foreground-work-context.ts",
+      "apps/web/lib/queue/functions/agent-task-dispatch.ts",
+      "apps/web/lib/tak/autonomous-work-run.ts",
+      "apps/web/lib/routing/governed-inference-deadline.ts",
+      "apps/web/lib/shared/task-execution-fence.ts",
+      "apps/web/lib/mcp-task-capacity-contract.ts",
+      "apps/web/lib/govern/current-user-context.ts",
+      "apps/web/lib/inference/ai-inference.ts",
+      "apps/web/lib/actions/coworker-response-persistence.ts",
+      "apps/web/lib/tak/agentic-loop.ts",
+      "apps/web/lib/agent-form-assist.ts",
+      "apps/web/lib/coworker/agent-coworker-core.ts",
+      "apps/web/scripts/foreground-work-recovery-verification.ts",
+      "apps/web/scripts/ux-sweep-fixture-core.mjs",
+      "apps/web/scripts/ux-sweep-fixture.ts",
+    ]) {
+      const test = path.replace(/(\.(?:mjs|ts))$/, ".test$1");
+      const plan = createEvidencePlan(input({ changedFiles: [path, test], knownTests: [test],
+        codeGraphAdvice: trustedGraph(), relatedTestsBySource: { [path]: [test] } }));
+      assert.equal(plan.fullSuite, false, `covered path must select without an escalation: ${path}`);
+      assert.ok(plan.runtimeScenarios?.some(scenario => scenario.id === "foreground-recovery"
+        && scenario.requiredCaseIds.includes("stored-result-provenance")), path);
+    }
+  });
+
+  it("does not require foreground recovery for an unrelated trusted PR", () => {
+    const path = "apps/web/lib/example.ts", test = "apps/web/lib/example.test.ts";
+    const plan = createEvidencePlan(input({ changedFiles: [path, test], knownTests: [test],
+      codeGraphAdvice: trustedGraph(), relatedTestsBySource: { [path]: [test] } }));
+    assert.equal(plan.fullSuite, false);
+    assert.deepEqual(plan.runtimeScenarios, []);
+  });
+
+  it("requires the runtime journey for exhaustive lifecycles and unsafe scope", () => {
+    for (const eventName of ["merge_group", "push", "workflow_dispatch", "schedule"]) {
+      const plan = createEvidencePlan(input({ eventName, changedFiles: ["README.md"] }));
+      assert.ok(plan.runtimeScenarios?.some(scenario => scenario.id === "foreground-recovery"), eventName);
+    }
+    const unknown = createEvidencePlan(input({ changedFiles: [] }));
+    assert.ok(unknown.runtimeScenarios?.some(scenario => scenario.id === "foreground-recovery"));
+  });
+
+  // Python was invisible to the classifier: neither convention matched, so any
+  // change touching a .py file fell through to `unmapped-file` and escalated the
+  // whole run to exhaustive — which switches on the portal UX sweep for a diff
+  // that cannot affect a route. Observed on PR #5436: two skill-pack Python
+  // files, affectedRoutes [], and a 10-minute UX sweep.
+  it("classifies a Python test by its own naming convention, not the JS one", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+      knownTests: ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+    }));
+    assert.equal(
+      plan.escalations.some((e) => e.code === "unmapped-file"),
+      false,
+      "a *_test.py file is a test, not an unclassifiable file",
+    );
+    // Assert the CLASSIFICATION, not merely the absence of an escalation.
+    // Production patterns now cover .py too, so a *_test.py would stop
+    // escalating even without the test pattern — by being mislabelled
+    // production rather than by being understood. Only `kind` catches that.
+    const disposition = plan.fileDispositions.find(
+      (f) => f.path === "packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py",
+    );
+    assert.equal(disposition?.kind, "test", "a Python test must classify as a test, not as production");
+  });
+
+  it("maps a Python source file to its colocated <stem>_test.py", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/scripts/update_agent_toolchain.py"],
+      knownTests: ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+    }));
+    assert.deepEqual(
+      plan.affectedTests,
+      ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+      "Python colocates as <stem>_test.py; the JS `.test.` prefixes never match it",
+    );
+    assert.equal(
+      plan.escalations.some((e) => e.code.startsWith("unmapped")),
+      false,
+    );
+  });
+
+  it("maps the policy-guard registry to its declared PR Health Logic test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["scripts/lib/ci-policy-guards.mjs"],
+      knownTests: ["scripts/ci-policy-guards.test.mjs"],
+    }));
+    assert.deepEqual(plan.affectedTests, ["scripts/ci-policy-guards.test.mjs"]);
+  });
+
+  it("maps the installed published-correction guard to its PR Health Logic test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/hooks/lib/published-correction.mjs"],
+      knownTests: ["scripts/published-correction.test.mjs"],
+    }));
+    assert.deepEqual(plan.affectedTests, ["scripts/published-correction.test.mjs"]);
+  });
+
+  it("does not claim a Python route, because .py files serve none", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: [
+        "packages/dpf-skill-pack/scripts/update_agent_toolchain.py",
+        "packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py",
+      ],
+      knownTests: ["packages/dpf-skill-pack/scripts/update_agent_toolchain_test.py"],
+    }));
+    assert.deepEqual(plan.affectedRoutes, []);
+  });
+
+  it("still escalates a Python source file that has no colocated test", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["packages/dpf-skill-pack/scripts/lonely.py"],
+      knownTests: [],
+    }));
+    assert.equal(
+      plan.escalations.some((e) => e.code === "unmapped-production"),
+      true,
+      "untested production Python must still widen the run — this is not a way to opt out of coverage",
+    );
+  });
+
   it("emits a versioned deterministic semantic plan and digest", () => {
     const first = createEvidencePlan(input({
       changedFiles: [
@@ -341,6 +467,26 @@ describe("createEvidencePlan", () => {
     assert.deepEqual(plan.affectedTests, ["apps/web/lib/orders.test.ts"]);
     assert.equal(plan.fullSuite, false);
     assert.deepEqual(plan.escalations, []);
+  });
+
+  it("retains an explicit existing-test mapping for a Dockerfile", () => {
+    const source = "services/edge-node/Dockerfile";
+    const test = "scripts/check-docker-workspace-context.test.mjs";
+    const plan = createEvidencePlan(input({
+      changedFiles: [source],
+      knownTests: [test],
+      relatedTestsBySource: { [source]: [test] },
+      codeGraphAdvice: trustedGraph(),
+    }));
+
+    assert.deepEqual(plan.affectedTests, [test]);
+    assert.deepEqual(plan.fileDispositions, [{
+      path: source,
+      kind: "other",
+      disposition: "mapped-tests",
+      tests: [test],
+      routes: [],
+    }]);
   });
 
   it("derives Next route paths and route families from page ownership", () => {

@@ -204,3 +204,100 @@ test("owner death reaps and refills only its slot while the peer remains valid",
     "healthy peer must never be reaped with the dead owner",
   );
 });
+
+// BI-B1CB7EC3 — a slot goes only to a waiter that proves it is attached to a
+// process, and only on that waiter's own claim.
+
+test("a stranger's claim does not promote the queued head; the head keeps precedence", () => {
+  const plan = planEnvironmentAdmission({
+    leases: [
+      lease({ id: "head", queuedAt: new Date("2026-07-28T20:59:00.000Z") }),
+      lease({ id: "claimant", queuedAt: new Date("2026-07-28T20:59:30.000Z") }),
+    ],
+    now: NOW,
+    slotKeys: ["slot-0"],
+    livenessWindowMs: 120_000,
+    admissibleLeaseIds: ["claimant"],
+  });
+
+  assert.deepEqual(plan.admissions, []);
+  assert.deepEqual(plan.queuePositions, [
+    { leaseId: "head", position: 1 },
+    { leaseId: "claimant", position: 2 },
+  ]);
+});
+
+test("a claimant admits itself when it is the live head", () => {
+  const plan = planEnvironmentAdmission({
+    leases: [
+      lease({ id: "claimant", queuedAt: new Date("2026-07-28T20:59:00.000Z") }),
+      lease({ id: "later", queuedAt: new Date("2026-07-28T20:59:30.000Z") }),
+    ],
+    now: NOW,
+    slotKeys: ["slot-0", "slot-1"],
+    livenessWindowMs: 120_000,
+    admissibleLeaseIds: ["claimant"],
+  });
+
+  assert.deepEqual(plan.admissions, [{ leaseId: "claimant", slotKey: "slot-0" }]);
+  assert.deepEqual(plan.queuePositions, [{ leaseId: "later", position: 1 }]);
+});
+
+test("a head whose last beat is older than the window neither takes nor blocks a slot", () => {
+  const plan = planEnvironmentAdmission({
+    leases: [
+      lease({
+        id: "dead-head",
+        queuedAt: new Date("2026-07-28T20:30:00.000Z"),
+        heartbeatAt: new Date("2026-07-28T20:57:59.000Z"),
+      }),
+      lease({
+        id: "claimant",
+        queuedAt: new Date("2026-07-28T20:59:30.000Z"),
+        heartbeatAt: NOW,
+      }),
+    ],
+    now: NOW,
+    slotKeys: ["slot-0"],
+    livenessWindowMs: 120_000,
+    admissibleLeaseIds: ["claimant"],
+  });
+
+  assert.deepEqual(plan.admissions, [{ leaseId: "claimant", slotKey: "slot-0" }]);
+  assert.deepEqual(plan.expiredLeaseIds, []);
+  assert.deepEqual(plan.queuePositions, [{ leaseId: "dead-head", position: 1 }]);
+});
+
+test("a beat exactly at the window edge still proves liveness; queuedAt is the implicit first beat", () => {
+  const plan = planEnvironmentAdmission({
+    leases: [
+      lease({
+        id: "edge",
+        queuedAt: new Date(NOW.getTime() - 120_000),
+        heartbeatAt: null,
+      }),
+    ],
+    now: NOW,
+    slotKeys: ["slot-0"],
+    livenessWindowMs: 120_000,
+    admissibleLeaseIds: ["edge"],
+  });
+
+  assert.deepEqual(plan.admissions, [{ leaseId: "edge", slotKey: "slot-0" }]);
+});
+
+test("without a liveness window or an admissible set the legacy FIFO promotion is unchanged", () => {
+  const plan = planEnvironmentAdmission({
+    leases: [
+      lease({
+        id: "stale-head",
+        queuedAt: new Date("2026-07-28T20:00:00.000Z"),
+        heartbeatAt: new Date("2026-07-28T20:00:00.000Z"),
+      }),
+    ],
+    now: NOW,
+    slotKeys: ["slot-0"],
+  });
+
+  assert.deepEqual(plan.admissions, [{ leaseId: "stale-head", slotKey: "slot-0" }]);
+});

@@ -6,8 +6,8 @@
 // during a self-upgrade drain) and honors the ScheduledJob.enabled kill switch
 // inside the runner.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   CATALOG_SWEEP_CRON,
@@ -16,7 +16,7 @@ import {
   CATALOG_SWEEP_REQUESTED_INNGEST_ID,
 } from "@/lib/asset-intelligence/catalog-sweep-constants";
 
-export const catalogEnrichmentSweepScheduled = inngest.createFunction(
+export const catalogEnrichmentSweepScheduled = jobs.createFunction(
   {
     id: CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -24,7 +24,7 @@ export const catalogEnrichmentSweepScheduled = inngest.createFunction(
     triggers: [cron(CATALOG_SWEEP_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, CATALOG_SWEEP_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("catalog-enrichment-sweep", async () => {
       const { runCatalogEnrichmentSweepJob } = await import(
@@ -37,7 +37,7 @@ export const catalogEnrichmentSweepScheduled = inngest.createFunction(
 
 // Manual one-shot trigger for the admin "run now" action; supports an optional
 // smaller batch limit for a quick poll.
-export const catalogEnrichmentSweepRequested = inngest.createFunction(
+export const catalogEnrichmentSweepRequested = jobs.createFunction(
   {
     id: CATALOG_SWEEP_REQUESTED_INNGEST_ID,
     retries: 1,

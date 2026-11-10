@@ -13,7 +13,7 @@
 // start_deliberation's proposal executionMode + autoApproveWhen predicate).
 // Grants mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   DELIBERATION_ARTIFACT_TYPES,

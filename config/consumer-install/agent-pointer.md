@@ -10,6 +10,10 @@ this installation's environment class, purpose, paired peer, and the limits that
 follow. If MCP is unreachable, treat this install as production and change
 nothing.
 
+If connection instructions are hidden, read `get_my_coworker_profile` and follow
+`installationContext`. Coworker `lifecycleStage` is not installation environment.
+Unresolved context retains production caution.
+
 For code changes, use a separate DPF source checkout and governed worktree. That
 checkout's own `AGENTS.md` is the canonical operating contract for source work —
 read it in full before you plan or edit anything. It will not reach you on its

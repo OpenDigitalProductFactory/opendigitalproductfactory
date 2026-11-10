@@ -23,6 +23,7 @@ const ASSET_RESOURCE = new Map<string, "post" | "page">([
   ["wordpress-page", "page"],
 ]);
 const WORDPRESS_METADATA_FIELDS = new Set(["title", "locale", "publicPublicationAuthorized", "excerpt", "slug", "requestedStatus", "scheduledAt", "termIds", "featuredMediaId"]);
+const WORDPRESS_CHANNEL_IDS = new Set(["wordpress-self-hosted", "wordpress"]);
 
 type Client = Pick<ReturnType<typeof createWordPressClient>, "upsertContent">;
 
@@ -47,7 +48,7 @@ export function createWordPressOutboundAdapter(dependencies: {
     assetTypes: [...ASSET_RESOURCE.keys()],
 
     validateDraft(draft: OutboundDraftLike): AdapterValidationResult {
-      if (draft.channelId !== "wordpress-self-hosted") return { ok: false, reason: "Draft is not routed to WordPress." };
+      if (!WORDPRESS_CHANNEL_IDS.has(draft.channelId)) return { ok: false, reason: "Draft is not routed to WordPress." };
       if (!ASSET_RESOURCE.has(draft.assetType)) return { ok: false, reason: `Unsupported WordPress asset type ${JSON.stringify(draft.assetType)}.` };
       if (!title(draft)) return { ok: false, reason: "WordPress title is required in draft metadata." };
       if (!draft.body.trim()) return { ok: false, reason: "WordPress body is empty." };

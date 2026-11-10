@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import {
   mkdirSync,
   readFileSync,
@@ -44,47 +45,48 @@ function addOwnedRoot(map, value) {
 }
 
 export function parseCliArgs(args) {
-  const options = {
-    repository: process.env.GITHUB_REPOSITORY ?? "",
-    treeSha: process.env.GITHUB_SHA ?? "",
-    eventName: process.env.GITHUB_EVENT_NAME ?? "local",
-    runId: process.env.GITHUB_RUN_ID ?? "",
-    runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT ?? 1),
-    createdAt: new Date().toISOString(),
-    coverage: [],
-    ownedRoots: new Map(),
-    vitest: [],
-    previousObservationPath: null,
-    shadowSelectionPath: null,
-    cacheSamplesPath: null,
-    timingSamplesPath: null,
-    outputPath: null,
-  };
+  const option = { type: "string" };
+  const repeated = { type: "string", multiple: true };
+  const { values } = utilParseArgs({
+    args,
+    options: {
+      repository: option,
+      "tree-sha": option,
+      event: option,
+      "run-id": option,
+      "run-attempt": option,
+      "created-at": option,
+      coverage: repeated,
+      "owned-root": repeated,
+      vitest: repeated,
+      "previous-observation": option,
+      "shadow-selection": option,
+      "cache-samples": option,
+      "timing-samples": option,
+      output: option,
+    },
+  });
+  const empty = Object.keys(values).find((name) => [values[name]].flat().some((value) => !value));
+  if (empty) throw new Error(`--${empty} requires a value`);
 
-  for (let index = 0; index < args.length; index += 1) {
-    const flag = args[index];
-    const value = args[index + 1];
-    if (!value || value.startsWith("--")) {
-      throw new Error(`${flag} requires a value`);
-    }
-    index += 1;
-    if (flag === "--repository") options.repository = value;
-    else if (flag === "--tree-sha") options.treeSha = value;
-    else if (flag === "--event") options.eventName = value;
-    else if (flag === "--run-id") options.runId = value;
-    else if (flag === "--run-attempt") options.runAttempt = Number(value);
-    else if (flag === "--created-at") options.createdAt = value;
-    else if (flag === "--coverage") options.coverage.push(parsePackagePath(value, flag));
-    else if (flag === "--owned-root") addOwnedRoot(options.ownedRoots, value);
-    else if (flag === "--vitest") options.vitest.push(parsePackagePath(value, flag));
-    else if (flag === "--previous-observation") options.previousObservationPath = value;
-    else if (flag === "--shadow-selection") options.shadowSelectionPath = value;
-    else if (flag === "--cache-samples") options.cacheSamplesPath = value;
-    else if (flag === "--timing-samples") options.timingSamplesPath = value;
-    else if (flag === "--output") options.outputPath = value;
-    else throw new Error(`unknown argument: ${flag}`);
-  }
-  return options;
+  const ownedRoots = new Map();
+  for (const value of values["owned-root"] ?? []) addOwnedRoot(ownedRoots, value);
+  return {
+    repository: values.repository ?? process.env.GITHUB_REPOSITORY ?? "",
+    treeSha: values["tree-sha"] ?? process.env.GITHUB_SHA ?? "",
+    eventName: values.event ?? process.env.GITHUB_EVENT_NAME ?? "local",
+    runId: values["run-id"] ?? process.env.GITHUB_RUN_ID ?? "",
+    runAttempt: Number(values["run-attempt"] ?? process.env.GITHUB_RUN_ATTEMPT ?? 1),
+    createdAt: values["created-at"] ?? new Date().toISOString(),
+    coverage: (values.coverage ?? []).map((value) => parsePackagePath(value, "--coverage")),
+    ownedRoots,
+    vitest: (values.vitest ?? []).map((value) => parsePackagePath(value, "--vitest")),
+    previousObservationPath: values["previous-observation"] ?? null,
+    shadowSelectionPath: values["shadow-selection"] ?? null,
+    cacheSamplesPath: values["cache-samples"] ?? null,
+    timingSamplesPath: values["timing-samples"] ?? null,
+    outputPath: values.output ?? null,
+  };
 }
 
 function isOwnedSourceFile(name) {

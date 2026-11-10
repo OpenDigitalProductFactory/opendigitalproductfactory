@@ -50,7 +50,8 @@
               "properties": {
                 "ok": { "const": true },
                 "toolCount": { "type": "integer", "minimum": 0 },
-                "observedAt": { "type": "string", "format": "date-time" }
+                "observedAt": { "type": "string", "format": "date-time" },
+                "delivery": {"type": "object", "required": ["ready", "missingTokenTools", "missingCoworkerTools", "unavailableTools"], "properties": {"ready": {"type": "boolean"}, "missingTokenTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}, "missingCoworkerTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}, "unavailableTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}}, "additionalProperties": false}
               },
               "additionalProperties": false
             },
@@ -59,8 +60,9 @@
               "required": ["ok", "reason", "httpStatus"],
               "properties": {
                 "ok": { "const": false },
-                "reason": { "type": "string", "enum": ["no_token", "portal-unavailable", "mcp-unavailable", "endpoint_unreachable", "scope_insufficient", "unexpected_shape"] },
-                "httpStatus": { "type": ["integer", "null"] }
+                "reason": { "type": "string", "enum": ["no_token", "portal-unavailable", "mcp-unavailable", "endpoint_unreachable", "scope_insufficient", "coworker_grants_insufficient", "unexpected_shape"] },
+                "httpStatus": { "type": ["integer", "null"] },
+                "delivery": {"type": "object", "required": ["ready", "missingTokenTools", "missingCoworkerTools", "unavailableTools"], "properties": {"ready": {"type": "boolean"}, "missingTokenTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}, "missingCoworkerTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}, "unavailableTools": {"type": "array", "maxItems": 100, "uniqueItems": true, "items": {"type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*$"}}}, "additionalProperties": false}
               },
               "additionalProperties": false
             }

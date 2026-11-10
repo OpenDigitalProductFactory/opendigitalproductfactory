@@ -1,0 +1,396 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  envelopeIdFromExecutionResult,
+  originalToolParameters,
+  summarizeCoworkerEnvelopeDecision,
+  envelopePrimaryDecision,
+} from "./coworker-envelope-decision";
+
+const RESEARCH = {
+  toolName: "record_initiative_evidence",
+  reviewBinding: { gate: "research", itemId: "BI-B3584737" },
+  recommenderAgentId: "AGT-WS-BUILD",
+  authorizerUserId: "user-1",
+};
+
+describe("primary decision disclosure", () => {
+  it.each([
+    ["request_self_upgrade", { reason: "Approved release batch" }, "Request an update for this app?"],
+    ["request_self_upgrade", {}, "Request an update for this app?"],
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?"],
+    ["release_nonprod_environment_lease", { leaseId: "NPEL-TEST" }, "Release this shared test reservation?"],
+  ])("names %s without claiming verified effects or work names", (toolName, proposedParameters, title) => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, proposedParameters, consequence: "irreversible" });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.title).toBe(title);
+    expect(primary.unresolved).toBe(true);
+    expect(primary.recommendation).toBe("Keep this on hold until its effect is clear.");
+    expect(primary.consequence).toContain("Cannot be undone");
+    expect(primary.target).toBe(toolName === "request_self_upgrade" ? "This app" : "Work name unavailable");
+    expect(JSON.parse(decision.completeProposedContent!)).toEqual(proposedParameters);
+  });
+
+  it.each([
+    ["request_self_upgrade", { reason: 4 }],
+    ["request_self_upgrade", { reason: "Update", scope: "another app" }],
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP" }],
+    ["release_nonprod_environment_lease", { leaseId: "" }],
+  ])("keeps malformed %s proposals generic with material facts visible", (toolName, proposedParameters) => {
+    const primary = envelopePrimaryDecision(summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, proposedParameters }));
+    expect(primary.title).toBe("Review this coworker request?");
+    expect(primary.unresolved).toBe(true);
+  });
+
+  it("retains consequential fields even when a registered operation is named", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "merge_backlog_items", proposedParameters: {
+      canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP", payment: { amount: 125, currency: "USD", recipient: "review@example.test" }, access: false,
+    } });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.title).toBe("Combine these duplicate work requests?");
+    expect(primary.facts).toEqual(expect.arrayContaining([
+      { label: "Payment · Amount", value: "125" }, { label: "Payment · Currency", value: "USD" },
+      { label: "Payment · Recipient", value: "review@example.test" }, { label: "Access", value: "false" },
+    ]));
+  });
+
+  it("formats the handover summary using the viewer locale", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "reassign_workroom_executor", recommenderAgentId: "AGT-EXT-CODEX",
+      proposedParameters: { capsuleId: "WC-1", toExecutorKind: "codex-desktop" } });
+    const normal = envelopePrimaryDecision(decision);
+    const pseudo = envelopePrimaryDecision(decision, "en-XA");
+    expect(pseudo.title).not.toBe(normal.title);
+    expect(pseudo.description).not.toBe(normal.description);
+    expect(pseudo.recommendation).not.toBe(normal.recommendation);
+  });
+
+  it.each(["grant", "revoke"])("keeps the full permission-change intent visible: %s", action => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "manage_coworker_tool_grant", consequence: "authority",
+      proposedParameters: { coworker: "Build Lead", grantKey: "admin_write", action } });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.facts).toEqual(expect.arrayContaining([
+      { label: "Coworker", value: "Build Lead" }, { label: "Grant Key", value: "admin_write" }, { label: "Action", value: action },
+    ]));
+    expect(primary.target).not.toBe("Work name unavailable");
+    expect(primary.unresolved).toBe(true);
+  });
+
+  it("keeps the target and direction of an irreversible unknown operation visible", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "unknown_operation", consequence: "irreversible",
+      proposedParameters: { path: "/reports/closing.csv", action: "delete", routingId: "internal-only" } });
+    expect(envelopePrimaryDecision(decision).facts).toEqual([
+      { label: "Path", value: "/reports/closing.csv" }, { label: "Action", value: "delete" },
+    ]);
+  });
+
+  it.each(["record_workroom_evidence", "record_initiative_evidence", "reassign_workroom_executor"])("keeps the declared irreversible effect visible for %s", toolName => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, recommenderAgentId: "AGT-EXT-CODEX", consequence: "irreversible",
+      proposedParameters: { capsuleId: "WC-1", summary: "Reported result", decision: "pass", toExecutorKind: "codex-desktop" } });
+    expect(envelopePrimaryDecision(decision).consequence).toContain("Cannot be undone");
+  });
+
+  it("keeps a missing record proposal unresolved", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence", proposedParameters: undefined });
+    expect(envelopePrimaryDecision(decision).unresolved).toBe(true);
+  });
+
+  it("preserves complete material values and missing recipients without exposing unrelated routing", () => {
+    const recipient = "long-recipient-" + "x".repeat(800) + "@example.test";
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "unrecognized_action", proposedParameters: {
+      routingId: "internal-only", recipients: [], payment: { amount: 1250, currency: "USD", recipient },
+    } });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.facts.some(fact => fact.value === recipient)).toBe(true);
+    expect(primary.facts.some(fact => /recipients/i.test(fact.label) && fact.value === "Not provided")).toBe(true);
+    expect(primary.facts.some(fact => fact.value === "internal-only")).toBe(false);
+  });
+
+  it("does not present permission names inside a report as a permission change", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence", proposedParameters: {
+      capsuleId: "WC-REPORT", kind: "note", summary: "Reviewed permissions", result: { permissions: ["admin_write"] },
+    } });
+    expect(envelopePrimaryDecision(decision).facts).toEqual([]);
+    expect(JSON.parse(decision.completeProposedContent!).result.permissions).toEqual(["admin_write"]);
+  });
+});
+
+describe("summarizeCoworkerEnvelopeDecision", () => {
+  it("preserves the complete proposal beyond summary limits, including clearing values", () => {
+    const params = {
+      itemId: "BI-12E5DD91", body: "x".repeat(700), reference: null,
+      emptyText: "", enabled: false,
+      ...Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`field${i}`, { value: i }])),
+    };
+    const summary = summarizeCoworkerEnvelopeDecision({
+      ...RESEARCH, toolName: "update_backlog_item", proposedParameters: { ...params, _surface: "mcp" },
+    });
+    expect(JSON.parse(summary.completeProposedContent!)).toEqual(params);
+    expect(summary.proposed.find((field) => field.label === "Body")?.value).toMatch(/100 more characters/);
+    expect(summary.proposed.find((field) => field.label === "Reference")?.value).toBe("null");
+    expect(summary.proposed.find((field) => field.label === "Empty Text")?.value).toBe('""');
+  });
+
+  it("never invents reversibility for an unclassified action", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "browser.click", proposedParameters: { selector: "#pay" } });
+    expect(summary.consequence).not.toMatch(/can be corrected afterwards/);
+    expect(summary.consequence).toMatch(/not established/i);
+  });
+
+  it.each([
+    { proposedParameters: {}, argsJson: undefined },
+    { proposedParameters: undefined, argsJson: {} },
+    { proposedParameters: { approvalBinding: { toolName: "record_workroom_evidence" }, _surface: "mcp" }, argsJson: {} },
+  ])("retains an explicitly empty original request while its effects remain unresolved: %j", input => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence", ...input });
+    expect(decision.completeProposedContent).toBe("{}");
+    expect(decision.kind).toBe("unknown");
+    expect(decision.target).toBe("Not provided");
+    expect(decision.recordedIfAuthorized).not.toMatch(/could not be loaded/);
+    expect(decision.recommendation).toBe("Keep this on hold until its effect is clear.");
+    expect(envelopePrimaryDecision(decision).unresolved).toBe(true);
+  });
+
+  it("prefers available proposal content over an empty execution projection", () => {
+    const params = { summary: "The release candidate was not supplied.", outcome: "blocked" };
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence",
+      proposedParameters: {}, argsJson: params });
+    expect(JSON.parse(decision.completeProposedContent!)).toEqual(params);
+  });
+
+  it("does not present audit-only metadata as an empty original request", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence",
+      proposedParameters: { approvalBinding: {}, _surface: "mcp" } });
+    expect(decision.completeProposedContent).toBeNull();
+    expect(envelopePrimaryDecision(decision).unresolved).toBe(true);
+  });
+
+  it("provides complete content for known receipts and leaves missing content unresolved", () => {
+    const params = { decision: "pass", reason: "x".repeat(700) };
+    const known = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, proposedParameters: params });
+    expect(known.kind).toBe("known");
+    expect(JSON.parse(known.completeProposedContent!)).toEqual(params);
+    const missing = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, proposedParameters: undefined });
+    expect(missing.completeProposedContent).toBeNull();
+  });
+
+  it("preserves the full handover manifest in the shared proposal projection", () => {
+    const params = { capsuleId: "WC-1", toExecutorKind: "codex-desktop", handoffManifest: { nextAction: "Continue", evidence: "x".repeat(900) } };
+    const summary = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "reassign_workroom_executor", recommenderAgentId: "AGT-EXT-CODEX", proposedParameters: params });
+    expect(summary.kind).toBe("handover");
+    expect(JSON.parse(summary.completeProposedContent!)).toEqual(params);
+  });
+
+  it("states a research pass with no findings as recommendation versus authorization", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({
+      ...RESEARCH,
+      proposedParameters: { decision: "pass" },
+    });
+
+    expect(summary.kind).toBe("known");
+    expect(summary.headline).toBe("Authorize this research receipt?");
+    expect(summary.recommendation).toBe("research passes with no findings");
+    expect(summary.authorization).toBe(
+      "record that receipt so implementation planning may continue",
+    );
+    expect(`AI recommendation: ${summary.recommendation}. Human authorization needed: ${summary.authorization}.`)
+      .toBe(
+        "AI recommendation: research passes with no findings. Human authorization needed: record that receipt so implementation planning may continue.",
+      );
+    expect(summary.authorizeDoes).toMatch(/receipt/i);
+    expect(summary.declineDoes).toMatch(/does not record/i);
+    expect(summary.authorizeDoes.toLowerCase()).not.toContain("approv");
+    expect(summary.declineDoes.toLowerCase()).not.toContain("approv");
+    expect(summary.headline.toLowerCase()).not.toContain("approv");
+    expect(summary.decision).toBe("pass");
+    expect(summary.findings).toEqual([]);
+    expect(summary.subjectId).toBe("BI-B3584737");
+    expect(summary.gate).toBe("research");
+    expect(summary.recommenderLabel).toBe("Your coworker");
+    expect(summary.authorizerLabel).toBe("You");
+  });
+
+  it("states a research fail and lists findings without inventing a pass", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({
+      ...RESEARCH,
+      proposedParameters: {
+        decision: "fail",
+        findings: [{ issue: "The defect was not reproduced on the named ref.", severity: "critical" }],
+      },
+    });
+
+    expect(summary.recommendation).toBe("research does not pass with 1 finding");
+    expect(summary.authorization).toMatch(/stays blocked/i);
+    expect(summary.findings).toEqual([
+      { issue: "The defect was not reproduced on the named ref.", severity: "critical" },
+    ]);
+    expect(summary.decision).toBe("fail");
+  });
+
+  it("states not-applicable without claiming the work passed", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({
+      ...RESEARCH,
+      proposedParameters: { decision: "not-applicable", reason: "This item is documentation-only." },
+    });
+
+    expect(summary.recommendation).toBe("research is not applicable");
+    expect(summary.authorization).toMatch(/does not apply/i);
+    expect(summary.reason).toBe("This item is documentation-only.");
+    expect(summary.decision).toBe("not-applicable");
+  });
+
+  it("shows the exact proposal for a tool with no specific summary, without inventing a consequence", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({
+      toolName: "browser.click",
+      proposedParameters: { selector: "#pay" },
+      recommenderAgentId: "AGT-WS-BUILD",
+      authorizerUserId: "user-1",
+    });
+
+    expect(summary.kind).toBe("exact");
+    expect(summary.recommendation).not.toMatch(/pass|fail|research/i);
+    expect(summary.authorization).not.toMatch(/implementation planning/i);
+    expect(summary.proposed).toEqual([{ label: "Selector", value: "#pay" }]);
+    expect(summary.consequence).toMatch(/none declared/i);
+    expect(summary.headline.toLowerCase()).not.toContain("approv");
+  });
+
+  it("states the effect as unresolved when the proposal cannot be loaded (BI-12E5DD91)", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({
+      toolName: "record_workroom_evidence",
+      proposedParameters: undefined,
+      argsJson: { approvalBinding: { toolName: "record_workroom_evidence" } },
+      recommenderAgentId: "AGT-EXT-CODEX",
+      authorizerUserId: "user-1",
+    });
+
+    expect(summary.kind).toBe("unknown");
+    expect(summary.headline).toMatch(/unresolved/i);
+    expect(summary.authorization).toMatch(/decline unless/i);
+    expect(summary.proposed).toEqual([]);
+    expect(summary.target).toMatch(/could not be loaded/i);
+  });
+
+  it("names action, target, content, consequence, reason and scope for an evidence entry (BI-12E5DD91)", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({
+      toolName: "record_workroom_evidence",
+      proposedParameters: {
+        capsuleId: "WC-04ED087E",
+        kind: "note",
+        summary: "OAuth acceptance A; separate explicit target.",
+        _surface: "mcp",
+      },
+      recommenderAgentId: "AGT-EXT-CODEX",
+      authorizerUserId: "user-1",
+      consequence: null,
+      rationale: "This action is authorized to proceed only after employee approval. It changes a record, and no recorded delegation covers it.",
+    });
+
+    expect(summary.kind).toBe("exact");
+    expect(summary.action).toBe("Add an evidence entry to a Workroom timeline");
+    expect(summary.target).toBe("Workroom WC-04ED087E");
+    expect(summary.proposed).toEqual([
+      { label: "Capsule Id", value: "WC-04ED087E" },
+      { label: "Kind", value: "note" },
+      { label: "Summary", value: "OAuth acceptance A; separate explicit target." },
+    ]);
+    expect(summary.whyAPerson).toMatch(/no recorded delegation/);
+    expect(summary.scope).toMatch(/does not review the content or confirm that any test/);
+  });
+
+  it("names the backlog as the destination of a new item and states an authority consequence", () => {
+    const created = summarizeCoworkerEnvelopeDecision({
+      toolName: "create_backlog_item",
+      proposedParameters: { title: "T", epicId: "EP-0AF96937", body: "x".repeat(700) },
+      recommenderAgentId: "AGT-EXT-CODEX",
+      authorizerUserId: "user-1",
+    });
+    expect(created.target).toBe("The backlog, under epic EP-0AF96937");
+    expect(created.proposed.find((f) => f.label === "Body")?.value).toMatch(/100 more characters\)$/);
+
+    const invite = summarizeCoworkerEnvelopeDecision({
+      toolName: "invite_room_participant",
+      proposedParameters: { agentId: "AGT-EXT-CODEX", canAct: true },
+      recommenderAgentId: "AGT-EXT-CODEX",
+      authorizerUserId: "user-1",
+      consequence: "authority",
+    });
+    expect(invite.consequence).toBe("Changes who may do what.");
+  });
+
+  it("does not treat a missing decision as a pass even when the gate is bound", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({
+      ...RESEARCH,
+      proposedParameters: {},
+    });
+
+    expect(summary.kind).toBe("unknown");
+    expect(summary.recommendation).not.toMatch(/passes/i);
+  });
+
+  it("reads argsJson when no ToolExecution parameters exist, ignoring the approval binding", () => {
+    const summary = summarizeCoworkerEnvelopeDecision({
+      ...RESEARCH,
+      proposedParameters: undefined,
+      argsJson: { approvalBinding: { toolName: "record_initiative_evidence" }, decision: "pass" },
+    });
+
+    expect(summary.kind).toBe("known");
+    expect(summary.recommendation).toBe("research passes with no findings");
+  });
+});
+
+describe("originalToolParameters", () => {
+  it("drops audit keys and the stored approval binding", () => {
+    expect(originalToolParameters({
+      decision: "pass",
+      approvalBinding: { toolName: "record_initiative_evidence" },
+      _surface: "mcp",
+    })).toEqual({ decision: "pass" });
+  });
+});
+
+describe("envelopeIdFromExecutionResult", () => {
+  it("reads the pending execution's envelope id", () => {
+    expect(envelopeIdFromExecutionResult({
+      success: false,
+      data: { envelopeId: "cmti2racd18zq01lht28321dp" },
+      error: "approval_required",
+    })).toBe("cmti2racd18zq01lht28321dp");
+  });
+});
+
+// BI-6AE64074: admitting a coworker and raising its data access is one plain choice.
+describe("room admission with a data access raise", () => {
+  const admission = (params: Record<string, unknown> = {}) => summarizeCoworkerEnvelopeDecision({
+    toolName: "invite_room_participant",
+    proposedParameters: { caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer", raiseClearanceTo: "internal", ...params },
+    recommenderAgentId: "AGT-EXT-CLAUDE",
+    authorizerUserId: "owner",
+    consequence: "authority",
+    targetLabel: "Quarterly supplier review",
+  });
+
+  it("says who joins which room and what data it can then read", () => {
+    const decision = admission();
+    expect(decision.kind).toBe("admission");
+    expect(decision.headline).toBe("Let change-reviewer into Quarterly supplier review and let it read internal information?");
+    expect(decision.admission?.changes.join(" ")).toMatch(/joins Quarterly supplier review/);
+    expect(decision.admission?.changes.join(" ")).toMatch(/internal information in any room it is admitted to/);
+    expect(decision.admission?.keeps.join(" ")).toMatch(/Coworker data access/);
+  });
+
+  it("gives the primary decision a plain title instead of an unresolved one", () => {
+    const primary = envelopePrimaryDecision(admission());
+    expect(primary.unresolved).toBe(false);
+    expect(primary.title).toBe("Let change-reviewer into this room with internal data access?");
+  });
+
+  it("keeps an ordinary invite on the exact-content card", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "invite_room_participant",
+      proposedParameters: { caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer" },
+      recommenderAgentId: "AGT-EXT-CLAUDE", authorizerUserId: "owner", consequence: "authority",
+    });
+    expect(decision.kind).not.toBe("admission");
+  });
+});

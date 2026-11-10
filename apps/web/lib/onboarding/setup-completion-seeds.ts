@@ -17,6 +17,7 @@ import { seedRiskPosture } from "./seed-risk-posture";
 import { seedArchetypeWorkforce } from "./seed-archetype-workforce";
 import { applyRiskEnvelopeToOrgProfile } from "./apply-risk-envelope-to-profile";
 import { applyMissionPrompt } from "./apply-mission-prompt";
+import { loadOrganizationDirection, type DirectionReadClient } from "@/lib/organization-direction/direction";
 
 /**
  * Persist the captured mission into the company-mission prompt (visible to
@@ -28,12 +29,12 @@ import { applyMissionPrompt } from "./apply-mission-prompt";
  * Idempotent — safe to re-run on setup re-completion, replay, or boot backfill.
  */
 export async function runSetupCompletionSeeds(organizationId: string): Promise<void> {
-  const bc = await prisma.businessContext.findUnique({
-    where: { organizationId },
-    select: { mission: true },
-  });
+  const direction = await loadOrganizationDirection(
+    prisma as unknown as DirectionReadClient,
+    organizationId,
+  );
 
-  await applyMissionPrompt({ mission: bc?.mission ?? null });
+  await applyMissionPrompt({ mission: direction.mission, direction });
   await seedOrgWwwdCorpus({ organizationId });
   await seedPortfolioDecomposition({ organizationId });
   await seedMarketOffer({ organizationId });

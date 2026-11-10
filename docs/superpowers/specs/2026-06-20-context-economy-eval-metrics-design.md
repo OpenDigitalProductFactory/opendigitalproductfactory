@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Context-Economy Eval Metrics (R8)
 
 **Status:** Phase 1 SHIPPED (per-turn tool-surface + selection-accuracy gauge, observability-only). Phase 2 (cross-task telemetry rollup) STAGED.
@@ -39,3 +43,13 @@ The per-turn signals are also the tested primitives for an aggregate view: a tel
 
 - `apps/web/lib/tak/context-economy-metrics.ts` (+ `.test.ts`).
 - `apps/web/lib/tak/agentic-loop.ts` — `logTurnSummary` gauge.
+
+## 7. 2026-09-03 delivery-outcome extension
+
+Per-turn context efficiency cannot establish delivery value by itself. The
+scorecard in
+[`2026-09-03-local-first-agentic-delivery-throughput-design.md`](2026-09-03-local-first-agentic-delivery-throughput-design.md)
+and `BI-69803ACC` reuses these signals and joins them to Workroom, PR/check/review,
+queue, and runtime-verification facts. Model/prompt-profile decisions must compare
+tokens and tool accuracy alongside verified outcome, cycle time, rework, quality,
+and human intervention; PR count or LOC alone is not an acceptable success metric.

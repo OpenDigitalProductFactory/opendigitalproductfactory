@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hardened LibreOffice user profile for dpf-doctools (BI-15D69168).
+  dpf-convert copies this into a fresh per-run profile, so no run can weaken it
+  for the next one. Key paths were read from the image's own schema
+  (/usr/lib/libreoffice/share/registry/main.xcd, LibreOffice 25.2).
+
+  - MacroSecurityLevel 3 = "very high": only macros from trusted locations run,
+    and SecureURL (the trusted-location list) is empty.
+  - DisableMacrosExecution: no macro runs at all, whatever the level.
+  - DisableActiveContent: no OLE objects, DDE or linked content are loaded or
+    refreshed (the linked-document advisory class).
+  - DisableOLEAutomation, BlockUntrustedRefererLinks: close the remaining
+    automation and referer-link paths.
+  - Content/Update/Link: never update links on load (Writer 2 = never,
+    Calc 1 = never; the two schemas number their options differently).
+  The runner also removes the network entirely (docker run, network "none").
+-->
+<oor:items xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="DisableMacrosExecution" oor:op="fuse"><value>true</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="SecureURL" oor:op="fuse"><value/></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="DisableActiveContent" oor:op="fuse"><value>true</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="DisableOLEAutomation" oor:op="fuse"><value>true</value></prop></item>
+<item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="BlockUntrustedRefererLinks" oor:op="fuse"><value>true</value></prop></item>
+<item oor:path="/org.openoffice.Office.Writer/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>2</value></prop></item>
+<item oor:path="/org.openoffice.Office.Calc/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>1</value></prop></item>
+</oor:items>

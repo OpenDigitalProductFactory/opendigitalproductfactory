@@ -1,0 +1,74 @@
+flowchart TB
+    subgraph L1["1. Outcomes and interaction"]
+        CON["Customer, workforce actor, or machine consumer"]
+        OUT["Desired and accepted outcome"]
+        OFF["Offering"]
+        AGR["ConsumptionAgreement and Entitlement"]
+        USE["UsageOccurrence or WorkOccurrence"]
+        CON --> OFF --> AGR --> USE --> OUT
+    end
+
+    subgraph L2["2. Governed agency and work"]
+        ID["GAID AgentSubject and Principal"]
+        OPF["Deployment operating-profile fingerprint"]
+        JOB["Job, activity, and TAK-JSI qualification"]
+        TEAM["Human oversight and agent collaboration"]
+        AUTH["TAK authority decision"]
+        ACT["Authorized action and execution receipt"]
+        JOB --> AUTH
+        TEAM --> AUTH
+        AUTH --> ACT
+    end
+
+    subgraph L3["3. Capabilities and controlled access"]
+        SK["Agent skill packages and procedures"]
+        TL["Tools and action interfaces"]
+        SV["Retrieval, decision, and execution services"]
+        GW["MCP, API, A2A, identity, and data gateways"]
+        SK --> AUTH
+        TL --> AUTH
+        SV --> AUTH
+        GW --> AUTH
+    end
+
+    subgraph L4["4. Knowledge, models, and runtime resources"]
+        MOD["Model routes and inference resources"]
+        DIR["Prompts, directives, policies, and memory"]
+        DAT["Structured and unstructured knowledge"]
+        RUN["Compute, runtime configuration, and telemetry"]
+        MOD --> AUTH
+        DIR --> AUTH
+        DAT --> AUTH
+        RUN --> AUTH
+    end
+
+    subgraph SPINE["Product, lifecycle, and assurance spine"]
+        DP["AI-coworker DigitalProduct"]
+        DES["DigitalProductDesign"]
+        REL["DigitalProductRelease"]
+        AST["DigitalProductAsset"]
+        PKG["DeploymentPackage"]
+        DIN["DeploymentIntent"]
+        DEP["Deployment"]
+        INS["DigitalProductInstance"]
+        SVI["ServiceInstance"]
+        BND["PAAW AIProductOperatingBinding"]
+        EVD["Controls, provenance, observations, and evidence"]
+        DP --> DES --> REL --> AST --> PKG --> DIN --> DEP --> INS --> SVI
+        REL -. "referenced by" .-> OPF
+        INS -. "configuration captured by" .-> OPF
+        REL -. "release" .-> BND
+        INS -. "instance" .-> BND
+        OPF -. "operating profile" .-> BND
+    end
+
+    AGR --> AUTH
+    ID -. "subject" .-> BND
+    BND --> AUTH
+    OPF --> AUTH
+    ACT --> EVD
+    OUT --> EVD
+    OFF -. "commercializes" .-> DP
+    SVI -. "supplies" .-> USE
+    BND -. "selects Product context" .-> JOB
+    EVD -. "assurance feedback" .-> DP

@@ -1,4 +1,6 @@
+import { parseRoomCharter, type RoomCharter } from "./room-charter";
 import { authorizeWorkroomAccess, type WorkroomAccessDecision } from "./room-participation";
+import { WORKROOM_PARTICIPANT_ROLES, type WorkroomParticipantRole } from "./room-types";
 
 export type WorkspaceRoomPolicyMetadata = {
   admittedPrincipalRefs: string[];
@@ -6,11 +8,13 @@ export type WorkspaceRoomPolicyMetadata = {
   actionPrincipalRefs: string[];
   sensitivityCeiling: string;
   participants: WorkspaceRoomPolicyParticipant[];
+  /** BI-C649809F: who joins without a person being asked (room-charter.ts). */
+  charter: RoomCharter;
 };
 
 export type WorkspaceRoomPolicyParticipant = {
   principalRef: string;
-  roles: Array<"accountable" | "coordinator" | "contributor" | "reviewer" | "observer">;
+  roles: WorkroomParticipantRole[];
   enteredReason: string | null;
   currentWorkSummary: string | null;
 };
@@ -35,11 +39,10 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
             ? participant.principalRef.trim()
             : "";
           if (!principalRef) return [];
-          const validRoles = ["accountable", "coordinator", "contributor", "reviewer", "observer"];
           const roles = Array.isArray(participant.roles)
             ? participant.roles.filter(
-                (role): role is WorkspaceRoomPolicyParticipant["roles"][number] =>
-                  typeof role === "string" && validRoles.includes(role),
+                (role): role is WorkroomParticipantRole =>
+                  typeof role === "string" && (WORKROOM_PARTICIPANT_ROLES as readonly string[]).includes(role),
               )
             : [];
           return [{
@@ -55,13 +58,15 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
         })
       : [];
     return {
-      admittedPrincipalRefs: strings("admittedPrincipalRefs"),
+      admittedPrincipalRefs: Object.hasOwn(record, "admittedPrincipalRefs") ? strings("admittedPrincipalRefs") : undefined,
       discoverablePrincipalRefs: strings("discoverablePrincipalRefs"),
-      actionPrincipalRefs: strings("actionPrincipalRefs"),
+      actionPrincipalRefs: Object.hasOwn(record, "actionPrincipalRefs") ? strings("actionPrincipalRefs") : undefined,
+      // Absent means "none set here"; each reader applies its own fallback.
       sensitivityCeiling: typeof record.sensitivityCeiling === "string"
         ? record.sensitivityCeiling
-        : "internal",
+        : undefined,
       participants,
+      charter: parseRoomCharter(record.charter) ?? undefined,
     };
   }
   return {};

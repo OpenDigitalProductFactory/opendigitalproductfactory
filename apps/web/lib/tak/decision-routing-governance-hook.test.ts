@@ -38,6 +38,56 @@ describe("resolveDecisionGateMode", () => {
   });
 });
 
+// ── BI-638024F9: one rule for internal coworkers and external agents ─────────
+//
+// External agents (Claude, Codex, Grok over /api/mcp/v1) call the same tools
+// through the same governed-execution seam with source "external-jsonrpc", but
+// the gate only governed "agentic-loop", so an external agent's consequential
+// decision was gated only by a client hook that can be skipped. Parity: the
+// same decision table governs both; the external source starts in shadow mode
+// (WWMD DI-F3C0940A38E9) and the operator enforces it with one switch.
+
+describe("parity: external MCP agents face the same rule as internal coworkers", () => {
+  it("resolves a per-source mode: internal enforces, external starts in shadow", () => {
+    expect(resolveDecisionGateMode({}, "agentic-loop")).toBe("enforce");
+    expect(resolveDecisionGateMode({}, "external-jsonrpc")).toBe("shadow");
+    expect(resolveDecisionGateMode({ DPF_DECISION_GATE_EXTERNAL_MODE: "enforce" }, "external-jsonrpc")).toBe("enforce");
+  });
+
+  it("the global off switch turns the gate off for every source", () => {
+    const env = { DPF_DECISION_GATE_MODE: "off", DPF_DECISION_GATE_EXTERNAL_MODE: "enforce" };
+    expect(resolveDecisionGateMode(env, "agentic-loop")).toBe("off");
+    expect(resolveDecisionGateMode(env, "external-jsonrpc")).toBe("off");
+  });
+
+  for (const source of ["agentic-loop", "external-jsonrpc"] as const) {
+    it(`${source}: one decision table — unconsulted denies when enforced, consulted allows, shadow audits`, () => {
+      const event = decisionEvent({ source });
+      expect(decidePreTool(event, { mode: "enforce", hasConsult: false }).decision).toBe("deny");
+      expect(decidePreTool(event, { mode: "enforce", hasConsult: true }).decision).toBe("allow");
+      const shadow = decidePreTool(event, { mode: "shadow", hasConsult: false });
+      expect(shadow.decision).toBe("allow");
+      expect(shadow.reason).toMatch(/shadow/);
+    });
+  }
+
+  it("an external agent that consulted the kernel over MCP is allowed; one that did not is denied once enforced", async () => {
+    const hook = createDecisionRoutingGovernanceHook({ now: () => 50_000, env: { DPF_DECISION_GATE_EXTERNAL_MODE: "enforce" } });
+    const external = (over: Record<string, unknown> = {}) => decisionEvent({ source: "external-jsonrpc", userId: "operator-1", ...over });
+    expect((await hook.onPreToolUse!(external()))?.decision).toBe("deny");
+    await hook.onPostToolUse!({ ...external({ toolName: "principle_decide" }), result: okResult, durationMs: 3 } as never);
+    expect((await hook.onPreToolUse!(external()))?.decision).toBe("allow");
+  });
+
+  it("by default an unconsulted external decision is allowed but audited with its source", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const hook = createDecisionRoutingGovernanceHook({ now: () => 1, env: {} });
+    expect((await hook.onPreToolUse!(decisionEvent({ source: "external-jsonrpc" })))?.decision).toBe("allow");
+    expect(warn.mock.calls.some((args) => args.some((a) => String(a).includes("external-jsonrpc")))).toBe(true);
+    warn.mockRestore();
+  });
+});
+
 // ── pure decision ─────────────────────────────────────────────────────────────
 
 describe("decidePreTool", () => {
@@ -63,8 +113,8 @@ describe("decidePreTool", () => {
     expect(decidePreTool(decisionEvent({ toolName: "query_backlog" }), { mode: "enforce", hasConsult: false }).decision).toBe("allow");
   });
 
-  it("ignores non-agentic-loop surfaces (external CLI = plane 1; REST = operator)", () => {
-    for (const source of ["external-jsonrpc", "rest", "jsonrpc", "internal-mcp-session"]) {
+  it("ignores operator surfaces (REST, JSON-RPC, the portal's own MCP session)", () => {
+    for (const source of ["rest", "jsonrpc", "internal-mcp-session"]) {
       expect(decidePreTool(decisionEvent({ source }), { mode: "enforce", hasConsult: false }).decision).toBe("allow");
     }
   });
@@ -113,7 +163,7 @@ describe("createDecisionRoutingGovernanceHook", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const hook = createDecisionRoutingGovernanceHook({ now: () => 1, mode: "shadow" });
     await hook.onPreToolUse!(decisionEvent());
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[decision-routing-gate]"), expect.anything(), expect.anything(), expect.anything(), expect.anything());
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[decision-routing-gate]"), expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything());
     warn.mockRestore();
   });
 

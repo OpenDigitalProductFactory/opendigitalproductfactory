@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { ownerDecisionCardDomId } from "@/lib/attention/owner-decision-dom-id";
 import type { OwnerAttentionEntry } from "@/lib/attention/owner-projection";
-import { ExpandableCard, StatusBadge } from "@/components/ui/report-kit";
+import { CollapsibleList, ExpandableCard, StatusBadge } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
+import { envelopePrimaryDecision } from "@/lib/attention/coworker-envelope-decision";
+import { SOURCE_CATALOG } from "@dpf/i18n";
 import { CoworkerEnvelopeApproval } from "./CoworkerEnvelopeApproval";
 import { CoworkerProposalActions } from "./CoworkerProposalActions";
 import { ProactivityProposalActions } from "./ProactivityProposalActions";
@@ -14,18 +18,62 @@ import { LEAVE_DECISION_ROUTE } from "@/lib/workforce/leave/leave-decision-propo
 export function OwnerDecisionCards({
   entries,
   limit,
+  focusItemId,
 }: {
   entries: OwnerAttentionEntry[];
   limit?: number;
+  /**
+   * The card a deep link asked for (BI-0012E6CA): it renders open and is
+   * scrolled into view. Without it, a URL fragment naming a card's DOM id
+   * (envelopeInboxRoute) has the same effect.
+   */
+  focusItemId?: string;
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
   const shown = typeof limit === "number" ? entries.slice(0, limit) : entries;
+  const [openId, setOpenId] = useState<string | null>(
+    focusItemId && shown.some((entry) => entry.item.id === focusItemId) ? focusItemId : null,
+  );
+  const [arrivalTarget, setArrivalTarget] = useState(openId);
+  // Preserve priority order while making a linked decision reachable on arrival.
+  const previewCount = Math.max(3, shown.findIndex((entry) => entry.item.id === arrivalTarget) + 1);
+
+  useEffect(() => {
+    const fragment = typeof window === "undefined" ? "" : decodeURIComponent(window.location.hash.slice(1));
+    const target = focusItemId
+      ?? shown.find((entry) => ownerDecisionCardDomId(entry.item.id) === fragment)?.item.id;
+    if (!target || !shown.some((entry) => entry.item.id === target)) return;
+    setOpenId(target);
+    setArrivalTarget(target);
+    // Focus once, on arrival; later re-renders must not yank the reader back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusItemId]);
+
+  useEffect(() => {
+    if (arrivalTarget) {
+      document.getElementById(ownerDecisionCardDomId(arrivalTarget))?.scrollIntoView?.({ block: "start" });
+    }
+  }, [arrivalTarget]);
 
   return (
-    <div className="space-y-3">
+    <CollapsibleList as="div" preserveMountedRows previewCount={previewCount} listClassName="space-y-3">
       {shown.map((entry) => {
-        const disclosureId = `owner-decision-${safeId(entry.item.id)}`;
+        const disclosureId = ownerDecisionCardDomId(entry.item.id);
         const open = openId === entry.item.id;
+        if (entry.item.envelope) {
+          const primary = envelopePrimaryDecision(entry.item.envelope.decision);
+          return (
+            <Surface as="article" key={entry.item.id} id={disclosureId} className="scroll-mt-4 space-y-3">
+              <header>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="text-dpf-title font-dpf-medium text-dpf-text">{entry.item.envelope.expiredUnanswered ? SOURCE_CATALOG.approvals.expiredUnanswered.label : primary.title}</h3>
+                  {entry.card.tags.map((tag) => <StatusBadge key={`${tag.kind}:${tag.label}`} domain="ownerDecisionImpact" status={tag.kind} label={tag.label} variant="soft" textTone="body" size="md" uppercase={false} />)}
+                </div>
+                <p className="mt-1 break-words text-dpf-caption text-dpf-muted">{entry.card.byline && !/\bAgt\b/i.test(entry.card.byline) ? entry.card.byline : SOURCE_CATALOG.approvals.card.coworkerByline}</p>
+              </header>
+              <CoworkerEnvelopeApproval approval={entry.item.envelope} technicalDetail={<TechnicalDetail entry={entry} />} />
+            </Surface>
+          );
+        }
         return (
           <ExpandableCard
             key={entry.item.id}
@@ -36,12 +84,13 @@ export function OwnerDecisionCards({
             summary={<DecisionSummary entry={entry} />}
             actions={<DecisionActions entry={entry} />}
             panelClassName="bg-[var(--dpf-surface-2)]"
+            className="scroll-mt-4"
           >
             <TechnicalDetail entry={entry} />
           </ExpandableCard>
         );
       })}
-    </div>
+    </CollapsibleList>
   );
 }
 
@@ -133,6 +182,7 @@ function DecisionActions({ entry }: { entry: OwnerAttentionEntry }) {
     return (
       <CoworkerProposalActions
         proposalId={entry.item.id.replace(/^agent-proposal:/, "")}
+        {...(entry.item.noLongerRunnable ? { noLongerRunnable: entry.item.noLongerRunnable } : {})}
       />
     );
   }
@@ -198,10 +248,6 @@ function TechnicalDetail({ entry }: { entry: OwnerAttentionEntry }) {
       </div>
     </div>
   );
-}
-
-function safeId(value: string): string {
-  return value.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
 }
 
 function stripConsequenceLead(value: string): string {

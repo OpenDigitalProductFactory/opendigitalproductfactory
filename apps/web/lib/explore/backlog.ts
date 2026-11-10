@@ -1,5 +1,9 @@
 // Pure utility library — no server imports. Safe in tests and client components.
 
+// Type-only: an inline `import("…")` type reads as a dynamic value import to the
+// client/server boundary check, which then walks into server-only modules.
+import type { BacklogWorkroomSummary } from "@/lib/work-capsules/backlog-workroom-ownership";
+
 export type BacklogItemInput = {
   title: string;
   type: "product" | "portfolio";
@@ -8,6 +12,8 @@ export type BacklogItemInput = {
   source?: BacklogSource;
   priority?: number;
   body?: string;
+  /** The outcome the item delivers, stored in BacklogItem.outcome (BI-B1B44777, BI-8DE5429B). */
+  outcome?: string;
   taxonomyNodeId?: string;
   digitalProductId?: string;
   organizationId?: string;
@@ -34,6 +40,9 @@ export type BacklogItemWithRelations = {
   workType: string | null;
   source: string | null;
   body: string | null;
+  /** BI-8DE5429B: the item's own outcome, and whether it was stated or derived. */
+  outcome?: string | null;
+  outcomeSource?: string | null;
   priority: number | null;
   epicId: string | null;
   triageOutcome: string | null;
@@ -46,6 +55,7 @@ export type BacklogItemWithRelations = {
   scopeRationale?: string | null;
   lifecycleTags?: string[];
   activeBuild: { buildId: string; phase: string | null } | null;
+  activeWorkrooms?: BacklogWorkroomSummary[];
   digitalProduct: { id: string; productId: string; name: string } | null;
   organizationId?: string | null;
   productLineId?: string | null;
@@ -208,6 +218,7 @@ export const BACKLOG_STATUS_VALUES = [
   "triaging",
   "open",
   "in-progress",
+  "awaiting-acceptance",
   "done",
   "deferred",
   "retired",
@@ -325,6 +336,7 @@ export function validateEpicInput(input: EpicInput): string | null {
 export const BACKLOG_STATUS_COLOURS: Record<string, string> = {
   "open":        "#38bdf8",
   "in-progress": "#fb923c",
+  "awaiting-acceptance": "var(--dpf-accent)",
   "done":        "#4ade80",
   "deferred":    "#8888a0",
   "retired":     "var(--dpf-muted)",

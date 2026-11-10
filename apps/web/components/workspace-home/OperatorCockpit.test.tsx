@@ -55,12 +55,12 @@ describe("OperatorCockpitView", () => {
     const projection = buildOwnerAttentionProjection(
       [
         item("platform-health", {
-          title: "qdrant is offline",
+          title: "redis is offline",
           riskClass: "high-risk",
           triage: {
             timeToAct: "none",
             residueReason: "no-self-heal",
-            blastRadius: "qdrant",
+            blastRadius: "redis",
             decideEffort: "review",
             irreversible: false,
           },
@@ -76,7 +76,7 @@ describe("OperatorCockpitView", () => {
     expect(html).toContain("Nothing needs you right now.");
     expect(html).toContain("Your digital team is handling</span> 1 item");
     expect(html).toContain("no action needed");
-    expect(html).not.toContain("qdrant is offline");
+    expect(html).not.toContain("redis is offline");
   });
 
   it("shows weekly batching without inflating today's count", () => {

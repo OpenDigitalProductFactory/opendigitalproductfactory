@@ -118,7 +118,7 @@ A held lease is *not* an invitation to take over — `:3001` is a single live-DB
 # WRONG (creates a new compose project with sibling DBs)
 docker compose -f docker-compose.dev-against-live-db.yml --profile dev up -d dev-portal
 
-# RIGHT (attaches to existing dpf project so postgres/neo4j/qdrant resolve)
+# RIGHT (attaches to existing dpf project so postgres resolves)
 docker compose -p dpf -f /d/DPF/docker-compose.yml \
   -f docker-compose.dev-against-live-db.yml --profile dev up -d dev-portal
 ```
@@ -183,4 +183,4 @@ sh scripts/dev-portal-lease.sh release --lease-id <NPEL-...>   # the id printed 
 
 Holding the lease after you stop using `:3001` blocks every other worktree from previewing (and the CI gate shares the same `local-integration-ci` lease), so release promptly — same discipline as any other shared nonprod environment. If you've lost the lease id, `sh scripts/dev-portal-lease.sh status` prints the active holder's id.
 
-The override file stays in the worktree (it's checked in). The dev-postgres / dev-neo4j containers from the unused `dev-init` step can be left running idle or stopped with `docker compose -p dpf --profile dev stop`.
+The override file stays in the worktree (it's checked in). The dev-postgres container from the unused `dev-init` step can be left running idle or stopped with `docker compose -p dpf --profile dev stop`.

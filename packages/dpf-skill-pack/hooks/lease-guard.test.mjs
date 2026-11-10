@@ -22,7 +22,11 @@ test("blocks npm/yarn dev, next dev, turbo dev, dev-portal-start", () => {
 test("a blocked verdict carries actionable guidance", () => {
   const v = decide("pnpm dev");
   assert.equal(v.block, true);
-  assert.match(v.reason, /governed|lease|bypass/i);
+  assert.match(v.reason, /dev-portal-lease\.sh up/);
+  assert.match(v.reason, /foreground/);
+  assert.match(v.reason, /durable taskRunId/);
+  assert.match(v.reason, /stop on terminal/);
+  assert.doesNotMatch(v.reason, /isolated worktree compose/);
 });
 
 // ── allows governed paths + bypass ───────────────────────────────────────────

@@ -4,7 +4,7 @@
 // minimized, source-correlated incident over the FederationLink; we (the MSP)
 // mirror it as a ServiceTicket. Authenticates with the peer's dpflink_ token
 // (dual-approved trusted link required). Flag-gated by
-// DPF_FEDERATION_EXCHANGE_ENABLED.
+// the trusted link (no flag).
 
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -17,7 +17,6 @@ import {
   type IncomingIncident,
 } from "@/lib/federation/exchange-handlers";
 import { autoDiagnoseAndSendProposal, type AutoProposeDb } from "@/lib/federation/auto-propose";
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const ERROR_STATUS: Record<string, number> = {
   missing_authorization: 401,
@@ -28,9 +27,6 @@ const ERROR_STATUS: Record<string, number> = {
 };
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  if (!envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
-    return NextResponse.json({ ok: false, error: "federation_exchange_disabled" }, { status: 404 });
-  }
   const authz = await resolveFederationLinkAuth(request.headers.get("authorization"));
   if (!authz.ok) {
     return NextResponse.json(

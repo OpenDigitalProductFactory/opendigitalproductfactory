@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { requireChangedFiles } from "./lib/git-changed-files.mjs";
 
 const PLAN_PATH_RE = /^docs\/superpowers\/plans\/.*\.md$/;
 
@@ -24,8 +24,19 @@ export function validatePlanText(path, text) {
 
   if (!decision) errors.push(`${path}: coverage Decision must be atomic or decomposed.`);
   if (parent !== itemId) errors.push(`${path}: coverage Parent must match umbrella ${itemId}.`);
+  // A plan is durable knowledge; its merge must not depend on reviewer capacity.
+  // The coverage receipt is enforced where it governs work — at the implementation
+  // claim (initiative-readiness PLAN_COVERAGE_REQUIRED) — so this gate accepts a
+  // plan that states, in the open, WHY the receipt could not be minted yet. A
+  // bare "pending" still fails: the condition must be named so the next reader
+  // can act on it rather than rediscover it (founder ruling 2026-09-05).
+  const blockedBy = receipt?.match(/^blocked-by:\s*(.+)$/i)?.[1]?.trim() ?? "";
   if (!receipt || /^(?:pending|none|n\/a)\b/i.test(receipt)) {
-    errors.push(`${path}: a live MCP coverage Receipt is required; "pending" and Markdown-only evidence are invalid.`);
+    errors.push(
+      `${path}: a live MCP coverage Receipt is required, or "Receipt: blocked-by: <the concrete condition>" naming why it cannot be minted yet; bare "pending" is not a condition.`,
+    );
+  } else if (/^blocked-by:/i.test(receipt) && blockedBy.length < 30) {
+    errors.push(`${path}: "Receipt: blocked-by:" must name the concrete blocking condition (at least 30 characters).`);
   }
   if (!dependencies) errors.push(`${path}: dependencies must be recorded explicitly (use "none" when empty).`);
 
@@ -41,14 +52,9 @@ export function validatePlanText(path, text) {
   return { ok: errors.length === 0, errors };
 }
 
-function git(...args) {
-  return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-}
-
 function main() {
   const base = process.env.BASE_SHA || "origin/main";
-  const paths = git("diff", "--name-only", "--diff-filter=AM", `${base}...HEAD`)
-    .split(/\r?\n/)
+  const paths = requireChangedFiles(base, "plan-backlog-coverage-gate")
     .filter((path) => PLAN_PATH_RE.test(path));
   const failures = paths.flatMap((path) => validatePlanText(path, readFileSync(path, "utf8")).errors);
   if (failures.length === 0) {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
 
+import { DELIVERY_WORKFLOW_TOOLS } from "../delivery-readiness-contract";
 import { runMcpReadinessProbe, runSmokeProbe } from "../probes";
 
 const ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
@@ -53,11 +54,11 @@ describe("runMcpReadinessProbe", () => {
         body: {
           jsonrpc: "2.0",
           id: 1,
-          result: { tools: [{ name: "list_backlog_items" }, { name: "list_epics" }] },
+          result: { structuredContent: { status: DELIVERY_WORKFLOW_TOOLS.map(name => ({ name, serverHasTool: true, tokenGranted: true, agentGranted: true, callableByName: true })) } },
         },
       }),
     });
-    expect(result).toEqual({ ok: true, toolCount: 2, observedAt: OBSERVED });
+    expect(result).toMatchObject({ ok: true, toolCount: DELIVERY_WORKFLOW_TOOLS.length, observedAt: OBSERVED });
   });
 
   it("interprets 401 with insufficient_token_scope as scope_insufficient", async () => {

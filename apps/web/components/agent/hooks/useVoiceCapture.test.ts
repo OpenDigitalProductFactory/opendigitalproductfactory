@@ -318,3 +318,45 @@ describe("useVoiceCapture — POST payload", () => {
     expect(captured.threadId).toBe("thread-7");
   });
 });
+
+describe("idle-reset timer does not outlive the component (BI-BAD950F9)", () => {
+  it("leaves no pending timer after unmount", async () => {
+    // The leak this pins: after a successful transcription the hook set a 0ms
+    // timer to return to idle, and unmount did not clear it. It fired against a
+    // gone component, React scheduled through react-dom, and the scheduler
+    // reached for `window` — already torn down under vitest, so the shard died
+    // on an unhandled "window is not defined" while every test passed.
+    //
+    // Asserted as a pending-timer count rather than by catching that error: the
+    // error surfaces after the environment is gone, which is exactly why it
+    // cannot be caught from inside the test that causes it.
+    installMediaDevices({ granted: true });
+    installFetch(async () => new Response(JSON.stringify({ text: "Hi" }), { status: 200 }));
+    const onTranscript = vi.fn();
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+
+    try {
+      const { result, unmount } = renderHook(() => useVoiceCapture({ onTranscript }));
+      await act(async () => {
+        await result.current.start();
+      });
+      act(() => {
+        recorderInstances[0].emitChunk(1024);
+      });
+      act(() => {
+        result.current.stop();
+      });
+      // Promises settle without the clock moving, so the idle-reset timer is
+      // scheduled and still pending at this point.
+      await act(async () => {});
+      expect(onTranscript).toHaveBeenCalledWith("Hi");
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      unmount();
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

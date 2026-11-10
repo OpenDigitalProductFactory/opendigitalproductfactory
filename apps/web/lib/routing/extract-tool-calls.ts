@@ -18,7 +18,7 @@
  * non-canonical shape.
  */
 
-import type { ToolCallEntry } from "./adapter-types";
+import type { ToolCallEntry } from "./chat-message-types";
 
 /** Deterministic JSON stringify with sorted object keys for content-based dedup. */
 function stableStringify(value: unknown): string {

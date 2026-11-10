@@ -1,3 +1,12 @@
+---
+status: active
+---
+
+BI-37719AAB's governed decision is owned by
+[2026-09-01-codex-subscription-model-eligibility-design.md](./2026-09-01-codex-subscription-model-eligibility-design.md).
+Section 13 below remains supporting routing detail, not a second approval
+artifact.
+
 # CLI Execution Adapter — Routing Design Spec
 
 | Field | Value |
@@ -217,7 +226,9 @@ model AdapterRunTelemetry {
 }
 ```
 
-`userAccepted` is set asynchronously when a downstream signal lands (user keeps the reply, retries, or escalates). Acceptance is the canonical "did this adapter win?" signal.
+#### 4.3.1 Exact-response disposition (BI-A009189A; design 2026-10-31)
+
+The [exact-response routing feedback design](./2026-10-31-exact-response-routing-feedback-design.md) is the canonical feedback extension to §4.3. This parent retains the adapter architecture; feedback objectives, acceptance criteria, authorization, audit and UX live in the dedicated design.
 
 ### 4.4 Hard-coded CLI special case removal
 
@@ -686,7 +697,97 @@ Reserved through every preceding phase. Specific deliverables:
 4. Unify CLI session ID generation across `claude-dispatch.ts`, `codex-dispatch.ts`, and the new substrate adapters.
 5. Cost / quota / outcome ledger consolidation (`AdapterRunTelemetry` is canonical; `ToolExecution.duration_ms` etc. cross-reference it).
 
-## 13. Open Risks
+## 13. BI-37719AAB integrity patch — account-aware Codex model eligibility
+
+The live Codex CLI rejected `gpt-5.3-codex` with HTTP 400 when the `codex`
+provider used ChatGPT OAuth, while the same authenticated CLI accepted
+`gpt-5.4`. The existing adapter then matched the word `rate` inside
+`degrade performance` and recorded a false pool-wide rate limit. This combines
+two distinct faults: selection admitted a model the connected account could not
+run, and failure classification used an unbounded substring.
+
+### Research and reproduction record
+
+The defect is named against pre-fix ref
+`e7f618eae0b7481f37101654826cc8aad2a4a2d2`:
+
+- `apps/web/lib/routing/codex-cli-adapter.ts:355` used
+  `stderr.includes("rate") || stderr.includes("429")`; the observed HTTP 400
+  includes `degrade performance`, so the first expression is true without a
+  capacity failure.
+- `apps/web/lib/routing/loader.ts:166-193` admitted every active profile whose
+  provider had a configured credential, and `profileToManifest` at lines
+  208-233 had no account/model compatibility field.
+- `apps/web/lib/routing/types.ts:75-82` consequently had no manifest carrier for
+  an account-specific hard exclusion.
+
+The live reproduction used one healthy ChatGPT-authenticated Codex credential:
+`codex login status` reported logged in with ChatGPT,
+`codex exec -m gpt-5.3-codex` returned HTTP 400 unsupported-account-model, and
+the same prompt immediately returned `OK` with `codex exec -m gpt-5.4`.
+`CliPoolStatus` then contained a false 60-second Codex rate-limit record.
+
+The TDD red run added the exact stderr and eligibility contracts before
+production code. The focused command over the four new/affected suites reported
+10 failures and 88 passes: missing `looksLikeCliRateLimit`, missing eligibility
+module, no manifest exclusion, and no V2 hard-filter exclusion. After the
+production change, the focused five-suite run reported 127/127 passes. The
+graph-expanded run reported 323/323, and the exact-tree merged gate at candidate
+`4c5aa639d50bfd7e482bd9cef247a2c2246f65e0` reported 3,541 passing tests plus a
+successful production build.
+
+Candidate causes ruled out by execution:
+
+- **Expired or invalid auth:** ruled out because login status was healthy and
+  `gpt-5.4` succeeded with the same credential and prompt.
+- **Real capacity exhaustion:** ruled out because the response was HTTP 400,
+  not 429, and the supported sibling succeeded immediately.
+- **Provider-wide outage or local-runtime failure:** ruled out because only the
+  account/model pair changed between failure and success; no local provider was
+  involved.
+- **Catalog-wide model invalidity:** ruled out because official OpenAI API docs
+  list `gpt-5.3-codex`; the incompatibility is specifically the ChatGPT-account
+  Codex transport, so API-key eligibility must remain intact.
+
+Official OpenAI documentation establishes that both
+[`gpt-5.3-codex`](https://developers.openai.com/api/docs/models/gpt-5.3-codex)
+and [`gpt-5.4`](https://developers.openai.com/api/docs/models/gpt-5.4) are API
+models, but does not establish identical availability through a ChatGPT-account
+Codex CLI session. Therefore the account-specific compatibility rule is grounded
+in the live CLI response, while the API-key path remains governed by the API
+catalog.
+
+The fix uses the existing endpoint-manifest and exclusion-trace substrate:
+
+1. The manifest loader computes a hard `eligibilityExclusionReason` for
+   `(provider=codex, auth=oauth2_authorization_code, model=gpt-5.3-codex)`.
+2. The routing hard filter preserves that endpoint as an excluded candidate,
+   making the reason available to dry-run previews, route decisions, and Runtime
+   Health instead of silently deleting it from the candidate set.
+3. A supported sibling such as `gpt-5.4` remains eligible and can win before
+   dispatch. Codex API-key connections remain eligible for `gpt-5.3-codex`.
+4. The adapter classifies capacity only from explicit 429, Too Many Requests,
+   rate-limit, quota-limit, weekly-limit, or usage-limit signatures. Ordinary
+   prose containing `rate` is a provider error and never mutates pool capacity.
+5. Runtime-health exclusion bucketing gives account/model incompatibility a
+   distinct explanation and corrective action.
+
+Acceptance is proven by unit tests for the exact observed stderr, genuine 429
+and weekly-limit payloads, OAuth-versus-API-key model eligibility, hard-filter
+trace preservation, and owner-facing exclusion attribution. No schema migration
+or seed/catalog deletion is required.
+
+### Acceptance mapping
+
+| Backlog acceptance target | Design/implementation contract | Executable proof |
+| --- | --- | --- |
+| ChatGPT-authenticated Codex never selects `gpt-5.3-codex` when unsupported | OAuth account/model policy writes `eligibilityExclusionReason` into the manifest and V2 treats it as a hard exclusion | `codex-subscription-model-eligibility.test.ts`; `loader.test.ts`; `codex-subscription-model-routing.test.ts` |
+| `degrade performance` cannot trip rate limiting | Only explicit HTTP throttle/quota/usage signatures classify capacity | Exact live stderr case in `codex-cli-adapter.test.ts` |
+| Genuine 429 still records capacity | `looksLikeCliRateLimit` retains 429, Too Many Requests, weekly, usage, and quota signatures; the existing record path is unchanged | Genuine 429 and weekly-limit cases in `codex-cli-adapter.test.ts` |
+| `gpt-5.4` wins without local detour | Unsupported sibling remains in the excluded trace; supported user-configured sibling remains rankable ahead of bundled endpoints | Three-candidate decision in `codex-subscription-model-routing.test.ts` |
+| Runtime Health explains the rejected model and action | New `account-model-eligibility` bucket maps the router reason to model-assignment remediation | `routing-exclusion-buckets.test.ts` plus existing phase/runtime-health consumers |
+
+## 14. Open Risks
 
 1. **Codex schema instability.** The schema-drift detector + version pin is the mitigation. If drift is constant, Codex CLI is operationally untenable for the panel and we keep it Build-Studio-only.
 2. **Sandbox pool exhaustion.** Per-thread sessions pin sandbox slots. With pool size 3 and TTL 60 min, ≥3 active threads block new claims. Mitigation: pool size scales with active-thread count; ephemeral fallback when pool saturated.
@@ -696,7 +797,7 @@ Reserved through every preceding phase. Specific deliverables:
 6. **Race-mode cost amplification.** A race against three adapters costs ~3×. Mitigation: race requires explicit opt-in env flag and per-route-plan opt-in; never default.
 7. **Acceptance signal lag.** `userAccepted` may take days for asynchronous threads. Outcome scoring runs over rolling 7-day windows to absorb this lag.
 
-## 14. Telemetry & Observability
+## 15. Telemetry & Observability
 
 `AdapterRunTelemetry` is the canonical run ledger. Operator dashboards read from it:
 
@@ -719,7 +820,7 @@ adapter_health = healthy
 
 `adapter.degraded` events surface in the panel as a banner; the route planner deprioritizes degraded adapters until 5 consecutive healthy runs clear the flag.
 
-## 15. Migration & Backwards Compatibility
+## 16. Migration & Backwards Compatibility
 
 - Existing coworker threads have `cliSessionId = null`. They keep working through the HTTP adapter exactly as today.
 - The hard-coded check at [ai-inference.ts:353](../../../apps/web/lib/ai-inference.ts#L353) is replaced by registry resolution that, in absence of an explicit `executionAdapter`, defaults to the prior provider-id-driven choice. No silent behavior change.
@@ -727,7 +828,115 @@ adapter_health = healthy
 - Build Studio dispatch is unchanged. Convergence happens only when Phase H has run and only as an explicit follow-up.
 - Receipts spec landing first lets §7 mint full provenance receipts. If receipts spec slips, §7 still mints `ToolExecution` rows and the receipt linkage is added in a follow-up patch.
 
-## 16. References
+## 17. Organization quota recovery (BI-EDF1BD54, 2026-09-27)
+
+The live Claude CLI returned a 149-character organization monthly spend-limit
+banner to three independent review branches. Their session records identify
+`isApiErrorMessage: true`, `error: rate_limit` and zero generated tokens.
+The adapter recognized personal weekly limits but missed this wording, returned
+it as content, and prevented the existing fallback chain from running.
+
+Extend the existing adapter boundary rather than changing reviewer prompts,
+quota settings or provider eligibility. Recognize the observed organization
+spend-limit banner and retain structured failed-result information. A failed
+CLI result must raise an existing `InferenceError`; quota maps to `rate_limit`,
+unknown failure to `provider_error`. Successful ordinary prose remains content.
+The fallback chain remains the owner of provider selection, screening, capacity,
+bounded retries and truthful exhaustion. Codex or local is used only when it is
+already an eligible candidate. No provider is newly enabled or granted access.
+
+This extends the simpler quota recovery in #4680. BI-18AF9BA0 fixes a distinct
+Codex stderr classification defect; its exclusion of echoed prompt text is a
+precedent for classifying only the CLI envelope and bounded quota banner here.
+No new table, dependency, public tool, credential or migration is required.
+
+Implementation and acceptance:
+
+- Reproduce the observed banner through the adapter before changing production
+  code. Include organization and personal quotas, successful content, and
+  structured failure envelopes with otherwise unfamiliar text.
+- Refactor quota/error classification into one adapter helper where needed;
+  keep parsing and error propagation separate so a parse catch cannot swallow
+  a provider failure.
+- Exercise the real adapter through the existing fallback chain with eligible
+  Codex and local candidates. Verify exhaustion remains an error, and failure
+  text is never returned as a completed review.
+- Run affected adapter/router tests, typecheck, deterministic guards and the
+  canonical merged-code gate; deliver through a DCO PR and merge queue, then
+  verify the review path on the canonical install.
+
+Operator direction in task `01a0c605-8f98-7ba1-bc3d-42836ccb11aa` explicitly
+authorizes this bounded process repair: "ok, this is an override situation then
+to fix that step in the process." It does not turn the existing inconclusive
+review into a pass or bypass protected publication, grants, independent review,
+scope ownership, build gates or runtime integrity. Any unavailable review stays
+inconclusive. This scope expires when this repair merges or is abandoned.
+
+### Availability follow-through (BI-EDF1BD54, 2026-10-12)
+
+On canonical `007eef1a3bc035a5f7906cf92cd2432819695534`, the stdout
+classifier raises `rate_limit` but never calls `recordCliRateLimit`. Only the
+stderr branch records exhaustion. The existing recorder writes provider
+capacity only for resets longer than its pool cooldown cap. Consequently a
+recognized stdout quota can leave both the dispatch pool and the next routing
+decision reporting availability.
+
+The artifact review's original and recovery windows on October 11 have eight
+`RouteOutcome` rate-limit failures across Opus and Sonnet on `anthropic-sub`.
+The provider's available snapshot remained dated October 8, with no Claude pool
+row. The preserved bounded banner is `You've hit your weekly limit · resets
+4pm (UTC)`. It supplies no date: do not invent an October 13 reset from it.
+This is separate from local context admission and model behavior conformance.
+
+Ordered atomic fix for Workroom `WC-C6E10155`:
+
+1. Reproduce the missing stdout observation and ordering through the real CLI
+   adapter/fallback harness. On the unchanged base, two tests fail because the
+   recorder is called zero times; six existing fallback tests pass. A separate
+   pool test fails because a time-only weekly banner produces no provider
+   capacity observation. This rules out banner recognition and fallback
+   classification as the remaining defect.
+2. Await the existing pool recorder after a classified stdout quota and before
+   exposing the error to fallback. Preserve the original inference error,
+   successful content, unknown-failure handling and authority checks.
+3. Have the recorder await both existing pool and provider capacity writes.
+   Preserve known long reset dates and shared-account scoping. For an unknown
+   reset date, record a bounded policy backoff with heuristic confidence;
+   distinguish it from a provider-authoritative reset. Do not infer a day from
+   a clock-only banner or use an unrelated weekly reset as an organization
+   spend-cap reset. Persistence errors remain non-fatal to error propagation.
+4. Verify persistence ordering, unavailable-peer exclusion, bounded expiry,
+   successful prose, explicit long resets and record-write failure. Run the
+   graph-linked CLI, pool, capacity-drain and weekly collector tests, web source
+   and test typechecks, applicable guards and the canonical exact-tree gate.
+5. Obtain independent review, publish a DCO-signed PR through the merge queue,
+   deploy canonically, and verify existing affected review recovery. Preserve
+   any failed behavior probe and unavailable verdict as such. Roll back through
+   a reviewed revert if availability or fallback behavior regresses.
+
+This is one atomic correction to the existing CLI quota observation contract;
+the adapter and recorder changes are not independently sufficient. No new
+schema, provider enablement, credentials, budgets, privacy policy, review
+identity or retry authority is introduced. Existing controls still decide
+which fallback is eligible; if none is eligible, the result remains a truthful
+infrastructure failure.
+
+### Dated Claude CLI weekly limit (BI-6C8E2561, 2026-10-21)
+
+The Claude CLI states a spent weekly limit as `resets Oct 20, 4pm (UTC)`:
+month, day, clock and IANA zone, but no year. The recorder only read Codex's
+`try again at <date>` form, so this banner took the 60-second default. On the
+live install the `anthropic-sub` pool read healthy from October 16 to October 20
+16:00 UTC, and the capacity drain, the agent-task dispatcher and the Workroom
+drive all counted it as capacity.
+
+The recorder now reads that form. The year is the occurrence nearest now, and
+the clock is converted through the named zone. The reset is recorded as
+`quota_resets_at` with exact confidence, so `getAllCliPoolStatuses` reports the
+pool exhausted until then. The clock-only banner above still names no day, and
+an unknown zone names no instant: both keep the bounded backoff.
+
+## 18. References
 
 - [Coworker Substrate Status Review](../audits/2026-04-29-cli-substrate-status-review.md) — the audit this spec promotes
 - [Codex JSONL probe evidence](../audits/evidence/2026-04-29-codex-cli-jsonl-probe.md) — empirical event taxonomy

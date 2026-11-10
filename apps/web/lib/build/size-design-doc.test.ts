@@ -270,7 +270,7 @@ describe("sizeDesignDoc — heuristic edge cases", () => {
     // reference, not a new data model.
     const doc: BuildDesignDoc = {
       problemStatement:
-        "The WindowsInstaller and DockerDesktop setup for DpfPlatform is undocumented; the InstallGuide must cover ModelRunner and QdrantStore.",
+        "The WindowsInstaller and DockerDesktop setup for DpfPlatform is undocumented; the InstallGuide must cover ModelRunner and VectorStore.",
       dataModel: "",
       reusePlan: "Reuse the existing MacOsGuide and LinuxGuide structure.",
       proposedApproach:

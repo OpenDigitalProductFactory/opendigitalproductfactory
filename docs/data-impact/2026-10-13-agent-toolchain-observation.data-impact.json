@@ -1,0 +1,73 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "AgentToolchainObservation: operational drift telemetry recording which dpf-platform pack copy each MCP credential connected with. No personal, customer or business-record data — credential references, pack versions and client names only."
+  ],
+  "migration": {
+    "name": "20261014010000_add_agent_toolchain_observation",
+    "backfill": "none — additive CREATE TYPE and CREATE TABLE of a brand-new relation; no existing rows exist to backfill or violate any constraint."
+  },
+  "tests": [
+    "apps/web/lib/agent-toolchain/connection-observation.test.ts",
+    "apps/web/lib/agent-toolchain/toolchain-verdict.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:agent-toolchain-observation",
+      "prismaModel": "AgentToolchainObservation",
+      "lifecycleDisposition": "operational telemetry; one row per credential and loaded digest refreshed at most every five minutes; the verdict is computed on read; rows past 30 days are pruned by the telemetry-bounded lifecycle.",
+      "fields": [
+        {
+          "fieldId": "data:agent-toolchain-observation#credentialRef",
+          "resolution": "not-applicable",
+          "reason": "Server-derived credential identity (oauth:<OAuthClient.id> or token:<McpApiToken.id>) — an operational key, not a data subject.",
+          "provenance": "the MCP route, from the authenticated credential and the connector's declaration"
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#loadedDigest",
+          "resolution": "not-applicable",
+          "reason": "First 16 hex of the declared delivered-content digest of the loaded dpf-platform pack, or 'undeclared'.",
+          "provenance": "the MCP route, from the authenticated credential and the connector's declaration"
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#clientKind",
+          "resolution": "not-applicable",
+          "reason": "Which DPF-managed client kind the connection declared (claude-code, codex, grok, antigravity) — an operational classification.",
+          "provenance": "the MCP route, from the authenticated credential and the connector's declaration"
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#probableClient",
+          "resolution": "not-applicable",
+          "reason": "User-Agent product token, kept for display only and never used for enforcement.",
+          "provenance": "the MCP route, from the authenticated credential and the connector's declaration"
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#loadedPackVersion",
+          "resolution": "not-applicable",
+          "reason": "The pack version the connection declared it loaded.",
+          "provenance": "the MCP route, from the authenticated credential and the connector's declaration"
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#authMode",
+          "resolution": "not-applicable",
+          "reason": "How the connection authenticated (oauth, bearer, session) — operational status only.",
+          "provenance": "the MCP route, from the authenticated credential and the connector's declaration"
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#clientInfoName",
+          "resolution": "not-applicable",
+          "reason": "MCP initialize clientInfo.name reported by the client application.",
+          "provenance": "the MCP route, from the authenticated credential and the connector's declaration"
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#clientInfoVersion",
+          "resolution": "not-applicable",
+          "reason": "MCP initialize clientInfo.version reported by the client application.",
+          "provenance": "the MCP route, from the authenticated credential and the connector's declaration"
+        }
+      ]
+    }
+  ]
+}

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   CHANGE_REVIEW_POLICY_VERSION,
-  CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION,
+  LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION,
   assessSemanticReviewReceiptFreshness,
   buildSemanticChangeReviewPrompt,
   createLowRiskAutoPassReceipt,
   createSemanticReviewReceipt,
   parseSemanticReviewResponse,
+  restoreSemanticReviewCheckpoint,
   projectSemanticReviewReceipt,
   type SemanticReviewIdentity,
 } from "./semantic-change-review";
@@ -23,6 +24,78 @@ const identity = (overrides: Partial<SemanticReviewIdentity> = {}): SemanticRevi
 });
 
 describe("semantic review receipt freshness", () => {
+  it("reports content-free structure for malformed responses without accepting them", () => {
+    const raw = '{"summary":"private } { \\\" content"}{"summary":"private"}';
+    const result = parseSemanticReviewResponse(raw);
+    expect(result.decision).toBe("inconclusive");
+    expect(result.parseDiagnostics?.[0]).toMatchObject({ stage: "invalid-json", structure: {
+      characters: raw.length, completedObjects: 2, openDepth: 0, unterminatedString: false, scanTruncated: false,
+    } });
+    expect(JSON.stringify(result)).not.toContain("private");
+    expect(restoreSemanticReviewCheckpoint(result, "change-reviewer").parseDiagnostics)
+      .toEqual(result.parseDiagnostics?.map(d => ({ ...d, agentId: "change-reviewer" })));
+  });
+
+  it("bounds structural scanning and rejects untrusted checkpoint counts", () => {
+    const result = parseSemanticReviewResponse('{"summary":"' + "x".repeat(1_000_010));
+    expect(result.parseDiagnostics?.[0]).toMatchObject({ stage: "missing-json", structure: {
+      characters: 1_000_000, scanTruncated: true, openDepth: 1, unterminatedString: true,
+    } });
+    const forged = { ...result, parseDiagnostics: [{ stage: "invalid-json",
+      structure: { characters: -1, completedObjects: 0, openDepth: 0, unterminatedString: false, scanTruncated: false } }] };
+    expect(restoreSemanticReviewCheckpoint(forged, "change-reviewer").parseDiagnostics).toBeUndefined();
+  });
+
+  it("provides one valid JSON response example including the required failure challenge", () => {
+    const prompt = buildSemanticChangeReviewPrompt({ title: "Review", artifact: "diff",
+      verificationEvidence: "Test evidence", requireFailureAnalysis: true });
+    const example = prompt.split("RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):\n")[1];
+    expect(JSON.parse(example)).toMatchObject({ decision: "pass", issues: [],
+      failureAnalysisReview: { adequate: true, rationale: expect.any(String) } });
+    expect(prompt).not.toContain("Also return");
+    expect(prompt).toContain('"cannot-verify"');
+  });
+
+  it.each([
+    ["private prose", "missing-json"],
+    ['{"summary":"private",}', "invalid-json"],
+    ['{"decision":"private-value","issues":[],"summary":"private"}', "schema-mismatch"],
+  ])("retains content-free parser diagnostics for %s", (raw, stage) => {
+    const result = parseSemanticReviewResponse(raw);
+    expect(result).toMatchObject({ decision: "inconclusive", parseError: true,
+      parseDiagnostics: [{ stage }] });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
+  it("identifies invalid contract fields without retaining response values", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({ decision: "pass",
+      issues: [{ severity: "private-value", description: "private source" }], summary: "private" }));
+    expect(result).toMatchObject({ parseDiagnostics: [{ stage: "schema-mismatch",
+      violations: [{ field: "issues.severity" }] }] });
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
+  it("bounds diagnostics and carries them through the canonical receipt projection", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({ decision: "pass",
+      issues: Array.from({ length: 100 }, () => ({ severity: "private", description: "private" })),
+      summary: "private", "private-property": "private-value" }));
+    expect(result.parseDiagnostics?.[0]?.violations).toHaveLength(8);
+    const receipt = createSemanticReviewReceipt({ identity: identity(), risk: "high",
+      disposition: "reviewed", rationale: "Independent review", result });
+    const projected = projectSemanticReviewReceipt(receipt);
+    expect(projected.externalEvidence.details.result.parseDiagnostics).toEqual(result.parseDiagnostics);
+    expect(JSON.stringify(projected)).not.toContain("private");
+  });
+
+  it("rejects untrusted checkpoint diagnostic text and handles missing results", () => {
+    const restored = restoreSemanticReviewCheckpoint({ decision: "inconclusive", issues: [], summary: "Unavailable",
+      parseError: true, parseDiagnostics: [{ stage: "schema-mismatch", agentId: "private",
+        violations: [{ field: "private", code: "private" }] }] }, "change-reviewer");
+    expect(restored.decision).toBe("inconclusive");
+    expect(JSON.stringify(restored)).not.toContain("private");
+    expect(restoreSemanticReviewCheckpoint(undefined, "change-reviewer").decision).toBe("inconclusive");
+  });
+
   const reviewedReceipt = () => createSemanticReviewReceipt({
     identity: identity(),
     disposition: "reviewed",
@@ -37,7 +110,7 @@ describe("semantic review receipt freshness", () => {
     }));
 
     expect(result).toEqual({ fresh: true, reasons: [] });
-    expect(receipt.schemaVersion).toBe(CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION);
+    expect(receipt.schemaVersion).toBe(LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION);
   });
 
   it.each([
@@ -72,6 +145,24 @@ describe("semantic review evidence", () => {
 });
 
 describe("surface-neutral review compatibility", () => {
+  it.each([
+    {},
+    { decision: "approved", issues: [], summary: "Reviewed" },
+    { decision: "pass", issues: "none", summary: "Reviewed" },
+    { decision: "pass", issues: [], summary: " " },
+    { decision: "pass", issues: [{ severity: "blocking", description: "Boundary bypass" }], summary: "Reviewed" },
+    { decision: "pass", issues: [{ severity: "critical", description: " " }], summary: "Reviewed" },
+  ])("does not turn an invalid reviewer contract into approval: %j", (response) => {
+    expect(parseSemanticReviewResponse(JSON.stringify(response)).decision).toBe("inconclusive");
+  });
+
+  it("preserves an explicitly inconclusive reviewer result", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({ decision: "inconclusive", issues: [], summary: "Provider response was incomplete." }));
+    expect(result.decision).toBe("inconclusive");
+    expect(result.summary).toContain("incomplete");
+    expect(result.parseError).toBeUndefined();
+  });
+
   it("builds a surface-neutral code-review prompt contract", () => {
     const prompt = buildSemanticChangeReviewPrompt({
       title: "Add filter",
@@ -79,8 +170,88 @@ describe("surface-neutral review compatibility", () => {
       verificationEvidence: "PASS 1 test",
     });
     expect(prompt).toContain("CHANGE: Add filter");
+    expect(prompt).toContain("The supplied immutable artifact is the review target");
+    expect(prompt).toContain("An unrelated ambient checkout is not evidence");
     expect(prompt).toContain("CODE CHANGES:\nconst x = 1;");
     expect(prompt).toContain("VERIFICATION EVIDENCE:\nPASS 1 test");
+  });
+
+  // BI-82902891: a reviewer that cannot see the change had no way to say so.
+  // The response contract offered only pass|fail and the decision was derived
+  // from severity alone, so "I could not see the code" arrived as an `important`
+  // issue and aggregated into a PASS — on a change the reviewer never read.
+  it("treats a reviewer that cannot verify the change as inconclusive, never pass", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({
+      decision: "cannot-verify",
+      issues: [{
+        severity: "important",
+        description: "The committed tree available for review does not contain the claimed change.",
+      }],
+      summary: "Could not review: the artifact was not present in the reviewed tree.",
+    }));
+
+    expect(result.decision).toBe("inconclusive");
+    expect(result.inconclusiveReason).toBe("reviewer-could-not-verify-change");
+    // Not a parse failure — the reviewer answered correctly, it just could not see the change.
+    expect(result.parseError).toBeUndefined();
+    // The reviewer's own account of why is preserved for the operator.
+    expect(result.issues).toHaveLength(1);
+    expect(result.summary).toContain("not present");
+  });
+
+  it("accepts the underscore spelling of cannot_verify", () => {
+    const result = parseSemanticReviewResponse('{"decision":"cannot_verify","issues":[],"summary":"no artifact"}');
+    expect(result.decision).toBe("inconclusive");
+    expect(result.inconclusiveReason).toBe("reviewer-could-not-verify-change");
+  });
+
+  it("still refuses to publish a cannot-verify receipt in enforce mode", () => {
+    // The inconclusive channel already fails closed downstream; this pins that a
+    // cannot-verify verdict rides it rather than the pass path.
+    const result = parseSemanticReviewResponse('{"decision":"cannot-verify","issues":[],"summary":"no artifact"}');
+    expect(result.decision).not.toBe("pass");
+  });
+
+  it("offers the cannot-verify channel in the prompt contract", () => {
+    const prompt = buildSemanticChangeReviewPrompt({
+      title: "t", artifact: "a", verificationEvidence: "e",
+    });
+    expect(prompt).toContain("cannot-verify");
+    // The reviewer must be told this is NOT a code finding, which is the
+    // misgrading that produced the false pass.
+    expect(prompt.toLowerCase()).toContain("not a code issue");
+  });
+
+  // The verbatim shape of the BI-82902891 incident: the reviewer answered "pass"
+  // and filed its inability to see the change as an `important` finding, because
+  // the cannot-verify channel did not exist yet. A model that ignores the new
+  // channel must not be able to reproduce that false pass.
+  it("refuses to pass when the findings themselves say the change was not in the reviewed tree", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({
+      decision: "pass",
+      issues: [{
+        severity: "important",
+        description: "Receipt integrity failure: the committed tree available for review does not contain the claimed change.",
+      }],
+      summary: "2 independent review branches completed; 0 blocking findings.",
+    }));
+
+    expect(result.decision).toBe("inconclusive");
+    expect(result.inconclusiveReason).toBe("reviewer-could-not-verify-change");
+  });
+
+  it("does not trip the integrity net on an ordinary finding that happens to say 'not present'", () => {
+    const result = parseSemanticReviewResponse(JSON.stringify({
+      decision: "pass",
+      issues: [{
+        severity: "minor",
+        description: "A loading state is not present on the submit button.",
+      }],
+      summary: "Reviewed; one minor nit.",
+    }));
+
+    expect(result.decision).toBe("pass");
+    expect(result.inconclusiveReason).toBeUndefined();
   });
 
   it("parses severity-driven results and fails closed on malformed output", () => {

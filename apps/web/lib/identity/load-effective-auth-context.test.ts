@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   loadEffectiveAuthContext,
+  EffectiveAuthContextError,
   resolveManagerScope,
 } from "./load-effective-auth-context";
 
@@ -43,6 +44,37 @@ describe("resolveManagerScope", () => {
 });
 
 describe("loadEffectiveAuthContext", () => {
+  it("preserves infrastructure errors instead of classifying them as authority refusal", async () => {
+    const outage = new Error("Identity database unavailable");
+    const db = { principalAlias: { findFirst: vi.fn().mockRejectedValue(outage) }, employeeProfile: { findMany: vi.fn(async () => []) },
+      teamMembership: { findMany: vi.fn(async () => []) }, delegationGrant: { findMany: vi.fn(async () => []) } };
+    const request = loadEffectiveAuthContext({ user: { id: "u", email: "test@example.test", type: "admin", platformRole: null,
+      isSuperuser: false, accountId: null, accountName: null, contactId: null }, grantedCapabilities: [], authentication: { source: "session" } }, db);
+    await expect(request).rejects.toBe(outage);
+    expect(outage).not.toBeInstanceOf(EffectiveAuthContextError);
+  });
+
+  it("fails closed when a Principal-rooted session no longer resolves", async () => {
+    const db = {
+      principal: { findUnique: vi.fn().mockResolvedValue(null) },
+      principalAlias: { findFirst: vi.fn() },
+      employeeProfile: { findMany: vi.fn().mockResolvedValue([]) },
+      teamMembership: { findMany: vi.fn().mockResolvedValue([]) },
+      delegationGrant: { findMany: vi.fn() },
+    };
+
+    await expect(loadEffectiveAuthContext({
+      user: {
+        id: "user-1", principalId: "PRN-missing", email: "user@example.com",
+        type: "admin", platformRole: null, isSuperuser: false,
+        accountId: null, accountName: null, contactId: null,
+      },
+      grantedCapabilities: [],
+      authentication: { source: "session" },
+    }, db)).rejects.toMatchObject({ name: "EffectiveAuthContextError", message: "Principal PRN-missing could not be resolved" });
+    expect(db.principalAlias.findFirst).not.toHaveBeenCalled();
+  });
+
   it("hydrates canonical workforce scope and filters exhausted delegation grants", async () => {
     const db = {
       principalAlias: {
@@ -130,6 +162,14 @@ describe("loadEffectiveAuthContext", () => {
       employeeProfile: { findMany: vi.fn() },
       teamMembership: { findMany: vi.fn() },
       delegationGrant: { findMany: vi.fn() },
+      customerContact: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "contact-1",
+          isActive: true,
+          mergedIntoId: null,
+          account: { accountId: "ACC-PARTNER", status: "active" },
+        }),
+      },
     };
 
     const context = await loadEffectiveAuthContext(
@@ -157,6 +197,43 @@ describe("loadEffectiveAuthContext", () => {
       partnerAccountIds: ["ACC-PARTNER"],
     });
     expect(db.employeeProfile.findMany).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a customer session when live account scope is suspended", async () => {
+    const db = {
+      principalAlias: {
+        findFirst: vi.fn().mockResolvedValue({
+          principal: {
+            principalId: "PRN-CUSTOMER",
+            kind: "customer",
+            status: "active",
+            sensitivityClearance: ["public"],
+            aliases: [{ aliasType: "customer_contact", aliasValue: "contact-1", issuer: "" }],
+          },
+        }),
+      },
+      customerContact: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "contact-1",
+          isActive: true,
+          mergedIntoId: null,
+          account: { accountId: "ACC-1", status: "suspended" },
+        }),
+      },
+      employeeProfile: { findMany: vi.fn() },
+      teamMembership: { findMany: vi.fn() },
+      delegationGrant: { findMany: vi.fn() },
+    };
+
+    await expect(loadEffectiveAuthContext({
+      user: {
+        id: "contact-1", email: "customer@example.com", type: "customer",
+        platformRole: null, isSuperuser: false,
+        accountId: "ACC-1", accountName: "Customer", contactId: "contact-1",
+      },
+      grantedCapabilities: [],
+      authentication: { source: "session" },
+    }, db)).rejects.toMatchObject({ name: "EffectiveAuthContextError", message: "Customer session scope is no longer active or canonical" });
   });
 
   it("rejects an inactive canonical principal", async () => {
@@ -195,6 +272,6 @@ describe("loadEffectiveAuthContext", () => {
         },
         db,
       ),
-    ).rejects.toThrow("Principal PRN-INACTIVE is not active");
+    ).rejects.toMatchObject({ name: "EffectiveAuthContextError", message: "Principal PRN-INACTIVE is not active" });
   });
 });

@@ -6,6 +6,17 @@
 
 DPF tracks platform work, common company capabilities, and archetype-specific functionality in the same backlog. That is correct for execution, but it makes investment planning blurry unless every epic and backlog item can say what kind of scope it serves.
 
+Scope classification and product association do not change how an item closes.
+Since BI-B1B44777, a merge through CI and the merge queue closes any item that is
+not tagged `contractual`, whatever its scope or product link. A contractual item
+keeps its independent acceptance. A medium contractual item can use valid
+acceptance criteria in its body: after delivery passes, its authorized
+completion attempt retains an immutable criteria baseline, and recovery issues
+an independent review request. The backlog MCP read carries the requesting
+person's context, so reviewer room admission is checked. See
+[the readiness runbook](initiative-readiness-runbook.md) for current baseline,
+evidence and reviewer prerequisites.
+
 Backlog archetype scope is the planning facet that separates:
 
 | Scope kind | Meaning | Typical examples |

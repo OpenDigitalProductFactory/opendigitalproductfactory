@@ -265,3 +265,28 @@ describe("evaluateDemandTransition", () => {
     ).toMatchObject({ allowed: false, code: "funding-reconsideration-required" });
   });
 });
+
+// BI-00C68162: who supplied the value inputs is shown, never weighed. An
+// agent-proposed score has exactly the standing of an owner's on the same inputs.
+describe("value-input provenance is visible, not a gate", () => {
+  const scored = {
+    demandStage: "screened" as const,
+    problemStatement: "Starts fall back to age because nothing is scored.",
+    evidenceCount: 1,
+    scoreInputs: { reach: 2, impact: 2, confidence: 0.5, jobSize: 3, occurrenceCount: 1, effortSize: "medium" },
+    investmentBucket: "grow",
+    estimateSource: "ai" as const,
+  };
+
+  it("surfaces the input source on the score explanation", () => {
+    expect(buildDemandActivationState(demand({ ...scored, valueInputSource: "ai" })).score.inputSource).toBe("ai");
+    expect(buildDemandActivationState(demand(scored)).score.inputSource).toBeNull();
+  });
+
+  it("gives agent-proposed and owner inputs identical readiness", () => {
+    const agent = buildDemandActivationState(demand({ ...scored, valueInputSource: "ai" }));
+    const owner = buildDemandActivationState(demand({ ...scored, valueInputSource: "human" }));
+    expect(agent.readiness).toEqual(owner.readiness);
+    expect(agent.blockers).toEqual(owner.blockers);
+  });
+});

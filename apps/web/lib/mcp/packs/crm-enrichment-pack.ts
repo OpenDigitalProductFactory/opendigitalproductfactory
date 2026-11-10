@@ -12,7 +12,7 @@
 // The split keeps the platform invariant: research/propose is non-destructive;
 // the record change is a separate, approved, governed step.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
@@ -168,7 +168,7 @@ const proposeCrmEnrichmentTool: ToolPackHandler = async (params, _userId, contex
 
   const { loadRecordForEnrichment, fileEnrichmentProposal } = await import("@/lib/crm/enrichment/enrichment-service");
   const { buildEnrichmentProposal } = await import("@/lib/crm/enrichment/enrichment-proposal");
-  const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
+  const { resolveProactivityPlan } = await import("@dpf/validators/workroom-policy/proactivity-resolver");
 
   const record = await loadRecordForEnrichment(recordKind, recordId);
   if (!record) {

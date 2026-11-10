@@ -23,12 +23,15 @@ vi.mock("@dpf/db", () => ({
       findFirst: (...a: unknown[]) => db.organizationFindFirst(...a),
     },
     // RC2 (BI-E1267C6D): core/contextual principles are relevance-ranked by
-    // Qdrant and then rehydrated from Postgres for their signed vector and
+    // the vector store and then rehydrated from Postgres for their signed vector and
     // weight override. Without this the rehydration throws into its own
     // catch and every test silently exercises the pre-fix path.
     wikiPage: {
       findMany: (...a: unknown[]) => db.wikiPageFindMany(...a),
     },
+    // BI-825D3487: the corpus-grant check reads the caller's authority row; no
+    // row means the code baseline, which holds wiki_kernel_read.
+    agent: { findFirst: async () => null },
   },
   listPrinciplesByTier: (...a: unknown[]) => db.listPrinciplesByTier(...a),
   PRINCIPLE_DECIDE_DEFAULTS: {
@@ -58,7 +61,8 @@ vi.mock("@dpf/db/wiki-taxonomy", async (importActual) => ({
 vi.mock("@/lib/wiki/embeddings", () => ({
   searchWikiPages: (...a: unknown[]) => wiki.searchWikiPages(...a),
 }));
-vi.mock("@/lib/wiki/principle-decide", () => ({
+vi.mock("@dpf/validators/judgment/option-scoring", async (importOriginal) => ({
+  ...await importOriginal<object>(),
   decide: (...a: unknown[]) => wiki.decide(...a),
 }));
 vi.mock("@/lib/wiki/calling-ring-map", () => ({
@@ -68,7 +72,8 @@ vi.mock("@/lib/inference/embedding", () => ({
   generateEmbedding: (...a: unknown[]) => wiki.generateEmbedding(...a),
   isEmbeddingAvailable: (...a: unknown[]) => wiki.isEmbeddingAvailable(...a),
 }));
-vi.mock("@/lib/decision/caller-context", () => ({
+vi.mock("@/lib/decision/caller-context", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/decision/caller-context")>()),
   resolveDecisionCallerContext: (...a: unknown[]) => decision.resolveDecisionCallerContext(...a),
 }));
 vi.mock("@/lib/decision/kernel-consult-ledger", () => ({
@@ -157,7 +162,7 @@ describe("principle-decide pack — handler behavior (delegation preserved)", ()
       { agentId: "agent-9", routeContext: "build", threadId: "t-1" },
     );
 
-    // The Postgres commandment lookup and Qdrant principle search both ran.
+    // The Postgres commandment lookup and the vector principle search both ran.
     expect(db.listPrinciplesByTier).toHaveBeenCalledOnce();
     expect(wiki.searchWikiPages).toHaveBeenCalled();
     expect(wiki.decide).toHaveBeenCalledOnce();
@@ -172,6 +177,32 @@ describe("principle-decide pack — handler behavior (delegation preserved)", ()
       governingProfile: { kind: "platform_kernel", profileId: "prof-1" },
       ledger: { interactionId: "int-1" },
     });
+  });
+
+  it("does not let a public principle_decide caller attach an action authorization binding", async () => {
+    wiki.decide.mockReturnValue({
+      recommendation: { optionId: "proceed", confidence: "high", composite: 1, margin: 1 },
+      scores: [{ optionId: "proceed", composite: 1, contributions: [] }],
+      flags: { structuredCoverage: "strong", semanticFallbackRatio: 0, autonomyEligible: true },
+      reasoning: "clear winner",
+    });
+
+    await principleDecidePack.handlers.principle_decide(
+      {
+        context: "caller-controlled attempt",
+        callingPopulation: "human",
+        options: [{ id: "proceed", description: "Proceed", features: { governance_compliance: 1 } }],
+        policyProjection: {
+          policyAffirmativeOptionId: "proceed",
+          policyActionBinding: { actionKey: "record_initiative_evidence" },
+        },
+      },
+      "u1",
+    );
+
+    expect(decision.recordKernelConsultInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ policyProjection: null }),
+    );
   });
 
   it("fails fast on an unknown ringScope value", async () => {
@@ -487,15 +518,15 @@ describe("principle-decide pack — the dimension registry travels with the sche
 // ── BI-E1267C6D: core/contextual principles reach structured scoring ─────────
 //
 // Three root causes on one code path, all verified against the live install:
-//   RC2 — the Qdrant payload omits principleDimensionVector, so 70 of 95 kernel
+//   RC2 — the vector payload omits principleDimensionVector, so 70 of 95 kernel
 //         principles carried an authored vector that never reached scoring.
 //   RC3 — it omits principleWeight too, so the override fix read a key that is
 //         never written and every core principle used the tier default.
-//   RC6 — maxPrinciples ("cap on core/contextual from Qdrant") was applied to
+//   RC6 — maxPrinciples ("cap on core/contextual from the vector index") was applied to
 //         the MERGED, commandments-first list. With 41 commandments against a
 //         cap of 20 it dropped 21 commandments and every core principle.
 //
-// These pin the contract that Qdrant ranks relevance and Postgres supplies
+// These pin the contract that the vector store ranks relevance and Postgres supplies
 // authority, so re-introducing a payload shortcut fails here.
 
 describe("principle-decide pack — core/contextual reach structured scoring", () => {
@@ -507,7 +538,7 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
     contentPreview: "prefer the sound fix",
   };
   // The authored row as it exists in Postgres — vector and weight override
-  // both present, neither of them reachable through the Qdrant payload.
+  // both present, neither of them reachable through the vector payload.
   const CORE_ROW = {
     id: "wp-core-1",
     title: "Proper Fix Over Quick Fix",
@@ -564,7 +595,7 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
     expect(core!.dimensionVector).toEqual(CORE_ROW.principleDimensionVector);
   });
 
-  it("RC2: rehydration is keyed by the Qdrant pageId, in one batched lookup", async () => {
+  it("RC2: rehydration is keyed by the vector pageId, in one batched lookup", async () => {
     wiki.searchWikiPages
       .mockResolvedValueOnce([CORE_HIT, { ...CORE_HIT, pageId: "wp-core-2" }])
       .mockResolvedValueOnce([{ ...CORE_HIT, pageId: "wp-ctx-1", principleTier: "contextual" }]);
@@ -603,7 +634,7 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
   // SEMANTICS REVISED by BI-6ADB019D. This originally asserted that a
   // rehydration miss kept the principle on semantic fallback, on the theory
   // that a miss might be transient. Live evidence showed the opposite: a miss
-  // on a SUCCESSFUL query means the WikiPage was deleted and the Qdrant point
+  // on a SUCCESSFUL query means the WikiPage was deleted and the vector point
   // is a phantom, so keeping it just burns a maxPrinciples slot. The original
   // intent — never silently drop doctrine for a transient reason — is preserved
   // by the query-failure test below, which is the case that actually is
@@ -652,7 +683,7 @@ describe("principle-decide pack — core/contextual reach structured scoring", (
   });
 
   it("BI-6ADB019D: drops a hit whose WikiPage no longer exists", async () => {
-    // Qdrant returns two points; only one has a live row. The phantom must not
+    // The vector store returns two points; only one has a live row. The phantom must not
     // reach scoring — left in, it contributes 0.000 but occupies a
     // maxPrinciples slot that real doctrine would fill.
     wiki.searchWikiPages

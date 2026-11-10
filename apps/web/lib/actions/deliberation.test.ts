@@ -51,8 +51,8 @@ vi.mock("../deliberation/orchestrator", () => ({
   orchestrateDeliberation: mocks.orchestrate,
 }));
 
-vi.mock("../queue/inngest-client", () => ({
-  inngest: { send: mocks.inngestSend },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: mocks.inngestSend },
 }));
 
 import {

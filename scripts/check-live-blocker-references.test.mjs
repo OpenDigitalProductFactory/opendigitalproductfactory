@@ -5,6 +5,9 @@
 // desirable case, so a guard that flags it would be an over-reporting measure,
 // which is itself a defect.
 
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -64,4 +67,18 @@ test("baseline round-trips", () => {
   assert.ok(parsed.has("apps/web/a.ts\tBI-00000001"));
   assert.ok(parsed.has("apps/web/b.ts\tBI-00000002"));
   assert.equal(parsed.size, 2);
+});
+
+test("an unresolvable BASE_SHA must not exit 0 with OK (BI-B263E76C)", () => {
+  const script = fileURLToPath(new URL("./check-live-blocker-references.mjs", import.meta.url));
+  const result = spawnSync(process.execPath, [script], {
+    encoding: "utf8",
+    cwd: path.resolve(path.dirname(script), ".."),
+    env: { ...process.env, BASE_SHA: "origin/this-ref-does-not-exist-b263e76c" },
+  });
+  const out = `${result.stdout}${result.stderr}`;
+  assert.notEqual(result.status, 0, `must not exit 0 when the base ref is missing; output:\n${out}`);
+  assert.doesNotMatch(out, /\bOK\.\s*$/m);
+  assert.match(out, /cannot resolve|did not run/i);
+  assert.match(out, /git fetch --deepen/);
 });

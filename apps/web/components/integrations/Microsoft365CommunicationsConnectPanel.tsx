@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { EmailInput } from "@/components/ui/EmailInput";
 import type { ConnectorPersistedSetupStatus } from "@/lib/integrations/kernel/setup-state";
+import { formatDateTime } from "@/lib/datetime";
 
 export interface Microsoft365CommunicationsConnectionState {
   status: ConnectorPersistedSetupStatus;
@@ -237,18 +238,4 @@ function FormField({
       {hint && <span className="block text-xs text-[var(--dpf-muted)]">{hint}</span>}
     </label>
   );
-}
-
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
 }

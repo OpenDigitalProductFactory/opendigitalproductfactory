@@ -165,3 +165,104 @@ describe("branch identity is keyed on (repository, branch) — BI-F83CF689", () 
     expect(db.workroom.create).not.toHaveBeenCalled();
   });
 });
+
+// BI-D526F72C: `adopt_worktree` accepted a `backlogItemId` argument its schema
+// never declared, so the binding was dropped. The resulting orphan capsule
+// occupied the branch permanently — `claim_backlog_item_for_work` refused it
+// with capsule_identity_mismatch, and abandoning it did not free the branch
+// because a resume needs a backlog item the orphan does not have. Live
+// reproduction: WC-8DB317F7 on fix/prompt-only-semantic-review-routing-impl.
+describe("an orphan capsule never holds a branch hostage — BI-D526F72C", () => {
+  const orphan = (status: string, archivedAt: Date | null = null) => ({
+    id: "row-1",
+    capsuleId: "WC-8DB317F7",
+    status,
+    archivedAt,
+    backlogItemId: null,
+    executorRef: null,
+    epicId: null,
+    headBranch: "fix/orphaned",
+    worktreePath: "/wt/orphaned",
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+  });
+
+  const adopt = (backlogItemId: string | null) => adoptWorktreeCapsule({
+    db: capsuleDb(),
+    input: {
+      title: "Adopt",
+      objective: "Take over the abandoned branch.",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      headBranch: "fix/orphaned",
+      worktreePath: "/wt/orphaned",
+      ...(backlogItemId ? { backlogItemId } : {}),
+    },
+    actor: { userId: "user-1", agentId: null, principalId: "principal-1" },
+  });
+
+  it.each(["abandoned", "archived", "complete"])(
+    "resumes a %s orphan and binds the incoming item instead of refusing",
+    async (status) => {
+      db.workroom.findFirst.mockResolvedValueOnce(orphan(status, status === "archived" ? new Date() : null));
+      db.workroom.update.mockResolvedValue({
+        id: "row-1",
+        capsuleId: "WC-8DB317F7",
+        backlogItemId: "BI-47ACE2C7",
+        status: "ready",
+      });
+
+      const result = await adopt("BI-47ACE2C7");
+
+      expect(result.capsuleId).toBe("WC-8DB317F7");
+      expect(db.workroom.create).not.toHaveBeenCalled();
+      expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { capsuleId: "WC-8DB317F7" },
+        data: expect.objectContaining({
+          status: "ready",
+          backlogItemId: "BI-47ACE2C7",
+          // A resumed capsule is live again on every surface, not ready-here and
+          // archived-there.
+          archivedAt: null,
+        }),
+      }));
+    },
+  );
+
+  it("resumes an unbound orphan even when the caller names no item", async () => {
+    // Without this the branch is unusable by anyone: nothing to resume against,
+    // and the create path refuses because the identity row already exists.
+    db.workroom.findFirst.mockResolvedValueOnce(orphan("abandoned"));
+    db.workroom.update.mockResolvedValue({ id: "row-1", capsuleId: "WC-8DB317F7", status: "ready" });
+
+    const result = await adopt(null);
+
+    expect(result.capsuleId).toBe("WC-8DB317F7");
+    expect(db.workroom.create).not.toHaveBeenCalled();
+  });
+
+  it("still refuses a terminal capsule that belongs to a different item", async () => {
+    // The protection BI-E363A524 added stays: a row carrying real history is not
+    // rebound, so the branch's provenance cannot be overwritten by a re-adopt.
+    db.workroom.findFirst.mockResolvedValueOnce({
+      ...orphan("abandoned"),
+      capsuleId: "WC-OTHER",
+      backlogItemId: "BI-OTHER",
+    });
+
+    await expect(adopt("BI-47ACE2C7")).rejects.toThrow(/already bound to Work Capsule WC-OTHER/);
+    expect(db.workroom.create).not.toHaveBeenCalled();
+    expect(db.workroom.update).not.toHaveBeenCalled();
+  });
+
+  it("tells a caller blocked by an unbound capsule what will actually work", async () => {
+    // The old text said "Resume that capsule for the same backlog item" for a
+    // capsule with no backlog item — an instruction that cannot be followed.
+    db.workroom.findFirst.mockResolvedValueOnce({
+      ...orphan("working"),
+      capsuleId: "WC-LIVEORPHAN",
+      executorRef: "session-other",
+      backlogItemId: "BI-OTHER",
+    });
+
+    await expect(adopt("BI-47ACE2C7")).rejects.toThrow(/Resume BI-OTHER on that capsule/);
+  });
+});

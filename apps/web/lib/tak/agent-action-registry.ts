@@ -1,9 +1,11 @@
 // apps/web/lib/agent-action-registry.ts
 import type { PageAction, PageActionManifest } from "@/lib/agent-action-types";
 import { can, type UserContext } from "@/lib/permissions";
-import { employeeActions } from "@/app/(shell)/employee/actions/manifest";
+import { employeeActions } from "./page-action-manifests/employee";
 
-// Import manifests as they are created — each page adds its manifest here
+// Import manifests as they are created — each page adds its manifest under
+// ./page-action-manifests/ (lib, not app/: lib may not import app/** or
+// components/**, enforced by scripts/check-application-boundaries.mjs).
 const manifests: PageActionManifest[] = [
   employeeActions,
 ];

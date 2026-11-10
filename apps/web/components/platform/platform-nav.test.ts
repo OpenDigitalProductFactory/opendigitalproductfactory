@@ -3,6 +3,7 @@ import {
   getPlatformFamily,
   PLATFORM_FAMILIES,
 } from "@/components/platform/platform-nav";
+import { getRouteNavRecord } from "@/lib/navigation/portal-navigation-model";
 
 describe("platform-nav", () => {
   it("defines the top-level platform workflow families", () => {
@@ -12,6 +13,7 @@ describe("platform-nav", () => {
       "AI Operations",
       "Tools & Services",
       "Governance & Audit",
+      "Updates & health",
     ]);
   });
 
@@ -20,8 +22,12 @@ describe("platform-nav", () => {
     // that swaps the whole context with no way back. The "Core Admin" tab must be
     // gone and no family may point outside the platform route tree.
     expect(PLATFORM_FAMILIES.map((family) => family.label)).not.toContain("Core Admin");
+    // Updates & health links to /ops/* routes whose nav records carry the platform
+    // domain (EP-2FB6C0CC, BI-811C588E), so they stay inside the platform context.
     expect(
-      PLATFORM_FAMILIES.every((family) => family.href.startsWith("/platform")),
+      PLATFORM_FAMILIES.every(
+        (family) => family.href.startsWith("/platform") || getRouteNavRecord(family.href)?.domain === "platform",
+      ),
     ).toBe(true);
   });
 

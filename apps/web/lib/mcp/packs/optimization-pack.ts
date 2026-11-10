@@ -5,7 +5,7 @@
 // coworker; analyze MCP/governed-tool call efficiency (thrash, retries,
 // volume) from ToolExecution; and analyze A2A coworker↔coworker edge health.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -30,7 +30,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "analyze_mcp_call_efficiency",
     description:
-      "Analyze ToolExecution thrash, retries, high volume, and failures. Recommends skill, tool-merge, or webhook fixes to cut agent token waste. notify=true posts AI Ops alerts; dispatchAiOps=true files critical BIs and queues a one-shot platform-engineer review.",
+      "Analyze MCP call efficiency over an explicit complete or partial time window. Returns requested/observed bounds, snapshot population, included calls and scan budgets. Complete reports recommend skill, tool-merge or webhook fixes. Partial reports are diagnostics only: narrow the window and restart; no corrective BIs or AI Ops dispatch. notify=true posts deduplicated findings or a coverage warning; dispatchAiOps=true acts only on a complete scan.",
     inputSchema: {
       type: "object",
       properties: {
@@ -163,7 +163,8 @@ async function analyzeMcpCallEfficiency(
   return {
     success: true,
     message:
-      `${report.totalCalls} call(s) in window; ${(report.successRate * 100).toFixed(0)}% success; ` +
+      `${report.coverage.complete ? "Complete" : "Partial"} window: ${report.totalCalls}/${report.coverage.populationCount} included call(s); ` +
+      `${(report.successRate * 100).toFixed(0)}% success across all included calls (governed refusals remain in this denominator); ` +
       `${report.findings.length} finding(s)` +
       (notified ? `; notified ${notified}` : "") +
       aiOpsNote +

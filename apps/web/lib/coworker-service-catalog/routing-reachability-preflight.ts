@@ -4,7 +4,7 @@
 // ever asked until a human typed a message and watched it die. This preflight
 // asks on a schedule: it projects route readiness for every production coworker
 // (including the payload-screening escalation ceiling, see route-readiness.ts),
-// raises ONE deduplicated owner-visible health issue when any coworker has zero
+// raises deduplicated owner-visible health issues when any coworker has zero
 // eligible endpoints, and resolves that issue when routing recovers. Read-only
 // with respect to routing: it performs the same side-effect-free dry-run the
 // runtime-health page and resolve_model_selection use.
@@ -40,6 +40,42 @@ const ALERT_LABELS = {
   service: "ai-routing",
   severity: "critical",
 } as const;
+
+const SENSITIVE_ALERT_LABELS = {
+  alertname: "CoworkerSensitiveRoutingUnreachable",
+  service: "ai-routing",
+  severity: "warning",
+} as const;
+
+/** Reuse the health issue lifecycle and attention deduplication for both
+ * declared-route failure and conditional sensitive-route failure. Resolution
+ * errors must reach the scheduler so it cannot record a false healthy run. */
+async function reconcileRoutingIssue(input: {
+  labels: typeof ALERT_LABELS | typeof SENSITIVE_ALERT_LABELS;
+  affected: CoworkerReachabilityResult[];
+  summary: string;
+  description: string;
+  title: string;
+  itemKey: string;
+  riskClass: "high" | "medium";
+}): Promise<void> {
+  if (input.affected.length === 0) {
+    await resolveHealthAlertIssue(prisma as never, healthAlertIssueKey({ ...input.labels }));
+    return;
+  }
+  await upsertHealthAlertIssue(prisma as never, {
+    labels: { ...input.labels },
+    annotations: { summary: input.summary, description: input.description },
+    activeAt: new Date().toISOString(),
+    sourceSystem: "routing-preflight",
+  });
+  const ownerUserId = await resolveOperatorRecipient();
+  if (ownerUserId) await notifyAttentionLive({
+    source: "platform-health", itemKey: input.itemKey, userId: ownerUserId,
+    title: input.title, body: input.summary,
+    deepLink: "/platform/ai/runtime-health", riskClass: input.riskClass,
+  });
+}
 
 /** Project route readiness for every production coworker. */
 export async function computeCoworkerRoutingReachability(): Promise<
@@ -95,52 +131,33 @@ export async function computeCoworkerRoutingReachability(): Promise<
 }
 
 /**
- * Run the preflight: compute reachability, then raise or resolve the single
- * owner-visible issue. Returns a summary for the scheduled-job stamp.
+ * Run the preflight: compute reachability, then raise or resolve the
+ * owner-visible issues. Returns a summary for the scheduled-job stamp.
  */
 export async function runRoutingReachabilityPreflight(): Promise<{
   checked: number;
   blocked: CoworkerReachabilityResult[];
+  escalationBlocked: CoworkerReachabilityResult[];
 }> {
   const results = await computeCoworkerRoutingReachability();
   const blocked = results.filter((r) => !r.ready);
-
-  if (blocked.length > 0) {
-    const names = blocked.map((b) => b.displayName).join(", ");
-    const summary =
-      `${blocked.length} AI coworker${blocked.length === 1 ? " has" : "s have"} no eligible AI model — ` +
-      `their turns will fail until routing is repaired: ${names}`;
-    // `as never` matches the existing callers (alert-delivery-bridge, alerts
-    // route): the narrow MonitorIssueDb parameter type predates the full client.
-    await upsertHealthAlertIssue(prisma as never, {
-      labels: { ...ALERT_LABELS },
-      annotations: {
-        summary,
-        description: blocked
-          .map((b) => `${b.displayName} (${b.agentId}): ${b.reason}`)
-          .join("\n"),
-      },
-      activeAt: new Date().toISOString(),
-      sourceSystem: "routing-preflight",
-    });
-    const ownerUserId = await resolveOperatorRecipient();
-    if (ownerUserId) {
-      await notifyAttentionLive({
-        source: "platform-health",
-        itemKey: "routing-preflight",
-        userId: ownerUserId,
-        title: `${blocked.length} AI coworker${blocked.length === 1 ? "" : "s"} cannot reach any AI model`,
-        body: summary,
-        deepLink: "/platform/ai/runtime-health",
-        riskClass: "high",
-      });
-    }
-  } else {
-    await resolveHealthAlertIssue(
-      prisma as never,
-      healthAlertIssueKey({ ...ALERT_LABELS }),
-    ).catch(() => {});
-  }
-
-  return { checked: results.length, blocked };
+  const escalationBlocked = results.filter((r) => r.ready && r.escalated?.ready === false);
+  const names = blocked.map((b) => b.displayName).join(", ");
+  const summary =
+    `${blocked.length} AI coworker${blocked.length === 1 ? " has" : "s have"} no eligible AI model — ` +
+    `their turns will fail until routing is repaired: ${names}`;
+  await reconcileRoutingIssue({
+    labels: ALERT_LABELS, affected: blocked, summary,
+    description: blocked.map((b) => `${b.displayName} (${b.agentId}): ${b.reason}`).join("\n"),
+    title: `${blocked.length} AI coworker${blocked.length === 1 ? "" : "s"} cannot reach any AI model`,
+    itemKey: "routing-preflight", riskClass: "high",
+  });
+  await reconcileRoutingIssue({
+    labels: SENSITIVE_ALERT_LABELS, affected: escalationBlocked,
+    summary: `${escalationBlocked.length} AI coworkers can route ordinary requests but have no eligible model for sensitive requests: ${escalationBlocked.map((b) => b.displayName).join(", ")}`,
+    description: escalationBlocked.map((b) => `${b.displayName} (${b.agentId}) — ${b.escalated!.sensitivity}: ${b.escalated!.reason}`).join("\n"),
+    title: `${escalationBlocked.length} AI coworkers cannot route sensitive requests`,
+    itemKey: "routing-preflight-sensitive", riskClass: "medium",
+  });
+  return { checked: results.length, blocked, escalationBlocked };
 }

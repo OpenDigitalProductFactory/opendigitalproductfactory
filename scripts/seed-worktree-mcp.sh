@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 # Open Digital Product Factory -- worktree MCP config seeder (POSIX shell)
 #
-# Copies .mcp.json and .vscode/mcp.json from the main worktree (root clone)
-# into a target git worktree so Claude Code's /mcp connector list and the
-# VS Code MCP client can find the dpf server.
+# Copies .vscode/mcp.json (when the root clone has one) from the main worktree
+# into a target git worktree so the VS Code MCP client can find the dpf server.
+# The file is gitignored, so it does not travel with `git worktree add`.
 #
-# Predicated on platform installation: scripts/setup.sh must have completed
-# AND an admin must have generated an MCP token at Admin > Platform Development
-# (which writes the source files at the root clone). The two source files are
-# gitignored on purpose -- they carry a local bearer token -- so they do not
-# travel with `git worktree add`.
+# It never copies a project .mcp.json (BI-5201141C, design 12.4.4): Claude
+# Code's dpf connector is the dpf-platform plugin's URL-only descriptor, which
+# every worktree already has, and Claude Code de-duplicates plugin and project
+# servers by endpoint -- a copied .mcp.json would load as a second dpf server.
 #
 # For linked worktrees, this also writes a worktree-scoped COMPOSE_PROJECT_NAME
 # into the target .env file. docker-compose.yml defaults to the root project
@@ -138,16 +137,8 @@ step "Copying MCP config"
 copy_one() {
     local src="$1" dst="$2"
     if [ ! -f "$src" ]; then
-        printf '\n  [FAIL] Missing source: %s\n\n' "$src" >&2
-        cat >&2 <<EOF
-  The platform must be installed and an MCP token generated before seeding worktrees.
-  Steps:
-    1. From the main worktree at $main_abs, run scripts/setup.sh if you have not already.
-    2. Start the platform (pnpm dev or docker compose up) and log in at http://localhost:3000 as admin@dpf.local.
-    3. Open Admin > Platform Development and generate an MCP token (writes .mcp.json + .vscode/mcp.json at the root).
-    4. Re-run this script.
-EOF
-        exit 1
+        skip "No $src in the root clone; nothing to copy."
+        return 0
     fi
 
     mkdir -p "$(dirname "$dst")"
@@ -159,7 +150,7 @@ EOF
     ok "Wrote $dst"
 }
 
-copy_one "$main_abs/.mcp.json"        "$target_abs/.mcp.json"
+# Claude Code: the dpf-platform plugin owns the connector (no project file).
 copy_one "$main_abs/.vscode/mcp.json" "$target_abs/.vscode/mcp.json"
 
 # BI-3047C122 (Wave 2): optional managed dependency bootstrap. Born compile-ready

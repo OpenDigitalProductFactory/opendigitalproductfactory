@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "inline-disclosure",
+  "decisionInteractionId": "DI-C5920F911E59",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx",
+      "apps/web/components/workspace/workroom/RoomWorkforcePanel.tsx",
+      "apps/web/components/workspace/workroom/NestedRoomCoordinationPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["inline-disclosure", "visible-chain", "hierarchy-route"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "evidenceClass": "Owning-scope comparison of the working sample prototype; no served-DOM measurement or completed specialist critique claimed."
+  }
+}

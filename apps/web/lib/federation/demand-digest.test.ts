@@ -4,6 +4,8 @@ vi.mock("@/lib/queue/queue-telemetry", () => ({ recordQueueTransition: vi.fn().m
 
 import type { DemandDigestV1 } from "@dpf/db/federated-demand-contract";
 
+import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
+
 import {
   compareIncomingDemandDigest,
   reconcileDemandDigests,
@@ -106,7 +108,7 @@ describe("reconcileDemandDigests", () => {
             envelope: { ...digest.records[0], specVersion: "dpf.demand/1", originInstallationId: "inst_origin" }, // ref_missing
           } },
           // Genuinely poison — already resurrected to the cap; must NOT thrash forever.
-          { mirrorId: "dl_poison", federationLinkId: "link_1", version: 3, syncStatus: "dead-letter", rehealCount: 3, payload: {
+          { mirrorId: "dl_poison", federationLinkId: "link_1", version: 3, syncStatus: "dead-letter", rehealCount: 3, lastDeliveryError: "peer responded 422", payload: {
             activity: "dpf.demand.proposed", eventId: "evt_b", queuedAt: digest.generatedAt,
             envelope: { ...digest.records[1], specVersion: "dpf.demand/1", originInstallationId: "inst_origin" }, // ref_stale
           } },
@@ -131,6 +133,46 @@ describe("reconcileDemandDigests", () => {
       syncStatus: "pending", deadLetteredAt: null, rehealCount: 1,
     }) });
     expect(update).not.toHaveBeenCalledWith(expect.objectContaining({ where: { mirrorId: "dl_poison" } }));
+  });
+
+  // BI-2DE1002F: before the cause was recorded, a peer 503 window and a pre-rebase
+  // 409 spent the whole re-heal budget, and those records could never be told apart
+  // from poison. A dead letter at the cap with no recorded cause gets exactly one
+  // more re-heal; the next dead letter records its cause and the cap holds again.
+  it("gives a capped dead letter whose cause was never recorded one more re-heal, and only one", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const row = (lastDeliveryError: string | null) => ({
+      mirrorId: "dl_unrecorded", federationLinkId: "link_1", version: 1, syncStatus: "dead-letter", rehealCount: 3,
+      lastDeliveryError, payload: {
+        activity: "dpf.demand.proposed", eventId: "evt_a", queuedAt: digest.generatedAt,
+        envelope: { ...digest.records[0], specVersion: "dpf.demand/1", originInstallationId: "inst_origin" },
+      },
+    });
+    const dbWith = (lastDeliveryError: string | null) => ({
+      ...queueDelegates(),
+      federationLink: { findMany: vi.fn().mockResolvedValue([
+        { linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "encrypted" },
+      ]) },
+      federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([row(lastDeliveryError)]), update },
+    } as unknown as DemandDigestDb);
+    const send = vi.fn().mockResolvedValue({
+      ok: true, status: 200, body: { ok: true, checked: 1, needs: [{ originRecordRef: "ref_missing", reason: "missing" }] },
+    });
+    const options = { now: new Date("2026-07-20T06:10:00Z"), decryptToken: () => "dpflink_token", send };
+    const identity = { installationId: "inst_origin", projectionSecret: "a".repeat(64) };
+
+    const first = await reconcileDemandDigests(dbWith(null), identity, options);
+
+    expect(first.requeued).toBe(1);
+    const data = update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ syncStatus: "pending", deadLetteredAt: null });
+    expect(typeof data.lastDeliveryError).toBe("string");
+
+    update.mockClear();
+    const second = await reconcileDemandDigests(dbWith(data.lastDeliveryError), identity, options);
+
+    expect(second.requeued).toBe(0);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("pages the full local inventory in batches — never silently truncates past one batch (scale)", async () => {
@@ -174,5 +216,46 @@ describe("reconcileDemandDigests", () => {
     for (const id of ["out_a", "out_b", "out_c"]) {
       expect(update).toHaveBeenCalledWith({ where: { mirrorId: id }, data: expect.objectContaining({ syncStatus: "synced" }) });
     }
+  });
+
+  it("a repeated digest pass over unchanged, already-pending records writes no new enqueued events (BI-1A8887C7)", async () => {
+    // Live evidence 2026-10-14: ~1,978 pending records on one trusted link were
+    // re-scheduled on EVERY five-minute digest cycle because the peer still
+    // needed them (their jobs could not drain), writing ~700K `enqueued`
+    // QueueTelemetryEvent rows a day and resetting each job's retry clock.
+    // A pending record already has a queued delivery job; the peer needing it
+    // again is not a new state transition.
+    const update = vi.fn().mockResolvedValue({});
+    const queue = queueDelegates();
+    const db = {
+      ...queue,
+      federationLink: { findMany: vi.fn().mockResolvedValue([
+        { linkId: "link_1", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "encrypted", role: "same-org-peer" },
+      ]) },
+      federatedRecordMirror: {
+        findMany: vi.fn().mockImplementation((args: { cursor?: unknown }) => Promise.resolve(args.cursor ? [] : [
+          { mirrorId: "out_pending", federationLinkId: "link_1", version: 1, syncStatus: "pending", payload: {
+            activity: "dpf.demand.proposed", eventId: "evt_p", queuedAt: digest.generatedAt,
+            envelope: { ...digest.records[0], specVersion: "dpf.demand/1", originInstallationId: "inst_origin" },
+          } },
+        ])),
+        update,
+      },
+    } as unknown as DemandDigestDb;
+    const send = vi.fn().mockResolvedValue({
+      ok: true, status: 200, body: { ok: true, checked: 1, needs: [{ originRecordRef: "ref_missing", reason: "missing" }] },
+    });
+    vi.mocked(recordQueueTransition).mockClear();
+
+    for (const minute of ["06:10", "06:15", "06:20"]) {
+      await reconcileDemandDigests(db, {
+        installationId: "inst_origin", projectionSecret: "a".repeat(64),
+      }, { now: new Date(`2026-07-20T${minute}:00Z`), decryptToken: () => "dpflink_token", send });
+    }
+
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(queue.workItem.upsert).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(recordQueueTransition).not.toHaveBeenCalledWith(expect.objectContaining({ transition: "enqueued" }));
   });
 });

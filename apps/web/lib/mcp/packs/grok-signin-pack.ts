@@ -9,7 +9,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -21,6 +21,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // reaches a third party → consult-gated (TAK §8.4.1).
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "grok_signin_status",

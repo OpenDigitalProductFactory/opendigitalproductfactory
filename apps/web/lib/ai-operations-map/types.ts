@@ -109,6 +109,8 @@ export type OperationsMapExternalEvidence = {
 };
 
 export type OperationsMapTaskRun = {
+  a2aMetadata?: unknown;
+  progressPayload?: unknown;
   id: string;
   taskRunId: string;
   status: string;
@@ -128,6 +130,8 @@ export type OperationsMapProjectionSource =
   | "evidence-external";
 
 export type OperationsMapProjection = {
+  recovery?: "semantic-review" | "stalled";
+  reviewBudget?: import("@/lib/change-review/semantic-review-recovery-policy").SemanticReviewBudgetSnapshot;
   id: string;
   occurredAt: string;
   actorAgentId: string | null;

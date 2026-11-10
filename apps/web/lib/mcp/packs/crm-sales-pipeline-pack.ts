@@ -7,7 +7,7 @@
 // which owns duplicate detection and quote math. Contact-level tools live in
 // the separate crm-contacts pack.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { prisma } from "@dpf/db";
 import {
@@ -281,7 +281,7 @@ async function buildCreatedAccountEnrichmentOffer(
 ) {
   try {
     const { buildEnrichmentOfferForIntake } = await import("@/lib/crm/enrichment/enrichment-offer");
-    const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
+    const { resolveProactivityPlan } = await import("@dpf/validators/workroom-policy/proactivity-resolver");
     const plan = resolveProactivityPlan({
       activityFamily: "crm-record-enrichment",
       agentId: context?.agentId ?? null,

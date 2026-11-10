@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-662254C6. Migration 20260901070000_add_workroom_relations adds WorkCapsuleRelation for the five work-coordination relations. Additive; existing WorkCapsule rows keep their columns. No live relation graph exists to backfill; inventing edges from portfolio-role arrays is refused.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "WorkroomRelation",
+      "lifecycleDisposition": "retain-with-workroom",
+      "fields": [
+        {
+          "name": "fromWorkroomId",
+          "resolution": "inherited",
+          "reason": "FK to the existing WorkCapsule row that holds the relation. Not a second room identity.",
+          "provenance": "Writer-supplied Workroom id after assertWorkroomRelation.",
+          "flags": []
+        },
+        {
+          "name": "toWorkroomId",
+          "resolution": "inherited",
+          "reason": "FK to the referenced WorkCapsule row.",
+          "provenance": "Writer-supplied Workroom id after assertWorkroomRelation.",
+          "flags": []
+        },
+        {
+          "name": "relation",
+          "resolution": "not-applicable",
+          "reason": "Closed work-coordination vocabulary: contains, spawned-from, depends-on, blocks, contributes-to. Not a portfolio-dependency field.",
+          "provenance": "Named by the writer; portfolio-dependency aliases are rejected in parseWorkroomRelation.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

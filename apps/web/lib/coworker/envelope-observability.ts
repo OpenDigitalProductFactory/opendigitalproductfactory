@@ -1,9 +1,11 @@
 // BI-78D3CF1E — make a lapsed consent request countable.
 //
 // A CoworkerActionEnvelope is a coworker asking one named human to approve one
-// side-effecting call, and it expires 15 minutes after it is raised. An envelope
-// nobody answers transitions to nothing: no alert, no error, no row anywhere an
-// operator looks. Seven lapsed unactioned on the founder's install before an
+// side-effecting call, and it expires after a lifetime set by the call's declared
+// consequence — 15 minutes for outward, seven days otherwise (approval-lifetime.ts,
+// BI-0012E6CA). Before BI-410ACCB8 an
+// envelope nobody answered transitioned to nothing: no alert, no error, no row
+// anywhere an operator looked. Seven lapsed unactioned on the founder's install before an
 // approval surface existed, and the only way to learn that was to query the
 // table by hand.
 //

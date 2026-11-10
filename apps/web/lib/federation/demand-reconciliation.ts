@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
+import { hasFederatedWorkOriginMarker } from "@dpf/db/federated-work-contract";
 import type { FederationRelationshipPreset } from "@dpf/db/federation-link-types";
 
 import { FEDERATION_SYNCABLE_BACKLOG_STATUSES } from "@/lib/explore/backlog";
@@ -31,6 +32,10 @@ interface ReconciliationBacklogItem {
   body: string | null;
   workType: string | null;
   occurrenceCount: number;
+  // BI-7ED79807: archetype scope travels so a receiver can decide relevance.
+  scopeKind: string | null;
+  archetypeCategories: string[];
+  archetypeIds: string[];
   createdAt: Date;
   updatedAt: Date;
   digitalProduct: { productId: string } | null;
@@ -122,12 +127,18 @@ export async function runDemandReconciliation(
       select: {
         itemId: true, title: true, body: true, workType: true, occurrenceCount: true,
         createdAt: true, updatedAt: true, digitalProduct: { select: { productId: true } },
+        // BI-7ED79807: archetype scope travels so a receiver can decide relevance.
+        scopeKind: true, archetypeCategories: true, archetypeIds: true,
       },
     });
     // Parse the governed marker as a complete standalone line. A broad SQL
     // substring predicate both drops NULL bodies and mistakes explanatory prose
     // for an adopted peer envelope.
-    const eligibleItems = items.filter((item) => !hasFederatedDemandOriginMarker(item.body));
+    // A work-sync mirror (BI-FF8A57EF) is a peer's record held read-only here;
+    // projecting it as demand would hand the owner a copy of its own item.
+    const eligibleItems = items.filter(
+      (item) => !hasFederatedDemandOriginMarker(item.body) && !hasFederatedWorkOriginMarker(item.body),
+    );
     const eligibleIds = new Set(eligibleItems.map((item) => item.itemId));
     for (const link of automaticLinks) {
       for (const item of eligibleItems) {
@@ -146,6 +157,9 @@ export async function runDemandReconciliation(
               workType: item.workType,
               occurrenceCount: item.occurrenceCount,
               product: item.digitalProduct?.productId ?? null,
+              scopeKind: item.scopeKind,
+              archetypeCategories: item.archetypeCategories,
+              archetypeIds: item.archetypeIds,
               createdAt: item.createdAt,
               updatedAt: item.updatedAt,
             },

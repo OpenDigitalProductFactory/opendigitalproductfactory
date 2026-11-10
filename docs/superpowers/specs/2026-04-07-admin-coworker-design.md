@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Admin AI Coworker — Design Spec
 **Date:** 2026-04-07  
 **Status:** Approved for implementation  
@@ -96,6 +100,29 @@ Runs a read-only SQL query against the portal database.
 - Only `SELECT` statements permitted (enforced by regex + pg role)
 - Returns results as a formatted table
 - Max 1000 rows
+
+#### Quoted SQL preservation (BI-F7770315)
+
+Comment normalization must preserve quoted data. The previous regex removed
+`--format` from a string literal and sent an unterminated query to PostgreSQL.
+The admin pack now delegates normalization to a bounded lexical helper, following
+[PostgreSQL lexical structure](https://www.postgresql.org/docs/current/sql-syntax-lexical.html).
+It preserves single/double quotes, doubled quotes, explicit escape strings and
+dollar-quoted text; removes real line and nested block comments as whitespace;
+and preserves comment newlines so adjacent string semantics stay intact.
+Ordinary strings use PostgreSQL's default `standard_conforming_strings=on`.
+Unterminated quoted text/comments and input over 100,000 characters are refused
+and audited before querying, rather than silently truncating input.
+
+This extends the existing tool and introduces no parser dependency, schema,
+grant, approval, or runtime service. Existing SELECT/WITH admission, forbidden
+keyword screening (including quoted keywords), result serialization, explicit
+LIMIT handling and fallback row cap remain the caller's responsibility.
+The helper is not an SQL authorization parser. Handler regression tests must
+prove literal preservation, real-comment removal without joining tokens,
+malformed/oversize refusals and unchanged read-only controls. Source tests and
+typechecks precede the shared build gate; live verification uses one harmless
+literal SELECT through the existing governed tool after canonical deployment.
 
 ### `admin_read_file(path)`
 Reads a file within `PROJECT_ROOT`. Same path traversal guard as sandbox file tools.

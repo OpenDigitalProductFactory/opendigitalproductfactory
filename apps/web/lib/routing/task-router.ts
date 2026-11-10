@@ -15,7 +15,7 @@
  */
 
 import type { EndpointManifest, SensitivityLevel } from "./types";
-import { TIER_MINIMUM_DIMENSIONS, QUALITY_TIERS } from "./quality-tiers";
+import { QUALITY_TIERS } from "./quality-tiers";
 import type { QualityTier } from "./quality-tiers";
 import type {
   TaskRequirement,

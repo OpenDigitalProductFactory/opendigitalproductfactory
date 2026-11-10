@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveWorkroomPosture, type WorkroomPostureContext } from "./room-posture";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 
 const NINE_TO_FIVE: WeeklySchedule = {
@@ -129,6 +129,18 @@ describe("resolveWorkroomPosture", () => {
       WED_1000,
     )!;
     expect(posture.verificationDepth).toBe("deep");
+  });
+
+  it("threads build rightsizing stakes through the room posture resolver", () => {
+    const posture = resolveWorkroomPosture(
+      { ...FACTS, stakes: { qualityFirst: true, deliverableSensitivity: "high" } },
+      context(),
+      WED_1000,
+    )!;
+    expect(posture.verificationDepth).toBe("deep");
+    expect(posture.adjustments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "verificationDepth", reasonCode: "stakes_high_sensitivity" }),
+    ]));
   });
 
   it("raises pace for an emergency-reactive archetype", () => {

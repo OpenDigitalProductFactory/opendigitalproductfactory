@@ -6,8 +6,33 @@ import {
   localCapacityHeldHandoff,
   noEligibleModelHandoff,
   providersBusyHandoff,
+  sensitivityClearanceHandoff,
   unexplainedDeadEndHandoff,
 } from "./inference-dead-ends";
+
+describe("local admission wait recovery", () => {
+  const cause = "inference admission timeout on local engine after 120000ms (origin=interactive, provider=local)";
+  it.each([cause, `All endpoints failed for tool-action. Attempts: ${JSON.stringify([
+    { endpointId: "local", error: cause, code: "INFERENCE_ADMISSION_TIMEOUT" },
+  ])}`])("identifies queued capacity without inventing a setup repair: %s", message => {
+    const outcome = describeToolRouteFailureOutcome(message, 15);
+    expect(outcome.kind).toBe("capacity");
+    expect(outcome.message).toMatch(/queue/i);
+    expect(outcome.message).toMatch(/did not start/i);
+    expect(outcome.message).not.toMatch(/start_sandbox|Providers & Routing|Nothing is misconfigured|30 seconds/i);
+    expect(outcome.message).not.toMatch(/Once that's done, tell me/i);
+  });
+
+  it("preserves a real provider failure in a mixed endpoint chain", () => {
+    const message = `All endpoints failed for tool-action. Attempts: ${JSON.stringify([
+      { endpointId: "local", error: cause, code: "INFERENCE_ADMISSION_TIMEOUT" },
+      { endpointId: "anthropic", error: "invalid API key", code: "auth" },
+    ])}`;
+    const outcome = describeToolRouteFailureOutcome(message, 15);
+    expect(outcome.kind).not.toBe("capacity");
+    expect(outcome.message).toContain("invalid API key");
+  });
+});
 
 // BI-33F1EA72. Measured on the live install: 196 of 1,138 assistant messages
 // were dead ends, and 84% of those were provider availability — the paths the
@@ -17,6 +42,7 @@ describe("dead-end replies hand off instead of asking the user to poll", () => {
     ["no eligible model", noEligibleModelHandoff()],
     ["providers busy", providersBusyHandoff()],
     ["local capacity held", localCapacityHeldHandoff()],
+    ["sensitivity clearance", sensitivityClearanceHandoff("confidential")],
     ["unexplained dead end", unexplainedDeadEndHandoff()],
   ] as const;
 
@@ -123,6 +149,41 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
       .toBe(providersBusyHandoff());
   });
 
+  // BI-431524DF. A confidential coworker's empty route is a data-governance block,
+  // not an outage — it must NOT tell the operator to re-check connected providers.
+  it("names the clearance lever when the block is sensitivity, not availability", () => {
+    const routerReason =
+      "No eligible endpoints for task type 'conversation' with sensitivity 'confidential'. " +
+      "3 endpoint(s) excluded. No connected provider is cleared for 'confidential' data.";
+    const message = describeToolRouteFailure(routerReason, 0);
+
+    expect(message).toBe(sensitivityClearanceHandoff("confidential"));
+    // The wrong advice the generic branch would give, explicitly absent.
+    expect(message).not.toMatch(/provider status/i);
+    // The real levers, present.
+    expect(message).toMatch(/no-training/i);
+    expect(message).toMatch(/local model/i);
+    // Never implies attesting a personal subscription.
+    expect(message).toMatch(/business or enterprise account/i);
+  });
+
+  it("classifies the sensitivity-clearance dead end as policy-or-capability", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      "No eligible endpoints for task type 'conversation' with sensitivity 'restricted'. " +
+        "2 endpoint(s) excluded. No connected provider is cleared for 'restricted' data.",
+      0,
+    );
+    expect(outcome.kind).toBe("policy-or-capability");
+    expect(outcome.message).toBe(sensitivityClearanceHandoff("restricted"));
+  });
+
+  // Regression: an empty route with NO clearance clause stays the generic copy —
+  // the clearance branch must not swallow ordinary "no eligible endpoints" cases.
+  it("leaves a non-clearance empty route on the generic hand-off", () => {
+    expect(describeToolRouteFailure("No eligible endpoints for task type 'conversation'", 0))
+      .toBe(noEligibleModelHandoff());
+  });
+
   it("falls through to the unexplained hand-off, not to a fabricated cause", () => {
     expect(describeToolRouteFailure("ECONNRESET talking to the model host", 0))
       .toBe(unexplainedDeadEndHandoff());
@@ -139,6 +200,34 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
     expect(outcome.message).toMatch(/model.*unavailable|available model/i);
   });
 
+  it("preserves an unenforceable required writer before the generic all-endpoints branch", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      'All endpoints failed for initiative-review. Attempts: [{"endpointId":"codex","error":"required-terminal-writer-not-enforceable: codex-cli cannot require record_initiative_evidence"}]',
+      1,
+    );
+
+    expect(outcome.kind).toBe("required-terminal-writer-not-enforceable");
+    expect(outcome.message).toMatch(/inference was not started|model was not run/i);
+    expect(outcome.message).toMatch(/required governed.*writer|required tool choice/i);
+    expect(outcome.message).not.toBe(providersBusyHandoff());
+  });
+
+  it.each([
+    ["Provider is overloaded, status: 529", "busy"],
+    ["Local provider dispatch deferred: local-ci-active-capacity-reservation", "capacity"],
+  ])("does not let an earlier CLI capability miss hide a later enforcing adapter refusal (%s)", (lastError, kind) => {
+    const outcome = describeToolRouteFailureOutcome(
+      `All endpoints failed for initiative-review. Attempts: ${JSON.stringify([
+        { endpointId: "codex", error: "required-terminal-writer-not-enforceable: codex-cli cannot require the writer" },
+        { endpointId: "enforcing", error: lastError },
+      ])}`,
+      1,
+    );
+
+    expect(outcome.kind).toBe(kind);
+    expect(outcome.kind).not.toBe("required-terminal-writer-not-enforceable");
+  });
+
   it("keeps the bounded reconciliation signal classified as model-missing", () => {
     const outcome = describeToolRouteFailureOutcome(
       "Provider model inventory changed for docker-model-runner. Attempts: []",
@@ -147,6 +236,49 @@ describe("describeToolRouteFailure classifies the deferral that stranded the own
 
     expect(outcome.kind).toBe("model-missing");
     expect(outcome.message).not.toMatch(/busy|rate-limit/i);
+  });
+
+  it("classifies an all-endpoint network outage as a transient provider wait", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"openai","error":"connect ECONNREFUSED 10.0.0.8:443"}]',
+      0,
+    );
+
+    expect(outcome.kind).toBe("busy");
+    expect(outcome.message).toBe(providersBusyHandoff());
+  });
+
+  it("ignores a non-dispatched CLI capability miss when every enforcing adapter has a network outage", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      `All endpoints failed for initiative-review. Attempts: ${JSON.stringify([
+        { endpointId: "claude-cli", error: "required-terminal-writer-not-enforceable: claude-cli cannot require the writer" },
+        { endpointId: "enforcing-http", error: "Network error calling enforcing-http: fetch failed" },
+      ])}`,
+      1,
+    );
+
+    expect(outcome.kind).toBe("busy");
+    expect(outcome.message).toBe(providersBusyHandoff());
+  });
+
+  it.each([
+    [
+      "mixed structural and network failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"local","error":"provider returned an unrecognised response"}]',
+      "unknown",
+    ],
+    [
+      "authentication failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"openai","error":"authentication failed"}]',
+      "credentials",
+    ],
+    [
+      "context failures",
+      'All endpoints failed for external-mcp. Attempts: [{"endpointId":"anthropic","error":"Network error calling anthropic: fetch failed"},{"endpointId":"local","error":"request exceeds the available context size"}]',
+      "context",
+    ],
+  ])("does not turn %s into a provider wait", (_label, message, kind) => {
+    expect(describeToolRouteFailureOutcome(message, 0).kind).toBe(kind);
   });
 });
 
@@ -173,13 +305,23 @@ describe("the capacity reply names the window when it knows one", () => {
 
   it("puts the window in the step, not in a separate sentence to skim past", () => {
     const message = localCapacityHeldHandoff(false, new Date("2026-08-23T20:17:00.000Z"), now);
-    expect(message).toMatch(/^1\. Send the message again in about 3 minutes/m);
+    expect(message).toMatch(/^1\. Send the message again in about 3 minutes at the earliest/m);
     expect(message).toMatch(/Nothing is misconfigured/);
   });
 
-  it("falls back to the generic wait when no window is known", () => {
+  // BI-EBE25715: with no window we do not know how long the host stays
+  // reserved, and a queue behind the current claim can make it indefinite.
+  // Saying "a couple of minutes" was a promise the platform cannot keep.
+  it("admits it cannot tell how long when no window is known", () => {
     const message = localCapacityHeldHandoff(false, null, now);
-    expect(message).toMatch(/^1\. Give it a couple of minutes/m);
+    expect(message).toMatch(/I can't tell from here how long that will be/);
+    expect(message).not.toMatch(/couple of minutes/);
+  });
+
+  it("frames a known window as the EARLIEST it could free, not a promise", () => {
+    const message = localCapacityHeldHandoff(false, new Date("2026-08-23T20:17:00.000Z"), now);
+    expect(message).toMatch(/at the earliest/);
+    expect(message).toMatch(/nothing else is waiting for this machine/);
   });
 
   it("reads the window off the thrown error the routing layer produced", () => {
@@ -202,5 +344,42 @@ describe("the capacity reply names the window when it knows one", () => {
     };
 
     expect(describeToolRouteFailure(thrown.message, 0, thrown)).toMatch(/about 2 minutes/);
+  });
+});
+
+// BI-D25F867D — on 2026-09-24 "every provider is busy, nothing is
+// misconfigured" covered a stopped sandbox container and a local model held by
+// a local-CI gate. Only a wholly transient failure is busy; anything else names
+// what each endpoint hit.
+describe("all-endpoints-failed classification", () => {
+  const aggregate = (attempts: Array<{ endpointId: string; error: string; code?: string }>) =>
+    `All endpoints failed for external-mcp. Attempts: ${JSON.stringify(attempts)}`;
+  const stoppedSandbox = { endpointId: "anthropic-sub", error: "Sandbox file write failed (exit 1): Error response from daemon: container 25e992095b77 is not running\n" };
+  const reserved = { endpointId: "local", error: "local-ci-active-capacity-reservation" };
+
+  it("names a stopped sandbox and a reserved local model instead of calling them busy", () => {
+    const outcome = describeToolRouteFailureOutcome(aggregate([stoppedSandbox, reserved, stoppedSandbox]), 3);
+    expect(outcome.kind).toBe("unknown");
+    expect(outcome.message).toContain("build sandbox, which is not running");
+    expect(outcome.message).toContain("reserved for a running local-CI gate");
+    expect(outcome.message).not.toContain("Nothing is misconfigured");
+  });
+
+  it("treats limits, overloads, capacity reservations and typed rate limits as a wait", () => {
+    for (const attempts of [
+      [reserved, { endpointId: "codex", error: "codex pool exhausted — resets in ~120s (EP-COST pool check)" }],
+      [{ endpointId: "anthropic-sub", error: "Claude CLI usage limit reached" }],
+      [{ endpointId: "openai", error: "upstream said no", code: "rate_limit" }],
+    ]) {
+      const outcome = describeToolRouteFailureOutcome(aggregate(attempts), 3);
+      expect(outcome.kind).toBe("busy");
+      expect(outcome.message).toContain("busy right now");
+    }
+  });
+
+  it("keeps an authentication failure mixed with a limit out of the wait", () => {
+    const outcome = describeToolRouteFailureOutcome(
+      aggregate([{ endpointId: "codex", error: "invalid API key" }, reserved]), 3);
+    expect(outcome.kind).not.toBe("busy");
   });
 });

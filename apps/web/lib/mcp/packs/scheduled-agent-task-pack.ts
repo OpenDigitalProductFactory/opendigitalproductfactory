@@ -10,7 +10,7 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import {
@@ -18,7 +18,7 @@ import {
   SCHEDULED_WORK_TRIGGER_KINDS,
   withScheduledWorkTrigger,
   type ScheduledWorkTriggerKind,
-} from "@/lib/scheduling/scheduled-work-trigger";
+} from "@dpf/validators/workroom-policy/scheduled-work-trigger";
 
 const definitions: ToolDefinition[] = [
   {
@@ -50,7 +50,7 @@ const definitions: ToolDefinition[] = [
         },
         trigger: {
           type: "object",
-          description: "WHY this job exists, so immediacy is judgeable at fire time (BI-5087F34F).",
+          description: "WHY this job exists, so immediacy is judgeable at fire time (BI-5087F34F). Recorded either way — omit it and the job records kind 'time'. Supply workroomId to have the room's posture govern this job's pace at fire time.",
           properties: {
             kind: { type: "string", enum: [...SCHEDULED_WORK_TRIGGER_KINDS], description: "Trigger source." },
             workroomId: { type: "string", description: "Room this job serves, if any." },
@@ -78,6 +78,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        taskId: { type: "string", description: "Optional exact task id; returns only this owned task and its current revision without expanding its prompt." },
         organizationId: { type: "string" },
         productLineId: { type: "string" },
         businessProductId: { type: "string" },
@@ -87,6 +88,15 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_operations",
     executionMode: "immediate",
     sideEffect: false,
+  },
+  {
+    name: "configure_scheduled_agent_task_reporting",
+    description: "Narrow an eligible paused task you own to observation and reporting only. All operational writes are excluded. Routine results stay in its history; actionable changes are surfaced once. Preserves its original instructions, cadence, settings and history; does not resume it.",
+    inputSchema: { type: "object", properties: {
+      taskId: { type: "string" }, expectedRevision: { type: "string", description: "Exact current revision returned by the task list." },
+      mode: { type: "string", enum: ["read-only-history"] }, reason: { type: "string" },
+    }, required: ["taskId", "expectedRevision", "mode", "reason"], additionalProperties: false },
+    requiredCapability: "view_operations", executionMode: "immediate", sideEffect: true, consequence: "authority",
   },
   {
     name: "cancel_scheduled_agent_task",
@@ -177,19 +187,28 @@ async function createScheduledAgentTaskHandler(
     && !Array.isArray(triggerParam.obligation)
       ? (triggerParam.obligation as Record<string, unknown>)
       : null;
-  const taskConfig = triggerParam
-    ? withScheduledWorkTrigger(baseTaskConfig, {
-        kind: triggerParam.kind as ScheduledWorkTriggerKind,
-        workroomId: typeof triggerParam.workroomId === "string" ? triggerParam.workroomId : null,
-        obligation:
-          typeof obligationParam?.dueAt === "string"
-            ? {
-                dueAt: obligationParam.dueAt,
-                label: typeof obligationParam.label === "string" ? obligationParam.label : null,
-              }
-            : null,
-      })
-    : baseTaskConfig;
+  // BI-5087F34F set out to record WHY a job exists, not just when. Recording it
+  // only when a caller opted in left most tasks with no answer: of 53 live tasks
+  // 13 carried a trigger, and none of the 12 ACTIVE ones did. An optional
+  // provenance record is one most callers never supply.
+  //
+  // So the record is now unconditional. "time" is the honest default for a job
+  // created on a cron with no stated cause — it is what a scheduled job IS, not
+  // a guess about intent. A caller that knows better still supplies its own kind,
+  // the room it serves, and the obligation it races; nothing about that path
+  // changes. What changes is that "why does this job exist" now always has an
+  // answer, which is what the posture ladder reads at fire time.
+  const taskConfig = withScheduledWorkTrigger(baseTaskConfig, {
+    kind: (triggerParam?.kind as ScheduledWorkTriggerKind | undefined) ?? "time",
+    workroomId: typeof triggerParam?.workroomId === "string" ? triggerParam.workroomId : null,
+    obligation:
+      typeof obligationParam?.dueAt === "string"
+        ? {
+            dueAt: obligationParam.dueAt,
+            label: typeof obligationParam.label === "string" ? obligationParam.label : null,
+          }
+        : null,
+  });
   const result = await scheduleAgentTaskFor(userId, {
     agentId: String(params.agentId ?? ""),
     title: String(params.title ?? ""),
@@ -224,6 +243,9 @@ async function listScheduledAgentTasksHandler(
   params: Record<string, unknown>,
   userId: string,
 ): Promise<ToolResult> {
+  if (params.taskId !== undefined && (typeof params.taskId !== "string" || !params.taskId.trim() || params.taskId.length > 128)) {
+    return { success: false, error: "invalid_task_selector", message: "Provide one exact scheduled task id." };
+  }
   const { getScheduledAgentTasksFor } = await import("@/lib/operate/scheduled-jobs/agent-task-core");
   const scope =
     typeof params.organizationId === "string"
@@ -240,8 +262,10 @@ async function listScheduledAgentTasksHandler(
         }
       : undefined;
   const tasks = scope
-    ? await getScheduledAgentTasksFor(userId, scope)
-    : await getScheduledAgentTasksFor(userId);
+    ? await getScheduledAgentTasksFor(userId, scope, typeof params.taskId === "string" ? params.taskId : undefined)
+    : typeof params.taskId === "string"
+      ? await getScheduledAgentTasksFor(userId, undefined, params.taskId)
+      : await getScheduledAgentTasksFor(userId);
   // Bound each prompt so a few long tasks can't blow the local context window
   // (the MCP-route result cap is the backstop).
   const compact = tasks.map((t) => ({ ...t, prompt: t.prompt.length > 200 ? `${t.prompt.slice(0, 200)}…` : t.prompt }));
@@ -293,6 +317,10 @@ async function cancelScheduledAgentTaskHandler(
 }
 
 const handlers: Record<string, ToolPackHandler> = {
+  configure_scheduled_agent_task_reporting: async (params, userId) => {
+    const { configureScheduledReportingFor } = await import("@/lib/operate/scheduled-jobs/scheduled-reporting-config");
+    return configureScheduledReportingFor(userId, params);
+  },
   create_scheduled_agent_task: (params, userId) => createScheduledAgentTaskHandler(params, userId),
   list_scheduled_agent_tasks: (params, userId) => listScheduledAgentTasksHandler(params, userId),
   cancel_scheduled_agent_task: (params, userId) => cancelScheduledAgentTaskHandler(params, userId),
@@ -309,6 +337,7 @@ export const scheduledAgentTaskPack: ToolPack = {
   definitions,
   handlers,
   grants: {
+    configure_scheduled_agent_task_reporting: ["work_capsule_write"],
     create_scheduled_agent_task: ["work_capsule_write"],
     cancel_scheduled_agent_task: ["work_capsule_write"],
     pause_scheduled_agent_task: ["work_capsule_write"],

@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "offer-only-when-history-pinned",
+  "decisionInteractionId": "DI-CB87985817E6",
+  "scope": {
+    "files": [
+      "apps/web/components/agent/ThreadSensitivityNotice.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "offer-only-when-history-pinned",
+      "always-offer-the-action",
+      "notice-only-no-action"
+    ],
+    "note": "BI-706530B2 (spec docs/superpowers/specs/2026-09-06-thread-sensitivity-visibility-design.md). The panel gains one dismissible status strip under the header, carrying a headline, one sentence of cause, and at most one control. The control is 'Start a fresh conversation', wired to the existing clear-conversation confirm flow — no new destructive path, and the existing confirmation still gates it. It renders only when deriveThreadSensitivityNotice classifies the pin as 'history', i.e. every escalating match sits below the current turn and a fresh thread genuinely restores normal routing; on 'mixed', 'current-turn' and 'outside-conversation' the cause is stated and no control is drawn, because a new thread would re-trigger on its first message and cost the owner their context for nothing. The strip is text plus a labelled dismiss button, uses --dpf tokens only, and adds no route, field or choice control. The kernel scored the conditional-offer shape highest (composite 11.41, margin 1.54, confidence high) against always offering it (4.82) and against explaining with no action at all (9.86)."
+  }
+}

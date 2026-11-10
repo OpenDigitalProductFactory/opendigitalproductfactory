@@ -20,7 +20,7 @@ sources:
 
 ## Rule
 
-The memory layer (Qdrant vector store) holds salient context: user decisions, design rationale, cross-conversation insights, discovered constraints, and quality patterns. It does not hold raw conversation transcripts, code content, build artifacts, or transient state — those live in their primary sources (codebase, git, database, build records) and are re-derived on demand.
+The memory layer (the pgvector store in Postgres) holds salient context: user decisions, design rationale, cross-conversation insights, discovered constraints, and quality patterns. It does not hold raw conversation transcripts, code content, build artifacts, or transient state — those live in their primary sources (codebase, git, database, build records) and are re-derived on demand.
 
 ## Why
 

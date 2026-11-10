@@ -70,3 +70,33 @@ export interface CreateIssueInput {
   labels: string[];
   egressClass: EgressClass;
 }
+
+/** GitHub's closed-issue reasons; other forges map onto the same two. */
+export type CloseIssueReason = "completed" | "not_planned";
+
+export interface CloseIssueInput {
+  repository: ForgeRepository;
+  number: number;
+  /** Posted as a comment before closing. Skipped when the issue is already closed. */
+  comment: string | null;
+  reason: CloseIssueReason;
+  egressClass: EgressClass;
+}
+
+export type CloseIssueOutcome = "closed" | "already-closed";
+
+export type CloseIssueResult =
+  | (Exclude<RemoteIssueResult, ForgeFailure> & { outcome: CloseIssueOutcome })
+  | ForgeFailure;
+
+/** One comment on an existing issue (BI-C899BB40: the submitter confirmation question). */
+export interface CommentOnIssueInput {
+  repository: ForgeRepository;
+  number: number;
+  body: string;
+  egressClass: EgressClass;
+}
+
+export type CommentOnIssueResult =
+  | (Exclude<RemoteIssueResult, ForgeFailure> & { commentId: string; commentUrl: string })
+  | ForgeFailure;

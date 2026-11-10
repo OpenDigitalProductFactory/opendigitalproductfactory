@@ -20,6 +20,7 @@
  *   /api/v1/edge/*          (edge-node heartbeats)
  *   /api/internal/quiescence-state   (we'd recurse otherwise)
  *   /api/mcp/v1             (route enforces read/write tool policy)
+ *   /api/ops/self-upgrade/control  (operator Keep waiting / Force / Abort)
  *
  * Fail-open / fail-closed (§12 Q6 decision):
  *
@@ -62,6 +63,10 @@ const ALLOW_LISTED_PREFIXES = [
   // and flips the level back to normal, wedging the portal in "quiescing"
   // forever. It has its own request-signature auth, so it's safe to bypass.
   "/api/inngest",
+  // BI-F9EE05E5 slice C: Keep waiting / Force now / Abort while an upgrade
+  // waits. The operator's only lever must not be refused by the drain it
+  // controls. The route checks view_operations itself.
+  "/api/ops/self-upgrade/control",
 ];
 
 export function isAllowListed(pathname: string): boolean {
@@ -106,8 +111,28 @@ let stateCache: CacheEntry | null = null;
  * the most recent draining/swapping state we observed so that if the state
  * route is unreachable during a mutation, we can preserve that posture
  * rather than fail open.
+ *
+ * BI-4479DDA0: the memory is forgotten on the next successful `normal` read
+ * and expires after LAST_KNOWN_NON_NORMAL_MAX_AGE_MS. Without both, one
+ * `swapping` observation followed by failing lookups refused every browser
+ * mutation for a completed run until the process restarted. The bound is
+ * twice the coordinator's 5-minute drain budget.
  */
-let lastKnownNonNormal: ProxyQuiescenceState | null = null;
+export const LAST_KNOWN_NON_NORMAL_MAX_AGE_MS = 10 * 60 * 1_000;
+let lastKnownNonNormal: { state: ProxyQuiescenceState; observedAt: number } | null = null;
+
+/**
+ * Where the gate reads quiescence state: this server's own loopback port.
+ * Never the request's public origin — behind the TLS proxy that is
+ * `https://localhost`, which nothing inside the portal container serves
+ * (ECONNREFUSED), so every lookup failed (BI-4479DDA0). Same convention as
+ * lib/business-journeys/probes.ts.
+ */
+export function resolveQuiescenceStateOrigin(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  return `http://127.0.0.1:${env.PORT ?? "3000"}`;
+}
 
 /**
  * Fetch the current state from the internal route, with cache + timeout.
@@ -149,7 +174,7 @@ export async function fetchQuiescenceState(
       bundleHash: body.bundleHash ?? "unknown",
     };
     stateCache = { state, cachedAt: now };
-    if (state.level !== "normal") lastKnownNonNormal = state;
+    lastKnownNonNormal = state.level === "normal" ? null : { state, observedAt: now };
     return state;
   } catch {
     // Fetch failed / timed out. Don't cache the failure — let next call
@@ -185,8 +210,10 @@ export function _resetProxyQuiescenceCache(): void {
  * by the gate to apply preserve-last-known fail-closed for mutations when
  * the state route is unreachable.
  */
-export function getLastKnownNonNormal(): ProxyQuiescenceState | null {
-  return lastKnownNonNormal;
+export function getLastKnownNonNormal(now: number = Date.now()): ProxyQuiescenceState | null {
+  if (!lastKnownNonNormal) return null;
+  if (now - lastKnownNonNormal.observedAt > LAST_KNOWN_NON_NORMAL_MAX_AGE_MS) return null;
+  return lastKnownNonNormal.state;
 }
 
 function getAllowListedPassState(): ProxyQuiescenceState {
@@ -197,6 +224,10 @@ function getAllowListedPassState(): ProxyQuiescenceState {
     version: "unknown",
     bundleHash: "unknown",
   };
+}
+
+function isOAuthTokenPost(req: NextRequest): boolean {
+  return req.nextUrl.pathname === "/api/oauth/token" && req.method.toUpperCase() === "POST";
 }
 
 // ─── Gating decision ──────────────────────────────────────────────────────
@@ -229,13 +260,18 @@ export function evaluateGate(
     return { kind: "pass", state };
   }
 
-  if (state.level === "swapping") {
+  const tokenPost = isOAuthTokenPost(req);
+  if (state.level === "swapping" || (tokenPost && state.level === "unknown")) {
     return {
       kind: "block",
-      response: build503(state, /* swapping= */ true),
+      response: build503(state, state.level === "swapping", tokenPost),
       state,
     };
   }
+
+  // The Node token route classifies the grant and keeps ordinary client,
+  // resource, consent, rotation and revocation checks. This is not an allow-list.
+  if (tokenPost && state.level === "draining") return { kind: "pass", state };
 
   if (state.level === "draining" && isMutationRequest(req)) {
     return {
@@ -252,7 +288,7 @@ export function evaluateGate(
  * Construct the 503 Upgrade response. Includes Retry-After + version
  * headers (so the client can detect stale-bundle on retry).
  */
-function build503(state: ProxyQuiescenceState, swapping: boolean): NextResponse {
+function build503(state: ProxyQuiescenceState, swapping: boolean, oauthToken = false): NextResponse {
   const headers = new Headers({
     "Retry-After": "30",
     "Cache-Control": "no-store, max-age=0",
@@ -262,7 +298,10 @@ function build503(state: ProxyQuiescenceState, swapping: boolean): NextResponse 
   });
   if (state.runId) headers.set("X-Quiescence-Run-Id", state.runId);
   headers.set("Connection", "close");
-  const body = JSON.stringify({
+  const body = JSON.stringify(oauthToken ? {
+    error: "temporarily_unavailable",
+    error_description: "Platform upgrade in progress. Try again shortly.",
+  } : {
     error: "portal_quiescing",
     message: swapping
       ? "Platform upgrade in progress — please retry shortly"
@@ -319,6 +358,7 @@ export async function checkQuiescenceForRequest(
 
   const state = await fetchQuiescenceState(origin);
   if (state.level === "unknown") {
+    if (isOAuthTokenPost(req)) return evaluateGate(req, state);
     // Fail policy: preserve last known non-normal for mutations; fail open
     // when there is no evidence this Edge process has observed a drain.
     if (isMutationRequest(req)) {

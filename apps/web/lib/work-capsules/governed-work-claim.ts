@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   INITIATIVE_READINESS_POLICY_VERSION,
   projectBacklogItemReadiness,
+  readinessRequirement,
   type InitiativeReadinessDecision,
   type InitiativeReadinessActivity,
 } from "@/lib/backlog/initiative-readiness";
@@ -11,6 +12,15 @@ import {
   type WorkCapsuleExecutorKind,
   type WorkIntent,
 } from "@/lib/work-capsules";
+import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
+import { type BoundWorkShapeDb, readBoundEditPaths } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import { prepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
+import {
+  governingPrinciplesFor,
+  withGoverningRules,
+  type GoverningPrinciples,
+} from "@/lib/kernel/governing-principles";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import {
   resolveInitiativeReviewerRecovery,
@@ -22,6 +32,14 @@ import {
 import { claimBacklogItemWorkspace } from "./work-capsule-store";
 import { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
+import { isFullSourceCommitSha } from "./work-capsule-branch-identity";
+import {
+  describeRoomOwnership,
+  establishRoomOwnership,
+  resolveRoomOwnershipPrincipals,
+  type RoomOwnershipDb,
+} from "./room-ownership";
 
 type ClaimInput = {
   backlogItemId: string;
@@ -29,30 +47,51 @@ type ClaimInput = {
   headBranch: string;
   worktreePath: string;
   baseBranch?: string | null;
+  /** Exact source identity. Without both, reviewer routes cannot bind an artifact. */
+  baseSha?: string | null;
+  headSha?: string | null;
   executorKind?: WorkCapsuleExecutorKind | null;
   executorRef?: string | null;
   title?: string;
   objective?: string;
+  force?: boolean;
+  overrideReason?: string | null;
+  /** v3: the delivery shape resolved at the claim (`delivery-<shape>@<version>`), when any. */
+  workShape?: string | null;
 };
 
 type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;
 
 type Dependencies = {
+  prepareCurrentDesign?: typeof prepareCurrentDesignObservation;
   claimWorkspace?: typeof claimBacklogItemWorkspace;
   declareIntent?: typeof declareWorkCapsuleIntent;
   discoverCanonicalArtifact?: DiscoverCanonicalArtifact;
+  /** Principal.id of a user; used when an agent claims without OAuth. */
+  resolveUserPrincipalId?: (userId: string) => Promise<string | null>;
 };
+
+async function userPrincipalIdFromLinking(userId: string): Promise<string | null> {
+  const { syncUserPrincipal } = await import("@/lib/identity/principal-linking");
+  return (await syncUserPrincipal(userId))?.id ?? null;
+}
 
 type DiscoverCanonicalArtifact = (args: {
   repositoryFullName: string;
   baseSha: string;
   headSha: string;
+  backlogBody?: string | null;
+  subjectItemId?: string;
+  headBranch?: string;
 }) => Promise<InitiativeRecoveryCanonicalArtifact>;
 
 async function discoverCanonicalArtifactFromProvider(args: {
   repositoryFullName: string;
   baseSha: string;
   headSha: string;
+  backlogBody?: string | null;
+  subjectItemId?: string;
+  headBranch?: string;
 }): Promise<InitiativeRecoveryCanonicalArtifact> {
   const { discoverCanonicalDesignArtifact } = await import(
     "@/lib/backlog/initiative-readiness/canonical-artifact-discovery"
@@ -70,6 +109,10 @@ type ExactReadback = {
   repositoryFullName: string;
   headBranch: string;
   worktreePath: string;
+  baseSha: string | null;
+  headSha: string | null;
+  /** Full recorded SHA syntax, not observed Git state or publication authority. */
+  sourceIdentityComplete: boolean;
   executorKind: string | null;
   executorRef: string | null;
   leaseHolderPrincipalId: string;
@@ -88,6 +131,8 @@ type GovernedClaimFailure = {
   code: "initiative_not_ready" | "capsule_identity_mismatch" | "readiness_projection_failed";
   workIntent: WorkIntent;
   readiness: InitiativeReadinessDecision;
+  /** BI-DEDAC950: principle page per unmet code, beside the decision so replay stays deep-equal. */
+  governingPrinciples: GoverningPrinciples;
   recovery: InitiativeReviewerRecovery;
 };
 
@@ -104,10 +149,12 @@ function claimSuccess(data: GovernedClaimSuccess): GovernedClaimSuccessResult {
 const EMPTY_RECOVERY: InitiativeReviewerRecovery = { reviewerRoutes: [], escalations: [], unroutable: [] };
 
 type PendingRecovery = {
+  backlogBody: string | null;
   decision: InitiativeReadinessDecision;
   baselineId: string | null;
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   baseSha: string | null;
+  planArtifact: ReturnType<typeof projectBacklogItemReadiness>["planArtifact"];
 };
 
 /**
@@ -121,33 +168,82 @@ async function resolveRecoveryOutsideTransaction(args: {
   actor: WorkCapsuleActor;
   pending: PendingRecovery;
   discover: DiscoverCanonicalArtifact;
+  input: ClaimInput;
 }): Promise<InitiativeReviewerRecovery> {
   const { pending } = args;
-  const canonicalArtifact: InitiativeRecoveryCanonicalArtifact = pending.dispatchContext && pending.baseSha
+  const sourceIdentity = pending.dispatchContext
+    && isFullSourceCommitSha(pending.baseSha) && isFullSourceCommitSha(pending.dispatchContext.headSha)
+    ? { context: pending.dispatchContext, baseSha: pending.baseSha } : null;
+  const canonicalArtifact: InitiativeRecoveryCanonicalArtifact = sourceIdentity
     ? await args.discover({
-      repositoryFullName: pending.dispatchContext.repositoryFullName,
-      baseSha: pending.baseSha,
-      headSha: pending.dispatchContext.headSha,
+      repositoryFullName: sourceIdentity.context.repositoryFullName,
+      baseSha: sourceIdentity.baseSha,
+      headSha: sourceIdentity.context.headSha,
+      subjectItemId: pending.decision.subject.id,
+      headBranch: sourceIdentity.context.branchName,
+      ...(pending.backlogBody ? { backlogBody: pending.backlogBody } : {}),
     })
     : {
       resolved: false,
-      nextAction: "The workroom records no immutable base and head, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, headSha), then retry.",
+      nextAction: `The workroom lacks ${!isFullSourceCommitSha(pending.baseSha) ? "a valid baseSha" : "a valid reviewer dispatch identity (including headSha)"}, so no reviewer binding can be issued. Re-sync the branch with adopt_worktree(headBranch, baseSha, headSha), supplying full immutable commit SHAs for both fields and preserving any valid recorded identity, then retry.`,
     };
 
-  return resolveInitiativeReviewerRecovery({
+  // Recovery can synthesize spec approval before missing plan coverage. Resolve
+  // trusted history before routing instead of predicting which gates it emits.
+  const taskAuthorityKey = args.actor.taskAuthorityTokenId
+    ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
+      tokenId: args.actor.taskAuthorityTokenId, userId: args.actor.userId, source: "oauth" }) : null;
+  const recovery = await resolveInitiativeReviewerRecovery({
     decision: pending.decision,
     currentAgentId: args.actor.agentId,
     db: args.db,
-    dispatchContext: pending.dispatchContext,
+    dispatchContext: sourceIdentity?.context ?? null,
     canonicalArtifact,
+    planArtifact: pending.planArtifact && sourceIdentity
+      && pending.planArtifact.repositoryFullName.toLowerCase() === sourceIdentity.context.repositoryFullName.toLowerCase()
+      ? { resolved: true, path: pending.planArtifact.path,
+        commitSha: pending.planArtifact.commitSha, providerBlobId: pending.planArtifact.providerBlobId }
+      : { resolved: false, nextAction: "Record valid plan coverage for the current baseline and this Workroom repository, including the immutable plan commit and blob, then retry plan review." },
     expectedCurrentBaselineId: pending.baselineId,
+    ...(taskAuthorityKey ? { isPlanReviewExhausted:
+      (await import("@/lib/backlog/initiative-readiness/exhausted-plan-review")).createExhaustedPlanReviewPredicate(
+        { userId: args.actor.userId, taskAuthorityKey },
+        (await import("@dpf/db")).prisma) } : {}),
   });
+  if (!sourceIdentity) {
+    if (canonicalArtifact.resolved === false) {
+      const nextAction = canonicalArtifact.nextAction;
+      recovery.escalations = recovery.escalations.map(entry => entry.reason === "dispatch-context-required"
+        ? { ...entry, reason: "no-canonical-artifact", nextAction } : entry);
+    }
+    recovery.identityRepair = projectWorkroomIdentityRepair({
+      repositoryFullName: args.input.repositoryFullName,
+      headBranch: args.input.headBranch,
+      worktreePath: args.input.worktreePath,
+      baseSha: pending.baseSha,
+      headSha: pending.dispatchContext?.headSha ?? null,
+    }, {
+        title: args.input.title ?? `Work on ${args.input.backlogItemId}`,
+        objective: args.input.objective ?? `Claim-at-start binding for ${args.input.backlogItemId}`,
+        backlogItemId: args.input.backlogItemId,
+        baseBranch: args.input.baseBranch ?? "main",
+        ...(args.input.executorKind ? { executorKind: args.input.executorKind } : {}),
+        ...(args.input.executorRef ? { sessionRef: args.input.executorRef } : {}),
+    }) ?? undefined;
+  }
+  return recovery;
 }
 
 class CapsuleIdentityMismatch extends Error {
-  constructor(readonly decision: InitiativeReadinessDecision) {
-    super("Claimed Workroom identity did not match the requested subject, branch, worktree, executor, lease, and intent.");
+  constructor(readonly decision: InitiativeReadinessDecision, readonly mismatches: readonly string[] = []) {
+    super(mismatches.length > 0
+      ? `Claimed Workroom identity did not match the request. ${mismatches.map(endWithPeriod).join(" ")}`
+      : "Claimed Workroom identity did not match the requested subject, branch, worktree, executor, lease, and intent.");
   }
+}
+
+function endWithPeriod(text: string): string {
+  return /[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
 }
 
 function targetForIntent(intent: WorkIntent): "design" | "plan" | "implementation" {
@@ -202,36 +298,116 @@ async function recordDecision(args: {
   } });
 }
 
+/**
+ * Why the claimed workroom is not the one the caller asked for, in the
+ * caller's own terms.
+ *
+ * BI-69BBC446: this was one `||` chain returning null, so fourteen distinct
+ * causes — an expired lease, a foreign executor, a rewritten branch — all
+ * surfaced as the single sentence "the recorded branch and head no longer
+ * match. Re-sync with adopt_worktree". On WC-0BE07607 the branch and head
+ * matched exactly and the lease had expired nine hours earlier; the remedy
+ * sent the caller re-syncing two fields that were already correct, and the
+ * branch sat unclaimable for two days. A blocker that names the wrong field
+ * is worse than one that names none, because it is actionable and wrong.
+ */
+function readbackMismatches(args: {
+  row: Record<string, unknown> | null;
+  intentPayload: unknown;
+  /** Active coordinators after ownership was established; undefined when unreadable. */
+  coordinatorCount?: number;
+  input: ClaimInput;
+  actor: WorkCapsuleActor;
+  capsuleId: string;
+  workIntent: WorkIntent;
+  now: Date;
+}): string[] {
+  const row = args.row;
+  if (!row) return [`No workroom row exists for ${args.capsuleId}`];
+  const reasons: string[] = [];
+  const differs = (label: string, actual: unknown, expected: unknown) => {
+    if (actual !== expected) {
+      reasons.push(`${label} is ${format(actual)}, the claim asked for ${format(expected)}`);
+    }
+  };
+  differs("The workroom id", row.capsuleId, args.capsuleId);
+  differs("The bound backlog item", row.backlogItemId, args.input.backlogItemId);
+  differs("The repository", row.repositoryFullName, args.input.repositoryFullName);
+  differs("The recorded branch", row.headBranch, args.input.headBranch);
+  differs("The recorded worktree path", row.worktreePath, args.input.worktreePath);
+  differs("The executor kind", row.executorKind, args.input.executorKind ?? null);
+  differs("The executor ref", row.executorRef, args.input.executorRef ?? null);
+  if (args.input.baseSha) differs("The recorded base commit", row.baseSha, args.input.baseSha);
+  if (args.input.headSha) differs("The recorded head commit", row.headSha, args.input.headSha);
+  if (args.workIntent === "implementation") {
+    for (const field of ["baseSha", "headSha"] as const) {
+      if (!isFullSourceCommitSha(row[field])) reasons.push(`The recorded ${field} must be a full 40-character commit SHA; capture the actual local Git identity and retry claim_backlog_item_for_work with baseSha and headSha`);
+    }
+  }
+  if (args.coordinatorCount !== undefined && args.coordinatorCount !== 1) {
+    reasons.push(`The room has ${args.coordinatorCount} owners (Process Overseers); it needs exactly one`);
+  }
+  if (row.archivedAt != null) reasons.push("The workroom is archived");
+  if (["abandoned", "archived", "complete", "superseded"].includes(String(row.status))) {
+    reasons.push(`The workroom status is ${format(row.status)}, which is terminal — claim a new one`);
+  }
+  if (row.leaseHolderPrincipalId !== args.actor.principalId) {
+    reasons.push("The lease is held by a different principal — that session still owns this workroom");
+  }
+  const lease = leaseExpiry(row);
+  if (!lease) {
+    reasons.push("The workroom has no lease expiry recorded — re-claim it");
+  } else if (lease.getTime() <= args.now.getTime()) {
+    // The observed BI-69BBC446 case. Named with both timestamps because "the
+    // lease expired" invites the reader to wonder by how much, and the answer
+    // changes the remedy: minutes means heartbeat, days means re-claim.
+    reasons.push(
+      `The lease expired at ${lease.toISOString()} (now ${args.now.toISOString()}) — `
+      + "renew it with heartbeat_workroom, or re-claim if the work has moved on",
+    );
+  }
+  const parsedIntent = parseWorkIntentDeclared(args.intentPayload);
+  if (!parsedIntent.ok) {
+    reasons.push("No readable work-intent declaration is recorded on the workroom");
+  } else {
+    differs("The declared work intent", parsedIntent.intent, args.workIntent);
+    if (parsedIntent.subject.kind !== "backlog-item") {
+      reasons.push(`The declared subject is a ${format(parsedIntent.subject.kind)}, not a backlog item`);
+    } else {
+      differs("The declared subject", parsedIntent.subject.id, args.input.backlogItemId);
+    }
+  }
+  return reasons;
+}
+
+function format(value: unknown): string {
+  return value == null ? "unset" : `"${String(value)}"`;
+}
+
+function leaseExpiry(row: Record<string, unknown>): Date | null {
+  if (row.leaseExpiresAt instanceof Date) return row.leaseExpiresAt;
+  if (typeof row.leaseExpiresAt === "string") {
+    const parsed = new Date(row.leaseExpiresAt);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
 function exactReadback(args: {
   row: Record<string, unknown> | null;
   intentPayload: unknown;
+  coordinatorCount?: number;
   input: ClaimInput;
   actor: WorkCapsuleActor;
   capsuleId: string;
   workIntent: WorkIntent;
   now: Date;
 }): ExactReadback | null {
+  if (readbackMismatches(args).length > 0) return null;
+  const row = args.row as Record<string, unknown>;
   const parsedIntent = parseWorkIntentDeclared(args.intentPayload);
-  const row = args.row;
-  const lease = row?.leaseExpiresAt instanceof Date
-    ? row.leaseExpiresAt
-    : typeof row?.leaseExpiresAt === "string" ? new Date(row.leaseExpiresAt) : null;
-  if (!row
-    || row.capsuleId !== args.capsuleId
-    || row.backlogItemId !== args.input.backlogItemId
-    || row.repositoryFullName !== args.input.repositoryFullName
-    || row.headBranch !== args.input.headBranch
-    || row.worktreePath !== args.input.worktreePath
-    || row.executorKind !== (args.input.executorKind ?? null)
-    || row.executorRef !== (args.input.executorRef ?? null)
-    || row.archivedAt != null
-    || ["abandoned", "archived", "complete", "superseded"].includes(String(row.status))
-    || row.leaseHolderPrincipalId !== args.actor.principalId
-    || !lease || lease.getTime() <= args.now.getTime()
-    || !parsedIntent.ok
-    || parsedIntent.intent !== args.workIntent
-    || parsedIntent.subject.kind !== "backlog-item"
-    || parsedIntent.subject.id !== args.input.backlogItemId) return null;
+  const lease = leaseExpiry(row)!;
+  if (!parsedIntent.ok) return null;
   return {
     capsuleId: String(row.capsuleId),
     backlogItemId: String(row.backlogItemId),
@@ -239,6 +415,9 @@ function exactReadback(args: {
     repositoryFullName: String(row.repositoryFullName),
     headBranch: String(row.headBranch),
     worktreePath: String(row.worktreePath),
+    baseSha: typeof row.baseSha === "string" ? row.baseSha : null,
+    headSha: typeof row.headSha === "string" ? row.headSha : null,
+    sourceIdentityComplete: isFullSourceCommitSha(row.baseSha) && isFullSourceCommitSha(row.headSha),
     executorKind: row.executorKind == null ? null : String(row.executorKind),
     executorRef: row.executorRef == null ? null : String(row.executorRef),
     leaseHolderPrincipalId: String(row.leaseHolderPrincipalId),
@@ -246,6 +425,23 @@ function exactReadback(args: {
     workIntent: parsedIntent.intent,
   };
 }
+
+/**
+ * The activity kinds the claim's readiness projection reads.
+ *
+ * `evidence` is here because a small fix's research at claim is its recorded
+ * reproduction (BI-6EB2DBBB): `source_verified` plus `test_pass`, written by
+ * record_execution_evidence. The refusal advises exactly that remedy, so the
+ * claim must load what the remedy writes, or the advice can never be satisfied
+ * (BI-5C992261).
+ */
+export const CLAIM_READINESS_ACTIVITY_KINDS = [
+  "initiative_gate_receipt",
+  "initiative_scope_baseline",
+  "plan_backlog_coverage",
+  "break_fix_declared",
+  "evidence",
+] as const;
 
 export async function claimGovernedBacklogWorkspace(args: {
   db: CapsuleDb;
@@ -263,33 +459,67 @@ export async function claimGovernedBacklogWorkspace(args: {
   const target = targetForIntent(workIntent);
   const claimWorkspace = args.dependencies?.claimWorkspace ?? claimBacklogItemWorkspace;
   const declareIntent = args.dependencies?.declareIntent ?? declareWorkCapsuleIntent;
+  const currentDesignObservation = await (args.dependencies?.prepareCurrentDesign ?? prepareCurrentDesignObservation)({
+    itemId: args.input.backlogItemId, db: args.db as never,
+    claimSource: args.input,
+  });
   const transact = args.db.$transaction
     ? <T>(fn: (tx: CapsuleDb) => Promise<T>) => args.db.$transaction!(fn)
     : <T>(fn: (tx: CapsuleDb) => Promise<T>) => fn(args.db);
   let backlogItemRowId = "";
   let evaluated: InitiativeReadinessDecision | null = null;
   let pendingRecovery: PendingRecovery | null = null;
+  // Resolved before the transaction: identity sync writes outside it. Skipped
+  // for a db that cannot hold participants (isolated tests).
+  const ownership = args.db.workroomParticipant
+    ? await resolveRoomOwnershipPrincipals(
+      args.actor,
+      args.dependencies?.resolveUserPrincipalId ?? userPrincipalIdFromLinking,
+    )
+    : null;
 
   try {
     const outcome = await transact(async (tx) => {
       if (!tx.backlogItem || !tx.backlogItemActivity) throw new Error("Readiness transaction lost backlog access.");
+      // Receipt writers lock this subject too. Read every gate fact only after
+      // that lock and the prepared source guard, including a newly failed review.
+      if (tx.$queryRaw) await tx.$queryRaw`SELECT "id" FROM "BacklogItem"
+        WHERE "itemId" = ${args.input.backlogItemId} OR "id" = ${args.input.backlogItemId} FOR UPDATE`;
+      const currentDesign = await currentDesignObservation.admissionGuard(tx as never);
       const item = await tx.backlogItem.findFirst({
         where: { OR: [{ itemId: args.input.backlogItemId }, { id: args.input.backlogItemId }] },
         select: {
-          id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true,
+          id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true, title: true, body: true,
           archetypeCategories: true, archetypeIds: true, activeBuild: { select: { kind: true } },
         },
       });
       if (!item) throw new Error(`BacklogItem ${args.input.backlogItemId} not found`);
       backlogItemRowId = item.id;
       const activities = await tx.backlogItemActivity.findMany({
-        where: { backlogItemId: item.id, kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        where: { backlogItemId: item.id, kind: { in: [...CLAIM_READINESS_ACTIVITY_KINDS] } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
       }) as InitiativeReadinessActivity[];
+      const inheritedScope = await loadInheritedInitiativeScope(
+        tx as unknown as InheritanceDb,
+        { childItemId: item.itemId, childRowId: item.id },
+      );
       const projection = projectBacklogItemReadiness({
-        item: { ...item, activeBuildKind: item.activeBuild?.kind ?? null },
+        currentDesign,
+        item: {
+          ...item,
+          activeBuildKind: item.activeBuild?.kind ?? null,
+          // v3: the shape resolved for this claim keys the gates; sensitivity raises them.
+          workShape: args.input.workShape ?? null,
+          // BI-243BC956: read from what the change touches — a re-claimed room's
+          // declared edit scope, else the paths the body cites — not its prose.
+          deliverySensitivity: assessDeliverySensitivity({
+            ...item,
+            declaredPaths: await readBoundEditPaths(tx as unknown as BoundWorkShapeDb, item.itemId).catch(() => []),
+          }),
+        },
         activities,
+        inheritedScope,
         target,
         transitionObject: {
           kind: "work-capsule",
@@ -345,14 +575,18 @@ export async function claimGovernedBacklogWorkspace(args: {
         const recoveryWorkroom =
           recoveryWorkrooms.find((room) => room.backlogItemId === item.itemId && room.headSha)
           ?? recoveryWorkrooms.find((room) => room.headSha)
+          ?? recoveryWorkrooms.find((room) => room.backlogItemId === item.itemId)
+          ?? recoveryWorkrooms[0]
           ?? null;
         // Recovery needs a repository-provider round trip to bind the canonical
         // design (BI-9FE775F9). That must not run inside this transaction, so
         // the not-ready path records its decision here and resolves recovery
         // after the commit.
-        pendingRecovery = {
+        pendingRecovery = projection.currentDesignState === "unavailable" ? null : {
+          backlogBody: item.body ?? null,
           decision: evaluated,
           baselineId: projection.baselineId,
+          planArtifact: projection.planArtifact,
           dispatchContext: recoveryWorkroom?.headSha ? {
             workroomId: recoveryWorkroom.capsuleId,
             repositoryFullName: recoveryWorkroom.repositoryFullName,
@@ -362,12 +596,17 @@ export async function claimGovernedBacklogWorkspace(args: {
           baseSha: recoveryWorkroom?.baseSha ?? null,
         };
         await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
+        const governingPrinciples = governingPrinciplesFor(evaluated);
         return {
-          ...err(`Cannot start ${workIntent}: ${[...evaluated.blockers, ...evaluated.unmet].map((entry) => entry.code).join(", ")}.`),
+          ...err(withGoverningRules(
+            `Cannot start ${workIntent}: ${[...evaluated.blockers, ...evaluated.unmet].map((entry) => entry.code).join(", ")}.`,
+            governingPrinciples,
+          )),
           data: {
             code: "initiative_not_ready" as const,
             workIntent,
             readiness: evaluated,
+            governingPrinciples,
             recovery: EMPTY_RECOVERY,
           },
         };
@@ -383,6 +622,12 @@ export async function claimGovernedBacklogWorkspace(args: {
         actor: args.actor,
       });
       const row = await tx.workroom.findUnique({ where: { capsuleId: claim.capsuleId } }) as Record<string, unknown> | null;
+      // BI-36FC2981: the room is born owned, in the claim's own transaction.
+      const coordinatorCount = row && ownership && tx.workroomParticipant
+        ? await bornOwned(tx as CapsuleDb & RoomOwnershipDb, {
+          workroomRowId: String(row.id), ownership, actor: args.actor,
+        })
+        : undefined;
       const latestIntent = tx.workroomActivity.findFirst
         ? await tx.workroomActivity.findFirst({
           where: { workCapsuleId: row?.id, kind: "work-intent-declared" },
@@ -393,13 +638,19 @@ export async function claimGovernedBacklogWorkspace(args: {
       const readback = exactReadback({
         row,
         intentPayload: latestIntent?.payload,
+        coordinatorCount,
         input: args.input,
         actor: args.actor,
         capsuleId: claim.capsuleId,
         workIntent,
         now,
       });
-      if (!readback) throw new CapsuleIdentityMismatch(evaluated);
+      if (!readback) {
+        throw new CapsuleIdentityMismatch(evaluated, readbackMismatches({
+          row, intentPayload: latestIntent?.payload, coordinatorCount, input: args.input,
+          actor: args.actor, capsuleId: claim.capsuleId, workIntent, now,
+        }));
+      }
       await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
       return claimSuccess({ workIntent, readiness: evaluated, claim, readback });
     });
@@ -413,6 +664,7 @@ export async function claimGovernedBacklogWorkspace(args: {
           actor: args.actor,
           pending: pendingRecovery,
           discover: args.dependencies?.discoverCanonicalArtifact ?? discoverCanonicalArtifactFromProvider,
+          input: args.input,
         }),
       },
     };
@@ -422,17 +674,51 @@ export async function claimGovernedBacklogWorkspace(args: {
     const denied: InitiativeReadinessDecision = {
       ...priorDecision,
       verdict: "denied",
-      blockers: [{ code: "CAPSULE_IDENTITY_MISMATCH", state: "fail", accountableRole: "delivery-coordinator", evidenceRefs: [] }],
+      blockers: [readinessRequirement({
+        code: "CAPSULE_IDENTITY_MISMATCH",
+        state: "fail",
+        accountableRole: "delivery-coordinator",
+        profile: priorDecision.profile,
+        reasons: error.mismatches,
+      })],
     };
     await recordDecision({ db: args.db, backlogItemRowId, decision: denied, workIntent, actor: args.actor });
+    const governingPrinciples = governingPrinciplesFor(denied);
     return {
-      ...err(error.message),
+      ...err(withGoverningRules(error.message, governingPrinciples)),
       data: {
         code: "capsule_identity_mismatch",
         workIntent,
         readiness: denied,
+        governingPrinciples,
         recovery: EMPTY_RECOVERY,
       },
     };
   }
+}
+
+/** Establish ownership and record it; returns the room's active coordinator count. */
+async function bornOwned(
+  tx: CapsuleDb & RoomOwnershipDb,
+  args: { workroomRowId: string; ownership: Awaited<ReturnType<typeof resolveRoomOwnershipPrincipals>>; actor: WorkCapsuleActor },
+): Promise<number> {
+  const outcome = await establishRoomOwnership(tx, { workroomId: args.workroomRowId, ...args.ownership });
+  const summary = describeRoomOwnership(outcome);
+  if (summary && (outcome.ownerAppointed || outcome.assistantAdmitted)) {
+    await tx.workroomActivity.create({
+      data: {
+        workCapsuleId: args.workroomRowId,
+        kind: "coworker-joined",
+        summary,
+        payload: { ...outcome, source: "claim" },
+        recordedById: args.actor.userId,
+        recordedByAgentId: args.actor.agentId,
+      },
+    });
+  }
+  const active = await tx.workroomParticipant.findMany({
+    where: { workroomId: args.workroomRowId, lifecycle: "active" },
+    select: { roles: true },
+  });
+  return active.filter((row: { roles: string[] }) => row.roles.includes("coordinator")).length;
 }

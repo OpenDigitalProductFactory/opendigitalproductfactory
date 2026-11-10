@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "strict-shared-read",
+  "decisionInteractionId": "DI-6C3C4523D3B1",
+  "scope": {
+    "files": ["apps/web/components/platform/LocalOnlyInferenceToggle.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["strict-shared-read", "fallback-local"]
+  }
+}

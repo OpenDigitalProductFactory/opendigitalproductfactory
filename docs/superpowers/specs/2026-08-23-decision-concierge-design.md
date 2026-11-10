@@ -4,7 +4,7 @@ status: draft
 
 # Decision Concierge — the review queue proposes, the owner rules
 
-Phase 1 (BI-6700AF66) shipped in #4601. Phase 2 (BI-3D0FB84B) is implemented on this branch; phases 3-4 are proposed.
+Phase 1 (BI-6700AF66) shipped in #4601. Phase 2 (BI-3D0FB84B) shipped in #4611. Phases 3 (BI-19B350FD) and 4 (BI-C62127B9) are implemented on this branch: the panel and the cadence that calls it ship together, because a panel nothing triggers is dead code.
 Owner: platform (WWMD)
 Epic: EP-0AF96937 (Decision Governance Surface — close the review-and-adjust loop)
 Workroom: WC-69329196

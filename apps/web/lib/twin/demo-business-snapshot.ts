@@ -16,7 +16,7 @@
 
 import type { DemoBusiness, TwinProfile, TwinValueStreamBinding } from "@dpf/storefront-templates";
 
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 
 import { buildStageFlow, type StageDemand } from "./stage-flow";
 import type {
@@ -24,14 +24,14 @@ import type {
   TwinZoneSnapshot,
   TwinQueueSnapshot,
   TwinOutcome,
-} from "@/components/twin/snapshot";
+} from "./twin-snapshot";
 import type {
   CapacityChipData,
   QueueItemData,
   ResourceUnitData,
   UtilityMeterData,
   WorkItemData,
-} from "@/components/twin/types";
+} from "./kit-types";
 
 const RESOURCE_STATES: Array<{ state: string; intent: Intent }> = [
   { state: "Active", intent: "success" },

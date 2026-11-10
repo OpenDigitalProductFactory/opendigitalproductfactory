@@ -31,6 +31,23 @@ field.
 
 ## 2. Facet registry
 
+### Cross-workroom review application (informative)
+
+The [cross-workroom review design](../superpowers/specs/2026-09-06-cross-workroom-learning-review-design.md)
+applies the composition in Section 1 to evidence review as well as work execution. Each proposed
+review profile identifies applicability, added outcomes and evidence, eligible denominators and
+exclusions, freshness, critical failures, assessor eligibility, permitted actions and retention.
+Common requirements remain inherited; a conflicting overlay is unresolved rather than silently
+overwriting another obligation. A version change starts a separately identified comparison cohort.
+
+Development uses exact source/runtime and review receipts; bookkeeping uses period and
+reconciliation evidence; pet rescue uses custody, welfare and capacity evidence; campground work
+uses site/rig fit and occupancy evidence. These examples guide future archetype qualification,
+not claims of deployed domain conformance. Coverage reports distinguish resolved, unsupported,
+unknown and not-exercised definitions and keep definition coverage separate from occurrence
+performance. This informative application does not change the catalog's identity registry or
+adopt the candidate review profile as a normative standard.
+
 Facet IDs are stable within the catalog major version. A leaf may select several facets on an axis.
 Selection never weakens a core requirement.
 

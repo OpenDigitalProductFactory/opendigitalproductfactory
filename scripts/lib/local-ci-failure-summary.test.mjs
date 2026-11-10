@@ -42,4 +42,19 @@ describe("summarizeLocalCiOutput", () => {
     assert.match(summary.failedChecks[1].text, /vitest-pool/);
     assert.match(summary.failedChecks[2].text, /Worker exited unexpectedly/);
   });
+
+  test("does not treat FAIL inside a passing test title as a failure (BI-FBB86A69)", () => {
+    const summary = summarizeLocalCiOutput(`
+      ✓ lib/decision-perspective/evaluator.test.ts > FAIL-SAFE: lexical relevance escalates even when the apparent stance APPROVES
+      ✓ lib/build/coding-agent.test.ts > outputIndicatesTestFailure > detects an ANSI FAIL marker line
+       Test Files  2788 passed | 4 skipped (2792)
+            Tests  23925 passed | 17 skipped | 18 todo (23960)
+      [local-ci-vitest] classification=passed attempts=1 recovered=false
+      Prisma schema loaded from prisma/schema.
+    `);
+
+    assert.equal(summary.failedTests.length, 0);
+    assert.equal(summary.failedChecks.length, 0);
+    assert.equal(summary.omittedFailureLineCount, 0);
+  });
 });

@@ -4,7 +4,7 @@
 // mcp-tools.ts inline dispatcher while preserving the same proposal approval
 // payload shape used by the supervisor rail.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [

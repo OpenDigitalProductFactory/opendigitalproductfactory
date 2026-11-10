@@ -22,16 +22,55 @@ Native companion app for the Open Digital Product Factory platform.
 - Expo CLI: `npm install -g expo-cli`
 - EAS CLI: `npm install -g eas-cli`
 
-### Setup
+### Running it on the iOS simulator
+
+This is an Expo **managed** app: `ios/` and `android/` are generated, not committed.
 
 ```bash
-# From monorepo root
+cd apps/mobile && pnpm exec expo prebuild --platform ios # generates ios/
+cd ios && LANG=en_US.UTF-8 pod install                   # CocoaPods needs UTF-8
+cd .. && pnpm exec expo run:ios                          # build + launch
+```
+
+A **Debug** build needs Metro running or it shows the red "No script URL provided"
+screen. To run it standalone — which is what you want for a quick visual check —
+build Release, which embeds the JS bundle:
+
+```bash
+xcodebuild -workspace ios/DPFMobile.xcworkspace -scheme DPFMobile \
+  -configuration Release -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build
+```
+
+Do **not** pass `CODE_SIGNING_ALLOWED=NO`. An unsigned simulator build cannot use
+the keychain, and `expo-secure-store` then throws `KeyChainException: A required
+entitlement isn't present` — which looks exactly like an app bug and is not one.
+
+### Setup
+
+`apps/mobile` is its own pnpm workspace with its own lockfile
+(`apps/mobile/pnpm-workspace.yaml`, `apps/mobile/pnpm-lock.yaml`). A root
+`pnpm install` no longer installs it. Install and run it from this folder:
+
+```bash
+cd apps/mobile
 pnpm install
 
 # Start Expo dev server
-cd apps/mobile
-npx expo start
+pnpm exec expo start
 ```
+
+Why it is separate: the Expo, React Native and Jest toolchain is about 950
+packages that the platform (portal, services, image) never runs. Keeping it in
+its own lockfile keeps it out of the platform's SBOM, typecheck and image, and
+lets mobile pin React to the exact version React Native's renderer embeds
+without forcing that version on the web app. See plan 2026-09-08 move M6.
+
+The supply-chain gates still cover this tree: the OSV scan, the release-age
+floor, the New Dependency Gate, the shape budgets and the Override Provenance
+Guard all read every lockfile listed in `scripts/sbom/lockfile-roots.mjs`.
+Security floors the root carries are repeated in this workspace file, because
+root overrides do not reach it.
 
 ### Running Tests
 
@@ -98,6 +137,11 @@ The mobile app uses shared packages from the monorepo:
 - `@dpf/types` — Entity types, API request/response shapes, dynamic content schemas
 - `@dpf/validators` — Zod validation schemas
 - `@dpf/api-client` — Typed REST API client
+
+They come in as injected `file:` copies (`dependenciesMeta.injected` in
+`package.json`), so Metro and Jest resolve them from this folder's
+`node_modules`. After you change one of them, run `pnpm install` here to refresh
+the copy; mobile CI does this on every run.
 
 ## API
 

@@ -419,7 +419,6 @@ const TASK_X_START = 40;
 const TASK_X_SPACING = 260;
 const TASK_Y_START = 40;
 const TASK_Y_SPACING = 100;
-const FORK_JOIN_Y_OFFSET = 40;
 
 /**
  * Build a ReactFlow graph of the build plan tasks.

@@ -7,6 +7,7 @@ import {
   shouldShowDocsLink,
 } from "./docs-route-map";
 import { docsPathExists } from "./docs-route-map.server";
+import { resolvePackagedDocsDestination } from "./docs-route-map.server";
 
 describe("resolveDocsPath", () => {
   it("maps finance banking leaf routes to a workflow-specific doc", () => {
@@ -93,6 +94,33 @@ describe("docs exposure policy", () => {
 });
 
 describe("mapped docs pages", () => {
+  it("recovers renamed and missing direct docs routes without a 404", () => {
+    const existing = new Set([
+      "/docs/workspace/index",
+      "/docs/getting-started/index",
+      "/docs",
+    ]);
+    const exists = (path: string) => existing.has(path);
+
+    expect(resolvePackagedDocsDestination("/docs/getting-started", exists)).toEqual({
+      href: "/docs/getting-started/index",
+      requestedKey: "getting-started",
+      resolvedKey: "getting-started/index",
+      recoveryKind: "alias",
+    });
+    expect(resolvePackagedDocsDestination("/docs/workspace/removed-page", exists)).toEqual({
+      href: "/docs/workspace/index",
+      requestedKey: "workspace/removed-page",
+      resolvedKey: "workspace/index",
+      recoveryKind: "area-index",
+    });
+    expect(resolvePackagedDocsDestination("/docs/no-such-area/page", exists)).toEqual({
+      href: "/docs",
+      requestedKey: "no-such-area/page",
+      resolvedKey: "index",
+      recoveryKind: "global-index",
+    });
+  });
   it("keeps every mapped docs path backed by an actual docs page", () => {
     for (const entry of getMappedDocsRoutes()) {
       expect(

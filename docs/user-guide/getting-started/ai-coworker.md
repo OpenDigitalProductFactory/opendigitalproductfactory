@@ -27,7 +27,36 @@ The coworker does not use raw page HTML as authority. If a surface is not yet co
 
 For example, **Estate Discovery** publishes its real Discovery Method, target, credential state, validation, connection status, and **Save & Test** outcome. It knows that **SNMP** discovers network devices and **SMTP** configures outbound email elsewhere; the community string remains write-only and is never repeated back.
 
+## Saved requests and recovery
+
+When a conversation says **Your request is saved**, DPF has retained the original
+message and its job reference. This confirms receipt; it does not confirm that
+the requested business result is complete.
+
+A provider-capacity wait keeps the same request. DPF checks again within its
+original recovery window, with a bounded number of attempts. You do not need to
+resend the message. The coworker must still have permission when work resumes.
+
+If execution ends without a confirmed outcome, DPF retains the request and
+records an explanation in the conversation. Existing results must be checked
+before another attempt, because an action may already have taken effect.
+An action awaiting approval remains pending. A saved response alone does not
+prove that a delegated business task succeeded.
+
+**Stop** cancels the conversation's open retained requests. A canceled request
+does not resume automatically.
+
 ## Quick Actions
+
+In **Finance**, the opening briefing keeps urgent owner decisions visible, even
+when they concern another area. Otherwise it gives Finance decisions priority
+and keeps routine unrelated decisions in your **Needs-you inbox**, with the
+correct count. It does not move work or answer a decision for you.
+
+On **Spend** and expense pages, a nonempty briefing also points to the existing
+expense-entry form and explains what to prepare. You can always use **Spend →
+My Expenses → New Expense Claim**. When no decision needs you, the normal
+briefing stays silent; the entry action remains on the page.
 
 Each page has skill buttons that trigger common tasks. These appear at the top of the coworker panel when you open it. Examples:
 
@@ -56,8 +85,12 @@ The coworker operates within a two-layer authorization model:
 
 - **Your role determines what's possible** — your platform role (e.g., Portfolio Manager, Enterprise Architect) controls which capabilities are available
 - **The agent's grants determine what's offered** — each agent persona has declared tool grants that scope what it can do. The coworker on the Ops page (Scrum Master) has different grants than the one on the Portfolio page (Portfolio Analyst)
-- **Side-effect actions require approval** — when the coworker wants to create, update, or delete something, it proposes the action and waits for your approval before executing
+- **Approval follows the action's authority** — routine work can run when current policy and your delegation authorize it. Damaging actions, missing authority, and decisions that require your judgment come to you for approval. Your role, the coworker's grants, connection permissions, and work context still limit every action.
+- **How you approve** — when an action needs you, the coworker raises an approval request for that exact action and waits. The request appears on the coworker's message, with **Authorize** and **Decline**, and in **Needs you**. Authorize runs the action once, exactly as asked, under your authority; the coworker then continues with the result. A request waits up to seven days (15 minutes for an action that reaches outside the platform). If nobody answers in time it shows as **Expired unanswered**, nothing changes, and **Ask again** puts it back in front of you
+- **Only the person asked decides** — a request lends your authority, so only you can decide it. For a scheduled task, that is the task's owner. An admin can decide on someone's behalf when that person has left or cannot sign in: they open the request's link, choose **Decide on their behalf**, and give a reason. The decision, the admin and the reason are recorded and shown on the request
 - **Every action is recorded** — all tool calls (not just proposals) are logged with your identity and the agent's identity for audit purposes. View the log at `/platform/ai/authority`
+
+An **Authorized, but did not complete** result keeps the approval separate from execution. When a saved execution proves the failure reason, the result explains it and offers **Inspect original Workroom** if you still have access. Missing or conflicting evidence stays explicit. An inspection link does not authorize another attempt.
 
 On a business Product's **Direction** page, informational cards and links do
 not send a coworker prompt. **Preview a demand review** first shows the product
@@ -137,6 +170,6 @@ When you need to add an external tool (MCP server, npm package, API), the cowork
 
 - Be specific. "Show me overdue compliance actions" works better than "what's wrong?"
 - The coworker can create backlog items, register products, assign roles, and more — it's not just a chatbot
-- If the coworker proposes an action (like creating a record), you'll see an approval prompt before anything changes
+- If an action needs your authorization, you'll see **Authorize** and **Decline** on the coworker's message before anything changes; review the card before deciding. The same request is in **Needs you**. Routine work already covered by policy and delegation can run without a new prompt.
 - Each conversation is tied to the page context. If you switch pages, the coworker knows the new context
 - Ask in the words of your business. "Which trucks need restock?" or "Which appointments are missing forms?" is better than guessing the platform's internal module name.

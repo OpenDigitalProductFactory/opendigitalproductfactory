@@ -116,7 +116,7 @@ export function buildProviderCostView(input: {
     },
     externalProviderBilling: snapshot
       ? {
-          label: "External provider billing",
+          label: "Billing reconciliation",
           value: "Provider billing snapshot",
           provenance: {
             kind: snapshot.sourceType === "provider_api" || snapshot.sourceType === "provider_portal" ? "connected-account" : "live-db",
@@ -128,13 +128,14 @@ export function buildProviderCostView(input: {
           actionHref: financeProfile?.usageUrl ?? financeProfile?.billingUrl ?? "/finance/spend/ai",
         }
       : {
-          label: "External provider billing",
-          value: "Not connected",
+          label: "Billing reconciliation",
+          value: "Not set up",
           provenance: {
             kind: "not-connected",
-            label: "Not connected",
+            label: "Not set up",
             sourceTable: "ContractUsageSnapshot",
-            description: "No reconciled provider billing snapshot is connected for this provider.",
+            description:
+              "No provider billing statement has been imported into Finance for reconciliation. This does not reflect the provider's credentials or traffic, which are shown separately.",
           },
           actionHref: financeProfile?.usageUrl ?? financeProfile?.billingUrl ?? "/finance/spend/ai",
         },

@@ -100,7 +100,16 @@ const WORKLOAD_BINDINGS: Readonly<Record<AiWorkloadClassKey, AiWorkloadDataBindi
   },
   "source-code": {
     assetId: "data:source-code",
-    sensitivity: "confidential",
+    // BI-35FAE2DB follow-up: source code is INTERNAL, not confidential.
+    // `confidential` on this scale means disclosure causes irreparable harm —
+    // bank details, HR records, PHI. It also auto-attaches a `mask` obligation
+    // (profile default-confidential), and a masked payload is useless for the
+    // one thing code is sent for: being read. That combination fenced every
+    // code payload to the local engine regardless of the source-code pack's
+    // declared `allow-with-obligations`. Genuine secrets are NOT reclassified —
+    // `secrets-credentials` stays `restricted` + local-only below, so keys and
+    // tokens never leave even when they appear inside a code payload.
+    sensitivity: "internal",
     categories: ["content", "configuration"],
     residencyClass: "region-bound",
   },

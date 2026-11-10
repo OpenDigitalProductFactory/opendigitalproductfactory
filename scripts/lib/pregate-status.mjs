@@ -35,6 +35,13 @@
 // INCONCLUSIVE, not FAIL. A metadata candidateSha that is not HEAD is STALE
 // in the headline, not FAIL with a buried metadata line.
 
+import { hasBoundDocumentationEvidence, isTestStubGateRecord } from "./local-ci-gate-state.mjs";
+import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS } from "./local-ci-slot-substrate.mjs";
+import { mergeConflictRemedy } from "./sandbox-freshness.mjs";
+
+/** The recorded status of a candidate that does not merge onto the base (BI-FCC1DCB2). */
+const MERGE_CONFLICT_GATE_STATUS = "conflict";
+
 /** Terminal verdicts, ordered worst-to-best for slot reconciliation. */
 export const PREGATE_VERDICTS = Object.freeze([
   "NO-RECORD",
@@ -46,7 +53,76 @@ export const PREGATE_VERDICTS = Object.freeze([
 ]);
 
 /** Statuses that mean the gate was never admitted / never finished. Not FAIL. */
-const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled"]);
+// "admitted" is in flight too: the slot is granted and the stages are running (BI-27A37D27).
+const UNFINISHED_GATE_STATUSES = new Set(["queued", "cancelled", "running", "admitted"]);
+
+/**
+ * "running" is here deliberately. The gate writes status "running" the moment it
+ * starts the long stage and only overwrites it when the stage returns a verdict,
+ * so a record left at "running" means one of exactly two things: the run is still
+ * in flight, or it was released/killed before it could grade anything. Neither is
+ * evidence about the diff.
+ *
+ * It used to fall through to FAIL. On a contended host that turned "your run was
+ * preempted" into "your code is broken" — the precise inversion AGENTS.md §4
+ * forbids ("a gate that could not run is not a verdict"), and it blocked pushes
+ * for branches whose own logs recorded no failing command.
+ */
+const RUNNING_GATE_STATUS = "running";
+
+/**
+ * The pool policy the gate recorded with a parked claim (BI-D908DA0A). Read from
+ * the admission snapshot first, then the queued lease event, so an older record
+ * that carries only one of them still answers.
+ */
+export function poolClosedReasonFromState(state) {
+  const policy = state?.admission?.poolPolicy;
+  if (policy && policy.effectiveCapacity === 0) {
+    return typeof policy.rollbackReason === "string" && policy.rollbackReason
+      ? policy.rollbackReason
+      : "capacity-zero";
+  }
+  const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i]?.type === "queued" && typeof events[i].poolClosedReason === "string") {
+      return events[i].poolClosedReason;
+    }
+  }
+  return null;
+}
+
+/**
+ * BI-8392DA16 / BI-2AB94B5A. A `blocked_*` status is infrastructure evidence —
+ * the child was killed, the sandbox drifted, or the control plane starved.
+ * FAIL is a claim about the diff. These must never share a headline.
+ */
+const BLOCKED_GATE_STATUSES = new Set([
+  "blocked_sandbox_drift",
+  "blocked_control_plane_starvation",
+  "blocked_child_signal_death",
+  SLOT_SUBSTRATE_UNAVAILABLE_STATUS,
+]);
+
+/**
+ * How many claims were ahead of this one when it was parked, from the newest
+ * queued lease event (BI-277ECBDB). Position 1 is next in line, so N claims are
+ * ahead at position N+1. Null when no position was recorded.
+ */
+function claimsAheadFromState(state) {
+  const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (events[i]?.type === "queued" && Number.isInteger(events[i].queuePosition)) {
+      return Math.max(0, events[i].queuePosition - 1);
+    }
+  }
+  return null;
+}
+
+/** The newest recorded queue position (1 = next in line), or null. */
+function queuePositionFromState(state) {
+  const ahead = claimsAheadFromState(state);
+  return ahead === null ? null : ahead + 1;
+}
 
 function rank(verdict) {
   const index = PREGATE_VERDICTS.indexOf(verdict);
@@ -80,7 +156,7 @@ function rank(verdict) {
  *
  * That matters because local-integration-ci runs at effectiveCapacity 1 on a
  * host that may have several sessions gating at once. A run that queued,
- * started, and was released early is a RETRY, not a verdict on the diff.
+ * started, and was released early is an inconclusive outcome, not a verdict on the diff.
  *
  * This is a reader, so it cannot fix the missing reason. It can stop presenting
  * absence as a finding, and name the lease outcome the record does carry.
@@ -98,8 +174,13 @@ function describeFailure(state, metadata) {
     || state?.error
     || (metadataIsForThisRun ? metadata?.execution?.failedCommand : null);
   if (stated) return `gate record status ${status} — ${typeof stated === "string" ? stated : "see the gate record"}`;
+  // BI-C1121FFB: the wrapper stores the failing test on failureSummary even
+  // when failureReason, error, and failedCommand are empty. Quote that before
+  // admitting the record has no reason.
+  const namedFailure = quotedFailureSummary(state);
+  if (namedFailure) return `gate record status ${status} — ${namedFailure}`;
   if (!metadataIsForThisRun) {
-    return `gate record status ${status} with NO recorded reason for THIS run — the metadata file on disk describes a previous run, so it is not evidence about this one. Re-run pregate; do not treat this as a verdict on the diff.`;
+    return `gate record status ${status} with NO recorded reason for THIS run — the metadata file on disk describes a previous run, so it is not evidence about this one. Stop this attempt and reconcile its durable task; do not treat missing evidence as a verdict on the diff.`;
   }
 
   const events = Array.isArray(state?.leaseEvents) ? state.leaseEvents : [];
@@ -109,12 +190,12 @@ function describeFailure(state, metadata) {
 
   if (started && !stated) {
     const suffix = queued || replaced
-      ? " The run held the slot and was released without recording a failing command, and this claim queued behind another session — a contended slot is a retry, not a verdict on your diff."
+      ? " The run held the slot and was released without recording a failing command, and this claim queued behind another session — a contended slot is not a verdict on your diff."
       : " The run started and was released without recording a failing command, so this is not evidence that the diff is bad.";
-    return `gate record status ${status} with NO recorded reason — re-run before treating this as a real failure.${suffix}`;
+    return `gate record status ${status} with NO recorded reason — stop this attempt and reconcile its durable task before treating this as a real failure.${suffix}`;
   }
 
-  return `gate record status ${status} with NO recorded reason — this SHA has not passed, but the record does not say why. Re-run pregate.`;
+  return `gate record status ${status} with NO recorded reason — this SHA has not passed, but the record does not say why. Stop this attempt and reconcile its durable task before any new authorized attempt.`;
 }
 
 /**
@@ -141,7 +222,15 @@ function describeFailure(state, metadata) {
  * lease at all) so this never reports a false mismatch on a record that simply
  * cannot answer.
  */
+function quotedFailureSummary(state) {
+  const summary = state?.failureSummary;
+  if (!summary || typeof summary !== "object") return "";
+  const named = summary.failedTests?.[0]?.text || summary.failedChecks?.[0]?.text;
+  return typeof named === "string" ? named.trim() : "";
+}
+
 function metadataDescribesAnotherRun(state, metadata) {
+  if (state?.executionLane === "documentation") return true;
   const boundLease = String(state?.leaseId || "");
   const metadataLease = String(metadata?.runLeaseId || "");
   if (boundLease && metadataLease) return boundLease !== metadataLease;
@@ -153,17 +242,195 @@ function metadataDescribesAnotherRun(state, metadata) {
   return true;
 }
 
-export function classifySlotRecord({ state, metadata, headSha, headBranch = "", now = Date.now() }) {
+/**
+ * BI-41C3E303. Everything a record whose gate did NOT pass can be: infrastructure
+ * that never graded the diff, bookkeeping from a slot that lost the race, a record
+ * about another commit, or a real failure.
+ *
+ * Extracted so the ONE thing it must never be — a pass — cannot be reached around
+ * it. `evidencePending` is a qualifier on a PASS, not a verdict of its own, and the
+ * old ordering tested it first, so any of these outcomes carrying pending evidence
+ * short-circuited into a PENDING headlined "gate passed".
+ */
+function classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha, queuedWaiter = null, supersedingWinner }) {
+  // BI-51353470: a metadata candidateSha that is not HEAD is STALE in the
+  // headline, not FAIL with a buried metadata line. Observed: FAIL quoting
+  // a previous run's vitest command while gated claimed the current HEAD.
+  if (candidateSha && headSha && candidateSha !== headSha) {
+    return {
+      ...base,
+      verdict: "STALE",
+      reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — read the current durable task and reconcile before a new attempt`,
+      staleness: "metadata-mismatch",
+    };
+  }
+  const status = String(state.status || "");
+  // BI-5529B5AC: another slot PASSED this branch+SHA and the gate rewrote this
+  // losing record to say so. Bookkeeping, not a verdict on the diff.
+  if (status === "superseded" || state.supersededBy) {
+    const winner = state.supersededBy?.slotKey || "another slot";
+    const prior = state.supersededStatus || "prior";
+    // BI-A9031FF3: the winner's pass is re-read, never trusted. A late lease loss
+    // can rewrite the winning record after it superseded this one, and then no
+    // slot holds a pass. `undefined` means the caller could not look (old callers).
+    if (supersedingWinner !== undefined) {
+      const stillPassed = supersedingWinner?.gatePassed === true
+        && supersedingWinner.sha === state.sha
+        && supersedingWinner.branch === state.branch;
+      if (!stillPassed) {
+        const now = supersedingWinner
+          ? `now reads ${supersedingWinner.status || "not passed"}${supersedingWinner.sha && supersedingWinner.sha !== state.sha ? ` for ${String(supersedingWinner.sha).slice(0, 12)}` : ""}`
+          : "has no record";
+        return {
+          ...base,
+          verdict: "INCONCLUSIVE",
+          reason: `gate record superseded by ${winner}, but ${winner} ${now} — no slot holds a pass for this SHA; this slot's ${prior} record is not a verdict either. Stop this attempt and reconcile its durable task before any new authorized attempt.`,
+        };
+      }
+    }
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      reason: `gate record superseded — ${winner} passed this SHA; this slot's ${prior} record is not a verdict`,
+    };
+  }
+  if (UNFINISHED_GATE_STATUSES.has(status)) {
+    // BI-27A37D27: a queued claim with no live waiter is not waiting for
+    // anything. Name that first; it is the one fact that changes what to do.
+    if (status === "queued" && queuedWaiter?.checked && !queuedWaiter.alive) {
+      const pids = queuedWaiter.pids?.length ? ` (last waiter pid ${queuedWaiter.pids.join(", ")})` : "";
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status queued — but no waiter is alive for this claim${pids}, so nothing will run it and its queue row lapses within minutes. Not a failure of the diff. Reconcile this durable claim and resume its task; do not create a replacement claim.`,
+      };
+    }
+    // BI-D908DA0A: a claim parked because the pool had NO admissible slot is
+    // host pressure, not a queue. Say so, or the operator waits behind nobody.
+    const closed = poolClosedReasonFromState(state);
+    if (closed) {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status ${status} — the local-CI pool was CLOSED (${closed}) when this claim was parked: no slot could admit anyone, so this is host pressure, not a queue and not a failure of the diff. No session action frees it (page cache already counts as available; never drop caches or run sync): observe this durable claim while pressure passes; reconcile and resume its task if the waiter is absent.`,
+      };
+    }
+    if (status === RUNNING_GATE_STATUS || status === "admitted") {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason:
+          `gate record status ${status} — the run started and has not recorded a verdict. `
+          + "It is either still in flight or was released before it could grade the diff; "
+          + "either way this is not a failure of the code. Observe the existing runner and durable task; "
+          + "reconcile its recorded outcome before any new attempt.",
+      };
+    }
+    const ahead = status === "queued" ? claimsAheadFromState(state) : null;
+    if (ahead !== null) {
+      return {
+        ...base,
+        verdict: "INCONCLUSIVE",
+        reason: `gate record status queued — queued behind ${ahead} other claim${ahead === 1 ? "" : "s"} for the local-CI pool. This is a queue, not a failure of the diff; the waiter runs it when a slot frees.`,
+      };
+    }
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Observe or reconcile the existing durable task before any new attempt.`,
+    };
+  }
+  if (status === SLOT_SUBSTRATE_UNAVAILABLE_STATUS) {
+    const substrate = state?.substrate || {};
+    const container = substrate.container || "the slot Postgres container";
+    const observed = substrate.state || "unavailable";
+    const remedy = substrate.remedy || `start ${container}`;
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      reason: `BLOCKED — slot substrate unavailable: ${container} is ${observed}. The gate claimed nothing; this is infrastructure, not a verdict on the diff, and running the gate again changes nothing until the substrate is back.`,
+      rerun: false,
+      remedy,
+    };
+  }
+  // BI-FCC1DCB2: the candidate does not merge onto the base. A verdict about
+  // the branch with a remedy the author owns, never infrastructure, and never
+  // fixed by gating again — so the next step is the merge, not a re-run.
+  if (status === MERGE_CONFLICT_GATE_STATUS) {
+    const mergeConflict = state?.mergeConflict
+      ?? (metadataDescribesAnotherRun(state, metadata) ? null : metadata?.execution?.mergeConflict ?? null);
+    const remedy = mergeConflictRemedy(mergeConflict);
+    return {
+      ...base,
+      verdict: "FAIL",
+      reason: `gate record status conflict — merge conflict with ${mergeConflict?.baseRef || "origin/main"}: the candidate does not merge cleanly, so nothing was graded. The branch needs a merge; gating again fails the same way until you ${remedy}.`,
+      rerun: false,
+      remedy,
+    };
+  }
+  if (BLOCKED_GATE_STATUSES.has(status) || status.startsWith("blocked_")) {
+    const stated = state?.failureReason || state?.error || "";
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      reason: stated
+        ? `gate record status ${status} — infrastructure, not a product verdict. ${stated}`
+        : `gate record status ${status} — infrastructure, not a product verdict. The run was blocked before it could grade the diff. Stop this attempt and reconcile its durable task; host recovery alone does not authorize replacing a terminal claim.`,
+    };
+  }
+  return {
+    ...base,
+    verdict: "FAIL",
+    reason: describeFailure(state, metadata),
+    staleness: metadataDescribesAnotherRun(state, metadata) ? "metadata-describes-another-run" : "",
+  };
+}
+
+/**
+ * A run whose gate did not pass can still hold local evidence waiting to be
+ * published — `gate-worktree.mjs` preserves it across a control-plane outage on
+ * purpose. Say so, because the pending-evidence file is on disk and visible, but
+ * never let it read as a pass: --finalize-evidence has no published PASS to
+ * finalize and refuses, so it is deliberately not named here. Reconcile the durable task and its
+ * terminal outcome before considering a new authorized attempt.
+ */
+function unpublishedEvidenceNote(state) {
+  const reason = state?.evidencePendingReason || "unknown";
+  return ` Local evidence from this run is preserved on disk and still unpublished (${reason}) — that is a pending PUBLICATION, not a pass, and publishing it cannot produce one. Stop this attempt and reconcile its durable task before any new authorized attempt.`;
+}
+
+export function classifySlotRecord({ state, metadata, headSha, headBranch = "", now = Date.now(), queuedWaiter = null, supersedingWinner }) {
   const boundSha = String(state?.sha || "");
   const boundBranch = String(state?.branch || "");
-  const candidateSha = String(metadata?.candidateSha || "");
+  const documentation = state?.executionLane === "documentation";
+  const candidateSha = String(documentation ? state?.producerEvidence?.candidateSha || "" : metadata?.candidateSha || "");
   const evidenceId = String(state?.evidenceRecordId || "");
   const recordedAt = String(state?.recordedAt || "");
   const expiresAt = String(state?.expiresAt || "");
-  const base = { boundSha, boundBranch, candidateSha, evidenceId, recordedAt, expiresAt, staleness: "" };
+  const base = {
+    boundSha, boundBranch, candidateSha, evidenceId, recordedAt, expiresAt,
+    gateStatus: String(state?.status || ""), staleness: "",
+    queuePosition: state?.status === "queued" ? queuePositionFromState(state) : null,
+  };
 
   if (!state) {
     return { ...base, verdict: "NO-RECORD", reason: "no gate record for this worktree — pregate has not run here" };
+  }
+
+  // BI-53B189C8. The DPF_ALLOW_LOCAL_CI_STUB run builds nothing and still
+  // records "passed", and a lease test once wrote such records into the git dir
+  // of the checkout running it, bound to that checkout's real HEAD. Name it
+  // before any SHA or branch check, so it is never read as a gate at all: not
+  // as a PASS for HEAD, and not as an ordinary STALE record either.
+  if (isTestStubGateRecord(state)) {
+    return {
+      ...base,
+      verdict: "INCONCLUSIVE",
+      testStub: true,
+      reason:
+        `gate record was written by the DPF_ALLOW_LOCAL_CI_STUB=1 test stub for ${boundBranch || "(unknown branch)"} @ ${boundSha.slice(0, 12) || "(unknown)"} `
+        + "— no sandbox build ran, so it is not evidence for any push. A test or a stub run wrote it into this checkout. Stop this attempt and reconcile its durable task before any new authorized attempt.",
+    };
   }
 
   // A record for a DIFFERENT commit is not weaker evidence for HEAD; it is no
@@ -173,7 +440,7 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     return {
       ...base,
       verdict: "STALE",
-      reason: `gate record is bound to ${boundSha.slice(0, 12)} but HEAD is ${headSha.slice(0, 12)} — re-run pregate`,
+      reason: `gate record is bound to ${boundSha.slice(0, 12)} but HEAD is ${headSha.slice(0, 12)} — reconcile the prior durable task before requesting fresh evidence for this identity`,
       staleness: "head-moved",
     };
   }
@@ -181,9 +448,17 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     return {
       ...base,
       verdict: "STALE",
-      reason: `gate record is bound to branch ${boundBranch} but HEAD is on ${headBranch} — re-run pregate`,
+      reason: `gate record is bound to branch ${boundBranch} but HEAD is on ${headBranch} — reconcile the prior durable task before requesting fresh evidence for this identity`,
       staleness: "branch-moved",
     };
+  }
+
+  // The gate did not pass. Classify what actually happened FIRST — `evidencePending`
+  // qualifies a PASS and can never manufacture one (BI-41C3E303).
+  if (state.gatePassed !== true) {
+    const unpassed = classifyUnpassedRecord({ state, metadata, base, headSha, candidateSha, queuedWaiter, supersedingWinner });
+    if (state.evidencePending !== true) return unpassed;
+    return { ...unpassed, reason: `${unpassed.reason}${unpublishedEvidenceNote(state)}` };
   }
 
   if (state.evidencePending === true) {
@@ -194,32 +469,12 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
     };
   }
 
-  if (state.gatePassed !== true) {
-    // BI-51353470: a metadata candidateSha that is not HEAD is STALE in the
-    // headline, not FAIL with a buried metadata line. Observed: FAIL quoting
-    // a previous run's vitest command while gated claimed the current HEAD.
-    if (candidateSha && headSha && candidateSha !== headSha) {
-      return {
-        ...base,
-        verdict: "STALE",
-        reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
-        staleness: "metadata-mismatch",
-      };
-    }
-    const status = String(state.status || "");
-    if (UNFINISHED_GATE_STATUSES.has(status)) {
-      return {
-        ...base,
-        verdict: "INCONCLUSIVE",
-        reason: `gate record status ${status} — the gate did not run. This is not a failure of the diff. Re-run pregate.`,
-      };
-    }
-    return {
-      ...base,
-      verdict: "FAIL",
-      reason: describeFailure(state, metadata),
-      staleness: metadataDescribesAnotherRun(state, metadata) ? "metadata-describes-another-run" : "",
-    };
+  // A lane name or an old lease event alone cannot exempt a result from the
+  // sandbox cross-check. Unknown/partial producer records require a fresh run.
+  const declaresProducer = state.executionLane != null || state.producerEvidence != null
+    || (Array.isArray(state.leaseEvents) && state.leaseEvents.some((event) => event?.type === "documentation-lane"));
+  if (declaresProducer && !hasBoundDocumentationEvidence(state)) {
+    return { ...base, verdict: "INCONCLUSIVE", reason: "gate producer evidence is missing, unsupported or inconsistent — reconcile the durable task before requesting fresh evidence" };
   }
 
   if (expiresAt) {
@@ -228,7 +483,7 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
       return {
         ...base,
         verdict: "STALE",
-        reason: `gate record expired at ${expiresAt} — re-run pregate`,
+        reason: `gate record expired at ${expiresAt} — reconcile the prior durable task before requesting fresh evidence for this identity`,
         staleness: "expired",
       };
     }
@@ -237,16 +492,16 @@ export function classifySlotRecord({ state, metadata, headSha, headBranch = "", 
   // The gate state says passed; cross-check the independent metadata record.
   // These are written by different processes (the wrapper vs the sandbox run),
   // so a disagreement means one of them is not describing this run.
-  if (candidateSha && headSha && candidateSha !== headSha) {
+  if (!documentation && candidateSha && headSha && candidateSha !== headSha) {
     return {
       ...base,
       verdict: "STALE",
-      reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+      reason: `metadata record gated ${candidateSha.slice(0, 12)}, not HEAD ${headSha.slice(0, 12)} — read the current durable task and reconcile before a new attempt`,
       staleness: "metadata-mismatch",
     };
   }
 
-  return { ...base, verdict: "PASS", reason: "gate passed for this HEAD" };
+  return { ...base, verdict: "PASS", reason: documentation ? "documentation gate passed for this HEAD" : "gate passed for this HEAD" };
 }
 
 /**
@@ -267,13 +522,119 @@ export function reconcileSlots(slots) {
   let best = considered[0];
   for (const slot of considered.slice(1)) {
     if (rank(slot.verdict) > rank(best.verdict)) best = slot;
+    else if (slot.verdict === "INCONCLUSIVE" && best.verdict === "INCONCLUSIVE"
+      && slot.boundSha && slot.boundSha === best.boundSha && slot.boundBranch === best.boundBranch
+      && ["admitted", "running"].includes(slot.gateStatus) && best.gateStatus === "queued") best = slot;
   }
   return { ...best, slot: best.slotKey ?? null };
 }
 
-/** Exit code contract: 0 ONLY for a PASS bound to the current HEAD. */
+/**
+ * BI-F039AA83. The words a gate that is still WORKING reports instead of a
+ * verdict. None of them is terminal: the right response to each is to wait and
+ * read again, never to stop, re-claim, or tell anyone the gate failed.
+ */
+export const PREGATE_LIVE_VERDICTS = Object.freeze(["PREFLIGHT", "QUEUED", "ADMITTED", "RUNNING"]);
+
+/** Exit code while a gate is still working — EX_TEMPFAIL, the same 75 pregate exits with when it queues. */
+export const LIVE_GATE_EXIT_CODE = 75;
+
+/**
+ * Exit code contract: 0 ONLY for a PASS bound to the current HEAD; 75 while a
+ * gate for HEAD is still working (wait, then read again); 1 for everything else.
+ */
 export function exitCodeForVerdict(verdict) {
-  return verdict === "PASS" ? 0 : 1;
+  if (verdict === "PASS") return 0;
+  return PREGATE_LIVE_VERDICTS.includes(verdict) ? LIVE_GATE_EXIT_CODE : 1;
+}
+
+const LIVE_STAGE_TEXT = Object.freeze({
+  preflight: "guard-parity preflight",
+  "reduced-tier": "reduced-tier verification",
+  gate: "local-CI admission",
+  queued: "waiting for a local-CI slot",
+  admitted: "admitted — sandbox run starting",
+  running: "sandbox run",
+});
+const LIVE_VERDICT_FOR_STATUS = Object.freeze({ queued: "QUEUED", admitted: "ADMITTED", running: "RUNNING" });
+
+/**
+ * BI-F039AA83. Overlay the LIVE process state onto the record verdict.
+ *
+ * The records say what the last run concluded; they cannot say a run is still
+ * going. Two facts can: the pregate live marker (written at pregate start, so
+ * it covers the preflight that precedes any record) and the local-CI queue
+ * observer the gate process registers for its whole lease. Either one, proven
+ * alive for HEAD, turns a record that would read NO-RECORD, FAIL or
+ * INCONCLUSIVE into PREFLIGHT / QUEUED / ADMITTED / RUNNING.
+ *
+ * A PASS for HEAD is never overlaid: it is already the answer. A live pregate
+ * gating a different commit does not stand in for HEAD; it is named in the
+ * reason so nobody starts a second run on top of it.
+ *
+ * HEAD's in-flight record is looked for in EVERY slot, not only the reconciled
+ * winner: a five-day-old record in the other slot reconciles as STALE and
+ * outranks a queued claim, which hid a live queue behind "STALE" (2026-11-03).
+ *
+ * @param {object} reconciled verdict (reconcileSlots or the NO-RECORD stub)
+ * @param {{ live?: ReturnType<import("./pregate-live.mjs").readLivePregate>,
+ *           queuedWaiter?: { checked?: boolean, alive?: boolean, pids?: number[], alivePids?: number[] } | null,
+ *           slots?: object[], headSha?: string, headBranch?: string }} input
+ */
+export function applyLiveGate(reconciled, { live = null, queuedWaiter = null, slots = [], headSha = "", headBranch = "" } = {}) {
+  if (!reconciled || reconciled.verdict === "PASS") return reconciled;
+  const sameBranch = (branch) => !headBranch || !branch || branch === headBranch;
+  const liveForHead = live && live.sha === headSha && sameBranch(live.branch) ? live : null;
+  const inFlightRecord = [reconciled, ...slots].find((record) => record?.boundSha === headSha
+    && sameBranch(record.boundBranch) && LIVE_VERDICT_FOR_STATUS[record.gateStatus]);
+  const result = inFlightRecord && inFlightRecord !== reconciled
+    ? { ...inFlightRecord, slot: inFlightRecord.slotKey ?? inFlightRecord.slot ?? null }
+    : reconciled;
+  const inFlightStatus = inFlightRecord ? inFlightRecord.gateStatus : "";
+  const waiterAlive = queuedWaiter?.checked === true && queuedWaiter.alive === true;
+  const waiterPid = (queuedWaiter?.alivePids ?? queuedWaiter?.pids ?? [])[0] ?? null;
+
+  let verdict = "";
+  let stage = "";
+  let pid = null;
+  if (inFlightStatus && (waiterAlive || liveForHead?.stage === "gate")) {
+    verdict = LIVE_VERDICT_FOR_STATUS[inFlightStatus];
+    stage = inFlightStatus;
+    pid = liveForHead?.pid ?? waiterPid;
+  } else if (liveForHead) {
+    verdict = { gate: "QUEUED", "reduced-tier": "RUNNING" }[liveForHead.stage] ?? "PREFLIGHT";
+    stage = liveForHead.stage;
+    pid = liveForHead.pid;
+  }
+
+  if (!verdict) {
+    if (live?.sha && live.sha !== headSha) {
+      return {
+        ...reconciled,
+        reason: `${reconciled.reason} (a pregate, pid ${live.pid}, is still running for ${live.sha.slice(0, 12)}, not HEAD ${String(headSha).slice(0, 12)} — let it finish before gating HEAD)`,
+      };
+    }
+    return reconciled;
+  }
+
+  const queuePosition = inFlightStatus === "queued" ? (result.queuePosition ?? null) : null;
+  const stageText = LIVE_STAGE_TEXT[stage] || stage;
+  let where = `${stageText} in progress`;
+  if (verdict === "QUEUED") {
+    where = queuePosition !== null
+      ? `queued for the local-CI pool at position ${queuePosition}`
+      : "requesting a local-CI slot (queue position not yet known)";
+  }
+  const prior = ["NO-RECORD", "INCONCLUSIVE"].includes(reconciled.verdict)
+    ? ""
+    : ` The ${reconciled.verdict} on disk belongs to an earlier attempt and is being replaced.`;
+  return {
+    ...result,
+    verdict,
+    priorVerdict: reconciled.verdict,
+    reason: `pregate is still working (pid ${pid ?? "unknown"}): ${where}. This is not a verdict and not a failure — wait, then read pregate:status again.${prior}`,
+    live: { pid, stage: stageText, queuePosition },
+  };
 }
 
 function ageText(iso, now) {
@@ -309,11 +670,26 @@ export function formatStatusReport(result, { headBranch, headSha, now = Date.now
   if (result.candidateSha && result.candidateSha !== result.boundSha) {
     lines.push(`  metadata    candidateSha ${result.candidateSha.slice(0, 12)}`);
   }
+  if (result.live) {
+    lines.push(`  pid         ${result.live.pid ?? "unknown"}`);
+    lines.push(`  stage       ${result.live.stage}`);
+    if (result.live.queuePosition !== null && result.live.queuePosition !== undefined) {
+      lines.push(`  queue       position ${result.live.queuePosition}`);
+    }
+  }
   if (result.slot) lines.push(`  slot        ${result.slot}`);
   if (result.evidenceId) lines.push(`  evidence    ${result.evidenceId}`);
   if (result.logFile) lines.push(`  full log    ${result.logFile}`);
-  if (result.verdict !== "PASS") {
-    lines.push("  next        pnpm run pregate   (foreground, unpiped, as the sole command)");
+  if (PREGATE_LIVE_VERDICTS.includes(result.verdict)) {
+    lines.push("  next        wait, then re-read: pnpm run pregate:status   (exit 75 = still working; do not start another pregate)");
+  } else if (result.rerun === false) {
+    lines.push(`  next        ${result.remedy || "restore the gate substrate"}`);
+  } else if (result.verdict !== "PASS") {
+    if (result.gateStatus && result.boundSha === headSha) {
+      lines.push(["queued", "admitted", "running"].includes(result.gateStatus)
+        ? "  next        observe the existing durable task; do not re-claim"
+        : "  next        reconcile this terminal claim before an explicitly new attempt");
+    } else lines.push("  next        pnpm run pregate   (foreground, unpiped, as the sole command)");
   }
   return lines;
 }

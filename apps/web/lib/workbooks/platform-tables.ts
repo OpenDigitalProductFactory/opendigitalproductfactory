@@ -196,6 +196,8 @@ const COMPLIANCE_OBLIGATION_TABLE: GenericTableConfig = {
     { field: "frequency", name: "Frequency", fieldType: "text", width: 120 },
     { field: "applicability", name: "Applicability", fieldType: "text", width: 160 },
     { field: "reviewDate", name: "Review date", fieldType: "date", width: 120 },
+    // BI-4DD2F087: sortable, so the obligations that lengthen a retention window are findable. Blank = states no minimum.
+    { field: "retentionMinimumDays", name: "Retention min (days)", fieldType: "number", width: 150 },
     { field: "status", name: "Status", fieldType: "text", width: 110 },
     { field: "updatedAt", name: "Updated", fieldType: "datetime", width: 170 },
   ],

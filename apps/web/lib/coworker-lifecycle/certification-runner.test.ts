@@ -7,6 +7,13 @@ import {
   type CertificationDeps,
 } from "./certification-runner";
 import { deriveCertificationStates } from "./certification-status";
+import { journeysForCoworker } from "./golden-journeys";
+
+// The runner tests exercise finding reopen and audit scoping, not WHICH journey a
+// coworker has. Hardcoding one made them fail the moment that coworker gained a
+// curated journey — a curation change breaking a runner test is noise, so the id
+// is derived from the registry instead.
+const COO_JOURNEY_ID = journeysForCoworker("coo")[0].journeyId;
 
 type FindingRow = { findingKey: string; status: string };
 
@@ -55,11 +62,14 @@ function makeDeps(overrides?: {
     }),
     fetchToolEvidence: vi.fn().mockResolvedValue(overrides?.governedEvidence ?? []),
     fetchAgentGrants: vi.fn().mockResolvedValue(overrides?.agentGrants ?? []),
+    resolveOwnerUserId: vi.fn(async () => {
+      const owner = overrides?.superuser === undefined ? { id: "usr-1" } : overrides.superuser;
+      if (!owner) throw new Error("No accountable owner");
+      return owner.id;
+    }),
     db: {
       user: {
-        findFirst: vi
-          .fn()
-          .mockResolvedValue(overrides?.superuser === undefined ? { id: "usr-1" } : overrides.superuser),
+        findUnique: vi.fn().mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] }),
       },
       assuranceRun: {
         create: vi.fn().mockImplementation(async (args: { data: unknown }) => {
@@ -207,7 +217,7 @@ describe("coworker certification runner (EP-COWORKER-LIFECYCLE Phase 2)", () => 
   });
 
   it("reopens a previously resolved finding instead of duplicating it", async () => {
-    const journeyId = "coo/derived-read-probe";
+    const journeyId = COO_JOURNEY_ID;
     const { deps, created, updates } = makeDeps({
       loopContent: "Done! Everything has been updated successfully.",
       executedTools: [],
@@ -281,7 +291,7 @@ describe("governed ToolExecution evidence union (BI-68BBF206, native-mcp dispatc
     expect(deps.fetchToolEvidence).toHaveBeenCalled();
     const call = (deps.fetchToolEvidence as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     // Thread naming observed live: certification:<agentId>/<journeyId>.
-    expect(call.threadId).toBe("certification:coo/derived-read-probe");
+    expect(call.threadId).toBe(`certification:${COO_JOURNEY_ID}`);
     expect(call.agentId).toBe("coo");
     expect(call.since).toBeInstanceOf(Date);
     expect(call.until).toBeInstanceOf(Date);
@@ -534,5 +544,22 @@ describe("certification state derivation", () => {
     expect(states.get("b")?.status).toBe("failed");
     expect(states.get("c")?.status).toBe("stale");
     expect(states.get("d")?.status).toBe("never");
+  });
+});
+
+// BI-87AE4BF6: certification runs as the portfolio-aligned owner, never the
+// oldest superuser, and with that person's real permissions.
+describe("certification identity", () => {
+  it("runs as whoever the scheduled-work owner lookup returns", async () => {
+    const { resolveCertificationUserContext } = await import("./certification-runner");
+    const db = { user: { findUnique: vi.fn().mockResolvedValue({ isActive: true, isSuperuser: false, groups: [{ platformRole: { roleId: "HR-300" } }] }) } };
+    const ctx = await resolveCertificationUserContext(db as never, async () => "u-mark");
+    expect(ctx).toEqual({ userId: "u-mark", platformRole: "HR-300", isSuperuser: false });
+  });
+
+  it("returns null when no owner can be resolved", async () => {
+    const { resolveCertificationUserContext } = await import("./certification-runner");
+    const ctx = await resolveCertificationUserContext({ user: { findUnique: vi.fn() } } as never, async () => { throw new Error("none"); });
+    expect(ctx).toBeNull();
   });
 });

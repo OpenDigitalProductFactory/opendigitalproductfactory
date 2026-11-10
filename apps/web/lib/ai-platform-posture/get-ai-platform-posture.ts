@@ -27,6 +27,7 @@
 import { prisma } from "@dpf/db";
 import { getTokenSpendByProvider, getTokenSpendByAgent } from "@/lib/inference/ai-provider-data";
 import { providerFromEndpoint } from "@/lib/ai-operations-map/projection-helpers";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type AiPlatformPostureOptions = {
   /** Lookback window, in hours, for the failover-chain and agent-assignment signals. Default 24, max 168 (7 days). */
@@ -117,6 +118,18 @@ export type AiPlatformPostureScheduledTasks = {
   counts: { activeAgentTasks: number; failingAgentTasks: number; enabledJobs: number; failingJobs: number };
 };
 
+/**
+ * BI-7F2FBDA3: a production coworker whose capability floor + residency has NO
+ * eligible endpoint right now. An empty list is an honest zero; a non-empty one
+ * is the alarm that would have fired days before the 2026-09-07 reviewer outage.
+ */
+export type AiPlatformPostureUnroutableFloor = {
+  agentId: string;
+  displayName: string;
+  sensitivity: string;
+  reason: string;
+};
+
 export type AiPlatformPosture = {
   generatedAt: string;
   windowHours: number;
@@ -126,11 +139,64 @@ export type AiPlatformPosture = {
   failoverChain: AiPlatformPostureFailover;
   agentProviderAssignments: AiPlatformPostureAssignment[];
   scheduledTasks: AiPlatformPostureScheduledTasks;
+  unroutableFloors: AiPlatformPostureUnroutableFloor[];
 };
+
+export type ScheduledAgentTaskPosture = {
+  generatedAt: string;
+  scope: "scheduled-task";
+  requestedTaskId: string;
+  found: boolean;
+  scheduledTask: AiPlatformPostureScheduledTasks["agentTasks"][number] | null;
+  truncation: { agentId: boolean; title: boolean; lastStatus: boolean; lastError: boolean };
+};
+
+/** Same platform-wide status authority as the full reader, without its unrelated queries. */
+export async function loadScheduledAgentTaskPosture(taskId: string): Promise<ScheduledAgentTaskPosture> {
+  const task = await prisma.scheduledAgentTask.findUnique({
+    where: { taskId },
+    select: { taskId: true, agentId: true, title: true, isActive: true, nextRunAt: true, lastStatus: true, lastError: true },
+  });
+  // These existing free-form status fields can include returned coworker text.
+  // Bound their serialized projection; do not interpret it as run settlement.
+  const limits = { agentId: 200, title: 300, lastStatus: 100, lastError: 4_000 };
+  return {
+    generatedAt: new Date().toISOString(),
+    scope: "scheduled-task",
+    requestedTaskId: taskId,
+    found: task !== null,
+    scheduledTask: task ? {
+      taskId: task.taskId,
+      agentId: task.agentId.slice(0, limits.agentId),
+      title: task.title.slice(0, limits.title),
+      isActive: task.isActive,
+      nextRunAt: task.nextRunAt?.toISOString() ?? null,
+      lastStatus: task.lastStatus?.slice(0, limits.lastStatus) ?? null,
+      lastError: task.lastError?.slice(0, limits.lastError) ?? null,
+    } : null,
+    truncation: {
+      agentId: (task?.agentId.length ?? 0) > limits.agentId,
+      title: (task?.title.length ?? 0) > limits.title,
+      lastStatus: (task?.lastStatus?.length ?? 0) > limits.lastStatus,
+      lastError: (task?.lastError?.length ?? 0) > limits.lastError,
+    },
+  };
+}
 
 const ROUTE_ROW_LIMIT = 500;
 const RECENT_FALLBACK_CHAIN_SAMPLE = 10;
 const MAX_WINDOW_HOURS = 168;
+
+
+async function loadUnroutableFloors(): Promise<Array<{ agentId: string; displayName: string; sensitivity: string; ready: boolean; reason: string }>> {
+  try {
+    const { computeCoworkerRoutingReachability } = await import("@/lib/coworker-service-catalog/routing-reachability-preflight");
+    return await computeCoworkerRoutingReachability();
+  } catch (error) {
+    console.warn(`[ai-platform-posture] reachability unavailable: ${getErrorMessage(error)}`);
+    return [];
+  }
+}
 
 export async function loadAiPlatformPosture(
   options?: AiPlatformPostureOptions,
@@ -400,6 +466,12 @@ export async function loadAiPlatformPosture(
     },
   };
 
+  // BI-7F2FBDA3: the routing preflight already knows which production coworkers
+  // cannot route at all; surface that here so the posture is honest about it.
+  const unroutableFloors: AiPlatformPostureUnroutableFloor[] = (await loadUnroutableFloors())
+    .filter((row) => !row.ready)
+    .map((row) => ({ agentId: row.agentId, displayName: row.displayName, sensitivity: row.sensitivity, reason: row.reason }));
+
   return {
     generatedAt: now.toISOString(),
     windowHours,
@@ -409,5 +481,6 @@ export async function loadAiPlatformPosture(
     failoverChain,
     agentProviderAssignments,
     scheduledTasks,
+    unroutableFloors,
   };
 }

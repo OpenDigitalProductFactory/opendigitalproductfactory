@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const mockExecInSandbox = vi.hoisted(() => vi.fn());
+vi.mock("./sandbox", () => ({ execInSandbox: mockExecInSandbox }));
 
 import {
   diagnoseSandboxReadiness,
+  inspectSandboxGit,
   normalizeSandboxPathForComparison,
   type SandboxAdminDb,
   type SandboxGitProbe,
@@ -173,5 +177,52 @@ describe("diagnoseSandboxReadiness", () => {
     expect(snapshot.canDeploy).toBe(false);
     expect(snapshot.recommendedActions.map((item) => item.action)).toContain("reset_build_phase");
     expect(snapshot.summary).toMatch(/finished without a releasable diff/i);
+  });
+});
+
+// BI-5C4933EB: with per-build worktree isolation the shared /workspace stays on
+// client/<uuid>; the build's branch lives in /workspace/.builds/<buildId>.
+describe("inspectSandboxGit", () => {
+  const originalIsolation = process.env.DPF_BUILD_WORKTREE_ISOLATION;
+  afterEach(() => {
+    mockExecInSandbox.mockReset();
+    if (originalIsolation === undefined) delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    else process.env.DPF_BUILD_WORKTREE_ISOLATION = originalIsolation;
+  });
+
+  const probeOutput = (branch: string) => `branch=${branch}\nheadSha=a\nheadTreeSha=t\ntargetSha=b\ntargetTreeSha=t\ndirty=false\n`;
+
+  it("probes the build's own worktree when isolation is on", async () => {
+    delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    mockExecInSandbox.mockResolvedValue(probeOutput("build/BI-123"));
+
+    const probe = await inspectSandboxGit("sandbox-container-1", makeBuild());
+
+    const command = mockExecInSandbox.mock.calls[0]?.[1] as string;
+    expect(command).toContain("cd '/workspace/.builds/BI-123'");
+    expect(probe.branchName).toBe("build/BI-123");
+    expect(probe.sourceCurrencyStatus).toBe("current");
+  });
+
+  it("probes the shared /workspace when isolation is off", async () => {
+    process.env.DPF_BUILD_WORKTREE_ISOLATION = "0";
+    mockExecInSandbox.mockResolvedValue(probeOutput("build/BI-123"));
+
+    const probe = await inspectSandboxGit("sandbox-container-1", makeBuild());
+
+    const command = mockExecInSandbox.mock.calls[0]?.[1] as string;
+    expect(command).toContain("cd '/workspace'");
+    expect(command).not.toContain(".builds");
+    expect(probe.branchName).toBe("build/BI-123");
+  });
+
+  it("reports a missing build worktree as no branch, not as the recorded branch", async () => {
+    delete process.env.DPF_BUILD_WORKTREE_ISOLATION;
+    mockExecInSandbox.mockResolvedValue("reason=build-worktree-missing\n");
+
+    const probe = await inspectSandboxGit("sandbox-container-1", makeBuild());
+
+    expect(probe.branchName).toBeNull();
+    expect(probe.sourceCurrencySummary).toMatch(/worktree .*missing/i);
   });
 });

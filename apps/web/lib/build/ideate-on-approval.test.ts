@@ -8,10 +8,11 @@ const { mockPrisma } = vi.hoisted(() => ({
   },
 }));
 
-const { mockDispatchIdeateResearch, mockGetBuildStudioConfig, mockExecuteTool } = vi.hoisted(() => ({
+const { mockDispatchIdeateResearch, mockGetBuildStudioConfig, mockExecuteTool, mockReleaseUnfinishedBuildPhaseRun } = vi.hoisted(() => ({
   mockDispatchIdeateResearch: vi.fn(),
   mockGetBuildStudioConfig: vi.fn(),
   mockExecuteTool: vi.fn(),
+  mockReleaseUnfinishedBuildPhaseRun: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
@@ -19,6 +20,16 @@ vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 vi.mock("./ideate-dispatch", () => ({
   dispatchIdeateResearch: mockDispatchIdeateResearch,
 }));
+
+vi.mock("./build-phase-run", () => ({
+  startBuildPhaseRun: vi.fn().mockResolvedValue(undefined),
+  releaseUnfinishedBuildPhaseRun: mockReleaseUnfinishedBuildPhaseRun,
+}));
+
+// BI-0B95D268: the infrastructure retry waits for the sandbox container; the
+// test answers "running" immediately so the wait returns on its first poll.
+vi.mock("./sandbox/sandbox", () => ({ isSandboxRunning: async () => true }));
+vi.mock("./sandbox/agent-cli-runtime", () => ({ SANDBOX_CONTAINER: "dpf-sandbox-test" }));
 
 vi.mock("@/lib/build/build-studio-config", () => ({
   getBuildStudioConfig: mockGetBuildStudioConfig,
@@ -44,6 +55,7 @@ import {
   dispatchApprovedIdeateBuilds,
   dispatchDesignReviewFixLoop,
   DESIGN_FIX_MAX_ROUNDS,
+  fixDiagnosisProblem,
 } from "./ideate-on-approval";
 
 function engineSelection(
@@ -238,6 +250,54 @@ describe("dispatchIdeateForApprovedBuild", () => {
     expect(mockExecuteTool).toHaveBeenCalledTimes(2);
   });
 
+  it("re-runs the SAME engine once after an infrastructure kill, once the sandbox is back (BI-0B95D268)", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({ originatingBacklogItemId: "cmpcuid1", designDoc: null, title: "T", description: "D" })
+      .mockResolvedValueOnce({ designDoc: { problemStatement: "P" } });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body.", effortSize: "medium", workType: "bug" });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "claude",
+      claudeProviderId: "anthropic-sub",
+      codexProviderId: "codex",
+      grokProviderId: "",
+      opencodeProviderId: "",
+      claudeModel: "sonnet",
+      codexModel: "",
+      grokModel: "",
+      opencodeModel: "",
+      selection: engineSelection("claude", "anthropic-sub", [{ engine: "codex", providerId: "codex" }]),
+    });
+    mockDispatchIdeateResearch
+      .mockResolvedValueOnce({ success: false, designDoc: null, rawOutput: "", durationMs: 17_300, infrastructure: true, error: "claude engine process was killed or lost its runtime (exit 137) — an infrastructure failure, not a model verdict." })
+      .mockResolvedValueOnce({ success: true, designDoc: { problemStatement: "P" }, rawOutput: "{}", durationMs: 5 });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
+
+    expect(outcome.kind).toBe("dispatched-success");
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledTimes(2);
+    expect(mockDispatchIdeateResearch).toHaveBeenNthCalledWith(2, expect.objectContaining({ dispatchEngine: "claude", providerId: "anthropic-sub" }));
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ summary: expect.stringMatching(/infrastructure failure, not a model verdict/i) }),
+    }));
+  });
+
+  it("does not retry an infrastructure kill more than once", async () => {
+    mockPrisma.featureBuild.findUnique
+      .mockResolvedValueOnce({ originatingBacklogItemId: "cmpcuid1", designDoc: null, title: "T", description: "D" });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body.", effortSize: "medium", workType: "bug" });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "claude", claudeProviderId: "anthropic-sub", codexProviderId: "", grokProviderId: "", opencodeProviderId: "",
+      claudeModel: "sonnet", codexModel: "", grokModel: "", opencodeModel: "",
+      selection: engineSelection("claude", "anthropic-sub", []),
+    });
+    mockDispatchIdeateResearch.mockResolvedValue({ success: false, designDoc: null, rawOutput: "", durationMs: 10, infrastructure: true, error: "killed (exit 137)" });
+
+    const outcome = await dispatchIdeateForApprovedBuild({ buildId: "FB-X", userId: "u-1" });
+    expect(outcome.kind).toBe("dispatched-failure");
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledTimes(2);
+  });
+
   it("dispatches research and saves designDoc evidence on the happy path", async () => {
     // 2026-05-24: originatingBacklogItemId is a FK to BacklogItem.id (cuid),
     // not BacklogItem.itemId (BI-XXXXX semantic id). Use a cuid-shaped value
@@ -308,6 +368,7 @@ describe("dispatchIdeateForApprovedBuild", () => {
       "u-1",
       expect.any(Object),
     );
+    expect(mockReleaseUnfinishedBuildPhaseRun).not.toHaveBeenCalled();
     // Selection evidence, the dispatch log, and the saved success are visible.
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledTimes(3);
   });
@@ -332,6 +393,7 @@ describe("dispatchIdeateForApprovedBuild", () => {
 
     expect(outcome.kind).toBe("dispatched-failure");
     expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockReleaseUnfinishedBuildPhaseRun).toHaveBeenCalledWith("FB-X", "ideate");
   });
 
   it("returns dispatched-failure when saveBuildEvidence rejects", async () => {
@@ -547,6 +609,18 @@ describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
     expect(mockDispatchIdeateResearch).not.toHaveBeenCalled();
   });
 
+  // BI-A9C8DA0E: the diagnosis loop only read brief.problem / brief.summary, and
+  // none of the 16 fix builds on the dev install had either — so it never ran and
+  // every fix escalated at round 0 (FB-AA30F66E). The problem statement lives in
+  // the tee-up's fixContext.actual (the item body) and ideate's problemStatement.
+  it("finds the problem to diagnose where fix builds actually carry it", () => {
+    expect(fixDiagnosisProblem({ problem: " P " }, null)).toBe("P");
+    expect(fixDiagnosisProblem({ fixContext: { actual: "the body" } }, { problemStatement: "PS" })).toBe("the body");
+    expect(fixDiagnosisProblem({ fixContext: {} }, { problemStatement: "from ideate" })).toBe("from ideate");
+    expect(fixDiagnosisProblem(null, null)).toBe("");
+    expect(fixDiagnosisProblem({ fixContext: { actual: "   " } }, { problemStatement: "" })).toBe("");
+  });
+
   it("escalates a fix build directly — regenerating the designDoc cannot fill a missing fix diagnosis", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValue({
       id: "ck2", title: "Bug fix", kind: "fix", originatingBacklogItemId: null,
@@ -602,6 +676,49 @@ describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
     // later round can land on an engine that works.
     expect(res.rounds).toBe(DESIGN_FIX_MAX_ROUNDS);
     // The build is NOT abandoned and the backlog item is NOT deferred.
+    expect(mockEscalate).not.toHaveBeenCalled();
+  });
+
+  // BI-3E57890E: the independent reviewer failed a plan-phase design that Build
+  // Studio's own review passed. The loop takes the reviewer's findings as its
+  // input and saves the revision even though the build is in plan.
+  it("revises a design from an independent review's findings although its own review passed", async () => {
+    const designFields = { id: "ck4", title: "Forge outbox", kind: "fix", originatingBacklogItemId: "cmpcuid1",
+      designReview: { decision: "pass", issues: [] }, designDoc: { problemStatement: "Old" } };
+    mockPrisma.featureBuild.findUnique.mockImplementation(async (args: { select?: Record<string, boolean> }) => {
+      const select = args?.select ?? {};
+      if (select.kind) return designFields;
+      if (select.originatingBacklogItemId) return { originatingBacklogItemId: "cmpcuid1", designDoc: designFields.designDoc, title: "T", description: "D" };
+      if (select.designReview) return { designReview: { decision: "pass", issues: [] } };
+      return { designDoc: { problemStatement: "Revised" } };
+    });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body.", effortSize: "medium", workType: "bug" });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "claude", claudeProviderId: "anthropic-sub", codexProviderId: "", grokProviderId: "", opencodeProviderId: "",
+      claudeModel: "sonnet", codexModel: "", grokModel: "", opencodeModel: "",
+      selection: engineSelection("claude", "anthropic-sub"),
+    });
+    mockDispatchIdeateResearch.mockResolvedValue({ success: true, designDoc: { problemStatement: "Revised" }, rawOutput: "{}", durationMs: 5 });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    const res = await dispatchDesignReviewFixLoop({
+      buildId: "FB-IR", userId: "u-1",
+      failedReview: { decision: "fail", issues: [{ severity: "important", description: "[spec-approval] No per-class retry budget." }] },
+    });
+
+    expect(res).toMatchObject({ kind: "repaired", rounds: 1 });
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledWith(expect.objectContaining({
+      userContext: expect.stringContaining("No per-class retry budget."),
+    }));
+    expect(mockExecuteTool).toHaveBeenCalledWith(
+      "saveBuildEvidence",
+      expect.objectContaining({ buildId: "FB-IR", field: "designDoc" }),
+      "u-1",
+      expect.objectContaining({ allowPlanPhaseDesignRevision: true }),
+    );
+    // The build stays in plan: the finished ideate phase run is not reopened.
+    const { startBuildPhaseRun } = await import("./build-phase-run");
+    expect(startBuildPhaseRun).not.toHaveBeenCalled();
     expect(mockEscalate).not.toHaveBeenCalled();
   });
 

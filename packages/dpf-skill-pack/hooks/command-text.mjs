@@ -29,18 +29,31 @@ function unquote(quoted) {
   return q === '"' ? body.replace(/\\(.)/g, "$1") : body;
 }
 
-function stripHeredocBodies(command) {
+export function shellCommandPayloads(command, isExecutable = () => true) {
+  return [...command.matchAll(SHELL_C_PAYLOAD_RE)]
+    .filter((match) => isExecutable(match.index))
+    .map((match) => unquote(match[1]));
+}
+
+// Root filesystem guards preserve shell-fed bodies: unlike evidence data,
+// those bodies really execute. Existing pattern guards retain their default.
+export function stripHeredocBodies(command, keepBody = () => false) {
   const lines = command.split("\n");
   const out = [];
   let terminator = null;
+  let preserve = false;
   for (const line of lines) {
     if (terminator !== null) {
       if (line.trim() === terminator) terminator = null;
+      else if (preserve) out.push(line);
       continue;
     }
     const heredoc = /<<-?\s*(?:'(\w+)'|"(\w+)"|(\w+))/.exec(line);
     out.push(line);
-    if (heredoc) terminator = heredoc[1] ?? heredoc[2] ?? heredoc[3];
+    if (heredoc) {
+      terminator = heredoc[1] ?? heredoc[2] ?? heredoc[3];
+      preserve = keepBody(line);
+    }
   }
   return out.join("\n");
 }
@@ -78,8 +91,8 @@ export function executableCommandText(command, depth = 0) {
   if (typeof command !== "string" || command === "") return "";
   const payloads = [];
   if (depth < 2) {
-    for (const match of command.matchAll(SHELL_C_PAYLOAD_RE)) {
-      payloads.push(executableCommandText(unquote(match[1]), depth + 1));
+    for (const payload of shellCommandPayloads(command)) {
+      payloads.push(executableCommandText(payload, depth + 1));
     }
   }
   const stripped = stripQuotedSegments(stripHeredocBodies(command));

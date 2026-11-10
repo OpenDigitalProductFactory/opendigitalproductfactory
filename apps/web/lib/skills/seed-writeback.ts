@@ -55,7 +55,7 @@ export function writeSkillSeed(
   skillId: string,
   content: string,
 ): SkillSeedWriteResult {
-  if (!existsSync(repoRoot())) {
+  if (!existsSync(/*turbopackIgnore: true*/ repoRoot())) {
     return {
       status: "repo-unavailable",
       path: null,

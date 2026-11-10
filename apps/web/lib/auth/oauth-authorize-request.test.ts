@@ -70,11 +70,15 @@ describe("happy path", () => {
     expect(r.request.redirectUri).toBe(REDIRECT);
   });
 
-  it("defaults to the advertised read floor when no scope is requested", async () => {
+  // A client that names no scope gets the advertised floor, which is now the
+  // development set (BI-CE5F8C0A). Grok is why this matters: it derives its
+  // request from the challenge and has no scope setting of its own, so this
+  // default is the only scope it can ever obtain.
+  it("defaults to the advertised development floor when no scope is requested", async () => {
     const r = await parseAuthorizeRequest(params({ scope: null }), ORIGIN);
     expect(r.valid).toBe(true);
     if (!r.valid) return;
-    expect(r.request.scopes).toEqual(["dpf.read"]);
+    expect(r.request.scopes).toEqual(["dpf.read", "dpf.work", "dpf.build"]);
   });
 
   it("defaults resource to the canonical URI when the client omits it", async () => {

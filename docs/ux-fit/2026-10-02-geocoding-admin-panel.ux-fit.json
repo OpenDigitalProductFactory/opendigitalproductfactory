@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "inline-provider-select-default-none",
+  "decisionInteractionId": "DI-298A3A9D2825",
+  "scope": {
+    "files": [
+      "apps/web/components/customer/map/GeocodingAdminPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-provider-select-default-none",
+      "auto-geocode-on-by-default",
+      "settings-page-elsewhere"
+    ]
+  }
+}

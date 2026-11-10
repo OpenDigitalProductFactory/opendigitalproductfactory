@@ -11,7 +11,7 @@
 
 import type { TwinValueStreamBinding } from "@dpf/storefront-templates";
 
-import type { TwinStageFlow } from "@/components/twin/snapshot";
+import type { TwinStageFlow } from "./twin-snapshot";
 
 export interface StageDemand {
   count: number;
@@ -48,6 +48,7 @@ export function buildStageFlow(
       order: s.order,
       loadBearing: s.loadBearing,
       observable: s.queueKeys.length > 0 || s.zoneKeys.length > 0,
+      inherited: s.inherited,
       count: d?.count ?? 0,
       ...(d?.longestWaitMs && d.longestWaitMs > 0 ? { longestWait: fmtWait(d.longestWaitMs) } : {}),
     };

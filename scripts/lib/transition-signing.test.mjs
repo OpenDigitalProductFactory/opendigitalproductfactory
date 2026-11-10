@@ -5,11 +5,61 @@ import test from "node:test";
 import {
   canonicalTransitionPayload,
   signTransitionPayload,
+  verifyTransitionSignature,
   issueSelfSignedMigrationEnvelope,
   verifyInstallStateMigrationEnvelope,
+  prepareRuntimeReconciliationIntent,
 } from "./transition-signing.mjs";
+import { computeCapabilityStateVersion } from "./capability-state-hash.mjs";
 
 const secret = "s".repeat(32);
+const reconciliationCatalog = { catalogHash: "a".repeat(64), capabilityIds: ["runtime:core", "runtime:build", "runtime:local-ai"] };
+function reconciliationIntent() {
+  return {
+    observedHost: { schemaVersion: 2, installerVersion: "fixture", platform: "win32", arch: "amd64",
+      capabilityCatalogHash: reconciliationCatalog.catalogHash,
+      capabilityStateVersion: computeCapabilityStateVersion(reconciliationCatalog.catalogHash, ["runtime:core"], reconciliationCatalog.capabilityIds),
+      enabledRuntimeCapabilities: ["runtime:core"] },
+    observedDatabaseStates: { "runtime:core": "active", "runtime:build": "active", "runtime:local-ai": "operator-paused" },
+    desiredHostEnabledKeys: ["runtime:core"], desiredDatabaseStates: { "runtime:core": "active", "runtime:build": "disabled", "runtime:local-ai": "operator-paused" },
+    touchedKeys: ["runtime:build"],
+  };
+}
+test("shared reconciliation preserves complete independent baselines and unknown untouched states", () => {
+  const input = reconciliationIntent();
+  const prepared = prepareRuntimeReconciliationIntent(input, reconciliationCatalog);
+  assert.equal(prepared.observedDatabaseStates["runtime:build"], "active");
+  assert.equal(prepared.desiredDatabaseStates["runtime:build"], "disabled");
+  assert.equal(prepared.desiredDatabaseStates["runtime:local-ai"], "operator-paused");
+  assert.deepEqual(prepared.residualDriftKeys, ["runtime:local-ai"]);
+  input.observedHost.enabledRuntimeCapabilities.push("runtime:build");
+  input.desiredDatabaseStates["runtime:build"] = "active";
+  input.touchedKeys.push("runtime:local-ai");
+  assert.deepEqual(prepared.observedHost.enabledRuntimeCapabilities, ["runtime:core"]);
+  assert.equal(prepared.desiredDatabaseStates["runtime:build"], "disabled");
+  assert.deepEqual(prepared.touchedKeys, ["runtime:build"]);
+});
+test("shared reconciliation owns nested host metadata used by the signed full snapshot", () => {
+  const input = reconciliationIntent();
+  input.observedHost.composeFiles = ["docker-compose.yml"];
+  const prepared = prepareRuntimeReconciliationIntent(input, reconciliationCatalog);
+  input.observedHost.composeFiles.push("later-overlay.yml");
+  assert.deepEqual(prepared.observedHost.composeFiles, ["docker-compose.yml"]);
+});
+for (const [name, mutate, error] of [
+  ["untouched change", input => { input.desiredDatabaseStates["runtime:local-ai"] = "disabled"; }, "reconciliation_untouched_state_changed"],
+  ["incomplete map", input => { delete input.observedDatabaseStates["runtime:local-ai"]; }, "reconciliation_database_map_invalid"],
+  ["extra key", input => { input.desiredDatabaseStates["runtime:unknown"] = "active"; }, "reconciliation_database_map_invalid"],
+  ["managed unknown", input => { input.desiredDatabaseStates["runtime:build"] = "unproven"; }, "reconciliation_managed_state_invalid"],
+  ["stale host", input => { input.observedHost.capabilityStateVersion = "f".repeat(64); }, "reconciliation_host_baseline_invalid"],
+  ["duplicate scope", input => { input.touchedKeys.push("runtime:build"); }, "reconciliation_touched_keys_invalid"],
+  ["unknown desired host", input => { input.desiredHostEnabledKeys.push("runtime:unknown"); }, "reconciliation_desired_host_invalid"],
+]) {
+  test(`shared reconciliation refuses ${name} before producing an intent`, () => {
+    const input = reconciliationIntent(); mutate(input);
+    assert.throws(() => prepareRuntimeReconciliationIntent(input, reconciliationCatalog), new RegExp(error));
+  });
+}
 const envelope = {
   version: 1,
   kind: "install-state-migration",
@@ -23,6 +73,53 @@ const envelope = {
   hostIdentity: { platform: "win32", arch: "amd64", provenance: "explicit" },
   promoterDigest: `sha256:${"c".repeat(64)}`,
 };
+
+const reconciliation = {
+  version: 2, kind: "runtime-capability-transition", transitionId: "RCT-reconcile",
+  observedHost: { enabledKeys: ["runtime:core"], stateHash: "a".repeat(64) },
+  observedDatabase: { "runtime:core": "active", "runtime:build": "active" },
+  desiredHostKeys: ["runtime:build", "runtime:core"],
+  desiredDatabase: { "runtime:core": "active", "runtime:build": "active" },
+  touchedKeys: ["runtime:build"], observedHealth: { sandbox: "unhealthy" },
+};
+
+test("version 2 authenticates nested health, baselines and desired results", () => {
+  const signature = signTransitionPayload(reconciliation, secret);
+  const mutations = [
+    { ...reconciliation, observedHealth: { sandbox: "healthy" } },
+    { ...reconciliation, observedHost: { ...reconciliation.observedHost, stateHash: "b".repeat(64) } },
+    { ...reconciliation, observedDatabase: { ...reconciliation.observedDatabase, "runtime:build": "disabled" } },
+    { ...reconciliation, desiredDatabase: { ...reconciliation.desiredDatabase, "runtime:build": "disabled" } },
+    { ...reconciliation, desiredHostKeys: ["runtime:core"] },
+    { ...reconciliation, touchedKeys: ["runtime:core"] },
+  ];
+  for (const mutation of mutations) {
+    assert.notEqual(signTransitionPayload(mutation, secret), signature);
+    assert.throws(() => verifyTransitionSignature(mutation, signature, secret), /tampered/);
+  }
+});
+
+test("version 2 canonicalization is independent of nested object insertion order", () => {
+  const reordered = Object.fromEntries(Object.entries(reconciliation).reverse());
+  reordered.observedHost = Object.fromEntries(Object.entries(reconciliation.observedHost).reverse());
+  reordered.observedDatabase = Object.fromEntries(Object.entries(reconciliation.observedDatabase).reverse());
+  assert.equal(signTransitionPayload(reordered, secret), signTransitionPayload(reconciliation, secret));
+});
+
+test("unknown runtime signing versions refuse rather than falling back to legacy bytes", () => {
+  for (const version of [0, 3, "2", null]) {
+    assert.throws(() => signTransitionPayload({ ...reconciliation, version }, secret), /unsupported_runtime_transition_version/);
+  }
+});
+
+test("version 2 refuses a missing or wrong kind before signing nested health", () => {
+  for (const kind of [undefined, null, "", "unknown-transition"]) {
+    const value = { ...reconciliation, kind };
+    if (kind === undefined) delete value.kind;
+    assert.throws(() => signTransitionPayload(value, secret), /unsupported_runtime_transition_kind/);
+    assert.throws(() => canonicalTransitionPayload(value), /unsupported_runtime_transition_kind/);
+  }
+});
 
 test("shared signing preserves the existing sorted top-level JSON/HMAC bytes", () => {
   const legacy = { version: 1, transitionId: "RCT-test", issuedAt: "a", expiresAt: "b", previousKeys: ["runtime:core"] };

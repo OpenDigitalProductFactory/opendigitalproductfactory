@@ -13,6 +13,7 @@ export {
   defaultVisibleHtml,
   extractSubtrees,
   isDisclosureRegion,
+  isLiveRegion,
   isStructurallyHidden,
   leadBandHtml,
   removeSubtrees,
@@ -62,6 +63,7 @@ export {
   type DraftPurposeRecord,
   type PagePurposeContract,
   type PagePurposeRegistry,
+  type PurposeContractModule,
   type PurposeContractSource,
   type QuarantinedPurposeRecord,
   type RatifiedPurposeContract,
@@ -72,7 +74,6 @@ export {
 export {
   PURPOSE_CONTRACT_SOURCES,
   buildPurposeContractSourceIndex,
-  type PurposeContractModule,
 } from "./purpose-contracts";
 
 export {

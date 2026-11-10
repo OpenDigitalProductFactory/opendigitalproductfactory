@@ -1,7 +1,7 @@
 {
   "version": "1",
   "accountableOwner": "data-steward",
-  "affectedCopies": ["qdrant:agent-memory"],
+  "affectedCopies": ["pgvector:agent-memory"],
   "migration": { "name": "20260717120000_add_widget", "backfill": "none — new table" },
   "tests": ["lib/govern/data/coverage.live.test.ts"],
   "changes": [
@@ -29,8 +29,8 @@
     },
     {
       "kind": "projection",
-      "store": "qdrant:widget-index",
-      "derivedContractId": "new-widget->qdrant-widget-index",
+      "store": "pgvector:widget-index",
+      "derivedContractId": "new-widget->pgvector-widget-index",
       "cleanupTest": "lib/widgets/widget-cleanup.test.ts",
       "reconciliationTest": "lib/widgets/widget-reconcile.test.ts"
     },

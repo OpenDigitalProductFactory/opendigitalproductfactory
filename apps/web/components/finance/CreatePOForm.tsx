@@ -25,7 +25,7 @@ interface Supplier {
 interface Props {
   suppliers: Supplier[];
   defaultSupplierId?: string;
-  defaultCurrency?: string;
+  defaultCurrency: string;
   /** Org default line-item tax rate (%). 0 for AP (mirrors bills); operator sets per line. */
   defaultTaxRate?: number;
 }
@@ -40,7 +40,7 @@ export function CreatePOForm({ suppliers, defaultSupplierId, defaultCurrency, de
   const [error, setError] = useState<string | null>(null);
 
   const [selectedSupplierId, setSelectedSupplierId] = useState(defaultSupplierId ?? "");
-  const [currency, setCurrency] = useState(defaultCurrency ?? "GBP");
+  const [currency, setCurrency] = useState(defaultCurrency);
   const [deliveryDate, setDeliveryDate] = useState("");
   const [terms, setTerms] = useState("");
   const [notes, setNotes] = useState("");

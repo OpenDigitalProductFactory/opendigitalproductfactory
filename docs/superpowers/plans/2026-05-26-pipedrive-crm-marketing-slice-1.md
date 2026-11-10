@@ -1,6 +1,11 @@
+---
+status: superseded
+supersededBy: docs/superpowers/audits/2026-06-06-customer-crm-marketing-ux-reconciliation.md
+---
+
 # Pipedrive CRM Marketing Slice 1 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** This is a historical plan. Do not execute unchecked boxes directly. For remaining CRM/marketing work, use the DPF-native path: one backlog item, one branch, one PR; run `dpf-ux-fit-review` before UI changes, use `dpf-tdd` for implementation, run the local merge/pregate checks that the workroom impact contract requires, and use `dpf-pr-with-dco` for handoff.
 
 > **2026-06-06 reconciliation status:** Do not execute this plan task-by-task from the unchecked boxes below. `origin/main` already contains the Slice 1 substrate and follow-on customer CRM/marketing surfaces: CRM presentation metadata, `RevenueCockpit`, `CustomerMetricTile`, `CustomerStatusBadge`, pipeline inspector, acquisition signal routing, real marketing Campaigns/Funnel/Automation subroutes, and guided coworker launch boundaries. The current reconciliation artifact is `docs/superpowers/audits/2026-06-06-customer-crm-marketing-ux-reconciliation.md`. Remaining product work is tracked as `BI-D8E00326` (CRM marketing Slice 5: agentic sales and marketing operations).
 

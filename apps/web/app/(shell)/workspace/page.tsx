@@ -6,15 +6,19 @@ import { prisma } from "@dpf/db";
 import { PlatformWorkspaceHome } from "@/components/workspace-home/PlatformWorkspaceHome";
 import { VerticalWorkspaceHome } from "@/components/workspace-home/VerticalWorkspaceHome";
 import { OperatorCockpit } from "@/components/workspace-home/OperatorCockpit";
+import { MainStreamHero } from "@/components/workspace-home/MainStreamHero";
 import { WorkspaceStorefrontAttention } from "@/components/owner-first/WorkspaceStorefrontAttention";
 import { WorkspaceTwinHero } from "@/components/workspace-home/WorkspaceTwinHero";
 import { resolveCloudProviderReadiness } from "@/lib/inference/cloud-provider-readiness";
 import { CloudProviderUnclearedNotice } from "@/components/workspace-home/CloudProviderUnclearedNotice";
 import { LocalOnlyProviderNotice } from "@/components/workspace-home/LocalOnlyProviderNotice";
 import { UnconfiguredWorkspaceHomeNotice } from "@/components/workspace-home/UnconfiguredWorkspaceHomeNotice";
+import { RescueWorkspaceEntry } from "@/components/animal-welfare/RescueWorkspaceEntry";
 import { loadPlatformWorkspaceHomeData } from "@/lib/workspace-home/platform-loader";
 import { resolveWorkspaceHomeContribution } from "@/lib/workspace-home/registry";
 import { loadWorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
+import { loadCustomerMap } from "@/lib/crm/customer-map.server";
+import { getT } from "@/lib/i18n/t.server";
 import { recordWorkspaceHomeResolution } from "@/lib/workspace-home/telemetry";
 import {
   isSimpleNavMode,
@@ -47,8 +51,19 @@ export default async function WorkspacePage() {
   const twinPresentation = await loadWorkspaceTwinPresentation(
     archetypeRef?.archetypeId ?? null,
     archetypeRef?.name ?? null,
+    { viewer: session.user },
   );
   const restaurantShift = Boolean(twinPresentation?.restaurantFloor);
+
+  // BI-560128FB: homes whose archetype declares a customer-map slot link it to
+  // the customer map with counts, instead of adding a panel (DI-2D2929A12ABC).
+  const customerMapCounts =
+    workspaceHomeResolution.mode === "vertical" &&
+    workspaceHomeResolution.contribution.components.some((component) => component.key === "customer-map")
+      ? await Promise.all([loadCustomerMap(), getT("customerMap")]).then(([map, t]) =>
+          t("homeCounts", { placed: map.placedCount, missing: map.unplaced.length }),
+        )
+      : null;
 
   // BI-575F0046: counting active non-local providers reported a fresh install as
   // HAVING cloud AI the moment one was connected — while its clearance was
@@ -103,6 +118,9 @@ export default async function WorkspacePage() {
       {workspaceHomeResolution.mode !== "unconfigured" && cloudReadiness.state === "public-only" && (
         <CloudProviderUnclearedNotice providerNames={cloudReadiness.providerNames} />
       )}
+      {workspaceHomeResolution.mode === "vertical" && workspaceHomeResolution.contribution.id === "home-pet-rescue" ? (
+        <RescueWorkspaceEntry />
+      ) : null}
       {twinPresentation ? (
         // Operator-confirmed placement (parent spec §9 option c): the operational
         // twin is the main workspace view, a dedicated hero with the cockpit folded
@@ -117,20 +135,25 @@ export default async function WorkspacePage() {
           }
           density={simpleHome ? "simple" : "full"}
           platformBody={
-            <PlatformWorkspaceHome
-              data={platformHomeData}
-              heading="All workspace areas"
-              density="simple"
-            />
+            <>
+              <MainStreamHero archetypeId={archetypeRef?.archetypeId ?? null} />
+              <PlatformWorkspaceHome
+                data={platformHomeData}
+                heading="All workspace areas"
+                density="simple"
+              />
+            </>
           }
         />
       ) : (
         <>
           {cockpit}
+          <MainStreamHero archetypeId={archetypeRef?.archetypeId ?? null} />
           {workspaceHomeResolution.mode === "vertical" ? (
             <VerticalWorkspaceHome
               contribution={workspaceHomeResolution.contribution}
               data={platformHomeData}
+              customerMapCounts={customerMapCounts}
             />
           ) : (
             <PlatformWorkspaceHome

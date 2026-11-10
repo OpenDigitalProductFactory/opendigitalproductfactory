@@ -3,6 +3,7 @@ enum BacklogItemStatus {
   triaging
   open
   in_progress @map("in-progress")
+  awaiting_acceptance @map("awaiting-acceptance")
   done
   deferred
   retired

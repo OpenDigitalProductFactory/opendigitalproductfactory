@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Legal AI Coworker Design
 
 **Date:** 2026-06-30  
@@ -365,7 +369,7 @@ Source-local verification:
 Runtime verification:
 
 - use the governed live-install or shared local-integration lease, not an ungoverned dev server;
-- drive the the operator legal packet flow;
+- drive the operator legal packet flow;
 - create a draft document;
 - review a draft;
 - attempt a high-risk publish/send/signature action and confirm approval is required;

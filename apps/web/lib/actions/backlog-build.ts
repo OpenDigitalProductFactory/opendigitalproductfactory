@@ -1,6 +1,8 @@
 "use server";
 
-import { requireCapability } from "@/lib/actions/shared/guards";
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
+import { requireUserId } from "@/lib/actions/shared/guards";
+import { currentOperationAuthority } from "@/lib/govern/operation-authority";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
 import { prisma } from "@dpf/db";
 import * as crypto from "crypto";
@@ -66,7 +68,8 @@ export async function createBuildStudioBacklogIntake(input: {
       effortSize: "medium",
       portfolioId: portfolio.id,
       submittedById: userId,
-      body: title,
+      // BI-458CCA8D: the title is all this intake asks for, so it is the outcome.
+      body: composeIntakeBody({ outcome: `"${title}" is delivered for ${portfolio.name}.`, body: title }),
     },
     select: {
       id: true,
@@ -188,7 +191,11 @@ export async function startBacklogBuild(itemId: string): Promise<StartBacklogBui
 }
 
 async function requireBuildAccess(): Promise<string> {
-  return (await requireCapability("view_platform")).userId;
+  const userId = await requireUserId();
+  if (!await currentOperationAuthority(userId, "promote_to_build_studio")) {
+    throw new Error("You do not have permission to start work from the backlog.");
+  }
+  return userId;
 }
 
 function buildHref(buildId: string): string {

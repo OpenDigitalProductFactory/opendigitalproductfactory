@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-4512E7D2 / BI-BD88A142. Add ProviderClearanceOverride, the durable record of an operator's break-glass decision to accept the risk of a provider serving a data sensitivity its account is NOT verified-safe for. Additive, non-destructive: a new table only, no changes to existing rows, applies cleanly against any existing data state (migration 20260901120000_add_provider_clearance_override). Defaults off — the table is empty after apply and stays empty until an operator explicitly creates an override, so every install behaves exactly as before. Classified 'restricted' (same as DataPolicyException) and RETAINED (never auto-purged): the record and its revocation are the audit a security/data-protection review turns on. No external PII: attribution is by internal principal id (approverRef/revokedByRef); rationale/acknowledgedRisk are operator-authored governance text, governed by the table's restricted classification.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "ProviderClearanceOverride",
+      "lifecycleDisposition": "retained",
+      "fields": [
+        { "name": "id", "resolution": "governed", "reason": "Primary key (cuid); the override's identity, exposed to the operator surface. Not a person.", "provenance": "Prisma @default(cuid()).", "flags": [] },
+        { "name": "organizationId", "resolution": "governed", "reason": "Audit attribution to the accepting organization (canonical Organization). FK, cascade-deleted with the org.", "provenance": "Resolved from the canonical Organization at grant time.", "flags": [] },
+        { "name": "providerId", "resolution": "governed", "reason": "FK to the ModelProvider the risk is accepted for (cascade-deleted with the provider). Platform identifier, not tenant data.", "provenance": "From the operator's selection on the break-glass surface.", "flags": [] },
+        { "name": "acceptedSensitivities", "resolution": "governed", "reason": "The sensitivity levels risk-accepted (e.g. confidential). Closed-set governance values.", "provenance": "Operator selection, validated against the closed sensitivity scale.", "flags": [] },
+        { "name": "status", "resolution": "governed", "reason": "active | revoked | expired lifecycle state.", "provenance": "Set by grant/revoke actions.", "flags": [] },
+        { "name": "rationale", "resolution": "governed", "reason": "Operator-authored justification for accepting the risk. Governance text; governed by the restricted table classification.", "provenance": "Operator input at grant time.", "flags": [] },
+        { "name": "acknowledgedRisk", "resolution": "governed", "reason": "The exact risk statement shown and acknowledged at accept time, frozen for audit.", "provenance": "Rendered by the break-glass surface; stored verbatim at grant.", "flags": [] },
+        { "name": "approverRef", "resolution": "governed", "reason": "Internal principal id of the operator who accepted the risk. Not external PII; governed by the restricted classification.", "provenance": "Authenticated session user id (requireCapability).", "flags": [] },
+        { "name": "acknowledgedAt", "resolution": "governed", "reason": "When the override was granted. Operational timestamp.", "provenance": "Prisma @default(now()).", "flags": [] },
+        { "name": "expiresAt", "resolution": "governed", "reason": "Required expiry; the override stops biting past it. No indefinite overrides.", "provenance": "Operator input at grant time.", "flags": [] },
+        { "name": "revokedAt", "resolution": "governed", "reason": "When the override was revoked, if ever. Operational timestamp.", "provenance": "Set by the revoke action.", "flags": [] },
+        { "name": "revokedByRef", "resolution": "governed", "reason": "Internal principal id of the operator who revoked. Not external PII.", "provenance": "Authenticated session user id at revoke.", "flags": [] },
+        { "name": "provenance", "resolution": "governed", "reason": "Structured origin marker (source, actorUserId). Operational governance metadata.", "provenance": "Set by the grant action.", "flags": [] },
+        { "name": "createdAt", "resolution": "governed", "reason": "Row creation timestamp.", "provenance": "Prisma @default(now()).", "flags": [] },
+        { "name": "updatedAt", "resolution": "governed", "reason": "Row update timestamp.", "provenance": "Prisma @updatedAt.", "flags": [] }
+      ]
+    }
+  ]
+}

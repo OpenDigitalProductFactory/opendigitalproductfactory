@@ -2,6 +2,10 @@
 // Edge actions. This module is pure so the portal, dispatch gate, native-agent
 // fixtures, and future Connections preview all share one parser.
 
+import { isRecord } from "@dpf/validators";
+
+import { isInstallationEnvironmentClass, type InstallationEnvironmentClass } from "./installation-operating-intent";
+
 export const ORGANIZATION_JOIN_ACTION_TYPES = [
   "organization.join.issue",
   "organization.join.import",
@@ -29,6 +33,12 @@ export interface OrganizationJoinPackagePreview {
   rootFingerprint: string;
   intendedPeer: string;
   intendedSans: string[];
+  /**
+   * The class the authority attested for the joining installation, which the CA
+   * certifies as a URI SAN (BI-0716C8A8). Null for a file issued before classes
+   * were attested: unattested, never assumed production.
+   */
+  environmentClass: InstallationEnvironmentClass | null;
   expiresAt: Date;
 }
 
@@ -42,20 +52,17 @@ const PACKAGE_KEYS = [
   "root_fingerprint",
   "intended_hostname",
   "intended_sans",
+  "environment_class",
   "expires_at",
   "enrollment_token",
   "edge_client_enrollment_token",
 ] as const;
-const REQUIRED_PACKAGE_KEYS = PACKAGE_KEYS.filter((key) => key !== "intended_sans");
+const REQUIRED_PACKAGE_KEYS = PACKAGE_KEYS.filter((key) => key !== "intended_sans" && key !== "environment_class");
 const SAFE_PEER = /^[A-Za-z0-9._:-]{1,253}$/;
 const SAFE_TOKEN = /^[A-Za-z0-9._-]{1,4096}$/;
 const MAX_JOIN_PACKAGE_BYTES = 64 * 1024;
 const MIN_TTL_SECONDS = 5 * 60;
 const MAX_TTL_SECONDS = 15 * 60;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value).sort();
@@ -108,10 +115,31 @@ export function parseOrganizationJoinDispatchParameters(
   return parseOrganizationJoinRequest(actionType, parameters, now);
 }
 
+/** The preview plus the one-time enrollment authority the CA honours exactly once. */
+export interface OrganizationJoinPackageMaterial extends OrganizationJoinPackagePreview {
+  enrollmentToken: string;
+}
+
 export function parseOrganizationJoinPackage(
   raw: string,
   now: Date = new Date(),
 ): ParseResult<OrganizationJoinPackagePreview> {
+  const parsed = parseOrganizationJoinPackageMaterial(raw, now);
+  if (!parsed.ok) return parsed;
+  const { enrollmentToken: _token, ...preview } = parsed.value;
+  return { ...parsed, value: preview };
+}
+
+/**
+ * The full material a member portal needs to turn the package into a
+ * certificate (EP-ZERO-CONFIG-FEDERATION, portal-mediated membership): the
+ * preview facts plus the enrollment token. Never render the token; it is the
+ * credential the organization CA accepts once.
+ */
+export function parseOrganizationJoinPackageMaterial(
+  raw: string,
+  now: Date = new Date(),
+): ParseResult<OrganizationJoinPackageMaterial> {
   if (typeof raw !== "string" || new TextEncoder().encode(raw).byteLength > MAX_JOIN_PACKAGE_BYTES || raw.includes("\0")) {
     return { ok: false, reason: "invalid-join-package" };
   }
@@ -141,6 +169,11 @@ export function parseOrganizationJoinPackage(
   }
   const intendedSans = intendedSansRaw === "" ? [] : intendedSansRaw.split(",");
   if (intendedSans.some((value) => !SAFE_PEER.test(value))) return { ok: false, reason: "invalid-join-package" };
+  const environmentClassRaw = fields.get("environment_class");
+  if (environmentClassRaw !== undefined && !isInstallationEnvironmentClass(environmentClassRaw)) {
+    return { ok: false, reason: "invalid-environment-class" };
+  }
+  const environmentClass = environmentClassRaw ?? null;
   if (!isPrivateOrganizationCaUrl(caUrl)) return { ok: false, reason: "invalid-private-ca-url" };
   if (!/^\d{1,12}$/.test(expiresRaw)) return { ok: false, reason: "invalid-package-expiry" };
   const expiresAt = new Date(Number(expiresRaw) * 1000);
@@ -152,7 +185,7 @@ export function parseOrganizationJoinPackage(
   }
   return {
     ok: true,
-    value: { packageId, caUrl, rootFingerprint, intendedPeer, intendedSans, expiresAt },
+    value: { packageId, caUrl, rootFingerprint, intendedPeer, intendedSans, environmentClass, expiresAt, enrollmentToken: fields.get("enrollment_token")! },
   };
 }
 

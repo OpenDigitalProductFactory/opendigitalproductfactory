@@ -77,3 +77,9 @@ regexes = [
 paths = [
   '''^packages/db/recovery/backlog/''',
 ]
+
+[[allowlists]]
+description = "Test-only PKI fixtures for the federation membership-proof tests: a throwaway organization CA, a member leaf and a stranger leaf with their PKCS8 keys. Generated once with openssl, never used by any install (EP-ZERO-CONFIG-FEDERATION §5.6)."
+paths = [
+  '''(^|/)apps/web/lib/federation/membership-fixtures\.ts$''',
+]

@@ -65,6 +65,14 @@ export interface FieldClassification {
  * PHI. Extend as coverage grows; every entry must name a real column.
  */
 export const FIELD_DATA_CLASSIFICATION: Readonly<Record<string, FieldClassification>> = Object.freeze({
+  "AdapterRunTelemetry.investmentPrincipalId": { categories: ["identity", "telemetry"], regulatedScope: "none", note: "Funding principal at dispatch; historical provenance, never present authorization." },
+  "AdapterRunTelemetry.investmentOrganizationId": { categories: ["identity", "telemetry"], regulatedScope: "none" },
+  "AdapterRunTelemetry.investmentItemId": { categories: ["telemetry"], regulatedScope: "none" },
+  "AdapterRunTelemetry.investmentPurpose": { categories: ["telemetry"], regulatedScope: "none" },
+  "AdapterRunTelemetry.investmentClass": { categories: ["telemetry"], regulatedScope: "none" },
+  "AdapterRunTelemetry.investmentPolicyRef": { categories: ["telemetry"], regulatedScope: "none" },
+  "AdapterRunTelemetry.investmentInstallationRef": { categories: ["identity", "telemetry"], regulatedScope: "none" },
+  "AdapterRunTelemetry.investmentCapturedAt": { categories: ["telemetry"], regulatedScope: "none" },
   // ── Credentials / secrets (credential-secret) ─────────────────────────────
   "CredentialEntry.clientSecret": { categories: ["credential-secret"], regulatedScope: "none" },
   "CredentialEntry.cachedToken": { categories: ["credential-secret"], regulatedScope: "none" },

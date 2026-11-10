@@ -43,7 +43,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Generate SBOM + analysis
         run: node scripts/sbom/generate-platform-sbom.mjs --git-ref "$GITHUB_SHA"
@@ -51,7 +51,7 @@ jobs:
       - name: Publish analysis to the run summary
         run: cat sbom/dpf-platform-sbom-analysis.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Drift report (fails only on a NEW first-party version split)
+      - name: Drift report (fails on a NEW first-party version split or a shape total over budget)
         run: node scripts/sbom/check-sbom-drift.mjs
 
       - name: Upload SBOM + analysis artifacts

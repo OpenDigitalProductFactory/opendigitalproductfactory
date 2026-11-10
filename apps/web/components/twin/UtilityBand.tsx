@@ -6,7 +6,7 @@
 
 import { intentStyle } from "@/components/ui/report-kit";
 
-import type { UtilityMeterData } from "./types";
+import type { UtilityMeterData } from "@/lib/twin/kit-types";
 
 export interface UtilityBandProps {
   meters: UtilityMeterData[];

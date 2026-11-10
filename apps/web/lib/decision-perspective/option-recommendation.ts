@@ -6,7 +6,7 @@
 //
 // Deliberately commandments-only, not a full principle_decide call. The full
 // retrieval path (apps/web/lib/mcp/packs/principle-decide-pack.ts) carries
-// Qdrant core/contextual search, ring-scope filtering, and the RC2/RC3/RC6
+// vector core/contextual search, ring-scope filtering, and the RC2/RC3/RC6
 // fixes shipped 2026-07-24 (BI-E1267C6D) — reusing or duplicating that
 // machinery here would touch the single most recently-fixed, most sensitive
 // retrieval path in the platform for a gate-verdict decision that commandments
@@ -22,7 +22,7 @@ import {
   type DecisionOption,
   type DecisionPrinciple,
   type DecisionStakes,
-} from "../decision/option-scoring";
+} from "@dpf/validators/judgment/option-scoring";
 import type { DecisionRiskTier, DecisionScoredOption } from "./types";
 
 const TIER_DEFAULT_WEIGHT = 1.0; // commandments only; matches principle-decide-pack.ts's TIER_DEFAULT_WEIGHT.commandment.

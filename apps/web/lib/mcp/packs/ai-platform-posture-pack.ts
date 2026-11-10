@@ -14,7 +14,7 @@
 // the established ToolPack pattern (BI-ARCH-TOOLPACKS); grants mirror
 // agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -33,6 +33,12 @@ const definitions: ToolDefinition[] = [
           type: "boolean",
           description: "Include retired providers and model profiles. Default false.",
         },
+        scheduledTaskId: {
+          type: "string",
+          minLength: 1,
+          maxLength: 200,
+          description: "Read only one exact scheduled agent task's existing status fields. Free-form fields are bounded with truncation flags; lastError is limited to 4,000 characters. Overrides windowHours and includeRetired. Omit for full platform posture.",
+        },
       },
       required: [],
     },
@@ -44,6 +50,20 @@ const definitions: ToolDefinition[] = [
 ];
 
 async function getAiPlatformPostureHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  if (Object.hasOwn(params, "scheduledTaskId")) {
+    const value = params["scheduledTaskId"];
+    if (typeof value !== "string" || value.length > 200 || !value.trim()) {
+      return { success: false, message: "scheduledTaskId must be a non-empty string of at most 200 characters." };
+    }
+    const { loadScheduledAgentTaskPosture } = await import("@/lib/ai-platform-posture/get-ai-platform-posture");
+    const posture = await loadScheduledAgentTaskPosture(value.trim());
+    const clipped = Object.values(posture.truncation).some(Boolean);
+    return {
+      success: true,
+      message: !posture.found ? "Scheduled task not found." : clipped ? "Scheduled task status read; some fields were truncated." : "Scheduled task status read.",
+      data: posture as unknown as Record<string, unknown>,
+    };
+  }
   const { loadAiPlatformPosture } = await import("@/lib/ai-platform-posture/get-ai-platform-posture");
   const windowHours = typeof params["windowHours"] === "number" ? params["windowHours"] : undefined;
   const includeRetired = typeof params["includeRetired"] === "boolean" ? params["includeRetired"] : undefined;

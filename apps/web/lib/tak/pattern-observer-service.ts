@@ -10,6 +10,7 @@ import {
   type PatternObserverTurnMetric,
 } from "./pattern-observer";
 import { mergeWorkPatternMetadata } from "./work-pattern-types";
+import { isRecord } from "@/lib/shared/coerce";
 
 const OBSERVER_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -70,10 +71,6 @@ export type ObserveWorkPatternsAfterRunResult = {
     | "no-signals"
     | "observer-error";
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function fingerprintFromNeed(row: PatternObserverNeedRow): string | null {
   for (const value of [row.evidenceJson, row.readinessJson]) {

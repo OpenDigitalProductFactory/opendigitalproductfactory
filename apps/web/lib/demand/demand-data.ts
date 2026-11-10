@@ -7,7 +7,7 @@ import { prisma } from "@dpf/db";
 import type { DemandItemView } from "./board";
 import { isPrismaMissingColumnError } from "./prisma-missing-column";
 import { buildDemandActivationState } from "./activation";
-import { resolveEstimateProvenance } from "./estimate-provenance";
+import { ESTIMATE_SOURCE_VALUES, resolveEstimateProvenance, type EstimateSource } from "./estimate-provenance";
 import {
   DEMAND_SCORE_FRAMEWORKS,
   type DemandScoreFramework,
@@ -31,6 +31,7 @@ type DemandRow = {
   estimateHumanJobSize: number | null;
   estimateSource: string | null;
   estimateAgreed: boolean | null;
+  demandInputSource?: string | null;
   claimStatus: string | null;
   claimedByAgentId: string | null;
   organizationId?: string | null;
@@ -61,6 +62,10 @@ type DemandRow = {
   _count?: { activities: number };
   epic: { epicId: string } | null;
 };
+
+function asEstimateSource(v: string | null | undefined): EstimateSource | null {
+  return (ESTIMATE_SOURCE_VALUES as readonly string[]).includes(v ?? "") ? (v as EstimateSource) : null;
+}
 
 /** Pure map from Prisma rows → board view models (unit-tested). */
 export function mapDemandRows(rows: DemandRow[]): DemandItemView[] {
@@ -137,6 +142,7 @@ export function mapDemandRows(rows: DemandRow[]): DemandItemView[] {
         estimateAgreed: r.estimateAgreed,
         estimateDiverged: estimate.diverged,
         fundingDecisionAllowed: false,
+        valueInputSource: asEstimateSource(r.demandInputSource),
       }),
       fundingDecisionCount: r._count?.activities ?? 0,
     };

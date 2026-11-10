@@ -1,7 +1,12 @@
+import { completeAgenticResult, type AgenticCompletionSource, type AgenticCompletionExtra, type AgenticResult, type ExecutedTool } from "./agentic-result";
+import {currentReadEvidencePolicy, acceptReadEvidenceContribution} from "./read-evidence-policy";
+import { currentUserContext } from "@/lib/govern/current-user-context";
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
 // This is the core behavioral difference between a chatbot and an agent.
-import { routeAndCall, type RoutedInferenceResult } from "@/lib/routed-inference";
+import { routeAndCall, type RouteAndCallOptions, type RoutedInferenceResult } from "@/lib/routed-inference";
+import type { DowngradeCause } from "@/lib/inference/downgrade-explanation";
+import type { MessageOrigin } from "@/lib/inference/data-screening/types";
 import {
   detectRepeatedToolCall,
   detectApproachingRepeatedToolCall,
@@ -9,29 +14,39 @@ import {
   recordRepeatedToolIssue,
 } from "@/lib/tak/runtime-issues";
 import { isRedundantReaskQuestion } from "@/lib/tak/conversation-intent";
-import { PLATFORM_TOOLS, toolsToOpenAIFormat, type ToolDefinition, type ToolResult } from "@/lib/mcp-tools";
-import { createAuthorizedSurfaceTurnGovernance } from "@/lib/coworker/authorized-surface-execution-context";
-import { LOAD_TOOLS_TOOL_NAME, selectLoadableTools } from "@/lib/tak/tool-intent";
+import { PLATFORM_TOOLS, toolsToOpenAIFormat } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import { loopToolContext, pendingApprovalEnvelopeId, type LoopToolContextInput } from "./agentic-loop-tool-context";
+import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
+import { LOAD_TOOLS_TOOL_NAME } from "@/lib/tak/tool-intent";
+import { DynamicToolSurface } from "@/lib/tak/dynamic-tool-surface";
 import {
   classifyEvidenceRequirement,
   resolveEvidenceRecovery,
 } from "@/lib/tak/evidence-requirement";
 import { resolveRouteContext } from "@/lib/route-context-map";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection-disposition";
+import { isParkedRefusal } from "@/lib/govern/authority/refusal-breaker";
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { evidenceRecoveryFailure } from "./evidence-recovery-artifact";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
+import { transferLocalNativeContinuation, withLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
-import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
+import { terminalTruncationMessage } from "./terminal-response-truncation";
+import { resolveEffectiveAgentRouteConfig } from "./agent-route-config";
 import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
   resolveTurnGroundedGuidanceRoute,
   resolveTurnMinimumCapabilities,
+  type AgentMinimumCapabilities,
 } from "@/lib/routing/agent-capability-types";
 import { extractToolCalls } from "@/lib/routing/extract-tool-calls";
-import type { AgentMinimumCapabilities } from "@/lib/routing/agent-capability-types";
+import { lookupPinnedModelFamily } from "@/lib/routing/model-successor";
 import type { UserContext } from "@/lib/permissions";
 import {
   type ExecutionPlan,
@@ -44,13 +59,13 @@ import {
   planProgress,
 } from "./execution-plan";
 import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
-import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
-import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
+import { estimateContextTokens, classifyContextPressure, compactAgenticMessages } from "./context-pressure";
+import { clampToolResultForModel, resolveToolResultCharCap, resolveToolResultProvenance } from "./tool-result-budget";
 import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
-import { applyEscalationLadderGuard, buildHumanHandoff } from "./escalation-ladder";
+import { applyEscalationLadderGuard } from "./escalation-ladder";
+import { buildDowngradedFabricationMessage, buildLocalToolCallFailureMessage } from "./provider-failure-messages";
 import { logGeneratedProse } from "../prose/generated-prose"; // BI-41F15FD7
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
-import { summarizeDroppedMessages } from "./compaction-digest";
 import {
   detectToolRefusedDespiteAvailability,
   appendToolRefusedRecoveryMessages,
@@ -63,9 +78,13 @@ import {
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
+  canonicalDesignRefusalMessage,
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
-// Re-export for importers (certification-oracles, tests) that pull from agentic-loop.
+import { rotateTerminalWriterRoute } from "./terminal-writer-route";
+import { shouldExitWithLocalToolCallDiagnostic } from "./local-tool-call-diagnostic";
+import { assertRestrictedReassessmentTurn, restrictedReassessmentLoop, restrictedReassessmentToolCall, restrictedReassessmentReceipt, rethrowRestrictedReassessmentError, type CanonicalReviewReceiptCheck } from "./reassessment-loop";
+import { preloadFiniteReassessment, fullReassessmentToolResult } from "./reassessment-preload";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -84,9 +103,6 @@ const MAX_DURATION_BUILD_MS = 600_000;    // 10 min — sandbox code gen
 const MAX_DURATION_PLAN_MS = 600_000;     // 10 min — ideate/plan (heavy research)
 const MAX_DURATION_REVIEW_MS = 300_000;   // 5 min — review
 const MAX_DURATION_SHIP_MS = 300_000;     // 5 min — ship
-const MAX_AGENTIC_HISTORY_MESSAGES = 24;
-const MAX_TOOL_RESULT_CHARS = 1_500;
-const MAX_TEXT_MESSAGE_CHARS = 4_000;
 
 // ─── Extracted for testability ──────────────────────────────────────────────
 
@@ -107,7 +123,8 @@ export const HARD_COMPLETION_CLAIM_PATTERN =
   /\bI(?:'ve| have| just)?\s*(?:have\s+)?(?:saved|created|published|posted|sent|scheduled|recorded|queued|logged|added|drafted and saved|placed)\b|\b(?:saved|published|posted|sent|scheduled|queued|added|recorded)\s+(?:it|that|your|the)\b|\b(?:is|are|has been|have been)\s+(?:now\s+)?(?:live|saved|published|sent|scheduled|posted|queued|recorded)\b|in\s+(?:your\s+)?approval\s+queue|\b(?:prospect\s+)?account\s+created\b|\bACCT-[A-Z0-9]{4,}\b/i;
 
 // The dead-end classifier and its copy live in ./inference-dead-ends (BI-A89E4827).
-import { describeToolRouteFailure, describeToolRouteFailureOutcome, type InferenceDeadEndOutcome } from "./inference-dead-ends";
+import { describeBankedReaderDeferral, describeToolRouteFailure, describeToolRouteFailureOutcome } from "./inference-dead-ends";
+import { forcedToolRoute } from "./forced-tool-choice";
 import { usesGovernedReviewTools } from "./governed-review-tools";
 export { describeToolRouteFailure };
 
@@ -221,107 +238,6 @@ function hasAuthoritativeToolProgress(
   ) ?? false;
 }
 
-type AgentRouteConfig = {
-  minimumDimensions?: Record<string, number>;
-  budgetClass?: "minimize_cost" | "balanced" | "quality_first";
-  preferredProviderId?: string;
-  preferredModelId?: string;
-  allowedProviders?: string[];
-  deniedProviders?: string[];
-  residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
-  effort?: "low" | "medium" | "high" | "max";
-};
-
-function resolveEffectiveAgentRouteConfig(params: {
-  agentModelConfig: {
-    minimumTier: string;
-    budgetClass: string;
-    pinnedProviderId: string | null;
-    pinnedModelId: string | null;
-  } | null;
-  modelRequirements: unknown;
-}): AgentRouteConfig {
-  const codeConfig: AgentRouteConfig =
-    params.modelRequirements && typeof params.modelRequirements === "object"
-      ? {
-          ...("defaultMinimumTier" in params.modelRequirements
-            ? {
-                minimumDimensions:
-                  TIER_MINIMUM_DIMENSIONS[
-                    params.modelRequirements.defaultMinimumTier as QualityTier
-                  ] ?? {},
-              }
-            : "minimumDimensions" in params.modelRequirements
-              ? {
-                  minimumDimensions:
-                    params.modelRequirements.minimumDimensions as Record<string, number>,
-                }
-              : {}),
-          ...("defaultBudgetClass" in params.modelRequirements
-            ? {
-                budgetClass: params.modelRequirements.defaultBudgetClass as
-                  | "minimize_cost"
-                  | "balanced"
-                  | "quality_first",
-              }
-            : "budgetClass" in params.modelRequirements
-              ? {
-                  budgetClass: params.modelRequirements.budgetClass as
-                    | "minimize_cost"
-                    | "balanced"
-                    | "quality_first",
-                }
-              : {}),
-          ...("preferredProviderId" in params.modelRequirements
-            ? { preferredProviderId: params.modelRequirements.preferredProviderId as string }
-            : {}),
-          ...("preferredModelId" in params.modelRequirements
-            ? { preferredModelId: params.modelRequirements.preferredModelId as string }
-            : {}),
-          ...("allowedProviders" in params.modelRequirements
-            ? { allowedProviders: params.modelRequirements.allowedProviders as string[] }
-            : {}),
-          ...("deniedProviders" in params.modelRequirements
-            ? { deniedProviders: params.modelRequirements.deniedProviders as string[] }
-            : {}),
-          ...("residencyPolicy" in params.modelRequirements
-            ? {
-                residencyPolicy: params.modelRequirements.residencyPolicy as
-                  | "local_only"
-                  | "approved_cloud"
-                  | "any_enabled",
-              }
-            : {}),
-          ...("defaultEffort" in params.modelRequirements
-            ? {
-                effort: params.modelRequirements.defaultEffort as
-                  | "low"
-                  | "medium"
-                  | "high"
-                  | "max",
-              }
-            : {}),
-        }
-      : {};
-
-  if (!params.agentModelConfig) return codeConfig;
-
-  return {
-    ...codeConfig,
-    minimumDimensions:
-      TIER_MINIMUM_DIMENSIONS[params.agentModelConfig.minimumTier as QualityTier] ??
-      codeConfig.minimumDimensions ??
-      {},
-    budgetClass: params.agentModelConfig.budgetClass as
-      | "minimize_cost"
-      | "balanced"
-      | "quality_first",
-    preferredProviderId:
-      params.agentModelConfig.pinnedProviderId ?? codeConfig.preferredProviderId,
-    preferredModelId:
-      params.agentModelConfig.pinnedModelId ?? codeConfig.preferredModelId,
-  };
-}
 
 /** Detect when the agent claims completion or narrates code without having called authoritative tools. */
 export function detectFabrication(
@@ -480,96 +396,10 @@ function buildFabricationFailureMessage(params: {
  * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
  * See spec docs/specs/routing-resilience-and-failure-observability-spec.md §4.5.
  */
-function buildDowngradedFabricationMessage(): string {
-  return (
-    "My usual AI provider was unavailable, so I worked through a backup that "
-    + "couldn't fully complete this — nothing was left half-saved on your side. "
-    + "Please try again (the primary connection may have recovered), or break "
-    + "the request into a smaller step."
-  );
-}
 
-function buildLocalToolCallFailureMessage(_result: RoutedInferenceResult): string {
-  // Respects IDENTITY_BLOCK rule #5 — no infrastructure names, model ids, or
-  // routing architecture; engineers get those from RoutedInferenceResult.
-  // Copy must stay honest (G2, 2026-05-23): an earlier version promised a
-  // re-route the loop never performs.
-  // Rung 4 (BI-33F1EA72): connecting a provider is work only the human can do,
-  // so this hands off rather than apologizing — steps, then the resumption.
-  return buildHumanHandoff({
-    blocker: "I'm on the local AI here, and it couldn't carry this one through.",
-    steps: ["Open Platform > AI > Providers.", "Connect a stronger provider — Claude, Gemini, or OpenAI."],
-    verify: "confirm the stronger provider is live",
-  });
-}
 
-type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult };
-
-function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
-  const counts = new Map<string, number>();
-  for (const tool of executedTools) {
-    counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 5)
-    .map(([name, count]) => count > 1 ? `${name} x${count}` : name)
-    .join(", ");
-}
-
-// BI-0C19AFDD: this message must stay domain-agnostic. The prior copy hard-coded
-// a "finance reports"/"finance-summary tool" suggestion, which confabulated an
-// unrelated domain for every non-finance coworker (e.g. Dale's truck-parts build
-// was told to "use the finance reports directly"). Keep the guidance generic,
-// mirroring the honest max-iter sibling below.
-export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string {
-  const toolSummary = summarizeExecutedToolNames(executedTools) || "the available tools";
-  return [
-    `I used ${toolSummary}, but the coworker hit the runtime limit before it produced a final answer.`,
-    "I stopped before returning another raw tool request.",
-    "The route and tool attempts were recorded; try a narrower question, or break the request into a smaller step.",
-  ].join(" ");
-}
-
-/**
- * Plain-English message for when the loop hits MAX_ITERATIONS without
- * producing a text-only response. Replaces the prior generic "I ran into
- * a limit while working on this. Try breaking your request into smaller
- * steps." which obscured the actual cause (usually: preferred provider
- * unavailable → fallback model overwhelmed by the tool surface). Respects
- * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
- *
- * BI-F4D3B9E9(d): this branched on `downgraded`, which conflated "a dispatch
- * failed" with "nothing was eligible" — so it printed "My usual AI was
- * unavailable" directly beneath a banner that had just said "your configured
- * provider is active but wasn't eligible". One of the two was always wrong.
- * It now branches on the routed `downgradeReason` so both statements describe
- * the same cause, and it no longer tells an owner to connect a provider they
- * already have connected.
- */
-export function buildMaxIterationsExhaustedMessage(params: {
-  downgradeReason: "provider-unavailable" | "not-eligible" | null;
-  executedTools: ExecutedTool[];
-}): string {
-  const toolSummary = summarizeExecutedToolNames(params.executedTools);
-  const downgradeLead = params.downgradeReason === "provider-unavailable"
-    ? "My usual AI was unavailable, so I worked through a backup that wasn't able to keep up. "
-    : params.downgradeReason === "not-eligible"
-      ? "My usual AI wasn't a fit for this particular request, so I worked through a backup that wasn't able to keep up. "
-      : "";
-  const workNote = toolSummary
-    ? `I made several attempts (${toolSummary}) but couldn't complete a final answer before hitting my safety limit.`
-    : "I worked through several attempts but couldn't complete a final answer before hitting my safety limit.";
-  // Honest copy (G2, 2026-05-23): no false re-route promises. Point at the fix
-  // that matches the actual cause — an owner whose providers are all connected
-  // and merely ineligible must not be told to connect one (BI-F4D3B9E9(d)).
-  const suggestion = params.downgradeReason === "provider-unavailable"
-    ? "Reconnecting or restoring that provider at Platform > AI > Providers unlocks the work I'm built for. Otherwise, try a narrower question."
-    : params.downgradeReason === "not-eligible"
-      ? "A shorter request usually routes back to the stronger model. The note above says what ruled it out."
-      : "Try the same question again, or break it into a smaller piece.";
-  return `${downgradeLead}${workNote} ${suggestion}`;
-}
+import { buildMaxIterationsExhaustedMessage, buildRuntimeLimitToolLoopMessage } from "./max-iterations-message";
+export { buildMaxIterationsExhaustedMessage, buildRuntimeLimitToolLoopMessage };
 
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
@@ -731,17 +561,17 @@ export function isSetupTourTurn(messages: ChatMessage[]): boolean {
   return /^\s*\[setup step:/i.test(latestUserText(messages));
 }
 
-function shouldAllowProviderStatusTextReply(params: {
+function shouldAllowFirstTurnTextReply(params: {
   routeContext: string;
   taskType?: string;
   providerId: string;
   messages: ChatMessage[];
   responseText: string;
+  conversationalSourceOnlyTurn?: boolean;
 }): boolean {
+  if (params.conversationalSourceOnlyTurn) return true;
   if (!params.routeContext.startsWith("/platform/ai/providers/")) return false;
-  // Provider-detail status questions are often classified as "unknown" or
-  // platform operations because the route carries most of the intent. The
-  // route and status-language checks below are the durable guard here.
+  // Provider-detail intent relies on the route and status-language checks.
   if (params.providerId === "local") return false;
 
   const latestUser = latestUserText(params.messages).toLowerCase();
@@ -756,10 +586,8 @@ function shouldAllowProviderStatusTextReply(params: {
 }
 
 /**
- * Clause 2.4: if a turn produces specific phase-evidence content in the
- * response text but does not call saveBuildEvidence with the matching field,
- * the evidence is ephemeral. Returns the field name that should have been
- * saved, or null. Conservative — only fires on clear evidence-content signals.
+ * Clause 2.4: specific phase evidence needs matching saveBuildEvidence.
+ * Return the missing field, or null; only clear evidence-content signals count.
  */
 export function detectUnsavedEvidence(
   responseText: string,
@@ -782,48 +610,11 @@ export function detectUnsavedEvidence(
   return wasSaved ? null : entry.field;
 }
 
-export type AgenticResult = {
-  /** Final text response from the agent */
-  content: string;
-  /** Provider that generated the final response */
-  providerId: string;
-  modelId: string;
-  /** Whether the provider was downgraded */
-  downgraded: boolean;
-  downgradeMessage: string | null;
-  /** Total tokens across all iterations */
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  /** Tool calls executed during the loop */
-  executedTools: ExecutedTool[];
-  /** If a proposal tool was called, return it for approval card rendering */
-  proposal: { name: string; arguments: Record<string, unknown>; content: string } | null;
-  failure?: InferenceDeadEndOutcome;
-  /**
-   * BI-2AC48661: the execution plan as it stood when the loop returned, when
-   * `enableExecutionPlan` was set. Null when planning was off or the model
-   * never recorded one. Carried out for observability and for the streamed-plan
-   * UX (BI-95C0835E).
-   */
-  executionPlan?: ExecutionPlan | null;
-};
+export type { AgenticResult } from "./agentic-result";
 
 async function resolveUserContext(userId: string): Promise<UserContext> {
-  const row = await prisma.user
-    .findUnique({
-      where: { id: userId },
-      select: {
-        isSuperuser: true,
-        groups: { include: { platformRole: true }, take: 1 },
-      },
-    })
-    .catch(() => null);
-
-  return {
-    userId,
-    platformRole: row?.groups?.[0]?.platformRole?.roleId ?? null,
-    isSuperuser: row?.isSuperuser ?? false,
-  };
+  return await currentUserContext(userId).catch(() => null)
+    ?? { userId, platformRole: null, isSuperuser: false };
 }
 
 /** Generate a phase-aware nudge based on which tools have been used so far. */
@@ -972,81 +763,14 @@ export function buildToolSessionHintMessage(
   );
 }
 
-function truncateMessageContent(content: string, maxChars: number, label: string): string {
-  if (content.length <= maxChars) return content;
-  const omitted = content.length - maxChars;
-  const suffix = `\n...[truncated ${omitted} chars of earlier ${label}]`;
-  return `${content.slice(0, Math.max(0, maxChars - suffix.length))}${suffix}`;
-}
-
-
-function compactAgenticMessages(
-  messages: ChatMessage[],
-  maxContextTokens?: number | null,
-  zone?: import("./context-pressure").ContextPressureZone,
-): ChatMessage[] {
-  // BI-9679EB1A: size the caps from the real model window when known, never
-  // below today's floor. Unknown window (incl. iteration 0) -> floor exactly,
-  // so the unknown-window path is byte-for-byte identical to before.
-  // BI-3C8220ED: a live overload `zone` tightens the trim (never below floor).
-  const caps = deriveCompactionCaps(maxContextTokens, {
-    maxHistory: MAX_AGENTIC_HISTORY_MESSAGES,
-    toolCap: MAX_TOOL_RESULT_CHARS,
-    textCap: MAX_TEXT_MESSAGE_CHARS,
-  }, zone);
-  let scopedMessages: ChatMessage[];
-  if (messages.length <= caps.maxHistory) {
-    scopedMessages = messages;
-  } else {
-    // R9a (P11): the middle of a long turn is dropped entirely. Before
-    // discarding it, distill its TOOL ACTIVITY into a one-line digest — zero
-    // inference, because the local-first single-GPU path can't afford a
-    // summarization call — and re-insert it right after message[0] so "what was
-    // already tried / what failed" survives compaction instead of being silently
-    // lost (which lets the model repeat completed work or re-hit a known fail).
-    const dropped = messages.slice(1, messages.length - (caps.maxHistory - 1));
-    const digest = summarizeDroppedMessages(dropped);
-    const tail = messages.slice(-(caps.maxHistory - 1));
-    scopedMessages = digest
-      ? [messages[0]!, { role: "assistant" as const, content: `[System notice] ${digest}` }, ...tail]
-      : [messages[0]!, ...tail];
-  }
-
-  const retainedToolCallIds = new Set(
-    scopedMessages.flatMap((message) =>
-      message.role === "assistant" && message.toolCalls
-        ? message.toolCalls.map((toolCall) => toolCall.id)
-        : [],
-    ),
-  );
-
-  return scopedMessages
-    .filter((message) =>
-      message.role !== "tool" ||
-      !message.toolCallId ||
-      retainedToolCallIds.has(message.toolCallId),
-    )
-    .map((message) => {
-      if (typeof message.content !== "string") return message;
-      if (message.role === "tool") {
-        return {
-          ...message,
-          content: truncateMessageContent(message.content, caps.toolCap, "tool output"),
-        };
-      }
-      return {
-        ...message,
-        content: truncateMessageContent(message.content, caps.textCap, "message context"),
-      };
-    });
-}
-
-export type RunAgenticLoopParams = {
-
+export type RunAgenticLoopParams = Pick<LoopToolContextInput, "taskExecutionFence"> & {
+  canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   chatHistory: ChatMessage[];
   systemPrompt: string;
   /** Instruction spans in `systemPrompt`; see RouteAndCallOptions (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];
+  /** What each `chatHistory` entry is — labels only (BI-40EF7C44). */
+  messageOrigins?: readonly MessageOrigin[];
   sensitivity: import("@/lib/agent-sensitivity").RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>> | undefined;
@@ -1117,9 +841,22 @@ export type RunAgenticLoopParams = {
    */
   interactionMode?: "chat" | "autonomous";
   /**
+   * EP-WORK-POSTURE §8.2 — what the Workroom the turn runs in resolved for it
+   * (lib/work-management/room-turn-authority.ts). `workroomId` reaches the
+   * authorized-surface context so the room-aware pre-tool gate fires;
+   * `roomAuthority` reaches the governed executor so a tool outside the room's
+   * surface is denied; `externalAccessEnabled` is the server-resolved web
+   * permission (never a client flag); `workroomPriority` is the room's
+   * Cost/Quality/Time posture, which outranks org/platform in routing.
+   */
+  workroomId?: string | null;
+  roomAuthority?: RoomAuthorityContext | null;
+  externalAccessEnabled?: boolean;
+  workroomPriority?: GoldenTrianglePreference | null;
+  /**
    * BI-80532D5C — when true, a side-effecting non-artifact tool the model calls
-   * is diverted to an AgentActionProposal (status "proposed") instead of being
-   * executed. Set by the scheduler when the run's proactivity actionBoundary is
+   * is raised as an approval request through the monitor (BI-7BCC87BB) instead
+   * of being executed. Set by the scheduler when the run's proactivity actionBoundary is
    * "propose". Default false preserves the act path for every existing caller.
    */
   proposeSideEffects?: boolean;
@@ -1128,6 +865,7 @@ export type RunAgenticLoopParams = {
    * PlatformIssueReport rows. Caller should look this up alongside buildPhase.
    */
   featureBuildId?: string | null;
+  coworkerMode?: "advise" | "act"; // BI-FAD98137: reaches tool context so delegates never run wider
   /** EP-31815F97 S2 (BI-F82F4E04): active DelegationChain grouping id when this
    *  loop runs a delegated coworker, so each ToolExecution joins its
    *  chain-of-custody back to the human origin. Omitted for direct turns. */
@@ -1142,6 +880,7 @@ export type RunAgenticLoopParams = {
    * call records the same token id in ToolExecution audit rows.
    */
   apiTokenId?: string | null;
+  tokenScope?: "read" | "write" | "admin"; tokenGrantScopes?: string[]; // nested governed dispatch is authorized against these (BI-F8C661D0)
   /**
    * Governed Hermes learning Slice 1: active coworker skill for this run.
    * When set, every governed tool call records the same skillId in
@@ -1171,18 +910,20 @@ export type RunAgenticLoopParams = {
   enableExecutionPlan?: boolean;
   /** Bounded evidence-reader surface with a reserved governed writer step. */
   terminalToolPolicy?: TerminalToolPolicy;
-
+  /** BI-A8679D84: the final step of a run owing this writer, forced at the provider until attempted. */
+  forcedToolName?: string;
 };
 
 export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<AgenticResult> {
+  const restricted = restrictedReassessmentLoop(params);
   const tracker = { activeSkillId: params.activeSkillId ?? null };
   let isSuccess = false;
   try {
-    const result = await _runAgenticLoop(params, tracker);
-    isSuccess = true;
+    const result = await withLocalNativeContinuation(() => _runAgenticLoop(params, tracker, restricted));
+    isSuccess = !result.failure;
     return result;
   } finally {
-    if (tracker.activeSkillId) {
+    if (!restricted && tracker.activeSkillId) {
       const { recordSkillUsageEvents } = await import("@/lib/skills/usage-events");
       void recordSkillUsageEvents({
         phase: isSuccess ? "completed" : "failed",
@@ -1197,11 +938,14 @@ export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<Agen
   }
 }
 
-async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSkillId: string | null }): Promise<AgenticResult> {
+async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSkillId: string | null }, restricted: boolean): Promise<AgenticResult> {
+  // Restricted composition rejects a competing specialist policy before entry.
+  const readEvidencePolicy = currentReadEvidencePolicy();
   const {
     chatHistory,
     systemPrompt,
     systemPromptInstructionSpans,
+    messageOrigins,
     sensitivity,
     tools,
     toolsForProvider,
@@ -1222,7 +966,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let hasResolvedSkillInvocation = false;
   const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
   const proposeSideEffects = params.proposeSideEffects ?? false;
-  const userContext = await resolveUserContext(userId);
+
 
   // Admin DB configuration takes precedence over registry defaults.
   const agentModelConfig = await prisma.agentModelConfig.findUnique({ where: { agentId } }).catch(() => null);
@@ -1260,12 +1004,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   );
   effectiveConfig.minimumDimensions = turnRoute.minimumDimensions;
 
-  // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
-  // per turn and, when it is near the budget, bias the routing budget class
-  // toward cost so the router picks a cheaper (still capability-floor-respecting)
-  // model — instead of only logging the warning until the 100% hard-reject.
-  // Advisory: any failure leaves the class untouched and never blocks the turn.
-  try {
+  // BI-7F2FBDA3: a pinned model is a preference with lineage; routing moves to
+  // the family successor rather than to whatever ranked first.
+  effectiveConfig.preferredModelFamily ??= await lookupPinnedModelFamily(prisma, effectiveConfig.preferredProviderId, effectiveConfig.preferredModelId);
+
+  // BI-E8BCA547: ordinary turns may bias routing toward cost near budget.
+  // Restricted turns retain their qualified composition and budget owner.
+  if (!restricted) try {
     const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
     const { spendAwareBudgetClass } = await import("@/lib/inference/spend-aware-routing");
     const budget = await checkAgentBudgetFromRegistry(agentId);
@@ -1289,26 +1034,28 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // Budget gate is advisory — never block a turn on it.
   }
 
-  // Build routeAndCall options once (reused every iteration)
-  const routeOptions = {
+  const routeOptions: RouteAndCallOptions = {
     ...(toolsForProvider ? { tools: toolsForProvider } : {}),
     ...(systemPromptInstructionSpans?.length ? { systemPromptInstructionSpans } : {}),
+    ...(messageOrigins?.length ? { messageOrigins } : {}),
     taskType: turnRoute.taskType,
     ...effectiveConfig,
+    requiresStreaming: interactionMode === "autonomous" ? false : undefined,
     ...(requireTools ? { requireTools: true } : {}),
     ...(agentDisplayName ? { agentDisplayName } : {}),
     // EP-AGENT-CAP-002: Capability floor — passed through to pipeline Stage 1
     minimumCapabilities,
     agentMinimumContextTokens,
-    agentId, routeContext,
+    agentId, routeContext, threadId, // threadId: the cost ledger's join key (BI-CCF1ACBB)
     ...(agentMessageId ? { agentMessageId } : {}),
+    ...(params.workroomPriority ? { workroomPriority: params.workroomPriority } : {}),
     // mcpSession is forwarded through callWithFallbackChain → callProvider →
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
     // short-lived JWT for `--mcp-config`, exposing platform tools as native
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
     // adapters ignore the field. The agentic loop is the only place with
     // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext },
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence, ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -1338,8 +1085,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // authorized tools here as a deferred pool; the model pulls them back via the
   // load_tools meta-tool (intercepted below, like the plan tools). Empty for
   // autonomous/build callers, so their behavior is byte-for-byte unchanged.
-  const deferredPool: ToolDefinition[] = [...(params.deferredTools ?? [])];
-  const loadedToolDefs: ToolDefinition[] = [];
+  const dynamicToolSurface = new DynamicToolSurface({ active: tools, deferred: params.deferredTools });
 
   // Append the current plan as an ephemeral reminder to the messages handed to
   // the model. NOT stored in `messages`, so it is regenerated from live plan
@@ -1363,6 +1109,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const executedTools: AgenticResult["executedTools"] = [];
+  const finitePreload = await preloadFiniteReassessment({ ...params, interactionMode }, executedTools, governedExecuteTool); if (finitePreload) messages.push(finitePreload);
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
   // BI-PIR-2fc2106c: one soft no-progress nudge per args signature.
@@ -1374,51 +1121,44 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // finish (up to this many times) before falling through to the best partial.
   const MAX_TRUNCATION_CONTINUES = 2;
   let truncationContinues = 0;
-  // Evidence-integrity gate (INV-1). Decide once whether this turn's answer
-  // depends on live operational state (a route with authoritative domain tools +
-  // a live-state question); the terminal guard in the zero-tool branch enforces
-  // that such a turn never returns factual prose without a successful tool call.
+  // INV-1: decide once whether this answer needs live operational evidence.
+  // The zero-tool terminal guard withholds factual prose without verification.
+  // Supplied source supports its own analysis; mixed requests still owe live evidence.
+  const isConversationalRoute = !BUILD_ROUTE_PATTERN.test(routeContext ?? "");
   const evidenceRequirement = classifyEvidenceRequirement({
     routeContext,
     domainTools: resolveRouteContext(routeContext).domainTools,
     message: latestUserText(messages),
   });
+  const suppliedSourceEvidence = !!evidenceRequirement.suppliedSourceEvidence && isConversationalRoute && !requireTools;
   let evidenceRecoveryNudges = 0;
+  const withheldDrafts: string[] = [];
   let terminalToolNudges = 0;
   let terminalToolSurfaceOverride: string[] | null = null;
-  const completeResult = (
-    content: string,
-    source: Pick<RoutedInferenceResult, "providerId" | "modelId" | "downgraded" | "downgradeMessage"> | null = lastResult,
-    extra: Partial<Pick<AgenticResult, "failure" | "executionPlan">> = {},
-  ): AgenticResult => ({
-    content,
-    providerId: source?.providerId ?? "",
-    modelId: source?.modelId ?? "",
-    downgraded: source?.downgraded ?? false,
-    downgradeMessage: source?.downgradeMessage ?? null,
-    totalInputTokens,
-    totalOutputTokens,
-    executedTools,
-    proposal: null,
-    ...extra,
-  });
-  let bestPreNudgeContent = ""; // Preserve best text from before nudge
+  const completeResult = (content: string, source: AgenticCompletionSource | null = lastResult, extra: AgenticCompletionExtra = {}): AgenticResult =>
+    completeAgenticResult(content, source, { totalInputTokens, totalOutputTokens, executedTools, suppliedSourceEvidence }, extra);
+  const terminalFailure = (message: string, source = lastResult): AgenticResult =>
+    completeResult(message, source, { failure: { kind: "terminal-writer-missing", message } });
+  let bestPreNudgeContent = ""; // Preserve content and its own producer together.
+  let bestPreNudgeSource: RoutedInferenceResult | null = null;
   const startTime = Date.now();
   let inferenceCallCount = 0;
   let ctxPeakTokens = 0; // Peak assembled context (est. tokens) this turn — dumb-zone gauge.
   let resolvedMaxContextTokens: number | null = null; // BI-9679EB1A: learned from the first dispatch; sizes compaction + the gauge to the real window.
   let sandboxUnavailableCount = 0; // Circuit breaker: stop trying sandbox tools if unavailable
-  // Grant-starvation circuit breaker: an agent whose profile lacks the grants
-  // for the tools it was handed keeps emitting tool calls that all return
-  // `forbidden_grant`. Without this, the loop burns the full MAX_ITERATIONS /
-  // MAX_DURATION with executedTools=0 (observed 2026-07-06: build-architect on
-  // a build-pipeline thread spun ~500s, iter=200, zero tools executed). The
-  // repetition detector doesn't fire because the model keeps trying DIFFERENT
-  // forbidden tools; the nudge cap (1) is spent after the first iteration. We
-  // count consecutive forbidden_grant rejections and reset on ANY tool success,
-  // so a legitimately mixed grant surface (some tools allowed) never trips it.
-  let forbiddenGrantStreak = 0;
-  const forbiddenGrantTools = new Set<string>(); // names seen rejected, for the blocked message
+  // Count settled refusals through the executor's shared classification.
+  let refusalStreak = 0;
+  const refusedTools = new Set<string>();
+  const refusalReasons = new Set<string>();
+  const stopRefusedTurn = (): AgenticResult => {
+    const blockedTools = Array.from(refusedTools).sort();
+    const reasons = Array.from(refusalReasons).sort();
+    console.warn(`[agentic-loop] refused: ${refusalStreak} settled rejections. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)} tools=${JSON.stringify(blockedTools)} reasons=${JSON.stringify(reasons)}. Aborting loop.`);
+    const message = `Blocked — coworker ${agentId} cannot complete these actions in the current work scope: ` +
+      `${blockedTools.join(", ")} (${reasons.join(", ")}). ` +
+      "Resolve the recorded refusal or route the work to an authorized coworker before retrying.";
+    return completeResult(message, lastResult, { failure: { kind: "policy-or-capability", message } });
+  };
   let previousResponseId: string | undefined; // Responses API conversation chaining
 
   // Per-turn observability: one structured summary line with the correlation
@@ -1442,11 +1182,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `[turn] thread=${JSON.stringify(threadId)} agent=${JSON.stringify(agentId)} ` +
         `route=${JSON.stringify(routeContext)} provider=${provider} model=${model} ` +
         `dispatches=${inferenceCallCount} nudges=${continuationNudges} ` +
-        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} ` +
+        `toolsAttached=${toolsAttachedForTurn} executedTools=${executedTools.length} sourceEvidence=${suppliedSourceEvidence ? 1 : 0} ` +
         `totalMs=${Date.now() - startTime} ` +
         `ctxPeakTokens=${ctxPeakTokens} ctxZone=${ctxPressure.zone} ` +
         `toolSurface=${surface.toolCount} estToolTokens=${surface.estDefinitionTokens} surfaceZone=${surface.zone} ` +
-        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}`,
+        // toolAccuracy scores the calls a turn MADE, so a requireTools turn that
+        // made none still logged a clean 1.00 and read as healthy (BI-2FA5A874).
+        `toolAccuracy=${economyMetrics.toolSelectionAccuracy === null ? "na" : economyMetrics.toolSelectionAccuracy.toFixed(2)}` +
+        (requireTools ? ` requiredToolsMet=${executedTools.length > 0}` : ""),
       ),
     );
     // BI-47443B67: persist the same rollup durably so the regression detector
@@ -1460,7 +1203,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       providerId: provider,
       modelId: model,
       dispatches: inferenceCallCount,
-      nudges: continuationNudges,
+      nudges: continuationNudges + evidenceRecoveryNudges,
       toolsAttached: toolsAttachedForTurn,
       executedTools: executedTools.length,
       totalMs: Date.now() - startTime,
@@ -1468,8 +1211,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     });
   };
 
-  // EP-27FD96BC · P1 — the unified warrant bounds iterations for this turn.
-  // Clamped to the hard MAX_ITERATIONS safety ceiling; absent warrant = 200.
+  // EP-27FD96BC: clamp the warrant to the hard iteration ceiling.
   const iterationCeiling = Math.min(
     MAX_ITERATIONS,
     effortWarrant?.maxIterations ?? MAX_ITERATIONS,
@@ -1481,12 +1223,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolBudgetTarget=${effortWarrant.toolBudgetTarget} signals=${effortWarrant.signals.join(",")}`,
     );
   }
-
   for (let iteration = 0; iteration < iterationCeiling; iteration++) {
+    assertRestrictedReassessmentTurn(restricted, terminalProviderTools);
+    const forced = params.forcedToolName && !restricted ? forcedToolRoute(params.forcedToolName, executedTools, terminalProviderTools) : null;
+    if (forced) Object.assign(routeOptions, forced);
     if (params.terminalToolPolicy) {
-      routeOptions.tools = terminalToolSurfaceOverride
+      routeOptions.tools = restricted ? [...terminalProviderTools] : terminalToolSurfaceOverride
         ? selectTerminalToolSurface(terminalProviderTools, terminalToolSurfaceOverride)
         : applyTerminalToolSurface(params.terminalToolPolicy, executedTools, terminalProviderTools);
+      const writerOnlySurface = !restricted && routeOptions.tools.length === 1
+        && selectTerminalToolSurface(routeOptions.tools, [params.terminalToolPolicy.writerToolName]).length === 1;
+      routeOptions.toolChoice = writerOnlySurface ? "required" : undefined;
+      routeOptions.terminalWriterToolName = writerOnlySurface ? params.terminalToolPolicy.writerToolName : undefined;
     }
     // EP-ASYNC-COWORKER-001: Check cancellation flag at each iteration boundary
     if (agentEventBus.isCancelled(threadId)) {
@@ -1495,9 +1243,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       break;
     }
 
-    // BI-4ab6be39 — cooperative heartbeat. If the row was canceled elsewhere
-    // (status != "working"), heartbeat returns false; we treat that as a
-    // cooperative-cancel signal and break out of the loop.
+    // BI-4ab6be39: stop cooperatively when the task's heartbeat is refused.
     if (taskRunId) {
       const { heartbeat } = await import("@/lib/observability/heartbeat");
       const alive = await heartbeat(taskRunId);
@@ -1518,27 +1264,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // and surface the error so the user can start a sandbox rather than spinning expensively.
     if (sandboxUnavailableCount >= 2) {
       console.warn(`[agentic-loop] sandbox unavailable after ${sandboxUnavailableCount} attempts. Aborting loop.`);
-      return completeResult("The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.");
-    }
-
-    // Grant-starvation circuit breaker — after 3 consecutive forbidden_grant
-    // rejections with no intervening success, this agent's profile is missing
-    // the grants for the work it was handed. Continuing only burns iterations
-    // (repetition detector won't fire — the model varies which forbidden tool
-    // it tries). Exit with an actionable, honest blocked status that names the
-    // held-back tools so the operator can grant them, rather than spinning to
-    // MAX_DURATION with executedTools=0.
-    if (forbiddenGrantStreak >= 3) {
-      const blockedTools = Array.from(forbiddenGrantTools).sort();
-      console.warn(
-        `[agentic-loop] grant-starved: ${forbiddenGrantStreak} consecutive forbidden_grant rejections. ` +
-        `agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)} tools=${JSON.stringify(blockedTools)}. Aborting loop.`,
-      );
-      return completeResult(
-          `Blocked — hard stop, not a retry situation. This agent's profile lacks the grant(s) required for ` +
-          `the tools it needs: ${blockedTools.join(", ")}. Every attempt was rejected with \`forbidden_grant\`. ` +
-          `A platform operator needs to grant \`${agentId}\` access to these tools (or hand the work to a peer that already holds them) before it can proceed.`,
-      );
+      return completeResult("The sandbox is not available — no slots are free. Please ensure the sandbox container is running (check Docker Desktop), then try again.", lastResult, { synthetic: true });
     }
 
     // Time ceiling — phase-aware duration limits.
@@ -1604,7 +1330,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           : ` on a text answer. Exiting early with diagnostic.`) +
         ` agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
       );
-      return completeResult(bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult), lastResult);
+      return completeResult(bestPreNudgeContent || buildLocalToolCallFailureMessage(lastResult), bestPreNudgeContent ? bestPreNudgeSource : lastResult, { synthetic: !bestPreNudgeContent });
     }
 
     // Repetition detector (runtime-issues). BI-PIR-2fc2106c: no-progress hard-stops
@@ -1615,7 +1341,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const content = buildRepeatedToolStopMessage({
         toolName: repeated.toolName, count: repeated.count, routeContext, reasonHint: repeated.reasonHint,
       });
-      await recordRepeatedToolIssue({
+      if (!restricted) await recordRepeatedToolIssue({
         repeated, routeContext: routeContext ?? null, userId,
         agentId: agentId ?? null, threadId: threadId ?? null, taskRunId: taskRunId ?? null,
       });
@@ -1630,11 +1356,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
 
     // EP-INF-009b: All inference goes through V2 routing pipeline
     inferenceCallCount++;
-    // Assemble the compacted, plan-reminded context once (it was built twice,
-    // once per heartbeat branch below) and gauge its pressure. Observability
-    // only — the array is sent unchanged; this just makes context fill visible
-    // per dispatch (the autonomous loop is the run most likely to drift into
-    // the dumb zone). See ./context-pressure.
+    // Keep complete finite evidence; ordinary turns retain context compaction.
     // BI-3C8220ED — overload→trim. Measure the pressure BEFORE compaction and
     // feed the zone into the trim, so a turn already in the warning/dumb zone
     // compacts harder instead of only being logged after the fact.
@@ -1643,7 +1365,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       resolvedMaxContextTokens,
     ).zone;
     const assembledMessages = withPlanReminder(
-      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone),
+      finitePreload || (readEvidencePolicy && iteration === 0) ? messages : compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
     );
     const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
@@ -1694,17 +1416,31 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         );
       }
     } catch (routeErr) {
+      rethrowRestrictedReassessmentError(restricted, routeErr);
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
       const failure = describeToolRouteFailureOutcome(msg, routeOptions.tools?.length ?? 0, routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       if (params.terminalToolPolicy) {
-        const exit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, 1);
-        if (exit.kind === "input-required") {
-          return completeResult(exit.message, null, {
-            failure: { kind: "terminal-writer-missing", message: exit.message },
-          });
+        // A thrown native execution may have committed effects. Preserve that
+        // uncertainty instead of converting it into a resumable writer wait.
+        // An adapter capability refusal is also preserved on
+        // every required-writer call. A RESOURCE wait is preserved as-is only
+        // before any tool work, mirroring `preInferenceResourceWait`, which
+        // projects a `provider-capacity` wait on the same TaskRun (rewriting it
+        // to `terminal-writer-missing` once cost five dispatches auditing grants
+        // that were correct). Once a reader runs its work is banked and the
+        // resumable writer wait is kept, but BI-50B0C471: it still names the
+        // deferral, so the caller waits instead of spending writer attempts.
+        if (failure.kind === "execution-uncertain" || failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
+          return completeResult(failure.message, null, { failure });
         }
+        const deferred = describeBankedReaderDeferral(failure.kind, executedTools.length, params.terminalToolPolicy.writerToolName, msg);
+        if (deferred) return completeResult(deferred.message, null, { failure: deferred });
+        const message = routeOptions.toolChoice === "required"
+          ? `The required governed writer ${params.terminalToolPolicy.writerToolName} could not be dispatched. The same TaskRun remains resumable. No receipt was created.`
+          : `The governed review route failed before ${params.terminalToolPolicy.writerToolName} could be recorded. The same TaskRun remains resumable. No receipt was created.`;
+        return terminalFailure(message, null);
       }
       return {
         content: failure.message,
@@ -1752,12 +1488,29 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-
+    // Both ordinary completion policies consume the same native-call audit once.
+    if (!restricted && (params.terminalToolPolicy || readEvidencePolicy)) {
+      await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools });
+    }
+    if (params.terminalToolPolicy) {
+      const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools);
+      if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); }
+    }
+    if (readEvidencePolicy) {
+      if (!result.toolCalls?.length) {
+        const {readEvidenceExit,inspectReadEvidenceContribution} = await import("./read-evidence-policy");
+        const exit = readEvidenceExit(await inspectReadEvidenceContribution(result.content));
+        if (exit.kind === "blocked") return completeResult(exit.message, result, {failure:{kind:"policy-or-capability",message:exit.message}});
+        acceptReadEvidenceContribution(result.content);
+        // Immutable specialist evidence owns this typed contribution. Generic
+        // live-operational prose handling must not replace its verified JSON.
+        return completeResult(result.content, result);
+      }
+    }
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
 
-      // Diagnostic: log raw response so we can trace stalls
       console.log(
         `[agentic-loop] thread=${JSON.stringify(threadId)} iter=${iteration} provider=${result.providerId} model=${result.modelId} ` +
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
@@ -1770,31 +1523,32 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           logTurnSummary(result.providerId, result.modelId);
           return completeResult(result.content, result);
         }
+        if (result.truncated) {
+          const exhausted = truncationContinues >= MAX_TRUNCATION_CONTINUES;
+          const message = terminalTruncationMessage(params.terminalToolPolicy, executedTools, exhausted);
+          if (exhausted) return terminalFailure(message, result);
+          truncationContinues++;
+          messages = [...messages, transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }), { role: "user", content: message }];
+          continue;
+        }
         if (exit.kind === "nudge") {
           terminalToolNudges++;
           terminalToolSurfaceOverride = exit.allowedToolNames;
-          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
+          messages = [...messages, transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }), { role: "user", content: exit.message }];
+          if (!restricted) await rotateTerminalWriterRoute({ policy: params.terminalToolPolicy, records: executedTools, options: routeOptions, providerId: result.providerId, messages, systemPrompt: params.systemPrompt, sensitivity: params.sensitivity });
           continue;
         }
         if (exit.kind === "input-required") {
-          return completeResult(exit.message, result, { failure: { kind: "terminal-writer-missing", message: exit.message } });
+          return terminalFailure(exit.message, result);
         }
       }
 
-      // BI-1D144CC1: truncation stop. The provider cut generation off at the
-      // output-token ceiling (stop_reason=max_tokens / finish_reason=length /
-      // MAX_TOKENS / Responses incomplete). A reply that ends without a tool call
-      // because it RAN OUT OF TOKENS is not a natural end_turn — returning its
-      // partial text as the final answer is the defect this guards. Ask the model
-      // to finish (bounded) BEFORE the "why did you stop" contract/fabrication/
-      // nudge guards run: we already know why it stopped, so those diagnostics
-      // would misfire. This realizes the stop_reason==="end_turn" contract the
-      // loop's own header comment claims but never enforced.
+      // BI-1D144CC1: an output-token cutoff is not a natural end_turn.
       if (result.truncated && truncationContinues < MAX_TRUNCATION_CONTINUES) {
         truncationContinues++;
         // Never regress below today's behaviour: keep the longest partial as the
         // fallback answer in case a continuation returns empty.
-        if (trimmed.length > bestPreNudgeContent.length) bestPreNudgeContent = trimmed;
+        if (trimmed.length > bestPreNudgeContent.length) { bestPreNudgeContent = trimmed; bestPreNudgeSource = result; }
         console.warn(
           `[agentic-loop] response truncated at output-token ceiling with no tool call; ` +
           `continuing generation (${truncationContinues}/${MAX_TRUNCATION_CONTINUES}). ` +
@@ -1802,7 +1556,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         );
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -1916,7 +1670,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // Don't nudge — break immediately with a clear error.
       if (trimmed.length === 0 && executedTools.length === 0) {
         console.warn(`[agentic-loop] Empty response from ${result.providerId}/${result.modelId} on iteration ${iteration}. Model may not support tool use. Breaking.`);
-        return completeResult(`The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`, result);
+        return completeResult(`The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`, result, { synthetic: true });
       }
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
@@ -1935,21 +1689,22 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           recoveryNudgesUsed: evidenceRecoveryNudges,
         });
         if (recovery.kind === "nudge") {
+          withheldDrafts.push(result.content);
           evidenceRecoveryNudges++;
           console.warn(`[agentic-loop] evidence-required turn, zero authoritative tools; nudging. route=${JSON.stringify(routeContext)}`);
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             { role: "user" as const, content: recovery.nudgeMessage },
           ];
           continue;
         }
         if (recovery.kind === "refuse") {
-          // BI-0C0669B5: log the WITHHELD length so a turn whose reasoning was
-          // quarantined is greppable, and so the extractor's zero can be
-          // compared against what the model actually produced.
           console.warn(`[agentic-loop] evidence-required turn unverifiable; could-not-verify (INV-1/5). route=${JSON.stringify(routeContext)} withheldChars=${recovery.withheldContent.trim().length}`);
-          return completeResult(recovery.message, result);
+          logTurnSummary(result.providerId, result.modelId);
+          const failure = await evidenceRecoveryFailure({ taskRunId, taskExecutionFence: params.taskExecutionFence, userId, agentId, threadId,
+            message: recovery.message, drafts: [...withheldDrafts, recovery.withheldContent], toolResults: executedTools.map(tool => tool.result), observedToolExecutions: executedTools.length, observedSuccessfulToolExecutions: authoritativeToolExecutions, recoveryNudges: evidenceRecoveryNudges });
+          return completeResult(failure.failure.message, result, failure);
         }
       }
 
@@ -1973,7 +1728,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         continuationNudges++;
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -1986,7 +1741,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         continuationNudges++;
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -2010,7 +1765,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continuationNudges++;
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: buildRepeatedQuestionNudge({
@@ -2061,7 +1816,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             );
             messages = [
               ...messages,
-              { role: "assistant" as const, content: result.content },
+              transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
               {
                 role: "user" as const,
                 content: buildFabricationRecoveryNudge({
@@ -2103,7 +1858,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           );
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: buildFabricationRecoveryNudge({
@@ -2159,34 +1914,29 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           ),
         ),
         isSetupTourTurn: isSetupTourTurn(messages),
-        isConversationalRoute: !BUILD_ROUTE_PATTERN.test(routeContext ?? ""),
-        allowFirstTurnTextOnlyReply: shouldAllowProviderStatusTextReply({
+        isConversationalRoute,
+        allowFirstTurnTextOnlyReply: shouldAllowFirstTurnTextReply({
           routeContext,
           taskType,
           providerId: result.providerId,
           messages,
           responseText: trimmed,
+          conversationalSourceOnlyTurn: suppliedSourceEvidence,
         }),
         requireToolExecution: requireTools,
       });
 
-        // Local model produced text-only on iteration 0 of a tool-backed turn:
-        // exit with a diagnostic instead of nudging — nudging won't teach a
-        // small local model to use tools mid-turn, it just burns iterations.
-        // The previous Build-Studio carve-out (!BUILD_ROUTE_PATTERN) was the
-        // root cause of 200-iteration hangs on /build threads when the
-        // preferred provider was unavailable and routing fell back to local.
-        // See FB-71FB3A53 thread, 2026-05-22.
-        if (
-          shouldNudgeNow &&
-          iteration === 0 &&
-          executedTools.length === 0 &&
-          result.providerId === "local"
-        ) {
+        if (shouldExitWithLocalToolCallDiagnostic({
+          shouldNudgeNow,
+          iteration,
+          executedToolCount: executedTools.length,
+          providerId: result.providerId,
+          requireTools: Boolean(requireTools),
+        })) {
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
-          return completeResult(buildLocalToolCallFailureMessage(result), result);
+          return completeResult(buildLocalToolCallFailureMessage(result), result, { synthetic: true });
         }
 
         if (shouldNudgeNow) {
@@ -2196,7 +1946,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           // later empty retry can resurrect an ungrounded "plan ready" / "built"
           // claim as the fallback response.
           if (trimmed.length > bestPreNudgeContent.length) {
-            bestPreNudgeContent = trimmed;
+            bestPreNudgeContent = trimmed; bestPreNudgeSource = result;
           }
           continuationNudges++;
 
@@ -2207,7 +1957,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.log(`[agentic-loop] permission-seeking nudge (${continuationNudges}/3): ${trimmed.slice(0, 100)}`);
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: "Do not ask for permission. Proceed with the next step. You only need user approval at phase transitions (ideate→plan→build→review→ship), not within a phase. Act now.",
@@ -2238,7 +1988,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         messages = [
           ...messages,
           ...(trimmed.length > 0
-            ? [{ role: "assistant" as const, content: result.content }]
+            ? [transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content })]
             : []),
           {
             role: "user" as const,
@@ -2263,7 +2013,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const phaseTools = getPhaseSpecificNudge(executedTools);
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content: `STOP apologizing and hedging. You have tools — use them. ${phaseTools} If a previous tool call failed, try a DIFFERENT approach. Do not repeat the same failing call.`,
@@ -2283,10 +2033,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         if (gate.action === "nudge" && gate.nudge) {
           planNudges++;
           console.log(`[agentic-loop] plan-incomplete nudge (${planNudges}/${MAX_PLAN_NUDGES})`);
-          if (trimmed.length > bestPreNudgeContent.length) bestPreNudgeContent = trimmed;
+          if (trimmed.length > bestPreNudgeContent.length) { bestPreNudgeContent = trimmed; bestPreNudgeSource = result; }
           messages = [
             ...messages,
-            ...(trimmed.length > 0 ? [{ role: "assistant" as const, content: result.content }] : []),
+            ...(trimmed.length > 0 ? [transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content })] : []),
             { role: "user" as const, content: gate.nudge },
           ];
           continue;
@@ -2302,23 +2052,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // BI-41F15FD7 — observability only; content is returned unchanged.
       logGeneratedProse(finalContent, { threadId, modelId: result.modelId }, sanitizeForLog);
       logTurnSummary(result.providerId, result.modelId);
-      return completeResult(finalContent, result, { executionPlan });
+      return completeResult(finalContent, trimmed.length > 0 ? result : (bestPreNudgeSource ?? result), { executionPlan });
     }
 
     // Collect all immediate tool results for this iteration
-    const iterationResults: Array<{
-      tc: { id: string; name: string; arguments: Record<string, unknown> };
-      toolResult: ToolResult;
-    }> = [];
+    const iterationResults: Array<{ tc: ToolCallEntry; toolResult: ToolResult }> = [];
+    const chatApprovalIds: string[] = []; // BI-7BCC87BB: declared-proposal requests raised in chat this step
 
     for (const providerToolCall of result.toolCalls) {
-      let tc = providerToolCall;
+      let tc = restrictedReassessmentToolCall(restricted, params, providerToolCall);
       if (params.terminalToolPolicy) {
-        const normalized = normalizeTerminalToolArguments(
-          params.terminalToolPolicy,
-          tc.name,
-          tc.arguments,
-        );
+        // BI-E8237EAE: size governed reader pages to what this model can see whole.
+        const normalized = normalizeTerminalToolArguments(params.terminalToolPolicy, tc.name, tc.arguments, resolveToolResultCharCap(resolvedMaxContextTokens));
         if (normalized.kind === "refuse") {
           executedTools.push({ name: tc.name, args: tc.arguments, result: normalized.result });
           iterationResults.push({ tc, toolResult: normalized.result });
@@ -2363,32 +2108,22 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // governedExecuteTool (EP-COWORKER-INTERACTIVITY, BI-6A745E3C).
       if (tc.name === LOAD_TOOLS_TOOL_NAME) {
         const req = (tc.arguments ?? {}) as { names?: string[]; query?: string };
-        const toLoad = selectLoadableTools(deferredPool, req);
-        for (const t of toLoad) {
-          const idx = deferredPool.findIndex((d) => d.name === t.name);
-          if (idx >= 0) deferredPool.splice(idx, 1);
-          loadedToolDefs.push(t);
-        }
-        if (toLoad.length > 0) {
-          // Reassign provider tools so the NEXT iteration advertises the newly
-          // loaded schemas (mirrors the plan-tool append above).
-          routeOptions.tools = [
-            ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
-            ...toolsToOpenAIFormat(toLoad),
-          ];
-        }
-        const loadedNames = toLoad.map((t) => t.name);
+        const change = dynamicToolSurface.load(req);
+        routeOptions.tools = toolsToOpenAIFormat(change.active);
+        const loadedNames = change.loaded.map((t) => t.name);
         console.log(
-          `[agentic-tool] LOAD_TOOLS iter=${iteration} loaded=${loadedNames.length} ` +
-          `remaining=${deferredPool.length} names=${JSON.stringify(loadedNames)}`,
+          `[agentic-tool] LOAD_TOOLS iter=${iteration} initial=${dynamicToolSurface.initialCount} ` +
+          `loaded=${JSON.stringify(loadedNames)} displaced=${JSON.stringify(change.displaced.map((t) => t.name))} ` +
+          `unattached=${JSON.stringify(change.unattached.map((t) => t.name))} reason=${change.unattached.length ? "ceiling" : "none"} ` +
+          `final=${change.active.length} ceiling=${dynamicToolSurface.ceiling} remaining=${dynamicToolSurface.deferredCount}`,
         );
         iterationResults.push({
           tc,
           toolResult: {
             success: true,
             message:
-              toLoad.length > 0
-                ? `Loaded ${toLoad.length} tool(s): ${loadedNames.join(", ")}. Call them on your next step.`
+              loadedNames.length > 0
+                ? `Loaded ${loadedNames.length} tool(s): ${loadedNames.join(", ")}. Call them on your next step.`
                 : "No deferred tools matched. Use search_tool_marketplace to discover tools, or proceed with your current set.",
           },
         });
@@ -2403,23 +2138,17 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         }
       }
 
-      let toolDef =
-        tools.find((t) => t.name === tc.name) ?? loadedToolDefs.find((t) => t.name === tc.name);
+      let toolDef = dynamicToolSurface.definition(tc.name);
 
       // Authority-preserving on-demand attach: if the model calls an authorized
       // tool that was deferred (not in this turn's attached set), promote it from
       // the deferred pool and execute it now. Deferral caps per-turn COST without
       // ever removing CAPABILITY — whether or not the model first called load_tools.
-      if (!toolDef) {
-        const idx = deferredPool.findIndex((d) => d.name === tc.name);
-        if (idx >= 0) {
-          const [promoted] = deferredPool.splice(idx, 1);
-          loadedToolDefs.push(promoted);
-          routeOptions.tools = [
-            ...((routeOptions.tools as Array<Record<string, unknown>> | undefined) ?? []),
-            ...toolsToOpenAIFormat([promoted]),
-          ];
-          toolDef = promoted;
+      if (dynamicToolSurface.isDeferred(tc.name)) {
+        const change = dynamicToolSurface.promote(tc.name);
+        if (change.loaded.length > 0) {
+          routeOptions.tools = toolsToOpenAIFormat(change.active);
+          toolDef = change.loaded[0];
           console.log(`[agentic-tool] AUTO_LOAD iter=${iteration} tool=${tc.name} (deferred → attached on direct call)`);
         }
       }
@@ -2441,7 +2170,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             preAuthorized = false;
           }
         }
-        if (!preAuthorized) {
+        // BI-7BCC87BB (spec D2 S1): in chat the call goes to the monitor, which raises the
+        // approval request bound to it; autonomous callers keep this return (FU-7).
+        if (!preAuthorized && interactionMode !== "chat") {
           logTurnSummary(result.providerId, result.modelId);
           return {
             content: result.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
@@ -2459,7 +2190,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             },
           };
         }
-        console.log(`[agentic-tool] auto-approved iter=${iteration} tool=${tc.name} (pre-authorized via platform config)`);
+        if (preAuthorized) console.log(`[agentic-tool] auto-approved iter=${iteration} tool=${tc.name} (pre-authorized via platform config)`);
         // Fall through to immediate execution below.
       }
 
@@ -2485,8 +2216,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
 
       // Propose-interception (BI-80532D5C): under a propose boundary, a
-      // side-effecting non-artifact tool is captured as an AgentActionProposal
-      // for the owner to approve instead of running now (null = execute normally).
+      // side-effecting non-artifact tool is raised as an approval request through
+      // the monitor for the owner to decide (null = execute normally; BI-7BCC87BB).
+      const contextInput: LoopToolContextInput = {
+        routeContext, agentId, threadId, taskRunId, taskExecutionFence: params.taskExecutionFence, apiTokenId, interactionMode, chatHistory,
+        tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes, skillId: tracker.activeSkillId,
+        workroomId: params.workroomId ?? null, externalAccessEnabled: params.externalAccessEnabled,
+        requiresExternalAccess: toolDef.requiresExternalAccess, roomAuthority: params.roomAuthority,
+        featureBuildId: params.featureBuildId, coworkerMode: params.coworkerMode, delegationChainId: params.delegationChainId,
+      };
+      // Server-set only (AC-TRANSPORT): the inline card keys on the turn's message id.
+      const chatMessage = interactionMode === "chat" && agentMessageId ? { chatMessageId: agentMessageId } : {};
+      const declaredProposalInChat = interactionMode === "chat" && toolDef.executionMode === "proposal";
       const proposalResult = await interceptToolCallAsProposal({
         toolDef,
         proposeSideEffects,
@@ -2496,6 +2237,10 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         threadId,
         routeContext,
         taskRunId: taskRunId ?? null,
+        execute: async (boundary) => governedExecuteTool({
+          toolName: tc.name, rawParams: tc.arguments, userId, userContext: await resolveUserContext(userId),
+          context: loopToolContext(contextInput, { ...boundary, ...chatMessage }), source: "agentic-loop",
+        }),
       });
       if (proposalResult) {
         console.log(`[agentic-tool] PROPOSED iter=${iteration} tool=${tc.name} (propose boundary)`);
@@ -2514,7 +2259,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const toolStartMs = Date.now();
       let toolResult: ToolResult;
       try {
-        if (!tracker.activeSkillId && !hasResolvedSkillInvocation && tc.name !== LOAD_TOOLS_TOOL_NAME && !EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
+        if (!restricted && !tracker.activeSkillId && !hasResolvedSkillInvocation && tc.name !== LOAD_TOOLS_TOOL_NAME && !EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
           hasResolvedSkillInvocation = true;
           try {
             const { getSkillsForAgent } = await import("@/lib/skills/runtime");
@@ -2542,36 +2287,15 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           toolName: tc.name,
           rawParams: tc.arguments,
           userId,
-          userContext,
-          context: {
-            routeContext,
-            agentId,
-            threadId,
-            taskRunId: taskRunId ?? undefined,
-            apiTokenId: apiTokenId ?? undefined,
-            skillId: tracker.activeSkillId ?? undefined,
-            // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
-            // to the tool surface (actions/agent-coworker.ts). Flag the turn so
-            // the governed grant check honours the same baseline at execution
-            // time (BI-FD7E4D72) — otherwise a coworker whose own grants lack a
-            // baseline read grant gets the tool attached but rejected on call.
-            // Autonomous turns leave this false, so their authority is unchanged.
-            coworkerReadBaseline: interactionMode === "chat",
-            ...createAuthorizedSurfaceTurnGovernance({ interactionMode, apiTokenId, route: routeContext, chatHistory }),
-            externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
-            // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
-            // user is messaging from into tool context so phase-scoped
-            // tools (start_ideate_research, start_scout_research) can
-            // target the correct build instead of "latest in phase".
-            featureBuildId: params.featureBuildId ?? undefined,
-            // EP-31815F97 S2 (BI-F82F4E04): when this loop runs a delegated
-            // coworker, carry the active DelegationChain grouping id so each
-            // ToolExecution joins its chain-of-custody back to the human origin.
-            delegationChainId: params.delegationChainId ?? undefined,
-          },
+          userContext: await resolveUserContext(userId),
+          context: loopToolContext(
+            { ...contextInput, skillId: tracker.activeSkillId },
+            (declaredProposalInChat || (apiTokenId == null && toolDef.sideEffect === true)) ? { approvalCompletion: "platform", ...chatMessage } : {},
+          ),
           source: "agentic-loop",
         });
       } catch (err) {
+        rethrowRestrictedReassessmentError(restricted, err);
         const errorMsg = err instanceof Error ? err.message : "Unknown error";
         console.error(`[agentic-tool] UNCAUGHT iter=${iteration} tool=${tc.name}:`, errorMsg);
         toolResult = { success: false, error: errorMsg, message: `Tool ${tc.name} failed: ${errorMsg}` };
@@ -2586,37 +2310,58 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         sandboxUnavailableCount++;
       }
 
-      // Grant-starvation circuit breaker: governedExecuteTool returns the
-      // rejection code in `error` ("forbidden_grant"). Count consecutive
-      // rejections; any successful tool clears the streak so a mixed surface
-      // (some grants present) never trips it.
-      if (!toolResult.success && toolResult.error === "forbidden_grant") {
-        forbiddenGrantStreak++;
-        forbiddenGrantTools.add(tc.name);
-      } else if (toolResult.success) {
-        forbiddenGrantStreak = 0;
+      // A parked repeat (BI-E458A9CB) counts too, whatever it waits on: it was already answered.
+      if (isGovernedToolRefusal(toolResult) || isParkedRefusal(toolResult)) {
+        refusalStreak++;
+        refusedTools.add(tc.name);
+        refusalReasons.add(toolResult.error ?? "refused");
+      } else {
+        // Success, pending input/approval and inconclusive checks break a streak.
+        refusalStreak = 0;
+        refusedTools.clear();
+        refusalReasons.clear();
       }
 
-      executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult });
+      const modelEvidenceTruncated = !finitePreload && params.terminalToolPolicy?.readerToolNames.includes(tc.name)
+        ? clampToolResultForModel(toolResult, { maxChars: resolveToolResultCharCap(resolvedMaxContextTokens) }).truncated
+        : undefined;
+      executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult, modelEvidenceTruncated });
       if (toolResult.success && params.terminalToolPolicy?.readerToolNames.includes(tc.name)) {
-        terminalToolSurfaceOverride = null;
+        terminalToolSurfaceOverride = null; terminalToolNudges = 0;
       }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
-
-
+      const receipt = await restrictedReassessmentReceipt(restricted, params, tc.name, toolResult);
+      if (receipt) { logTurnSummary(result.providerId, result.modelId); return completeResult(receipt.summary, result, { synthetic: true }); }
+      const raisedId = (declaredProposalInChat || (apiTokenId == null && toolDef.sideEffect === true)) ? pendingApprovalEnvelopeId(toolResult) : null;
+      // The turn ends on the raised request; later calls in this batch are not run.
+      if (raisedId) { chatApprovalIds.push(raisedId); break; }
+      // Also bound a batch from one inference; varying arguments evade the
+      // exact-call repetition detector. Keep all completed calls in the result.
+      { const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools); if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); } if (refusalStreak >= 3) return stopRefusedTurn(); }
     }
 
-    // Append ONE assistant message (with toolCalls preserved) + N tool result messages.
-    // This gives the model its own tool-call history in the native structured format
-    // that callProvider will serialize correctly per provider.
+    // End on the exact pending request; ordinary calls must not claim completion.
+    if (chatApprovalIds.length > 0) {
+      const pending = iterationResults.find((r) => pendingApprovalEnvelopeId(r.toolResult) === chatApprovalIds[0])!;
+      logTurnSummary(result.providerId, result.modelId);
+      return {
+        content: pending.toolResult.message || "This request is waiting for owner approval; it has not run.",
+        providerId: result.providerId, modelId: result.modelId,
+        downgraded: result.downgraded, downgradeMessage: result.downgradeMessage,
+        totalInputTokens, totalOutputTokens, executedTools, proposal: null,
+        pendingApproval: { envelopeIds: chatApprovalIds },
+      };
+    }
+
+    // Preserve native history only when the executed call snapshot still agrees.
     messages = [
       ...messages,
-      {
+      transferLocalNativeContinuation(result, {
         role: "assistant" as const,
         content: result.content,
-        toolCalls: iterationResults.map(({ tc }) => tc),
-      },
+        toolCalls: iterationResults.map(({ tc }) => tc.gemini ? result.toolCalls!.find((original) => original.id === tc.id) ?? tc : tc),
+      }),
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,
         // G1/P6 (context-engineering-standards.md): bound the model-facing
@@ -2624,8 +2369,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // truncation notice. Replaces the prior silent `slice(0, 3000)`, which
         // left `message` unbounded and gave the model no signal that data was
         // cut. The stored toolResult (audit/receipts) is unaffected.
-        content: clampToolResultForModel(toolResult, {
-          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens),
+        content: finitePreload ? fullReassessmentToolResult(toolResult, tc.name) : clampToolResultForModel(toolResult, {
+          maxChars: resolveToolResultCharCap(resolvedMaxContextTokens), toolName: tc.name, provenance: resolveToolResultProvenance(tc.name, (name) => dynamicToolSurface.definition(name)),
         }).text,
         toolCallId: tc.id,
       })),
@@ -2639,6 +2384,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     `executedTools=${executedTools.length}. ` +
     `This may indicate the model needs more room or is stuck in a loop.`,
   );
+  if (params.terminalToolPolicy) {
+    const terminalExit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, Math.max(1, terminalToolNudges));
+    if (terminalExit.kind === "input-required") {
+      return terminalFailure(terminalExit.message);
+    }
+  }
   const fallbackContent = lastResult?.content?.trim() ?? "";
   const fallbackIsRawToolUse = fallbackContent.length > 0 && extractToolCalls(fallbackContent).length > 0;
   const fallbackIsFabricated = detectFabrication(
@@ -2656,16 +2407,18 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // that predate the field fall back to the unavailable reading only when they
     // actually reported a downgrade.
     downgradeReason: lastResult?.downgradeReason ?? (downgraded ? "provider-unavailable" : null),
+    // Use the banner's binding cause so recovery addresses the actual constraint (BI-FB184D69).
+    cause: lastResult?.downgradeCause ?? null,
     executedTools,
   });
-  return {
+  const exhaustedContent =
     // Routing-resilience Slice D: a raw tool-use loop is a genuine model
     // hallucination and still gets the loop message. But a fabrication signal on
     // a DOWNGRADED turn yields to the downgrade-aware exhausted message (honest
     // infra copy) instead of the "underlying work wasn't recorded" build copy —
     // the exhaustion was driven by the backup provider, not by the model faking
     // work. Fabrication copy is reserved for healthy-provider false claims.
-    content: fallbackIsRawToolUse
+    fallbackIsRawToolUse
       ? buildRuntimeLimitToolLoopMessage(executedTools)
       : fallbackIsFabricated
       ? (downgraded
@@ -2686,15 +2439,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             }))
       // Defect-B safety net (BI-C145F650): before the canned exhausted message,
       // prefer a correct answer preserved before a nudge over discarding it.
-      : (lastResult?.content?.trim() ? lastResult.content : (bestPreNudgeContent || exhaustedMessage)),
-    providerId: lastResult?.providerId ?? "unknown",
-    modelId: lastResult?.modelId ?? "unknown",
-    downgraded: lastResult?.downgraded ?? false,
-    downgradeMessage: lastResult?.downgradeMessage ?? null,
-    totalInputTokens,
-    totalOutputTokens,
-    executedTools,
-    proposal: null,
-    executionPlan,
-  };
+      : (lastResult?.content?.trim() ? lastResult.content : (bestPreNudgeContent || exhaustedMessage));
+  const exhaustedSource = fallbackContent || !bestPreNudgeContent ? lastResult : bestPreNudgeSource;
+  return completeResult(exhaustedContent, exhaustedSource ?? { providerId: "unknown", modelId: "unknown", downgraded: false, downgradeMessage: null }, { executionPlan, synthetic: fallbackIsRawToolUse || fallbackIsFabricated || (!fallbackContent && !bestPreNudgeContent) });
 }

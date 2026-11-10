@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "decidedOption": "extend-platform-development-page-with-oauth-clients-section",
+  "decisionInteractionId": "DI-03DA64D1850B",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/McpOAuthClientManager.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-03DA64D1850B",
+    "consideredOptions": [
+      "extend-platform-development-page-with-oauth-clients-section",
+      "new-admin-mcp-clients-route",
+      "headless-template-inside-token-issue-modal"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. Admin > Platform Development stays the single home for MCP credentials; an 'MCP OAuth clients' section sits directly beneath 'MCP access tokens', exactly where the self-authentication design (Slice 2b) placed it. No new route, tab or navigation entry.",
+    "persona": "An operator whose local-CI gate or CI runner needs to authenticate without a personal token creates one headless client, copies its secret once, and pastes one command; later they see which clients exist, which are still used, and revoke one that leaked.",
+    "reuse": "Composes Surface, Button, DataTable, StatusBadge, Notice, confirmDialog and the form-kit (TextField, CheckboxField, FormStatus, SubmitButton). Scope labels and detail come from the consent screen's PUBLIC_SCOPE_COPY; the credentials-file snippet comes from the same setup-snippet module the PAT manager uses.",
+    "sourceTruth": "OAuthClient rows via listOAuthClients / createOAuthCredentialsClient / revokeOAuthClient; the secret is returned once by the action and never re-readable. The file path and env names match scripts/lib/mcp-credential.mjs, the gate's resolver.",
+    "states": "Loading shows the table skeleton; no clients explains what a headless client is for; a refused creation is shown inline with the server's reason; the one-time secret panel warns that it is shown once and offers copy buttons per value and per command; revoke asks for confirmation naming the live tokens that will stop; revoked rows keep their history and lose the action. Status is text plus badge, never colour alone.",
+    "aiBoundary": "No control sends a coworker prompt. Creating and revoking a client is an operator action under the operator's own role; no coworker can grant itself a client.",
+    "verification": "Component tests (list, create with one-time secret, refused create, confirmed revoke, revoked row) and the snippet unit test pass with web typecheck. Browser verification on the governed contributor preview could not run in this session: the preview lease needs the very credential this surface exists to issue, and the install's PAT is expired. The UX check is recorded as UNRUN in the PR body, not passed."
+  }
+}

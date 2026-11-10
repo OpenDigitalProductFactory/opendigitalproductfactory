@@ -18,7 +18,8 @@ import {
 } from "@/lib/feature-build-types";
 import type { BuildStudioCustodianPrompt } from "./build-studio-custodian";
 
-const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction, mockRerunPlanReview, mockResumeBuildImplementation } = vi.hoisted(() => ({
+const { mockAdvanceBuildPhase, mockCaptureDecisionInteraction, mockRerunPlanReview, mockResumeBuildImplementation, mockRetryBuildExecution } = vi.hoisted(() => ({
+  mockRetryBuildExecution: vi.fn(),
   mockAdvanceBuildPhase: vi.fn(),
   mockCaptureDecisionInteraction: vi.fn(),
   mockRerunPlanReview: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock("@/lib/actions/build", () => ({
   rerunPlanReview: mockRerunPlanReview,
   resumeBuildImplementation: mockResumeBuildImplementation,
   resetBuildExecution: vi.fn(),
-  retryBuildExecution: vi.fn(),
+  retryBuildExecution: mockRetryBuildExecution,
   runBuildReviewVerification: vi.fn(),
 }));
 
@@ -241,6 +242,26 @@ describe("BuildStudioWorkflowActionCard WWMD visibility", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Start Implementation" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(message)).toBeInTheDocument();
+    });
+  });
+
+  // BI-E47D9C5E: a refused retry threw, and the card rendered "Minified React
+  // error #441" instead of saying why (FB-2FE91CD3, 2026-09-23).
+  it("surfaces a refused retry as its reason, not a React error", async () => {
+    const message = "Only the person who started this build can retry it.";
+    mockRetryBuildExecution.mockResolvedValueOnce({ ok: false, error: message });
+
+    render(
+      <BuildStudioWorkflowActionCard
+        build={makeBuild({ phase: "build" })}
+        action={implementationAction({ kind: "retry-build", primaryLabel: "Try to fix", targetPhase: undefined } as Partial<BuildStudioWorkflowAction>)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Try to fix" }));
 
     await waitFor(() => {
       expect(screen.getByText(message)).toBeInTheDocument();

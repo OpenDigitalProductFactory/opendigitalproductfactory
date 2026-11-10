@@ -14,6 +14,55 @@ import { after, before, describe, it } from "node:test";
 
 import { githubOutputsForPlan } from "./ci-evidence-plan.mjs";
 
+it("scopes a PR source head independently of the synthetic merge checkout", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-ci-source-base-"));
+  const runGit = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
+  try {
+    runGit("init", "-b", "main");
+    runGit("config", "user.email", "ci-planner@example.invalid");
+    runGit("config", "user.name", "CI Planner Test");
+    writeFileSync(join(directory, "README.md"), "base\n");
+    runGit("add", ".");
+    runGit("commit", "-m", "base");
+    runGit("checkout", "-b", "source");
+    writeFileSync(join(directory, "README.md"), "source documentation\n");
+    runGit("commit", "-am", "documentation change");
+    const sourceHead = runGit("rev-parse", "HEAD");
+    runGit("checkout", "main");
+    mkdirSync(join(directory, "apps/web/lib"), { recursive: true });
+    writeFileSync(join(directory, "apps/web/lib/unrelated.ts"), "export const unrelated = true;\n");
+    runGit("add", ".");
+    runGit("commit", "-m", "concurrent main change");
+    runGit("update-ref", "refs/remotes/origin/main", "HEAD");
+    runGit("merge", "--no-ff", "source", "-m", "synthetic PR merge");
+
+    const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+    const expression = workflow.match(/FRESH_BASE="\$\((git merge-base [^\n]+?)\)"/);
+    assert.ok(expression, "CI must resolve an explicit merge base");
+    const bash = process.platform === "win32"
+      ? join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe")
+      : "bash";
+    const sourceBase = execFileSync(bash, ["-c", expression[1]], {
+      cwd: directory, encoding: "utf8", env: { ...process.env, HEAD_SHA: sourceHead },
+    }).trim();
+    const planFor = (head) => JSON.parse(execFileSync(process.execPath, [
+      fileURLToPath(new URL("./ci-evidence-plan.mjs", import.meta.url)),
+      "--event", "pull_request", "--base", sourceBase, "--head", head,
+    ], { cwd: directory, encoding: "utf8" }));
+    const docs = planFor(sourceHead);
+    assert.deepEqual(docs.changedFiles, ["README.md"]);
+    assert.equal(docs.executionLane, "documentation");
+    assert.equal(docs.fullSuite, false);
+    // The synthetic integration tree still contains runtime changes; narrowing
+    // the source comparison must not weaken the planner's runtime classification.
+    const integration = planFor("HEAD");
+    assert.ok(integration.changedFiles.includes("apps/web/lib/unrelated.ts"));
+    assert.equal(integration.fullSuite, true);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const cliPath = join(repoRoot, "scripts", "ci-evidence-plan.mjs");
 let fixture;

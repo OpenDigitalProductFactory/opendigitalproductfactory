@@ -95,7 +95,7 @@ outvote the ledger.
 
 Fields are parsed by the YAML subset shared with `seed-skills.ts` and `seed-prompt-templates.ts`. Scalars, inline arrays (`[a, b]`), and block-style lists (`- item`) all work. **No nested objects.** Quotes are optional; surrounding `"`/`'` are stripped.
 
-The `slug` is derived from the file path relative to `wiki/` (e.g. `wiki/stances/portfolio-as-anchor.md` → slug `stances/portfolio-as-anchor`). To override, set `slug:` in the frontmatter.
+The `slug` is derived from the file path relative to `wiki/` (e.g. `wiki/stances/portfolio-as-anchor.md` → slug `stances/portfolio-as-anchor`). To override, set `slug:` in the frontmatter. The rule is `kernelWikiPageSlug` in `packages/db/src/wiki-frontmatter.ts`; profession pages use `professionCorpusPageSlug` there (`professions/<profession>/<name>`, frontmatter `slug:` not honoured). Code that cites a page by slug (a gate's `principleSlug`, `apps/web/lib/kernel/governing-principles.ts`) is tested to resolve by that same rule, so renaming a cited page or changing its `slug:` fails a test rather than silently breaking the citation.
 
 ---
 
@@ -140,7 +140,7 @@ open http://localhost:3000/wiki/stances/portfolio-as-anchor
 #    Triggers can also be done via the wiki_lint MCP tool.
 ```
 
-The seed advances the revision chain **only when body content changes**, so re-running on unchanged files is a no-op. Same for link / source / Qdrant upserts — all idempotent.
+The seed advances the revision chain **only when body content changes**, so re-running on unchanged files is a no-op. Same for link / source / vector upserts — all idempotent.
 
 ---
 
@@ -182,7 +182,9 @@ Principle pages have stricter rules than the other kinds because their content d
    - `core` — strong default. Soft cap ~30. Requires `principleDirection`; vector recommended.
    - `contextual` — narrow rules that only matter in a bounded situation. Uncapped.
 3. **Write a signed `principleDimensionVector`.** Inline JSON, keys from [`packages/db/src/wiki-taxonomy.ts`](../../packages/db/src/wiki-taxonomy.ts) `PRINCIPLE_DIMENSIONS`. Positive values mean "this principle pulls *for* this axis"; negative values mean "this principle pulls *against* this axis" (e.g., `speed_to_value: -0.4` is correct for `architecture-over-shortcuts`). The seed walker rejects unknown dimensions with a clear error.
-   - **Cost axes must be negative.** Three dimensions are *costs* (`PRINCIPLE_COST_DIMENSIONS`: `blast_radius`, `human_cognitive_load`, `vendor_lock_in`) — a higher option-feature score means the option exhibits *more* of a bad thing. Because `principle_decide` option features are non-negative (0..1), the only way to express "this principle opposes the cost" is a **negative** weight. A positive weight on a cost axis makes the scorer *reward* the cost the principle exists to prevent — the sign-convention guard test (`seed-wiki-kernel.test.ts`) blocks it. Do **not** use a large positive magnitude to signal "this principle cares a lot about risk/load" — that is salience, not direction; encode strength as the magnitude of a **negative** weight. See `docs/superpowers/audits/2026-06-14-principle-dimension-sign-audit.md`.
+   - **Cost axes must be negative.** Five dimensions are *costs* — the exact set is `PRINCIPLE_COST_DIMENSIONS` in [`packages/db/src/wiki-taxonomy.ts`](../../packages/db/src/wiki-taxonomy.ts), and at the time of writing it is `blast_radius`, `human_cognitive_load`, `vendor_lock_in`, `business_disruption`, `operator_effort`. Read the registry rather than trusting this list: it is the authority, this sentence is a convenience, and `scripts/check-authoring-cost-dimensions.mjs` fails the build if the two disagree. On a cost axis a higher option-feature score means the option exhibits *more* of a bad thing. Because `principle_decide` option features are non-negative (0..1), the only way to express "this principle opposes the cost" is a **negative** weight. A positive weight on a cost axis makes the scorer *reward* the cost the principle exists to prevent — the sign-convention guard test (`seed-wiki-kernel.test.ts`) blocks it. Do **not** use a large positive magnitude to signal "this principle cares a lot about risk/load" — that is salience, not direction; encode strength as the magnitude of a **negative** weight.
+
+     Two of the five carry benefit-shaped names and are the ones most often signed wrong. `operator_effort` was deliberately **renamed** from `interaction_efficiency` because the old name invited a positive weight; more effort is worse, so a principle that favours fewer operations weights it negative. `business_disruption` reads like something you might want to measure rather than oppose; a response that breaks production is a cost, so it is negative too. See `docs/superpowers/audits/2026-06-14-principle-dimension-sign-audit.md`.
 4. **Pick a consumer archetype + populations carefully.** The two axes (`principleConsumerArchetype` and `principleAppliesTo`) are independent, but the coherence matrix in [`SCHEMA.md`](SCHEMA.md) constrains valid combinations. The seed walker throws on incoherent pairings (e.g., `ai-coworker-universal` + `human`, or `route-domain-specific` without ≥1 context). When in doubt:
    - Rule governs humans AND agents anywhere → `universal` (must include ≥2 populations in `principleAppliesTo`).
    - Rule governs all in-platform AI coworkers → `ai-coworker-universal`.
@@ -251,8 +253,8 @@ Customers will be able to override kernel pages with their own takes via the `ke
 | Seed fails: `has pageKind "heuristic" but declares principle-only frontmatter` | A non-`principle` page declares `principleDimensionVector`, `principleTier`, or another `principle*` key. Those are read only from `pageKind: principle`. | Change `pageKind` to `principle` if the page is meant to move decision verdicts, or drop the `principle*` keys if it is a rule of thumb. See §3. |
 | Page doesn&#39;t appear at `/wiki/<slug>` after seed | Slug mismatch | Check the file path. Slug is `<path-under-wiki-without-ext>` unless overridden. |
 | Same page seeds with `version=1` every time | Body actually unchanged between runs | Expected behaviour — revision chain only advances on body change. |
-| Qdrant upsert returns `qdrant=no-sidecar` | `embeddings.jsonl` missing | Run `tsx scripts/build-kernel-embeddings.ts` to generate it. The seed still writes Postgres rows even without it. |
-| Wiki block doesn&#39;t show up in agent prompts | Qdrant index empty for this query, score below threshold (0.55), or the embedding model is down | Verify Qdrant has points (`/admin/wiki/lint` page count > 0), check the embedding endpoint, broaden the query. |
+| Vector upsert returns `vectors=no-sidecar` | `embeddings.jsonl` missing | Run `tsx scripts/build-kernel-embeddings.ts` to generate it. The seed still writes Postgres rows even without it. |
+| Wiki block doesn&#39;t show up in agent prompts | Vector index empty for this query, score below threshold (0.55), or the embedding model is down | Verify the vector index has points (`/admin/wiki/lint` page count > 0), check the embedding endpoint, broaden the query. |
 
 ---
 

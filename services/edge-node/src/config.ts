@@ -21,6 +21,11 @@
 //   DPF_INSTALL_MODE     native | container-host | container-vm.
 //                        Default: container-host (Phase 0 deployment mode).
 //   DPF_EDGE_NODE_VERSION  agent version string. Set at build time.
+//
+// The federation-candidate scan loop reads its own environment, the way the
+// metrics loop reads SNMP_TARGET: see `resolveFederationScanSettings` in
+// src/federation-scan.ts for DPF_FEDERATION_SCAN, _HOSTS, _ENDPOINTS,
+// _INTERVAL_SEC and _MAX_TARGETS.
 
 import { hostname } from "node:os";
 

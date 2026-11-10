@@ -6,6 +6,7 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
 vi.mock("@/lib/self-upgrade/completion", () => ({
   getDeployedSha: vi.fn(),
 }));
+vi.mock("./source", () => ({ loadImpactSource: vi.fn() }));
 
 // Mock the durable store so the orchestrator tests stay DB-free; store.ts has
 // its own test for the prisma interaction.
@@ -36,6 +37,7 @@ import {
 import { _resetCacheForTest } from "./cache";
 import { getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
+import { loadImpactSource } from "./source";
 import type { InstallSignals, RawCommit, UpgradeImpactSummary } from "./types";
 
 beforeEach(() => {
@@ -88,6 +90,31 @@ function rawCommit(subject: string, files: string[] = [], sha = "0".padEnd(40, "
 }
 
 describe("summarizeUpgradeImpact — orchestrator", () => {
+  it("uses the canonical release source without injected target or change loaders", async () => {
+    const collect = vi.fn(async () => [rawCommit("fix: upgrades", [], "1".repeat(40))]);
+    vi.mocked(loadImpactSource).mockResolvedValue({ targetSha: "b".repeat(40), unavailableReason: null, collect });
+    const out = await summarizeUpgradeImpact({ skipPhrasing: true }, {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      enrichPrs: async () => ({ reachable: false, enriched: 0, byPr: new Map() }),
+    });
+    expect(out).toMatchObject({ ok: true, summary: { targetSha: "b".repeat(40), counts: { fix: 1 } } });
+    expect(collect).toHaveBeenCalledWith({ currentLineageSha: "a".repeat(40), targetSha: "b".repeat(40) });
+  });
+  it("retries a transient change-details failure for the same known target", async () => {
+    const change = vi.fn().mockRejectedValueOnce(new Error("Published change details unavailable"))
+      .mockResolvedValueOnce([rawCommit("fix: upgrade", [], "1".repeat(40))]);
+    const deps = {
+      loadCurrentLineageSha: async () => "a".repeat(40),
+      loadTargetSha: async () => "b".repeat(40),
+      loadInstallSignals: async () => SIGNALS,
+      loadChangeSet: change,
+      enrichPrs: async () => ({ reachable: false, enriched: 0, byPr: new Map() }),
+    };
+    expect(await summarizeUpgradeImpact({ skipPhrasing: true }, deps)).toMatchObject({ ok: false, reason: "git-log-failed" });
+    expect(await summarizeUpgradeImpact({ skipPhrasing: true }, deps)).toMatchObject({ ok: true, summary: { targetSha: "b".repeat(40) } });
+    expect(change).toHaveBeenCalledTimes(2);
+  });
   it("returns no-lineage when there is no succeeded run on record", async () => {
     const out = await summarizeUpgradeImpact({}, {
       loadCurrentLineageSha: async () => null,

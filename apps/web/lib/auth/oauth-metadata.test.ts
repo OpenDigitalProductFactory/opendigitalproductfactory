@@ -125,8 +125,22 @@ describe("Protected Resource Metadata (RFC 9728)", () => {
     expect(doc.authorization_servers[0]).toBe(ORIGIN);
   });
 
-  it("advertises the read floor only", () => {
-    expect(doc.scopes_supported).toEqual(["dpf.read"]);
+  // BI-CE5F8C0A. This resource exists to do development work, so the MCP
+  // spec's "minimal set necessary for basic functionality" is read + the two
+  // development write scopes, not read alone. A client that lands read-only
+  // cannot claim a workroom, record evidence or move an item — it cannot do
+  // the thing it connected to do.
+  it("advertises the development floor: read plus the two write scopes", () => {
+    expect(doc.scopes_supported).toEqual(["dpf.read", "dpf.work", "dpf.build"]);
+  });
+
+  // The floor is not a ceiling and it is not everything. Running the business,
+  // operating the estate and administering the platform stay behind an
+  // explicit request, because they are not this resource's basic functionality.
+  it("does not advertise business, operate or admin", () => {
+    for (const scope of ["dpf.business", "dpf.operate", "dpf.admin"]) {
+      expect(doc.scopes_supported).not.toContain(scope);
+    }
   });
 
   it("advertises header-only bearer methods (never a query string)", () => {
@@ -177,8 +191,13 @@ describe("401 challenge — the parameter whose absence was the whole defect", (
     expect(h).toContain(`resource_metadata="${ORIGIN}${PRM_PATH_SUFFIXED}"`);
   });
 
-  it("carries the least-privilege scope hint", () => {
-    expect(buildUnauthorizedChallenge(ORIGIN, "nope")).toContain('scope="dpf.read"');
+  // This string is load-bearing for challenge-driven clients. Grok derives its
+  // entire OAuth request from it ("WWW-Authenticate challenge contains scope:")
+  // and has no scope setting of its own, so whatever appears here is the only
+  // authority such a client can ever hold (BI-CE5F8C0A).
+  it("carries the development scope hint, which is what a challenge-driven client will request", () => {
+    expect(buildUnauthorizedChallenge(ORIGIN, "nope"))
+      .toContain('scope="dpf.read dpf.work dpf.build"');
   });
 
   it("still returns a parseable Bearer challenge with no resolvable origin", () => {

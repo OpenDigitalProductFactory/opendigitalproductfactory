@@ -12,7 +12,8 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { denyEnvelope } from "@/lib/coworker/envelope-actions";
+import { denyEnvelope, describeOnBehalfDecision } from "@/lib/coworker/envelope-actions";
+import { readOnBehalfRequest } from "@/lib/coworker/envelope-on-behalf-request";
 
 type RouteContext = {
   params: Promise<{ envelopeId: string }>;
@@ -20,7 +21,7 @@ type RouteContext = {
 
 export const dynamic = "force-dynamic";
 
-export async function POST(_request: Request, context: RouteContext): Promise<Response> {
+export async function POST(request: Request, context: RouteContext): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,10 +32,15 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
     return NextResponse.json({ error: "envelopeId required" }, { status: 400 });
   }
 
-  const result = await denyEnvelope(envelopeId, session.user.id);
+  // BI-7BCC87BB (AC-OVERRIDE): an admin may decline on the owner's behalf, with a reason.
+  const onBehalf = await readOnBehalfRequest(request, session.user);
+  const result = onBehalf
+    ? await denyEnvelope(envelopeId, session.user.id, onBehalf)
+    : await denyEnvelope(envelopeId, session.user.id);
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: result.httpStatus });
   }
+  const decidedOnBehalf = onBehalf ? await describeOnBehalfDecision(result.envelope.argsJson) : null;
 
-  return NextResponse.json({ ok: true, envelope: result.envelope });
+  return NextResponse.json({ ok: true, envelope: result.envelope, ...(decidedOnBehalf ? { onBehalf: decidedOnBehalf } : {}) });
 }

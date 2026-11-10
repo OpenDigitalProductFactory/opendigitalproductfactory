@@ -67,6 +67,34 @@ If none of those four apply, the agent finishes the work.
 - Strategic judgment calls the operator hasn't delegated.
 - Actions the sandbox genuinely cannot perform — the operator deserves a clear "I can't because Y" diagnosis, not a hand-off dressed as completion.
 
+## Amendment 2026-09-22 — a reach limit is a recorded outcome, not a silent stall
+
+Reason 4 above ("Reach — the sandbox genuinely cannot perform the action") is the
+common case of something larger: a recursively self-improving system sometimes
+cannot fix itself, because the defect is in the path it runs on, or the capability
+is absent, or the change exceeds what the local model can do. That limit is real
+and must be designed for, not papered over by reaping the stuck unit of work.
+
+Automating the REMOVAL of a stuck unit clears the symptom and loses both the work
+and the cause. Recognising "I cannot fix this" is a first-class, learnable
+outcome, which is the same shape as
+[[principles/report-only-the-verdict-you-reached]] one layer down: every check has
+three outcomes, and the third is the one implementations forget.
+
+So a reach limit owes four things, not one:
+
+1. A durable escalation record carrying the root cause, what was attempted, why
+   it is blocked, and a **self-fix-feasibility class** — auto-recoverable, needs
+   human, or needs external capability.
+2. Surfacing as "needs human", **distinct from an auto-recoverable stall**, with
+   the underlying work re-queued so nothing is silently dropped.
+3. The failure **signature** routed to the commons, per
+   [[principles/learnings-belong-in-the-shared-commons]], so the network learns
+   its own limits and a later install inherits a known path.
+4. A support tier to route to, rather than a dead end.
+
+Founder direction, 2026-06-19.
+
 ## See also
 
 - Companion principle: `[[principles/test-in-the-portal-build]]` — naming the verification path that counts as "doing the work" for engineering tasks.

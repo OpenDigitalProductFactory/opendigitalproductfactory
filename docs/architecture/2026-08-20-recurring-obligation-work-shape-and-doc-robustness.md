@@ -7,6 +7,12 @@ area: architecture
 
 # Recurring-Obligation Work Shape and Documentation Robustness
 
+The provider-pause reconciliation cadence is an implemented recovery consumer:
+its core catalog entry runs every five minutes and reads overdue persisted
+pause identities. It preserves superseding operator actions and independent
+health restrictions. The [provider control guide](../user-guide/ai-workforce/provider-ollama.md)
+describes the controls, expiry behavior, and restart recovery together.
+
 **Scoping pass, 2026-08-20.** Triggered by an operator observation on the public
 compliance and licensing-readiness pages: the docs describe *records and screens*
 but never describe **what the AI Coworker actually does, in what shape, on what
@@ -99,6 +105,33 @@ should look like: a discovery spine, an external authority feed, a daily sweep, 
 findings ledger, and an auto-remediation tee-up. The gap is not conceptual
 capability — it is that this shape was built once, for one obligation family, and
 never generalized.
+
+
+### 2.2 The split-registry hazard is general ⟦runtime: 2026-09-02⟧
+
+Self-tasks were the second of four registries to move to a second module while a
+static reader kept reading the first; shapes, skills and the coworker grants map
+were the others. The rule that came out of it: a scanner that reads a registry
+must name its sources in an exported list with a guard test, never an inline
+path. See `SELF_TASK_SOURCES`, `SHAPE_SOURCE_FILES` and `GRANTS_SOURCE_FILES` in
+`scripts/measure-capability-completeness.mjs`.
+
+### 2.1 Self-tasks now span two modules ⟦runtime: 2026-09-02⟧
+
+`COWORKER_SELF_TASKS` reached 749 lines against an 800-line ceiling, so entries
+that pair with a declared work shape live in
+`coworker-standing-self-tasks.ts` and are spread into the original registry.
+
+A static reader has to union both: a spread is invisible to the frontmatter-style
+parser the capability measure uses, so reading only the first module would report
+every coworker declared in the second as having no recurring trigger — which the
+measure states as "any Proactivity setting is a silent no-op". `SELF_TASK_SOURCES`
+in `scripts/measure-capability-completeness.mjs` names both, with the literal to
+read from each.
+
+Each standing self-task drives the FIRST stage of its coworker's shape and nothing
+past the shape's governed gate. A self-task starts standing work; it never carries
+it through the decision a human owns.
 
 ## 3. The generalization: obligations are a family, not a feature
 

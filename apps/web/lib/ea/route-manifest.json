@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 641,
+  "routeCount": 685,
   "routes": [
     {
       "routePath": "/",
@@ -32,6 +32,16 @@
         "agentId"
       ],
       "file": "apps/web/app/.well-known/agent-card/[agentId]/route.ts"
+    },
+    {
+      "routePath": "/.well-known/dpf-federation.json",
+      "kind": "route",
+      "segments": [
+        ".well-known",
+        "dpf-federation.json"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/.well-known/dpf-federation.json/route.ts"
     },
     {
       "routePath": "/.well-known/dpf-instance.json",
@@ -294,6 +304,17 @@
       "file": "apps/web/app/(shell)/admin/settings/page.tsx"
     },
     {
+      "routePath": "/admin/settings/monitoring",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "settings",
+        "monitoring"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/settings/monitoring/page.tsx"
+    },
+    {
       "routePath": "/admin/skills",
       "kind": "page",
       "segments": [
@@ -525,6 +546,30 @@
       "file": "apps/web/app/api/admin/ops/execute-proposal/route.ts"
     },
     {
+      "routePath": "/api/agent-toolchain/manifest",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent-toolchain",
+        "manifest"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent-toolchain/manifest/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/agent-toolchain/pack.tar.gz",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent-toolchain",
+        "pack.tar.gz"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/agent-toolchain/pack.tar.gz/route.ts",
+      "exposure": "public"
+    },
+    {
       "routePath": "/api/agent/build/advance-phase",
       "kind": "route",
       "segments": [
@@ -546,6 +591,21 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/agent/cancel/route.ts"
+    },
+    {
+      "routePath": "/api/agent/envelope/[envelopeId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/agent/envelope/[envelopeId]/approve",
@@ -576,6 +636,38 @@
         "envelopeId"
       ],
       "file": "apps/web/app/api/agent/envelope/[envelopeId]/deny/route.ts"
+    },
+    {
+      "routePath": "/api/agent/envelope/[envelopeId]/reraise",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]",
+        "reraise"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/reraise/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/agent/envelope/[envelopeId]/standing-ruling",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]",
+        "standing-ruling"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/standing-ruling/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/agent/health",
@@ -644,6 +736,18 @@
         "nextauth"
       ],
       "file": "apps/web/app/api/auth/[...nextauth]/route.ts"
+    },
+    {
+      "routePath": "/api/automation/sign-in",
+      "kind": "route",
+      "segments": [
+        "api",
+        "automation",
+        "sign-in"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/automation/sign-in/route.ts",
+      "exposure": "public"
     },
     {
       "routePath": "/api/brand/logo",
@@ -776,6 +880,49 @@
         "path"
       ],
       "file": "apps/web/app/api/docs-asset/[...path]/route.ts"
+    },
+    {
+      "routePath": "/api/documents",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/documents/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/documents/[documentId]/content",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents",
+        "[documentId]",
+        "content"
+      ],
+      "dynamicParams": [
+        "documentId"
+      ],
+      "file": "apps/web/app/api/documents/[documentId]/content/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/documents/[documentId]/previews/[page]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents",
+        "[documentId]",
+        "previews",
+        "[page]"
+      ],
+      "dynamicParams": [
+        "documentId",
+        "page"
+      ],
+      "file": "apps/web/app/api/documents/[documentId]/previews/[page]/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/health",
@@ -1052,6 +1199,70 @@
       "file": "apps/web/app/api/kernel/gate/route.ts"
     },
     {
+      "routePath": "/api/map-assets",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/map-assets/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/[packId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "[packId]"
+      ],
+      "dynamicParams": [
+        "packId"
+      ],
+      "file": "apps/web/app/api/map-assets/[packId]/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/install-status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "install-status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/map-assets/install-status/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/recommendation",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "recommendation"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/map-assets/recommendation/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/runtime/[file]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "runtime",
+        "[file]"
+      ],
+      "dynamicParams": [
+        "file"
+      ],
+      "file": "apps/web/app/api/map-assets/runtime/[file]/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/mcp/call",
       "kind": "route",
       "segments": [
@@ -1234,6 +1445,19 @@
       "file": "apps/web/app/api/operations/snapshot/route.ts"
     },
     {
+      "routePath": "/api/ops/self-upgrade/control",
+      "kind": "route",
+      "segments": [
+        "api",
+        "ops",
+        "self-upgrade",
+        "control"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/ops/self-upgrade/control/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/ops/self-upgrade/impact-summary",
       "kind": "route",
       "segments": [
@@ -1356,6 +1580,18 @@
         "syncId"
       ],
       "file": "apps/web/app/api/platform/integrations/sync-progress/[syncId]/route.ts"
+    },
+    {
+      "routePath": "/api/platform/managed-inference",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "managed-inference"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/managed-inference/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/platform/metrics",
@@ -1771,6 +2007,48 @@
       "file": "apps/web/app/api/storefront/admin/publish/route.ts"
     },
     {
+      "routePath": "/api/storefront/admin/resource-occupancies",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "resource-occupancies"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/resource-occupancies/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/storefront/admin/resources",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "resources"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/resources/route.ts",
+      "exposure": "public"
+    },
+    {
+      "routePath": "/api/storefront/admin/resources/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "resources",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/resources/[id]/route.ts",
+      "exposure": "public"
+    },
+    {
       "routePath": "/api/storefront/admin/sections/[id]",
       "kind": "route",
       "segments": [
@@ -1917,15 +2195,16 @@
       "file": "apps/web/app/api/storefront/sign-up/route.ts"
     },
     {
-      "routePath": "/api/test/codex-responses",
+      "routePath": "/api/telemetry/journeys",
       "kind": "route",
       "segments": [
         "api",
-        "test",
-        "codex-responses"
+        "telemetry",
+        "journeys"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/api/test/codex-responses/route.ts"
+      "file": "apps/web/app/api/telemetry/journeys/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/transcribe",
@@ -2180,6 +2459,23 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/compliance/regulations/route.ts"
+    },
+    {
+      "routePath": "/api/v1/customer-sites/[siteId]/location/device-confirmation",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "customer-sites",
+        "[siteId]",
+        "location",
+        "device-confirmation"
+      ],
+      "dynamicParams": [
+        "siteId"
+      ],
+      "file": "apps/web/app/api/v1/customer-sites/[siteId]/location/device-confirmation/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/v1/customer/accounts",
@@ -2529,6 +2825,20 @@
       "file": "apps/web/app/api/v1/edge/actions/claim/route.ts"
     },
     {
+      "routePath": "/api/v1/edge/actions/inference-admission",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "actions",
+        "inference-admission"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/actions/inference-admission/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/v1/edge/actions/result",
       "kind": "route",
       "segments": [
@@ -2675,6 +2985,20 @@
       "file": "apps/web/app/api/v1/federation/enroll/route.ts"
     },
     {
+      "routePath": "/api/v1/federation/enroll/organization",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "enroll",
+        "organization"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/enroll/organization/route.ts",
+      "exposure": "private-mesh"
+    },
+    {
       "routePath": "/api/v1/federation/inbox",
       "kind": "route",
       "segments": [
@@ -2711,6 +3035,20 @@
       "file": "apps/web/app/api/v1/federation/introductions/route.ts"
     },
     {
+      "routePath": "/api/v1/federation/membership/sign",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "membership",
+        "sign"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/membership/sign/route.ts",
+      "exposure": "private-mesh"
+    },
+    {
       "routePath": "/api/v1/federation/proposal",
       "kind": "route",
       "segments": [
@@ -2721,6 +3059,19 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/federation/proposal/route.ts"
+    },
+    {
+      "routePath": "/api/v1/federation/work",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "federation",
+        "work"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/federation/work/route.ts",
+      "exposure": "private-mesh"
     },
     {
       "routePath": "/api/v1/finance/assets",
@@ -3784,6 +4135,22 @@
       "file": "apps/web/app/api/v1/work-items/[itemId]/evidence/route.ts"
     },
     {
+      "routePath": "/api/v1/work-items/[itemId]/sites",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "work-items",
+        "[itemId]",
+        "sites"
+      ],
+      "dynamicParams": [
+        "itemId"
+      ],
+      "file": "apps/web/app/api/v1/work-items/[itemId]/sites/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/v1/work-queue/[itemId]/claim",
       "kind": "route",
       "segments": [
@@ -3955,6 +4322,70 @@
         "capsuleId"
       ],
       "file": "apps/web/app/api/work-capsules/[capsuleId]/activity-stream/route.ts"
+    },
+    {
+      "routePath": "/api/work-capsules/delivery-page",
+      "kind": "route",
+      "segments": [
+        "api",
+        "work-capsules",
+        "delivery-page"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/work-capsules/delivery-page/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/work-capsules/delivery-stream",
+      "kind": "route",
+      "segments": [
+        "api",
+        "work-capsules",
+        "delivery-stream"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/work-capsules/delivery-stream/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/workbooks/export",
+      "kind": "route",
+      "segments": [
+        "api",
+        "workbooks",
+        "export"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/workbooks/export/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/workspace/cases/[caseKey]/projection",
+      "kind": "route",
+      "segments": [
+        "api",
+        "workspace",
+        "cases",
+        "[caseKey]",
+        "projection"
+      ],
+      "dynamicParams": [
+        "caseKey"
+      ],
+      "file": "apps/web/app/api/workspace/cases/[caseKey]/projection/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/area/[key]",
+      "kind": "page",
+      "segments": [
+        "area",
+        "[key]"
+      ],
+      "dynamicParams": [
+        "key"
+      ],
+      "file": "apps/web/app/(shell)/area/[key]/page.tsx"
     },
     {
       "routePath": "/auth/callback",
@@ -4509,6 +4940,16 @@
       "file": "apps/web/app/(shell)/customer/(crm)/engagements/page.tsx"
     },
     {
+      "routePath": "/customer/footprint",
+      "kind": "page",
+      "segments": [
+        "customer",
+        "footprint"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/customer/footprint/page.tsx"
+    },
+    {
       "routePath": "/customer/funnel",
       "kind": "page",
       "segments": [
@@ -4635,7 +5076,8 @@
         "delivery"
       ],
       "dynamicParams": [],
-      "file": "apps/web/app/(shell)/delivery/page.tsx"
+      "file": "apps/web/app/(shell)/delivery/page.tsx",
+      "redirectTo": "/area/delivery"
     },
     {
       "routePath": "/docs/[[...slug]]",
@@ -5497,6 +5939,16 @@
       "file": "apps/web/app/(shell)/ops/dev-loop/page.tsx"
     },
     {
+      "routePath": "/ops/gate-efficacy",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "gate-efficacy"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/gate-efficacy/page.tsx"
+    },
+    {
       "routePath": "/ops/health",
       "kind": "page",
       "segments": [
@@ -5676,7 +6128,8 @@
       "dynamicParams": [
         "bindingId"
       ],
-      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx",
+      "redirectTo": "/platform/ai/assignments"
     },
     {
       "routePath": "/platform/ai/authority",
@@ -6161,7 +6614,8 @@
       "dynamicParams": [
         "bindingId"
       ],
-      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx"
+      "file": "apps/web/app/(shell)/platform/identity/authorization/bindings/[bindingId]/page.tsx",
+      "redirectTo": "/platform/identity/authorization"
     },
     {
       "routePath": "/platform/identity/directory",
@@ -6982,7 +7436,8 @@
       "dynamicParams": [
         "productId"
       ],
-      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx"
+      "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx",
+      "redirectTo": "/portfolio/product/[id]"
     },
     {
       "routePath": "/r/[token]",
@@ -7319,6 +7774,17 @@
       "file": "apps/web/app/(shell)/storefront/animals/page.tsx"
     },
     {
+      "routePath": "/storefront/animals/waiting",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "animals",
+        "waiting"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/storefront/animals/waiting/page.tsx"
+    },
+    {
       "routePath": "/storefront/dispatch",
       "kind": "page",
       "segments": [
@@ -7631,6 +8097,30 @@
       "file": "apps/web/app/(shell)/workspace/inbox/page.tsx"
     },
     {
+      "routePath": "/workspace/mailroom",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "mailroom"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/mailroom/page.tsx"
+    },
+    {
+      "routePath": "/workspace/mailroom/items/[inboundId]",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "mailroom",
+        "items",
+        "[inboundId]"
+      ],
+      "dynamicParams": [
+        "inboundId"
+      ],
+      "file": "apps/web/app/(shell)/workspace/mailroom/items/[inboundId]/page.tsx"
+    },
+    {
       "routePath": "/workspace/my-queue",
       "kind": "page",
       "segments": [
@@ -7639,6 +8129,81 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/workspace/my-queue/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/adoptions",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "adoptions"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/adoptions/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/animals",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "animals"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/animals/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/care",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "care"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/care/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/intake",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "intake"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/intake/page.tsx"
+    },
+    {
+      "routePath": "/workspace/rescue/stewardship",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "rescue",
+        "stewardship"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/rescue/stewardship/page.tsx"
+    },
+    {
+      "routePath": "/workspace/ward",
+      "kind": "page",
+      "segments": [
+        "workspace",
+        "ward"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/workspace/ward/page.tsx"
     }
   ]
 }

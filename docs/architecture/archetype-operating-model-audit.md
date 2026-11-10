@@ -249,6 +249,11 @@ Record with the score: the install, the date, the roles used, and the count of s
 
 For reference, `pet-rescue` measured **0.30 operability** on 2026-08-26 — of ten steps, zero
 completed, six partial, four impossible — against **0.05 coverage** measured the previous day.
+Re-run on 2026-09-01 after the operating-day fixes shipped, it measured **0.40** — zero completed,
+eight partial, two impossible — with **coverage unchanged at 0.05**. That pair is the axis earning
+its keep: removing six ways the product misled or obstructed the operator moved operability and
+moved coverage not at all, because none of it added an entity. One number would have hidden which
+of the two happened.
 The gap between the two is the interesting part: it is made of the reachability, inert-affordance
 and forced-publication defects above, none of which coverage can see.
 

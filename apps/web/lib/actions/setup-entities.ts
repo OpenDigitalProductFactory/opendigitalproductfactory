@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
+import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { slugify } from "@/lib/shared/slugify";
 import { hashPassword } from "../password";
 import { linkSetupToOrg, linkSetupToUser } from "./setup-progress";
@@ -79,6 +80,7 @@ export async function createOwnerAccount(
   const existing = await prisma.user.findUnique({ where: { email: data.email } });
   if (existing) {
     await linkSetupToUser(setupId, existing.id);
+    await recordOwnerAsAccountableIfUnset(setupId, existing.id);
     return { userId: existing.id, email: existing.email };
   }
 
@@ -94,6 +96,42 @@ export async function createOwnerAccount(
   });
 
   await linkSetupToUser(setupId, user.id);
+  await recordOwnerAsAccountableIfUnset(setupId, user.id);
 
   return { userId: user.id, email: user.email };
+}
+
+/**
+ * Record the setup owner as the organization's accountable owner
+ * (Organization.topAccountablePrincipalId) — only while nothing is recorded.
+ * The null guard sits in the UPDATE's WHERE clause, so a choice already made
+ * (including one changed later in Admin › Settings) is never overwritten.
+ *
+ * Links the owner's human Principal now rather than at first sign-in: every
+ * human-creation path produces its Principal (BI-4150F4D6), and the FK needs
+ * Principal.id. Best-effort like the other creation paths — a linking failure
+ * must not strand setup; the organization then reads as having no accountable
+ * owner, which Admin › Settings offers to set.
+ */
+async function recordOwnerAsAccountableIfUnset(setupId: string, userId: string): Promise<void> {
+  try {
+    const principal = await syncUserPrincipal(userId);
+    if (principal.kind !== "human" || principal.status !== "active") return;
+
+    const progress = await prisma.platformSetupProgress.findUnique({
+      where: { id: setupId },
+      select: { organizationId: true },
+    });
+    const organizationId =
+      progress?.organizationId ??
+      (await prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
+    if (!organizationId) return;
+
+    await prisma.organization.updateMany({
+      where: { id: organizationId, topAccountablePrincipalId: null },
+      data: { topAccountablePrincipalId: principal.id },
+    });
+  } catch (error) {
+    console.error("[createOwnerAccount] could not record the accountable owner", error);
+  }
 }

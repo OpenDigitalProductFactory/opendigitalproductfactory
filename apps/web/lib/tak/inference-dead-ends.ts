@@ -22,6 +22,9 @@
 // belong in that budget.
 import { describeContextCapacityFailure } from "./context-capacity-failure";
 import { buildHumanHandoff } from "./escalation-ladder";
+import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
+import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, type ExecutionUncertainty } from "../shared/execution-uncertainty";
+import { isLocalProviderId } from "../routing/provider-locality";
 
 /** Routing eliminated every candidate — a real configuration question. */
 export function noEligibleModelHandoff(): string {
@@ -33,6 +36,35 @@ export function noEligibleModelHandoff(): string {
       "Check the active route for this coworker: provider status, data-policy or residency limits, capability requirements, and context size.",
     ],
     verify: "re-check which models this coworker can reach",
+  });
+}
+
+/**
+ * Routing eliminated every candidate specifically because no connected provider
+ * is cleared for this coworker's data sensitivity — the confidential-data fence
+ * working as designed, not an outage (BI-431524DF). The generic "no eligible
+ * model" copy sends the operator to re-check provider status, which is the wrong
+ * advice here: the providers ARE connected and active; they are held back only
+ * because a personal-subscription account carries no commercial no-training
+ * guarantee. Name the two real levers instead — clear a business cloud account,
+ * or provision a capable local model — and never imply a personal subscription
+ * should be attested.
+ */
+export function sensitivityClearanceHandoff(sensitivity: string): string {
+  return buildHumanHandoff({
+    blocker:
+      `This coworker handles ${sensitivity} work, and none of the connected AI providers are cleared for ` +
+      `${sensitivity} data. Cloud providers such as Claude or GPT stay limited to public work until their ` +
+      `account's data policy is reviewed — a personal subscription is deliberately not cleared for ${sensitivity} ` +
+      `data, so ${sensitivity} content is never sent to a provider that might train on it. The built-in local ` +
+      `model is cleared for it but is not strong enough for this request.`,
+    steps: [
+      `To let a cloud provider handle ${sensitivity} work: open Platform > AI Operations > Providers & Routing, ` +
+      `and only on a genuine business or enterprise account with a no-training agreement, attest its data policy ` +
+      `(mark it operator-attested, or upload the contract).`,
+      `To keep ${sensitivity} work fully on-premises: configure a stronger local model that is cleared for ${sensitivity} data.`,
+    ],
+    verify: `re-check which models this coworker can reach for ${sensitivity} work`,
   });
 }
 
@@ -50,11 +82,109 @@ export function providersBusyHandoff(): string {
   });
 }
 
+/**
+ * Every endpoint failed, but not all of them transiently (BI-D25F867D). Name
+ * what each one hit instead of claiming nothing is misconfigured: on
+ * 2026-09-24 "every provider is busy" covered a stopped sandbox container and
+ * a local model reserved for a local-CI gate, and nobody could act on it.
+ */
+export function providersUnavailableHandoff(attempts: readonly EndpointAttempt[]): string {
+  const seen = new Set<string>();
+  const causes = attempts.flatMap((attempt) => {
+    const line = `${attempt.endpointId}: ${plainAttemptCause(attempt.error)}`;
+    if (seen.has(line)) return [];
+    seen.add(line);
+    return [line];
+  });
+  return buildHumanHandoff({
+    blocker: `No AI provider could take this turn. ${causes.join("; ")}.`,
+    steps: [
+      "If the build sandbox is stopped, start it (start_sandbox); a local model reserved for a local-CI gate frees when the gate finishes.",
+      "Otherwise open Platform > AI Operations > Providers & Routing and check the provider named above.",
+    ],
+    verify: "re-check the providers and pick this straight back up",
+  });
+}
+
+export type EndpointAttempt = { endpointId: string; error: string; code?: string };
+
+/** A queue expiry proves no dispatch for this call, not a provider outage. */
+function isLocalAdmissionWait(message: string): boolean {
+  const marker = /inference admission timeout on local engine after \d+ms \(origin=(?:interactive|autonomous)(?:, provider=[^)]+)?\)/i;
+  if (/All endpoints failed/i.test(message)) {
+    const attempts = parseEndpointAttempts(message);
+    return !!attempts?.length && attempts.every(attempt =>
+      isLocalProviderId(attempt.endpointId) && marker.test(attempt.error),
+    );
+  }
+  return marker.test(message);
+}
+
+function localAdmissionWaitHandoff(): string {
+  return "This AI step did not start: other requests were ahead in this machine's AI queue when its wait limit was reached. "
+    + "Send the request again after local AI capacity becomes available.";
+}
+
+/** The attempts behind "All endpoints failed", or null when the message carries none. */
+export function parseEndpointAttempts(message: string): EndpointAttempt[] | null {
+  if (!/All endpoints failed/i.test(message)) return null;
+  const marker = message.match(/Attempts:\s*/i);
+  if (marker?.index === undefined) return null;
+  try {
+    const parsed: unknown = JSON.parse(message.slice(marker.index + marker[0].length).trim());
+    if (!Array.isArray(parsed)) return null;
+    return parsed.flatMap((entry) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+      const record = entry as Record<string, unknown>;
+      return [{
+        endpointId: typeof record.endpointId === "string" ? record.endpointId : "unknown",
+        error: typeof record.error === "string" ? record.error : "",
+        ...(typeof record.code === "string" ? { code: record.code } : {}),
+      }];
+    });
+  } catch {
+    return null;
+  }
+}
+
+const NETWORK_ERROR = /network error|fetch failed|\bECONN(?:REFUSED|RESET|ABORTED)\b|\bENOTFOUND\b|\bEAI_AGAIN\b|\bETIMEDOUT\b|\bUND_ERR_(?:CONNECT_TIMEOUT|SOCKET)\b|socket hang up|getaddrinfo|connect(?:ion)? (?:refused|reset|timed out)|connect timeout/i;
+const LIMIT_ERROR = /rate.?limit|overload|\bbusy\b|\b429\b|\b529\b|pool exhausted|usage limit/i;
+const CAPACITY_DEFERRAL = /local-ci-active-capacity-reservation|Local provider dispatch deferred|capacity (?:reservation|deferr)/i;
+const TRANSIENT_CODES: ReadonlySet<string> = new Set(["rate_limit", "overloaded", "transient", "network", "capacity"]);
+
+/** Whether waiting would help: a limit, an overload, a network blip, or capacity held by other work. */
+export function isTransientAttempt(attempt: EndpointAttempt): boolean {
+  if (attempt.code && TRANSIENT_CODES.has(attempt.code)) return true;
+  return NETWORK_ERROR.test(attempt.error) || LIMIT_ERROR.test(attempt.error) || CAPACITY_DEFERRAL.test(attempt.error);
+}
+
+function plainAttemptCause(error: string): string {
+  if (/container [0-9a-f]+ is not running|sandbox .*not running|is not running/i.test(error)) {
+    return "it runs in the build sandbox, which is not running";
+  }
+  if (CAPACITY_DEFERRAL.test(error)) return "it is reserved for a running local-CI gate";
+  if (LIMIT_ERROR.test(error)) return "it has reached its usage or rate limit for now";
+  if (NETWORK_ERROR.test(error)) return "it could not be reached";
+  const first = error.split("\n")[0].trim();
+  return first ? first.slice(0, 160) : "it failed without a reason";
+}
+
 export function modelMissingHandoff(): string {
   return buildHumanHandoff({
     blocker: "The selected AI model is no longer available from its provider, so the platform could not answer this turn.",
     steps: ["Open Platform > AI Operations > Providers & Routing and refresh that provider's models."],
     verify: "re-check the available models and pick this straight back up",
+  });
+}
+
+export function requiredTerminalWriterNotEnforceableHandoff(): string {
+  return buildHumanHandoff({
+    blocker:
+      "None of the available AI adapters can enforce this task's required governed receipt writer, so inference was not started and no receipt was created.",
+    steps: [
+      "Activate or route this task to an AI provider adapter that supports required tool choice.",
+    ],
+    verify: "resume this same task with its unchanged evidence and record the governed receipt",
   });
 }
 
@@ -110,11 +240,18 @@ export function localCapacityHeldHandoff(
       ? "I couldn't confirm the local AI model was free to use, so I held off rather than risk disrupting something else running on this machine. Nothing is misconfigured."
       : "The only AI model allowed to handle this request is tied up with a background job on this machine, so I couldn't answer. Nothing is misconfigured.",
     steps: [
+      // BI-EBE25715: `expectedFreeAt` is ONE lease's expiry, not the time until
+      // the host is actually free. When other claims are waiting behind it the
+      // reservation is re-taken the moment it clears, so "send again in about
+      // two minutes" reads as a promise the platform cannot keep — observed on
+      // a host running 9-46 queued claims, where the same turn was refused for
+      // over an hour on that advice. Name the window as the earliest it COULD
+      // free, and say plainly that it depends on what else is queued.
       window
-        ? `Send the message again in ${window}, when that job is due to finish.`
-        : "Give it a couple of minutes, then send the message again.",
+        ? `Send the message again in ${window} at the earliest — sooner only if nothing else is waiting for this machine.`
+        : "It frees up when that job finishes. I can't tell from here how long that will be, so send the message again when you want me to retry.",
     ],
-    verify: "check the moment it frees up",
+    verify: "check whether it has freed up",
   });
 }
 
@@ -140,6 +277,32 @@ export function unexplainedDeadEndHandoff(): string {
       "Check whether a provider needs reconnecting — the most common cause, though not the only one.",
     ],
     verify: "re-check what this coworker can reach and tell you what I find",
+  });
+}
+
+/**
+ * The platform's own daily allowance for paid AI was used (BI-F3B6713F). This
+ * is a spending limit, not an outage: say so, say when it resets and who can
+ * raise it. Matched by name or message, for the bundle reason below.
+ */
+export function isDailyAllowanceUsed(error: unknown, message: string): boolean {
+  const name = typeof error === "object" && error !== null && "name" in error
+    ? (error as { name?: unknown }).name
+    : undefined;
+  return name === "AgentAllowanceExhaustedError" || /^Daily allowance used:/.test(message);
+}
+
+export function dailyAllowanceUsedHandoff(resetAt: string | null): string {
+  const reset = resetAt ? new Date(resetAt) : null;
+  const when = reset && !Number.isNaN(reset.getTime())
+    ? `at ${reset.toISOString().slice(11, 16)} UTC` : "at 00:00 UTC";
+  return buildHumanHandoff({
+    blocker: `Today's allowance for paid AI is used up. It resets ${when}. Local and subscription models are not affected.`,
+    steps: [
+      "Wait for the reset.",
+      "Or ask an owner to raise it in Admin > Platform Development > Paid AI allowance.",
+    ],
+    verify: "check the allowance",
   });
 }
 
@@ -178,6 +341,30 @@ function readExpectedFreeAt(error: unknown): Date | null {
   return null;
 }
 
+function isRequiredTerminalWriterNotEnforceable(error: unknown, message: string): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+  if (code === "required_terminal_writer_not_enforceable") return true;
+  const marker = /required[_-]terminal[_-]writer[_-]not[_-]enforceable/i;
+  if (!marker.test(message)) return false;
+  if (!/^All endpoints failed/i.test(message)) return true;
+  const serializedAttempts = /Attempts:\s*(\[.*\])\s*$/s.exec(message)?.[1];
+  if (!serializedAttempts) return false;
+  try {
+    const attempts = JSON.parse(serializedAttempts) as unknown;
+    return Array.isArray(attempts)
+      && attempts.length > 0
+      && attempts.every((attempt) => {
+        if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
+        const attemptError = (attempt as Record<string, unknown>)["error"];
+        return typeof attemptError === "string" && marker.test(attemptError);
+      });
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Plain-language, non-technical explanation for a turn that failed because
  * routing could not complete a tool-using call (BI-23E0714C).
@@ -210,6 +397,18 @@ function describeToolRouteFailureMessage(
 
   if (msg.startsWith("REQUEST_TOO_LARGE:")) {
     return "Your conversation is too long for this AI provider. Please start a new thread to continue.";
+  }
+
+  if (isRequiredTerminalWriterNotEnforceable(error, msg)) {
+    return requiredTerminalWriterNotEnforceableHandoff();
+  }
+
+  if (isLocalAdmissionWait(msg)) return localAdmissionWaitHandoff();
+
+  if (isDailyAllowanceUsed(error, msg)) {
+    const resetAt = typeof error === "object" && error !== null && "resetAt" in error
+      && typeof (error as { resetAt?: unknown }).resetAt === "string" ? (error as { resetAt: string }).resetAt : null;
+    return dailyAllowanceUsedHandoff(resetAt);
   }
 
   // Checked early, and before the credential and threshold branches: a deferral
@@ -278,6 +477,17 @@ function describeToolRouteFailureMessage(
   const contextCapacityFailure = describeContextCapacityFailure(msg);
   if (contextCapacityFailure) return contextCapacityFailure;
 
+  // Data-governance gap, NOT an outage: every candidate was eliminated because no
+  // connected provider is cleared for this coworker's data sensitivity (the router
+  // appends this clause when an active, capable provider was dropped purely on
+  // clearance). Must be checked BEFORE the generic "No eligible endpoints" branch,
+  // whose copy ("re-check provider status") is wrong advice here — the providers
+  // are connected; they simply are not cleared for confidential data. (BI-431524DF)
+  const clearanceBlock = msg.match(/No connected provider is cleared for '([^']+)' data/i);
+  if (clearanceBlock) {
+    return sensitivityClearanceHandoff(clearanceBlock[1]);
+  }
+
   // Config/capacity gap: routing eliminated EVERY candidate (e.g. the cloud
   // provider's sign-in expired AND the bundled local model's context window is
   // too small for this coworker's larger requests). This reaches here as a plain
@@ -287,28 +497,57 @@ function describeToolRouteFailureMessage(
     return noEligibleModelHandoff();
   }
 
-  // Endpoints exist but all transiently failed (rate-limit / overload / network).
+  // Endpoints exist but all failed. Only a wholly transient failure is "busy";
+  // anything else names what each endpoint hit.
   if (/All endpoints failed/i.test(msg)) {
-    return providersBusyHandoff();
+    const attempts = dispatchedAttempts(msg);
+    return attempts && attempts.length > 0 && !attempts.every(isTransientAttempt)
+      ? providersUnavailableHandoff(attempts)
+      : providersBusyHandoff();
   }
 
   return unexplainedDeadEndHandoff();
 }
 
 export type InferenceDeadEndKind =
+  | "evidence-unavailable"
   | "model-missing"
   | "credentials"
   | "capacity"
   | "policy-or-capability"
   | "context"
   | "busy"
+  | "required-terminal-writer-not-enforceable"
   | "terminal-writer-missing"
+  | "execution-uncertain"
   | "unknown";
 
 export type InferenceDeadEndOutcome = {
   kind: InferenceDeadEndKind;
   message: string;
+  executionUncertainty?: ExecutionUncertainty;
+  /** BI-50B0C471: set on `terminal-writer-missing` when a capacity/busy
+   * deferral, not the writer contract, stopped a reviewer after banked reads. */
+  deferredBy?: "capacity" | "busy";
 };
+
+/** Attempts that actually dispatched: a writer the route cannot enforce is not a provider failure. */
+function dispatchedAttempts(message: string): EndpointAttempt[] | null {
+  const attempts = parseEndpointAttempts(message);
+  return attempts?.filter((attempt) => !/required-terminal-writer-not-enforceable/i.test(attempt.error)) ?? null;
+}
+
+/**
+ * Every dispatched endpoint failed for a reason that waiting fixes. Once only
+ * network errors counted (BI-A50F6B7B), so a pool or usage limit, a typed
+ * rate_limit and a capacity reservation all read as "unknown" and the task
+ * failed instead of waiting (2026-09-24).
+ */
+function isAllEndpointTransient(message: string): boolean {
+  const attempts = dispatchedAttempts(message);
+  if (!attempts || attempts.length === 0) return false;
+  return attempts.every((attempt) => attempt.error.trim().length > 0 && isTransientAttempt(attempt));
+}
 
 export function describeToolRouteFailureOutcome(
   errorMessage: string,
@@ -316,15 +555,27 @@ export function describeToolRouteFailureOutcome(
   error?: unknown,
 ): InferenceDeadEndOutcome {
   const msg = errorMessage ?? "";
+  if (classifyDispatchFailure(error ?? msg).code === "execution-uncertain") {
+    return { kind: "execution-uncertain", message: EXECUTION_UNCERTAIN_MESSAGE,
+      executionUncertainty: executionUncertaintyFromError(error) };
+  }
+  if (isRequiredTerminalWriterNotEnforceable(error, msg)) {
+    return {
+      kind: "required-terminal-writer-not-enforceable",
+      message: requiredTerminalWriterNotEnforceableHandoff(),
+    };
+  }
   if (/model[_ ]not[_ ]found|model not found|provider model inventory changed/i.test(msg)) {
     return { kind: "model-missing", message: modelMissingHandoff() };
   }
   const message = describeToolRouteFailureMessage(msg, toolCount, error);
+  if (isLocalAdmissionWait(msg)) return { kind: "capacity", message };
   if (/REQUEST_TOO_LARGE|exceed_context_size|available context size/i.test(msg)) return { kind: "context", message };
   if (isLocalCapacityDeferral(error, msg)) return { kind: "capacity", message };
   if (/No credential|auth(?:entication|orization)? (?:failed|error)|unauthorized/i.test(msg)) return { kind: "credentials", message };
   if (/No eligible endpoints|toolUse required|tool-capable/i.test(msg)) return { kind: "policy-or-capability", message };
   if (/rate.?limit|overload|\bbusy\b|status(?:Code)?[\"']?:\s*(?:429|529)/i.test(msg)) return { kind: "busy", message };
+  if (isAllEndpointTransient(msg)) return { kind: "busy", message };
   return { kind: "unknown", message };
 }
 
@@ -334,4 +585,24 @@ export function describeToolRouteFailure(
   error?: unknown,
 ): string {
   return describeToolRouteFailureOutcome(errorMessage, toolCount, error).message;
+}
+
+/**
+ * BI-50B0C471: a capacity/busy deferral that met a governed reviewer AFTER its
+ * bound reads. The banked writer wait is kept (the run is no longer a clean
+ * pre-inference wait), but the outcome names the deferral instead of reporting
+ * that the writer could not be dispatched, so the caller waits for capacity and
+ * the resume does not spend one of the writer's bounded attempts.
+ */
+export function describeBankedReaderDeferral(
+  kind: InferenceDeadEndKind,
+  reads: number,
+  writerToolName: string,
+  cause: string,
+): InferenceDeadEndOutcome | null {
+  if (kind !== "capacity" && kind !== "busy") return null;
+  const message = `Inference ${kind === "capacity" ? "capacity was deferred" : "was busy"} after ${reads} bound read${reads === 1 ? "" : "s"} (${cause}). `
+    + `The reads are banked on this TaskRun and ${writerToolName} has not run. `
+    + "Re-issue the same request after the reservation clears; it resumes here without spending a writer attempt. No receipt was created.";
+  return { kind: "terminal-writer-missing", message, deferredBy: kind };
 }

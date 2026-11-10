@@ -23,10 +23,12 @@ import {
 } from "@dpf/db/installation-peer-pairing";
 import {
   buildInstallationOperatingProfileSnapshot,
+  isInstallationEnvironmentClass,
   parseOperatingIntent,
   type InstallationOperatingIntentV1,
 } from "@dpf/db/installation-operating-intent";
 
+import { shortDeviceId } from "@/lib/federation/instance-identity";
 import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
 import { readInstallHostProfile } from "@/lib/install/host-profile";
 
@@ -42,7 +44,7 @@ export const OPERATING_INTENT_CONFIG_KEY = "installation.operating-intent.v1";
 export const BACKLOG_CAPTURE_CONFIG_KEY = "installation.backlog-capture.v1";
 
 /** Backlog statuses whose work is not yet finished, and so cannot be recreated. */
-const UNFINISHED_STATUSES = ["triaging", "open", "in-progress"] as const;
+const UNFINISHED_STATUSES = ["triaging", "open", "in-progress", "awaiting-acceptance"] as const;
 
 /**
  * A durable capture receipt written by the backlog exporter.
@@ -114,9 +116,18 @@ export function holdsIrreplaceableWork(input: {
   return latestChange > capturedAt;
 }
 
+/** The peer installation as an operator recognises it: its name and DID suffix. */
+function peerInstallationLabel(displayName: string | null | undefined, deviceId: string | null): string | null {
+  const name = displayName?.trim();
+  if (!name) return null;
+  return deviceId ? `${name} (${shortDeviceId(deviceId)})` : name;
+}
+
 /** Minimal store shape so callers can pass Prisma without this module importing it. */
 export interface InstanceStanceStore {
   readConfig(key: string): Promise<unknown>;
+  /** The Organization row's name from setup — the lowest estate-name tier (BI-CA54ACC8). */
+  readOrganizationName?(): Promise<string | null>;
   countBacklogItemsByStatus(statuses: readonly string[]): Promise<number>;
   /**
    * Most recent create/update across items in those statuses, or null when
@@ -131,6 +142,8 @@ export interface InstanceStanceStore {
    * off rather than assuming a declared peer is real.
    */
   listFederationLinks?(): Promise<readonly PairingLink[]>;
+  /** The one federation health sentence, or null when it cannot be read. */
+  readWorkSyncHealthLine?(): Promise<string | null>;
 }
 
 /**
@@ -142,11 +155,14 @@ export interface InstanceStanceStore {
  * a different set of rows.
  */
 export function prismaInstanceStanceStore(
-  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem" | "federationLink">,
+  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem" | "federationLink" | "organization">,
 ): InstanceStanceStore {
   return {
     readConfig: async (key) =>
       (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+    // Lowest estate-name tier: the organization named at setup (BI-CA54ACC8).
+    readOrganizationName: async () =>
+      (await prisma.organization.findFirst({ select: { name: true } }))?.name ?? null,
     countBacklogItemsByStatus: (statuses) =>
       prisma.backlogItem.count({ where: { status: { in: [...statuses] } } }),
     latestBacklogChangeByStatus: async (statuses) => {
@@ -168,6 +184,10 @@ export function prismaInstanceStanceStore(
       if (stamps.length === 0) return null;
       return stamps.reduce((a, b) => (a.getTime() >= b.getTime() ? a : b));
     },
+    readWorkSyncHealthLine: async () => {
+      const { getFederationHealth } = await import("@/lib/federation/work-sync-read-model");
+      return (await getFederationHealth()).line;
+    },
     listFederationLinks: async () => {
       const rows = await prisma.federationLink.findMany({
         select: {
@@ -175,8 +195,11 @@ export function prismaInstanceStanceStore(
           linkState: true,
           role: true,
           peerOrganizationRef: true,
+          peerDeviceId: true,
+          peerEnvironmentClass: true,
           revokedAt: true,
           quarantinedAt: true,
+          principal: { select: { displayName: true } },
         },
       });
       return rows.map((row) => ({
@@ -186,6 +209,11 @@ export function prismaInstanceStanceStore(
         // itself is not a column, so the role is what identifies the pairing.
         relationshipPreset: row.role === "same-org-peer" ? "same-organization" : row.role,
         peerLabel: row.peerOrganizationRef,
+        // BI-0716C8A8: the CA-attested class, and the peer installation itself
+        // for display. `peerLabel` stays the organization ref the operator's
+        // declaration is compared against.
+        peerEnvironmentClass: isInstallationEnvironmentClass(row.peerEnvironmentClass) ? row.peerEnvironmentClass : null,
+        peerInstallationLabel: peerInstallationLabel(row.principal?.displayName, row.peerDeviceId),
         revokedAt: row.revokedAt,
         quarantinedAt: row.quarantinedAt,
       }));
@@ -261,12 +289,21 @@ export async function loadInstanceStance(
     declaredRef: snapshot.pairedProductionInstallationRef,
     links,
   });
+  let workSyncHealthLine: string | undefined;
+  try {
+    workSyncHealthLine = (await store.readWorkSyncHealthLine?.()) ?? undefined;
+  } catch {
+    workSyncHealthLine = undefined;
+  }
 
   return resolveInstanceStance(
     { ...snapshot, pairedProductionInstallationRef: pairing.ref ?? undefined },
     {
       sourceCapable: hostProfile.sourceCapable,
       pairingIsEstablished: pairingSupportsWorkSync(pairing),
+      peerEnvironmentClass: pairing.peerEnvironmentClass,
+      ...(pairing.peerInstallationLabel ? { peerInstallationLabel: pairing.peerInstallationLabel } : {}),
+      ...(workSyncHealthLine ? { workSyncHealthLine } : {}),
     },
     {
       holdsIrreplaceableWork: holdsIrreplaceableWork({

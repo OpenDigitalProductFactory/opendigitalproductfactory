@@ -1,6 +1,7 @@
 import type { ActiveViewer } from "./work-item-presence";
 import { deriveRoomCoordinator } from "./room-coordinator";
 import type {
+  WorkroomParticipantAssignmentSource,
   WorkroomParticipantRole,
   WorkroomParticipantView,
 } from "./room-types";
@@ -15,6 +16,25 @@ const SENSITIVITY_RANK: Record<string, number> = {
   restricted: 3,
   critical: 3,
 };
+
+/** Does any held clearance reach the ceiling? One rule for room access and the room charter. */
+export function clearanceCovers(clearance: readonly string[], ceiling: string): boolean {
+  const required = SENSITIVITY_RANK[ceiling] ?? Number.MAX_SAFE_INTEGER;
+  return Math.max(-1, ...clearance.map((value) => SENSITIVITY_RANK[value] ?? -1)) >= required;
+}
+
+const CLEARANCE_LEVELS = ["public", "internal", "confidential", "restricted"] as const;
+
+/** Every level from public up to and including `ceiling`; empty for an unknown ceiling. */
+export function clearanceLevelsUpTo(ceiling: string): string[] {
+  const index = (CLEARANCE_LEVELS as readonly string[]).indexOf(ceiling);
+  return index < 0 ? [] : CLEARANCE_LEVELS.slice(0, index + 1);
+}
+
+/** The highest level held, in the words a person reads; "public" when nothing known is held. */
+export function highestClearance(clearance: readonly string[]): string {
+  return [...CLEARANCE_LEVELS].reverse().find((level) => clearance.includes(level)) ?? "public";
+}
 
 export type WorkroomAccessDecision = {
   level: WorkroomAccessLevel;
@@ -74,12 +94,7 @@ export function authorizeWorkroomAccess(input: {
       : { level: "none", reason: "not-admitted" };
   }
 
-  const required = SENSITIVITY_RANK[input.sensitivityCeiling ?? "public"] ?? Number.MAX_SAFE_INTEGER;
-  const clearance = Math.max(
-    -1,
-    ...input.sensitivityClearance.map((value) => SENSITIVITY_RANK[value] ?? -1),
-  );
-  if (clearance < required) {
+  if (!clearanceCovers(input.sensitivityClearance, input.sensitivityCeiling ?? "public")) {
     return { level: "discover", reason: "insufficient-clearance" };
   }
 
@@ -96,11 +111,12 @@ export type WorkroomParticipantAssignment = {
   sponsorPrincipalRef: string | null;
   sponsorDisplayName?: string | null;
   authoritySummary: string;
+  assignmentSource: Exclude<WorkroomParticipantAssignmentSource, "conversation">;
 };
 
 export type WorkroomConversationParticipant = Omit<
   WorkroomParticipantView,
-  "kind" | "presence" | "sourceRefs"
+  "kind" | "presence" | "sourceRefs" | "assignmentSource" | "coordinatorSource"
 > & {
   sourceRef: WorkroomParticipantView["sourceRefs"][number];
 };
@@ -116,11 +132,12 @@ export function projectWorkroomParticipants(input: {
   for (const assignment of input.assignments) {
     const existing = projected.get(assignment.principalRef);
     const currentWorkSummary = assignment.currentWorkSummary ?? existing?.currentWorkSummary ?? null;
+    const roles = existing
+      ? [...new Set([...existing.roles, ...assignment.roles])]
+      : assignment.roles;
     projected.set(assignment.principalRef, {
       ...assignment,
-      roles: existing
-        ? [...new Set([...existing.roles, ...assignment.roles])]
-        : assignment.roles,
+      roles,
       currentWorkSummary,
       enteredReason: assignment.enteredReason ?? existing?.enteredReason ?? null,
       sponsorPrincipalRef: assignment.sponsorPrincipalRef ?? existing?.sponsorPrincipalRef ?? null,
@@ -131,18 +148,21 @@ export function projectWorkroomParticipants(input: {
         ...(existing?.sourceRefs ?? []),
         { kind: "evidence", id: assignment.principalRef, sourceType: "principal" },
       ],
+      assignmentSource: assignment.assignmentSource,
+      coordinatorSource: roles.includes("coordinator") ? "explicit" : "none",
     });
   }
 
   for (const participant of input.conversationParticipants) {
     const existing = projected.get(participant.principalRef);
+    const roles = existing
+      ? [...new Set([...existing.roles, ...participant.roles])]
+      : participant.roles;
     projected.set(participant.principalRef, {
       principalRef: participant.principalRef,
       displayName: participant.displayName,
       kind: "agent",
-      roles: existing
-        ? [...new Set([...existing.roles, ...participant.roles])]
-        : participant.roles,
+      roles,
       workState: participant.workState,
       presence: active.has(participant.principalRef) ? "active" : "unknown",
       currentWorkSummary: participant.currentWorkSummary,
@@ -154,6 +174,8 @@ export function projectWorkroomParticipants(input: {
         ...(existing?.sourceRefs ?? []),
         participant.sourceRef,
       ],
+      assignmentSource: existing?.assignmentSource ?? "conversation",
+      coordinatorSource: existing?.coordinatorSource ?? "none",
     });
   }
 

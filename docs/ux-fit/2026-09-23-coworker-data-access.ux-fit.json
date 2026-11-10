@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "decidedOption": "principal-setup",
+  "decisionInteractionId": "DI-A8F0093A0CAF",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/identity/CoworkerDataAccess.tsx",
+      "apps/web/components/platform/identity/CoworkerDataAccessSettings.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["principal-setup", "consent-override", "global-default"]
+  }
+}

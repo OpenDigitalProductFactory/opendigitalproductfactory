@@ -12,10 +12,12 @@
 //
 // Exit code: 0 only when the verdict is PASS for the current HEAD. That makes
 // `pnpm run pregate:status && git push` a correct composition — which the raw
-// pregate exit code never was.
+// pregate exit code never was. 75 means a gate for HEAD is still working
+// (PREFLIGHT / QUEUED / ADMITTED / RUNNING): wait and read again (BI-F039AA83).
+// 1 is everything else, including a recorded FAIL.
 
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { dirname, resolve as resolvePath } from "node:path";
 
 import {
@@ -24,18 +26,20 @@ import {
   resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import {
+  applyLiveGate,
   classifySlotRecord,
   exitCodeForVerdict,
   formatStatusReport,
   reconcileSlots,
 } from "./lib/pregate-status.mjs";
 import { installBrokenPipeTolerance } from "./lib/pregate-console.mjs";
+import { PREGATE_LIVE_MARKER_NAME, readLivePregate } from "./lib/pregate-live.mjs";
+import { findQueueWaiter } from "./lib/local-queue-observer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { guardReceiptDirectory, observeGuardReceipt, reconcileGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
 
 function gitText(args, cwd) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  if (result.error || result.status !== 0) return "";
-  return String(result.stdout || "").trim();
+  return gitTextOrNull(args, { cwd: cwd ?? process.cwd() }) ?? "";
 }
 
 function readJson(path) {
@@ -79,16 +83,47 @@ export function resolveWorktreeContext(cwd = process.cwd()) {
   });
 }
 
-/** Read and classify every slot's records for this worktree. */
-export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = readJson } = {}) {
-  return LOCAL_CI_SLOT_KEYS.map((slotKey) => {
-    const manifest = createLocalCiSlotManifest({
-      slotKey,
-      rootClone: context.rootClone,
-      gitCommonDir: context.gitCommonDir,
-      candidateGitDir: context.candidateGitDir,
+/**
+ * BI-27A37D27: whether any waiter is alive for this claim, read from the same
+ * observer registry the gate and its resumer register in. Null when unreadable.
+ */
+export function readQueueWaiter(context, findWaiterImpl = findQueueWaiter) {
+  try {
+    return findWaiterImpl({
+      directory: process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
+        || resolvePath(context.gitCommonDir, "dpf-local-ci-queue-observers"),
+      branch: context.headBranch,
+      sha: context.headSha,
     });
-    const state = readJsonImpl(manifest.evidence.state);
+  } catch {
+    return null;
+  }
+}
+
+/** The pregate live marker for this worktree (BI-F039AA83) — in the worktree's OWN git dir. */
+export function livePregateMarkerPath(context) {
+  return resolvePath(context.candidateGitDir, PREGATE_LIVE_MARKER_NAME);
+}
+
+/** Read and classify every slot's records for this worktree. */
+export function collectSlotVerdicts(context, {
+  now = Date.now(), readJsonImpl = readJson, findWaiterImpl = findQueueWaiter,
+  queuedWaiter = readQueueWaiter(context, findWaiterImpl),
+} = {}) {
+  const manifests = new Map(LOCAL_CI_SLOT_KEYS.map((slotKey) => [slotKey, createLocalCiSlotManifest({
+    slotKey,
+    rootClone: context.rootClone,
+    gitCommonDir: context.gitCommonDir,
+    candidateGitDir: context.candidateGitDir,
+  })]));
+  const states = new Map([...manifests].map(([slotKey, manifest]) => [slotKey, readJsonImpl(manifest.evidence.state)]));
+  return LOCAL_CI_SLOT_KEYS.map((slotKey) => {
+    const manifest = manifests.get(slotKey);
+    const state = states.get(slotKey);
+    // BI-A9031FF3: re-read the winner a superseded record names, so a pass that
+    // was later rewritten (late lease loss) is not reported as a pass.
+    const winnerKey = state?.supersededBy?.slotKey;
+    const supersedingWinner = winnerKey && states.has(winnerKey) ? (states.get(winnerKey) ?? null) : undefined;
     // No state at all means this slot never ran here — it is absent, not failing.
     // Only slots with a record participate, so an unused slot cannot drag the
     // reconciled verdict down to NO-RECORD while the other slot holds a PASS.
@@ -102,9 +137,76 @@ export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = 
         headSha: context.headSha,
         headBranch: context.headBranch,
         now,
+        queuedWaiter,
+        supersedingWinner,
       }),
     };
   }).filter(Boolean);
+}
+
+export function collectHostPreflightStatus(context, { reconcile = false, directory = guardReceiptDirectory(context.worktreePath) } = {}) {
+  const read = reconcile ? reconcileGuardReceipt : observeGuardReceipt;
+  const observed = read({ directory, stage: "pregate-preflight" });
+  const { receipt, ...projection } = observed;
+  return { ...projection, sourceIdentity: receipt?.identity ?? null, startedAt: receipt?.startedAt ?? null,
+    lastHeartbeatAt: receipt?.lastHeartbeatAt ?? null, completedAt: receipt?.completedAt ?? null,
+    lastProgress: receipt?.observations?.at(-1) ?? null };
+}
+
+/**
+ * The whole answer for this worktree: the reconciled record verdict, with a
+ * gate that is provably still working overlaid as PREFLIGHT / QUEUED /
+ * ADMITTED / RUNNING (BI-F039AA83).
+ */
+export function collectGateStatus(context, {
+  now = Date.now(), readJsonImpl = readJson, findWaiterImpl = findQueueWaiter,
+  readLiveImpl = readLivePregate,
+} = {}) {
+  const queuedWaiter = readQueueWaiter(context, findWaiterImpl);
+  const slots = collectSlotVerdicts(context, { now, readJsonImpl, findWaiterImpl, queuedWaiter });
+  const recorded = slots.length > 0
+    ? reconcileSlots(slots)
+    : {
+      verdict: "NO-RECORD",
+      reason: "no gate record for this worktree and no pregate running here",
+      slot: null,
+    };
+  let live = null;
+  try {
+    live = readLiveImpl({ path: livePregateMarkerPath(context) });
+  } catch {
+    live = null;
+  }
+  return applyLiveGate(recorded, {
+    live,
+    queuedWaiter,
+    slots,
+    headSha: context.headSha,
+    headBranch: context.headBranch,
+  });
+}
+
+export function projectGateStatus(result, context, hostPreflight) {
+  return {
+      verdict: result.verdict,
+      reason: result.reason,
+      headBranch: context.headBranch,
+      headSha: context.headSha,
+      boundSha: result.boundSha ?? "",
+      boundBranch: result.boundBranch ?? "",
+      candidateSha: result.candidateSha ?? "",
+      staleness: result.staleness ?? "",
+      gateStatus: result.gateStatus ?? "",
+      testStub: result.testStub === true,
+      evidenceId: result.evidenceId ?? "",
+      recordedAt: result.recordedAt ?? "",
+      slot: result.slot,
+      logFile: result.logFile ?? "",
+      worktreePath: context.worktreePath,
+      ...(hostPreflight ? { hostPreflight } : {}),
+      live: result.live ?? null,
+      priorVerdict: result.priorVerdict ?? "",
+  };
 }
 
 function main() {
@@ -117,36 +219,17 @@ function main() {
     process.exit(1);
   }
 
-  const slots = collectSlotVerdicts(context);
-  const result = slots.length > 0
-    ? reconcileSlots(slots)
-    : {
-      verdict: "NO-RECORD",
-      reason: "no gate record for this worktree — pregate has not run here",
-      slot: null,
-    };
+  const hostPreflight = collectHostPreflightStatus(context, { reconcile: process.argv.includes("--reconcile-host-receipt") });
+  const result = collectGateStatus(context);
 
   if (asJson) {
-    process.stdout.write(`${JSON.stringify({
-      verdict: result.verdict,
-      reason: result.reason,
-      headBranch: context.headBranch,
-      headSha: context.headSha,
-      boundSha: result.boundSha ?? "",
-      boundBranch: result.boundBranch ?? "",
-      candidateSha: result.candidateSha ?? "",
-      staleness: result.staleness ?? "",
-      evidenceId: result.evidenceId ?? "",
-      recordedAt: result.recordedAt ?? "",
-      slot: result.slot,
-      logFile: result.logFile ?? "",
-      worktreePath: context.worktreePath,
-    }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(projectGateStatus(result, context, hostPreflight), null, 2)}\n`);
   } else {
     process.stdout.write(`${formatStatusReport(result, {
       headBranch: context.headBranch,
       headSha: context.headSha,
     }).join("\n")}\n`);
+    if (hostPreflight.status !== "absent") process.stdout.write(`Host preflight (separate from gate): ${hostPreflight.status}; receipt ${hostPreflight.receiptPath}; attempt ${hostPreflight.attemptId ?? "unknown"}\nMissing proof: ${hostPreflight.missingProof.join(", ") || "none observed"}\nNext: ${hostPreflight.nextAction}\n`);
   }
 
   process.exit(exitCodeForVerdict(result.verdict));

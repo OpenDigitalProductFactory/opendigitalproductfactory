@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { SectionNav } from "@/components/shell/SectionNav";
-import { COMPLIANCE_FAMILIES } from "./compliance-nav";
+import { COMPLIANCE_FAMILIES } from "@/lib/navigation/compliance-nav";
 
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
 // resolves active state from the pathname. Compliance uses the "tab" style (underline

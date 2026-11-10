@@ -125,6 +125,27 @@ describe("evaluateAutonomousBuildEligibility", () => {
     expect(result.nextGovernedAction).toBe(action);
   });
 
+  // BI-E30C0F4F (operator rule 2026-10-07): a person is engaged only where a
+  // matched policy names its basis. A supervised ceiling means an independent AI
+  // reviewer approves, which the build's own review stage provides.
+  it("lets a supervised ceiling without human control proceed: the independent review stage supervises it", () => {
+    const result = evaluateAutonomousBuildEligibility({
+      ...BASE_INPUT,
+      regulatory: { ceiling: "supervised", humanControlRequired: false },
+    });
+    expect(result.blockers).not.toContain("regulatory_ceiling_requires_human");
+    expect(result.eligible).toBe(true);
+  });
+
+  it("still hands to a person when a matched policy caps the work at propose", () => {
+    const result = evaluateAutonomousBuildEligibility({
+      ...BASE_INPUT,
+      regulatory: { ceiling: "propose", humanControlRequired: false },
+    });
+    expect(result.blockers).toContain("regulatory_ceiling_requires_human");
+    expect(result.nextGovernedAction).toBe("escalate");
+  });
+
   it("does not mutate its input", () => {
     const input = structuredClone(BASE_INPUT);
     const before = structuredClone(input);

@@ -34,9 +34,130 @@ export function isReadonlyDispatchActionType(actionType: string): boolean {
   return (READONLY_DISPATCH_ACTION_TYPES as readonly string[]).includes(actionType);
 }
 
+/**
+ * BI-F8F8C383: restart the Docker Desktop VM (WSL) on the Windows host, to clear
+ * processes stuck in uninterruptible I/O that no container command can remove.
+ * It stops the portal and every container, so it is operator-approved through an
+ * approved ChangeRequest, machine bound, and never dispatched automatically.
+ */
+export const DOCKER_VM_RESTART_ACTION_TYPE = "substrate.docker-vm.restart";
+/** A bounded managed runtime transition; permission is explicit per host.
+ * This is deliberately absent from automatic host-upkeep convergence. */
+export const MANAGED_INFERENCE_ACTION_TYPE = "inference.runtime.transition";
+export const QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE = "qualification.windows.verify-v1";
+
+export interface QualificationBlobIdentity {
+  path: string;
+  blobSha: string;
+}
+
+export interface QualificationSourceFile extends QualificationBlobIdentity {
+  contentBase64: string;
+}
+
+export interface QualificationWindowsVerifyParameters {
+  version: 2;
+  backlogItemId: string;
+  workroomId: string;
+  repository: string;
+  baseSha: string;
+  headSha: string;
+  protocolPath: string;
+  protocolBlobSha: string;
+  productionBlobs: QualificationBlobIdentity[];
+  testBlobs: QualificationBlobIdentity[];
+  qualificationBindingDigest: string;
+  procedureId: "windows-bound-node-test-v2";
+  resultSchemaVersion: 2;
+  maxDurationSeconds: number;
+  edgeNodeId: string;
+  sourceFiles: QualificationSourceFile[];
+}
+
+const QUALIFICATION_PARAMETER_KEYS = [
+  "version", "backlogItemId", "workroomId", "repository", "baseSha", "headSha", "protocolPath",
+  "protocolBlobSha", "productionBlobs", "testBlobs", "qualificationBindingDigest", "procedureId",
+  "resultSchemaVersion", "maxDurationSeconds", "edgeNodeId", "sourceFiles",
+] as const;
+
+function isSafeRepositoryPath(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 500
+    && !value.startsWith("/") && !value.startsWith("\\") && !value.includes("..") && !value.includes("\\");
+}
+
+function isQualificationBlobList(value: unknown): value is QualificationBlobIdentity[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 100
+    && value.every(entry => entry && typeof entry === "object" && !Array.isArray(entry)
+      && Object.keys(entry).sort().join(",") === "blobSha,path"
+      && isSafeRepositoryPath((entry as Record<string, unknown>).path)
+      && typeof (entry as Record<string, unknown>).blobSha === "string"
+      && /^[a-f0-9]{40}$/.test(String((entry as Record<string, unknown>).blobSha)));
+}
+
+function isQualificationSourceList(value: unknown): value is QualificationSourceFile[] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 101
+    && value.every(entry => entry && typeof entry === "object" && !Array.isArray(entry)
+      && Object.keys(entry).sort().join(",") === "blobSha,contentBase64,path"
+      && isSafeRepositoryPath((entry as Record<string, unknown>).path)
+      && typeof (entry as Record<string, unknown>).blobSha === "string"
+      && /^[a-f0-9]{40}$/.test(String((entry as Record<string, unknown>).blobSha))
+      && typeof (entry as Record<string, unknown>).contentBase64 === "string"
+      && String((entry as Record<string, unknown>).contentBase64).length <= 1_400_000
+      && /^[A-Za-z0-9+/]*={0,2}$/.test(String((entry as Record<string, unknown>).contentBase64)));
+}
+
+/** Closed signer-side schema for the one compiled Windows qualification procedure. */
+export function parseQualificationWindowsVerifyParameters(value: unknown): QualificationWindowsVerifyParameters | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const p = value as Record<string, unknown>;
+  if (Object.keys(p).sort().join(",") !== [...QUALIFICATION_PARAMETER_KEYS].sort().join(",")
+    || p.version !== 2 || p.resultSchemaVersion !== 2
+    || p.procedureId !== "windows-bound-node-test-v2"
+    || typeof p.backlogItemId !== "string" || !/^BI-[A-Z0-9]+$/.test(p.backlogItemId)
+    || typeof p.workroomId !== "string" || !/^WC-[A-Z0-9]+$/.test(p.workroomId)
+    || typeof p.repository !== "string" || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(p.repository)
+    || ![p.baseSha, p.headSha, p.protocolBlobSha].every(sha => typeof sha === "string" && /^[a-f0-9]{40}$/.test(sha))
+    || !isSafeRepositoryPath(p.protocolPath)
+    || !isQualificationBlobList(p.productionBlobs) || !isQualificationBlobList(p.testBlobs)
+    || !isQualificationSourceList(p.sourceFiles)
+    || typeof p.qualificationBindingDigest !== "string" || !/^[a-f0-9]{64}$/.test(p.qualificationBindingDigest)
+    || !Number.isInteger(p.maxDurationSeconds) || Number(p.maxDurationSeconds) < 1 || Number(p.maxDurationSeconds) > 1800
+    || typeof p.edgeNodeId !== "string" || !/^edge_[A-Za-z0-9_-]{1,100}$/.test(p.edgeNodeId)) return null;
+  return value as QualificationWindowsVerifyParameters;
+}
+
+export interface ManagedInferenceTransitionParameters {
+  version: 1;
+  operation: "activate" | "rollback";
+  sourceSha: string;
+  profileSha256: string;
+  runtimeManifestSha256: string;
+  qualificationReportSha256: string;
+  baselineEngineSha256: string;
+  leaseId: string;
+}
+
+/** Same closed wire contract on the signer and the native controller. No
+ * command, URL, executable, directory, listener or provider is caller-chosen. */
+export function parseManagedInferenceTransitionParameters(value: unknown): ManagedInferenceTransitionParameters | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const p = value as Record<string, unknown>;
+  if (Object.keys(p).sort().join(",") !== ["version", "operation", "sourceSha", "profileSha256", "runtimeManifestSha256",
+    "qualificationReportSha256", "baselineEngineSha256", "leaseId"].sort().join(",")
+    || p.version !== 1 || !["activate", "rollback"].includes(String(p.operation))
+    || typeof p.sourceSha !== "string" || !/^[a-f0-9]{40}$/.test(p.sourceSha)
+    || typeof p.leaseId !== "string" || !/^NPEL-[A-Za-z0-9_-]{1,90}$/.test(p.leaseId)
+    || ![p.profileSha256, p.runtimeManifestSha256, p.qualificationReportSha256, p.baselineEngineSha256]
+      .every(digest => typeof digest === "string" && /^[a-f0-9]{64}$/.test(digest))) return null;
+  return value as ManagedInferenceTransitionParameters;
+}
+
 export const PRIVILEGED_DISPATCH_ACTION_TYPES = [
   "organization.join.issue",
   "organization.join.import",
+  DOCKER_VM_RESTART_ACTION_TYPE,
+  MANAGED_INFERENCE_ACTION_TYPE,
+  QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE,
 ] as const;
 
 export function isPrivilegedDispatchActionType(actionType: string): boolean {
@@ -85,6 +206,19 @@ export function canTransitionDispatch(
  * read-only diagnostics collect should finish in seconds; 10 min is generous.
  */
 export const DEFAULT_CLAIM_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * A Docker VM restart takes the portal down with it: the node can only report
+ * once the VM, Docker and the portal are back. Give it room for that, so a slow
+ * but successful restart is not recorded as timed out.
+ */
+export const DOCKER_VM_RESTART_CLAIM_TIMEOUT_MS = 30 * 60 * 1000;
+
+export function claimTimeoutMsForActionType(actionType: string): number {
+  return actionType === DOCKER_VM_RESTART_ACTION_TYPE
+    ? DOCKER_VM_RESTART_CLAIM_TIMEOUT_MS
+    : DEFAULT_CLAIM_TIMEOUT_MS;
+}
 
 // ── Claim eligibility ─────────────────────────────────────────────────────────
 
@@ -158,9 +292,19 @@ export function isClaimableByNode(action: DispatchableActionView, node: Claiming
     if (action.riskClass !== "high") return { claimable: false, reason: "privileged-action-risk-class-invalid" };
     if (!action.edgeNodeId) return { claimable: false, reason: "privileged-action-must-be-machine-bound" };
     if (!action.changeRequestApproved) return { claimable: false, reason: "approved-change-request-required" };
-    const requiredRole = action.actionType === "organization.join.issue" ? "authority" : "member";
-    if (node.organizationTrustRole !== requiredRole) {
-      return { claimable: false, reason: "wrong-organization-trust-role" };
+    if ([MANAGED_INFERENCE_ACTION_TYPE, QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE].includes(action.actionType as never)
+      && (node.customerAccountId != null || node.customerSiteId != null
+        || action.customerAccountId != null || action.customerSiteId != null)) {
+      return { claimable: false, reason: action.actionType === MANAGED_INFERENCE_ACTION_TYPE
+        ? "managed-inference-internal-host-required"
+        : "qualification-internal-host-required" };
+    }
+    if (![DOCKER_VM_RESTART_ACTION_TYPE, MANAGED_INFERENCE_ACTION_TYPE, QUALIFICATION_WINDOWS_VERIFY_ACTION_TYPE]
+      .includes(action.actionType as never)) {
+      const requiredRole = action.actionType === "organization.join.issue" ? "authority" : "member";
+      if (node.organizationTrustRole !== requiredRole) {
+        return { claimable: false, reason: "wrong-organization-trust-role" };
+      }
     }
   } else {
     return { claimable: false, reason: `actionType-not-in-dispatch-allowlist (${action.actionType})` };

@@ -13,7 +13,6 @@ import {
   IT4IT_VALUE_STREAMS,
   MATURITY_LEVELS,
   TRACE_RELATIONSHIPS,
-  TRACE_TARGET_TYPES,
 } from "@/lib/business-capabilities/types";
 
 type Props = {

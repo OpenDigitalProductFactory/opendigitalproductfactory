@@ -281,9 +281,45 @@ Scope for this epic: **bind, search, group membership. Over TLS. Read-only.**
 - **TLS from the existing org PKI (Step CA).** No second CA, no self-signed fallback — a test asserts the chain.
 - **Bind** for all three classes; a service account binds as a first-class peer of a human.
 - **Search authorization is mandatory.** What a bind identity may see is filtered by §8.4 and by the binding principal's own clearance. An anonymous or low-privilege bind must not enumerate the tree. A directory that answers every search identically is an information-disclosure surface.
-- **Explicitly out of scope:** SAML, OIDC, SCIM, and LDAP write operations. Each is its own surface and its own decision. Attempting all four at once is how the predecessor plan reached 111 tasks and shipped nothing.
+- **Explicitly out of scope:** SAML, OIDC, SCIM, and LDAP write operations. Each is its own surface and its own decision. Attempting all four at once is how the predecessor plan reached 111 tasks and shipped nothing. The exclusions are recorded rather than silent: SCIM as `BI-2C44C3EF`, OIDC as `BI-88363C2C`.
 
 **Acceptance is a real client.** `ldapsearch` binds over TLS and returns correct results for a human, an agent, and a service account, against the running app. Structural verification does not count here — this is a protocol, and only a real client proves conformance.
+
+### 9.1 Serving it — the difference between built and running
+
+`BI-A91004A7` found the gap this section now closes: Phase 3 delivered the protocol, and no install served it. `createLdapServer` was exported and never invoked outside tests. The epic's own verification did not catch it, because all 78 unit tests and all six real-`ldapsearch` runs **start the listener themselves** — a functional test that provisions its own runtime proves the code works, not that the product does.
+
+So the acceptance above is amended: a real client, against the **running install**, on a listener the test did not start.
+
+The serving contract:
+
+- **Off by default, on by explicit choice.** `DPF_LDAP_ENABLED` gates it. An install does not begin serving an identity protocol because it was upgraded.
+- **Three states, never silence.** The listener is `disabled`, `listening`, or `refused`, and the operator surface (`/platform/identity/directory`) renders all three. A directory that was turned on and failed must not read the same as one nobody asked for — that equivalence is exactly how a dark capability survives.
+- **Refusal never downgrades.** Absent org-PKI key, cert or CA, the listener refuses to start. There is no self-signed fallback, because a directory that quietly downgrades its transport is invisible to every client that trusts it.
+- **The tree is built before the port is bound.** If no `Organization` exists there is no base DN, and the listener refuses rather than binding a directory with nothing to publish — a startup misconfiguration must not become a per-client mystery.
+- **It reuses the portal's own issued identity.** The organization CA already issues `authority.crt` / `authority.key` / `root_ca.crt` into `DPF_PKI_DIR` (default `$HOME/.dpf/pki`), which sits inside `DPF_STATE_DIR` — already mounted read-only into the portal. No second certificate, no second mount, no second CA.
+- **Loopback by default.** The published port binds `127.0.0.1` unless `DPF_LDAP_BIND_ADDRESS` says otherwise, matching the `step-ca` overlay: a directory other hosts can bind to is a deliberate choice.
+- **A listener that cannot start does not take the portal with it.** It is reported, loudly, and every other surface keeps serving.
+
+Operator procedure: [serving the directory](../../install/serve-the-directory.md).
+
+**Outcome, measured 2026-08-29 on the canonical runtime.** The amended acceptance
+above is met: the running install serves LDAPS on 636 from the organization CA.
+Portal log `[ldap] Serving the directory over LDAPS on port 636`; `:::636` bound
+in-container; TLS chain verified to the org root (`Verify return code: 0`, issuer
+`DPF Organization CA Intermediate CA`); and a real OpenLDAP client received the
+bind verifier's own diagnostic, confirming request decode, verifier dispatch,
+response encode and client parse end to end. Verified again after a subsequent
+self-upgrade, so the capability is carried by configuration rather than by a
+hand-held container.
+
+Two things this deliberately does **not** claim. A successful bind returning
+published entries was not demonstrated — that needs a credential for a production
+principal, and minting one (a client certificate whose CN is a real `principalId`
+would do it) manufactures an authentication credential for a real identity, which
+is not a verification step. And the disabled case was verified before enabling:
+with `DPF_LDAP_ENABLED=0` nothing was bound in-container and a real client could
+not connect, so the published port is inert until an operator turns it on.
 
 ## 10. Authorization Stays Where It Is
 
@@ -316,8 +352,9 @@ Each phase is a live backlog item. **No deliverable in this design exists only a
 | 3 | `BI-F7317D65` | LDAP listener: bind, search, groups, over org-PKI TLS | 2 |
 | 4 | `BI-CEACBD0D` | Principal becomes the authentication root; install as auth authority | 2 |
 | 5 | `BI-5167932D` | Audit 111 tasks, migrate live deliverables, mark 2026-04-22 superseded | 0 |
+| 6 | `BI-A91004A7` | Serve it: runtime entrypoint, config, operator surface, org-PKI wiring (§9.1) | 3 |
 
-Phases 1 and 4 are the ~80% convergence. Phase 3 is the ~20% new feature.
+Phases 1 and 4 are the ~80% convergence. Phase 3 is the ~20% new feature. Phase 6 was not in the original plan; it exists because Phase 3 shipped a listener nobody could reach, and "no deliverable exists only as a checkbox" has to mean running, not merged.
 
 ## 13. Design Decisions
 
@@ -365,8 +402,8 @@ need to make.
 ## 14. Open Questions
 
 1. **Which credential scheme for service-account binds** — shared secret, or mTLS from the org PKI only? mTLS is stronger and reuses existing substrate, but not every client that needs to bind can present a client certificate. Resolve in `BI-F7317D65`.
-2. **Does `User` survive as a table, or fold into `Principal` with a credential side-table?** D2 says side-table; the migration shape needs its own review given `User` carries ~70 relations. This is the highest-risk mechanical change in the epic.
-3. **Multi-organization installs** — one tree per `Organization`, or one tree with organizational branches? Deferred until a live install needs it; noted so it is not silently assumed away.
+2. **Does `User` survive as a table, or fold into `Principal` with a credential side-table?** D2 says side-table; the migration shape needs its own review given `User` carries ~70 relations. This is the highest-risk mechanical change in the epic. Filed as `BI-D070FC77`, deliberately alone: a migration touching ~70 relations cannot be reverted as one clean concern if it rides along with anything else.
+3. **Multi-organization installs** — one tree per `Organization`, or one tree with organizational branches? Deferred until a live install needs it; noted so it is not silently assumed away. Filed as `BI-FAF6A01E`, which names the exact assumption site: `buildDirectoryProjection` takes the first `Organization` by `createdAt`.
 4. **Absorbed protocol code provenance** — vendored with notice, or reimplemented from the RFC with `ldapjs` as reference only? Legal answer is either; the maintenance answer differs. Resolve in `BI-27E462BA`.
 
 ## 15. Relationship to Existing Work

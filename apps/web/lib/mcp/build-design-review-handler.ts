@@ -1,3 +1,5 @@
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
+import { readReviewHistory, assembleReviewPanel, finishReviewIteration } from "@/lib/build/review-history";
 // Design-review gate handler — Simplify & Strengthen W9 (BI-0E7B0953).
 //
 // The reviewDesignDoc executeTool case from the mcp-tools.ts legacy monolith,
@@ -7,12 +9,13 @@
 // over MCP; the local error boundary mirrors executeTool's shared try/catch
 // (see build-review-handlers.ts).
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import * as crypto from "crypto";
 
 import { prisma } from "@dpf/db";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPackHandler } from "./tool-pack";
 import {
   logBuildActivity,
@@ -28,7 +31,10 @@ import { toFailureResult } from "./build-review-handlers";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
 
-export async function reviewDesignDoc(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
+import { attestIdeateResearch } from "@/lib/build/record-ideate-research-receipt";
+export { attestIdeateResearch };
+
+async function reviewDesignDocInner(params: Record<string, unknown>, userId: string, context?: HandlerContext): Promise<ToolResult> {
   try {
       const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
       if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -42,13 +48,14 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // trajectory in the operator-facing gate reason (mirror of BI-4396EFEC
       // for the plan path). Live repro: FB-5E20E793 oscillated on the same
       // "missing accessibility" complaint round after round.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true, title: true, description: true, originatingBacklogItemId: true } });
 
       // Fix flow: a fix build has no feature design doc — it carries a structured
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
       // and advance ideate → plan, instead of running the feature design reviewers.
       if (build?.kind === "fix") {
-        const { isFixContextComplete, checkPhaseGate } = await import("@/lib/feature-build-types");
+        const { isFixContextComplete } = await import("@/lib/feature-build-types");
+        const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
         const fixBrief = (build.brief ?? null) as import("@/lib/feature-build-types").FeatureBrief | null;
         const fixProcessSize = ((build.plan as Record<string, unknown> | null)?.processSize as string | undefined) ?? "medium";
         const fc = fixBrief?.fixContext;
@@ -64,15 +71,24 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           await triggerDesignReviewAutoRepair(buildId, userId, context);
           return { success: true, message: `Fix review FAILED. ${review.issues[0]?.description ?? review.summary}`, data: { review, blocked: true, action: "revise_and_resubmit" } };
         }
+        await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null, context);
         let fixPhaseGateBlocker: string | null = null;
         try {
           const fixPlan = (build.plan as Record<string, unknown> | null);
-          const gate = checkPhaseGate("ideate", "plan", { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review });
+          const gate = await checkBuildPhaseGate({
+            buildId,
+            from: "ideate",
+            to: "plan",
+            evidence: { kind: "fix", processSize: fixProcessSize, deliverableSensitivity: fixPlan?.deliverableSensitivity, qualityFirst: fixPlan?.qualityFirst === true, fixContext: fc, designReview: review },
+          });
           const readiness = gate.allowed
             ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })
             : null;
           if (gate.allowed && readiness?.allowed) {
-            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
+            const { admitPhaseTransition, completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
+            if (!(await admitPhaseTransition(buildId, "ideate", "plan"))) {
+              return { success: true, message: "Fix design approved. Planning starts after the platform upgrade finishes.", data: { review, deferred: "platform-upgrade" } };
+            }
             void completeBuildPhaseRun(buildId, "ideate");
             void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
             if (context?.threadId) {
@@ -82,6 +98,12 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             await prisma.featureBuild.update({ where: { buildId }, data: { phase: "plan" } });
             if (context?.threadId) agentEventBus.emit(context.threadId, { type: "phase:change", buildId, phase: "plan" });
             logBuildActivity(buildId, "phase:advance", "Phase advanced: ideate → plan (fix)");
+            // BI-8823E12A: hand off to plan generation as the feature path does —
+            // without it a fix build idled in plan until the stranded-build sweep.
+            void import("@/lib/build/plan-on-approval").then(m =>
+              m.dispatchPlanForApprovedBuild({ buildId, userId })
+                .catch(err => console.error("[plan-on-approval] auto-dispatch failed:", err))
+            );
           } else {
             const reason = gate.reason ?? readiness?.message ?? "Initiative readiness is incomplete.";
             logBuildActivity(buildId, "phase:gate-blocked", reason);
@@ -97,30 +119,51 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       }
 
       if (!build?.designDoc) return { success: false, error: "No design document saved yet.", message: "Save designDoc first." };
-      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, mergeReviews, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { buildDesignReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { ownerAskContext } = await import("@/lib/build/owner-ask-context");
       const designDocTyped = build.designDoc as Parameters<typeof buildDesignReviewPrompt>[0];
       // BI-CE49D82E — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
-      // review = 1, every subsequent reviewDesignDoc call increments.
+      // review = 1; only a completed panel increments the round.
       const priorDesignReview = (build.designReview ?? null) as
         | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
         | null;
-      const priorRound = priorDesignReview?.iteration?.round ?? 0;
-      const priorIssues = Array.isArray(priorDesignReview?.issues)
-        ? priorDesignReview!.issues!
-            .filter((i): i is { severity: string; description: string } =>
-              typeof i?.severity === "string" && typeof i?.description === "string",
-            )
-            .map((i) => ({ severity: i.severity, description: i.description }))
-        : [];
-      const currentRound = priorRound + 1;
+      const history = readReviewHistory(priorDesignReview);
+      const priorRound = history.round;
+      const priorIssues = history.issues;
       const priorContext = priorIssues.length > 0
         ? { round: priorRound, issues: priorIssues }
         : null;
-      const prompt = buildDesignReviewPrompt(designDocTyped, "", priorContext);
-      const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, "");
+      // BI-82E41B79 — the reviewer must see what was ASKED FOR, not only what
+      // was designed. This handler passed "" as project context, so the review
+      // ran against the design alone. The design rewrites the ask into its own
+      // `problemStatement`, and constraints do not survive that rewrite: an
+      // owner who wrote "no settings, no filters, no configuration" got a
+      // design with URL-parameter filtering, and the review then failed the
+      // build on the FILTER's edge cases — twice, until the build was
+      // abandoned. A reviewer that cannot see the ask cannot catch a design
+      // that exceeds it; it can only harden the overreach.
+      //
+      // The server-action path (lib/actions/build.ts) already passed
+      // `Build: <title>. <description>`. This is the same context, on the path
+      // the pipeline actually uses.
+      const ownerContext = ownerAskContext(build.title, build.description);
+      // Founder ruling 2026-08-12 (mapBuildDeliverableToRoutingSensitivity):
+      // ordinary platform builds route as development work; only elevated/high
+      // deliverables demand internal/confidential clearance. The literal
+      // "internal" these reviewers used to send excluded every public-cleared
+      // cloud dev engine, so reviews landed on the local model and came back
+      // without JSON.
+      const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } =
+        await import("@/lib/explore/build-process-matrix");
+      const reviewSensitivity = mapBuildDeliverableToRoutingSensitivity(
+        deriveDeliverableSensitivity({ text: `${build.title}\n${build.description ?? ""}`, workType: build.kind }),
+      );
+      const prompt = buildDesignReviewPrompt(designDocTyped, ownerContext, priorContext);
+      const archPrompt = buildArchitectureReviewPrompt({ kind: "design", doc: designDocTyped }, ownerContext);
       const { routeAndCall } = await import("@/lib/routed-inference");
+      const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
       const messages = [{ role: "user" as const, content: prompt }];
       // Run the two checklist reviewers PLUS the advisory architecture reviewer
       // (chief-architect / Enterprise Architect lens) in parallel. The
@@ -128,53 +171,47 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       // it joins the deliberation trail as the `architect` branch and rides
       // along on review.architectureAdvisory so the coworker can fold concerns
       // into the spec, but it cannot gate pass/fail.
+      // BI-B3AB7FC9: every reviewer call carries who asked and which build it
+      // is for. Without this the three calls metered as agentId "unknown" /
+      // contextKey "routed-call" — 30% of a day's spend that no screen could
+      // name while the local model runner sat at 100%.
+      const attribution = {
+        ...(context?.agentId ? { agentId: context.agentId } : {}),
+        ...(context?.threadId ? { threadId: context.threadId } : {}),
+        buildId,
+      };
       const [r1settled, r2settled, archSettled] = await Promise.allSettled([
-        routeAndCall(messages, "You are a design reviewer.", "internal"),
+        routeAndCall(messages, "You are a design reviewer.", reviewSensitivity, buildPhaseRouteOptions(attribution)),
         routeAndCall(
           messages,
           "You are an independent design reviewer. Focus especially on security, data integrity, edge cases, and accessibility gaps the primary reviewer may have missed.",
-          "internal",
-          { budgetClass: "minimize_cost" },
+          reviewSensitivity,
+          buildPhaseRouteOptions({ ...attribution, budgetClass: "minimize_cost" }),
         ),
         routeAndCall(
           [{ role: "user" as const, content: archPrompt }],
           `You are the ${ENTERPRISE_ARCHITECT_DISPLAY_NAME} (DPF chief-architect lens) reviewing for architectural alignment. Advisory only — surface concerns and concrete spec edits, never block the gate.`,
-          "internal",
-          { budgetClass: "minimize_cost" },
+          reviewSensitivity,
+          buildPhaseRouteOptions({ ...attribution, budgetClass: "minimize_cost" }),
         ),
       ]);
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
-      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewDesignDoc");
-      const reviewBase = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
-        decision: "fail" as const,
-        issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
-        summary: "Review could not be completed — retry.",
-        // BI-D33F968A: nobody read the work. `fail` is the safe default, not a
-        // verdict — mark it so a repair loop does not spend rounds "fixing"
-        // something no reviewer looked at.
-        reviewIncomplete: true,
-      };
+      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewDesignDoc", {
+        // BI-22601A38: name what was reviewed, so what later happens to this
+        // design can resolve the advisory.
+        buildId,
+        kind: "design",
+        document: build.designDoc,
+        backlogItemId: build.originatingBacklogItemId ?? null,
+      });
+      const reviewBase = assembleReviewPanel(r1, r2);
       // BI-CE49D82E — Compute the iteration delta against the prior round and
       // attach to the ReviewResult. computeReviewDelta + isOscillating live in
       // feature-build-types so they're independently unit-testable and shared
       // with the plan path.
-      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
-      const reviewWithIteration = (() => {
-        if (priorIssues.length === 0) {
-          return { ...reviewBase, iteration: { round: currentRound } };
-        }
-        const delta = computeReviewDelta(priorIssues, reviewBase.issues);
-        return {
-          ...reviewBase,
-          iteration: {
-            round: currentRound,
-            prior: delta,
-            oscillating: isOscillating(delta, reviewBase.issues.length),
-          },
-        };
-      })();
+      const reviewWithIteration = finishReviewIteration(reviewBase, history);
       let review = architectureAdvisory ? { ...reviewWithIteration, architectureAdvisory } : reviewWithIteration;
       // A3 (BI-D506598C): governed Data Architect consultation, flag-gated
       // default-off. Unlike the anonymous `architect` routeAndCall above, this is
@@ -189,7 +226,7 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
           doc: typeof build.designDoc === "string" ? build.designDoc : JSON.stringify(designDocTyped),
           db: prisma,
           transport: (messages, systemPrompt) =>
-            routeAndCall(messages, systemPrompt, "internal", { budgetClass: "minimize_cost" }),
+            routeAndCall(messages, systemPrompt, reviewSensitivity, buildPhaseRouteOptions({ budgetClass: "minimize_cost" })),
         });
         if (!daAdvisory.skipped && daAdvisory.findings.length > 0) {
           review = Object.assign({}, review, { dataArchitectureAdvisory: daAdvisory }) as typeof review;
@@ -261,11 +298,20 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             phase: "ideate",
             reviewerBranches,
             ...(context?.threadId ? { threadId: context.threadId } : {}),
+            ...(context?.agentId ? { agentId: context.agentId } : {}),
           });
         }
       } catch (err) {
         console.warn("[deliberation] failed to record build review trail: %s",
           err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
+      }
+
+      if (review.reviewIncomplete) {
+        return {
+          success: true,
+          message: review.summary,
+          data: { review, blocked: true, action: "retry_review" },
+        };
       }
 
       // Failed review → structured recovery instructions, no auto-advance
@@ -311,7 +357,8 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
       //   3. Pass happyPathState to checkPhaseGate so the full intake
       //      check actually runs.
       try {
-        const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState, deriveIntakeTaxonomyAnchor } = await import("@/lib/feature-build-types");
+        const { canTransitionPhase, normalizeHappyPathState, deriveIntakeTaxonomyAnchor } = await import("@/lib/feature-build-types");
+        const { checkBuildPhaseGate } = await import("@/lib/work-posture/verification-depth-gate");
         const updatedBuild = await prisma.featureBuild.findUnique({
           where: { buildId },
           select: {
@@ -492,7 +539,11 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
                   type: "product",
                   status: "in-progress",
                   submittedById: userId,
-                  ...(body ? { body } : {}),
+                  // BI-458CCA8D: the build's constrained goal is the outcome that defines done.
+                  body: composeIntakeBody({
+                    outcome: happyPathState.intake.constrainedGoal?.trim() || `"${title}" is delivered as this build describes.`,
+                    body: body || null,
+                  }),
                   ...(epicCuid ? { epicId: epicCuid } : {}),
                 },
               });
@@ -556,22 +607,30 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
             }
           }
 
+          await attestIdeateResearch(buildId, build.designDoc, userId, context?.agentId ?? null, context);
           const idpPlan = (updatedBuild.plan as Record<string, unknown> | null);
-          const gate = checkPhaseGate("ideate", "plan", {
-            kind: updatedBuild.kind,
+          const gate = await checkBuildPhaseGate({
+            buildId,
+            from: "ideate",
+            to: "plan",
+            evidence: { kind: updatedBuild.kind,
             processSize: (idpPlan?.processSize as string | undefined) ?? "medium",
             deliverableSensitivity: idpPlan?.deliverableSensitivity,
             qualityFirst: idpPlan?.qualityFirst === true,
             designDoc: updatedBuild.designDoc,
             designReview: updatedBuild.designReview,
-            happyPathState,
+              happyPathState,
+            },
           });
           const readiness = gate.allowed
             ? await enforceBuildInitiativeReadiness({ buildId, target: "plan", targetPhase: "plan", expectedPhase: "ideate" })
             : null;
           if (gate.allowed && readiness?.allowed) {
             // EP-COST Phase 3: record ideate-phase cost rollup, start plan tracking, and compact thread
-            const { completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
+            const { admitPhaseTransition, completeBuildPhaseRun, startBuildPhaseRun } = await import("@/lib/build/build-phase-run");
+            if (!(await admitPhaseTransition(buildId, "ideate", "plan"))) {
+              return { success: true, message: "Design approved. Planning starts after the platform upgrade finishes.", data: { review, deferred: "platform-upgrade" } };
+            }
             void completeBuildPhaseRun(buildId, "ideate");
             void startBuildPhaseRun(buildId, "plan").catch(() => {}); // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
             if (context?.threadId) {
@@ -614,4 +673,11 @@ export async function reviewDesignDoc(params: Record<string, unknown>, userId: s
   } catch (err) {
     return toFailureResult("reviewDesignDoc", err);
   }
+}
+
+/** Build-phase entry: the reviewers run under the autonomous inference origin (BI-2F9DE752). */
+export function reviewDesignDoc(
+  ...args: Parameters<typeof reviewDesignDocInner>
+): ReturnType<typeof reviewDesignDocInner> {
+  return runAsBuildPhase(() => reviewDesignDocInner(...args));
 }

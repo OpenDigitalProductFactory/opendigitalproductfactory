@@ -25,6 +25,7 @@
 // restarts the work cleanly.
 
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 
 /** Default inert threshold: 3h with zero activity = dead-on-arrival. Override with BUILD_INERT_REAP_MS. */
 export const INERT_BUILD_REAP_MS = Number(process.env.BUILD_INERT_REAP_MS) || 3 * 60 * 60 * 1000;
@@ -212,6 +213,7 @@ export async function reapInertStuckBuilds(
           where: { buildId: c.buildId },
           data: { phase: "abandoned", abandonedAt: now, abandonReason },
         });
+        await closeOpenBuildPhaseRunsForTerminalBuild(c.buildId, { db: tx, now });
         await tx.buildActivity.create({
           data: {
             buildId: c.buildId,

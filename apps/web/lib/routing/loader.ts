@@ -3,7 +3,9 @@
  * Converts Prisma rows into the routing pipeline's type system.
  */
 import { prisma } from "@dpf/db";
+import { inCapturedProviderTransportScope, isCapturedNativeImageInputEvidence } from "../shared/captured-effect-store";
 import { providerHasConfiguredCredential } from "@/lib/ai-provider-internals";
+import { loadActiveRiskAcceptedClearances } from "@/lib/govern/clearance-overrides";
 import type {
   EndpointManifest,
   ProviderTier,
@@ -44,7 +46,14 @@ interface LoaderCacheEntry<T> {
   at: number;
 }
 
-let manifestsCache: LoaderCacheEntry<EndpointManifest[]> | null = null;
+/** The outer execution layer supplies observed runtime facts to routing policy. */
+export type LocalContextReader = (
+  fetchImpl: typeof fetch | undefined,
+  selected: { modelId: string; provider: { providerId: string; baseUrl: string | null; endpoint: string | null } },
+) => Promise<number | null | { contextTokens: number | null; thinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence;
+  imageInputEvidence?: import("../shared/captured-effect-store").CapturedNativeImageInputEvidence }>;
+const unknownLocalContext: LocalContextReader = async () => null;
+let manifestsCache = new WeakMap<LocalContextReader, LoaderCacheEntry<EndpointManifest[]>>();
 let policyRulesCache: LoaderCacheEntry<PolicyRuleEval[]> | null = null;
 // Overrides are keyed by taskType — a turn routes one taskType, but a process
 // serves many, so memo per key rather than a single slot.
@@ -57,7 +66,7 @@ const overridesCache = new Map<string, LoaderCacheEntry<EndpointOverride[]>>();
  * tests. Cheap and idempotent — clearing an already-cold cache is a no-op.
  */
 export function invalidateRoutingLoaderCache(): void {
-  manifestsCache = null;
+  manifestsCache = new WeakMap();
   policyRulesCache = null;
   overridesCache.clear();
 }
@@ -82,6 +91,8 @@ import {
 } from "./route-decision-attribution";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 import { serializeActivityHarnessAudit } from "./activity-harness-audit";
+import { authEligibilityExclusionReason } from "./model-auth-eligibility";
+import { expandProviderAccountCandidates } from "./provider-account-candidates";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -141,6 +152,16 @@ export function resolveToolUse(
   return profile.provider.supportsToolUse ?? null;
 }
 
+/** Reconcile sparse model discovery with the transport's streaming declaration. */
+function resolveStreaming(profile: ProfileWithProvider): boolean | null {
+  const capabilities = profile.capabilities as unknown as ModelCardCapabilities | null;
+  if (profile.provider.supportsStreaming === false || capabilities?.streaming === false) return false;
+  if (capabilities?.streaming === true) return true;
+  // A provider's text-streaming default says nothing about an embedding/image/audio model.
+  if (!["chat", "reasoning", "code"].includes(profile.modelClass ?? "chat")) return null;
+  return profile.provider.supportsStreaming ?? null;
+}
+
 /**
  * Load all active/degraded endpoints as EndpointManifest objects.
  * Queries ModelProfile joined with ModelProvider — each manifest entry represents
@@ -154,16 +175,20 @@ export function resolveToolUse(
  */
 export async function loadEndpointManifests(
   now: number = Date.now(),
+  readLocalContext: LocalContextReader = unknownLocalContext,
 ): Promise<EndpointManifest[]> {
-  if (manifestsCache && now - manifestsCache.at < ROUTING_LOADER_TTL_MS) {
-    return manifestsCache.value;
+  // Captured observations are request-bound facts, never a process cache entry.
+  if (inCapturedProviderTransportScope()) return queryEndpointManifests(readLocalContext);
+  const cached = manifestsCache.get(readLocalContext);
+  if (cached && now - cached.at < ROUTING_LOADER_TTL_MS) {
+    return cached.value;
   }
-  const value = await queryEndpointManifests();
-  manifestsCache = { value, at: now };
+  const value = await queryEndpointManifests(readLocalContext);
+  manifestsCache.set(readLocalContext, { value, at: now });
   return value;
 }
 
-async function queryEndpointManifests(): Promise<EndpointManifest[]> {
+async function queryEndpointManifests(readLocalContext: LocalContextReader): Promise<EndpointManifest[]> {
   const profiles = await prisma.modelProfile.findMany({
     where: {
       modelStatus: { in: ["active", "degraded"] },
@@ -188,9 +213,22 @@ async function queryEndpointManifests(): Promise<EndpointManifest[]> {
     ] as const),
   ));
 
-  return profiles
-    .filter((profile) => readiness.get(profile.providerId) === true)
-    .map((profile) => profileToManifest(profile));
+  // Break-glass (BI-4512E7D2): fold in any operator-accepted risk overrides as a
+  // SEPARATE per-provider signal. Empty for every provider unless an operator
+  // explicitly created one, so this is inert on a default install.
+  const riskAcceptedByProvider = await loadActiveRiskAcceptedClearances();
+
+  const accounts = await prisma.aiProviderConnection.findMany({
+    where: { providerId: { in: [...providers.keys()] } },
+    select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+      credentialEntryId: true, updatedAt: true, credentialEntry: { select: { status: true, updatedAt: true } },
+      accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, accountClass: true, supplierContractId: true, lastReviewedAt: true },
+  });
+  const candidates = await Promise.all(profiles.map(async profile => expandProviderAccountCandidates(
+    await profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider),
+    accounts, readiness.get(profile.providerId) === true, profile.capabilityOverrides,
+  )));
+  return candidates.flat();
 }
 
 type ProfileWithProvider = Awaited<
@@ -205,10 +243,46 @@ type ProfileWithProvider = Awaited<
  * endpoint be eligible IF its provider were enabled?" by forcing status to
  * "active" without mutating the DB.
  */
-function profileToManifest(
+async function profileToManifest(
   mp: ProfileWithProvider,
+  readLocalContext: LocalContextReader,
   statusOverride?: EndpointManifest["status"],
-): EndpointManifest {
+  riskAcceptedByProvider?: Map<string, SensitivityLevel[]>,
+): Promise<EndpointManifest> {
+  const streaming = resolveStreaming(mp);
+  // BI-7F2FBDA3: learned per-auth-mode eligibility first; the checked-in Codex
+  // subscription set is only the seed when nothing has been learned yet.
+  const eligibilityExclusionReason = authEligibilityExclusionReason({
+    providerId: mp.providerId,
+    authMethod: mp.provider.authMethod,
+    modelId: mp.modelId,
+    capabilityOverrides: mp.capabilityOverrides,
+  });
+
+  let maxContextTokens = mp.maxContextTokens ?? mp.provider.maxContextTokens;
+  let maxOutputTokens = mp.maxOutputTokens ?? mp.provider.maxOutputTokens;
+  let localThinkingBudgetEvidence: EndpointManifest["localThinkingBudgetEvidence"];
+  let imageInputEvidence: unknown;
+  if (mp.providerId === "local" && ["chat", "reasoning", "code"].includes(mp.modelClass ?? "chat")) {
+    const observation = await readLocalContext(undefined, {
+      modelId: mp.modelId, provider: mp.provider,
+    });
+    imageInputEvidence = typeof observation === "object" && observation !== null ? observation.imageInputEvidence : undefined;
+    const served = typeof observation === "object" && observation !== null ? observation.contextTokens : observation;
+    localThinkingBudgetEvidence = typeof observation === "object" && observation !== null ? observation.thinkingBudgetEvidence : undefined;
+    maxContextTokens = served !== null && Number.isSafeInteger(served) && served > 0 ? served : null;
+    // DMR shares one window between input and completion. This is an upper
+    // bound, not a requested allowance; activity admission still checks the sum.
+    maxOutputTokens = maxContextTokens === null ? null : maxOutputTokens === null
+      ? maxContextTokens : Math.min(maxOutputTokens, maxContextTokens);
+  }
+
+  const capabilities = (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES;
+  const imageOverride = (mp.capabilityOverrides as Record<string, unknown> | null)?.imageInput;
+  const explicitlyFalse = (value: unknown) => value === false || value !== null && typeof value === "object"
+    && "support" in value && value.support === false;
+  const observedImage = mp.providerId === "local" && !explicitlyFalse(capabilities.imageInput) && !explicitlyFalse(imageOverride)
+    && isCapturedNativeImageInputEvidence(imageInputEvidence, mp.modelId);
   return {
     id: mp.id,
     providerId: mp.providerId,
@@ -222,15 +296,17 @@ function profileToManifest(
         : mp.provider.status)) as EndpointManifest["status"],
     providerTier: classifyProviderTier(mp.providerId),
     sensitivityClearance: mp.provider.sensitivityClearance as SensitivityLevel[],
+    riskAcceptedClearances: riskAcceptedByProvider?.get(mp.providerId) ?? [],
     // Keep null (UNKNOWN) distinct from false (an explicit floor). Coercing to
     // false here made every undiscoverable-capability endpoint permanently
     // ineligible for tool work with no recovery path (BI-DFC30977).
     supportsToolUse: resolveToolUse(mp),
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
-    supportsStreaming: mp.provider.supportsStreaming,
-    maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,
-    maxOutputTokens: mp.maxOutputTokens ?? mp.provider.maxOutputTokens,
+    supportsStreaming: streaming === true,
+    maxContextTokens,
+    maxOutputTokens,
     modelRestrictions: mp.provider.modelRestrictions,
+    ...(eligibilityExclusionReason ? { eligibilityExclusionReason } : {}),
     reasoning: mp.reasoning,
     codegen: mp.codegen,
     toolFidelity: mp.toolFidelity,
@@ -250,11 +326,12 @@ function profileToManifest(
     // EP-INF-003: ModelCard fields
     modelClass: mp.modelClass ?? "chat",
     modelFamily: mp.modelFamily ?? null,
-    inputModalities: (mp.inputModalities as string[]) ?? ["text"],
+    inputModalities: observedImage ? [...new Set([...(mp.inputModalities as string[] ?? ["text"]), "image"])] : (mp.inputModalities as string[]) ?? ["text"],
     outputModalities: (mp.outputModalities as string[]) ?? ["text"],
-    capabilities: (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES,
+    capabilities: { ...capabilities, ...(observedImage ? { imageInput: true } : {}), streaming },
     pricing: (mp.pricing as unknown as ModelCardPricing) ?? EMPTY_PRICING,
     supportedParameters: (mp.supportedParameters as string[]) ?? [],
+    ...(localThinkingBudgetEvidence ? { localThinkingBudgetEvidence } : {}),
     deprecationDate: mp.deprecationDate ?? null,
     metadataSource: mp.metadataSource ?? "inferred",
     metadataConfidence: mp.metadataConfidence ?? "low",
@@ -271,7 +348,9 @@ function profileToManifest(
  * profile→manifest mapping as the live query so the hard-filter check
  * (getExclusionReasonV2) behaves identically to real routing.
  */
-export async function loadEnableCandidateManifests(): Promise<EndpointManifest[]> {
+export async function loadEnableCandidateManifests(
+  readLocalContext: LocalContextReader = unknownLocalContext,
+): Promise<EndpointManifest[]> {
   const profiles = await prisma.modelProfile.findMany({
     where: {
       modelStatus: { in: ["active", "degraded"] },
@@ -284,7 +363,7 @@ export async function loadEnableCandidateManifests(): Promise<EndpointManifest[]
     },
     include: { provider: true },
   });
-  return profiles.map((mp) => profileToManifest(mp, "active"));
+  return Promise.all(profiles.map((mp) => profileToManifest(mp, readLocalContext, "active")));
 }
 
 /**

@@ -1,4 +1,6 @@
 import { slugify } from "@/lib/shared/slugify";
+import { DECISION_SCOPES, type DecisionScope } from "@dpf/validators/decision-scopes";
+import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
 
 export const WORK_CAPSULE_STATUSES = [
   "draft",
@@ -22,13 +24,72 @@ export const WORK_CAPSULE_SOURCES = [
   "git-promotion",
   "manual",
   "scheduled-steward",
+  // Employment lifecycle (BI-2624B7EA). These three are the definition keys the
+  // actuator spawns, registered in WORK_CASE_SOURCE_REGISTRY by BI-28EFA338.
+  // They are BUSINESS instances: they coordinate a worker, not a code change, so
+  // they carry no repository, worktree, PR or CI evidence (AC-ELA-006) and
+  // BUSINESS_WORK_CAPSULE_SOURCES below stops one being defaulted onto them.
+  "worker-onboarding",
+  "worker-change",
+  "worker-offboarding",
+  // Platform maintenance rooms (embedding-coverage-workroom.ts). This value was
+  // written by a raw upsert without being registered here or in the DB check
+  // constraint, so the row it created could never be updated by anyone —
+  // every UPDATE re-validated the NOT VALID check and failed (BI-A5EEB5D1).
+  // The parity test beside the converger keeps this list and the migration
+  // that mirrors it from drifting apart again.
+  "platform-maintenance",
 ] as const;
+
+/**
+ * Capsule sources whose instances coordinate business work rather than a change
+ * to this repository.
+ *
+ * A development capsule without a repository is broken; a business capsule WITH
+ * one is a category error — it invites a reader to look for a branch that will
+ * never exist. `createWorkCapsule` therefore defaults a repository for the
+ * development sources only.
+ */
+export const BUSINESS_WORK_CAPSULE_SOURCES = new Set<string>([
+  "worker-onboarding",
+  "worker-change",
+  "worker-offboarding",
+]);
+
+/**
+ * The repository a new capsule records, if any.
+ *
+ * A development capsule without a repository is broken; a business capsule WITH
+ * one is a category error that sends a reader looking for a branch that will
+ * never exist (AC-ELA-006). Lives here, beside the source set the decision reads.
+ */
+export function capsuleRepositoryFullName(
+  source: string,
+  provided: string | null | undefined,
+  platformDefault: () => string,
+  idempotencyKey?: string,
+): string | null {
+  if (provided?.trim()) return provided.trim();
+  if (BUSINESS_WORK_CAPSULE_SOURCES.has(source)) return null;
+  return idempotencyKey?.startsWith(SUB_SHAPE_ROOM_KEY_PREFIX) ? null : platformDefault();
+}
+
+/**
+ * The idempotency-key namespace of a sub-shape child room (GPP Phase 3c
+ * PR-3c-5, design §9.2): `sub-shape:<parent>:<cycle>:<stage>:<iteration>`. The
+ * work-shape drive creates such a room to run a stage's child shape. It
+ * coordinates process work, not a change to this repository, so it records
+ * no repository: with one, the publication boundary
+ * (assertWorkroomPublishable) would refuse to complete it for want of a
+ * reviewed head it can never have.
+ */
+export const SUB_SHAPE_ROOM_KEY_PREFIX = "sub-shape:";
 
 export type WorkCapsuleSource = (typeof WORK_CAPSULE_SOURCES)[number];
 
-export const WORK_CAPSULE_DECISION_SCOPES = ["wwmd", "wwwd", "wsid"] as const;
+export const WORK_CAPSULE_DECISION_SCOPES = DECISION_SCOPES;
 
-export type WorkCapsuleDecisionScope = (typeof WORK_CAPSULE_DECISION_SCOPES)[number];
+export type WorkCapsuleDecisionScope = DecisionScope;
 
 export const WORK_CAPSULE_PORTFOLIO_ROLES = [
   "foundational",
@@ -89,6 +150,8 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "executor-changed",
   "scope-claimed",
   "scope-released",
+  // BI-CB5C0DCE: a governed move of the room's work-shape pin to a newer version.
+  "workshape-rebound",
   "work-intent-declared",
   "change-impact-planned",
   "evidence-recorded",
@@ -118,6 +181,12 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "question",
   "response",
   "error",
+  // BI-49BC21C1: the room's own recurring misses recorded as harness-edit
+  // candidates, once per room per day, by the harness evolution loop.
+  "harness-evolution-candidate",
+  // BI-B8DAEB71: the probe's verdict on one of those candidates (ADOPT,
+  // KEEP_BASE or KERNEL_GAP) with its outcome, load and gate-burden deltas.
+  "harness-evolution-verdict",
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];
@@ -203,6 +272,10 @@ export const WORK_CAPSULE_BRANCH_TAXONOMIES = [
 
 export type WorkCapsuleBranchTaxonomy = (typeof WORK_CAPSULE_BRANCH_TAXONOMIES)[number];
 
+// The six generic media kinds, plus every kind a work-shape stage declares.
+// A stage advances only on recorded evidence of a kind it declared, so the
+// shapes' vocabulary must be accepted here or no stage can ever advance
+// (DI-BE0348CE9229; guarded by stage-evidence-kind-parity.test.ts).
 export const WORK_CAPSULE_EVIDENCE_KINDS = [
   "test",
   "build",
@@ -210,6 +283,10 @@ export const WORK_CAPSULE_EVIDENCE_KINDS = [
   "verification",
   "lint",
   "note",
+  // Room-level, not a stage kind: it settles the affected docs before handoff
+  // (BI-9B17E889, work-capsules/docs-impact-disposition.ts) and never completes a stage.
+  "docs-impact-disposition",
+  ...WORK_SHAPE_EVIDENCE_KINDS,
 ] as const;
 
 export type WorkCapsuleEvidenceKind = (typeof WORK_CAPSULE_EVIDENCE_KINDS)[number];
@@ -240,6 +317,8 @@ export type ScopeClaim = {
   intent: "edit" | "read";
   recordedAt: string;
   recordedByPrincipalId: string;
+  /** Server-owned prospective protection; absence is legacy, not birth proof. */
+  releaseEpoch?: string;
 };
 
 const STATUS_SET = new Set<string>(WORK_CAPSULE_STATUSES);
@@ -252,7 +331,7 @@ const EXECUTOR_SET = new Set<string>(WORK_CAPSULE_EXECUTOR_KINDS);
 const ACTIVITY_SET = new Set<string>(WORK_CAPSULE_ACTIVITY_KINDS);
 const TAXONOMY_SET = new Set<string>(WORK_CAPSULE_BRANCH_TAXONOMIES);
 const EVIDENCE_KIND_SET = new Set<string>(WORK_CAPSULE_EVIDENCE_KINDS);
-const SCOPE_KIND_SET = new Set<ScopeClaim["kind"]>([
+export const SCOPE_KIND_SET: ReadonlySet<ScopeClaim["kind"]> = new Set<ScopeClaim["kind"]>([
   "path",
   "module",
   "package",
@@ -412,6 +491,14 @@ export type WorkCapsuleScopeInput = {
   decisionScope?: unknown;
   /** EP-WORK-POSTURE (BI-8C54B216): the collaboration shape the room is convened WITH. */
   workroomShape?: unknown;
+  /**
+   * BI-A967717A: the standing ACTIVITY shape that drives the room, as
+   * `key@version`. Distinct from `workroomShape`, which says who must be in the
+   * room for one consequential act; this says what wakes the room, what stages
+   * it moves through, and what stops it. Without it a room is inert — the drive
+   * runner reads this claim and skips every room that has none.
+   */
+  workShape?: unknown;
   portfolioRole?: unknown;
   servedPersona?: unknown;
   activityKind?: unknown;
@@ -423,6 +510,7 @@ export type WorkCapsuleScopeInput = {
 export type NormalizedWorkCapsuleScope = {
   decisionScope: WorkCapsuleDecisionScope | null;
   workroomShape: WorkroomShapeKey | null;
+  workShape: string | null;
   portfolioRole: WorkCapsulePortfolioRole | null;
   servedPersona: string | null;
   activityKind: WorkCapsuleScopeActivityKind | null;
@@ -527,10 +615,51 @@ function normalizeWorkroomShape(value: unknown): WorkroomShapeKey | null {
   return value;
 }
 
+const WORK_SHAPE_REF_PATTERN = /^[^@\s]+@\d+\.\d+\.\d+$/;
+
+/**
+ * `key@version`, validated for shape only. The registry lookup happens where the
+ * drive resolves, so this module stays free of a runtime dependency on the shape
+ * registry — but a malformed ref is refused here rather than persisted as a
+ * claim that silently never matches a shape.
+ */
+function normalizeWorkShapeRef(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  const trimmed = optionalString(value);
+  if (trimmed === null || !WORK_SHAPE_REF_PATTERN.test(trimmed)) {
+    throw new Error(
+      "workShape must be a declared shape reference of the form key@version, for example dependency-advisory-watch@1.0.0.",
+    );
+  }
+  return trimmed;
+}
+
+/**
+ * The `scopeClaims` entries a room is convened WITH. Both shapes ride this one
+ * JSON column rather than a column each — no migration, and existing readers
+ * strictly filter entries they do not recognize, so an unknown claim is inert
+ * rather than breaking them.
+ *
+ * `workroomShape` says who must be in the room for one consequential act;
+ * `workShape` says what wakes the room at all. Composed here, beside the
+ * normalizer that validates them, rather than inline at the write site.
+ */
+export function buildWorkCapsuleScopeClaims(
+  scope: Pick<NormalizedWorkCapsuleScope, "workroomShape" | "workShape">,
+  now: Date,
+): Array<Record<string, string>> {
+  const recordedAt = now.toISOString();
+  const claims: Array<Record<string, string>> = [];
+  if (scope.workroomShape) claims.push({ workroomShape: scope.workroomShape, recordedAt });
+  if (scope.workShape) claims.push({ workShape: scope.workShape, recordedAt });
+  return claims;
+}
+
 export function normalizeWorkCapsuleScopeInput(input?: WorkCapsuleScopeInput | null): NormalizedWorkCapsuleScope {
   return {
     decisionScope: normalizeDecisionScope(input?.decisionScope),
     workroomShape: normalizeWorkroomShape(input?.workroomShape),
+    workShape: normalizeWorkShapeRef(input?.workShape),
     portfolioRole: normalizePortfolioRole(input?.portfolioRole, "portfolioRole"),
     servedPersona: optionalString(input?.servedPersona),
     activityKind: normalizeScopeActivityKind(input?.activityKind),

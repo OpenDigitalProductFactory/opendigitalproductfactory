@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "two-then-disclose",
+  "decisionInteractionId": "DI-21CD5A026BD4",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomBoundaryControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "two-then-disclose",
+      "all-eleven-flat",
+      "separate-settings-route"
+    ]
+  }
+}

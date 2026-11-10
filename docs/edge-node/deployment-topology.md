@@ -29,6 +29,23 @@ An edge node is **not a second copy of DPF**. It carries:
 That is why an edge node is cheap to drop onto a small box at a remote site: it only reaches
 *out* to your portal and holds nothing but its own enrollment.
 
+## Edge nodes also find your other DPF installs
+
+Besides mapping hosts, an edge node looks for **other DPF installs** on its segment
+every 90 seconds and offers them to your portal as nearby peers to pair with. That
+is how two installs of one organization find each other without anyone typing a URL.
+
+Two switches control it, and both default to on:
+
+- `DPF_FEDERATION_SCAN` on an **edge node** — whether it looks.
+- `DPF_FEDERATION_ADVERTISE` on a **portal** — whether it can be found.
+
+On Docker Desktop the edge node cannot see your LAN, so name the peers with
+`DPF_FEDERATION_SCAN_HOSTS`; the [multi-host
+runbook](../install/edge-node-multi-host.md#finding-nearby-dpf-installs-federation-candidates)
+has the full table. Finding a peer never grants it anything — pairing is still a
+separate decision, made against your organization's certificate root.
+
 ## Edge nodes are opt-in
 
 Installing DPF does **not** start an edge node. Mapping a network is a deliberate choice you make

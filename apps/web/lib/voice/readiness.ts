@@ -98,10 +98,10 @@ export async function getSpeechToTextReadiness(): Promise<SpeechToTextReadiness>
       modelId: null,
       baseUrl: null,
       reason:
-        // Operator-facing copy must not name shell. The admin card uses the
-        // Enable button to drive the sidecar start; the underlying script is
-        // platform plumbing.
-        "Speech-to-text isn't configured yet. Click Enable to start the local sidecar, or connect a hosted provider in Platform Tools > Communications.",
+        // Operator-facing copy must not name shell. Speech is provider-managed
+        // (BI-F7E9A541): DPF ships no speech container, so the only route to
+        // readiness is configuring a provider that can transcribe.
+        "Speech-to-text isn't configured yet. Connect a provider that supports it in Platform Tools > Communications — a hosted one, or your own speech server if you'd rather keep audio on your infrastructure.",
     };
   }
 
@@ -180,7 +180,7 @@ export async function getSpeechToTextReadiness(): Promise<SpeechToTextReadiness>
         providerName: profile.provider.name,
         modelId: profile.modelId,
         baseUrl: profile.provider.baseUrl,
-        reason: `${profile.provider.name} is configured at ${profile.provider.baseUrl}, but its ${probe.reason}. Re-check the sidecar in Platform Tools > Communications.`,
+        reason: `${profile.provider.name} is configured at ${profile.provider.baseUrl}, but its ${probe.reason}. Re-check that endpoint in Platform Tools > Communications.`,
       };
     }
 
@@ -191,7 +191,7 @@ export async function getSpeechToTextReadiness(): Promise<SpeechToTextReadiness>
         providerName: profile.provider.name,
         modelId: profile.modelId,
         baseUrl: profile.provider.baseUrl,
-        reason: `${profile.provider.name} is reachable at ${profile.provider.baseUrl}, but the sidecar does not list model "${profile.modelId}". Re-run the platform seed from the current release.`,
+        reason: `${profile.provider.name} is reachable at ${profile.provider.baseUrl}, but it does not serve model "${profile.modelId}". Point it at a server that loads that model, or pick a provider whose models match.`,
       };
     }
   }

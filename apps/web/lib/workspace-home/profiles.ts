@@ -530,6 +530,31 @@ export const DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS: WorkspaceHomeContribution[] =
     ],
   }),
   profile({
+    id: "home-pet-rescue",
+    label: "Rescue operations home",
+    description:
+      "Animal intake, safe capacity, daily care, placement, and donor stewardship for pet rescue teams.",
+    primaryOperatingQuestion: "which animal or care commitment needs attention now?",
+    topConcerns: [
+      "animals waiting for intake or safe housing",
+      "medication, veterinary, and welfare exceptions",
+      "legal holds and placement readiness",
+      "adoption applications and returns",
+      "restricted donations and animal costs",
+    ],
+    semanticArchetypeIds: ["pet-rescue"],
+    archetypeCategories: [],
+    primitives: ["case-board", "capacity-lanes", "appointment-schedule", "handoff-queue"],
+    requiredCanonicalData: ["animal-profile", "work-item", "calendar-event", "resource"],
+    requiredSignals: ["animal-attention", "scheduled-work", "urgent-exception", "coworker-handoff"],
+    components: [
+      { key: "patient-queue", slotId: "today-now", primitiveKey: "case-board", title: "Animals needing attention", dataRefs: [{ kind: "projection", key: "rescue.animals", required: true }, urgentException] },
+      { key: "technician-load", slotId: "today-now", primitiveKey: "capacity-lanes", title: "Housing and foster capacity", dataRefs: [{ kind: "projection", key: "rescue.capacity", required: true }] },
+      { key: "today-schedule", slotId: "exceptions-needs-review", primitiveKey: "appointment-schedule", title: "Care rounds and appointments", dataRefs: [calendarEvent, scheduledWork] },
+      { key: "coworker-handoffs", slotId: "coworker-handoffs", primitiveKey: "handoff-queue", title: "Rescue team handoffs", dataRefs: [coworkerHandoff] },
+    ],
+  }),
+  profile({
     id: "home-nonprofit-community",
     label: "Mission operations home",
     description:

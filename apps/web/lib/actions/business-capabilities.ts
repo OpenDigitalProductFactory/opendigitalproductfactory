@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@dpf/db";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
-import { slugify as kebab } from "@/lib/shared/slugify";
+import { slugify } from "@/lib/shared/slugify";
 import {
   IT4IT_VALUE_STREAM_SET,
   TRACE_RELATIONSHIP_SET,
@@ -35,10 +35,6 @@ function assertMaturity(value: number): number {
     throw new Error("Maturity must be 1 through 5");
   }
   return value;
-}
-
-function slugify(value: string): string {
-  return kebab(value).slice(0, 80);
 }
 
 function nextCapabilityId(): string {
@@ -91,7 +87,7 @@ export async function createBusinessCapabilityFromForm(formData: FormData) {
     data: {
       capabilityId: nextCapabilityId(),
       name,
-      slug: slugify(name),
+      slug: slugify(name).slice(0, 80),
       description: readOptionalString(formData, "description"),
       level,
       parentId,

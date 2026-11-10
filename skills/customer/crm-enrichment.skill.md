@@ -2,7 +2,7 @@
 name: crm-enrichment
 description: "Enrich a thin prospect/account from public sources with citations — identity-gated, grounded-or-blank, propose-then-apply"
 category: customer
-assignTo: ["customer-advisor", "market-research-analyst"]
+assignTo: ["customer-advisor"]
 capability: "operate_customer"
 taskType: "conversation"
 triggerPattern: "enrich|research (the|this) (company|account|prospect)|fill in|look up|thin|scant|find (their|the) website|who are they"

@@ -58,7 +58,7 @@ describe("determineSocialAuthFlow", () => {
     }
   });
 
-  it("returns 'auto-link' when email matches contact with null password", async () => {
+  it("never auto-links by email when a provider subject has no identity", async () => {
     (prisma.socialIdentity.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     (prisma.customerContact.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: "c-3", email: "nopw@test.com", name: null, passwordHash: null,
@@ -67,7 +67,7 @@ describe("determineSocialAuthFlow", () => {
     const result = await determineSocialAuthFlow({
       provider: "apple", providerAccountId: "apple-789", email: "nopw@test.com", name: "NoPw User",
     });
-    expect(result.flow).toBe("auto-link");
+    expect(result.flow).toBe("link");
   });
 
   it("returns 'onboard' when no identity or contact match", async () => {
@@ -90,6 +90,21 @@ describe("determineSocialAuthFlow", () => {
     });
     const result = await determineSocialAuthFlow({
       provider: "google", providerAccountId: "google-inactive", email: "inactive@test.com", name: "Inactive User",
+    });
+    expect(result.flow).toBe("blocked");
+  });
+
+  it("blocks every non-session-capable account status", async () => {
+    (prisma.socialIdentity.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "si-closed",
+      contactId: "c-closed",
+      contact: {
+        id: "c-closed", email: "closed@test.com", name: null, isActive: true,
+        account: { id: "a-closed", accountId: "CUST-CLOSED", name: "ClosedCo", status: "closed" },
+      },
+    });
+    const result = await determineSocialAuthFlow({
+      provider: "google", providerAccountId: "google-closed", email: "closed@test.com", name: null,
     });
     expect(result.flow).toBe("blocked");
   });

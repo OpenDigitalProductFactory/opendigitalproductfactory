@@ -87,11 +87,11 @@ test("portal-shell UX survey — page lens + coworker button-decision lens", asy
   page,
 }, testInfo) => {
   const targets = portalShellTargets();
-  const mcpConfig = await resolveDpfMcpConfig();
+  const mcpConfig = resolveDpfMcpConfig();
 
   test.skip(
     mcpConfig === null,
-    "No DPF MCP config (set DPF_MCP_URL + DPF_MCP_BEARER_TOKEN, or provide .mcp.json) — the page lens calls evaluate_page over MCP.",
+    "No DPF MCP bearer (set DPF_MCP_BEARER_TOKEN, and DPF_MCP_URL for a non-default endpoint) — the page lens calls evaluate_page over MCP.",
   );
 
   const lensById = new Map<string, LensSpec>(PORTAL_SHELL_LENSES.map((lens) => [lens.id, lens]));

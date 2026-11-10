@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+const { humanRoomAccess } = vi.hoisted(() => ({ humanRoomAccess: vi.fn() }));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveHumanWorkroomAccess: humanRoomAccess }));
+vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [] }));
 
 import {
   coworkerEnvelopeToAttentionItem,
@@ -43,6 +46,7 @@ function envelope(over: Partial<CoworkerEnvelopeRow> = {}): CoworkerEnvelopeRow 
     // clock-bomb-guard: allow coworkerEnvelopeToAttentionItem takes nowMs explicitly and never reads the wall clock
     expiresAt: new Date("2026-08-25T20:09:05.868Z"),
     createdAt: new Date("2026-08-25T19:54:05.871Z"),
+    proposedParameters: { decision: "pass" },
     taskRun: { a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: reviewBinding } },
     ...over,
   };
@@ -77,6 +81,11 @@ describe("coworkerEnvelopeToAttentionItem", () => {
     );
     expect(approval?.expiresAtIso).toBe("2026-08-25T20:09:05.868Z");
     expect(approval?.actionable).toBe(true);
+    expect(approval?.decision.kind).toBe("known");
+    expect(approval?.decision.recommendation).toBe("research passes with no findings");
+    expect(approval?.decision.authorization).toBe(
+      "record that receipt so implementation planning may continue",
+    );
   });
 
   it("carries the immutable review binding: subject, gate, commit, path and blob", () => {
@@ -146,7 +155,10 @@ describe("coworkerEnvelopeToAttentionItem", () => {
     );
     const card = projection.needsYouNow[0]!.card;
 
+    expect(card.headline).toBe("Authorize this research receipt?");
     expect(card.headline.split(/\s+/).length).toBeLessThanOrEqual(8);
+    expect(card.recommendation.text).toBe("research passes with no findings");
+    expect(card.situation).toMatch(/BI-MCP-EFF-0285909C/);
     expect(
       [
         card.headline,
@@ -161,14 +173,18 @@ describe("coworkerEnvelopeToAttentionItem", () => {
 
   // Expiry and resolved states.
 
-  it("marks an expired proposal non-actionable and past due", () => {
+  // BI-0012E6CA: a lapsed proposal is no longer an "overdue" decision — nothing
+  // is held on it and it cannot be decided. It is an expired, unanswered
+  // request the person can ask again, with no deadline to chase.
+  it("marks an expired proposal non-actionable and expired unanswered, with no deadline", () => {
     const item = coworkerEnvelopeToAttentionItem(
       envelope(),
       Date.parse("2026-08-25T20:30:00.000Z"),
     );
 
     expect(item.envelope?.actionable).toBe(false);
-    expect(item.triage.timeToAct).toBe("overdue");
+    expect(item.envelope?.expiredUnanswered).toBe(true);
+    expect(item.triage.timeToAct).toBe("none");
   });
 
   it.each(["approved", "declined", "executed", "failed", "cancelled"] as const)(
@@ -217,14 +233,71 @@ describe("coworkerEnvelopeToAttentionItem", () => {
 
 // Owner projection and delegating-user isolation.
 
-function stubDb(rows: CoworkerEnvelopeRow[]) {
+function stubDb(
+  rows: CoworkerEnvelopeRow[],
+  executions: Array<{
+    taskRunId: string | null;
+    toolName: string;
+    userId?: string;
+    parameters: unknown;
+    result: unknown;
+  }> = [],
+) {
   const findMany = vi.fn(async (args: { where: { delegatingUserId: string } }) =>
     rows.filter((row) => row.delegatingUserId === args.where.delegatingUserId),
   );
-  return { db: { coworkerActionEnvelope: { findMany } } as never, findMany };
+  const findExecutions = vi.fn(async () => executions);
+  return {
+    db: {
+      coworkerActionEnvelope: { findMany },
+      toolExecution: { findMany: findExecutions },
+    } as never,
+    findMany,
+    findExecutions,
+  };
 }
 
+describe("coworkerEnvelopeToAttentionItem — standing ruling offer (BI-E5631708)", () => {
+  const bound = {
+    argsJson: { approvalBinding: { actingHumanUserId: OWNER, actingAgentId: "AGT-WS-PORTFOLIO", toolName: "record_initiative_evidence" } },
+  };
+
+  it("offers \"don't ask again\" only for a non-damaging request nothing recorded could steer", () => {
+    const offered = coworkerEnvelopeToAttentionItem(envelope({
+      ...bound, authorityDecision: { rationale: { damaging: false, escalationReason: "unsteered-side-effect" } },
+    }), NOW).envelope;
+    expect(offered?.standingRulingOffered).toBe(true);
+
+    for (const rationale of [
+      { damaging: true, escalationReason: "damaging-consequence" },
+      { damaging: false, escalationReason: "declared-proposal" },
+      null,
+    ]) {
+      const withheld = coworkerEnvelopeToAttentionItem(envelope({ ...bound, authorityDecision: rationale ? { rationale } : null }), NOW).envelope;
+      expect(withheld?.standingRulingOffered).toBeUndefined();
+    }
+    expect(coworkerEnvelopeToAttentionItem(envelope(), NOW).envelope?.standingRulingOffered).toBeUndefined();
+  });
+});
+
 describe("loadCoworkerEnvelopeItems", () => {
+  it.each([true, false])("shows a work name only when the actual reader has content access: %s", async (admitted) => {
+    humanRoomAccess.mockClear();
+    humanRoomAccess.mockResolvedValue({ decision: { level: admitted ? "content" : "none" } });
+    const row = envelope({ manifestActionId: "record_workroom_evidence", proposedParameters: undefined,
+      argsJson: { capsuleId: "WC-NAMED", kind: "note", summary: "Reported result" } });
+    const stub = stubDb([row]);
+    const room = { id: "room-row", capsuleId: "WC-NAMED", title: "Work on BI-NAMED", backlogItemId: "BI-NAMED" };
+    const db = { ...stub.db as object, workroom: { findMany: vi.fn(async (_args: unknown) => [room]) },
+      backlogItem: { findMany: vi.fn(async () => [{ id: "backlog-row", itemId: "BI-NAMED", title: "Repair the coworker inbox" }]) } };
+    const items = await loadCoworkerEnvelopeItems(db as never, OWNER, NOW);
+    expect(db.workroom.findMany.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ select: { id: true, capsuleId: true, backlogItemId: true } }));
+    expect(db.workroom.findMany).toHaveBeenCalledTimes(admitted ? 2 : 1);
+    expect(items[0]?.envelope?.decision.targetLabel).toBe(admitted ? "Repair the coworker inbox" : undefined);
+    expect(humanRoomAccess).toHaveBeenCalledWith({ userId: OWNER, workroomId: "room-row", requested: "content" }, db);
+    expect(JSON.parse(items[0]!.envelope!.decision.completeProposedContent!)).toEqual(row.argsJson);
+  });
+
   it("projects the authenticated delegating user's proposed envelopes", async () => {
     const { db, findMany } = stubDb([envelope()]);
 
@@ -260,5 +333,73 @@ describe("loadCoworkerEnvelopeItems", () => {
     expect(await loadCoworkerEnvelopeItems(db, undefined, NOW)).toEqual([]);
     expect(await loadCoworkerEnvelopeItems(db, "", NOW)).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("joins the pending ToolExecution parameters onto the owner decision", async () => {
+    const row = envelope({ proposedParameters: undefined });
+    const { db } = stubDb([row], [
+      {
+        taskRunId: row.taskRunId,
+        toolName: row.manifestActionId,
+        parameters: { decision: "fail", findings: [{ issue: "Not reproduced.", severity: "important" }] },
+        result: { data: { envelopeId: row.id } },
+      },
+    ]);
+
+    const items = await loadCoworkerEnvelopeItems(db, OWNER, NOW);
+
+    expect(items[0]?.envelope?.decision.recommendation).toBe(
+      "research does not pass with 1 finding",
+    );
+    expect(items[0]?.envelope?.decision.findings).toEqual([
+      { issue: "Not reproduced.", severity: "important" },
+    ]);
+  });
+});
+
+describe("loadCoworkerEnvelopeItems — external MCP envelopes (BI-12E5DD91)", () => {
+  it("finds the proposal of an envelope with no TaskRun by its envelope id", async () => {
+    const row = envelope({
+      manifestActionId: "record_workroom_evidence",
+      coworkerAgentId: "AGT-EXT-CODEX",
+      taskRunId: null,
+      taskRun: null,
+      proposedParameters: undefined,
+    } as never);
+    const { db, findExecutions } = stubDb([row], [
+      {
+        taskRunId: null,
+        toolName: "record_workroom_evidence",
+        userId: OWNER,
+        parameters: { capsuleId: "WC-04ED087E", kind: "note", summary: "Acceptance A." },
+        result: { data: { envelopeId: row.id } },
+      },
+    ]);
+
+    const items = await loadCoworkerEnvelopeItems(db, OWNER, NOW);
+
+    const decision = items[0]?.envelope?.decision;
+    expect(decision?.kind).toBe("exact");
+    expect(decision?.target).toBe("Workroom WC-04ED087E");
+    const where = (findExecutions.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where;
+    expect(where.OR).toEqual([{ result: { path: ["data", "envelopeId"], equals: row.id } }]);
+  });
+
+  it("does not show another user's execution even if it names the envelope", async () => {
+    const row = envelope({ taskRunId: null, taskRun: null, proposedParameters: undefined } as never);
+    const { db } = stubDb([row], [
+      {
+        taskRunId: null,
+        toolName: row.manifestActionId,
+        userId: OTHER_OWNER,
+        parameters: { decision: "pass" },
+        result: { data: { envelopeId: row.id } },
+      },
+    ]);
+
+    const items = await loadCoworkerEnvelopeItems(db, OWNER, NOW);
+
+    expect(items[0]?.envelope?.decision.kind).not.toBe("exact");
+    expect(items[0]?.envelope?.decision.proposed).toEqual([]);
   });
 });

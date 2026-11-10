@@ -31,9 +31,35 @@
 //   was a structural success that produced no functional truth. This wires
 //   the structural success to the functional dispatch.
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
+
+/** BI-0B95D268: poll the sandbox container until it runs again (bounded). */
+export async function waitForSandboxRunning(opts: {
+  timeoutMs?: number;
+  intervalMs?: number;
+  isRunning?: () => Promise<boolean>;
+  sleep?: (ms: number) => Promise<void>;
+} = {}): Promise<boolean> {
+  const timeoutMs = opts.timeoutMs ?? 3 * 60 * 1000;
+  const intervalMs = opts.intervalMs ?? 10_000;
+  const isRunning = opts.isRunning ?? (async () => {
+    const [{ isSandboxRunning }, { SANDBOX_CONTAINER }] = await Promise.all([
+      import("./sandbox/sandbox"),
+      import("./sandbox/agent-cli-runtime"),
+    ]);
+    return isSandboxRunning(SANDBOX_CONTAINER);
+  });
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await isRunning()) return true;
+    if (Date.now() >= deadline) return false;
+    await sleep(intervalMs);
+  }
+}
 import { formatBuildEngineSelectionEvidence } from "./build-engine-selection-runtime";
 
 type DispatchOutcome =
@@ -41,7 +67,9 @@ type DispatchOutcome =
   | { kind: "skipped-already-has-design"; reason: string }
   | { kind: "skipped-no-provider"; reason: string }
   | { kind: "dispatched-success"; designDocKeys: string[]; durationMs: number }
-  | { kind: "dispatched-failure"; error: string; durationMs: number };
+  | { kind: "dispatched-failure"; error: string; durationMs: number }
+  /** BI-5098ECEC: the host was busy; nothing is known about the design and no repair round is spent. */
+  | { kind: "deferred-capacity"; reason: string; durationMs: number };
 
 /**
  * Auto-dispatch Ideate-phase design-doc research for an approved backlog-promoted
@@ -51,7 +79,7 @@ type DispatchOutcome =
  * @param buildId  FB-* semantic build id
  * @param userId   the approving user — used as the actor for the saveBuildEvidence call
  */
-export async function dispatchIdeateForApprovedBuild(params: {
+async function dispatchIdeateForApprovedBuildInner(params: {
   buildId: string;
   userId: string;
   /** Design-review fix loop: prior reviewer issues appended to the research
@@ -63,6 +91,8 @@ export async function dispatchIdeateForApprovedBuild(params: {
   requestedReusabilityScope?: string;
   /** Bypass the designDoc idempotency guard (a fix-loop regeneration). */
   forceRegenerate?: boolean;
+  /** BI-3E57890E: the fix loop revising a plan-phase design saves the revision. */
+  allowPlanPhaseDesignRevision?: boolean;
 }): Promise<DispatchOutcome> {
   const {
     buildId,
@@ -71,6 +101,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     requestedUserContext,
     requestedReusabilityScope,
     forceRegenerate = false,
+    allowPlanPhaseDesignRevision = false,
   } = params;
 
   const logActivity = async (summary: string): Promise<void> => {
@@ -177,7 +208,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
       return outcome;
     }
 
-    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { getModelTier, deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
     const {
       getBuildStudioConfig,
       isModelTierRoutingEnabled,
@@ -199,7 +230,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
           sensitivity: deliverableSensitivity,
         })
       : undefined;
-    const routingSensitivity = deliverableSensitivity === "high" ? "confidential" as const : "internal" as const;
+    const routingSensitivity = mapBuildDeliverableToRoutingSensitivity(deliverableSensitivity);
 
     // Resolve the same task-qualified selection used by model-selection preview
     // and actual dispatch. A blocked result stops before phase work with one action.
@@ -289,13 +320,35 @@ export async function dispatchIdeateForApprovedBuild(params: {
         }
       }
     }
-    try {
+    const releaseIdeateAttempt = async () => {
+      try {
+        const { releaseUnfinishedBuildPhaseRun } = await import("./build-phase-run");
+        await releaseUnfinishedBuildPhaseRun(buildId, "ideate");
+      } catch {
+        /* phase attribution remains best-effort */
+      }
+    };
+    // §11a: no new ideate research while an upgrade drains (it was swallowed
+    // and dispatched anyway). The stranded-build resume re-dispatches it after.
+    {
+      const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
+      if ((await getQuiescenceLevel()) !== "normal") {
+        await logActivity("Waiting for the platform upgrade to finish before starting research.");
+        return { kind: "deferred-capacity", reason: "waiting for the platform upgrade to finish", durationMs: 0 };
+      }
+    }
+    // BI-3E57890E: a plan-phase design revision runs inside the open plan
+    // phase. Reopening the finished ideate row would leave it open for good
+    // (only ideate → plan closes it), and quiescence reads it as in flight.
+    if (!allowPlanPhaseDesignRevision) try {
       const { startBuildPhaseRun } = await import("./build-phase-run");
-      void startBuildPhaseRun(buildId, "ideate", {
+      // Await the start. A later release must not race an unawaited insert
+      // that would reopen the row after the attempt has already stopped.
+      await startBuildPhaseRun(buildId, "ideate", {
         ...(executionProfileRef ? { executionProfileRef } : {}),
-      }).catch(() => {});
+      });
     } catch {
-      /* phase attribution remains best-effort */
+      /* QuiescingError, or a start failure, must not abort the dispatch */
     }
 
     // The BI body is the canonical context for backlog-promoted drafts.
@@ -317,6 +370,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const attemptCandidates = [selection.selected, ...selection.fallbackChain.slice(0, 1)];
     let ideateResult: Awaited<ReturnType<typeof dispatchIdeateResearch>> | null = null;
     let resolvedAttempt = selection.selected;
+    let infrastructureRetried = false;
     for (let attemptIndex = 0; attemptIndex < attemptCandidates.length; attemptIndex += 1) {
       const attempt = attemptCandidates[attemptIndex]!;
       resolvedAttempt = attempt;
@@ -338,6 +392,32 @@ export async function dispatchIdeateForApprovedBuild(params: {
         sensitivity: routingSensitivity,
       });
       if (ideateResult.success) break;
+      // BI-0B95D268: the harness killed the engine (a sandbox restart during a
+      // self-upgrade swap is the common case). Wait for the sandbox to come
+      // back, then re-run the SAME attempt once — before this, the build sat
+      // as a "model failure" until the 20-minute stale window plus the
+      // 10-minute reconciler tick re-drove it.
+      if (ideateResult.capacityDeferred) {
+        // BI-5098ECEC: the host is busy, not broken. Waiting for the sandbox or
+        // switching engines cannot help; the stranded-build reconciler re-drives
+        // this build once the host frees. Stop here without a verdict.
+        await logActivity(`Ideate deferred: ${(ideateResult.error ?? "").slice(0, 220)}`);
+        await releaseIdeateAttempt();
+        return { kind: "deferred-capacity", reason: ideateResult.error ?? "capacity deferral", durationMs: Date.now() - startedAt };
+      }
+      if (ideateResult.infrastructure && !infrastructureRetried) {
+        infrastructureRetried = true;
+        await logActivity(
+          `Infrastructure failure, not a model verdict: ${(ideateResult.error ?? "").slice(0, 160)} — waiting for the sandbox, then retrying the same engine once.`,
+        );
+        const ready = await waitForSandboxRunning();
+        if (ready) {
+          attemptIndex -= 1;
+          continue;
+        }
+        await logActivity("Sandbox did not come back within the wait window; leaving the build for the stranded-build reconciler.");
+        break;
+      }
       const retryClass = classifyRetrySafePreDispatchFailure({
         message: ideateResult.error ?? "",
         durationMs: ideateResult.durationMs,
@@ -362,6 +442,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      await releaseIdeateAttempt();
       // BI-7AD0759A: the model's output is the ONLY thing that explains why it
       // could not be parsed, and it was being dropped on the floor here — on a
       // local-only install that leaves the operator a four-minute wait and a
@@ -407,7 +488,10 @@ export async function dispatchIdeateForApprovedBuild(params: {
       "saveBuildEvidence",
       { buildId, field: "designDoc", value: ideateResult.designDoc },
       userId,
-      authoringAgentId ? { agentId: authoringAgentId } : {},
+      {
+        ...(authoringAgentId ? { agentId: authoringAgentId } : {}),
+        ...(allowPlanPhaseDesignRevision ? { allowPlanPhaseDesignRevision: true } : {}),
+      },
     );
 
     if (!saveResult.success) {
@@ -417,6 +501,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch saved-evidence step failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
+      await releaseIdeateAttempt();
       return outcome;
     }
 
@@ -441,6 +526,7 @@ export async function dispatchIdeateForApprovedBuild(params: {
         durationMs,
       };
       await logActivity(`Auto-dispatch saved-evidence VERIFICATION FAILED after ${(durationMs / 1000).toFixed(1)}s: designDoc not present on ${buildId} after save.`);
+      await releaseIdeateAttempt();
       return outcome;
     }
 
@@ -462,13 +548,15 @@ export async function dispatchIdeateForApprovedBuild(params: {
       try {
         const { shouldRunPreSpecResearch, conductPreSpecResearch, formatResearchReportMarkdown, makeInferenceResearchDeps } =
           await import("@/lib/build/pre-spec-research");
-        const { deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+        const { deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
         const sensitivity = deriveDeliverableSensitivity({ text: `${featureTitle}\n${featureDescription}`, workType: bi.workType });
+        const researchRouteSensitivity = mapBuildDeliverableToRoutingSensitivity(sensitivity);
         if (shouldRunPreSpecResearch({ workType: bi.workType, effortSize: bi.effortSize, sensitivity })) {
           const { searchPublicWeb, fetchPublicWebsiteEvidence } = await import("@/lib/public-web-tools");
           const { routeAndCall } = await import("@/lib/routed-inference");
+          const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
           const deps = makeInferenceResearchDeps({
-            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", "internal", { budgetClass: "minimize_cost" })).content,
+            llm: async (p) => (await routeAndCall([{ role: "user" as const, content: p }], "You are a research assistant. Follow the output format exactly.", researchRouteSensitivity, { ...BUILD_PHASE_ROUTE_OPTIONS, budgetClass: "minimize_cost" })).content,
             search: async (q) => (await searchPublicWeb(q)).map((r) => ({ title: r.title, url: r.url, description: r.snippet })),
             fetchSource: async (u) => { const e = await fetchPublicWebsiteEvidence(u); return { title: e.title, textExcerpt: e.textExcerpt }; },
           });
@@ -524,6 +612,12 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const message = getErrorMessage(err);
     console.error("[ideate-on-approval] Unhandled error in auto-dispatch:", { buildId }, err);
     await logActivity(`Auto-dispatch threw unexpectedly: ${message.slice(0, 200)}`);
+    try {
+      const { releaseUnfinishedBuildPhaseRun } = await import("./build-phase-run");
+      await releaseUnfinishedBuildPhaseRun(buildId, "ideate");
+    } catch {
+      /* phase attribution remains best-effort */
+    }
     return { kind: "dispatched-failure", error: message, durationMs: 0 };
   }
 }
@@ -656,11 +750,38 @@ type DesignReviewVerdict =
  * regenerating the designDoc does NOT populate — so those escalate directly
  * rather than churn the loop. Never throws.
  */
+/**
+ * The problem a fix build's diagnosis loop investigates. BI-A9C8DA0E: the loop
+ * read only brief.problem / brief.summary, which no fix build carries (0 of 16
+ * on the dev install), so it never ran and every fix whose body lacked a
+ * structured Fix Context escalated at round 0. The statement is where the
+ * tee-up and ideate actually put it: fixContext.actual (the item body) and the
+ * design doc's problemStatement. Empty when none carries one — then escalating
+ * is still the honest answer.
+ */
+export function fixDiagnosisProblem(brief: unknown, designDoc: unknown): string {
+  const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const b = (brief && typeof brief === "object" ? brief : {}) as {
+    problem?: unknown; summary?: unknown; fixContext?: { actual?: unknown } | null;
+  };
+  const d = (designDoc && typeof designDoc === "object" ? designDoc : {}) as { problemStatement?: unknown };
+  return text(b.problem) || text(b.summary) || text(b.fixContext?.actual) || text(d.problemStatement);
+}
+
 export async function dispatchDesignReviewFixLoop(params: {
   buildId: string;
   userId: string;
+  /**
+   * BI-3E57890E: a failing INDEPENDENT design review (design-spec,
+   * spec-approval, architecture-review) to revise from, in place of the build's
+   * own designReview. Its findings seed round 1; the revision is saved even
+   * though the build is in plan, and the feature regeneration path is used
+   * whatever the build kind, because the reviewer judged the design itself.
+   */
+  failedReview?: DesignReviewVerdict;
 }): Promise<{ kind: string; rounds: number }> {
-  const { buildId, userId } = params;
+  const { buildId, userId, failedReview } = params;
+  const independent = failedReview?.decision === "fail";
   const log = (s: string) =>
     prisma.buildActivity
       .create({ data: { buildId, tool: "design_fix_loop", summary: s.slice(0, 240) } })
@@ -692,18 +813,101 @@ export async function dispatchDesignReviewFixLoop(params: {
   try {
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { id: true, title: true, kind: true, originatingBacklogItemId: true, designReview: true },
+      select: { id: true, title: true, kind: true, originatingBacklogItemId: true, designReview: true, brief: true, designDoc: true },
     });
     if (!build) return { kind: "build-not-found", rounds: 0 };
 
-    let review = build.designReview as DesignReviewVerdict;
+    let review = independent ? failedReview : (build.designReview as DesignReviewVerdict);
     if (review?.decision !== "fail") return { kind: "no-failed-review", rounds: 0 };
 
     // Fix builds: regenerating the designDoc cannot fill the missing fixContext
-    // ("Incomplete fix diagnosis"), so escalate to a human directly.
-    if (build.kind === "fix") {
-      await escalate(build, review, 0);
-      return { kind: "escalated-fix-diagnosis", rounds: 0 };
+    // ("Incomplete fix diagnosis"). That used to escalate to a human at round 0
+    // — and on an unattended install nobody answers, so the build is reaped at
+    // seven days. Measured on this install: 14 of 16 abandoned fix builds had an
+    // incomplete diagnosis, making this the single largest cause of abandonment
+    // (14 of 45).
+    //
+    // The brief is not empty: it carries a "## Problem" narrative naming dates,
+    // entity ids and observed symptoms. So attempt the diagnosis first, bounded
+    // by the same round budget the feature path uses, and escalate only when the
+    // investigation genuinely does not land.
+    //
+    // The safety rule lives in fix-context-diagnosis.ts: a diagnosis is either
+    // grounded or refused. A refusal escalates exactly as before — a guess
+    // recorded as fact would become the evidence the plan phase builds on.
+    if (build.kind === "fix" && !independent) {
+      const { executeTool: runTool } = await import("@/lib/mcp-tools");
+      const { buildFixDiagnosisPrompt, parseFixDiagnosis, isDiagnosisRefusal } = await import(
+        "@/lib/build/fix-context-diagnosis"
+      );
+      const problem = fixDiagnosisProblem(
+        (build as { brief?: unknown }).brief,
+        (build as { designDoc?: unknown }).designDoc,
+      );
+
+      let diagnosisRounds = 0;
+      let lastRefusal = "no diagnosis attempted";
+
+      while (review?.decision === "fail" && diagnosisRounds < DESIGN_FIX_MAX_ROUNDS && problem) {
+        diagnosisRounds += 1;
+        await log(
+          `Fix diagnosis incomplete — investigating (round ${diagnosisRounds}/${DESIGN_FIX_MAX_ROUNDS}) rather than escalating.`,
+        );
+        const prompt = buildFixDiagnosisPrompt({
+          title: build.title,
+          problem,
+          priorIssues: (review?.issues ?? []).map((i) => i.description),
+        });
+
+        let raw: unknown = null;
+        try {
+          const { routeAndCall } = await import("@/lib/inference/routed-inference");
+          const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
+          const answer = await routeAndCall(
+            [{ role: "user", content: prompt }],
+            "You are the design author diagnosing a defect you will then plan against.",
+            "development",
+            { ...BUILD_PHASE_ROUTE_OPTIONS, taskType: "conversation" },
+          );
+          raw = answer?.content ?? null;
+        } catch (err) {
+          const { getErrorMessage } = await import("@/lib/shared/get-error-message");
+          await log(`Fix diagnosis round ${diagnosisRounds} could not dispatch (${getErrorMessage(err)}) — retrying if rounds remain.`);
+          continue;
+        }
+
+        const parsed = parseFixDiagnosis(raw);
+        if (isDiagnosisRefusal(parsed)) {
+          lastRefusal = parsed.reason;
+          await log(`Fix diagnosis round ${diagnosisRounds} refused: ${parsed.reason}`);
+          continue;
+        }
+
+        await runTool("update_feature_brief", { buildId, fixContext: parsed }, userId, {
+          featureBuildId: buildId,
+        });
+        await log(
+          `Fix diagnosis recorded by the design author (round ${diagnosisRounds}): reproduction, root cause and approach.`,
+        );
+        await runTool("reviewDesignDoc", { buildId }, userId, {
+          featureBuildId: buildId,
+          suppressDesignReviewAutoRepair: true,
+        });
+        const rechecked = await prisma.featureBuild.findUnique({
+          where: { buildId },
+          select: { designReview: true },
+        });
+        review = rechecked?.designReview as DesignReviewVerdict;
+      }
+
+      if (review?.decision !== "fail") {
+        return { kind: "self-repaired", rounds: diagnosisRounds };
+      }
+      await log(
+        `Fix diagnosis still incomplete after ${diagnosisRounds} round(s) (${problem ? lastRefusal : "brief carries no problem statement to investigate"}) — escalating to a human.`,
+      );
+      await escalate(build, review, diagnosisRounds);
+      return { kind: "escalated-fix-diagnosis", rounds: diagnosisRounds };
     }
 
     const { formatPlanReviewFeedback } = await import("@/lib/build/plan-on-approval");
@@ -732,7 +936,17 @@ export async function dispatchDesignReviewFixLoop(params: {
       round += 1;
       await log(`Design review failed — regenerating (round ${round}/${DESIGN_FIX_MAX_ROUNDS}) against ${review.issues?.length ?? 0} issue(s)`);
       const feedback = formatPlanReviewFeedback(review.issues ?? []);
-      const regen = await dispatchIdeateForApprovedBuild({ buildId, userId, priorReviewFeedback: feedback });
+      const regen = await dispatchIdeateForApprovedBuild({
+        buildId, userId, priorReviewFeedback: feedback,
+        ...(independent ? { allowPlanPhaseDesignRevision: true } : {}),
+      });
+      if (regen.kind === "deferred-capacity") {
+        // BI-5098ECEC: a busy host says nothing about the design. Give the round
+        // back and stop; the reconciler resumes the loop when the host frees.
+        round -= 1;
+        await log(`Design regeneration deferred — host busy; round not consumed (${regen.reason.slice(0, 160)}).`);
+        break;
+      }
       if (regen.kind !== "dispatched-success") {
         // BI-E492F313: this used to `break`, so ONE infrastructure failure both
         // consumed a round and abandoned the rest — the advertised "round 1/2"
@@ -788,4 +1002,11 @@ export async function dispatchDesignReviewFixLoop(params: {
     await log(`Design fix loop error: ${String(err instanceof Error ? err.message : err).slice(0, 200)}`);
     return { kind: "error", rounds: 0 };
   }
+}
+
+/** Build-phase entry: runs under the autonomous inference origin (BI-2F9DE752). */
+export function dispatchIdeateForApprovedBuild(
+  params: Parameters<typeof dispatchIdeateForApprovedBuildInner>[0],
+): ReturnType<typeof dispatchIdeateForApprovedBuildInner> {
+  return runAsBuildPhase(() => dispatchIdeateForApprovedBuildInner(params));
 }

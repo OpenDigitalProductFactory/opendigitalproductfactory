@@ -14,12 +14,14 @@ describe("CapabilityCompletenessPanel", () => {
     }
   });
 
-  it("surfaces the missing grant on a reachability gap", () => {
-    // compliance-officer used to be the example here; the grant landed
-    // (BI-728FD7F2), so this now uses a declared-only agent that still cannot
-    // reach its corpus. The panel must name the grant, not merely mark a gap.
+  it("shows corpus reachability closed after the class-wide grant repair", () => {
+    // The completeness ratchet closes this gap for every canonical registry
+    // identity, including declared-only agents, rather than preserving one as
+    // a UI fixture for a defect that no longer exists.
     render(<CapabilityCompletenessPanel agentId="policy-enforcement-agent" />);
-    expect(screen.getByTestId("plane-corpus").textContent).toContain("registry_read");
+    const corpus = screen.getByTestId("plane-corpus").textContent ?? "";
+    expect(corpus).toContain("3/3");
+    expect(corpus).not.toContain("registry_read");
   });
 
   it("shows a platform-capped plane as capped, not as an agent failure", () => {

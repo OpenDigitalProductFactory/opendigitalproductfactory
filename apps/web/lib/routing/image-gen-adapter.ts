@@ -9,8 +9,7 @@
  */
 
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
-import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
-import { isOpenAI } from "./provider-utils";
+import { InferenceError, classifyHttpError } from "./inference-error";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -71,7 +70,7 @@ export const imageGenAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await request.fetchImpl(url, {
         method: "POST",
         headers: { ...headers, "Content-Type": contentType },
         body: JSON.stringify(body),

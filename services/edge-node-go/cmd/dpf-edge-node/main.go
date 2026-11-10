@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,13 @@ const (
 var nearbyDiscoveryHealth atomic.Int32
 var nearbyDiscoveryAccepted atomic.Bool
 var actionDispatchHealth atomic.Int32
+
+// Set only after the fixed controller package has been verified and its
+// original-envelope handler has been registered on the authenticated channel.
+var nativeInferenceController atomic.Pointer[action.NativeControllerDescription]
+var nativeInferenceViewConfig atomic.Pointer[nativeViewConfig]
+
+type nativeViewConfig struct{ stateDirectory, nodeID string }
 
 func main() {
 	printFixtureMode := flag.Bool("print-enroll-fixture", false,
@@ -174,8 +182,14 @@ func run() error {
 	// node_revoked; sweep currently runs until ctx is cancelled.
 	errCh := make(chan error, 4)
 	go func() { errCh <- runHeartbeat(ctx, cfg, client, st) }()
-	go func() { errCh <- runSweep(ctx, cfg, client, st) }()
-	go func() { errCh <- runFederationDiscovery(ctx, cfg, client, st) }()
+	// BI-28EFE18A: a host-upkeep node sweeps no network and runs no discovery;
+	// those stay opt-in edge features.
+	if cfg.HostUpkeepOnly() {
+		slog.Info("Host-upkeep role: network sweep and federation discovery are off")
+	} else {
+		go func() { errCh <- runSweep(ctx, cfg, client, st) }()
+		go func() { errCh <- runFederationDiscovery(ctx, cfg, client, st) }()
+	}
 	if actionClient != nil {
 		publicKey, err := action.LoadPublicKey(cfg.EdgeActionSigningPublicKeyFile)
 		if err != nil {
@@ -207,7 +221,39 @@ func run() error {
 				},
 			}
 		}
-		runner := &actionrunner.Runner{Client: actionClient, Executor: executor, NodeToken: st.NodeToken, BatchSize: 1}
+		if cfg.DockerVmRestartEnabled() {
+			executor.DockerVmRestart = newDockerVmRestartHandler(cfg)
+		}
+		if cfg.QualificationWindowsEnabled() {
+			nodePath, _ := exec.LookPath("node")
+			executor.QualificationWindows = &action.QualificationWindowsHandler{Platform: cfg.Platform, StateDirectory: cfg.StateDir, NodePath: nodePath}
+		}
+		if cfg.ManagedInferenceConfigured() {
+			nativeConfig := action.NativeInferenceConfig{
+				StateDirectory: cfg.ManagedInferenceState, EdgeStateDirectory: cfg.StateDir,
+				ControllerRoot: cfg.ManagedInferenceRoot, ControllerManifestSHA256: cfg.ManagedInferenceManifest,
+				ControllerSourceSHA: cfg.ManagedInferenceSource, PublicKeyFile: cfg.EdgeActionSigningPublicKeyFile,
+				BaselineEngine: cfg.ManagedInferenceBaseline,
+			}
+			description, err := action.VerifyNativeControllerPackage(nativeConfig)
+			if err != nil {
+				return fmt.Errorf("verify managed inference controller: %w", err)
+			}
+			executor.ManagedInference = &action.NativeManagedInferenceHandler{
+				Config: nativeConfig, NodeID: st.NodeID, PublicKey: publicKey,
+				Admission: func(admissionContext context.Context, original action.SignedEnvelope) (action.SignedEnvelope, error) {
+					return actionClient.ReadManagedInferenceAdmission(admissionContext, st.NodeToken, original)
+				},
+			}
+			nativeInferenceController.Store(&description)
+			defer nativeInferenceController.Store(nil)
+			nativeInferenceViewConfig.Store(&nativeViewConfig{stateDirectory: cfg.ManagedInferenceState, nodeID: st.NodeID})
+			defer nativeInferenceViewConfig.Store(nil)
+		}
+		runner := &actionrunner.Runner{
+			Client: actionClient, Executor: executor, NodeToken: st.NodeToken, BatchSize: 1,
+			Pending: actionrunner.FilePendingReports{Dir: filepath.Join(cfg.StateDir, "pending-action-reports")},
+		}
 		go func() { errCh <- runActionDispatch(ctx, actionClient, runner, st.NodeToken) }()
 	}
 
@@ -314,7 +360,16 @@ func federationCapabilityReports() []api.CapabilityReport {
 	}}
 }
 
-func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizationTrustRole string) []api.CapabilityReport {
+// hostUpkeepReport is what the agent tells the portal about host upkeep
+// (BI-28EFE18A): whether it can run the Docker VM restart, and which Docker
+// runtime it found, so the portal can say "only a reboot clears this" on a
+// native Linux Engine instead of offering a restart that cannot work.
+type hostUpkeepReport struct {
+	dockerVmRestart bool
+	dockerRuntime   string
+}
+
+func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizationTrustRole string, hostUpkeep hostUpkeepReport, qualificationWindows bool) []api.CapabilityReport {
 	reports := federationCapabilityReports()
 	if !actionConfigured {
 		return reports
@@ -334,14 +389,43 @@ func capabilityReports(actionConfigured, organizationJoinEnabled bool, organizat
 			actionTypes = append(actionTypes, "organization.join.import")
 		}
 	}
+	evidence := map[string]any{
+		"transport":             "mutual-tls-pull",
+		"actionTypes":           actionTypes,
+		"organizationTrustRole": organizationTrustRole,
+	}
+	if hostUpkeep.dockerVmRestart {
+		actionTypes = append(actionTypes, action.DockerVmRestartActionType)
+		evidence["dockerRuntime"] = hostUpkeep.dockerRuntime
+	}
+	if qualificationWindows {
+		actionTypes = append(actionTypes, action.QualificationWindowsVerifyActionType)
+		evidence["qualificationWindows"] = map[string]any{"schemaVersion": 2, "procedureId": action.WindowsHandleReplacementProcedureID}
+	}
+	if controller := nativeInferenceController.Load(); controller != nil {
+		actionTypes = append(actionTypes, action.ManagedInferenceActionType)
+		evidence["managedInference"] = map[string]any{
+			"schemaVersion": 1, "controllerVersion": "1", "sourceSha": controller.SourceSHA,
+			"controllerManifestSha256": controller.ManifestSHA256,
+			"platform":                 "darwin", "architecture": "arm64",
+		}
+		if cfg := nativeInferenceViewConfig.Load(); cfg != nil {
+			metadata := evidence["managedInference"].(map[string]any)
+			view, err := action.NativeInferenceStagedView(cfg.stateDirectory, cfg.nodeID)
+			if err != nil {
+				metadata["stagingStatus"] = "unavailable"
+			} else {
+				metadata["stagingStatus"] = "observed"
+				metadata["stagedProfiles"] = view.Profiles
+				metadata["selection"] = view.Selection
+			}
+		}
+	}
+	evidence["actionTypes"] = actionTypes
 	return append(reports, api.CapabilityReport{
 		Capability: "action.execute",
 		Status:     status,
-		Evidence: map[string]any{
-			"transport":             "mutual-tls-pull",
-			"actionTypes":           actionTypes,
-			"organizationTrustRole": organizationTrustRole,
-		},
+		Evidence:   evidence,
 	})
 }
 
@@ -458,7 +542,7 @@ func runHeartbeat(ctx context.Context, cfg *config.Config, client *api.Client, s
 		}
 
 		resp, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
-			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole),
+			CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole, currentHostUpkeep(cfg), cfg.QualificationWindowsEnabled()),
 		})
 		if err != nil {
 			if api.IsRevoked(err) {
@@ -535,7 +619,7 @@ func verifyOrganizationJoin(
 	}
 	evidence["portalHealth"] = true
 	if _, err := client.Heartbeat(ctx, st.NodeToken, api.HeartbeatRequest{
-		CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole),
+		CapabilityReports: capabilityReports(cfg.ActionDispatchEnabled(), cfg.OrganizationJoinEnabled(), cfg.OrganizationTrustRole, currentHostUpkeep(cfg), cfg.QualificationWindowsEnabled()),
 	}); err != nil {
 		return evidence, err
 	}

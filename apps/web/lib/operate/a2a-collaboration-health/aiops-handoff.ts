@@ -131,6 +131,25 @@ export function buildAiOpsReviewPrompt(
     .join("\n");
 }
 
+/**
+ * What will be true once a collaboration finding is fixed (BI-458CCA8D).
+ * Deterministic: the finding kind names what stops happening.
+ */
+export function collaborationFindingOutcome(f: Pick<CollaborationFinding, "kind" | "edgeKind">): string {
+  switch (f.kind) {
+    case "failed_edge":
+      return `${f.edgeKind} collaborations stop failing, and the next A2A health scan finds no failed edges of that kind.`;
+    case "blocked_edge":
+      return `${f.edgeKind} collaborations stop getting blocked, and the next A2A health scan finds none held there.`;
+    case "stuck_active":
+      return `No ${f.edgeKind} collaboration stays stuck active: each completes or is closed with a reason.`;
+    case "orphan_lineage":
+      return `Every ${f.edgeKind} record links to its parent task, and the next A2A health scan finds no orphans.`;
+    case "pair_failure_rate":
+      return `The agent pair behind this finding completes its ${f.edgeKind} collaborations at a normal failure rate.`;
+  }
+}
+
 function findingBody(f: CollaborationFinding): string {
   return [
     f.detail,
@@ -241,6 +260,7 @@ export async function dispatchA2aHealthAiOps(
       try {
         const res = await ingestBacklogItem({
           title: `[A2A health] ${f.title}`,
+          outcome: collaborationFindingOutcome(f),
           body: findingBody(f),
           workType: actionToWorkType(f.recommendedAction),
           source: "automated-detection",

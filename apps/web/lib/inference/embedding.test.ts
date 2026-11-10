@@ -1,4 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const admission = vi.hoisted(() => ({ provider: vi.fn(), connection: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: {
+  modelProvider: { findUnique: admission.provider },
+  aiProviderConnection: { findUnique: admission.connection },
+} }));
+
+const transport = vi.hoisted(() => ({ fetch: vi.fn() }));
+vi.mock("./provider-inference-transport", () => ({ providerInferenceFetch: transport.fetch }));
+const selection = vi.hoisted(() => ({ endpoint: null as string | null, error: null as Error | null }));
+vi.mock("./managed-runtime-selection", () => ({ readManagedInferenceEndpoint: () => {
+  if (selection.error) throw selection.error;
+  return selection.endpoint;
+} }));
 
 vi.mock("@/lib/routing/local-provider-capacity", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>()),
@@ -6,7 +20,7 @@ vi.mock("@/lib/routing/local-provider-capacity", async (importOriginal) => ({
 }));
 
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
-import { generateEmbedding, generateEmbeddingDetailed, isOversizeRejection } from "./embedding";
+import { generateEmbedding, generateEmbeddingDetailed, isEmbeddingAvailable, isOversizeRejection } from "./embedding";
 
 /** The exact rejection llama.cpp emits once n_batch is clamped to n_ubatch. */
 const OVERSIZE_BODY =
@@ -20,7 +34,62 @@ function okEmbedding(vec: number[]): Response {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  transport.fetch.mockReset();
+  admission.provider.mockReset().mockResolvedValue({ status: "active" });
+  admission.connection.mockReset().mockResolvedValue({ status: "active" });
+  selection.endpoint = null;
+  selection.error = null;
+  vi.stubEnv("LLM_BASE_URL", "http://model-runner.docker.internal/v1");
+  vi.stubEnv("OLLAMA_INTERNAL_URL", "");
+});
+afterEach(() => vi.unstubAllEnvs());
+
+describe("embedding follows the committed local engine selection (BI-CA88DAA7)", () => {
+  it("routes requests and availability to native, then Docker after rollback", async () => {
+    selection.endpoint = "http://host.docker.internal:12436/v1";
+    transport.fetch
+      .mockResolvedValueOnce(okEmbedding([0.1]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "ai/nomic-embed-text-v1.5" }] })))
+      .mockResolvedValueOnce(okEmbedding([0.2]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "ai/nomic-embed-text-v1.5" }] })));
+
+    await expect(generateEmbedding("knowledge")).resolves.toEqual([0.1]);
+    await expect(isEmbeddingAvailable()).resolves.toBe(true);
+    selection.endpoint = null;
+    await expect(generateEmbedding("knowledge")).resolves.toEqual([0.2]);
+    await expect(isEmbeddingAvailable()).resolves.toBe(true);
+
+    expect(transport.fetch.mock.calls.map(([url]) => url)).toEqual([
+      "http://host.docker.internal:12436/v1/embeddings",
+      "http://host.docker.internal:12436/v1/models",
+      "http://model-runner.docker.internal/v1/embeddings",
+      "http://model-runner.docker.internal/v1/models",
+    ]);
+    expect(JSON.parse(String(transport.fetch.mock.calls[0]![1].body))).toEqual({
+      model: "ai/nomic-embed-text-v1.5", input: "knowledge",
+    });
+  });
+
+  it.each(["transitioning", "invalid selection"])("contains %s without provider dispatch", async (message) => {
+    selection.error = new Error(message);
+    transport.fetch.mockImplementation(async () => okEmbedding([0.9]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toEqual({ status: "failed", reason: message });
+    await expect(generateEmbedding("knowledge")).resolves.toBeNull();
+    await expect(isEmbeddingAvailable()).resolves.toBe(false);
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+
+  it("contains a genuine endpoint conflict without silently using Docker", async () => {
+    selection.endpoint = "http://host.docker.internal:12436/v1";
+    transport.fetch.mockImplementation(async () => okEmbedding([0.9]));
+    vi.stubEnv("LLM_BASE_URL", "http://different-host/v1");
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "failed", reason: expect.stringMatching(/conflict/) });
+    await expect(generateEmbedding("knowledge")).resolves.toBeNull();
+    await expect(isEmbeddingAvailable()).resolves.toBe(false);
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("embedding is exempt from the local-CI capacity gate (BI-0AA939DF / DI-7F674966B4B2)", () => {
@@ -29,7 +98,7 @@ describe("embedding is exempt from the local-CI capacity gate (BI-0AA939DF / DI-
     // no gate, 10-20ms with an active gate and three queued, no observable
     // effect on the gate. Gating it suppressed retrieval platform-wide for the
     // duration of every gate run and bought nothing.
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    const fetchSpy = transport.fetch.mockResolvedValue(
       new Response(JSON.stringify({ data: [{ embedding: [0.1, 0.2] }] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -59,7 +128,7 @@ describe("oversize retry (BI-633845B0)", () => {
   // observed live at 520, 550 and 599 tokens. Retrying shorter recovers it.
   it("retries at a shorter slice and returns the embedding instead of null", async () => {
     const sent: number[] = [];
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    transport.fetch.mockImplementation(async (_url, init) => {
       const body = JSON.parse(String((init as RequestInit).body)) as { input: string };
       sent.push(body.input.length);
       // Reject anything over 1000 chars, mimicking a dense-text token overflow.
@@ -81,8 +150,7 @@ describe("oversize retry (BI-633845B0)", () => {
   it("gives up after the last slice rather than retrying forever", async () => {
     // A fresh Response per call: a body can only be read once, so a single
     // shared Response would make the second read empty and mask the retry.
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
+    const fetchSpy = transport.fetch
       .mockImplementation(async () => new Response(OVERSIZE_BODY, { status: 500 }));
 
     await expect(generateEmbedding("x".repeat(5000))).resolves.toBeNull();
@@ -91,8 +159,7 @@ describe("oversize retry (BI-633845B0)", () => {
   });
 
   it("does NOT retry a non-oversize failure — one attempt, then null", async () => {
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
+    const fetchSpy = transport.fetch
       .mockResolvedValue(new Response("model not found", { status: 404 }));
 
     await expect(generateEmbedding("durable knowledge")).resolves.toBeNull();
@@ -100,7 +167,7 @@ describe("oversize retry (BI-633845B0)", () => {
   });
 
   it("does not retry when the first attempt succeeds", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(okEmbedding([0.9]));
+    const fetchSpy = transport.fetch.mockResolvedValue(okEmbedding([0.9]));
 
     await expect(generateEmbedding("short text")).resolves.toEqual([0.9]);
     expect(fetchSpy).toHaveBeenCalledOnce();
@@ -133,7 +200,7 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
     // broken embedding model across the whole install.
     // No gate raises this any more, but the branch stays: any future capacity
     // boundary must still report a deferral as deferred rather than failed.
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+    transport.fetch.mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
 
@@ -146,7 +213,7 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
   });
 
   it("reports a genuine backend error as failed, not deferred", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED"));
+    transport.fetch.mockRejectedValue(new Error("connect ECONNREFUSED"));
 
     const result = await generateEmbeddingDetailed("anything");
 
@@ -154,10 +221,97 @@ describe("generateEmbeddingDetailed reports WHY it produced no vector (BI-339C44
   });
 
   it("keeps generateEmbedding null-returning, so its existing callers are untouched", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+    transport.fetch.mockRejectedValue(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),
     );
 
     await expect(generateEmbedding("anything")).resolves.toBeNull();
+  });
+});
+
+
+describe("canonical embedding transport", () => {
+  it("generates embeddings and checks availability when global fetch is unusable", async () => {
+    const globalFetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("shared transport unavailable"));
+    transport.fetch
+      .mockResolvedValueOnce(okEmbedding([0.1, 0.2]))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "ai/nomic-embed-text-v1.5" }] }), { status: 200 }));
+
+    await expect(generateEmbeddingDetailed("platform principles")).resolves.toEqual({ status: "ok", embedding: [0.1, 0.2] });
+    await expect(isEmbeddingAvailable()).resolves.toBe(true);
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(transport.fetch).toHaveBeenNthCalledWith(1, expect.stringContaining("/embeddings"), expect.objectContaining({ method: "POST" }));
+    expect(transport.fetch).toHaveBeenNthCalledWith(2, expect.stringContaining("/models"), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+});
+
+describe("query-time callers can bound the wait (BI-MCP-EFF-4F823E5B)", () => {
+  it("uses the caller's deadline, and keeps 30 s for everyone else", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    transport.fetch.mockResolvedValue(okEmbedding([0.1]));
+
+    await generateEmbeddingDetailed("search text", { timeoutMs: 15_000 });
+    await generateEmbeddingDetailed("indexed text");
+
+    expect(timeout).toHaveBeenNthCalledWith(1, 15_000);
+    expect(timeout).toHaveBeenNthCalledWith(2, 30_000);
+  });
+});
+
+
+describe("operator pause is authoritative for embedding inference", () => {
+  it.each(["paused", "inactive", "disabled"])("defers a %s account without contacting inference", async (status) => {
+    admission.connection.mockResolvedValue({ status });
+    transport.fetch.mockResolvedValue(okEmbedding([0.1]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "deferred" });
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+  it("denies an inactive local lifecycle even if the account is active", async () => {
+    admission.provider.mockResolvedValue({ status: "inactive" });
+    transport.fetch.mockResolvedValue(okEmbedding([0.1]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "deferred" });
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+  it("rechecks pause before an oversize retry", async () => {
+    transport.fetch.mockImplementation(async () => {
+      admission.connection.mockResolvedValue({ status: "paused" });
+      return new Response(OVERSIZE_BODY, { status: 500 });
+    });
+    await expect(generateEmbeddingDetailed("x".repeat(5000))).resolves.toMatchObject({ status: "deferred" });
+    expect(transport.fetch).toHaveBeenCalledTimes(1);
+  });
+  it("fails closed when eligibility cannot be read", async () => {
+    admission.provider.mockRejectedValue(new Error("database unavailable"));
+    transport.fetch.mockResolvedValue(okEmbedding([0.1]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "failed" });
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+  it("allows model-list monitoring while paused without generating inference", async () => {
+    admission.connection.mockResolvedValue({ status: "paused" });
+    transport.fetch.mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "nomic-embed-text" }] })));
+    await expect(isEmbeddingAvailable()).resolves.toBe(true);
+    expect(admission.connection).not.toHaveBeenCalled();
+    expect(transport.fetch).toHaveBeenCalledWith(expect.stringContaining("/models"), expect.not.objectContaining({ method: "POST" }));
+  });
+});
+
+
+describe("pause and selection compose before each embedding dispatch", () => {
+  it("honors operator pause before resolving an unavailable selection", async () => {
+    admission.connection.mockResolvedValue({ status: "paused" });
+    selection.error = new Error("transitioning");
+    transport.fetch.mockImplementation(async () => okEmbedding([0.9]));
+    await expect(generateEmbeddingDetailed("knowledge")).resolves.toMatchObject({ status: "deferred" });
+    expect(transport.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rechecks the selection fence before an oversize retry", async () => {
+    selection.endpoint = "http://host.docker.internal:12436/v1";
+    transport.fetch.mockImplementationOnce(async () => {
+      selection.error = new Error("transitioning");
+      return new Response(OVERSIZE_BODY, { status: 500 });
+    }).mockImplementation(async () => okEmbedding([0.9]));
+    await expect(generateEmbeddingDetailed("x".repeat(5000))).resolves.toEqual({ status: "failed", reason: "transitioning" });
+    expect(transport.fetch).toHaveBeenCalledTimes(1);
   });
 });

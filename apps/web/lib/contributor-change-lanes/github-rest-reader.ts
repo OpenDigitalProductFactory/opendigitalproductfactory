@@ -2,15 +2,24 @@
 // Phase 4 of BI-063BDF1B — real GitHub REST reader.
 //
 // Replaces the Phase 2 stub. Authenticates via the CredentialEntry row
-// with providerId "github-pr-sync" (created by the Contributor MCP card
-// from PR #1204; disjoint from the "git-backup" / "hive-contribution"
-// rows used by the contribution pipeline). Etag persistence uses
+// with providerId "github-pr-sync" when one exists, falling back to the
+// contribution-pipeline rows when it does not — see the comment on
+// GITHUB_READ_CREDENTIAL_PROVIDER_IDS below. The header used to say this row
+// was "created by the Contributor MCP card from PR #1204"; no such writer
+// exists in the tree, and believing it cost a day of looking for a settings
+// page that was never built (BI-69BBC446). Etag persistence uses
 // ScheduledJob.metadata.githubPrEtag so the rate-budget protection
 // survives the ContributorInventorySnapshot 7-day retention sweep.
 //
 // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
 //   §"Per-source work" item 3, §"Etag persistence".
 
+import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
+
+import {
+  createPullRequestObservation,
+  parseVerifiedPullRequestObservation,
+} from "./pull-request-observation";
 import type { PullRequestSnapshot } from "./types";
 
 const GITHUB_PR_CREDENTIAL_PROVIDER_ID = "github-pr-sync";
@@ -42,13 +51,38 @@ export type GithubReaderResult =
 export type GithubReaderDeps = {
   /** Injection point so tests don't fetch real URLs. */
   fetchImpl?: typeof fetch;
+  /** One operation timestamp, injected so every page in a sync is comparable. */
+  now?: () => Date;
 };
 
 /** Resolved repo coordinates `{owner}/{repo}`. */
 export type RepoIdentity = { owner: string; name: string };
 
+export type GithubReadTransport = Readonly<{
+  fetch: typeof fetch;
+  close(): Promise<void>;
+}>;
+
 /**
- * Production GitHub PR reader. Returns the rows for the open-PR list,
+ * Control-plane GitHub reads must not inherit Next.js' framework-patched
+ * global fetch. Own the dispatcher explicitly and close it at the operation
+ * boundary; callers still inject a plain Fetch implementation in tests.
+ */
+export function createGithubReadTransport(): GithubReadTransport {
+  return createOffThreadpoolFetchTransport();
+}
+
+/** Release an unconsumed provider response before retrying or closing its dispatcher. */
+export async function cancelGithubResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Cleanup cannot change the typed provider verdict already established.
+  }
+}
+
+/**
+ * Production GitHub PR reader. Returns the rows for the open and terminal PR list,
  * tagged with sourceKey = PR number as string. The pure runner in
  * contributor-inventory-sync.ts wraps this into a SyncSourceResult.
  */
@@ -57,6 +91,7 @@ export async function readGithubPullRequests(
 ): Promise<GithubReaderResult> {
   const { prisma } = await import("@dpf/db");
   const fetchImpl = deps.fetchImpl ?? fetch;
+  const observedAt = (deps.now ?? (() => new Date()))().toISOString();
 
   const token = await resolveGithubToken(prisma);
   if (!token) {
@@ -72,7 +107,7 @@ export async function readGithubPullRequests(
   const previousEtag = await loadEtag(prisma);
 
   try {
-    const result = await fetchOpenPullRequests(fetchImpl, repo, token, previousEtag);
+    const result = await fetchPullRequests(fetchImpl, repo, token, previousEtag, observedAt);
     if (result.kind === "not-modified") {
       return {
         ok: true,
@@ -118,12 +153,39 @@ export type PrismaLike = Pick<
   "credentialEntry" | "platformDevConfig" | "scheduledJob"
 >;
 
-// Exported for reuse by release-health (BI-3630773C) — same optional
-// "github-pr-sync" credential; callers that can read public repos treat a
-// null return as "proceed unauthenticated", not an error.
-export async function resolveGithubToken(prisma: PrismaLike): Promise<string | null> {
+/**
+ * Credentials this reader will authenticate with, best first.
+ *
+ * "github-pr-sync" stays the preferred row: the disjoint-credential intent in
+ * this file's header is a real one, and an install that sets it keeps a token
+ * scoped to exactly this job.
+ *
+ * The fallbacks exist because that intent was never reachable. Nothing in the
+ * product writes "github-pr-sync" — the Contributor MCP card named in the
+ * header does not exist in the tree. The GitHub device flow writes
+ * "hive-contribution"; the Admin > Platform Development panel writes
+ * "git-backup". So this resolver returned null on every install, and every
+ * caller degraded to an unauthenticated request, which against a private
+ * repository fails outright (BI-69BBC446).
+ *
+ * That took down the whole initiative-readiness chain: no repository
+ * provenance means no plan-coverage receipt, so no spec-approval baseline, so
+ * no reviewer binding, so no independent design review — on an install that
+ * had a perfectly good active credential sitting one row away. Preferring a
+ * dedicated credential is right; being dead without one is not.
+ *
+ * These are read-only calls against the same repository the fallback tokens
+ * already push to, so no fallback widens what the install can reach.
+ */
+const GITHUB_READ_CREDENTIAL_PROVIDER_IDS = [
+  GITHUB_PR_CREDENTIAL_PROVIDER_ID,
+  "hive-contribution",
+  "git-backup",
+] as const;
+
+async function readCredential(prisma: PrismaLike, providerId: string): Promise<string | null> {
   const cred = await prisma.credentialEntry.findUnique({
-    where: { providerId: GITHUB_PR_CREDENTIAL_PROVIDER_ID },
+    where: { providerId },
     select: { secretRef: true, status: true },
   });
   if (!cred || cred.status !== "active" || !cred.secretRef) return null;
@@ -131,13 +193,57 @@ export async function resolveGithubToken(prisma: PrismaLike): Promise<string | n
   const stored = cred.secretRef;
   try {
     const { decryptSecret } = await import("@/lib/credential-crypto");
-    if (stored.startsWith("enc:")) {
-      return decryptSecret(stored);
-    }
-    return stored;
+    // A key rotation leaves an undecryptable row: skip it and try the next
+    // credential rather than reporting "no token" for a store that has one.
+    return stored.startsWith("enc:") ? decryptSecret(stored) : stored;
   } catch {
     return null;
   }
+}
+
+/**
+ * The managed-repository login (BI-985F4EC9), written by the device flow with
+ * the "repository-controller" purpose and checked against the managed
+ * repository itself. Duplicated as a literal (not imported from
+ * lib/forge/managed-repository-access) to keep this reader's import graph flat.
+ */
+const REPOSITORY_CONTROLLER_PROVIDER_ID = "github-repository-controller";
+
+/**
+ * The managed-repository controller login only, never a read fallback
+ * (BI-C899BB40). A write to the managed repository, such as the acceptance
+ * sweep's one submitter question, must not borrow a read token; with no
+ * controller login it gets null and records that nothing was sent.
+ */
+export async function resolveRepositoryControllerToken(prisma: PrismaLike): Promise<string | null> {
+  return readCredential(prisma, REPOSITORY_CONTROLLER_PROVIDER_ID);
+}
+
+export type ResolveGithubTokenOptions = {
+  /**
+   * Try the managed-repository login first, then the existing chain. Issue
+   * intake sets it: the controller credential is the one the operator logged
+   * in for that repository. Installs that predate it keep the old chain.
+   */
+  preferRepositoryController?: boolean;
+};
+
+// Exported for reuse by release-health (BI-3630773C); callers that can read
+// public repos treat a null return as "proceed unauthenticated", not an error.
+export async function resolveGithubToken(
+  prisma: PrismaLike,
+  options: ResolveGithubTokenOptions = {},
+): Promise<string | null> {
+  const chain = options.preferRepositoryController
+    ? [REPOSITORY_CONTROLLER_PROVIDER_ID, ...GITHUB_READ_CREDENTIAL_PROVIDER_IDS]
+    : GITHUB_READ_CREDENTIAL_PROVIDER_IDS;
+  for (const providerId of chain) {
+    const token = await readCredential(prisma, providerId);
+    if (token) return token;
+  }
+  // Legacy env fallback, matching resolveHiveToken's chain so the two resolvers
+  // cannot disagree about whether this install has GitHub access.
+  return process.env.GITHUB_TOKEN ?? null;
 }
 
 // Exported for reuse by release-health (BI-3630773C).
@@ -188,11 +294,12 @@ type FetchOutcome =
   | { kind: "not-modified"; rateLimitRemaining?: number; rateLimitResetAt?: Date | null }
   | { kind: "error"; error: string };
 
-async function fetchOpenPullRequests(
+async function fetchPullRequests(
   fetchImpl: typeof fetch,
   repo: RepoIdentity,
   token: string,
   ifNoneMatch: string | null,
+  observedAt: string,
 ): Promise<FetchOutcome> {
   const rows: SnapshotRowPayload[] = [];
   let etag: string | null = null;
@@ -200,7 +307,7 @@ async function fetchOpenPullRequests(
   let rateLimitResetAt: Date | null | undefined;
 
   for (let page = 1; page <= DEFAULT_MAX_PAGES; page++) {
-    const url = `https://api.github.com/repos/${repo.owner}/${repo.name}/pulls?state=open&per_page=${DEFAULT_PER_PAGE}&page=${page}`;
+    const url = `https://api.github.com/repos/${repo.owner}/${repo.name}/pulls?state=all&sort=updated&direction=desc&per_page=${DEFAULT_PER_PAGE}&page=${page}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -246,7 +353,7 @@ async function fetchOpenPullRequests(
 
     const json = (await res.json()) as RawPullRequest[];
     for (const pr of json) {
-      const parsed = parsePullRequest(pr);
+      const parsed = parsePullRequest(pr, repo, observedAt);
       if (parsed) {
         rows.push({ sourceKey: String(parsed.number), payload: parsed });
       }
@@ -282,27 +389,52 @@ type RawPullRequest = {
   url?: string;
   html_url?: string;
   title?: string;
-  head?: { ref?: string };
+  head?: { ref?: string; sha?: string };
   state?: string;
   draft?: boolean;
   mergeable_state?: string;
+  merge_commit_sha?: string | null;
+  merged_at?: string | null;
+  updated_at?: string;
 };
 
-function parsePullRequest(pr: RawPullRequest): PullRequestSnapshot | null {
-  if (typeof pr.number !== "number" || !pr.head?.ref || !pr.html_url) return null;
-  return {
+function parsePullRequest(
+  pr: RawPullRequest,
+  repo: RepoIdentity,
+  observedAt: string,
+): PullRequestSnapshot | null {
+  if (
+    typeof pr.number !== "number" ||
+    !pr.head?.ref ||
+    !pr.head.sha ||
+    !pr.html_url ||
+    !pr.updated_at
+  ) {
+    return null;
+  }
+  const state = normalizeState(pr);
+  if (!state) return null;
+  const observation = createPullRequestObservation({
+    repositoryFullName: `${repo.owner}/${repo.name}`,
     number: pr.number,
     url: pr.html_url,
     title: pr.title ?? "",
     headBranch: pr.head.ref,
-    state: normalizeState(pr.state),
+    headSha: pr.head.sha,
+    state,
     isDraft: pr.draft === true,
     mergeStateStatus: pr.mergeable_state ?? null,
-  };
+    mergeCommitSha: state === "merged" ? pr.merge_commit_sha ?? null : null,
+    mergedAt: state === "merged" ? pr.merged_at ?? null : null,
+    providerUpdatedAt: pr.updated_at,
+    observedAt,
+  });
+  return parseVerifiedPullRequestObservation(observation);
 }
 
-function normalizeState(s: string | undefined): PullRequestSnapshot["state"] {
-  if (s === "open") return "open";
-  if (s === "closed") return "closed";
-  return "open";
+function normalizeState(pr: RawPullRequest): PullRequestSnapshot["state"] | null {
+  if (pr.merged_at) return "merged";
+  if (pr.state === "open") return "open";
+  if (pr.state === "closed") return "closed";
+  return null;
 }

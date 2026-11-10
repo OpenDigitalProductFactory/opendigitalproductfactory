@@ -32,9 +32,21 @@ function assertNoHostStateNamespace(relative, source) {
     // This generated catalog carries the portal's declarative host bind-mount
     // contract. The promoter reads only its service/capability projection; the
     // exact Compose interpolation string is data, not promoter process state.
-    const declarativeMount = "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro";
-    assert.equal(source.split(declarativeMount).length - 1, 1, "catalog exception must remain one exact declarative mount");
-    executableSource = source.replace(declarativeMount, "<install-state-host-mount>");
+    const catalog = JSON.parse(source);
+    const stateMount = "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro";
+    const federationMount = "${DPF_STATE_DIR:-${HOME}/.dpf}/federation:/dpf-federation";
+    const expected = new Map([["portal", [stateMount, federationMount]], ["portal-init", [stateMount]]]);
+    for (const capability of catalog.capabilities) {
+      for (const service of capability.services) {
+        if (capability.capabilityId !== "runtime:core" || !expected.has(service.service)) continue;
+        const allowed = expected.get(service.service);
+        assert.ok(allowed.every(mount => service.volumes.includes(mount)), "canonical host mounts must remain declared");
+        service.volumes = service.volumes.map(mount => allowed.includes(mount) ? "<declarative-host-mount>" : mount);
+        expected.delete(service.service);
+      }
+    }
+    assert.equal(expected.size, 0, "catalog exceptions must stay on the exact core services");
+    executableSource = JSON.stringify(catalog);
   }
   assert.doesNotMatch(executableSource, /\bDPF_STATE_DIR\b/, `${relative} must neither read nor write the host interpolation namespace`);
 }
@@ -57,4 +69,13 @@ test("the closure guard rejects a promoter entrypoint that exports the host name
     () => assertNoHostStateNamespace("scripts/promote.sh", `${script}\nexport DPF_STATE_DIR=/dpf-state\n`),
     /scripts\/promote\.sh must neither read nor write/,
   );
+});
+
+test("catalog exceptions never hide executable fields or mounts on another service", () => {
+  const catalog = JSON.parse(readFileSync(resolve(root, "scripts/capability-service-catalog.generated.json"), "utf8"));
+  catalog.untrustedCommand = "export DPF_STATE_DIR=/dpf-state";
+  assert.throws(() => assertNoHostStateNamespace("scripts/capability-service-catalog.generated.json", JSON.stringify(catalog)));
+  delete catalog.untrustedCommand;
+  catalog.capabilities[0].services.push({ service: "unknown", volumes: ["${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro"] });
+  assert.throws(() => assertNoHostStateNamespace("scripts/capability-service-catalog.generated.json", JSON.stringify(catalog)));
 });

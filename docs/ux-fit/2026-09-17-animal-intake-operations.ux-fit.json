@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "decidedOption": "extend-existing-rescue-intake-route-with-admission-checklist-and-readiness",
+  "decisionInteractionId": "DI-F289DBB51DCB",
+  "scope": {
+    "files": [
+      "apps/web/components/animal-welfare/IntakeOperations.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-F289DBB51DCB",
+    "consideredOptions": [
+      "extend-existing-rescue-intake-route-with-admission-checklist-and-readiness",
+      "create-separate-animal-intake-wizard-route",
+      "keep-intake-read-only-and-admit-through-the-housing-board"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. /workspace/rescue/intake stays the single intake home. The admission form, the per-animal checklist, hold release and the readiness verification are added to that page; no new route, navigation layer, dashboard or status narrator is introduced.",
+    "persona": "A shelter operator or intake volunteer admits an arriving animal, records what has been checked, and needs to know in plain words why the animal is not yet adoptable.",
+    "reuse": "The existing RescueCockpit shell, Surface, StatusBadge, shared form primitives (TextField, SelectField, TextareaField, SubmitButton, FormStatus) and the canonical Resource/occupancy read model are extended. Housing options come from the Ward board; the readiness explanation comes from the one placement-readiness evaluator.",
+    "sourceTruth": "AnimalProfile owns identity; AnimalCustodyEpisode and AnimalCustodyEvent own custody, stage and hold; CareIntakePacket owns the frozen checklist; CareRecord owns typed evidence; ResourceCapacityAllocation owns housing. Readiness is a projection over those records and is never stored as a flag.",
+    "states": "No open housing disables admission and names the recovery (add or unblock a unit). Every blocker is rendered as a sentence, never by color alone. Release hold appears only on a held animal; Verify placement readiness appears only when the evaluator is satisfied. Shared FormStatus exposes pending, success, validation, permission, capacity and stale-version outcomes; every control is at least 44px high.",
+    "aiBoundary": "No control sends a coworker prompt. Every action is a direct governed server command with server-derived organization, storefront, housing kinds and acting principal.",
+    "verification": "Focused policy, readiness, repository, workspace-loader and component tests plus web typecheck passed. Browser verification on the governed contributor preview is recorded in the PR body; if the preview could not be leased the PR says so and the UX check is reported as unrun, not passed."
+  }
+}

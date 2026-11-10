@@ -1,5 +1,6 @@
 // apps/web/lib/ai-provider-types.ts
 import type { DataSourceProvenance } from "@/lib/surface-data-provenance";
+import type { AsyncInferenceOperationStatus } from "./async-operation-contract";
 
 // ─── Schedule helpers ─────────────────────────────────────────────────────────
 
@@ -56,6 +57,9 @@ export type ProviderRow = {
   families: string[];
   enabledFamilies: string[];
   status: string;
+  /** Derived operator controls; persisted authority remains on the default connection/job. */
+  defaultConnectionStatus?: string | null;
+  operatorPause?: { resumeAt: string | null; pausedAt: string } | null;
   costModel: string;
   category: string;
   baseUrl: string | null;
@@ -92,6 +96,7 @@ export type ProviderRow = {
 
 /** Client-safe credential info — secrets are never sent to the browser. */
 export type CredentialRow = {
+  providerWorkspaceId?: string | null;
   providerId: string;
   secretHint: string | null;
   clientId: string | null;
@@ -402,7 +407,7 @@ export type AsyncOpRow = {
   providerId: string;
   modelId: string;
   contractFamily: string;
-  status: string;
+  status: AsyncInferenceOperationStatus;
   progressPct: number | null;
   progressMessage: string | null;
   errorMessage: string | null;

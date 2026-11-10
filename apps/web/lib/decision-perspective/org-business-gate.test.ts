@@ -69,6 +69,13 @@ const base = {
 };
 
 describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
+  it("carries a caller threshold declaration through the organization wrapper", async () => {
+    const result = await evaluateOrgBusinessDecisionGate({ ...base, db: makeDb() as never,
+      resolver: fakeResolver() as never, evaluator: () => makeEval({ outcomeType: "recommend" }),
+      declarations: { thresholdExceeded: true } });
+    expect(result.allowed).toBe(false);
+    expect(result.evaluation.escalation?.reasonCode).toBe("damaging-threshold");
+  });
   it("loads portfolio evidence only from the organization-owned Product model", async () => {
     const digitalFindMany = vi.fn();
     const productFindMany = vi.fn().mockResolvedValue([
@@ -160,7 +167,7 @@ describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
     expect((data.outcomePayload as { orgProfileSelected?: boolean }).orgProfileSelected).toBe(false);
   });
 
-  it("coverage gap forces defer and is not allowed", async () => {
+  it("coverage gap records defer and outstanding independent review", async () => {
     const db = makeDb();
     const result = await evaluateOrgBusinessDecisionGate({
       ...base,
@@ -169,11 +176,12 @@ describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
       evaluator: () => makeEval({ outcomeType: "recommend" }), // overridden by the coverage gap
     });
     expect(result.evaluation.outcomeType).toBe("defer");
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
+    expect(result.evaluation.escalation).toMatchObject({ route: "independent-review", followOn: "corpus-gap" });
     expect(db.decisionInteraction.create).toHaveBeenCalled();
   });
 
-  it("fail-closed: a resolver error escalates to a human and is still recorded", async () => {
+  it("a non-damaging resolver fault records independent review and preserves caller evidence", async () => {
     const db = makeDb();
     const caller = {
       client: "codex",
@@ -186,15 +194,16 @@ describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
       resolver: vi.fn().mockRejectedValue(new Error("db down")) as never,
       caller,
     });
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("escalate");
-    expect(result.evaluation.rationale).toMatch(/fail-closed/);
+    expect(result.evaluation.rationale).toMatch(/evaluation fault/);
+    expect(result.evaluation.escalation).toMatchObject({ route: "independent-review", followOn: "evaluation-fault" });
     expect(db.decisionInteraction.create).toHaveBeenCalled();
     const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
     expect((data.outcomePayload as { caller?: unknown }).caller).toEqual(caller);
   });
 
-  it("a non-recommend org outcome (e.g. escalate) is not allowed", async () => {
+  it("a non-damaging unresolved org outcome uses the recorded review interim", async () => {
     const db = makeDb();
     const result = await evaluateOrgBusinessDecisionGate({
       ...base,
@@ -202,6 +211,58 @@ describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
       resolver: fakeResolver() as never,
       evaluator: () => makeEval({ outcomeType: "escalate" }),
     });
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
+    expect(result.evaluation.escalation?.route).toBe("independent-review");
+  });
+});
+
+describe("instance direction in WWWD (BI-8AB6B4F7)", () => {
+  it("adds the owner's mission, vision and outcomes to the WWWD corpus with versioned refs", async () => {
+    const corpora = await loadOrgAlignmentCorpora({
+      wikiPage: { findMany: vi.fn().mockResolvedValue([]) },
+      product: { findMany: vi.fn().mockResolvedValue([]) },
+      businessContext: { findUnique: vi.fn().mockResolvedValue({ mission: "Serve MSPs", vision: "Every MSP runs on DPF" }) },
+      instanceOutcome: { findMany: vi.fn().mockResolvedValue([{ id: "o1", statement: "Ten MSP partners", measure: "signed contracts" }]) },
+      instanceDirectionRevision: { findFirst: vi.fn().mockResolvedValue({ version: 2 }) },
+    }, "org-123");
+    expect(corpora?.wwwd.map((e) => e.ref)).toEqual([
+      "direction:mission@v2",
+      "direction:vision@v2",
+      "direction:outcome:o1@v2",
+    ]);
+    expect(corpora?.wwwd[2]?.text).toContain("Ten MSP partners");
+  });
+
+  it("records on the ledger which direction refs the decision read", async () => {
+    const db = makeDb();
+    await evaluateOrgBusinessDecisionGate({
+      ...base,
+      db: db as never,
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval(),
+      alignmentCorpora: {
+        wwwd: [
+          { ref: "direction:mission@v2", text: "Mission: Serve MSPs" },
+          { ref: "wiki:stance", text: "We serve MSPs." },
+        ],
+        portfolio: [],
+        gtm: [],
+      },
+    });
+    const payload = db.decisionInteraction.create.mock.calls[0]![0].data.outcomePayload as Record<string, unknown>;
+    expect(payload.instanceDirection).toEqual({ recorded: true, refs: ["direction:mission@v2"] });
+  });
+
+  it("says no direction was recorded rather than inventing one", async () => {
+    const db = makeDb();
+    await evaluateOrgBusinessDecisionGate({
+      ...base,
+      db: db as never,
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval(),
+      alignmentCorpora: { wwwd: [], portfolio: [], gtm: [] },
+    });
+    const payload = db.decisionInteraction.create.mock.calls[0]![0].data.outcomePayload as Record<string, unknown>;
+    expect(payload.instanceDirection).toEqual({ recorded: false, refs: [] });
   });
 });

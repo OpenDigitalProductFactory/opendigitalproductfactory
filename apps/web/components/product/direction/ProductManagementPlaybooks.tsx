@@ -21,7 +21,7 @@ import type {
 } from "@/lib/product-management/product-operating-context";
 import type { ProductManagementAdoptionMeasure } from "@/lib/product-management/product-management-adoption";
 import { StatusBadge } from "@/components/ui/report-kit";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 
 const SECONDARY_BUTTON =
   "min-h-11 rounded-dpf-md border border-[var(--dpf-border)] px-dpf-md py-dpf-sm text-dpf-body font-dpf-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-50";
@@ -372,7 +372,7 @@ export function ProductManagementPlaybooks({
                   {task.taskRunId ? (
                     <Link
                       className={SECONDARY_BUTTON}
-                      href={`/platform/ai/history?taskRunId=${encodeURIComponent(task.taskRunId)}`}
+                      href={`/platform/audit/ledger?taskRunId=${encodeURIComponent(task.taskRunId)}`}
                     >
                       Inspect last run
                     </Link>

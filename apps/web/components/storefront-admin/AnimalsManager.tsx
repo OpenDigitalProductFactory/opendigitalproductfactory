@@ -15,6 +15,7 @@
 // Delete asks first, at a target size a kennel technician can hit one-handed on
 // the tablet the work is really done on.
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { MediaUploader } from "./MediaUploader";
 
@@ -177,7 +178,13 @@ export function AnimalsManager({
           Adoptable animals
         </h1>
         <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>
-          These show on your public storefront with their photos.
+          These show on your public storefront with their photos.{" "}
+          <Link
+            href="/storefront/animals/waiting"
+            className="text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+          >
+            Waiting list
+          </Link>
         </p>
         {!hasAnimalsSection && (
           <p className="text-[var(--dpf-error)]" style={{ fontSize: 12 }}>

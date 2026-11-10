@@ -6,14 +6,32 @@
 // and annotates every row with its true-liveness verdict plus a summary. Shared
 // by the `list_work_capsules` MCP tool so the handler stays thin.
 
-import { classifyWorkCapsuleLiveness } from "./liveness";
+import type { Prisma } from "@dpf/db";
+import { classifyWorkCapsuleLiveness,
+  isDemonstrablyWorking,
+  type WorkCapsuleLiveness,
+} from "./liveness";
+import { loadWorkroomRecoveryItems, projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
+import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
+import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
+import { readStoredWorkroomDriveState, projectStoredWorkroomDriveObservation } from "@/lib/work-management/workroom-drive-state";
+import { loadWorkroomDisplayTitles, workroomDisplayTitle, type WorkroomTitleDb } from "./workroom-display-titles.server";
+import { loadSemanticReviewRoomProjection, type ReviewerRoomClient } from "@/lib/work-management/semantic-review-room-projection";
+import { readPendingGovernedDecisions, governedDecisionStage } from "@/lib/work-management/workroom-stage-decision";
+import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 
 const INVENTORY_SELECT = {
   capsuleId: true,
   title: true,
   status: true,
   source: true,
+  backlogItemId: true,
   executorKind: true,
+  executorRef: true,
+  leaseHolderPrincipalId: true,
+  repositoryFullName: true,
   decisionScope: true,
   portfolioRole: true,
   servedPersona: true,
@@ -22,26 +40,54 @@ const INVENTORY_SELECT = {
   servesPortfolioRoles: true,
   dependsOnPortfolioRoles: true,
   headBranch: true,
+  baseSha: true,
+  headSha: true,
   worktreePath: true,
   pullRequestUrl: true,
   pullRequestNumber: true,
+  scopeClaims: true,
   leaseExpiresAt: true,
   lastSyncedAt: true,
   updatedAt: true,
   featureBuildId: true,
-} as const;
+  workspaceState: true,
+  activities: {
+    orderBy: { recordedAt: "desc" }, take: 1,
+    where: { OR: [
+      { kind: { in: ["concierge-sweep", "embedding-coverage"] } },
+      { kind: "workroom-drive", AND: [
+        { payload: { path: ["action"], equals: "dispatch_agent" } },
+        { payload: { path: ["reason"], equals: "agent_stage" } },
+      ] },
+    ] },
+    select: { kind: true, payload: true },
+  },
+  taskRun: { select: { taskRunId: true, status: true, updatedAt: true, source: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true } },
+} as const satisfies Prisma.WorkroomSelect;
 
-type InventoryDb = {
+export type InventoryDb = ReviewerRoomClient & {
+  backlogItem?: WorkroomTitleDb["backlogItem"];
   workroom: { findMany(args: unknown): Promise<any[]> };
   featureBuild: { findMany(args: unknown): Promise<any[]> };
+  scheduledAgentTask?: { findMany(args: unknown): Promise<Array<{ taskId: string; agentId: string }>> };
+  nonProductionEnvironmentLease?: { findMany(args: unknown): Promise<any[]> };
 };
 
 export type CapsuleLivenessSummary = {
   scanned: number;
+  /** Rooms that are HELD — do not steal or reap. Includes `leased-idle`. */
   live: number;
+  /**
+   * Rooms where an agent is demonstrably WORKING, which is a strictly smaller
+   * set than `live`. The gap between the two is the number of rooms holding a
+   * lease with nothing to show for it (BI-7271460C).
+   */
+  working: number;
   history: number;
   reapable: number;
   byLiveness: Record<string, number>;
+  heavyLane: { executing: number; nextReady: number; dormant: number };
+  progressSlo: { oldestWaitMs: number | null; maxNoTransitionMs: number | null };
 };
 
 /**
@@ -51,16 +97,46 @@ export type CapsuleLivenessSummary = {
  */
 export async function loadCapsuleLivenessInventory(
   db: InventoryDb,
-  args: { where: Record<string, unknown>; take: number },
+  args: { where: Record<string, unknown>; take: number; compact?: boolean; portalSummary?: boolean },
   now: Date = new Date(),
 ): Promise<{ capsulesAll: Array<Record<string, unknown>>; livenessSummary: CapsuleLivenessSummary }> {
   const rows = await db.workroom.findMany({
     where: args.where,
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
     take: args.take,
-    select: INVENTORY_SELECT,
+    select: args.portalSummary
+      ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
+      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false,
+          createdByPrincipalId: true, requestedByPrincipalId: true } : INVENTORY_SELECT,
   });
+  const titles = args.portalSummary ? await loadWorkroomDisplayTitles(db, rows) : null;
+  // One bounded review read for the page, never one query per room. A truncated
+  // history stays unknown; the detail action narrows the observation to a room.
+  const reviews = await loadSemanticReviewRoomProjection(db, rows.map(row => row.capsuleId), now);
+  const recoveryItems = await loadWorkroomRecoveryItems(db, rows);
+  // Only real decision rows need shape metadata. One bounded read, no scope
+  // packets on the normal inventory query or in the display projection.
+  const decisionRooms = args.portalSummary ? rows.filter(row => readPendingGovernedDecisions(row.workspaceState).length > 0) : [];
+  const decisionsById = new Map<string, Array<{ title: string; condition: string }>>();
+  if (decisionRooms.length) {
+    const definitions = await db.workroom.findMany({ where: { capsuleId: { in: decisionRooms.map(row => row.capsuleId) } },
+      select: { capsuleId: true, scopeClaims: true }, take: decisionRooms.length }).catch(() => []);
+    const definitionsById = new Map(definitions.map(row => [row.capsuleId, row.scopeClaims]));
+    for (const room of decisionRooms) {
+      const shape = resolveWorkShapeClaim(definitionsById.get(room.capsuleId));
+      const definition = shape ? readWorkShapeDefinitionContract(shape) : null;
+      decisionsById.set(room.capsuleId, readPendingGovernedDecisions(room.workspaceState).flatMap(pending => {
+        const stage = governedDecisionStage(definition, pending.stageKey);
+        return stage ? [{ title: stage.title, condition: stage.condition }] : [];
+      }));
+    }
+  }
 
+  const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
+  const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
+    where: { taskId: { in: [...new Set(taskIds)] } }, select: { taskId: true, agentId: true },
+  }) : [];
+  const tasksById = new Map(tasks.map((task) => [task.taskId, task]));
   const buildIds = rows.map((r) => r.featureBuildId).filter((id): id is string => Boolean(id));
   const buildsById = new Map<string, { phase: string | null; lastActivityAt: Date | null }>();
   if (buildIds.length > 0) {
@@ -73,31 +149,100 @@ export async function loadCapsuleLivenessInventory(
     }
   }
 
+  const leases = db.nonProductionEnvironmentLease
+    ? await db.nonProductionEnvironmentLease.findMany({
+      where: { status: { in: ["active", "queued"] }, expiresAt: { gt: now } },
+      orderBy: [{ environmentKey: "asc" }, { queuedAt: "asc" }, { id: "asc" }],
+      select: {
+        leaseId: true, environmentKey: true, status: true, worktreePath: true, branchName: true,
+        queuedAt: true, admittedAt: true, heartbeatAt: true, updatedAt: true,
+      },
+    })
+    : [];
+  const normalize = (value: unknown) => typeof value === "string"
+    ? value.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase()
+    : "";
+  const leaseFor = (row: any) => leases.find((lease) =>
+    (normalize(row.worktreePath) && normalize(lease.worktreePath) === normalize(row.worktreePath))
+    || (normalize(row.headBranch) && normalize(lease.branchName) === normalize(row.headBranch)));
+
   const capsulesAll = rows.map((row) => {
+    const drive = args.portalSummary ? readStoredWorkroomDriveState(row.workspaceState) : null;
     const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
-    const verdict = classifyWorkCapsuleLiveness({ ...row, featureBuild }, now);
-    const { featureBuildId: _omit, ...rest } = row;
+    const lease = leaseFor(row);
+    const verdict = classifyWorkCapsuleLiveness({
+      ...row,
+      featureBuild,
+      prFollowThrough: prFollowThroughOf(row.workspaceState),
+      durableWait: lease ? {
+        state: lease.status,
+        signaledAt: lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt ?? null,
+      } : null,
+    }, now);
+    const { featureBuildId: _omit, taskRun: _taskRun, workspaceState: _workspace, activities: _activities, ...rest } = row;
     return {
       ...rest,
+      ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
+      ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
+        lastCycleKey: drive.lastCycleKey, stageKey: drive.currentStageKey,
+        attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
+      ...(args.portalSummary ? { decisions: decisionsById.get(row.capsuleId) ?? [] } : {}),
+      attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
+      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews, recoveryItems.get(row.backlogItemId ?? "") ?? null, now),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,
+      disposition: verdict.disposition,
       livenessReason: verdict.reason,
       trueLivenessAt: verdict.trueLivenessAt ? verdict.trueLivenessAt.toISOString() : null,
     };
   });
 
+  return { capsulesAll, livenessSummary: summarizeCapsuleLiveness(capsulesAll, leases, now) };
+}
+
+export function summarizeCapsuleLiveness(capsulesAll: Array<Record<string, unknown>>, leases: any[] = [], now: Date = new Date()): CapsuleLivenessSummary {
   const byLiveness: Record<string, number> = {};
   for (const c of capsulesAll) byLiveness[c.liveness as string] = (byLiveness[c.liveness as string] ?? 0) + 1;
 
+  const active = leases.filter((lease) => lease.status === "active");
+  const queued = leases.filter((lease) => lease.status === "queued");
+  const headByEnvironment = new Set<string>();
+  for (const lease of queued) {
+    if (!headByEnvironment.has(lease.environmentKey)) headByEnvironment.add(lease.environmentKey);
+  }
+  const transitionAges = leases.map((lease) => {
+    const at = lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt;
+    return at instanceof Date ? Math.max(0, now.getTime() - at.getTime()) : null;
+  }).filter((age): age is number => age != null);
+  const waitAges = queued.map((lease) => lease.queuedAt instanceof Date
+    ? Math.max(0, now.getTime() - lease.queuedAt.getTime())
+    : null).filter((age): age is number => age != null);
+
   return {
-    capsulesAll,
-    livenessSummary: {
       scanned: capsulesAll.length,
       live: capsulesAll.filter((c) => c.isLive).length,
+      working: capsulesAll.filter((c) => isDemonstrablyWorking(c.liveness as WorkCapsuleLiveness)).length,
       history: capsulesAll.filter((c) => !c.isLive).length,
       reapable: capsulesAll.filter((c) => c.isReapable).length,
       byLiveness,
-    },
+      heavyLane: {
+        executing: active.length,
+        nextReady: headByEnvironment.size,
+        dormant: Math.max(0, queued.length - headByEnvironment.size),
+      },
+      progressSlo: {
+        oldestWaitMs: waitAges.length ? Math.max(...waitAges) : null,
+        maxNoTransitionMs: transitionAges.length ? Math.max(...transitionAges) : null,
+      },
   };
+}
+
+/** The room's PR follow-through status as last read from the provider (BI-88341B5D §3.7). */
+function prFollowThroughOf(workspaceState: unknown): { status: NonNullable<ReturnType<typeof projectPrFollowThroughStatus>>; observedAt: Date } | null {
+  const delivery = readBuildPrDeliveryState(workspaceState);
+  const status = projectPrFollowThroughStatus(delivery);
+  if (!status || !delivery?.lastObservedAt) return null;
+  const observedAt = new Date(delivery.lastObservedAt);
+  return Number.isNaN(observedAt.getTime()) ? null : { status, observedAt };
 }

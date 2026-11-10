@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { classifyModel } from "./model-classifier";
+import { classifyModel, supportsTextGeneration } from "./model-classifier";
+
+describe("supportsTextGeneration", () => {
+  it.each(["embedding", "image_gen", "speech", "audio", "moderation", "video"])(
+    "rejects %s even when stale output metadata says text", (modelClass) => {
+      expect(supportsTextGeneration({ modelClass, outputModalities: ["text"] })).toBe(false);
+    },
+  );
+  it("rejects an embedding output even when stale classification says chat", () => {
+    expect(supportsTextGeneration({ modelClass: "chat", outputModalities: ["embeddings"] })).toBe(false);
+  });
+  it.each(["chat", "reasoning", "code"])("allows generated text from %s", (modelClass) => {
+    expect(supportsTextGeneration({ modelClass, outputModalities: ["text", "image"] })).toBe(true);
+  });
+  it("preserves legacy text profiles but refuses malformed explicit modalities", () => {
+    expect(supportsTextGeneration({})).toBe(true);
+    expect(supportsTextGeneration({ outputModalities: {} })).toBe(false);
+  });
+});
 
 describe("classifyModel", () => {
   // Modality-based classification

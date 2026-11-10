@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
+import { NativeCliExecutionUncertainError } from "../routing/cli-owned-runner";
 import {
   ProviderReconciliationRequiredError,
   shouldDegradeModelForInterfaceDrift,
@@ -7,6 +9,15 @@ import {
 } from "./provider-reconciliation";
 
 describe("provider reconciliation heuristics", () => {
+  it("rebuilds a stale account route once before dispatch without replaying uncertain native execution", async () => {
+    const beforeRetry = vi.fn();
+    const attempt = vi.fn().mockRejectedValueOnce(new ProviderAccountSelectionChangedError("openai", "Selected provider account changed")).mockResolvedValueOnce("fresh selection");
+    await expect(withProviderReconciliationRetry(attempt, beforeRetry)).resolves.toBe("fresh selection");
+    expect(attempt).toHaveBeenCalledTimes(2);
+    attempt.mockReset().mockRejectedValue(new NativeCliExecutionUncertainError("codex"));
+    await expect(withProviderReconciliationRetry(attempt, beforeRetry)).rejects.toBeInstanceOf(NativeCliExecutionUncertainError);
+    expect(attempt).toHaveBeenCalledTimes(1);
+  });
   it("reconciles after model_not_found", () => {
     expect(
       shouldReconcileProviderAfterError("model_not_found", "Model not found on provider"),

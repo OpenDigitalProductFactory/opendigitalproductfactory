@@ -1,283 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { execFileSync, spawnSync } from "node:child_process";
-import { createHash, createHmac } from "node:crypto";
-import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, rmSync, readFileSync, realpathSync, readdirSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, rmSync, writeFileSync, mkdirSync, readdirSync, statSync, copyFileSync, chmodSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 
-// High-fidelity functional proof of scripts/promote.sh: run the REAL script
-// through all six steps against a REAL git repo, faking only the external
-// boundaries — `docker` (the image build is orthogonal to the stamp logic) and
-// `curl` (the portal's /api/health/sha). The fake portal "reports" whatever
-// DPF_VERSION the build stamped, by echoing $DPF_VERSION — which is exactly how
-// the real round-trip works (DPF_VERSION build-arg → /app/.dpf-image-version →
-// /api/health/sha). So a passing sha-verify here means the same thing it means
-// in production: the running runtime reports the SHA of the code that was built.
+// High-fidelity proof of the real promote.sh against a real Git repo, faking
+// only Docker and HTTP. The fake portal reports the stamped DPF_VERSION, so
+// sha-verify exercises the production build-arg -> image -> endpoint contract.
+// Harness lives in promote-script-functional.test-support.ts; the cleanup
+// sweep suite lives in promote-script-cleanup.test.ts.
 
-const SCRIPT = resolve(__dirname, "../../../../scripts/promote.sh");
-const REPO_ROOT = resolve(__dirname, "../../../..");
-const MIGRATOR = join(REPO_ROOT, "scripts", "installer", "migrate-install-state.mjs");
-const CATALOG = join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json");
-const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
-const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
-const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
-const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-const PROMOTE_TEST_TIMEOUT_MS = 30_000;
-
-let bashDrivePrefix: string | undefined;
-
-function toBashPath(value: string): string {
-  if (process.platform !== "win32") return value;
-  const normalized = value.replace(/\\/g, "/");
-  const drivePath = /^([A-Za-z]):\/(.*)$/.exec(normalized);
-  if (!drivePath) return normalized;
-
-  const drive = drivePath[1].toLowerCase();
-  const rest = drivePath[2];
-  if (bashDrivePrefix === undefined) {
-    const cwdDrive = /^([A-Za-z]):/.exec(process.cwd())?.[1]?.toLowerCase();
-    const pwd = spawnSync(BASH_COMMAND, ["-lc", "pwd"], { encoding: "utf8" }).stdout.trim();
-    bashDrivePrefix = cwdDrive && pwd.startsWith(`/mnt/${cwdDrive}/`) ? "/mnt" : "";
-  }
-  return `${bashDrivePrefix}/${drive}/${rest}`;
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function gitInit(dir: string): string {
-  const env = {
-    ...process.env,
-    GIT_AUTHOR_NAME: "t",
-    GIT_AUTHOR_EMAIL: "t@t",
-    GIT_COMMITTER_NAME: "t",
-    GIT_COMMITTER_EMAIL: "t@t",
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_SYSTEM: "/dev/null",
-  };
-  execFileSync("git", ["init", "-b", "main", dir], { env });
-  execFileSync("git", ["-C", dir, "config", "core.autocrlf", "false"], { env });
-  execFileSync("git", ["-C", dir, "config", "core.eol", "lf"], { env });
-  writeFileSync(join(dir, "Dockerfile"), "FROM scratch\n");
-  writeFileSync(join(dir, "docker-compose.yml"), "services: {}\n");
-  writeFileSync(join(dir, "docker-compose.macos.yml"), "services: {}\n");
-  mkdirSync(join(dir, "scripts", "lib"), { recursive: true });
-  copyFileSync(join(REPO_ROOT, "scripts", "lib", "resolve-capability-compose-profiles.mjs"), join(dir, "scripts", "lib", "resolve-capability-compose-profiles.mjs"));
-  copyFileSync(join(REPO_ROOT, "scripts", "lib", "govern-capability-compose-args.mjs"), join(dir, "scripts", "lib", "govern-capability-compose-args.mjs"));
-  copyFileSync(join(REPO_ROOT, "scripts", "lib", "capability-state-hash.mjs"), join(dir, "scripts", "lib", "capability-state-hash.mjs"));
-  copyFileSync(join(REPO_ROOT, "scripts", "capability-service-catalog.generated.json"), join(dir, "scripts", "capability-service-catalog.generated.json"));
-  execFileSync("git", ["-C", dir, "add", "-A"], { env });
-  execFileSync("git", ["-C", dir, "-c", "commit.gpgsign=false", "commit", "-m", "seed"], { env });
-  return execFileSync("git", ["-C", dir, "rev-parse", "HEAD"], { env }).toString().trim();
-}
-
-/** Fake `docker` and `curl` on PATH. */
-function makeFakeBin(root: string): string {
-  const bin = join(root, "bin");
-  mkdirSync(bin, { recursive: true });
-  // docker: `build`/`up` are no-ops; any `cat /app/.dpf-source-content-hash`
-  // (the content-verify guard — step 3 `docker run` and step 7
-  // `docker compose exec`) returns a single stable hash so built==running.
-  writeFileSync(
-    join(bin, "docker"),
-    `#!/bin/sh
-env_file=
-take_env_file=0
-for arg in "$@"; do
-  if [ "$take_env_file" = 1 ]; then env_file="$arg"; take_env_file=0; continue; fi
-  if [ "$arg" = "--env-file" ]; then take_env_file=1; fi
-done
-[ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
-case "$*" in
-  *".Id"*) printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;;
-  *".RepoDigests"*) printf "%s@%s\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}" ;;
-  *".Os"*) printf "%s" "\${DPF_TEST_RELEASE_OS:-linux}" ;;
-  *".Architecture"*) printf "%s" "\${DPF_TEST_RELEASE_ARCHITECTURE:-amd64}" ;;
-  *"buildx imagetools inspect"*"--raw"*) case "$*" in *"@$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST"*) printf '{"config":{"digest":"%s"}}' "\${DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;; *) if [ "\${DPF_TEST_DUPLICATE_PLATFORM:-no}" = yes ]; then printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}},{"digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; else printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; fi ;; esac ;;
-  *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG" ;;
-  *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
-  "create "*) printf "candidate-container" ;;
-  "cp candidate-container:/dpf-release-assets/. "*)
-    for destination in "$@"; do :; done
-    cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination"
-    ;;
-  *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
-    [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
-    printf "verified"
-    ;;
-  *"prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals"*)
-    [ "\${DPF_TEST_PRINCIPAL_RESOLVE_FAIL:-no}" = "yes" ] && exit 1
-    ;;
-  *"recover-human-principal-backfill-migration.mjs"*)
-    [ "\${DPF_TEST_PRINCIPAL_RECOVERY_DECISION:-not-needed}" = "blocked" ] && exit 1
-    if [ "\${DPF_TEST_PRINCIPAL_RECOVERY_DECISION:-not-needed}" = "recover" ]; then
-      printf "recover:11111111-1111-4111-8111-111111111111"
-    else
-      printf "not-needed"
-    fi
-    ;;
-  *"recover-inventory-snapshot-migration.mjs --verify-rolled-back"*) printf "verified" ;;
-  *"recover-inventory-snapshot-migration.mjs"*)
-    [ "\${DPF_TEST_RECOVERY_DECISION:-not-needed}" = "blocked" ] && exit 1
-    if [ "\${DPF_TEST_RECOVERY_DECISION:-not-needed}" = "recover" ]; then
-      printf "recover:11111111-1111-4111-8111-111111111111"
-    else
-      printf "not-needed"
-    fi
-    ;;
-  *"up -d --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
-    service=
-    for service in "$@"; do :; done
-    effective_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$env_file" | tail -n 1)"
-    printf 'recreate service=%s DPF_STATE_DIR=%s DPF_PROMOTER_STATE_DIR=%s DPF_STATE_DIR_HOST=%s mount_source=%s\\n' \
-      "$service" "\${DPF_STATE_DIR-<unset>}" "\${DPF_PROMOTER_STATE_DIR-<unset>}" "$effective_state_dir" "$effective_state_dir" >> "$DOCKER_LOG"
-    ;;
-  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;
-esac
-exit 0
-`,
-  );
-  // For any URL ending in /sha, report the stamped DPF_VERSION (inherited from
-  // the script's exported env) — modelling a correctly-stamped portal. Other
-  // health probes just succeed.
-  writeFileSync(
-    join(bin, "curl"),
-    '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "%s" "$DPF_VERSION" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
-  );
-  chmodSync(join(bin, "docker"), 0o755);
-  chmodSync(join(bin, "curl"), 0o755);
-  return bin;
-}
-
-function runPromote(opts: {
-  source: string;
-  backup: string;
-  targetSha: string;
-  fakeBin: string;
-  composeEnvFile?: string;
-  dockerLog?: string;
-  recoveryDecision?: "recover" | "not-needed" | "blocked";
-  principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
-  principalResolveFails?: boolean;
-  principalVerifyFails?: boolean;
-  release?: {
-    tag: string; owner: string; channelDigest?: string; platformManifestDigest?: string;
-    configDigest?: string; engineImageId?: string; platformOs?: string; frozenStrata?: boolean; repoImageId?: string; registryConfigDigest?: string; duplicatePlatform?: boolean;
-    platformArchitecture?: string; enginePlatformArchitecture?: string;
-    candidateAssets: string; gitLog: string;
-  };
-}): { status: number | null; stdout: string; stderr: string } {
-  const stateDir = join(opts.backup, "state");
-  const secret = "s".repeat(32);
-  const secretPath = join(stateDir, "runtime-transition.secret");
-  writeFileSync(secretPath, secret);
-  const stateBytes = readFileSync(join(stateDir, "install-state.json"));
-  // Ask the canonical migrator for the real projection. The previous fixture
-  // asserted `projectionHash === sourceHash`, which is never true of an actual
-  // projection; it went unnoticed only because promote.sh skipped the migrator
-  // whenever the schema version did not change, so the carrier's CAS binding
-  // was never checked (BI-AA6FBAD0).
-  const projection = JSON.parse(execFileSync(process.execPath, [MIGRATOR,
-    "--state", join(stateDir, "install-state.json"), "--catalog", CATALOG,
-    "--host-platform", "linux", "--host-arch", "amd64"], { encoding: "utf8" })) as { sourceHash: string; projectionHash: string };
-  const envelope = {
-    kind: "install-state-migration", version: 1, runId: "SUR-FUNCTIONAL",
-    promoterDigest: `sha256:${"d".repeat(64)}`,
-    sourceHash: projection.sourceHash,
-    projectionHash: projection.projectionHash,
-    fromSchemaVersion: 2, toSchemaVersion: 2,
-    hostIdentity: { platform: "linux", arch: "amd64", provenance: "explicit" },
-    issuedAt: new Date(Date.now() - 1_000).toISOString(),
-    expiresAt: new Date(Date.now() + 60_000).toISOString(),
-  };
-  const canonical = (value: unknown): string => Array.isArray(value)
-    ? `[${value.map(canonical).join(",")}]`
-    : value && typeof value === "object"
-      ? `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`
-      : JSON.stringify(value) ?? "null";
-  const signature = createHmac("sha256", secret).update(canonical(envelope)).digest("hex");
-  const exports = [
-    "unset DPF_STATE_DIR",
-    `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
-    `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
-    `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
-    `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
-    `export DPF_PROMOTER_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
-    `export DPF_RUNTIME_TRANSITION_SECRET_FILE=${shellQuote(toBashPath(secretPath))}`,
-    "export DPF_SELF_UPGRADE_RUN_ID='SUR-FUNCTIONAL'",
-    `export DPF_PROMOTER_DIGEST=${shellQuote(envelope.promoterDigest)}`,
-    `export DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${shellQuote(Buffer.from(JSON.stringify(envelope)).toString("base64url"))}`,
-    `export DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${shellQuote(signature)}`,
-    "export PROMOTE_HEALTH_URL='http://127.0.0.1:9/api/health'",
-    "export PROMOTE_COMPOSE_PROJECT='dpf-functest'",
-    ...(opts.recoveryDecision
-      ? [`export DPF_TEST_RECOVERY_DECISION=${shellQuote(opts.recoveryDecision)}`]
-      : []),
-    ...(opts.principalRecoveryDecision
-      ? [`export DPF_TEST_PRINCIPAL_RECOVERY_DECISION=${shellQuote(opts.principalRecoveryDecision)}`]
-      : []),
-    ...(opts.principalResolveFails ? ["export DPF_TEST_PRINCIPAL_RESOLVE_FAIL=yes"] : []),
-    ...(opts.principalVerifyFails ? ["export DPF_TEST_PRINCIPAL_VERIFY_FAIL=yes"] : []),
-    ...(opts.composeEnvFile
-      ? [`export PROMOTE_COMPOSE_ENV_FILE=${shellQuote(toBashPath(opts.composeEnvFile))}`]
-      : []),
-    ...(opts.dockerLog ? [`export DOCKER_LOG=${shellQuote(toBashPath(opts.dockerLog))}`] : []),
-    ...(opts.release ? [
-      "export DPF_PROMOTION_MODE=release",
-      `export DPF_RELEASE_TAG=${shellQuote(opts.release.tag)}`,
-      ...(opts.release.configDigest
-        ? [`export DPF_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest)}`]
-        : ["unset DPF_RELEASE_CONFIG_DIGEST"]),
-      ...(opts.release.frozenStrata === false || !opts.release.configDigest ? ["unset DPF_RELEASE_CHANNEL_DIGEST DPF_RELEASE_PLATFORM_MANIFEST_DIGEST DPF_RELEASE_PLATFORM_OS DPF_RELEASE_PLATFORM_ARCHITECTURE"] : [`export DPF_RELEASE_CHANNEL_DIGEST=${shellQuote(opts.release.channelDigest ?? "")}`, `export DPF_RELEASE_PLATFORM_MANIFEST_DIGEST=${shellQuote(opts.release.platformManifestDigest ?? "")}`, `export DPF_RELEASE_PLATFORM_OS=${shellQuote(opts.release.platformOs ?? "linux")}`, `export DPF_RELEASE_PLATFORM_ARCHITECTURE=${shellQuote(opts.release.platformArchitecture ?? "amd64")}`]),
-      `export GHCR_OWNER=${shellQuote(opts.release.owner)}`,
-      `export DPF_TEST_RELEASE_SHA=${shellQuote(opts.targetSha)}`,
-      `export DPF_TEST_RELEASE_TAG=${shellQuote(opts.release.tag)}`,
-      `export DPF_TEST_RELEASE_CONFIG_DIGEST=${shellQuote(opts.release.configDigest ?? `sha256:${"c".repeat(64)}`)}`,
-      `export DPF_TEST_RELEASE_ENGINE_ID=${shellQuote(opts.release.engineImageId ?? opts.release.configDigest ?? `sha256:${"c".repeat(64)}`)}`,
-      `export DPF_TEST_RELEASE_REPO_ID=${shellQuote(opts.release.repoImageId ?? "")}`, `export DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST=${shellQuote(opts.release.registryConfigDigest ?? "")}`,
-      `export DPF_TEST_DUPLICATE_PLATFORM=${opts.release.duplicatePlatform ? "yes" : "no"}`,
-      `export DPF_TEST_RELEASE_REPO=ghcr.io/${shellQuote(opts.release.owner)}/dpf-portal`,
-      `export DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST=${shellQuote(opts.release.platformManifestDigest ?? `sha256:${"b".repeat(64)}`)}`,
-      `export DPF_TEST_RELEASE_OS=${shellQuote(opts.release.platformOs ?? "linux")}`,
-      `export DPF_TEST_RELEASE_ARCHITECTURE=${shellQuote(opts.release.enginePlatformArchitecture ?? opts.release.platformArchitecture ?? "amd64")}`,
-      `export DPF_TEST_RELEASE_ASSETS=${shellQuote(toBashPath(opts.release.candidateAssets))}`,
-      `export GIT_LOG=${shellQuote(toBashPath(opts.release.gitLog))}`,
-      "export PROMOTE_COMPOSE_FILES='docker-compose.yml docker-compose.release.yml'",
-    ] : []),
-  ];
-  const r = spawnSync(BASH_COMMAND, ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
-    encoding: "utf8",
-  });
-  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
-}
-
-/** Scratch root with a clean git source dir (src/) + isolated bin/ and backup/. */
-function makeScratch(): { root: string; source: string; backup: string; fakeBin: string; head: string } {
-  // macOS exposes /var as a symlink to /private/var. Use the canonical parent
-  // so the production state-path escape guard sees the same path before and
-  // after realpath resolution.
-  const root = mkdtempSync(join(realpathSync(tmpdir()), "dpf-promote-"));
-  const source = join(root, "src");
-  mkdirSync(source, { recursive: true });
-  const head = gitInit(source);
-  const fakeBin = makeFakeBin(root);
-  const backup = join(root, "backup");
-  const stateDir = join(backup, "state");
-  mkdirSync(stateDir, { recursive: true });
-  // Produce the install-state the way an install actually gets one: hand a
-  // legacy state to the canonical migrator. Hand-assembling the capability
-  // snapshot here re-derived the closure by hand and drifted from the resolver;
-  // the legacy default already enables `runtime:build`, which is what the
-  // sandbox-refresh path in this fixture exercises.
-  writeFileSync(join(stateDir, "install-state.json"), JSON.stringify({
-    schemaVersion: 1, installerVersion: "functional", platform: "linux", arch: "amd64",
-    installPath: "/opt/dpf", stateDir: "/dpf-state", composeProjectName: "dpf",
-  }));
-  execFileSync(process.execPath, [MIGRATOR, "--state", join(stateDir, "install-state.json"),
-    "--catalog", CATALOG, "--host-platform", "linux", "--host-arch", "amd64", "--write"], { encoding: "utf8" });
-  return { root, source, backup, fakeBin, head };
-}
+import { BASH_OK, GIT_OK, PROMOTE_TEST_TIMEOUT_MS, makeFakeBin, makeScratch, promoteDiagnostics, runPromote, toBashPath } from "./promote-script-functional.test-support";
 
 describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run", () => {
   it.each([
@@ -295,6 +27,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   ])("promotes a verified release into a source-free install for a $caller", ({ caller, configDigest, engineImageId, platformArchitecture, enginePlatformArchitecture, frozenStrata, missingModernStratum, repoImageId, registryConfigDigest, duplicatePlatform, expectedStatus }) => {
     const { root, source, backup, fakeBin } = makeScratch();
     const targetSha = "b".repeat(40);
+    const installRoot = join(root, "canonical-install");
     const candidateAssets = join(root, "candidate-assets");
     const gitLog = join(root, "git.log");
     const dockerLog = join(root, "docker.log");
@@ -303,12 +36,14 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       writeFileSync(join(source, "docker-compose.release.yml"), "services: {}\n");
       writeFileSync(join(source, ".install-mode"), "consumer\n");
       writeFileSync(join(source, ".env"), "KEEP_ME=yes\nDPF_IMAGE_TAG=v1.0.0\nGHCR_OWNER=opendigitalproductfactory\n");
+      mkdirSync(installRoot, { recursive: true });
       mkdirSync(candidateAssets, { recursive: true });
       for (const relativePath of [
         "docker-compose.yml",
         "docker-compose.release.yml",
         "scripts/lib/resolve-capability-compose-profiles.mjs",
         "scripts/lib/govern-capability-compose-args.mjs",
+        "scripts/lib/script-argv.mjs",
         "scripts/lib/capability-state-hash.mjs",
         "scripts/capability-service-catalog.generated.json",
       ]) {
@@ -327,6 +62,9 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       const currentManaged = ["docker-compose.yml", "docker-compose.release.yml"];
       writeFileSync(join(source, ".verified-release-assets.sha256"), currentManaged.map(path => `${createHash("sha256").update(readFileSync(join(source, path))).digest("hex")}  ./${path}`).join("\n") + "\n");
       writeFileSync(join(source, ".verified-release-assets-version"), "v1.0.0");
+      for (const relativePath of [...currentManaged, ".env", ".verified-release-assets.sha256", ".verified-release-assets-version"]) {
+        copyFileSync(join(source, relativePath), join(installRoot, relativePath));
+      }
       const statePath = join(backup, "state", "install-state.json");
       const existing = JSON.parse(readFileSync(statePath, "utf8"));
       writeFileSync(statePath, JSON.stringify({
@@ -335,7 +73,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         installerVersion: "v1.0.0",
         lastSuccessfulInstallVersion: "v1.0.0",
         arch: "amd64",
-        installPath: source,
+        installPath: installRoot,
         installMode: "consumer",
         composeFiles: ["docker-compose.yml", "docker-compose.release.yml"],
         imageTag: "v1.0.0",
@@ -348,8 +86,8 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         platformManifestDigest: missingModernStratum ? undefined : `sha256:${"b".repeat(64)}`, configDigest, engineImageId, platformOs: "linux",
         platformArchitecture, enginePlatformArchitecture, frozenStrata, repoImageId, registryConfigDigest, duplicatePlatform, candidateAssets, gitLog,
       };
-      const r = runPromote({ source, backup, targetSha, fakeBin, dockerLog, release });
-      expect(r.status, r.stderr).toBe(expectedStatus);
+      const r = runPromote({ source, installRoot, backup, targetSha, fakeBin, dockerLog, composeEnvFile: join(installRoot, ".env"), release });
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog, "candidate assets": candidateAssets, backup })).toBe(expectedStatus);
       if (expectedStatus !== 0) {
         expect(r.stderr).toMatch(/(?:missing required variables|not a pulled repository digest|could not resolve an immutable|resolved config digest .* does not match|does not match resolved (?:config\/platform\/channel identities|candidate linux\/amd64))/);
         return;
@@ -362,8 +100,11 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       } else {
         expect(r.stdout).toContain("step=release-identity mode=legacy-bootstrap");
       }
-      expect(readFileSync(join(source, ".env"), "utf8")).toMatch(/^KEEP_ME=yes$/m);
-      expect(readFileSync(join(source, ".env"), "utf8")).toMatch(/^DPF_IMAGE_TAG=v2\.0\.0$/m);
+      expect(readFileSync(join(installRoot, ".env"), "utf8")).toMatch(/^KEEP_ME=yes$/m);
+      expect(readFileSync(join(installRoot, ".env"), "utf8")).toMatch(/^DPF_IMAGE_TAG=v2\.0\.0$/m);
+      expect(readFileSync(join(installRoot, ".verified-release-assets-version"), "utf8").trim()).toBe("v2.0.0");
+      expect(readFileSync(join(source, ".env"), "utf8")).toMatch(/^DPF_IMAGE_TAG=v1\.0\.0$/m);
+      expect(readFileSync(join(source, ".verified-release-assets-version"), "utf8").trim()).toBe("v1.0.0");
       expect(JSON.parse(readFileSync(statePath, "utf8")).imageTag).toBe("v2.0.0");
       const calls = readFileSync(dockerLog, "utf8");
       expect(calls).toContain("pull portal postgres");
@@ -374,6 +115,41 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
+  // BI-F9EE05E5 plan item 0: the image is built before the drain, so the
+  // portal refuses new work only for the swap.
+  it("PROMOTE_PHASE=build builds the image and stops: no backup, migration, recreate or state write", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      const statePath = join(backup, "state", "install-state.json");
+      const stateBefore = readFileSync(statePath, "utf8");
+      const dockerLog = join(root, "docker.log");
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, phase: "build" });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(`step=prebuild-docker-build target=${head}`);
+      expect(r.stdout).toContain(`step=prebuild-done target=${head}`);
+      expect(r.stdout).not.toMatch(/step=(?:prebuild-)?(?:migrate|docker-up|health|sha-verify)\b/);
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain("build portal postgres");
+      expect(calls).not.toMatch(/\bup\b.*-d|recreate service=/);
+      expect(readFileSync(statePath, "utf8")).toBe(stateBefore);
+      expect(existsSync(join(backup, "previous-sha.txt"))).toBe(false);
+      expect(existsSync(join(backup, "install-state.json"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("refuses an unknown PROMOTE_PHASE", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, phase: "swap" as never });
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain("PROMOTE_PHASE must be all or build");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
   it("stamps the source HEAD and sha-verify passes against a correctly-stamped portal", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
@@ -390,48 +166,22 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
-  it("sweeps dangling images and build cache after a successful promote", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
-    const dockerLog = join(root, "docker.log");
-    try {
-      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog });
-      expect(r.status).toBe(0);
-      expect(r.stdout).toContain("step=cleanup");
-      const dockerCalls = readFileSync(dockerLog, "utf8");
-      // Best-effort disk reclaim on the success path.
-      // Dangling images: removed outright (superseded previous portal version).
-      expect(dockerCalls).toContain("image prune -f");
-      // Build cache: BOUNDED, not wiped — kept as a rebuild-speed asset under a cap.
-      expect(dockerCalls).toContain("builder prune -f --keep-storage");
-      // Conservative scope: never the destructive `-a` (would delete in-use tagged images).
-      expect(dockerCalls).not.toContain("image prune -a");
-      // Volumes are operator state — cleanup must never touch them.
-      expect(dockerCalls).not.toContain("volume");
-      // BI-9B7FC928: also reclaims the TAGGED ephemeral verify/compare/build-test
-      // images that dangling-prune misses (the ~3.7 GB/upgrade leak). It queries
-      // by exact ephemeral naming so the running dpf-portal image is never hit.
-      expect(dockerCalls).toContain("images --filter reference=dpf-*-build-test");
-      expect(dockerCalls).toContain("images --filter reference=dpf-*-build-compare");
-      expect(dockerCalls).toContain("images --filter reference=dpf-*:verify");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  }, PROMOTE_TEST_TIMEOUT_MS);
-
-  it("derives a -dirty stamp when the build source has uncommitted changes", () => {
+  it("derives an honest -dirty stamp and refuses its unqualified image before swapping", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
       writeFileSync(join(source, "Dockerfile"), "FROM scratch\n# changed\n"); // dirty a tracked file
-      const r = runPromote({ source, backup, targetSha: `${head}-dirty`, fakeBin });
-      expect(r.status).toBe(0);
-      expect(r.stdout).toContain(`step=done target=${head}-dirty`);
+      const dockerLog = join(root, "docker.log");
+      const r = runPromote({ source, backup, targetSha: `${head}-dirty`, fakeBin, dockerLog });
+      expect(r.status).toBe(78);
+      expect(r.stdout).toContain(`step=docker-build target=${head}-dirty`);
+      expect(readFileSync(dockerLog, "utf8")).not.toContain("up -d --no-build --no-deps --force-recreate portal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("FAILS LOUD (does not deploy) when the build tree identity differs from the promote target", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
+    const { root, source, backup, fakeBin } = makeScratch();
     try {
       // Orchestrator's intended target ≠ what's on disk → the bytes about to be
       // deployed are not the bytes that were resolved. Spec §4.3 / BI-5B6C1C35:
@@ -464,24 +214,18 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   }, PROMOTE_TEST_TIMEOUT_MS);
 
   it("FAILS LOUD when the running portal reports an EMPTY /sha (DEPLOYED_SHA unpopulated)", () => {
-    const { root, source, backup, fakeBin, head } = makeScratch();
+    const { root, source, backup, head } = makeScratch();
     try {
       // Model the BI-5B6C1C35 symptom: DEPLOYED_SHA never made it into the
       // running container, so /sha returns blank. The verify step must treat an
       // empty stamp as a hard failure (the runtime cannot prove its identity),
       // not retry-until-timeout then pass.
-      const emptyShaBin = join(root, "bin-emptysha");
-      mkdirSync(emptyShaBin, { recursive: true });
-      writeFileSync(
-        join(emptyShaBin, "docker"),
-        '#!/bin/sh\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
-      );
+      const emptyShaBin = makeFakeBin(join(root, "emptysha"));
       // /sha → empty (the bug); other probes → ok.
       writeFileSync(
         join(emptyShaBin, "curl"),
         '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
       );
-      chmodSync(join(emptyShaBin, "docker"), 0o755);
       chmodSync(join(emptyShaBin, "curl"), 0o755);
 
       const r = runPromote({ source, backup, targetSha: head, fakeBin: emptyShaBin });
@@ -511,7 +255,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(log).toContain("build portal");
       // BI-D9BAB4FA: migrations run from the freshly-built image, before the swap.
       expect(log).toContain("run --rm -T --no-deps --entrypoint sh portal -c cd /app && pnpm --filter @dpf/db exec prisma migrate deploy");
-      expect(log).toContain("up -d --no-deps --force-recreate portal");
+      expect(log).toContain("up -d --no-build --no-deps --force-recreate portal");
       // BI-86FC0336: seed runs the full entrypoint from the freshly swapped image, after the swap.
       expect(log).toContain("run --rm -T --no-deps --entrypoint /docker-entrypoint.sh portal");
       expect(log).toContain("exec -T portal cat /app/.dpf-source-content-hash");
@@ -521,7 +265,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(log).toContain("build sandbox");
       expect(log).toContain("up -d --no-deps --force-recreate sandbox");
       const recreates = log.split(/\r?\n/).filter((line) => line.startsWith("recreate service="));
-      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort()).toEqual(["portal", "sandbox", "sandbox-postgres"]);
+      expect(recreates.map((line) => line.match(/^recreate service=(\S+)/)?.[1]).sort(), promoteDiagnostics(r, { "docker.log": dockerLog })).toEqual(["portal", "sandbox", "sandbox-postgres"]);
       for (const recreate of recreates) {
         expect(recreate).toContain("DPF_STATE_DIR=<unset>");
         expect(recreate).toContain(`DPF_PROMOTER_STATE_DIR=${toBashPath(join(backup, "state"))}`);
@@ -529,6 +273,81 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         expect(recreate).toContain(`mount_source=${hostStateDir}`);
         expect(recreate).not.toContain("=/dpf-state");
       }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("continues through older migration classifiers without resolving an activity migration when recovery is not needed", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, activityRecoveryDecision: "not-needed" });
+
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog })).toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      const activity = calls.indexOf("recover-workroom-activity-migration.mjs");
+      const principal = calls.indexOf("recover-human-principal-backfill-migration.mjs");
+      const inventory = calls.indexOf("recover-inventory-snapshot-migration.mjs");
+      expect(activity).toBeGreaterThanOrEqual(0);
+      expect(principal).toBeGreaterThan(activity);
+      expect(inventory).toBeGreaterThan(principal);
+      expect(calls.indexOf("prisma migrate deploy")).toBeGreaterThan(inventory);
+      expect(calls).not.toContain("prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening");
+      expect(calls).not.toContain("recover-workroom-activity-migration.mjs --verify-rolled-back");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("resolves only the allowlisted activity migration and verifies its original row before other classifiers", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, activityRecoveryDecision: "recover" });
+
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog })).toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      const check = calls.indexOf("recover-workroom-activity-migration.mjs");
+      const resolve = calls.indexOf("prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening");
+      const verify = calls.indexOf("recover-workroom-activity-migration.mjs --verify-rolled-back");
+      const principal = calls.indexOf("recover-human-principal-backfill-migration.mjs");
+      const inventory = calls.indexOf("recover-inventory-snapshot-migration.mjs");
+      expect(check).toBeGreaterThanOrEqual(0);
+      expect(resolve).toBeGreaterThan(check);
+      expect(verify).toBeGreaterThan(resolve);
+      expect(principal).toBeGreaterThan(verify);
+      expect(inventory).toBeGreaterThan(principal);
+      expect(calls.indexOf("prisma migrate deploy")).toBeGreaterThan(inventory);
+      const verificationCall = calls.split(/\r?\n/).find((line) => line.includes("recover-workroom-activity-migration.mjs --verify-rolled-back"));
+      expect(verificationCall).toContain('"$1" sh 22222222-2222-4222-8222-222222222222');
+      expect(calls.match(/prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening/g)).toHaveLength(1);
+      expect(calls).not.toContain("prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals");
+      expect(calls).not.toContain("prisma migrate resolve --rolled-back 20260728115900_snapshot_inventory_observation_facts");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it.each([
+    { failure: "classification refuses recovery", activityRecoveryDecision: "blocked" as const, activityResolveFails: false, activityVerifyFails: false, resolved: false, verified: false },
+    { failure: "Prisma rollback resolution fails", activityRecoveryDecision: "recover" as const, activityResolveFails: true, activityVerifyFails: false, resolved: true, verified: false },
+    { failure: "the original rolled-back row cannot be verified", activityRecoveryDecision: "recover" as const, activityResolveFails: false, activityVerifyFails: true, resolved: true, verified: true },
+  ])("stops before older classifiers, migration deploy and portal swap when $failure", ({ resolved, verified, ...scenario }) => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, ...scenario });
+
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog })).not.toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain("recover-workroom-activity-migration.mjs");
+      expect(calls.includes("prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening")).toBe(resolved);
+      expect(calls.includes("recover-workroom-activity-migration.mjs --verify-rolled-back")).toBe(verified);
+      expect(calls).not.toContain("recover-human-principal-backfill-migration.mjs");
+      expect(calls).not.toContain("recover-inventory-snapshot-migration.mjs");
+      expect(calls).not.toContain("prisma migrate deploy");
+      expect(calls).not.toContain("up -d --no-build --no-deps --force-recreate portal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -667,7 +486,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       const calls = readFileSync(dockerLog, "utf8");
       expect(calls).toContain("recover-human-principal-backfill-migration.mjs");
       expect(calls).not.toContain("prisma migrate deploy");
-      expect(calls).not.toContain("up -d --no-deps --force-recreate portal");
+      expect(calls).not.toContain("up -d --no-build --no-deps --force-recreate portal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -693,7 +512,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       const calls = readFileSync(dockerLog, "utf8");
       expect(calls).toContain("recover-inventory-snapshot-migration.mjs");
       expect(calls).not.toContain("prisma migrate deploy");
-      expect(calls).not.toContain("up -d --no-deps --force-recreate portal");
+      expect(calls).not.toContain("up -d --no-build --no-deps --force-recreate portal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -708,18 +527,9 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     try {
       // A docker shim that fails ONLY on `compose ... build sandbox`, succeeds
       // otherwise (and still answers the content-hash probe so portal verifies).
-      const bin = join(root, "failbin");
-      mkdirSync(bin, { recursive: true });
-      writeFileSync(
-        join(bin, "docker"),
-        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"build sandbox"*) exit 1 ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
-      );
-      writeFileSync(
-        join(bin, "curl"),
-        '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "%s" "$DPF_VERSION" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
-      );
-      chmodSync(join(bin, "docker"), 0o755);
-      chmodSync(join(bin, "curl"), 0o755);
+      const bin = makeFakeBin(join(root, "failbin"));
+      const docker = join(bin, "docker");
+      writeFileSync(docker, readFileSync(docker, "utf8").replace('case "$*" in', 'case "$*" in\n  *"build sandbox"*) exit 1 ;;'));
 
       const r = runPromote({ source, backup, targetSha: head, fakeBin: bin });
 
@@ -741,21 +551,12 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   it("SKIPS the pgvector recreate when the image already provides vector (pg_available_extensions=1)", () => {
     const { root, source, backup, head } = makeScratch();
     try {
-      const bin = join(root, "vecbin");
-      mkdirSync(bin, { recursive: true });
+      const bin = makeFakeBin(join(root, "vecbin"));
       const dockerLog = join(root, "docker.log");
       // A docker shim whose `psql ... pg_available_extensions` probe reports vector
       // present ("1"); everything else behaves like the default fake.
-      writeFileSync(
-        join(bin, "docker"),
-        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *pg_available_extensions*) printf "1" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
-      );
-      writeFileSync(
-        join(bin, "curl"),
-        '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "%s" "$DPF_VERSION" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
-      );
-      chmodSync(join(bin, "docker"), 0o755);
-      chmodSync(join(bin, "curl"), 0o755);
+      const docker = join(bin, "docker");
+      writeFileSync(docker, readFileSync(docker, "utf8").replace('case "$*" in', 'case "$*" in\n  *pg_available_extensions*) printf "1" ;;'));
 
       const r = runPromote({ source, backup, targetSha: head, fakeBin: bin, dockerLog });
 
@@ -796,4 +597,27 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       rmSync(root, { recursive: true, force: true });
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
+});
+
+// BI-683619D9: a CI-only failure must leave its evidence in the assertion message.
+describe("promoteDiagnostics", () => {
+  it("carries status, output tails, a log file and a directory listing, and survives a missing path", () => {
+    const { root } = makeScratch();
+    try {
+      const log = join(root, "docker.log");
+      writeFileSync(log, "recreate service=portal\n");
+      mkdirSync(join(root, "assets", "scripts"), { recursive: true });
+      writeFileSync(join(root, "assets", "SHA256SUMS"), "x\n");
+      const text = promoteDiagnostics({ status: 1, stdout: "step=done", stderr: "sha256sum: SHA256SUMS: No such file or directory" }, {
+        "docker.log": log, assets: join(root, "assets"), gone: join(root, "missing"),
+      });
+      expect(text).toContain("status=1");
+      expect(text).toContain("sha256sum: SHA256SUMS");
+      expect(text).toContain("recreate service=portal");
+      expect(text).toMatch(/SHA256SUMS\nscripts/);
+      expect(text).toMatch(/--- gone .*\n<unreadable: /);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

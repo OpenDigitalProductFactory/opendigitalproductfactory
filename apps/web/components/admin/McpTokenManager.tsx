@@ -44,6 +44,7 @@ import {
   type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
+import { formatTimestamp } from "@/lib/datetime";
 
 export interface McpTokenManagerProps {
   baseUrl: string;
@@ -90,11 +91,6 @@ type View =
 
 type Notice = { kind: "success" | "error"; message: string } | null;
 
-function formatDate(value: string | null): string {
-  if (!value) return "never";
-  return new Date(value).toLocaleString();
-}
-
 function isExpired(token: TokenRow): boolean {
   return token.expiresAt != null && new Date(token.expiresAt).getTime() < Date.now();
 }
@@ -139,7 +135,7 @@ function contributorReadinessCopy(readiness: ContributorMcpReadiness): {
         guidance: "Build Studio can use the current development token.",
       };
     case "needs_grants":
-      if (readiness.missingGrants.length === 0) {
+      if (readiness.missingGrants.length === 0 && readiness.permissionLayer !== "coworker") {
         return {
           tone: "attention",
           message: "Development token needs attention: read-only token.",
@@ -148,8 +144,8 @@ function contributorReadinessCopy(readiness: ContributorMcpReadiness): {
       }
       return {
         tone: "attention",
-        message: `Development token needs attention: missing ${readiness.missingGrants.length} ${readiness.missingGrants.length === 1 ? "grant" : "grants"}.`,
-        guidance: "Use Rotate with edit on the token row to apply the development grant set.",
+        message: readiness.permissionLayer === "coworker" ? "The acting coworker lacks approved delivery permissions." : `Development token needs attention: missing ${readiness.missingGrants.length} ${readiness.missingGrants.length === 1 ? "grant" : "grants"}.`,
+        guidance: readiness.permissionLayer === "coworker" ? "Platform install or upgrade must reconcile this binding; token rotation cannot grant coworker authority." : "Use Rotate with edit on the token row to apply the development grant set.",
       };
     case "needs_reissue":
       return {
@@ -160,8 +156,8 @@ function contributorReadinessCopy(readiness: ContributorMcpReadiness): {
     case "needs_identity_binding":
       return {
         tone: "attention",
-        message: "Development token needs attention: peer identity is not GAID-bound.",
-        guidance: "Token grants still gate MCP calls while the identity binding work lands.",
+        message: readiness.identityBinding === "bound" ? "Delivery tool access is unverified." : "Peer identity is not GAID-bound.",
+        guidance: "Test the connection after platform recovery.",
       };
     case "needs_authorization":
       return {
@@ -911,12 +907,12 @@ function TokenListItem(props: {
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Issued: </dt>
-              <dd className="inline">{formatDate(token.createdAt)}</dd>
+              <dd className="inline">{formatTimestamp(token.createdAt, "never")}</dd>
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Last used: </dt>
               <dd className="inline">
-                {formatDate(token.lastUsedAt)}
+                {formatTimestamp(token.lastUsedAt, "never")}
                 {token.idleDays != null && (
                   <span className="ml-1 text-[var(--dpf-muted)]">
                     ({token.idleDays === 0 ? "today" : `${token.idleDays}d idle`})
@@ -926,7 +922,7 @@ function TokenListItem(props: {
             </div>
             <div>
               <dt className="inline font-medium text-[var(--dpf-text)]">Expires: </dt>
-              <dd className="inline">{formatDate(token.expiresAt)}</dd>
+              <dd className="inline">{formatTimestamp(token.expiresAt, "never")}</dd>
             </div>
           </dl>
           </div>

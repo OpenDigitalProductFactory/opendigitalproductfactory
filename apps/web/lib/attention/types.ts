@@ -1,5 +1,7 @@
 // The Attention Surface — projector output types (EP-ATTENTION-SURFACE, BI-D39484E7 + BI-61B9EB88).
 // Spec: docs/superpowers/specs/2026-06-23-human-attention-surface-design.md §4.1, §4.4.
+
+import type { EnvelopeDecisionSummary } from "./coworker-envelope-decision";
 //
 // `AttentionItem` is a READ-MODEL projection, NOT a persisted entity. Each queue's
 // truth stays in its owning model (single-source-of-truth); the inbox projects over
@@ -18,6 +20,7 @@ export type AttentionSource =
   | "approval-outbound" // OutboundDraft pending-review (marketing)
   | "approval-bill" // Bill awaiting_approval (AP — carries a dueDate)
   | "approval-expense" // ExpenseClaim submitted
+  | "approval-leave" // LeaveRequest pending — the manager's own decision (BI-7BCC87BB)
   | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
   | "research-proposal" // ResearchProposal pending
   | "coworker-memory" // Newly distilled CoworkerMemoryNote rows for digest visibility
@@ -30,7 +33,14 @@ export type AttentionSource =
   | "business-journey" // PortfolioQualityIssue issueType=journey_failure — a critical business journey failed its watchdog run (BI-E105303D)
   | "compliance-source-freshness" // governed AI-provider compliance evidence lapsing or lapsed (BI-68D44727)
   | "coworker-envelope" // CoworkerActionEnvelope status=proposed, bound to the reading user (BI-7CB2CCDE)
-  | "skill-proposal"; // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
+  | "skill-proposal" // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
+  | "workroom-stall" // a Workroom whose drive has refused consecutive wakes — stalled, or unowned (BI-03E94B5B)
+  | "workroom-rebind" // a Workroom pinned to a superseded work-shape version (BI-CB5C0DCE)
+  | "orphaned-approval" // coworker approvals going to a delegate who is not using the portal (BI-61DE8177)
+  | "organization-direction" // the instance's mission, vision or top-level outcomes are not recorded yet (BI-916216E7)
+  | "contribution-setup" // contribution with the DPF project is undecided, or chosen with no GitHub account connected (BI-D3342020)
+  | "mailroom-item" // correspondence the Mailroom routed that nobody acknowledged inside its window, or that is immediate (BI-12B0AE91)
+  | "agent-toolchain"; // a computer's DPF tools have failed to update, or waited on the operator, for over a day (BI-3E66F76F)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
@@ -64,7 +74,10 @@ export type ResidueReason =
   | "needs-credential" // missing credential / authority, NOT judgment (TaskRun auth-required)
   | "policy-approval" // an agent action awaits approval (AgentActionProposal)
   | "new-memory-note" // a coworker's role-local memory gained a new distilled note
-  | "no-self-heal"; // a platform service is degraded and has no automated repair path (health_alert)
+  | "no-self-heal" // a platform service is degraded and has no automated repair path (health_alert)
+  | "room-stalled" // a Workroom's drive keeps refusing to advance — typically no accountable owner
+  | "awaiting-rebind" // a Workroom runs a superseded work-shape version; moving it is its owner's decision (BI-CB5C0DCE)
+  | "approver-absent"; // approvals route to one person, and that person is not using the portal
 
 /** How much the human must do. The human_cognitive_load cost axis. */
 export type DecideEffort = "one-tap" | "review" | "judgment";
@@ -125,7 +138,7 @@ export type AttentionTechnicalMetadata = {
  * level union remains canonical; owner-facing labels come from
  * PROACTIVITY_LEVEL_COPY (`quiet` renders as “Quiet”). */
 export type AttentionProactivity = {
-  level: import("@/lib/proactivity/proactivity-types").ProactivityLevel;
+  level: import("@dpf/validators/workroom-policy/proactivity-types").ProactivityLevel;
   actorId?: string;
   policyId?: string;
 };
@@ -183,10 +196,29 @@ export type AttentionEnvelopeApproval = {
   /** True only while the envelope is `proposed` AND unexpired at the projected
    *  moment. False hides every decision control. */
   actionable: boolean;
+  /** The window closed with nobody answering (BI-0012E6CA). The card offers
+   *  "Ask again" instead of decision controls. */
+  expiredUnanswered?: boolean;
   reviewBinding?: AttentionEnvelopeReviewBinding;
+  /** Decision-first owner summary (BI-F95B0795). Always present; unknown shapes fail closed. */
+  decision: EnvelopeDecisionSummary;
+  /**
+   * BI-E5631708: the owner may make this approval standing ("don't ask again
+   * when this coworker does this"). Set only for a non-damaging request that
+   * reached a person solely because nothing recorded could steer it.
+   */
+  standingRulingOffered?: boolean;
   /** The authenticated envelope state-machine routes (lib/coworker/envelope-routes). */
   approveHref: string;
   declineHref: string;
+  /** POST target that raises an expired, unanswered request again. */
+  reraiseHref?: string;
+  /**
+   * BI-7BCC87BB (AC-OVERRIDE): set only when an admin who is not the delegate
+   * opened this request's exact link. The card then offers "Decide on their
+   * behalf" with a required reason instead of Authorize / Decline.
+   */
+  onBehalf?: { ownerLabel: string };
 };
 
 export type AttentionItem = {
@@ -224,6 +256,10 @@ export type AttentionItem = {
   /** The governed coworker action awaiting this reader's decision. Set only by
    * the `coworker-envelope` source (BI-7CB2CCDE). */
   envelope?: AttentionEnvelopeApproval;
+  /** A legacy proposal whose approval the reference monitor refused: why it
+   * can no longer run as proposed. Set only by the `agent-proposal` source
+   * (convert-and-run, BI-04E5A511); the card then offers Decline only. */
+  noLongerRunnable?: string;
 };
 
 /**

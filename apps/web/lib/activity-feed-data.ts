@@ -146,7 +146,7 @@ export const getActivityFeed = cache(async (
         date: p.createdAt.toISOString(),
         status: p.status,
         statusColor: "#a78bfa",
-        href: "/ops/improvements",
+        href: "/ops?origin=improvement",
       });
     }
   }

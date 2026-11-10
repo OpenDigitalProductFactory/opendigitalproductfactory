@@ -66,7 +66,7 @@ export async function seedPlatformProduct() {
   const elements = [
     { name: "ODPF Portal",      typeId: appComponentType.id, desc: "Main Next.js web application" },
     { name: "ODPF Database",    typeId: techNodeType.id,     desc: "PostgreSQL via Prisma" },
-    { name: "ODPF Graph",       typeId: techNodeType.id,     desc: "Neo4j for enterprise architecture" },
+    { name: "ODPF Graph",       typeId: techNodeType.id,     desc: "Postgres graph mirror for enterprise architecture" },
     { name: "ODPF AI Service",  typeId: techNodeType.id,     desc: "Ollama local inference" },
     { name: "ODPF Sandbox",     typeId: techNodeType.id,     desc: "Docker containers for isolated code generation" },
   ];

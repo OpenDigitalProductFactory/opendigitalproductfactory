@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mocks for the lazy + module imports the watchdog touches.
 const quiescenceFindManyMock = vi.fn();
 const transitionStateMock = vi.fn();
+vi.mock("@/lib/self-upgrade/orphaned-drains", () => ({ recoverOrphanedUpgradeDrains: vi.fn(async () => 0) }));
 const setQuiescenceLevelMock = vi.fn();
 const inngestSendMock = vi.fn();
 const isStallWatchdogEnabledMock = vi.fn();
@@ -40,12 +41,13 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  reconcileTerminalBuildPhaseRuns: vi.fn(async () => 0),
   transitionState: (...a: unknown[]) => transitionStateMock(...a),
   setQuiescenceLevel: (...a: unknown[]) => setQuiescenceLevelMock(...a),
 }));
-vi.mock("../inngest-client", () => ({
-  inngest: {
-    // The module calls inngest.createFunction(config, handler) at import; expose
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
+    // The module calls jobs.createFunction(config, handler) at import; expose
     // the raw handler as `.fn` so the test can invoke it directly.
     createFunction: (_config: unknown, fn: unknown) => ({ fn }),
     send: (...a: unknown[]) => inngestSendMock(...a),
@@ -121,7 +123,7 @@ describe("isStuckQuiescingTaskRun (BI-8F45BA74)", () => {
 
 describe("recoverStuckQuiescenceCoordinators", () => {
   it("reaps a stuck coordinator: fails it, resets the level, clears the queue", async () => {
-    quiescenceFindManyMock.mockResolvedValueOnce([stuck("QR-1")]);
+    quiescenceFindManyMock.mockResolvedValueOnce([stuck("QR-1", "draining")]);
 
     const recovered = await recoverStuckQuiescenceCoordinators(
       new Date("2026-06-14T00:00:00.000Z"),
@@ -132,8 +134,9 @@ describe("recoverStuckQuiescenceCoordinators", () => {
       "QR-1",
       "failed",
       expect.objectContaining({ outcome: "failed", completionSource: "watchdog" }),
+      expect.any(Date), expect.objectContaining({ status: "draining" }),
     );
-    expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null);
+    expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null, expect.any(Date), "QR-1");
     expect(inngestSendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "platform.quiescence-cleared",
@@ -187,6 +190,17 @@ describe("recoverStuckQuiescenceCoordinators", () => {
     expect(notIn).not.toContain("preparing");
     expect(notIn).not.toContain("pending");
   });
+
+  it("keys an awaiting-operator drain on its heartbeat only — a waiting upgrade that still beats is never reaped (BI-F9EE05E5)", async () => {
+    // The coordinator heartbeats on every check (<= ~60s apart, also while it
+    // awaits the operator), so only a crashed one goes 2 minutes without a beat.
+    quiescenceFindManyMock.mockResolvedValueOnce([]);
+    const now = new Date("2026-09-30T19:00:00.000Z");
+    await recoverStuckQuiescenceCoordinators(now);
+    const where = quiescenceFindManyMock.mock.calls[0][0].where;
+    expect(where.status.notIn).not.toContain("awaiting-operator");
+    expect(where.OR[0]).toEqual({ lastHeartbeatAt: { lt: new Date(now.getTime() - 2 * 60 * 1000) } });
+  });
 });
 
 describe("taskrunWatchdog handler (the early-return fix)", () => {
@@ -203,8 +217,8 @@ describe("taskrunWatchdog handler (the early-return fix)", () => {
       reason: "flag-off",
       quiescenceRecovered: 1,
     });
-    expect(transitionStateMock).toHaveBeenCalledWith("QR-1", "failed", expect.any(Object));
-    expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null);
+    expect(transitionStateMock).toHaveBeenCalledWith("QR-1", "failed", expect.any(Object), expect.any(Date), expect.objectContaining({ status: "draining" }));
+    expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null, expect.any(Date), "QR-1");
   });
 
   it("BI-15B42AFE: dedupes taskrun.stalled notification when an unread one already exists", async () => {

@@ -28,6 +28,9 @@ export const DIAGRAM_VERSIONS = Object.freeze({
   "architecture/capability-driven-runtime-profiles/0": "5eab6fa2a09f0ded",
   "architecture/four-portfolio-archetype-ai-workforce-operating-standard/0": "f234f3ac4dd4139b",
   "architecture/four-portfolio-archetype-ai-workforce-operating-standard/1": "e36c31755fcf59c8",
+  "architecture/gated-permissions-process/0": "dd4bc1fc98b77b70",
+  "architecture/gated-permissions-process/1": "2973c45b3e227f32",
+  "architecture/gated-permissions-process/2": "37ba8a6cc47229d1",
   "architecture/platform-overview/0": "9c708514e7702ebd",
   "architecture/platform-overview/1": "2a1d843bd85ab6e8",
   "architecture/platform-overview/2": "68d006ae6ff7475e",
@@ -35,8 +38,8 @@ export const DIAGRAM_VERSIONS = Object.freeze({
   "architecture/platform-overview/4": "14f432109f86d7e1",
   "architecture/platform-overview/5": "1b7650cb641d9ccf",
   "architecture/platform-overview/6": "2c35a3c490b4c41e",
-  "architecture/trusted-ai-kernel/0": "b5261b7f0efa7aff",
-  "architecture/trusted-ai-kernel/1": "ac612ecb7861818f",
+  "architecture/trusted-ai-kernel/0": "7c3fe0ce82bac2cc",
+  "architecture/trusted-ai-kernel/1": "c5e61d44f6756ddf",
   "architecture/unified-development-tracking/0": "207be4c1c22032b0",
   "architecture/work-shapes-and-the-decision-gate/0": "59649abaf4662286"
 });

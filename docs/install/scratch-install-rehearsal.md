@@ -2,7 +2,7 @@
 
 Use this rehearsal before promoting changes that affect install, setup, provider authorization, Build Studio, Work Capsules, sandbox promotion, or platform shell routing.
 
-The rehearsal is intentionally separate from `scripts/fresh-install.ps1`. The fresh-install script resets the local developer stack. The scratch rehearsal creates an isolated git worktree and Docker Compose project so first-run behavior can be checked beside the real install.
+The rehearsal is intentionally separate from `scripts/fresh-install.ps1`. The fresh-install script resets the local developer stack, and since BI-F9939341 it takes a full `pg_dump` into `$DPF_BACKUPS_HOST_PATH\pre-destructive\<date>resh-install-<ts>\` before `docker compose down -v`, refusing to continue if that dump fails (`-SkipPreDestructiveDump` overrides at the cost of every unmirrored row). The scratch rehearsal creates an isolated git worktree and Docker Compose project so first-run behavior can be checked beside the real install.
 
 ## What It Proves
 

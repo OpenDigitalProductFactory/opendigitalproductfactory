@@ -3,7 +3,7 @@ name: dpf-record-decision-outcome
 description: "Use after a DPF WWMD/kernel decision is made and the outcome needs recording."
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: mcp__dpf__principle_decide mcp__dpf__record_capsule_evidence mcp__dpf__wiki_query
+allowed-tools: mcp__dpf__principle_decide mcp__dpf__record_decision_outcome mcp__dpf__record_capsule_evidence mcp__dpf__wiki_query
 category: governance
 assignTo: ["*"]
 capability: null
@@ -11,7 +11,7 @@ taskType: evidence
 triggerPattern: "record decision|save decision outcome|decision evidence|capture recommendation|record WWMD|ledger recorded"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["mcp__dpf__principle_decide", "mcp__dpf__record_capsule_evidence", "mcp__dpf__wiki_query"]
+allowedTools: ["mcp__dpf__principle_decide", "mcp__dpf__record_decision_outcome", "mcp__dpf__record_capsule_evidence", "mcp__dpf__wiki_query"]
 composesFrom: ["dpf-decision-via-kernel"]
 contextRequirements: ["DPF MCP tools reachable; decision result available"]
 riskBand: medium
@@ -40,7 +40,7 @@ The operator-visible audit surface is **`/coworker-decisions/decisions`** (and d
 ## When to use
 
 - After `dpf-decision-via-kernel` / `principle_decide` returns a recommendation.
-- When the operator (or agent) **overrides** the kernel recommendation — the DI row exists; you still need to say so in workroom evidence.
+- When the operator (or agent) **overrides** the kernel recommendation. The DI row exists, but the override is invisible until `record_decision_outcome` names the option you took.
 - When handing off across surfaces (Grok → Claude → Build Studio) and the next thread must know which DI governed the choice.
 
 ## When NOT to use
@@ -60,17 +60,36 @@ The operator-visible audit surface is **`/coworker-decisions/decisions`** (and d
    - Hub path: `/coworker-decisions/decisions/<interactionId>`
    - `callingSurface` you passed (must be a **normalized** surface id — see `dpf-decision-via-kernel`)
 
-3. **Attach to the Workroom when one exists.** Call `record_capsule_evidence` with a short, operator-readable summary:
-   - decision question
-   - chosen option (and whether it matched the kernel recommendation)
-   - `interactionId`
-   - next action
+3. **Report what you actually did — `record_decision_outcome`.** This is the step that
+   makes the decision measurable. Call it AFTER acting, with the `interactionId` and the
+   option you went with:
 
-4. **Human ratification / override.**
-   - High confidence + operator agrees → proceed; workroom evidence is enough.
-   - Low confidence / commandment conflict / operator override → state the override and rationale in workroom evidence (and escalate via open decision reviews when the outcome is `escalate`/`defer`).
+   - went with the kernel's pick → pass that option id.
+   - **chose differently → pass the option you took.** That records an override, and an
+     override is the most valuable row in this corpus: a labelled case where the scoring
+     and the actor disagreed, which is the only thing that can tune the scoring. State
+     in `rationale` what the kernel missed. Do not soften it and do not skip the call
+     because you diverged.
+   - the decision was dropped, superseded or overtaken → pass `chosenOptionId: null`.
+     Unresolved is a recorded state. **Not calling at all is not** — absence means
+     "nobody reported", and it is never counted as agreement.
+   - `resolvedBy` is `agent` unless a person actually chose. An agent agreeing with the
+     kernel and a human agreeing with it are different measurements and are never pooled.
 
-5. **Do not** write a second decision record to notes-only tools for the same consult.
+   Refusals are informative, not errors to retry: `no-recommendation` (the kernel
+   abstained — nothing to agree with), `already-resolved` (record an amendment as its own
+   decision; do not overwrite a correction), `option-not-offered` (that option was never
+   scored).
+
+4. **Attach to the Workroom when one exists.** Call `record_capsule_evidence` with a short,
+   operator-readable summary: decision question, chosen option, `interactionId`, next action.
+   This is the human-readable pointer. It does **not** substitute for step 3 — prose in an
+   evidence blob cannot be selected, counted, or learned from.
+
+5. **Escalation.** When the outcome was `escalate`/`defer`, also raise it through open
+   decision reviews. That is a different thing from the outcome record and does not replace it.
+
+6. **Do not** write a second decision record to notes-only tools for the same consult.
 
 ## Output template
 
@@ -80,6 +99,7 @@ The operator-visible audit surface is **`/coworker-decisions/decisions`** (and d
 - Question: <one sentence>
 - Recommendation: <optionId> (confidence <high|low>)
 - Operator disposition: <accepted | overridden: <option> | escalated>
+- Outcome recorded: <followed | overridden | unresolved> (record_decision_outcome)
 - DecisionInteraction: <DI-…>
 - Hub: /coworker-decisions/decisions/<DI-…>
 - Capsule evidence: <id or n/a>
@@ -89,6 +109,10 @@ The operator-visible audit surface is **`/coworker-decisions/decisions`** (and d
 ## Guardrails
 
 - **Single source of truth** is `DecisionInteraction`. Workroom evidence **points at** the DI; it does not replace it.
+- **The disposition belongs in a column, not in prose.** Before `record_decision_outcome`
+  existed this skill asked for the chosen option in a free-text evidence summary, and the
+  result was that of 1,080 recorded decisions exactly one carried a known outcome. A
+  sentence in an evidence blob is not a measurement.
 - Never claim "no decisions are recorded" without checking `/coworker-decisions/decisions` or the DI id from `ledger`.
 - Never invent DI ids. Only use ids returned by MCP.
 - If MCP progressive loading hides a tool, `load_tools` then retry — do not skip the ledger path.

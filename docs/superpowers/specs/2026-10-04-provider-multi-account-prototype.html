@@ -1,0 +1,164 @@
+<div id="dpf-account-proposal">
+<style>
+#dpf-account-proposal { --dp-bg:light-dark(#fafbfc,#12161d); --dp-surface:light-dark(#fff,#1a202a); --dp-ink:light-dark(#182335,#edf2fa); --dp-dim:light-dark(#526075,#a7b4c7); --dp-line:light-dark(#dce2ea,#323c4b); --dp-accent:light-dark(#176859,#63d1b9); --dp-soft:light-dark(#e9f5f1,#17352f); color:var(--dp-ink); font:14px/1.5 system-ui,sans-serif; }
+#dpf-account-proposal * { box-sizing:border-box; }
+#dpf-account-proposal .dp-window { background:var(--dp-bg); border:1px solid var(--dp-line); border-radius:14px; min-height:660px; overflow:hidden; }
+#dpf-account-proposal .dp-top { display:flex; flex-wrap:wrap; gap:12px; align-items:center; border-bottom:1px solid var(--dp-line); padding:16px 22px; background:var(--dp-surface); }
+#dpf-account-proposal .dp-brand { font-weight:650; letter-spacing:.03em; }
+#dpf-account-proposal .dp-sub { color:var(--dp-dim); font-size:12px; }
+#dpf-account-proposal .dp-content { padding:24px; }
+#dpf-account-proposal h2 { margin:0; font-size:24px; font-weight:600; letter-spacing:-.025em; }
+#dpf-account-proposal h3 { margin:0; font-size:16px; font-weight:600; }
+#dpf-account-proposal .dp-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:20px; }
+#dpf-account-proposal button { color:var(--dp-ink); background:var(--dp-surface); border:1px solid var(--dp-line); border-radius:7px; padding:8px 12px; font:inherit; }
+#dpf-account-proposal button.dp-main { background:var(--dp-ink); color:var(--dp-bg); border-color:var(--dp-ink); }
+#dpf-account-proposal .dp-summary { display:flex; flex-wrap:wrap; gap:10px 26px; margin-bottom:22px; color:var(--dp-dim); }
+#dpf-account-proposal .dp-summary strong { color:var(--dp-ink); font-weight:600; }
+#dpf-account-proposal .dp-group { margin-top:22px; }
+#dpf-account-proposal .dp-group-head { display:flex; justify-content:space-between; gap:12px; margin-bottom:10px; }
+#dpf-account-proposal .dp-grid-head, #dpf-account-proposal .dp-account { display:grid; grid-template-columns:1.2fr 1fr 1fr .75fr .8fr; gap:20px; align-items:center; }
+#dpf-account-proposal .dp-grid-head { padding:8px 14px; color:var(--dp-dim); font-size:12px; }
+#dpf-account-proposal .dp-account { padding:16px 14px; border-top:1px solid var(--dp-line); background:var(--dp-surface); }
+#dpf-account-proposal .dp-name { font-weight:600; }
+#dpf-account-proposal .dp-meter-label { display:flex; justify-content:space-between; gap:8px; font-variant-numeric:tabular-nums; }
+#dpf-account-proposal .dp-track { height:5px; margin:7px 0 5px; border-radius:4px; background:var(--dp-line); }
+#dpf-account-proposal .dp-fill { height:100%; border-radius:4px; background:var(--dp-accent); }
+#dpf-account-proposal .dp-status { font-size:12px; padding:4px 8px; display:inline-block; border-radius:6px; background:var(--dp-soft); color:var(--dp-accent); }
+#dpf-account-proposal .dp-status.dp-wait { background:var(--dp-bg); color:var(--dp-dim); }
+#dpf-account-proposal .dp-policy { margin-top:20px; padding-top:16px; border-top:1px solid var(--dp-line); display:flex; flex-wrap:wrap; gap:10px 22px; }
+#dpf-account-proposal .dp-detail { margin-top:18px; padding:16px; border:1px solid var(--dp-line); border-radius:9px; background:var(--dp-surface); }
+#dpf-account-proposal .dp-detail[hidden] { display:none; }
+#dpf-account-proposal .dp-lanes { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+#dpf-account-proposal .dp-lane { background:var(--dp-surface); border:1px solid var(--dp-line); border-radius:10px; padding:20px; }
+#dpf-account-proposal .dp-task { padding:16px 0; border-bottom:1px solid var(--dp-line); }
+#dpf-account-proposal .dp-task:last-child { border:0; padding-bottom:0; }
+#dpf-account-proposal .dp-task-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
+#dpf-account-proposal .dp-section { margin-top:22px; }
+#dpf-account-proposal .dp-fields { display:flex; gap:12px; flex-wrap:wrap; margin:12px 0; }
+#dpf-account-proposal label { display:flex; flex:1; min-width:170px; flex-direction:column; gap:5px; }
+#dpf-account-proposal input, #dpf-account-proposal select { width:100%; border:1px solid var(--dp-line); background:var(--dp-bg); color:var(--dp-ink); padding:9px; border-radius:6px; font:inherit; }
+@media(max-width:750px) { #dpf-account-proposal .dp-grid-head { display:none; } #dpf-account-proposal .dp-account { grid-template-columns:1fr 1fr; gap:14px; } #dpf-account-proposal .dp-identity { grid-column:1/-1; } #dpf-account-proposal .dp-lanes { grid-template-columns:1fr; } #dpf-account-proposal .dp-content { padding:18px; } #dpf-account-proposal .dp-window { min-height:990px; } }
+@media(pointer:coarse) { #dpf-account-proposal button { min-height:44px; } }
+#dpf-account-proposal .dp-window { min-height:550px; }
+#dpf-account-proposal .dp-top { padding:10px 16px; }
+#dpf-account-proposal .dp-content { padding:16px; }
+#dpf-account-proposal .dp-heading { margin-bottom:10px; }
+#dpf-account-proposal .dp-summary { margin-bottom:10px; }
+#dpf-account-proposal .dp-group { margin-top:12px; }
+#dpf-account-proposal .dp-group-head { margin-bottom:4px; align-items:center; }
+#dpf-account-proposal .dp-grid-head { padding:4px 10px; }
+#dpf-account-proposal .dp-account { padding:8px 10px; gap:12px; }
+#dpf-account-proposal .dp-grid-head,#dpf-account-proposal .dp-account { grid-template-columns:1.2fr 1fr 1fr .75fr 1.15fr; }
+#dpf-account-proposal .dp-account>div:last-child { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+#dpf-account-proposal button { padding:5px 8px; }
+#dpf-account-proposal .dp-track { height:4px; margin:4px 0; }
+#dpf-account-proposal .dp-policy { margin-top:12px; padding-top:10px; }
+#dpf-account-proposal .dp-detail { margin-top:10px; padding:12px; }
+#dpf-account-proposal .dp-picker { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin:10px 0; }
+#dpf-account-proposal .dp-picker button { text-align:left; padding:8px 10px; min-height:54px; }
+#dpf-account-proposal .dp-picker strong { display:block; font-weight:500; }
+#dpf-account-proposal .dp-local { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px; border-top:1px solid var(--dp-line); background:var(--dp-surface); }
+#dpf-account-proposal .dp-advanced { padding-top:10px; margin-top:10px; border-top:1px solid var(--dp-line); }
+#dpf-account-proposal .dp-advanced summary { color:var(--dp-dim); }
+#dpf-account-proposal [hidden] { display:none!important; }
+#dpf-account-proposal .dp-access { font-size:12px; color:var(--dp-dim); margin-top:2px; }
+#dpf-account-proposal .dp-issue { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:8px 10px; background:var(--dp-surface); border-left:3px solid var(--dp-accent); margin-bottom:10px; }
+#dpf-account-proposal .dp-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 18px; margin:8px 0; }
+#dpf-account-proposal .dp-facts dt { font-size:12px; color:var(--dp-dim); }
+#dpf-account-proposal .dp-facts dd { margin:0; }
+#dpf-account-proposal .dp-facts>div { padding:4px 0; }
+#dpf-account-proposal .dp-clearance { font-weight:600; color:var(--dp-ink); }
+#dpf-account-proposal .dp-routing-context { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:8px 0 12px; }
+#dpf-account-proposal .dp-routing-context label { flex:0 1 370px; min-width:0; }
+#dpf-account-proposal .dp-route-result { font-size:12px; font-weight:500; }
+#dpf-account-proposal .dp-grid-head,#dpf-account-proposal .dp-account { grid-template-columns:1fr 1.05fr 1.2fr .8fr .8fr 1.1fr; gap:10px; }
+#dpf-account-proposal .dp-account>div:last-child { display:block; }
+#dpf-account-proposal .dp-disclosure { padding:8px 0; border-top:1px solid var(--dp-line); }
+#dpf-account-proposal .dp-disclosure summary { font-weight:500; }
+#dpf-account-proposal .dp-detail-table { width:100%; border-collapse:collapse; margin-top:8px; }
+#dpf-account-proposal .dp-detail-table th,#dpf-account-proposal .dp-detail-table td { padding:6px; border-bottom:1px solid var(--dp-line); text-align:left; overflow-wrap:anywhere; }
+#dpf-account-proposal .dp-detail-table th { font-weight:500; color:var(--dp-dim); font-size:12px; }
+#dpf-account-proposal .dp-detail-table td { font-size:12px; }
+@media(max-width:480px) { #dpf-account-proposal .dp-facts { grid-template-columns:1fr; } }
+@media(max-width:750px) { #dpf-account-proposal .dp-picker { grid-template-columns:repeat(2,minmax(0,1fr)); } #dpf-account-proposal .dp-window { min-height:820px; } #dpf-account-proposal .dp-account { grid-template-columns:1fr 1fr; } }
+</style>
+<div class="viz-carousel" aria-label="Provider account interface proposals">
+<section data-variant="Capacity overview" aria-label="Capacity overview">
+<div class="dp-window">
+<div class="dp-top"><span class="dp-brand">DPF</span><span class="dp-sub">Platform / AI / Providers</span><span class="dp-sub">Design preview · sample accounts and readings</span></div>
+<div class="dp-content">
+<div class="dp-heading"><div><h2>Provider accounts</h2><div class="dp-sub">Configured providers · Capacity across accounts</div></div><button type="button" class="dp-main cursor-interaction" data-open-catalog aria-expanded="false">Add provider</button></div>
+<div class="dp-summary"><span><strong>3</strong> accounts with capacity</span><span><strong>1</strong> waiting for quota</span><span><strong>3</strong> tasks running</span><span>Cloud use: <strong>Governed</strong></span></div>
+<div class="dp-issue"><span class="dp-sub">Studio: public work only. Company-data evidence is unverified.</span><button type="button" class="cursor-interaction" data-account="Studio">Review restrictions</button></div>
+<div class="dp-routing-context"><label>Routing requirements · example task<select data-task><option value="code">Internal source code · tools · 64k context</option><option value="research">Public research · reasoning · 32k context</option><option value="documents">Confidential documents · extraction · 32k context</option></select></label><span class="dp-sub" data-route-summary aria-live="polite"></span></div>
+<div class="dp-group"><div class="dp-group-head"><h3>Claude <span class="dp-sub">· 2 accounts · 1 available</span></h3><button type="button" class="cursor-interaction" data-add-provider="Claude">+ Account</button></div>
+<div class="dp-grid-head"><span>Account / channel</span><span>5-hour remaining</span><span>7-day remaining</span><span>Active tasks</span><span>Status</span></div>
+<div class="dp-account"><div class="dp-identity"><div class="dp-name">Studio</div><div class="dp-sub">Subscription · CLI</div></div><div><div class="dp-meter-label"><span>Remaining</span><strong>74%</strong></div><div class="dp-track"><div class="dp-fill" style="width:74%"></div></div><div class="dp-sub">Resets in 3 hours</div></div><div><div class="dp-meter-label"><span>Remaining</span><strong>42%</strong></div><div class="dp-track"><div class="dp-fill" style="width:42%"></div></div><div class="dp-sub">Resets in 2 days</div></div><div>1 running<div class="dp-sub">Research brief</div></div><div><span class="dp-status">Available</span><div><button type="button" class="cursor-interaction" data-account="Studio">Details</button></div></div></div>
+<div class="dp-account"><div class="dp-identity"><div class="dp-name">Reserve</div><div class="dp-sub">Subscription · CLI</div></div><div><div class="dp-meter-label"><span>Remaining</span><strong>100%</strong></div><div class="dp-track"><div class="dp-fill" style="width:100%"></div></div><div class="dp-sub">Checked 2 minutes ago</div></div><div><div class="dp-meter-label"><span>Remaining</span><strong>0%</strong></div><div class="dp-track"></div><div class="dp-sub">Resets in 2 days</div></div><div>0 running<div class="dp-sub">Waiting</div></div><div><span class="dp-status dp-wait">Quota exhausted</span><div><button type="button" class="cursor-interaction" data-account="Reserve">Details</button></div></div></div>
+</div>
+<div class="dp-group"><div class="dp-group-head"><h3>OpenAI <span class="dp-sub">· 2 accounts · 2 available</span></h3><button type="button" class="cursor-interaction" data-add-provider="OpenAI">+ Account</button></div>
+<div class="dp-account"><div class="dp-identity"><div class="dp-name">Engineering</div><div class="dp-sub">Subscription · Codex CLI</div></div><div><div class="dp-meter-label"><span>Remaining</span><strong>97%</strong></div><div class="dp-track"><div class="dp-fill" style="width:97%"></div></div><div class="dp-sub">Resets in 47 minutes</div></div><div><div class="dp-meter-label"><span>Remaining</span><strong>68%</strong></div><div class="dp-track"><div class="dp-fill" style="width:68%"></div></div><div class="dp-sub">Resets in 6 days</div></div><div>1 running<div class="dp-sub">Code migration</div></div><div><span class="dp-status">Available</span><div><button type="button" class="cursor-interaction" data-account="Engineering">Details</button></div></div></div>
+<div class="dp-account"><div class="dp-identity"><div class="dp-name">Operations</div><div class="dp-sub">Business · API</div></div><div><div>Not reported</div><div class="dp-sub">Provider quota unavailable</div></div><div><div>$12.40 recorded</div><div class="dp-sub">DPF spend this month</div></div><div>1 running<div class="dp-sub">Document extraction</div></div><div><span class="dp-status">Available</span><div><button type="button" class="cursor-interaction" data-account="Operations">Details</button></div></div></div>
+</div>
+<div class="dp-group"><h3>Local</h3><div class="dp-local"><span>Local AI <span class="dp-sub">· Included · No external account</span></span><span class="dp-status">Ready</span></div></div>
+<div class="dp-detail" data-catalog hidden><div class="dp-task-head"><h3>Add a provider</h3><button type="button" class="cursor-interaction" data-close-catalog>Close</button></div><label>Find a provider<input data-search placeholder="Search provider catalog"></label><div class="dp-picker" data-picker></div><div data-setup hidden></div></div>
+<div class="dp-policy"><span>Routing <strong>Automatic</strong></span><span class="dp-sub">Account suitability → task capability → capacity → cost</span></div>
+<details class="dp-advanced"><summary class="cursor-interaction">Provider maintenance</summary><div class="dp-sub">Catalog sync: checked 2 minutes ago (sample). Discovery and maintenance results belong here; account-specific warnings remain beside their accounts.</div></details>
+<div class="dp-detail" data-detail hidden aria-live="polite"></div>
+</div></div>
+</section>
+<section data-variant="Initial install" aria-label="Initial install" hidden>
+<div class="dp-window"><div class="dp-top"><span class="dp-brand">DPF</span><span class="dp-sub">Platform / AI / Providers</span><span class="dp-sub">Design preview · sample work allocation</span></div><div class="dp-content">
+<div class="dp-heading"><div><h2>Set up your providers</h2><div class="dp-sub">Local AI is ready. Add accounts for more capacity.</div></div><button type="button" class="dp-main cursor-interaction" data-finish>Use local for now</button></div>
+<div class="dp-local"><span>Local AI <span class="dp-sub">· Included · No sign-in needed</span></span><span class="dp-status">Ready</span></div>
+<div class="dp-detail" data-initial-catalog><h3>Available providers</h3><div class="dp-sub">Sample catalog · Settings appear after you choose a provider</div><div class="dp-picker" data-picker></div><div data-setup hidden></div></div>
+<div class="dp-detail" data-finished hidden aria-live="polite"><h3>Providers</h3><div class="dp-sub">Setup complete · Local is ready</div><button type="button" class="dp-main cursor-interaction" data-reopen>Add provider</button></div>
+<div class="dp-policy"><span class="dp-sub">You can add providers or additional accounts whenever you need them.</span></div>
+</div></div>
+</section>
+</div>
+<script>
+(() => {
+ const root=document.getElementById('dpf-account-proposal');
+ const descriptions={Studio:'Studio · Claude subscription / CLI. Sample reading: short window 74% remaining; weekly 42% remaining. Checked 2 minutes ago. Research brief is running. Account suitability is evaluated separately for every task.',Reserve:'Reserve · Claude subscription / CLI. Sample reading: weekly quota exhausted, resets in 2 days. Short-window capacity does not override the exhausted weekly window. Other accounts remain eligible.',Engineering:'Engineering · OpenAI subscription / Codex CLI. Sample reading: short window 97% remaining; weekly 68% remaining. Code migration is running. A task keeps its isolated sign-in context until a safe handoff.',Operations:'Operations · OpenAI business / API. Quota is not reported. $12.40 is DPF-recorded monthly usage, not the provider invoice. Document extraction is running. Spending and request limits are enforced separately.'};
+ const accountFacts={
+ Studio:{provider:'Claude',channel:'Subscription / CLI',access:'Public work only',evidence:'Not verified',reason:'Company-data terms and account evidence have not been verified. Public research can continue; internal and restricted work remains blocked.',terms:'No training: not verified · Retention: not verified',region:'Account entitlement not verified',expiry:'Refresh available · expiry shown when reported'},
+ Reserve:{provider:'Claude',channel:'Subscription / CLI',access:'Public work only',evidence:'Not verified',reason:'Weekly quota exhausted. This account cannot accept work until capacity returns. Other suitable accounts can continue.',terms:'No training: not verified · Retention: not verified',region:'Account entitlement not verified',expiry:'Connected · refresh available'},
+ Engineering:{provider:'OpenAI',channel:'Subscription / Codex CLI',access:'Source code allowed (sample)',evidence:'Reviewed for source-code work (sample)',reason:'Source-code work is eligible in this illustration. Customer, employee and regulated records need their own suitability checks.',terms:'See account-specific evidence; no universal company-data allowance',region:'Region-restricted work remains blocked without entitlement',expiry:'Connected · isolated CLI sign-in'},
+ Operations:{provider:'OpenAI',channel:'Business / API',access:'Internal operations allowed (sample)',evidence:'Reviewed for internal operations (sample)',reason:'Internal document extraction is eligible in this illustration. Regulated work remains blocked unless its requirements are evidenced.',terms:'Account terms retained with evidence and expiry',region:'Required-region entitlement evaluated per task',expiry:'API credential · expiry not reported'}
+ };
+ const rowButtons=root.querySelectorAll('.dp-account [data-account]');
+ const routingExamples={
+ Studio:{tier:0,clearance:'Public only',scope:'Company data blocked',lanes:['research'],capacity:true,models:[{name:'Research model A',lanes:['research'],context:64,tools:true},{name:'General model B',lanes:['research','documents'],context:32,tools:false}]},
+ Reserve:{tier:0,clearance:'Public only',scope:'Company data blocked',lanes:['research'],capacity:false,models:[{name:'Research model A',lanes:['research'],context:64,tools:true}]},
+ Engineering:{tier:1,clearance:'Internal',scope:'Source code approved',lanes:['code','research'],capacity:true,models:[{name:'Coding model A',lanes:['code','research'],context:128,tools:true},{name:'General model B',lanes:['research'],context:32,tools:false}]},
+ Operations:{tier:2,clearance:'Confidential',scope:'Document work approved',lanes:['documents','research'],capacity:true,models:[{name:'Document model A',lanes:['documents','research'],context:64,tools:true}]}
+ };
+ const taskExamples={code:{tier:1,context:64,tools:true,label:'internal source-code work'},research:{tier:0,context:32,tools:false,label:'public research'},documents:{tier:2,context:32,tools:false,label:'confidential document work'}};
+ accountFacts.Engineering.access='Internal tier · Source-code work approved (sample)';accountFacts.Operations.access='Confidential tier · Document work approved (sample)';
+ const headings=root.querySelector('.dp-grid-head');headings.replaceChildren();['Account / work','Data clearance','Models / capabilities','5-hour left','7-day left','Routing / capacity'].forEach(text=>{const span=document.createElement('span');span.textContent=text;headings.append(span);});
+ rowButtons.forEach(button=>{const row=button.closest('.dp-account');const original=Array.from(row.children);const note=document.createElement('div');note.className='dp-access';note.textContent='Connected';row.querySelector('.dp-identity').append(note);const work=document.createElement('div');work.className='dp-sub';work.textContent=original[3].textContent.replace('running','running · ');row.querySelector('.dp-identity').append(work);const clearance=document.createElement('div');clearance.innerHTML='<div class="dp-clearance"></div><div class="dp-sub"></div>';clearance.children[0].textContent=routingExamples[button.dataset.account].clearance;clearance.children[1].textContent=routingExamples[button.dataset.account].scope;original[3].dataset.models=button.dataset.account;original[3].replaceChildren();row.replaceChildren(original[0],clearance,original[3],original[1],original[2],original[4]);const route=document.createElement('div');route.className='dp-route-result';route.dataset.route=button.dataset.account;original[4].prepend(route);const status=row.querySelector('.dp-status');if(status.textContent==='Available')status.textContent='Capacity ready';});
+ function updateRouting(){const key=root.querySelector('[data-task]').value;const task=taskExamples[key];let eligible=0;Object.entries(routingExamples).forEach(([name,a])=>{const matches=a.models.filter(m=>m.lanes.includes(key)&&m.context>=task.context&&(!task.tools||m.tools));const dataOk=a.tier>=task.tier&&a.lanes.includes(key);const route=dataOk&&matches.length>0&&a.capacity;eligible+=Number(route);const modelCell=root.querySelector('[data-models="'+name+'"]');modelCell.replaceChildren();const count=document.createElement('div');count.textContent=matches.length+' matching / '+a.models.length+' accessible';const profile=document.createElement('div');profile.className='dp-sub';profile.textContent=matches.length?matches.map(m=>m.name+' · '+m.context+'k'+(m.tools?' · Tools':'')).join('; '):'No model meets task requirements';modelCell.append(count,profile);root.querySelector('[data-route="'+name+'"]').textContent=!dataOk?'Data / scope blocked':matches.length===0?'Capability blocked':!a.capacity?'Waiting for quota':'Eligible';});root.querySelector('[data-route-summary]').textContent=eligible+' eligible remote account'+(eligible===1?'':'s')+' for '+task.label+'. Demo model profiles; region and contract checks also apply.';}
+ root.querySelector('[data-task]').addEventListener('change',updateRouting);updateRouting();
+ function facts(items){return '<dl class="dp-facts">'+items.map(([key,value])=>'<div><dt>'+key+'</dt><dd>'+value+'</dd></div>').join('')+'</dl>';}
+ function renderAccount(name,detail){const a=accountFacts[name];const spend=name==='Operations'?'$12.40 recorded this month (sample)':'Subscription usage shown as quota; no per-call price inferred';detail.innerHTML='<div class="dp-task-head"><div><h3>'+name+' · '+a.provider+'</h3><span class="dp-sub">Account details · illustrative data</span></div><button type="button" class="cursor-interaction" data-dismiss>Close details</button></div><div class="dp-issue"><span>'+a.reason+'</span></div>'+ 
+ '<details class="dp-disclosure" open><summary class="cursor-interaction">Connection &amp; access</summary>'+facts([['Connection / channel','Connected · '+a.channel],['Allowed work',a.access],['Account evidence',a.evidence],['Authentication',a.expiry],['Data terms',a.terms],['Processing regions',a.region],['Supplier contract','Link and account coverage retained; not supplied in this preview'],['Evidence expiry','Shown per claim when available'],['Underlying providers','Not applicable for these sample direct accounts'],['Risk overrides','None in this preview; explicit override status would remain visible']])+'<details class="dp-disclosure"><summary class="cursor-interaction">Supporting evidence and declarations</summary><div class="dp-sub">Account type, source documents, reviewed claims, review dates, evidence expiry, declared terms versus verified terms, residency requirements, drift observations, and any approved underlying providers retain separate records.</div></details></details>'+ 
+ '<details class="dp-disclosure"><summary class="cursor-interaction">Models &amp; execution</summary>'+facts([['Discovered models','Account-accessible catalog; preview does not invent model availability'],['Enabled families','Current selection retained'],['Context and output limits','Per-model values, with source and freshness'],['Tools and modalities','Per-model support; unsupported features stay explicit'],['Capability evaluations','Reasoning, code generation, tool fidelity, instruction following, structured output, conversation and context retention'],['Score confidence','Measured versus baseline; evaluation count and time retained'],['Execution recipes','Contract family and supported execution channel retained'],['Chosen route','Account, model, engine, reason and execution phase retained']])+'</details>'+ 
+ '<details class="dp-disclosure"><summary class="cursor-interaction">Usage &amp; billing</summary>'+facts([['Quota observation',descriptions[name]],['DPF usage',spend],['Catalog pricing','Separate from DPF usage and provider invoice'],['Routing cost band','Separate routing metadata; not an invoice'],['Billing profile','Supplier, contract coverage, currency, cadence, monthly commitment and payment method retained'],['Provider invoice','Not connected in this preview; never equated with DPF usage'],['Budget limits','Configured limits, warnings and rejected work retained'],['Finance work','Reconciliation, open work items and payment evidence link to Finance']])+'</details>'+ 
+ '<details class="dp-disclosure"><summary class="cursor-interaction">Diagnostics &amp; history</summary>'+facts([['Authentication history','Connection tests, refresh outcomes and actionable reconnect reasons'],['Capacity history','Quota source, observation time, reset windows and throttling reasons'],['Routing decisions','Selected/excluded candidates and reasons'],['Performance','Latency, failures and evaluation history'],['Catalog operations','Discovery, profiling and reconciliation results'],['Scheduled maintenance','Last result, next run and errors; separate from spend']])+'</details>';detail.querySelector('[data-dismiss]').addEventListener('click',()=>{detail.hidden=true;root.querySelectorAll('[data-account]').forEach(b=>b.setAttribute('aria-expanded','false'));});}
+ root.querySelectorAll('[data-account]').forEach(button=>{button.setAttribute('aria-expanded','false');button.addEventListener('click',()=>{const detail=button.closest('section').querySelector('[data-detail]');root.querySelectorAll('[data-account]').forEach(b=>b.setAttribute('aria-expanded','false'));const row=button.closest('.dp-account');if(row)row.after(detail);else button.closest('.dp-issue').after(detail);detail.hidden=false;renderAccount(button.dataset.account,detail);button.setAttribute('aria-expanded','true');detail.querySelector('[data-dismiss]').addEventListener('click',()=>button.focus());});});
+ const providers=[['Claude','Subscription / API'],['OpenAI','Subscription / API'],['Google','API'],['xAI','API'],['Z.ai','API / coding plan'],['OpenRouter','API'],['Mistral','API'],['NVIDIA','API']];
+ function setup(section,name){const slot=section.querySelector('[data-setup]');slot.hidden=false;slot.innerHTML='<div class="dp-policy"><h3></h3></div><div class="dp-fields"><label>Account label<input placeholder="e.g. Research team"></label><label>Connection method<select></select></label></div><div class="dp-sub">Preview only · No credentials collected. Available connection methods will come from the provider catalog.</div>';slot.querySelector('h3').textContent='Connect '+name;const methods=(name==='Claude'||name==='OpenAI')?['Provider-supported sign-in','API key']:['API key'];methods.forEach(method=>{const option=document.createElement('option');option.textContent=method;slot.querySelector('select').append(option);});slot.querySelector('input').focus();}
+ root.querySelectorAll('[data-picker]').forEach(list=>providers.forEach(([name,channel])=>{const button=document.createElement('button');button.type='button';button.className='cursor-interaction';button.dataset.provider=name;const label=document.createElement('strong');label.textContent=name;const sub=document.createElement('span');sub.className='dp-sub';sub.textContent=channel;button.append(label,sub);button.addEventListener('click',()=>setup(list.closest('section'),name));list.append(button);}));
+ const catalog=root.querySelector('[data-catalog]');const trigger=root.querySelector('[data-open-catalog]');
+ function openCatalog(open){catalog.hidden=!open;trigger.setAttribute('aria-expanded',String(open));if(open)catalog.querySelector('input').focus();}
+ trigger.addEventListener('click',()=>openCatalog(catalog.hidden));root.querySelector('[data-close-catalog]').addEventListener('click',()=>{openCatalog(false);trigger.focus();});
+ root.querySelector('[data-search]').addEventListener('input',event=>{const query=event.target.value.toLowerCase();catalog.querySelectorAll('[data-provider]').forEach(button=>button.hidden=!button.textContent.toLowerCase().includes(query));});
+ root.querySelectorAll('[data-add-provider]').forEach(button=>button.addEventListener('click',()=>{openCatalog(true);setup(button.closest('section'),button.dataset.addProvider);}));
+ const firstCatalog=root.querySelector('[data-initial-catalog]');const finished=root.querySelector('[data-finished]');const finish=root.querySelector('[data-finish]');
+ finish.addEventListener('click',()=>{firstCatalog.hidden=true;finished.hidden=false;finish.hidden=true;finish.closest('section').querySelector('h2').textContent='Providers';});
+ root.querySelector('[data-reopen]').addEventListener('click',()=>{firstCatalog.hidden=false;finished.hidden=true;});
+ if(globalThis.Tweak){const state={padding:8};const tweak=new Tweak({container:root,onChange:()=>root.querySelectorAll('.dp-account').forEach(row=>row.style.padding=state.padding+'px 10px')});tweak.addSlider(state,'padding',{label:'Account row spacing',min:4,max:12,step:4,unit:'px'});}
+})();
+</script>
+</div>

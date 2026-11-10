@@ -1,4 +1,3 @@
-import { lazyExec } from "@/lib/shared/lazy-node";
 import {
   createSandbox,
   destroySandbox,
@@ -16,8 +15,6 @@ import type {
   SandboxSpec,
 } from "../provider-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-
-const exec = lazyExec();
 
 const capabilities: BuildExecutionProviderCapabilities = {
   isolation: "container",

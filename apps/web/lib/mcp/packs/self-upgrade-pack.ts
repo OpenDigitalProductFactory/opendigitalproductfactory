@@ -1,11 +1,11 @@
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
   {
     name: "request_self_upgrade",
     description:
-      "Request the governed portal self-upgrade pipeline. Queues the same run path as the operator control when the install is inside its allowed off-hours window; outside that window it returns a human-override-required result and does not queue a run. Routine requests also wait for the release batch: when fewer merged updates have accumulated than the batch threshold, it returns a batch-below-threshold result with the pending tally instead of queueing — wait for the batch to deploy before validating live.",
+      "Request the governed portal self-upgrade pipeline. Inside the maintenance window it queues the same run path as the operator control; outside the window, or during an operator blackout, nothing runs now — the request is deferred to the next window (status deferred_to_window, with runAt saying when the scheduled upgrade picks it up). An operator can still deploy immediately from /ops/self-upgrade. Routine requests also wait for the release batch: when fewer merged updates have accumulated than the batch threshold, it returns a batch-below-threshold result with the pending tally instead of queueing — wait for the batch to deploy before validating live.",
     inputSchema: {
       type: "object",
       properties: {
@@ -19,8 +19,22 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_provider_connections",
     executionMode: "immediate",
     sideEffect: true,
-    // destroys state → consult-gated (TAK §8.4.1).
+    // Execution retains its controls; a delegated DEV agent may request admission.
     consequence: "irreversible",
+    consequenceForCall: async ({ params }) => {
+      if (Object.keys(params).some((key) => key !== "reason") ||
+          (params["reason"] !== undefined && typeof params["reason"] !== "string")) {
+        return { consequence: "irreversible", reason: "non-routine-upgrade-request" };
+      }
+      const [{ prisma }, { loadInstanceStance, prismaInstanceStanceStore }] = await Promise.all([
+        import("@dpf/db"),
+        import("@/lib/install/instance-stance"),
+      ]);
+      const stance = await loadInstanceStance(prismaInstanceStanceStore(prisma));
+      return stance.environmentClass === "development" && stance.primaryPurpose === "evolve-dpf"
+        ? { consequence: null, reason: "governed-development-upgrade-request" }
+        : { consequence: "irreversible", reason: "upgrade-request-outside-development" };
+    },
   },
   {
     name: "repair_promoter_image",
@@ -100,6 +114,14 @@ async function requestSelfUpgradeTool(
     };
   }
 
+  if (result.status === "deferred_to_window") {
+    return {
+      success: true,
+      message: result.message,
+      data: result as unknown as Record<string, unknown>,
+    };
+  }
+
   if (result.status === "human_override_required") {
     return {
       success: true,
@@ -126,9 +148,8 @@ async function requestSelfUpgradeTool(
 
   return {
     success: false,
-    error: result.message,
-    message: result.message,
-    data: result as unknown as Record<string, unknown>,
+    error: "Unexpected self-upgrade admission state.",
+    message: "Unexpected self-upgrade admission state.",
   };
 }
 
@@ -204,11 +225,35 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
       import("@/lib/self-upgrade/run-store"),
     ]);
   const config = await getSelfUpgradeConfig();
-  const [batch, latestRun] = await Promise.all([
+  const { getLastCheckedAt } = await import("@/lib/self-upgrade/last-check");
+  const { declineIsCurrent, getScheduledDecline, getWindowDecline, missedWindowDecline, nextScheduledCheckAt } =
+    await import("@/lib/self-upgrade/scheduled-gate");
+  const { resolveEffectiveUpgradeWindow, schedulingWindowOpening } = await import("@/lib/self-upgrade/effective-window");
+  const { getDeferredUpgradeRequest, isDeferredRequestPending } = await import("@/lib/self-upgrade/deferred-request");
+  const now = new Date();
+  const [batch, latestRun, lastCheckedAt, decline, deferred, windowDecline, windowOpening] = await Promise.all([
     resolveReleaseBatchStatus({ fresh: true, config }),
     getLatestRun(),
+    getLastCheckedAt(),
+    getScheduledDecline(),
+    getDeferredUpgradeRequest(),
+    getWindowDecline(),
+    // BI-EF1AC111: the window opening the next check would run in, which the
+    // interval is anchored to. Unknown (null) falls back to the plain interval.
+    resolveEffectiveUpgradeWindow({ config, now })
+      .then((window) => schedulingWindowOpening(window, now))
+      .catch(() => null),
   ]);
   const support = batch.support;
+  // BI-3CA18934: the unattended path is throttled by checkIntervalHours and
+  // gated by window/cooldown/blackout, none of which this status consulted. It
+  // reported routineUpgradeEligible:true while the next unattended check was 22
+  // hours away, so a merged fix looked imminent and never arrived. Report the
+  // schedule, and never call the routine path eligible while it would decline.
+  const nextScheduledCheck = nextScheduledCheckAt(lastCheckedAt, config.checkIntervalHours, now, windowOpening);
+  const scheduledGate = declineIsCurrent(decline, lastCheckedAt) ? decline : null;
+  const missedWindow = missedWindowDecline(windowDecline, lastCheckedAt);
+  const releaseBatchEligible = support.enabled && batch.eligible;
   return {
     success: true,
     message: support.message ?? batch.summary,
@@ -219,7 +264,19 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
       targetKind: support.targetKind,
       sourceMode: config.sourceMode,
       batchingApplicable: support.supported && batch.applicable,
-      routineUpgradeEligible: support.enabled && batch.eligible,
+      releaseBatchEligible,
+      routineUpgradeEligible: releaseBatchEligible && nextScheduledCheck === null,
+      lastCheckedAt: lastCheckedAt?.toISOString() ?? null,
+      checkIntervalHours: config.checkIntervalHours,
+      nextScheduledCheckAt: nextScheduledCheck?.toISOString() ?? null,
+      scheduledGate: scheduledGate ? { reason: scheduledGate.reason, at: scheduledGate.at } : null,
+      // BI-EF1AC111 (AC-3): a window that went without a check, and why. The
+      // daytime ticks after it do not overwrite it; the next check clears it.
+      missedWindow: missedWindow
+        ? { reason: missedWindow.reason, at: missedWindow.at, windowOpenedAt: missedWindow.windowOpenedAt }
+        : null,
+      // BI-2128872C: an agent request waiting for the next maintenance window.
+      deferredRequest: isDeferredRequestPending(deferred, lastCheckedAt) ? deferred : null,
       reason: support.supported ? batch.reason : support.reason,
       pendingPrCount: batch.pendingCount,
       batchMinPendingPrs: batch.minPendingPrs,
@@ -271,12 +328,13 @@ async function getQuiescenceStatusTool(): Promise<ToolResult> {
       retryAfterSeconds,
       writesRefused,
       readOperationsAllowed: true,
-      cleanupOperationsAllowed: ["release_nonprod_environment_lease"],
+      // Mirrors QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS in app/api/mcp/v1/route.ts.
+      cleanupOperationsAllowed: ["release_nonprod_environment_lease", "renew_nonprod_environment_lease"],
       refusedOperations: writesRefused
         ? ["mutating MCP writes", "new lease claims", "local-CI evidence writes"]
         : [],
       writeImplications: writesRefused
-        ? "Mutating MCP writes are refused during active quiescence; retry after the level returns to normal. Lease release remains cleanup-safe so local-CI can finalize without leaking a lease."
+        ? "Mutating MCP writes are refused during active quiescence; retry after the level returns to normal. Lease release and renewal remain allowed, so a running local-CI gate keeps its lease and can finalize without leaking it."
         : "Mutating MCP writes are accepted. Continue normal local-CI evidence recording and lease operations.",
     },
   };

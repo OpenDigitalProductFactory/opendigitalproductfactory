@@ -10,6 +10,9 @@ const readFile = vi.fn();
 vi.mock("@/lib/shared/lazy-node", () => ({
   lazyFsPromises: () => ({ readdir, readFile }),
   lazyPath: () => ({ resolve: (...parts: string[]) => parts.join("/") }),
+  lazyExec: () => async () => {
+    throw new Error("no git in this fixture");
+  },
   getCwd: () => "/cwd",
 }));
 
@@ -23,12 +26,12 @@ afterEach(() => {
 describe("loadCommittedSchema", () => {
   it("returns null when the schema directory cannot be read — a read failure, not an absence", async () => {
     readdir.mockRejectedValueOnce(new Error("ENOENT"));
-    expect(await loadCommittedSchema({ readGit })).toBeNull();
+    expect(await loadCommittedSchema({ skipDefaultBranch: true, readGit })).toBeNull();
   });
 
   it("returns null when the directory holds no .prisma files", async () => {
     readdir.mockResolvedValueOnce(["README.md"]);
-    expect(await loadCommittedSchema({ readGit })).toBeNull();
+    expect(await loadCommittedSchema({ skipDefaultBranch: true, readGit })).toBeNull();
   });
 
   it("joins every domain file and reports provenance naming the tree", async () => {
@@ -36,7 +39,7 @@ describe("loadCommittedSchema", () => {
     readdir.mockResolvedValueOnce(["b.prisma", "a.prisma"]);
     readFile.mockResolvedValueOnce("model A {}").mockResolvedValueOnce("model B {}");
 
-    const result = await loadCommittedSchema({ readGit });
+    const result = await loadCommittedSchema({ skipDefaultBranch: true, readGit });
 
     expect(result).not.toBeNull();
     expect(result!.provenance.tree).toBe("committed");
@@ -51,7 +54,7 @@ describe("loadCommittedSchema", () => {
     readdir.mockResolvedValueOnce(["a.prisma"]);
     readFile.mockResolvedValueOnce("model A {}");
 
-    const result = await loadCommittedSchema({ readGit });
+    const result = await loadCommittedSchema({ skipDefaultBranch: true, readGit });
 
     expect(result!.trust.kind).toBe("data-trust-vector");
     expect(result!.trust.subject.type).toBe("committed-schema");

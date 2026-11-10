@@ -9,6 +9,9 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/shell/Header";
 import { loadInstallationBadge } from "@/lib/install/estate-identity";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { namespaceMessages } from "@dpf/i18n";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 import { StatusBanner } from "@/components/shell/StatusBanner";
 import { UpdatePendingBanner } from "@/components/shell/UpdatePendingBanner";
@@ -18,7 +21,7 @@ import { SystemEventProvider } from "@/components/platform/SystemEventProvider";
 import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
-import { getShellNavSections } from "@/lib/permissions";
+import { getGrantedCapabilities, getShellNavSections } from "@/lib/permissions";
 import { cookies } from "next/headers";
 import { getActiveOrgCapabilities } from "@/lib/storefront/org-capabilities.server";
 import { AppRail } from "@/components/shell/AppRail";
@@ -28,6 +31,10 @@ import { resolveHomePhoneCountry } from "@/lib/phone-country.server";
 import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { UxInitialLoadBoundary } from "@/components/shell/UxInitialLoadBoundary";
+import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
+import { resolveFinanceSurface } from "@/lib/finance/finance-surface";
+import { recordUserSeen } from "@/lib/identity/last-seen";
+import { PortalVitals } from "@/components/telemetry/PortalVitals";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -46,6 +53,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   if (session.user.type === "customer") redirect("/portal");
 
   const user = session.user;
+  const { language } = await getLocaleContext();
+  // Approvals route to one person; this is how an operator can tell whether
+  // that person is still around (BI-61DE8177). Throttled and best effort.
+  await recordUserSeen(prisma, user.id);
 
   const [
     latestDiscoveryRun,
@@ -54,6 +65,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     useUnifiedCoworker,
     phoneCountry,
     activeOrgCapabilities,
+    storefrontConfig,
   ] = await Promise.all([
     prisma.discoveryRun.findFirst({
       orderBy: { startedAt: "desc" },
@@ -76,6 +88,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       // entries just stay hidden.
       console.error("[shell-nav] active-capability resolution failed", error);
       return new Set<string>() as ReadonlySet<string>;
+    }),
+    prisma.storefrontConfig.findFirst({
+      select: { archetype: { select: { archetypeId: true, category: true } } },
     }),
   ]);
 
@@ -154,28 +169,61 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         where: { completedAt: null, userId: user.id },
         select: { id: true, currentStep: true, steps: true, context: true },
       });
+  // A recorded monitoring choice completes that step; a missing decision hides
+  // it. The settings page already persists the decision, so this only moves setup.
+  let setupOverlay = activeSetup;
+  let monitoringCapabilityDecision: "enabled" | "disabled" | "undecided" | null = null;
+  if (activeSetup) {
+    const { reconcileMonitoringSetupStep } = await import("@/lib/actions/setup-progress");
+    const reconciled = await reconcileMonitoringSetupStep(activeSetup);
+    setupOverlay = reconciled.progress;
+    monitoringCapabilityDecision = reconciled.monitoringCapabilityDecision;
+  }
 
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
   // Worker/operator rail mode (EP-NAV-COHERENCE P4 / BI-655418A7). Default
   // "operator" = the full rail; "Simple" writes worker via the rail toggle.
   // Operator is always one toggle away, so worker mode never strands a user.
   const navMode = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
-  const shellNavSections = activeSetup
+  const userContext = {
+    userId: user.id,
+    platformRole: user.platformRole,
+    isSuperuser: user.isSuperuser,
+  };
+  const customerSurface = resolveCustomerSurface(storefrontConfig?.archetype.archetypeId, []);
+  // Rail and breadcrumb use the page's own title when the archetype renames a
+  // section, so a label never opens a page called something else (EP-2FB6C0CC).
+  const financeShellLabel =
+    resolveFinanceSurface(storefrontConfig?.archetype.category, storefrontConfig?.archetype.archetypeId).shellLabel ?? null;
+  const shellLabelOverrides: Record<string, string> = {
+    customer: customerSurface.shellLabel,
+    ...(financeShellLabel ? { finance: financeShellLabel } : {}),
+  };
+  const shellNavSections = (setupOverlay
     ? []
-    : getShellNavSections(
-        {
-          userId: user.id,
-          platformRole: user.platformRole,
-          isSuperuser: user.isSuperuser,
-        },
-        { activeOrgCapabilities, mode: navMode },
-      );
+    : getShellNavSections(userContext, { activeOrgCapabilities, mode: navMode })).map((section) => ({
+      ...section,
+      items: section.items.map((item) =>
+        item.key === "customer"
+          ? {
+              ...item,
+              label: customerSurface.shellLabel,
+              description: customerSurface.detailHint,
+            }
+          : shellLabelOverrides[item.key]
+            ? { ...item, label: shellLabelOverrides[item.key]! }
+            : item,
+      ),
+    }));
+  // The breadcrumb offers only what this principal can open. Same registry the
+  // rail filters on and the destination route enforces (BI-2777B86B).
+  const grantedCapabilities = getGrantedCapabilities(userContext);
 
   return (
     <PhoneCountryProvider country={phoneCountry}>
       <SystemEventProvider>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
-      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
+      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]" data-nav-mode={navMode}>
         {/* Common Shell Action-Result Contract (BI-9C0954D0) C6: the first
             focusable element skips the global header/rail chrome straight to the
             route task, so keyboard and assistive-tech owners reach their work
@@ -186,14 +234,17 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         >
           Skip to main content
         </a>
-        {activeSetup && (
+        {setupOverlay && (
           <SetupOverlay
-            progressId={activeSetup.id}
-            currentStep={activeSetup.currentStep}
-            steps={activeSetup.steps as Record<string, "pending" | "completed" | "skipped">}
-            setupContext={(activeSetup.context ?? {}) as Record<string, string>}
+            progressId={setupOverlay.id}
+            currentStep={setupOverlay.currentStep}
+            steps={setupOverlay.steps as Record<string, "pending" | "completed" | "skipped">}
+            setupContext={{
+              ...((setupOverlay.context ?? {}) as Record<string, string>),
+              ...(monitoringCapabilityDecision ? { monitoringCapabilityDecision } : {}),
+            }}
             triggeredSteps={
-              ((activeSetup.context ?? {}) as { triggeredSteps?: string[] }).triggeredSteps ?? []
+              ((setupOverlay.context ?? {}) as { triggeredSteps?: string[] }).triggeredSteps ?? []
             }
           />
         )}
@@ -219,6 +270,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           installationBadge={await loadInstallationBadge({
             readConfig: async (key) =>
               (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+            // The badge falls back to the organization named at setup (BI-CA54ACC8).
+            readOrganizationName: async () => organization?.name ?? null,
           })}
         />
         <div className="flex flex-1 flex-col lg:flex-row">
@@ -271,18 +324,31 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                   className="mx-auto w-full"
                   style={{ maxWidth: "var(--shell-page-content-max-width, none)" }}
                 >
-                  {shellNavSections.length > 0 && <ShellBreadcrumb />}
+                  {shellNavSections.length > 0 && (
+                    <ShellBreadcrumb
+                      capabilities={grantedCapabilities}
+                      labelOverrides={shellLabelOverrides}
+                    />
+                  )}
+                  <PortalVitals />
                   <UxInitialLoadBoundary>{children}</UxInitialLoadBoundary>
                 </div>
               </div>
             </div>
           </main>
         </div>
-        <AgentCoworkerShell
-          userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
-          useUnifiedCoworker={useUnifiedCoworker}
-          cooConversationalName={organization?.cooConversationalName ?? null}
-        />
+        {/* The global coworker is outside page providers. Keep its proposal
+            and answer-feedback namespaces local to this subtree. */}
+        <MessagesProvider locale={language} messages={{
+          approvals: namespaceMessages(language, "approvals"),
+          routingManagement: namespaceMessages(language, "routingManagement"),
+        }}>
+          <AgentCoworkerShell
+            userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
+            useUnifiedCoworker={useUnifiedCoworker}
+            cooConversationalName={organization?.cooConversationalName ?? null}
+          />
+        </MessagesProvider>
         {/* FeedbackButton moved to Header — see HeaderFeedbackButton */}
         <QueueFlusher />
         <ModelWarmup />

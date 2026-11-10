@@ -28,3 +28,10 @@ has since moved on while the doc stood still.
 The gate is the floor; the staleness report is the sweep. Neither can do the other's
 job — a link-checker can't read intent, and an intent-reviewer shouldn't be re-run by
 hand on every route rename.
+
+## [gate-cost-inventory-2026-11.md](gate-cost-inventory-2026-11.md)
+
+A point-in-time, evidence-based inventory of every check that can block a change from merging, covering required
+GitHub checks, local guards, hooks, readiness gates, manifests and reviewer token caps. Each gate is classified by
+risk, with its measured cost and frequency and a ranked keep / demote / auto-fix / retire recommendation. It is
+analysis only and changes no gate (BI-CF5ECBF6).

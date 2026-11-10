@@ -99,21 +99,26 @@ git -C "$root" fetch origin --quiet
 if [ -d "$target" ]; then
     printf '  [skip] worktree already exists: %s\n' "$target"
 else
-    # Reuse the branch if it already exists (e.g. resuming); otherwise create it
-    # off origin/main. -b fails on an existing branch, so branch on existence.
-    if git -C "$root" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
-        git -C "$root" worktree add "$target" "$branch"
-    else
-        git -C "$root" worktree add "$target" -b "$branch" origin/main
-    fi
+    # Governed provisioning (BI-D1FB8C4D): the platform admits and binds the
+    # Workroom BEFORE the worktree exists, then the library creates it (reusing
+    # an existing branch, else off origin/main) and records its source
+    # identity. A refusal or an unreachable platform creates nothing; the only
+    # override is the operator break-glass DPF_WORKTREE_BREAK_GLASS=<reason>.
+    node "$root/scripts/lib/worktree-provision.mjs" --main-root "$root" --target "$target" --branch "$branch" >/dev/null || exit 1
 fi
 
-# Seed MCP config (.mcp.json / .vscode + worktree-scoped COMPOSE_PROJECT_NAME) so
-# the dpf connector and isolated compose stack work in the new worktree.
+# Seed the worktree (.vscode/mcp.json when the root has one + worktree-scoped
+# COMPOSE_PROJECT_NAME) so the isolated compose stack works in the new
+# worktree. Claude Code's dpf connector is the dpf-platform plugin; no project
+# .mcp.json is copied (BI-5201141C).
 if [ -x "$root/scripts/seed-worktree-mcp.sh" ]; then
     "$root/scripts/seed-worktree-mcp.sh" "$target" || \
-        printf '  [warn] MCP seed skipped (root .mcp.json not present yet)\n' >&2
+        printf '  [warn] worktree seed failed; see the output above\n' >&2
 fi
+
+# The Workroom claim was made above, before creation (BI-D1FB8C4D). Binding
+# after the fact (BI-0B292D84 layer 1) was never fatal, so an unbound tree was
+# still created whenever the platform was unreachable; that path is gone.
 
 cat <<EOF
 

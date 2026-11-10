@@ -8,6 +8,30 @@ import {
 } from "./local-inference-runtime-policy";
 
 describe("local inference runtime policy", () => {
+  it("preserves generic local operator limits even within a governed parent", () => {
+    expect(resolveInferenceRuntimePolicy("local", "another-model", { localTimeoutMs: 60_000 }, {
+      deadlineAt: 1_000_000, now: 100_000,
+    }).effectiveTimeoutMs).toBe(60_000);
+    expect(resolveInferenceRuntimePolicy("local", "another-model", { localTimeoutMs: 60_000 }, {
+      deadlineAt: 1_000_000, now: 990_000,
+    }).effectiveTimeoutMs).toBe(10_000);
+  });
+  it("uses only the remaining authoritative parent window after admission", () => {
+    const deadlineAt = 1_000_000;
+    expect(resolveInferenceRuntimePolicy("local", GOVERNED_LOCAL_REVIEWER.modelId, {}, {
+      deadlineAt, now: 100_000,
+    }).effectiveTimeoutMs).toBe(900_000);
+    expect(resolveInferenceRuntimePolicy("local", GOVERNED_LOCAL_REVIEWER.modelId, {}, {
+      deadlineAt, now: 950_000,
+    }).effectiveTimeoutMs).toBe(50_000);
+  });
+
+  it.each([NaN, Infinity, 0, 99_999])("refuses invalid or exhausted parent deadline %s", deadlineAt => {
+    expect(() => resolveInferenceRuntimePolicy("local", GOVERNED_LOCAL_REVIEWER.modelId, {}, {
+      deadlineAt, now: 100_000,
+    })).toThrow("inference-parent-deadline");
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });

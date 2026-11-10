@@ -1,3 +1,5 @@
+import type { DecisionEscalationRoute } from "@dpf/db";
+
 export const DECISION_PROFILE_KINDS = [
   "platform",
   "organization",
@@ -85,6 +87,11 @@ export type DecisionAutonomyPolicy = {
   allowRecommendation: boolean;
   allowArbitration: boolean;
   maxRiskForArbitration: DecisionRiskTier;
+  /**
+   * BI-7FFFBEE3: the highest risk the delegate may proceed on by recommendation.
+   * Absent means "medium", which was the hard-coded rule before it was a policy.
+   */
+  maxRiskForRecommendation?: DecisionRiskTier;
   minimumConfidenceForRecommendation: number;
   minimumConfidenceForArbitration: number;
 };
@@ -188,6 +195,16 @@ export type DecisionPerspectiveEvaluationInput = {
 };
 
 export type DecisionPerspectiveEvaluationResult = {
+  /** Recorded by the shared rule table before a new interaction is persisted. */
+  escalation?: import("@/lib/govern/authority/escalation-gate").DecisionEscalation;
+  /** Outstanding review; the recorded interim may still allow the step. */
+  heldForIndependentReview?: boolean;
+  /** Set only by an evaluator/resolver fault path, never inferred from prose. */
+  evaluationFault?: boolean;
+  /** A profile's delegated risk limit, independent of confidence or damage. */
+  policyLimitExceeded?: boolean;
+  /** Doctrine-aligned but not previously ruled on; novelty is not a gate. */
+  novelProposition?: boolean;
   outcomeType: DecisionOutcomeType;
   selectedProfileId: string;
   fallbackProfileId: string | null;
@@ -233,6 +250,11 @@ export type DecisionPerspectiveEvaluationResult = {
   /** Independent corpus checks; any rejected hard boundary vetoes aggregation. */
   constitutionalAlignment?: import("./alignment-criteria").ConstitutionalAlignmentResult;
   rationale: string;
+  /**
+   * On an escalation, the `WikiPage.slug` of the principle that governs it
+   * (BI-DEDAC950), for `wiki_query`. Absent when no page states the rule.
+   */
+  principleSlug?: string;
   materialScores: PerspectiveMaterialScore[];
   sources: Array<DecisionEvaluationSource>;
   gapReason?:
@@ -241,7 +263,47 @@ export type DecisionPerspectiveEvaluationResult = {
     // BI-F5F2869D: not a gap at all — recorded doctrine is consistent with the
     // proposal, but nobody has ruled on this question, so it goes to the owner
     // as a NEW idea to weigh rather than as missing policy.
-    | "aligned-not-settled";
+    | "aligned-not-settled"
+    // EP-5CC9C184 / BI-5843CD9C: the material present CANNOT reach the
+    // recommendation band no matter how much more of the same kind is added,
+    // because its weighting ceiling sits below the band. Distinct from
+    // "material-below-confidence", which more or better material can fix.
+    | "ceiling-below-recommendation-band";
+  /**
+   * Why this consult could or could not have recommended, independent of what it
+   * decided. Present whenever applicable material was scored.
+   *
+   * Without this, a consult that is arithmetically incapable of recommending is
+   * indistinguishable from one that weighed the evidence and chose to escalate —
+   * both return an escalation with a plausible rationale. Callers then treat an
+   * inert mechanism as a considered judgement, and operators add material that
+   * cannot possibly help. Measured live under BI-0F3D5F94: five acumens holding
+   * 3 to 12 material rows all returned exactly 0.35 at medium risk.
+   */
+  decidability?: MaterialDecidability;
+};
+
+/**
+ * Whether the scored material could clear the recommendation band at all, and
+ * what is holding the ceiling down when it cannot.
+ */
+export type MaterialDecidability = {
+  /** Highest confidence this material set could reach at this risk tier. */
+  ceiling: number;
+  /** The band the ceiling is measured against. */
+  recommendationBand: number;
+  /** False when ceiling < band — more material of the same kind cannot help. */
+  canReachRecommendation: boolean;
+  /**
+   * The weighting factor capping the ceiling, when one dominates. `promotion`
+   * is the common case for seeded doctrine: candidate material is weighted 0.45,
+   * so it cannot reach a 0.7 band however much of it exists — only promotion
+   * moves it. `freshness` and `review` are operator-fixable by curation;
+   * `evidence` needs better sources, not more of them.
+   */
+  bindingFactor: "promotion" | "freshness" | "review" | "evidence" | "confidence" | null;
+  /** Plain-language remedy naming what would actually change the outcome. */
+  remedy: string | null;
 };
 
 /**
@@ -276,6 +338,9 @@ export type DecisionEvaluationSource = {
 };
 
 export type DecisionInteractionGateView = {
+  escalationRoute?: DecisionEscalationRoute | null;
+  escalationReason?: string | null;
+  escalationFollowOn?: string | null;
   interactionId: string;
   profileId: string;
   profileVersionId: string;

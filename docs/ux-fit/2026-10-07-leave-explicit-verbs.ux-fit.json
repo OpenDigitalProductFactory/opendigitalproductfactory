@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "explicit-approve-leave-deny-leave",
+  "decisionInteractionId": "DI-DC208379563E",
+  "scope": {
+    "files": [
+      "apps/web/components/agent/LeaveDecisionProposalCard.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "explicit-approve-leave-deny-leave",
+      "approve-enacts-recommendation"
+    ]
+  },
+  "rationale": "BI-4E192035: the chat card offered generic Approve / Reject on a time-off recommendation, so approving a 'deny' recommendation approved the leave. The card now states 'Advisor recommends: <approve|deny|needs your judgement>' and asks for the leave outcome with two plain verbs, Approve leave / Deny leave, calling the same governed actions LeavePanel uses (Deny asks for the employee-visible reason, as LeavePanel does). Two choices, no new route, no typed technical input. Rejected option: approve-enacts-recommendation keeps the ambiguous verb, has no meaning for escalate, and would re-stamp proposal status ahead of BI-C8EC05C9.",
+  "verification": "LeaveDecisionProposalCard.test.tsx (jsdom) exercises both verbs against both recommendations, the cancelled reason prompt, a refused action and the settled state; AgentMessageBubble renders the leave card and never the generic Approve / Reject for leave.decide. Served-target UX verification not run in this branch."
+}

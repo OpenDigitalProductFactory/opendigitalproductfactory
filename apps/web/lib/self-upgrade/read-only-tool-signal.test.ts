@@ -33,7 +33,7 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: vi.fn() } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send: vi.fn() } }));
 vi.mock("@/lib/tak/agent-event-bus", () => ({
   agentEventBus: { broadcastSystem: vi.fn() },
 }));

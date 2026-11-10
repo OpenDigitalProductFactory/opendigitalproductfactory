@@ -21,6 +21,7 @@ import {
   type LeaveDecisionInputs,
   type LeaveDecisionResult,
 } from "./leave-decision-coworker";
+import { buildLeaveGuardInputs } from "./leave-guard-facts";
 
 export type DecideLeaveRequestFromDataInput = {
   requestId: string;
@@ -38,7 +39,8 @@ export type LeaveDecisionRuntimeResult = LeaveDecisionResult & {
 export async function decideLeaveRequestFromData(
   input: DecideLeaveRequestFromDataInput,
 ): Promise<LeaveDecisionRuntimeResult> {
-  const [request] = await getLeaveRequests({ requestId: input.requestId });
+  // The advisor forms its own recommendation, so it does not read the current-guard projection.
+  const [request] = await getLeaveRequests({ requestId: input.requestId, withCurrentGuards: false });
   if (!request) throw new Error(`Leave request ${input.requestId} was not found`);
   if (request.status !== "pending") {
     throw new Error(`Leave request ${input.requestId} is ${request.status}, not pending`);
@@ -57,33 +59,16 @@ export async function decideLeaveRequestFromData(
   ]);
 
   const balance = balances.find((row) => row.leaveType === request.leaveType);
-  const overlapCount = approvedOverlap.filter((row) => row.requestId !== request.requestId).length;
-  const weakestCoverage = staffing.coverage.reduce<{
-    requiredHeadcount: number;
-    coveredIfApproved: number;
-  } | null>((weakest, row) => {
-    const candidate = {
-      requiredHeadcount: row.required,
-      coveredIfApproved: Math.max(0, row.assigned - overlapCount - 1),
-    };
-    if (!weakest) return candidate;
-    const weakestHeadroom = weakest.coveredIfApproved - weakest.requiredHeadcount;
-    const candidateHeadroom = candidate.coveredIfApproved - candidate.requiredHeadcount;
-    return candidateHeadroom < weakestHeadroom ? candidate : weakest;
-  }, null) ?? { requiredHeadcount: 0, coveredIfApproved: 0 };
-
-  const decisionInputs: LeaveDecisionInputs = {
-    requestId: request.requestId,
-    leaveType: request.leaveType,
+  const decisionInputs: LeaveDecisionInputs = buildLeaveGuardInputs({
+    request,
     organizationId: input.organizationId,
-    requestedDays: request.days,
     remainingBalance: balance?.remaining ?? 0,
-    coverage: weakestCoverage,
+    approvedOverlap,
+    staffing,
     minCoverageCushion: input.minCoverageCushion,
     maxConsecutiveDays: input.maxConsecutiveDays,
-    requestedConsecutiveDays: request.days,
     inBlackoutWindow: input.inBlackoutWindow,
-  };
+  });
   const result = await decideLeaveRequest(decisionInputs, {
     db: prisma,
     gate: evaluateOrgBusinessDecisionGate,

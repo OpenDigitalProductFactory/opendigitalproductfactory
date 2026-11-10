@@ -5,9 +5,38 @@ import { collectHostDiscovery } from "./discovery-collectors/host";
 import { collectKubernetesDiscovery } from "./discovery-collectors/kubernetes";
 import {
   executeBootstrapDiscovery,
+  flagUnconfiguredGateways,
   mergeCollectorOutputs,
   runBootstrapCollectors,
 } from "./discovery-runner";
+
+describe("gateway connection follow-up", () => {
+  it("creates actionable issues for uncovered gateways and repairs them on replay", async () => {
+    const gateways = [
+      { id: "physical", entityKey: "gateway:gateway:10.1.0.1", name: "Gateway 10.1.0.1", properties: { address: "10.1.0.1" } },
+      { id: "docker", entityKey: "gateway:docker-gw:fixture", name: "Docker GW fixture", properties: { address: "172.18.0.1" } },
+      { id: "covered", entityKey: "gateway:covered", name: "Managed", properties: { address: "10.2.0.1" } },
+    ];
+    const issues = new Map<string, Record<string, unknown>>();
+    const db = {
+      inventoryEntity: { findMany: vi.fn(async () => gateways) },
+      discoveryConnection: { findMany: vi.fn(async () => [{ gatewayEntityId: "covered", endpointUrl: "https://10.2.0.1" }]) },
+      portfolioQualityIssue: {
+        upsert: vi.fn(async ({ where, create }: { where: { issueKey: string }; create: Record<string, unknown> }) => {
+          issues.set(where.issueKey, create);
+        }),
+        updateMany: vi.fn(async () => ({ count: 0 })),
+      },
+    };
+    await flagUnconfiguredGateways(db);
+    expect(issues.size).toBe(2);
+    expect([...issues.values()].every(i => i.issueType === "gateway_connection_needed")).toBe(true);
+    expect(issues.get("gateway_connection:gateway:gateway:10.1.0.1")?.details).toEqual({ gatewayEntityId: "physical", address: "10.1.0.1" });
+    issues.clear(); // A persisted run does not substitute for its follow-up.
+    await flagUnconfiguredGateways(db);
+    expect(issues.size).toBe(2);
+  });
+});
 
 describe("mergeCollectorOutputs", () => {
   it("combines collector outputs without dropping items or relationships", () => {

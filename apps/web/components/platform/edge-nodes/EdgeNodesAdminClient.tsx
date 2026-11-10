@@ -25,6 +25,7 @@ import type {
   EdgeHostOs,
   RemoteProvisioningPlan,
 } from "@/lib/edge-node/remote-provisioning";
+import { formatTimestamp } from "@/lib/datetime";
 type EdgeNodeRow = EdgeFleetNode & {
   id: string;
   nodeId: string;
@@ -101,15 +102,6 @@ type IssuedTokenView = {
   prefix: string;
   expiresAt: string;
 };
-
-function formatTimestamp(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
-}
 
 type ScopeBadgeInput = {
   customerAccountId: string | null;

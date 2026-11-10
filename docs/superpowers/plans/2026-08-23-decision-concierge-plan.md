@@ -117,6 +117,24 @@ with its writer in Phase 3.
 6. Tests: staffing map, contract validation (the no-proposal path first), and
    that a failed panel leaves the record exactly as Phase 1 left it.
 
+**Status:** the pattern seed, both role prompts, the staffing map, the verdict
+contract, the conductor and the panel-roster line on the card are implemented on
+`feat/governance-triage-panel`, with 37 tests over the three new pure modules.
+
+**The trigger ships with it.** Hooking the kernel gate directly was rejected —
+a panel is provider-bound and asynchronous, and the gate is a hot path that must
+not wait on one. The caller is the Phase 4 sweep below, so Phases 3 and 4 land
+together: a panel nothing triggers is dead substrate that reads as capability.
+
+**Staffing signal quality — measured, not assumed.** The live ledger carries
+five domain classes across every unresolved decision (plan-readiness,
+kernel-consult, architecture-tradeoff, risk-assessment, professional-practice),
+which cannot separate a payroll question from a marketing one. Staffing
+therefore reads the profession gate first, then subject matter in the question
+text, then the domain class where it is unambiguous — and reports which signal
+it used. Subject-matter matching is a labelled heuristic; when nothing matches,
+the panel runs kernel-only and the card says so.
+
 ---
 
 ## Phase 4 — The standing process (BI-C62127B9)
@@ -130,6 +148,30 @@ with its writer in Phase 3.
 4. Tests: cap enforcement and the skip log, the ageing rule, and that the sweep
    and the review page cannot drift apart on which decisions are open.
 
+**Status:** implemented on `feat/governance-triage-panel` together with Phase 3.
+
+- `decision-perspective/owner-ruling-queue.ts` is the ONE definition of "waiting
+  on a human", and the sweep composes on it rather than restating it. Three
+  copies of that predicate drifted once already (BI-6EC1EE25). This branch
+  originally added its own consolidating module; `owner-ruling-queue.ts` landed
+  on `main` first with the same purpose plus an organization-profile ownership
+  boundary (BI-EB5E9BE3), so it is the canonical home and the duplicate was
+  dropped rather than reconciled.
+- `concierge-sweep.ts` is bounded and reports what it dropped — a cap that
+  truncates silently reads as "everything was covered" the moment anyone looks.
+  It never resolves anything: it writes proposals that sit at `proposed` until a
+  human rules.
+- `triage-panel-binding.ts` convenes the run through the existing orchestrator
+  and parses the adjudicator's verdict narrowly: either a JSON object comes out
+  or `null` does, and a verdict nobody can parse is refused rather than repaired.
+- The standing governance room is upserted on a stable key and each pass is
+  appended as activity — convened once, never closed.
+- The attention inbox now leads with the suggestion and asks for a review rather
+  than judgment once a draft exists.
+
+Deferred deliberately: the nav count and the weekly-digest line. Both are
+cosmetic next to the trigger, and neither is worth widening this change.
+
 ---
 
 ## Cross-cutting
@@ -140,3 +182,39 @@ with its writer in Phase 3.
   inference runtime is down, or the origin cannot be resolved.
 - Documentation impact per phase: the decision-governance surface docs and the
   operator-facing help copy change with Phase 1 and Phase 4.
+
+## Running a panel: the contract the first implementation got wrong
+
+The panel shipped unable to complete a single run. Ten `governance-triage`
+runs were created on the live install and none finished, against 222 waiting
+decisions. Both causes were invented identifiers, and both were invisible to
+unit tests because the tests asserted against fixtures rather than the engine.
+
+**A pattern may only use role ids the orchestrator implements.**
+`lib/deliberation/orchestrator.ts` maps roles to node types through a hardcoded
+switch, and finds the fan-in node by an exact `roleId === "adjudicator"` match.
+A pattern declaring `resolution-adjudicator` gets branch nodes and *no
+adjudicator node* — the run has nothing to conclude it and stays `pending`
+forever, with no error anywhere. The vocabulary today is `author`, `reviewer`,
+`skeptic`, `debater`, `adjudicator`; unknown ids fall back to a generic review
+node with a `console.warn` nobody reads. Node types are likewise fixed
+(`analyze`, `review`, `skeptical_review`, `summarize`).
+
+**Orchestration persists a graph; it does not run it.**
+`orchestrateDeliberation` writes the run and its nodes. A separate Inngest
+function executes them, and it only wakes on `deliberation/run.start`. Omitting
+that event does not fail — it leaves queued nodes and no outcome, which reads
+from the outside as "the panel produced nothing" rather than "the panel never
+ran". `lib/deliberation/start-run.ts` is the single place that send lives, so
+the step cannot be forgotten by omission.
+
+**The verdict is asynchronous.** Reading `DeliberationOutcome` immediately after
+orchestrating always returns nothing. The binding waits, bounded (four minutes),
+then reports "not drafted" and lets the next pass retry — one slow panel must
+not starve the decisions queued behind it, and a partial verdict is never
+written.
+
+**Verification that counts.** A green test suite did not catch either defect.
+The check is a run row with `completedAt` set and a `DecisionResolutionProposal`
+against a real interaction — read from the database on a live install, not from
+a fixture.

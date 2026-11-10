@@ -58,10 +58,32 @@ const generatedCatalog = catalog as unknown as {
   capabilities: GeneratedCapability[];
 };
 
+export type CapabilityHostPlatform = "linux" | "macos" | "windows";
+
+const CAPABILITY_HOST_BY_PLATFORM: Record<string, CapabilityHostPlatform> = {
+  darwin: "macos", macos: "macos", win32: "windows", windows: "windows", linux: "linux",
+};
+
+/**
+ * Map an install-state `platform` (darwin / win32 / linux, as the installers write it)
+ * to the catalog's host vocabulary — the same mapping the promoter's profile resolver
+ * applies. Anything unrecognised returns undefined, which keeps the projection
+ * unfiltered rather than guessing a host.
+ */
+export function capabilityHostPlatformFor(platform: string | undefined): CapabilityHostPlatform | undefined {
+  return platform ? CAPABILITY_HOST_BY_PLATFORM[platform] : undefined;
+}
+
 /** Typed web adapter over the generated catalog. Dependency closure remains owned by the generator resolver. */
 export function projectCapabilityServices(input: {
   enabledRuntimeCapabilities: string[];
   capabilityStates: LiveCapabilityState[];
+  /**
+   * The install's host. Host-scoped services (dpf-tts is linux/windows only; macOS
+   * speaks through its host-native Chatterbox) are required only on their hosts
+   * (BI-E2763038). Omitted = unfiltered. Does not enter capability identity.
+   */
+  hostPlatform?: CapabilityHostPlatform;
 }): CapabilityServiceProjection {
   const enabled = new Set(input.enabledRuntimeCapabilities);
   const catalogIds = new Set(generatedCatalog.capabilities.map((item) => item.capabilityId));
@@ -97,7 +119,7 @@ export function projectCapabilityServices(input: {
     substrate,
     capabilities,
     enabledRuntimeCapabilities: input.enabledRuntimeCapabilities,
-    hostPlatform: undefined,
+    hostPlatform: input.hostPlatform,
   });
   return {
     ...projection,

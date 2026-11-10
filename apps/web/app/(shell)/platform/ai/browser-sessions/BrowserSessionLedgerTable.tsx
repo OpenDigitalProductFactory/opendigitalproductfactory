@@ -1,7 +1,7 @@
 "use client";
 
 import { DataTable, StatusBadge, type Column } from "@/components/ui/report-kit";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import { LocalTime } from "@/components/ui/LocalTime";
 import type { BrowserSessionLedgerRow } from "@/lib/browser-drive/ledger";
 

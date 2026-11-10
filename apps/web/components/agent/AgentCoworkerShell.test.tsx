@@ -203,13 +203,14 @@ describe("AgentCoworkerShell support entry", () => {
     });
     expect(dialog).toHaveAttribute("data-panel-layout", "mobile-viewport");
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveStyle({
-      width: "100vw",
-      maxWidth: "100vw",
-      minWidth: "0",
-      height: "100dvh",
-      overflow: "hidden",
-    });
+    // Assert the declared inline frame, not jsdom's computed style: jsdom 30
+    // resolves viewport units against its own 1024px layout viewport and drops
+    // min/max-width from getComputedStyle, so toHaveStyle cannot see `100vw`.
+    expect(dialog.style.width).toBe("100vw");
+    expect(dialog.style.maxWidth).toBe("100vw");
+    expect(dialog.style.minWidth).toBe("0px");
+    expect(dialog.style.height).toBe("100dvh");
+    expect(dialog.style.overflow).toBe("hidden");
     expect(agentCoworkerPanelMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ isDocked: true }),
     );
@@ -750,6 +751,32 @@ describe("AgentCoworkerShell opening briefing (BI-DED493BA)", () => {
       row.id.startsWith("opening-briefing:"),
     );
     expect(briefingRows).toHaveLength(1);
+  });
+
+  it.each([
+    { answered: false, repeat: false, prior: false }, { answered: true, repeat: false, prior: false },
+    { answered: false, repeat: true, prior: false }, { answered: false, repeat: true, prior: true },
+  ])("keeps a briefing before unanswered requests (answered=$answered repeat=$repeat prior=$prior)", async ({ answered, repeat, prior }) => {
+    const base = { createdAt: "2026-01-01T00:00:00Z", agentId: null, routeContext: "/workspace" };
+    getOrCreateThreadSnapshotMock.mockResolvedValue({ threadId: "retained-thread", messages: [
+      ...(prior ? [{ ...base, id: "old-user", role: "user", content: "Previous work" },
+        { ...base, id: "old-answer", role: "assistant", content: "Previous result" }] : []),
+      { ...base, id: "saved-user", role: "user", content: "Check my saved work" },
+      { ...base, id: "foreground-receipt-job", role: "system", content: "Request saved" },
+      ...(repeat ? [{ ...base, id: "second-user", role: "user", content: "Second saved request" },
+        { ...base, id: "foreground-receipt-second", role: "system", content: "Second request saved" }] : []),
+      ...(answered ? [{ ...base, id: "actual-result", role: "assistant", content: "Verified result" }] : []),
+    ], openingBriefing: { content: "General work overview", agentId: null } });
+    renderShell();
+    fireEvent.click(screen.getByText("Open coworker"));
+    await settleShellThread();
+    const rows = (agentCoworkerPanelMock.mock.calls.at(-1)?.[0] as {
+      initialMessages: Array<{ id: string }>;
+    }).initialMessages;
+    const briefing = rows.findIndex(row => row.id.startsWith("opening-briefing:"));
+    if (answered) expect(briefing).toBe(rows.length - 1);
+    else expect(briefing).toBeLessThan(rows.findIndex(row => row.id === "saved-user"));
+    if (prior) expect(rows[0]!.id).toBe("old-user");
   });
 
   it("stays silent when the snapshot carries no briefing (quiet / nothing pending)", async () => {

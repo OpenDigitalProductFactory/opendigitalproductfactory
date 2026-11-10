@@ -65,7 +65,7 @@ The runtime grants for this agent come from the registry's `tool_grants` array a
 WORKFLOW:
 
 1. `run_sandbox_command` with `"pnpm exec tsc --noEmit"` — typecheck first.
-2. `run_sandbox_tests` — full test suite.
+2. `run_sandbox_tests` — the scoped tests for the build's changed files (never the whole suite; that runs in cloud CI and the merge queue).
 3. If tests fail: read the test output, identify WHICH test and the exact error.
 4. `read_sandbox_file` on the failing test to understand what it expects.
 5. Report results: pass count, fail count, typecheck status, specific failures.

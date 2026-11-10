@@ -131,7 +131,7 @@ test("allows root-clone git drift commands only with the explicit maintenance by
 });
 
 test("blocks direct Write/Edit targets when a surface is accidentally rooted at the merge checkout", () => {
-  for (const toolName of ["Write", "Edit", "MultiEdit"]) {
+  for (const toolName of ["Write", "Edit", "MultiEdit", "write", "search_replace"]) {
     const verdict = decideFileWrite({
       toolName,
       toolInput: { file_path: "apps/web/lib/routing/types.ts" },
@@ -316,6 +316,36 @@ test("blocks an interpreter one-liner that plainly writes from the clone root", 
 test("leaves a read-only interpreter one-liner alone — a guard that blocks reads gets disabled", () => {
   assert.equal(shellIn('python3 -c "import json;print(json.load(open(\'a.json\')))"', MAIN).block, false);
   assert.equal(shellIn("node -e 'console.log(1)'", MAIN).block, false);
+});
+
+test("read-only heredoc operators and quoted text are data, not shell redirections", () => {
+  for (const command of [
+    "python3 - <<'PY'\nprint(3 >= 2)\nPY",
+    "python3 - <<'PY'\nprint('<html>read only</html>')\nPY",
+    "node - <<'JS'\nconsole.log(3 > 2);\nJS",
+    `python3 -c 'print(3 > 2); print("<html>")'`,
+    `echo 'diagnostic > text; git reset --hard'`,
+    `echo "sh -c 'git reset --hard'"`,
+  ]) assert.equal(shellIn(command, MAIN).block, false, command);
+});
+
+test("heredoc data does not hide real shell writes or following commands", () => {
+  for (const command of [
+    "python3 - <<'PY' > 'apps/web/lib/output.txt'\nprint(3 >= 2)\nPY",
+    "python3 - <<'PY'\nprint(3 >= 2)\nPY\necho x > 'apps/web/lib/output file.txt'",
+    "python3 - <<'PY'\nprint(3 >= 2)\nPY\ngit reset --hard",
+    "python3 - <<'PY'\nopen('apps/web/lib/output.txt', 'w').write('x')\nPY",
+    `echo 'diagnostic > text' > 'apps/web/lib/output file.txt'`,
+  ]) assert.equal(shellIn(command, MAIN).block, true, command);
+});
+
+test("shell input stays executable when supplied through heredocs or quoted -c payloads", () => {
+  for (const command of [
+    "bash <<'SH'\nrm -rf packages\nSH",
+    "cat <<'SH' | sh\ngit reset --hard\nSH",
+    `bash -c 'echo diagnostic; git reset --hard'`,
+    `sh -c 'echo x > "apps/web/lib/output file.txt"'`,
+  ]) assert.equal(shellIn(command, MAIN).block, true, command);
 });
 
 test("does not touch writes inside a session's own worktree", () => {

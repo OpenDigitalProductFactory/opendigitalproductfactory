@@ -1,0 +1,54 @@
+# Warm start for the two apps/web tsc programs (spec 2026-09-30
+# web-runtime-import-cycle-and-project-references §6 PR-1). Both tsconfigs are
+# `incremental`, and with `noEmit` and no outDir tsc writes the build info
+# next to the tsconfig: apps/web/tsconfig.tsbuildinfo (production program) and
+# apps/web/tsconfig.test.tsbuildinfo (test program, set in tsconfig.test.json).
+#
+# This action computes the key and RESTORES only. Only the push-to-main job
+# `typecheck-cache` in ci.yml saves, with actions/cache/save and this action's
+# `key` output, so a PR or merge_group run can never write an entry another
+# run would reuse.
+#
+# Why a restored file is safe from any commit: tsc versions every program file
+# by a hash of its text and re-checks a file whose own text, or whose
+# dependencies' declaration signatures, changed. A build info written by a
+# different TypeScript version or different compiler options is discarded and
+# the run is cold. A miss restores nothing and the run is exactly as before.
+# Proof and timings: docs/architecture/dependency-reduction-routine.md.
+name: Restore web tsbuildinfo
+description: Compute the apps/web tsbuildinfo cache key and restore the latest main entry for it.
+
+outputs:
+  key:
+    description: Exact key for this commit (the push-to-main save uses it).
+    value: ${{ steps.key.outputs.key }}
+  cache-hit:
+    description: True when an entry for this exact commit already exists.
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute web tsbuildinfo cache key
+      id: key
+      shell: bash
+      working-directory: apps/web
+      env:
+        # The lockfile pins every typed dependency; the tsconfigs carry the
+        # compiler options. Same inputs, latest main entry wins (restore-keys).
+        INPUTS_HASH: ${{ hashFiles('pnpm-lock.yaml', 'tsconfig.base.json', 'apps/web/tsconfig.json', 'apps/web/tsconfig.test.json') }}
+      run: |
+        ts_version=$(node -p "require('typescript/package.json').version")
+        prefix="web-tsbuildinfo-v1-${RUNNER_OS}-ts${ts_version}-${INPUTS_HASH}-"
+        echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
+        echo "key=${prefix}${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore web tsbuildinfo
+      id: restore
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          apps/web/tsconfig.tsbuildinfo
+          apps/web/tsconfig.test.tsbuildinfo
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}

@@ -41,6 +41,9 @@ export async function serverTaskrunRetry(
   const userId = await operatorUserId();
   if (!userId) return err("Not authenticated");
   try {
+    const { retryPersistedSemanticReview } = await import("@/lib/change-review/semantic-review-background");
+    const native = await retryPersistedSemanticReview(taskRunId, userId, opts.force === true);
+    if (native) return ok(native);
     const { newTaskRunId, strategy } = await taskrunRetry(taskRunId, userId, opts);
     return ok({ newTaskRunId, strategy });
   } catch (e) {

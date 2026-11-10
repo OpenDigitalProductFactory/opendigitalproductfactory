@@ -4,9 +4,6 @@
  */
 import { test, expect } from "@playwright/test";
 
-const ADMIN_EMAIL = "admin@dpf.local";
-const ADMIN_PASSWORD = process.env.DPF_ADMIN_PASSWORD || "N7YY1tktO9JOndnJ";
-
 async function getAuthHeaders(page: any) {
   // Navigate and check for cookies
   await page.goto("http://localhost:3000");

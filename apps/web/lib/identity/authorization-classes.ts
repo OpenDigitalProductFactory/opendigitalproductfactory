@@ -62,7 +62,8 @@ function classifyGrant(grantKey: string): GaidAuthorizationClass[] {
     classes.add("create");
   }
 
-  if (grantKey.endsWith("_write") && !isAdminGrant) {
+  // Completing-receipt writeback is not a portable create/update of records.
+  if (grantKey.endsWith("_write") && !isAdminGrant && grantKey !== "workroom_evidence_write") {
     classes.add("create");
     classes.add("update");
   }

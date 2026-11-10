@@ -69,12 +69,12 @@ describe("createAssetSchema", () => {
     }
   });
 
-  it("defaults currency to GBP when omitted", () => {
+  it("leaves currency unset when omitted, so the writer applies the org base currency (BI-6030131C)", () => {
     const { currency: _, ...withoutCurrency } = validInput;
     const result = createAssetSchema.safeParse(withoutCurrency);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.currency).toBe("GBP");
+      expect(result.data.currency).toBeUndefined();
     }
   });
 

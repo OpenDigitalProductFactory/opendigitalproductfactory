@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { executableCommandText } from "./command-text.mjs";
+import { executableCommandText, shellCommandPayloads, stripHeredocBodies } from "./command-text.mjs";
 
 test("removes single- and double-quoted segments", () => {
   assert.equal(executableCommandText(`echo 'prisma migrate deploy'`), "echo ");
@@ -32,4 +32,16 @@ test("unmatched quote strips to end (fail open)", () => {
 test("non-string / empty input yields empty text", () => {
   assert.equal(executableCommandText(""), "");
   assert.equal(executableCommandText(undefined), "");
+});
+
+test("root guards can retain executable heredoc input without retaining data bodies", () => {
+  const command = "python3 <<'PY'\nprint(3 >= 2)\nPY\nbash <<'SH'\nrm -rf packages\nSH\ngit status";
+  const text = stripHeredocBodies(command, (header) => header.startsWith("bash "));
+  assert.ok(!text.includes("print(3 >= 2)"));
+  assert.ok(text.includes("rm -rf packages"));
+  assert.ok(text.includes("git status"));
+});
+
+test("shell payload extraction preserves quoted paths for filesystem guards", () => {
+  assert.deepEqual(shellCommandPayloads(`sh -c 'echo x > "path with spaces"'`), ['echo x > "path with spaces"']);
 });

@@ -9,11 +9,25 @@ import type {
   PortfolioForSelect,
   EpicWithRelations,
 } from "./backlog";
+import {
+  activeWorkroomsByBacklogItem,
+  loadBacklogWorkroomOwnership,
+} from "@/lib/work-capsules/backlog-workroom-ownership";
 
 export type { PortfolioForSelect };
 
+async function attachActiveWorkrooms<T extends BacklogItemWithRelations>(items: T[]): Promise<T[]> {
+  if (items.length === 0) return items;
+  const ownership = await loadBacklogWorkroomOwnership(
+    prisma,
+    items.flatMap((item) => [item.itemId, item.id]),
+  );
+  const byItem = activeWorkroomsByBacklogItem(items, ownership.liveWorkrooms);
+  return items.map((item) => ({ ...item, activeWorkrooms: byItem.get(item.itemId) ?? [] }));
+}
+
 export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[]> => {
-  return prisma.backlogItem.findMany({
+  const items = await prisma.backlogItem.findMany({
     orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
     select: {
       id: true,
@@ -24,6 +38,8 @@ export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[
       workType: true,
       source: true,
       body: true,
+      outcome: true,
+      outcomeSource: true,
       priority: true,
       epicId: true,
       triageOutcome: true,
@@ -61,10 +77,11 @@ export const getBacklogItems = cache(async (): Promise<BacklogItemWithRelations[
       claimedById: true,
     },
   });
+  return attachActiveWorkrooms(items as BacklogItemWithRelations[]);
 });
 
 export const getEpics = cache(async (): Promise<EpicWithRelations[]> => {
-  return prisma.epic.findMany({
+  const epics = await prisma.epic.findMany({
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
@@ -93,6 +110,8 @@ export const getEpics = cache(async (): Promise<EpicWithRelations[]> => {
           status: true,
           type: true,
           body: true,
+          outcome: true,
+          outcomeSource: true,
           priority: true,
           epicId: true,
           triageOutcome: true,
@@ -131,7 +150,13 @@ export const getEpics = cache(async (): Promise<EpicWithRelations[]> => {
         },
       },
     },
-  }) as Promise<EpicWithRelations[]>;
+  }) as EpicWithRelations[];
+  const items = await attachActiveWorkrooms(epics.flatMap((epic) => epic.items));
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return epics.map((epic) => ({
+    ...epic,
+    items: epic.items.map((item) => byId.get(item.id) ?? item),
+  }));
 });
 
 export const getDigitalProductsForSelect = cache(async (): Promise<DigitalProductSelect[]> => {

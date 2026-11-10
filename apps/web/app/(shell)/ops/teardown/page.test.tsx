@@ -6,7 +6,7 @@ vi.mock("@/lib/actions/teardown", () => ({
   previewInstallationTeardown: vi.fn(),
   executeInstallationTeardown: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/ops/teardown" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/ops/teardown", useRouter: () => ({ push: () => {} }) }));
 
 import TeardownPage from "./page";
 

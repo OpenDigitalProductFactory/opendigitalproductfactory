@@ -21,7 +21,7 @@ describe("summarizeDiscoveryPersistence", () => {
 });
 
 describe("persistBootstrapDiscoveryRun", () => {
-  it("projects normalized inventory entities and relationships into Neo4j adapters", async () => {
+  it("projects normalized inventory entities and relationships into graph adapters", async () => {
     const projectInventoryEntity = vi.fn().mockResolvedValue(undefined);
     const projectInventoryRelationship = vi.fn().mockResolvedValue(undefined);
     const upsertedEntityPayloads: Array<Record<string, unknown>> = [];

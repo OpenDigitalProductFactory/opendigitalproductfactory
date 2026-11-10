@@ -33,7 +33,20 @@ import {
   estimateModelVramGb,
   type HostMemory,
 } from "./local-model-policy";
-import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-config";
+import {
+  getServedContextTokens,
+  setServedContextTokens,
+  getLocalThinkingBudgetEvidence,
+  ensureLocalEmbedderOffGpu,
+  getLlamaCppEngineIdentity,
+  isGpuEngine,
+  isManagedGenerationFlags,
+  isSpeculationQualifiedEngine,
+  managedGenerationFlags,
+  LOCAL_RUNNER_KEEP_ALIVE,
+  type EmbedderPlacementResult,
+} from "./dmr-runtime-config";
+import { canonicalLocalModelKey } from "./local-model-management";
 import type { LocalPresence } from "@/lib/routing/local-tool-ceiling";
 
 /**
@@ -65,6 +78,54 @@ export async function resolveHostMemoryProfile(): Promise<
  * so the heaviest coworkers fit).
  */
 export const LOCAL_SERVED_CONTEXT_CONFIG_KEY = "local.servedContextTokens";
+
+/**
+ * PlatformConfig key that turns n-gram speculative decoding off ("off"); any
+ * other value or no row leaves it on for the qualified engine (BI-0D208EBB).
+ * The next reconcile removes the flags, which is the rollback.
+ */
+export const LOCAL_SPECULATIVE_DECODING_CONFIG_KEY = "local.speculativeDecoding";
+
+async function isSpeculationSwitchedOff(): Promise<boolean> {
+  try {
+    const row = await prisma.platformConfig.findUnique({ where: { key: LOCAL_SPECULATIVE_DECODING_CONFIG_KEY } });
+    return row?.value === "off";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The stored non-lifecycle config with the platform-managed runtime flags
+ * applied: --no-mmap on a GPU engine (BI-37A470F0), and the qualified
+ * speculation pair on the qualified engine unless switched off (BI-0D208EBB).
+ * Operator-chosen runtime flags are never rewritten.
+ */
+async function withManagedRuntimeFlags(
+  apiRoot: string,
+  retained: Record<string, unknown>,
+  fetchImpl: typeof fetch,
+): Promise<Record<string, unknown>> {
+  const { "runtime-flags": flags, ...rest } = retained;
+  if (flags !== undefined && !isManagedGenerationFlags(flags)) return retained;
+  const engine = await getLlamaCppEngineIdentity(apiRoot, fetchImpl);
+  const wanted = managedGenerationFlags({
+    noMmap: isGpuEngine(engine),
+    speculation: !(await isSpeculationSwitchedOff()) && isSpeculationQualifiedEngine(engine),
+  });
+  return wanted.length > 0 ? { ...rest, "runtime-flags": wanted } : rest;
+}
+
+/**
+ * Docker Model Runner is one host-wide service. Only the install portal owns
+ * its per-model config; the Build Studio sandbox (DPF_ENVIRONMENT=sandbox)
+ * reads a different database, so reconciling from it fought the portal and
+ * reloaded the model on every disagreement (BI-37A470F0).
+ */
+function isSandboxRuntime(): boolean {
+  return process.env.DPF_ENVIRONMENT === "sandbox";
+}
+const SANDBOX_SKIP_REASON = "Build Studio sandbox does not own the host-wide model runner";
 
 /**
  * The reconcile target, RESOURCE-AWARE (BI-3E614946, revised BI-F4D3B9E9):
@@ -158,9 +219,11 @@ export async function resolveServedContextInfo(fetchImpl: typeof fetch = fetch):
 
 export type ContextReconcileStatus =
   | "raised" // was below target; override applied (and ModelProfile synced)
-  | "ok" // already at/above target; no write
+  | "pinned" // context already met target; only residency (BI-34F71E9D) or speculation flags (BI-0D208EBB) changed
+  | "ok" // already at/above target and resident; no write
   | "deferred" // below target but DMR refused the write (runner active); applies on next load
   | "no-model" // no local generation model installed
+  | "skipped" // this runtime does not own the host-wide model runner (BI-37A470F0)
   | "unsupported" // local runtime exposes no context-size configuration API
   | "unreachable"; // local runtime / models endpoint not reachable
 
@@ -188,7 +251,6 @@ export type ContextReconcileResult = {
 export async function reconcileLocalModelContext(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ContextReconcileResult> {
-  const target = await resolveServedContextTarget();
   const none = (status: ContextReconcileStatus, reason: string | null): ContextReconcileResult => ({
     status,
     modelId: null,
@@ -196,6 +258,8 @@ export async function reconcileLocalModelContext(
     after: null,
     reason,
   });
+  if (isSandboxRuntime()) return none("skipped", SANDBOX_SKIP_REASON);
+  const target = await resolveServedContextTarget();
 
   try {
     const oaiBase = getOllamaBaseUrl().replace(/\/$/, "");
@@ -221,7 +285,21 @@ export async function reconcileLocalModelContext(
       return { status: "unsupported", modelId, before: null, after: null, reason: served.reason };
     }
     const before = served.contextTokens; // null = no override set (DMR default ~4k)
-    if (before !== null && before >= target) {
+    const contextMet = before !== null && before >= target;
+    const retained = await withManagedRuntimeFlags(apiRoot, served.retained ?? {}, fetchImpl);
+    const runnerDrift = JSON.stringify(retained) !== JSON.stringify(served.retained ?? {});
+    if (contextMet && (served.keepAlive !== LOCAL_RUNNER_KEEP_ALIVE || runnerDrift)) {
+      // Context is fine but DMR's 5-minute idle unload is in force (a DMR
+      // restart drops it, and so did every context write before BI-34F71E9D),
+      // or the speculation flags need adding or removing (BI-0D208EBB).
+      // Re-pin without lowering a larger served window.
+      const pinned = await setServedContextTokens(apiRoot, modelId, before, fetchImpl, retained);
+      if (!pinned.ok) {
+        return { status: "deferred", modelId, before, after: null, reason: pinned.reason };
+      }
+      return { status: "pinned", modelId, before, after: pinned.contextTokens ?? before, reason: null };
+    }
+    if (contextMet) {
       // DMR already serves enough. Repair the routing column if re-profiling has
       // drifted it below what is actually served — best-effort, conditional so the
       // steady state stays write-free.
@@ -238,7 +316,7 @@ export async function reconcileLocalModelContext(
       return { status: "ok", modelId, before, after: before, reason: null };
     }
 
-    const applied = await setServedContextTokens(apiRoot, modelId, target, fetchImpl);
+    const applied = await setServedContextTokens(apiRoot, modelId, target, fetchImpl, retained);
     if (!applied.ok) {
       // DMR refuses while a runner is active; the override applies on next load.
       return { status: "deferred", modelId, before, after: null, reason: applied.reason };
@@ -266,6 +344,31 @@ export async function reconcileLocalModelContext(
 }
 
 /**
+ * Keep the installed local embedder off the GPU (BI-B60AFE7B) so it never
+ * competes with the generation model for VRAM. Runs beside the context
+ * reconcile on boot and on the same interval: DMR forgets per-model config on
+ * restart. Best-effort; never throws.
+ */
+export async function reconcileLocalEmbedderPlacement(
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ status: EmbedderPlacementResult["status"] | "no-model" | "skipped" | "unreachable"; modelId: string | null; reason: string | null }> {
+  if (isSandboxRuntime()) return { status: "skipped", modelId: null, reason: SANDBOX_SKIP_REASON };
+  try {
+    const oaiBase = getOllamaBaseUrl().replace(/\/$/, "");
+    const modelsUrl = oaiBase.endsWith("/v1") ? `${oaiBase}/models` : `${oaiBase}/v1/models`;
+    const res = await fetchImpl(modelsUrl, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return { status: "unreachable", modelId: null, reason: `models endpoint returned HTTP ${res.status}` };
+    const body = (await res.json()) as { data?: Array<{ id?: string }> };
+    const modelId = (body.data ?? []).find((m) => m.id && isEmbeddingModelId(m.id))?.id ?? null;
+    if (!modelId) return { status: "no-model", modelId: null, reason: "no local embedding model installed" };
+    const placed = await ensureLocalEmbedderOffGpu(getOllamaApiRoot(), modelId, fetchImpl);
+    return { ...placed, modelId };
+  } catch (err) {
+    return { status: "unreachable", modelId: null, reason: `embedder placement failed: ${(err as Error).message}` };
+  }
+}
+
+/**
  * What a single probe of the local runtime established.
  *
  * The three cases are deliberately NOT collapsed (BI-A8BFEFCE): "DMR answered
@@ -280,14 +383,15 @@ type LocalGenerationProbe =
 
 async function probeLocalGenerationModel(
   fetchImpl: typeof fetch = fetch,
+  selected?: { modelId: string; provider?: Parameters<typeof getOllamaBaseUrl>[0] },
 ): Promise<LocalGenerationProbe> {
   // Wrap so getServedContextTokens' internal GET also gets a timeout (it issues
   // its own fetch without a signal), so a hung DMR can never stall a coworker turn.
   const withTimeout: typeof fetch = (url, init) =>
     fetchImpl(url, { ...init, signal: init?.signal ?? AbortSignal.timeout(2500) });
   try {
-    const oaiBase = getOllamaBaseUrl().replace(/\/$/, "");
-    const apiRoot = getOllamaApiRoot();
+    const oaiBase = getOllamaBaseUrl(selected?.provider).replace(/\/$/, "");
+    const apiRoot = getOllamaApiRoot(selected?.provider);
     const modelsUrl = oaiBase.endsWith("/v1") ? `${oaiBase}/models` : `${oaiBase}/v1/models`;
     let modelId: string | null = null;
     let cardDefault: number | null = null;
@@ -299,7 +403,8 @@ async function probeLocalGenerationModel(
       const body = (await res.json()) as {
         data?: Array<{ id?: string; dmr?: { context_window?: number } }>;
       };
-      const gen = (body.data ?? []).find((m) => m.id && !isEmbeddingModelId(m.id));
+      const gen = (body.data ?? []).find((m) => m.id && !isEmbeddingModelId(m.id) &&
+        (!selected || canonicalLocalModelKey(m.id) === canonicalLocalModelKey(selected.modelId)));
       modelId = gen?.id ?? null;
       cardDefault = typeof gen?.dmr?.context_window === "number" ? gen.dmr.context_window : null;
     } catch (err) {
@@ -309,6 +414,10 @@ async function probeLocalGenerationModel(
     // POSITIVE finding of absence, not a failure to read.
     if (!modelId) return { status: "no-model" };
     const served = await getServedContextTokens(apiRoot, modelId, withTimeout);
+    // Admission cannot substitute advertised capacity for an unread runtime.
+    if (selected && !served.supported) {
+      return { status: "unreachable", reason: served.reason ?? "runtime context unavailable" };
+    }
     // Override wins; else the card default is what DMR actually serves right now.
     return { status: "served", modelId, contextTokens: served.contextTokens ?? cardDefault ?? null };
   } catch (err) {
@@ -334,9 +443,23 @@ async function probeLocalGenerationModel(
  */
 export async function resolveLocalServedContextTokens(
   fetchImpl: typeof fetch = fetch,
+  selected?: { modelId: string; provider?: Parameters<typeof getOllamaBaseUrl>[0] },
 ): Promise<number | null> {
-  const probe = await probeLocalGenerationModel(fetchImpl);
-  return probe.status === "served" ? probe.contextTokens : null;
+  const probe = await probeLocalGenerationModel(fetchImpl, selected);
+  const tokens = probe.status === "served" ? probe.contextTokens : null;
+  return tokens !== null && Number.isSafeInteger(tokens) && tokens > 0 ? tokens : null;
+}
+
+/** Selected runtime facts for routing, without mutating or loading the model. */
+export async function resolveLocalRoutingRuntime(
+  fetchImpl: typeof fetch = fetch,
+  selected: { modelId: string; provider?: Parameters<typeof getOllamaBaseUrl>[0] },
+): Promise<{ contextTokens: number | null; thinkingBudgetEvidence?: import("@/lib/routing/types").LocalThinkingBudgetEvidence }> {
+  const contextTokens = await resolveLocalServedContextTokens(fetchImpl, selected);
+  const thinkingBudgetEvidence = contextTokens === null ? undefined : await getLocalThinkingBudgetEvidence(
+    getOllamaApiRoot(selected.provider), selected.modelId, fetchImpl,
+  );
+  return { contextTokens, ...(thinkingBudgetEvidence ? { thinkingBudgetEvidence } : {}) };
 }
 
 /**

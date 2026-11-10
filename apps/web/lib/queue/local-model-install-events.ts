@@ -1,10 +1,10 @@
-import { inngest, type LocalModelInstallEvent } from "./inngest-client";
+import { jobs, type LocalModelInstallEvent } from "@/lib/jobs";
 
 export function enqueueLocalModelInstall(
   data: LocalModelInstallEvent["data"],
   id: string,
 ) {
-  return inngest.send({
+  return jobs.send({
     id,
     name: "inference/local-model.install",
     data,

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "smol-toml";
 
-import { planCodexConfig } from "../codex-config";
+import { planCodexConfig, planCodexProjectConfig } from "../codex-config";
 
 const FIXTURES = join(__dirname, "fixtures");
 const operatorRedacted = readFileSync(
@@ -21,6 +21,27 @@ const LOCAL_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 const LOCAL_FULL_ENDPOINT = `${LOCAL_ENDPOINT}?tier=full`;
 
 describe("planCodexConfig", () => {
+  it("retains an explicitly selected legacy credential", () => {
+    const plan = planCodexConfig("", REPO, CONFIG_PATH, LOCAL_ENDPOINT, undefined, "legacy");
+    expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBe("DPF_MCP_BEARER_TOKEN");
+  });
+  it("preserves a user-owned credential override", () => {
+    const plan = planCodexConfig('[mcp_servers.dpf]\nurl="' + LOCAL_FULL_ENDPOINT + '"\nbearer_token_env_var="MY_TOKEN"\n', REPO, CONFIG_PATH, LOCAL_ENDPOINT);
+    expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBe("MY_TOKEN");
+  });
+  it("preserves a user-owned credential in explicit legacy mode too", () => {
+    const plan = planCodexConfig('[mcp_servers.dpf]\nurl="https://old.example/mcp"\nbearer_token_env_var="MY_TOKEN"\n', REPO, CONFIG_PATH, LOCAL_ENDPOINT, undefined, "legacy");
+    expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBe("MY_TOKEN");
+  });
+  it("migrates the managed bearer override to OAuth and preserves unrelated settings on rerun", () => {
+    const text = '[mcp_servers.dpf]\nurl = "' + LOCAL_FULL_ENDPOINT + '"\nbearer_token_env_var = "DPF_MCP_BEARER_TOKEN"\nstartup_timeout_sec = 45\n[mcp_servers.other]\nurl = "https://other.example/mcp"\n';
+    const first = planCodexConfig(text, REPO, CONFIG_PATH, LOCAL_ENDPOINT);
+    const parsed = parse(first.writes[0].content) as any;
+    expect(parsed.mcp_servers.dpf.bearer_token_env_var).toBeUndefined();
+    expect(parsed.mcp_servers.dpf.startup_timeout_sec).toBe(45);
+    expect(parsed.mcp_servers.other.url).toBe("https://other.example/mcp");
+    expect(planCodexConfig(first.writes[0].content, REPO, CONFIG_PATH, LOCAL_ENDPOINT).writes).toEqual([]);
+  });
   it("upserts [plugins.\"dpf-platform@personal\"] enabled=true on the operator-current fixture", () => {
     const plan = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH);
 
@@ -220,7 +241,6 @@ describe("planCodexConfig", () => {
     };
     expect(parsed.mcp_servers.dpf).toEqual({
       url: LOCAL_FULL_ENDPOINT,
-      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
     expect(parsed.mcp_servers.node_repl.command).toBe("node");
   });
@@ -256,7 +276,6 @@ describe("planCodexConfig", () => {
     expect(parsed.plugins["dpf-platform@personal"]).toEqual({ enabled: true });
     expect(parsed.mcp_servers["dpf"]).toEqual({
       url: LOCAL_FULL_ENDPOINT,
-      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
   });
 
@@ -292,7 +311,30 @@ describe("planCodexConfig", () => {
     expect(parsed.plugins["dpf-platform@personal"].enabled).toBe(false);
     expect(parsed.mcp_servers["dpf"]).toEqual({
       url: `${novelEndpoint}?tier=full`,
-      bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
     });
+  });
+});
+
+
+describe("planCodexProjectConfig", () => {
+  const endpoint = "https://localhost/api/mcp/v1";
+  it("repairs the project override without installing global defaults or changing user choices", () => {
+    const before = 'model="custom"\n[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\nenabled=false\nstartup_timeout_sec=45\nbearer_token_env_var="CUSTOM_TOKEN"\n[mcp_servers.other]\nurl="https://other.example/mcp"\n';
+    const plan = planCodexProjectConfig(before, CONFIG_PATH, endpoint);
+    expect(plan.writes).toHaveLength(1);
+    const expected = parse(before) as any;
+    expected.mcp_servers.dpf.url = endpoint + "?tier=full";
+    expect(parse(plan.writes[0].content)).toEqual(expected);
+    expect(planCodexProjectConfig(plan.writes[0].content, CONFIG_PATH, endpoint).writes).toEqual([]);
+  });
+  it("applies the managed OAuth credential policy to an existing override", () => {
+    const plan = planCodexProjectConfig('[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"\nbearer_token_env_var="DPF_MCP_BEARER_TOKEN"', CONFIG_PATH, endpoint);
+    expect((parse(plan.writes[0].content) as any).mcp_servers.dpf.bearer_token_env_var).toBeUndefined();
+  });
+  it.each(["", 'model="custom"', '[mcp_servers.other]\nurl="https://other.example"'])("does not introduce a DPF override into %s", text => {
+    expect(planCodexProjectConfig(text, CONFIG_PATH, endpoint).writes).toEqual([]);
+  });
+  it("rejects malformed TOML instead of claiming convergence", () => {
+    expect(() => planCodexProjectConfig('[mcp_servers.dpf]\nurl="unfinished', CONFIG_PATH, endpoint)).toThrow(/project.*TOML/i);
   });
 });

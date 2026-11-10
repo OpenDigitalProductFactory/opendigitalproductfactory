@@ -5,11 +5,12 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { projectInstallState } from "./installer/migrate-install-state.mjs";
 import { signTransitionPayload } from "./lib/transition-signing.mjs";
 
-const root = resolve(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const bash = process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash";
 const bashPath = (path) => process.platform === "win32"
   ? resolve(path).replace(/^([A-Za-z]):\\/, (_, drive) => `/${drive.toLowerCase()}/`).replaceAll("\\", "/")
@@ -87,11 +88,17 @@ exit $rc
   spawnSync("git", ["-C", source, "add", "."]);
   spawnSync("git", ["-C", source, "commit", "-q", "-m", "fixture"]);
   const sha = spawnSync("git", ["-C", source, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  const compatibility = JSON.stringify({ schemaVersion: 1, sourceSha: sha, sourceContentHash: "a".repeat(64), contractSha256: "b".repeat(64),
+    owners: Object.fromEntries(["transport", "approval", "worker", "writer"].map(owner => [owner, { version: 2, sourceSha256: "e".repeat(64) }])) });
   const shellHarness = `
+timeout() { shift 3; [[ "$1" == docker ]] || return 64; "$@"; }
 docker() {
   printf 'docker:%s\\n' "$*" >> '${bashPath(events)}'
+  if [[ "$1" == image && "$2" == inspect && "$*" == *"{{.Id}}"* ]]; then printf 'sha256:${"c".repeat(64)}'; return 0; fi
+  if [[ "$1" == run && "$*" == *"/app/scripts/reassessment-capability-probe.mjs"* ]]; then printf '%s' '${compatibility}'; return 0; fi
   if [[ '${stage}' == build && "$*" == *"build portal postgres"* ]]; then printf 'failure-injected:build\\n' >> '${bashPath(events)}'; return 91; fi
   if [[ '${stage}' == swap && "$*" == *"force-recreate portal"* ]]; then printf 'failure-injected:swap\\n' >> '${bashPath(events)}'; return 92; fi
+  if [[ "$*" == *"recover-workroom-activity-migration.mjs"* ]]; then printf 'not-needed\\n'; return 0; fi
   if [[ "$*" == *"recover-human-principal-backfill-migration.mjs"* ]]; then printf 'not-needed\\n'; return 0; fi
   if [[ "$*" == *"recover-inventory-snapshot-migration.mjs"* ]]; then printf 'not-needed\\n'; return 0; fi
   if [[ "$1" == run ]]; then printf 'candidate-content-hash\\n'; fi

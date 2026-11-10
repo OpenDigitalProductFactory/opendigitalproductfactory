@@ -132,3 +132,27 @@ export function assertMayShareDemandCrossOrg(ctx: DemandShareContext): void {
       `Platform demand flows upstream automatically; customer-domain demand must be marked "public" to share.`,
   );
 }
+
+// ─── Effective sensitivity of work (BI-0A5EE9C1, WWMD DI-5E19848444FC) ───────
+//
+// DPF is open source: work on the platform itself is already public, so it is
+// public by default and any cleared coworker may help with it. Customer-domain
+// work keeps the fail-closed `internal` default, and an explicit
+// `confidential` / `restricted` mark always wins, on platform work too.
+// Derived at read time so every create path — and an item reclassified after
+// creation — gets the same answer without a stored copy to drift.
+
+const PLATFORM_WORK_SCOPE_KINDS: ReadonlySet<string> = new Set(["platform", "common"]);
+
+/** True when the item is work on the open-source platform itself. */
+export function isPlatformWork(ctx: DemandShareContext): boolean {
+  return ctx.digitalProductId === PLATFORM_DIGITAL_PRODUCT_ID
+    || (typeof ctx.scopeKind === "string" && PLATFORM_WORK_SCOPE_KINDS.has(ctx.scopeKind));
+}
+
+/** The sensitivity access checks should enforce for a backlog item. */
+export function effectiveBacklogSensitivity(ctx: DemandShareContext): BacklogSensitivity {
+  const stored = normalizeSensitivity(ctx.sensitivity);
+  if (stored === "confidential" || stored === "restricted") return stored;
+  return isPlatformWork(ctx) ? "public" : stored;
+}

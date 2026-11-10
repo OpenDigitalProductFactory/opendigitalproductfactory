@@ -7,6 +7,19 @@ param(
 
 Set-Location $DPF_DIR
 
+# Host GPU snapshot for local-model admission. Non-fatal when the publisher
+# is absent; a missing snapshot does not disable the local model.
+$gpuPublisher = Join-Path $DPF_DIR "scripts\publish-host-gpu.ps1"
+if (Test-Path -LiteralPath $gpuPublisher) {
+    try {
+        Start-Process -FilePath "powershell.exe" -WindowStyle Hidden -ArgumentList @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $gpuPublisher
+        ) | Out-Null
+    } catch {
+        Write-Host "[!] Host GPU publisher did not start (non-fatal)." -ForegroundColor Yellow
+    }
+}
+
 # Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design section 5).
 # Include the local Edge Node overlay ONLY when this install enabled it.
 # -WithEdge / -NoEdge override; otherwise resolve from install-state.json
@@ -18,15 +31,20 @@ elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
 $includeEdge = $false
 $stateLib = Join-Path $DPF_DIR "scripts\installer\lib\state.ps1"
 if (-not (Test-Path -LiteralPath $stateLib)) { $stateLib = Join-Path $DPF_DIR "installer\lib\state.ps1" }
-try {
-    if (Test-Path -LiteralPath $stateLib) {
-        . $stateLib
+if (Test-Path -LiteralPath $stateLib) {
+    . $stateLib
+    try {
         $includeEdge = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
-    } else {
+    } catch {
         $includeEdge = ($env:DPF_INCLUDE_EDGE -eq '1')
     }
-} catch {
+} else {
     $includeEdge = ($env:DPF_INCLUDE_EDGE -eq '1')
+}
+
+$consumerReleaseTag = Resolve-DpfConsumerReleaseImageTag -InstallDir $DPF_DIR
+if ($consumerReleaseTag) {
+    Write-Host "Using recorded consumer release tag $consumerReleaseTag" -ForegroundColor Cyan
 }
 
 $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR

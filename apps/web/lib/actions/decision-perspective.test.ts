@@ -70,6 +70,25 @@ describe("captureDecisionInteraction", () => {
     mockPrisma.buildActivity.create.mockResolvedValue({});
   });
 
+  it("captures a recommendation routed to a human as an escalation", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(interactionRow({ outcomeType: "recommend", escalationRoute: "human" }));
+    await expect(captureDecisionInteraction({ buildId: "FB-123", interactionId: "DI-ABC123", outcomeType: "escalate", answer: "Approved with the recorded limits" })).resolves.toMatchObject({ captureType: "escalation" });
+    expect(mockPrisma.escalationCapture.create).toHaveBeenCalledOnce();
+    expect(mockPrisma.deferralCapture.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["independent_review", "decided"])("rejects owner capture for the recorded %s route", async (escalationRoute) => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(interactionRow({ escalationRoute }));
+    await expect(captureDecisionInteraction({ buildId: "FB-123", interactionId: "DI-ABC123", outcomeType: "escalate", answer: "Proceed" })).rejects.toThrow("does not require capture");
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("does not let human routing bypass build ownership", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(interactionRow({ outcomeType: "recommend", escalationRoute: "human", build: { buildId: "FB-123", createdById: "another-user" } }));
+    await expect(captureDecisionInteraction({ buildId: "FB-123", interactionId: "DI-ABC123", outcomeType: "escalate", answer: "Proceed" })).rejects.toThrow("Forbidden");
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it("persists human escalation direction as a single durable capture row", async () => {
     mockPrisma.decisionInteraction.findUnique.mockResolvedValue(interactionRow());
 

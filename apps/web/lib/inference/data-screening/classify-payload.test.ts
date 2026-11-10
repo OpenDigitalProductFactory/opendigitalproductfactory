@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { classifyInferencePayload } from "./classify-payload";
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 describe("classifyInferencePayload", () => {
   it("detects secrets, customer, employee, finance, and source-code data without echoing raw values", () => {
@@ -269,8 +269,22 @@ describe("ambiguous-vocabulary corroboration (BI-CD13D818)", () => {
   });
 
   it("escalates when precise vocabulary accompanies an ambiguous term", () => {
-    expect(screen("Review the payroll run and the benefits elections.").overallSensitivity)
+    // Fixture changed 2026-09-01 (BI-67CAF494). This asserted the same rule with
+    // "payroll run" as its precise term; `payroll` has since moved to the
+    // ambiguous set, because it names a domain rather than a record. The rule
+    // under test is unchanged — `salary` is precise and still escalates beside an
+    // ambiguous term.
+    expect(screen("Review the salary bands and the benefits elections.").overallSensitivity)
       .toBe("restricted");
+  });
+
+  it("holds two ambiguous EMPLOYMENT words at confidential, not restricted", () => {
+    // The deliberate behaviour change, pinned so it cannot regress silently:
+    // naming two employment domains is a request ABOUT payroll, not payroll data.
+    // Confidential still summons the PDP and still keeps the turn off any
+    // endpoint lacking confidential clearance.
+    expect(screen("Review the payroll run and the benefits elections.").overallSensitivity)
+      .toBe("confidential");
   });
 
   it("does not let one ambiguous word repeated across probes fake corroboration", () => {
@@ -614,5 +628,154 @@ describe("a field named 'discipline' is not evidence of an HR record", () => {
 
     expect(result.overallSensitivity).toBe("restricted");
     expect(result.dataEvidencedClasses).toContain("employee-records");
+  });
+});
+
+describe("naming a domain is not evidence of a record in it (BI-67CAF494)", () => {
+  function ask(content: string) {
+    return classifyInferencePayload({
+      messages: [{ role: "user" as const, content }],
+      systemPrompt: "",
+      taskType: "conversation",
+    });
+  }
+
+  it("lets a coworker be ASKED for help with payroll", () => {
+    // The live failure: a design-review request that said "payroll" and "tax
+    // filing" classified restricted and clamped to local-only, so the reviewer
+    // could not be reached. RouteDecisionLog 2026-09-01T20:03:07Z, AGT-WS-REVIEW,
+    // classes ["employee-records","payments-finance"]. The message carried no
+    // employee record and no payment value — only the name of the domain.
+    const result = ask(
+      "Please review the payroll tax acquisition design and record spec-approval.",
+    );
+    expect(result.overallSensitivity).not.toBe("restricted");
+  });
+
+  it("still escalates alone on a real employment value", () => {
+    // Fails closed: the words that name the thing itself are unchanged.
+    expect(ask("Her salary is being reviewed.").overallSensitivity).toBe("restricted");
+    expect(ask("Attach the disciplinary letter.").overallSensitivity).toBe("restricted");
+  });
+
+  it("still escalates alone on a real payment identifier", () => {
+    expect(ask("The routing number is on file.").overallSensitivity).toBe("restricted");
+    expect(ask("His SSN is required for the filing.").overallSensitivity).toBe("restricted");
+  });
+
+  it("does not treat payroll plus a bare invoice topic as a payment record", () => {
+    const result = ask("Reconcile the payroll against the invoice.");
+    expect(result.overallSensitivity).toBe("confidential");
+    expect(result.dataEvidencedClasses).not.toContain("payments-finance");
+  });
+
+  it("does not let one word corroborate itself across two rules", () => {
+    // The defect this closes: `payroll` sat in BOTH the employee-records and
+    // payments-finance text patterns, so a single word produced two distinct
+    // restricted reasons — exactly the corroboration bar. The guard corroborated
+    // itself, and no amount of ambiguity marking would have helped.
+    const reasons = new Set(
+      ask("payroll").matches.filter((m) => m.dataClass !== "unknown-governed-data").map((m) => m.reason),
+    );
+    expect(reasons.size).toBeLessThan(2);
+  });
+
+  it("still reports every detected class on the receipt", () => {
+    // Suppressed for routing, never hidden from audit.
+    const result = ask("Please review the payroll tax acquisition design.");
+    expect(result.dataClasses).toContain("employee-records");
+  });
+});
+
+describe("invoice vocabulary is not a payment record (BI-12CD3010)", () => {
+  const classify = (content: string) => classifyInferencePayload({
+    messages: [{ role: "user", content }], systemPrompt: "", taskType: "build-review",
+  });
+
+  it.each([
+    "A build coworker adding an Invoice table chooses DECIMAL(12,2) or integer cents.",
+    "Invoice: table schema; Invoice = document type; Invoice - example table.",
+    "Compensation requires its own authority after rollback. Review the Invoice schema design.",
+    "Invoice table uses integer cents.\n\nRelease date: 2026-11-01. Budget $125.00.",
+    "Invoice schema version 125 SDK describes a document type.",
+    "Release date: 2026-11-01. Budget $125.00.\n\nInvoice table uses integer cents.",
+    "Discuss credential permissions, governance, invoice matching and sensitive domains.",
+    "The field names password, apiKey, invoice and payment describe the schema.",
+  ])("does not infer a payment record from documentation: %s", (content) => {
+    const result = classify(content);
+    expect(result.dataClasses).not.toContain("payments-finance");
+    expect(result.overallSensitivity).not.toBe("restricted");
+  });
+
+  it.each([
+    "Invoice: INV-1042\nAmount: $125.00.",
+    "Invoice=INV-1042",
+    "Invoice INV_1042",
+    "Invoice $125.00",
+    "Invoice: EUR 125.00",
+    "Invoice number INV_1042",
+    "Invoice # INV-1042",
+    "Invoice$125.00",
+    "Invoice - INV_1042",
+    "Invoice due date: 2026-11-01",
+    "Invoice for 125.00 USD",
+    "Invoice total: -125.00 USD",
+    "Invoice from Acme for $125.00",
+    "Invoice total: -125.00",
+    "Invoice \"INV-1042\" is overdue.",
+    "Invoice: (INV_1042)",
+    "Invoice for (125.00 EUR)",
+    "Invoice\nDue date: 2026-11-01\nAmount: 125.00 USD",
+    "Invoice dated October 25, 2026",
+    "Invoice for 125.00 CAD",
+    "Invoice for ₹125.00",
+    "Invoice for 125.00 €",
+    "Invoice from Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor for $125.00",
+    "Please pay $125.00 for this invoice.",
+    "Amount: $125.00\nInvoice",
+    "Due date: 2026-11-01\nInvoice",
+    "Invoice INV-1042 is overdue.",
+    "Invoice INV1042 is overdue.",
+    "Invoice A-1042 is overdue.",
+    "Invoice no. 1042 is payable.",
+    "Invoice dated 2026-10-25.",
+    "Invoice due on 2026-11-01.",
+    "Invoice for USD 125.00.",
+    "Invoice total EUR 125.00.",
+    "Invoice #1042 is payable.",
+    "Invoice amount: $125.00.",
+    "Invoice for $125.00 from the vendor.",
+    "Invoice total is 125.00.",
+    "Invoice number: private-reference",
+  ])("keeps actual invoice details restricted: %s", (content) => {
+    const result = classify(content);
+    expect(result.dataEvidencedClasses).toContain("payments-finance");
+    expect(result.overallSensitivity).toBe("restricted");
+    expect(JSON.stringify(result)).not.toContain(content);
+  });
+
+  it("does not exempt protected content embedded beside an illustrative schema", () => {
+    const secretCanary = ["sk", "fixture", "1234567890abcdef"].join("-");
+    for (const privateValue of [
+      "Employee salary is 125000.",
+      "Invoice INV-1042 amount: $125.00.",
+      "Customer: pat@example.com.",
+      secretCanary,
+    ]) {
+      const result = classify("Public repository schema example: Invoice table. " + privateValue);
+      expect(result.dataEvidencedClasses.length).toBeGreaterThan(0);
+      expect(result.overallSensitivity).not.toBe("internal");
+      expect(JSON.stringify(result)).not.toContain(privateValue);
+    }
+  });
+
+  it("retains authoritative classification even when no value detector matches", () => {
+    const result = classifyInferencePayload({
+      messages: [{role: "user", content: "Invoice schema."}], systemPrompt: "",
+      governedData: [{classificationKnown: true, sensitivity: "restricted",
+        dataClasses: ["payments-finance"]}],
+    });
+    expect(result.overallSensitivity).toBe("restricted");
+    expect(result.dataEvidencedClasses).toContain("payments-finance");
   });
 });

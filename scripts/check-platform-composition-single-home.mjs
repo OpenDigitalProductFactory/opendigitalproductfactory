@@ -11,7 +11,7 @@ function source(root, path) {
 
 export function inspectPlatformCompositionSingleHome(root = defaultRoot) {
   const failures = [];
-  const opsNav = source(root, "apps/web/components/ops/ops-nav.ts");
+  const opsNav = source(root, "apps/web/lib/navigation/ops-nav.ts");
   const productNav = source(root, "apps/web/components/product/ProductTabNav.tsx");
   const productDependencies = source(root, "apps/web/app/(shell)/portfolio/product/[id]/inventory/page.tsx");
   const stackRedirect = source(root, "apps/web/app/(shell)/ops/stack-currency/page.tsx");
@@ -24,7 +24,7 @@ export function inspectPlatformCompositionSingleHome(root = defaultRoot) {
   if (opsNav.includes("Stack Currency") || opsNav.includes("/ops/stack-currency")) {
     failures.push("Operations navigation still publishes Stack Currency.");
   }
-  if (!opsNav.includes("Workrooms")) {
+  if (!opsNav.includes("/ops/workrooms")) {
     failures.push("The unrelated Workrooms navigation entry was removed.");
   }
   if (productNav.includes("Supply Chain") || productNav.includes("/supply-chain")) {

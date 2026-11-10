@@ -20,6 +20,8 @@
 //   - route budgets/companions → apps/web/lib/ux-budget/route-budget-baseline.json
 //                              + deriveRoute from lib/ci-evidence-plan.mjs
 //   - migration immutability → the pre-commit guard + migration-safety contract
+//   - docs impact            → apps/web/lib/docs/doc-impact.generated.json +
+//                              DOCS_ROUTE_MAP via check-docs-impact.mjs
 //
 // Consumers: the scripts/gate-context.mjs CLI (`pnpm gate:context`) today; an
 // MCP tool and Build Studio prompt assembly in follow-up slices (they must
@@ -49,6 +51,8 @@ import {
 } from "./gate-sensitivity.mjs";
 import { findCanonicalSeedContentPaths } from "./seed-fit-gate.mjs";
 import { PR_TRAILER_NAMES } from "./pr-trailer-contract.mjs";
+import { classifyConvergenceSurfaces } from "../check-convergence-impact.mjs";
+import { computeImpact, parseRouteMap } from "../check-docs-impact.mjs";
 import {
   MODULE_SIZE_HARD_CAP,
   MODULE_SIZE_SOFT_CEILING,
@@ -57,6 +61,28 @@ import {
 import { POLICY_GUARD_PROFILES } from "./ci-policy-guards.mjs";
 
 export const GATE_CONTEXT_SCHEMA_VERSION = 2;
+
+/** Local routing only: never authorizes execution or asserts live health. */
+export function buildTaskBrief(situation = "normal") {
+  const recovery = "packages/dpf-skill-pack/skills/dpf-systematic-debugging/references/recovery-routing.md";
+  const routes = {
+    normal: ["delivery", "Claim the existing backlog/workroom; run gate:context for the diff.", "docs/architecture/backlog-and-planning-runbook.md"],
+    "upgrade-failed": ["recovery", "Inspect upgrade status/logs with existing authority; repair source and run local tests before the independent recovery procedure.", recovery],
+    "mcp-unavailable": ["recovery", "Preserve local evidence and continue authorized source work; reconcile coordination when MCP returns.", recovery],
+    "ci-unavailable": ["recovery", "Classify the infrastructure evidence; inspect the checked-in audited gate override and its prerequisites. Record gate-unrun.", recovery],
+    "review-infrastructure-unavailable": ["recovery", "Read the checked-in semantic review publication policy and validate the exact tree. Preserve independent assessments; record unavailable native review as unrun. Reuse existing scoped operator authorization.", "docs/architecture/build-gate-runbook.md"],
+    "permission-denied": ["authorization", "Stop the denied operation; follow the returned token, coworker grant, role or clearance remedy. Never substitute shell/DB access.", recovery],
+    "break-fix-occupied": ["coordination", "Inspect owner and liveness; reconcile a stale claim only through supported coordination. Occupancy is not an outage.", recovery],
+  };
+  const route = Object.hasOwn(routes, situation) ? routes[situation] : null;
+  if (!route) throw new Error(`Unknown situation. Choose: ${Object.keys(routes).join(", ")}`);
+  return {
+    situation, route: route[0], nextAction: route[1], reference: route[2],
+    evidence: "Observed symptom, affected dependency, source identity, existing authorization and actual check results.",
+    stopCondition: "Missing authority or no checked-in recovery for a privileged action; PR, DCO and production-integrity controls still apply.",
+    authorizesExecution: false,
+  };
+}
 
 const MIGRATION_FILE_RE = /^packages\/db\/prisma\/migrations\/[^/]+\/migration\.sql$/;
 // Schema domain-folder files (packages/db/prisma/schema/*.prisma, B5 Seam C
@@ -115,6 +141,34 @@ function guardObligations(paths) {
     add("style-drift-guard", "planned source is scanned for hardcoded colors and off-scale style tokens");
   }
   return selected;
+}
+
+/**
+ * Published docs the doc-impact graph says this diff affects (BI-9B17E889).
+ *
+ * The Docs Impact Gate used to be the first place an author learned which
+ * page described the code they changed, so the answer arrived at push time as
+ * a trailer demand and the page went unedited. Computing it here, from the same
+ * graph and the same `computeImpact` the gate runs, puts the page in the plan.
+ * `pending` docs still need an update or a disposition; `updated` docs are
+ * already in the diff. Fails soft: no graph means an empty list, and CI's gate
+ * still runs.
+ */
+export function docsImpact(paths, repoRoot) {
+  let entries = [];
+  let codeToDocs = {};
+  try {
+    entries = parseRouteMap(readFileSync(join(repoRoot, "apps/web/lib/docs-route-map.ts"), "utf8"));
+  } catch { /* route map absent: code edges still apply */ }
+  codeToDocs = loadJson(repoRoot, "apps/web/lib/docs/doc-impact.generated.json")?.codeToDocs ?? {};
+  const describe = (hit) => (hit.kind === "route" ? `route ${hit.route} (${hit.page})` : `code ${hit.code}`);
+  const pending = computeImpact(paths, entries, codeToDocs);
+  const all = computeImpact(paths.filter((path) => !path.endsWith(".md")), entries, codeToDocs);
+  return [...all.keys()].sort().map((doc) => ({
+    doc,
+    status: pending.has(doc) ? "pending" : "updated",
+    because: all.get(doc).map(describe),
+  }));
 }
 
 function testImpact(files, repoRoot) {
@@ -223,6 +277,22 @@ function trailerConstraints(files, addedLinesByFile) {
     });
   }
 
+  // BI-B19BE117: an install-reachable surface (compose, env contract, installer,
+  // hooks, config, image-copied-by-name script, seed content) must state how an
+  // EXISTING install converges. Advertised here so every surface writes the
+  // trailer before generation rather than learning about it from a red check.
+  let convergence = [];
+  try { convergence = classifyConvergenceSurfaces(paths); } catch { /* registry unreadable: the CI gate still runs */ }
+  if (convergence.length > 0) {
+    trailers.push({
+      gate: "Convergence-Impact",
+      trailer: `${PR_TRAILER_NAMES.convergenceImpact}:`,
+      level: "required",
+      because: `install-reachable surface(s) changed: ${convergence.map((s) => `${s.kind} (${s.files.slice(0, 3).join(", ")})`).join("; ")}`,
+      alternative: "<mode> — <mechanism or reason, 20+ chars>; modes: auto-converges | self-upgrade-step | operator-action | fresh-install-only | not-reachable",
+    });
+  }
+
   return trailers;
 }
 
@@ -239,6 +309,17 @@ export function buildGateContext({
 
   // 1. Attestation trailers this diff shape requires.
   const trailers = trailerConstraints(files, addedLinesByFile);
+  const docs = docsImpact(paths, repoRoot);
+  const pendingDocs = docs.filter((entry) => entry.status === "pending");
+  if (pendingDocs.length > 0) {
+    trailers.push({
+      gate: "Docs Impact",
+      trailer: `${PR_TRAILER_NAMES.docsImpact}:`,
+      level: "required",
+      because: `the doc-impact graph links changed files to: ${pendingDocs.slice(0, 5).map((entry) => entry.doc).join(", ")}`,
+      alternative: "update those docs in this change (preferred); the trailer is only for a change that leaves them true",
+    });
+  }
 
   // 2. Module-size ratchet: baselined caps for touched files; absolute budget
   //    for new source files. Baselined files may shrink, never grow.
@@ -273,6 +354,13 @@ export function buildGateContext({
     id: entry.id,
     description: entry.description,
     artifacts: entry.artifactPaths,
+    // The registry has carried `generate` and `check` all along; this context
+    // used to print only the artifact PATHS, so a reader learned WHAT was stale
+    // and still had to know HOW to refresh it. Surfacing the commands is what
+    // makes this consumable by a script rather than only by a person who already
+    // knows the repo (BI-4CE4F52F): `pnpm land` regenerates straight from here.
+    generate: entry.generate ?? null,
+    check: entry.check ?? null,
   }));
 
   // 5. Routes: net-new pages face absolute budgets + four generated
@@ -343,6 +431,7 @@ export function buildGateContext({
     derivedArtifacts: derived,
     routes,
     migrations,
+    docsImpact: docs,
     guardObligations: guards,
     testImpact: tests,
     verification: [
@@ -376,7 +465,10 @@ export function formatGateContextMarkdown(context) {
   ));
   out.push(...formatSection(
     "Derived artifacts to regenerate in this change",
-    context.derivedArtifacts.map((d) => `- **${d.id}**: ${d.artifacts.join(", ")}`),
+    context.derivedArtifacts.map((d) => {
+      const how = d.generate ? ` — regenerate: \`${d.generate.join(" ")}\`` : "";
+      return `- **${d.id}**: ${d.artifacts.join(", ")}${how}`;
+    }),
   ));
   out.push(...formatSection(
     "Route budgets",
@@ -385,6 +477,10 @@ export function formatGateContextMarkdown(context) {
   out.push(...formatSection(
     "Migrations",
     context.migrations.map((m) => `- [${m.severity}] ${m.rule}`),
+  ));
+  out.push(...formatSection(
+    "Docs this change affects (update each, or record why it stays true)",
+    (context.docsImpact ?? []).map((d) => `- \`${d.doc}\` [${d.status}] ← ${d.because.join(", ")}`),
   ));
   out.push(...formatSection(
     "Guards to exercise before implementation is considered complete",
@@ -398,6 +494,7 @@ export function formatGateContextMarkdown(context) {
   if (
     context.trailers.length + context.moduleSize.length + context.ratchets.length +
     context.derivedArtifacts.length + context.routes.length + context.migrations.length +
+    (context.docsImpact?.length ?? 0) +
     context.guardObligations.length + context.testImpact.length === 0
   ) {
     out.splice(2, 0, "_No gate-sensitive surfaces detected in this diff — the always-on verification path still applies._", "");

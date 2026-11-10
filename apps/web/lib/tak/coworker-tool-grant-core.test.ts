@@ -2,13 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: vi.fn(),
     agent: { findFirst: vi.fn() },
     agentToolGrant: { upsert: vi.fn(), deleteMany: vi.fn() },
     agentToolGrantRevocation: { upsert: vi.fn(), deleteMany: vi.fn() },
+    toolExecution: { create: vi.fn() },
   },
 }));
 
 import { prisma } from "@dpf/db";
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
 
 import {
   applyCoworkerToolGrant,
@@ -25,6 +28,7 @@ const SCOUT = { id: "cuid-scout", agentId: "AGT-WS-SCOUT", slugId: "external-cat
 
 beforeEach(() => {
   vi.clearAllMocks();
+  asMock(prisma.$transaction).mockImplementation(async (fn: (db: typeof prisma) => Promise<unknown>) => fn(prisma));
   asMock(prisma.agentToolGrant.deleteMany).mockResolvedValue({ count: 0 });
   asMock(prisma.agentToolGrantRevocation.deleteMany).mockResolvedValue({ count: 0 });
 });
@@ -33,6 +37,45 @@ describe("isKnownGrantKey", () => {
   it("accepts a real grant key and rejects a typo", () => {
     expect(isKnownGrantKey("backlog_write")).toBe(true);
     expect(isKnownGrantKey("not_a_real_grant")).toBe(false);
+  });
+});
+
+// BI-825D3487: extra profession families are granted as `wiki_profession_read:<key>`.
+describe("isKnownGrantKey — corpus grants", () => {
+  it("accepts the corpus grants and a registered extra family, and rejects an unknown family", () => {
+    expect(isKnownGrantKey("wiki_kernel_read")).toBe(true);
+    expect(isKnownGrantKey("wiki_org_read")).toBe(true);
+    expect(isKnownGrantKey("wiki_profession_read")).toBe(true);
+    expect(isKnownGrantKey(`wiki_profession_read:${PROFESSION_REGISTRY.families[0]!.professionKey}`)).toBe(true);
+    expect(isKnownGrantKey("wiki_profession_read:not-a-profession")).toBe(false);
+  });
+});
+
+// BI-825D3487 (AC-CRG-6): a corpus grant change leaves an authority-trail row.
+describe("corpus grant audit", () => {
+  it("writes an authority-trail row when a corpus grant is revoked or granted", async () => {
+    await removeCoworkerToolGrant("cuid-scout", "wiki_kernel_read", "user_1");
+    expect(prisma.toolExecution.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        threadId: "coworker-corpus-grant:cuid-scout",
+        agentId: "cuid-scout",
+        userId: "user_1",
+        toolName: "manage_coworker_tool_grant",
+        auditClass: "authority-trail",
+        parameters: { agentCuid: "cuid-scout", grantKey: "wiki_kernel_read", action: "revoke" },
+        success: true,
+      }),
+    });
+    const extra = `wiki_profession_read:${PROFESSION_REGISTRY.families[1]!.professionKey}`;
+    await applyCoworkerToolGrant("cuid-scout", extra, "user_1");
+    expect(prisma.toolExecution.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({ parameters: { agentCuid: "cuid-scout", grantKey: extra, action: "grant" } }),
+    });
+  });
+
+  it("writes no corpus audit row for an ordinary grant", async () => {
+    await applyCoworkerToolGrant("cuid-scout", "backlog_write", "user_1");
+    expect(prisma.toolExecution.create).not.toHaveBeenCalled();
   });
 });
 
@@ -120,10 +163,10 @@ describe("resolveCoworkerAgent", () => {
   it("canonicalises a registry alias miss through the registry then retries", async () => {
     // First DB probe (raw alias) misses; registry canonicalises the alias
     // "hive-scout" to AGT-WS-SCOUT; the retry hits.
-    asMock(prisma.agent.findFirst).mockResolvedValueOnce(null).mockResolvedValueOnce(SCOUT);
+    asMock(prisma.agent.findFirst).mockResolvedValueOnce(SCOUT);
     const res = await resolveCoworkerAgent("hive-scout");
     expect(res).toEqual(SCOUT);
-    expect(prisma.agent.findFirst).toHaveBeenCalledTimes(2);
+    expect(prisma.agent.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it("returns null for an empty ref without touching the DB", async () => {

@@ -4,17 +4,18 @@
 
 This document is an informative contribution and submission roadmap for the Trusted AI Kernel
 (`TAK`), Global AI Agent Identification and Governance (`GAID`), and Job-Specific Intelligence
-(`TAK-JSI`) standards family.
+(`TAK-JSI`) standards family. The working-draft Gated Permissions Process (`GPP`, added
+2026-09-30) is not yet assessed against the readiness levels below; it enters the roadmap at
+the lowest level until its assertions have executable evidence.
 
 It does not authorize a submission, establish an intellectual-property policy, claim endorsement,
 or make any external specification normative. The canonical technical relationship to external
 work remains in
 [External Standards Alignment](agent-standards-external-alignment.md). Normative requirements
-remain in the three standards identified by
+remain in the standards identified by
 [Trustworthy AI Agent Standards Family](agent-standards-family.md).
 
-Venue and process information was verified against primary sources on 2026-07-26. It must be
-rechecked before an external contribution is filed.
+The original venue allocation was verified on 2026-07-26. The [LF/TBM discussion packet](../publications/trusted-agent-tbm/README.md) refreshes the November 9–11, 2026 meeting context and AAIF/JDF contribution options as of 2026-10-16. This refresh does not supersede venue ownership or establish IP terms; recheck the receiving venue before any authorized contribution is filed.
 
 ## 1. Purpose
 

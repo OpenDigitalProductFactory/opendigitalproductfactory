@@ -33,20 +33,32 @@
 //   node scripts/check-doc-anchor-existence.mjs            # check (CI)
 //   node scripts/check-doc-anchor-existence.mjs --update   # regenerate the grandfather baseline
 //
-// Endpoint: $DPF_MCP_ENDPOINT (default http://127.0.0.1:3000/api/mcp/v1),
-// bearer $DPF_MCP_BEARER_TOKEN.
+// Endpoint: $DPF_MCP_URL, then legacy $DPF_MCP_ENDPOINT, then loopback default.
+// Credentials use the shared client-credentials resolver and legacy PAT fallback.
 
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
+import { listChangedFiles, runGit } from "./lib/git-changed-files.mjs";
+import { mcpPost } from "./lib/mcp-client.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
+
+export { listChangedFiles, runGit };
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = path.join(REPO_ROOT, "scripts", "doc-anchor-baseline.txt");
 export const DEFAULT_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 const FETCH_TIMEOUT_MS = 5000;
+
+// Keep the refreshable bearer and selected endpoint together. A malformed
+// configured client must remain unavailable, never retry as another identity.
+export function resolveDocAnchorConnection(env = process.env, { resolveCredential = resolveMcpCredential } = {}) {
+  const endpoint = env.DPF_MCP_URL?.trim() || env.DPF_MCP_ENDPOINT?.trim() || DEFAULT_ENDPOINT;
+  return { endpoint, bearer: resolveCredential({ mcpUrl: endpoint, env }).bearer };
+}
 
 const DEFAULT_BUDGET = Object.freeze({ owner: "platform-architecture", expiry: "2026-11-16" });
 const BUDGET_NOTE_LINES = Object.freeze([
@@ -124,32 +136,47 @@ export function interpretToolResponse(kind, id, body) {
   return "unknown";
 }
 
-/** POST one MCP tools/call. Returns the raw response text, or null on failure. */
-export async function callTool(endpoint, token, name, args) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+/**
+ * True when a catalog response admits it did not return everything. The tool
+ * reports `total`/`fetched`/`truncated`; any of those signalling a short read
+ * means an id absent from the page is not evidence the id does not exist.
+ */
+export function isTruncatedListing(body) {
+  let parsed;
   try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name, arguments: args },
-      }),
+    parsed = typeof body === "string" ? JSON.parse(body) : body;
+  } catch {
+    return true; // unparseable is not proof of completeness
+  }
+  const text = JSON.stringify(parsed?.result ?? parsed ?? null);
+  // Two truncation shapes: the tool's own `truncated: true` page marker, and
+  // the MCP server's per-call context budget, which replaces a large result
+  // with `structuredContent._truncated: true` plus a `_preview` holding only
+  // the first few rows. A 222-epic catalog came back as a 6 KB preview naming
+  // four epics, and every other correctly cited epic read as "missing".
+  if (/"_?truncated"\s*:\s*true/.test(text)) return true;
+  const total = text.match(/"total"\s*:\s*(\d+)/);
+  const fetched = text.match(/"fetched"\s*:\s*(\d+)/);
+  if (total && fetched && Number(fetched[1]) < Number(total[1])) return true;
+  return false;
+}
+
+/**
+ * POST one MCP tools/call through the shared client. Returns the raw response
+ * text, or null on any failure (non-2xx, transport, timeout, refused endpoint):
+ * this gate degrades to warn-and-skip, never to "missing".
+ */
+export async function callTool(endpoint, token, name, args) {
+  try {
+    const reply = await mcpPost("tools/call", { name, arguments: args }, {
+      mcpUrl: endpoint,
+      bearerToken: token,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      accept: "application/json, text/event-stream",
     });
-    if (!res.ok) return null;
-    return await res.text();
+    return reply.status >= 200 && reply.status < 300 ? reply.text : null;
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -177,54 +204,6 @@ export async function verifyAnchors(pairs, lookup) {
 }
 
 const REF_RE = /^[A-Za-z0-9._\-/]{1,200}$/;
-
-/**
- * Run git in the repo. Distinguishes success from failure — never collapse a
- * failed invocation into an empty string (BI-B6433DC6).
- */
-export function runGit(args, { exec = execFileSync } = {}) {
-  try {
-    const stdout = exec("git", args, {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { ok: true, stdout: String(stdout ?? ""), stderr: "" };
-  } catch (e) {
-    return {
-      ok: false,
-      stdout: (e.stdout && e.stdout.toString()) || "",
-      stderr: (e.stderr && e.stderr.toString()) || e.message || "",
-      status: e.status ?? 1,
-    };
-  }
-}
-
-/**
- * Files changed vs `base`. An unresolvable ref or a failed three-dot diff is
- * `unresolvable`, never an empty list — a shallow clone can name origin/main
- * and still fail the merge-base (BI-B6433DC6).
- */
-export function listChangedFiles(base, { git = runGit } = {}) {
-  const parsed = git(["rev-parse", "--verify", `${base}^{commit}`]);
-  if (!parsed.ok) {
-    return {
-      status: "unresolvable",
-      files: [],
-      detail: (parsed.stderr || parsed.stdout || "").trim(),
-    };
-  }
-  const diff = git(["diff", "--name-only", `${base}...HEAD`]);
-  if (!diff.ok) {
-    return {
-      status: "unresolvable",
-      files: [],
-      detail: (diff.stderr || diff.stdout || "").trim(),
-    };
-  }
-  const files = diff.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
-  return { status: "ok", files, detail: "" };
-}
 
 function scanAllDocs() {
   const pairs = [];
@@ -303,20 +282,31 @@ async function main() {
     return;
   }
 
-  const token = process.env.DPF_MCP_BEARER_TOKEN;
-  const endpoint = process.env.DPF_MCP_ENDPOINT || DEFAULT_ENDPOINT;
-  if (!token) {
-    console.warn(`[doc-anchor] WARN: ${newPairs.length} new citation(s) NOT verified — DPF_MCP_BEARER_TOKEN unset (no live install on this runner). Skipped:`);
+  let connection;
+  try { connection = resolveDocAnchorConnection(); } catch { /* Missing or invalid configured credentials are unknown. */ }
+  if (!connection) {
+    console.warn(`[doc-anchor] WARN: ${newPairs.length} new citation(s) NOT verified — configured MCP credential unavailable. Skipped:`);
     for (const p of newPairs) console.warn(`  ~ ${p.doc}: ${p.id}`);
     console.warn("[doc-anchor] Passing (degraded). Verify on an install with the portal up before merge.");
     return;
   }
+  const { endpoint, bearer: token } = connection;
 
   let epicListing = null; // one list_epics call serves every EP-* id
   const lookup = async (kind, id) => {
     if (kind === "epic") {
       if (epicListing === null) {
-        epicListing = (await callTool(endpoint, token, "list_epics", {})) ?? "unreachable";
+        // list_epics defaults to 100 rows. An install with more epics than that
+        // returned a TRUNCATED catalog, and every id past the cut read as
+        // "missing" — a correctly cited, freshly filed epic failed the guard.
+        // Ask for the documented maximum, and if the catalog is STILL truncated
+        // treat epic lookups as unverifiable rather than absent: everywhere else
+        // this guard fails open on uncertainty, and a partial listing is exactly
+        // that. Absence must be proven, never inferred from a short page.
+        const listing = await callTool(endpoint, token, "list_epics", { limit: 1000 });
+        epicListing = listing == null || isTruncatedListing(listing)
+          ? "unreachable"
+          : listing;
       }
       if (epicListing === "unreachable") return "unknown";
       return interpretToolResponse("epic", id, epicListing);

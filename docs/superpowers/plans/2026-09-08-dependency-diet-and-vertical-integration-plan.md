@@ -1,0 +1,420 @@
+---
+status: active
+---
+
+# Dependency diet and vertical integration plan
+
+_Founder-directed research and re-architecture planning thread, 2026-09-08._
+_Epic: `EP-8DC217EB` (Vertical Integration Inward). Extends [the 2026-07-07 plan](2026-07-07-vertical-integration-inward-plan.md) BET-14 and the [dependency-reduction routine](../../architecture/dependency-reduction-routine.md); it does not replace either._
+
+> **For agentic workers:** execute one move per backlog item, one branch, one PR. Moves marked **WWMD** need a `principle_decide` record before code. Every move ships its ratchet (§7) in the same PR or names the item that will.
+
+## 0. What the founder asked, and the honest answer
+
+The direction: fewer dependencies, fewer duplicate versions, fewer pins, vertically integrate what we already half-own, and get faster builds and compile times out of it.
+
+Measured on `main` at `2fa630fcbe2` (2026-09-08), the picture is:
+
+| Measure | Value |
+|---|---|
+| Resolved packages in `pnpm-lock.yaml` | 2000 (1709 names) |
+| Names resolved at more than one version | 227 (291 surplus copies) |
+| Production-runtime closure (portal + adp + edge) | 825 (41%) |
+| Dev / build / test / mobile-only | 1175 (59%) |
+| `pnpm-workspace.yaml` override entries | 78 |
+| Shipped portal image | 4.17 GB |
+| `node_modules` inside that image | 1.83 GB, 1167 package directories |
+| `apps/web` typecheck, local | 98 s wall, 60 s in the checker, 7.3 GB heap |
+| First-party TypeScript loaded by that typecheck | 3.05 M lines vs 0.40 M lines of `.d.ts` |
+| CI long poles (merge-group run 34303811714) | UX route sweep 573 s, production build 420 s, typecheck 274 s, web unit shards 271 to 340 s |
+
+Three conclusions shape the plan:
+
+1. **The image bloat is a packaging defect, not a dependency-count problem.** The runner stage copies the whole workspace `node_modules` (`Dockerfile` line 312), so the production image carries two TypeScript compilers, vitest, jsdom, msw, mermaid with its headless-browser stack, Prisma Studio, and a 130 MB browser-only ONNX runtime. Fixing that removes roughly 1.3 GB and about 450 packages from the shipped artifact without touching a single dependency declaration (§3 M1).
+2. **The dependency count is dominated by five roots.** `inngest` (380 in its closure, 130 exclusive to it, in production), `@mermaid-js/mermaid-cli` (349 / 113, dev), the Expo toolchain (about 940 shared, mobile only), `@stoplight/prism` (211 / 26, harness), and the document cluster in `apps/web` (react-pdf, react-markdown, remark-gfm, pdf-parse: about 230 / 106). Everything else is long tail.
+3. **Compile time is source-bound, not dependency-bound.** Definitions are 12% of the lines the checker loads; our own code is 88%, and 37% of that is test files. Dependency work will not move typecheck time; program shape will (§3 M11).
+
+The rent-versus-own doctrine (founder, 2026-06-20) and the tiered posture (2026-07-21) stay in force. This plan works the first three rungs of that ladder, **eliminate, dedupe, hybridize onto substrate we already own**, and reaches "own" only where the platform already carries the capability (Postgres, the browser sidecar, the document pipeline).
+
+## 1. Evidence
+
+### 1.1 Where the packages come from
+
+Closure = every package reachable from the direct dependency. Exclusive = reachable from no other direct dependency anywhere in the workspace.
+
+| Direct dependency | Closure | Exclusive | Kind | Workspace |
+|---|---|---|---|---|
+| `inngest` | 380 | 130 | prod | apps/web |
+| `@mermaid-js/mermaid-cli` | 349 | 113 | dev | root |
+| `@react-pdf/renderer` | 67 | 45 | prod | apps/web |
+| `react-markdown` + `remark-gfm` | 85 + 68 | 48 | prod | apps/web |
+| `@tailwindcss/postcss` | 44 | 29 | dev | apps/web |
+| `@stoplight/prism-cli` | 211 | 26 | prod | integration-test-harness |
+| `jest-expo` | 940 | 17 | dev | apps/mobile |
+| `nativewind` | 499 | 16 | prod | apps/mobile |
+| `pdf-parse` | 13 | 13 | prod | apps/web |
+| `recharts` | 44 | 12 | prod | apps/web |
+| `@modelcontextprotocol/sdk` | 92 | 11 | prod | services/adp |
+| `mammoth` | 26 | 8 | prod | apps/web |
+| `next-auth` | 106 | 6 | prod | apps/web |
+| `@ricky0123/vad-web` | 19 | 6 | prod | apps/web |
+
+Exclusive packages by workspace and kind: apps/web prod 301, root devDependencies 120, apps/web dev 37, apps/mobile 51, harness 27, adp 15, db 21.
+
+### 1.2 What the duplicate versions trace to
+
+| Package | Versions | Pulled by |
+|---|---|---|
+| `commander` | 6 | terser, sucrase, d3-dsv, katex, react-native, mermaid-cli |
+| `@types/node` | 5 | `@inngest/ai` (22), `@types/net-snmp` (24), `docx` (25), first-party (26) |
+| `typescript` | 2 in the image | first-party 6.0.3; `@inngest/ai` drags 5.9.3 |
+| `pino` | 3 | Prism (6), `@zenuml/core` via mermaid (8), harness (10) |
+| `lightningcss` | 3 | `react-native-css-interop` (1.27), tailwind 4 (1.32, 1.33) |
+| `elkjs` | 3 | mermaid layout (0.9), Prisma Studio (0.11), first-party (0.12) |
+| `tailwindcss` | 3.x and 4.x | the only first-party split in `sbom/baseline.json`: mobile on nativewind v4 |
+| `semver` 6, `lru-cache` 5, `glob` 7, `minimatch` 3 | old majors | Babel and `test-exclude` (Expo / coverage) |
+
+Every row except the Babel one disappears with a move in §3: mermaid-cli (M2), inngest (M3), Prism (M4), mobile toolchain (M6).
+
+### 1.3 What the image ships that the portal never executes
+
+From `docker history` and a `du` inside `dpf-portal:v2026.09.08-reviewer-recovery.3`:
+
+| Layer or directory | Size |
+|---|---|
+| `COPY /app/node_modules` | 1.83 GB |
+| Next standalone output (already carries its own traced `node_modules`) | 880 MB |
+| `apps/web-src` + `packages-src` (Build Studio source copies) | 187 MB |
+| apk toolchain (docker-cli, git, git-lfs, postgres client, nmap) | 185 MB |
+
+Inside that `node_modules`: mermaid + zenuml + katex + cytoscape 202 MB, vitest + jsdom + msw + vite + rolldown + esbuild + two TypeScripts 145 MB, `onnxruntime-web` 130 MB (browser-only, from `vad-web`), Prisma Studio 43 MB, `@fortawesome/fontawesome-free` 36 MB (mermaid-cli only), `effect` 34 MB (`@prisma/config`), `date-fns` 33 MB (`react-day-picker` only), `@electric-sql/pglite` 24 MB (`@prisma/dev`).
+
+The Dockerfile comment explains the copy: seeds and migrations import `@dpf/*` workspace packages and run under `tsx`, so the runner needs a resolvable workspace. That justifies a **production** workspace install, not the dev one.
+
+### 1.4 What the durable-job engine actually uses
+
+`inngest` is the largest production root and the only consumer of the `redis` container (the sole other reference is a poison-queue drain script). Usage on `main`:
+
+| Feature | Sites |
+|---|---|
+| `createFunction` | 117 across 86 files, 85 of them under `lib/queue/` |
+| `step.run` | 236 |
+| `step.waitForEvent` | 19 |
+| `step.sleep` / `sleepUntil` | 5 |
+| `cron:` triggers | 78 |
+| `concurrency:` / `retries:` / `priority:` options | 89 / 121 / 231 |
+| `idempotency` / `cancelOn` | 3 / 1 |
+| `inngest.send(` | 45 |
+
+That is a bounded feature set: memoized steps, event wait, sleep, cron, concurrency keys, retries, priority. The event store already lives in Postgres (`INNGEST_POSTGRES_URI`); Redis holds the queue. The shape is the same one BET-5 retired for Neo4j and Qdrant: a non-authoritative projection sitting beside Postgres.
+
+### 1.5 Retired substrate still referenced
+
+97 files under `apps/web/lib` and `packages/db/src` still mention `neo4j` or `qdrant` after BI-A1E864A5 closed (2026-08-13), led by `operate/backups/engine-specs.ts` (60 mentions), `operate/metrics.ts` (20) and the backup test suites. `scripts/check-retired-substrate.mjs` exists but ratchets rather than forbids.
+
+### 1.6 Compile-time profile
+
+`tsc --extendedDiagnostics` on `apps/web`: 11,554 files, parse 5.5 s, bind 2.8 s, **check 60.5 s**, incremental emit 24 s, total 98 s, 7.3 GB heap (the `run-tsc.mjs` wrapper already raises the heap for this). Tracked `apps/web` TypeScript is 1.40 M lines, of which 0.52 M (37%) are `*.test.ts(x)` files compiled into the same program. The four largest `lib/` domains by file count are `build` (400), `actions` (361), `tak` (324) and `mcp` (273).
+
+## 2. What already exists (extend, do not reinvent)
+
+- Routine, gates and doctrine: [dependency-reduction-routine.md](../../architecture/dependency-reduction-routine.md) (New Dependency Gate, SBOM Divergence Guard, Singleton Safety Guard, OSV scan, release-age floor, `pnpm candidates`, `pnpm surface`).
+- Posture: [dependency sovereignty spec](../specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md) (Tier 0 / 1 / 2, six-criterion vendoring bar `DI-957F61CFECEA`).
+- Prior retirement precedent: BI-A1E864A5 (Neo4j + Qdrant onto Postgres, benchmarked, founder green-lit, done).
+- Open long-tail item this plan decomposes: BI-C0CEB377 (BET-14).
+- Override audit: `pnpm audit:stale-overrides` reports "un-auditable" offline; it needs `GITHUB_REPOSITORY` + `GITHUB_TOKEN` to cross-check, so the 78-entry block has never actually been pruned by the tool.
+
+## 3. The moves
+
+Ranked by leverage ÷ effort ÷ risk. Effect numbers are from §1; "packages" means lockfile resolutions unless stated.
+
+### M1 · Ship a production dependency set in the portal image · effort M · leverage H · no decision needed
+
+**Now:** runner stage copies the dev workspace `node_modules` (1.83 GB, 1167 package dirs).
+**Move:** build a second install in the `init` stage with `pnpm install --prod --frozen-lockfile --filter` scoped to what the runner executes at runtime (`@dpf/db` seed and migrate under `tsx`, the Prisma CLI for `migrate deploy`, `scripts/` consumers such as gate-context and the backup runners), and copy only that. Build Studio already bootstraps its own `/workspace` install from the shipped manifests, so it loses nothing. Keep `apps/web-src` and `packages-src` (source is not the problem).
+**Effect:** roughly 1.3 GB off the image and about 450 packages out of the shipped artifact, including both stray TypeScripts, vitest, jsdom, mermaid, puppeteer, Prisma Studio and the ONNX runtime. Smaller image pulls on every self-upgrade across the fleet.
+**Risk:** a runtime import that only resolved because the dev tree was present. Mitigation: enumerate every `require`/`import` executed from `/app/scripts` and the seed path first, and prove the image on the local-CI gate plus `/ops/self-upgrade` on the dev install.
+**Ratchet:** an image-size budget in `publish-image.yml` and a `node_modules` package-count assertion in the runner stage.
+
+### M2 · Take the diagram and docx toolchain out of the workspace · effort S · leverage H · no decision needed
+
+**Now:** `@mermaid-js/mermaid-cli`, `puppeteer`, `docx` are root devDependencies used only by `scripts/render-doc-diagrams.mjs` (84 files with mermaid fences, 18 committed `.mmd`) and three `docs:*-docx` generators. They bring 349 + 22 packages, eight exact override pins, `commander@13`, `pino@8`, `elkjs@0.9`, `katex`, `cytoscape` and 36 MB of Font Awesome.
+**Move:** run the renderer from a pinned OCI tool image (`minlag/mermaid-cli` upstream or a DPF-built `dpf-doctools` image alongside the promoter image) invoked by the same script; move the docx generators into the same tool image or onto the portal's existing document pipeline. The diagram stack keeps its "last policy-vetted release" discipline through the image digest instead of eight npm pins.
+**Effect:** about 370 packages, 8 overrides, one `commander`, one `pino`, one `elkjs` and 202 MB of the current image.
+**Risk:** contributors without Docker cannot render diagrams locally. The check mode (`--check`) stays pure Node, so the PR gate is unaffected.
+**Ratchet:** the New Dependency Gate already blocks re-adding; add the three names to a deny list in `sbom/dependency-allowlist.json`.
+
+### M3 · Hybridize the durable-job engine onto Postgres · effort XL · leverage H · **WWMD**
+
+**Now:** §1.4. Two always-on containers (`inngest`, `redis`) plus `redis-exporter`, a per-step HTTP round trip portal → inngest → portal, the largest production root, and the source of the duplicate TypeScript and `@types/node@22` in the image.
+**Move:** an owned `@dpf/jobs` package on Postgres: a `FOR UPDATE SKIP LOCKED` run queue, a step-memo table giving the same `step.run` replay semantics, `LISTEN/NOTIFY` for `waitForEvent`, a cron scheduler folded into the existing `ScheduledJob` substrate (BET-11), and concurrency keys as advisory locks. Keep the `createFunction` / `step.*` facade so the 117 functions migrate mechanically, then retire the three containers and the `INNGEST_*` env surface. Sequence behind BET-11 so the scheduler lands once.
+**Research and benchmarking (required before the decision):** compare `pg-boss`, `graphile-worker` and `river` for queue and retry semantics, and Inngest self-hosting for what we lose (its dashboard, replay UI, and step-level observability, which `/ops` already reports from `TaskRun`). Record what DPF adopts and rejects with the reason.
+**Effect:** about 380 packages from the production closure, three containers, one HTTP hop per step, `typescript@5.9.3` and `@types/node@22` gone.
+**Risk:** the biggest blast radius in this plan (86 files, every background workflow). Mitigation: facade first, dual-run behind a flag with `TaskRun` outcomes and the `taskrun-watchdog` stall detector as the oracle, one queue domain at a time.
+**Decision:** `principle_decide` on `own_postgres_jobs` vs `keep_inngest` vs `rent_pg_boss`, scoring `operational_independence` and `vendor_lock_in` against `long_term_maintainability` and `blast_radius`.
+**Design (2026-09-25):** [durable jobs on Postgres](../specs/2026-09-25-postgres-durable-job-engine-design.md) holds the research and benchmarking section, the recommendation (`own_postgres_jobs`) and the decision inputs. A re-count on `main` found 125 functions in 93 files, not 117 in 86. It also found that the platform uses none of Inngest's flow-control features, and that neither pg-boss nor graphile-worker provides memoised steps, `waitForEvent` or `cancelOn`.
+
+### M4 · Replace Prism in the integration-test harness with an owned contract validator · effort M · leverage M · **WWMD**
+
+**Now:** `@stoplight/prism-http` and `prism-cli` (211 packages, `pino@6`, one `commander`) back a 60-line `prism-contract.ts` that validates vendor fixtures against an OpenAPI document in a 1,360-line service.
+**Move:** validate request and response shapes with the OpenAPI document plus `zod` (already a dependency) or a single small OpenAPI validator, and serve fixtures from the harness's own router.
+**Effect:** about 210 packages, `pino` collapses from three majors to one.
+**Decision:** small, but it is an own-versus-rent call, so record it.
+
+### M5 · Collapse the document cluster in `apps/web` · effort M · leverage M · **WWMD** for the markdown engine
+
+- `@react-pdf/renderer` (67 packages, 45 exclusive) has one call site, `lib/invoice-pdf.tsx`. The platform already runs a browser sidecar and Playwright for UX verification; render the invoice as the same HTML the portal shows and print it to PDF through that path. Effect: −67 packages.
+- `react-markdown` + `remark-gfm` (153 packages) have six call sites. Markdown rendering is a sanitization boundary, so this is not a "write our own" candidate under the vendoring bar; the decision is one engine, server-side, behind a single `renderMarkdown()` primitive, and whether the unified pipeline or a single-package renderer is that engine.
+- `pdf-parse`, `mammoth`, `read-excel-file`, `papaparse`, `fast-xml-parser` stay (rent), but behind the `parseDocument()` facade BET-14 already names, and `pdf-parse` moves off the eager path if its 56 MB of `pdfjs-dist` + `@napi-rs/canvas` can load lazily.
+- `@ricky0123/vad-web` is browser-only; assert it never enters a server chunk (M1 removes its ONNX runtime from the image regardless).
+
+### M6 · Split the mobile app into its own pnpm workspace · effort M · leverage H · **founder decision**
+
+**Now:** `apps/mobile` is active (26 commits since July) and healthy, but it is why the platform lockfile carries about 950 Expo, React Native, Metro and Jest packages, the exact `react` / `react-dom` 19.2.3 override (React Native's embedded renderer), 42 of the 78 overrides (the Jest 30 unification), the only first-party version split (`tailwindcss` 3 vs 4), `lightningcss@1.27` and `commander@12`.
+**Move:** give `apps/mobile` its own `pnpm-workspace.yaml` and lockfile, consuming `@dpf/api-client`, `@dpf/types` and `@dpf/validators` as published or packed artifacts (the same boundary an external consumer of the API would use). The platform SBOM, typecheck, unit-test shards and image builds stop seeing the mobile toolchain; the mobile CI keeps its own.
+**Effect:** lockfile 2000 → about 1050; overrides 78 → about 30; `react` pin gone; the Tier-1 split gone.
+**Cost:** two lockfiles to scan; the routine's scripts take a `--lockfile` argument. Shared-type changes need a publish step, which is a feature, not a bug, for an API boundary.
+**Decision:** the founder owns whether mobile stays in the platform monorepo. The recommendation is to split.
+
+### M7 · Toolchain multi-version cleanup · effort S · leverage M · no decision needed
+
+Independent of M2, M3, M4 and M6: floor `@types/node` to `^26` for `@types/net-snmp` and `docx` (or drop `@types/net-snmp` by typing the four call sites), trace and align the `immer` 10/11 pair already accepted in `sbom/singleton-baseline.json`, and run `pnpm dedupe` for the Tier-2 same-major drift (81 candidates in the baseline). Then ratchet `sbom/baseline.json` totals down.
+
+### M8 · Prune the override block with the tool it already has · effort S · leverage M · no decision needed
+
+Run `pnpm audit:stale-overrides` with a `GITHUB_TOKEN` in the `dependency-scan.yml` schedule so the cross-check actually executes, and remove every floor whose parent range now resolves at or above it. The 42 Jest lines go with M6; the 8 diagram pins go with M2; the remaining CVE floors (about 18) are load-bearing until the audit says otherwise.
+
+### M9 · Sweep the retired-substrate residue · effort M · leverage M · no decision needed
+
+Reduce the 97 `neo4j` / `qdrant` mentions to the guard, the deferral note in BI-A1E864A5 and nothing else; convert `check-retired-substrate.mjs` from ratchet to forbid once the count is zero. Backups `engine-specs.ts` and `operate/metrics.ts` are the bulk.
+
+### M10 · Gate the observability fleet by profile · **already done, retired**
+
+Retired 2026-09-08 (BI-A5B2A32F discarded). The evidence in §1 counted services in the compose file, not the default profile. On the live dev install `docker compose config --services` with no profile resolves to `inngest`, `portal`, `portal-init`, `postgres` and `redis` only: prometheus, grafana, loki, alloy and postgres-exporter sit behind the `runtime:deep-observability` capability profile, redis-exporter behind `runtime:durable-automation`, cadvisor and node-exporter behind `linux-monitoring` (`scripts/lib/resolve-capability-compose-profiles.mjs`). The redis-exporter retirement folds into M3.
+
+### M11 · Cut typecheck and build time at the source · effort M · leverage H · no decision needed
+
+Dependency work does not move this number (§1.6). What does:
+
+1. **Separate the test program.** A `tsconfig.test.json` that owns `*.test.ts(x)` and the vitest setup, and a production `tsconfig.json` that excludes them. That removes 37% of the checked lines from the gate that runs on every push; vitest keeps typechecking tests through its own program. Expected: check time 60 s → about 40 s, heap well under the 8 GB ceiling `run-tsc.mjs` has to request today.
+2. **Project references for the four heavy domains** (`lib/build`, `lib/actions`, `lib/tak`, `lib/mcp`) so incremental builds skip untouched domains and CI can check them in parallel. This is the structural fix and it pairs with the module-size guard already in place.
+3. **CI shape.** The long poles are the UX route sweep (573 s) and the production build (420 s), not tsc (274 s). The route sweep is the next target once M1 lands, because a smaller image is a faster sandbox boot for it.
+4. **Measure, then ratchet.** Commit the `--extendedDiagnostics` baseline (`Files`, `Lines of TypeScript`, `Check time`) next to `sbom/baseline.json` and fail a PR that grows checked lines by more than its diff explains.
+
+## 4. Sequencing
+
+| Wave | Moves | Why this order |
+|---|---|---|
+| **A · packaging and hygiene** (no decisions) | M1, M2, M7, M8, M9, M11 step 1 | Each is one PR, reversible, and lands the measurement baselines the later waves are judged by. M1 alone is most of the image win. |
+| **B · decisions** | M6 (founder), M3 and M4 and M5 (`principle_decide`) | Route the four decisions in parallel while Wave A ships; M6 is the biggest lockfile win and needs only a yes. |
+| **C · structural** | M3 build-out behind BET-11, M11 steps 2 to 4, M5 build-out | Migration-bearing work sequenced behind its read-model and scheduler substrate. |
+
+## 5. Targets
+
+| Measure | Now | After Wave A | After Waves B and C |
+|---|---|---|---|
+| Lockfile resolutions | 2000 | about 1620 | about 700 |
+| Names at more than one version | 227 | about 200 | under 120 |
+| Override entries | 78 | about 65 | under 25 |
+| Production closure | 825 | 825 | about 450 |
+| Portal image | 4.17 GB | under 2.5 GB | under 2 GB |
+| Always-on containers (default profile) | 5 | 5 | 2 (M3 retires inngest, redis, redis-exporter) |
+| `apps/web` typecheck, local | 98 s | about 70 s | under 60 s with references |
+
+## 6. Kernel decisions to route
+
+1. **M3** own a Postgres job engine vs keep Inngest vs rent `pg-boss`. Blast radius large; the precedent decision `DI-957F61CFECEA` and BI-A1E864A5 both point at "prove with a benchmark, then retire".
+2. **M4** own the contract validator vs keep Prism.
+3. **M5** which markdown engine is the single sanitizing renderer.
+4. **M6** is a founder call on repository shape, not a kernel score.
+
+## 7. Ratchets (so it cannot regrow)
+
+- Image size and shipped package-count budget in the publish workflow (M1).
+- Deny list in the dependency allowlist for names retired by M2, M3, M4 (the gate already blocks unlisted names; the deny list blocks re-acknowledging them without a decision record).
+- `sbom/baseline.json` totals become budgets, ratcheted down per wave, not informational.
+- Typecheck line-count and check-time baseline (M11).
+- `check-retired-substrate.mjs` flips to forbid (M9).
+
+## 8. Backlog coverage
+
+Filed 2026-09-08 under `EP-8DC217EB` (they decompose BI-C0CEB377, BET-14):
+
+| Move | Backlog item | Effort | Priority |
+|---|---|---|---|
+| M1 production dependency set in the image | BI-C7C6D827 | medium | p1 |
+| M2 diagram and docx toolchain out of the workspace | BI-DBDB8C6D | small | p1 |
+| M3 durable-job engine onto Postgres (WWMD) | BI-068BBA33 | xlarge | p2 |
+| M4 Prism replaced in the harness (WWMD) | BI-BB1D8453 | medium | p3 |
+| M5 document cluster collapse (WWMD for markdown) | BI-0AB1FD47 | medium | p3 |
+| M6 mobile workspace split (founder) | BI-2FD295F3 | medium | p2 |
+| M7 + M8 multi-version cleanup and override prune | BI-5265CAD0 | small | p2 |
+| M9 retired-substrate sweep | BI-B1977CEE | small | p2 |
+| M10 observability fleet profile gate | BI-A5B2A32F | retired: already implemented | — |
+| M11 typecheck at the source | BI-0A3B155F | medium | p2 |
+
+## 9. What this plan does not do
+
+- It does not revisit the rent-versus-own default. Nothing here vendors a library; it removes roots whose job the platform already does, and it packages what remains correctly.
+- It does not touch the CVE override floors. Those are the fix for the transitive advisories, and M8 prunes only what the audit proves redundant.
+- It does not claim compile-time gains from dependency removal. The measurement says the gain is in program shape, and M11 is scoped accordingly.
+
+## 10. Progress and re-measurement, 2026-09-25
+
+_Founder direction, 2026-09-25: too many dependencies, too much complexity, too many versions of the same component; compress, eliminate and de-risk the supply chain, and amalgamate our own source where it duplicates itself._ This section extends the plan. It does not replace it.
+
+### 10.1 Where each move stands
+
+| Move | State | Evidence |
+|---|---|---|
+| M1 production dependency set in the image | done | #5267 |
+| M2 diagram toolchain out of the workspace | done: mermaid out (#5253); `docx` retired, the architecture `.docx` builds through dpf-doctools (#5724) | #5253, #5724 |
+| M3 durable jobs onto Postgres | decided `own_postgres_jobs` (§10.6.1). Phase 1 done: every durable job goes through the `@/lib/jobs` facade (#5760). Phase 2 merged 2026-10-02 in #5898 (BI-85E6EF14): the owned engine behind `DPF_JOBS_ENGINE`, default off (unset = the facade *is* the Inngest client), per-function and shared concurrency limits, cron, sleep/waitForEvent, cancelOn, onFailure, lease recovery, and one additive forward-only migration. The spec §7 benchmarks ran on real Postgres (spec §7.1): every correctness drill passes and throughput holds at 21 runs/s, but event-to-first-step latency (p50 10.8 ms) is above Inngest's, so the flag flips per domain for a soak, not fleet-wide. The soak runs in four batches judged by `scripts/job-engine-soak-report.ts` (spec §7.2, BI-66D2BB3F); phase 3 (retire Inngest, then rebaseline the SBOM, BI-742D569C, scoped in spec §6.2) waits for it | #5760, #5898, [design](../specs/2026-09-25-postgres-durable-job-engine-design.md), [phase-2 plan](2026-09-29-m3-phase-2-postgres-job-engine-plan.md), BI-85E6EF14 |
+| M4 Prism replaced in the harness | done: an owned OpenAPI contract runtime; Prism retired on the dependency allowlist | [design](../specs/2026-09-25-harness-owned-contract-validator-design.md) |
+| M5 document cluster | partly absorbed by the office-document engine; its S9 (BI-D1B40D43, 2026-09-26) retired mammoth, read-excel-file and pdf-parse (with pdfjs-dist and @napi-rs/canvas): 39 resolved components, now on the sbom deny list. M5b done: invoice PDFs render through the dpf-doctools export path and `@react-pdf/renderer` is retired (#5770). The markdown half is done (2026-09-29, BI-0AB1FD47): one `renderMarkdown()` on `markdown-it` 14 with raw HTML off (§10.6.1, DI-D9292D812CFF) serves the user guide, wiki, coworker chat, build brief, workspace documents and the office export; `react-markdown` and `remark-gfm` are retired on the sbom allowlist, and `check-no-local-markdown-renderer.mjs` holds it at one renderer. Platform lockfile 959 → 872 resolved components | [office document conversion design](../specs/2026-09-22-office-document-conversion-design.md), #5770, #5803 |
+| M6 mobile workspace split | done (follow-ups: the Jest 30.5.2 patch landed deduped, #5727; the React pin is declared, guarded by `check-mobile-react-pin.mjs` and excluded from Dependabot, #5759): founder-approved 2026-09-25; `apps/mobile` resolves in its own workspace and lockfile; platform tree 1759 → 1062 packages, duplicated names 165 → 68 | `apps/mobile/pnpm-workspace.yaml`, `scripts/sbom/lockfile-roots.mjs` |
+| M7 multi-version cleanup | done: first pass #5289, second pass #5670, third pass #5795 (Playwright 1.63 drops the second `fsevents`; `@inngest/ai` 0.1.8 drops the last TypeScript 5); nodemailer 10 (#5798) clears GHSA-6vj9-mwq6-2f5v and GHSA-8vvx-rff5-p5rq and leaves one nodemailer. Every remaining duplicate is held by an upstream pin or needs an override; the #5795 PR body lists them by cause | #5289, #5670, #5795, #5798 |
+| M8 override prune | done | #5670 |
+| M9 retired-substrate sweep | done: backup engines deleted (#5285); Neo4j and Qdrant residue swept and `check-retired-substrate.mjs` now forbids it (#5774) | #5285, #5774 |
+| M11 step 1 separate test program | done | #5268, #5292 |
+| M11 step 2 project references | re-scoped by the 2026-09-30 spec (#5830) and delivered through its PR-4; PR-5 (`lib`/`ui` references) is conditional on a re-measurement. Project references need the all-imports graph (`import type` included) acyclic. Corrected 2026-09-29: the earlier "657 files, 610 type-only imports" came from a regex that also matched `import type`; converting imports to `import type` would have removed nothing. Measured with the TypeScript parser: the largest all-imports cycle was 678 files (519 without inline `import("x").T` type queries); the runtime cycle is 75. Moving the tool contract types out of `lib/mcp-tools.ts` took it to 134 (#5797), and the guard `check-no-web-import-cycle-growth.mjs` now holds it; moving the governed-execute contract types took it to 92 (#5805); the `ChatMessage`/`ContentBlock` and task-submit leaves took it to 81 (#5813); the approval, readiness, quiescence, data-asset and purpose-contract leaves took it to 75 and removed three more cycles (27, 18, 17) (#5825). 75 is the floor for type-only moves. It closes only through dynamic `import()` calls; counting static value imports alone, the load-order cycles are 11, 4 and 2 files, all around `lib/ai-inference.ts`. The design spec (2026-09-30 web runtime import cycle) measured what project references would buy and re-scoped step 2. Delivered against it: PR-1 warm-starts the CI typecheck from a main-written tsbuildinfo cache (#5838, with the retried pinned-pnpm fetch from #5844); PR-2 cut the three static load-order cycles to none and the cycle guard now forbids any (#5848); PR-3 took `lib` imports of `app/` and `components/` from 44 to 0, held by the application-boundary guard (#5849); PR-4 made `lib` declaration emit clean, 31 `TS2883` to 0 (#5862) | #5797, #5805, #5813, #5825, #5830, #5838, #5848, #5849, #5862 |
+| M11 step 4 measure, then ratchet | done: the web typecheck records its program in the same compile, and CI fails a PR that grows it by lines no diff explains (dependency types, excluded files pulled back in, a new source directory). Anchor `sbom/typecheck-baseline.json`: 8,223 files, 2,973,637 checked lines; the generated Prisma client is 54% of them, the largest remaining lever | #5793 |
+| §7 budgets ratchet | done | #5670 |
+
+### 10.2 The totals regrew because nothing held them
+
+Between the M7 pass and 2026-09-25 the lockfile grew back to 1,907 resolved components (+34 on the baseline), 216 duplicated names (+19) and 261 excess instances (+22). Every gate stayed green, because `sbom/baseline.json` totals were informational. The §7 ratchet was the missing piece. It now lands: `check-sbom-drift.mjs` fails a PR whose resolved components, duplicated names, excess instances or multi-major names exceed their budget. `--update-baseline` only lowers budgets, and raising one needs `--raise-budget "<reason>"`, recorded in the baseline for review.
+
+### 10.3 What this branch removed
+
+| Change | Effect |
+|---|---|
+| 21 overrides proven redundant by the per-floor prune screen, then jointly (resolved set identical without them): `@types/react`, `find-my-way`, `@expo/cli@0.24.24>picomatch` (the target version is no longer in the tree), `lodash-es` and `dompurify` (not in the tree at all), `node-forge`, both `protobufjs` entries, `nanoid@<3.3.18`, `ws`, `fast-uri`, `hono`, both `js-yaml` and both `@xmldom/xmldom` ranges, `qs`, `sharp`, `body-parser`, `valibot`, and `@hono/node-server` (its only consumer left with the MCP SDK below) | overrides 79 → 58 |
+| `@modelcontextprotocol/sdk` removed from `services/adp`: declared, never imported (the server writes its own JSON-RPC) | 11 packages out of the production closure |
+| `@types/pino` removed from the harness: a deprecated stub, since `pino` 10 ships its own types | 1 package |
+| `apps/mobile` `@types/react` aligned to `^19.2.18`. The `@types/react` override had hidden a real first-party split (mobile 19.2.18, web 19.3.0), because the analysis does not report override-governed names as splits | one `@types/react` |
+| `pnpm dedupe`: 27 surplus versions collapsed onto versions already in the tree, none added, among them `glob@7` and the deprecated `inflight` | see totals |
+
+| Measure | 2026-09-08 | 2026-09-25 before | After this branch |
+|---|---|---|---|
+| Resolved components | 2000 | 1907 | 1869 |
+| Duplicated names | 227 | 216 | 195 |
+| Excess instances | 291 | 261 | 235 |
+| Multi-major names | — | 124 | 121 |
+| Override entries | 78 | 79 | 58 |
+| Production closure (portal + adp + edge) | 825 | 835 | 822 |
+
+Lesson for the commons: an override can mask what the guard exists to see. Prune overrides with the empirical screen, not by reading comments, and treat a split that appears when an override leaves as a finding, not as a regression of the prune.
+
+### 10.4 What the remaining moves are worth, measured today
+
+Counterfactual: drop the named direct dependencies from the resolved graph and recount. Each row is independent. The last row drops all of them together.
+
+| Move | Resolved components | Duplicated names | Excess instances |
+|---|---|---|---|
+| now (before this branch) | 1911 | 216 | 260 |
+| M6 mobile split | 1247 (−664) | 122 (−94) | 132 |
+| M5 react-pdf + react-markdown + remark-gfm | 1772 (−139) | 210 (−6) | 251 |
+| M3 inngest | 1783 (−128) | 207 (−9) | 251 |
+| M4 Prism | 1801 (−110) | 185 (−31) | 225 |
+| M3 + M4 + M5 + M6 + docx | 797 | 65 | 67 |
+
+Most of the "too many versions of the same component" complaint traces to two roots. The Expo, React Native and Jest toolchain holds 94 of the 216 duplicated names; Prism holds 31, including three `@stoplight/types` majors and `pino@6`. M6 is the single largest lever in the plan and needs only a founder decision. M4 is the cheapest per duplicate removed.
+
+The Jest 30 block (42 of the 58 remaining overrides) passes the one-at-a-time screen but fails the joint one: with it gone, jest-expo 57 and the React Native toolchain bring Jest 29 back. A minimal subset also fails. It leaves with M6.
+
+### 10.5 New track: amalgamate first-party source (S-moves)
+
+The founder direction extends past packages to our own source. A read-only survey on 2026-09-25 counted definition sites outside test files; the S1 and S2 counts were re-measured as top-level definitions in `scripts/` and `scripts/lib/` only, so they are floors. The ranked candidates:
+
+| Move | Concern | Sites | Single home | Effort |
+|---|---|---|---|---|
+| S1 | git exec wrappers in `scripts/` with three argument orders | at least 37 files define their own top-level `git` or `runGit` | `scripts/lib/git.mjs`, from `runGit` in `scripts/lib/git-changed-files.mjs` | M, mechanical. **Step 1 done 2026-09-25**: 29 of the 32 exec wrappers now delegate to `scripts/lib/git.mjs` (`runGit` / `gitText` / `gitTextOrNull`, failure behaviour chosen by name); every affected test file gives the same result as before. The ratchet `scripts/check-no-direct-git-spawn.mjs` holds the rest (31 files) as a closed backlog. Ten diff-scoped guards still read partial stdout on a failed git call; each is now marked `Fail-open as before` for review. **Step 2 done 2026-09-26** (#5717): 26 more scripts moved onto the runner; the allowlist is down from 31 to 5, each with its reason (async, Buffer output or `.error` readers, or no static imports). |
+| S2 | CLI argument parsing in `scripts/` | at least 22 files define their own top-level `parseArgs` | `node:util` `parseArgs` | M, mechanical. **Done 2026-09-26** (#5718): one argument parser for every script |
+| S3 | hand-written `pnpm-lock.yaml` parsers | 5 (`sbom/runtime-surface`, `sbom/generate-platform-sbom`, `sbom/check-lockfile-release-age`, `lib/load-pinned-guard-typescript`, `lib/sandbox-freshness`) | `scripts/lib/pnpm-lock.mjs` | S. **Done 2026-09-25**: all five migrated; ratchet `scripts/check-no-local-lockfile-parser.mjs`. It fixed a latent bug: the release-age walk had emitted 107 junk keys from nested lines |
+| S4 | canonical JSON for hashing and signing | 22 copies beside `apps/web/lib/shared/canonical-json.ts` | `@dpf/integration-shared`, so db, web and scripts share one | M. The copies differ (key collation, non-finite handling), so a switch changes hashes and needs a migration note per call site. **Done 2026-09-26** (#5773): one canonical-JSON home per import boundary, plus the ratchet `check-no-local-canonical-json.mjs` |
+| S5 | `isRecord` / `isPlainObject` | 35 | widen `check-no-local-isrecord.mjs` from `apps/web/lib` to `components/`, `packages/` and `scripts/lib` | S. **Done 2026-09-26** (#5722): one `isRecord` per import boundary. Two storefront-template files keep local copies, allowlisted with reasons, because their generator runs in the guard CI job, where workspace packages are not installed |
+| S6 | date, money, byte and duration formatters | 41 + 34 (12 identical `formatDateTime` in integration panels, 11 identical `formatMoney` in finance tables) | `lib/org-locale` for money and dates; `lib/shared/format.ts` for the rest | S to M. **Done 2026-09-26** (#5764): the copied date formatters have one home; the ratchet `check-no-local-formatters.mjs` lists the remaining exceptions with reasons |
+| S7 | `slugify` | 14 beside `lib/shared/slugify.ts` | the existing home, plus a local-copy ratchet | S. **Done 2026-09-26** (#5723): identical copies migrated, plus a local-copy ratchet |
+| S8 | hand-written MCP JSON-RPC clients in `scripts/` and packages | 7 beside `scripts/lib/mcp-client.mjs` | the existing client | S to M. **Done 2026-09-26** (#5725): scripts use the one MCP JSON-RPC client |
+| S9 | types redeclared outside `@dpf/types` | 13 pairs. `MeResponse` has already drifted (`platformRole: string \| null` vs `string`) | `@dpf/types`, with routes using `satisfies` | S. **Done 2026-09-26** (#5762): one declaration per `@dpf/types` wire type |
+| S10 | two graph-layout engines | `dagre` in `lib/graph`, `elkjs` in `lib/ea` | one engine (elkjs already covers layered layout); a dependency removal | M, WWMD. **Done 2026-09-26** (#5766): founder chose elkjs (§10.6.1); the dagre layouts are ported and `dagre` is retired |
+| S11 | first-party range drift | `net-snmp` `^3.26.3` vs `^3.14.0`; `dotenv` `^17.2.3` vs `^17.4.2`; `@prisma/client` `^7.9.0` vs `prisma` `^7.9.1`; exact `typescript` in `repo-guard-runtime`; `bcryptjs`, `read-excel-file` and `undici` declared in several workspaces | one specifier per package, then a pnpm `catalog:` so the next drift cannot happen | S. **Done 2026-09-25**: `dotenv`, `net-snmp` and `@prisma/client` aligned; the Prisma family now resolves to 7.9.1 together, where the client had been 7.9.0. `check-sbom-drift` now fails on specifier drift, with the accepted exceptions recorded in `sbom/baseline.json` (only the exact `typescript` pin). `catalog:` done 2026-09-30 (#5819): the 15 registry packages two or more platform workspaces declare are written once in the default catalog, and `check-sbom-drift` fails a shared package declared without the same `catalog:` reference. S12 had already moved every image onto the workspace file, so the deferral no longer held |
+| S12 | service images installing without the lockfile | `services/adp` and `services/integration-test-harness` ran `pnpm install` against their own `package.json`: no lockfile, overrides, release-age floor or patches. Measured on 2026-09-25, the harness resolved 25 versions and adp 13 versions that the lockfile of the day did not have (adp shipped `undici` 8.11.2 and `zod` 4.6.5 against locked 8.10.0 and 4.4.3); every registry release reached the image unvetted. The adp image also could not start: since 2026-07-10 `@dpf/integration-shared` has exported extensionless TypeScript source that Node cannot load from `node_modules` | both install `--frozen-lockfile` from the workspace and ship a `pnpm deploy --prod` tree, as edge-node does; `integration-shared/scripts/prepare-dist.mjs` makes its `dist/` Node-loadable; the adp build fails if its runtime imports do not load | S. **Done 2026-09-25** |
+
+Each S-move ships its ratchet in the same PR, in the shape the `check-no-local-*` guards already use. S1 to S3 and S5 are hygiene with no decision. S10 is an own-versus-rent call.
+
+### 10.6 Order from here
+
+1. **Decisions (no code blocked on them for long):** M6 founder yes or no; M4 and S10 `principle_decide`; M3 `principle_decide` once its research section is written.
+2. **Hygiene, no decisions, one PR each:** S11 plus a `catalog:`, S3, S5, S7, S9, then S1 and S2.
+3. **Structural:** M6 execution if approved, M4, then M3 behind BET-11, and M5 through the office-document engine's S9.
+
+### 10.6.1 Founder decisions, 2026-09-26
+
+The founder decided the four open calls in the dependency-architecture thread on 2026-09-26, each on the recommended option. The DPF MCP server was unreachable from that session; the decisions were filed in the WWMD decision ledger on 2026-09-29 (`principle_decide`, platform-development), each recommending the founder's option with high confidence:
+
+| Call | Ledger record |
+|---|---|
+| M3 `own_postgres_jobs` (supersedes DI-66B0DEBEA992, keep Inngest, under that record's re-open trigger (a)) | DI-E52E32AEA1E4 |
+| S10 `elkjs` only | DI-459D332D727F |
+| M5 `markdown-it`, raw HTML off | DI-D9292D812CFF |
+| One branch and one PR per move | DI-8578ECC7DA6C |
+| M11 step 2 `rescope_to_measured_levers` (filed 2026-10-01, after the re-scope had shipped; spec §7) | DI-F2DCF2FEDBE7 |
+
+Outcomes recorded 2026-10-02 (`record_decision_outcome`, resolved by the founder, each `followed`): DI-E52E32AEA1E4 `own_postgres_jobs`, DI-459D332D727F `elkjs_only`, DI-D9292D812CFF `markdown_it_raw_html_off`, DI-8578ECC7DA6C one PR per move. Before 2026-10-01 they were refused for a missing `decision_record_create` grant; DI-F2DCF2FEDBE7 is pointed at from Workroom WC-6E73264F.
+
+| Call | Decision | Consequence |
+|---|---|---|
+| M3 durable-job engine | `own_postgres_jobs` | [Durable jobs on Postgres](../specs/2026-09-25-postgres-durable-job-engine-design.md) moves from `draft` to `active`. Implementation follows its §6: facade first, then the engine behind a flag, then retirement. The §7 benchmarks gate the flag flip, not the facade. |
+| S10 graph layout | `elkjs` only | `dagre` retires; the three `lib/graph` layouts move to elkjs `layered`. |
+| M5 markdown | one `renderMarkdown()` on `markdown-it`, raw HTML off | `react-markdown` and `remark-gfm` retire behind one primitive. |
+| Delivery | one branch and one PR per move | Moves ship in parallel on `claude/<move>` branches. |
+
+### 10.6.2 Re-measurement and what remains, 2026-09-29 (updated 2026-09-30)
+
+Measured with `node scripts/sbom/check-sbom-drift.mjs` on `main` at `fab98a17b`, again at `38d6f07b7` after #5795, #5798 and #5803, and at `3d7a7bde1` after #5819, #5824 and #5825 (totals unchanged by those; #5824 moved brace-expansion to 5.0.12 and @grpc/grpc-js to 1.14.5 to clear GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7 and GHSA-m9gg-hp2v-232j). The platform totals count the platform lockfile only; since M6, `apps/mobile` has its own lockfile and its own budget.
+
+| Measure | 2026-09-08 | 2026-09-25 before | 2026-09-29 |
+|---|---|---|---|
+| Resolved components (platform) | 2000 | 1907 | 868 |
+| Duplicated names (platform) | 227 | 216 | 55 |
+| Excess instances (platform) | 291 | 261 | 58 |
+| Multi-major names (platform) | — | 124 | 25 |
+| Mobile lockfile | — | — | 951 components, 87 duplicated names |
+
+Every S-move and M1, M2, M4, M5, M6, M7, M8 and M9 are done. Open:
+
+- **M3 phase 3.** Phase 2 (the engine behind a flag, BI-85E6EF14) merged in #5898 and is benchmarked. The soak (BI-66D2BB3F, spec §7.2) runs in four batches; Inngest retires (BI-742D569C, scoped in spec §6.2) after every function has run on Postgres for 7 days with the soak report passing.
+- **M5 markdown.** Done in #5803 (BI-0AB1FD47).
+- **M11 step 2.** Delivered through PR-4 of the 2026-09-30 spec (§10.1). PR-5, `lib` and `ui` as project references, proceeds only if a re-measurement on the PR-4 tree shows a UI-only cold check saving 40% or more. No guard yet holds `lib` declaration emit at 0: the cheapest is `"declaration": true` under `noEmit` in `apps/web/tsconfig.json` (about 60 s on one cold run), after the 14 declaration errors in `app/` and `proxy.ts` are fixed. Step 4 is done (#5793). Step 3 (CI shape) is unchanged.
+- **edge-node image installs without `--frozen-lockfile`.** Done: every Dockerfile installs `--frozen-lockfile`, enforced by `check-docker-patch-context.mjs` (#5829). Because `pnpm deploy --legacy` ignores the lockfile under the hoisted linker, the edge-node, adp and integration-test-harness images now assert their deployed tree against the lockfile (`scripts/sbom/assert-deploy-matches-lockfile.mjs`, #5829, #5837).
+- **Owed records.** Filed 2026-09-29; decision outcomes recorded 2026-10-02 (§10.6.1).
+
+### 10.7 Backlog coverage
+
+M8 and the §7 ratchet ran against BI-5265CAD0 (M7 + M8). The S-moves were delivered before their backlog items existed; the items were filed under `EP-8DC217EB` on 2026-09-29 and closed with their PRs as evidence. The M-items were linked to the same epic.
+
+| Move | Item | State |
+|---|---|---|
+| S1 | BI-92ED9ECF | done (#5707, #5717) |
+| S2 | BI-0FEDF412 | done (#5718) |
+| S3 | BI-BA138E88 | done (#5690) |
+| S4 | BI-2CD11286 | done (#5773) |
+| S5 | BI-4D521509 | done (#5722) |
+| S6 | BI-210F06A4 | done (#5764) |
+| S7 | BI-CB991A70 | done (#5723) |
+| S8 | BI-5F59E987 | done (#5725) |
+| S9 | BI-FF951FC9 | done (#5762) |
+| S10 | BI-1023CDD1 | done (#5766) |
+| S11 | BI-3D37F899 | done (#5693) |
+| S12 | BI-82052153 | done (#5702; images frozen and asserted against the lockfile, #5829, #5837) |
+| M2 | BI-DBDB8C6D | awaiting acceptance (#5253, #5724) |
+| M3 | BI-068BBA33 | open: phase 1 done (#5760); phase 2 merged behind a flag (#5898, BI-85E6EF14, awaiting acceptance); phase 3 waits for a soak |
+| M5 | BI-0AB1FD47 | awaiting acceptance (#5770, #5803) |
+| M7 + M8 | BI-5265CAD0 | awaiting acceptance (#5289, #5670) |
+| M9 | BI-B1977CEE | awaiting acceptance (#5285, #5774) |
+| M11 | BI-0A3B155F | open: steps 1 and 4 done; step 2 re-scoped (DI-F2DCF2FEDBE7) and delivered through PR-4 (#5830, #5838, #5848, #5849, #5862); PR-5 re-measured 2026-10-01 on local hardware (spec §8): a UI-only cold check is 44% faster than the whole program in total time and 39% faster in check time, at the 40% bar; a CI-runner measurement decides it (BI-71085BD4); step 3 unchanged |
+| M11 precursor | BI-F68CD3E3 | merged into BI-0A3B155F on 2026-10-01 (WWMD DI-CECDB7C8C91C): its premise was corrected on 2026-09-29, and the cycle is at its floor of 75, held by `check-no-web-import-cycle-growth.mjs` (#5797, #5805, #5813, #5825) |
+
+M2, M7 + M8 and M9 stop at awaiting acceptance. The readiness gate refused `done` for each: it wants research, plan-coverage and acceptance evidence those older items never recorded (`initiative_not_ready`: RESEARCH_REQUIRED, PLAN_REQUIRED, ACCEPTANCE_EVIDENCE_REQUIRED, OBJECTIVE_BASELINE_REQUIRED, OBJECTIVE_RECONCILIATION_REQUIRED). The work is merged; acceptance is a reviewer's step. A retry on 2026-10-01 for M2 was refused with the same five codes; the research lane also refuses a receipt unless a live Workroom is bound to the item's branch, and these items predate one.

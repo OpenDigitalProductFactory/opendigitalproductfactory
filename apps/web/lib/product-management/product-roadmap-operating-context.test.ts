@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ProductOperatingContext } from "./product-operating-context";
 import { projectProductRoadmapFromOperatingContext } from "./product-roadmap-operating-context";

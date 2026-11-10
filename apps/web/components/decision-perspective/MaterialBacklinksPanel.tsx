@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { MaterialBacklinksResult } from "@/lib/decision-perspective/material-backlinks";
 
+import { BacklinkGroup, type BacklinkItem } from "@/components/wiki/BacklinkGroup";
+
 export function MaterialBacklinksPanel({ result }: { result: MaterialBacklinksResult }) {
   if (result.missingReason !== "none") {
     return (
@@ -31,9 +33,9 @@ export function MaterialBacklinksPanel({ result }: { result: MaterialBacklinksRe
         </p>
       </div>
 
-      <BacklinkGroup label="Stances and heuristics" pages={result.wikiNeighborhood.stancesAndHeuristics} />
-      <BacklinkGroup label="Referenced by" pages={result.wikiNeighborhood.inLinks} />
-      <BacklinkGroup label="References" pages={result.wikiNeighborhood.outLinks} />
+      <BacklinkGroup label="Stances and heuristics" items={toItems(result.wikiNeighborhood.stancesAndHeuristics)} />
+      <BacklinkGroup label="Referenced by" items={toItems(result.wikiNeighborhood.inLinks)} />
+      <BacklinkGroup label="References" items={toItems(result.wikiNeighborhood.outLinks)} />
 
       <div>
         <h3 className="text-xs font-semibold text-[var(--dpf-muted)]">Citations</h3>
@@ -67,7 +69,7 @@ export function MaterialBacklinksPanel({ result }: { result: MaterialBacklinksRe
               <Link
                 key={decision.interactionId}
                 className="block border-b border-[var(--dpf-border)] pb-2 text-sm last:border-b-0 last:pb-0"
-                href={`/platform/ai/decisions/${encodeURIComponent(decision.interactionId)}`}
+                href={`/coworker-decisions/decisions/${encodeURIComponent(decision.interactionId)}`}
               >
                 <span className="block font-medium">{decision.question}</span>
                 <span className="mt-1 block text-xs text-[var(--dpf-muted)]">{decision.outcomeType ?? "outcome"}</span>
@@ -80,27 +82,6 @@ export function MaterialBacklinksPanel({ result }: { result: MaterialBacklinksRe
   );
 }
 
-function BacklinkGroup({
-  label,
-  pages,
-}: {
-  label: string;
-  pages: MaterialBacklinksResult["wikiNeighborhood"]["inLinks"];
-}) {
-  return (
-    <div>
-      <h3 className="text-xs font-semibold text-[var(--dpf-muted)]">{label}</h3>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {pages.length === 0 ? (
-          <span className="text-sm text-[var(--dpf-muted)]">None</span>
-        ) : (
-          pages.map((page) => (
-            <span key={page.id} className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-xs">
-              {page.title}
-            </span>
-          ))
-        )}
-      </div>
-    </div>
-  );
+function toItems(pages: MaterialBacklinksResult["wikiNeighborhood"]["inLinks"]): BacklinkItem[] {
+  return pages.map((page) => ({ id: page.id, title: page.title, href: `/coworker-decisions/${page.slug}` }));
 }

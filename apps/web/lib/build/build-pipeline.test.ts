@@ -1,7 +1,9 @@
 // apps/web/lib/build-pipeline.test.ts
 // Tests for pure state machine functions in the build pipeline.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("@dpf/db", () => ({ prisma: { featureBuild: { findUnique: async () => ({ createdById: "human" }) } } }));
+vi.mock("@/lib/govern/operation-authority", () => ({ currentOperationAuthority: async () => ({ userId: "human", platformRole: "HR-000", isSuperuser: false }) }));
 import { getResumeStep, shouldRetry, nextStep, buildFailedState, executeStep } from "./build-pipeline";
 import type { BuildExecutionState } from "./build-exec-types";
 

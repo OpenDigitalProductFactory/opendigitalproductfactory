@@ -159,7 +159,7 @@ const DIMENSIONS: Array<{ key: keyof RoutingProfileData; label: string }> = [
 
 const SOURCE_LABELS: Record<string, string> = {
   seed:       "Seed data",
-  evaluated:  "Evaluated",
+  evaluated:  "Measurements",
   production: "Production observations",
 };
 
@@ -260,9 +260,8 @@ export function ModelCard({ model, profile, isStale, profilingFailed, canWrite, 
           | { dimensions: Array<{ inconclusive: boolean; newScore: number }>; hasDrift: boolean; hasSevereDrift: boolean; firstError?: string | null };
 
         if ("queued" in result) {
-          // Background job queued — show message and refresh later
-          setEvalMessage(result.message);
-          setTimeout(() => router.refresh(), 5000);
+          // A queued acknowledgement does not describe the job's current state.
+          setEvalMessage("Evaluation requested. See Test Runs for its status and results.");
           return;
         }
 

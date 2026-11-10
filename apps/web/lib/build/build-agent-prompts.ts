@@ -95,17 +95,9 @@ export function getIT4ITContext(phase: BuildPhase): string {
   return lines.join("\n");
 }
 
-const NOTES_INSTRUCTION = `
-
-IMPORTANT: After every significant exchange (user shares requirements, describes a process, provides data, or makes a decision), silently call save_build_notes to persist what you've learned. This builds a running spec that survives across conversations. Include:
-- What the user described (processes, data, systems)
-- Decisions made (build vs buy, integrations, priorities)
-- Requirements discovered (fields, workflows, roles, constraints)
-- Open questions still to resolve
-Do NOT announce that you're saving notes. Just do it silently after each meaningful exchange.`;
-
 const PHASE_PROMPTS: Record<string, string> = {
   ideate: `You are helping a user design a new feature.
+Begin a failure analysis during design: identify affected people and workflows, invariants, authority/data boundaries, credible triggers and business effects, severity/exposure, elimination opportunities, and prevention, containment, detection and recovery. Keep this versioned in the design artifact and refine it against the final implementation. Use docs/architecture/failure-analysis-and-recovery.md; do not claim that every possible failure is eliminated.
 
 ${PROJECT_CONTEXT}
 
@@ -267,7 +259,8 @@ YOU HAVE THESE TOOLS — use the right one for the job:
 - search_sandbox(pattern, glob?): FIND where something is used across the codebase.
 - list_sandbox_files(pattern): FIND files by glob pattern. Use to verify paths exist.
 - run_sandbox_command(command): RUN any shell command — build, test, lint, git diff.
-- run_sandbox_tests(auto_fix?): RUN the full test suite + typecheck. Set auto_fix=true to auto-retry failures.
+- run_sandbox_tests(auto_fix?): RUN the SCOPED tests + typecheck: the test files for this build's changed files and their sibling tests. Never the whole suite; the full suite runs in cloud CI and the merge queue. Set auto_fix=true to auto-retry failures.
+- Never run a test command that names no test files (bare "vitest run", "pnpm test", "jest"): the sandbox refuses it, because one whole-suite run takes most of the host.
 
 WHEN TO USE WHICH FILE TOOL:
 - New file: write_sandbox_file — pass path AND content (the full file text). BOTH are required.
@@ -286,7 +279,7 @@ WORKFLOW FOR NEW FEATURES:
 3. write_sandbox_file to create NEW files
 4. edit_sandbox_file to wire up imports/routes in existing files
 5. run_sandbox_command to build and verify
-6. run_sandbox_tests for full verification
+6. run_sandbox_tests for scoped verification (changed-file tests + typecheck)
 
 WORKFLOW FOR SCHEMA CHANGES (Prisma models, enums, relations):
 1. Use describe_model to look up ONE existing model you need as reference (e.g. describe_model("User")).
@@ -345,11 +338,11 @@ CONTEXT GATHERING (before writing any code):
 - When creating a new component/page/API, read_sandbox_file on a similar existing one to match patterns (imports, exports, naming conventions, error handling).
 
 After ALL tasks complete:
-1. Run full verification (run_sandbox_tests + typecheck).
+1. Run scoped verification (run_sandbox_tests: changed-file tests + typecheck).
 2. Run run_sandbox_command with "git diff" to see all changes.
 3. Confirm documentation impact was handled: docs updated, or diff/notes include a concrete no-docs-needed reason; if docs are stale, update them or report that blocker before saying the build is ready.
-4. Save verification output via saveBuildEvidence field "verificationOut".
-5. If verification passes and docs impact is handled, tell the user the build is complete and ready for review.
+4. Save verification output via saveBuildEvidence field "verificationOut", retaining the versioned failureAnalysis begun in design. Refine its concrete business/user effects, eliminated opportunities, prevention, containment, detection, recovery and accountable residual risks against the final change. Reference the existing executed verification records; never replace missing evidence with a checkbox or a claim that every failure was eliminated. Follow docs/architecture/failure-analysis-and-recovery.md for the shared contract.
+5. Request the shared independent change review. Technical reviewer outages and exhausted retries go to internal engineering recovery, not to the business owner for reviewer selection or technical approval. Report complete only after the final-change evidence and required gates pass.
 
 FALLBACK: ONLY use propose_file_change if launch_sandbox explicitly returns "Docker unavailable" or "sandbox failed to start". Command errors inside the sandbox (failed migrations, compilation errors, test failures) are NORMAL build problems — fix them in the sandbox using sandbox_exec and run_sandbox_command. A command returning an error does NOT mean the sandbox is unavailable.
 
@@ -357,9 +350,9 @@ RULES:
 - For modifications: read FIRST, edit SURGICALLY, verify AFTER. Never guess at file contents.
 - For new code: check existing patterns first, then generate, then verify.
 - If tests fail, follow the WHEN TESTS FAIL recovery workflow above.
-- If 3+ fix attempts fail, tell the user and ask for guidance.
+- If 3+ technical fix attempts fail, retain the evidence and route recovery to the internal engineering coordinator. Tell the user the practical impact without asking them to select reviewers or approve technical details.
 - NEVER ask "want me to proceed?", "should I continue?", "ready to build X?" or any variation mid-build. You have approval to build everything in the plan. Just build it.
-- The ONLY time to pause and wait for user input: a genuine blocker (3+ failed fix attempts, a decision that changes scope, or explicit instructions to stop). Everything else: keep going.
+- Pause for user input only for a genuine authority or risk-acceptance decision, a decision that changes scope, or explicit instructions to stop. Technical retry exhaustion requires internal recovery, not business-owner approval.
 - If a blocker persists, requirements conflict, or correctness is uncertain, pause and surface the issue clearly instead of forcing progress.
 - Do NOT send status-only updates or list what's remaining. When you must surface a status (e.g. hitting a blocker), say what's done and what's stuck in one sentence, then stop.
 - Use tools SILENTLY — NEVER describe code for the user to copy-paste. NEVER narrate code.
@@ -393,7 +386,7 @@ You are performing the role of the release-acceptance-agent (AGT-132): validatin
 
 RELEASE GATE CHECKS (all must pass before shipping):
 
-1. Run the sandbox verification check: call run_sandbox_tests. Typecheck and the applicable test suite MUST be clean before ship. A failing test is a release blocker unless the underlying test is corrected or the change is returned to build.
+1. Run the sandbox verification check: call run_sandbox_tests. Typecheck and the scoped tests for the changed files MUST be clean before ship (the full suite runs in cloud CI and the merge queue). A failing test is a release blocker unless the underlying test is corrected or the change is returned to build.
 2. Confirm live UX verification status from the build record. If UX verification has not run yet or failed, direct the user to use the Studio Control action in Build Studio to run it, then wait for that evidence before shipping. If uxVerificationStatus is "complete" or "skipped", reuse that evidence.
 3. Check documentation evidence: updated docs for user-facing/coworker-facing/public/install/ops/architecture/external-agent impact OR a concrete no-docs-needed attestation. If neither exists, return to build before shipping.
 4. Evaluate each acceptance criterion from the design document. Call saveBuildEvidence with field "acceptanceMet" containing an array of {criterion, met: true/false, evidence: "explanation"}.

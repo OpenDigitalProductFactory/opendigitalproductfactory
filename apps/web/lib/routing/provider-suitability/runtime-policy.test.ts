@@ -43,6 +43,20 @@ function policy(overrides: Partial<ProviderSuitabilityPolicy> = {}): ProviderSui
 }
 
 describe("applyProviderSuitabilityPolicyToContract", () => {
+  it("binds approved accounts without admitting a rejected sibling or overriding an operator denial", () => {
+    const result = applyProviderSuitabilityPolicyToContract({
+      contract: contract({ deniedProviders: ["operator-denied"] }),
+      policy: policy({ allowedProviders: ["local"], deniedProviders: ["anthropic"], allowedProviderConnectionIds: ["business", "connection-local"], deniedProviderConnectionIds: ["personal"] }),
+      rollout: resolveProviderSuitabilityRollout("evidence-enforcement"),
+      archetypeCategory: "healthcare-wellness",
+      accountCandidates: [{ providerId: "anthropic", connectionId: "business" }, { providerId: "anthropic", connectionId: "personal" }, { providerId: "local", connectionId: "connection-local" }],
+    });
+    expect(result.contract.allowedProviderConnectionIds).toEqual(["business", "connection-local"]);
+    expect(result.contract.deniedProviderConnectionIds).toEqual(["personal"]);
+    expect(result.contract.allowedProviders).toEqual(["anthropic", "local"]);
+    expect(result.contract.deniedProviders).toEqual(["operator-denied"]);
+  });
+
   it("does not enforce during compiler shadow mode", () => {
     const original = contract({ allowedProviders: ["openai-personal"] });
     const result = applyProviderSuitabilityPolicyToContract({

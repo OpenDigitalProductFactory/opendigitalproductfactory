@@ -11,8 +11,6 @@ async function main() {
   console.log("Portfolios found:", portfolios.map((p) => p.slug));
 
   const mfgDelivery = bySlug["manufacturing_and_delivery"];
-  const forEmployees = bySlug["for_employees"];
-  const productsSold = bySlug["products_and_services_sold"];
 
   if (!mfgDelivery) {
     throw new Error("manufacturing_and_delivery portfolio not found — run seed first.");

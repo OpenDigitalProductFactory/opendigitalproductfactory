@@ -1,5 +1,16 @@
 import type { ModelClass } from "./model-card-types";
 
+/** Chat calibration requires generated text, not merely text input. */
+export function supportsTextGeneration(model: {
+  modelClass?: string | null;
+  outputModalities?: unknown;
+}): boolean {
+  const modelClass = model.modelClass ?? "chat";
+  if (!["chat", "reasoning", "code"].includes(modelClass)) return false;
+  return model.outputModalities == null
+    || (Array.isArray(model.outputModalities) && model.outputModalities.includes("text"));
+}
+
 /**
  * EP-INF-003: Classify a model by type based on modalities and ID patterns.
  * Modality-based rules take priority over ID-based fallbacks.

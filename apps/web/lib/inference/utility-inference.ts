@@ -6,6 +6,8 @@
 // Write-time, not read-time — outputs are stored alongside source data.
 
 import { countTokens } from "@/lib/tak/context-arbitrator";
+import type { ActivityContract } from "@/lib/routing/activity-contract";
+import { withInferenceCancellation, withInferenceOrigin } from "./inference-admission";
 import {
   utilityInferenceOps,
   utilityInferenceLatency,
@@ -166,27 +168,52 @@ export async function utilityInfer(params: {
   }
 
   // Attempt inference via routed pipeline
+  let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
     const { routeAndCall } = await import("@/lib/inference/routed-inference");
+    const maxOutputTokens = params.maxOutputTokens ?? 512;
+    if (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens <= 0) {
+      throw new Error("Invalid utility output budget");
+    }
+    const activityContract: ActivityContract = {
+      activityId: crypto.randomUUID(), parentRef: { patternKey: `utility_${params.task}` },
+      activityClass: params.task === "classify" ? "classify"
+        : params.task.startsWith("extract") ? "extract"
+        : params.task === "detect_drift" ? "critique" : "summarize",
+      title: `Utility ${params.task}`, distributionShape: "mixed", riskClass: "low",
+      successShape: params.task === "classify" || params.task === "extract_metadata" ? "json" : "text",
+      contextPolicy: "minimal",
+      tokenEnvelope: { maxInputTokens: limit + countTokens(template), maxOutputTokens, compression: "none" },
+      evaluationPolicy: { evaluator: "schema", minimumSignal: "valid-output" },
+      requestContractHints: { taskType: `utility_${params.task}`, budgetClass: "minimize_cost" },
+    };
+    const controller = new AbortController();
+    const timeout = new Promise<never>((_, reject) => {
+      deadline = setTimeout(() => {
+        const reason = new DOMException("utility inference deadline reached", "AbortError");
+        controller.abort(reason);
+        reject(reason);
+      }, 10_000);
+    });
 
     const result = await Promise.race([
-      routeAndCall(
+      withInferenceOrigin("autonomous", () => withInferenceCancellation(controller.signal, () => routeAndCall(
         [{ role: "user", content: input }],
         template,
         "internal",
         {
           taskType: `utility_${params.task}`,
           budgetClass: "minimize_cost",
+          effort: "low",
           persistDecision: false,
+          activityContract,
+          systemPromptInstructionSpans: [template],
         },
-      ),
-      // 10-second timeout — utility ops should be fast
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("utility inference timeout")), 10_000),
-      ),
+      ))),
+      timeout,
     ]);
 
-    const validated = validateOutput(params.task, result.content, input);
+    const validated = result.truncated ? null : validateOutput(params.task, result.content, input);
     const inferenceMs = Date.now() - start;
 
     if (validated) {
@@ -229,5 +256,7 @@ export async function utilityInfer(params: {
       inferenceMs: Date.now() - start,
       fallback: true,
     };
+  } finally {
+    if (deadline !== undefined) clearTimeout(deadline);
   }
 }

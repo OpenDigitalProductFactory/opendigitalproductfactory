@@ -6,7 +6,9 @@ import {
   planMcpReadinessProbe,
   interpretMcpReadinessResponse,
   interpretScopeCoverageProbe,
+  interpretTokenAuthProbe,
   SCOPE_COVERAGE_PROBE,
+  TOKEN_AUTH_PROBE,
 } from "../mcp-readiness-probe";
 
 const FIXTURES = join(__dirname, "fixtures");
@@ -152,5 +154,39 @@ describe("interpretScopeCoverageProbe (BI-A3DE9A31)", () => {
 
   it("returns null for an unrecognized body shape", () => {
     expect(interpretScopeCoverageProbe(200, {})).toEqual({ sufficient: null, reason: "inconclusive" });
+  });
+});
+
+describe("interpretTokenAuthProbe (BI-2F82F1A0: re-mint a present token the portal rejects)", () => {
+  it("re-mints on 401 — expired, revoked or unknown credential", () => {
+    expect(interpretTokenAuthProbe(401)).toEqual({
+      action: "remint",
+      reason: "unauthorized",
+      httpStatus: 401,
+    });
+    expect(TOKEN_AUTH_PROBE.remintHttpStatuses).toContain(401);
+  });
+
+  it("keeps an accepted token", () => {
+    expect(interpretTokenAuthProbe(200)).toEqual({ action: "keep", reason: "accepted" });
+  });
+
+  it("keeps a token on 403 — under-scoped is the scope-coverage probe's job", () => {
+    expect(interpretTokenAuthProbe(403)).toEqual({ action: "keep", reason: "forbidden" });
+  });
+
+  it("never re-mints when the portal is unreachable or erroring", () => {
+    expect(interpretTokenAuthProbe(0)).toEqual({ action: "keep", reason: "unreachable" });
+    expect(interpretTokenAuthProbe(502)).toEqual({ action: "keep", reason: "unreachable" });
+    expect(interpretTokenAuthProbe(503)).toEqual({ action: "keep", reason: "unreachable" });
+  });
+
+  it("keeps a token on any other status (inconclusive)", () => {
+    expect(interpretTokenAuthProbe(404)).toEqual({ action: "keep", reason: "inconclusive" });
+    expect(interpretTokenAuthProbe(302)).toEqual({ action: "keep", reason: "inconclusive" });
+  });
+
+  it("uses the read-only tools/list method", () => {
+    expect(TOKEN_AUTH_PROBE.method).toBe("tools/list");
   });
 });

@@ -6,8 +6,14 @@ Platform SBOM + dependency-reduction outputs. See
 **Committed (tracked):**
 
 - `baseline.json` — drift anchor for `scripts/sbom/check-sbom-drift.mjs`. Lists
-  the accepted set of first-party version splits; the CI **SBOM Divergence
-  Guard** fails when a new one appears.
+  the accepted set of first-party version splits and the dependency-shape
+  `budgets`. The CI **SBOM Divergence Guard** fails when a new split appears or
+  a total exceeds its budget.
+- `typecheck-baseline.json` — anchor for `scripts/sbom/check-typecheck-baseline.mjs`:
+  the web production program's budgets for lines no diff explains (dependency
+  types, excluded files pulled back in) and the accepted outside source
+  directories, plus the reference `--extendedDiagnostics` numbers. CI's
+  **Typecheck** job runs the ratchet on the report from its own compile.
 - `README.md` — this file.
 
 **Generated (git-ignored, produced by `pnpm sbom`):**
@@ -18,3 +24,17 @@ Platform SBOM + dependency-reduction outputs. See
 These regenerate from `pnpm-lock.yaml` on every dependency change and are
 published as CI artifacts (`.github/workflows/sbom-platform.yml`), so they are
 not committed. Regenerate locally any time with `pnpm sbom`.
+
+## Release images
+
+Every image in `.github/workflows/publish-image.yml` is published with a BuildKit
+SBOM attestation and max-mode provenance (`sbom: true`, `provenance: mode=max`),
+per architecture. The generated SBOM above describes the monorepo's npm graph
+only. The OS packages inside each image appear in that image's attestation.
+
+- `dpf-doctools` (BI-15D69168): Debian trixie-slim (pinned by digest) with the
+  distribution's headless LibreOffice (writer, calc, impress, draw), `python3-uno`,
+  `poppler-utils` and the DejaVu, Liberation, Carlito and Caladea fonts. It adds no
+  npm dependency. Its attestation is the SBOM of record. Evaluation:
+  [docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md](../docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md).
+  Its release gate is `tools/doctools/smoke.sh` plus `tools/doctools/size-budget.sh`.

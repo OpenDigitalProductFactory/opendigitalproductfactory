@@ -10,25 +10,25 @@ import {
   isDataAssetId,
   isDataFieldId,
   parseDataFieldId,
-  type ClassificationProvenance,
   type DataAssetId,
   type DataCategory,
   type DataCriticality,
   type DataFieldId,
   type DataSensitivity,
   type LifecycleClassKey,
-  type MasterDataDomainKey,
   type ProcessingPurposeKey,
   type ProjectionClass,
   type ProtectionProfileKey,
   type ResidencyClassKey,
-  type SubjectLocator,
 } from "./taxonomy";
+import { AI_PROVIDER_GOVERNANCE_ASSETS } from "./ai-provider-governance-assets";
+import { STATUTORY_REFERENCE_ASSETS } from "./statutory-reference-assets";
 import { PROCESSING_GOVERNANCE_ASSETS } from "./processing-governance-assets";
 import { BUSINESS_PRODUCT_PORTFOLIO_ASSETS } from "./business-product-portfolio-assets";
 import { HOSPITALITY_CAPACITY_ASSETS } from "./hospitality-capacity-assets";
 import { BEAUTY_CAPACITY_ASSETS } from "./beauty-capacity-assets";
 import { RESOURCE_SCHEDULING_ASSETS } from "./resource-scheduling-assets";
+import { AGENT_TOOLCHAIN_OBSERVATION_ASSETS } from "./agent-toolchain-assets";
 import { LIFECYCLE_GOVERNANCE_ASSETS } from "./lifecycle-governance-assets";
 import { STOCK_COVERAGE_ASSETS } from "./stock-coverage-assets";
 import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-assets";
@@ -37,60 +37,25 @@ import { WORKER_CLASSIFICATION_ASSETS } from "./worker-classification-assets";
 import { DECISION_TRUST_ENVELOPE_ASSETS } from "./decision-trust-envelope-assets";
 import { MCP_OAUTH_ASSETS } from "./mcp-oauth-assets";
 import { MCP_ASSETS } from "./mcp-assets";
+import { WORKROOM_PARTICIPANT_ASSETS } from "./workroom-participant-assets";
+import { WORKROOM_RELATION_ASSETS } from "./workroom-relation-assets";
+import { GRAPH_RELATION_TYPE_ASSETS } from "./graph-relation-type-assets";
+import { INSTANCE_DIRECTION_ASSETS } from "./instance-direction-assets";
+import { GPP_PERMIT_ASSETS } from "./gpp-permit-assets";
 import { INITIATIVE_GOVERNANCE_ASSETS } from "./initiative-governance-assets";
 import { FEDERATION_INTRODUCTION_ASSETS } from "./federation-introduction-assets";
+import { MAILROOM_ASSETS } from "./mailroom-assets";
+import { PORTFOLIO_BUDGET_ASSETS } from "./portfolio-budget-assets";
 import { BUSINESS_PERFORMANCE_ASSETS } from "./business-performance-assets";
 import { EXTERNAL_CHANNEL_ASSETS } from "./external-channel-assets";
-
-// ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
-export type FieldResolution = "inherited" | "governed" | "not-applicable";
-
-export type DataFieldDefinition = {
-  id: DataFieldId;
-  physicalName: string;
-  resolution: FieldResolution;
-  resolutionReason: string;
-  categories?: DataCategory[];
-  sensitivity?: DataSensitivity;
-  subjectRoles?: SubjectLocator[];
-  collectionRule?: "allowed" | "minimize" | "prohibited";
-  protection?: ProtectionProfileKey;
-  purposeCapabilities?: ProcessingPurposeKey[];
-  lifecycleOverride?: LifecycleClassKey;
-  projectionOverride?: ProjectionClass;
-  provenance: ClassificationProvenance;
-};
-
-export type DataAssetDefinition = {
-  id: DataAssetId;
-  physical: { prismaModel: string };
-  fields: DataFieldDefinition[];
-  domain: string;
-  ownerRole: string;
-  stewardRole: string;
-  categories: DataCategory[];
-  sensitivity: DataSensitivity;
-  criticality: DataCriticality;
-  subjectLocators: SubjectLocator[];
-  masterDataDomain?: MasterDataDomainKey;
-  lifecycleClass: LifecycleClassKey;
-  purposeCapabilities: ProcessingPurposeKey[];
-  residencyClass: ResidencyClassKey;
-  projectionClass: ProjectionClass;
-  classification: {
-    state: "suggested" | "confirmed";
-    source: "manual" | "inferred" | "propagated";
-    effectiveFrom: string;
-  };
-};
-
-// ─── Registry (indexed, validated) ───────────────────────────────────────────
-
-export type DataAssetRegistry = {
-  readonly byId: ReadonlyMap<DataAssetId, DataAssetDefinition>;
-  readonly byPrismaModel: ReadonlyMap<string, DataAssetDefinition>;
-  readonly assets: readonly DataAssetDefinition[];
-};
+import { ANIMAL_WELFARE_ASSETS } from "./animal-welfare-assets";
+import { CONTROLLED_SUBSTANCE_ASSETS } from "./controlled-substance-assets";
+import { JOB_ENGINE_ASSETS } from "./job-engine-assets";
+import type {
+  DataAssetDefinition,
+  DataAssetRegistry,
+  DataFieldDefinition,
+} from "./asset-types";
 
 /** Thrown when a registry definition violates a structural invariant. */
 export class DataAssetRegistryError extends Error {
@@ -649,25 +614,8 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-24" },
     fields: [],
   },
-  {
-    id: "data:ai-provider-connection",
-    physical: { prismaModel: "AiProviderConnection" },
-    domain: "ai-provider-governance",
-    ownerRole: "platform-owner",
-    stewardRole: "data-steward",
-    categories: ["configuration", "authorization", "security-audit"],
-    sensitivity: "confidential",
-    criticality: "mission-critical",
-    subjectLocators: [
-      { role: "organization", fieldPath: "organization" },
-    ],
-    lifecycleClass: "legal-evidence",
-    purposeCapabilities: ["platform-operations", "compliance-and-legal", "coworker-assistance"],
-    residencyClass: "local-only",
-    projectionClass: "metadata",
-    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-19" },
-    fields: [],
-  },
+  ...AI_PROVIDER_GOVERNANCE_ASSETS,
+  ...STATUTORY_REFERENCE_ASSETS,
   {
     // Per-customer incumbent coverage verdict (BI-548060D5). Operational — the
     // instantiated verdict for a customer's incumbent app, defaulted from the
@@ -727,6 +675,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...HOSPITALITY_CAPACITY_ASSETS,
   ...BEAUTY_CAPACITY_ASSETS,
   ...RESOURCE_SCHEDULING_ASSETS,
+  ...AGENT_TOOLCHAIN_OBSERVATION_ASSETS,
   ...LIFECYCLE_GOVERNANCE_ASSETS,
   ...STOCK_COVERAGE_ASSETS,
   ...FINANCE_INVOICE_DOCUMENT_ASSETS, ...BUSINESS_PERFORMANCE_ASSETS,
@@ -736,9 +685,19 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...DECISION_TRUST_ENVELOPE_ASSETS,
   ...MCP_OAUTH_ASSETS,
   ...MCP_ASSETS,
+  ...WORKROOM_PARTICIPANT_ASSETS,
+  ...WORKROOM_RELATION_ASSETS,
+  ...GRAPH_RELATION_TYPE_ASSETS,
+  ...INSTANCE_DIRECTION_ASSETS,
+  ...GPP_PERMIT_ASSETS,
   ...INITIATIVE_GOVERNANCE_ASSETS,
   ...FEDERATION_INTRODUCTION_ASSETS,
+  ...MAILROOM_ASSETS,
+  ...PORTFOLIO_BUDGET_ASSETS,
   ...EXTERNAL_CHANNEL_ASSETS,
+  ...ANIMAL_WELFARE_ASSETS,
+  ...CONTROLLED_SUBSTANCE_ASSETS,
+  ...JOB_ENGINE_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },

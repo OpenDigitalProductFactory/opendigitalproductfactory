@@ -19,7 +19,7 @@ import { prisma } from "@dpf/db";
 import { buildFormAssistInstruction, type AgentFormAssistContext } from "@/lib/agent-form-assist";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
 import { getFeatureBuildForContext } from "@/lib/feature-build-data";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 /** The elevated form-fill instruction, or null when it does not apply. */
 export function formAssistSection(input: {

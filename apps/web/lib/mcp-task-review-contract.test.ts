@@ -1,0 +1,312 @@
+import { describe, expect, it } from "vitest";
+
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { initiativeReviewWriterArgumentContract, narrowInitiativeReviewTools, parseInitiativeReviewBinding } from "./mcp-task-review-contract";
+import { remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
+
+const binding = {
+  writerToolName: "record_initiative_evidence",
+  itemId: "BI-7D2C4F02",
+  gate: "objective-mapping",
+  expectedCurrentBaselineId: "baseline-08cecc05-02ef-4bf1-bfae-f250fc5e6da0",
+  eligibleEvidenceActivityIds: ["EVIDENCE-1", "EVIDENCE-2"],
+  workroomRef: {
+    kind: "workroom-head" as const,
+    workroomId: "WC-7D2C4F02",
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    branchName: "fix/objective-mapping",
+    headSha: "25934fda4591e2047bd66ac799a1e024353f03cd",
+  },
+  artifactRef: {
+    kind: "repo-blob-at-commit" as const,
+    repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    commitSha: "25934fda4591e2047bd66ac799a1e024353f03cd",
+    path: "docs/superpowers/specs/2026-08-24-platform-sbom-currency-consolidation-design.md",
+    providerBlobId: "3652f3d223fa8eb9a2a4873de7d65a8222f114c6",
+  },
+};
+
+it("retains every server-issued present relation byte in the immutable request", () => {
+  const presentReassessment = {
+    schemaVersion: 1 as const, authorizationItemId: "BI-7906C73E", baselineId: "baseline-approved",
+    policyDigest: "a".repeat(64), originalTaskRunId: "TR-MCP-original", originalRequestDigest: "b".repeat(64),
+    predecessorTaskRunIds: ["TR-MCP-original"],
+    authorityArtifact: { kind: "repo-blob-at-commit" as const, repositoryFullName: "owner/repo", commitSha: "c".repeat(40),
+      path: "docs/spec.md", providerBlobId: "d".repeat(40) },
+  };
+  const current = { ...binding, writerToolName: "record_initiative_design_review", gate: "design-spec", presentReassessment };
+  expect(parseInitiativeReviewBinding(current)).toEqual(current);
+  expect(parseInitiativeReviewBinding({ ...current, presentReassessment: { ...presentReassessment, originalReplay: true } })).toBeNull();
+  const packet = { agentId: "reviewer", routeContext: "/build", title: "Review", objective: "Review", prompt: "Review",
+    riskClass: "bounded-write" as const, idempotencyKey: "server-issued", initiativeReviewBinding: current };
+  const originalDigest = remoteTaskRequestDigest(packet);
+  expect(remoteTaskRequestDigest({ ...packet, initiativeReviewBinding: binding })).not.toBe(originalDigest);
+});
+
+const evidenceWriterSchema = {
+  type: "object",
+  properties: {
+    itemId: { type: "string" },
+    gate: { type: "string" },
+    decision: { type: "string", enum: ["pass", "fail", "not-applicable"] },
+    artifactRef: { type: "object" },
+    reason: { type: "string" },
+    findings: { type: "array" },
+    resolvedFindingRefs: { type: "array" },
+    operation: { type: "string", enum: ["gate-receipt", "objective-mapping"] },
+    baselineId: { type: "string" },
+    objectiveMappings: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          objectiveId: { type: "string" },
+          evidenceRefs: { type: "array", items: { type: "string" } },
+        },
+        required: ["objectiveId", "evidenceRefs"],
+      },
+    },
+  },
+  required: ["itemId", "reason"],
+};
+
+it("shares the exact variable writer argument contract used by provider schemas and restricted dispatch", () => {
+  expect(initiativeReviewWriterArgumentContract(binding)).toMatchObject({
+    objectiveMappingProposal: true,
+    writerPropertyNames: ["operation", "baselineId", "objectiveMappings", "reason"],
+    requiredWriterNames: ["operation", "baselineId", "objectiveMappings", "reason"],
+  });
+  expect(initiativeReviewWriterArgumentContract({ ...binding, gate: "spec-approval" })).toMatchObject({
+    objectiveMappingProposal: false,
+    writerPropertyNames: ["decision", "reason", "findings", "resolvedFindingRefs", "profile", "artifactRole", "supersessionDispositions"],
+    requiredWriterNames: ["decision", "reason", "findings", "resolvedFindingRefs", "profile", "artifactRole"],
+  });
+});
+
+describe("narrowInitiativeReviewTools", () => {
+  it("binds spec approval to current server classification without changing task identity", () => {
+    const review = { ...binding, gate: "spec-approval", writerToolName: "record_initiative_design_review" };
+    const before = JSON.stringify(review);
+    const writer: ToolDefinition = {
+      name: review.writerToolName, description: "Review", requiredCapability: "manage_backlog",
+      inputSchema: { type: "object", properties: { profile: { type: "string", enum: ["fix", "feature"] } } },
+    };
+    const result = narrowInitiativeReviewTools({ tools: [writer], deferredTools: [],
+      toolsForProvider: [{ type: "function", function: { name: writer.name, parameters: writer.inputSchema } }],
+    }, [writer.name], review, undefined, "feature");
+    expect(result.tools[0]?.inputSchema).toMatchObject({ properties: { profile: { enum: ["feature"] } } });
+    expect(result.toolsForProvider[0]).toMatchObject({ function: { parameters: { properties: { profile: { enum: ["feature"] } } } } });
+    expect(JSON.stringify(review)).toBe(before);
+  });
+
+  it("exposes only the complete objective-mapping proposal on the bound evidence writer", () => {
+    const reader: ToolDefinition = {
+      name: "read_source_at_version",
+      description: "Read immutable source.",
+      requiredCapability: "manage_backlog",
+      inputSchema: { type: "object", properties: {} },
+    };
+    const writer: ToolDefinition = {
+      name: binding.writerToolName,
+      description: "Record initiative evidence.",
+      requiredCapability: "manage_backlog",
+      inputSchema: evidenceWriterSchema,
+    };
+    const narrowed = narrowInitiativeReviewTools({
+      tools: [reader, writer],
+      toolsForProvider: [
+        { type: "function", function: { name: reader.name, parameters: reader.inputSchema } },
+        { type: "function", function: { name: writer.name, parameters: writer.inputSchema } },
+      ],
+      deferredTools: [],
+    }, [reader.name, writer.name], binding);
+
+    const expectedWriterSchema = {
+      type: "object",
+      properties: {
+        operation: { type: "string", enum: ["objective-mapping"] },
+        baselineId: {
+          type: "string",
+          enum: [binding.expectedCurrentBaselineId],
+        },
+        objectiveMappings: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              objectiveId: { type: "string" },
+              evidenceRefs: {
+                type: "array",
+                items: { type: "string", enum: binding.eligibleEvidenceActivityIds },
+                minItems: 1,
+                uniqueItems: true,
+              },
+            },
+            required: ["objectiveId", "evidenceRefs"],
+          },
+        },
+        reason: evidenceWriterSchema.properties.reason,
+      },
+      required: ["operation", "baselineId", "objectiveMappings", "reason"],
+      additionalProperties: false,
+    };
+    const narrowedWriter = narrowed.tools.find((tool) => tool.name === writer.name);
+    const providerWriter = narrowed.toolsForProvider.find((tool) => {
+      const fn = tool["function"] as Record<string, unknown> | undefined;
+      return fn?.["name"] === writer.name;
+    });
+
+    expect(narrowedWriter?.inputSchema).toEqual(expectedWriterSchema);
+    expect((providerWriter?.["function"] as Record<string, unknown>)?.["parameters"])
+      .toEqual(expectedWriterSchema);
+  });
+
+  it("preserves the explicit objective-mapping operation on a legacy dependency-disposition binding", () => {
+    const reader: ToolDefinition = {
+      name: "read_source_at_version",
+      description: "Read immutable source.",
+      requiredCapability: "manage_backlog",
+      inputSchema: { type: "object", properties: {} },
+    };
+    const writer: ToolDefinition = {
+      name: binding.writerToolName,
+      description: "Record initiative evidence.",
+      requiredCapability: "manage_backlog",
+      inputSchema: evidenceWriterSchema,
+    };
+    const legacyBinding = { ...binding, gate: "dependency-disposition" };
+    const narrowed = narrowInitiativeReviewTools({
+      tools: [reader, writer],
+      toolsForProvider: [
+        { type: "function", function: { name: reader.name, parameters: reader.inputSchema } },
+        { type: "function", function: { name: writer.name, parameters: writer.inputSchema } },
+      ],
+      deferredTools: [],
+    }, [reader.name, writer.name], legacyBinding,
+    "Only if grounded, call record_initiative_evidence with operation='objective-mapping'.");
+
+    expect(narrowed.tools.find((tool) => tool.name === writer.name)?.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        operation: { type: "string", enum: ["objective-mapping"] },
+        baselineId: {
+          type: "string",
+          enum: [binding.expectedCurrentBaselineId],
+        },
+        objectiveMappings: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              objectiveId: { type: "string" },
+              evidenceRefs: {
+                type: "array",
+                items: { type: "string", enum: binding.eligibleEvidenceActivityIds },
+                minItems: 1,
+                uniqueItems: true,
+              },
+            },
+            required: ["objectiveId", "evidenceRefs"],
+          },
+        },
+        reason: evidenceWriterSchema.properties.reason,
+      },
+      required: ["operation", "baselineId", "objectiveMappings", "reason"],
+      additionalProperties: false,
+    });
+  });
+
+  it("rejects a newly issued objective-mapping binding without finite eligible evidence", () => {
+    const withoutEvidence = { ...binding, eligibleEvidenceActivityIds: undefined };
+    expect(parseInitiativeReviewBinding(withoutEvidence)).toBeNull();
+    const withoutWorkroom = { ...binding, workroomRef: undefined };
+    expect(parseInitiativeReviewBinding(withoutWorkroom)).toMatchObject({
+      gate: "objective-mapping",
+      eligibleEvidenceActivityIds: binding.eligibleEvidenceActivityIds,
+    });
+  });
+
+  it("normalizes evidence order and rejects an incomplete Workroom identity", () => {
+    expect(parseInitiativeReviewBinding({
+      ...binding,
+      eligibleEvidenceActivityIds: ["EVIDENCE-2", "EVIDENCE-1"],
+    })?.eligibleEvidenceActivityIds).toEqual(["EVIDENCE-1", "EVIDENCE-2"]);
+    expect(parseInitiativeReviewBinding({
+      ...binding,
+      workroomRef: { ...binding.workroomRef, headSha: "" },
+    })).toBeNull();
+    expect(parseInitiativeReviewBinding({
+      ...binding,
+      workroomRef: { ...binding.workroomRef, repositoryFullName: "Other/repository" },
+    })).toBeNull();
+  });
+
+  it("does not grant objective-mapping authority to an ordinary dependency disposition", () => {
+    const writer: ToolDefinition = {
+      name: binding.writerToolName,
+      description: "Record initiative evidence.",
+      requiredCapability: "manage_backlog",
+      inputSchema: evidenceWriterSchema,
+    };
+    const narrowed = narrowInitiativeReviewTools({
+      tools: [writer],
+      toolsForProvider: [
+        { type: "function", function: { name: writer.name, parameters: writer.inputSchema } },
+      ],
+      deferredTools: [],
+    }, [writer.name], { ...binding, gate: "dependency-disposition" },
+    "Review the dependency disposition and record a governed pass or fail.");
+
+    expect(narrowed.tools[0]?.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        decision: evidenceWriterSchema.properties.decision,
+        reason: evidenceWriterSchema.properties.reason,
+        findings: evidenceWriterSchema.properties.findings,
+        resolvedFindingRefs: evidenceWriterSchema.properties.resolvedFindingRefs,
+      },
+      required: ["decision", "reason", "findings", "resolvedFindingRefs"],
+      additionalProperties: false,
+    });
+  });
+});
+
+
+describe("parseInitiativeReviewBinding — feature-build-revision (BI-926A7E90)", () => {
+  const base = {
+    writerToolName: "record_initiative_design_review",
+    itemId: "BI-926A7E90",
+    gate: "spec-approval",
+    expectedCurrentBaselineId: null,
+    workroomRef: {
+      kind: "workroom-head",
+      workroomId: "WC-1",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      branchName: "build/FB-1",
+      headSha: "sha256:design-digest",
+    },
+  };
+  it("accepts a revision bound by id and value digest", () => {
+    const parsed = parseInitiativeReviewBinding({
+      ...base,
+      artifactRef: {
+        kind: "feature-build-revision",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        revisionId: "rev_1",
+        valueDigest: "sha256:design-digest",
+      },
+    });
+    expect(parsed?.artifactRef).toEqual({
+      kind: "feature-build-revision",
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      revisionId: "rev_1",
+      valueDigest: "sha256:design-digest",
+    });
+  });
+  it("refuses a revision binding without its digest", () => {
+    expect(parseInitiativeReviewBinding({
+      ...base,
+      artifactRef: { kind: "feature-build-revision", repositoryFullName: "o/r", revisionId: "rev_1" },
+    })).toBeNull();
+  });
+});

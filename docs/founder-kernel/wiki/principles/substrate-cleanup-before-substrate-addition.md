@@ -36,9 +36,11 @@ fragmentation in place.
 
 ## What "cleanup before addition" looks like
 
-- **Reserve 20% of implementation capacity** for refactoring existing
-  event/evidence/coordination seams before adding new emitters or
-  consumers. Treat the budget as non-optional, not as slack.
+- **Use the funding owner's allocation.** Founder-funded shared platform
+  work targets approximately 80% refactoring, integration and repair, with
+  20% new capability. Organization/archetype work defaults to the inverse.
+  These are cumulative directions, not per-task quotas; resolve the owner
+  and purpose before applying them. See [investment allocation](../../../user-guide/investment-allocation.md).
 - **Phase 0 of any multi-phase plan consolidates.** Phase 1+ adds. If a
   plan starts at Phase 1 with no Phase 0, ask why the cleanup didn't
   fit; the answer is usually "we didn't think we needed it" — which is
@@ -147,10 +149,30 @@ Before opening a PR that adds a new substrate layer:
 - [`one-data-model`](../../../professions/data-architect/wiki/one-data-model.md) — the architectural reason
   fragmentation is expensive
 - [`architecture-over-shortcuts`](architecture-over-shortcuts.md) — the
-  20% refactoring budget posture this principle operationalizes
+  architecture posture this principle operationalizes; current owner-scoped allocation is in [Absorb, Don't Adopt](absorb-dont-adopt.md)
 
 ## Spec references
 
 - [Reduction Gear Architecture spec](../../../superpowers/specs/2026-05-24-reduction-gear-architecture-design.md) — §0 architect verdict, 20% refactor budget
 - [Governed-upgrade plan](../../../superpowers/plans/2026-05-23-governed-platform-upgrade-phase-0-and-1.md) — Phase 0 consolidation
 - [Founder kernel evolution discipline spec](../../../superpowers/specs/2026-05-24-founder-kernel-evolution-discipline-design.md) — §6.4 promotion record
+
+## Amendment 2026-09-22 — surface a deprecation when you meet it, and price a big one
+
+The applicable owner-scoped refactoring budget covers the seams you choose to work on. Two clauses extend it
+to the debt that arrives on its own.
+
+**Surface a deprecation proactively.** When a library, framework or internal module
+is deprecated — especially a load-bearing one — raise it as tracked work the moment
+it is noticed, not when it breaks. A deprecation visible only in a build warning is
+invisible. The same applies to every standing workaround: an entry in a dependency
+ignore list, a pinned-back version, a "we'll do it later" comment should each carry
+an item pointing at the work that removes it, or it is permanent by default.
+
+**Price a large one rather than punting it.** When an upgrade or refactor is too
+large to land in the current work, do not silently defer it and do not start it
+either. State the scope, the effort, the risk of waiting and the alternatives, and
+let the owner make the call — the shape [[principles/proper-fix-over-quick-fix]]
+already requires when a proper fix expands scope.
+
+Platform principle, stated by the founder.

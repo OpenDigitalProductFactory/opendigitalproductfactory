@@ -1,7 +1,6 @@
 // packages/db/src/graph-sync.ts
 // Projection sync: push Prisma records into the Postgres graph mirror after writes.
-// BET-5 (BI-A1E864A5): the writes formerly ran Cypher MERGE against Neo4j; they now
-// UPSERT into the `graph_node` / `graph_edge` tables (see 20260714120000_bet5_graph_mirror)
+// The writes UPSERT into the `graph_node` / `graph_edge` tables (see 20260714120000_bet5_graph_mirror)
 // that pg-graph.ts reads. These are fire-and-forget projections — failures are logged
 // but never allowed to bubble up to the caller. Postgres is always the authority.
 //
@@ -16,15 +15,16 @@
 // by pgId and the nodeId-keyed subtree read would never find the product.
 
 import { prisma } from "./client";
-import { NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
+import { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
+import { assertRelationWrite, toRelationType, type RelationType } from "./relation-vocabulary";
 
 // ─── Graph-mirror primitives ──────────────────────────────────────────────────
 
 /** UPSERT a node. On conflict, labels are UNION-merged (existing order preserved,
  *  genuinely-new labels appended) so labels added out-of-band — IT4IT value-stream
  *  labels on DigitalProduct, the type-specific EaElement label — survive a re-sync
- *  (Neo4j `MERGE ... SET` never touched the label set). Props are shallow-merged,
- *  mirroring `SET n.x = …` (only named keys change; others are left intact). */
+ *  (a re-sync never removes a label). Props are shallow-merged: only named keys
+ *  change; others are left intact. */
 export async function upsertGraphNode(
   key: string,
   labels: string[],
@@ -46,7 +46,7 @@ export async function upsertGraphNode(
   );
 }
 
-/** Append labels to an already-present node (Neo4j apoc.create.addLabels parity).
+/** Append labels to an already-present node.
  *  No-op if the node is absent or is not of `requiredLabel`. */
 async function addGraphNodeLabels(
   key: string,
@@ -67,13 +67,16 @@ async function addGraphNodeLabels(
   );
 }
 
-/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type). Props shallow-merged. */
+/** UPSERT a directed edge keyed by (src_key, dst_key, rel_type). Props shallow-merged.
+ *  The type must be in the relation vocabulary (BI-85389A35): an unregistered or
+ *  retired type, or a missing required prop or qualifier, throws before the write. */
 export async function upsertGraphEdge(
   srcKey: string,
   dstKey: string,
-  relType: string,
+  relType: RelationType,
   props: Record<string, unknown> = {},
 ): Promise<void> {
+  assertRelationWrite(relType, props);
   await prisma.$executeRawUnsafe(
     `INSERT INTO graph_edge (src_key, dst_key, rel_type, props)
      VALUES ($1, $2, $3, $4::jsonb)
@@ -84,6 +87,35 @@ export async function upsertGraphEdge(
     relType,
     JSON.stringify(props),
   );
+}
+
+/** Make `srcKey`'s outgoing `relType` edges exactly `dstKeys` (BI-23900D0A).
+ *
+ *  Upsert alone can only add, so an edge whose source body no longer names its
+ *  target stayed in the mirror between two live pages. This deletes the edges
+ *  of that one type from that one source that are no longer wanted, then
+ *  upserts the rest. Edges of other types, and edges from other sources, are
+ *  never touched. */
+export async function replaceGraphEdgesFromSource(
+  srcKey: string,
+  relType: RelationType,
+  dstKeys: string[],
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge
+      WHERE src_key = $1 AND rel_type = $2 AND NOT (dst_key = ANY($3::text[]))`,
+    srcKey,
+    relType,
+    dstKeys,
+  );
+  for (const dstKey of dstKeys) {
+    await upsertGraphEdge(srcKey, dstKey, relType);
+  }
+}
+
+/** The `LINKS_TO` projection of a wiki page's out-links (BI-23900D0A). */
+export function projectWikiLinksToGraph(fromPageId: string, toPageIds: string[]): Promise<void> {
+  return replaceGraphEdgesFromSource(fromPageId, "LINKS_TO", toPageIds);
 }
 
 /** Resolve a Prisma TaxonomyNode FK (= TaxonomyNode.id, stored as the `pgId`
@@ -138,7 +170,7 @@ export async function syncDigitalProduct(dp: {
  * Apply IT4IT value stream labels to a DigitalProduct node.
  * Labels: :S2P (Strategy to Portfolio), :R2D (Requirement to Deploy),
  *         :R2F (Request to Fulfill), :D2C (Detect to Correct)
- * See neo4j-schema.ts for label definitions.
+ * See graph-schema.ts for the relationship vocabulary.
  */
 export async function syncIT4ITLabels(
   productId: string,
@@ -237,13 +269,6 @@ export async function syncWikiPage(page: {
   }
 }
 
-/** Upsert the page-to-page link edge (`WikiPageLink`). */
-export async function syncWikiPageLink(link: {
-  fromPageId: string;
-  toPageId: string;
-}): Promise<void> {
-  await upsertGraphEdge(link.fromPageId, link.toPageId, "LINKS_TO");
-}
 
 export async function syncDocumentNode(doc: {
   documentId: string;
@@ -289,7 +314,7 @@ export async function syncDocumentReference(ref: {
     documentKind: ref.targetKind ?? null,
     syncedAt,
   });
-  // DOC_REFERENCES edge. The Neo4j edge identity also carried refType +
+  // DOC_REFERENCES edge. A reference is also identified by refType +
   // source/targetVersionId; the mirror's (src,dst,rel_type) uniqueness cannot
   // hold parallel references, so those are stored as props on the single edge.
   await upsertGraphEdge(ref.sourceDocumentId, ref.targetDocumentId, "DOC_REFERENCES", {
@@ -343,8 +368,8 @@ export async function syncInfraCI(
   };
 
   if (extendedProps) {
-    // Only carry keys that were explicitly provided (parity with the conditional
-    // Neo4j SET clauses — an absent key leaves any existing prop untouched).
+    // Only carry keys that were explicitly provided — an absent key leaves any
+    // existing prop untouched.
     if (extendedProps.baseUrl !== undefined) props.baseUrl = extendedProps.baseUrl;
     if (extendedProps.gpu !== undefined) props.gpu = extendedProps.gpu;
     if (extendedProps.vramGb !== undefined) props.vramGb = extendedProps.vramGb;
@@ -494,7 +519,7 @@ export async function syncInventoryRelationship(rel: {
   const neoType = rel.relationshipType.toUpperCase();
 
   if (TYPED_EDGE_RELATIONSHIP_TYPES.has(neoType)) {
-    await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, neoType, {
+    await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, toRelationType(neoType), {
       syncedAt: nowIso(),
     });
     return;
@@ -564,9 +589,9 @@ export async function syncEaRelationship(rel: {
   notationSlug: string;
   relationshipTypeSlug: string;
 }): Promise<void> {
-  // Edge identity in Neo4j also carried relationshipId; the mirror keys edges by
+  // A relationship is also identified by relationshipId; the mirror keys edges by
   // (src,dst,rel_type) and stores relationshipId as a prop (used by deleteEaRelationship).
-  await upsertGraphEdge(rel.fromElementId, rel.toElementId, rel.neoType, {
+  await upsertGraphEdge(rel.fromElementId, rel.toElementId, toRelationType(rel.neoType), {
     relationshipId: rel.id,
     notationId: rel.notationSlug,
     relationshipType: rel.relationshipTypeSlug,
@@ -588,6 +613,20 @@ export async function deleteEaElement(elementId: string): Promise<void> {
 }
 
 /** Remove a single EaRelationship edge by its relationshipId property. */
+/** Drop EA edges whose relationship row is gone or now carries another type (BI-28C22BE3).
+ *  The EA projection upserts by (src, dst, rel_type), so a retyped or deleted
+ *  EaRelationship would otherwise leave its old edge behind. Returns the count. */
+export async function pruneStaleEaRelationshipEdges(): Promise<number> {
+  return prisma.$executeRawUnsafe(
+    `DELETE FROM graph_edge e
+      WHERE e.props ? 'relationshipId'
+        AND NOT EXISTS (
+          SELECT 1 FROM "EaRelationship" r
+            JOIN "EaRelationshipType" t ON t.id = r."relationshipTypeId"
+           WHERE r.id = e.props->>'relationshipId' AND t."neoType" = e.rel_type)`,
+  );
+}
+
 export async function deleteEaRelationship(relationshipId: string): Promise<void> {
   // No rel-type filter — matches any type by relationshipId (low volume, intentional).
   await prisma.$executeRawUnsafe(

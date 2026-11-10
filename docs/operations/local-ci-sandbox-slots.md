@@ -5,6 +5,47 @@ a versioned slot manifest. The lease decides who may run; the manifest decides
 which physical resources that admitted owner may mutate. These are separate
 safety layers.
 
+## Routine lease release
+
+Releasing a nonproduction lease frees a reservation on a shared test machine or
+preview portal. On every installation, including production, a release is
+routine and does not ask a person when it frees nothing another session is
+using (BI-88D51B8F, owner direction 2026-11-04):
+
+- **Ended reservation.** The lease is already released, cancelled or expired.
+  The release changes nothing.
+- **Lapsed reservation.** The lease is active or queued, but its `expiresAt`
+  has passed. A lapsed lease cannot be renewed, and the expiry janitor would
+  free it with no person involved.
+- **Owned reservation.** The caller's own process-free local-CI or preview
+  reservation, proven by the exact original session and a server-recorded
+  durable wait that belongs to the authenticated user. The classifier checks
+  the complete lease/wait identity and version-one slot binding.
+
+The approval decision and the locked release run the same check on the current
+row (`routineLeaseRelease`). A lease that changes between the two is checked
+again before anything is written.
+
+A **live** reservation that another session still holds and renews keeps the
+authority gate. Freeing it can let the next queued test start on top of a run
+that is still going. That request reaches a person with a plain-language
+statement of what will happen and why it matters. Missing or legacy provenance,
+unknown state and explicit operator approval policies also keep their gates.
+Token scope, coworker grants, user capabilities, immutable ownership, execution
+fencing and the release transaction remain enforced.
+
+Release the admitted lease after its owned work finishes. An expired or cancelled
+wait stays terminal; cleanup never implies admission, command success or completed
+verification. Reuse the exact supported request rather than creating repeated
+approval envelopes or new attempts for the same cleanup.
+
+Automatic expiry settles the lease's matching submitted durable wait in the
+same transaction. A capacity notification cannot reopen a completed wait.
+Concurrent notifications trigger a bounded re-read; sustained contention rolls
+back expiry for a later reconciliation pass. Settling a wait records only that
+waiting ended. It never proves a command ran or verification passed, and does
+not repair historical waits whose leases had already expired before this change.
+
 ## Host-wide heavyweight resource admission
 
 The local-CI slots are not the only processes capable of exhausting a
@@ -12,8 +53,25 @@ developer host. Canonical TypeScript, Vitest, Next build, Docker build,
 preview, inference, and semantic-review entry points declare a resource class
 through `scripts/host-resource-runner.mjs`. The runner requests the durable
 `host-heavy-resource` lease before starting its child, supervises that child
-and its descendants, renews while it runs, and releases only after the owned
-process group exits.
+and its descendants, and renews while it runs. When supervision ends, it stops
+renewal and reads that exact persisted reservation once. It does not request
+generic immediate release of a process-owned reservation. Natural expiry uses
+the existing reaper cadence; elapsed time alone never proves settlement.
+
+The runner reports command outcome separately from reservation state. Active or
+queued is pending; an unavailable or mismatched read is unknown. A matching
+persisted terminal row with no active slot proves reservation settlement only,
+never command success or descendant exit. Existing immediate-release authority
+checks and pending approval history remain intact.
+
+Qualification verification is currently unavailable. A signed token and host
+lease can bind admission, but the runner submits its result with the caller's
+ordinary MCP credential. Because the server cannot distinguish that submission
+from a direct forged success, terminal recovery does not issue qualification
+tokens and `record_execution_evidence` refuses qualification payloads. The
+native Edge action channel is separately authenticated but has no bounded
+qualification-test action. Ordinary host-resource commands retain the
+coordination contract above and produce no qualification evidence.
 
 The versioned profile is
 `apps/web/lib/nonprod/host-resource-profiles.json`. On a host with at most 64
@@ -23,8 +81,26 @@ preserves the host reserve and an inference-growth reserve. Cheap Node guards
 such as documentation, policy, and change-impact checks do not enter this lane
 and remain concurrent.
 
-A full lane produces a typed `host_resource_queued` response and exits without
-leaving a waiting Node process. Stray matching processes are included as
+A full lane exits 75 with `host_resource_durable_wait`. The command does not
+start until admitted. `resumeOwner: detached-resumer` hands the wait to the
+existing background resumer; `resumeOwner: caller` means no detached owner
+started. The response includes `resumePin`: pass it as `--resume-pin <value>`
+before the child-command `--` only when resuming that exact attempt. A fresh
+invocation intentionally creates a different attempt.
+
+Retries preserve the original lease and queue age while updating process
+identity. Source, command, owner, credential, dependency or resource-budget
+changes stop the old attempt unrun (exit 82). Terminal leases stop unrun (81);
+active or foreign leases cannot be taken over. The server still evaluates
+current capacity on every retry.
+
+Diagnostics live in `<git-common-dir>/dpf-local-ci-queue-observers`, or the
+configured `DPF_LOCAL_QUEUE_OBSERVER_DIR`. Each resumer log records its actual
+PID, each gate child's PID and bounded command output. On Windows WMI launches,
+`launcherPid` names the short-lived launcher; use the log's `start` PID for the
+resumer, not the launcher. Logs do not turn a queued or unrun command into PASS.
+
+Stray matching processes are included as
 `evidence-only` diagnostics; the broker never kills a process merely because
 its command line resembles a heavy workload. Only the admitted runner's own
 descendant group may be terminated when lease authority is lost.

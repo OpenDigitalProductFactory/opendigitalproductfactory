@@ -4,8 +4,13 @@
  * Owning plan: docs/superpowers/plans/2026-05-16-voice-input-slice-1-portal-mic.md
  * Owning spec: docs/superpowers/specs/2026-05-16-voice-input-and-transcription-design.md §5.3
  *
- * Mounted under Platform Tools > Communications. Shows the speaches sidecar
- * (or replacement) readiness state and a test-phrase harness.
+ * Mounted under Platform Tools > Communications. Shows which transcription
+ * provider is currently resolved, its readiness state, and a test-phrase
+ * harness.
+ *
+ * Speech is provider-managed (BI-F7E9A541): DPF ships no speech container, so
+ * "not configured" means no active provider advertises a transcription model,
+ * and the remedy is connecting one — hosted, or the operator's own server.
  */
 
 import { Mic } from "lucide-react";

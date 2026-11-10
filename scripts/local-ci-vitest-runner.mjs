@@ -1,10 +1,14 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { runVitestWithRecovery } from "./lib/local-ci-vitest-supervisor.mjs";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
+import { changedFilesAgainst, resolveVitestMaxDurationMs, resolveVitestExecution } from "./lib/local-ci-vitest-selection.mjs";
+export { changedFilesAgainst, resolveVitestMaxDurationMs } from "./lib/local-ci-vitest-selection.mjs";
 import {
   classifyPriorStage,
   createStageReceiptWriter,
@@ -14,11 +18,16 @@ import {
   stageIdentityMatches,
 } from "./lib/local-ci-stage-receipt.mjs";
 
-const DEFAULT_VITEST_MAX_DURATION_MS = 30 * 60 * 1_000;
-
 function valueAfter(flag, fallback) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] : fallback;
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: scriptArgv(),
+    strict: false,
+    allowPositionals: true,
+    options: { "initial-workers": { type: "string" }, "retry-workers": { type: "string" }, "base": { type: "string" } },
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return value === undefined ? fallback : typeof value === "string" ? value : undefined;
 }
 
 function positiveInteger(value, fallback) {
@@ -26,20 +35,8 @@ function positiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function resolveVitestMaxDurationMs(env = process.env) {
-  return positiveInteger(
-    env.DPF_LOCAL_CI_VITEST_MAX_DURATION_MS,
-    DEFAULT_VITEST_MAX_DURATION_MS,
-  );
-}
-
 function resolveGit(ref) {
-  const result = spawnSync("git", ["rev-parse", "--verify", ref], {
-    encoding: "utf8",
-    shell: false,
-    windowsHide: true,
-  });
-  return result.status === 0 ? result.stdout.trim() : null;
+  return gitTextOrNull(["rev-parse", "--verify", ref], { cwd: process.cwd() });
 }
 
 function processAlive(pid) {
@@ -98,8 +95,15 @@ function latestExecutionProfile(receipt) {
   return receipt?.executionProfile ?? null;
 }
 
-export function recoveryReceiptForIdentity({ receipt, identity }) {
-  return receipt?.stage === "exhaustive-vitest"
+export function recoveryReceiptForIdentity({
+  receipt,
+  identity,
+  stage = "exhaustive-vitest",
+}) {
+  // The stage name carries the coverage mode, and the identity carries the
+  // command (which includes --changed). A narrower prior run must never satisfy
+  // a wider one, so both have to match.
+  return receipt?.stage === stage
     && stageIdentityMatches(receipt.identity, identity)
     ? receipt
     : null;
@@ -138,11 +142,12 @@ export function createAttemptRunner({
       lastCompletedTest: lastCompletedTestLine(progress.outputTail ?? ""),
     }),
   });
-  return function runAttempt({ workers, attempt }) {
+  return function runAttempt({ workers, attempt, extraArgs = [] }) {
     const args = [
         "--filter", "web", "exec", "vitest", "run",
         `--maxWorkers=${workers}`,
         "--reporter=verbose",
+        ...extraArgs,
       ];
     return runObservedProcess({
       command: "pnpm",
@@ -166,15 +171,22 @@ async function main() {
   );
   const startedAt = new Date().toISOString();
   let latestAttempts = [];
-  const identity = {
-    integrationTreeSha: resolveGit("HEAD^{tree}"),
-    command: `pnpm --filter web exec vitest run --maxWorkers=${initialWorkers} --reporter=verbose`,
-    maxDurationMs,
-  };
+
+  // BI-2227C37C: narrow the LOCAL tier to the tests the diff can reach. The
+  // cloud still runs everything, sharded, so a miss here is caught before merge
+  // rather than after. Selection fails safe to the exhaustive run — see
+  // lib/local-ci-vitest-selection.mjs for the conditions.
+  const baseRef = valueAfter("--base", "");
+  const { selection, identity } = resolveVitestExecution({
+    integrationTreeSha: resolveGit("HEAD^{tree}"), initialWorkers,
+    baseRef, changedFiles: changedFilesAgainst(baseRef),
+  });
+  process.stdout.write(`[local-ci-vitest] coverage=${selection.mode} (${selection.reason})\n`);
+
   const priorReceipt = readStageReceipt(diagnosticsPath);
   if (reusablePassedStage({
     receipt: priorReceipt,
-    stage: "exhaustive-vitest",
+    stage: selection.stage,
     identity,
   })) {
     markStageReceiptReused({ path: diagnosticsPath, receipt: priorReceipt });
@@ -186,6 +198,7 @@ async function main() {
   const matchingPriorReceipt = recoveryReceiptForIdentity({
     receipt: priorReceipt,
     identity,
+    stage: selection.stage,
   });
   const priorDisposition = matchingPriorReceipt?.retryExhausted === true
     ? "retry-exhausted"
@@ -201,11 +214,12 @@ async function main() {
   });
   const receipt = createStageReceiptWriter({
     path: diagnosticsPath,
-    stage: "exhaustive-vitest",
+    stage: selection.stage,
     identity,
   });
   receipt.start({
     bi: "BI-872CB1BF",
+    selection,
     maxDurationMs,
     executionProfile: recoveryPlan.executionProfile,
     recoveredFrom: recoveryPlan.recoveringPriorTermination
@@ -253,7 +267,7 @@ async function main() {
           workers,
         },
       });
-      return observedAttempt({ workers, attempt });
+      return observedAttempt({ workers, attempt, extraArgs: selection.extraArgs });
     },
     onAttempt: async (attempt) => {
       latestAttempts = [...latestAttempts, attempt];
@@ -266,7 +280,7 @@ async function main() {
       });
       if (recoveryPlan.allowRetry && attempt.classification === "runner-termination" && attempt.attempt === 1) {
         process.stderr.write(
-          `[local-ci-vitest] runner termination detected (status=${attempt.status}, signal=${attempt.signal ?? "none"}); retrying the same exhaustive suite once with ${retryWorkers} workers\n`,
+          `[local-ci-vitest] runner termination detected (status=${attempt.status}, signal=${attempt.signal ?? "none"}); retrying the same ${selection.mode} selection once with ${retryWorkers} workers\n`,
         );
       }
     },
@@ -281,9 +295,11 @@ async function main() {
     recoveryPlan,
     startedAt,
     attempts: result.attempts,
+    failedTestFiles: result.failedTestFiles ?? [],
   });
+  const failedFiles = result.failedTestFiles?.length ? ` failed-files=${result.failedTestFiles.join(",")}` : "";
   process.stdout.write(
-    `[local-ci-vitest] classification=${result.classification} attempts=${result.attempts.length} recovered=${recovered} diagnostics=${diagnosticsPath}\n`,
+    `[local-ci-vitest] classification=${result.classification} attempts=${result.attempts.length} recovered=${recovered}${failedFiles} diagnostics=${diagnosticsPath}\n`,
   );
   process.exit(result.status);
 }

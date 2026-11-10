@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 const NEEDLE_ROTATION: Record<ProactivityLevel, number> = {
   quiet: -42,

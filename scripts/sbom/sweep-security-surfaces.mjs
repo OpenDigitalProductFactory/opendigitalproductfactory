@@ -23,6 +23,8 @@
 // run or an air-gapped install degrades loudly rather than reporting a false
 // all-clear.
 
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "../lib/script-argv.mjs";
 import { writeFileSync } from "node:fs";
 
 const REPO = process.env.GITHUB_REPOSITORY ?? "OpenDigitalProductFactory/opendigitalproductfactory";
@@ -30,8 +32,15 @@ const TOKEN = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? "";
 const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
 
 const argOf = (flag) => {
-  const i = process.argv.indexOf(flag);
-  return i === -1 ? null : process.argv[i + 1];
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: scriptArgv(),
+    strict: false,
+    allowPositionals: true,
+    options: { "md": { type: "string" }, "json": { type: "string" } },
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return value === undefined ? null : typeof value === "string" ? value : undefined;
 };
 
 /**
@@ -69,7 +78,7 @@ async function fetchAlerts(surface) {
       return {
         ok: false,
         alerts: [],
-        reason: "403 — the default GITHUB_TOKEN cannot read this surface; set the DEPENDABOT_ALERTS_TOKEN secret (security_events scope)",
+        reason: "403 — the default GITHUB_TOKEN cannot read this surface; set the SECURITY_SWEEP_APP_ID + SECURITY_SWEEP_APP_PRIVATE_KEY secrets (GitHub App) or DEPENDABOT_ALERTS_TOKEN (fine-grained PAT) — see BI-3E6AFF04",
       };
     }
     if (!res.ok) return { ok: false, alerts: [], reason: `HTTP ${res.status}` };

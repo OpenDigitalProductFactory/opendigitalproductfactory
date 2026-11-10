@@ -21,60 +21,58 @@
 // a new kind of row. `backlogItemId` is nullable and `outcomeAnchor` already
 // admits a coworker anchor, so coworker-owned standing work fits as-is.
 
-import type { WorkroomShapeKey } from "./room-shapes";
+import { validateStopExits } from "@dpf/validators/gpp/stop-exits";
+import { ACCEPTANCE_VERIFICATION_SHAPES } from "./acceptance-verification-shape";
+import { COWORKER_STANDING_SHAPES } from "./coworker-standing-shapes";
+import { COWORKER_STANDING_SHAPES_CRAFT } from "./coworker-standing-shapes-craft";
+import { COWORKER_STANDING_SHAPES_OPERATE } from "./coworker-standing-shapes-operate";
+import { DELIVERY_SHAPES } from "./delivery-shapes";
+import { GENERATED_WORK_SHAPES } from "./generated/index.generated";
+import { improveActivityFor, type ImproveLayer, type WorkShapeImproveActivity } from "./improve-activity";
+import { ORCHESTRATION_SHAPES } from "./orchestration-shapes";
+import { PLATFORM_REVIEW_SHAPES } from "./platform-review-shape";
+import { SOURCE_INQUIRY_SHAPES } from "./source-inquiry-shape";
+import { STANDING_SHAPES } from "./standing-operations-shapes";
+import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 
-/** §8.11.1 trigger vocabulary, verbatim and closed. */
-export const WORK_SHAPE_TRIGGER_CLASSES = [
-  "claim",
-  "cadence",
-  "deadline-horizon",
-  "authority-change",
-  "estate-drift",
-  "evidence-decay",
-  "escalation",
-] as const;
-export type WorkShapeTriggerClass = (typeof WORK_SHAPE_TRIGGER_CLASSES)[number];
+// Structural contracts and vocabularies have one portable owner. This module
+// retains the application registry and its existing validation/read adapters.
+import type { WorkShapeDefinition, WorkShapeDefinitionContract } from "@dpf/validators/gpp/work-shape-contracts";
+import { WORK_SHAPE_TRIGGER_CLASSES, type WorkShapeTriggerClass } from "@dpf/validators/gpp/work-vocabulary";
+export { WORK_SHAPE_TRIGGER_CLASSES, type WorkShapeTriggerClass } from "@dpf/validators/gpp/work-vocabulary";
+export type {
+  WorkShapeAdvance,
+  WorkShapeGate,
+  WorkShapeBinding,
+  WorkShapeStage,
+  WorkShapeStageDeadline,
+  WorkShapeFlow,
+  WorkShapeStopCondition,
+  WorkShapeGrant,
+  WorkShapeMeasure,
+  WorkShapeBudget,
+  WorkShapeDefinition,
+  WorkShapeDefinitionContract,
+} from "@dpf/validators/gpp/work-shape-contracts";
 
-/**
- * How a stage advances. `governed-decision` means the advance is a §8.4
- * decision — the kernel is consulted and a decision record is sealed — not a
- * status write. §8.11.2: which advances these are is a property of the
- * ACTIVITY, so a proactivity setting can never downgrade one.
- */
-export type WorkShapeAdvance =
-  | { kind: "status-change"; condition: string }
-  | { kind: "governed-decision"; condition: string; decisionScope: string };
-
-export type WorkShapeStage = {
-  key: string;
-  title: string;
-  /** Who answers for this stage. `agent:<id>` | `role:<role>` | `person:<ref>`. */
-  accountablePrincipalRef: string;
-  advance: WorkShapeAdvance;
-  /** Evidence kinds the stage is expected to leave behind (§8.11). */
-  evidence: readonly string[];
-};
-
-export type WorkShapeStopCondition = {
-  /** A shape MUST declare its failure exit, not only its successful one. */
-  kind: "success" | "failure" | "budget";
-  condition: string;
-};
-
-export type WorkShapeDefinition = {
-  key: string;
-  /** Versioned: changing stages or gates is a new version, not an edit in place. */
-  version: string;
-  title: string;
-  description: string;
-  triggers: readonly WorkShapeTriggerClass[];
-  stages: readonly WorkShapeStage[];
-  stopConditions: readonly WorkShapeStopCondition[];
-  /** The activity is examined here whether or not it progressed. */
-  reviewPoint: { everyDays: number; description: string };
-  /** The room shape a consequential act inside this activity binds to. */
-  collaborationShape: WorkroomShapeKey | null;
-};
+export function readWorkShapeDefinitionContract(
+  shape: WorkShapeDefinition,
+): WorkShapeDefinitionContract {
+  return {
+    key: shape.key,
+    version: shape.version,
+    title: shape.title,
+    description: shape.description,
+    triggers: shape.triggers,
+    stages: shape.stages,
+    stopConditions: shape.stopConditions,
+    grants: shape.grants,
+    measures: shape.measures,
+    budgets: shape.budgets,
+    reviewPoint: shape.reviewPoint,
+    ...(shape.flow !== undefined ? { flow: shape.flow } : {}),
+  };
+}
 
 // ── the registry ─────────────────────────────────────────────────────────────
 
@@ -133,9 +131,16 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "No obligation, control review, or licence reference remains inside the horizon unfindinged." },
-      { kind: "failure", condition: "The sweep cannot read the compliance substrate (no profile, no obligations, or a query error) — it stops and reports, and does NOT raise findings from an empty read." },
-      { kind: "budget", condition: "More than 200 findings would be raised in one run — the run stops and escalates, rather than burying the ledger." },
+      { kind: "success", condition: "No obligation, control review, or licence reference remains inside the horizon unfindinged.", disposition: "proceed" },
+      { kind: "failure", condition: "The sweep cannot read the compliance substrate (no profile, no obligations, or a query error) — it stops and reports, and does NOT raise findings from an empty read.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 200 findings would be raised in one run — the run stops and escalates, rather than burying the ledger.", disposition: "awaiting-person" },
+    ],
+    grants: ["tool:read"],
+    measures: [
+      { key: "findings-raised", description: "Findings opened onto the assurance ledger in one run." },
+    ],
+    budgets: [
+      { kind: "findings-per-run", limit: 200, unit: "findings" },
     ],
     reviewPoint: {
       everyDays: 30,
@@ -147,12 +152,114 @@ const SHAPES: Record<string, WorkShapeDefinition> = {
   },
 };
 
+
+/**
+ * The full registry, family by family: the anchor compliance shape, the
+ * standing operations, the coworker standing shapes, the five delivery shapes,
+ * one orchestration cycle per IT4IT value stream, the acceptance-verification
+ * steward, platform post-implementation review and read-only source inquiry
+ * activities. Each family names the improve layer its shapes inherit
+ * (BI-CE564FBB).
+ */
+const SHAPE_FAMILIES: readonly (readonly [ImproveLayer, Record<string, WorkShapeDefinition>])[] = [
+  ["assurance", SHAPES],
+  ["platform-operations", STANDING_SHAPES],
+  ["business-operations", COWORKER_STANDING_SHAPES],
+  ["business-operations", COWORKER_STANDING_SHAPES_OPERATE],
+  ["craft", COWORKER_STANDING_SHAPES_CRAFT],
+  ["ring-0", DELIVERY_SHAPES],
+  ["orchestration", ORCHESTRATION_SHAPES],
+  ["assurance", ACCEPTANCE_VERIFICATION_SHAPES],
+  ["assurance", PLATFORM_REVIEW_SHAPES],
+  ["ring-0", SOURCE_INQUIRY_SHAPES],
+];
+
+const ALL_SHAPES: Record<string, WorkShapeDefinition> = Object.assign({}, ...SHAPE_FAMILIES.map(([, family]) => family));
+
+/** The improve activity each shape inherits, from the family that registers it (last registration wins, as in ALL_SHAPES). */
+const IMPROVE_ACTIVITIES = new Map<string, WorkShapeImproveActivity>(
+  SHAPE_FAMILIES.flatMap(([layer, family]) => Object.keys(family).map((key) => [key, improveActivityFor(layer)] as const)),
+);
+
+// A compiled shape (GPP Phase 3b, PR-3b-6) is registered by reference, in its
+// original position in its family file, so listWorkShapes() keeps its order.
+// The generated index is read only to prove that: every generated definition
+// is registered here under its key, as the very same object. Nothing generated
+// is spread into ALL_SHAPES.
+for (const generated of GENERATED_WORK_SHAPES) {
+  if (ALL_SHAPES[generated.key] !== generated) {
+    throw new Error(
+      `work-shapes: the generated definition ${generated.key}@${generated.version} is not the registered one; `
+        + "reference its generated constant in place of the hand-written literal.",
+    );
+  }
+}
+
 export function listWorkShapes(): WorkShapeDefinition[] {
-  return Object.values(SHAPES);
+  return Object.values(ALL_SHAPES);
 }
 
 export function getWorkShape(key: string): WorkShapeDefinition | null {
-  return SHAPES[key] ?? null;
+  return ALL_SHAPES[key] ?? null;
+}
+
+/** The standard improve activity a shape carries; null only for a key the registry does not hold. */
+export function getWorkShapeImproveActivity(key: string): WorkShapeImproveActivity | null {
+  return IMPROVE_ACTIVITIES.get(key) ?? null;
+}
+
+/** What a room inherits from its declared shape: no per-room setup, no opt-in. */
+export function resolveRoomImproveActivity(scopeClaims: unknown): WorkShapeImproveActivity | null {
+  const key = readDeclaredWorkShapeKey(scopeClaims);
+  return key ? getWorkShapeImproveActivity(key) : null;
+}
+
+/** An exact `key@version`: the current definition, or a superseded one a live
+ *  room may still pin (work-shape-prior-versions.ts). Null when neither holds it. */
+export function getWorkShapeVersion(key: string, version: string): WorkShapeDefinition | null {
+  const current = getWorkShape(key);
+  if (current?.version === version) return current;
+  return WORK_SHAPE_PRIOR_VERSIONS.find((shape) => shape.key === key && shape.version === version) ?? null;
+}
+
+/** Does this shape describe work that RECURS rather than finishing?
+ *
+ *  Read from the shape's own declared triggers, not a hand-kept list: every
+ *  standing operations shape declares `cadence`, every finite delivery shape
+ *  declares `claim`. A new standing shape is therefore standing the day it is
+ *  declared, with nothing else to remember to update (BI-97B24FB5).
+ */
+/** The work-shape key a room declares on its scope claims, e.g. from
+ *  "adopter-health-watch@1.0.0" -> "adopter-health-watch".
+ *
+ *  scopeClaims is an untyped JSON array written by several writers, so read it
+ *  defensively. Shared rather than re-implemented per caller: the room's
+ *  declared shape now decides its projection, so every reader must agree on
+ *  what the room declared (BI-97B24FB5).
+ */
+export function readDeclaredWorkShapeKey(scopeClaims: unknown): string | null {
+  if (!Array.isArray(scopeClaims)) return null;
+  for (const claim of scopeClaims) {
+    if (!claim || typeof claim !== "object") continue;
+    const ref = (claim as Record<string, unknown>).workShape;
+    if (typeof ref === "string" && ref.length > 0) return ref.split("@")[0] ?? null;
+  }
+  return null;
+}
+
+/**
+ * Whether a shape recurs: it declares the `cadence` trigger class, so it is a
+ * standing activity that runs again every cycle. A shape without it (a
+ * claim-triggered delivery, for example) runs once: when its run succeeds that
+ * run is final (WWMD DI-8DCB9A4B566C, BI-853120EE).
+ */
+export function workShapeRecurs(shape: Pick<WorkShapeDefinition, "triggers">): boolean {
+  return shape.triggers.includes("cadence");
+}
+
+export function isStandingWorkShape(key: string): boolean {
+  const shape = getWorkShape(key);
+  return shape ? workShapeRecurs(shape) : false;
 }
 
 /** Agent ids that a declared shape names as accountable for at least one stage. */
@@ -192,9 +299,7 @@ export function validateWorkShape(shape: WorkShapeDefinition): string[] {
     }
     if (!stage.advance.condition) issues.push(`${shape.key}/${stage.key}: no advance condition`);
   }
-  if (!shape.stopConditions.some((stop) => stop.kind === "failure")) {
-    issues.push(`${shape.key}: no failure exit — only a successful one`);
-  }
+  issues.push(...validateStopExits(shape));
   if (!(shape.reviewPoint.everyDays > 0)) issues.push(`${shape.key}: no review point`);
   return issues;
 }

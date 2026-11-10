@@ -67,6 +67,37 @@ type _ProfileShapeKeysAreRealColumns =
 const _assertProfileShapeKeysAreRealColumns: _ProfileShapeKeysAreRealColumns = true;
 void _assertProfileShapeKeysAreRealColumns;
 
+// Every field used in the diff must be read from the row. Otherwise a missing
+// selected value looks like null drift and manufactures a change on every boot.
+const CATALOG_PROFILE_SELECT = {
+  profileSource: true,
+  catalogHash: true,
+  capabilityOverrides: true,
+  supportsToolUse: true,
+  toolFidelity: true,
+  reasoning: true,
+  codegen: true,
+  instructionFollowingScore: true,
+  structuredOutputScore: true,
+  conversational: true,
+  contextRetention: true,
+  capabilities: true,
+  maxContextTokens: true,
+  maxOutputTokens: true,
+  inputModalities: true,
+  outputModalities: true,
+  modelClass: true,
+  modelFamily: true,
+  friendlyName: true,
+  summary: true,
+  capabilityCategory: true,
+  costTier: true,
+  qualityTier: true,
+  modelStatus: true,
+  metadataSource: true,
+  metadataConfidence: true,
+} satisfies Prisma.ModelProfileSelect & Record<keyof ProfileUpdateShape, true>;
+
 function isWindowsAbsolutePath(value: string): boolean {
   return /^[a-zA-Z]:[\\/]/.test(value) || /^\\\\/.test(value);
 }
@@ -214,8 +245,10 @@ async function logChanges(
   }
 }
 
-async function reconcile(): Promise<void> {
-  const KNOWN_PROVIDER_MODELS = await loadKnownProviderModels();
+export async function reconcile(
+  catalog?: KnownProviderModelsByProvider,
+): Promise<void> {
+  const KNOWN_PROVIDER_MODELS = catalog ?? await loadKnownProviderModels();
   let created = 0;
   let updated = 0;
   let skipped = 0;
@@ -242,20 +275,7 @@ async function reconcile(): Promise<void> {
 
       const profile = await prisma.modelProfile.findFirst({
         where: { providerId, modelId },
-        select: {
-          profileSource: true,
-          catalogHash: true,
-          capabilityOverrides: true,
-          supportsToolUse: true,
-          toolFidelity: true,
-          reasoning: true,
-          codegen: true,
-          instructionFollowingScore: true,
-          structuredOutputScore: true,
-          conversational: true,
-          contextRetention: true,
-          capabilities: true,
-        },
+        select: CATALOG_PROFILE_SELECT,
       });
 
       if (!profile) {
@@ -320,7 +340,9 @@ async function reconcile(): Promise<void> {
 
       // Compute what changed, excluding admin-pinned fields
       const overrides = profile.capabilityOverrides as Record<string, unknown> | null;
-      const incoming = catalogEntryToProfileFields(entry);
+      // Static lifecycle defaults belong only to creation. Discovery, runtime
+      // refusal and operator decisions own the lifecycle of existing rows.
+      const { modelStatus: _creationDefault, ...incoming } = catalogEntryToProfileFields(entry);
       const changedFields = diffExcludingOverrides(
         profile as Record<string, unknown>,
         incoming as Record<string, unknown>,
@@ -328,11 +350,13 @@ async function reconcile(): Promise<void> {
       );
 
       if (Object.keys(changedFields).length === 0) {
-        // All changes were in overridden fields — still update hash to prevent future re-checks
-        await prisma.modelProfile.updateMany({
-          where: { providerId, modelId },
-          data: { catalogHash: hash } as Parameters<typeof prisma.modelProfile.updateMany>[0]["data"],
-        });
+        // Advance provenance only when it changed; a stable boot writes no profile.
+        if (profile.catalogHash !== hash) {
+          await prisma.modelProfile.updateMany({
+            where: { providerId, modelId },
+            data: { catalogHash: hash },
+          });
+        }
         noChange++;
         continue;
       }

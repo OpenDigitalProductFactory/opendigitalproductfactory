@@ -9,6 +9,7 @@
 import * as crypto from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { pathToFileURL } from "node:url";
 import type { PrismaClient } from "../generated/client/client";
 import { Prisma } from "../generated/client/client";
 
@@ -119,17 +120,43 @@ function loadRuntimeCapabilities(): RuntimeCapabilitySeed[] {
   return validateRuntimeCapabilitySeeds(JSON.parse(readFileSync(seedPath, "utf8")));
 }
 
-async function syncRuntimeCapabilities(prisma: PrismaClient, runtimeCapabilities: RuntimeCapabilitySeed[]): Promise<void> {
+async function loadRuntimeBootstrapStates(runtimeCapabilities: RuntimeCapabilitySeed[], readInstallState: () => Promise<unknown>) {
+  const scripts = join(__dirname, "../../../scripts");
+  const validator = await import(pathToFileURL(join(scripts, "installer/validate-install-state.mjs")).href) as {
+    validateInstallState(value: unknown): Promise<{ valid: boolean }>;
+  };
+  const hashing = await import(pathToFileURL(join(scripts, "lib/capability-state-hash.mjs")).href) as {
+    computeCapabilityStateVersion(hash: string, keys: readonly string[], ids: readonly string[]): string;
+  };
+  const parsed = await readInstallState();
+  if (!(await validator.validateInstallState(parsed)).valid) throw new Error("runtime_bootstrap_host_invalid");
+  const host = parsed as { schemaVersion: number; enabledRuntimeCapabilities?: string[]; capabilityCatalogHash?: string; capabilityStateVersion?: string };
+  const catalog = JSON.parse(readFileSync(join(scripts, "capability-service-catalog.generated.json"), "utf8")) as {
+    catalogHash: string; capabilities: Array<{ capabilityId: string }>;
+  };
+  const ids = catalog.capabilities.map(capability => capability.capabilityId).sort();
+  const keys = host.enabledRuntimeCapabilities;
+  if (host.schemaVersion < 2 || !Array.isArray(keys) || JSON.stringify(keys) !== JSON.stringify([...new Set(keys)].sort())
+    || keys.some(key => !ids.includes(key)) || host.capabilityCatalogHash !== catalog.catalogHash
+    || JSON.stringify([...runtimeCapabilities.map(capability => capability.capabilityId)].sort()) !== JSON.stringify(ids)
+    || host.capabilityStateVersion !== hashing.computeCapabilityStateVersion(catalog.catalogHash, keys, ids)) throw new Error("runtime_bootstrap_host_stale");
+  return Object.fromEntries(ids.map(id => [id, keys.includes(id) ? "active" : "disabled"]));
+}
+
+async function syncRuntimeCapabilities(prisma: PrismaClient, runtimeCapabilities: RuntimeCapabilitySeed[], readInstallState: () => Promise<unknown>): Promise<void> {
+  let bootstrapStates: Record<string, string> | undefined;
   await prisma.$transaction(async (tx) => {
     for (const capability of runtimeCapabilities) {
       await tx.$queryRaw(Prisma.sql`SELECT "capabilityId" FROM "PlatformCapability" WHERE "capabilityId" = ${capability.capabilityId} FOR UPDATE`);
       const existing = await tx.platformCapability.findUnique({ where: { capabilityId: capability.capabilityId }, select: { manifest: true, state: true } });
+      if (!existing && !bootstrapStates) bootstrapStates = await loadRuntimeBootstrapStates(runtimeCapabilities, readInstallState);
       const existingManifest = existing?.manifest && typeof existing.manifest === "object" && !Array.isArray(existing.manifest) ? existing.manifest as Record<string, unknown> : {};
       const manifest = { ...existingManifest, ...capability.manifest };
       await tx.platformCapability.upsert({
         where: { capabilityId: capability.capabilityId },
         update: { name: capability.name, description: capability.description, manifest: manifest as Prisma.InputJsonValue },
-        create: { capabilityId: capability.capabilityId, name: capability.name, description: capability.description, state: capability.state, manifest: manifest as Prisma.InputJsonValue },
+        create: { capabilityId: capability.capabilityId, name: capability.name, description: capability.description,
+          state: bootstrapStates?.[capability.capabilityId] ?? existing!.state, manifest: manifest as Prisma.InputJsonValue },
       });
     }
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -137,11 +164,11 @@ async function syncRuntimeCapabilities(prisma: PrismaClient, runtimeCapabilities
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export async function syncCapabilities(prisma: PrismaClient, loaders: { tools?: () => ToolSnapshot[]; runtime?: () => RuntimeCapabilitySeed[] } = {}): Promise<void> {
+export async function syncCapabilities(prisma: PrismaClient, loaders: { tools?: () => ToolSnapshot[]; runtime?: () => RuntimeCapabilitySeed[]; installState?: () => Promise<unknown> } = {}): Promise<void> {
   console.log("[sync-capabilities] Starting capability sync...");
 
   const runtimeCapabilities = (loaders.runtime ?? loadRuntimeCapabilities)();
-  await syncRuntimeCapabilities(prisma, runtimeCapabilities);
+  await syncRuntimeCapabilities(prisma, runtimeCapabilities, loaders.installState ?? (async () => JSON.parse(readFileSync("/dpf-state/install-state.json", "utf8"))));
 
   let tools: ToolSnapshot[];
   try {

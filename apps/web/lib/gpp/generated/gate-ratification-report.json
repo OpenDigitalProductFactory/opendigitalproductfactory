@@ -1,0 +1,721 @@
+{
+  "dropped": [
+    {
+      "shape": "inquiry-response-watch@1.0.0",
+      "stage": "send",
+      "field": "advance.gate",
+      "value": {
+        "authority": "wwwd",
+        "mode": "enforced",
+        "blocking": true,
+        "resolution": "accountable-human"
+      }
+    }
+  ],
+  "governedStages": [
+    {
+      "shape": "adopter-health-watch@1.0.0",
+      "stage": "act",
+      "decisionScope": "adopter-relationship-action",
+      "status": "proposed"
+    },
+    {
+      "shape": "architecture-alignment-review@1.0.0",
+      "stage": "ratify",
+      "decisionScope": "architecture-alignment",
+      "status": "proposed"
+    },
+    {
+      "shape": "bookkeeping-period-cycle@1.0.0",
+      "stage": "owner-close",
+      "decisionScope": "bookkeeping-period-close",
+      "status": "proposed"
+    },
+    {
+      "shape": "catalog-scout-sweep@1.0.0",
+      "stage": "adopt",
+      "decisionScope": "external-tool-adoption",
+      "status": "proposed"
+    },
+    {
+      "shape": "consume-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "demand-prioritization",
+      "status": "proposed"
+    },
+    {
+      "shape": "contributor-intake-watch@1.0.0",
+      "stage": "admit",
+      "decisionScope": "contributor-admission",
+      "status": "proposed"
+    },
+    {
+      "shape": "contributor-intake-watch@1.1.0",
+      "stage": "admit",
+      "decisionScope": "contributor-admission",
+      "status": "proposed"
+    },
+    {
+      "shape": "coworker-fitness-watch@1.0.0",
+      "stage": "grant",
+      "decisionScope": "coworker-authority-change",
+      "status": "proposed"
+    },
+    {
+      "shape": "credential-hygiene-watch@1.0.0",
+      "stage": "rotate",
+      "decisionScope": "credential-rotation",
+      "status": "proposed"
+    },
+    {
+      "shape": "cross-cutting-finance-position@1.0.0",
+      "stage": "act",
+      "decisionScope": "finance-position-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "cross-cutting-portfolio-standup@1.0.0",
+      "stage": "owner-directs",
+      "decisionScope": "portfolio-direction",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-break-fix@1.0.0",
+      "stage": "merge",
+      "decisionScope": "delivery-merge",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-break-fix@1.0.0",
+      "stage": "post-implementation-review",
+      "decisionScope": "break-fix-post-implementation-review",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "accept",
+      "decisionScope": "delivery-acceptance",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "deploy",
+      "decisionScope": "delivery-deploy",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "merge",
+      "decisionScope": "delivery-merge",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "plan",
+      "decisionScope": "initiative-plan-coverage",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "spec-approval",
+      "decisionScope": "initiative-spec-approval",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-medium@1.0.0",
+      "stage": "accept",
+      "decisionScope": "delivery-acceptance",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-medium@1.0.0",
+      "stage": "merge",
+      "decisionScope": "delivery-merge",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-small@1.0.0",
+      "stage": "merge",
+      "decisionScope": "delivery-merge",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-xlarge@1.0.0",
+      "stage": "decompose",
+      "decisionScope": "initiative-decomposition",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-xlarge@1.0.0",
+      "stage": "reconcile",
+      "decisionScope": "initiative-outcome-reconciliation",
+      "status": "proposed"
+    },
+    {
+      "shape": "dependency-advisory-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "security-advisory-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "deploy-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "promotion-readiness",
+      "status": "proposed"
+    },
+    {
+      "shape": "detection-coverage-hunt@1.0.0",
+      "stage": "activate-content",
+      "decisionScope": "detection-content-activation",
+      "status": "proposed"
+    },
+    {
+      "shape": "estate-conformance-watch@1.0.0",
+      "stage": "accept-or-remediate",
+      "decisionScope": "estate-drift-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "evaluate-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "evaluation-priority",
+      "status": "proposed"
+    },
+    {
+      "shape": "explore-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "exploration-direction",
+      "status": "proposed"
+    },
+    {
+      "shape": "external-build-handoff@1.0.0",
+      "stage": "accept-evidence",
+      "decisionScope": "external-delivery-acceptance",
+      "status": "proposed"
+    },
+    {
+      "shape": "governance-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "governance-position",
+      "status": "proposed"
+    },
+    {
+      "shape": "inquiry-response-watch@1.0.0",
+      "stage": "send",
+      "decisionScope": "outbound-customer-communication",
+      "status": "ratified"
+    },
+    {
+      "shape": "integrate-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "integration-sequencing",
+      "status": "proposed"
+    },
+    {
+      "shape": "integration-surface-review@1.0.0",
+      "stage": "authorize",
+      "decisionScope": "integration-surface-authorization",
+      "status": "proposed"
+    },
+    {
+      "shape": "issue-triage-watch@1.0.0",
+      "stage": "admit",
+      "decisionScope": "backlog-admission",
+      "status": "proposed"
+    },
+    {
+      "shape": "licence-currency-watch@1.0.0",
+      "stage": "adopt",
+      "decisionScope": "licensing-requirement-adoption",
+      "status": "proposed"
+    },
+    {
+      "shape": "mailroom-triage-and-dispatch@1.0.0",
+      "stage": "approve-reply",
+      "decisionScope": "outbound-reply-approval",
+      "status": "proposed"
+    },
+    {
+      "shape": "market-research-brief@1.0.0",
+      "stage": "act-on-it",
+      "decisionScope": "market-research-adoption",
+      "status": "proposed"
+    },
+    {
+      "shape": "obligation-assurance-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "compliance-obligation-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "operate-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "operational-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "outward-surface-review@1.0.0",
+      "stage": "publish",
+      "decisionScope": "outward-content-publication",
+      "status": "proposed"
+    },
+    {
+      "shape": "payables-watch@1.0.0",
+      "stage": "pay",
+      "decisionScope": "payables-disbursement",
+      "status": "proposed"
+    },
+    {
+      "shape": "payables-watch@1.1.0",
+      "stage": "pay",
+      "decisionScope": "payables-disbursement",
+      "status": "proposed"
+    },
+    {
+      "shape": "pull-request-flow-watch@1.0.0",
+      "stage": "merge",
+      "decisionScope": "change-merge-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "pull-request-flow-watch@1.1.0",
+      "stage": "merge",
+      "decisionScope": "change-merge-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "release-readiness-watch@1.0.0",
+      "stage": "cut",
+      "decisionScope": "release-cut-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "release-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "release-authorization",
+      "status": "proposed"
+    },
+    {
+      "shape": "repository-policy-drift-watch@1.0.0",
+      "stage": "approve",
+      "decisionScope": "repository-policy-change",
+      "status": "proposed"
+    },
+    {
+      "shape": "seasonal-operations-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "seasonal-operations-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "security-alert-triage-ladder@1.0.0",
+      "stage": "authorize-response",
+      "decisionScope": "security-response-authorization",
+      "status": "proposed"
+    },
+    {
+      "shape": "security-incident-command@1.0.0",
+      "stage": "authorize-containment",
+      "decisionScope": "security-response-authorization",
+      "status": "proposed"
+    },
+    {
+      "shape": "security-incident-command@1.0.0",
+      "stage": "stand-down",
+      "decisionScope": "security-incident-closure",
+      "status": "proposed"
+    },
+    {
+      "shape": "service-dispatch-cycle@1.0.0",
+      "stage": "commit",
+      "decisionScope": "service-schedule-commitment",
+      "status": "proposed"
+    },
+    {
+      "shape": "setup-business-understanding@1.0.0",
+      "stage": "settle",
+      "decisionScope": "org-business-answer-confirmation",
+      "status": "proposed"
+    },
+    {
+      "shape": "time-off-policy-currency@1.0.0",
+      "stage": "publish",
+      "decisionScope": "time-off-policy-publication",
+      "status": "proposed"
+    },
+    {
+      "shape": "ux-critique-pass@1.0.0",
+      "stage": "adjudicate",
+      "decisionScope": "ux-critique-adjudication",
+      "status": "proposed"
+    },
+    {
+      "shape": "vendor-renewal-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "vendor-renewal-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "vendor-renewal-watch@1.1.0",
+      "stage": "decide",
+      "decisionScope": "vendor-renewal-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "workforce-intake-cycle@1.0.0",
+      "stage": "admit",
+      "decisionScope": "workforce-admission",
+      "status": "proposed"
+    }
+  ],
+  "awaitingRatification": [
+    {
+      "shape": "adopter-health-watch@1.0.0",
+      "stage": "act",
+      "decisionScope": "adopter-relationship-action",
+      "status": "proposed"
+    },
+    {
+      "shape": "architecture-alignment-review@1.0.0",
+      "stage": "ratify",
+      "decisionScope": "architecture-alignment",
+      "status": "proposed"
+    },
+    {
+      "shape": "bookkeeping-period-cycle@1.0.0",
+      "stage": "owner-close",
+      "decisionScope": "bookkeeping-period-close",
+      "status": "proposed"
+    },
+    {
+      "shape": "catalog-scout-sweep@1.0.0",
+      "stage": "adopt",
+      "decisionScope": "external-tool-adoption",
+      "status": "proposed"
+    },
+    {
+      "shape": "consume-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "demand-prioritization",
+      "status": "proposed"
+    },
+    {
+      "shape": "contributor-intake-watch@1.0.0",
+      "stage": "admit",
+      "decisionScope": "contributor-admission",
+      "status": "proposed"
+    },
+    {
+      "shape": "contributor-intake-watch@1.1.0",
+      "stage": "admit",
+      "decisionScope": "contributor-admission",
+      "status": "proposed"
+    },
+    {
+      "shape": "coworker-fitness-watch@1.0.0",
+      "stage": "grant",
+      "decisionScope": "coworker-authority-change",
+      "status": "proposed"
+    },
+    {
+      "shape": "credential-hygiene-watch@1.0.0",
+      "stage": "rotate",
+      "decisionScope": "credential-rotation",
+      "status": "proposed"
+    },
+    {
+      "shape": "cross-cutting-finance-position@1.0.0",
+      "stage": "act",
+      "decisionScope": "finance-position-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "cross-cutting-portfolio-standup@1.0.0",
+      "stage": "owner-directs",
+      "decisionScope": "portfolio-direction",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-break-fix@1.0.0",
+      "stage": "merge",
+      "decisionScope": "delivery-merge",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-break-fix@1.0.0",
+      "stage": "post-implementation-review",
+      "decisionScope": "break-fix-post-implementation-review",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "accept",
+      "decisionScope": "delivery-acceptance",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "deploy",
+      "decisionScope": "delivery-deploy",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "merge",
+      "decisionScope": "delivery-merge",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "plan",
+      "decisionScope": "initiative-plan-coverage",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-large@1.0.0",
+      "stage": "spec-approval",
+      "decisionScope": "initiative-spec-approval",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-medium@1.0.0",
+      "stage": "accept",
+      "decisionScope": "delivery-acceptance",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-medium@1.0.0",
+      "stage": "merge",
+      "decisionScope": "delivery-merge",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-small@1.0.0",
+      "stage": "merge",
+      "decisionScope": "delivery-merge",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-xlarge@1.0.0",
+      "stage": "decompose",
+      "decisionScope": "initiative-decomposition",
+      "status": "proposed"
+    },
+    {
+      "shape": "delivery-xlarge@1.0.0",
+      "stage": "reconcile",
+      "decisionScope": "initiative-outcome-reconciliation",
+      "status": "proposed"
+    },
+    {
+      "shape": "dependency-advisory-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "security-advisory-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "deploy-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "promotion-readiness",
+      "status": "proposed"
+    },
+    {
+      "shape": "detection-coverage-hunt@1.0.0",
+      "stage": "activate-content",
+      "decisionScope": "detection-content-activation",
+      "status": "proposed"
+    },
+    {
+      "shape": "estate-conformance-watch@1.0.0",
+      "stage": "accept-or-remediate",
+      "decisionScope": "estate-drift-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "evaluate-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "evaluation-priority",
+      "status": "proposed"
+    },
+    {
+      "shape": "explore-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "exploration-direction",
+      "status": "proposed"
+    },
+    {
+      "shape": "external-build-handoff@1.0.0",
+      "stage": "accept-evidence",
+      "decisionScope": "external-delivery-acceptance",
+      "status": "proposed"
+    },
+    {
+      "shape": "governance-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "governance-position",
+      "status": "proposed"
+    },
+    {
+      "shape": "integrate-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "integration-sequencing",
+      "status": "proposed"
+    },
+    {
+      "shape": "integration-surface-review@1.0.0",
+      "stage": "authorize",
+      "decisionScope": "integration-surface-authorization",
+      "status": "proposed"
+    },
+    {
+      "shape": "issue-triage-watch@1.0.0",
+      "stage": "admit",
+      "decisionScope": "backlog-admission",
+      "status": "proposed"
+    },
+    {
+      "shape": "licence-currency-watch@1.0.0",
+      "stage": "adopt",
+      "decisionScope": "licensing-requirement-adoption",
+      "status": "proposed"
+    },
+    {
+      "shape": "mailroom-triage-and-dispatch@1.0.0",
+      "stage": "approve-reply",
+      "decisionScope": "outbound-reply-approval",
+      "status": "proposed"
+    },
+    {
+      "shape": "market-research-brief@1.0.0",
+      "stage": "act-on-it",
+      "decisionScope": "market-research-adoption",
+      "status": "proposed"
+    },
+    {
+      "shape": "obligation-assurance-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "compliance-obligation-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "operate-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "operational-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "outward-surface-review@1.0.0",
+      "stage": "publish",
+      "decisionScope": "outward-content-publication",
+      "status": "proposed"
+    },
+    {
+      "shape": "payables-watch@1.0.0",
+      "stage": "pay",
+      "decisionScope": "payables-disbursement",
+      "status": "proposed"
+    },
+    {
+      "shape": "payables-watch@1.1.0",
+      "stage": "pay",
+      "decisionScope": "payables-disbursement",
+      "status": "proposed"
+    },
+    {
+      "shape": "pull-request-flow-watch@1.0.0",
+      "stage": "merge",
+      "decisionScope": "change-merge-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "pull-request-flow-watch@1.1.0",
+      "stage": "merge",
+      "decisionScope": "change-merge-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "release-readiness-watch@1.0.0",
+      "stage": "cut",
+      "decisionScope": "release-cut-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "release-stream-orchestration@1.0.0",
+      "stage": "direct",
+      "decisionScope": "release-authorization",
+      "status": "proposed"
+    },
+    {
+      "shape": "repository-policy-drift-watch@1.0.0",
+      "stage": "approve",
+      "decisionScope": "repository-policy-change",
+      "status": "proposed"
+    },
+    {
+      "shape": "seasonal-operations-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "seasonal-operations-response",
+      "status": "proposed"
+    },
+    {
+      "shape": "security-alert-triage-ladder@1.0.0",
+      "stage": "authorize-response",
+      "decisionScope": "security-response-authorization",
+      "status": "proposed"
+    },
+    {
+      "shape": "security-incident-command@1.0.0",
+      "stage": "authorize-containment",
+      "decisionScope": "security-response-authorization",
+      "status": "proposed"
+    },
+    {
+      "shape": "security-incident-command@1.0.0",
+      "stage": "stand-down",
+      "decisionScope": "security-incident-closure",
+      "status": "proposed"
+    },
+    {
+      "shape": "service-dispatch-cycle@1.0.0",
+      "stage": "commit",
+      "decisionScope": "service-schedule-commitment",
+      "status": "proposed"
+    },
+    {
+      "shape": "setup-business-understanding@1.0.0",
+      "stage": "settle",
+      "decisionScope": "org-business-answer-confirmation",
+      "status": "proposed"
+    },
+    {
+      "shape": "time-off-policy-currency@1.0.0",
+      "stage": "publish",
+      "decisionScope": "time-off-policy-publication",
+      "status": "proposed"
+    },
+    {
+      "shape": "ux-critique-pass@1.0.0",
+      "stage": "adjudicate",
+      "decisionScope": "ux-critique-adjudication",
+      "status": "proposed"
+    },
+    {
+      "shape": "vendor-renewal-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "vendor-renewal-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "vendor-renewal-watch@1.1.0",
+      "stage": "decide",
+      "decisionScope": "vendor-renewal-decision",
+      "status": "proposed"
+    },
+    {
+      "shape": "workforce-intake-cycle@1.0.0",
+      "stage": "admit",
+      "decisionScope": "workforce-admission",
+      "status": "proposed"
+    }
+  ]
+}

@@ -45,6 +45,7 @@ export interface CaptureBuildPrDeps {
         pullRequestUrl: string;
         pullRequestNumber: number;
         workspaceState: Prisma.InputJsonValue;
+        headSha?: string;
       };
     }): Promise<{ count: number }>;
   };
@@ -60,13 +61,29 @@ export interface CaptureBuildPrArgs {
   prNumber: number;
   prUrl: string;
   repository?: string;
+  /** The commit the PR was published at (create_portal_pr's API commit). */
+  headSha?: string | null;
+}
+
+/**
+ * The room's head is the PR's head once a PR exists (BI-ECA50241). A Build
+ * Studio PR is a commit minted through the GitHub API, never the sandbox commit
+ * the gauntlet stamped on the room, and the delivery poller skips any room
+ * whose recorded head differs from the PR it observes (the stale-binding guard
+ * from #6148). Left on the sandbox SHA, every Build Studio room was skipped on
+ * every tick, so no Build Studio PR was ever queued by the poller.
+ */
+export function roomHeadForDelivery(delivery: BuildPrDeliveryStateV1, publishedHeadSha?: string | null): string | null {
+  return delivery.lastObservedHeadSha || publishedHeadSha || null;
 }
 
 export async function persistBuildPrDeliveryStateForBuild(input: {
   db: CaptureBuildPrDeps;
   featureBuildId: string;
   delivery: BuildPrDeliveryStateV1;
+  publishedHeadSha?: string | null;
 }): Promise<number> {
+  const headSha = roomHeadForDelivery(input.delivery, input.publishedHeadSha);
   const capsules = await input.db.workroom.findMany({
     where: { featureBuildId: input.featureBuildId },
     select: { id: true, workspaceState: true, updatedAt: true },
@@ -81,6 +98,7 @@ export async function persistBuildPrDeliveryStateForBuild(input: {
           capsule.workspaceState,
           input.delivery,
         ) as unknown as Prisma.InputJsonValue,
+        ...(headSha ? { headSha } : {}),
       },
     }),
   ));
@@ -116,6 +134,6 @@ export async function captureBuildPrOntoCapsule(
   if (!repository) return { captured: 0 };
 
   const delivery = createBuildPrDeliveryState({ repository, prNumber, prUrl });
-  const captured = await persistBuildPrDeliveryStateForBuild({ db, featureBuildId, delivery });
+  const captured = await persistBuildPrDeliveryStateForBuild({ db, featureBuildId, delivery, publishedHeadSha: args.headSha });
   return { captured };
 }

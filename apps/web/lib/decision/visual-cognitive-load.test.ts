@@ -4,7 +4,7 @@ import {
   parseVisualCognitiveLoad,
   type VisionInferenceFn,
 } from "./visual-cognitive-load";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 
 describe("parseVisualCognitiveLoad", () => {
   it("parses a fenced JSON reply and clamps/rounds fields", () => {

@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "in-house-click-vertices",
+  "decisionInteractionId": "DI-4D6FA8193950",
+  "scope": {
+    "files": [
+      "apps/web/components/customer/map/ServiceAreasPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "in-house-click-vertices",
+      "terra-draw",
+      "postal-code-lists"
+    ]
+  }
+}

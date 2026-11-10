@@ -12,7 +12,9 @@ import { prepareUpgradeSource, defaultGitRunner } from "./prepare-source";
 // and the upgrade must succeed anyway because the merge happens elsewhere.
 
 const GIT_AVAILABLE = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-const REAL_GIT_TEST_TIMEOUT_MS = 30_000;
+// Measures a hang, not host speed (BI-F25D7E88): real clones and merges run
+// past 30 s on a loaded Windows gate host.
+const REAL_GIT_TEST_TIMEOUT_MS = 120_000;
 
 const GIT_ENV = {
   ...process.env,
@@ -283,7 +285,7 @@ describe.skipIf(!GIT_AVAILABLE)("prepareUpgradeSource — workspace-isolated (BI
     // histories — git refuses with "refusing to merge unrelated histories"
     // and produces zero U-state files. The pre-fix failureLog was literally
     // "merge-conflict:" with no detail. After the fix, stderr is captured.
-    const { upstream, install, workspace, root } = makeWorld();
+    const { install, workspace, root } = makeWorld();
     cleanup.push(root);
     // Reset the install branch to a freshly orphan-branched tree so it shares
     // NO history with upstream.

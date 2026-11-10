@@ -71,3 +71,9 @@ export function apiErrorResponse(
 ): NextResponse<ApiErrorBody> {
   return new ApiError(code, message, status, details).toResponse();
 }
+
+/** The catch-all for a route handler: an ApiError as itself, anything else as a 500. */
+export function toRouteErrorResponse(error: unknown): NextResponse<ApiErrorBody> {
+  if (error instanceof ApiError) return error.toResponse();
+  return apiErrorResponse("INTERNAL_ERROR", "An unexpected error occurred", 500);
+}

@@ -5,86 +5,133 @@ enum PrincipalSensitivity {
   restricted
 }
 
+enum AutomationPersonaProfile {
+  platform_manager
+  developer
+  backlog_manager
+  employee
+  developer_backlog_manager
+}
+
 model User {
-  id                             String                        @id @default(cuid())
-  email                          String                        @unique
-  passwordHash                   String
-  isActive                       Boolean                       @default(true)
-  isSuperuser                    Boolean                       @default(false)
-  createdAt                      DateTime                      @default(now())
-  approvedProposals              AgentActionProposal[]         @relation("ProposalDecisions")
-  agentThreads                   AgentThread[]
-  apiTokens                      ApiToken[]
-  mcpApiTokens                   McpApiToken[]
-  ownedOAuthClients              OAuthClient[]                   @relation("OAuthClientOwner")
-  oauthAuthorizationCodes        OAuthAuthorizationCode[]
-  oauthRefreshTokens             OAuthRefreshToken[]
-  backlogSubmissions             BacklogItem[]                 @relation("BacklogSubmissions")
-  customEvalDimsApproved         CustomEvalDimension[]         @relation("CustomEvalDimensionApprover")
-  customEvalDimsCreated          CustomEvalDimension[]         @relation("CustomEvalDimensionCreator")
-  grantedDelegations             DelegationGrant[]             @relation("DelegationGrantGrantor")
-  employeeProfile                EmployeeProfile?
-  authoredEmploymentEvents       EmploymentEvent[]
-  workerClassificationsDetermined WorkerClassificationDetermination[] @relation("ClassificationDeterminedBy")
-  epicSubmissions                Epic[]                        @relation("EpicSubmissions")
-  externalEvidenceRecords        ExternalEvidenceRecord[]
-  featureBuilds                  FeatureBuild[]
-  improvementReviews             ImprovementProposal[]         @relation("ImprovementReviews")
-  improvementSubmissions         ImprovementProposal[]         @relation("ImprovementSubmissions")
-  notifications                  Notification[]
-  notificationSubscriptions      NotificationSubscription[]    @relation("NotificationSubscriptionUser")
-  requestedPasswordResetTokens   PasswordResetToken[]          @relation("PasswordResetRequestedBy")
-  passwordResetTokens            PasswordResetToken[]          @relation("PasswordResetForUser")
-  issueReports                   PlatformIssueReport[]
-  policyRulesCreated             PolicyRule[]                  @relation("PolicyRuleCreator")
-  pushDevices                    PushDeviceRegistration[]
-  taskRequirementsApproved       TaskRequirement[]             @relation("TaskRequirementApprover")
-  taskRequirementsCreated        TaskRequirement[]             @relation("TaskRequirementCreator")
-  teamMemberships                TeamMembership[]
-  groups                         UserGroup[]
-  userSkills                     UserSkill[]                   @relation("UserSkillCreator")
-  invoicesCreated                Invoice[]                     @relation("InvoiceCreations")
-  invoiceDocumentsCreated        InvoiceDocument[]
-  paymentsCreated                Payment[]                     @relation("PaymentCreations")
-  journalEntriesCreated          JournalEntry[]                @relation("JournalEntryCreations")
-  journalEntriesPosted           JournalEntry[]                @relation("JournalEntryPostings")
-  engagementAssignments          Engagement[]                  @relation("EngagementAssignments")
-  opportunityAssignments         Opportunity[]                 @relation("OpportunityAssignments")
-  activitiesCreated              Activity[]                    @relation("ActivityCreations")
-  quotesCreated                  Quote[]                       @relation("QuoteCreations")
-  billsCreated                   Bill[]                        @relation("BillCreations")
-  posCreated                     PurchaseOrder[]               @relation("PurchaseOrderCreations")
-  approvalRules                  ApprovalRule[]                @relation("ApprovalRuleApprover")
-  billApprovals                  BillApproval[]                @relation("BillApprovalResponses")
-  recurringSchedulesCreated      RecurringSchedule[]           @relation("RecurringScheduleCreations")
-  expenseApprovals               ExpenseClaim[]                @relation("ExpenseApprovals")
-  platformSetupProgress          PlatformSetupProgress?        @relation("UserSetupProgress")
-  taskRuns                       TaskRun[]
-  businessModelRoleAssignments   BusinessModelRoleAssignment[]
-  platformDevConfigs             PlatformDevConfig[]           @relation("PlatformDevConfiguredBy")
-  platformDevDcoAcceptances      PlatformDevConfig[]           @relation("PlatformDevDcoAcceptedBy")
-  privatePathRules               PrivatePathRule[]             @relation("PrivatePathRuleCreatedBy")
-  platformDevFeedbackOptIns      PlatformDevConfig[]           @relation("PlatformDevUpstreamFeedbackOptInBy")
-  agentModelConfigs              AgentModelConfig[]            @relation("AgentModelConfiguredBy")
-  knowledgeArticles              KnowledgeArticle[]            @relation("KnowledgeArticleAuthor")
-  knowledgeRevisions             KnowledgeArticleRevision[]    @relation("KnowledgeRevisionCreator")
-  wikiRevisions                  WikiPageRevision[]            @relation("WikiRevisionCreator")
-  wikiIngestEvents               WikiIngestEvent[]             @relation("WikiIngestEventUser")
-  workItemAssignments            WorkItem[]                    @relation("WorkItemAssignee")
-  workSchedule                   WorkSchedule?
-  adminActivities                AdminActivity[]
-  userFacts                      UserFact[]
-  decisionEscalationsResolved    EscalationCapture[]           @relation("DecisionEscalationResolverUser")
-  triggeredDecisionInteractions  DecisionInteraction[]         @relation("DecisionInteractionTriggeredByUser")
-  weightAdjustmentProposalsRuled WeightAdjustmentProposal[]
+  id                               String                              @id @default(cuid())
+  email                            String                              @unique
+  passwordHash                     String
+  isActive                         Boolean                             @default(true)
+  isSuperuser                      Boolean                             @default(false)
+  automationVerificationId         String?
+  automationProfile                AutomationPersonaProfile?
+  automationSlot                   Int?
+  automationExpiresAt              DateTime?
+  automationVerification           RuntimeVerification? @relation(fields: [automationVerificationId], references: [id], onDelete: Restrict)
+  instanceDirectionRevisions       InstanceDirectionRevision[]         @relation("InstanceDirectionRevisionAuthor")
+  createdAt                        DateTime                            @default(now())
+  /// Last time this person used the workforce portal: stamped at sign-in and,
+  /// at most hourly, on shell renders. Null = not seen since tracking began.
+  /// Tells an operator that approvals routed to this account have no reader
+  /// (BI-61DE8177). Not a security signal; sessions outlive it.
+  lastSeenAt                       DateTime?
+  /// SHA-256 (hex) of this person's private calendar subscription token
+  /// (BI-051A74CE). The .ics feed serves only a request that presents the
+  /// matching token for this user id; the plaintext is shown once at issue and
+  /// never stored. Rotating overwrites it (the old link dies at once); null =
+  /// no subscription link, so the feed refuses every request for this user.
+  calendarFeedTokenHash            String?                             @unique
+  /// When the current calendar feed token was issued. Null when none is.
+  calendarFeedTokenIssuedAt        DateTime?
+  /// When this account's live work was handed over (BI-F25A5FC7) and who
+  /// approved it. Null = never. Rules that name an owner for NEW work (the
+  /// workroom drive's task owner, the scheduled-task seeds, the install-owner
+  /// fallback) skip a handed-over account; historical requester/creator fields
+  /// keep naming it (BI-858FDE5A).
+  workHandedOverAt                 DateTime?
+  workHandedOverById               String?
+  workHandedOverBy                 User?                               @relation("UserWorkHandedOverBy", fields: [workHandedOverById], references: [id], onDelete: SetNull)
+  workHandoversApproved            User[]                              @relation("UserWorkHandedOverBy")
+  approvedProposals                AgentActionProposal[]               @relation("ProposalDecisions")
+  agentThreads                     AgentThread[]
+  apiTokens                        ApiToken[]
+  mcpApiTokens                     McpApiToken[]
+  portfolioAccountableSets         Portfolio[]                         @relation("PortfolioAccountableSetBy")
+  ownedOAuthClients                OAuthClient[]                       @relation("OAuthClientOwner")
+  oauthAuthorizationCodes          OAuthAuthorizationCode[]
+  oauthAuthorityBindings           AuthorityBinding[]
+  oauthRefreshTokens               OAuthRefreshToken[]
+  backlogSubmissions               BacklogItem[]                       @relation("BacklogSubmissions")
+  customEvalDimsApproved           CustomEvalDimension[]               @relation("CustomEvalDimensionApprover")
+  customEvalDimsCreated            CustomEvalDimension[]               @relation("CustomEvalDimensionCreator")
+  grantedDelegations               DelegationGrant[]                   @relation("DelegationGrantGrantor")
+  employeeProfile                  EmployeeProfile?
+  authoredEmploymentEvents         EmploymentEvent[]
+  workerClassificationsDetermined  WorkerClassificationDetermination[] @relation("ClassificationDeterminedBy")
+  epicSubmissions                  Epic[]                              @relation("EpicSubmissions")
+  externalEvidenceRecords          ExternalEvidenceRecord[]
+  featureBuilds                    FeatureBuild[]
+  improvementReviews               ImprovementProposal[]               @relation("ImprovementReviews")
+  improvementSubmissions           ImprovementProposal[]               @relation("ImprovementSubmissions")
+  notifications                    Notification[]
+  notificationSubscriptions        NotificationSubscription[]          @relation("NotificationSubscriptionUser")
+  requestedPasswordResetTokens     PasswordResetToken[]                @relation("PasswordResetRequestedBy")
+  passwordResetTokens              PasswordResetToken[]                @relation("PasswordResetForUser")
+  issueReports                     PlatformIssueReport[]
+  policyRulesCreated               PolicyRule[]                        @relation("PolicyRuleCreator")
+  pushDevices                      PushDeviceRegistration[]
+  taskRequirementsApproved         TaskRequirement[]                   @relation("TaskRequirementApprover")
+  epicPortfoliosConfirmed          EpicPortfolio[]                     @relation("EpicPortfolioConfirmedBy")
+  portfolioBudgetsSet              PortfolioBudgetPeriod[]             @relation("PortfolioBudgetSetBy")
+  budgetReservations               BudgetReservation[]                 @relation("BudgetReservationActor")
+  taskRequirementsCreated          TaskRequirement[]                   @relation("TaskRequirementCreator")
+  teamMemberships                  TeamMembership[]
+  groups                           UserGroup[]
+  userSkills                       UserSkill[]                         @relation("UserSkillCreator")
+  invoicesCreated                  Invoice[]                           @relation("InvoiceCreations")
+  invoiceDocumentsCreated          InvoiceDocument[]
+  paymentsCreated                  Payment[]                           @relation("PaymentCreations")
+  journalEntriesCreated            JournalEntry[]                      @relation("JournalEntryCreations")
+  journalEntriesPosted             JournalEntry[]                      @relation("JournalEntryPostings")
+  engagementAssignments            Engagement[]                        @relation("EngagementAssignments")
+  opportunityAssignments           Opportunity[]                       @relation("OpportunityAssignments")
+  activitiesCreated                Activity[]                          @relation("ActivityCreations")
+  quotesCreated                    Quote[]                             @relation("QuoteCreations")
+  billsCreated                     Bill[]                              @relation("BillCreations")
+  posCreated                       PurchaseOrder[]                     @relation("PurchaseOrderCreations")
+  approvalRules                    ApprovalRule[]                      @relation("ApprovalRuleApprover")
+  billApprovals                    BillApproval[]                      @relation("BillApprovalResponses")
+  recurringSchedulesCreated        RecurringSchedule[]                 @relation("RecurringScheduleCreations")
+  expenseApprovals                 ExpenseClaim[]                      @relation("ExpenseApprovals")
+  platformSetupProgress            PlatformSetupProgress?              @relation("UserSetupProgress")
+  taskRuns                         TaskRun[]
+  businessModelRoleAssignments     BusinessModelRoleAssignment[]
+  platformDevConfigs               PlatformDevConfig[]                 @relation("PlatformDevConfiguredBy")
+  platformDevDcoAcceptances        PlatformDevConfig[]                 @relation("PlatformDevDcoAcceptedBy")
+  privatePathRules                 PrivatePathRule[]                   @relation("PrivatePathRuleCreatedBy")
+  platformDevFeedbackOptIns        PlatformDevConfig[]                 @relation("PlatformDevUpstreamFeedbackOptInBy")
+  platformDevPaidAllowanceSets     PlatformDevConfig[]                 @relation("PlatformDevPaidInferenceAllowanceSetBy")
+  agentModelConfigs                AgentModelConfig[]                  @relation("AgentModelConfiguredBy")
+  knowledgeArticles                KnowledgeArticle[]                  @relation("KnowledgeArticleAuthor")
+  knowledgeRevisions               KnowledgeArticleRevision[]          @relation("KnowledgeRevisionCreator")
+  wikiRevisions                    WikiPageRevision[]                  @relation("WikiRevisionCreator")
+  wikiIngestEvents                 WikiIngestEvent[]                   @relation("WikiIngestEventUser")
+  workItemAssignments              WorkItem[]                          @relation("WorkItemAssignee")
+  workSchedule                     WorkSchedule?
+  adminActivities                  AdminActivity[]
+  userFacts                        UserFact[]
+  decisionEscalationsResolved      EscalationCapture[]                 @relation("DecisionEscalationResolverUser")
+  triggeredDecisionInteractions    DecisionInteraction[]               @relation("DecisionInteractionTriggeredByUser")
+  weightAdjustmentProposalsRuled   WeightAdjustmentProposal[]
   decisionResolutionProposalsRuled DecisionResolutionProposal[]
-  perspectiveMaterialReviewed    PerspectiveMaterial[]
-  scheduledAgentTasks            ScheduledAgentTask[]          @relation("ScheduledAgentTaskOwner")
-  addedLocalities                City[]                        @relation("CityAddedByUser")
-  workbooksCreated               Workbook[]                    @relation("WorkbookCreatedBy")
-  workbookShares                 WorkbookShare[]               @relation("WorkbookShareUser")
-  workbookRowsCreated            WorkbookRow[]                 @relation("WorkbookRowCreatedBy")
-  workbookViewsCreated           WorkbookView[]                @relation("WorkbookViewCreatedBy")
+  perspectiveMaterialReviewed      PerspectiveMaterial[]
+  scheduledAgentTasks              ScheduledAgentTask[]                @relation("ScheduledAgentTaskOwner")
+  addedLocalities                  City[]                              @relation("CityAddedByUser")
+  workbooksCreated                 Workbook[]                          @relation("WorkbookCreatedBy")
+  workbookShares                   WorkbookShare[]                     @relation("WorkbookShareUser")
+  workbookRowsCreated              WorkbookRow[]                       @relation("WorkbookRowCreatedBy")
+  workbookViewsCreated             WorkbookView[]                      @relation("WorkbookViewCreatedBy")
+  payrollTaxRulesRatified          PayrollTaxRule[]                    @relation("PayrollTaxRuleRatifiedBy")
+
+  @@unique([automationVerificationId, automationProfile, automationSlot], map: "User_automation_fixture_key")
+  @@index([automationExpiresAt, id])
+  @@index([workHandedOverById])
 }
 
 model UserGroup {
@@ -120,6 +167,8 @@ model AccountInvite {
   usedBy    String?
   createdAt DateTime        @default(now())
   account   CustomerAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
 }
 
 model PasswordResetToken {
@@ -178,6 +227,8 @@ model TeamMembership {
 }
 
 model Principal {
+  responseFeedbackAttempts            AdapterRunTelemetry[]               @relation("ResponseFeedbackPrincipal")
+  investmentAttempts                  AdapterRunTelemetry[]               @relation("InvestmentAttemptPrincipal")
   id                                  String                              @id @default(cuid())
   principalId                         String                              @unique
   kind                                String
@@ -186,17 +237,26 @@ model Principal {
   sponsorPrincipalId                  String?
   authorityMode                       String?
   sensitivityClearance                PrincipalSensitivity[]              @default([public])
+  /// BCP-47 UI language the person chose (EP-6B33A840 L0.1). Null = follow the org default / browser.
+  preferredLanguage                   String?
+  /// IANA timezone the person chose. Null = the org's timezone.
+  timeZone                            String?
   aliases                             PrincipalAlias[]
   deferredBacklogItems                BacklogItem[]                       @relation("BacklogDeferralOwner")
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
+  accountableForOrganizations         Organization[]                      @relation("OrganizationTopAccountable")
+  accountableForPortfolios            Portfolio[]                         @relation("PortfolioAccountable")
   sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")
   communicationChannelBindings        CommunicationChannelBinding[]
+  mailboxAccountsCreated              MailboxAccount[]                    @relation("MailboxAccountCreatedBy")
+  mailroomAcknowledgements            InboundChannelMessage[]             @relation("MailroomAcknowledgedBy")
   communicationChannelSessions        CommunicationChannelSession[]
   // Per AGENTS.md §11 (Principal convergence, 2026-05-09): EdgeNode
   // identity lives on Principal + PrincipalAlias, with EdgeNode as a
   // host-attributes side table keyed by `principalId`. 1:1 cardinality.
   edgeNode                            EdgeNode?                           @relation("EdgeNodeIdentity")
   edgeNodesApproved                   EdgeNode[]                          @relation("EdgeNodeApprover")
+  mcpServerToolsApproved              McpServerTool[]                     @relation("McpServerToolApprover")
   // EP-MSP-FEDERATION · B1 — a federated peer (another DPF deployment) is a
   // Principal(kind="federated-peer") with FederationLink as its side table,
   // exactly as EdgeNode is for an edge agent. No parallel identity table.
@@ -248,6 +308,17 @@ model Principal {
   leaseHeldWorkrooms                  Workroom[]                          @relation("WorkroomLeaseHolder")
   createdWorkrooms                    Workroom[]                          @relation("WorkroomCreator")
   requestedWorkrooms                  Workroom[]                          @relation("WorkroomRequester")
+  workroomParticipations              WorkroomParticipant[]               @relation("WorkroomParticipantPrincipal")
+
+  controlledSubstanceHandlerGrants         ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandler")
+  controlledSubstanceHandlerGrantsIssued   ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandlerGrantor")
+  controlledSubstanceHandlerGrantsRevoked  ControlledSubstanceHandlerAuthorization[] @relation("ControlledSubstanceHandlerRevoker")
+  controlledSubstanceMovementsActed        ControlledSubstanceMovement[]             @relation("ControlledSubstanceMovementActor")
+  controlledSubstanceMovementsWitnessed    ControlledSubstanceMovement[]             @relation("ControlledSubstanceMovementWitness")
+  controlledSubstanceCountsTaken           ControlledSubstanceCount[]                @relation("ControlledSubstanceCountTaker")
+  controlledSubstanceCountsWitnessed       ControlledSubstanceCount[]                @relation("ControlledSubstanceCountWitness")
+  controlledSubstanceDiscrepanciesOpened   ControlledSubstanceDiscrepancy[]          @relation("ControlledSubstanceDiscrepancyOpener")
+  controlledSubstanceDiscrepanciesResolved ControlledSubstanceDiscrepancy[]          @relation("ControlledSubstanceDiscrepancyResolver")
 
   @@index([sponsorPrincipalId])
   @@index([kind, authorityMode])
@@ -284,6 +355,11 @@ model BusinessProfile {
   updatedAt         DateTime           @updatedAt
 }
 
+enum OAuthBindingPurpose {
+  delegation
+  consent
+}
+
 model AuthorityBinding {
   id                 String                     @id @default(cuid())
   bindingId          String                     @unique
@@ -303,7 +379,19 @@ model AuthorityBinding {
   subjects           AuthorityBindingSubject[]
   grants             AuthorityBindingGrant[]
   decisionLogs       AuthorizationDecisionLog[]
+  /// Interactive OAuth authority belongs to a human/client pair, never the
+  /// shared client registration. Null for existing non-OAuth bindings.
+  oauthPurpose       OAuthBindingPurpose?
+  oauthUserId        String?
+  oauthUser          User? @relation(fields: [oauthUserId], references: [id], onDelete: Restrict)
+  oauthClientId      String?
+  oauthClient        OAuthClient? @relation(fields: [oauthClientId], references: [id], onDelete: Restrict)
+  oauthCodes         OAuthAuthorizationCode[]
+  oauthAccessTokens  McpApiToken[]
+  oauthRefreshTokens OAuthRefreshToken[]
 
+  @@index([oauthUserId, oauthClientId, oauthPurpose, status])
+  @@index([oauthClientId])
   @@index([scopeType, status])
   @@index([resourceType, resourceRef])
   @@index([appliedAgentId])
@@ -336,6 +424,8 @@ model AuthorityBindingGrant {
   @@index([grantKey])
 }
 
+/// Every authorization decision (actor, grant, outcome). Security-audit trail; one year baseline, longer for regulated industries.
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=restricted categories=security-audit,authorization timeAxis=createdAt
 model AuthorizationDecisionLog {
   id                        String                   @id @default(cuid())
   decisionId                String                   @unique
@@ -377,9 +467,11 @@ model AuthorizationDecisionLog {
   @@index([organizationId, patientSubjectPrincipalId, createdAt])
   @@index([patientAuthorityId])
   @@index([patientConsentDirectiveId])
+  @@index([patientSubjectPrincipalId])
 }
 
 model Organization {
+  investmentAttempts                  AdapterRunTelemetry[]               @relation("InvestmentAttemptOrganization")
   id                                String                             @id @default(cuid())
   orgId                             String                             @unique
   name                              String
@@ -402,6 +494,17 @@ model Organization {
   //            replacement; falls back to "vector" when the subgraph
   //            is sparse or PPR fails.
   wikiRetrievalMode                 String                             @default("vector")
+  // The human who answers for this organization's outcomes — its owner or CEO.
+  //
+  // Nullable on purpose. An organization that has not recorded one must read as
+  // unset so the product can ask for it, because the alternative is deriving an
+  // owner from the first administrator, the install's creator, or whoever
+  // happens to hold a lease, and a guessed accountable reads as a decision
+  // somebody made. Accountability inherits from here down explicit containment
+  // (apps/web/lib/work-management/human-accountability.ts); this column is the
+  // root of that lineage and grants no capability by itself.
+  topAccountablePrincipalId         String?
+  topAccountablePrincipal           Principal?                         @relation("OrganizationTopAccountable", fields: [topAccountablePrincipalId], references: [id], onDelete: SetNull)
   createdAt                         DateTime                           @default(now())
   updatedAt                         DateTime                           @updatedAt
   brandingConfig                    BrandingConfig?
@@ -425,6 +528,8 @@ model Organization {
   resourceCapacityAllocations       ResourceCapacityAllocation[]       @relation("ResourceCapacityAllocationOrganization")
   hospitalityBookingHolds           BookingHold[]                      @relation("BookingHoldOrganization")
   businessContext                   BusinessContext?
+  instanceOutcomes                  InstanceOutcome[]
+  instanceDirectionRevisions        InstanceDirectionRevision[]
   marketingStrategy                 MarketingStrategy?
   marketingReviews                  MarketingReview[]
   marketingCampaigns                MarketingCampaign[]
@@ -433,6 +538,11 @@ model Organization {
   marketingAssetVariants            MarketingAssetVariant[]
   marketingBattlecards              MarketingBattlecard[]
   workEngagements                   WorkEngagement[]
+  animalProfiles                    AnimalProfile[]
+  animalCustodyEpisodes             AnimalCustodyEpisode[]
+  animalCustodyEvents               AnimalCustodyEvent[]
+  animalAdoptionApplications        AnimalAdoptionApplication[]
+  animalPlacements                  AnimalPlacement[]
   marketingKpiCheckpoints           MarketingKpiCheckpoint[]
   marketingAutomationCandidates     MarketingAutomationCandidate[]
   taxProfile                        OrganizationTaxProfile?
@@ -458,6 +568,7 @@ model Organization {
   mediaAssets                       MediaAsset[]
   ledgerAccounts                    LedgerAccount[]
   journalEntries                    JournalEntry[]
+  financialFunds                    FinancialFund[]
   patientProfiles                   PatientProfile[]
   patientAuthorizationDecisions     AuthorizationDecisionLog[]
   storefrontBookings                StorefrontBooking[]                @relation("StorefrontBookingOrganization")
@@ -489,16 +600,19 @@ model Organization {
   careResources                     CareResource[]
   careSchedulingPolicies            CareSchedulingPolicy[]
   careAppointments                  CareAppointment[]
+  careRecords                       CareRecord[]
   careIntakePackets                 CareIntakePacket[]
   aiProviderConnections             AiProviderConnection[]
   partnerAccounts                   PartnerAccount[]
   founderDemandClusters             FounderDemandCluster[]
   dataProcessingActivities          DataProcessingActivity[]
   dataPolicyExceptions              DataPolicyException[]
+  providerClearanceOverrides        ProviderClearanceOverride[]
   dataControlOperations             DataControlOperation[]
   billableRates                     BillableRate[]
   outboundDrafts                    OutboundDraft[]
   inboundChannelMessages            InboundChannelMessage[]
+  mailboxAccounts                   MailboxAccount[]
   marketingChannelSpendCeilings     MarketingChannelSpendCeiling[]
   scheduledOutboundActions          ScheduledOutboundAction[]
   outboundAutopilotPolicies         OutboundAutopilotPolicy[]
@@ -516,11 +630,23 @@ model Organization {
   workforceCandidateFacts           WorkforceCandidateFact[]
   gearInterfaces                    GearInterface[]
   staffingConstraintRules           StaffingConstraintRule[]
-  vehicles                 Vehicle[]                @relation("VehicleOrganization")
-  trips                    Trip[]                   @relation("TripOrganization")
-  tripClassificationRules  TripClassificationRule[] @relation("TripRuleOrganization")
-  driverLocationConsents   DriverLocationConsent[]  @relation("DriverConsentOrganization")
-  mileageRatePlans         MileageRatePlan[]        @relation("MileageRatePlanOrganization")
+  vehicles                          Vehicle[]                          @relation("VehicleOrganization")
+  trips                             Trip[]                             @relation("TripOrganization")
+  tripClassificationRules           TripClassificationRule[]           @relation("TripRuleOrganization")
+  driverLocationConsents            DriverLocationConsent[]            @relation("DriverConsentOrganization")
+  mileageRatePlans                  MileageRatePlan[]                  @relation("MileageRatePlanOrganization")
+
+  // FK-leading: resolve the accountable principal's organizations, and detect
+  // orphaned bindings when a principal is retired.
+  controlledSubstanceProducts              ControlledSubstanceProduct[]
+  controlledSubstanceRegisters             ControlledSubstanceRegister[]
+  controlledSubstanceHandlerAuthorizations ControlledSubstanceHandlerAuthorization[]
+  controlledSubstanceMovements             ControlledSubstanceMovement[]
+  controlledSubstanceCounts                ControlledSubstanceCount[]
+  controlledSubstanceCountLines            ControlledSubstanceCountLine[]
+  controlledSubstanceDiscrepancies         ControlledSubstanceDiscrepancy[]
+
+  @@index([topAccountablePrincipalId])
 }
 
 // EP-PARTNER-CHANNEL Phase 1b. Generic per-organization opt-in overlay on top of
@@ -549,6 +675,57 @@ model OrganizationCapabilityActivation {
   @@index([organizationId])
 }
 
+// The instance's top-level outcomes (BI-916216E7, EP-OUTCOME-HIERARCHY, WWMD
+// DI-5C99BCBB0AF4; boundary contract in 2026-10-28-outcome-hierarchy-design).
+// The top of the outcome hierarchy: Epic.servesInstanceOutcomeId (BI-7CD178F8)
+// points at this row's id, so rows are retired, never deleted. The id is the
+// stable semantic id IO-XXXXXXXX, minted in app code. The owner writes them;
+// no agent path does. At most five are active
+// (apps/web/lib/organization-direction/direction.ts).
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
+model InstanceOutcome {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // What will be true, and for whom.
+  statement      String
+  // Optional "how we'll know": the plain-language measure.
+  measure        String?
+  ordinal        Int          @default(0)
+  // The record lifecycle convention (data-model stewardship runbook): an
+  // outcome the owner removes becomes `retired`; it is never deleted.
+  lifecycle      RecordLifecycle @default(active)
+  lifecycleAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, lifecycle])
+}
+
+// Append-only version history of the instance's direction (mission, vision,
+// active outcomes). One row per owner save; decisions cite direction@vN.
+// Same snapshot pattern as WikiPageRevision and PromptRevision.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
+model InstanceDirectionRevision {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  version         Int
+  mission         String?
+  vision          String?
+  // Snapshot of the active outcomes after the save: [{ id, statement, measure }].
+  outcomes        Json
+  changedByUserId String?
+  changedBy       User?        @relation("InstanceDirectionRevisionAuthor", fields: [changedByUserId], references: [id], onDelete: SetNull)
+  // Where the save came from: "settings" or "setup".
+  source          String
+  createdAt       DateTime     @default(now())
+
+  @@unique([organizationId, version])
+  @@index([organizationId])
+  @@index([changedByUserId])
+}
+
 model BusinessContext {
   id             String       @id @default(cuid())
   organizationId String       @unique
@@ -560,6 +737,10 @@ model BusinessContext {
   // Why the company exists — captured at onboarding (business-context step).
   // Seeds the company-mission prompt (Block 0) and the org WWWD corpus.
   mission          String?
+  // Where the organization is heading, in the owner's own words. Captured at
+  // the direction setup step beside mission (BI-916216E7, spec
+  // 2026-10-28-instance-direction-design). Never machine-filled.
+  vision           String?
 
   // Who they serve
   targetMarket     String?
@@ -668,6 +849,12 @@ model McpApiToken {
   // same DB but the FK semantics here are loose-coupled (we don't want a
   // build delete to cascade-delete the audit trail).
   buildId       String?
+  // BI-05715F4C: when kind = "workroom_session", the Workroom (capsuleId, WC-*)
+  // and run whose agent-CLI session this token authorizes. Loose references like
+  // buildId: the room issues and revokes the token, and a room delete must not
+  // erase the audit trail. The token is refused for any other room.
+  workroomRef   String?
+  runRef        String?
   name          String
   tokenHash     String    @unique
   prefix        String
@@ -698,15 +885,23 @@ model McpApiToken {
   oauthClientId String?
   resource      String?
   publicScopes  String[]  @default([])
+  authorityBindingId String?
+  authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
+  oauthFamilyKey String?
 
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  oauthClient   OAuthClient? @relation(fields: [oauthClientId], references: [id], onDelete: SetNull)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oauthClient OAuthClient? @relation(fields: [oauthClientId], references: [id], onDelete: SetNull)
 
+  @@index([authorityBindingId])
+  @@index([oauthFamilyKey, revokedAt])
   @@index([userId, revokedAt])
   @@index([tokenHash])
   // Lookup: "all active ephemeral tokens for build X" — used by the
   // ship-exit hook to find rows to revoke.
   @@index([buildId, revokedAt])
+  // Lookup: "every live session credential of room X" — revoked when the room's
+  // session stops, its executor changes, or it reaches a terminal status.
+  @@index([workroomRef, revokedAt])
   // Lookup: "revoke everything issued to this client" — the per-client revoke
   // control in Admin > Platform Development.
   @@index([oauthClientId, revokedAt])
@@ -734,6 +929,7 @@ enum OAuthClientRegistrationKind {
 }
 
 /// An OAuth client registered against this install's authorization server.
+/// @dpf lifecycle=operational retention=domain sensitivity=restricted categories=configuration,credential-secret owner=platform-owner steward=data-steward
 model OAuthClient {
   id               String                      @id @default(cuid())
   /// The OAuth `client_id` value this client presents. Named for the model
@@ -771,6 +967,7 @@ model OAuthClient {
   tokens             McpApiToken[]
   authorizationCodes OAuthAuthorizationCode[]
   refreshTokens      OAuthRefreshToken[]
+  authorityBindings  AuthorityBinding[]
 
   @@index([ownerUserId, revokedAt])
   @@index([registrationKind, revokedAt])
@@ -780,11 +977,15 @@ model OAuthClient {
 /// A single-use authorization code. Short-lived, consumed on first exchange;
 /// a second presentation is a replay and is refused. The PKCE challenge is
 /// stored, never the verifier.
+/// Single-use OAuth codes that expire in minutes (BI-E4DFDCB0). A row is dead the moment it is exchanged or expires; the exchange itself is recorded in AuthorizationDecisionLog, so nothing of record is lost. Purged on the shortest available window purely to stop the table growing.
+/// @dpf lifecycle=operational retention=90d sensitivity=restricted categories=credential-secret owner=platform-owner steward=data-steward timeAxis=createdAt
 model OAuthAuthorizationCode {
   id                  String    @id @default(cuid())
   codeHash            String    @unique
   oauthClientId       String
   userId              String
+  authorityBindingId  String?
+  authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
   redirectUri         String
   codeChallenge       String
   codeChallengeMethod String    @default("S256")
@@ -798,6 +999,7 @@ model OAuthAuthorizationCode {
   client OAuthClient @relation(fields: [oauthClientId], references: [id], onDelete: Cascade)
   user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([authorityBindingId])
   @@index([oauthClientId])
   @@index([userId])
   @@index([expiresAt])
@@ -807,11 +1009,16 @@ model OAuthAuthorizationCode {
 /// issues a successor. A replayed refresh token is therefore detectable — its
 /// successor already exists — and the whole chain is revoked, per OAuth 2.1
 /// refresh-token-rotation guidance.
+/// Rotating refresh tokens for MCP clients (BI-E4DFDCB0). Retained past their own expiry on purpose: the rotation chain is what makes a replayed token detectable, so a purge window shorter than the refresh TTL would erase the evidence of a stolen token. One year comfortably exceeds the 30-day default TTL.
+/// @dpf lifecycle=operational retention=365d sensitivity=restricted categories=credential-secret owner=platform-owner steward=data-steward timeAxis=createdAt
 model OAuthRefreshToken {
   id            String    @id @default(cuid())
   tokenHash     String    @unique
   oauthClientId String
   userId        String
+  authorityBindingId String?
+  authorityBinding AuthorityBinding? @relation(fields: [authorityBindingId], references: [id], onDelete: Restrict)
+  oauthFamilyKey String?
   agentId       String?
   resource      String
   scopes        String[]  @default([])
@@ -830,6 +1037,8 @@ model OAuthRefreshToken {
   rotatedTo   OAuthRefreshToken?  @relation("OAuthRefreshRotation", fields: [rotatedToId], references: [id], onDelete: SetNull)
   rotatedFrom OAuthRefreshToken[] @relation("OAuthRefreshRotation")
 
+  @@index([authorityBindingId])
+  @@index([oauthFamilyKey, revokedAt])
   @@index([oauthClientId, revokedAt])
   @@index([userId, revokedAt])
   @@index([agentId])

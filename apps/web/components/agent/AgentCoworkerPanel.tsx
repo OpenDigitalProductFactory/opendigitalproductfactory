@@ -5,17 +5,18 @@ import { usePathname } from "next/navigation";
 import type { AgentMessageRow, AgentInfo } from "@/lib/agent-coworker-types";
 import type { UserContext } from "@/lib/permissions";
 import { resolveAgentForRouteSync, AGENT_NAME_MAP } from "@/lib/agent-routing";
-import { agentHoldsWebSearchGrant } from "@/lib/tak/agent-web-search-grant";
-import { clearConversation, getOrCreateThreadSnapshot, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
+import { clearConversation, getThreadSnapshotById, getMarketingSkillRules } from "@/lib/actions/agent-coworker";
 import { signOutAction } from "@/lib/actions";
 import { useResilientEventSource } from "@/lib/hooks/useResilientEventSource";
 import { isTurnStalled } from "@/lib/agent/turn-watchdog";
 import { approveProposal, rejectProposal } from "@/lib/actions/proposals";
 import { AgentPanelHeader } from "./AgentPanelHeader";
+import { ThreadSensitivityNotice } from "./ThreadSensitivityNotice";
 import { AgentSkillAttributionChip } from "./AgentSkillAttributionChip";
+import { approvalFollowUpMessage } from "@/lib/tak/approval-follow-up";
 import { AgentMessageBubble } from "./AgentMessageBubble";
+import { proposalAfterApproval } from "./ProposalNoLongerRunnable";
 import { AgentMessageInput } from "./AgentMessageInput";
-import { CoworkerPriorityDock } from "@/components/golden-triangle/CoworkerPriorityDock";
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
 import { CollaborationActivityPanel } from "./CollaborationActivityPanel";
 import { collaborationReturnMessage, type CollaborationCard } from "./HandoffCard";
@@ -28,13 +29,6 @@ import { resolveCoworkerRuntimeMode } from "./coworker-runtime-mode";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { isStandingCooAgentId, presentStandingCoo, resolveCooPresentationIdentity, resolveCooPresentationName } from "@/lib/coworker-presentation/coo-name";
 import {
-  loadElevatedAssistPreference,
-  saveElevatedAssistPreference,
-} from "./agent-form-assist-prefs";
-import {
-  buildExternalAccessContinuationPrompt,
-  loadExternalAccessSessionState,
-  saveExternalAccessSessionState,
   loadCoworkerMode,
   saveCoworkerMode,
   type CoworkerMode,
@@ -42,16 +36,21 @@ import {
 import {
   buildAgentFormAssistContext,
   getActiveFormAssist,
+  applyFormAssistDelivery, type FormAssistDeliveryState,
 } from "@/lib/agent-form-assist";
 import {
   createOptimisticUserMessage,
   failOptimisticMessage,
   retryOptimisticMessage,
+  acknowledgeRetainedMessage,
+  pendingCoworkerLabel,
   type AgentRenderableMessage,
 } from "./agent-message-state";
+import { FOREGROUND_RECEIPT_PREFIX } from "@/lib/agent/foreground-work-contract";
 import { useVoiceSynth } from "./hooks/useVoiceSynth";
-import { deriveComposerState, type ThreadLoadState } from "./composer-state";
+import { deriveComposerState, isClearDisabled, type ThreadLoadState } from "./composer-state";
 import { resolvePanelRouteContextLabel } from "@/lib/agent/panel-route-context";
+import { beginJourney, completeJourney } from "@/lib/telemetry/journeys";
 
 type Props = {
   threadId: string | null;
@@ -82,7 +81,6 @@ type Props = {
 };
 
 type MessageSendOptions = {
-  externalAccessEnabled?: boolean;
   questionPacket?: QuestionPacket | null;
 };
 
@@ -105,15 +103,6 @@ function filterMessages(messages: AgentMessageRow[]): AgentMessageRow[] {
     }
     return true;
   });
-}
-
-function isClearDisabled(
-  messages: AgentRenderableMessage[],
-  busy: boolean,
-  isClearing: boolean,
-  threadId?: string | null,
-) {
-  return !threadId || messages.length === 0 || busy || isClearing;
 }
 
 // BI-2750EB6F: how long a busy turn may go with NO sign of server life (no SSE
@@ -154,6 +143,7 @@ export function AgentCoworkerPanel({
   // BI-2750EB6F: last sign of SERVER life (any SSE data frame OR the 15s liveness
   // heartbeat), driving the turn-completion watchdog effect below.
   const lastServerActivityRef = useRef<number>(0);
+  const retainedRequestRef = useRef<{ threadId: string; requestKey: string; taskRunId: string | null } | null>(null);
   const [isClearing, startClearing] = useTransition();
   // Embedders that don't thread load state through (e.g. tests rendering the
   // panel directly) get the legacy inference: no threadId means still loading.
@@ -166,8 +156,6 @@ export function AgentCoworkerPanel({
     sendsInFlight,
     isBusy,
   });
-  const [elevatedAssistEnabled, setElevatedAssistEnabled] = useState(false);
-  const [externalAccessEnabled, setExternalAccessEnabled] = useState(false);
   // Build Studio defaults to Act mode — its purpose is building, not advising
   const [coworkerMode, setCoworkerMode] = useState<CoworkerMode>(() =>
     pathname.startsWith("/build") ? "act" : "advise"
@@ -280,7 +268,6 @@ export function AgentCoworkerPanel({
   const routeAgent: AgentInfo = resolveAgentForRouteSync(effectiveRoute, userContext);
   const agent = presentStandingCoo(routeAgent, cooConversationalName);
   const agentIdentity = resolveCooPresentationIdentity({ agentId: agent.agentId, canonicalName: agent.agentName, conversationalName: cooConversationalName });
-  const webAccessAvailable = agentHoldsWebSearchGrant(agent.agentId);
   const canUseDev = userContext.isSuperuser || userContext.platformRole === "HR-000" || userContext.platformRole === "HR-300";
   const preferenceUserKey = userContext.userId ?? `${userContext.isSuperuser ? "super" : "role"}:${userContext.platformRole ?? "none"}`;
 
@@ -478,9 +465,7 @@ export function AgentCoworkerPanel({
           if (data.providerInfo) {
             setLastProviderInfo(data.providerInfo);
           }
-          if (data.formAssistUpdate && activeFormAssistRef.current) {
-            activeFormAssistRef.current.applyFieldUpdates(data.formAssistUpdate);
-          }
+          applyFormAssistDelivery(activeFormAssistRef.current, data, appliedFormDeliveries.current.applied, retainedRequestRef.current?.taskRunId ?? null, appliedFormDeliveries.current.pending);
 
           // Refresh messages from DB — authoritative source.
           // Fetch by threadId (which we already have as a prop) rather than
@@ -546,6 +531,10 @@ export function AgentCoworkerPanel({
       getThreadSnapshotById({ threadId }).then((snapshot) => {
         if (!snapshot) return;
         const latestMsg = snapshot.messages[snapshot.messages.length - 1];
+        if (latestMsg?.id.startsWith(FOREGROUND_RECEIPT_PREFIX)) {
+          setMessages(filterMessages(snapshot.messages));
+          return;
+        }
         if (latestMsg && (latestMsg.role === "assistant" || latestMsg.role === "system")) {
           setMessages(filterMessages(snapshot.messages));
           setIsBusy(false);
@@ -559,11 +548,7 @@ export function AgentCoworkerPanel({
 
   // BI-2750EB6F: turn-completion watchdog. Purely client-side — the ONLY clearer
   // that keeps working when the portal event loop itself is saturated (the SSE
-  // `done`, the DB recovery poll, and the transport reconnect all need the loop
-  // to make progress). If no server life (data frame OR liveness heartbeat) has
-  // been observed for TURN_STALL_LIMIT_MS while busy, the turn is presumed lost:
-  // surface a failure system message so the user isn't left staring at a silent
-  // spinner, clear isBusy so the composer is usable again, and reset the chips.
+  // Missing live progress does not establish whether retained work settled.
   useEffect(() => {
     if (!isBusy) return;
     const watchdog = setInterval(() => {
@@ -574,7 +559,9 @@ export function AgentCoworkerPanel({
           id: `local-turn-timeout-${Date.now()}`,
           role: "system" as const,
           content:
-            "The coworker didn't respond — the server may be overloaded right now. Your message was sent; try again in a moment.",
+            retainedRequestRef.current?.threadId === threadId && retainedRequestRef.current.taskRunId
+              ? "Your request is saved. Live progress is unavailable; its progress and outcome will stay in this conversation. You do not need to resend."
+              : "Live progress is unavailable. This does not establish that the request failed; its saved state must be reconciled before another attempt.",
           agentId: agent.agentId,
           routeContext: effectiveRoute,
           createdAt: new Date().toISOString(),
@@ -585,7 +572,7 @@ export function AgentCoworkerPanel({
       setOrchestratorStatus(null);
     }, TURN_WATCHDOG_TICK_MS);
     return () => clearInterval(watchdog);
-  }, [isBusy, agent.agentId, effectiveRoute]);
+  }, [isBusy, agent.agentId, effectiveRoute, threadId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -618,8 +605,6 @@ export function AgentCoworkerPanel({
   }, [threadId]);
 
   useEffect(() => {
-    setElevatedAssistEnabled(loadElevatedAssistPreference(preferenceUserKey, pathname));
-    setExternalAccessEnabled(loadExternalAccessSessionState(preferenceUserKey, pathname));
     setCoworkerMode(loadCoworkerMode(preferenceUserKey, pathname));
   }, [pathname, preferenceUserKey]);
 
@@ -641,32 +626,6 @@ export function AgentCoworkerPanel({
     }
   }, [pendingAutoMessage, threadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleToggleElevatedAssist() {
-    setElevatedAssistEnabled((prev) => {
-      const next = !prev;
-      saveElevatedAssistPreference(preferenceUserKey, pathname, next);
-      return next;
-    });
-  }
-
-  function handleToggleExternalAccess() {
-    const next = !externalAccessEnabled;
-    setExternalAccessEnabled(next);
-    saveExternalAccessSessionState(preferenceUserKey, pathname, next);
-
-    if (next && !isBusy) {
-      const continuation = buildExternalAccessContinuationPrompt(messages);
-      if (continuation) {
-        submitMessage(
-          continuation,
-          createOptimisticUserMessage(continuation, effectiveRoute),
-          true,
-          { externalAccessEnabled: true },
-        );
-      }
-    }
-  }
-
   function handleToggleCoworkerMode() {
     setCoworkerMode((prev) => {
       const next: CoworkerMode = prev === "advise" ? "act" : "advise";
@@ -675,9 +634,11 @@ export function AgentCoworkerPanel({
     });
   }
 
-  // EP-ASYNC-COWORKER-001: activeFormAssist ref for SSE done handler
   const activeFormAssistRef = useRef<ReturnType<typeof getActiveFormAssist>>(null);
-  activeFormAssistRef.current = elevatedAssistEnabled ? getActiveFormAssist(pathname) : null;
+  const appliedFormDeliveries = useRef<FormAssistDeliveryState>({ applied: new Set(), pending: new Map() });
+  // EP-WORK-POSTURE 8.2: the page's form-assist DATA is always collected; whether
+  // the coworker may fill the fields is decided server-side from the Workroom.
+  activeFormAssistRef.current = getActiveFormAssist(pathname);
 
   function submitMessage(
     content: string,
@@ -699,6 +660,8 @@ export function AgentCoworkerPanel({
     const formAssistContext = activeFormAssistRef.current
       ? buildAgentFormAssistContext(activeFormAssistRef.current)
       : undefined;
+    retainedRequestRef.current = { threadId, requestKey: optimisticMessage.id, taskRunId: null };
+    appliedFormDeliveries.current.pending.clear();
     if (appendOptimistic) {
       setMessages((prev) => [...prev, optimisticMessage]);
     }
@@ -708,17 +671,15 @@ export function AgentCoworkerPanel({
 
     setIsBusy(true);
     setSendsInFlight((count) => count + 1);
-    // BI-2750EB6F: start the turn watchdog's clock — the server has "just been
-    // heard from" (we're about to POST). If nothing (data or heartbeat) arrives
-    // before the deadline, the watchdog effect surfaces a failure.
+    // BI-2750EB6F: start the turn watchdog's clock; no data/heartbeat by the deadline = failure.
     lastServerActivityRef.current = Date.now();
+    beginJourney("message-ack"); // BI-BD0B0DCC
 
     const runtimeMode = resolveCoworkerRuntimeMode({
       pathname,
       devMode,
       useUnifiedCoworker,
       coworkerMode,
-      externalAccessEnabled: sendOptions?.externalAccessEnabled ?? externalAccessEnabled,
     });
 
     // EP-ASYNC-COWORKER-001: Non-blocking fetch to API route.
@@ -729,11 +690,10 @@ export function AgentCoworkerPanel({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         threadId,
+        requestKey: optimisticMessage.id,
         content,
         routeContext: effectiveRoute,
         coworkerMode: runtimeMode.coworkerMode,
-        externalAccessEnabled: runtimeMode.externalAccessEnabled,
-        elevatedFormFillEnabled: elevatedAssistEnabled,
         ...(formAssistContext ? { formAssistContext } : {}),
         ...(activeBuildId ? { buildId: activeBuildId } : {}),
         ...(attachmentForThisMessage ? { attachmentId: attachmentForThisMessage.attachmentId } : {}),
@@ -750,13 +710,15 @@ export function AgentCoworkerPanel({
         );
         setIsBusy(false);
       } else {
-        // Server accepted — mark as sent so user sees delivery confirmation
-        // instead of "Sending..." for the entire duration of agent execution.
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.id === optimisticMessage.id ? { ...message, deliveryState: "sent" as const } : message,
-          ),
-        );
+        const acknowledged = await res.json().catch(() => null);
+        if (typeof acknowledged?.taskRunId === "string" && retainedRequestRef.current?.requestKey === optimisticMessage.id
+          && retainedRequestRef.current.threadId === threadId) {
+          retainedRequestRef.current.taskRunId = acknowledged.taskRunId;
+          applyFormAssistDelivery(activeFormAssistRef.current, {}, appliedFormDeliveries.current.applied, acknowledged.taskRunId, appliedFormDeliveries.current.pending);
+        }
+        // Stored and accepted (BI-DEFA25EE): show "sent", not "Sending..." for the whole turn.
+        completeJourney("message-ack", { serverTiming: res.headers.get("server-timing") }); // BI-BD0B0DCC
+        setMessages(prev => acknowledgeRetainedMessage(prev, optimisticMessage.id, acknowledged?.receipt));
         // Notify BuildStudio of the threadId so it can connect SSE as a fallback.
         // The server writes threadId to the build on first message (fire-and-forget),
         // so by the time the response arrives, the link exists in the DB.
@@ -816,26 +778,14 @@ export function AgentCoworkerPanel({
       setMessages((prev) =>
         prev.map((m) =>
           m.proposal?.proposalId === proposalId
-            ? {
-                ...m,
-                proposal: {
-                  ...m.proposal,
-                  status: result.success ? "executed" : "failed",
-                  ...(result.resultEntityId !== undefined ? { resultEntityId: result.resultEntityId } : {}),
-                  ...(result.error !== undefined ? { resultError: result.error } : {}),
-                },
-              }
+            // A monitor refusal ran nothing: the card stays pending, with why (spec D5).
+            ? { ...m, proposal: proposalAfterApproval(m.proposal, result) }
             : m,
         ),
       );
 
       // Auto-send a follow-up so the agent reacts to the result
-      if (result.success) {
-        const followUp = result.resultEntityId
-          ? `I approved ${actionType.replace(/_/g, " ")}. Result: ${result.resultEntityId}. What's next?`
-          : `I approved ${actionType.replace(/_/g, " ")}. What's next?`;
-        submitMessage(followUp);
-      }
+      if (result.success) submitMessage(approvalFollowUpMessage(actionType, result.resultEntityId));
     } catch (e) {
       console.error("[handleApprove]", e);
       setMessages((prev) =>
@@ -939,6 +889,10 @@ export function AgentCoworkerPanel({
         presentationIdentity={agentIdentity}
       />
 
+      {/* BI-706530B2: name the local-model pin instead of letting the owner
+          experience it as an unexplained loss of capability. */}
+      <ThreadSensitivityNotice threadId={threadId} messageCount={messages.length} />
+
       {/* Voice activity indicator — shown when voice synthesis is active */}
       {voiceSynth.available && (voiceSynth.isSynthesizing || voiceSynth.isPlaying) && (
         <div
@@ -1010,6 +964,7 @@ export function AgentCoworkerPanel({
               }) : null}
               onApprove={handleApprove}
               onReject={handleReject}
+              onApprovalAuthorized={(run) => submitMessage(approvalFollowUpMessage(run.toolName, run.entityId))}
               {...(decisionActive ? { onDecision: (value: string) => handleSend(value) } : {})}
               {...(msg.deliveryState ? { deliveryState: msg.deliveryState } : {})}
               {...(msg.deliveryState === "failed" ? { onRetry: () => handleRetry(msg.id) } : {})}
@@ -1058,17 +1013,9 @@ export function AgentCoworkerPanel({
               {(isBusy || isClearing) && (
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 11 }}>
-                {isClearing
-                  ? "Clearing conversation"
-                  : orchestratorStatus
-                    ? orchestratorStatus
-                    : currentTool
-                      ? `${agentIdentity.primaryName} is using ${currentTool.replace(/_/g, " ")}...`
-                      : thinkingSeconds < 5
-                        ? `${agentIdentity.primaryName} is thinking`
-                        : thinkingSeconds < 15
-                          ? `${agentIdentity.primaryName} is working on it`
-                          : `${agentIdentity.primaryName} is still working (${thinkingSeconds}s)`}
+                {pendingCoworkerLabel({ agentName: agentIdentity.primaryName, clearing: isClearing,
+                  status: orchestratorStatus, tool: currentTool, elapsedSeconds: thinkingSeconds,
+                  acknowledged: Boolean(retainedRequestRef.current?.taskRunId) })}
               </span>
               {/* Animated bouncing dots */}
               <span style={{ display: "inline-flex", gap: 2, alignItems: "center" }}>
@@ -1206,7 +1153,6 @@ export function AgentCoworkerPanel({
       </div>
 
       <CoworkerHealthStatus />
-      <CoworkerPriorityDock agentId={agent.agentId} />
       {effectiveThreadLoadState === "failed" && (
         <div
           role="alert"
@@ -1297,11 +1243,6 @@ export function AgentCoworkerPanel({
         voicePlaybackUnavailableReason={voiceSynth.unavailableReason}
         voicePlaybackEnabled={voicePlaybackEnabled}
         onVoicePlaybackToggle={toggleVoicePlayback}
-        elevatedAssistEnabled={elevatedAssistEnabled}
-        onToggleElevatedAssist={handleToggleElevatedAssist}
-        externalAccessEnabled={webAccessAvailable && externalAccessEnabled}
-        onToggleExternalAccess={handleToggleExternalAccess}
-        webAccessAvailable={webAccessAvailable}
         coworkerMode={coworkerMode}
         onToggleCoworkerMode={handleToggleCoworkerMode}
         useUnified={useUnifiedCoworker}

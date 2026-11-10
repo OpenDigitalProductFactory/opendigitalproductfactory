@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const monitoringDecision = vi.hoisted(() => vi.fn(async () => null as "enabled" | "disabled" | "undecided" | null));
+vi.mock("@/lib/platform-runtime/monitoring-switch-loader", () => ({
+  loadMonitoringCapabilityDecision: monitoringDecision,
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     platformSetupProgress: {
@@ -22,13 +27,11 @@ vi.mock("@dpf/db", () => ({
 import { prisma } from "@dpf/db";
 import {
   isFirstRun,
-  getSetupProgress,
   createSetupProgress,
   advanceStep,
   skipStep,
-  pauseSetup,
-  completeSetup,
   getSetupContext,
+  reconcileMonitoringSetupStep,
   updateSetupContext,
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
@@ -36,6 +39,7 @@ import { SETUP_STEPS } from "./setup-constants";
 describe("setup-progress", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    monitoringDecision.mockResolvedValue(null);
   });
 
   describe("isFirstRun", () => {
@@ -154,7 +158,7 @@ describe("setup-progress", () => {
       (prisma.storefrontConfig.findFirst as any).mockResolvedValue({ id: "sf-1" });
       (prisma.platformSetupProgress.update as any).mockResolvedValue({
         ...mockProgress,
-        currentStep: "platform-development",
+        currentStep: "mailroom",
       });
 
       await advanceStep("test-id");
@@ -165,7 +169,7 @@ describe("setup-progress", () => {
       });
       expect(prisma.platformSetupProgress.update).toHaveBeenCalledWith({
         where: { id: "test-id" },
-        data: expect.objectContaining({ currentStep: "platform-development" }),
+        data: expect.objectContaining({ currentStep: "mailroom" }),
       });
     });
   });
@@ -204,6 +208,81 @@ describe("setup-progress", () => {
       const ctx = await getSetupContext();
       expect(ctx?.orgName).toBe("Acme Ltd");
       expect(ctx?.suggestedCurrency).toBe("EUR");
+    });
+
+    // BI-575F0046 Slice 2: readiness is computed live rather than read from the
+    // stored blob, because a stored answer goes stale the moment the owner
+    // connects a provider or completes its trust review.
+    it("computes cloud readiness live, not from the stored context", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
+        context: { orgName: "Acme Ltd", cloudProviderReadiness: "ready" },
+      });
+      (prisma as any).modelProvider = {
+        findMany: async () => [
+          { providerId: "chatgpt", name: "ChatGPT", status: "active", sensitivityClearance: ["public"] },
+        ],
+      };
+
+      expect((await getSetupContext())?.cloudProviderReadiness).toBe("public-only");
+    });
+
+    it("says it does not know rather than guessing when providers cannot be read", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
+        context: { orgName: "Acme Ltd" },
+      });
+      (prisma as any).modelProvider = {
+        findMany: async () => { throw new Error("db down"); },
+      };
+
+      expect((await getSetupContext())?.cloudProviderReadiness).toBeUndefined();
+    });
+
+    it("threads the live monitoring decision and ignores a stored copy", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
+        context: { orgName: "Acme Ltd", monitoringCapabilityDecision: "undecided" },
+      });
+      monitoringDecision.mockResolvedValue("enabled");
+      expect((await getSetupContext())?.monitoringCapabilityDecision).toBe("enabled");
+
+      monitoringDecision.mockResolvedValue(null);
+      expect((await getSetupContext())?.monitoringCapabilityDecision).toBeUndefined();
+    });
+  });
+
+  describe("reconcileMonitoringSetupStep", () => {
+    it("completes monitoring when a decision is recorded and leaves an undecided step pending", async () => {
+      const steps = Object.fromEntries(
+        SETUP_STEPS.map((step) => [
+          step,
+          SETUP_STEPS.indexOf(step) <= SETUP_STEPS.indexOf("platform-development") ? "completed" : "pending",
+        ]),
+      );
+      (prisma.platformSetupProgress.update as any).mockResolvedValue({ organizationId: null });
+
+      monitoringDecision.mockResolvedValue("undecided");
+      const open = await reconcileMonitoringSetupStep({
+        id: "test-id",
+        currentStep: "monitoring",
+        steps,
+      });
+      expect(open.progress?.currentStep).toBe("monitoring");
+      expect(prisma.platformSetupProgress.update).not.toHaveBeenCalled();
+
+      monitoringDecision.mockResolvedValue("disabled");
+      const decided = await reconcileMonitoringSetupStep({
+        id: "test-id",
+        currentStep: "monitoring",
+        steps,
+      });
+      expect(decided.monitoringCapabilityDecision).toBe("disabled");
+      expect(decided.progress?.currentStep).toBe("build-studio");
+      expect(prisma.platformSetupProgress.update).toHaveBeenCalledWith({
+        where: { id: "test-id" },
+        data: expect.objectContaining({
+          currentStep: "build-studio",
+          steps: expect.objectContaining({ monitoring: "completed" }),
+        }),
+      });
     });
   });
 

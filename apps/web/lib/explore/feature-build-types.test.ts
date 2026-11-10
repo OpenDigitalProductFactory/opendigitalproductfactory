@@ -111,6 +111,11 @@ describe("canTransitionPhase", () => {
     expect(canTransitionPhase("ship", "complete")).toBe(true);
   });
 
+  it("allows ship → review, so a build rebased at ship re-earns review (BI-76BD65E6)", () => {
+    expect(canTransitionPhase("ship", "review")).toBe(true);
+    expect(canTransitionPhase("ship", "build")).toBe(false);
+  });
+
   it("allows any phase → failed", () => {
     expect(canTransitionPhase("ideate", "failed")).toBe(true);
     expect(canTransitionPhase("build", "failed")).toBe(true);
@@ -182,7 +187,7 @@ describe("generatePackId", () => {
 
 // ─── Phase Gate Tests (Build Disciplines) ────────────────────────────────────
 
-import { checkPhaseGate } from "./feature-build-types";
+import { checkPhaseGate } from "./build-process-matrix";
 
 describe("canTransitionPhase — review→build backward transition", () => {
   it("allows review to build (backward transition for changes)", () => {
@@ -521,6 +526,11 @@ describe("isOscillating (BI-4396EFEC)", () => {
 });
 
 describe("describePlanReviewFailure (BI-4396EFEC)", () => {
+  it("preserves the plan when the panel did not complete", () => {
+    const reason = describePlanReviewFailure(review({ reviewIncomplete: true, iteration: { round: 117 } }));
+    expect(reason).toContain("review incomplete");
+    expect(reason).not.toMatch(/Revise|Round|failed/);
+  });
   function review(overrides: Partial<ReviewResult> = {}): ReviewResult {
     return {
       decision: "fail",
@@ -583,6 +593,11 @@ describe("describePlanReviewFailure (BI-4396EFEC)", () => {
 });
 
 describe("describeDesignReviewFailure (BI-CE49D82E)", () => {
+  it("preserves the design when the panel did not complete", () => {
+    const reason = describeDesignReviewFailure(review({ reviewIncomplete: true, iteration: { round: 25 } }));
+    expect(reason).toContain("review incomplete");
+    expect(reason).not.toMatch(/Revise|Round|failed/);
+  });
   // Mirror of describePlanReviewFailure for the design path. Same convergence
   // / oscillation language so the operator sees consistent trajectory framing
   // across both phase gates. Live repro that drove this fix: FB-5E20E793

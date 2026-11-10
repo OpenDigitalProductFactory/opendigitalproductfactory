@@ -21,6 +21,11 @@
 // `pnpm scan:deps` (OSV), and whether an existing dependency already covers it.
 // Record the outcome in the allowlist entry's `note`.
 //
+// Retired names: the allowlist's `retired` map lists packages a recorded
+// decision removed (plan 2026-09-08 §7). The gate refuses one outright, and
+// --update-allowlist never re-acknowledges it. Reversing a retirement is a
+// deliberate edit: delete its `retired` entry, with the reason, in the PR.
+//
 // Usage:
 //   node scripts/sbom/check-new-dependencies.mjs                  # gate (CI / pre-PR)
 //   node scripts/sbom/check-new-dependencies.mjs --update-allowlist  # acknowledge current set
@@ -29,6 +34,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { listDirectDependencies } from "./generate-platform-sbom.mjs";
+import { LOCKFILE_ROOTS, repoWorkspacePath } from "./lockfile-roots.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ALLOWLIST_PATH = join(ROOT, "sbom", "dependency-allowlist.json");
@@ -44,14 +50,37 @@ function loadAllowlist() {
 
 const NOTE = "Acknowledged DIRECT dependencies. The New Dependency Gate (scripts/sbom/check-new-dependencies.mjs) fails a PR that adds a direct dependency not listed here, so every acquired package is a deliberate, recorded decision. Add an entry ONLY after vetting: npm provenance attestation, package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and whether an existing dep already covers it — record the outcome in `note`. See docs/architecture/dependency-reduction-routine.md.";
 
+/** Declared direct dependencies that a recorded decision retired. */
+export function findRetiredInUse(declaredNames, retired = {}) {
+  return [...declaredNames].filter((name) => Object.hasOwn(retired, name)).sort();
+}
+
+/** Direct dependencies across every lockfile root, keyed by name, with repo-relative workspaces. */
+export function listAllDirectDependencies(repoRoot = ROOT) {
+  const merged = new Map();
+  for (const root of LOCKFILE_ROOTS) {
+    for (const [name, info] of listDirectDependencies(join(repoRoot, root.dir))) {
+      if (!merged.has(name)) merged.set(name, { workspaces: new Set(), kinds: new Set(), versions: new Set() });
+      const into = merged.get(name);
+      for (const ws of info.workspaces) into.workspaces.add(repoWorkspacePath(root, ws));
+      for (const k of info.kinds) into.kinds.add(k);
+      for (const v of info.versions) into.versions.add(v);
+    }
+  }
+  return merged;
+}
+
 function main() {
-  const current = listDirectDependencies(ROOT); // Map<name,{workspaces:Set,kinds:Set}>
+  const current = listAllDirectDependencies(); // Map<name,{workspaces:Set,kinds:Set}>
   const today = new Date().toISOString().slice(0, 10);
 
   if (update) {
-    const prior = loadAllowlist()?.dependencies ?? {};
+    const priorAllowlist = loadAllowlist();
+    const prior = priorAllowlist?.dependencies ?? {};
+    const retired = priorAllowlist?.retired ?? {};
     const dependencies = {};
     for (const name of [...current.keys()].sort()) {
+      if (Object.hasOwn(retired, name)) continue;
       const info = current.get(name);
       dependencies[name] = prior[name] ?? {
         added: today,
@@ -60,7 +89,7 @@ function main() {
         note: "bootstrap — pre-existing dependency, acknowledged in bulk",
       };
     }
-    writeFileSync(ALLOWLIST_PATH, JSON.stringify({ note: NOTE, dependencies }, null, 2) + "\n");
+    writeFileSync(ALLOWLIST_PATH, JSON.stringify({ note: NOTE, dependencies, retired }, null, 2) + "\n");
     process.stdout.write(`Allowlist updated: ${ALLOWLIST_PATH} (${Object.keys(dependencies).length} direct deps acknowledged)\n`);
     return;
   }
@@ -70,6 +99,22 @@ function main() {
     process.stderr.write(`::error::No dependency allowlist at ${ALLOWLIST_PATH}. Seed it with: node scripts/sbom/check-new-dependencies.mjs --update-allowlist\n`);
     process.exit(1);
   }
+  const retiredInUse = findRetiredInUse(current.keys(), allow.retired);
+  if (retiredInUse.length) {
+    process.stderr.write(
+      [
+        `::error::Retired dependenc${retiredInUse.length === 1 ? "y" : "ies"} declared again: ${retiredInUse.join(", ")}`,
+        ...retiredInUse.map((n) => `    - ${n}: ${allow.retired[n].reason}`),
+        "",
+        "  A recorded decision removed this package. Use what replaced it. To reverse the",
+        "  decision, delete its `retired` entry in sbom/dependency-allowlist.json in the same PR",
+        "  and say why in the PR description.",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+
   const acknowledged = new Set(Object.keys(allow.dependencies || {}));
   const newNames = [...current.keys()].filter((n) => !acknowledged.has(n)).sort();
   const removed = [...acknowledged].filter((n) => !current.has(n)).sort();
@@ -100,4 +145,6 @@ function main() {
   process.stdout.write(`OK — no new direct dependencies (${acknowledged.size} acknowledged).\n`);
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  main();
+}

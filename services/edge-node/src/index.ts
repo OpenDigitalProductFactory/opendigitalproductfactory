@@ -12,6 +12,9 @@
 //   - Sweep loop: periodic discovery submission.
 //   - Metrics loop: SNMP ifTable + LLDP peer collection (every 10 s,
 //     gated on SNMP_TARGET env and trustState=trusted).
+//   - Federation scan loop: probe the segment for nearby DPF installs and
+//     report them (every 90 s, trustState=trusted). Without it the Authority's
+//     nearby-candidate list has no producer at all — BI-105966A1.
 //
 // If the heartbeat or sweep loop returns (e.g. node revoked), the
 // process exits so the supervisor can restart it.
@@ -23,6 +26,7 @@
 import { AuthorityApiClient, AuthorityHttpError } from "./api-client";
 import { loadConfig } from "./config";
 import { runEnrollment } from "./enroll";
+import { runFederationScanLoop } from "./federation-scan";
 import { runHeartbeatLoop } from "./heartbeat";
 import { runMetricsLoop } from "./metrics-loop";
 import { loadState } from "./state";
@@ -116,6 +120,15 @@ async function main(): Promise<void> {
     "info",
     `Starting heartbeat (every ${state.heartbeatIntervalSec}s) + sweep (every ${state.sweepIntervalSec}s) + metrics (every ${metricsIntervalSec}s) loops.`,
   );
+
+  // The federation scan is started ALONGSIDE the race, never inside it. It
+  // returns normally when an operator sets DPF_FEDERATION_SCAN=0, and a resolved
+  // promise wins a race exactly as a rejected one does — so racing it would make
+  // turning discovery off exit the process and hand the supervisor a restart
+  // loop. Nothing about finding peers is authoritative enough to end the agent.
+  void runFederationScanLoop({ config, api, state }).catch((err) => {
+    log("warn", `federation-scan loop exited unexpectedly: ${(err as Error).message}`);
+  });
 
   // Race: if the heartbeat or sweep loop returns (revocation signal),
   // let the process exit. The metrics loop runs as a fire-and-forget

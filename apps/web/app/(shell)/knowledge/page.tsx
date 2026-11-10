@@ -6,6 +6,11 @@ import { prisma } from "@dpf/db";
 import Link from "next/link";
 import { KnowledgeArticleList } from "@/components/knowledge/KnowledgeArticleList";
 import type { KnowledgeArticleSummary } from "@/components/knowledge/KnowledgeArticleCard";
+import {
+  describeEmptyKnowledgeView,
+  KNOWLEDGE_STATUS_TABS,
+} from "@/components/knowledge/knowledge-status-summary";
+import { EmptyState } from "@/components/ui/report-kit/EmptyState";
 
 const PORTFOLIO_PERSONAS: Record<string, { label: string; description: string }> = {
   foundational: {
@@ -33,22 +38,19 @@ type Props = {
 export default async function KnowledgeBrowsePage({ searchParams }: Props) {
   const sp = await searchParams;
 
-  // Build where clause from filters
-  const where: Record<string, unknown> = {};
-
-  // Default to non-archived
+  // Build where clause from filters. The status filter is applied separately so
+  // the same scope also yields per-status counts for the tabs.
+  const scope: Record<string, unknown> = {};
   const statusFilter = sp.status ?? "published";
-  if (statusFilter !== "all") {
-    where.status = statusFilter;
-  }
   if (sp.portfolioId) {
-    where.portfolios = { some: { portfolioId: sp.portfolioId } };
+    scope.portfolios = { some: { portfolioId: sp.portfolioId } };
   }
   if (sp.category) {
-    where.category = sp.category;
+    scope.category = sp.category;
   }
+  const where = statusFilter === "all" ? scope : { ...scope, status: statusFilter };
 
-  const [articles, portfolios] = await Promise.all([
+  const [articles, portfolios, statusGroups] = await Promise.all([
     prisma.knowledgeArticle.findMany({
       where: where as never,
       orderBy: { updatedAt: "desc" },
@@ -72,7 +74,23 @@ export default async function KnowledgeBrowsePage({ searchParams }: Props) {
       orderBy: { name: "asc" },
       select: { id: true, slug: true, name: true },
     }),
+    prisma.knowledgeArticle.groupBy({
+      by: ["status"],
+      where: scope as never,
+      _count: { _all: true },
+    }),
   ]);
+  const statusCounts: Record<string, number> = Object.fromEntries(
+    statusGroups.map((g) => [g.status, g._count._all]),
+  );
+  const emptyView = describeEmptyKnowledgeView(statusFilter, statusCounts);
+
+  const statusHref = (status: string) => {
+    const params = new URLSearchParams();
+    if (sp.portfolioId) params.set("portfolioId", sp.portfolioId);
+    if (status !== "published") params.set("status", status);
+    return `/knowledge${params.toString() ? `?${params.toString()}` : ""}`;
+  };
 
   // Resolve active portfolio for persona banner
   const activePortfolio = sp.portfolioId
@@ -88,7 +106,7 @@ export default async function KnowledgeBrowsePage({ searchParams }: Props) {
         <h1 className="text-lg font-semibold text-[var(--dpf-text)]">Knowledge Base</h1>
         <Link
           href={`/knowledge/new${sp.portfolioId ? `?portfolioId=${sp.portfolioId}` : ""}`}
-          className="text-xs px-3 py-1.5 rounded bg-[var(--dpf-accent)] text-white hover:opacity-90 transition-opacity"
+          className="text-xs px-3 py-1.5 rounded bg-[var(--dpf-accent)] text-[var(--dpf-on-accent)] hover:opacity-90 transition-opacity"
         >
           New Article
         </Link>
@@ -115,7 +133,7 @@ export default async function KnowledgeBrowsePage({ searchParams }: Props) {
               className={[
                 "text-[10px] px-2 py-1 rounded-full border transition-colors",
                 isActive
-                  ? "border-[var(--dpf-accent)] text-[var(--dpf-accent)] bg-[var(--dpf-accent)]10"
+                  ? "border-[var(--dpf-accent)] text-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)]"
                   : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)]",
               ].join(" ")}
             >
@@ -127,21 +145,13 @@ export default async function KnowledgeBrowsePage({ searchParams }: Props) {
 
       {/* Status tabs */}
       <div className="flex gap-1 mb-4 border-b border-[var(--dpf-border)]">
-        {[
-          { label: "Published", value: "published" },
-          { label: "Drafts", value: "draft" },
-          { label: "Needs Review", value: "review-needed" },
-          { label: "Archived", value: "archived" },
-        ].map((tab) => {
+        {KNOWLEDGE_STATUS_TABS.map((tab) => {
           const isActive = statusFilter === tab.value;
-          const params = new URLSearchParams();
-          if (sp.portfolioId) params.set("portfolioId", sp.portfolioId);
-          if (tab.value !== "published") params.set("status", tab.value);
-          const href = `/knowledge${params.toString() ? `?${params.toString()}` : ""}`;
+          const count = statusCounts[tab.value] ?? 0;
           return (
             <Link
               key={tab.value}
-              href={href}
+              href={statusHref(tab.value)}
               className={[
                 "px-3 py-1.5 text-xs font-medium rounded-t transition-colors",
                 isActive
@@ -150,15 +160,28 @@ export default async function KnowledgeBrowsePage({ searchParams }: Props) {
               ].join(" ")}
             >
               {tab.label}
+              <span className="ms-1 text-[var(--dpf-muted)]">({count})</span>
             </Link>
           );
         })}
       </div>
 
-      <KnowledgeArticleList
-        articles={articles as KnowledgeArticleSummary[]}
-        emptyMessage="No knowledge articles found. Create the first article to start building your knowledge base."
-      />
+      {articles.length === 0 ? (
+        <EmptyState
+          title={emptyView.title}
+          description={emptyView.description}
+          action={emptyView.link && (
+            <Link
+              href={statusHref(emptyView.link.status)}
+              className="text-xs text-[var(--dpf-accent)] hover:underline"
+            >
+              {emptyView.link.label}
+            </Link>
+          )}
+        />
+      ) : (
+        <KnowledgeArticleList articles={articles as KnowledgeArticleSummary[]} />
+      )}
     </div>
   );
 }

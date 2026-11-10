@@ -41,10 +41,8 @@ import {
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "stewardship-scope-baseline.txt");
-const EXEMPTIONS_PATH = join(REPO_ROOT, "scripts", "stewardship-exemptions.txt");
 
 const CLASSIFICATION_PATH = "packages/db/src/table-classification.ts";
-const POLICIES_PATH = "apps/web/lib/operate/retention/policies.ts";
 
 const rd = (p) => readFileSync(join(REPO_ROOT, p), "utf8");
 
@@ -80,27 +78,6 @@ function classifiedModels(source) {
 }
 
 /** Delegate accessors named by a `model: "..."` entry inside one registry array. */
-function registryModels(source, constName) {
-  const body = source.match(
-    new RegExp(`${constName}[^=]*=\\s*\\[([\\s\\S]*?)^\\] as const;`, "m"),
-  );
-  if (!body) throw new Error(`could not locate ${constName} in ${POLICIES_PATH}`);
-  return new Set([...body[1].matchAll(/\bmodel:\s*"([^"]+)"/g)].map((x) => x[1]));
-}
-
-/** Declared exemptions: `ModelName  reason-slug  # optional note`. */
-function readExemptions(path) {
-  const map = new Map();
-  if (!existsSync(path)) return map;
-  for (const raw of readFileSync(path, "utf8").split(/\r?\n/)) {
-    const line = raw.replace(/#.*$/, "").trim();
-    if (!line) continue;
-    const [model, reason] = line.split(/\s+/);
-    map.set(model, reason ?? "");
-  }
-  return map;
-}
-
 function readLineKeys(path) {
   const set = new Set();
   if (!existsSync(path)) return set;
@@ -129,13 +106,52 @@ function serializeBaseline(models) {
 }
 
 // ── Load ─────────────────────────────────────────────────────────────────────
-const policiesSource = rd(POLICIES_PATH);
+// EP-A33A5C61 slice 4d: the retention DISPOSITION is read from the schema's
+// `/// @dpf retention=` tags (the only place it is declared), not from a
+// TypeScript registry or an exemptions file. Classification still reads
+// table-classification.ts until slice 4d-ii moves sensitivity into the tag too.
+const RETENTION_KIND_TO_EXEMPTION_REASON = {
+  reference: "reference-data",
+  config: "config-singleton",
+  domain: "domain-lifecycle-managed",
+  projection: "derived-projection",
+};
+async function dispositionsFromTags() {
+  const { tsImport } = await import("tsx/esm/api");
+  const { pathToFileURL } = await import("node:url");
+  const modulePath = join(REPO_ROOT, "packages", "db", "src", "model-metadata.ts");
+  const { parseModelMetadataSources } = await tsImport(pathToFileURL(modulePath).href, import.meta.url);
+  const { readdirSync } = await import("node:fs");
+  const dir = join(REPO_ROOT, "packages", "db", "prisma", "schema");
+  const parsed = parseModelMetadataSources(
+    readdirSync(dir)
+      .filter((f) => f.endsWith(".prisma"))
+      .sort()
+      .map((file) => ({ file, source: readFileSync(join(dir, file), "utf8") })),
+  );
+  const delegate = (m) => m.charAt(0).toLowerCase() + m.slice(1);
+  const purgeModels = new Set();
+  const retainedModels = new Set();
+  const exemptions = new Map();
+  // 4d-ii: a model whose tag carries sensitivity= is classified by the schema;
+  // the registry file only lists the untagged remainder.
+  const taggedSensitivity = new Set();
+  for (const e of parsed.entries) {
+    if (e.metadata.sensitivity) taggedSensitivity.add(e.model);
+    const kind = e.metadata.retention.kind;
+    if (kind === "purge") purgeModels.add(delegate(e.model));
+    else if (kind === "retained") retainedModels.add(delegate(e.model));
+    else exemptions.set(e.model, RETENTION_KIND_TO_EXEMPTION_REASON[kind]);
+  }
+  return { purgeModels, retainedModels, exemptions, taggedSensitivity };
+}
+const dispositions = await dispositionsFromTags();
 const input = {
   models: persistentModels(readPrismaSchemaText(REPO_ROOT)),
-  classified: classifiedModels(rd(CLASSIFICATION_PATH)),
-  purgeModels: registryModels(policiesSource, "PURGE_POLICIES"),
-  retainedModels: registryModels(policiesSource, "RETAINED_DATASETS"),
-  exemptions: readExemptions(EXEMPTIONS_PATH),
+  classified: new Set([...classifiedModels(rd(CLASSIFICATION_PATH)), ...dispositions.taggedSensitivity]),
+  purgeModels: dispositions.purgeModels,
+  retainedModels: dispositions.retainedModels,
+  exemptions: dispositions.exemptions,
   baseline: readLineKeys(BASELINE_PATH),
 };
 
@@ -193,7 +209,7 @@ if (!result.ok) {
       "retention disposition. Absence is not a decision — left alone the model is\n" +
       `classified "confidential" by fallback and never swept, silently, forever.\n\n` +
       `  1. classification -> ${CLASSIFICATION_PATH}\n` +
-      `  2. disposition    -> ${POLICIES_PATH} (PURGE_POLICIES or RETAINED_DATASETS)\n` +
+      `  2. disposition    -> packages/db/prisma/schema (PURGE_POLICIES or RETAINED_DATASETS)\n` +
       `                       or scripts/stewardship-exemptions.txt when neither applies\n` +
       `                       (reasons: ${EXEMPTION_REASONS.join(" | ")})\n\n` +
       "Do NOT invent a purge window to clear this gate: the retention engine EXECUTES\n" +

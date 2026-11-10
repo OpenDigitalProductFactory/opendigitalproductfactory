@@ -1,9 +1,11 @@
+import { projectDeliveryAgreement } from "./delivery-agreement";
 import type {
   WorkCaseBlockingActorKind,
   WorkCaseDetail,
   WorkCaseSourceRef,
 } from "./case-types";
 import type { ReceiptEnvelope } from "./receipt-envelope";
+import { composeRoomReviewProfile } from "./room-review-profile";
 import {
   normalizeWorkroomActivities,
   type WorkroomActivityInput,
@@ -20,7 +22,23 @@ import {
   resolveWorkroomPosture,
   type WorkroomPostureContext,
 } from "./room-posture";
+import { resolveRoomProjectionMode } from "./room-cycle";
 import { readWorkroomPostureClaim } from "./workroom-posture-claim";
+import {
+  getWorkShape,
+  readDeclaredWorkShapeKey,
+  readWorkShapeDefinitionContract,
+  type WorkShapeDefinition,
+} from "./work-shapes";
+import { isCompletingWorkroomDriveReceiptAt } from "@dpf/validators/workroom/receipts";
+import { readWorkShapeClaim, resolveWorkShapeClaim } from "./workroom-shape-claim";
+import {
+  evaluateWorkroomShapeConformance,
+  projectUnresolvedWorkroomShapeConformance,
+  projectUnshapedWorkroomConformance,
+  type WorkroomCoordinatorEligibility,
+  type WorkroomShapeConformanceInput,
+} from "./workroom-shape-conformance";
 import {
   getWorkCaseSourceEntry,
   getWorkroomDefinitionIdentity,
@@ -41,9 +59,13 @@ export type { WorkroomBoundaryInput } from "./room-boundary";
 
 export interface BuildWorkroomViewInput {
   caseKey: string;
+  deliveryState?: unknown;
   detail: WorkCaseDetail;
   boundary?: Partial<WorkroomBoundaryInput>;
   currentCycle?: WorkroomCycleView | null;
+  /** Set when the cycle could not be projected. The room still renders; the
+   *  cycle section says so rather than the page dying (BI-97B24FB5). */
+  cycleProjectionError?: string | null;
   completedCycles?: readonly WorkroomCycleView[];
   participants?: readonly WorkroomParticipantView[];
   activities?: readonly WorkroomActivityInput[];
@@ -51,7 +73,11 @@ export interface BuildWorkroomViewInput {
   outcomePacket?: WorkroomOutcomePacket | null;
   outcomeHealth?: WorkroomOutcomeView["health"];
   receipts?: readonly ReceiptEnvelope[];
+  reviewerRuns?: WorkroomView["reviewerRuns"];
   sourceHealth?: WorkroomView["projection"]["sourceHealth"];
+  executionAttentionReason?: string | null;
+  recordedBlocker?: WorkroomView["work"]["recordedBlocker"];
+  failedHandoffRecovery?: WorkroomView["work"]["failedHandoffRecovery"];
   /**
    * The subject's value-stream + lifecycle structure, pre-resolved by the loader via
    * `resolveWorkroomStructure` (kept out of this pure build, like `sourceHealth`).
@@ -68,10 +94,57 @@ export interface BuildWorkroomViewInput {
   shapeKey?: string | null;
   /** The room's activityKind, from the anchored Workroom. */
   activityKind?: string | null;
+  /** The anchored Workroom's change passes a governed gate chain (BI-D0DFE502). */
+  gateGoverned?: boolean;
   /** Raw scopeClaims of the anchored Workroom, for the declared-posture claim. */
   scopeClaims?: unknown;
   /** The instant the view is built. Passed in so the build stays deterministic. */
   now?: Date;
+  /** Optional observed execution state supplied by a lifecycle/drive loader. */
+  processOverseerObservation?: {
+    attentionReason?: string | null;
+    currentStageKey?: string | null;
+    proposedStageKey?: string | null;
+    /** Graph rooms only (GPP Phase 3c PR-3c-2): every stage the drive's marking holds. Absent means one current stage. */
+    currentStageKeys?: readonly string[];
+    /** Graph rooms only: each marked stage's current iteration (absent means 0). */
+    stageIterations?: Readonly<Record<string, number>>;
+    /** Graph rooms only (BI-086DC167): the run the marking belongs to; a run-scoped receipt counts only within it. */
+    runKey?: string;
+    receipts?: readonly { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
+    budgetUsage?: readonly { kind: string; used: number }[];
+    stopConditionHits?: readonly string[];
+    reviewDue?: boolean;
+    proposedGrants?: readonly string[];
+    coordinatorHasProcessCoordinationAuthority?: boolean;
+    independentEvaluatorPrincipalRef?: string | null;
+    independentApproverPrincipalRef?: string | null;
+    closing?: boolean;
+    unresolvedDeviationCount?: number;
+    coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
+  };
+}
+
+/**
+ * Graph rooms only (GPP Phase 3c PR-3c-2, design §4.3 "Room view"): the
+ * marked stages in document order, echoed on the check so the view marks each
+ * one current, and the flow-aware order check the drive itself runs, so a
+ * legal parallel position is not read as out of order by the index rules.
+ * Nothing for a sequential room, whose observation carries no marked stages.
+ */
+function graphStageOrder(
+  shape: WorkShapeDefinition,
+  observation: BuildWorkroomViewInput["processOverseerObservation"],
+): Pick<WorkroomShapeConformanceInput, "currentStageKeys" | "flowOrder"> {
+  const marked = observation?.currentStageKeys;
+  if (!marked) return {};
+  const keys = shape.stages.map((stage) => stage.key).filter((key) => marked.includes(key));
+  const delivered = Object.fromEntries(shape.stages.map((stage) => [
+    stage.key,
+    (observation?.receipts ?? []).some((receipt) =>
+      isCompletingWorkroomDriveReceiptAt(receipt, stage.key, observation?.stageIterations?.[stage.key] ?? 0, observation?.runKey)),
+  ]));
+  return { currentStageKeys: keys, flowOrder: { enabled: keys, delivered } };
 }
 
 function primarySourceRef(detail: WorkCaseDetail): WorkCaseSourceRef {
@@ -148,6 +221,7 @@ export function buildWorkroomView(
 
   const source = sourceEntryForDetail(input.detail);
   const participants = [...(input.participants ?? [])];
+  const recordedBlocker = input.detail.summary.terminal ? null : input.recordedBlocker ?? null;
   const context: WorkroomContextView = {
     refs: dedupeRoomSourceRefs(input.context?.refs ?? []),
     digest: roomText(input.context?.digest),
@@ -160,7 +234,13 @@ export function buildWorkroomView(
     context,
     contextProvided: Boolean(input.context),
   });
-  const mode = source?.roomProjection.mode ?? "finite";
+  // The room's own declared shape decides its mode, not the source entry alone
+  // — otherwise a standing room renders as finite while its cycle projects
+  // standing, and the two halves of the same room disagree (BI-97B24FB5).
+  const declaredShapeKey = readDeclaredWorkShapeKey(input.scopeClaims);
+  const mode = source
+    ? resolveRoomProjectionMode(caseRefForDetail(input.detail).sourceType, declaredShapeKey)
+    : "finite";
   const health = sourceHealth(input, source);
   const standingIdle = mode === "standing" && !input.currentCycle;
   const posture = resolveWorkroomPosture(
@@ -171,6 +251,7 @@ export function buildWorkroomView(
       cycleActive: Boolean(input.currentCycle),
       dueAt: boundary.timeBoundary.dueAt,
       declaration: readWorkroomPostureClaim(input.scopeClaims),
+      gateGoverned: input.gateGoverned ?? false,
     },
     input.postureContext ?? null,
     input.now ?? new Date(),
@@ -185,6 +266,7 @@ export function buildWorkroomView(
   const currentCycleRef = cycleRef(currentCycle);
   const executionRefs = dedupeRoomSourceRefs([
     ...activeCapsuleRefs,
+    ...sourceRefs.filter((ref) => ref.kind === "task-run"),
     ...(currentCycle?.sourceRefs ?? []).filter(
       (ref) =>
         ref.kind === "work-item"
@@ -193,9 +275,67 @@ export function buildWorkroomView(
     ),
   ]);
   const caseRef = caseRefForDetail(input.detail);
+  const now = input.now ?? new Date(0);
+  const declaredShape = readWorkShapeClaim(input.scopeClaims);
+  const resolvedShape = resolveWorkShapeClaim(input.scopeClaims);
+  const observation = input.processOverseerObservation;
+  const processOverseer = !declaredShape
+    ? projectUnshapedWorkroomConformance({
+        roomKey: caseRef.caseId,
+        collaborationShape: input.shapeKey ?? null,
+        participants,
+        checkedAt: now,
+      })
+    : !resolvedShape
+      ? projectUnresolvedWorkroomShapeConformance({
+          roomKey: caseRef.caseId,
+          collaborationShape: input.shapeKey ?? null,
+          participants,
+          shapeKey: declaredShape.key,
+          shapeVersion: declaredShape.version,
+          registeredVersion: getWorkShape(declaredShape.key)?.version ?? null,
+          checkedAt: now,
+        })
+      : evaluateWorkroomShapeConformance({
+          roomKey: caseRef.caseId,
+          ...graphStageOrder(resolvedShape, observation),
+          definition: readWorkShapeDefinitionContract(resolvedShape),
+          collaborationShape: input.shapeKey ?? resolvedShape.collaborationShape,
+          participants,
+          currentStageKey: observation?.currentStageKey ?? null,
+          proposedStageKey: observation?.proposedStageKey
+            ?? resolvedShape.stages[0]?.key
+            ?? null,
+          receipts: observation?.receipts ?? [],
+          budgetUsage: observation?.budgetUsage ?? [],
+          stopConditionHits: observation?.stopConditionHits ?? [],
+          reviewDue: observation?.reviewDue ?? false,
+          proposedGrants: observation?.proposedGrants,
+          coordinatorHasProcessCoordinationAuthority:
+            observation?.coordinatorHasProcessCoordinationAuthority ?? true,
+          independentEvaluatorPrincipalRef: observation?.independentEvaluatorPrincipalRef,
+          independentApproverPrincipalRef: observation?.independentApproverPrincipalRef,
+          closing: observation?.closing,
+          unresolvedDeviationCount: observation?.unresolvedDeviationCount,
+          coordinatorEligibility: observation?.coordinatorEligibility,
+          checkedAt: now,
+        });
+
+  const processNeedsAttention = !input.detail.summary.terminal
+    && ["pause", "escalate", "stop"].includes(processOverseer.disposition);
+  const processAttention = processNeedsAttention
+    ? processOverseer.interventionReason ?? "The process check requires attention before work continues."
+    : null;
+  const driveAttention = input.detail.summary.terminal ? null : observation?.attentionReason;
 
   return {
     roomKey: input.caseKey,
+    delivery: mode === "finite" ? projectDeliveryAgreement({ workspaceState: input.deliveryState, currentObjective: boundary.outcome, terminal: input.detail.summary.terminal }) : null,
+    reviewProfile: {
+      source: composeRoomReviewProfile(caseRef.sourceType, []),
+      applicability: "unknown",
+      assessment: "not-exercised",
+    },
     caseRef,
     identity: {
       definition: getWorkroomDefinitionIdentity(caseRef.sourceType),
@@ -221,15 +361,30 @@ export function buildWorkroomView(
     },
     boundary,
     currentCycle,
+    cycleProjectionError: input.cycleProjectionError ?? null,
     completedCycles: [...(input.completedCycles ?? [])],
     participants,
     activity: normalizeWorkroomActivities(input.activities ?? []),
     work: {
-      nextAction: standingIdle
+      recordedBlocker,
+      failedHandoffRecovery: input.detail.summary.terminal ? null : input.failedHandoffRecovery ?? null,
+      nextAction: processNeedsAttention
+        ? "Resolve the process check before continuing"
+        : input.executionAttentionReason
+        ? "Inspect Observed execution for the reviewer status and required action."
+        : driveAttention
+        ? driveAttention
+        : recordedBlocker
+        ? "Inspect the recorded blocker before continuing."
+        : standingIdle
         ? "Open next cycle"
+        : input.detail.summary.state === "triage"
+          && input.detail.summary.nextAction === "Assign owner"
+          && boundary.accountablePrincipalRef
+        ? "Review the next step with the accountable owner"
         : input.detail.summary.nextAction,
-      attentionRequired: input.detail.summary.attention.required,
-      attentionReason: input.detail.summary.attention.reason,
+      attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || Boolean(driveAttention) || Boolean(recordedBlocker) || input.detail.summary.attention.required,
+      attentionReason: [processAttention, input.executionAttentionReason, driveAttention, recordedBlocker ? "Work is blocked." : input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
       blockingActorKind: blockingActorKindForState(input.detail.summary.state),
       activeCapsuleRefs,
       activeTaskRunSummary: null,
@@ -238,7 +393,9 @@ export function buildWorkroomView(
     },
     context,
     posture,
+    processOverseer,
     receipts: [...(input.receipts ?? [])],
+    reviewerRuns: input.reviewerRuns ?? [],
     sourceRefs,
     structure: input.structure ?? null,
     projection: {

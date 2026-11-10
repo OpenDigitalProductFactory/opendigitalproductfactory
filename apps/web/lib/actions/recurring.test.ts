@@ -29,9 +29,6 @@ import { prisma } from "@dpf/db";
 import { createInvoice, sendInvoice } from "@/lib/actions/finance";
 import {
   createRecurringSchedule,
-  getRecurringSchedule,
-  listRecurringSchedules,
-  updateScheduleStatus,
   calculateNextDate,
   generateDueInvoices,
 } from "./recurring";

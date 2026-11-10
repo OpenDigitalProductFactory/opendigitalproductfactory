@@ -14,6 +14,10 @@ vi.mock("@/lib/platform/image-version", () => ({
   readImageVersion: vi.fn(),
 }));
 
+const closure = vi.hoisted(() => ({ resolveFeatureBuildDeploymentClosure: vi.fn() }));
+vi.mock("@/lib/backlog/initiative-readiness/deployment-closure", () => closure);
+vi.mock("@/lib/backlog/initiative-readiness/merge-delivery-signal", () => ({ mergeSignalRoots: () => ["/repo"] }));
+
 import { prisma } from "@dpf/db";
 import { execFileSync } from "node:child_process";
 import { readImageVersion } from "@/lib/platform/image-version";
@@ -31,6 +35,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   delete process.env.DEPLOYED_SHA;
   vi.mocked(readImageVersion).mockResolvedValue(null);
+  closure.resolveFeatureBuildDeploymentClosure.mockResolvedValue({ kind: "unavailable", reason: "none" });
 });
 
 // ─── getDeployedSha ──────────────────────────────────────────────────────────
@@ -139,6 +144,28 @@ describe("getBuildMergeSha", () => {
 // ─── isFeatureBuildDeployed ──────────────────────────────────────────────────
 
 describe("isFeatureBuildDeployed", () => {
+  // BI-1CDA479D: an upstream build's ProductVersion holds "unknown" or the
+  // sandbox HEAD, never its merge commit; the build's own room proves delivery.
+  it("is deployed when the build's room proves its merged PR is in the served image", async () => {
+    process.env.DEPLOYED_SHA = "d".repeat(40);
+    vi.mocked(prisma.featureBuild.findUnique)
+      .mockResolvedValueOnce({ productVersions: [{ gitCommitHash: "unknown" }] } as never)
+      .mockResolvedValueOnce({ id: "row-1" } as never);
+    vi.mocked(execFileSync).mockImplementation(() => { throw new Error("no .git in the image"); });
+    closure.resolveFeatureBuildDeploymentClosure.mockResolvedValue({ kind: "deployed" });
+    expect(await isFeatureBuildDeployed("FB-2E891686")).toBe(true);
+    expect(closure.resolveFeatureBuildDeploymentClosure).toHaveBeenCalledWith({ featureBuildRowId: "row-1", workType: null, roots: ["/repo"] });
+  });
+
+  it("is not deployed when the room cannot prove it", async () => {
+    process.env.DEPLOYED_SHA = "d".repeat(40);
+    vi.mocked(prisma.featureBuild.findUnique)
+      .mockResolvedValueOnce({ productVersions: [{ gitCommitHash: "unknown" }] } as never)
+      .mockResolvedValueOnce({ id: "row-1" } as never);
+    vi.mocked(execFileSync).mockImplementation(() => { throw new Error("no .git in the image"); });
+    expect(await isFeatureBuildDeployed("FB-2E891686")).toBe(false);
+  });
+
   it("returns false when neither DEPLOYED_SHA env nor image-version is set", async () => {
     vi.mocked(readImageVersion).mockResolvedValue(null);
     mockBuild("abc123def456");

@@ -13,10 +13,24 @@ vi.mock("@dpf/db", () => ({
 
 import { prisma } from "@dpf/db";
 import { recordExternalEvidence } from "./external-evidence";
+import { recordExternalEvidenceInStore } from "@/lib/observability/external-evidence-store";
 
 const mockPrisma = prisma as any;
 
 describe("external evidence", () => {
+  it("keeps evidence and capsule resolution within the supplied transaction", async () => {
+    const transaction = {
+      workroom: { findMany: vi.fn().mockResolvedValue([{ id: "room-transaction", executorKind: "codex" }]) },
+      externalEvidenceRecord: { create: vi.fn().mockResolvedValue({ id: "evidence-transaction" }) },
+    };
+    await recordExternalEvidenceInStore({ actorUserId: "user-1", routeContext: "change-review",
+      operationType: "semantic-change-review.receipt", target: "gate-1", provider: "reviewer",
+      resultSummary: "Review complete", buildId: "build-1" }, transaction as never);
+    expect(transaction.externalEvidenceRecord.create).toHaveBeenCalledWith({ data: expect.objectContaining({ workCapsuleId: "room-transaction" }) });
+    expect(mockPrisma.externalEvidenceRecord.create).not.toHaveBeenCalled();
+    expect(mockPrisma.workroom.findMany).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Default: no capsule linked to any build (the buildId-resolve path is a no-op).

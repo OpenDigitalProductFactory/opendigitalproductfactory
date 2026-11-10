@@ -58,6 +58,18 @@ describe("formatProviderBadge", () => {
 });
 
 describe("AgentMessageBubble", () => {
+  it("keeps a retained request legible and discloses its reference only under details", () => {
+    const html = renderToStaticMarkup(<AgentMessageBubble message={{
+      id: "foreground-receipt-TR-CHAT-example", role: "system",
+      content: "Your request is saved. Its progress and result will stay in this conversation.\n\nRequest reference: TR-CHAT-example",
+      agentId: "coo", routeContext: "/workspace/mailroom", createdAt: "2026-10-29T00:00:00.000Z",
+    }} showAgentLabel={false} agentName={null} />);
+    expect(html).toContain("font-size:14px");
+    expect(html).toContain("<details><summary>Your request is saved.");
+    expect(html).not.toContain("<details open");
+    expect(html).toContain("Your request is saved");
+    expect(html).toContain("TR-CHAT-example");
+  });
   it("announces system recovery messages as status updates", () => {
     const html = renderToStaticMarkup(
       <AgentMessageBubble
@@ -464,5 +476,35 @@ describe("AgentMessageBubble — system-prompt prefix strip (BI-253ADC70 D5/D9)"
 
     // User-typed content is preserved verbatim so we cannot lose user intent.
     expect(html).toContain("[Setup step:");
+  });
+});
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S1): an assistant message lists
+// the approval requests raised for it, each with the shared Authorize/Decline
+// surface. Nothing renders for a message without them.
+describe("AgentMessageBubble — inline approval requests", () => {
+  const message = {
+    id: "m-1", role: "assistant" as const, content: "I'd like to share this finding.",
+    agentId: "AGT-COWORKER", routeContext: "/workspace", createdAt: "2026-10-07T00:00:00.000Z",
+  };
+  const request = (envelopeId: string) => ({
+    envelopeId, toolName: "contribute_to_hive", status: "proposed",
+    expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), rationale: "This action is defined as a proposal, so a person decides it.",
+  });
+
+  it("renders one decision card per request, with Authorize and Decline", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageBubble message={{ ...message, approvalRequests: [request("ENV-1"), request("ENV-2")] }} showAgentLabel agentName="Coworker" />,
+    );
+    expect(html.match(/data-testid="inline-approval-request"/g)).toHaveLength(2);
+    expect(html.match(/>Authorize</g)).toHaveLength(2);
+    expect(html.match(/>Decline</g)).toHaveLength(2);
+    expect(html).toContain("contribute to hive");
+    expect(html).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
+  });
+
+  it("renders no approval surface for a message without requests", () => {
+    const html = renderToStaticMarkup(<AgentMessageBubble message={message} showAgentLabel agentName="Coworker" />);
+    expect(html).not.toContain("inline-approval-request");
   });
 });

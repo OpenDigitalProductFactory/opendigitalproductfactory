@@ -273,7 +273,7 @@ function mapProvenanceToRawSourceType(
  *   3. Run the three-pass LLM proposer to extract claims/stances/heuristics.
  *   4. Commit the proposal: create draft pages, append to existing published
  *      ones, write WikiPageRevisions, link WikiPageSource citations.
- *   5. For each touched page: embed it into Qdrant (fail-open) and upsert a
+ *   5. For each touched page: embed it into the vector store (fail-open) and upsert a
  *      PerspectiveMaterial row linking the page to the org's
  *      DecisionPerspectiveProfile current version. Material state reflects
  *      the trust level (researched → draft/candidate; first-party/derived →

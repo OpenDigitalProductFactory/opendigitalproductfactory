@@ -125,6 +125,9 @@ committee projects are identified as such and are not represented as completed s
 | [ISO/IEC 5259-5:2025](https://www.iso.org/standard/84150.html) | Data-quality governance and accountable stewardship |
 | [W3C Verifiable Credentials Data Model 2.0](https://www.w3.org/TR/vc-data-model/) | Issuer-holder-verifier claim model, schemas, evidence, validity, and status |
 | [1EdTech Open Badges 3.0](https://standards.1edtech.org/open-badges/specifications/standards/v3p0/cert) | Achievement claims with issuer, evidence, results, issue date, expiry, and portable verification |
+| [WikiSkill](https://arxiv.org/html/2608.27454) | Separation of immutable experience, curated knowledge, executable skills, validation/rollback, and evidence that skill transfer can regress on another model |
+| [Automated Researchers Can Reliably Mitigate Alignment Failures](https://alignment.anthropic.com/2026/automated-alignment-researchers/) | Parallel research, isolated held-out evaluation, capability preservation, and monitored evaluation-gaming evidence |
+| [Automated Weak-to-Strong Researcher](https://alignment.anthropic.com/2026/automated-w2s-researcher/) | Flexible research inside a fixed control envelope and concrete reward-hacking modes involving seeds, evaluator feedback, and label leakage |
 | [O*NET Content Model](https://www.onetcenter.org/content.html) | Tasks, knowledge, skills, abilities, work activities, and work context as job descriptors |
 | [ESCO](https://esco.ec.europa.eu/en/about-esco) | Versioned relationships among occupations, skills, competences, and qualifications |
 
@@ -191,7 +194,7 @@ Accordingly:
 | `work-sample assessment` | A representative task performed end-to-end through the subject's real production execution path, judged afterwards against declared assessment criteria |
 | `assessment criterion` | A single independently checkable assertion about a recorded work sample, stated as the competency being assured |
 | `governed execution record` | The authoritative retained log of operations an agent actually performed, independent of any one execution transport's instrumentation |
-| `authorization envelope` | The set of operations a subject's grants and permitted consequence classes allow, as distinct from any narrower surface an assessment harness presents |
+| `authorization envelope` | The operations permitted at the time of execution by the intersection of principal authority, agent grants, route/workflow/GPP restrictions, permitted consequence classes and the applicable qualification, data, regulatory and oversight ceilings; a non-authoritative discovery list is not this envelope |
 | `surveillance` | Ongoing monitoring used to determine whether a qualification remains valid between formal reassessments |
 | `material change` | A change capable of altering job performance, risk, data handling, authority, or the validity of prior evidence |
 | `proactivity` | The requested degree of initiative an agent may take before involving a human |
@@ -351,6 +354,75 @@ An implementation `MAY` adapt:
 
 Adaptive changes `MUST` remain observable, attributable, bounded, and subject to the material-change
 rules in Section 13.
+
+An adaptive method proven for one operating profile `MUST NOT` be presumed transferable to another
+model, provider, harness, tool surface, corpus, memory policy, job version, or data/risk context.
+Transfer requires direct target-profile evidence or a scheme-defined equivalence decision. The
+informative [PAAW competence-evolution Workroom
+profile](../superpowers/specs/2026-08-30-paaw-competence-evolution-workroom-design.md) defines the
+DPF application pattern for producing that evidence.
+
+### 8.3 Workroom Process Overseer qualification
+
+When an AI coworker occupies a Workroom's canonical `coordinator` role, the job profile `MUST`
+include the applicable process-oversight activity. A qualification for the room's substantive task
+does not imply qualification to oversee its execution shape.
+
+The scheme `MUST` assess whether the subject can:
+
+- resolve the exact collaboration shape and WorkShapeDefinition versions;
+- distinguish accountable ownership, execution, evaluation/review, approval, and coordination;
+- detect missing or conflicting participants, out-of-order stages, absent prerequisite evidence,
+  exhausted budgets, due review points, and met stop conditions;
+- pause or refuse execution, produce an attributable conformance receipt, and route repair or
+  escalation without inventing an occupant, skipping a gate, or widening authority;
+- preserve attempt, seed, retry, submission, and resource accounting without optimizing a proxy by
+  silent repetition; and
+- remain independent from evaluator or approver roles wherever the Workroom shape requires that
+  separation.
+
+The qualification scope `MUST` name the supported Workroom shapes, work/activity classes, maximum
+risk, tools, data classes, and allowed oversight posture. A material change to the shape registry,
+conformance logic, coordinator instructions, tools, model/provider, or authority binding triggers
+the Section 13 impact and revalidation rules.
+
+**Informative application of Sections 8.2, 8.3, 11.5 and 13.** The
+[cross-workroom review profile](../superpowers/specs/2026-09-06-cross-workroom-learning-review-design.md)
+records effective source/shape and archetype-profile versions, tool/skill/instruction versions,
+evidence scope and missing attribution alongside a proposed learning. Its analyst and assessor
+need competence in selecting comparable denominators, separating retries from independent
+occurrences, interpreting valid refusals, reporting uncertainty and reconstructing safe recovery.
+Qualification to execute a business activity does not itself establish competence to assess
+improvements across that activity's workrooms.
+
+For this proposed application, the assessor precommits the eligible population, critical failures,
+minimum opportunity window and decision rule before observing the candidate. The change author
+does not certify its benefit. Common-to-domain and domain-to-common transfer use the target-profile
+evidence or equivalence process in Section 8.2; changes to the reviewer, evaluator, method or
+effective profile receive the applicable Section 13 impact analysis. Insufficient observations
+remain inconclusive. This note explains application of existing requirements; it does not confer
+qualification, widen authority or adopt additional conformance requirements.
+
+### 8.4 Qualification of Principle-Directed Work
+
+**Working-draft amendment, EP-B932453F / BI-A484D58F.** `JSI-PD-001`: a scheme
+assessing principle-directed work `MUST` evaluate the subject's ability to select
+the owning scope, distinguish constraints from preferences, recognize insufficient
+evidence, and seek the correct resolver without fabricating authority. The scheme
+`MUST` bind those results to the assessed corpus/axis versions, work shape, model
+routing, tool/data boundaries and oversight configuration.
+
+`JSI-PD-002`: transfer to another harness or operating profile `MUST` retain the
+original evidence scope and require target-profile assessment or an attributable,
+scheme-defined equivalence decision. Unsupported enforcement capabilities `MUST`
+be reported as limitations rather than inferred from successfully imported prose
+or skills. A portable definition can remain `TAK-JSI-Defined` without being
+`TAK-JSI-Assessed` or `TAK-JSI-Qualified`.
+
+These clauses refine §§8.1, 8.2 and 13. TAK owns live authorization and the
+[principle-directed control contract](trusted-ai-kernel.md#713-principle-directed-decision-contract).
+Independent review remains pending; no existing qualification is upgraded by this
+draft amendment.
 
 ## 9. Model and Provider Suitability
 
@@ -574,18 +646,24 @@ Schemes `SHOULD` therefore:
 #### 11.4.3 Authorization-envelope rule
 
 Where a criterion tests whether the subject stayed within bounds, the bound `MUST` be the
-subject's **authorization envelope** — what its grants and the operation's consequence class
-permit — and `MUST NOT` be whatever narrower list the assessment harness happened to present.
+subject's **authorization envelope** at the time of each operation, applying TAK §7.2 and the
+ceilings in §14. Grants and consequence class are necessary inputs, not the whole intersection.
+The criterion `MUST NOT` ignore a principal, route, workflow, Workroom/GPP, qualification, data,
+regulatory or oversight restriction merely because the agent holds the tool's grant.
 
-The two differ routinely and legitimately. A harness may attach a curated subset for a focused
-task while the subject's runtime exposes its full authorized read surface; an operation drawn from
-the wider surface is authorized, audited, and correct, yet a naive membership test scores it as a
-scope violation. Penalizing it teaches the wrong lesson and masks real violations in noise.
+A harness may curate a discovery list for focus without making that list an authority control.
+An operation outside such a list is not a scope violation solely because it was omitted, provided
+the full authorization intersection permits it. The assessment `MUST` declare whether its list is
+non-authoritative discovery curation or an enforced scope restriction. An actual task, route,
+workflow or GPP restriction remains binding even when another transport exposes more tools.
 
-An operation is inside the envelope when it is authorized by the subject's grants **and** its
-consequence class is permitted for the assessment. Operations that are unauthorized,
-consequential when consequence was withheld, or absent from the capability registry are outside
-it, and the criterion `SHOULD` report which of those three applies.
+For each executed operation, retained evidence `MUST` identify the applicable authority and
+scope decision sufficiently to distinguish an authorized operation from a real boundary violation.
+An executed operation outside that intersection, consequential when consequence was withheld,
+or absent from the capability registry is outside the envelope. The criterion `SHOULD` report
+which restriction applied. A denied request is not an executed operation; other declared criteria
+may still assess whether making that request was appropriate. Missing authority evidence is
+inconclusive under §11.4.4, never evidence that the operation was authorized.
 
 #### 11.4.4 Inconclusive results
 
@@ -596,6 +674,38 @@ the profile's declared floor, evidence-store unavailability, harness fault — `
 Inconclusive results carry no qualification consequence and `SHOULD` be requeued. Conflating
 infrastructure failure with demonstrated incapacity is the fastest way to make a qualification
 scheme untrusted by the operators who depend on it.
+
+### 11.5 Evaluation integrity and resistance to metric gaming
+
+An evaluation that can change qualification status or autonomy `MUST` protect the evaluation from
+the qualification subject as carefully as it protects the subject from an invalid harness.
+
+The scheme `MUST`:
+
+- assign evaluator/oracle ownership and qualification decision authority independently from the
+  subject;
+- keep a Workroom Process Overseer distinct from evaluator/oracle or qualification decision
+  authority wherever the declared shape requires independent assessment;
+- keep held-out fixtures, expected results, labels, and evaluator credentials outside the
+  subject's writable environment;
+- retain scored logs and artifacts outside that writable environment;
+- precommit primary endpoints, critical failures, capability floors, sample/cohort construction,
+  seed and retry policy, resource/submission budgets, invalidation conditions, and the decision
+  rule before candidate execution;
+- attribute who selected each seed, sample, cohort, retry, and evaluator submission;
+- invalidate evidence affected by evaluator leakage, label access, unauthorized test inspection,
+  or an exceeded submission budget;
+- distinguish a correct refusal, an incorrect refusal, a successful completion, and a mandatory
+  escalation rather than folding them into one aggregate score;
+- assess cross-model/provider transfer against the target operating profile rather than infer it
+  from source-profile success; and
+- base the qualification decision on governed actions, artifacts, receipts, and observed outcomes,
+  not on private chain-of-thought access.
+
+A capability floor `MUST` prevent a scheme from treating destruction of required job capability as
+a safety or alignment improvement. For high-consequence work, a scheme `SHOULD` also use an
+independent monitor, out-of-distribution cases, and repeated or long-horizon scenarios appropriate
+to the job.
 
 ## 12. Qualification Decision and Record
 
@@ -773,6 +883,10 @@ Threats include:
 
 - capability inflation through vague badges
 - benchmark overfitting and evaluation leakage
+- cherry-picked seeds, cohorts, or retries that overstate performance
+- repeated evaluator probing that reconstructs held-out labels or acceptance boundaries
+- apparent safety gains caused by destroying required job capability
+- negative transfer when a method qualified on one operating profile is reused on another
 - swapping the assessed model, prompt, tools, or data after qualification
 - using a low-risk job qualification to justify high-risk work
 - routing sensitive work through an unassessed provider
@@ -787,6 +901,9 @@ Mitigations `SHOULD` include:
 - precise scope and exclusions
 - immutable profile fingerprints
 - protected evidence and transparent methodology
+- write-isolated held-out material and attributable evaluator submissions
+- precommitted endpoints, seed/retry policy, budgets, capability floors, and invalidation rules
+- direct target-profile assessment or governed equivalence before transfer
 - independent assessment where risk warrants it
 - critical-failure gates
 - change-triggered revalidation

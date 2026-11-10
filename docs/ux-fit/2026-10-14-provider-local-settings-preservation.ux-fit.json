@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "decidedOption": "compact-account-disclosure",
+  "decisionInteractionId": "DI-BE29BCA0E998",
+  "scope": {
+    "files": ["apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["compact-account-disclosure", "expanded-provider-catalog"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "evidenceClass": "Repair within the founder-approved preservation inventory and compact-disclosure choice: Local/optional Ollama intentionally omit cloud account declarations, but that branch must retain their existing settings and usage owners. Reuse ProviderDetailSections for Provider settings and ProviderUsageDetails for cost sources, finance and recipes. No new credential, policy, billing, installation or model operation; write permission still flows to the existing form. Source regression and containing served acceptance are separate evidence."
+  }
+}

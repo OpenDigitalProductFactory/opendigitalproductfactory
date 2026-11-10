@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { can, getAccessibleSectionNavEntries } from "@/lib/permissions";
 import { CustomerTabNav } from "@/components/customer/CustomerTabNav";
+import { loadOwnerFirstContext } from "@/lib/owner-first/context";
+import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
 
 export default async function CustomerLayout({
   children,
@@ -25,10 +27,12 @@ export default async function CustomerLayout({
     notFound();
   }
 
-  const tabs = getAccessibleSectionNavEntries(access, "/customer").map((entry) => ({
+  const accessibleTabs = getAccessibleSectionNavEntries(access, "/customer").map((entry) => ({
     label: entry.label,
     href: entry.href,
   }));
+  const { archetypeId } = await loadOwnerFirstContext();
+  const { tabs } = resolveCustomerSurface(archetypeId, accessibleTabs);
 
   return (
     <div>

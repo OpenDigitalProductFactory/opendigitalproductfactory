@@ -7,70 +7,33 @@
 // instead of re-implementing `evaluate_page`'s browser-use protocol or
 // `record_functional_failure_evidence`'s backlog dedup.
 //
-// Config resolution matches the pre-existing e2e evidence fixture (which now
-// shares this module): explicit env first, then the repo's .mcp.json.
-
-import { readFile } from "node:fs/promises";
+// Config resolution is shared with the e2e evidence fixture
+// (e2e/fixtures/evidence.ts) and follows the gate scripts (scripts/pregate.mjs):
+// DPF_MCP_URL, else the local endpoint, with the bearer from the environment.
+// No project .mcp.json is read (BI-5201141C): on https no writer produces one,
+// because Claude Code's dpf connector is the plugin's URL-only OAuth
+// descriptor, which carries no token a script could reuse.
 
 export type DpfMcpConfig = { url: string; authorization: string };
 
-/**
- * Expand `${VAR}` placeholders against an environment map. The repo's committed
- * .mcp.json stores the bearer as the literal string `Bearer ${DPF_MCP_BEARER_TOKEN}`
- * — MCP clients expand it, a raw fetch does not. Expanding here is what keeps a
- * plain HTTP caller from sending the placeholder and getting a 401.
- */
-export function expandEnvPlaceholders(
-  value: string,
-  env: Record<string, string | undefined> = process.env,
-): string {
-  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name: string) => env[name] ?? match);
-}
+/** The scripted-caller default, the same local endpoint the gate scripts use. */
+export const DEFAULT_DPF_MCP_SCRIPT_URL = "http://127.0.0.1:3000/api/mcp/v1";
 
 function bearer(token: string): string {
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 }
 
 /**
- * Resolve MCP endpoint + bearer. Explicit env wins per field; the repo's
- * .mcp.json supplies whatever env does not, with `${VAR}` placeholders expanded.
- * Active standard is DPF_MCP_BEARER_TOKEN; DPF_MCP_TOKEN stays for back-compat
- * (BI-14E9F7CE). Returns null when the bearer cannot be resolved to a real value
- * — an unexpanded placeholder counts as unresolved, not as a token.
+ * Resolve MCP endpoint + bearer from the environment. Active standard is
+ * DPF_MCP_BEARER_TOKEN; DPF_MCP_TOKEN stays for back-compat (BI-14E9F7CE).
+ * Returns null when no bearer is configured.
  */
-export async function resolveDpfMcpConfig(
-  mcpJsonPath = ".mcp.json",
+export function resolveDpfMcpConfig(
   env: Record<string, string | undefined> = process.env,
-): Promise<DpfMcpConfig | null> {
-  const raw = await readFile(mcpJsonPath, "utf8").catch(() => null);
-
-  let fileUrl: string | undefined;
-  let fileAuth: string | undefined;
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as {
-        mcpServers?: { dpf?: { url?: string; headers?: { Authorization?: string } } };
-      };
-      fileUrl = parsed.mcpServers?.dpf?.url;
-      fileAuth = parsed.mcpServers?.dpf?.headers?.Authorization;
-    } catch {
-      // Malformed config — fall through to env-only resolution.
-    }
-  }
-
-  const envToken = env.DPF_MCP_BEARER_TOKEN ?? env.DPF_MCP_TOKEN;
-  const authorization = envToken
-    ? bearer(envToken)
-    : fileAuth
-      ? expandEnvPlaceholders(fileAuth, env)
-      : undefined;
-
-  if (!authorization || authorization.includes("${")) return null;
-
-  const url = env.DPF_MCP_URL ?? (fileUrl ? expandEnvPlaceholders(fileUrl, env) : undefined);
-  if (!url || url.includes("${")) return null;
-
-  return { url, authorization };
+): DpfMcpConfig | null {
+  const token = env.DPF_MCP_BEARER_TOKEN ?? env.DPF_MCP_TOKEN;
+  if (!token) return null;
+  return { url: env.DPF_MCP_URL || DEFAULT_DPF_MCP_SCRIPT_URL, authorization: bearer(token) };
 }
 
 type McpCallResponse = {

@@ -6,18 +6,27 @@ import {
   normalizePriorityClass,
   slugifyReferenceModelName,
 } from "./reference-model-import.js";
-import { readWorkbook, requireSheetData, sheetDataToObjects } from "./excel-sheet-reader.js";
-import type {
-  FunctionalCriteriaRow,
-  ParticipationMatrixRow,
-  ValueStreamActivityRow,
-} from "./reference-model-types.js";
+import { IT4IT_REFERENCE_JSON_PATH, loadIt4itReferenceRows } from "./it4it-reference-data.js";
+import {
+  referenceModelAppliesToInstall,
+  type InstallArchetype,
+} from "./reference-model-applicability";
+
+// Re-exported so the seed stays the one place callers already know to look for
+// this rule; the rule itself now lives in one module the read path shares
+// (BI-C44EAEE6).
+export {
+  REFERENCE_MODEL_ARCHETYPES,
+  describeReferenceModelApplicability,
+  referenceModelAppliesToInstall,
+  type InstallArchetype,
+} from "./reference-model-applicability";
+
 
 // __dirname is packages/db/src at runtime (tsx) — three levels up is repo root (/app in container).
 // The prior four-level climb landed at / and made the IT4IT workbook unfindable on every install.
 const REPO_ROOT = process.env.DPF_DATA_ROOT ?? join(__dirname, "..", "..", "..");
 const REFERENCE_ROOT = join(REPO_ROOT, "docs", "Reference");
-const IT4IT_WORKBOOK_PATH = join(REFERENCE_ROOT, "IT4IT_Functional_Criteria_Taxonomy.xlsx");
 
 function slugifyPart(value: string): string {
   return value
@@ -29,44 +38,6 @@ function slugifyPart(value: string): string {
 
 function buildElementSlug(kind: string, ...parts: string[]): string {
   return [kind, ...parts.map(slugifyPart)].filter(Boolean).join("__");
-}
-
-async function loadIt4itWorkbook() {
-  const workbook = await readWorkbook(IT4IT_WORKBOOK_PATH);
-
-  const functionalRows = sheetDataToObjects(requireSheetData(workbook, "IT4IT Functional Criteria"));
-  const valueStreamRows = sheetDataToObjects(requireSheetData(workbook, "Value Stream Activities"));
-  const participationRows = sheetDataToObjects(requireSheetData(workbook, "FC Participation Matrix"));
-
-  return {
-    functionalRows: functionalRows.map<FunctionalCriteriaRow>((row) => ({
-      capabilityGroup: String(row["Level 1: Capability Group"] ?? "").trim(),
-      functionName: String(row["Level 2: Function"] ?? "").trim(),
-      componentName: String(row["Level 3: Functional Component"] ?? "").trim(),
-      criteria: String(row["Functional Criteria"] ?? "").trim(),
-      referenceSection: row["Reference Section"] == null ? null : String(row["Reference Section"]).trim(),
-    })),
-    valueStreamRows: valueStreamRows.map<ValueStreamActivityRow>((row) => ({
-      valueStream: String(row["Value Stream"] ?? "").trim(),
-      valueStreamStage: String(row["Value Stream Stage"] ?? "").trim(),
-      criteria: String(row["Activity Criteria"] ?? "").trim(),
-      referenceSection: row["Reference Section"] == null ? null : String(row["Reference Section"]).trim(),
-    })),
-    participationRows: participationRows.map<ParticipationMatrixRow>((row) => {
-      const participationByColumn: Record<string, string | null> = {};
-      for (const [key, value] of Object.entries(row)) {
-        if (key === "Value Stream" || key === "Value Stream Stage" || key === "Ref") continue;
-        participationByColumn[key] = value == null ? null : String(value).trim();
-      }
-
-      return {
-        valueStream: String(row["Value Stream"] ?? "").trim(),
-        valueStreamStage: String(row["Value Stream Stage"] ?? "").trim(),
-        reference: row["Ref"] == null ? null : String(row["Ref"]).trim(),
-        participationByColumn,
-      };
-    }),
-  };
 }
 
 async function upsertElement(args: {
@@ -167,6 +138,32 @@ const BIAN_SD_TO_CAPABILITY_KEY: Readonly<Record<string, string>> = {
   "Credit Management": "bian-credit-management",
   "Fraud Resolution": "bian-fraud-resolution",
 };
+
+/**
+ * Read the install's setup-chosen archetype. `StorefrontConfig.archetypeId` is a
+ * cuid FK, not a slug, so the join to StorefrontArchetype is required to reach
+ * the category/id slugs the applicability lists are written in.
+ *
+ * Returns nulls when setup has not run yet. That is treated as "not applicable"
+ * below rather than "applicable": seeding a banking hierarchy onto an install
+ * that has not said it is a bank is the defect being fixed. The seed is
+ * idempotent and runs on every boot and upgrade, so an install that later
+ * declares banking imports the hierarchy on its next seed.
+ */
+async function resolveInstallArchetype(): Promise<InstallArchetype> {
+  const config = await prisma.storefrontConfig.findFirst({
+    select: { archetypeId: true },
+  });
+  if (!config) return { category: null, archetypeId: null };
+  const archetype = await prisma.storefrontArchetype.findUnique({
+    where: { id: config.archetypeId },
+    select: { archetypeId: true, category: true },
+  });
+  return {
+    category: archetype?.category ?? null,
+    archetypeId: archetype?.archetypeId ?? null,
+  };
+}
 
 async function seedBianReferenceModel(modelId: string): Promise<void> {
   const BIAN_JSON_PATH = join(REFERENCE_ROOT, "bian", "bian-v14-service-landscape.json");
@@ -293,7 +290,10 @@ export async function seedEaReferenceModels(): Promise<void> {
     });
   }
 
-  const { functionalRows, valueStreamRows, participationRows } = await loadIt4itWorkbook();
+  // BI-B470264D: committed JSON generated from the workbook at dev time. The
+  // seed never parses the .xlsx, so neither a spreadsheet parser nor LFS
+  // content in the image is on the portal-init path (BI-FEE26C36).
+  const { functionalRows, valueStreamRows, participationRows } = loadIt4itReferenceRows();
 
   const domainIds = new Map<string, string>();
   const functionIds = new Map<string, string>();
@@ -466,26 +466,52 @@ export async function seedEaReferenceModels(): Promise<void> {
     },
   });
 
-  await seedBianReferenceModel(bianModel.id);
+  // The MODEL ROW above is catalogue and is always upserted — it carries
+  // primaryIndustry, so a non-banking install can still see that BIAN exists
+  // and what it is for. That mirrors seed-banking-compliance.ts, which seeds
+  // banking regulations everywhere and scopes them at consumption.
+  //
+  // The ELEMENT HIERARCHY is different: it is ~390 rows of banking-specific
+  // structure that a software-platform, dry-cleaning or field-service install
+  // has no use for, and — until now — a zero count for it FAILED the seed on
+  // every one of those installs. Import it only where it applies.
+  const install = await resolveInstallArchetype();
+  const bianApplies = referenceModelAppliesToInstall(bianSlug, install);
+  if (bianApplies) {
+    await seedBianReferenceModel(bianModel.id);
+  }
 
-  // BI-98D19DF2: a workbook read that silently yields zero rows (e.g. an
-  // LFS pointer stub masquerading as the real .xlsx, or a JSON schema
-  // change that empties every extracted row) must fail loudly here rather
-  // than let the seed report success while a fresh install imports
-  // nothing. Row-count assertion, not just absence of a thrown error.
-  const [it4itElementCount, bianElementCount] = await Promise.all([
-    prisma.eaReferenceModelElement.count({ where: { modelId: model.id } }),
-    prisma.eaReferenceModelElement.count({ where: { modelId: bianModel.id } }),
-  ]);
-
+  // BI-98D19DF2: a workbook/JSON read that silently yields zero rows (e.g. an
+  // LFS pointer stub masquerading as the real .xlsx, or a schema change that
+  // empties every extracted row) must fail loudly here rather than let the
+  // seed report success while a fresh install imports nothing. Row-count
+  // assertion, not just absence of a thrown error.
+  //
+  // BI-DDB48B04 follow-on: assert only over models this install actually
+  // needs. The original assertion demanded a non-zero BIAN count from every
+  // install, so on any non-banking install the eaReferenceModels step threw
+  // and — because seed steps are caught and logged, not fatal (seed.ts
+  // `step()`) — failed silently on every boot and every upgrade. That is the
+  // same "seed reports success while importing nothing" shape this assertion
+  // was written to prevent, inverted: an assertion asserting the wrong thing
+  // is as blind as no assertion at all.
+  const it4itElementCount = await prisma.eaReferenceModelElement.count({
+    where: { modelId: model.id },
+  });
   if (it4itElementCount === 0) {
     throw new Error(
-      `IT4IT reference model imported zero elements from ${IT4IT_WORKBOOK_PATH} — the workbook read did not throw but produced no rows (check for an LFS pointer stub or an empty/relabelled sheet).`
+      `IT4IT reference model imported zero elements from ${IT4IT_REFERENCE_JSON_PATH} — the read did not throw but produced no rows (regenerate it with scripts/generate-it4it-reference-json.ts and check for an empty/relabelled sheet).`
     );
   }
-  if (bianElementCount === 0) {
-    throw new Error(
-      "BIAN Service Landscape reference model imported zero elements — the JSON read did not throw but produced no business areas/domains/service domains (check docs/Reference/bian/bian-v14-service-landscape.json)."
-    );
+
+  if (bianApplies) {
+    const bianElementCount = await prisma.eaReferenceModelElement.count({
+      where: { modelId: bianModel.id },
+    });
+    if (bianElementCount === 0) {
+      throw new Error(
+        "BIAN Service Landscape reference model imported zero elements — the JSON read did not throw but produced no business areas/domains/service domains (check docs/Reference/bian/bian-v14-service-landscape.json)."
+      );
+    }
   }
 }

@@ -17,11 +17,11 @@
 // `registry_read` (a coworker-read baseline), so every coworker inherits it — the
 // pack mirrors agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const DISCIPLINES = ["all", "wwmd", "wwwd", "wsid"] as const;
-const UNRESOLVED_OUTCOMES = ["defer", "escalate"];
+import { humanEscalationWhere, isHumanEscalation } from "@/lib/decision-perspective/human-escalation";
 
 /** Bound free-text fields so a large queue can't blow the local model window
  *  (the MCP route also caps the whole result — this keeps per-item cost small). */
@@ -99,7 +99,7 @@ async function listOpenDecisionReviews(
 
   const rows = await prisma.decisionInteraction.findMany({
     where: {
-      outcomeType: { in: UNRESOLVED_OUTCOMES },
+      AND: [humanEscalationWhere()],
       humanOutcome: { equals: Prisma.DbNull },
       question: { not: "" },
       // Mirror of isFounderActionable at the DB, so `take: limit` counts only
@@ -128,6 +128,8 @@ async function listOpenDecisionReviews(
       question: true,
       options: true,
       outcomeType: true,
+      escalationRoute: true,
+      escalationReason: true,
       outcomePayload: true,
       buildId: true,
       taskRunId: true,
@@ -142,6 +144,7 @@ async function listOpenDecisionReviews(
   });
 
   const candidates = rows
+    .filter(isHumanEscalation)
     .filter((row) => !isBlankFounderReviewQuestion(row))
     .filter((row) => isFounderActionable(row))
     .map((row) => ({ row, candidate: projectFounderReviewCandidate(row) }));

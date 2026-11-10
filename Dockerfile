@@ -29,6 +29,9 @@ COPY patches/ ./patches/
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/hooks-dir.mjs ./scripts/lib/
 COPY scripts/sbom/generate-platform-sbom.mjs ./scripts/sbom/
+COPY scripts/lib/script-argv.mjs ./scripts/lib/
+COPY scripts/lib/git.mjs ./scripts/lib/
+COPY scripts/lib/pnpm-lock.mjs ./scripts/lib/
 COPY .github/workflows/publish-image.yml ./.github/workflows/
 COPY apps/web/package.json ./apps/web/
 COPY packages/db/package.json ./packages/db/
@@ -45,10 +48,13 @@ COPY packages/api-client/package.json ./packages/api-client/
 COPY packages/coworker-sim-harness/package.json ./packages/coworker-sim-harness/
 COPY packages/dpf-bootstrap/package.json ./packages/dpf-bootstrap/
 COPY packages/finance-templates/package.json ./packages/finance-templates/
+COPY packages/i18n/package.json ./packages/i18n/
 COPY packages/integration-shared/package.json ./packages/integration-shared/
 COPY packages/storefront-templates/package.json ./packages/storefront-templates/
 COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
+# The integrity-pinned first-party artifact is an install input, not source to rebuild.
+COPY packages/validators/vendor/ ./packages/validators/vendor/
 # pnpm-workspace.yaml `patchedDependencies` names patch files by repo-relative
 # path. pnpm resolves them against the workspace root, so every stage that runs
 # `pnpm install` needs them in the build context — without this COPY the install
@@ -68,6 +74,11 @@ COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
+COPY scripts/lib/canonical-json.mjs ./scripts/lib/
+# The local-CI status set is shared by the gate scripts and the MCP evidence
+# handler, so the build stage needs it too (BI-C59AC8AF).
+COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY apps/web/ ./apps/web/
@@ -111,10 +122,15 @@ COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 # the sandbox's `next dev` exits with "Module not found".
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/installer/validate-install-state.mjs ./scripts/installer/
+COPY scripts/installer/runtime-apply-lock.mjs ./scripts/installer/
+COPY scripts/installer/recovery-filesystem.mjs ./scripts/installer/
+COPY scripts/lib/canonical-json.mjs ./scripts/lib/
+COPY scripts/lib/local-sandbox-fence.mjs ./scripts/lib/
 COPY scripts/installer/install-state-transaction.mjs ./scripts/installer/
 COPY scripts/installer/install-release-assets.mjs ./scripts/installer/
 COPY scripts/installer/install-state-lock-contract.json ./scripts/installer/
@@ -122,10 +138,32 @@ COPY scripts/installer/install-state-schema-registry.mjs ./scripts/installer/
 COPY scripts/installer/install-state.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v1.schema.json ./scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
+# BI-31F11C37: the installers' monitoring question. The helper reads its cost from
+# config/install-resource-budgets.json (config/ is COPYed below) through the
+# budget gate's parser, so both ship with it.
+COPY scripts/installer/monitoring-choice.mjs ./scripts/installer/
+COPY scripts/check-compose-resource-budgets.mjs ./scripts/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
-COPY scripts/bootstrap-organization-pki.ps1 ./scripts/
+# BI-084F85E5: the consumer start script and the host convergence it runs ship
+# as release assets, so each self-upgrade replaces them in the install dir.
+COPY scripts/installer/dpf-start.consumer.ps1 ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.ps1 ./scripts/installer/lib/
+# ...and their macOS/Linux twins, plus the self-upgrade step that bridges launch
+# scripts written before them (promote.sh runs it from the install root).
+COPY scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.sh ./scripts/installer/lib/
+COPY scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/rotate-runtime-transition-secret.mjs ./scripts/
+COPY scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs ./scripts/installer/
+COPY scripts/installer/edge-client-certificate.mjs ./scripts/installer/
+COPY scripts/publish-host-gpu.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/compose-chain.ps1 ./scripts/installer/lib/
+# BI-B55CCFAA: the release-assets step ships the activation table promote.sh
+# reads in release mode (BI-B422ED03); the cp below can only copy what is here.
+COPY scripts/installer/lib/activation-overlays.txt ./scripts/installer/lib/
+COPY scripts/installer/lib/canonical-origin.ps1 ./scripts/installer/lib/
+COPY scripts/installer/lib/machine-trust.ps1 ./scripts/installer/lib/
+COPY scripts/installer/lib/mcp-client-env.ps1 ./scripts/installer/lib/
 # The consumer installer copies the kernel-commandment shell guard out of the
 # install dir, which on that path IS the release-asset bundle. The init stage
 # COPYs each asset explicitly, so the guard must be pulled in here before the
@@ -138,24 +176,71 @@ COPY monitoring/ ./monitoring/
 COPY scripts/backup-postgres.sh ./scripts/
 COPY scripts/restore-postgres.sh ./scripts/
 COPY scripts/postgres-trial-restore.sh ./scripts/
+# BI-3F16A430: web-src workspace linker — run at build below and re-run from the
+# host bootstrap against older images (see the script header).
+COPY scripts/link-web-src-workspace.sh ./scripts/
 COPY scripts/salvage-sweep.mjs ./scripts/
+COPY scripts/reassessment-capability-probe.mjs ./scripts/
 # Work Capsule change-impact planning executes the canonical gate-context CLI
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
 COPY scripts/gate-context.mjs ./scripts/
+# gate-context and worktree-janitor read their flags through scriptArgv.
+COPY scripts/lib/script-argv.mjs ./scripts/lib/
+COPY scripts/lib/git.mjs ./scripts/lib/
 COPY scripts/check-design-grounding-decision.mjs ./scripts/
 COPY scripts/check-data-impact.mjs ./scripts/
+# gate-context advertises the Convergence-Impact trailer (BI-B19BE117); the
+# classifier and its surface registry ride along so the packaged generator
+# names the same surfaces CI will gate.
+COPY scripts/check-convergence-impact.mjs ./scripts/
+COPY scripts/convergence-surfaces.json ./scripts/
+# gate-context lists the docs a planned change affects (BI-9B17E889) through the
+# Docs Impact Gate's own computeImpact, so a Workroom sees them at claim time.
+COPY scripts/check-docs-impact.mjs ./scripts/
 COPY scripts/lib/gate-context.mjs ./scripts/lib/
 COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
 COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
 COPY scripts/lib/gate-sensitivity.mjs ./scripts/lib/
 COPY scripts/lib/seed-fit-gate.mjs ./scripts/lib/
+COPY scripts/lib/seed-fit-mechanism.mjs ./scripts/lib/
+# BI-B3370CB2: the worktree janitor is EXECUTED by the portal (queue function
+# worktreeJanitor, daily 05:40) but was never copied, so every run died with
+# MODULE_NOT_FOUND, was caught, and reported UNHEALTHY. A backstop that has
+# never once reached its subject looked exactly like a quiet success.
+COPY scripts/worktree-janitor.mjs ./scripts/
+COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
+COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
+# The janitor logs path and reason text through sanitizeForLog. That module
+# has to be in the image or the daily queue dies with ERR_MODULE_NOT_FOUND.
+COPY scripts/lib/safe-log.mjs ./scripts/lib/
+COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
+# worktree-janitor.mjs and worktree-liveness.mjs query leases and Workroom
+# claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
+COPY scripts/lib/mcp-client.mjs ./scripts/lib/
+COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
+COPY scripts/lib/mcp-host-trust.mjs ./scripts/lib/
+COPY scripts/lib/foreground-gate-process.mjs ./scripts/lib/
+COPY scripts/lib/resolve-compose-install-context.mjs ./scripts/lib/
+COPY scripts/installer/lib/mcp-client-env.sh ./scripts/installer/lib/
+# mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
+COPY packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs ./packages/dpf-skill-pack/scripts/lib/
+COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
 COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/lib/module-size-scope.mjs ./scripts/lib/
 COPY scripts/lib/ci-policy-guards.mjs ./scripts/lib/
+COPY scripts/lib/guard-bash.mjs ./scripts/lib/
+COPY scripts/lib/load-pinned-guard-typescript.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
+# check-design-grounding-decision and check-data-impact import the shared
+# unresolvable-diff helper; without this COPY the init image dies at
+# ERR_MODULE_NOT_FOUND (BI-20599979).
+COPY scripts/lib/git-changed-files.mjs ./scripts/lib/
+# The shared git runner every migrated script imports (plan 2026-09-08 S1).
+COPY scripts/lib/git.mjs ./scripts/lib/
 COPY scripts/lib/entry-module.mjs ./scripts/lib/
+COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
 COPY scripts/module-size-baseline.txt ./scripts/
 COPY scripts/prose-lint-baseline.json ./scripts/
 COPY scripts/style-drift-baseline.json ./scripts/
@@ -193,18 +278,59 @@ COPY config/ ./config/
 # seed-ea-reference-models.ts. The rest of docs/Reference/ is large
 # binary content not needed in the image.
 COPY docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx ./docs/Reference/
+# The BIAN Service Landscape, read at seed time on a banking install.
+COPY docs/Reference/bian/bian-v14-service-landscape.json ./docs/Reference/bian/
+# The workbook is tracked in Git LFS, so a checkout without `lfs: true` copies a
+# ~130-byte pointer stub here instead of the real file. That shipped: every
+# consumer install's eaReferenceModels seed step failed with "invalid zip data"
+# and the IT4IT and BIAN reference models never imported (BI-FEE26C36).
+#
+# seed-ea-reference-models.ts already asserts a non-zero row count for exactly
+# this case, but that guard runs AFTER the workbook read and the xlsx parser
+# throws on a stub first — a guard placed after a read cannot cover a read that
+# throws. The assertion has to sit where the bytes enter the artifact.
+#
+# Fail the PUBLISH, never the install: a release that cannot seed its reference
+# models must not become :latest. An .xlsx is a zip, so real content starts "PK".
+RUN head -c 2 docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx | grep -q '^PK' || { \
+      echo "ERROR: docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx is not a zip archive."; \
+      echo "It is almost certainly an unmaterialized Git LFS pointer. Check out with lfs: true"; \
+      echo "(or run 'git lfs pull') before building this image."; \
+      head -c 64 docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx; \
+      exit 1; \
+    }
+# Same rule for the BIAN landscape: assert the bytes where they enter the
+# artifact. This one is plain JSON (not LFS), and it was simply absent from the
+# image for its whole life — seedBianReferenceModel caught the read error and
+# returned, so a banking install imported zero Service Domains and the seed's
+# own row-count guard fired into a non-fatal catch. A missing or truncated file
+# must fail the build, not the bank.
+RUN head -c 1 docs/Reference/bian/bian-v14-service-landscape.json | grep -q '{' || { \
+      echo "ERROR: docs/Reference/bian/bian-v14-service-landscape.json is not a JSON object."; \
+      echo "seed-ea-reference-models.ts reads this at seed time on a banking install;"; \
+      echo "a missing or truncated file imports zero BIAN Service Domains."; \
+      head -c 64 docs/Reference/bian/bian-v14-service-landscape.json; \
+      exit 1; \
+    }
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @dpf/db exec prisma generate
 # Generate capability snapshot from mcp-tools.ts (runs at build time; output bundled into runner)
 RUN node packages/db/scripts/generate-tools-snapshot.js
 RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/installer/lib \
-      /dpf-release-assets/monitoring && \
+      /dpf-release-assets/monitoring /dpf-release-assets/config && \
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
-    cp scripts/bootstrap-organization-pki.ps1 /dpf-release-assets/scripts/ && \
-    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/publish-host-gpu.ps1 scripts/rotate-runtime-transition-secret.mjs /dpf-release-assets/scripts/ && \
+    cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/script-argv.mjs scripts/lib/git.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
+    cp scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/edge-client-certificate.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/runtime-apply-lock.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/recovery-filesystem.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/lib/canonical-json.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/local-sandbox-fence.mjs /dpf-release-assets/scripts/lib/ && \
+    cp scripts/lib/entry-module.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/installer/local-model-policy.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/validate-install-state.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state-transaction.mjs scripts/installer/install-release-assets.mjs scripts/installer/install-state-lock-contract.json /dpf-release-assets/scripts/installer/ && \
@@ -213,7 +339,12 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
-    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp scripts/installer/dpf-start.consumer.ps1 /dpf-release-assets/dpf-start.ps1 && \
+    cp scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/monitoring-choice.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/check-compose-resource-budgets.mjs /dpf-release-assets/scripts/ && \
+    cp config/install-resource-budgets.json /dpf-release-assets/config/ && \
+    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 scripts/installer/lib/host-convergence.ps1 scripts/installer/lib/host-convergence.sh /dpf-release-assets/scripts/installer/lib/ && \
     cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \
     cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
@@ -223,6 +354,36 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp -R monitoring/. /dpf-release-assets/monitoring/ && \
     cd /dpf-release-assets && \
     find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+
+# ─── Runtime dependency set (BI-C7C6D827, plan 2026-09-08 M1) ───────────────
+# The runner copies this stage's node_modules, and until this step that was the
+# whole DEV workspace tree: two TypeScript compilers, vitest/jsdom/msw, Prisma
+# Studio, the mobile toolchain, a 130 MB browser-only ONNX runtime — 1.8 GB and
+# ~1,170 packages the portal never executes. Everything the build stage needed
+# (prisma generate, the tools snapshot, the release assets) has already run
+# above, so the tree is now re-installed to exactly what the runner executes:
+#
+#   docker-entrypoint.sh  pnpm --filter @dpf/db exec prisma migrate deploy
+#                         pnpm --filter @dpf/db exec tsx src/seed.ts (+ sync/
+#                         reconcile scripts under packages/db/scripts)
+#   seed.ts               @dpf/storefront-templates and the other @dpf/* links
+#   /app/scripts/*.mjs    pure Node by design (gate-context, data-impact, SBOM)
+#
+# The Next.js server itself resolves from the standalone output's own traced
+# node_modules, and Build Studio's /workspace runs its own `pnpm install` from
+# the shipped lockfile at first boot, so neither depends on this tree.
+# `@dpf/db...` selects the db package plus every workspace package it links;
+# its devDependencies (prisma CLI, tsx) are runtime executables here, so the
+# install is deliberately NOT --prod. --offline: the pnpm store in this stage
+# already holds every package from the full install above.
+# The root importer also supplies the pinned shared Workroom package to
+# maintenance scripts under /app/apps/web-src that reach shape conformance.
+RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules services/*/node_modules && \
+    pnpm install --frozen-lockfile --offline --filter "@dpf/db..." --config.confirmModulesPurge=false && \
+    pnpm --filter @dpf/db exec prisma generate && \
+    pnpm --filter @dpf/db exec tsx --version >/dev/null && \
+    pnpm --filter @dpf/db exec prisma --version >/dev/null && \
+    echo "runtime dependency set: $(find node_modules/.pnpm -maxdepth 1 -mindepth 1 -type d | wc -l) packages"
 
 # ─── Stage 5: runner (unified — serves app AND runs init) ─────────────────────
 FROM base AS runner
@@ -234,7 +395,19 @@ WORKDIR /app
 # nmap powers the fast path of the arp_scan discovery collector. Without it the
 # collector falls back to a 254-host ping sweep; with it a /24 scans in seconds.
 # (See packages/db/src/discovery-collectors/arp-scan.ts — BI-4CA890B7.)
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git curl nmap
+#
+# git-lfs is load-bearing on the git-source install shape, not hygiene. This
+# stage runs the self-upgrade source preparation (lib/self-upgrade/prepare-source.ts),
+# which clones the host install clone into .upgrade-workspace and hands that
+# tree to the promoter as its build context. `git` alone smudges LFS-tracked
+# paths to ~130-byte pointer stubs, so the promoter build then dies on the
+# zip-magic assertion this Dockerfile makes over the IT4IT workbook — failing
+# every upgrade on this shape, permanently (BI-FEE26C36 follow-on). The
+# publish path materializes LFS via `actions/checkout` with `lfs: true`; this
+# is the same guarantee for the path that has no GitHub Actions runner.
+# Dockerfile.sandbox installs it for the same class of reason.
+# Shared HTTPS tooling consumes the installer-owned Bash environment resolver.
+RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
@@ -265,6 +438,8 @@ COPY --from=init /app/.github ./.github
 COPY --from=init /app/config/ci-evidence-policy.json ./config/
 COPY --from=init /app/config/seed-content-paths.json ./config/
 COPY --from=init /app/apps/web/lib/ux-budget/route-budget-baseline.json ./apps/web/lib/ux-budget/
+COPY --from=init /app/apps/web/lib/docs/doc-impact.generated.json ./apps/web/lib/docs/
+COPY --from=init /app/apps/web/lib/docs-route-map.ts ./apps/web/lib/
 COPY --from=init /dpf-release-assets /dpf-release-assets
 # Managed operational scripts (backup/restore/trial-restore) are invoked at
 # runtime by the backup runners. They are committed from a Windows checkout,
@@ -299,6 +474,11 @@ COPY --from=init /app/packages/ ./packages-src/
 RUN rm -rf /app/apps/web-src/.next \
            /app/apps/web-src/tsconfig.tsbuildinfo \
            /app/packages-src/db/generated
+# BI-3F16A430: web-src has no node_modules and /app/node_modules carries no
+# @dpf/* links (runtime dependency set above), so scripts run from web-src —
+# the MCP token issuer the host bootstrap depends on — could not resolve
+# @dpf/db or @dpf/integration-shared. Link the shipped workspace packages in.
+RUN sh /app/scripts/link-web-src-workspace.sh
 
 # Canonical platform version (Phase 1 of governed-upgrade lifecycle).
 # Hand-edited until Phase 2 CI bump automation lands. Read at boot by
@@ -359,12 +539,20 @@ COPY promoter-contract.json /promoter/promoter-contract.json
 COPY scripts/promote.sh /promoter/scripts/promote.sh
 COPY scripts/governed-teardown.mjs /promoter/scripts/governed-teardown.mjs
 COPY scripts/salvage-sweep.mjs /promoter/scripts/salvage-sweep.mjs
+COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY Dockerfile /promoter/Dockerfile
 COPY scripts/apply-runtime-capability-transition.mjs /promoter/scripts/apply-runtime-capability-transition.mjs
 COPY scripts/runtime-transition-authority.mjs /promoter/scripts/runtime-transition-authority.mjs
+COPY scripts/installer/runtime-apply-lock.mjs /promoter/scripts/installer/runtime-apply-lock.mjs
+COPY scripts/installer/recovery-filesystem.mjs /promoter/scripts/installer/recovery-filesystem.mjs
+COPY scripts/lib/canonical-json.mjs /promoter/scripts/lib/canonical-json.mjs
+COPY scripts/lib/local-sandbox-fence.mjs /promoter/scripts/lib/local-sandbox-fence.mjs
+COPY scripts/lib/entry-module.mjs /promoter/scripts/lib/entry-module.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
 COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing.mjs
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs
+COPY scripts/promoter-epoch-evidence.mjs /promoter/scripts/promoter-epoch-evidence.mjs
+COPY scripts/lib/maintenance-epoch-receipt.mjs /promoter/scripts/lib/maintenance-epoch-receipt.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
 COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
 COPY scripts/installer/install-release-assets.mjs /promoter/scripts/installer/install-release-assets.mjs
@@ -377,6 +565,8 @@ COPY scripts/installer/install-state.v1.schema.json /promoter/scripts/installer/
 COPY scripts/installer/install-state.v2.schema.json /promoter/scripts/installer/install-state.v2.schema.json
 COPY scripts/lib/resolve-capability-compose-profiles.mjs /promoter/scripts/lib/resolve-capability-compose-profiles.mjs
 COPY scripts/lib/govern-capability-compose-args.mjs /promoter/scripts/lib/govern-capability-compose-args.mjs
+COPY scripts/lib/script-argv.mjs /promoter/scripts/lib/script-argv.mjs
+COPY scripts/lib/git.mjs /promoter/scripts/lib/git.mjs
 COPY scripts/lib/capability-state-hash.mjs /promoter/scripts/lib/capability-state-hash.mjs
 COPY scripts/capability-service-catalog.generated.json /promoter/scripts/capability-service-catalog.generated.json
 

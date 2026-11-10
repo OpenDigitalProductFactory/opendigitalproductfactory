@@ -17,8 +17,13 @@ interface DigestMirrorRow {
   version: bigint;
   syncStatus: string;
   rehealCount?: number;
+  lastDeliveryError?: string | null;
   payload: unknown;
 }
+
+/** Marks the one extra re-heal a capped, cause-less dead letter receives. */
+const UNRECORDED_CAUSE_REHEAL =
+  "re-healed once more: dead-lettered before its cause was recorded (BI-2DE1002F)";
 
 /** How many times digest reconciliation may resurrect a dead-lettered record the
  *  peer still needs. A transient/upgrade window recovers in one resurrection; a
@@ -132,7 +137,10 @@ export async function reconcileDemandDigests(
         orderBy: { mirrorId: "asc" },
         take: batchSize,
         ...(cursorId ? { cursor: { mirrorId: cursorId }, skip: 1 } : {}),
-        select: { mirrorId: true, federationLinkId: true, version: true, syncStatus: true, rehealCount: true, payload: true },
+        select: {
+          mirrorId: true, federationLinkId: true, version: true, syncStatus: true, rehealCount: true,
+          lastDeliveryError: true, payload: true,
+        },
       });
       if (rows.length === 0) break;
       const lastId = rows[rows.length - 1]?.mirrorId;
@@ -192,11 +200,24 @@ export async function reconcileDemandDigests(
             // resurrections so a genuinely-poison record eventually stays dead instead
             // of re-sending on every digest cycle forever (BI-8A7E3E56).
             const wasDeadLettered = row.syncStatus === "dead-letter";
-            if (wasDeadLettered && (row.rehealCount ?? 0) >= MAX_DEMAND_REHEALS) continue;
+            const capped = wasDeadLettered && (row.rehealCount ?? 0) >= MAX_DEMAND_REHEALS;
+            // BI-2DE1002F: dead letters from before delivery recorded a cause (a
+            // peer 503 window, a pre-rebase 409) spent the cap with no evidence
+            // they were poison. Such a record gets exactly one more re-heal, and
+            // the marker below means the cap holds for it from then on.
+            const unrecordedCause = capped && !row.lastDeliveryError;
+            if (capped && !unrecordedCause) continue;
+            // BI-1A8887C7: a pending record already has a delivery job that owns
+            // it, on its own retry clock (a missing job is created by the dispatch
+            // bridge). The peer still needing it is not news; re-scheduling it on
+            // every five-minute digest reset its backoff and wrote ~700K
+            // `enqueued` telemetry rows a day while the queue could not drain.
+            if (row.syncStatus === "pending") continue;
             requeued++;
             await db.federatedRecordMirror.update!({ where: { mirrorId: row.mirrorId }, data: {
               syncStatus: "pending", deadLetteredAt: null,
-              ...(wasDeadLettered ? { rehealCount: (row.rehealCount ?? 0) + 1 } : {}),
+              ...(wasDeadLettered && !unrecordedCause ? { rehealCount: (row.rehealCount ?? 0) + 1 } : {}),
+              ...(unrecordedCause ? { lastDeliveryError: UNRECORDED_CAUSE_REHEAL } : {}),
             } });
             await scheduleFederationDeliveryJob(db, row.mirrorId!, now);
           } else {

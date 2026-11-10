@@ -1,18 +1,42 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: vi.fn(async () => ({ progressPayload: {}, a2aMetadata: {} })) } } }));
+vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: vi.fn(async () => null) }));
 import {
   _setGovernanceForTests,
   agentHasAnyGrant,
   governedExecuteTool,
   registerToolLifecycleHook,
-} from "./mcp-governed-execute";
-import type {
-  AuthorityApprovalEnvelopeCreate,
-  AuthorityApprovalEnvelopeFinalize,
-  AuthorityApprovalTaskResume,
+  type AuthorityApprovalEnvelopeCreate,
+  type AuthorityApprovalEnvelopeFinalize,
+  type AuthorityApprovalTaskResume,
 } from "./mcp-governed-execute";
 import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
-import type { ToolResult } from "./mcp-tools";
+import type { ToolResult } from "./mcp-tool-types";
+import type { RoomParticipantInvitationPreflight } from "./work-management/room-participant-invitation-preflight.server";
 import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
+import { registerWorkroomAliasCases } from "./mcp-governed-execute-alias.cases";
+import { registerRefusalDurationCases } from "./mcp-governed-execute-refusal-duration.cases";
+import { registerUpgradeAdmissionCases } from "./mcp-governed-execute.upgrade-admission.cases";
+import { coworkerAuthorityInputFixture as authorityInput } from "../test-support/coworker-authority-input-fixture";
+import { registerRefusalBreakerCases } from "./mcp-governed-execute-refusal-breaker.cases";
+
+const preflightMocks = vi.hoisted(() => {
+  const roomItem = {
+    id: "WI-1", itemId: "BI-1", sourceType: "backlog-item", sourceId: "BI-1",
+    title: "Room", evidence: null, assignedToAgentId: null, assignedToUserId: null,
+  };
+  return {
+    roomItem,
+    workroomTargetAccessRefusal: vi.fn(async () => null as ToolResult | null),
+    preflightRoomParticipantInvitation: vi.fn<() => Promise<RoomParticipantInvitationPreflight>>(async () => ({
+      verdict: "allow" as const, agentId: "AGT-100",
+      caseKey: "backlog-item:BI-1", item: roomItem, clearanceRaise: null,
+    })),
+  };
+});
+
+vi.mock("./work-capsules/oauth-workroom-ownership", () => ({ workroomTargetAccessRefusal: preflightMocks.workroomTargetAccessRefusal }));
+vi.mock("./work-management/room-participant-invitation-preflight.server", () => ({ preflightRoomParticipantInvitation: preflightMocks.preflightRoomParticipantInvitation }));
 type AuditRow = Record<string, unknown>;
 function captureAudit(rows: AuditRow[]) { return async (data: AuditRow) => { rows.push(data); }; }
 const NORMAL_USER = { platformRole: "ceo", isSuperuser: true };
@@ -27,70 +51,11 @@ type ExecuteFn = (
     taskRunId?: string;
   },
 ) => Promise<ToolResult>;
-let auditRows: AuditRow[];
-let receiptRows: AuditRow[];
-let authorityRows: AuditRow[];
+let auditRows: AuditRow[], receiptRows: AuditRow[], authorityRows: AuditRow[];
 let executeMock: ReturnType<typeof vi.fn> & ExecuteFn;
 let approvalEnvelopeCreate: AuthorityApprovalEnvelopeCreate;
 let approvalTaskResume: AuthorityApprovalTaskResume;
 let approvalEnvelopeFinalize: AuthorityApprovalEnvelopeFinalize;
-function authorityInput(
-  overrides: Partial<CoworkerAuthorityInput> = {},
-): CoworkerAuthorityInput {
-  return {
-    authContext: {
-      principalId: "PRN-1",
-      principalAliases: [],
-      population: "workforce",
-      platformRole: "HR-000",
-      isSuperuser: true,
-      employeeId: "EMP-1",
-      managerScope: { directReportIds: [], indirectReportIds: [] },
-      teamIds: [],
-      accountScope: {
-        accountIds: [],
-        contactIds: [],
-        partnerAccountIds: [],
-      },
-      sensitivityClearance: [
-        "public",
-        "internal",
-        "confidential",
-        "restricted",
-      ],
-      authentication: {
-        source: "session",
-        methods: ["mfa"],
-        contextClassReference: null,
-      },
-      actingHumanUserId: "user-1",
-      actingAgentId: "AGT-100",
-      delegationGrantIds: [],
-      grantedCapabilities: ["view_platform", "view_backlog", "manage_backlog"],
-    },
-    action: {
-      toolName: "query_backlog",
-      requiredCapability: "view_platform",
-      agentGrantAllowed: true,
-      sideEffect: false,
-      executionMode: "immediate",
-      routeContext: "/ops",
-      approvalPolicy: "none",
-    },
-    subject: { kind: "platform", id: "dpf" },
-    delegation: null,
-    integration: { required: false, state: "not-required" },
-    dataPolicy: {
-      sensitivity: "internal",
-      maskingRequired: false,
-      maskingSatisfied: true,
-      decisionVersionsCurrent: true,
-    },
-    task: null,
-    rawParams: {},
-    ...overrides,
-  };
-}
 function applyAuthorityOverrides(
   overrides: Parameters<typeof _setGovernanceForTests>[0],
 ): void {
@@ -106,15 +71,19 @@ function applyAuthorityOverrides(
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null, toolPreflight: async () => null,
     ...overrides,
   });
 }
 
 beforeEach(() => {
-  auditRows = [];
-  receiptRows = [];
-  authorityRows = [];
+  preflightMocks.workroomTargetAccessRefusal.mockReset(); preflightMocks.workroomTargetAccessRefusal.mockResolvedValue(null);
+  preflightMocks.preflightRoomParticipantInvitation.mockReset();
+  preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue({
+    verdict: "allow", agentId: "AGT-100",
+    caseKey: "backlog-item:BI-1", item: preflightMocks.roomItem, clearanceRaise: null,
+  });
+  auditRows = []; receiptRows = []; authorityRows = [];
   executeMock = vi.fn(
     async (): Promise<ToolResult> => ({
       success: true,
@@ -141,7 +110,7 @@ beforeEach(() => {
     authorityApprovalTaskResume: approvalTaskResume,
     authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
     policyAuthorityProjectionAttempt: async () => ({ outcome: "not-authorized" }),
-    policyAuthorityEnvelopeReserve: async () => true,
+    policyAuthorityEnvelopeReserve: async () => true, authorityExecutedOutcome: async () => null, toolPreflight: async () => null,
   });
 });
 
@@ -158,7 +127,7 @@ afterEach(() => {
     authorityApprovalTaskResume: null,
     authorityApprovalEnvelopeFinalize: null,
     policyAuthorityProjectionAttempt: null,
-    policyAuthorityEnvelopeReserve: null,
+    policyAuthorityEnvelopeReserve: null, authorityExecutedOutcome: null, toolPreflight: null,
   });
 });
 
@@ -170,6 +139,8 @@ describe("governedExecuteTool — happy path", () => {
     approvalEnvelopeCreate: () => approvalEnvelopeCreate, approvalTaskResume: () => approvalTaskResume,
     approvalEnvelopeFinalize: () => approvalEnvelopeFinalize,
   });
+  registerRefusalBreakerCases({ applyOverrides: applyAuthorityOverrides, authorityInput, normalUser: NORMAL_USER, executeMock: () => executeMock,
+    authorityRows: () => authorityRows, auditRows: () => auditRows, approvalEnvelopeCreate: () => approvalEnvelopeCreate });
   it("supports registering and unregistering lifecycle hooks", async () => {
     const calls: string[] = [];
     const unregister = registerToolLifecycleHook({
@@ -323,11 +294,9 @@ describe("governedExecuteTool — happy path", () => {
   });
 
   it("forwards caller attribution and effective token scope into executeTool (BI-0EEBA669)", async () => {
-    // Regression: governedExecuteTool built the executeTool context from only
-    // {agentId, threadId, routeContext, taskRunId, featureBuildId} and dropped
-    // the three caller-attribution fields, so every principle_decide consult
-    // recorded an all-null caller and the decision ledger could not match a
-    // decision back to the client/thread that made it.
+    // Regression: the executeTool context dropped the caller-attribution fields, so
+    // every principle_decide consult recorded an all-null caller. BI-FAD98137: the
+    // turn's coworkerMode must also reach the handler, or a delegated child runs wider.
     await governedExecuteTool({
       toolName: "query_backlog",
       rawParams: { status: "open" },
@@ -340,6 +309,7 @@ describe("governedExecuteTool — happy path", () => {
         apiTokenId: "tok_xyz",
         authSource: "pat",
         tokenScope: "admin",
+        coworkerMode: "advise",
       },
       source: "external-jsonrpc",
     });
@@ -354,6 +324,7 @@ describe("governedExecuteTool — happy path", () => {
         authSource: "pat",
         tokenScope: "admin",
         threadId: "thread-9",
+        coworkerMode: "advise",
       }),
     );
   });
@@ -437,38 +408,21 @@ describe("governedExecuteTool — happy path", () => {
     );
   });
 });
-
+registerRefusalDurationCases({ auditRows: () => auditRows, applyOverrides: applyAuthorityOverrides, normalUser: NORMAL_USER, executionCalls: () => executeMock.mock.calls });
+registerUpgradeAdmissionCases({ auditRows: () => auditRows, receiptRows: () => receiptRows, applyOverrides: applyAuthorityOverrides, executionCalls: () => executeMock.mock.calls, authorityInput });
 describe("governedExecuteTool — rejection paths", () => {
-  it("returns unknown_tool without invoking executeTool", async () => {
-    const result = await governedExecuteTool({
-      toolName: "totally_made_up_tool",
-      rawParams: {},
-      userId: "u",
-      userContext: NORMAL_USER,
-      source: "rest",
-    });
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("unknown_tool");
-    expect(executeMock).not.toHaveBeenCalled();
-    // unknown_tool is rejected before audit write
-    expect(auditRows).toHaveLength(0);
-  });
-
-  it("rejects on forbidden_capability and audits the failure", async () => {
-    const lowPrivilege = { platformRole: "viewer", isSuperuser: false };
-    const result = await governedExecuteTool({
-      toolName: "create_backlog_item",
-      rawParams: { title: "x", type: "product", source: "user-request" },
-      userId: "u",
-      userContext: lowPrivilege,
-      source: "rest",
-    });
-    // viewer doesn't have manage_backlog
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("forbidden_capability");
-    expect(executeMock).not.toHaveBeenCalled();
-    expect(auditRows).toHaveLength(1);
-    expect(auditRows[0]?.success).toBe(false);
+  registerWorkroomAliasCases({
+    executionCalls: () => executeMock.mock.calls, auditRows: () => auditRows,
+    applyOverrides: applyAuthorityOverrides, authorityInput, normalUser: NORMAL_USER,
+    executeMock: () => executeMock, approvalEnvelopeCreate: () => approvalEnvelopeCreate,
+    authorityRows: () => authorityRows,
+    setOAuthRefusalResults: (results) => {
+      preflightMocks.workroomTargetAccessRefusal.mockReset();
+      for (const result of results) preflightMocks.workroomTargetAccessRefusal.mockResolvedValueOnce(result);
+    },
+    oauthRefusalCalls: () => preflightMocks.workroomTargetAccessRefusal.mock.calls,
+    setInvitationPreflightResult: (result) => preflightMocks.preflightRoomParticipantInvitation.mockResolvedValue(result),
+    invitationPreflightCalls: () => preflightMocks.preflightRoomParticipantInvitation.mock.calls,
   });
 });
 
@@ -517,13 +471,8 @@ describe("governedExecuteTool — resilience", () => {
   });
 });
 
-// BI-16A80690: some MCP clients serialize array/object tool args as JSON
-// strings on the wire. governedExecuteTool is the single funnel for all MCP
-// wire transports, so it re-hydrates those strings (schema-driven) before the
-// tool switch sees them. These tests use the REAL principle_decide schema from
-// PLATFORM_TOOLS (resolved by findTool) and assert via the executeTool spy that
-// the handler receives native values — locking BOTH the JSON-string and the
-// already-structured shapes.
+// BI-16A80690: use the real principle_decide schema to verify that serialized
+// JSON arguments and structured arguments both reach the handler as native values.
 describe("governedExecuteTool — JSON-string arg coercion (BI-16A80690)", () => {
   const STRUCTURED_OPTIONS = [
     { id: "a", description: "Option A" },

@@ -1,3 +1,5 @@
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
+import {redactDiagnosticEvidenceText as redactFunctionalFailureText} from "@/lib/shared/diagnostic-evidence-redaction";
 // Build-evidence tool pack — scoped ToolPack extraction.
 //
 // Drains the build/backlog evidence-capture domain out of the mcp-tools.ts
@@ -9,42 +11,38 @@
 //
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source. The
-// functional-failure handler used one local redaction helper that had no other
-// consumer; it is replicated here so the pack is self-contained.
+// functional-failure handler shares the canonical diagnostic redaction policy.
 
 import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import {
+  parseQualificationExperimentState,
+  qualificationExecutionEvidenceAllowed,
+  verifyQualificationExperimentAdmission,
+} from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 import {
   EXECUTION_EVIDENCE_KINDS,
+  evidenceKindMetadata,
   isExecutionEvidenceKind,
   validateExecutionEvidenceStructure,
 } from "@/lib/backlog/execution-evidence";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
+  isLocalIntegrationStatus,
+  LOCAL_INTEGRATION_STATUSES,
+} from "../../../../../scripts/lib/local-integration-status.mjs";
+import {
   isNonprodOwnerProvider,
   NONPROD_OWNER_PROVIDERS,
 } from "@/lib/nonprod/nonprod-owner-provider";
 
-/** Strip bearer tokens / MCP tokens / Anthropic keys out of operator-supplied failure text. */
-function redactFunctionalFailureText(text: string): string {
-  return text
-    .replace(/\bdpfmcp_[A-Za-z0-9_-]+/g, "[redacted-token]")
-    .replace(/\bBearer\s+[A-Za-z0-9._-]+/g, "[redacted-token]")
-    // BI-1291B677: Anthropic OAuth tokens (sk-ant-oat01-*) and API keys
-    // (sk-ant-api03-*) in raw form.
-    .replace(/\bsk-ant-[A-Za-z0-9_-]{8,}/g, "[redacted-token]")
-    // BI-1291B677: a secret staged into the sandbox as `echo '<base64>' | base64 -d`
-    // (the CLI dispatch token / mcp-config write). Redact the base64 payload so a
-    // surfaced docker command can't be reversed back to the secret.
-    .replace(/echo '[A-Za-z0-9+\/=]{20,}'(\s*\|\s*base64\s+-d)/g, "echo '[redacted-token]'$1");
-}
-
 const definitions: ToolDefinition[] = [
   {
     name: "record_execution_evidence",
-    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). Positive completion evidence is later resolved server-side; a supplied ToolExecution reference must identify a successful execution owned by the same user.",
+    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). Use manual_fail, not manual_check, for a blocked or failed manual check. manual_fail never earns completion credit. A supplied ToolExecution must belong to the same user. Failed executions may be linked only by failure evidence kinds; these never earn completion credit. Other kinds require successful execution, including manual_check.",
     inputSchema: {
       type: "object",
       properties: {
@@ -58,6 +56,7 @@ const definitions: ToolDefinition[] = [
         url: { type: "string", description: "Link to PR / CI run / screenshot" },
         body: { type: "string", description: "Longer notes (<= 8000 chars)" },
         toolExecutionId: { type: "string", description: "Audit row id when this evidence was produced by a prior tool call" },
+        qualification: { type: "object", description: "Server-bound host qualification evidence. Accepted only for the accountable Workroom principal and exact signed verification binding." },
       },
       required: ["itemId", "kind", "summary"],
     },
@@ -77,7 +76,7 @@ const definitions: ToolDefinition[] = [
         taskRunId: { type: "string" },
         candidateBranch: { type: "string" },
         mode: { type: "string", enum: ["single-branch", "sibling-set", "post-merge-main"] },
-        status: { type: "string", enum: ["passed", "failed", "conflict", "blocked_sandbox_drift", "blocked_control_plane_starvation"] },
+        status: { type: "string", enum: [...LOCAL_INTEGRATION_STATUSES] },
         summary: { type: "string" },
         gateKey: { type: "string", description: "Server-derived immutable gate key returned at admission." },
         leaseId: { type: "string", description: "Canonical executor lease id returned at admission." },
@@ -133,7 +132,7 @@ const definitions: ToolDefinition[] = [
 async function recordExecutionEvidenceHandler(
   params: Record<string, unknown>,
   userId: string,
-  context?: { agentId?: string },
+  context?: { agentId?: string; authSource?: string; apiTokenId?: string },
 ): Promise<ToolResult> {
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   const kindRaw = String(params["kind"] ?? "");
@@ -142,6 +141,7 @@ async function recordExecutionEvidenceHandler(
   const body = typeof params["body"] === "string" ? params["body"].slice(0, 8000) : null;
   const toolExecutionId =
     typeof params["toolExecutionId"] === "string" ? params["toolExecutionId"] : null;
+  const qualification = params["qualification"];
   if (!itemIdRaw || !kindRaw || !summaryRaw)
     return {
       success: false,
@@ -165,16 +165,44 @@ async function recordExecutionEvidenceHandler(
       where: { id: toolExecutionId },
       select: { id: true, success: true, userId: true },
     });
-    if (!toolExecution?.success || toolExecution.userId !== userId) {
+    const allowsFailedExecution = evidenceKindMetadata(kindRaw).polarity === "fail";
+    if (!toolExecution || toolExecution.userId !== userId
+      || (!toolExecution.success && !allowsFailedExecution)) {
       return {
         success: false,
         error: "invalid_tool_execution",
-        message: `ToolExecution ${toolExecutionId} does not resolve to a successful execution owned by this user`,
+        message: `ToolExecution ${toolExecutionId} must exist, belong to this user, and be successful unless the evidence kind records a failure`,
       };
     }
   }
-  const activity = await prisma.backlogItemActivity.create({
-    data: {
+  if (qualification !== undefined) {
+    if (kindRaw !== "test_pass") {
+      return { success: false, error: "invalid_qualification_evidence", message: "Qualification execution evidence must use kind=test_pass." };
+    }
+    const raw = qualification && typeof qualification === "object" && !Array.isArray(qualification)
+      ? qualification as Record<string, unknown> : null;
+    const capsuleId = typeof raw?.workroomId === "string" ? raw.workroomId.trim() : "";
+    const room = capsuleId ? await prisma.workroom.findUnique({ where: { capsuleId },
+      select: { workspaceState: true } }) : null;
+    const workspace = room?.workspaceState && typeof room.workspaceState === "object" && !Array.isArray(room.workspaceState)
+      ? room.workspaceState as Record<string, unknown> : null;
+    const state = parseQualificationExperimentState(workspace?.qualificationExperimentAdmission);
+    const admission = state ? verifyQualificationExperimentAdmission(state.token, { allowExpired: true }) : null;
+    const actor = await workCapsuleActor(userId, context);
+    const leaseId = typeof raw?.leaseId === "string" ? raw.leaseId.trim() : "";
+    const lease = leaseId ? await prisma.nonProductionEnvironmentLease.findUnique({ where: { leaseId }, select: {
+      leaseId: true, environmentKey: true, status: true, claimKey: true, purpose: true,
+      ownerSessionId: true, ownerProvider: true, branchName: true, buildId: true, taskRunId: true,
+      ownerPid: true, ownerProcessIdentity: true, admittedAt: true, expiresAt: true, evidenceRecordId: true,
+    } }) : null;
+    if (!state || !admission?.ok || !qualificationExecutionEvidenceAllowed({ binding: admission.data.binding,
+      state, evidence: qualification, accountablePrincipalRef: actor.principalId, now: new Date(),
+      lease: lease ?? undefined })) {
+      return { success: false, error: "invalid_qualification_evidence",
+        message: "Qualification evidence does not match the live signed binding, accountable Workroom principal, source, platform, or execution window." };
+    }
+  }
+  const activityData = {
       backlogItemId: item.id,
       kind: "evidence",
       summary: summaryRaw,
@@ -183,12 +211,32 @@ async function recordExecutionEvidenceHandler(
         url,
         body,
         toolExecutionId,
+        ...(qualification !== undefined ? { qualification } : {}),
       },
       recordedById: userId,
       recordedByAgentId: context?.agentId ?? null,
       toolExecutionId,
-    },
-  });
+  };
+  let activity;
+  if (qualification !== undefined) {
+    const leaseId = typeof (qualification as Record<string, unknown>).leaseId === "string"
+      ? String((qualification as Record<string, unknown>).leaseId) : "";
+    const activityId = crypto.randomUUID();
+    try {
+      activity = await prisma.$transaction(async (tx) => {
+        const bound = await tx.nonProductionEnvironmentLease.updateMany({
+          where: { leaseId, evidenceRecordId: null, status: "active" },
+          data: { evidenceRecordId: activityId },
+        });
+        if (bound.count !== 1) throw new Error("qualification_receipt_conflict");
+        return tx.backlogItemActivity.create({ data: { id: activityId, ...activityData } });
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "qualification_receipt_conflict") throw error;
+      return { success: false, error: "qualification_receipt_conflict",
+        message: "The canonical host lease already has a terminal receipt or is no longer active." };
+    }
+  } else activity = await prisma.backlogItemActivity.create({ data: activityData });
   return {
     success: true,
     entityId: activity.id,
@@ -202,7 +250,7 @@ async function recordLocalIntegrationResultHandler(
   userId: string,
   context?: { routeContext?: string },
 ): Promise<ToolResult> {
-  const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
+  const { recordLocalIntegrationResult, TEST_STUB_EVIDENCE_REFUSED } = await import("@/lib/nonprod/local-integration");
   const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
   const provider = stringValue("provider");
   const externalSessionId = stringValue("externalSessionId");
@@ -235,25 +283,34 @@ async function recordLocalIntegrationResultHandler(
   if (!["single-branch", "sibling-set", "post-merge-main"].includes(mode)) {
     return { success: false, error: "invalid_mode", message: `Unsupported local integration mode: ${mode}` };
   }
-  if (!["passed", "failed", "conflict", "blocked_sandbox_drift", "blocked_control_plane_starvation"].includes(status)) {
+  if (!isLocalIntegrationStatus(status)) {
     return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
   }
 
-  const result = await recordLocalIntegrationResult({
-    actorUserId: userId,
-    provider,
-    externalSessionId,
-    routeContext,
-    buildId: stringValue("buildId") || undefined,
-    taskRunId: stringValue("taskRunId") || undefined,
-    candidateBranch,
-    mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-    status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
-    summary,
-    gateKey: stringValue("gateKey") || undefined,
-    leaseId: stringValue("leaseId") || undefined,
-    evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
-  });
+  let result: { id: string };
+  try {
+    result = await recordLocalIntegrationResult({
+      actorUserId: userId,
+      provider,
+      externalSessionId,
+      routeContext,
+      buildId: stringValue("buildId") || undefined,
+      taskRunId: stringValue("taskRunId") || undefined,
+      candidateBranch,
+      mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
+      status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
+      summary,
+      gateKey: stringValue("gateKey") || undefined,
+      leaseId: stringValue("leaseId") || undefined,
+      evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
+    });
+  } catch (error) {
+    // BI-F5344F65: the writer refuses DPF_ALLOW_LOCAL_CI_STUB payloads; name it.
+    if ((error as { code?: unknown } | null)?.code === TEST_STUB_EVIDENCE_REFUSED) {
+      return { success: false, error: TEST_STUB_EVIDENCE_REFUSED, message: (error as Error).message };
+    }
+    throw error;
+  }
   return {
     success: true,
     entityId: result.id,
@@ -364,15 +421,19 @@ async function recordFunctionalFailureEvidenceHandler(
         submittedById: userId,
         agentId: context?.agentId ?? agentId ?? null,
         lastSeenAt: new Date(createdAt),
-        body: [
-          `failureFingerprint: ${failureFingerprint}`,
-          `ownerArea: ${likelyOwnerArea}`,
-          `route: ${route}`,
-          `suite: ${suite}`,
-          `expected: ${expected}`,
-          `actual: ${actual}`,
-          `repro: ${reproCommand}`,
-        ].join("\n"),
+        // BI-458CCA8D: done when the smoke passes again with the expected result.
+        body: composeIntakeBody({
+          outcome: `${testId} passes on ${route}: ${expected}`,
+          body: [
+            `failureFingerprint: ${failureFingerprint}`,
+            `ownerArea: ${likelyOwnerArea}`,
+            `route: ${route}`,
+            `suite: ${suite}`,
+            `expected: ${expected}`,
+            `actual: ${actual}`,
+            `repro: ${reproCommand}`,
+          ].join("\n"),
+        }),
       },
       select: { id: true, itemId: true, occurrenceCount: true },
     });

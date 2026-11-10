@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
 
 import {
@@ -9,16 +11,24 @@ import {
   runPolicyProfile,
 } from "./lib/ci-policy-guards.mjs";
 
+import { buildPreflightPlan } from "./lib/pregate-preflight.mjs";
+import { buildGatePlan } from "./pr-readiness/core.mjs";
+
 const EXPECTED_LEGACY_JOBS = [
+  "actuator-inputs-writable",
   "application-boundary-guard",
   "archetype-completeness-guard",
   "build-studio-namespace-guard",
   "build-studio-surface-guard",
   "bundle-boundary-guard",
   "capability-consumer-guard",
+  "client-server-boundary-guard",
+  "compose-bind-posture-guard",
   "compose-env-contract-guard",
+  "compose-init-reaping-guard",
   "compose-resource-budgets-guard",
   "context-economy-guard",
+  "convergence-impact-gate",
   "data-impact-gate",
   "db-commandment-coverage",
   "decision-baseline",
@@ -30,6 +40,7 @@ const EXPECTED_LEGACY_JOBS = [
   "docs-impact-gate",
   "docs-link-integrity",
   "docs-staleness-detector",
+  "employment-event-writers",
   "endpoint-classification-guard",
   "finding-substrate-guard",
   "fk-index-coverage-guard",
@@ -37,6 +48,10 @@ const EXPECTED_LEGACY_JOBS = [
   "fresh-install-reliability",
   "gate-executor-liveness",
   "governed-teardown-guard",
+  "guard-conformance-marks",
+  "guard-diff-honesty",
+  "hidden-unicode-commit-text-guard",
+  "hidden-unicode-instruction-files-guard",
   "host-port-range-guard",
   "installer-help-contract",
   "installer-skip-visibility",
@@ -46,28 +61,37 @@ const EXPECTED_LEGACY_JOBS = [
   "janitor-tests",
   "label-association-guard",
   "live-blocker-references",
+  "local-canonical-json-guard",
+  "local-markdown-renderer-guard",
+  "local-slugify-guard",
   "mcp-tool-pack-guard",
   "mobile-jest-pin-guard",
+  "model-metadata-tags",
   "module-size-guard",
   "n-minus-one-caller-honesty",
   "new-dependency-gate",
+  "no-unreachable-room-links",
+  "no-url-pathname-fs-guard",
   "override-provenance-guard",
-  "owned-patch-regression",
   "package-boundary-guard",
   "platform-composition-single-home",
   "pr-health-test",
+  "prisma-runtime-traps",
   "prose-lint-guard",
   "published-image-freshness",
   "release-asset-contract",
   "release-compose-pins",
+  "rendered-backlog-pointers",
   "repo-guard-loop",
   "reporting-composition-guard",
-  "retention-enrollment-guard",
   "retired-substrate-guard",
   "sbom-divergence-guard",
   "seed-fit-gate",
+  "self-task-cadence-parity",
   "shell-guard-shim-contract",
   "singleton-safety-guard",
+  "skill-capability-key-guard",
+  "skill-pack-category",
   "spec-plan-doc-gate",
   "spec-status-frontmatter",
   "stewardship-scope-guard",
@@ -75,9 +99,12 @@ const EXPECTED_LEGACY_JOBS = [
   "test-clock-bomb-guard",
   "test-cwd-independence-guard",
   "tool-surface-guard",
+  "toolchain-version-guard",
+  "unattributable-deferral",
   "ux-fit-gate",
   "ux-primitive-adoption-guard",
   "work-unit-conformance-guard",
+  "xff-single-reader",
 ];
 
 function workflowJobBlock(workflow, jobId) {
@@ -88,15 +115,20 @@ function workflowJobBlock(workflow, jobId) {
 }
 
 describe("CI policy guard registry", () => {
-  it("launches pnpm through cmd on Windows without enabling shell mode globally", () => {
+  it("launches pnpm through Node on Windows with literal arguments", t => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "dpf-policy-pnpm-")));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    writeFileSync(join(root, "pnpm.cmd"), "");
+    const script = join(root, "pnpm.cjs");
+    writeFileSync(script, "");
     assert.deepEqual(
       resolvePolicyGuardInvocation("pnpm", ["run", "check:prose-lint"], {
         platform: "win32",
-        env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+        env: { PATH: root },
       }),
       {
-        command: "C:\\Windows\\System32\\cmd.exe",
-        args: ["/d", "/s", "/c", "pnpm run check:prose-lint"],
+        command: process.execPath,
+        args: [script, "run", "check:prose-lint"],
       },
     );
     assert.deepEqual(
@@ -258,4 +290,13 @@ describe("CI policy guard registry", () => {
       );
     }
   });
+});
+
+// This copied-package acceptance suite executes source bytes, not guard logic.
+it("keeps copied-package worktree acceptance in both normal host plans", () => {
+  const fixture = "packages/dpf-skill-pack/hooks/worktree-create.test.mjs";
+  assert.ok(buildPreflightPlan().some(entry => entry.commands.some(command => command[1].includes(fixture))),
+    "host preflight must exercise the cold copied package");
+  assert.ok(buildGatePlan().some(entry => entry.command[1].includes(fixture)),
+    "PR readiness must exercise the same copied-package acceptance");
 });

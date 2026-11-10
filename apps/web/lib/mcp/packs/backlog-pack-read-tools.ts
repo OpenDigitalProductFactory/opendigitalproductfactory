@@ -1,6 +1,18 @@
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import { publicCompletionActivity } from "@/lib/backlog/initiative-readiness/completion-input-context";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
+import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
+import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
+import type { prepareCurrentDesignObservation as PrepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
+
+const INITIATIVE_READINESS_ACTIVITY_KINDS = [
+  "initiative_gate_receipt",
+  "initiative_scope_baseline",
+  "plan_backlog_coverage",
+  "initiative_readiness_decision",
+  "break_fix_declared",
+];
 
 function addDeferralFilters(where: Record<string, unknown>, params: Record<string, unknown>): ToolResult | null {
   const conformance = params["deferralConformance"];
@@ -82,7 +94,7 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
   if (epicRowId !== undefined) where["epicId"] = epicRowId;
   const limit = resolveListLimit(params["limit"]);
 
-  const [items, matching, epics, epicTotal, open, inProgress, done, deferred, retired] = await Promise.all([
+  const [items, matching, epics, epicTotal, open, inProgress, awaitingAcceptance, done, deferred, retired] = await Promise.all([
     prisma.backlogItem.findMany({
       where,
       orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
@@ -115,6 +127,7 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
     prisma.epic.count({ where: epicWhere }),
     prisma.backlogItem.count({ where: { status: "open" } }),
     prisma.backlogItem.count({ where: { status: "in-progress" } }),
+    prisma.backlogItem.count({ where: { status: "awaiting-acceptance" } }),
     prisma.backlogItem.count({ where: { status: "done" } }),
     prisma.backlogItem.count({ where: { status: "deferred" } }),
     prisma.backlogItem.count({ where: { status: "retired" } }),
@@ -122,9 +135,9 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
 
   return {
     success: true,
-    message: `Backlog: ${open} open, ${inProgress} in-progress, ${deferred} deferred, ${done} done, ${retired} retired. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
+    message: `Backlog: ${open} open, ${inProgress} in-progress, ${awaitingAcceptance} awaiting-acceptance, ${deferred} deferred, ${done} done, ${retired} retired. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
     data: {
-      summary: { open, inProgress, deferred, done, retired },
+      summary: { open, inProgress, awaitingAcceptance, deferred, done, retired },
       total: matching,
       truncated: items.length < matching,
       epicTotal,
@@ -182,6 +195,7 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
       const total = e.items.length;
       const open = e.items.filter((it) => it.status === "open").length;
       const inProgress = e.items.filter((it) => it.status === "in-progress").length;
+      const awaitingAcceptance = e.items.filter((it) => it.status === "awaiting-acceptance").length;
       const done = e.items.filter((it) => it.status === "done").length;
       const triaging = e.items.filter((it) => it.status === "triaging").length;
       const deferred = e.items.filter((it) => it.status === "deferred").length;
@@ -192,11 +206,11 @@ export async function listEpics(params: Record<string, unknown>): Promise<ToolRe
         status: e.status,
         priority: e.priority,
         ...scopeData(e),
-        itemCount: { total, triaging, open, inProgress, deferred, done, retired },
+        itemCount: { total, triaging, open, inProgress, awaitingAcceptance, deferred, done, retired },
         hasSpec: refIndex.specs.has(e.epicId),
         hasPlan: refIndex.plans.has(e.epicId),
         updatedAt: e.updatedAt.toISOString(),
-        _hasOpen: triaging + open + inProgress + deferred > 0,
+        _hasOpen: triaging + open + inProgress + awaitingAcceptance + deferred > 0,
       };
     })
     .filter((row) => (wantOpenItems ? row._hasOpen : true))
@@ -242,6 +256,29 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   if (params["hasActiveBuild"] === true) where["activeBuildId"] = { not: null };
   else if (params["hasActiveBuild"] === false) where["activeBuildId"] = null;
 
+  // BI-28E8CB88 acceptance criterion 3: the items holding evidence the gates
+  // cannot read must be enumerable, so the backlog can be reconciled rather than
+  // silently stalled. When first measured on the live install, 38 items held
+  // `evidence` activities, 4 held `initiative_gate_receipt`, and the other 35
+  // had no way to be found.
+  if (params["evidenceNotCounted"] === true) {
+    const holdingEvidence = await prisma.backlogItemActivity.findMany({
+      where: { kind: "evidence" },
+      distinct: ["backlogItemId"],
+      select: { backlogItemId: true },
+    });
+    const holdingReceipts = await prisma.backlogItemActivity.findMany({
+      where: { kind: "initiative_gate_receipt" },
+      distinct: ["backlogItemId"],
+      select: { backlogItemId: true },
+    });
+    const withReceipts = new Set(holdingReceipts.map((row) => row.backlogItemId));
+    const stalled = holdingEvidence
+      .map((row) => row.backlogItemId)
+      .filter((id) => !withReceipts.has(id));
+    where["id"] = { in: stalled };
+  }
+
   const limit = resolveListLimit(params["limit"]);
   const matching = await prisma.backlogItem.count({ where });
   const items = await prisma.backlogItem.findMany({
@@ -269,7 +306,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       epic: { select: { epicId: true } },
       activeBuild: { select: { phase: true, draftApprovedAt: true, kind: true } },
       activities: {
-        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        where: { kind: { in: INITIATIVE_READINESS_ACTIVITY_KINDS } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         take: 100,
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
@@ -279,6 +316,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
   const { buildSpecPlanReferenceIndex, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+  const { withReadinessGoverningPrinciples } = await import("@/lib/kernel/governing-principles");
   const refIndex = await buildSpecPlanReferenceIndex();
   const specPlanCaveat = specPlanCorpusCaveat(refIndex.corpus);
   const evaluatedAt = new Date().toISOString();
@@ -286,10 +324,12 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
     const semanticEpic = i.epic?.epicId ?? null;
     const hasSpec = refIndex.specs.has(i.itemId) || Boolean(semanticEpic && refIndex.specs.has(semanticEpic));
     const hasPlan = refIndex.plans.has(i.itemId) || Boolean(semanticEpic && refIndex.plans.has(semanticEpic));
-    const readiness = projectBacklogItemReadinessSummary({
+    // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
+    const readiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
       item: {
         id: i.id,
         itemId: i.itemId,
+        status: i.status,
         type: i.type,
         source: i.source,
         workType: i.workType,
@@ -302,7 +342,7 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
       hasSpec,
       hasPlan,
       evaluatedAt,
-    });
+    }));
     return ({
     itemId: i.itemId,
     title: i.title,
@@ -347,7 +387,8 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string, context?: ToolExecutionContext,
+  internal?: { currentDesignSource: NonNullable<Parameters<typeof PrepareCurrentDesignObservation>[0]["claimSource"]> }): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -373,6 +414,9 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
           draftApprovedAt: true,
           sandboxId: true,
           createdAt: true,
+          designDoc: true,
+          designReview: true,
+          buildPlan: true,
         },
       },
       activities: {
@@ -383,6 +427,13 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  const { selectWorkroomReadSource, selectionRefusal } = await import("../backlog-workroom-read-source");
+  const selected = await selectWorkroomReadSource({ workroomId: params["workroomId"],
+    userId: currentUserId, agentId: currentAgentId,
+    itemId: item.itemId, itemRowId: item.id });
+  if (selected && !selected.ok) return selectionRefusal;
+  const { loadBacklogWorkroomOwnership } = await import("@/lib/work-capsules/backlog-workroom-ownership");
+  const workroomOwnership = await loadBacklogWorkroomOwnership(prisma, [item.itemId, item.id]);
   const { deriveLifecycleLabel } = await import("@/lib/governed-backlog-workflow");
   const { searchSpecsAndPlans, specPlanCorpusCaveat } = await import("@/lib/backlog/spec-plan-search");
   const { corpus: specPlanCorpus, results: specPlanRefs } = await searchSpecsAndPlans({
@@ -394,12 +445,47 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
   const { mapDemandRows } = await import("@/lib/demand/demand-data");
   const demandView = mapDemandRows([item])[0]!;
   const { projectBacklogItemReadinessSummary } = await import("@/lib/backlog/initiative-readiness/entry-adapter");
+  const { loadInheritedInitiativeScope } = await import("@/lib/backlog/initiative-readiness/parent-scope-inheritance");
+  const { withReadinessGoverningPrinciples } = await import("@/lib/kernel/governing-principles");
   const hasSpec = specPlanRefs.some((entry) => entry.kind === "spec");
   const hasPlan = specPlanRefs.some((entry) => entry.kind === "plan");
-  const readiness = projectBacklogItemReadinessSummary({
+  const inheritedScope = await loadInheritedInitiativeScope(prisma, { childItemId: item.itemId, childRowId: item.id });
+  const { readBoundEditPaths, readBoundWorkShapeRef } = await import("@/lib/backlog/initiative-readiness/bound-work-shape");
+  const { assessDeliverySensitivity } = await import("@/lib/backlog/initiative-readiness/delivery-sensitivity");
+  const boundWorkShape = await readBoundWorkShapeRef(prisma, item.itemId);
+  const declaredPaths = await readBoundEditPaths(prisma, item.itemId).catch(() => []);
+  // BI-8ECF7B5C: judge an item with an active build on its build gate's facts, so the router sees the gate's verdict.
+  const ab = item.activeBuild;
+  const buildFacts = ab ? await (await import("@/lib/build/build-entry-gate")).loadBuildReadinessFacts(prisma as never, {
+    kind: ab.kind, designDoc: ab.designDoc, designReview: ab.designReview, buildPlan: ab.buildPlan,
+    originator: { id: item.id, itemId: item.itemId, title: item.title, body: item.body, workType: item.workType },
+  }).catch(() => null) : null;
+  const evaluatedAt = new Date().toISOString();
+  // BI-094B41AC: an item awaiting acceptance reads the completion gate's own
+  // evaluation (merge signal included), so this view and the gate agree. Null
+  // — any other status, or an evaluation that could not run — keeps the
+  // existing projection.
+  const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
+  const { prepareCurrentDesignObservation } = await import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
+  // Public selection contributes only the persisted source after exact action access.
+  // Legacy internal callers retain their independently checked source binding.
+  const currentDesign = await prepareCurrentDesignObservation({ itemId: item.itemId,
+    ...(selected?.ok ? { claimSource: selected.source } : internal ? { claimSource: internal.currentDesignSource } : {}) });
+  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt,
+    currentDesign: currentDesign.evidence });
+  // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
+  const projectedReadiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
+    currentDesign: currentDesign.evidence,
+    completionDecision: gateCompletion?.decision ?? null,
+    inheritedScope,
     item: {
       id: item.id,
+      workShape: boundWorkShape,
+      deliverySensitivity: buildFacts?.deliverySensitivity
+        ?? assessDeliverySensitivity({ title: item.title, body: item.body, workType: item.workType, declaredPaths }),
+      body: item.body,
       itemId: item.itemId,
+      status: item.status,
       type: item.type,
       source: item.source,
       workType: item.workType,
@@ -409,17 +495,101 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       activeBuildKind: item.activeBuild?.kind ?? null,
     },
     activities: item.activities
-      .filter((activity) => ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"].includes(activity.kind))
+      .filter((activity) => INITIATIVE_READINESS_ACTIVITY_KINDS.includes(activity.kind))
       .map((activity) => ({ ...activity, gateKey: activity.gateKey ?? null })),
     hasSpec,
     hasPlan,
-    evaluatedAt: new Date().toISOString(),
-  });
+    evaluatedAt,
+    buildDesign: buildFacts?.buildDesign ?? null,
+  }));
+  const deliveryReadiness = gateCompletion
+    ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
+    : projectedReadiness;
+  const { loadPlanBaselinePrerequisite } = await import("@/lib/backlog/initiative-readiness/plan-baseline-prerequisite");
+  const readiness = { ...deliveryReadiness, planBaselinePrerequisite: await loadPlanBaselinePrerequisite({
+    db: prisma, item, decision: projectedReadiness.decisions?.implementation,
+    currentDesignState: projectedReadiness.currentDesignState,
+  }) };
+  const requestedGate = params["recoveryGate"];
+  const reassessmentAuthorizationItemId = params["reassessmentAuthorizationItemId"];
+  if (reassessmentAuthorizationItemId !== undefined && (typeof reassessmentAuthorizationItemId !== "string"
+    || !/^BI-[A-F0-9]{8}$/.test(reassessmentAuthorizationItemId)
+    || !["design-spec", "spec-approval"].includes(String(requestedGate)) || context?.authSource !== "oauth")) {
+    return { success: false, error: "reassessment-policy-unproven", message: "A present reassessment requires one exact approved authorization item and design review gate on the current connection." };
+  }
+  if (requestedGate !== undefined && !isRecoveryReadGate(requestedGate)) {
+    return { success: false, error: "invalid_recovery_gate", message: "Choose a declared recoveryGate from get_backlog_item's schema. No review request was delivered." };
+  }
+  const completion = requestedGate !== undefined
+    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}, readiness.planBaselinePrerequisite) : readiness.decisions?.completion;
+  const needsTerminalRecovery = currentDesign.evidence.state !== "unavailable" && completion && completion.verdict !== "allowed"
+    && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
+      .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
+        "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code)));
+  let taskAuthority: { userId: string; taskAuthorityKey: string } | null = null;
+  // Admission regenerates these packets with trusted task history too. Omitting
+  // it changes a fresh request's identity even when an owned legacy task masks it.
+  const needsDesignTaskAuthority = needsTerminalRecovery && (requestedGate === undefined
+    ? completion && designPhaseReviewDecision(completion) !== null
+    : ["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(requestedGate));
+  if (needsTerminalRecovery && needsDesignTaskAuthority && context?.authSource === "oauth") {
+    const taskAuthorityKey = currentUserId && context.apiTokenId
+      ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
+        tokenId: context.apiTokenId, userId: currentUserId, source: "oauth",
+      }) : null;
+    if (!taskAuthorityKey || !currentUserId) return { success: false, error: "review_task_authority_unavailable",
+      message: "The current connection's review task authority could not be verified. No replacement request was delivered; restore the authorized connection before reading independent design recovery." };
+    taskAuthority = { userId: currentUserId, taskAuthorityKey };
+  }
+  const recovery = needsTerminalRecovery
+    ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
+      currentUserId,
+        decision: completion, currentAgentId, refusedWorkroomId: selected?.ok ? selected.source.workroomId : null,
+        ...(taskAuthority ? { taskAuthority } : {}),
+      })
+    : undefined;
+  if (requestedGate !== undefined) {
+    if (!await canReadRecoveryPacket({ gate: requestedGate, recovery, currentAgentId, currentUserId })) {
+      return { success: false, error: "workroom_data_access_required", message: "The current connection cannot read this Workroom's review packet. Follow the existing room admission remedy; item visibility grants no additional access." };
+    }
+    if (recovery && currentUserId && currentAgentId && context?.authSource === "oauth") {
+      const { issueOriginalReviewRecoveryTarget } = await import("@/lib/mcp-task-review-recovery");
+      const key = taskAuthority?.taskAuthorityKey ?? (context.apiTokenId ? await (await import("@/lib/auth/oauth-task-authority"))
+        .resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId: currentUserId, source: "oauth" }) : null);
+      if (!key) return { success: false, error: "review_task_authority_unavailable", message: "The current connection's review task authority could not be verified. No request was delivered." };
+      for (const route of recovery.reviewerRoutes.filter(route => route.gate === requestedGate && route.independent)) {
+        if (typeof reassessmentAuthorizationItemId === "string") {
+          try {
+            const { issuePresentReassessmentRequest } = await import("@/lib/mcp-task-review-reassessment");
+            route.requestCoworker = await issuePresentReassessmentRequest({ packet: route.requestCoworker,
+              authorizationItemId: reassessmentAuthorizationItemId, userId: currentUserId, actingAgentId: currentAgentId,
+              tokenGrantScopes: context.tokenGrantScopes ?? [] }) as typeof route.requestCoworker;
+          } catch {
+            return { success: false, error: "reassessment-policy-unproven", message: "The current approval, original readback or exact source could not authorize a present request. No replacement was delivered." };
+          }
+          continue;
+        }
+        const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
+          userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key,
+          tokenGrantScopes: context.tokenGrantScopes });
+        if (issued.kind === "refused") return { success: false, error: "original_review_recovery_required",
+          message: "The existing review needs reconciliation before any new dispatch. No replacement request was delivered.",
+          data: { reason: issued.reason, itemId: item.itemId, recoveryGate: requestedGate,
+            ...(issued.originalResult ? { originalResult: issued.originalResult } : {}),
+            ...(issued.resultRead ? { resultRead: issued.resultRead } : {}) } };
+        if (issued.kind === "target") route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
+      }
+    }
+    if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;
+    return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, recovery });
+  }
+  if (selected?.ok && !await selected.isCurrent()) return selectionRefusal;
   return {
     success: true,
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
     data: {
       itemId: item.itemId,
+      workShape: boundWorkShape,
       title: item.title,
       status: item.status,
       type: item.type,
@@ -430,6 +600,10 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       triageOutcome: item.triageOutcome,
       deferral: deferralData(item),
       ...scopeData(item),
+      // BI-8DE5429B: the item's own outcome, and whether a person or agent
+      // stated it or the platform derived a draft that is still to be confirmed.
+      outcome: item.outcome ?? null,
+      outcomeSource: item.outcomeSource ?? null,
       body: item.body ?? null,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
@@ -469,7 +643,10 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
             sandboxId: item.activeBuild.sandboxId,
           }
         : null,
+      workrooms: workroomOwnership.workrooms,
+      activeWorkrooms: workroomOwnership.liveWorkrooms,
       readiness,
+      ...(recovery ? { recovery } : {}),
       specPlanCorpus,
       specPlanFiles: specPlanRefs.map((r) => ({
         path: r.path,
@@ -477,13 +654,7 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
         title: r.title,
         date: r.date,
       })),
-      recentActivity: item.activities.slice(0, 10).map((a) => ({
-        id: a.id,
-        kind: a.kind,
-        summary: a.summary,
-        recordedAt: a.recordedAt.toISOString(),
-        payload: a.payload,
-      })),
+      recentActivity: item.activities.slice(0, 10).map(publicCompletionActivity),
     },
   };
 }
@@ -546,7 +717,7 @@ export async function getNextRecommendedWork(params: Record<string, unknown>): P
       epic: { select: { epicId: true, status: true } },
       activeBuild: { select: { kind: true } },
       activities: {
-        where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+        where: { kind: { in: INITIATIVE_READINESS_ACTIVITY_KINDS } },
         orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
         take: 100,
         select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
@@ -565,6 +736,7 @@ export async function getNextRecommendedWork(params: Record<string, unknown>): P
       item: {
         id: i.itemId,
         itemId: i.itemId,
+        status: i.status,
         type: i.type,
         source: i.source,
         workType: i.workType,

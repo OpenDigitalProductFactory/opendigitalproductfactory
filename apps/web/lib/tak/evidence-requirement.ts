@@ -15,13 +15,11 @@
 // live-state tools) plus a live-state question cue. Phase 2 (the IntentClassifier)
 // replaces the heuristic; the enforcement guard is permanent.
 
-import { classifyTaskClass } from "./intent-taxonomy";
+import { classifyTaskClass, isSuppliedSourceAnalysis, LIVE_STATE_CUES } from "./intent-taxonomy";
 
 /** What the user is shown when a live-data answer could not be tool-verified. */
 export const INV5_UNVERIFIED_MESSAGE =
-  "I couldn't verify this against live data just now — I don't want to guess at " +
-  "operational numbers that might be wrong. Ask me again and I'll pull the current " +
-  "figures directly, or check the relevant workspace view.";
+  "I don't have a verified live-data result for this answer. The request is unfinished.";
 
 /** Label for the quarantined draft wherever an operator surface renders it. */
 export const INV5_WITHHELD_HEADING = "Unverified draft (no tool evidence — do not act on it as fact):";
@@ -36,35 +34,19 @@ export const INV5_WITHHELD_HEADING = "Unverified draft (no tool evidence — do 
  * The fix deliberately does NOT put the draft back in the reply. BI-B5C358B1
  * established that a fabricated operational figure must never reach the reader,
  * and a labelled fabrication is still a fabrication in front of someone
- * skimming. So the user-facing content is unchanged, and the withheld text is
- * carried alongside for the caller to persist as an internal artifact.
+ * skimming. The reply reports the unverified outcome, and withheld text is
+ * carried separately for fenced internal diagnostic retention.
  */
 
 /** Minimum length for a reply to count as a substantive (potentially-misleading)
  *  operational answer. Below this it is a terse acknowledgement, not a claim. */
 export const SUBSTANTIVE_REPLY_MIN_CHARS = 80;
 
-/**
- * Words that signal a question about CURRENT operational state — the class of
- * answer that must be backed by a live tool call, not the model's memory. Kept
- * deliberately small and high-precision for Phase 1.
- */
-const LIVE_STATE_CUES: readonly RegExp[] = [
-  /\bresolved\b/i,
-  /\bstatus\b/i,
-  /\bhow many\b/i,
-  /\bhow much\b/i,
-  /\bcount\b/i,
-  /\bcurrent(ly)?\b/i,
-  /\b(still )?(open|pending|outstanding|in[- ]progress|blocked|overdue|done|closed|completed)\b/i,
-  /\bany (new|updates?|changes?)\b/i,
-  /\bwhat('?s| is| are)\b.*\b(left|remaining|happening|going on)\b/i,
-  /\blatest\b/i,
-  /\bright now\b/i,
-];
 
 export interface EvidenceRequirement {
   required: boolean;
+  /** Supplied source analysis; never evidence for current operational state. */
+  suppliedSourceEvidence?: boolean;
   /** The matched task class (e.g. "backlog-status"), or a route label / null. */
   taskClass: string | null;
   /** The authoritative live-state tools that verify this class, when known. A
@@ -88,6 +70,7 @@ export function classifyEvidenceRequirement(params: {
 }): EvidenceRequirement {
   const message = (params.message ?? "").trim();
   if (message.length === 0) return { required: false, taskClass: null };
+  if (isSuppliedSourceAnalysis(message)) return { required: false, taskClass: null, suppliedSourceEvidence: true };
 
   // Phase 2: data-driven task-class classification.
   const tc = classifyTaskClass({ routeContext: params.routeContext, message });

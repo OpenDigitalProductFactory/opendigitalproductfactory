@@ -23,8 +23,8 @@ import {
   type Column,
   type RowsChangeData,
   type SortColumn,
-  type RenderSummaryCellProps,
-  type RenderGroupCellProps,
+  type RenderSummaryCellContentProps as RenderSummaryCellProps,
+  type RenderGroupCellContentProps as RenderGroupCellProps,
   type CellCopyArgs,
   type CellPasteArgs,
   type CellMouseArgs,
@@ -101,12 +101,9 @@ import {
   type FilterGroup,
 } from "./grid-filter-builder";
 import { rowsToCsv } from "./grid-csv";
-import { buildXlsx, type XlsxValue } from "./grid-xlsx";
-import {
-  type ConditionalRule,
-  rowColor,
-  rowColorClass,
-} from "./grid-conditional-format";
+import { exportWorkbookView } from "./grid-office-export";
+import type { ConditionalRule } from "@/lib/workbooks/conditional-format";
+import { rowColor, rowColorClass } from "./grid-conditional-format";
 import {
   GridFilterPanel,
   GridSummaryPanel,
@@ -972,8 +969,8 @@ export function WorkbookGrid({
   // does not support summary rows, so it always receives undefined.
   const bottomSummaryRows = showFooter && !grouping ? [footerRow] : undefined;
 
-  const rowGrouper = useCallback(
-    (rows: readonly GridRowData[], columnKey: string) => groupRowsByColumn(rows, columnKey),
+  const getRowGroupKey = useCallback(
+    (row: GridRowData, columnKey: string) => Object.keys(groupRowsByColumn([row], columnKey))[0],
     [],
   );
 
@@ -1434,33 +1431,14 @@ export function WorkbookGrid({
     URL.revokeObjectURL(url);
   }, [columns, sortedRows, tableId]);
 
-  // Native .xlsx export of the current view (visible columns, current sort/filter).
-  // Numeric cells stay numbers so Excel treats them as numbers; everything else is
-  // the same display text as the CSV export. Dependency-free writer (grid-xlsx.ts).
-  const onExportXlsx = useCallback(() => {
-    if (typeof document === "undefined") return;
-    const header: XlsxValue[] = visibleCols.map((c) => c.name);
-    const dataRows: XlsxValue[][] = sortedRows.map((r) =>
-      visibleCols.map((c) => {
-        const raw = r[c.columnId];
-        return typeof raw === "number" ? raw : cellSearchText(raw ?? null);
-      }),
-    );
-    const bytes = buildXlsx([header, ...dataRows], { sheetName: tableId });
-    // Uint8Array is a valid BlobPart at runtime; the cast placates the DOM lib's
-    // stricter generic (Uint8Array<ArrayBufferLike>) under TS 5.7+.
-    const blob = new Blob([bytes as BlobPart], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${tableId}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }, [visibleCols, sortedRows, tableId]);
+  // Office export of the current view through the document engine
+  // (grid-office-export.ts): formats, formulas, rules and the chart view's data.
+  const onExportOffice = useCallback(async (format: "xlsx" | "ods") => {
+    setBusy(true);
+    const chart = showSummary && summaryMode === "chart" && summaryGroupBy ? { groupByColumnId: summaryGroupBy, valueColumnId: summaryValue || null } : null;
+    setError(await exportWorkbookView(format, { tableId, columns: visibleCols, rows: sortedRows, cfRules, chart }));
+    setBusy(false);
+  }, [visibleCols, sortedRows, tableId, cfRules, showSummary, summaryMode, summaryGroupBy, summaryValue]);
 
   return (
     <div className="flex h-full flex-col gap-2" onKeyDown={onKeyDown}>
@@ -1543,9 +1521,10 @@ export function WorkbookGrid({
           />
         </div>
         <GridExportMenu
-          disabled={columns.length === 0}
+          disabled={columns.length === 0 || busy}
           onExportCsv={onExportCsv}
-          onExportXlsx={onExportXlsx}
+          onExportXlsx={() => void onExportOffice("xlsx")}
+          onExportOds={() => void onExportOffice("ods")}
         />
         <button
           type="button"
@@ -1769,7 +1748,7 @@ export function WorkbookGrid({
               onSelectedRowsChange={setSelectedRows}
               onColumnsReorder={onColumnsReorder}
               groupBy={effectiveGroupBy}
-              rowGrouper={rowGrouper}
+              getRowGroupKey={getRowGroupKey}
               expandedGroupIds={expandedGroupIds}
               onExpandedGroupIdsChange={onExpandedGroupIdsChange}
               rowClass={(row) => {

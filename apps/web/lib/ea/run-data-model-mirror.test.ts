@@ -55,7 +55,12 @@ function makeClient() {
   return {
     eaNotation: { findUnique: async () => ({ id: "n", slug: "archimate4" }) },
     eaElementType: { findUnique: async () => ({ id: "et", neoLabel: "ArchiMate__DataObject", slug: "data_object" }) },
-    eaRelationshipType: { findUnique: async () => ({ id: "rt", neoType: "ASSOCIATED_WITH", slug: "associated_with" }) },
+    eaRelationshipType: {
+      findUnique: async (args: Record<string, unknown>) => {
+        const slug = (args.where as { notationId_slug: { slug: string } }).notationId_slug.slug;
+        return { id: `rt-${slug}`, neoType: slug.toUpperCase(), slug };
+      },
+    },
     viewpointDefinition: { upsert: async () => ({ id: "vp" }) },
     eaView: { findFirst: async () => null, create: async () => ({ id: "view" }) },
     eaElement: store(elements, "el"),
@@ -72,16 +77,16 @@ function makeClient() {
 }
 
 describe("runDataModelMirror", () => {
-  it("composes parse → reconcile → steward from an injected schema (Neo4j off)", async () => {
+  it("composes parse → reconcile → steward from an injected schema (graph sync off)", async () => {
     const result = await runDataModelMirror({
       prisma: makeClient(),
       schemaSource: SCHEMA,
-      syncNeo4j: false,
+      syncGraph: false,
     });
 
     expect(result.mirror.status).toBe("applied");
     expect(result.mirror.summary.created).toBeGreaterThan(0);
     expect(result.steward).toBeDefined();
-    expect(result.neo4jSynced).toBeNull();
+    expect(result.graphSynced).toBeNull();
   });
 });

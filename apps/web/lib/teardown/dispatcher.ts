@@ -55,7 +55,7 @@ export async function dispatchTeardown(params: TeardownDispatchParams): Promise<
   const { command, args } = buildTeardownDockerCommand(params);
   const containerName = `dpf-teardown-${params.envelope.runId.toLowerCase()}`;
   return await new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env: { ...process.env }, windowsHide: true });
+    const child = spawn(/*turbopackIgnore: true*/ command, args, { env: { ...process.env }, windowsHide: true });
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });

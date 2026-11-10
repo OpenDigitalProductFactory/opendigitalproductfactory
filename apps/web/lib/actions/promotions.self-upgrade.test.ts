@@ -54,11 +54,13 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
 vi.mock("@/lib/self-upgrade/runtime-image-identity", () => ({ readCurrentContainerConfigDigest: vi.fn().mockResolvedValue(`sha256:${"a".repeat(64)}`) }));
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   createRun: vi.fn(),
-  failRun: vi.fn(),
   getLatestRun: vi.fn(),
   getLatestSucceededRun: vi.fn(),
 }));
-
+vi.mock("@/lib/self-upgrade/admission", () => ({
+  resolveCurrentSelfUpgradeTarget: vi.fn(),
+  admitSelfUpgrade: vi.fn(),
+}));
 vi.mock("@/lib/self-upgrade/impact", () => ({
   getCurrentImpactSummaryId: vi.fn().mockResolvedValue(null),
   loadRunImpactDigest: vi.fn().mockResolvedValue(null),
@@ -115,8 +117,8 @@ vi.mock("@/lib/self-upgrade/cooldown", () => ({
   DEFAULT_COOLDOWN_MINUTES: 30,
 }));
 
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: {
+vi.mock("@/lib/jobs", () => ({
+  jobs: {
     send: vi.fn().mockResolvedValue(undefined),
     // createFunction is called at module-init by self-upgrade.ts; stub it to avoid TypeError
     createFunction: vi.fn().mockReturnValue({ id: "mocked-fn" }),
@@ -175,6 +177,10 @@ import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { loadReleaseInstallContext, resolveReleaseUpgradeCandidate } from "@/lib/self-upgrade/release-target";
 import { createRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
 import {
+  admitSelfUpgrade,
+  resolveCurrentSelfUpgradeTarget,
+} from "@/lib/self-upgrade/admission";
+import {
   getCurrentImpactSummaryId,
   loadRunImpactDigests,
   loadRunImpactSummary,
@@ -183,9 +189,10 @@ import { isUpgradeWindowOpen, nextUpgradeWindowOpen } from "@/lib/self-upgrade/w
 import { resolveAutoUpgradeWindow, nextAutoWindowOpen } from "@/lib/self-upgrade/auto-window";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { revalidatePath } from "next/cache";
 import { runSelfUpgradeRollback, SelfUpgradeRollbackError } from "@/lib/self-upgrade/rollback";
+import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
 import {
   getSelfUpgradeRunImpact,
   getSelfUpgradeStatus,
@@ -193,7 +200,7 @@ import {
   rollbackSelfUpgrade,
   triggerSelfUpgrade,
 } from "./promotions";
-import { consumerReleaseContext, consumerReleaseSupport, mockConfig, mockRun, mockSession } from "./promotions.self-upgrade.test-fixtures";
+import { consumerReleaseContext, consumerReleaseSupport, mockConfig, mockRun, mockSession, mockRunRow1, mockRunRow2, recoverableRun } from "./promotions.self-upgrade.test-fixtures";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -213,6 +220,17 @@ beforeEach(() => {
   vi.mocked(loadReleaseInstallContext).mockResolvedValue(null);
   vi.mocked(getLatestRun).mockResolvedValue(null);
   vi.mocked(getLatestSucceededRun).mockResolvedValue(null);
+  vi.mocked(resolveCurrentSelfUpgradeTarget).mockResolvedValue({
+    targetKind: "git-source",
+    targetSha: "b".repeat(40),
+    targetTag: null,
+  });
+  vi.mocked(admitSelfUpgrade).mockResolvedValue({
+    admitted: true,
+    disposition: "created",
+    runId: "SUR-QUEUED1",
+    dispatchStatus: "admission_pending",
+  });
   vi.mocked(createRun).mockResolvedValue({
     ...mockRun,
     runId: "SUR-QUEUED1",
@@ -241,6 +259,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 // ─── Permission Guard ─────────────────────────────────────────────────────────
@@ -528,10 +547,9 @@ describe("getSelfUpgradeStatus", () => {
     expect(result.windowSource).toBe("needs-timezone");
     expect(result.autoWindowSummary).toBeNull();
     expect(result.nextWindowStart).toBeNull();
-    // No window is handed to the gate (24/7 + unknown tz → not auto-runnable).
-    expect(isUpgradeWindowOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ explicitWindows: undefined }),
-    );
+    // 24/7 + unknown tz → no window is evaluated and none is open (BI-2128872C:
+    // effective-window.ts, shared with the scheduled gate).
+    expect(result.inMaintenanceWindow).toBe(false);
   });
 
   // BI-59591B14 — surface an active operator blackout so the panel can explain a
@@ -578,34 +596,6 @@ describe("getSelfUpgradeStatus", () => {
 });
 
 // ─── listSelfUpgradeRuns ──────────────────────────────────────────────────────
-
-const mockRunRow1 = {
-  runId: "SUR-AAAA0001",
-  status: "succeeded",
-  trigger: "scheduled",
-  currentSha: "abc1234",
-  targetSha: "def5678",
-  deployedSha: "def5678",
-  startedAt: new Date("2026-05-20T02:00:00Z"),
-  completedAt: new Date("2026-05-20T02:05:00Z"),
-  completionEvidence: { recoveryPoint: { status: "ok" } },
-  failureLog: null,
-  createdAt: new Date("2026-05-20T02:00:00Z"),
-};
-
-const mockRunRow2 = {
-  runId: "SUR-BBBB0002",
-  status: "failed",
-  trigger: "manual",
-  currentSha: "abc1234",
-  targetSha: "def5678",
-  deployedSha: null,
-  startedAt: new Date("2026-05-19T02:00:00Z"),
-  completedAt: new Date("2026-05-19T02:01:00Z"),
-  completionEvidence: null,
-  failureLog: "promoter exited with code 1",
-  createdAt: new Date("2026-05-19T02:00:00Z"),
-};
 
 describe("listSelfUpgradeRuns – access control", () => {
   it("rejects unauthenticated users", async () => {
@@ -900,69 +890,77 @@ describe("triggerSelfUpgrade – access control", () => {
   });
 });
 
-// ─── triggerSelfUpgrade – dispatch ───────────────────────────────────────────
-
 describe("triggerSelfUpgrade – dispatch", () => {
-  it("creates a durable queued run before sending the worker event", async () => {
+  it("does not grant recovery authority to a plain failed-run retry", async () => {
+    vi.mocked(getLatestRun).mockResolvedValue(recoverableRun as never);
     const result = await triggerSelfUpgrade();
-
-    expect(createRun).toHaveBeenCalledWith({
-      triggeredBy: "manual:user-ops-1",
-      impactSummaryId: null,
-    });
-    expect(vi.mocked(inngest.send)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ runId: "SUR-QUEUED1" }),
-      }),
-    );
-    expect(result).toEqual({ queued: true, runId: "SUR-QUEUED1" });
+    expect(admitSelfUpgrade).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ queued: false, reason: "recovery-binding-required", runId: "SUR-6B312E24" });
   });
-
+  it.each([
+    { dispatchAttemptCount: 1 },
+    { dispatchAcknowledgedAt: new Date("2026-09-06T18:28:00Z") },
+    { dispatchEventIds: ["dispatch-event"] },
+  ])("admits a fresh run after a dispatched failure: %j", async (dispatch) => {
+    vi.mocked(getLatestRun).mockResolvedValue({ ...recoverableRun, ...dispatch } as never);
+    const result = await triggerSelfUpgrade();
+    expect(result).toMatchObject({ queued: true, admitted: true });
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      recoveryOfRunId: null, requestedForce: false,
+    }));
+  });
+  it("uses the authenticated operator action as the sole typed recovery boundary", async () => {
+    const releaseTarget = { targetKind: "release-artifact" as const, targetSha: "c137e6cdb1fe82d00565841ec683cec5c80710ab",
+      targetTag: "v2026.08.29-source-free-upgrade-reconciliation.1" };
+    vi.stubEnv("DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "test-target-binding-secret");
+    vi.mocked(readSelfUpgradeSupport).mockResolvedValue(consumerReleaseSupport);
+    vi.mocked(resolveCurrentSelfUpgradeTarget).mockResolvedValue(null);
+    vi.mocked(getLatestRun).mockResolvedValue(recoverableRun as never);
+    const result = await triggerSelfUpgrade({ targetBinding: createSelfUpgradeTargetBinding(releaseTarget) });
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      triggeredBy: "manual:user-ops-1", target: releaseTarget, recoveryOfRunId: "SUR-6B312E24",
+    }));
+    expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
+  });
+  it("preserves the rendered target on a fresh dispatched-failure retry", async () => {
+    const target = { targetKind: "release-artifact" as const, targetSha: "c137e6cdb1fe82d00565841ec683cec5c80710ab", targetTag: "v2026.08.29-source-free-upgrade-reconciliation.1" };
+    vi.stubEnv("DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "test-target-binding-secret");
+    vi.mocked(readSelfUpgradeSupport).mockResolvedValue(consumerReleaseSupport);
+    vi.mocked(getLatestRun).mockResolvedValue({ ...recoverableRun, dispatchAttemptCount: 1 } as never);
+    vi.mocked(resolveCurrentSelfUpgradeTarget).mockResolvedValue(target);
+    expect(await triggerSelfUpgrade({ targetBinding: createSelfUpgradeTargetBinding(target) })).toMatchObject({ queued: true });
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({ target, recoveryOfRunId: null, requestedForce: false }));
+  });
+  it("refuses an incomplete failed run without fresh admission", async () => {
+    vi.mocked(getLatestRun).mockResolvedValue({ ...recoverableRun, completedAt: null, dispatchAttemptCount: 1 } as never);
+    expect(await triggerSelfUpgrade()).toMatchObject({ queued: false, reason: "recovery-predecessor-not-terminal" });
+    expect(admitSelfUpgrade).not.toHaveBeenCalled();
+  });
   it("attaches the reviewed impact summary to the run when one exists", async () => {
     vi.mocked(getCurrentImpactSummaryId).mockResolvedValueOnce("UIS-77");
-
     await triggerSelfUpgrade();
-
-    expect(createRun).toHaveBeenCalledWith({
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
       triggeredBy: "manual:user-ops-1",
       impactSummaryId: "UIS-77",
-    });
+    }));
   });
-
-  it("sends self-upgrade event to inngest", async () => {
+  it("binds the manual actor and force posture in admission", async () => {
     await triggerSelfUpgrade();
-
-    expect(vi.mocked(inngest.send)).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "ops/self-upgrade.run" }),
-    );
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({
+      triggeredBy: `manual:${mockSession.user.id}`,
+      requestedForce: false,
+    }));
   });
-
-  it("includes manual triggeredBy with user id", async () => {
-    await triggerSelfUpgrade();
-
-    expect(vi.mocked(inngest.send)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          triggeredBy: `manual:${mockSession.user.id}`,
-        }),
-      }),
-    );
-  });
-
   it("passes dryRun: true when dryRun option is set", async () => {
     await triggerSelfUpgrade({ dryRun: true });
-
-    expect(vi.mocked(inngest.send)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ dryRun: true }),
-      }),
-    );
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true }));
   });
 
   it("returns { queued: true }", async () => {
     const result = await triggerSelfUpgrade();
-    expect(result).toEqual({ queued: true, runId: "SUR-QUEUED1" });
+    expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
   });
+
 });
 
 // ─── triggerSelfUpgrade – maintenance window gate + emergency override ─────────
@@ -975,28 +973,26 @@ describe("triggerSelfUpgrade – manual is not window-gated", () => {
 
     const result = await triggerSelfUpgrade();
 
-    expect(result).toEqual({ queued: true, runId: "SUR-QUEUED1" });
-    expect(vi.mocked(inngest.send)).toHaveBeenCalled();
-    // It doesn't even consult the window for a manual trigger.
-    expect(vi.mocked(isUpgradeWindowOpen)).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
+    // BI-2128872C AC-2: it runs now, and the run records that it bypassed the window.
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({ triggeredBy: `manual:${mockSession.user.id}+outside-window` }));
   });
 
   it("emergency override dispatches with force (bypasses the quiescence drain)", async () => {
     const result = await triggerSelfUpgrade({ force: true });
 
-    expect(result).toEqual({ queued: true, runId: "SUR-QUEUED1" });
-    expect(vi.mocked(inngest.send)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ force: true }),
-      }),
+    expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(
+      expect.objectContaining({ requestedForce: true }),
     );
   });
 
   it("does not include force in the event for a normal manual trigger", async () => {
     await triggerSelfUpgrade();
 
-    const sent = vi.mocked(inngest.send).mock.calls[0][0] as { data: Record<string, unknown> };
-    expect(sent.data).not.toHaveProperty("force");
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(
+      expect.objectContaining({ requestedForce: false }),
+    );
   });
 });
 
@@ -1015,7 +1011,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "already-running" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("includes runId of the active run in the response", async () => {
@@ -1042,7 +1038,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "already-running" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("does not dispatch a duplicate event while the latest run is still queued", async () => {
@@ -1062,7 +1058,7 @@ describe("triggerSelfUpgrade – guard: already-running", () => {
       runId: "SUR-QUEUED1",
     });
     expect(createRun).not.toHaveBeenCalled();
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 });
 
@@ -1080,7 +1076,7 @@ describe("triggerSelfUpgrade – guard: invalid-config", () => {
     expect(result).toEqual(
       expect.objectContaining({ queued: false, reason: "disabled" }),
     );
-    expect(vi.mocked(inngest.send)).not.toHaveBeenCalled();
+    expect(vi.mocked(jobs.send)).not.toHaveBeenCalled();
   });
 
   it("dryRun bypasses the disabled guard and dispatches the event", async () => {
@@ -1091,7 +1087,7 @@ describe("triggerSelfUpgrade – guard: invalid-config", () => {
 
     const result = await triggerSelfUpgrade({ dryRun: true });
 
-    expect(result).toEqual({ queued: true, runId: "SUR-QUEUED1" });
-    expect(vi.mocked(inngest.send)).toHaveBeenCalled();
+    expect(result).toMatchObject({ queued: true, admitted: true, runId: "SUR-QUEUED1" });
+    expect(admitSelfUpgrade).toHaveBeenCalledWith(expect.objectContaining({ dryRun: true }));
   });
 });

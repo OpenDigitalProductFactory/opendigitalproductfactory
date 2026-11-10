@@ -48,6 +48,16 @@ export async function runReleaseHealthCheck(
 
   const prior = await loadReleaseHealthState();
   const snapshot = read.latest;
+  const verifiedTarget =
+    snapshot?.status === "verified" &&
+    snapshot.runConclusion === "success" &&
+    prior?.snapshot?.status === "verified" &&
+    prior.snapshot.runConclusion === "success" &&
+    prior.snapshot.runId === snapshot.runId &&
+    prior.snapshot.tag === snapshot.tag &&
+    prior.snapshot.headSha === snapshot.headSha
+      ? (prior.verifiedTarget ?? null)
+      : null;
 
   let notificationCreated = false;
   let notificationsResolved = 0;
@@ -67,6 +77,7 @@ export async function runReleaseHealthCheck(
     snapshot,
     checkedAt: now.toISOString(),
     notifiedRunId: isRed ? snapshot.runId : (prior?.notifiedRunId ?? null),
+    verifiedTarget,
   });
 
   return { ok: true, snapshot, notificationCreated, notificationsResolved };

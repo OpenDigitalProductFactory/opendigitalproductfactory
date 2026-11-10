@@ -4,7 +4,7 @@ import {
   mapConsultOutcome,
   recordKernelConsultInteraction,
 } from "./kernel-consult-ledger";
-import type { DecisionResult } from "./option-scoring";
+import type { DecisionResult } from "@dpf/validators/judgment/option-scoring";
 import type { DecisionCallerContext } from "./caller-context";
 
 function makeResult(overrides: Partial<DecisionResult> = {}): DecisionResult {
@@ -56,10 +56,27 @@ function makeDb(overrides: {
   profile?: { profileId: string; kind: string } | null;
   version?: { versionId: string } | null;
   createImpl?: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+  /** Agent.agentId values that exist. */
+  agents?: string[];
 } = {}) {
   const created: Array<Record<string, unknown>> = [];
+  const ledger: Array<{ where: { ledgerId: string }; create: Record<string, unknown> }> = [];
   return {
     created,
+    ledger,
+    agent: {
+      findMany: vi.fn(async (args: { where: { agentId: { in: string[] } } }) =>
+        args.where.agentId.in
+          .filter((id) => (overrides.agents ?? []).includes(id))
+          .map((agentId) => ({ agentId })),
+      ),
+    },
+    decisionShadowLedger: {
+      upsert: vi.fn(async (args: { where: { ledgerId: string }; create: Record<string, unknown> }) => {
+        ledger.push(args);
+        return args.create;
+      }),
+    },
     decisionPerspectiveProfile: {
       findUnique: vi.fn(async () =>
         overrides.profile === undefined
@@ -142,6 +159,11 @@ describe("mapConsultOutcome", () => {
 });
 
 describe("recordKernelConsultInteraction", () => {
+  it("records an unresolved non-damaging consult for independent review", async () => {
+    const db = makeDb();
+    await recordKernelConsultInteraction({ db: db as never, result: makeResult({ recommendation: null }), callerContext: wwmdContext, question: "Which storage approach?", optionIds: ["a", "b"], optionDescriptions: { a: "First option", b: "Second option" }, appliedPrincipleCount: 0, seal: false });
+    expect(db.created[0]).toMatchObject({ outcomeType: "defer", escalationRoute: "independent_review", escalationReason: "independent-review-required", escalationFollowOn: "corpus-gap" });
+  });
   it("persists a ledger row attributed to the governing profile", async () => {
     const db = makeDb();
     const outcome = await recordKernelConsultInteraction({
@@ -151,8 +173,24 @@ describe("recordKernelConsultInteraction", () => {
       question: "Which storage approach should we take?",
       optionIds: ["option-a", "option-b"],
       optionDescriptions: { "option-a": "Reuse table", "option-b": "New table" },
+      scoredOptions: [
+        { id: "option-a", description: "Reuse table", features: { blast_radius: -0.2 } },
+        { id: "option-b", description: "New table", features: { blast_radius: -0.7 } },
+      ],
       appliedPrincipleCount: 21,
       callingSurface: "claude-code",
+      policyProjection: {
+        policyAffirmativeOptionId: "proceed",
+        dualControlRequired: false,
+        policyActionBinding: {
+          actionKey: "record_initiative_evidence",
+          subject: { kind: "backlog-item", id: "BI-2014236E" },
+          organizationId: "platform",
+          professionId: null,
+          routeContext: "/build/work/WC-48A3D214",
+          artifactFingerprint: "sha256:exact",
+        },
+      },
     });
 
     expect(outcome.recorded).toBe(true);
@@ -164,17 +202,105 @@ describe("recordKernelConsultInteraction", () => {
     expect(row.domainClass).toBe("kernel-consult");
     // BI-FD7CBA06: external MCP consults must name their door for audit filters.
     expect(row.gateKey).toBe("kernel-consult");
+    // BI-01F8F06D: a consult with no human behind it is unattended, and must be
+    // excluded from an agreement denominator by construction. This fixture has
+    // no triggeredByUserId, so it is an agent asking the kernel.
+    expect(row.autonomous).toBe(true);
     expect(row.outcomeType).toBe("recommend");
     expect(row.question).toBe("Which storage approach should we take?");
     expect(row.options).toEqual(["option-a", "option-b"]);
     expect(row.phaseFrom).toBeNull();
     expect(row.phaseTo).toBeNull();
+    // BI-F302B80E: the pick belongs in its own indexed column, not only in the
+    // JSON blob. It was written to the payload and the seal while this column
+    // stayed NULL, so 657 recorded recommendations across the corpus were
+    // unqueryable — and agreement cannot be measured against a value nothing
+    // can select. Assert the column, not just the payload copy.
+    expect(row.recommendedOptionId).toBe("option-a");
+    // BI-F302B80E part 2: record the MENU beside the pick. A row carrying a
+    // recommendation but no scored options can be counted and never learned
+    // from — weight-inference-adapter requires scoredOptions, the pick and the
+    // later outcome together, and this path wrote null for the first of them.
+    expect(row.scoredOptions).toEqual([
+      { id: "option-a", description: "Reuse table", features: { blast_radius: -0.2 } },
+      { id: "option-b", description: "New table", features: { blast_radius: -0.7 } },
+    ]);
+    // The outcome columns stay empty until the caller reports back. Absence is
+    // "nobody said", never "they agreed".
+    expect(row.chosenOptionId ?? null).toBeNull();
+    expect(row.humanOutcome ?? null).toBeNull();
     const payload = row.outcomePayload as Record<string, unknown>;
     expect(payload.tool).toBe("principle_decide");
     expect(payload.recommendedOptionId).toBe("option-a");
     expect(payload.callingPopulation).toBe("external_coding_agent");
     expect(payload.callingSurface).toBe("claude-code");
+    expect(payload.policyAffirmativeOptionId).toBe("proceed");
+    expect(payload.dualControlRequired).toBe(false);
+    expect(payload.policyActionBinding).toEqual({
+      actionKey: "record_initiative_evidence",
+      subject: { kind: "backlog-item", id: "BI-2014236E" },
+      organizationId: "platform",
+      professionId: null,
+      routeContext: "/build/work/WC-48A3D214",
+      artifactFingerprint: "sha256:exact",
+    });
     expect(Array.isArray(payload.topContributors)).toBe(true);
+  });
+
+  // BI-6082C235: the coworker that asked the kernel was recorded only inside
+  // outcomePayload.caller, so no decision could be attributed to a coworker
+  // and the shadow ledger stayed empty. It now lands in its own column and the
+  // decision is bridged into the ledger, at shadow, record only.
+  it("records the asking coworker and bridges the decision into the shadow ledger", async () => {
+    const db = makeDb({ agents: ["AGT-EXT-CLAUDE"] });
+    const outcome = await recordKernelConsultInteraction({
+      db: db as never,
+      result: makeResult(),
+      callerContext: wwmdContext,
+      question: "q",
+      optionIds: ["option-a", "option-b"],
+      optionDescriptions: {},
+      appliedPrincipleCount: 1,
+      caller: { client: "claude-code/2", agentId: "AGT-EXT-CLAUDE" },
+    });
+
+    expect(outcome.recorded).toBe(true);
+    expect(db.created[0]!.agentId).toBe("AGT-EXT-CLAUDE");
+    expect(outcome.shadowLedger).toEqual({
+      written: true,
+      ledgerId: `DSL-${outcome.interactionId}`,
+      agreement: null,
+    });
+    expect(db.ledger).toHaveLength(1);
+    expect(db.ledger[0]!.create).toMatchObject({
+      agentId: "AGT-EXT-CLAUDE",
+      activityType: "governed_decision_kernel_consult",
+      riskClass: "internal-reversible",
+      autonomyLevel: "shadow",
+      decisionInteractionId: outcome.interactionId,
+      agreement: null,
+    });
+  });
+
+  it("records no coworker, and writes no ledger row, for an id no Agent row carries", async () => {
+    const db = makeDb({ agents: [] });
+    const outcome = await recordKernelConsultInteraction({
+      db: db as never,
+      result: makeResult(),
+      callerContext: wwmdContext,
+      question: "q",
+      optionIds: ["a"],
+      optionDescriptions: {},
+      appliedPrincipleCount: 1,
+      caller: { agentId: "AGT-GHOST" },
+    });
+
+    expect(outcome.recorded).toBe(true);
+    expect(db.created[0]!.agentId).toBeNull();
+    // The caller's declaration is still kept, verbatim, where it always was.
+    expect((db.created[0]!.outcomePayload as { caller: { agentId: string } }).caller.agentId).toBe("AGT-GHOST");
+    expect(outcome.shadowLedger).toBeNull();
+    expect(db.ledger).toHaveLength(0);
   });
 
   it("skips observably when the governing profile is not provisioned", async () => {
@@ -218,5 +344,20 @@ describe("recordKernelConsultInteraction", () => {
     });
     expect(outcome.recorded).toBe(false);
     expect(outcome.reason).toBe("write-failed");
+  });
+});
+
+describe("recordKernelConsultInteraction — instance direction (BI-8AB6B4F7)", () => {
+  it("records the direction an organization-scoped consult read", async () => {
+    const db = makeDb();
+    const instanceDirection = { recorded: true, version: 2, refs: ["direction:mission@v2"], missing: ["vision", "outcomes"] };
+    await recordKernelConsultInteraction({ db: db as never, result: makeResult(), callerContext: wwmdContext, question: "q", optionIds: ["a", "b"], optionDescriptions: { a: "A", b: "B" }, appliedPrincipleCount: 0, seal: false, instanceDirection });
+    expect((db.created[0]!.outcomePayload as Record<string, unknown>).instanceDirection).toEqual(instanceDirection);
+  });
+
+  it("omits the field for a platform consult that read no direction", async () => {
+    const db = makeDb();
+    await recordKernelConsultInteraction({ db: db as never, result: makeResult(), callerContext: wwmdContext, question: "q", optionIds: ["a", "b"], optionDescriptions: { a: "A", b: "B" }, appliedPrincipleCount: 0, seal: false });
+    expect(db.created[0]!.outcomePayload as Record<string, unknown>).not.toHaveProperty("instanceDirection");
   });
 });

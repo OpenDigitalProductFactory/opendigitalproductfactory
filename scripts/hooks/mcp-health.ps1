@@ -44,22 +44,108 @@ try {
         $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
     }
 
-    # Probe URL: read the dpf server url from .mcp.json when present so the probe
-    # tracks the real client config; otherwise use the known local bind.
-    $url = 'http://127.0.0.1:3000/api/mcp/v1'
+    # Probe URL (BI-8A562681, design 12.4.5): the client's connector is the
+    # plugin descriptor, `${DPF_CLAUDE_MCP_URL:-<plugin default>}`, so resolve
+    # the endpoint the same way: DPF_CLAUDE_MCP_URL first, then the default
+    # written in the shipped plugin descriptor, then the known local bind. The
+    # shared DPF_MCP_URL is deliberately not read (BI-D6A6462A).
+    $url = $env:DPF_CLAUDE_MCP_URL
+    if ([string]::IsNullOrWhiteSpace($url)) {
+        $url = $null
+        $pluginCfg = Join-Path $root 'packages\dpf-skill-pack\claude.mcp.json'
+        if (Test-Path -LiteralPath $pluginCfg) {
+            try {
+                $u = [string](Get-Content -Raw -LiteralPath $pluginCfg | ConvertFrom-Json).mcpServers.dpf.url
+                if ($u -match '^\$\{DPF_(?:CLAUDE_)?MCP_URL:-(.+)\}$') { $url = $Matches[1] }
+                elseif (-not [string]::IsNullOrWhiteSpace($u) -and -not $u.StartsWith('$')) { $url = $u }
+            }
+            catch { }  # malformed descriptor -> fall back to the default bind
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($url)) { $url = 'http://127.0.0.1:3000/api/mcp/v1' }
+
+    # A plain-http "localhost" url is a latent failure on hosts where localhost
+    # resolves to ::1 and IPv6 is not answering; 127.0.0.1 is the safe literal.
+    # Not on https: there https://localhost is the install's canonical origin
+    # (design 12.4.1), and OAuth tokens are bound to that exact host.
+    if ($url -like 'http://*' -and $url -match 'localhost') {
+        Write-Output "NOTE: DPF MCP -- the dpf endpoint is '$url'. If localhost resolves to ::1 and IPv6 is not answering, the client cannot connect; use the 127.0.0.1 literal instead."
+    }
+
+    # A repo .mcp.json is a legacy connector. On https the dpf-platform plugin
+    # is the one dpf connector (BI-5201141C, design 12.4.4) and no writer
+    # produces a project file, so a leftover dpf entry loads as a second dpf
+    # server (Claude Code de-duplicates plugin and project servers by
+    # endpoint). On plain http (BI-46B636B0) the client cannot use OAuth, so
+    # the file's header is the only credential path: diagnose a missing one at
+    # session start. When the file is absent there is nothing to diagnose.
+    $hasHeader = $false
+    $hasDpf = $false
     $cfg = Join-Path $root '.mcp.json'
     if (Test-Path -LiteralPath $cfg) {
         try {
-            $u = (Get-Content -Raw -LiteralPath $cfg | ConvertFrom-Json).mcpServers.dpf.url
-            if (-not [string]::IsNullOrWhiteSpace($u)) { $url = $u }
+            $cfgText = Get-Content -Raw -LiteralPath $cfg
+            $hasHeader = ($cfgText -match '"Authorization"')
+            $hasDpf = ($cfgText -match '"dpf"')
+        } catch { }
+        if ($url -like 'https://*') {
+            # Existing machines converge here (AC-CANON-3): a platform-written
+            # dpf entry is retired when the installed plugin's connector is
+            # confirmed URL-only. The JSON edit lives once, in node, shared
+            # with the sh twin.
+            $retireRc = 11
+            $converger = Join-Path $PSScriptRoot 'lib\retire-project-dpf-connector.mjs'
+            $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+            if ($null -ne $nodeCmd -and (Test-Path -LiteralPath $converger)) {
+                try {
+                    $retireOut = & $nodeCmd.Source $converger $root $url
+                    $retireRc = $LASTEXITCODE
+                    if ($retireOut) { $retireOut | ForEach-Object { Write-Output $_ } }
+                } catch { $retireRc = 11 }
+            } elseif (-not $hasDpf) {
+                $retireRc = 10
+            }
+            if ($retireRc -ne 0 -and $retireRc -ne 10) {
+                Write-Output "NOTE: DPF MCP -- $cfg defines a 'dpf' server. On https the dpf-platform plugin is the one dpf connector, and Claude Code loads a project server at a different URL as a second dpf connector. It was left in place because the installed plugin's connector could not be confirmed URL-only or the entry does not point at this install; remove the dpf entry from $cfg (delete the file if dpf is its only server), then restart the client. Runbook: $runbook."
+            }
         }
-        catch { }  # malformed/partial config -> fall back to the default bind
+        elseif (-not $hasHeader) {
+            Write-Output "WARNING: DPF MCP -- .mcp.json configures dpf on plain-http '$url' with NO headers.Authorization. The client refuses OAuth over http, so this config cannot authenticate by ANY path (BI-46B636B0). Fix: re-run the toolchain bootstrap (scripts/dpf-bootstrap-agent-toolchain.ps1) to restore the `${DPF_MCP_BEARER_TOKEN} header fallback, or serve the portal over https (docker-compose.tls.yml) and point DPF_MCP_URL at it. Runbook: $runbook."
+        }
     }
 
-    # A "localhost" url is a latent failure on hosts where localhost resolves to
-    # ::1 and IPv6 is not answering; 127.0.0.1 is the safe literal.
-    if ($url -match 'localhost') {
-        Write-Output "NOTE: DPF MCP -- .mcp.json points dpf at '$url'. If localhost resolves to ::1 and IPv6 is not answering, the client cannot connect; use the 127.0.0.1 literal instead."
+    # BI-FA2C46D7: on https the client authorizes itself over OAuth, so no token
+    # is expected here. Probe anonymously and read the challenge: a 401 naming
+    # resource_metadata is the healthy answer. Node clients trust the
+    # organization root through NODE_EXTRA_CA_CERTS; this PowerShell probe uses
+    # the Windows certificate store, so an untrusted root surfaces as a TLS
+    # failure and is reported as such.
+    if (($url -like 'https://*') -and ([string]::IsNullOrWhiteSpace($env:DPF_MCP_BEARER_TOKEN) -or -not $hasHeader)) {
+        $challenge = ''
+        $status = 0
+        try {
+            $null = Invoke-WebRequest -Uri $url -Method Post -UseBasicParsing -TimeoutSec 4 `
+                -ContentType 'application/json' `
+                -Body '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+            $status = 200
+        }
+        catch {
+            $resp = $_.Exception.Response
+            if ($resp -and ($resp.PSObject.Properties.Name -contains 'StatusCode')) {
+                try { $status = [int]$resp.StatusCode.value__ } catch { $status = 0 }
+                try { $challenge = [string]$resp.Headers['WWW-Authenticate'] } catch { $challenge = '' }
+            }
+        }
+        if ($status -eq 401 -and $challenge -match 'resource_metadata') {
+            Write-Output "OK: dpf MCP endpoint reachable over https at $url; it advertises OAuth (resource_metadata in the challenge) and the client authorizes itself -- no bearer token is needed or expected."
+        }
+        elseif ($status -gt 0) {
+            Write-Output "WARNING: dpf MCP endpoint at $url answered without an OAuth challenge (resource_metadata missing). The client cannot authorize over OAuth against it. Runbook: $runbook."
+        }
+        else {
+            Write-Output "WARNING: dpf MCP endpoint at $url did not answer (TLS front not running, or the organization root is not trusted by this host). Node clients trust it via NODE_EXTRA_CA_CERTS, which the toolchain bootstrap persists for an https endpoint. Runbook: $runbook."
+        }
+        exit 0
     }
 
     if ([string]::IsNullOrWhiteSpace($env:DPF_MCP_BEARER_TOKEN)) {

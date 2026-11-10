@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { searchCustomerSiteAddresses } from "@/lib/actions/crm";
 import type { ValidatedSiteAddress } from "@/lib/shared/site-address-validation";
 
@@ -17,8 +17,12 @@ type Props = {
 };
 
 /**
- * Progressive address lookup: type a query, pick one validated result.
+ * Address lookup: type a query, search, pick one validated result.
  * Selection carries providerRef for create/update server actions.
+ *
+ * The search runs only when asked (button or Enter), never as you type: the
+ * free OpenStreetMap Nominatim service forbids client-side autocomplete
+ * (BI-3099EACD).
  */
 export function ValidatedSiteAddressField({
   value,
@@ -32,34 +36,26 @@ export function ValidatedSiteAddressField({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (query.trim().length < 3) {
-      setResults([]);
-      return;
-    }
-
-    const handle = window.setTimeout(() => {
-      startTransition(async () => {
-        try {
-          setError(null);
-          const next = await searchCustomerSiteAddresses(query);
-          setResults(next);
-          if (next.length === 0) {
-            setError("No validated matches. Try a fuller street address.");
-          }
-        } catch (lookupError) {
-          setResults([]);
-          setError(
-            lookupError instanceof Error
-              ? lookupError.message
-              : "Address lookup failed.",
-          );
+  function runSearch() {
+    if (query.trim().length < 3) return;
+    startTransition(async () => {
+      try {
+        setError(null);
+        const next = await searchCustomerSiteAddresses(query);
+        setResults(next);
+        if (next.length === 0) {
+          setError("No validated matches. Try a fuller street address.");
         }
-      });
-    }, 350);
-
-    return () => window.clearTimeout(handle);
-  }, [query]);
+      } catch (lookupError) {
+        setResults([]);
+        setError(
+          lookupError instanceof Error
+            ? lookupError.message
+            : "Address lookup failed.",
+        );
+      }
+    });
+  }
 
   return (
     <div className="space-y-2">
@@ -89,17 +85,30 @@ export function ValidatedSiteAddressField({
               Current: {currentAddressLabel}. Search to revalidate and replace.
             </p>
           ) : null}
-          <input
-            role="combobox"
-            aria-expanded={results.length > 0}
-            aria-controls={listboxId}
-            aria-autocomplete="list"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Start typing a street address..."
-            className={inputClasses}
-            autoComplete="off"
-          />
+          <div className="flex gap-2">
+            <input
+              aria-controls={listboxId}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter searches here; it must not submit the surrounding form.
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  runSearch();
+                }
+              }}
+              className={inputClasses}
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={runSearch}
+              disabled={isPending || query.trim().length < 3}
+              className="min-h-[44px] shrink-0 rounded border border-[var(--dpf-border)] px-3 text-dpf-caption text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-60"
+            >
+              Search
+            </button>
+          </div>
           {isPending ? (
             <p className="text-dpf-caption text-[var(--dpf-muted)]">Searching...</p>
           ) : null}
@@ -113,7 +122,7 @@ export function ValidatedSiteAddressField({
                 <li key={candidate.providerRef} role="option">
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left text-dpf-caption text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+                    className="block w-full px-3 py-2 text-start text-dpf-caption text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
                     onClick={() => {
                       onChange(candidate);
                       setResults([]);
@@ -127,6 +136,9 @@ export function ValidatedSiteAddressField({
               ))}
             </ul>
           ) : null}
+          <p className="text-dpf-caption text-[var(--dpf-muted)]">
+            © OpenStreetMap contributors
+          </p>
         </>
       )}
 

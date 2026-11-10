@@ -1,4 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const monitoringDecision = vi.hoisted(() => vi.fn(async () => null as "enabled" | "disabled" | "undecided" | null));
+vi.mock("@/lib/platform-runtime/monitoring-switch-loader", () => ({
+  loadMonitoringCapabilityDecision: monitoringDecision,
+}));
 
 // Mock prisma with in-memory state
 vi.mock("@dpf/db", () => {
@@ -47,20 +52,29 @@ import {
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
-// SETUP_STEPS has 11 entries:
+// SETUP_STEPS has 14 entries. monitoring follows platform-development and is
+// offered only while runtime:deep-observability is undecided. This walk has no
+// recorded decision, so monitoring is hidden and does not block:
 //   0: account-bootstrap
 //   1: business-context
-//   2: ai-providers
-//   3: branding
-//   4: how-you-decide
-//   5: operating-hours
-//   6: storefront
-//   7: platform-development
-//   8: build-studio
-//   9: meet-your-coo
-//   10: workspace
+//   2: direction (skippable, BI-916216E7)
+//   3: ai-providers
+//   4: branding
+//   5: how-you-decide
+//   6: operating-hours
+//   7: storefront
+//   8: mailroom
+//   9: platform-development
+//   10: monitoring (hidden unless undecided)
+//   11: build-studio
+//   12: meet-your-coo
+//   13: workspace
 
 describe("setup flow integration", () => {
+  beforeEach(() => {
+    monitoringDecision.mockResolvedValue(null);
+  });
+
   it("walks through the full step sequence", async () => {
     // First run detected
     expect(await isFirstRun()).toBe(true);
@@ -73,7 +87,11 @@ describe("setup flow integration", () => {
     const step1 = await advanceStep(progress.id, { orgName: "Test Co" });
     expect(step1.currentStep).toBe("business-context");
 
-    // Skip step 1 → step 2
+    // Advance step 1 → the direction step
+    const step1b = await advanceStep(progress.id);
+    expect(step1b.currentStep).toBe("direction");
+
+    // Skipping the direction step never blocks setup (BI-916216E7 AC-4)
     const step2 = await skipStep(progress.id);
     expect(step2.currentStep).toBe("ai-providers");
 
@@ -92,7 +110,12 @@ describe("setup flow integration", () => {
     expect(step5.currentStep).toBe("storefront");
 
     const step6 = await advanceStep(progress.id);
-    expect(step6.currentStep).toBe("platform-development");
+    expect(step6.currentStep).toBe("mailroom");
+
+    // Skip the Mailroom step — no mailbox to connect yet is a valid answer
+    // (design 2026-09-09 §4.9); the page keeps offering the connect flow.
+    const step6b = await skipStep(progress.id);
+    expect(step6b.currentStep).toBe("platform-development");
 
     const step7 = await advanceStep(progress.id);
     expect(step7.currentStep).toBe("build-studio");
@@ -119,5 +142,22 @@ describe("setup flow integration", () => {
     }
 
     expect(current.currentStep).toBe("workspace");
+  });
+
+  it("offers monitoring after platform development only while the decision is undecided", async () => {
+    monitoringDecision.mockResolvedValue("undecided");
+    const progress = await createSetupProgress();
+    let current = progress;
+    while (current.currentStep !== "platform-development") {
+      current = await advanceStep(current.id);
+    }
+    const offered = await advanceStep(current.id);
+    expect(offered.currentStep).toBe("monitoring");
+    expect((offered.steps as Record<string, string> | null)?.monitoring).toBe("pending");
+
+    monitoringDecision.mockResolvedValue("enabled");
+    const chosen = await advanceStep(offered.id);
+    expect((chosen.steps as Record<string, string> | null)?.monitoring).toBe("completed");
+    expect(chosen.currentStep).toBe("build-studio");
   });
 });

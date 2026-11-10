@@ -272,3 +272,15 @@ test("command-line contract validates the installer-resolved state path", async 
   assert.match(result.stdout, /install-state valid/);
 });
 
+
+test("persists complete delivery authority proof on supported state versions without admitting extra credential fields", async () => {
+  const delivery = { ready: false, missingTokenTools: [], missingCoworkerTools: ["list_coworker_offers"], unavailableTools: [] };
+  for (const schemaVersion of [1, 2]) {
+    const base = schemaVersion === 2 ? valid : { schemaVersion: 1, installerVersion: "2026.06.26", platform: "linux", arch: "amd64" };
+    const state = { ...base, agentToolchain: { ...legacyAgentToolchain,
+      mcpReadiness: { ok: false, reason: "coworker_grants_insufficient", httpStatus: 200, delivery }, readinessState: "needs_refresh" } };
+    assert.equal((await validateInstallState(state)).valid, true);
+    assert.equal((await validateInstallState({ ...state, agentToolchain: { ...state.agentToolchain,
+      mcpReadiness: { ...state.agentToolchain.mcpReadiness, delivery: { ...delivery, bearerToken: "synthetic-secret" } } } })).valid, false);
+  }
+});

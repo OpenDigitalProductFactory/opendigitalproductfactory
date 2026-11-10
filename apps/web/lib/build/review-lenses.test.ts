@@ -41,6 +41,33 @@ function lensByKey(rows: ReturnType<typeof deriveReviewLenses>, key: string) {
 }
 
 describe("deriveReviewLenses — checklist lens", () => {
+  it.each([
+    { decision: "fail" as const, reviewIncomplete: true },
+    { decision: "inconclusive" as const },
+  ])("shows an unavailable panel as pending, without rejection or inflated rounds", (outcome) => {
+    const l = lensByKey(deriveReviewLenses(build({ planReview: review({
+      ...outcome, iteration: { round: 117 },
+      issues: [{ severity: "critical", description: "Both review agents failed to respond" }],
+    }) })), "checklist");
+    expect(l).toMatchObject({ state: "pending", detail: "review incomplete" });
+  });
+
+  it("keeps missing panel evidence visible beside a completed reviewer", () => {
+    const lenses = deriveReviewLenses(build({ planReview: review({
+      decision: "fail", reviewIncomplete: true, usableReviewerCount: 1,
+      reviewers: [{ source: "reviewer-1", label: "Primary review", role: "reviewer", decision: "pass", issueCounts: { critical: 0, important: 0, minor: 0 } }],
+    }) }));
+    expect(lensByKey(lenses, "checklist")).toMatchObject({ state: "pending", detail: "review incomplete" });
+    expect(lensByKey(lenses, "reviewer:reviewer-1")).toMatchObject({ state: "pass" });
+  });
+
+  it("never clears an inconclusive individual reviewer", () => {
+    const lenses = deriveReviewLenses(build({ planReview: review({ reviewers: [
+      { source: "reviewer-2", label: "Independent review", role: "reviewer", decision: "inconclusive", issueCounts: { critical: 0, important: 0, minor: 0 } },
+    ] }) }));
+    expect(lensByKey(lenses, "reviewer:reviewer-2")).toMatchObject({ state: "pending", detail: "review unavailable" });
+  });
+
   it("is pending with 'not yet reviewed' when no review exists", () => {
     const l = lensByKey(deriveReviewLenses(build()), "checklist");
     expect(l).toMatchObject({ state: "pending", detail: "not yet reviewed" });

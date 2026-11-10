@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { spawnSync } from "node:child_process";
+
+function fixtureGitEnv() {
+  const env = { ...process.env };
+  for (const k of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_PREFIX", "GIT_NAMESPACE"]) delete env[k];
+  return env;
+}
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -75,7 +81,9 @@ describe("worktree-session-heartbeat behavior", () => {
     try {
       base = mkdtempSync(join(tmpdir(), "dpf-hb-root-"));
       const git = (args, cwd) => {
-        const r = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true, timeout: 30_000 });
+        // BI-062F5687: never inherit a hook's GIT_DIR — mirrors scripts/lib/git-hook-env.mjs
+        // (kept inline so the skill pack stays self-contained).
+        const r = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true, timeout: 30_000, env: fixtureGitEnv() });
         if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
         return r;
       };
@@ -113,7 +121,9 @@ describe("worktree-session-heartbeat behavior", () => {
     try {
       base = mkdtempSync(join(tmpdir(), "dpf-hb-"));
       const git = (args, cwd) => {
-        const r = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true, timeout: 30_000 });
+        // BI-062F5687: never inherit a hook's GIT_DIR — mirrors scripts/lib/git-hook-env.mjs
+        // (kept inline so the skill pack stays self-contained).
+        const r = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true, timeout: 30_000, env: fixtureGitEnv() });
         if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
         return r;
       };

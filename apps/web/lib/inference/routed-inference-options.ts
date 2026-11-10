@@ -1,7 +1,12 @@
 import type { ActivityContract } from "@/lib/routing/activity-contract";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
 import type { ModelClass } from "@/lib/routing/model-card-types";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { RouteDecisionActor } from "@/lib/routing/route-decision-attribution";
+import type {
+  AsyncOperationAuthorityActor,
+  AsyncOperationAuthorityRequest,
+} from "./async-operation-authority";
 
 /** Caller-owned constraints and preferences for canonical routing plus dispatch. */
 export interface RouteAndCallOptions {
@@ -13,10 +18,16 @@ export interface RouteAndCallOptions {
    * so omitting this is the safe default and changes nothing.
    */
   systemPromptInstructionSpans?: string[];
+  /** What each entry of `messages` is — a label per index, never content. */
+  messageOrigins?: readonly import(
+    "@/lib/inference/data-screening/types"
+  ).MessageOrigin[];
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   preferredProviderId?: string;
   preferredModelId?: string;
+  /** BI-7F2FBDA3: lineage of the preferred model, so an unavailable pin can find its family successor. */
+  preferredModelFamily?: string | null;
   requiresCodeExecution?: boolean;
   requiresWebSearch?: boolean;
   requiresComputerUse?: boolean;
@@ -54,14 +65,55 @@ export interface RouteAndCallOptions {
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;
   interactionMode?: "sync" | "background";
+  /** Token-streaming capability demand; independent of completed vs async delivery. */
+  requiresStreaming?: boolean;
+  /**
+   * Semantic authority for a durable async route. The server resolves this to
+   * the exact TaskRun/Workroom row; callers cannot pass an internal scope key.
+   */
+  durableAsyncOperation?: {
+    request: AsyncOperationAuthorityRequest;
+    actor: AsyncOperationAuthorityActor;
+    /** Closed callers can constrain the selected plan before durable admission. */
+    expectedExecution?: {
+      providerId: string;
+      contractFamily: string;
+      executionAdapter: "async";
+      explorationMode: "champion";
+      plans: readonly {
+        recipeId: string;
+        modelId: string;
+        maxTokens: number;
+        providerSettings: Readonly<Record<string, unknown>>;
+        toolPolicy: Readonly<Record<string, unknown>>;
+        responsePolicy: Readonly<Record<string, unknown>>;
+      }[];
+    };
+    /** The closed caller persists its TaskRun projection before the first wake. */
+    deferInitialWake?: boolean;
+  };
   threadId?: string;
   maxDurationMs?: number;
   persistDecision?: boolean;
   /** Forbid capability degradation that strips required tools. */
   requireTools?: boolean;
+  /**
+   * Caller-owned function-call requirement. `required` is stronger than
+   * `requireTools`: the endpoint must not return a prose-only completion while
+   * a governed terminal action is pending.
+   */
+  toolChoice?: "auto" | "required" | "none";
+  /** Exact sole writer guarded by the caller's terminal-tool policy. */
+  terminalWriterToolName?: string;
   minimumCapabilities?: import("@/lib/routing/agent-capability-types").AgentMinimumCapabilities;
   agentMinimumContextTokens?: number;
   agentId?: string;
+  /**
+   * EP-WORK-POSTURE §8.2 (BI-7ADEBDC1): the Cost/Quality/Time posture of the
+   * Workroom this call runs in. Outranks the org/platform default in routing;
+   * a caller with an exact durable execution plan still wins.
+   */
+  workroomPriority?: GoldenTrianglePreference | null;
   agentMessageId?: string;
   /** FeatureBuild this call belongs to. Threaded into AdapterRunTelemetry so
    *  completeBuildPhaseRun can aggregate per-phase tokens/cost (BI-0A6B8B38). */
@@ -76,6 +128,8 @@ export interface RouteAndCallOptions {
   routeContext?: string;
   effort?: "low" | "medium" | "high" | "max";
   previousResponseId?: string;
+  /** Store with responseId to prevent transferring provider context across accounts. */
+  previousResponseProviderConnectionId?: string;
   activityContract?: ActivityContract;
   agentDisplayName?: string;
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession;

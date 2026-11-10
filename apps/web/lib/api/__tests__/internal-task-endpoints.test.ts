@@ -162,6 +162,7 @@ describe("GET /api/internal/tasks/[taskId]", () => {
       taskRunId: "TR-123",
       threadId: "thread-1",
       contextId: "ctx-1",
+      status: "submitted",
       progressPayload: {
         type: "brand:extract.progress",
         taskRunId: "TR-123",
@@ -190,7 +191,7 @@ describe("GET /api/internal/tasks/[taskId]", () => {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
     const chunks: string[] = [];
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < 5; index += 1) {
       const chunk = await reader.read();
       chunks.push(decoder.decode(chunk.value ?? new Uint8Array()));
     }
@@ -199,6 +200,8 @@ describe("GET /api/internal/tasks/[taskId]", () => {
     const text = chunks.join("");
     expect(text).toContain('"type":"task:status"');
     expect(text).toContain('"taskId":"TR-123"');
+    expect(text).toContain('"state":"submitted"');
+    expect(text).toContain('"sourceEvent":"task-run.snapshot"');
     expect(text).toContain('"type":"task:artifact"');
   });
 });

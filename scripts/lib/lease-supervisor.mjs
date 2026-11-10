@@ -1,3 +1,19 @@
+/** Share in-flight cleanup, and remember only confirmed completion. */
+export function createRetryableRelease(release) {
+  let completed = false;
+  let inFlight = null;
+  return () => {
+    if (completed) return Promise.resolve();
+    if (inFlight) return inFlight;
+    inFlight = Promise.resolve().then(release).then(() => {
+      completed = true;
+    }).finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  };
+}
+
 export function heartbeatIntervalMs(ttlMs) {
   if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
     throw new Error("lease TTL must be a positive number");
@@ -5,11 +21,61 @@ export function heartbeatIntervalMs(ttlMs) {
   return Math.max(1, Math.floor(ttlMs / 3));
 }
 
+/**
+ * The TTL to pace heartbeats by: the authority the server actually granted
+ * (`expiresAt` minus now), falling back to the requested TTL only when the
+ * grant carries no readable expiry. Pacing by the requested TTL when the
+ * server granted less fences the run at its own deadline before the first
+ * heartbeat fires (BI-E226C954).
+ */
+export function admittedLeaseTtlMs(expiresAt, fallbackTtlMs, nowMs = Date.now()) {
+  const expiryMs = parsedExpiryMs(expiresAt);
+  if (expiryMs === null) return fallbackTtlMs;
+  return Math.max(1, expiryMs - nowMs);
+}
+
 export function authoritySafetyMarginMs(ttlMs) {
   if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
     throw new Error("lease TTL must be a positive number");
   }
   return Math.min(5_000, Math.max(1, Math.floor(ttlMs / 10)));
+}
+
+/**
+ * How long to wait before retrying a renewal whose outcome we never learned.
+ *
+ * A renewal that THROWS proves nothing: the lease service was unreachable, not
+ * lost. Waiting a full heartbeat interval to find out spends a third of the
+ * authority budget on a transport hiccup. At a 120s TTL the deadline fires 115s
+ * after the last good renewal and heartbeats land at +40s and +80s, so two slow
+ * renewals in a row killed the run -- and they are slow precisely when the run
+ * itself is saturating the host (BI-ECAE03F7).
+ *
+ * The backoff starts at a fortieth of the interval and doubles, capped at the
+ * interval itself. At a 40s interval that is 1s, 2s, 4s, 8s, 16s, 32s: six
+ * further chances inside the same budget that previously allowed one, without
+ * hammering a service that is already struggling.
+ */
+export function uncertainRetryDelayMs(ttlMs, attempt) {
+  const intervalMs = heartbeatIntervalMs(ttlMs);
+  const base = Math.max(1, Math.floor(intervalMs / 40));
+  const exponent = Math.min(Math.max(1, attempt) - 1, 5);
+  return Math.min(intervalMs, base * 2 ** exponent);
+}
+
+/**
+ * Refusals that mean "not now", not "the lease is gone". A quiescing portal and
+ * a tool that threw say nothing about who holds the lease, so treating them as
+ * final killed healthy gate runs mid-build and lost their verdicts (2026-09-24).
+ */
+const TRANSIENT_REFUSALS = new Set(["portal_quiescing", "tool_threw"]);
+
+/** A renewal response that proves the lease is gone. Anything else is retried until the deadline. */
+export function isAuthoritativeRefusal(response) {
+  if (!response || typeof response !== "object" || typeof response.success !== "boolean") return false;
+  if (response.success) return false;
+  if (response.data?.retryable === true) return false;
+  return !TRANSIENT_REFUSALS.has(response.error);
 }
 
 function parsedExpiryMs(value) {
@@ -32,25 +98,32 @@ export async function superviseLeaseRun({
   renew,
   terminate,
   release,
+  observeReservation,
   schedule = (callback, intervalMs) => setInterval(callback, intervalMs),
   cancelSchedule = (timer) => clearInterval(timer),
   scheduleDeadline = (callback, delayMs) => setTimeout(callback, delayMs),
   cancelDeadline = (timer) => clearTimeout(timer),
+  scheduleRetry = (callback, delayMs) => setTimeout(callback, delayMs),
+  cancelRetry = (timer) => clearTimeout(timer),
   now = () => Date.now(),
   safetyMarginMs = authoritySafetyMarginMs(ttlMs),
   onEvent = () => {},
 }) {
   const startedAt = new Date().toISOString();
   let fencedReason = "";
+  let finalizing = false;
+  let authorityClosed = false;
   let heartbeatInFlight = null;
   let deadlineInFlight = null;
   let deadlineTimer = null;
+  let retryTimer = null;
+  let uncertainStreak = 0;
   let knownExpiryMs = parsedExpiryMs(expiresAt) ?? now() + ttlMs;
 
   onEvent({ type: "started", at: startedAt });
 
   const fence = async (reason, eventType, detail = {}) => {
-    if (fencedReason) return;
+    if (fencedReason || (finalizing && (observeReservation || authorityClosed))) return;
     fencedReason = reason;
     onEvent({
       type: eventType,
@@ -70,6 +143,7 @@ export async function superviseLeaseRun({
   };
 
   const armAuthorityDeadline = () => {
+    if (finalizing) return;
     if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
     const delayMs = Math.max(0, knownExpiryMs - safetyMarginMs - now());
     deadlineTimer = scheduleDeadline(() => {
@@ -84,22 +158,60 @@ export async function superviseLeaseRun({
 
   armAuthorityDeadline();
 
+  const cancelRetryTimer = () => {
+    if (retryTimer === null) return;
+    cancelRetry(retryTimer);
+    retryTimer = null;
+  };
+
+  const scheduleUncertainRetry = () => {
+    if (finalizing || fencedReason) return;
+    cancelRetryTimer();
+    const delayMs = uncertainRetryDelayMs(ttlMs, uncertainStreak);
+    onEvent({
+      type: "heartbeat-retry-scheduled",
+      at: new Date().toISOString(),
+      delayMs,
+      attempt: uncertainStreak,
+    });
+    retryTimer = scheduleRetry(() => {
+      retryTimer = null;
+      return heartbeat();
+    }, delayMs);
+  };
+
   const heartbeat = async () => {
-    if (fencedReason || heartbeatInFlight) return heartbeatInFlight;
+    if (finalizing || fencedReason || heartbeatInFlight) return heartbeatInFlight;
     heartbeatInFlight = (async () => {
       let response;
       try {
         response = await renew();
       } catch (error) {
+        if (finalizing) return;
+        // Unreachable, not lost. Retry soon instead of surrendering a third of
+        // the authority budget to a transport hiccup (BI-ECAE03F7).
+        uncertainStreak += 1;
         onEvent({
           type: "heartbeat-uncertain",
           at: new Date().toISOString(),
           reason: error?.message || String(error),
           expiresAt: new Date(knownExpiryMs).toISOString(),
+          attempt: uncertainStreak,
         });
+        scheduleUncertainRetry();
+        return;
+      }
+      if (finalizing) {
+        // Legacy qualifiers still consume authority loss until their outstanding
+        // renewal settles. Host observation closes command authority immediately.
+        if (!observeReservation && isAuthoritativeRefusal(response)) {
+          await fence(response?.error || "lease-renewal-failed", "heartbeat-lost");
+        }
         return;
       }
       if (response?.success === true) {
+        uncertainStreak = 0;
+        cancelRetryTimer();
         knownExpiryMs = renewedExpiryMs(response) ?? now() + ttlMs;
         armAuthorityDeadline();
         onEvent({
@@ -109,6 +221,23 @@ export async function superviseLeaseRun({
         });
         return;
       }
+      // A transient refusal (quiescence, a server that threw, a malformed reply)
+      // is as uncertain as an unreachable service: retry it inside the budget.
+      if (!isAuthoritativeRefusal(response)) {
+        uncertainStreak += 1;
+        onEvent({
+          type: "heartbeat-uncertain",
+          at: new Date().toISOString(),
+          reason: response?.error || "renewal-response-unreadable",
+          expiresAt: new Date(knownExpiryMs).toISOString(),
+          attempt: uncertainStreak,
+        });
+        scheduleUncertainRetry();
+        return;
+      }
+      // A refusal that says the lease is gone is authoritative: another holder
+      // may exist. Never retry that.
+      cancelRetryTimer();
       await fence(
         response?.error || "lease-renewal-failed",
         "heartbeat-lost",
@@ -120,18 +249,45 @@ export async function superviseLeaseRun({
   };
 
   const timer = schedule(heartbeat, heartbeatIntervalMs(ttlMs));
+  let result;
   try {
-    const result = await run();
-    if (fencedReason) return { status: "fenced", reason: fencedReason, result };
-    return { status: "completed", result };
+    result = await run();
   } finally {
-    // finally runs once per superviseLeaseRun call — release is always owned here
-    // (idempotent release is the caller's responsibility if they wrap again).
+    // Finalization runs once after supervision. Host callers may observe natural
+    // expiry instead of requesting release; other callers retain their release path.
+    // A renewal already on the wire may finish, but cannot restart supervision.
+    finalizing = true;
     cancelSchedule(timer);
-    if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
+    cancelRetryTimer();
+    // Keep a legacy qualifier's existing deadline through its final renewal;
+    // this is authority evidence, not permission to restart supervision.
+    if (observeReservation && deadlineTimer !== null) cancelDeadline(deadlineTimer);
     if (heartbeatInFlight) await heartbeatInFlight;
     if (deadlineInFlight) await deadlineInFlight;
-    await release();
-    onEvent({ type: "released", at: new Date().toISOString() });
+    authorityClosed = true;
+    cancelRetryTimer();
+    if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
+    deadlineTimer = null;
+    // A failed release must not take the run's verdict with it: the evidence is
+    // recorded after this, and an unreleased lease still accepts it.
+    if (observeReservation) {
+      try {
+        const observation = await observeReservation();
+        onEvent({ type: "reservation-observed", at: new Date().toISOString(), observation });
+      } catch {
+        onEvent({ type: "reservation-observation-unavailable", at: new Date().toISOString() });
+      }
+    } else {
+      try {
+        await release();
+        onEvent({ type: "released", at: new Date().toISOString() });
+      } catch (error) {
+        onEvent({ type: "release-failed", at: new Date().toISOString(), reason: error?.message || String(error) });
+      }
+    }
   }
+  // Classify only after final authority evidence has settled. A thrown command
+  // still propagates through finally rather than becoming a completed result.
+  if (fencedReason) return { status: "fenced", reason: fencedReason, result };
+  return { status: "completed", result };
 }

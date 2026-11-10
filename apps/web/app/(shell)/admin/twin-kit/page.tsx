@@ -8,7 +8,9 @@ import {
 
 import { buildDemoTwinSnapshot } from "@/components/twin";
 import { TwinKitShowcase, type TwinExample } from "@/components/twin/TwinKitShowcase";
-import { loadLivingBusinessSnapshot } from "@/lib/twin/living-business-snapshot";
+import { loadVersionedOperationsSnapshot } from "@/lib/twin/operations-loader";
+import { toLivingBusinessSnapshot } from "@dpf/storefront-templates/operations";
+import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Operational Twin Kit — preview",
@@ -86,7 +88,8 @@ export default async function AdminTwinKitPage() {
   // The live twin for THIS deployment's org, projected from real substrate
   // (workforce roster, finance spine, bookings). Null when no org is configured —
   // then only the demo archetypes show. When present it leads as the default tab.
-  const live = await loadLivingBusinessSnapshot();
+  const current = await loadVersionedOperationsSnapshot({ viewer: (await auth())?.user });
+  const live = current ? toLivingBusinessSnapshot(current) : null;
   const liveDef = live ? ALL_ARCHETYPES.find((a) => a.archetypeId === live.archetypeId) : undefined;
   const liveExample: TwinExample | null =
     live && liveDef

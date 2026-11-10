@@ -9,16 +9,18 @@
 // the coworker's inherited posture) are pre-resolved by the loader and handed
 // in as `context`, exactly as `structure` and `sourceHealth` already are.
 //
-// The tighten-only invariant is enforced inside resolveWorkPosture, so nothing
-// assembled here can widen what a coworker may do unattended.
+// The resolver keeps declaration and hard-policy floors. A trusted gateGoverned
+// fact lets the owner's room default set the action boundary before those floors;
+// the host derives that fact from the actual executor. Posture grants no authority.
 import {
   resolveWorkPosture,
   type ArchetypeStreamInput,
   type PostureHardPolicy,
   type ResolvedWorkPosture,
   type RoomPostureDeclaration,
-} from "@/lib/work-posture";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+  type WorkStakesInput,
+} from "@dpf/validators/workroom-policy";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 import type { LowTrafficWindow } from "@/lib/self-upgrade/auto-window";
@@ -73,7 +75,11 @@ export interface WorkroomPostureFacts {
   cycleActive: boolean;
   /** The room's own time boundary, when it has one. */
   dueAt: string | null;
+  /** Existing Build Studio rightsizing facts, when this room fronts a build. */
+  stakes?: WorkStakesInput | null;
   declaration: RoomPostureDeclaration | null;
+  /** The room's change passes a governed gate chain (isGateGovernedExecutor). */
+  gateGoverned?: boolean;
 }
 
 export interface WorkroomPostureView extends ResolvedWorkPosture {
@@ -116,12 +122,14 @@ export function resolveWorkroomPosture(
     hardPolicy: context.hardPolicy ?? null,
     declaration: facts.declaration,
     workroomDefault: context.workroomDefault ?? null,
+    gateGoverned: facts.gateGoverned ?? false,
     shape: {
       shapeKey: facts.shapeKey,
       activityKind: facts.activityKind,
       mode: facts.mode,
       cycleActive: facts.cycleActive,
     },
+    stakes: facts.stakes ?? null,
     stream: context.stream ?? null,
     temporal: {
       now,

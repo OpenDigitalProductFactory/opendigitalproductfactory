@@ -58,6 +58,15 @@ body`,
       "packages/db/prisma/schema.prisma",
     ]);
   });
+
+  // BI-25C90258: a docs-only plan matched nothing, so the description was
+  // scanned instead and a file it merely mentioned became a "promise".
+  it("reads any repo path in the File Structure and ignores the description then", () => {
+    expect(extractExpectedPlanFiles({
+      planDocument: "## File Structure\n- Modify `docs/superpowers/specs/a-design.md`: typo",
+      description: "The hook may regenerate apps/web/lib/docs/doc-index.generated.json.",
+    })).toEqual(["docs/superpowers/specs/a-design.md"]);
+  });
 });
 
 describe("buildSandboxStateFromRecord", () => {

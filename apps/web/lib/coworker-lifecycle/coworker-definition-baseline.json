@@ -1,11 +1,4 @@
 {
   "comment": "Pre-existing coworker definition gaps (EP-COWORKER-LIFECYCLE). May only shrink. Regenerate: UPDATE_COWORKER_DEFINITION_BASELINE=1 pnpm exec vitest run lib/coworker-lifecycle",
-  "findings": [
-    "LIFE-003:data-steward",
-    "LIFE-003:dispatcher",
-    "LIFE-003:doc-specialist",
-    "LIFE-003:external-catalog-scout",
-    "LIFE-003:finance-controller",
-    "LIFE-003:legal-operations-counsel"
-  ]
+  "findings": []
 }

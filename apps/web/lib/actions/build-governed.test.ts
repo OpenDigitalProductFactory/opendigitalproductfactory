@@ -11,6 +11,9 @@ const { mockAuth, mockPrisma } = vi.hoisted(() => ({
     },
     buildPhaseRun: {
       upsert: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
     },
     businessBuildBrief: {
       findUnique: vi.fn(),
@@ -95,7 +98,7 @@ const { mockGetQuiescenceLevel } = vi.hoisted(() => ({
 const { mockEnforceBuildInitiativeReadiness } = vi.hoisted(() => ({
   mockEnforceBuildInitiativeReadiness: vi.fn(),
 }));
-const mockAssertFeatureBuildCompletion = vi.hoisted(() => vi.fn());
+const mockCompleteBuildWhenDelivered = vi.hoisted(() => vi.fn(async () => ({ ok: true as const })));
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
@@ -109,6 +112,7 @@ vi.mock("@/lib/build/sandbox/build-branch", () => ({
   isSandboxAvailable: mockIsSandboxAvailable,
   startBuildBranch: mockStartBuildBranch,
   getClientIdentity: mockGetClientIdentity,
+  resolveBuildWorkdir: (buildId: string) => `/workspace/.builds/${buildId}`, // BI-5C4933EB
 }));
 vi.mock("@/lib/build/sandbox/sandbox-build-gc", () => ({ releaseSandboxForTerminalBuild: vi.fn(async () => {}) }));
 vi.mock("@/lib/build-review-verification-trigger", () => ({
@@ -143,7 +147,7 @@ vi.mock("@/lib/build/build-entry-gate", () => ({
   assertBuildPhaseInitiativeReadiness: mockEnforceBuildInitiativeReadiness,
   checkBuildPhaseInitiativeReadiness: async (a: unknown) => { try { await mockEnforceBuildInitiativeReadiness(a); return null; } catch (e) { return e instanceof Error && e.message ? e.message : "refused"; } }, // BI-C5D978E9
 }));
-vi.mock("@/lib/backlog/initiative-readiness/build-terminal-transition", () => ({ assertFeatureBuildCompletion: mockAssertFeatureBuildCompletion }));
+vi.mock("@/lib/build-flow-state", () => ({ completeBuildWhenDelivered: mockCompleteBuildWhenDelivered }));
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -184,7 +188,7 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
 }));
 
 import { revalidatePath } from "next/cache";
-import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief, updateFeatureBrief } from "./build";
+import { approveBuildStart, advanceBuildPhase, completeBuild, createFeatureBuild, recordBuildAcceptance, resumeBuildImplementation, runBuildReviewVerification, updateBusinessBuildBrief } from "./build";
 
 describe("governed build start approvals", () => {
   beforeEach(() => {
@@ -217,6 +221,9 @@ describe("governed build start approvals", () => {
     mockPrisma.organization.findFirst.mockResolvedValue({ id: "org-1" });
     mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
     mockPrisma.buildPhaseRun.upsert.mockResolvedValue({});
+    mockPrisma.buildPhaseRun.findUnique.mockResolvedValue(null);
+    mockPrisma.buildPhaseRun.create.mockResolvedValue({});
+    mockPrisma.buildPhaseRun.update.mockResolvedValue({});
     mockGetQuiescenceLevel.mockResolvedValue("normal");
     mockIsSandboxAvailable.mockResolvedValue(false);
     mockStartBuildBranch.mockResolvedValue(undefined);
@@ -327,76 +334,21 @@ describe("governed build start approvals", () => {
     }
 
     expect(unhandled).toEqual([]);
-    // The drain gate refuses the start before any DB write — the cost-tracking
-    // upsert never runs.
     expect(mockPrisma.buildPhaseRun.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.buildPhaseRun.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.buildPhaseRun.create).not.toHaveBeenCalled();
+    expect(mockPrisma.buildPhaseRun.update).not.toHaveBeenCalled();
   });
 
-  it("createFeatureBuild RETURNS (not throws) the WIP-cap error so its message reaches the client", async () => {
-    // In production, a thrown Server-Action error has its message stripped to a
-    // generic digest, so the operator would never see "you already have 3 builds
-    // in progress" — they'd see a scary render error. Locking in the returned-value
-    // contract keeps the plain-English message intact across the RSC boundary.
-    mockPrisma.featureBuild.count.mockResolvedValue(3); // at the cap (BUILD_WIP_CAP)
+  it("createFeatureBuild no longer refuses on a count of active builds (BI-3430B3A4)", async () => {
+    // The count cap is retired. A build started from a title has no backlog item,
+    // so there is no investment to admit; the sandbox pool stays the physical
+    // limit on acquire. Many active builds do not stop a start.
+    mockPrisma.featureBuild.count.mockResolvedValue(99);
 
-    const result = await createFeatureBuild({ title: "One build too many" });
+    const result = await createFeatureBuild({ title: "Started past the old cap" });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected the WIP cap to reject the build");
-    expect(result.code).toBe("BUILD_WIP_CAP_REACHED");
-    expect(result.error).toContain("3 builds in progress");
-    // Rejected before any DB write — no build row, no work capsule.
-    expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
-    expect(mockPrisma.workroom.create).not.toHaveBeenCalled();
-  });
-
-  it("updateFeatureBrief writes the legacy brief and backfills the BusinessBuildBrief contract", async () => {
-    mockPrisma.featureBuild.findUnique.mockResolvedValue({
-      id: "feature-build-row-1",
-      buildId: "FB-123",
-      title: "Improve Build Studio intake",
-      createdById: "user-1",
-      phase: "ideate",
-    });
-    mockPrisma.featureBuild.update.mockResolvedValue({});
-
-    const brief = {
-      title: "Improve Build Studio intake",
-      description: "Build Studio should turn business-language requests into a brief.",
-      portfolioContext: "Build Studio",
-      targetRoles: ["Operations lead"],
-      inputs: ["Reviewed plan"],
-      dataNeeds: "Business outcome, evidence, success signals",
-      acceptanceCriteria: ["A non-developer can review the generated brief."],
-    };
-
-    await updateFeatureBrief("FB-123", brief);
-
-    expect(mockPrisma.$transaction).toHaveBeenCalledWith(expect.any(Function));
-    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith({
-      where: { buildId: "FB-123" },
-      data: { brief },
-    });
-    expect(mockPrisma.businessBuildBrief.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { featureBuildId: "feature-build-row-1" },
-        create: expect.objectContaining({
-          briefId: "BBB-FB-123",
-          orgId: "org-1",
-          featureBuildId: "feature-build-row-1",
-          capabilityPackId: "build_studio_self_development",
-          status: "accepted",
-          acceptedByUserId: "user-1",
-          acceptedAt: expect.any(Date),
-        }),
-        update: expect.objectContaining({
-          businessOutcome: brief.description,
-          confidence: "high",
-          acceptedByUserId: "user-1",
-          acceptedAt: expect.any(Date),
-        }),
-      }),
-    );
+    expect(result.ok === false && result.code === "BUILD_WIP_CAP_REACHED").toBe(false);
   });
 
   it("updateBusinessBuildBrief persists business edits and accepts a complete brief", async () => {
@@ -715,10 +667,7 @@ describe("governed build start approvals", () => {
 
     await resumeBuildImplementation("FB-789");
 
-    expect(mockListReleasableSandboxFiles).toHaveBeenCalledWith(
-      "dpf-sandbox-1",
-      { baseRef: "client/test-client-id" },
-    );
+    expect(mockListReleasableSandboxFiles).toHaveBeenCalledWith("dpf-sandbox-1", { baseRef: "client/test-client-id", workspace: "/workspace/.builds/FB-789" });
     expect(mockStartBuildBranch).toHaveBeenCalledWith("FB-789");
     expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1032,10 +981,8 @@ describe("governed build start approvals", () => {
 
     await completeBuild("FB-READ");
 
-    expect(mockAssertFeatureBuildCompletion).toHaveBeenCalledWith({
-      buildId: "FB-READ",
-      expectedPhase: undefined,
-    });
+    // BI-BDB63485: completion goes through the delivery preconditions first.
+    expect(mockCompleteBuildWhenDelivered).toHaveBeenCalledWith("FB-READ");
     expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -1134,6 +1081,7 @@ describe("governed build start approvals", () => {
       message:
         "No releasable source changes are present in the sandbox. Tasks are marked complete but no code was written. Resume implementation and make real code changes before advancing to review.",
     });
+    expect(mockListReleasableSandboxFiles).toHaveBeenCalledWith("dpf-sandbox-1", { baseRef: "client/test-client-id", workspace: "/workspace/.builds/FB-123" });
 
     expect(mockPrisma.featureBuild.update).not.toHaveBeenCalledWith(
       expect.objectContaining({

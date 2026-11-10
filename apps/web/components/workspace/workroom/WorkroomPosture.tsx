@@ -1,6 +1,7 @@
 import { Surface } from "@/components/ui/Surface";
 
 import { WorkroomPostureControl } from "./WorkroomPostureControl";
+import { WorkroomPostureProvenance } from "./WorkroomPostureProvenance";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 
 // EP-WORK-POSTURE Slice D (BI-4F468192) — make the room's posture observable.
@@ -37,6 +38,7 @@ const SOURCE_COPY: Record<string, string> = {
   "hard-policy": "policy",
   "room-declaration": "this room",
   derived: "the work shape",
+  "workroom-default": "your default for rooms",
   agent: "the coworker",
   organization: "the organisation",
   platform: "the default",
@@ -95,20 +97,11 @@ export function WorkroomPosture({ room }: { room: WorkroomView }) {
                 </div>
               ) : null}
 
-              {posture.inert ? (
-                <p className="text-xs text-[var(--dpf-muted)]">Unchanged for this room.</p>
-              ) : (
-                <div>
-                  <p className="text-xs text-[var(--dpf-muted)]">Why</p>
-                  <ul className="mt-1 space-y-1 text-[var(--dpf-muted)]">
-                    {posture.adjustments.map((adjustment) => (
-                      <li key={`${adjustment.field}:${adjustment.reasonCode}`}>
-                        {adjustment.reason}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {/* The layer-by-layer account (BI-4EB2F1D0). It subsumes the flat
+                  "Why" list this section used to render — the same reasons, now
+                  attributed to the layer that produced them — so the reasons
+                  appear once rather than twice. */}
+              <WorkroomPostureProvenance posture={posture} />
             </>
           )}
 
@@ -122,6 +115,7 @@ export function WorkroomPosture({ room }: { room: WorkroomView }) {
               currentShape={posture.editable.declaredShape as never}
               currentPace={posture.proactivityLevel}
               currentAuthority={posture.actionBoundary}
+              currentPriority={posture.priority}
               hasDeclaration={posture.editable.hasDeclaration}
             />
           ) : null}

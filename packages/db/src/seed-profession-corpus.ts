@@ -1,8 +1,8 @@
 // packages/db/src/seed-profession-corpus.ts
 // WSID Phase 2 (BI-871126F9): seed profession corpus wiki pages from
 // docs/professions/*/wiki/. Generalises seed-wiki-kernel.ts machinery
-// for open-license external sources (no kernel manifest; no Qdrant sidecar
-// in Phase 2 — Qdrant seeding is a Phase 3+ extension).
+// for open-license external sources (no kernel manifest; no vector sidecar
+// in Phase 2 — vector seeding is a Phase 3+ extension).
 //
 // Idempotent: re-running advances the revision chain only when body
 // content has changed; never duplicates RawSource rows, page rows,
@@ -11,9 +11,11 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { Prisma, PrismaClient } from "../generated/client/client";
-import { deriveSlug, extractPrinciplePayload, parseFrontmatter } from "./seed-wiki-kernel";
-import { appendRevision, attachSource, linkPages, upsertWikiPage } from "./wiki-store";
-import { extractWikilinks } from "./wiki-frontmatter";
+import { extractPrinciplePayload, parseFrontmatter } from "./seed-wiki-kernel";
+import { appendRevision, attachSource, upsertWikiPage } from "./wiki-store";
+import { replaceWikiPageOutLinks } from "./wiki-links";
+import { projectWikiLinksToGraph } from "./graph-sync";
+import { extractWikilinks, professionCorpusPageSlug } from "./wiki-frontmatter";
 import type { WikiPageFrontmatter } from "./wiki-frontmatter";
 import { PROVIDER_COMPLIANCE_SOURCE_REGISTRY } from "./provider-compliance-source-registry";
 import {
@@ -1840,24 +1842,6 @@ function walkMarkdownFiles(dir: string): string[] {
   return out;
 }
 
-/**
- * Derive a wiki slug for a profession corpus page.
- *   docs/professions/data-architect/wiki/parameterized-queries-commandment.md
- *   -> professions/data-architect/parameterized-queries-commandment
- *
- * Strips the `wiki/` path segment and prefixes with `professions/` so
- * profession corpus pages are distinguishable from kernel pages by
- * their slug prefix, which the `detectUnsourcedProfessionPages` lint
- * detector uses as its identification mechanism.
- */
-function deriveCorpusSlug(absolutePath: string): string {
-  const rel = deriveSlug(absolutePath, PROFESSIONS_DIR);
-  // rel = "data-architect/wiki/parameterized-queries-commandment"
-  // Strip the wiki/ path segment: "data-architect/parameterized-queries-commandment"
-  const stripped = rel.replace(/^([^/]+)\/wiki\//, "$1/");
-  return `professions/${stripped}`;
-}
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export type SeedProfessionCorpusResult = {
@@ -2025,7 +2009,7 @@ export async function seedProfessionCorpus(
   for (const file of wikiFiles) {
     const raw = readFileSync(file, "utf8");
     const { frontmatter, body } = parseFrontmatter<WikiPageFrontmatter>(raw);
-    const slug = deriveCorpusSlug(file);
+    const slug = professionCorpusPageSlug(file, PROFESSIONS_DIR);
     const status = frontmatter.status ?? "published";
 
     const { jurisdictions, competencyLevel, archetypes, basis } = tallyVariantCoverage(
@@ -2102,13 +2086,11 @@ export async function seedProfessionCorpus(
     const fromId = slugToId.get(fromSlug);
     if (!fromId) continue;
     for (const toSlug of extractWikilinks(body)) {
-      const toId = slugToId.get(toSlug);
-      if (!toId) {
-        orphanLinks.push({ from: fromSlug, to: toSlug });
-        continue;
-      }
-      await linkPages(prisma, { fromPageId: fromId, toPageId: toId });
+      if (!slugToId.has(toSlug)) orphanLinks.push({ from: fromSlug, to: toSlug });
     }
+    // Replace semantics (BI-23900D0A): the stored links become exactly what the
+    // body says, so a link removed from the file is removed from the install.
+    await replaceWikiPageOutLinks(prisma, { pageId: fromId, organizationId: null, body }, projectWikiLinksToGraph);
   }
 
   if (orphanLinks.length > 0) {

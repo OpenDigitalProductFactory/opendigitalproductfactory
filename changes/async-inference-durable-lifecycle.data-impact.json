@@ -1,0 +1,70 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-801313EB adds a durable, resumable lifecycle to AsyncInferenceOp and an append-only AsyncInferenceOperationTransition outbox. The migration is additive. Existing rows remain identityVersion=0 and receive a delivered sequence-zero audit transition without invented authority; new admissions explicitly opt into identityVersion=1 after server-side TaskRun or Workroom binding. Provider credentials and unscreened prompts are never persisted. Terminal rows and transition history follow the bound TaskRun or Workroom lifecycle; transition rows cascade only when their owning operation is governedly removed. Migration: 20260904113000_async_inference_durable_lifecycle.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "AsyncInferenceOp",
+      "lifecycleDisposition": "retain-with-bound-task-run-or-workroom",
+      "fields": [
+        {
+          "name": "identityVersion/authorityScopeKey/requestKey/requestDigest/bindingDigest",
+          "resolution": "governed",
+          "reason": "Server-owned immutable admission identity and digests make replay idempotent without storing credentials or trusting client scope.",
+          "provenance": "Derived by the authorized admission boundary from the authenticated TaskRun or Workroom binding and canonical screened request.",
+          "flags": []
+        },
+        {
+          "name": "taskRunId/workroomId",
+          "resolution": "inherited",
+          "reason": "Exactly one existing governed work carrier owns each version-one operation; database constraints reject zero or multiple owners.",
+          "provenance": "Resolved server-side from authenticated execution authority before persistence; foreign keys reference TaskRun or Workroom.",
+          "flags": []
+        },
+        {
+          "name": "checkpointSequence/transitionSequence/startClaimFence",
+          "resolution": "governed",
+          "reason": "Monotonic counters fence concurrent workers, provider starts, and transition delivery.",
+          "provenance": "Advanced transactionally by the durable operation store under compare-and-swap conditions.",
+          "flags": []
+        },
+        {
+          "name": "startAttemptedAt/leaseOwner/leaseExpiresAt/cancelRequestedAt/nextPollAt/updatedAt",
+          "resolution": "governed",
+          "reason": "Operational lifecycle timestamps and opaque worker lease identity support recovery, cancellation, and bounded polling.",
+          "provenance": "Written by the server-owned admission, worker, cancellation, and recovery paths using the database clock.",
+          "flags": []
+        },
+        {
+          "name": "requestContext/resultText/resultData/errorMessage/progressPct/progressMessage",
+          "resolution": "governed",
+          "reason": "Only normalized credential-free request context and sanitized provider outcomes are retained; raw secret-bearing payloads are rejected or stripped.",
+          "provenance": "Produced by credential screening and provider-specific normalization before the transactional store write.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "AsyncInferenceOperationTransition",
+      "lifecycleDisposition": "retain-with-owning-async-operation",
+      "fields": [
+        {
+          "name": "operationId/sequence/status",
+          "resolution": "inherited",
+          "reason": "Each immutable ordered transition belongs to one operation and uses the same closed lifecycle vocabulary.",
+          "provenance": "Created transactionally with the owning AsyncInferenceOp state transition; legacy rows receive one explicitly delivered sequence-zero boundary.",
+          "flags": []
+        },
+        {
+          "name": "checkpoint/occurredAt/deliveryAttempts/deliveredAt",
+          "resolution": "governed",
+          "reason": "Sanitized checkpoints and delivery metadata provide an auditable transactional outbox without duplicating business authority.",
+          "provenance": "Written by the durable transition store and updated by the bounded outbox dispatcher.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

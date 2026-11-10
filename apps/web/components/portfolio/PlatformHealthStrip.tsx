@@ -7,6 +7,9 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
+import { MonitoringOffNotice } from "@/components/monitoring/MonitoringOffNotice";
+import { Surface } from "@/components/ui/Surface";
+
 type Alert = {
   labels: Record<string, string>;
   state: string;
@@ -17,6 +20,8 @@ type ServiceStatus = { name: string; up: boolean };
 type HealthState = {
   checked: boolean;
   online: boolean;
+  /** Monitoring switched off on this install (BI-2CE9CBF4). */
+  off?: boolean;
   services: ServiceStatus[];
   firingAlerts: number;
   criticalAlerts: number;
@@ -30,7 +35,7 @@ const INITIAL: HealthState = {
   criticalAlerts: 0,
 };
 
-// BET-5: Qdrant/Neo4j retired — memory/graph are Postgres (BI-31FDC859).
+// Memory and graph live in Postgres (BET-5, BI-31FDC859).
 const SERVICE_JOBS = [
   { name: "Portal", job: "portal" },
   { name: "PostgreSQL", job: "postgres" },
@@ -56,6 +61,10 @@ export function PlatformHealthStrip() {
 
       // Parse service status
       const upJson = await upRes.json();
+      if (upJson.status === "monitoring-off") {
+        setState({ ...INITIAL, checked: true, off: true });
+        return;
+      }
       const results: Array<{ metric: { job?: string }; value: [number, string] }> =
         upJson.data?.result ?? [];
       const statusMap = new Map<string, number>();
@@ -92,6 +101,14 @@ export function PlatformHealthStrip() {
   }, [probe]);
 
   if (!state.checked) return null;
+
+  if (state.off) {
+    return (
+      <Surface padding="sm" className="mb-6">
+        <MonitoringOffNotice compact />
+      </Surface>
+    );
+  }
 
   if (!state.online) {
     return (

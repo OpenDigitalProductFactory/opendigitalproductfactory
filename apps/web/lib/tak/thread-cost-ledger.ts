@@ -18,18 +18,34 @@
 /** One contributor to a thread's spend (an inference run or a tool call). */
 export type SpendRow = {
   source: "inference" | "tool";
+  /**
+   * Provider-reported input tokens. For Anthropic this is the UNCACHED input
+   * only: a turn served from a prompt-cache prefix reports a handful here and
+   * carries the prompt the model actually read in the two cache fields below.
+   * A ledger that ignored them under-read anthropic-sub by two orders of
+   * magnitude (measured avg 17 input tokens per run, BI-CCF1ACBB).
+   */
   inputTokens: number | null;
   outputTokens: number | null;
   costUsd: number | null;
+  /** Tokens written into the provider prompt cache this call (absent for tools / non-caching providers). */
+  cacheCreationInputTokens?: number | null;
+  /** Tokens read from the provider prompt cache this call. */
+  cachedInputTokens?: number | null;
 };
 
 export type ThreadSpend = {
+  /** Everything the model read as input: uncached + cache-written + cache-read tokens. */
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
   inferenceRuns: number;
   toolCalls: number;
+  /** Subset of inputTokens that was written into a prompt cache (billed at write rate). */
+  cacheCreationInputTokens: number;
+  /** Subset of inputTokens that was served from a prompt cache (billed at read rate). */
+  cachedInputTokens: number;
 };
 
 export const EMPTY_THREAD_SPEND: ThreadSpend = {
@@ -39,6 +55,8 @@ export const EMPTY_THREAD_SPEND: ThreadSpend = {
   costUsd: 0,
   inferenceRuns: 0,
   toolCalls: 0,
+  cacheCreationInputTokens: 0,
+  cachedInputTokens: 0,
 };
 
 /**
@@ -49,7 +67,11 @@ export const EMPTY_THREAD_SPEND: ThreadSpend = {
 export function summarizeThreadSpend(rows: SpendRow[]): ThreadSpend {
   const acc = { ...EMPTY_THREAD_SPEND };
   for (const r of rows) {
-    acc.inputTokens += r.inputTokens ?? 0;
+    const cacheCreation = r.cacheCreationInputTokens ?? 0;
+    const cached = r.cachedInputTokens ?? 0;
+    acc.inputTokens += (r.inputTokens ?? 0) + cacheCreation + cached;
+    acc.cacheCreationInputTokens += cacheCreation;
+    acc.cachedInputTokens += cached;
     acc.outputTokens += r.outputTokens ?? 0;
     acc.costUsd += r.costUsd ?? 0;
     if (r.source === "inference") acc.inferenceRuns += 1;
@@ -64,6 +86,8 @@ export function combineThreadSpend(spends: ThreadSpend[]): ThreadSpend {
   const acc = { ...EMPTY_THREAD_SPEND };
   for (const s of spends) {
     acc.inputTokens += s.inputTokens;
+    acc.cacheCreationInputTokens += s.cacheCreationInputTokens;
+    acc.cachedInputTokens += s.cachedInputTokens;
     acc.outputTokens += s.outputTokens;
     acc.costUsd += s.costUsd;
     acc.inferenceRuns += s.inferenceRuns;

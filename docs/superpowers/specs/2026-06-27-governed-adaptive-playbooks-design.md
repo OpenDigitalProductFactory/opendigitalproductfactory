@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Governed Adaptive Playbooks - Translating Ornith-Style Self-Improving Work into DPF
 
 > **2026-07-25 continuation:** The proposal, review, Work Case staging, receipt, and resolution
@@ -10,8 +14,17 @@
 > versioned bounded recovery, exact-head PR/merge-queue custody, governed-release/deployed-SHA
 > closure, execution-profile attribution, and the operator custody band. Rollout remains
 > default-off and proceeds through shadow and a contained `dpf_dogfood` canary.
+>
+> **2026-08-30 competence-assurance continuation:** WikiSkill and Anthropic's automated-researcher
+> results do not change the Living Playbook ownership model. They add requirements at its evaluation
+> and qualification seams: evidence/knowledge/method separation, a Workroom coordinator acting as
+> the outer-loop Process Overseer, held-out evaluator isolation, capability floors, anti-gaming
+> controls, target-profile transfer evidence, and TAK-JSI revalidation before activation. The
+> overseer enforces the room contract and transition invariants while the inner learning method may
+> adapt; it is not the evaluator or activation authority. The canonical extension is
+> [`2026-08-30-paaw-competence-evolution-workroom-design.md`](2026-08-30-paaw-competence-evolution-workroom-design.md).
 
-- **Status:** Design analysis
+- **Status:** active
 - **Date:** 2026-06-27
 - **Author:** Codex, operator-directed
 - **Primary audience:** DPF platform architecture, AI workforce, TAK runtime, Build Studio

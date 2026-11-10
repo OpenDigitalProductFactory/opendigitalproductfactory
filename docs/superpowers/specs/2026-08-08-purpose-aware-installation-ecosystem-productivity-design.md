@@ -1,4 +1,17 @@
+---
+status: superseded
+---
+
 # Purpose-Aware Installation to Ecosystem Productivity
+
+> **Superseded (2026-09-01).** This 2026-08-08 umbrella design was decomposed
+> into the more specific, currently-authoritative specs it spawned — the
+> installation-identity, installation-estate-identity, external-agent-operating-contract,
+> consumer-install-rulebook, and zero-touch-federation designs under
+> `docs/superpowers/specs/`. Consult those for current design. Its coordination
+> anchors (`EP-1FABA22D` and its BIs) are no longer in the live backlog;
+> recovery is tracked by `BI-99250643`. Kept for history — original wording
+> below is unchanged.
 
 - **Status:** proposed architecture and product design
 - **Date:** 2026-08-08

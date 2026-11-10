@@ -5,20 +5,23 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  baselineKey,
-  computeFindings,
+  evaluate,
   findRetiredMentions,
+  isScannable,
+  isUnderHistoricalRoot,
   loadRegistry,
-  parseBaseline,
-  serializeBaseline,
 } from "./check-retired-substrate.mjs";
-import { publishedDocFiles } from "./lib/published-doc-roots.mjs";
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENTRIES = [
   { term: "neo4j", retiredBy: "BET-5", replacement: "the Postgres graph mirror" },
   { term: "qdrant", retiredBy: "BET-5", replacement: "pgvector" },
 ];
+
+function registry({ allowed = {}, historicalRoots = {} } = {}) {
+  return { entries: ENTRIES, allowed, historicalRoots };
+}
 
 test("finds a retired term regardless of case", () => {
   assert.deepEqual(findRetiredMentions("We run Neo4j here.\n", ENTRIES), [{ term: "neo4j", line: 1 }]);
@@ -48,59 +51,89 @@ test("does not fire on a term embedded in a larger word", () => {
   assert.equal(findRetiredMentions("(qdrant)\n", ENTRIES).length, 1);
 });
 
-test("stays silent on a clean document", () => {
+test("stays silent on a clean file", () => {
   assert.deepEqual(findRetiredMentions("All state lives in PostgreSQL.\n", ENTRIES), []);
 });
 
 test("loadRegistry rejects an entry with no term rather than silently skipping it", () => {
   assert.throws(() => loadRegistry({ retired: [{ retiredBy: "x" }] }), /missing a "term"/);
-  assert.deepEqual(loadRegistry({ retired: [] }), []);
+  assert.deepEqual(loadRegistry({ retired: [] }).entries, []);
 });
 
-test("baseline round-trips and tolerates space-separated legacy lines", () => {
-  const keys = new Set([baselineKey("docs/a.md", "neo4j"), baselineKey("docs/b.md", "qdrant")]);
-  assert.deepEqual(parseBaseline(serializeBaseline(keys)), keys);
-  // Comments and blank lines are ignored; spaces normalize to the tab form.
-  assert.deepEqual(
-    parseBaseline("# header\n\ndocs/a.md   neo4j\n"),
-    new Set([baselineKey("docs/a.md", "neo4j")]),
+test("loadRegistry refuses an allowlist or historical-root entry with no reason", () => {
+  assert.throws(() => loadRegistry({ retired: [], allowed: { "a.ts": "" } }), /allowed entry "a.ts" has no reason/);
+  assert.throws(
+    () => loadRegistry({ retired: [], historicalRoots: { "docs/old/": "  " } }),
+    /historicalRoots entry "docs\/old\/" has no reason/,
   );
+  assert.throws(() => loadRegistry({ retired: [], historicalRoots: { "docs/old": "x" } }), /must end with "\/"/);
 });
 
-test("computeFindings pairs every doc with every term it mentions", () => {
-  const docs = ["docs/one.md", "docs/two.md", "docs/clean.md"];
-  const contents = {
-    "docs/one.md": "neo4j and qdrant\n",
-    "docs/two.md": "just qdrant\n",
-    "docs/clean.md": "postgres only\n",
+test("forbids a mention in any file that is neither allowlisted nor historical", () => {
+  const contents = { "apps/x.ts": "// write to neo4j\n", "docs/clean.md": "postgres only\n" };
+  const result = evaluate(Object.keys(contents), registry(), (p) => contents[p]);
+  assert.deepEqual(result.forbidden, [{ filePath: "apps/x.ts", term: "neo4j", line: 1 }]);
+  assert.deepEqual(result.stale, []);
+});
+
+test("an allowlisted file and a file under a historical root pass", () => {
+  const contents = { "scripts/guard.mjs": "qdrant\n", "docs/superpowers/plan.md": "neo4j\n" };
+  const result = evaluate(
+    Object.keys(contents),
+    registry({ allowed: { "scripts/guard.mjs": "guard" }, historicalRoots: { "docs/superpowers/": "history" } }),
+    (p) => contents[p],
+  );
+  assert.deepEqual(result, { forbidden: [], stale: [], redundant: [] });
+});
+
+test("an allowlist entry whose file no longer names a retired term is stale", () => {
+  // The list only shrinks: once a file is fixed its entry must go, so the
+  // mention cannot quietly come back.
+  const contents = { "apps/fixed.ts": "pgvector\n" };
+  const result = evaluate(
+    Object.keys(contents),
+    registry({ allowed: { "apps/fixed.ts": "was a guard", "apps/deleted.ts": "gone" } }),
+    (p) => contents[p] ?? null,
+  );
+  assert.deepEqual(result.stale.sort(), ["apps/deleted.ts", "apps/fixed.ts"]);
+});
+
+test("an allowlist entry under a historical root is redundant", () => {
+  const result = evaluate(
+    [],
+    registry({ allowed: { "docs/superpowers/x.md": "dup" }, historicalRoots: { "docs/superpowers/": "history" } }),
+    () => null,
+  );
+  assert.deepEqual(result.redundant, ["docs/superpowers/x.md"]);
+});
+
+test("binary formats are not scanned; source and config are", () => {
+  assert.equal(isScannable("docs/diagram.png"), false);
+  assert.equal(isScannable("reference/model.xlsx"), false);
+  assert.equal(isScannable(".env.example"), true);
+  assert.equal(isScannable("docker-compose.yml"), true);
+  assert.equal(isUnderHistoricalRoot("changes/x.json", { "changes/": "r" }), true);
+  assert.equal(isUnderHistoricalRoot("changesets/x.json", { "changes/": "r" }), false);
+});
+
+test("the committed registry holds the repo exactly: nothing forbidden, nothing stale", () => {
+  const reg = loadRegistry(fs.readFileSync(path.join(REPO_ROOT, "scripts", "retired-substrate.json"), "utf-8"));
+  assert.ok(reg.entries.length > 0, "registry should declare at least one retired term");
+  const files = gitText(["ls-files", "-z"], { trim: false, maxBuffer: 64 * 1024 * 1024 })
+    .split("\0")
+    .filter(Boolean);
+  assert.ok(files.length > 1000, "expected the real tracked tree, not an empty list");
+  const read = (p) => {
+    try {
+      return fs.readFileSync(path.join(REPO_ROOT, p), "utf-8");
+    } catch {
+      return null;
+    }
   };
-  const findings = computeFindings(docs, ENTRIES, (p) => contents[p]);
-  assert.deepEqual(
-    findings.map((f) => baselineKey(f.docPath, f.term)).sort(),
-    [
-      baselineKey("docs/one.md", "neo4j"),
-      baselineKey("docs/one.md", "qdrant"),
-      baselineKey("docs/two.md", "qdrant"),
-    ].sort(),
-  );
-});
-
-test("the committed baseline covers every current mention, so the gate is green", () => {
-  const entries = loadRegistry(fs.readFileSync(path.join(REPO_ROOT, "scripts", "retired-substrate.json"), "utf-8"));
-  assert.ok(entries.length > 0, "registry should declare at least one retired term");
-
-  const baseline = parseBaseline(
-    fs.readFileSync(path.join(REPO_ROOT, "scripts", "retired-substrate-baseline.txt"), "utf-8"),
-  );
-  // Reuse the real corpus so this test fails if a page regresses.
-  const docs = publishedDocFiles(REPO_ROOT);
-  assert.ok(docs.length > 100, "expected the real published corpus, not an empty list");
-
-  const findings = computeFindings(docs, entries, (p) => fs.readFileSync(path.join(REPO_ROOT, p), "utf-8"));
-  assert.ok(findings.length > 0, "expected the grandfathered mentions to still be found");
-
-  const netNew = findings.filter((f) => !baseline.has(baselineKey(f.docPath, f.term)));
-  assert.deepEqual(netNew, [], `net-new retired-substrate mentions: ${JSON.stringify(netNew)}`);
+  const result = evaluate(files, reg, read);
+  assert.deepEqual(result.forbidden, [], `retired-substrate mentions: ${JSON.stringify(result.forbidden)}`);
+  assert.deepEqual(result.stale, [], `stale allowlist entries: ${JSON.stringify(result.stale)}`);
+  assert.deepEqual(result.redundant, []);
 });
 
 test("the two pages this gate was built for describe live substrate, not retired services", () => {

@@ -31,8 +31,33 @@ export type PresentedProposal = {
   confidence: string | null;
   /** Stated when nothing disagreed, so agreement and silence never look alike. */
   agreementNote: string | null;
+  /** Who weighed in, or the plain admission that no specialist applied. */
+  panelNote: string | null;
   labels: typeof PROPOSAL_LABELS;
 };
+
+/**
+ * Who sat on the panel, read from the run's own branch roster (BI-19B350FD).
+ * Derived rather than copied onto the proposal: the roster belongs to the run,
+ * and a second copy could disagree with it.
+ */
+export function panelNoteFrom(roster: unknown): string | null {
+  if (!Array.isArray(roster)) return null;
+  const roles = [
+    ...new Set(
+      roster.flatMap((entry) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+        const role = (entry as Record<string, unknown>).role;
+        return typeof role === "string" && role.trim().length > 0 ? [role.trim()] : [];
+      }),
+    ),
+  ];
+  const specialists = roles.filter((r) => r !== "resolution-adjudicator" && r !== "skeptic");
+  if (specialists.length === 0) {
+    return "No specialist coworker applied to this, so it was weighed on general platform judgement.";
+  }
+  return `Weighed in: ${specialists.join(", ")}.`;
+}
 
 export const PROPOSAL_LABELS = {
   heading: "What your coworkers suggest",
@@ -111,6 +136,8 @@ export function presentProposal(row: {
   draftPayload: unknown;
   dissent: unknown;
   confidence: number | null;
+  /** The deliberation run's branch roster, when a panel produced this. */
+  panelRoster?: unknown;
 }): PresentedProposal | null {
   if (row.status !== "proposed") return null;
   if (row.lifecycle && row.lifecycle !== "active") return null;
@@ -131,6 +158,7 @@ export function presentProposal(row: {
     dissent,
     confidence: confidenceSentence(row.confidence),
     agreementNote: dissent.length === 0 ? "Everyone who looked at this agreed." : null,
+    panelNote: panelNoteFrom(row.panelRoster),
     labels: PROPOSAL_LABELS,
   };
 }

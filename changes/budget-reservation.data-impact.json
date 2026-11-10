@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-EF265C9A (slice 4 of EP-PORTFOLIO-BUDGET-WIP). New model BudgetReservation and enum BudgetReservationState (reserved|consumed|released): the investment points a funding approval reserves against a portfolio's quarterly budget. Written by approve_demand_for_funding after a funded decision; settled by settleBudgetReservations (done consumes, retired or deferred releases, a re-size adjusts the points and records a budget_reservation_resized activity), which the status tools call at once and a 15-minute cron sweeps. One open reservation per item (partial unique index). Additive: a new empty table, no backfill. Migration: 20260925200000_budget_reservation.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "BudgetReservation",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        { "name": "backlogItemId", "resolution": "governed", "reason": "The funded item; cascades with it.", "provenance": "The item being approved.", "flags": [] },
+        { "name": "portfolioId", "resolution": "governed", "reason": "The portfolio whose budget carries the points, resolved by the slice 1 attribution.", "provenance": "resolveBacklogItemPortfolio at approval time.", "flags": [] },
+        { "name": "periodStart", "resolution": "governed", "reason": "The UTC quarter the reservation counts against.", "provenance": "The quarter containing the approval.", "flags": [] },
+        { "name": "periodEnd", "resolution": "governed", "reason": "Exclusive end of that quarter.", "provenance": "Derived with periodStart.", "flags": [] },
+        { "name": "points", "resolution": "governed", "reason": "The item's investment points; adjusted on re-size with an activity row.", "provenance": "resolveInvestmentPoints at approval, then settlement.", "flags": [] },
+        { "name": "state", "resolution": "governed", "reason": "reserved, consumed or released, derived from the item's status.", "provenance": "Settlement only.", "flags": [] },
+        { "name": "overrideReason", "resolution": "governed", "reason": "A person's reason for approving past the allocation; an autonomous caller is refused instead.", "provenance": "Operator-entered on approve_demand_for_funding.", "flags": [] },
+        { "name": "actorId", "resolution": "governed", "reason": "The person who approved the funding.", "provenance": "From the authenticated caller.", "flags": [] },
+        { "name": "actorAgentId", "resolution": "governed", "reason": "The coworker that carried the approval, when it is a registered agent.", "provenance": "From the tool execution context.", "flags": [] },
+        { "name": "settledAt", "resolution": "governed", "reason": "When the reservation was consumed or released.", "provenance": "Settlement clock.", "flags": [] }
+      ]
+    }
+  ]
+}

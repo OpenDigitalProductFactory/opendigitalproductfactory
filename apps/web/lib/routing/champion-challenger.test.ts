@@ -2,7 +2,7 @@
  * EP-INF-006: Champion/Challenger selection and promotion tests (TDD).
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -26,7 +26,6 @@ import { loadChampionRecipe } from "./recipe-loader";
 import {
   selectRecipeWithExploration,
   evaluatePromotions,
-  promoteChallenger,
   _resetPromotionState,
 } from "./champion-challenger";
 import type { RequestContract } from "./request-contract";

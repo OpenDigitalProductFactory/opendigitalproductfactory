@@ -1,8 +1,13 @@
 import { prisma } from "@dpf/db";
 
 import type { ConstitutionalAlignmentResult } from "@/lib/decision-perspective/alignment-criteria";
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 import type { SpecialistAlignmentDelegationResult } from "./alignment-specialist-delegation";
+import {
+  TAK_ALIGNMENT_OPTIONS,
+  TAK_ALIGNMENT_PROPOSED_OPTION_ID,
+  TAK_ALIGNMENT_SCORED_OPTIONS,
+} from "./alignment-gate-options";
 
 export type AlignmentGateDecision = {
   verdict: "approve" | "decline" | "escalate";
@@ -12,6 +17,11 @@ export type AlignmentGateDecision = {
   specialistDelegation?: SpecialistAlignmentDelegationResult;
   policyVersion?: string;
   amendmentLineage?: string[];
+  /**
+   * On a refusal, the `WikiPage.slug` of the principle that governs it
+   * (BI-DEDAC950), for `wiki_query`. Set by enforceTakPreexecution.
+   */
+  principleSlug?: string;
 };
 export type AlignmentGate = (input: {
   organizationId?: string;
@@ -25,14 +35,33 @@ export function setAlignmentGateOverrideForTests(override: AlignmentGate | null)
   overrideForTests = override;
 }
 
-function alignmentStatement(toolName: string, params: Record<string, unknown>): string {
-  const fields = [
-    "name", "title", "description", "summary", "question", "product", "offer",
-    "market", "segment", "motion", "geography", "customerType",
-  ];
-  const values = fields.map((field) => params[field])
+const STATEMENT_FIELDS = [
+  "name", "title", "description", "summary", "question", "product", "offer",
+  "market", "segment", "motion", "geography", "customerType",
+] as const;
+const STATEMENT_FALLBACK_MAX_PARAMS = 6;
+const STATEMENT_FALLBACK_MAX_VALUE = 80;
+
+/**
+ * The question the WWWD gate is asked. Prefers the tool's descriptive fields;
+ * when a tool carries none of them the statement used to collapse to a bare
+ * `"<tool name>: "`, which reached the owner's review queue as a card with no
+ * question on it (BI-63B14D4B). A gate that cannot state its question must at
+ * least state what was requested, so the fallback names the scalar parameters
+ * it was given and says so plainly when there were none.
+ */
+export function alignmentStatement(toolName: string, params: Record<string, unknown>): string {
+  const label = toolName.replaceAll("_", " ");
+  const values = STATEMENT_FIELDS.map((field) => params[field])
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0);
-  return `${toolName.replaceAll("_", " ")}: ${values.join(". ")}`;
+  if (values.length > 0) return `${label}: ${values.join(". ")}`;
+  const scalars = Object.entries(params)
+    .filter(([, value]) => ["string", "number", "boolean"].includes(typeof value))
+    .slice(0, STATEMENT_FALLBACK_MAX_PARAMS)
+    .map(([key, value]) => `${key}=${String(value).slice(0, STATEMENT_FALLBACK_MAX_VALUE)}`);
+  return scalars.length > 0
+    ? `${label} with ${scalars.join(", ")}`
+    : `${label} (no parameters describe this request)`;
 }
 
 export function composeAlignmentVerdicts(
@@ -67,11 +96,12 @@ export async function runTakAlignmentGate(args: GovernedExecuteArgs): Promise<Al
     db: prisma,
     organizationId,
     question: statement,
-    options: ["Proceed", "Decline"],
-    scoredOptions: [
-      { id: "proceed", description: "Proceed", features: { mission_fit: 1, market_fit: 1, product_fit: 1, gtm_fit: 1 } },
-      { id: "decline", description: "Decline", features: { reversibility: 1, blast_radius: 0 } },
-    ],
+    options: [...TAK_ALIGNMENT_OPTIONS],
+    scoredOptions: TAK_ALIGNMENT_SCORED_OPTIONS,
+    // The coworker asked to run this tool: its proposal is to proceed. Recorded
+    // so the trust ledger can compare it with what a person then chose
+    // (BI-AE416D75).
+    proposedOptionId: TAK_ALIGNMENT_PROPOSED_OPTION_ID,
     domainClass: "plan-readiness",
     riskTier: "medium",
     routeContext: args.context?.routeContext ?? `/tool/${args.toolName}`,

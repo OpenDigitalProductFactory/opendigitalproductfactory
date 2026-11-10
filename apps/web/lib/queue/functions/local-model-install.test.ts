@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../inngest-client", () => ({
-  inngest: { createFunction: vi.fn(() => ({ id: "local-model-install" })) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { createFunction: vi.fn(() => ({ id: "local-model-install" })) },
 }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn() }));
 vi.mock("@/lib/inference/local-model-management", () => ({ installLocalModel: vi.fn() }));

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
+import { validateInitiativeDisposition } from "./disposition-contract";
 
 import type { InitiativeSubject } from "./types";
 import type { ReadinessProfile } from "./types";
 import { independentReviewerRemedy } from "./reviewer-identity";
+import { commitRangesEqual, parseRepoCommitRangeRef, type RepoCommitRangeRef } from "./repo-commit-range";
 
 export const INITIATIVE_GATE_KEYS = [
   "classification",
@@ -19,6 +21,7 @@ export const INITIATIVE_GATE_KEYS = [
   "dependency-disposition",
   "archetype-provisioning",
   "archetype-completeness",
+  "post-implementation-review",
 ] as const;
 
 export type InitiativeGateKey = (typeof INITIATIVE_GATE_KEYS)[number];
@@ -33,7 +36,9 @@ export type InitiativeArtifactRef =
     commitSha: string;
     path: string;
     providerBlobId: string;
-  };
+  }
+  // BI-46E344FE: a merged repair's whole change (post-implementation review only).
+  | RepoCommitRangeRef;
 
 export type InitiativeAuthoritySnapshot = {
   decision: "allow";
@@ -127,11 +132,12 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isNonEmptyString);
 }
 
-function isArtifactRef(value: unknown): value is InitiativeArtifactRef {
+export function isInitiativeArtifactRef(value: unknown): value is InitiativeArtifactRef {
   if (!value || typeof value !== "object") return false;
   const ref = value as Record<string, unknown>;
   if (ref.kind === "feature-build-revision") return isNonEmptyString(ref.revisionId);
   if (ref.kind === "document-version") return isNonEmptyString(ref.versionId);
+  if (ref.kind === "repo-commit-range") return parseRepoCommitRangeRef(ref) !== null;
   return ref.kind === "repo-blob-at-commit"
     && isNonEmptyString(ref.repositoryFullName)
     && isNonEmptyString(ref.commitSha)
@@ -153,6 +159,10 @@ function artifactRefsMatch(left: InitiativeArtifactRef, right: InitiativeArtifac
       && left.path === right.path
       && left.providerBlobId === right.providerBlobId;
   }
+  if (left.kind === "repo-commit-range" && right.kind === left.kind) {
+    return left.repositoryFullName === right.repositoryFullName && left.digest === right.digest
+      && commitRangesEqual(left.ranges, right.ranges);
+  }
   return false;
 }
 
@@ -170,7 +180,7 @@ export function validateInitiativeGateReceiptDraft(
   if (!draft || typeof draft !== "object"
     || !INITIATIVE_GATE_KEYS.includes(draft.gate)
     || !(["pass", "fail", "not-applicable"] as const).includes(draft.decision)
-    || !isArtifactRef(draft.artifactRef)
+    || !isInitiativeArtifactRef(draft.artifactRef)
     || typeof draft.reason !== "string"
     || !isStringArray(draft.findingRefs)
     || !isStringArray(draft.resolvedFindingRefs)) {
@@ -236,9 +246,8 @@ export function validateInitiativeGateReceiptDraft(
   if (draft.findingRefs.some((finding) => draft.resolvedFindingRefs.includes(finding))) {
     return reject("finding-resolution-invalid", "A receipt cannot introduce and resolve the same finding.");
   }
-  if (draft.decision !== "fail" && draft.findingRefs.length > 0) {
-    return reject("malformed-receipt", "Only a failing receipt can introduce findings.");
-  }
+  const dispositionError = validateInitiativeDisposition(draft.decision, draft.findingRefs, draft.resolvedFindingRefs);
+  if (dispositionError) return reject("malformed-receipt", dispositionError);
   for (const resolved of draft.resolvedFindingRefs) openFindings.delete(resolved);
   if (draft.decision !== "fail" && openFindings.size > 0) {
     return reject("blocking-findings-open", "A passing or not-applicable receipt cannot leave findings open.");

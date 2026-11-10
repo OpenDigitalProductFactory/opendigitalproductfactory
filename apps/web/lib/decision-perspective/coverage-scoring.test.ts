@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { scoreProfileCoverage } from "./coverage-scoring";
+import { scoreProfileCoverage, delegatedRiskLimit } from "./coverage-scoring";
 import type { PerspectiveMaterial } from "./types";
+
+describe("shared delegated risk limit", () => {
+  it.each([
+    [{ allowArbitration: true, maxRiskForArbitration: "high" }, "high"],
+    [{ allowArbitration: false, maxRiskForArbitration: "high" }, "medium"],
+    [{ allowArbitration: true, maxRiskForArbitration: "low", maxRiskForRecommendation: "high" }, "high"],
+  ] as const)("uses configured limits without increasing delegated authority (%j)", (policy, expected) => {
+    expect(delegatedRiskLimit(policy)).toBe(expected);
+  });
+});
 
 // BI-F5F2869D — the escalation must carry signal. Two failures were measured
 // live: a decisive 1.0-weight ruling scored 0.60 because relevance was

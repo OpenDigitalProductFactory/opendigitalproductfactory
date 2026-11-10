@@ -26,6 +26,14 @@ import {
   OBLIGATION_WATCH_JOB_NAME,
   OBLIGATION_WATCH_REQUESTED_EVENT,
 } from "@/lib/compliance/obligation-watch-constants";
+import {
+  WORKROOM_DRIVE_CADENCE,
+  WORKROOM_DRIVE_CRON,
+  WORKROOM_DRIVE_INNGEST_ID,
+  WORKROOM_DRIVE_JOB_ID,
+  WORKROOM_DRIVE_JOB_NAME,
+  WORKROOM_DRIVE_REQUESTED_EVENT,
+} from "@/lib/work-management/workroom-drive-constants";
 
 import type { ScheduledJobCatalogEntry } from "./catalog-types";
 
@@ -33,6 +41,7 @@ export const WATCH_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: BUSINESS_JOURNEY_WATCHDOG_JOB_ID,
     inngestId: BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID,
+    honorsEnabledGate: true,
     name: BUSINESS_JOURNEY_WATCHDOG_JOB_NAME,
     purpose:
       "BI-E105303D / EP-PROACTIVE-OPS: exercises the install's critical business journeys (front door, enquiry, booking, sign-in, checkout) against the running system, records evidence, and raises a journey_failure issue the Needs-you inbox surfaces. If it stops, a broken signup or booking path goes unnoticed until a customer complains.",
@@ -45,6 +54,7 @@ export const WATCH_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: OBLIGATION_WATCH_JOB_ID,
     inngestId: OBLIGATION_WATCH_INNGEST_ID,
+    honorsEnabledGate: true,
     name: OBLIGATION_WATCH_JOB_NAME,
     purpose:
       "TAK §8.11 obligation-assurance-watch: sweeps recorded obligations, control reviews, and licence expiries against a 30-day look-ahead and raises an assurance finding for each one falling due, plus for any recurrence that has no next date. The accountable owner decides the response; this job never decides it. If it stops, six recorded cadence columns go back to reading as controls in force while behaving as controls that are not.",
@@ -53,5 +63,18 @@ export const WATCH_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: false,
     runNowEvent: OBLIGATION_WATCH_REQUESTED_EVENT,
+  },
+  {
+    jobId: WORKROOM_DRIVE_JOB_ID,
+    inngestId: WORKROOM_DRIVE_INNGEST_ID,
+    honorsEnabledGate: true,
+    name: WORKROOM_DRIVE_JOB_NAME,
+    purpose:
+      "BI-FCD639D9: wakes standing Workrooms on their declared trigger, dispatches agent stages through ScheduledAgentTask, converts human/governed stages into attention, and stops on budget, review, or a declared stop. If it stops, standing rooms wait for a person to notice.",
+    cron: WORKROOM_DRIVE_CRON,
+    cadence: WORKROOM_DRIVE_CADENCE,
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: WORKROOM_DRIVE_REQUESTED_EVENT,
   },
 ] as const;

@@ -15,18 +15,18 @@
 // the MERGE-STATE corpus — catching the "green alone, red merged" gap on the PR
 // instead of in the queue.
 //
-// Math + scenarios MIRROR apps/web/lib/decision/{option-scoring,golden-decisions}.ts.
-// The formula (alignment = Σ option·vec / Σ|vec|; contribution = weight × alignment;
-// composite = Σ) is the core decision algorithm and is intentionally stable. The
-// SCENARIOS below mirror GOLDEN_SCENARIOS; scripts/check-golden-decisions.test.mjs
-// is a drift-guard that fails CI if the ids / margin floors / winners diverge, and
-// both engines (this scorer + the canonical vitest test) run in CI against the same
-// corpus, so any behavioral divergence surfaces as one going red.
+// Scoring imports the portable engine; no second math implementation is kept.
+// SCENARIOS below mirror GOLDEN_SCENARIOS; the existing test guards their ids,
+// margin floors and winners. The generated distribution keeps the guard
+// compatible with the repository's Node >=20 floor without runtime build tools.
 
-import { execFileSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
+import { gitText } from "./lib/git.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildOptionScores } from "./generated/judgment/option-scoring.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRINCIPLES_DIR = join(HERE, "..", "docs", "founder-kernel", "wiki", "principles");
@@ -57,6 +57,15 @@ export const SCENARIOS = [
     options: {
       "cheap-sound-additive": { long_term_maintainability: 0.85, schema_grounding: 0.8, reusability: 0.6, blast_radius: 0.2, speed_to_value: 0.75, evidence_density: 0.9, governance_compliance: 0.6, cost_efficiency: 0.9, human_cognitive_load: 0.3 },
       "expensive-rebuild": { long_term_maintainability: 0.9, schema_grounding: 0.85, reusability: 0.7, blast_radius: 0.95, speed_to_value: 0.05, evidence_density: 0.4, governance_compliance: 0.5, cost_efficiency: 0.2, human_cognitive_load: 0.1 },
+    },
+  },
+  {
+    id: "adopt-vs-absorb-capability",
+    expectedWinner: "absorb-into-spine",
+    marginFloor: 0.3,
+    options: {
+      "adopt-upstream-stack": { speed_to_value: 0.9, evidence_density: 0.85, long_term_maintainability: 0.6, schema_grounding: 0.45, reusability: 0.6, operational_independence: 0.4, vendor_lock_in: 0.6, blast_radius: 0.2, operator_effort: 0.3, cost_efficiency: 0.6, governance_compliance: 0.7 },
+      "absorb-into-spine": { speed_to_value: 0.25, evidence_density: 0.55, long_term_maintainability: 0.8, schema_grounding: 0.75, reusability: 0.7, operational_independence: 0.9, vendor_lock_in: 0.1, blast_radius: 0.5, operator_effort: 0.6, cost_efficiency: 0.6, governance_compliance: 0.6 },
     },
   },
 ];
@@ -141,13 +150,8 @@ export function loadCommandments(dir = PRINCIPLES_DIR, professionsDir = PROFESSI
   );
 }
 
-function defaultGit(args) {
-  return execFileSync("git", args, {
-    cwd: join(HERE, ".."),
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 32 * 1024 * 1024,
-  });
+function defaultGit(args, opts = {}) {
+  return gitText(args, { cwd: join(HERE, ".."), trim: false, maxBuffer: 64 * 1024 * 1024, ...opts });
 }
 
 /**
@@ -163,44 +167,101 @@ export function resolveMergeTree(ref, { git = defaultGit } = {}) {
   return tree;
 }
 
-/** Read the decision corpus straight from a Git tree without materializing it. */
-export function loadCommandmentsFromGitTree(tree, { git = defaultGit } = {}) {
-  const prefix = "docs/";
-  const paths = String(git(["ls-tree", "-r", "--name-only", tree, "--", prefix]) ?? "")
-    .split(/\r?\n/)
-    .map((path) => path.trim())
-    .filter((path) =>
-      path.startsWith("docs/founder-kernel/wiki/principles/") && path.endsWith(".md")
-      || /^docs\/professions\/[^/]+\/wiki\/[^/]+\.md$/.test(path),
+const CORPUS_PATH = (path) =>
+  path.startsWith("docs/founder-kernel/wiki/principles/") && path.endsWith(".md")
+  || /^docs\/professions\/[^/]+\/wiki\/[^/]+\.md$/.test(path);
+
+function corpusSlug(path) {
+  const kernelPrefix = "docs/founder-kernel/wiki/principles/";
+  if (path.startsWith(kernelPrefix)) return path.slice(kernelPrefix.length, -3);
+  const professionMatch = path.match(/^docs\/professions\/([^/]+)\/wiki\/(.+)\.md$/);
+  return `professions/${professionMatch[1]}/${professionMatch[2]}`;
+}
+
+/**
+ * Raised when the merge tree names blobs this clone does not hold and origin
+ * would not supply them. It is an environment gap, not a decision regression
+ * (BI-1D04A29F), so the CLI reports it as such with the exact remedy.
+ */
+export class CorpusBlobsUnavailableError extends Error {
+  constructor(missing, cause) {
+    super(
+      `${missing.length} decision-corpus blob(s) of the merge tree are not in this clone and could not be fetched `
+      + `(${cause}). This is an environment gap, not a decision regression. Remedy: git fetch --no-tags origin `
+      + `${missing.slice(0, 5).join(" ")}${missing.length > 5 ? " …" : ""}`,
     );
-
-  return parseCommandmentFiles(paths.map((path) => {
-    const kernelPrefix = "docs/founder-kernel/wiki/principles/";
-    const professionMatch = path.match(/^docs\/professions\/([^/]+)\/wiki\/(.+)\.md$/);
-    const slug = path.startsWith(kernelPrefix)
-      ? path.slice(kernelPrefix.length, -3)
-      : `professions/${professionMatch[1]}/${professionMatch[2]}`;
-    return { slug, raw: String(git(["show", `${tree}:${path}`]) ?? "") };
-  }));
+    this.name = "CorpusBlobsUnavailableError";
+    this.missing = missing;
+  }
 }
 
-// ─── Scoring (mirrors option-scoring.ts) ─────────────────────────────────────
-function alignment(features, vec) {
-  const dims = Object.keys(vec);
-  if (!dims.length) return 0; // empty vector -> semantic fallback -> 0 (no embeddings here)
-  let num = 0, den = 0;
-  for (const d of dims) { den += Math.abs(vec[d]); const f = features[d]; if (typeof f === "number") num += f * vec[d]; }
-  return den === 0 ? 0 : num / den;
+/** Parse `git cat-file --batch` output (a Buffer) into sha -> utf8 content. */
+export function parseCatFileBatch(buffer) {
+  const out = new Map();
+  let offset = 0;
+  while (offset < buffer.length) {
+    const headerEnd = buffer.indexOf(0x0a, offset);
+    if (headerEnd < 0) break;
+    const [sha, type, size] = buffer.subarray(offset, headerEnd).toString("utf8").split(" ");
+    if (type === "missing" || size === undefined) {
+      offset = headerEnd + 1;
+      continue;
+    }
+    const length = Number(size);
+    out.set(sha, buffer.subarray(headerEnd + 1, headerEnd + 1 + length).toString("utf8"));
+    offset = headerEnd + 1 + length + 1; // each object's content is followed by one LF
+  }
+  return out;
 }
-function composite(features, commandments) {
-  return commandments.reduce((s, p) => s + p.weight * alignment(features, p.vec), 0);
+
+/**
+ * Read the decision corpus straight from a Git tree without materializing it.
+ *
+ * BI-1D04A29F: one `git show` per page cost ~0.8 s each on Windows (337 pages,
+ * about 280 s), and in this blob:none partial clone each one lazy-fetched its
+ * blob alone, so a single unreachable blob failed the whole guard as if a
+ * decision had regressed. Now: list the tree once, find missing blobs without
+ * lazy fetching, fetch them in one request, and read every blob in one batch.
+ */
+export function loadCommandmentsFromGitTree(tree, { git = defaultGit } = {}) {
+  const entries = String(git(["ls-tree", "-r", tree, "--", "docs/"]) ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\d+ blob ([0-9a-f]{40,64})\t(.+)$/i))
+    .filter(Boolean)
+    .map(([, sha, path]) => ({ sha, path: path.trim() }))
+    .filter(({ path }) => CORPUS_PATH(path));
+  if (entries.length === 0) return parseCommandmentFiles([]);
+
+  const shaList = `${[...new Set(entries.map((e) => e.sha))].join("\n")}\n`;
+  const missing = String(
+    git(["cat-file", "--batch-check=%(objectname) %(objecttype)"], {
+      input: shaList,
+      env: { ...process.env, GIT_NO_LAZY_FETCH: "1" },
+    }) ?? "",
+  )
+    .split(/\r?\n/)
+    .filter((line) => / missing$/.test(line))
+    .map((line) => line.split(" ")[0]);
+  if (missing.length > 0) {
+    try {
+      git(["fetch", "--no-tags", "--quiet", "origin", ...missing]);
+    } catch (error) {
+      const cause = error instanceof Error ? error.message.split("\n")[0] : String(error);
+      throw new CorpusBlobsUnavailableError(missing, cause);
+    }
+  }
+
+  const blobs = parseCatFileBatch(git(["cat-file", "--batch"], { input: shaList, binary: true }));
+  return parseCommandmentFiles(entries.map(({ sha, path }) => ({ slug: corpusSlug(path), raw: blobs.get(sha) ?? "" })));
 }
 
 export function runCheck(dir = PRINCIPLES_DIR, { commandments } = {}) {
   const resolvedCommandments = commandments ?? loadCommandments(dir);
   const results = SCENARIOS.map((s) => {
-    const scored = Object.entries(s.options)
-      .map(([id, f]) => [id, composite(f, resolvedCommandments)])
+    const scored = buildOptionScores(
+      Object.entries(s.options).map(([id, features]) => ({ id, description: id, features })),
+      resolvedCommandments.map((p) => ({ id: p.id, name: p.id, tier: "commandment", weight: p.weight, dimensionVector: p.vec })),
+    ).map((score) => [score.optionId, score.composite])
       .sort((a, b) => b[1] - a[1]);
     const margin = scored[0][1] - scored[1][1];
     const winnerOk = scored[0][0] === s.expectedWinner;
@@ -213,14 +274,21 @@ export function runCheck(dir = PRINCIPLES_DIR, { commandments } = {}) {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 const invokedDirectly = process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("check-golden-decisions.mjs");
 if (invokedDirectly) {
-  const mergeWithIndex = process.argv.indexOf("--merge-with");
-  const mergeWith = mergeWithIndex >= 0 ? process.argv[mergeWithIndex + 1] : null;
-  if (mergeWithIndex >= 0 && !mergeWith) {
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args: scriptArgv(), strict: false, allowPositionals: true, options: { "merge-with": { type: "string" } } });
+  const mergeWithGiven = values["merge-with"] !== undefined;
+  const mergeWith = !mergeWithGiven ? null : typeof values["merge-with"] === "string" ? values["merge-with"] : undefined;
+  if (mergeWithGiven && !mergeWith) {
     throw new Error("--merge-with requires a Git ref");
   }
-  const commandments = mergeWith
-    ? loadCommandmentsFromGitTree(resolveMergeTree(mergeWith))
-    : undefined;
+  let commandments;
+  try {
+    commandments = mergeWith ? loadCommandmentsFromGitTree(resolveMergeTree(mergeWith)) : undefined;
+  } catch (error) {
+    if (!(error instanceof CorpusBlobsUnavailableError)) throw error;
+    console.error(`[golden-decisions] ENVIRONMENT-UNAVAILABLE: ${error.message}`);
+    process.exit(3);
+  }
   const { commandmentCount, results, ok } = runCheck(PRINCIPLES_DIR, { commandments });
   console.log(`[golden-decisions] scored ${results.length} canonical decisions against ${commandmentCount} commandments`);
   for (const r of results) {

@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -7,10 +7,10 @@ import { gateAtEntry } from "../quiescence-gates";
  * Batches [reference-doc] ImprovementProposal rows into one doc chore BI for
  * human-approved canonical-source PRs.
  */
-export const canonicalImprovementDigest = inngest.createFunction(
+export const canonicalImprovementDigest = jobs.createFunction(
   { id: "ops/canonical-improvement-digest", retries: 1, triggers: [cron("17 6 * * 1")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/canonical-improvement-digest");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("digest-reference-doc-proposals", async () => {

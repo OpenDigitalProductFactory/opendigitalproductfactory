@@ -76,7 +76,11 @@ describe("WorkroomPosture", () => {
         })}
       />,
     );
-    expect(html).toContain("Unchanged for this room");
+    // BI-4EB2F1D0: the honest empty state names what IS running rather than
+    // only what is not, and renders no provenance chain for decisions nobody
+    // made.
+    expect(html).toContain("Running platform defaults");
+    expect(html).not.toContain("How this was decided");
     expect(html).toContain("open");
   });
 

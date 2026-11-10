@@ -5,22 +5,17 @@ import {
   CloudCog,
 } from "lucide-react";
 
+import type { MessageArgs, MessageKey } from "@dpf/i18n";
 import type {
-  CapabilityHealthAvailability,
   CapabilityHealthState,
   CapabilityHealthTone,
+  CapabilityServiceHealthItem,
   CapabilityServiceHealthProjection,
 } from "@/lib/platform-runtime/service-health";
 
 type CapabilityServiceHealthProps = {
   projection: CapabilityServiceHealthProjection;
-};
-
-const AVAILABILITY_LABEL: Record<CapabilityHealthAvailability, string> = {
-  available: "Available",
-  unavailable: "Unavailable",
-  inactive: "Inactive",
-  unknown: "Unknown",
+  t: (key: MessageKey<"admin">, args?: MessageArgs) => string;
 };
 
 const TONE_CLASS: Record<CapabilityHealthTone, string> = {
@@ -39,7 +34,56 @@ const STATE_PRESENTATION: Record<
   external: { Icon: CloudCog, iconClass: "text-[var(--dpf-accent)]" },
 };
 
-export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthProps) {
+function ServiceRequirements({ items, sharedAction, sharedLabel, t }: {
+  items: CapabilityServiceHealthItem[]; sharedAction?: string; sharedLabel?: string;
+  t: CapabilityServiceHealthProps["t"];
+}) {
+  return (
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {items.map(item => {
+        const presentation = item.state === "required" && item.availability === "unavailable"
+          ? { Icon: AlertTriangle, iconClass: "text-[var(--dpf-warning)]" }
+          : STATE_PRESENTATION[item.state];
+        const { Icon, iconClass } = presentation;
+        const hasSharedAction = item.state === "required" && !item.actionHref && item.action === sharedAction;
+        return (
+          <li key={`${item.kind}:${item.key}`} aria-describedby={sharedLabel === item.label ? "capability-shared-required-status" : undefined} className="min-w-0 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+            <div className="flex items-start gap-3">
+              <Icon aria-hidden="true" className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} />
+              <div className="min-w-0">
+                <h3 className="break-words text-xs font-semibold text-[var(--dpf-text)]">{item.key}</h3>
+                {sharedLabel !== item.label && <p className="mt-1 text-xs font-medium text-[var(--dpf-text)]">{item.label}</p>}
+                {!(item.state === "required" && item.availability === "unavailable" && item.label.toLowerCase().includes("unavailable")) && (
+                  <p className={`mt-1 text-xs font-semibold ${TONE_CLASS[item.tone]}`}>
+                    {t("runtimeHealth.capabilityServices.availabilityLabel", {
+                      value: t(`runtimeHealth.capabilityServices.availability.${item.availability}`),
+                    })}
+                  </p>
+                )}
+                {item.detail && <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">{item.detail}</p>}
+                {item.actionHref ? (
+                  <a href={item.actionHref} className="mt-2 inline-flex min-h-8 items-center rounded-sm text-xs font-medium text-[var(--dpf-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dpf-surface-2)]">
+                    {item.action}
+                  </a>
+                ) : !hasSharedAction && <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">{item.action}</p>}
+              </div>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function CapabilityServiceHealth({ projection, t }: CapabilityServiceHealthProps) {
+  const inactive = projection.items.filter(item => item.state === "optional_inactive" && item.availability === "inactive");
+  const active = projection.items.filter(item => !inactive.includes(item));
+  const required = active.filter(item => item.state === "required" && !item.actionHref);
+  const sharedAction = required.length > 1 && required.every(item => item.action === required[0]!.action)
+    ? required[0]!.action : undefined;
+  const sharedLabel = active.length > 1 && active.every(item => item.kind === "service"
+    && item.state === "required" && item.availability === active[0]!.availability && item.label === active[0]!.label)
+    ? active[0]!.label : undefined;
   return (
     <section
       aria-labelledby="capability-service-health-title"
@@ -51,21 +95,20 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
             id="capability-service-health-title"
             className="text-sm font-semibold text-[var(--dpf-text)]"
           >
-            Capability service requirements
+            {t("runtimeHealth.capabilityServices.heading")}
           </h2>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-[var(--dpf-muted)]">
-            Current service expectations come from the enabled runtime capabilities. Inactive
-            optional services do not reduce platform health.
+            {t("runtimeHealth.capabilityServices.explanation")}
           </p>
         </div>
         <div className="shrink-0 sm:max-w-xs sm:text-right">
           <p
             className="text-xs font-semibold text-[var(--dpf-text)]"
-            aria-label={`Platform capability health: ${projection.aggregate.value}`}
+            aria-label={t("runtimeHealth.capabilityServices.aggregateLabel", { value: projection.aggregate.value })}
           >
             {projection.aggregate.value}
           </p>
-          <p className="mt-1 text-[11px] leading-4 text-[var(--dpf-muted)]">
+          <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
             {projection.aggregate.detail}
           </p>
         </div>
@@ -73,55 +116,22 @@ export function CapabilityServiceHealth({ projection }: CapabilityServiceHealthP
 
       {projection.items.length === 0 ? (
         <p className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs text-[var(--dpf-muted)]">
-          No capability-owned service requirements are configured.
+          {t("runtimeHealth.capabilityServices.empty")}
         </p>
       ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {projection.items.map((item) => {
-            const presentation = item.state === "required" && item.availability === "unavailable"
-              ? { Icon: AlertTriangle, iconClass: "text-[var(--dpf-warning)]" }
-              : STATE_PRESENTATION[item.state];
-            const { Icon, iconClass } = presentation;
-            return (
-              <li
-                key={`${item.kind}:${item.key}`}
-                className="min-w-0 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
-              >
-                <div className="flex items-start gap-3">
-                  <Icon aria-hidden="true" className={`mt-0.5 h-4 w-4 shrink-0 ${iconClass}`} />
-                  <div className="min-w-0">
-                    <h3 className="break-words text-xs font-semibold text-[var(--dpf-text)]">
-                      {item.key}
-                    </h3>
-                    <p className="mt-1 text-xs font-medium text-[var(--dpf-text)]">
-                      {item.label}
-                    </p>
-                    <p className={`mt-1 text-[11px] font-semibold ${TONE_CLASS[item.tone]}`}>
-                      Availability: {AVAILABILITY_LABEL[item.availability]}
-                    </p>
-                    {item.detail && (
-                      <p className="mt-1 text-[11px] leading-4 text-[var(--dpf-muted)]">
-                        {item.detail}
-                      </p>
-                    )}
-                    {item.actionHref ? (
-                      <a
-                        href={item.actionHref}
-                        className="mt-2 inline-flex rounded-sm text-[11px] font-medium text-[var(--dpf-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--dpf-surface-2)]"
-                      >
-                        {item.action}
-                      </a>
-                    ) : (
-                      <p className="mt-1 text-[11px] leading-4 text-[var(--dpf-muted)]">
-                        {item.action}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          {sharedAction && <p className="mb-3 text-xs leading-5 text-[var(--dpf-muted)]">{t("runtimeHealth.capabilityServices.requiredAdvice", { action: sharedAction })}</p>}
+          {sharedLabel && <p id="capability-shared-required-status" className="mb-2 text-xs font-semibold text-[var(--dpf-text)]">{sharedLabel} ({active.length})</p>}
+          {active.length > 0 && <ServiceRequirements items={active} sharedAction={sharedAction} sharedLabel={sharedLabel} t={t} />}
+          {inactive.length > 0 && (
+            <details className="mt-4 rounded-md border border-[var(--dpf-border)] p-3">
+              <summary className="min-h-8 cursor-pointer py-1 text-sm font-medium text-[var(--dpf-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)]">
+                {t("runtimeHealth.capabilityServices.inactiveSummary", { count: inactive.length })}
+              </summary>
+              <div className="mt-3"><ServiceRequirements items={inactive} t={t} /></div>
+            </details>
+          )}
+        </>
       )}
     </section>
   );

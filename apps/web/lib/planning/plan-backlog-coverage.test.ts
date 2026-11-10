@@ -661,10 +661,48 @@ describe("recordPlanBacklogCoverage", () => {
     expect(error).toContain("record_initiative_design_review");
     expect(error).toContain("spec-approval");
     expect(error).toContain("independent");
+    expect(error).toContain("claim_backlog_item_for_work");
+    expect(error).toContain("workIntent=`implementation`");
+    expect(error).toContain("recovery.reviewerRoutes");
+    expect(error).toContain("request_coworker");
     // The remediation must not hand the caller a backlog id to cite: the id
     // goes stale the moment it closes, the condition never does.
     expect(error).not.toMatch(/\b(?:BI|EP)-[0-9A-F]{8}\b/);
     expect(activityCreate).not.toHaveBeenCalled();
+  });
+
+  it("accepts an ordered immutable fix design as the fix profile's atomic coverage artifact", async () => {
+    const { db, activityCreate } = fakeDb();
+    db.backlogItem.findUnique = vi.fn(async () => ({
+      id: "parent-row",
+      itemId: "BI-PARENT",
+      effortSize: "large",
+      workType: "bug",
+    }));
+    const fixRef = {
+      ...planArtifactRef,
+      path: "docs/superpowers/specs/fix-design.md",
+    };
+
+    const result = await recordPlanBacklogCoverage({
+      itemId: "BI-PARENT",
+      planPath: fixRef.path,
+      planArtifactRef: fixRef,
+      decision: "atomic",
+      rationale: "The ordered repair is one indivisible compatibility boundary.",
+      deliverables: [{ key: "repair", title: "Repair", independentlyShippable: false, dependsOn: [], ...traceability }],
+      userId: "user-1",
+      db,
+      resolveArtifact: resolvePlan,
+    });
+
+    expect(result).toMatchObject({ ok: true, decision: "atomic" });
+    expect(activityCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        kind: "plan_backlog_coverage",
+        payload: expect.objectContaining({ planPath: fixRef.path, decision: "atomic" }),
+      }),
+    }));
   });
 
   it("does not write a receipt when a mapped BI does not exist", async () => {

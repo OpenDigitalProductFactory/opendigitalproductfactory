@@ -68,6 +68,39 @@ describe("Work Case status projection", () => {
     });
   });
 
+  it("projects coworker service engagement approval and terminal states", () => {
+    expect(
+      projectWorkCaseState({
+        coworkerEngagement: { engagementId: "CE-1", status: "needs-approval" },
+      }),
+    ).toMatchObject({
+      state: "awaiting-decision",
+      a2aStatus: "input-required",
+      blockingActorKind: "decision",
+      sourceRef: { kind: "coworker-engagement", id: "CE-1", status: "needs-approval" },
+    });
+
+    expect(
+      projectWorkCaseState({
+        coworkerEngagement: { engagementId: "CE-2", status: "completed" },
+      }),
+    ).toMatchObject({
+      state: "resolved",
+      a2aStatus: "completed",
+      terminal: true,
+    });
+
+    expect(
+      projectWorkCaseState({
+        coworkerEngagement: { engagementId: "CE-3", status: "rejected" },
+      }),
+    ).toMatchObject({
+      state: "cancelled",
+      a2aStatus: "rejected",
+      terminal: true,
+    });
+  });
+
   it("prioritizes capsule and verification states over a still-open queue item", () => {
     expect(
       projectWorkCaseState({
@@ -119,4 +152,8 @@ describe("Work Case status projection", () => {
       sourceRef: { kind: "task-run", id: "TR-9", status: "input-required" },
     });
   });
+});
+
+it.each(["failed", "unavailable", "unknown"])("shows actionable nonterminal engagement state %s", status => {
+  expect(projectWorkCaseState({ coworkerEngagement: { engagementId: "CE-ORIGINAL", status } })).toMatchObject({ state: "waiting-on-system", terminal: false, reason: expect.stringMatching(/original|provenance|reconcile/i) });
 });

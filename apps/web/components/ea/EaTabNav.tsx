@@ -3,7 +3,7 @@
 
 import { usePathname } from "next/navigation";
 import { SectionNav } from "@/components/shell/SectionNav";
-import { EA_TABS } from "./ea-nav";
+import { EA_TABS } from "@/lib/navigation/ea-nav";
 
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
 // resolves active state from the pathname. EA uses the flat single-row tab style.

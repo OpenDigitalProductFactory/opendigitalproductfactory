@@ -20,7 +20,9 @@ import { prisma } from "@dpf/db";
 import { ALL_ARCHETYPES, type WorkforceProfile } from "@dpf/storefront-templates";
 
 export type SeedArchetypeWorkforceClient = {
-  storefrontConfig: { findFirst: (args: unknown) => Promise<{ archetypeId: string } | null> };
+  storefrontConfig: {
+    findFirst: (args: unknown) => Promise<{ archetype: { archetypeId: string } | null } | null>;
+  };
   employmentType: {
     findUnique: (args: unknown) => Promise<{ id: string } | null>;
     create: (args: unknown) => Promise<unknown>;
@@ -54,11 +56,18 @@ export async function seedArchetypeWorkforce({
 }: SeedArchetypeWorkforceInput): Promise<SeedArchetypeWorkforceResult> {
   const client = (db ?? (prisma as unknown)) as SeedArchetypeWorkforceClient;
 
+  // Read the archetype's SLUG through the relation, not the column.
+  // `StorefrontConfig.archetypeId` is a foreign key to `StorefrontArchetype.id`
+  // — a cuid — while the templates are keyed by slug ("pet-rescue"). Matching
+  // the cuid against the slug never matched, so this seeder shipped, deployed
+  // and silently seeded nothing (BI-A30152B6). The two names are one character
+  // apart and the failure mode is a no-op, which is why only the live install
+  // caught it.
   const config = await client.storefrontConfig.findFirst({
     where: { organizationId },
-    select: { archetypeId: true },
+    select: { archetype: { select: { archetypeId: true } } },
   });
-  const archetypeId = config?.archetypeId ?? null;
+  const archetypeId = config?.archetype?.archetypeId ?? null;
   const profile = workforceProfileFor(archetypeId);
 
   const employmentTypesAdded: string[] = [];

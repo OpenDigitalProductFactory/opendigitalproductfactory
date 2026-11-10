@@ -64,6 +64,14 @@ export interface CapabilityDivergenceReport {
   summary: string;
 }
 
+/** A recognized diagnosis, distinct from an opaque infrastructure failure. */
+export class CapabilityStateDivergenceError extends Error {
+  constructor(message: string, readonly divergence: CapabilityDivergenceReport, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "CapabilityStateDivergenceError";
+  }
+}
+
 function describe(divergences: CapabilityDivergence[]): string {
   if (divergences.length === 0) {
     return "Capability state agrees with the installation snapshot.";

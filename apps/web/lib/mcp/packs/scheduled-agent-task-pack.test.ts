@@ -19,6 +19,7 @@ const EXPECTED_TOOLS = [
   "pause_scheduled_agent_task",
   "resume_scheduled_agent_task",
   "rerun_scheduled_agent_task",
+  "configure_scheduled_agent_task_reporting",
 ];
 
 const EXPECTED_GRANTS: Record<string, string[]> = {
@@ -28,6 +29,7 @@ const EXPECTED_GRANTS: Record<string, string[]> = {
   pause_scheduled_agent_task: ["work_capsule_write"],
   resume_scheduled_agent_task: ["work_capsule_write"],
   rerun_scheduled_agent_task: ["work_capsule_write"],
+  configure_scheduled_agent_task_reporting: ["work_capsule_write"],
 };
 
 beforeEach(() => {
@@ -46,6 +48,19 @@ describe("scheduled-agent-task pack — registration", () => {
     }
   });
 
+  it("lists only an exact selected task through the owner-bound core while retaining the compact prompt", async () => {
+    core.getScheduledAgentTasksFor.mockResolvedValue([{ taskId: "selected", prompt: "private ".repeat(100), revision: "a".repeat(64) }]);
+    const result = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ taskId: "selected" }, "owner");
+    expect(core.getScheduledAgentTasksFor).toHaveBeenCalledWith("owner", undefined, "selected");
+    expect((result.data?.tasks as Array<{ prompt: string }>)[0]!.prompt.length).toBeLessThanOrEqual(201);
+    expect(result.data?.tasks).toEqual([expect.objectContaining({ revision: "a".repeat(64) })]);
+  });
+  it.each(["", "   ", 42, null])("does not broaden an invalid exact task selector %j into a bulk list", async taskId => {
+    const result = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ taskId }, "owner");
+    expect(result.success).toBe(false);
+    expect(core.getScheduledAgentTasksFor).not.toHaveBeenCalled();
+  });
+
   it("preserves requiredCapability, executionMode, and sideEffect metadata verbatim", () => {
     const byName = Object.fromEntries(scheduledAgentTaskPack.definitions.map((d) => [d.name, d]));
     for (const t of EXPECTED_TOOLS) {
@@ -58,6 +73,7 @@ describe("scheduled-agent-task pack — registration", () => {
     expect(byName.pause_scheduled_agent_task.sideEffect).toBe(true);
     expect(byName.resume_scheduled_agent_task.sideEffect).toBe(true);
     expect(byName.rerun_scheduled_agent_task.sideEffect).toBe(true);
+    expect(byName.configure_scheduled_agent_task_reporting.consequence).toBe("authority");
   });
 
   it("grants mirror agent-grants for every tool", () => {
@@ -85,7 +101,52 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
       routeContext: "/platform",
       schedule: "0 9 * * *",
       timezone: undefined,
+      // BI-5087F34F: every job records WHY it exists. A caller that names no
+      // trigger still gets one — "time" is what a cron-created job IS.
+      taskConfig: { trigger: expect.objectContaining({ kind: "time" }) },
     });
+  });
+
+  // The record is unconditional precisely because it used to be optional: of 53
+  // live tasks only 13 carried a trigger, and none of the 12 ACTIVE ones did.
+  it("records a trigger even when the caller supplies none", async () => {
+    core.scheduleAgentTaskFor.mockResolvedValue({ success: true, taskId: "agent-task-1" });
+    await scheduledAgentTaskPack.handlers.create_scheduled_agent_task(
+      { agentId: "a", title: "t", prompt: "p", schedule: "0 9 * * *" },
+      "u1",
+    );
+    const trigger = core.scheduleAgentTaskFor.mock.calls[0][1].taskConfig.trigger;
+    expect(trigger.kind).toBe("time");
+    expect(typeof trigger.recordedAt).toBe("string");
+    // Absent facts stay absent — a default kind must not invent a room or a deadline.
+    expect(trigger.workroomId).toBeUndefined();
+    expect(trigger.obligation).toBeUndefined();
+  });
+
+  it("preserves a caller's own trigger, room and obligation", async () => {
+    const futureDueAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    core.scheduleAgentTaskFor.mockResolvedValue({ success: true, taskId: "agent-task-2" });
+    await scheduledAgentTaskPack.handlers.create_scheduled_agent_task(
+      {
+        agentId: "a",
+        title: "t",
+        prompt: "p",
+        schedule: "0 9 * * *",
+        trigger: {
+          kind: "detected-need",
+          workroomId: "WC-1",
+          // Relative, not absolute: this asserts PASS-THROUGH, so the instant is
+          // irrelevant — but a hardcoded future date silently becomes a past one
+          // and starts testing something else.
+          obligation: { dueAt: futureDueAt, label: "Q3 filing" },
+        },
+      },
+      "u1",
+    );
+    const trigger = core.scheduleAgentTaskFor.mock.calls[0][1].taskConfig.trigger;
+    expect(trigger.kind).toBe("detected-need");
+    expect(trigger.workroomId).toBe("WC-1");
+    expect(trigger.obligation.dueAt).toBe(futureDueAt);
   });
 
   it("create_scheduled_agent_task appends a de-confliction note and honors a supplied routeContext", async () => {
@@ -129,7 +190,12 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
         organizationId: "org-1",
         businessProductId: "product-1",
         taskKind: "product-management-playbook",
-        taskConfig,
+        // The typed playbook config is preserved verbatim; the trigger is merged
+        // alongside it rather than replacing it.
+        taskConfig: expect.objectContaining({
+          ...taskConfig,
+          trigger: expect.objectContaining({ kind: "time" }),
+        }),
       }),
     );
   });

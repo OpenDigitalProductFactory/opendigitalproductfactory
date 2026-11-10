@@ -108,7 +108,8 @@ async function main() {
 
   const event = hookEventName(payload);
   if (event === "SessionEnd") {
-    lib.removeHeartbeat(top);
+    // Only this session's entry: another session may still be working here (BI-296C9E24).
+    lib.removeHeartbeat(top, { sessionId: sessionIdOf(payload) });
   } else {
     lib.writeHeartbeat(top, { sessionId: sessionIdOf(payload), event });
   }

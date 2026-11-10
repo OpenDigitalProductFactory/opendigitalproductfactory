@@ -1,0 +1,61 @@
+---
+status: active
+---
+
+# October 3 dependency batch
+
+Backlog: BI-0AE77798. Workroom: WC-A6BECCB3.
+
+## Objective and acceptance
+
+- Compatible updates from PRs #5991–#5996 are delivered through a DCO-signed replacement PR and the merge queue.
+- Coupled package versions remain compatible; builds, affected tests, dependency inventories and security scans pass.
+- Original PRs are closed only after their changes are delivered, or a specific incompatible upgrade is left explicitly tracked.
+
+## Design and evidence
+
+Reuse [dependency intake](../specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md), especially Tier 0 and lockfile regeneration, and [dependency health](../../architecture/dependency-reduction-routine.md).
+
+The operator selected consolidation over six separate repairs. This is one dependency graph and one revert. Inventory regeneration and compatibility repair are sequencing within that delivery, not independent features.
+
+At source commit `96a9df71b3ec2c39d7df439c79a6f4ae76f50d85`, GitHub job `111180686148` fails on stale SBOM and one added duplicate. Job `111180685367` reports the unpatched mobile-only braces advisory `GHSA-vfj7-8cjw-p6xm`. At `d58971d3c91722a006927a42b888e8d7db3fb94e`, production job `111180951036` fails on missing Temporal imports. PR-body policy job `111180632143` identifies invisible characters in generated release notes. All six PRs lack local-CI receipts.
+
+FullCalendar 7 requires source/API migration, not just matching package versions: [upstream migration](https://fullcalendar.io/docs/upgrading-from-v6-js). Vitest coverage must match its runner: [migration guide](https://main.vitest.dev/guide/migration/). Do not include either major upgrade without its required migration and functional proof; leave an incompatible upgrade explicitly tracked.
+
+## Ordered work
+
+1. Inspect each proposed manifest/lock change and its consumers. Apply compatible changes against `origin/main`; keep coupled families coherent. Paths: `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `apps/web/package.json`, `packages/dpf-bootstrap/package.json`, and `scripts/probes/marketing-media/{package.json,pnpm-lock.yaml}`.
+2. Regenerate the platform lock through `scripts/regen-lockfile.mjs` with an explicit changed-package allowlist. Review resolution scope and prove a stable second resolve. Avoid unintended duplicates. Reuse the exact reviewed probe lockfile when its manifest change is unchanged.
+3. Investigate braces reachability through `apps/mobile/pnpm-lock.yaml`. Prefer a patched upstream release if available. A time-bounded acceptance in `sbom/vuln-baseline.json` is allowed only with concrete trusted-input-only exposure evidence under the existing vulnerability-baseline procedure. Do not hide a reachable vulnerability. Refresh `sbom/baseline.json` with the existing generator; justify any deliberate budget increase in its recorded diff.
+4. Verify TOML bootstrap consumers, changed dependency consumers, source policy, SBOM drift/singletons, and the online high-severity scan. Run affected package typechecks/tests from the provisioned worktree, then the exhaustive governed local-CI gate and cloud CI. Production builds and served UI verification belong to the shared governed runtime. No new route, schema, migration, or operator behavior is intended; update contributor documentation only if the final repair changes it.
+5. Publish the DCO-signed branch, open a ready PR, run `pnpm pr:health`, address review findings, and merge through `gh pr merge --squash --auto`. Verify the actual merge before closing superseded originals. Leave any undelivered major upgrade linked to its specific migration work.
+
+## Verification contract
+
+The scope-derived Workroom change-impact contract is resolved: no named testImpact or guardObligation entries; required derived artifacts are `sbom/baseline.json` and `apps/web/lib/docs/doc-index.generated.json`. This does not exempt exhaustive verification. Run `pnpm gate:context`, the dependency checks above, `pnpm run pregate:preflight`, `pnpm run pregate`, and `pnpm pr:health`.
+
+## Risk and rollback
+
+Library behavior or peer resolution may change even on a minor version. Do not merge a failing dependency graph. Roll back with a PR reverting the batch manifests, lockfiles and matching inventory together. This work never advances the live installation or changes gate enforcement.
+
+## Backlog coverage
+
+Atomic deliverable `dependency-batch` maps to BI-0AE77798, with no external deliverable dependency. Requirement reference: `Objective and acceptance`. Contract reference: `docs/architecture/dependency-reduction-routine.md`. Flow reference: `Ordered work`. Verification reference: `Verification contract`. The operator requested one compatible batch; all repair steps produce and validate that graph. Record governed coverage against this immutable plan before source implementation.
+
+Coverage receipt: `cmusy0yp67xhs01jzptp8nec2`, bound to plan commit `a06a9e2c8b36f7e07ed8cd3371296e08ee361394`, blob `ea32e9978995859dda284ce02edbc0c685726744`; atomic BI-0AE77798, no deliverable dependencies.
+
+## Migration follow-ups
+
+FullCalendar 7 is tracked as BI-89604587; Vitest 5 runner/coverage is tracked as BI-BB992B4D. Both remain triage/planning work with their original PRs open until migration evidence exists. The compatible batch resolves smol-toml 1.9.0, lucide-react 1.50.0 within the proposed ^1.48.0 range, axe-core and its Playwright adapter 4.13.0, and hyperframes 0.8.96.
+
+No operator or contributor workflow changes are introduced; existing public/user documentation stays accurate. The braces exception is limited to mobile build tooling and expires 2026-11-02.
+
+## Independent review repair
+
+The first review requested the source behind the mobile exposure assessment, direct HyperFrames rendering, and a production build. The next review must include the unchanged mobile source context at commit `c67de09cfc1742edc01997f9e94b734d412d71d6`: `apps/mobile/tailwind.config.ts` (blob `f82f5432a72d7e2e716880016e5be4a6f3282c2f`), `metro.config.js` (blob `e9d92d3d92a13726e4ae7c1789aa3b417a4ec630`), `package.json` (blob `1f1e045c80b3c36ba7cfe901d278fb9d09b0ecfa`), and `pnpm-lock.yaml` (blob `31fa0a8f85a20c277d483bb8750756f69a3648f8`). These are unchanged source files, not additional implementation changes.
+
+The Tailwind inputs are the three fixed app/src/dynamic TS/TSX patterns. Metro uses Expo defaults and fixed NativeWind `./global.css`. The mobile lock's only direct braces consumers are chokidar 3.6.0 and micromatch 4.0.8; provide those stanzas plus their Metro/Tailwind callers to the reviewer. A scan of every tracked JS/TS file under mobile app/src/dynamic found no braces, micromatch, chokidar or fast-glob token. This is static source evidence, not a runtime bundle trace.
+
+Run `scripts/probes/marketing-media/run-container-probe.mjs` from an immutable copy of the probe under the governed local-CI lease. Its synthetic composition is rendered twice offline; retain the actual version fingerprints and determinism receipt. Run the canonical local-CI runner with its supported local production-build strategy. These additional checks are pending until their executed receipts exist; do not treat the earlier unit-suite pass as rendering or production-build proof.
+
+The first direct renderer attempt built an ARM64 container on an ARM64 host and stopped at `ffprobe` startup, before rendering. Inspection of the exact `ffprobe-static@3.1.0` tarball found Linux ia32/x64 binaries and no Linux ARM64 binary. Repair the existing probe launcher to pass `--platform linux/amd64` for build and run, matching its documented target. Derive its image tag from the pinned manifest and its receipt candidate version from the executed tool, replacing stale 0.7.87 labels. This adds `run-container-probe.mjs` and `run-local-render.mjs` to the batch's affected scope. The observed failed startup is the regression reproduction; the existing end-to-end render probe supplies the post-repair functional check.

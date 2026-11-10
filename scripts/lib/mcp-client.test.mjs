@@ -1,8 +1,51 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { mcpCall } from "./mcp-client.mjs";
+import { buildJsonRpcBody, isAllowedMcpEndpoint, mcpCall, mcpPost, quoteForMsysArgv } from "./mcp-client.mjs";
+
+test("MCP deadline bounds the whole response even while bytes keep arriving", { timeout: 3000 }, async t => {
+  let timer;
+  let finish;
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.write(" ");
+    timer = setInterval(() => response.write(" "), 5);
+    finish = setTimeout(() => { clearInterval(timer); response.end("{}"); }, 250);
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(async () => {
+    clearInterval(timer);
+    clearTimeout(finish);
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  });
+  await assert.rejects(mcpPost("tools/call", { name: "fixture_read", arguments: {} }, {
+    mcpUrl: `http://127.0.0.1:${server.address().port}/api/mcp/v1`,
+    bearerToken: "fixture-only", timeoutMs: 50,
+  }), error => error.code === "ETIMEDOUT" && /timed out/.test(error.message));
+});
+
+// BI-1B4910B4: Node quotes by MSVC rules, but MSYS sh collapses `\\` inside a
+// quoted argument, so a JSON body with a Windows path reached the injected
+// transport as invalid JSON.
+test("quoteForMsysArgv escapes backslashes and quotes inside one quoted argument", () => {
+  assert.equal(quoteForMsysArgv(String.raw`{"p":"C:\\x"}`), String.raw`"{\"p\":\"C:\\\\x\"}"`);
+  assert.equal(quoteForMsysArgv(""), `""`);
+});
+
+test("quoteForMsysArgv round-trips through MSYS sh byte for byte", {
+  skip: process.platform === "win32" ? false : "the Cygwin command-line parser exists only on Windows",
+}, () => {
+  for (const value of [String.raw`{"worktreePath":"C:\\Users\\x y"}`, String.raw`trail\\`, "$HOME * 'q' `t` %P% & |"]) {
+    const result = spawnSync("sh", ["-c", `printf '%s' "$1"`, "_", value].map(quoteForMsysArgv), {
+      encoding: "utf8",
+      windowsVerbatimArguments: true,
+    });
+    assert.equal(result.stdout, value);
+  }
+});
 
 test("MCP calls abort within the configured transport deadline", async () => {
   const server = createServer((_request, _response) => {
@@ -26,4 +69,234 @@ test("MCP calls abort within the configured transport deadline", async () => {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+// A bearer token is a live `dpfmcp_...` credential. isAllowedMcpEndpoint has
+// documented that rule for a while, but only one of the sixteen mcpCall sites
+// ever ran it, so for the rest it was a convention rather than an invariant --
+// which is what CodeQL's js/file-access-to-http reports on this module. These
+// pin the enforcement now that mcpCall owns it.
+
+const REMOTE = "http://evil.example.com/api/mcp/v1";
+
+/** Run with a temporarily patched process.env, restoring it afterwards. */
+async function withEnv(patch, run) {
+  const saved = new Map(Object.keys(patch).map((key) => [key, process.env[key]]));
+  Object.entries(patch).forEach(([key, value]) => {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  });
+  try {
+    await run();
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+test("refuses to send a bearer token to a non-loopback endpoint", async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
+    await assert.rejects(
+      mcpCall("test_tool", {}, { mcpUrl: REMOTE, bearerToken: "dpfmcp_test" }),
+      /refusing to send a bearer token/,
+    );
+  });
+});
+
+test("refuses a credentials-in-authority endpoint that only looks like loopback", async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
+    await assert.rejects(
+      mcpCall("test_tool", {}, {
+        mcpUrl: "http://127.0.0.1@evil.example.com/api/mcp/v1",
+        bearerToken: "dpfmcp_test",
+      }),
+      /refusing to send a bearer token/,
+    );
+  });
+});
+
+test("honours a non-loopback endpoint the operator set explicitly", async () => {
+  // Operator intent, not ambient state. It must fail on transport, not policy.
+  await withEnv({ DPF_MCP_URL: REMOTE, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
+    await assert.rejects(
+      mcpCall("test_tool", {}, { mcpUrl: REMOTE, bearerToken: "dpfmcp_test", timeoutMs: 50 }),
+      (error) => !/refusing to send a bearer token/.test(error.message),
+    );
+  });
+});
+
+test("refuses an endpoint that differs from the one the operator set", async () => {
+  // The tampered/stale .mcp.json case: something on disk names another host.
+  await withEnv({ DPF_MCP_URL: "http://10.0.0.5:3000/api/mcp/v1", DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
+    await assert.rejects(
+      mcpCall("test_tool", {}, { mcpUrl: REMOTE, bearerToken: "dpfmcp_test" }),
+      /refusing to send a bearer token/,
+    );
+  });
+});
+
+test("an explicit call-site opt-in still allows a non-loopback endpoint", async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
+    await assert.rejects(
+      mcpCall("test_tool", {}, {
+        mcpUrl: REMOTE,
+        bearerToken: "dpfmcp_test",
+        timeoutMs: 50,
+        allowNonLoopbackEndpoint: true,
+      }),
+      (error) => !/refusing to send a bearer token/.test(error.message),
+    );
+  });
+});
+
+// BI-8A562681 (S4, design §12.4.5): the install's canonical origin is
+// configuration, not ambient state. An endpoint on the PUBLIC_URL origin, or on
+// the origin of DPF_MCP_URL (which S2 persists as <PUBLIC_URL>/api/mcp/v1?...),
+// is the install itself; any other non-loopback host is still refused.
+
+test("isAllowedMcpEndpoint accepts an endpoint on the PUBLIC_URL origin", () => {
+  const env = { PUBLIC_URL: "https://dpf.example.lan" };
+  assert.equal(isAllowedMcpEndpoint("https://dpf.example.lan/api/mcp/v1", env), true);
+  assert.equal(isAllowedMcpEndpoint("https://DPF.example.lan:443/api/mcp/v1?tier=full", env), true);
+});
+
+test("isAllowedMcpEndpoint accepts any path on the DPF_MCP_URL origin", () => {
+  const env = { DPF_MCP_URL: "https://dpf.example.lan/api/mcp/v1?tier=full" };
+  assert.equal(isAllowedMcpEndpoint("https://dpf.example.lan/api/mcp/v1", env), true);
+});
+
+test("isAllowedMcpEndpoint still refuses a host the install is not configured on", () => {
+  const env = { PUBLIC_URL: "https://dpf.example.lan", DPF_MCP_URL: "https://dpf.example.lan/api/mcp/v1" };
+  for (const url of [
+    REMOTE,
+    "https://evil.example.com/api/mcp/v1",
+    "http://dpf.example.lan/api/mcp/v1", // scheme differs from the configured origin
+    "https://dpf.example.lan:8443/api/mcp/v1", // port differs
+    "https://dpf.example.lan.evil.com/api/mcp/v1",
+    "https://dpf.example.lan@evil.example.com/api/mcp/v1",
+    "https://user:pw@dpf.example.lan/api/mcp/v1",
+  ]) {
+    assert.equal(isAllowedMcpEndpoint(url, env), false, url);
+  }
+});
+
+test("isAllowedMcpEndpoint refuses a non-loopback host when nothing is configured", () => {
+  assert.equal(isAllowedMcpEndpoint("https://dpf.example.lan/api/mcp/v1", {}), false);
+  assert.equal(isAllowedMcpEndpoint("https://dpf.example.lan/api/mcp/v1", { PUBLIC_URL: "not a url" }), false);
+});
+
+test("mcpCall sends to the PUBLIC_URL origin without an explicit opt-in", async () => {
+  await withEnv({ PUBLIC_URL: "https://dpf.example.lan", DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+    const seen = [];
+    const result = await mcpCall("test_tool", {}, {
+      mcpUrl: "https://dpf.example.lan/api/mcp/v1",
+      bearerToken: "dpfmcp_test",
+      fetchImpl: async (url) => {
+        seen.push(url);
+        return new Response(JSON.stringify({ result: { content: [{ type: "text", text: "{\"ok\":true}" }] } }));
+      },
+    });
+    assert.deepEqual(result, { ok: true });
+    assert.deepEqual(seen, ["https://dpf.example.lan/api/mcp/v1"]);
+  });
+});
+
+test("mcpCall still refuses an arbitrary host when PUBLIC_URL names another", async () => {
+  await withEnv({ PUBLIC_URL: "https://dpf.example.lan", DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined }, async () => {
+    await assert.rejects(
+      mcpCall("test_tool", {}, { mcpUrl: REMOTE, bearerToken: "dpfmcp_test" }),
+      /refusing to send a bearer token/,
+    );
+  });
+});
+
+// Plan 2026-09-08 §10.5 S8: one client for every script. mcpPost is the raw
+// layer the fail-open call sites use; mcpCall unwraps on top of it.
+
+test("buildJsonRpcBody writes a JSON-RPC 2.0 envelope with a fresh id", () => {
+  const first = JSON.parse(buildJsonRpcBody("tools/call", { name: "t", arguments: {} }));
+  const second = JSON.parse(buildJsonRpcBody("tools/list"));
+  assert.equal(first.jsonrpc, "2.0");
+  assert.equal(first.method, "tools/call");
+  assert.deepEqual(first.params, { name: "t", arguments: {} });
+  assert.ok(second.id > first.id);
+  assert.equal("params" in second, false);
+});
+
+test("mcpPost returns the raw reply without interpreting the HTTP status", async () => {
+  let seen = null;
+  const reply = await mcpPost("tools/call", { name: "list_workrooms", arguments: {} }, {
+    mcpUrl: "http://127.0.0.1:3000/api/mcp/v1",
+    bearerToken: "dpfmcp_test",
+    accept: "application/json, text/event-stream",
+    fetchImpl: async (url, init) => {
+      seen = { url, init };
+      return new Response("unauthorized", { status: 401 });
+    },
+  });
+  assert.equal(reply.status, 401);
+  assert.equal(reply.text, "unauthorized");
+  assert.equal(seen.init.headers.Authorization, "Bearer dpfmcp_test");
+  assert.equal(seen.init.headers.Accept, "application/json, text/event-stream");
+  assert.equal(JSON.parse(seen.init.body).params.name, "list_workrooms");
+});
+
+test("mcpPost enforces the loopback rule on the fetchImpl path too", async () => {
+  await withEnv({ DPF_MCP_URL: undefined, DPF_MCP_ENDPOINT: undefined, PUBLIC_URL: undefined }, async () => {
+    await assert.rejects(
+      mcpPost("tools/call", { name: "t", arguments: {} }, {
+        mcpUrl: REMOTE,
+        bearerToken: "dpfmcp_test",
+        fetchImpl: async () => { throw new Error("must not be called"); },
+      }),
+      /refusing to send a bearer token/,
+    );
+  });
+});
+
+test("mcpCall unwraps the text content of a tool result", async () => {
+  const result = await mcpCall("t", {}, {
+    mcpUrl: "http://127.0.0.1:3000/api/mcp/v1",
+    bearerToken: "dpfmcp_test",
+    fetchImpl: async () => new Response(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      result: { content: [{ type: "text", text: JSON.stringify({ success: true, data: 7 }) }] },
+    }), { status: 200 }),
+  });
+  assert.deepEqual(result, { success: true, data: 7 });
+});
+
+test("mcpCall keeps its invalid-JSON error text, which retry classifiers match", async () => {
+  await assert.rejects(
+    mcpCall("t", {}, {
+      mcpUrl: "http://127.0.0.1:3000/api/mcp/v1",
+      bearerToken: "dpfmcp_test",
+      fetchImpl: async () => new Response("<html>", { status: 502 }),
+    }),
+    /mcpCall: invalid JSON response from http:\/\/127\.0\.0\.1:3000\/api\/mcp\/v1 \(status 502\)/,
+  );
+});
+
+
+test("MCP transport uses the caller-scoped endpoint environment without ambient changes", async () => {
+  const endpoint = "https://scoped-install.example/api/mcp/v1";
+  let requests = 0;
+  const options = { mcpUrl: endpoint, bearerToken: "fixture", env: { DPF_MCP_URL: endpoint },
+    fetchImpl: async () => { requests++; return new Response("{}"); } };
+  assert.equal((await mcpPost("tools/list", {}, options)).status, 200);
+  await assert.rejects(mcpPost("tools/list", {}, { ...options, env: {} }), /refusing to send/);
+  assert.equal(requests, 1);
+});
+
+test("an unapproved endpoint is refused before credential materialization", async () => {
+  let materializations = 0;
+  await assert.rejects(mcpPost("tools/call", { name: "fixture_read" }, {
+    mcpUrl: "https://unapproved.invalid/api/mcp/v1", env: {},
+    bearerToken: { get: async () => { materializations++; return "fixture-only"; } },
+    requestImpl: () => { throw new Error("must not request an unapproved endpoint"); },
+  }), /refusing to send a bearer token/);
+  assert.equal(materializations, 0, "OAuth exchange must not precede endpoint authorization");
 });

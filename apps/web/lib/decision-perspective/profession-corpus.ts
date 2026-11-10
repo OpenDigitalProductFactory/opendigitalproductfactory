@@ -11,8 +11,8 @@
 //                  → corpus WikiPages (slug prefix `professions/<key>/`)
 //                  → lexically-ranked, token-bounded excerpts → prompt block
 //
-// Why slug-prefix (not Qdrant): the profession corpus is seeded into Postgres
-// WikiPage rows but is NOT embedded into the Qdrant wiki collection (Phase 2
+// Why slug-prefix (not the vector store): the profession corpus is seeded into Postgres
+// WikiPage rows but is NOT embedded into the vector wiki collection (Phase 2
 // seeded pages only). A deterministic lexical ranker over the small per-family
 // page set (4–9 pages) needs no vector sidecar, works on a cold install, and is
 // fully unit-testable. When Phase 3+ seeds embeddings, this can swap to vector

@@ -47,6 +47,31 @@ describe("buildNavigationModel", () => {
     expect(model.relTypeSlugs).toContain("traces");
   });
 
+  it("emits interaction-shape metadata when supplied by the shape extractor", () => {
+    const m = buildNavigationModel({
+      entries: [{
+        key: "marketing_delegate",
+        label: "Ask marketing coworker",
+        path: "/customer/marketing",
+        domain: "business",
+        targetDomain: "business",
+        jobLane: "owner-marketing",
+        stepRole: "delegate",
+        continuesTo: ["coworker-marketing"],
+        spineStage: "market-and-sell",
+      }],
+      routePaths: ["/customer/marketing"],
+    });
+
+    const entry = m.elements.find((e) => e.sysmlKey === "navigation:entry:marketing_delegate");
+    expect(entry?.properties).toMatchObject({
+      jobLane: "owner-marketing",
+      stepRole: "delegate",
+      continuesTo: ["coworker-marketing"],
+      spineStage: "market-and-sell",
+    });
+  });
+
   it("flags real routes with no canonical nav entry as an orphan conformance finding, excluding dynamic routes", () => {
     const orphan = model.conformanceIssues?.find((c) => c.issueType === "route-not-in-canonical-nav");
     expect(orphan?.onKey).toBe(NAVIGATION_PACKAGE_KEY);

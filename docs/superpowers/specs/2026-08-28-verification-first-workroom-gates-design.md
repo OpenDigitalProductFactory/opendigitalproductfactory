@@ -25,7 +25,7 @@ Every row is code-verified against this branch, not inferred.
 | 1 | **Failing tests do not block a phase advance.** `verification-typecheck-passed` reads `evidence.verificationOut` and asserts only `typecheckPassed`. `testsFailed` is declared on the same inline type and never read. | `apps/web/lib/explore/build-process-matrix.ts` `checkRequirement`, case `verification-typecheck-passed` |
 | 2 | **UX verification cannot block.** `uxVerification-not-blocking` returns `allowed` for `complete`, `failed`, `skipped` and `null`. Only the transient `running` defers. The code comment records this as an operator decision of 2026-06-07 and names the open quality problem as `BI-4BD81F3B` — "browser-use agent producing genuine, non-vacuous results". | same file, case `uxVerification-not-blocking` |
 | 3 | **Acceptance is self-assessed.** `acceptance-evaluated` requires only that `evidence.acceptanceMet` be truthy. `acceptance-all-met-if-array` tightens this *only* when the value happens to be an array. A scalar truthy value passes unexamined. | same file, cases `acceptance-evaluated`, `acceptance-all-met-if-array` |
-| 4 | **`verificationDepth` is inert.** It is derived (`work-posture/derive.ts`), tightened through a floor (`work-posture/resolve.ts` `tightenVerificationDepth`), and rendered as chips. Its only consumers are display components. No gate reads it. | `WorkroomPosture.tsx`, `posture-display.ts`, `GoldenTriangleOutcomes.tsx`; already recorded as finding 5 of [`workroom-work-posture-design`](2026-08-22-workroom-work-posture-design.md) |
+| 4 | ~~**`verificationDepth` is inert.** It is derived (`work-posture/derive.ts`), tightened through a floor (`work-posture/resolve.ts` `tightenVerificationDepth`), and rendered as chips. Its only consumers are display components. No gate reads it.~~ **CORRECTED 2026-09-06 — this finding was already stale when written.** See §1.2. | `WorkroomPosture.tsx`, `posture-display.ts`, `GoldenTriangleOutcomes.tsx`; already recorded as finding 5 of [`workroom-work-posture-design`](2026-08-22-workroom-work-posture-design.md) |
 | 5 | **Nothing constrains the judge to be independent of the author.** No gate requirement, routing rule, or envelope check asserts that the model family judging an artifact differs from the family that produced it. | `GATE_REQUIREMENTS` (11 entries, none about judge identity); `apps/web/lib/model-selection` |
 | 6 | **Verification that runs on the real path exists — and is not gate-bound.** Golden journeys execute through the real coworker path (real persona, real tool surface, real routing) and are judged by five mechanical oracles (`ORACLE-FABRICATE`, `ORACLE-PURITY`, `ORACLE-REFUSAL`, `ORACLE-SURFACE`, `ORACLE-TOOL`). They run on a certification *sweep*. No phase gate or workroom transition consults their verdicts. | `coworker-lifecycle/golden-journeys.ts`, `certification-runner.ts`, `certification-oracles.ts` |
 | 7 | **There is no feature reachability map.** `apps/web/lib/ea/route-manifest.json` is a route *inventory* — `routePath`, `kind`, `segments`, `dynamicParams`, `file`. It carries nothing about how a *user* reaches a feature: no nav path, no entry point, no stable selector, no keyboard affordance. | `apps/web/lib/ea/route-manifest.json` |
@@ -39,6 +39,18 @@ Every one of those guards protects **the repository that builds the factory**.
 The **workroom** — where in-portal coworkers do customer work — has, at the runtime tier, exactly one hard check: the code compiles. Tests are informational, UX verification is advisory, acceptance is self-reported, and the declared verification depth is decorative.
 
 **DPF has hard gates on the code that builds the factory and soft gates on the work the factory does.** Findings 1–7 are that one sentence seen from seven angles.
+
+### 1.2 Correction to finding 4 — recorded 2026-09-06
+
+Finding 4 claimed no gate reads `verificationDepth`. That was **already false on the day this design was written**, and is now false twice over. Recorded here rather than silently edited, because the reason it was wrong is the reason §10's blocking precondition existed.
+
+1. **The action path was already bound, five days earlier.** `BI-13ED1BE1` (EP-WORK-POSTURE, Slice E) shipped in PR #4591 / `a5da024b4` on **2026-08-23**. `resolveVerificationRequirement` (`work-management/hitl-join.ts`) fuses the declared depth with `RiskClass.outbound-or-floor`, and `evaluateWorkCasePolicy` denies a consequential action by name — `missing_verification_evidence` — when verification is required and no evidence carries a `verifiedAt`. That item's own body states Defect 1 in the same terms this design's finding 4 uses. The design was authored without live backlog state (see §10), so it re-derived a problem the platform had already fixed at a different enforcement point.
+
+2. **The build phase gate is now bound in shadow.** PR #4880 / `48a7492bd` (2026-09-02) landed Change A per §4.1 — `verification-depth-satisfied` in `GATE_REQUIREMENTS`, evaluated on every transition and recorded to `BuildActivity`, changing no verdict.
+
+**What survives.** The two bindings enforce at *different points* and are not duplicates: BI-13ED1BE1 governs whether a coworker may take a consequential **action**; §4.1 governs whether a build may cross a **phase boundary**. The accurate form of finding 4 is narrower and still true as of `433d90325`: *the build-process phase gate did not read `verificationDepth`* — `GATE_REQUIREMENTS` carried 11 entries and none concerned depth.
+
+**What this costs the rest of the design.** §4.1's depth table and BI-13ED1BE1's requirement now define "deep" differently — a three-tier evidence ladder versus a binary requires-verification floor. Reconciling them is unowned work; until it is done, one declaration means two things. Before Phase 3 binds anything, that reconciliation is a precondition, not a cleanup.
 
 ## 2. Why this is a design problem, not seven bug fixes
 
@@ -196,6 +208,18 @@ Detail, task breakdown and rollback: [`2026-08-28-verification-first-workroom-ga
 
 Findings 1–7 are code-verified on this branch and cite the files.
 
-**Backlog coverage is absent.** The DPF MCP server was unreachable for this session (`DPF_MCP_BEARER_TOKEN` unset; connection refused), so live epic and backlog state could not be queried. Per [`live-state-over-seed-data`](../../professions/data-architect/wiki/live-state-over-seed-data.md) and the epic-overlap rule, this design is **not ready to implement** until an epic-overlap check runs against the live database — `EP-WORK-CONVERGENCE`, `EP-1C37C089`, `EP-QUALITY-RIGHTSIZING` and `EP-COWORKER-LIFECYCLE` are the likely neighbours and may already own parts of this. `BI-4BD81F3B` is cited from a source comment and its live status is unconfirmed.
+~~**Backlog coverage is absent.**~~ **RESOLVED 2026-09-06 — the epic-overlap check ran against live state.** Recorded below; the original text is preserved in git history.
 
-This document is a design proposal with verified problem statements, not an approved plan.
+The check the original §10 asked for was run against the live database on 2026-09-06 with `DPF_MCP_BEARER_TOKEN` set and the MCP server reachable. Results:
+
+| Named neighbour | Live state |
+| --- | --- |
+| `EP-WORK-CONVERGENCE` | Exists. Does not own depth binding. |
+| `EP-1C37C089` | Exists, but is **mislabelled in the plan as "gate binding"**. Its real title is *TAK alignment control surface — WWWD×WSID governance gate on consequential tool use*. Adjacent, not this. |
+| `EP-QUALITY-RIGHTSIZING` | **Does not exist.** No match across all 80 epics. |
+| `EP-COWORKER-LIFECYCLE` | Exists. Owns certification and oracles (finding 6), not depth binding. |
+| **`EP-WORK-POSTURE`** | **The actual owner, and not named in the original list.** Slice E, `BI-13ED1BE1`, owns making `verificationDepth` load-bearing — see §1.2. |
+
+**`BI-4BD81F3B` does not exist in the live backlog.** It returns `not_found`. It is cited only from a code comment in `build-process-matrix.ts`. §4.2 makes it the hard ordering precondition for Phase 4, so **Phase 4 is currently gated on a backlog item that was never filed.** Filing it — or replacing the reference with whatever really tracks non-vacuous browser-use results — is a precondition for Phase 4, not a formality.
+
+**Status of the design as a whole.** The problem statements remain code-verified apart from finding 4 (§1.2). Phase 2 is delivered (`BI-30165EB4`) and its report is at [`2026-09-06-verification-depth-shadow-report.md`](../audits/2026-09-06-verification-depth-shadow-report.md). Phases 3–6 remain proposals; Phase 3 has two open preconditions named in that report.

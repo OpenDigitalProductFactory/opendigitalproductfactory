@@ -137,6 +137,40 @@ dpf_preflight_unsupported_host() {
 DPF_DOCKER_MIN_MEM_MB="${DPF_DOCKER_MIN_MEM_MB:-6144}"   # 6 GB hard floor
 DPF_DOCKER_WARN_MEM_MB="${DPF_DOCKER_WARN_MEM_MB:-8192}" # 8 GB soft target
 
+# ── ...and a ceiling. ─────────────────────────────────────────────────────
+# The floor check above is one-sided: the more memory the VM is given, the
+# happier it is. That is wrong on macOS, and it cost nine fenced builds on a
+# 128 GB host configured with a 68.5 GiB Docker VM running 3.5 GB of
+# containers.
+#
+# The platform difference is architectural, not capacity:
+#
+#   Windows (WSL2)  the VM sizes dynamically and, since WSL 2.0,
+#                   autoMemoryReclaim returns freed pages to Windows. A
+#                   generous ceiling costs little because it is given back.
+#   macOS          Docker Desktop's VM allocation competes with native apps
+#                  and local models. A generous limit can leave too little
+#                  headroom; container usage alone does not measure VM footprint.
+#
+# Starving the host does not break the install — it breaks the local-CI
+# capacity watchdog later, with `host-capacity-lost:host-memory-low` and no
+# hint as to why. So this warns loudly with the actual remedy rather than
+# refusing: the install itself is fine.
+DPF_DOCKER_MAX_MEM_FRACTION="${DPF_DOCKER_MAX_MEM_FRACTION:-50}"  # percent of host RAM
+
+# Host physical memory in MB, or 0 when it cannot be determined.
+_dpf_host_mem_mb() {
+  if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
+    local bytes
+    bytes="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+    echo $(( bytes / 1048576 ))
+  elif [ -r /proc/meminfo ]; then
+    awk '/^MemTotal:/ { print int($2 / 1024); exit }' /proc/meminfo 2>/dev/null || echo 0
+  else
+    echo 0
+  fi
+}
+
 dpf_preflight_docker_memory() {
   if ! command -v docker >/dev/null 2>&1; then
     return 0  # docker.sh will handle a missing daemon later
@@ -168,6 +202,25 @@ dpf_preflight_docker_memory() {
     info "  To increase: Docker Desktop → Settings → Resources → Memory."
   else
     ok "Docker VM memory: ${mem_mb} MB"
+  fi
+
+  # Ceiling: an over-allocated VM starves the host it runs on.
+  local host_mb ceiling_mb
+  host_mb="$(_dpf_host_mem_mb)"
+  if [ "${host_mb:-0}" -gt 0 ] 2>/dev/null; then
+    ceiling_mb=$(( host_mb * DPF_DOCKER_MAX_MEM_FRACTION / 100 ))
+    if [ "$mem_mb" -gt "$ceiling_mb" ] 2>/dev/null; then
+      warn "Docker VM memory is ${mem_mb} MB of ${host_mb} MB host RAM (over ${DPF_DOCKER_MAX_MEM_FRACTION}%)."
+      if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
+        info "  Docker VM allocation competes with native applications and AI models."
+        info "  Re-run the current installer to size local Desktop memory (8-32 GiB),"
+        info "  or adjust Docker Desktop -> Settings -> Resources -> Memory."
+      else
+        info "  WSL2 reclaims freed memory, so this is usually benign — but an explicit"
+        info "  memory= in %USERPROFILE%\\.wslconfig pins it. Remove it, or lower it, and"
+        info "  run: wsl --shutdown"
+      fi
+    fi
   fi
   return 0
 }

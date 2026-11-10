@@ -15,6 +15,8 @@ type Props = {
   inboundMessages: InboundMessageRow[];
   /** Active storefront archetype category, for archetype-fit checks. */
   category: string | null;
+  /** What this business itself sells; terms naming it are not platform leaks. */
+  ownOffer?: string | null;
 };
 
 function timeAgo(date: Date | string): string {
@@ -67,12 +69,14 @@ function DraftRow({
   draft,
   trailing,
   category,
+  ownOffer = null,
 }: {
   draft: OutboundDraftRow;
   trailing: React.ReactNode;
   category: string | null;
+  ownOffer?: string | null;
 }) {
-  const fit = assessArchetypeFit({ text: draft.body, category });
+  const fit = assessArchetypeFit({ text: draft.body, category, ownOffer });
   return (
     <li
       data-draft-id={draft.draftId}
@@ -115,6 +119,7 @@ export function ApprovalQueuePanel({
   connectedChannels,
   inboundMessages,
   category,
+  ownOffer = null,
 }: Props) {
   const linkedInConnected =
     connectedChannels.includes("linkedin-personal-social") ||
@@ -158,6 +163,7 @@ export function ApprovalQueuePanel({
                 key={draft.draftId}
                 draft={draft}
                 category={category}
+                ownOffer={ownOffer}
                 trailing={
                   <ApprovalQueueReview
                     draftId={draft.draftId}
@@ -166,6 +172,7 @@ export function ApprovalQueuePanel({
                     channelId={draft.channelId}
                     assetType={draft.assetType}
                     category={category}
+                    ownOffer={ownOffer}
                   />
                 }
               />
@@ -204,20 +211,21 @@ export function ApprovalQueuePanel({
                 key={draft.draftId}
                 draft={draft}
                 category={category}
+                ownOffer={ownOffer}
                 trailing={
                   isLinkedInChannel(draft.channelId) ? (
                     <PublishLinkedInButton
                       draftId={draft.draftId}
                       channelConnected={linkedInConnected}
                       channelId="linkedin-personal-social"
-                      fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
+                      fitBlocked={assessArchetypeFit({ text: draft.body, category, ownOffer }).blocked}
                       artifactTitle={draft.assetTaskTitle}
                     />
                   ) : isWordPressChannel(draft.channelId) ? (
                     <PublishWordPressButton
                       draftId={draft.draftId}
                       channelConnected={wordpressConnected}
-                      fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
+                      fitBlocked={assessArchetypeFit({ text: draft.body, category, ownOffer }).blocked}
                       artifactTitle={draft.assetTaskTitle}
                     />
                   ) : isEmailChannel(draft.channelId) ? (
@@ -225,7 +233,7 @@ export function ApprovalQueuePanel({
                       draftId={draft.draftId}
                       channelConnected={emailConnected}
                       channelId="email-postmark"
-                      fitBlocked={assessArchetypeFit({ text: draft.body, category }).blocked}
+                      fitBlocked={assessArchetypeFit({ text: draft.body, category, ownOffer }).blocked}
                       artifactTitle={draft.assetTaskTitle}
                     />
                   ) : (

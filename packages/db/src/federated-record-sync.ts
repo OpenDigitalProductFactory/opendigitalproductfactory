@@ -16,6 +16,9 @@ export const FEDERATED_RECORD_TYPES = [
   // backlog it produced dies with it.
   "backlog-item",
   "epic",
+  // Read-only operational-posture rollup: each install is canonical for its own
+  // posture and projects a minimized, read-only summary to same-organization peers.
+  "operational-posture",
 ] as const;
 export type FederatedRecordType = (typeof FEDERATED_RECORD_TYPES)[number];
 

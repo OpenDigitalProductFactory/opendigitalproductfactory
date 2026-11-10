@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "preserve-review-evidence-and-show-incomplete",
+  "decisionInteractionId": "DI-0A77C4898E52",
+  "scope": {
+    "files": [
+      "apps/web/components/build/ReviewPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "preserve-review-evidence-and-show-incomplete",
+      "hide-entire-incomplete-review-panel",
+      "retain-generic-fail-closed-rejected-presentation"
+    ]
+  },
+  "sourceDecision": {
+    "sourceSha": "1384649f96ed5cffbcb9bca3a01d83e036c9184d",
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "evidenceClass": "Comparative source design judgments with exact-source code citations; no served-DOM measurement or independent review claimed."
+  }
+}

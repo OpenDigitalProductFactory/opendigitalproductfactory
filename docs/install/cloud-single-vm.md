@@ -43,7 +43,7 @@ For the architectural background:
 | Cloud | AWS, GCP, or Azure. Other providers (DigitalOcean, Linode, Hetzner) likely work — they're not yet tested. |
 | VM OS | Ubuntu 22.04+ / Debian 12+ / Fedora 39+ (the Linux installer's supported matrix) |
 | VM size | **4 vCPU / 16 GB RAM minimum**; 8 vCPU / 32 GB recommended for the local-LLM tier |
-| Disk | **100 GB minimum** (Postgres + Neo4j + Qdrant volumes + GHCR images + Ollama models) |
+| Disk | **100 GB minimum** (Postgres volume + GHCR images + Ollama models) |
 | Architecture | `x86_64` or `arm64` (multi-arch GHCR images cover both) |
 | Inbound | Port 443 (or 80 → 443 redirect) to the VM if exposing publicly; Port 3000 for direct/internal access |
 | Outbound | Full egress to `ghcr.io`, `registry-1.docker.io`, `objects.githubusercontent.com`, plus any LLM provider endpoints you configure |
@@ -286,13 +286,20 @@ deployment you'll want:
    are excluded from the redirect so load balancer probes hitting the
    VM directly still succeed.
 
+   Behind a proxy or tunnel, per-requester rate limits key on the
+   `X-Forwarded-For` entry your nearest proxy appended (the rightmost),
+   never the leftmost, which the client controls. In code,
+   `clientAddressKey` (`apps/web/lib/security/client-address.ts`) is the
+   only way to derive a requester key, and the `xff-single-reader` CI
+   guard refuses any other reader of the header (BI-1FF67B91).
+
 The cloud-deployment spec covers TLS placement options in detail
 ([§ Public URL and TLS](../superpowers/specs/2026-05-09-cloud-deployment-design.md#public-url-and-tls)).
 
 ## Persistent storage
 
-The Linux installer creates Docker named volumes for Postgres, Neo4j,
-Qdrant, and Redis. These live in `/var/lib/docker/volumes/` on the VM.
+The Linux installer creates Docker named volumes for Postgres and
+Redis. These live in `/var/lib/docker/volumes/` on the VM.
 
 For a customer-cloud deployment you want those volumes on a separate,
 snapshotted disk:
@@ -398,8 +405,7 @@ Out of scope for the Single VM Phase 0 substrate:
 - **HA / multi-AZ** — single VM by definition. Pick the Managed k8s
   substrate if you need HA today.
 - **PITR backups** — disk snapshots are the operator's responsibility.
-- **Managed databases** — Phase 0 runs Postgres / Neo4j / Qdrant /
-  Redis inside the compose stack on the VM. Managed-DB variants are
+- **Managed databases** — Phase 0 runs Postgres / Redis inside the compose stack on the VM. Managed-DB variants are
   the Managed container service substrate, not Single VM.
 - **Build Studio in cloud** — works the same as on-prem on this
   substrate (sandboxes are local Docker containers on the same VM).

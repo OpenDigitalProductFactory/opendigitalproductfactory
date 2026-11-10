@@ -38,6 +38,7 @@ vi.mock("@/lib/actions/leave", () => ({
 }));
 
 import { approveProposal, rejectProposal } from "./proposals";
+import { LEAVE_DECISION_VERB_REFUSAL } from "@/lib/workforce/leave/leave-decision-proposal-contract";
 
 const proactivityParameters = {
   kind: "proactivity-change",
@@ -72,34 +73,57 @@ describe("proposal actions", () => {
     mocks.rejectLeaveRequest.mockResolvedValue({ success: true });
   });
 
-  it("routes leave approval through the governed human leave action", async () => {
-    mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({
-      proposalId: "AP-LEAVE",
-      status: "proposed",
-      actionType: "leave.decide",
-      parameters: { requestId: "LR-1", recommendation: "approve", rationale: "Coverage is sufficient." },
-      agentId: "time-off-advisor",
-      threadId: "thread-1",
-    });
-
-    expect(await approveProposal("AP-LEAVE")).toEqual({ success: true });
-    expect(mocks.approveLeaveRequest).toHaveBeenCalledWith("LR-1");
-    expect(mocks.executeTool).not.toHaveBeenCalled();
+  // BI-4E192035 (option B, WWMD DI-DC208379563E) — a leave.decide proposal
+  // carries the advisor's recommendation. "Approve" / "reject" of it never says
+  // which leave outcome the person meant, so the generic verbs refuse and never
+  // touch the leave; the leave is decided by the explicit Approve leave / Deny
+  // leave actions (approveLeaveRequest / rejectLeaveRequest).
+  const leaveProposal = (recommendation: "approve" | "deny" | "escalate") => ({
+    proposalId: "AP-LEAVE",
+    status: "proposed",
+    actionType: "leave.decide",
+    parameters: { requestId: "LR-1", recommendation, rationale: "Advisor rationale.", guardReasons: [] },
+    agentId: "time-off-advisor",
+    threadId: "thread-1",
   });
 
-  it("routes leave rejection through the governed human leave action", async () => {
-    mocks.prisma.agentActionProposal.findUnique.mockResolvedValue({
-      proposalId: "AP-LEAVE",
-      status: "proposed",
-      actionType: "leave.decide",
-      parameters: { requestId: "LR-1", recommendation: "deny", rationale: "Coverage is insufficient." },
-      agentId: "time-off-advisor",
-      threadId: "thread-1",
-    });
+  describe("AC-LEAVE-RECOMMENDATION: approving a leave proposal never approves the leave", () => {
+    it.each(["deny", "approve", "escalate"] as const)(
+      "approving a %s-recommendation proposal refuses and leaves the leave request untouched",
+      async (recommendation) => {
+        mocks.prisma.agentActionProposal.findUnique.mockResolvedValue(leaveProposal(recommendation));
 
-    expect(await rejectProposal("AP-LEAVE", "Manager declined")).toEqual({ success: true });
-    expect(mocks.rejectLeaveRequest).toHaveBeenCalledWith("LR-1", "Manager declined");
-    expect(mocks.executeTool).not.toHaveBeenCalled();
+        expect(await approveProposal("AP-LEAVE")).toEqual({
+          success: false,
+          error: LEAVE_DECISION_VERB_REFUSAL,
+        });
+        expect(mocks.approveLeaveRequest).not.toHaveBeenCalled();
+        expect(mocks.rejectLeaveRequest).not.toHaveBeenCalled();
+        expect(mocks.executeTool).not.toHaveBeenCalled();
+        expect(mocks.prisma.agentActionProposal.update).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe("AC-LEAVE-EXPLICIT: rejecting a leave proposal never decides the leave", () => {
+    it.each(["deny", "approve", "escalate"] as const)(
+      "rejecting a %s-recommendation proposal refuses and leaves the leave request untouched",
+      async (recommendation) => {
+        mocks.prisma.agentActionProposal.findUnique.mockResolvedValue(leaveProposal(recommendation));
+
+        expect(await rejectProposal("AP-LEAVE", "I disagree")).toEqual({
+          success: false,
+          error: LEAVE_DECISION_VERB_REFUSAL,
+        });
+        expect(mocks.rejectLeaveRequest).not.toHaveBeenCalled();
+        expect(mocks.approveLeaveRequest).not.toHaveBeenCalled();
+        expect(mocks.prisma.agentActionProposal.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it("tells the person how the leave is decided", () => {
+      expect(LEAVE_DECISION_VERB_REFUSAL).toMatch(/^Leave is decided with Approve leave \/ Deny leave/);
+    });
   });
 
   it("approves proactivity changes by persisting a scoped preference override without executing a tool", async () => {

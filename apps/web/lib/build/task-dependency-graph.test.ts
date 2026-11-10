@@ -34,7 +34,7 @@ describe("isRedundantVerificationTask", () => {
     const phases = buildDependencyGraph(files, tasks);
     const allTitles = phases.flatMap((p) => p.tasks.map((tk) => tk.title));
     expect(allTitles).not.toContain("Run full test suite");
-    expect(allTitles.filter((x) => x === "Full verification: tests + typecheck")).toHaveLength(1);
+    expect(allTitles.filter((x) => x === "Scoped verification: changed-file tests + typecheck")).toHaveLength(1);
     // Exactly one verification phase remains (the synthetic QA one).
     expect(phases[phases.length - 1]!.tasks[0]!.specialist).toBe("qa-engineer");
   });

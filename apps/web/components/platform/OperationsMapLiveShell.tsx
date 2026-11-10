@@ -18,8 +18,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { AiOperationsMap } from "./AiOperationsMap";
+import { OperationsMapRefreshProvider } from "./operations-map-refresh-context";
 import type { OperationsMapData } from "@/lib/ai-operations-map/load-map-data";
 import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
+import { useSearchParams } from "next/navigation";
+import { readRoutingScope, routingWindow } from "@/lib/ai-operations-map/routing-management-scope";
 
 const REFRESH_INTERVAL_MS = 45_000;
 const SCRUB_SETTLE_MS = 600;
@@ -63,17 +66,22 @@ export function OperationsMapLiveShell({
   initialData,
   initialArchitectureMode = "compare",
   initialFocusStageId = null,
+  initialTechnicalOpen = false,
 }: {
   initialData: OperationsMapData;
   initialArchitectureMode?: RoutingArchitectureMode;
   initialFocusStageId?: string | null;
+  initialTechnicalOpen?: boolean;
 }) {
   const [data, setData] = useState(initialData);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
-  const fetchedWindowRef = useRef<EvidenceWindowMs | null>(null);
+  const params = useSearchParams();
+  const scope = readRoutingScope(params);
+  const scopedMinutesRef = useRef(scope.minutes);
+  const fetchedWindowRef = useRef<EvidenceWindowMs | null>(initialData.queriedWindow ? { start: Date.parse(initialData.queriedWindow.start), end: Date.parse(initialData.queriedWindow.end) } : null);
   const abortRef = useRef<AbortController | null>(null);
   const swapAtRef = useRef(0);
   const scrubAtRef = useRef(0);
@@ -112,6 +120,13 @@ export function OperationsMapLiveShell({
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (scopedMinutesRef.current === scope.minutes) return;
+    scopedMinutesRef.current = scope.minutes;
+    const window = routingWindow(scope, Date.now());
+    void fetchSnapshot({ start: window.start.getTime(), end: window.end.getTime() });
+  }, [scope.minutes, fetchSnapshot]);
 
   const refreshNow = useCallback(() => {
     const fetched = fetchedWindowRef.current;
@@ -179,7 +194,10 @@ export function OperationsMapLiveShell({
         error={refreshError}
         onRefresh={refreshNow}
       />
+      <OperationsMapRefreshProvider value={refreshNow}>
       <AiOperationsMap
+        routingManagement={data.routingManagement}
+        initialTechnicalOpen={initialTechnicalOpen}
         template={data.template}
         agents={data.agents}
         projections={data.projections}
@@ -191,6 +209,7 @@ export function OperationsMapLiveShell({
         evidenceRange={data.evidenceRange}
         onReplayWindowChange={handleReplayWindowChange}
       />
+      </OperationsMapRefreshProvider>
     </div>
   );
 }
@@ -225,8 +244,9 @@ function OpsMapFreshnessBar({
       data-opsmap-freshness
       className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-1.5 text-xs text-[var(--dpf-muted)]"
     >
-      <span aria-live="polite">
-        {refreshing ? "Refreshing…" : `Live view · ${ageLabel} · auto-refresh every ${Math.round(REFRESH_INTERVAL_MS / 1000)}s`}
+      <span aria-live="polite" title={`Auto-refresh every ${Math.round(REFRESH_INTERVAL_MS / 1000)}s`}>
+        <span aria-hidden>{refreshing ? "Refreshing…" : `Live · ${ageLabel}`}</span>
+        <span className="sr-only">{refreshing ? "Refreshing…" : `Live view · ${ageLabel} · auto-refresh every ${Math.round(REFRESH_INTERVAL_MS / 1000)}s`}</span>
         {error ? (
           <span className="ml-2 text-[var(--dpf-error)]">Last refresh failed: {error}</span>
         ) : null}

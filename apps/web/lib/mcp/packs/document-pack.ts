@@ -8,9 +8,23 @@
 // handlers attribute the actor through the shared principal-linking façade.
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
+//
+// create_presentation (BI-543819B1) produces a branded deck from an outline on
+// the document generation facility and stores it here as a managed document.
+// The report, letter, sheet and drawing tools (BI-012487AA) are composed in
+// from document-family-tools.ts.
+//
+// Access (BI-957915CB): every handler resolves the document viewer from the
+// ACTING USER, never from the coworker's own principal, and passes it to the
+// store, so a coworker reads exactly what the person it acts for may read. A
+// restricted document another person cannot read is "not found" here.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+import type { PresentationOutline } from "@/lib/documents/generation/create-presentation";
+import type { ManagedDocument } from "@/lib/documents/document-store";
+import { DOCUMENT_FAMILY_TOOL_DEFINITIONS, DOCUMENT_FAMILY_TOOL_GRANTS, documentFamilyToolHandlers } from "./document-family-tools";
 
 // Local coercion helpers — copies of the mcp-tools.ts module helpers so the pack
 // owns its inputs without depending on that module's internals.
@@ -20,6 +34,13 @@ function optionalString(value: unknown): string | null {
 
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+// Keep the selected body once at the tool boundary. The shared store retains
+// history for the human UI; coworkers can list metadata and load a pinned version.
+function documentToolProjection(document: ManagedDocument): Omit<ManagedDocument, "versions"> {
+  const { versions: _versions, ...selected } = document;
+  return selected;
 }
 
 // Resolve the principal id the document write should be attributed to: the
@@ -34,10 +55,82 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
   return userPrincipal?.id ?? null;
 }
 
+/** The person a document tool acts for (BI-957915CB). */
+async function documentViewerFor(userId: string) {
+  const { resolveDocumentViewer } = await import("@/lib/documents/document-access");
+  return resolveDocumentViewer(userId);
+}
+
+/** Largest exported file doc_load returns inline as contentBase64 (BI-4865EB4D). */
+export const DOC_LOAD_EXPORT_INLINE_LIMIT_BYTES = 5 * 1024 * 1024;
+
+/** Largest binary doc_save accepts inline as contentBase64 (BI-9D43CBEF). */
+export const DOCUMENT_BINARY_SAVE_LIMIT_BYTES = 20 * 1024 * 1024;
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+
+function decodeContentBase64(value: string): ActionResult<Buffer> {
+  const compact = value.replace(/\s+/g, "");
+  if (compact.length === 0 || compact.length % 4 !== 0 || !BASE64_PATTERN.test(compact)) {
+    return err("contentBase64 is not valid base64.");
+  }
+  const bytes = Buffer.from(compact, "base64");
+  if (bytes.byteLength > DOCUMENT_BINARY_SAVE_LIMIT_BYTES) {
+    return err(`contentBase64 decodes to ${bytes.byteLength} bytes; the limit is ${DOCUMENT_BINARY_SAVE_LIMIT_BYTES}.`);
+  }
+  return ok(bytes);
+}
+
+const OUTLINE_SLIDE_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "Slide title." },
+    layout: {
+      type: "string",
+      enum: ["title", "section", "bullets", "chart", "image", "table"],
+      description: "Optional. Inferred from what the slide carries: chart, table, image, bullets; otherwise the first slide is the title slide and later ones are section dividers.",
+    },
+    subtitle: { type: "string", description: "Subtitle for a title or section slide." },
+    bullets: { type: "array", items: { type: "string" }, description: "Up to 12 short points." },
+    notes: { type: "string", description: "Speaker notes for the presenter." },
+    chart: {
+      type: "object",
+      description: "{ type: bar|column|line|pie|area, title?, categories: string[], series: [{ name, values: number[] }] } with one value per category.",
+    },
+    table: { type: "object", description: "{ columns: string[], rows: (string|number|boolean|null)[][] }." },
+    image: {
+      type: "object",
+      description: "{ documentId, alt } for an image stored as a document, or { data (base64), mimeType: image/png|image/jpeg|image/gif, alt }. Alt text is required.",
+    },
+    caption: { type: "string", description: "Caption under an image." },
+  },
+  required: ["title"],
+};
+
+const CREATE_PRESENTATION_DEFINITION: ToolDefinition = {
+  name: "create_presentation",
+  description:
+    "Produce a branded presentation from an outline: a PowerPoint (.pptx) file, a PDF and a preview image of every slide, laid out in the organization's brand and saved as a managed document. To revise, send the whole corrected outline again with the presentation's documentId; that saves a new version of the same document. Never edit the file itself.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      title: { type: "string", description: "Presentation title." },
+      subtitle: { type: "string", description: "Shown on the title slide when it has no subtitle of its own." },
+      audience: { type: "string", description: "Who the deck is for." },
+      goal: { type: "string", description: "What the audience should decide or do." },
+      documentId: { type: "string", description: "An existing presentation to revise, such as DOC-1234ABCD. Omit to create a new one." },
+      slides: { type: "array", items: OUTLINE_SLIDE_SCHEMA, description: "The slides, in order. One outline slide is one slide in the deck." },
+    },
+    required: ["title", "slides"],
+  },
+  requiredCapability: null,
+  executionMode: "immediate",
+  sideEffect: true,
+};
+
 const definitions: ToolDefinition[] = [
   {
     name: "doc_save",
-    description: "Create a managed document or append a new version. Use for coworker-authored briefs, policies, plans, and other durable non-code artifacts that need stable references, lifecycle, search, and version history.",
+    description: "Create a managed document or append a new version. Use for coworker-authored briefs, policies, plans, and other durable non-code artifacts that need stable references, lifecycle, search, and version history. An office file (Word, Excel, PowerPoint, OpenDocument, RTF) saved as contentBase64 with its MIME type gets PDF and plain-text renditions in the background, which make its body text searchable.",
     inputSchema: {
       type: "object",
       properties: {
@@ -47,6 +140,7 @@ const definitions: ToolDefinition[] = [
         contentFormat: { type: "string", description: "MIME-ish format, e.g. text/markdown, text/plain, text/html, application/pdf." },
         contentText: { type: "string", description: "Inline content for text documents under the inline storage limit." },
         contentBlobId: { type: "string", description: "DocumentBlob id for larger or binary content." },
+        contentBase64: { type: "string", description: `Binary content (for example a .docx or .pptx), base64-encoded, up to ${DOCUMENT_BINARY_SAVE_LIMIT_BYTES / (1024 * 1024)} MB. Stored as a DocumentBlob; set contentFormat to the file's MIME type. Use instead of contentText and contentBlobId.` },
         contentSha256: { type: "string", description: "SHA-256 of the content when known." },
         summary: { type: "string", description: "Version change summary or abstract." },
         tags: { type: "array", items: { type: "string" }, description: "Searchable tags." },
@@ -74,14 +168,21 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
+  CREATE_PRESENTATION_DEFINITION,
+  ...DOCUMENT_FAMILY_TOOL_DEFINITIONS,
   {
     name: "doc_load",
-    description: "Load a managed document by stable document id, optionally pinned to a version.",
+    description: "Load a managed document by stable document id, optionally pinned to a version. Returns the selected body once; use doc_version_list for history metadata and doc_load with a version number for another body. Pass exportFormat to also export that version as a Word (docx), OpenDocument (odt) or PDF file through the document engine; the export is kept as a rendition, so asking again is cheap.",
     inputSchema: {
       type: "object",
       properties: {
         documentId: { type: "string", description: "Stable document id, such as DOC-1234ABCD." },
         version: { type: "number", description: "Optional version number. Defaults to current version." },
+        exportFormat: {
+          type: "string",
+          enum: ["docx", "odt", "pdf"],
+          description: `Optional. Export the loaded version to this format. The result carries a download path, and the file as contentBase64 when it is at most ${DOC_LOAD_EXPORT_INLINE_LIMIT_BYTES / (1024 * 1024)} MB.`,
+        },
       },
       required: ["documentId"],
     },
@@ -97,7 +198,7 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         query: { type: "string", description: "Phrase or natural-language concept to search for." },
-        mode: { type: "string", enum: ["metadata", "full-text", "semantic", "hybrid"], description: "Search mode. Hybrid combines Postgres filters and Qdrant semantic results." },
+        mode: { type: "string", enum: ["metadata", "full-text", "semantic", "hybrid"], description: "Search mode. Hybrid combines Postgres filters and pgvector semantic results." },
         state: { type: "string", enum: ["draft", "published", "archived"], description: "Lifecycle state filter." },
         documentKind: { type: "string", description: "Kind filter." },
         ownerPrincipalId: { type: "string", description: "Principal DB id for owner filter." },
@@ -131,7 +232,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "doc_version_list",
-    description: "List version metadata for a managed document.",
+    description: "List version metadata without bodies for a managed document. Use doc_load with a version number to read that version's body.",
     inputSchema: {
       type: "object",
       properties: {
@@ -186,7 +287,24 @@ async function docSave(
   const {
     saveManagedDocument,
   } = await import("@/lib/documents/document-store");
+  const contentBase64 = optionalString(params["contentBase64"]);
+  let contentBlobId = optionalString(params["contentBlobId"]);
+  let contentSha256 = optionalString(params["contentSha256"]);
+  if (contentBase64) {
+    if (optionalString(params["contentText"]) || contentBlobId) {
+      const error = "Provide only one of contentText, contentBlobId or contentBase64.";
+      return { success: false, message: error, error };
+    }
+    const decoded = decodeContentBase64(contentBase64);
+    if (!decoded.ok) return { success: false, message: decoded.error, error: decoded.error };
+    const { storeDocumentBlob } = await import("@/lib/documents/blob-storage");
+    const blob = await storeDocumentBlob({ content: decoded.data, mimeType: optionalString(params["contentFormat"]) });
+    contentBlobId = blob.id;
+    contentSha256 = blob.sha256;
+  }
   const actorPrincipalId = await resolveDocumentActorPrincipalId(userId, context?.agentId);
+  const viewer = await documentViewerFor(userId);
+  const accessScope = optionalString(params["accessScope"]);
   const references = Array.isArray(params["references"])
     ? params["references"].flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
@@ -208,16 +326,20 @@ async function docSave(
     documentKind: String(params["documentKind"] ?? ""),
     contentFormat: String(params["contentFormat"] ?? ""),
     contentText: optionalString(params["contentText"]),
-    contentBlobId: optionalString(params["contentBlobId"]),
-    contentSha256: optionalString(params["contentSha256"]),
+    contentBlobId,
+    contentSha256,
     summary: optionalString(params["summary"]),
     tags: stringArray(params["tags"]),
     references,
-    accessScope: optionalString(params["accessScope"]),
+    accessScope,
     sourceKind: optionalString(params["sourceKind"]),
-    ownerPrincipalId: optionalString(params["ownerPrincipalId"]) ?? actorPrincipalId,
+    ownerPrincipalId: optionalString(params["ownerPrincipalId"]),
+    // A restricted document a coworker makes for a person is owned by that
+    // person, so they can open it; otherwise the saver owns a new document.
+    defaultOwnerPrincipalId: accessScope === "restricted" && viewer.principalId ? viewer.principalId : actorPrincipalId,
     createdByPrincipalId: actorPrincipalId,
     actorPrincipalId,
+    viewer,
   });
   const version = (document as { version?: number }).version ?? document.currentVersion?.version ?? 1;
   return {
@@ -225,30 +347,141 @@ async function docSave(
     entityId: document.documentId,
     message: `Saved document ${document.documentId} v${version}: /workspace/documents/${encodeURIComponent(document.documentId)}.`,
     data: {
-      document: document as unknown as Record<string, unknown>,
+      document: documentToolProjection(document),
       route: `/workspace/documents/${encodeURIComponent(document.documentId)}`,
     },
   };
 }
 
-async function docLoad(params: Record<string, unknown>): Promise<ToolResult> {
-  const { loadManagedDocument } = await import("@/lib/documents/document-store");
-  const document = await loadManagedDocument({
-    documentId: String(params["documentId"] ?? ""),
-    version: typeof params["version"] === "number" ? params["version"] : null,
+async function createPresentationTool(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
+  const { createPresentation } = await import("@/lib/documents/generation/create-presentation");
+  const refused = await refuseUnreadableOutlineReference(params, userId);
+  if (refused) return refused;
+  const actorPrincipalId = await resolveDocumentActorPrincipalId(userId, context?.agentId);
+  const result = await createPresentation({
+    outline: params as unknown as PresentationOutline,
+    actorPrincipalId,
   });
-  if (!document) return { success: false, message: "Document not found.", error: "Document not found." };
+  if (!result.ok) {
+    return { success: false, message: result.error, error: result.error, data: { reason: result.reason } };
+  }
+  const created = result.data;
+  const verb = created.revised ? "Revised" : "Created";
+  const warnings = created.warnings.length > 0 ? ` Engine notes: ${created.warnings.join("; ")}.` : "";
   return {
     success: true,
-    entityId: document.documentId,
-    message: `Loaded document ${document.documentId}.`,
-    data: { document: document as unknown as Record<string, unknown> },
+    entityId: created.documentId,
+    message:
+      `${verb} presentation ${created.documentId} v${created.version}: ${created.slideCount} slides as ${created.formats.join(" and ")}, ` +
+      `with ${created.previewCount} slide previews. Review it at ${created.route}.${warnings}`,
+    data: { ...created },
   };
 }
 
-async function docSearch(params: Record<string, unknown>): Promise<ToolResult> {
+/**
+ * The first document a presentation outline names (the deck it revises, or a
+ * stored slide image) that the acting person may not read, or null.
+ */
+/** Every `documentId` an outline names, at any depth: the deck or document it revises and each stored image. */
+function outlineDocumentIds(value: unknown, found: string[] = [], depth = 0): string[] {
+  if (depth > 8 || value === null || typeof value !== "object") return found;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (key === "documentId") {
+      const id = optionalString(child);
+      if (id) found.push(id);
+    } else {
+      outlineDocumentIds(child, found, depth + 1);
+    }
+  }
+  return found;
+}
+
+/**
+ * The refusal for an outline that names a document the acting person may not
+ * read (revising it, or embedding its image), or null. Answers like a missing
+ * document, so a refusal never confirms one exists.
+ */
+async function refuseUnreadableOutlineReference(params: Record<string, unknown>, userId: string): Promise<ToolResult | null> {
+  const named = outlineDocumentIds(params);
+  if (named.length === 0) return null;
+  const { readableDocumentIds } = await import("@/lib/documents/document-store");
+  const readable = await readableDocumentIds(named, await documentViewerFor(userId));
+  const refused = named.find((id) => !readable.has(id));
+  if (!refused) return null;
+  const error = `Document not found: ${refused}.`;
+  return { success: false, message: error, error };
+}
+
+type DocumentToolHandler = (params: Record<string, unknown>, userId: string, context?: { agentId?: string }) => Promise<ToolResult>;
+
+/** The render-family tools revise and embed documents too, so they pass the same check first. */
+function withOutlineReferenceCheck<T extends Record<string, DocumentToolHandler>>(handlers: T): T {
+  return Object.fromEntries(
+    Object.entries(handlers).map(([name, handler]) => [
+      name,
+      (async (params, userId, context) => (await refuseUnreadableOutlineReference(params, userId)) ?? handler(params, userId, context)) as DocumentToolHandler,
+    ]),
+  ) as T;
+}
+
+async function docLoad(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+  const { loadManagedDocument } = await import("@/lib/documents/document-store");
+  const documentId = String(params["documentId"] ?? "");
+  const pinnedVersion = typeof params["version"] === "number" ? params["version"] : null;
+  const viewer = await documentViewerFor(userId);
+  const document = await loadManagedDocument({ documentId, version: pinnedVersion, viewer });
+  if (!document) return { success: false, message: "Document not found.", error: "Document not found." };
+  // Renditions of the loaded version (BI-9D43CBEF): a PDF and a plain-text
+  // projection of an office file, once the rendition job has run.
+  const data: Record<string, unknown> = {
+    document: documentToolProjection(document),
+    renditions: document.currentVersion?.renditions ?? [],
+  };
+
+  const exportFormat = params["exportFormat"];
+  if (exportFormat === undefined || exportFormat === null) {
+    return { success: true, entityId: document.documentId, message: `Loaded document ${document.documentId}.`, data };
+  }
+  // Export (BI-4865EB4D): the version as a .docx / .odt / .pdf file.
+  const { documentExportFailureMessage, exportDocumentVersion, isDocumentExportFormat } = await import("@/lib/documents/document-office-export");
+  if (!isDocumentExportFormat(exportFormat)) {
+    return { success: false, message: "exportFormat must be docx, odt or pdf.", error: "exportFormat must be docx, odt or pdf." };
+  }
+  const version = document.currentVersion?.version ?? null;
+  const exported = await exportDocumentVersion({ documentId: document.documentId, version, format: exportFormat, viewer });
+  if (!exported.ok) {
+    const message = documentExportFailureMessage(exported.reason);
+    data["export"] = { format: exportFormat, status: "failed", reason: exported.reason, message };
+    return { success: true, entityId: document.documentId, message: `Loaded document ${document.documentId}. ${message}`, data };
+  }
+  const { bytes, mimeType, filename } = exported.data;
+  const inline = bytes.byteLength <= DOC_LOAD_EXPORT_INLINE_LIMIT_BYTES;
+  data["export"] = {
+    format: exportFormat,
+    status: "exported",
+    version: exported.data.version,
+    filename,
+    mimeType,
+    sizeBytes: bytes.byteLength,
+    downloadPath: `/api/documents/${encodeURIComponent(document.documentId)}/content?version=${exported.data.version}&export=${exportFormat}`,
+    ...(inline ? { contentBase64: bytes.toString("base64") } : {}),
+  };
+  return {
+    success: true,
+    entityId: document.documentId,
+    message: `Loaded document ${document.documentId} and exported v${exported.data.version} as ${filename}.`,
+    data,
+  };
+}
+
+async function docSearch(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { searchManagedDocuments } = await import("@/lib/documents/document-store");
   const documents = await searchManagedDocuments({
+    viewer: await documentViewerFor(userId),
     query: optionalString(params["query"]),
     mode: typeof params["mode"] === "string" ? params["mode"] as "metadata" | "full-text" | "semantic" | "hybrid" : "hybrid",
     currentState: optionalString(params["state"]),
@@ -264,7 +497,7 @@ async function docSearch(params: Record<string, unknown>): Promise<ToolResult> {
   return {
     success: true,
     message: summary,
-    data: { results: documents as unknown as Record<string, unknown>[] },
+    data: { results: documents.map(documentToolProjection) },
   };
 }
 
@@ -282,6 +515,7 @@ async function docLink(
     refType: String(params["refType"] ?? ""),
     anchor: optionalString(params["anchor"]),
     actorPrincipalId,
+    viewer: await documentViewerFor(userId),
   });
   return {
     success: true,
@@ -291,13 +525,13 @@ async function docLink(
   };
 }
 
-async function docVersionList(params: Record<string, unknown>): Promise<ToolResult> {
+async function docVersionList(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { listManagedDocumentVersions } = await import("@/lib/documents/document-store");
-  const versions = await listManagedDocumentVersions(String(params["documentId"] ?? ""));
+  const versions = await listManagedDocumentVersions(String(params["documentId"] ?? ""), await documentViewerFor(userId));
   return {
     success: true,
     message: versions.length === 0 ? "No versions found." : `Found ${versions.length} document version${versions.length === 1 ? "" : "s"}.`,
-    data: { versions: versions as unknown as Record<string, unknown>[] },
+    data: { versions: versions.map(({ contentText: _contentText, ...metadata }) => metadata) },
   };
 }
 
@@ -314,18 +548,19 @@ async function docStateChange(
     reason: optionalString(params["reason"]),
     toolExecutionId: optionalString(params["toolExecutionId"]),
     actorPrincipalId,
+    viewer: await documentViewerFor(userId),
   });
   return {
     success: true,
     entityId: document.documentId,
     message: `Document ${document.documentId} moved to ${document.currentState}.`,
-    data: { document: document as unknown as Record<string, unknown> },
+    data: { document: documentToolProjection(document) },
   };
 }
 
-async function docListReferences(params: Record<string, unknown>): Promise<ToolResult> {
+async function docListReferences(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { listManagedDocumentReferences } = await import("@/lib/documents/document-store");
-  const references = await listManagedDocumentReferences(String(params["documentId"] ?? ""));
+  const references = await listManagedDocumentReferences(String(params["documentId"] ?? ""), await documentViewerFor(userId));
   return {
     success: true,
     message: `Document references loaded for ${String(params["documentId"] ?? "")}.`,
@@ -338,14 +573,18 @@ export const documentPack: ToolPack = {
   definitions,
   handlers: {
     doc_save: (params, userId, context) => docSave(params, userId, context),
-    doc_load: (params) => docLoad(params),
-    doc_search: (params) => docSearch(params),
+    doc_load: (params, userId) => docLoad(params, userId),
+    doc_search: (params, userId) => docSearch(params, userId),
     doc_link: (params, userId, context) => docLink(params, userId, context),
-    doc_version_list: (params) => docVersionList(params),
+    doc_version_list: (params, userId) => docVersionList(params, userId),
     doc_state_change: (params, userId, context) => docStateChange(params, userId, context),
-    doc_list_references: (params) => docListReferences(params),
+    doc_list_references: (params, userId) => docListReferences(params, userId),
+    create_presentation: (params, userId, context) => createPresentationTool(params, userId, context),
+    ...withOutlineReferenceCheck(documentFamilyToolHandlers(resolveDocumentActorPrincipalId)),
   },
   grants: {
+    create_presentation: ["document_write"],
+    ...DOCUMENT_FAMILY_TOOL_GRANTS,
     doc_save: ["document_write", "registry_write"],
     doc_load: ["document_read", "registry_read"],
     doc_search: ["document_read", "registry_read"],

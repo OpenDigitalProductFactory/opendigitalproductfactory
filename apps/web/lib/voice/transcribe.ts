@@ -31,7 +31,8 @@
 
 import { prisma } from "@dpf/db";
 
-import { callProvider, type InferenceResult, type ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { callProvider, type InferenceResult } from "@/lib/inference/ai-inference";
 import type { RoutedExecutionPlan } from "@/lib/routing/recipe-types";
 
 import { classifyBiasPrompt } from "./bias-classification-gate";

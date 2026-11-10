@@ -20,7 +20,29 @@
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 
-export type CorrectiveFailureSource = "build-failure" | "self-upgrade-failure";
+import { composeIntakeBody, recurringFailureOutcome } from "@/lib/backlog/intake-outcome";
+
+/**
+ * Every source this module may write.
+ *
+ * A VALUE, not a bare type union, so a guard can check it at runtime against
+ * the database's own closed set (BI-4C6934CF). It was a type-only union, and
+ * `data-growth` was added here without being added to the
+ * `BacklogItem_source_closed_set` CHECK constraint. The type compiled, mocked
+ * tests passed, and every real insert failed with Postgres 23514 — swallowed by
+ * this module's own best-effort catch. Eleven nights of detected findings were
+ * filed nowhere. `backlog-source-closed-set.test.ts` now fails if these two
+ * vocabularies drift apart again.
+ */
+export const CORRECTIVE_FAILURE_SOURCES = [
+  "build-failure",
+  "self-upgrade-failure",
+  // EP-A33A5C61 slice 5: a growth / payload-anatomy finding that persisted for
+  // PERSISTENT_NIGHTS consecutive steward samples (lib/ea/table-growth.ts).
+  "data-growth",
+] as const;
+
+export type CorrectiveFailureSource = (typeof CORRECTIVE_FAILURE_SOURCES)[number];
 
 export type CorrectiveFailureInput = {
   source: CorrectiveFailureSource;
@@ -63,6 +85,19 @@ function correctiveRecoveryActivityId(backlogItemId: string, runId: string): str
   return `recovery_${digest}`;
 }
 
+/** What will be true once a captured failure is fixed (BI-458CCA8D). */
+export function correctiveFailureOutcome(source: CorrectiveFailureSource, title: string): string {
+  const what = title.trim().slice(0, 200);
+  switch (source) {
+    case "build-failure":
+      return recurringFailureOutcome(`The Build Studio build failure "${what}"`);
+    case "self-upgrade-failure":
+      return recurringFailureOutcome(`The self-upgrade failure "${what}"`);
+    case "data-growth":
+      return `The growth behind "${what}" is back within its expected bounds, and the nightly steward stops reporting it.`;
+  }
+}
+
 export async function captureCorrectiveFailureBI(
   input: CorrectiveFailureInput,
 ): Promise<CorrectiveCaptureResult> {
@@ -99,7 +134,11 @@ export async function captureCorrectiveFailureBI(
         submittedById: input.submittedById ?? null,
         agentId: input.agentId ?? null,
         lastSeenAt: new Date(),
-        body: `failureFingerprint: ${fingerprint}\n${input.body}`,
+        // BI-458CCA8D: the captured failure is done when it stops recurring.
+        body: composeIntakeBody({
+          outcome: correctiveFailureOutcome(input.source, input.title),
+          body: `failureFingerprint: ${fingerprint}\n${input.body}`,
+        }),
       },
       select: { itemId: true },
     });

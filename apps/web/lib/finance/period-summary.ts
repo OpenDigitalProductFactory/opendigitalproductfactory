@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { orgCurrencyFromSettings } from "@/lib/org-locale/org-locale";
 
 export type FinancePeriodPreset =
   | "month-to-date"
@@ -208,6 +209,7 @@ export async function getFinancePeriodSummary(
     }),
     prisma.orgSettings.findFirst(),
   ]);
+  const baseCurrency = orgCurrencyFromSettings(orgSettings);
 
   const income: FinancePeriodComponent = {
     total: toNumber(invoicesPaid._sum.totalAmount),
@@ -255,14 +257,14 @@ export async function getFinancePeriodSummary(
   const receivablesAmount = toNumber(receivablesPending._sum.amountDue);
   if (receivablesPending._count > 0) {
     gaps.push(
-      `${receivablesPending._count} invoice(s) issued in this period are still outstanding (${receivablesAmount.toFixed(2)} ${orgSettings?.baseCurrency ?? "GBP"} not yet collected). Income only counts payments received.`,
+      `${receivablesPending._count} invoice(s) issued in this period are still outstanding (${receivablesAmount.toFixed(2)} ${baseCurrency} not yet collected). Income only counts payments received.`,
     );
   }
 
   const payablesAmount = toNumber(payablesPending._sum.amountDue);
   if (payablesPending._count > 0) {
     gaps.push(
-      `${payablesPending._count} bill(s) issued in this period are still unpaid (${payablesAmount.toFixed(2)} ${orgSettings?.baseCurrency ?? "GBP"} not yet disbursed). Expenses only count payments made.`,
+      `${payablesPending._count} bill(s) issued in this period are still unpaid (${payablesAmount.toFixed(2)} ${baseCurrency} not yet disbursed). Expenses only count payments made.`,
     );
   }
 
@@ -292,7 +294,7 @@ export async function getFinancePeriodSummary(
       start: window.start.toISOString(),
       end: window.end.toISOString(),
     },
-    currency: orgSettings?.baseCurrency ?? "GBP",
+    currency: baseCurrency,
     income,
     expenses: {
       total: expensesTotal,

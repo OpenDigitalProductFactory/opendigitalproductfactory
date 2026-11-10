@@ -77,6 +77,13 @@ export const FEDERATION_OPERATOR_PRINCIPAL_KIND = "federated-operator";
 export const FEDERATION_PEER_ALIAS_TYPE = "federated-peer";
 export const FEDERATION_OPERATOR_ALIAS_TYPE = "federated-operator";
 
+/** The canonical principalId of the federated-peer Principal a link enrols for
+ *  its peer. One convention, two callers: enrolment mints it, work-sync reads it
+ *  as the accountable owner of a mirrored deferral (BI-9DA5F179). */
+export function federationPeerPrincipalId(linkId: string): string {
+  return `principal_${linkId}`;
+}
+
 export const FEDERATION_LINK_TOKEN_PREFIX = TOKEN_PREFIXES.federationLink;
 export const FEDERATION_BOOTSTRAP_TOKEN_PREFIX = TOKEN_PREFIXES.federationBootstrap;
 

@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // prisma is used by several handlers; stub the surfaces the delegation tests hit.
 const db = vi.hoisted(() => ({
   employeeProfile: { findUnique: vi.fn() },
+  agentThread: { findFirst: vi.fn() },
+  backlogItem: { findMany: vi.fn() },
   feedbackNote: { create: vi.fn() },
-  improvementProposal: { create: vi.fn(), update: vi.fn() },
+  improvementProposal: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
   agentMessage: { findMany: vi.fn() },
+  $executeRaw: vi.fn(),
+  $transaction: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 
@@ -33,6 +37,10 @@ import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 const EXPECTED_TOOLS = [
   "assess_contribution",
   "contribute_to_hive",
+  // BI-1281A164: the findings path. contribute_to_hive needs an active build
+  // and its diff, so a knowledge finding raised outside Build Studio had no way
+  // to leave the install at all.
+  "contribute_finding_to_hive",
   "submit_feedback",
   "propose_improvement",
   "propose_skill_improvement",
@@ -40,10 +48,18 @@ const EXPECTED_TOOLS = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.agentThread.findFirst.mockResolvedValue({ id: "THR-1" });
+  db.backlogItem.findMany.mockResolvedValue([]);
+  db.improvementProposal.findFirst.mockResolvedValue(null);
+  db.improvementProposal.findUnique.mockImplementation(async () => {
+    const value = await db.improvementProposal.create.mock.results.at(-1)?.value;
+    return value ? { status: "proposed", category: "performance", backlogItemId: null, ...value } : null;
+  });
+  db.$transaction.mockImplementation(async (work: (tx: typeof db) => Promise<unknown>) => work(db));
 });
 
 describe("contribution-hive pack — registration", () => {
-  it("exposes exactly the five contribution & hive tools with a handler each", () => {
+  it("exposes exactly the six contribution & hive tools with a handler each", () => {
     expect(contributionHivePack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(contributionHivePack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -156,8 +172,44 @@ describe("contribution-hive pack — handler behavior (delegation preserved)", (
     );
     expect(res.success).toBe(true);
     expect(res.entityId).toBe("IP-ABCDE");
-    expect(res.message).toContain("IMP-1");
+    expect(res.data?.backlogItemId).toBe("IMP-1");
     expect(backlogSvc.ingestBacklogItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves only explicit learning evidence without reading conversation messages", async () => {
+    db.agentMessage.findMany.mockResolvedValue([{ role: "user", content: "Private unrelated conversation" }]);
+    db.improvementProposal.create.mockResolvedValue({ proposalId: "IP-EXPLICIT", title: "Learning", description: "Submitted finding", observedFriction: "Slow read", severity: "medium" });
+    backlogSvc.ingestBacklogItem.mockResolvedValue({ itemId: "IMP-EXPLICIT" });
+    await contributionHivePack.handlers.propose_improvement(
+      { title: "Learning", description: "Submitted finding", observedFriction: "Slow read", category: "performance" },
+      "u1", { agentId: "AGT-7", routeContext: "/build", threadId: "THR-1" },
+    );
+    expect(db.agentMessage.findMany).not.toHaveBeenCalled();
+    expect(db.improvementProposal.create.mock.calls[0][0].data).toMatchObject({ description: "Submitted finding", observedFriction: "Slow read", conversationExcerpt: null });
+  });
+
+  it("reuses the same pending scoped draft without repeating completed intake", async () => {
+    const proposal = { proposalId: "IP-REPEAT", title: "Learning", description: "Submitted finding", observedFriction: null, category: "performance", severity: "medium", status: "proposed", backlogItemId: "IMP-REPEAT" };
+    db.improvementProposal.findFirst.mockResolvedValue(proposal);
+    db.improvementProposal.create.mockResolvedValue(proposal);
+    db.agentMessage.findMany.mockResolvedValue([]);
+    backlogSvc.ingestBacklogItem.mockResolvedValue({ itemId: "IMP-REPEAT" });
+    const first = await contributionHivePack.handlers.propose_improvement({ title: "Learning", description: "Submitted finding", category: "performance" }, "u1", { agentId: "AGT-7", routeContext: "/build", threadId: "THR-1" });
+    const repeat = await contributionHivePack.handlers.propose_improvement({ title: "Learning", description: "Submitted finding", category: "performance" }, "u1", { agentId: "AGT-7", routeContext: "/build", threadId: "THR-1" });
+    expect(first.entityId).toBe("IP-REPEAT");
+    expect(repeat.entityId).toBe("IP-REPEAT");
+    expect(db.improvementProposal.create).not.toHaveBeenCalled();
+    expect(backlogSvc.ingestBacklogItem).not.toHaveBeenCalled();
+  });
+
+  it("refuses foreign or stale thread context before any draft or transcript access", async () => {
+    db.agentThread.findFirst.mockResolvedValue(null);
+    db.agentMessage.findMany.mockResolvedValue([]);
+    const result = await contributionHivePack.handlers.propose_improvement({ title: "Learning", description: "Submitted finding", category: "performance" }, "u1", { agentId: "AGT-7", routeContext: "/build", threadId: "FOREIGN" });
+    expect(result.success).toBe(false);
+    expect(db.improvementProposal.create).not.toHaveBeenCalled();
+    expect(db.agentMessage.findMany).not.toHaveBeenCalled();
+    expect(backlogSvc.ingestBacklogItem).not.toHaveBeenCalled();
   });
 
   it("does NOT auto-file a low-severity [reference-doc] proposal (BI-18685188 gate)", async () => {
@@ -215,6 +267,6 @@ describe("contribution-hive pack — handler behavior (delegation preserved)", (
 
     expect(res.success).toBe(true);
     expect(backlogSvc.ingestBacklogItem).toHaveBeenCalledTimes(1);
-    expect(res.message).toContain("IMP-9");
+    expect(res.data?.backlogItemId).toBe("IMP-9");
   });
 });

@@ -1,0 +1,50 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "ProductObjective.sourceKind / ProductObjective.sourceRef, written by createProductObjective when an origin is given (apps/web/lib/product-management/outcomes-repository.ts), called by designatePlatformWorkProduct and the epic-objective derivation in apps/web/lib/product-management/delivered-work-outcomes-repository.ts",
+    "Read by recordDeliveredWorkOutcome (same module) on every done transition through completeBacklogItemTransition (apps/web/lib/backlog/initiative-readiness/backlog-terminal-transition.ts)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: an origin label (\"epic\" or \"platform-work\") and an epic id or Product row id",
+    "dataSubjectRights": "Not applicable; no personal data.",
+    "reviewDisposition": "Origin metadata on an existing organization-owned objective row. No new personal content."
+  },
+  "migration": {
+    "name": "20261028100000_product_objective_origin",
+    "backfill": "None. ProductObjective has 0 rows on the live install (read-only SQL, 2026-10-28); every existing row on any install gets NULL origin, which marks an objective a person defined. NULLs are distinct under the unique index, so existing rows never collide.",
+    "rollback": "Forward-only and additive. Older code neither reads nor writes the columns; rolling the code back leaves derived objectives as ordinary objectives."
+  },
+  "tests": [
+    "apps/web/lib/product-management/delivered-work-outcomes-repository.test.ts",
+    "apps/web/lib/product-management/delivered-work-outcomes.test.ts",
+    "apps/web/lib/product-management/outcomes-repository.test.ts",
+    "apps/web/lib/backlog/initiative-readiness/delivered-outcome-recording.test.ts",
+    "apps/web/lib/mcp/packs/product-outcomes-pack-designation.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:product-objective",
+      "prismaModel": "ProductObjective",
+      "lifecycleDisposition": "Existing model; the columns follow the objective row and its archive lifecycle.",
+      "fields": [
+        {
+          "fieldId": "data:product-objective#sourceKind",
+          "resolution": "governed",
+          "reason": "Where the platform derived the objective from: \"epic\" or \"platform-work\" (the standing objective that designates the business Product platform work serves). Null for objectives a person defines.",
+          "provenance": "BI-42399593",
+          "flags": []
+        },
+        {
+          "fieldId": "data:product-objective#sourceRef",
+          "resolution": "governed",
+          "reason": "The epic id or the designated Product row id; unique with organizationId and sourceKind so a derivation happens once.",
+          "provenance": "BI-42399593",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

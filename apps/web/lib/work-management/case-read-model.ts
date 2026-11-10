@@ -51,9 +51,19 @@ export interface WorkCaseReadModelEvidenceInput {
   summary: string;
 }
 
+export interface WorkCaseReadModelCoworkerEngagementInput {
+  engagementId: string;
+  requestedOutcome: string;
+  status: string;
+  priority?: string | null;
+  providerDisplayName?: string | null;
+  workCapsuleId?: string | null;
+}
+
 export interface BuildWorkCaseReadModelInput {
   source: WorkCaseReadModelSourceInput;
   workItem?: WorkCaseReadModelWorkItemInput | null;
+  coworkerEngagement?: WorkCaseReadModelCoworkerEngagementInput | null;
   capsule?: WorkCaseReadModelCapsuleInput | null;
   runtimeVerification?: WorkCaseReadModelVerificationInput | null;
   capsules?: readonly WorkCaseReadModelCapsuleInput[];
@@ -124,6 +134,19 @@ function sourceRefsForInput(input: BuildWorkCaseReadModelInput): WorkCaseSourceR
       status: input.workItem.status,
     });
   }
+  if (input.coworkerEngagement) {
+    refs.push({
+      kind: "coworker-engagement",
+      id: input.coworkerEngagement.engagementId,
+      status: input.coworkerEngagement.status,
+    });
+    if (input.coworkerEngagement.workCapsuleId) {
+      refs.push({
+        kind: "work-capsule",
+        id: input.coworkerEngagement.workCapsuleId,
+      });
+    }
+  }
   if (input.capsule) {
     refs.push({
       kind: "work-capsule",
@@ -156,6 +179,12 @@ export function buildWorkCaseSummary(
     workItem: input.workItem
       ? { itemId: input.workItem.itemId, status: input.workItem.status }
       : null,
+    coworkerEngagement: input.coworkerEngagement
+      ? {
+          engagementId: input.coworkerEngagement.engagementId,
+          status: input.coworkerEngagement.status,
+        }
+      : null,
     capsule: input.capsule ?? input.capsules?.[0] ?? null,
     decision: primaryDecision ?? null,
     runtimeVerification: input.runtimeVerification ?? null,
@@ -164,18 +193,36 @@ export function buildWorkCaseSummary(
 
   return {
     caseId: buildCaseId(input),
-    title: input.workItem?.title ?? `${sourceEntry?.displayLabel ?? input.source.sourceType} ${input.source.sourceId}`,
+    title: input.workItem?.title
+      ?? input.coworkerEngagement?.requestedOutcome
+      ?? `${sourceEntry?.displayLabel ?? input.source.sourceType} ${input.source.sourceId}`,
     sourceLabel: sourceEntry?.displayLabel ?? input.source.sourceType,
     state: projection.state,
     stateReason: projection.reason,
     a2aStatus: projection.a2aStatus,
     terminal: projection.terminal,
     nextAction: nextActionForState(projection.state),
-    urgency: input.workItem?.urgency,
+    urgency: input.workItem?.urgency ?? input.coworkerEngagement?.priority ?? undefined,
     dueAt: iso(input.workItem?.dueAt),
     assignedToUserId: input.workItem?.assignedToUserId ?? null,
     attention: attentionForProjection(projection),
     sourceRefs: sourceRefsForInput(input),
+  };
+}
+
+function coworkerEngagementTimelineEvent(
+  engagement: WorkCaseReadModelCoworkerEngagementInput,
+): WorkCaseTimelineEvent {
+  return {
+    eventId: `coworker-engagement:${engagement.engagementId}`,
+    label: engagement.providerDisplayName
+      ? `${engagement.providerDisplayName}: ${engagement.requestedOutcome}`
+      : engagement.requestedOutcome,
+    sourceRef: {
+      kind: "coworker-engagement",
+      id: engagement.engagementId,
+      status: engagement.status,
+    },
   };
 }
 
@@ -233,6 +280,7 @@ export function buildWorkCaseDetail(
     decisions,
     evidence,
     timeline: [
+      ...(input.coworkerEngagement ? [coworkerEngagementTimelineEvent(input.coworkerEngagement)] : []),
       ...capsules.map(capsuleTimelineEvent),
       ...decisions.map(decisionTimelineEvent),
       ...evidence.map(evidenceTimelineEvent),

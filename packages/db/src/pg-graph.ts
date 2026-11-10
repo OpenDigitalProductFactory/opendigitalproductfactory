@@ -1,17 +1,13 @@
-// BET-5 (BI-A1E864A5): Postgres graph traversal, a drop-in replacement for neo4j-graph.ts.
-// Reimplements the same exported surface (GraphNode, GraphEdge, ImpactResult, PruneResult,
-// LayeredDependency, Neo4jTopologyScope, getDownstreamImpact, getUpstreamDependencies,
-// getProductsByPortfolio, getProductsByTaxonomySubtree, shortestPath, pruneStaleInfraCIs,
-// getLayeredDependencyStack, getNetworkTopologyAtLayer, getNetworkTopologyAtLayerForScope,
-// getInfraCIs, getNeighbours) over the `graph_node` / `graph_edge` tables (see the
-// 20260714120000_bet5_graph_mirror migration) so Neo4j can be retired with an import swap.
+// Postgres graph traversal over the graph mirror (`graph_node` / `graph_edge`, created
+// by the 20260714120000_bet5_graph_mirror migration). Exports GraphNode, GraphEdge,
+// ImpactResult, PruneResult, LayeredDependency, GraphTopologyScope, the impact and
+// dependency traversals, shortestPath, pruneStaleInfraCIs, the layered and network
+// topology reads, getInfraCIs and getNeighbours.
 //
-// The Cypher traversals become `WITH RECURSIVE` CTEs. A node's universal key
+// Traversals are `WITH RECURSIVE` CTEs. A node's universal key
 // = coalesce(productId, ciId, nodeId, slug) — that is `graph_node.key`. `labels`
-// is the old Neo4j labels array; `props` carries name/ciId/productId/nodeId/slug/
+// is the node's label array; `props` carries name/ciId/productId/nodeId/slug/
 // decommissionedAt/osiLayer/etc. Edges are directed rows in `graph_edge`.
-//
-// NOT YET WIRED: callers still import from ./neo4j-graph until the cutover repoints them.
 
 import { prisma } from "./client";
 
@@ -33,15 +29,12 @@ export const IMPACT_RELATIONSHIP_TYPES = [
   "PEER_OF",
 ] as const;
 
-/** Cypher relationship filter fragment, e.g. ":DEPENDS_ON|HOSTS|RUNS_ON|..." (parity with neo4j-graph). */
-export const IMPACT_REL_FILTER = IMPACT_RELATIONSHIP_TYPES.map((t) => t).join("|");
-
 /** Mutable copy for binding as a Postgres text[] param (`= ANY($1::text[])`). */
 function impactRelParam(): string[] {
   return [...IMPACT_RELATIONSHIP_TYPES];
 }
 
-// ─── Types (identical to neo4j-graph.ts) ─────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 export type GraphNode = {
   id: string;       // the unique key (productId, ciId, nodeId, slug)
@@ -64,10 +57,9 @@ export type ImpactResult = {
 };
 
 // ─── Row → GraphNode mapping ─────────────────────────────────────────────────
-// Mirrors nodeFromRecord in neo4j-graph.ts: primary label = labels[0] (else
-// "Unknown"); id = props coalesce, falling back to the row key (which itself is
-// coalesce(productId,ciId,nodeId,slug), so it equals the Neo4j String(identity)
-// fallback in practice); name = props.name ?? id.
+// Primary label = labels[0] (else "Unknown"); id = props coalesce, falling back
+// to the row key (which itself is coalesce(productId,ciId,nodeId,slug)); name =
+// props.name ?? id.
 
 type NodeRow = { key: string; labels: string[]; props: Record<string, unknown> };
 
@@ -91,7 +83,7 @@ export function nodeFromRow(row: NodeRow): GraphNode {
 }
 
 // ─── Reachability CTE builder ────────────────────────────────────────────────
-// Shared by getDownstreamImpact (reverse: Cypher `origin<-[*]-affected`, walk
+// Shared by getDownstreamImpact (reverse: who depends on origin, walk
 // dst→src) and getUpstreamDependencies (forward: `origin-[*]->dep`, walk
 // src→dst). Params: $1 = rel-type text[], $2 = origin key. `maxDepth` is the
 // only interpolated value and is truncated to a positive integer first.
@@ -409,7 +401,7 @@ export async function getNetworkTopologyAtLayer(osiLayer: number): Promise<{
 }
 
 /** Topology scope context. Mirrors DiscoveryScopeContext at the graph layer. */
-export type Neo4jTopologyScope = {
+export type GraphTopologyScope = {
   scopeKey: string;
   customerAccountId?: string | null;
   customerSiteId?: string | null;
@@ -421,7 +413,7 @@ export type Neo4jTopologyScope = {
  */
 export async function getNetworkTopologyAtLayerForScope(
   osiLayer: number,
-  scope: Neo4jTopologyScope,
+  scope: GraphTopologyScope,
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
   const layerStr = String(osiLayer);
   const [nodeRows, edgeRows] = await Promise.all([
@@ -461,7 +453,7 @@ export async function getNetworkTopologyAtLayerForScope(
 
 /**
  * All InfraCI nodes, optionally filtered by ciType.
- * NOTE: faithful to neo4j-graph.ts — this does NOT exclude decommissioned nodes.
+ * NOTE: this does NOT exclude decommissioned nodes.
  */
 export async function getInfraCIs(ciType?: string): Promise<GraphNode[]> {
   const rows = (ciType
@@ -512,8 +504,7 @@ export async function getNeighbours(nodeKey: string): Promise<{
 
 /**
  * All InfraCI→InfraCI edges (both endpoints labeled InfraCI), returning endpoint
- * keys + relationship type. Replaces the Neo4j `MATCH (a:InfraCI)-[r]->(b:InfraCI)`
- * reads in the graph server actions. Optional filters mirror the former Cypher variants:
+ * keys + relationship type, for the graph server actions. Optional filters:
  *  - relTypes: restrict to these relationship types (e.g. HOSTS/RUNS_ON/MEMBER_OF)
  *  - osiLayer: keep edges where either endpoint sits on this OSI layer
  */
@@ -548,8 +539,7 @@ export async function getInfraEdges(opts?: {
 }
 
 /**
- * All edges whose BOTH endpoints are in the given key set — the Postgres form of the
- * Neo4j `MATCH (a)-[r]->(b) WHERE coalesce(a.ciId,a.productId) IN $ids ...` reads.
+ * All edges whose BOTH endpoints are in the given key set.
  * graph_node.key already IS the coalesced business key, so this is a straight src/dst
  * membership test. Empty input → no rows (and no query).
  */
@@ -566,8 +556,7 @@ export async function getEdgesAmong(
 }
 
 /**
- * Remove a node and all edges touching it — the Postgres form of Neo4j
- * `MATCH (n {key}) DETACH DELETE n`. Used when a projected entity is deleted.
+ * Remove a node and all edges touching it. Used when a projected entity is deleted.
  */
 export async function deleteGraphNode(key: string): Promise<void> {
   await prisma.$executeRawUnsafe(
@@ -578,9 +567,8 @@ export async function deleteGraphNode(key: string): Promise<void> {
 }
 
 /**
- * Delete every node carrying `label` plus all edges touching those nodes — the
- * Postgres form of Neo4j `MATCH (n:Label) DETACH DELETE n`. Used by the graph
- * rebuild scripts before re-projecting from Postgres.
+ * Delete every node carrying `label` plus all edges touching those nodes. Used by
+ * the graph rebuild scripts before re-projecting from Postgres.
  */
 export async function clearGraphByLabel(label: string): Promise<void> {
   await prisma.$executeRawUnsafe(

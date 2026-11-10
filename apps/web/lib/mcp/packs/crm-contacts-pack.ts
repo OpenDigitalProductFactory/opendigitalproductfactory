@@ -3,7 +3,7 @@
 // model but unreachable — no tool existed, so the coworker parked real people
 // ("Ian Pruden — email to be added") in free-text account notes.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -45,7 +45,7 @@ async function buildCreatedContactEnrichmentOffer(
 ) {
   try {
     const { buildEnrichmentOfferForIntake } = await import("@/lib/crm/enrichment/enrichment-offer");
-    const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
+    const { resolveProactivityPlan } = await import("@dpf/validators/workroom-policy/proactivity-resolver");
     const plan = resolveProactivityPlan({
       activityFamily: "crm-record-enrichment",
       agentId: context?.agentId ?? null,

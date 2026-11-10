@@ -73,7 +73,7 @@ describe("evaluateBusinessAnalysisWatchTask", () => {
       organizationId: "org-old",
       taskConfig: taskConfig(),
     }, {
-      loadPerformance: async () => ({ status: "not-configured", reason: "ambiguous", asOf: null, metricValues: [], source: "business-performance-read-model" }),
+      loadPerformance: async () => ({ status: "not-configured", reason: "ambiguous", asOf: null, metricValues: [], source: "business-performance-read-model", applicable: true }),
     })).rejects.toThrow(/organization/i);
   });
 });

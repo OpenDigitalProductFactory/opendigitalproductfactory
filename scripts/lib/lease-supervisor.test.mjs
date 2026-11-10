@@ -2,14 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createRetryableRelease,
+  admittedLeaseTtlMs,
+  authoritySafetyMarginMs,
   heartbeatIntervalMs,
+  isAuthoritativeRefusal,
   superviseLeaseRun,
+  uncertainRetryDelayMs,
 } from "./lease-supervisor.mjs";
 
 function deferred() {
-  let resolve;
-  const promise = new Promise((done) => { resolve = done; });
-  return { promise, resolve };
+  let resolve, reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 test("heartbeat cadence is no greater than one third of the lease TTL", () => {
@@ -81,7 +86,7 @@ test("a thrown command still cancels heartbeats and releases once", async () => 
   assert.equal(releases, 1);
 });
 
-test("transient renewal uncertainty retries without immediately killing a healthy child", async () => {
+test("a single uncertain renewal does not kill a healthy child", async () => {
   const child = deferred();
   const events = [];
   const deadlines = [];
@@ -208,4 +213,415 @@ test("a fence termination error is observed without leaking an unhandled timer r
     ),
     true,
   );
+});
+
+// BI-ECAE03F7 — the supervisor must recover from a renewal it never got an
+// answer to. The test above drives its own second attempt by hand, so it passed
+// against a supervisor that scheduled no retry at all. These do not.
+
+test("an uncertain renewal schedules its own retry, without the caller driving it", async () => {
+  const child = deferred();
+  const events = [];
+  const retries = [];
+  let renewAttempt = 0;
+  let heartbeatCallback;
+
+  const resultPromise = superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: () => child.promise,
+    renew: async () => {
+      renewAttempt += 1;
+      if (renewAttempt === 1) throw new Error("ETIMEDOUT");
+      return { success: true, data: { lease: { expiresAt: new Date(240_000).toISOString() } } };
+    },
+    terminate: async () => { throw new Error("must not terminate"); },
+    release: async () => {},
+    schedule: (callback) => { heartbeatCallback = callback; return "heartbeat"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    scheduleRetry: (callback, delayMs) => {
+      retries.push({ callback, delayMs });
+      return `retry-${retries.length}`;
+    },
+    cancelRetry: () => {},
+    onEvent: (event) => events.push(event),
+  });
+
+  await heartbeatCallback();
+
+  // The supervisor -- not the test -- must have armed the next attempt.
+  assert.equal(retries.length, 1, "an uncertain renewal armed no retry of its own");
+  assert.equal(retries[0].delayMs, uncertainRetryDelayMs(120_000, 1));
+  assert.equal(
+    events.some((event) => event.type === "heartbeat-retry-scheduled" && event.attempt === 1),
+    true,
+  );
+
+  // Firing the supervisor's own timer renews, with no further help from here.
+  await retries[0].callback();
+  assert.equal(renewAttempt, 2);
+  assert.equal(events.some((event) => event.type === "heartbeat-renewed"), true);
+
+  child.resolve({ status: 0 });
+  assert.equal((await resultPromise).status, "completed");
+});
+
+test("consecutive uncertainty backs off and stays inside the authority budget", async () => {
+  const child = deferred();
+  const retries = [];
+  let heartbeatCallback;
+
+  const resultPromise = superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: () => child.promise,
+    renew: async () => { throw new Error("ECONNRESET"); },
+    terminate: async () => {},
+    release: async () => {},
+    schedule: (callback) => { heartbeatCallback = callback; return "heartbeat"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    scheduleRetry: (callback, delayMs) => {
+      retries.push({ callback, delayMs });
+      return `retry-${retries.length}`;
+    },
+    cancelRetry: () => {},
+    onEvent: () => {},
+  });
+
+  await heartbeatCallback();
+  for (let i = 0; i < 5; i += 1) await retries.at(-1).callback();
+
+  assert.deepEqual(
+    retries.map((retry) => retry.delayMs),
+    [1_000, 2_000, 4_000, 8_000, 16_000, 32_000],
+  );
+  // Six attempts inside the ~115s the deadline allows, where the old shape
+  // spent the whole budget on two.
+  const spentMs = retries.reduce((total, retry) => total + retry.delayMs, 0);
+  assert.ok(spentMs < 120_000 - authoritySafetyMarginMs(120_000), `backoff overran the budget: ${spentMs}ms`);
+
+  child.resolve({ status: 0 });
+  await resultPromise;
+});
+
+test("a renewal that REFUSES is authoritative and is never retried", async () => {
+  const child = deferred();
+  const events = [];
+  const retries = [];
+  let heartbeatCallback;
+
+  const resultPromise = superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: () => child.promise,
+    // Not a transport failure: the service answered, and the answer is no.
+    renew: async () => ({ success: false, error: "nonprod_lease_not_owner" }),
+    terminate: async () => { events.push({ type: "terminated" }); child.resolve({ status: 143 }); },
+    release: async () => {},
+    schedule: (callback) => { heartbeatCallback = callback; return "heartbeat"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    scheduleRetry: (callback, delayMs) => { retries.push({ callback, delayMs }); return "retry"; },
+    cancelRetry: () => {},
+    onEvent: (event) => events.push(event),
+  });
+
+  await heartbeatCallback();
+  const result = await resultPromise;
+
+  assert.equal(retries.length, 0, "a refused renewal must not be retried — another holder may exist");
+  assert.equal(result.status, "fenced");
+  assert.equal(result.reason, "nonprod_lease_not_owner");
+});
+
+test("a retry armed when the run ends is cancelled, not leaked", async () => {
+  const child = deferred();
+  const cancelled = [];
+  let heartbeatCallback;
+
+  const resultPromise = superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: () => child.promise,
+    renew: async () => { throw new Error("ETIMEDOUT"); },
+    terminate: async () => {},
+    release: async () => {},
+    schedule: (callback) => { heartbeatCallback = callback; return "heartbeat"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    scheduleRetry: () => "retry-timer",
+    cancelRetry: (timer) => cancelled.push(timer),
+    onEvent: () => {},
+  });
+
+  await heartbeatCallback();
+  child.resolve({ status: 0 });
+  await resultPromise;
+
+  assert.ok(cancelled.includes("retry-timer"), "the armed retry outlived the run");
+});
+
+test("the backoff is capped at the heartbeat interval and never zero", () => {
+  for (const ttlMs of [1_000, 30_000, 120_000, 600_000]) {
+    const intervalMs = Math.floor(ttlMs / 3);
+    for (let attempt = 1; attempt <= 10; attempt += 1) {
+      const delay = uncertainRetryDelayMs(ttlMs, attempt);
+      assert.ok(delay >= 1, `ttl ${ttlMs} attempt ${attempt} produced ${delay}`);
+      assert.ok(delay <= intervalMs, `ttl ${ttlMs} attempt ${attempt} exceeded the interval`);
+    }
+  }
+});
+
+// 2026-09-24: a passed gate lost its verdict. A quiescing portal or a server
+// that threw is "not now", not "the lease is gone", and a failed release must
+// not take the run's evidence with it.
+test("only a refusal that says the lease is gone is authoritative", () => {
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "lease_lost" }), true);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "nonprod_lease_not_owner" }), true);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "portal_quiescing" }), false);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "tool_threw" }), false);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "x", data: { retryable: true } }), false);
+  assert.equal(isAuthoritativeRefusal({ jsonrpc: "2.0", error: { code: -32000 } }), false);
+  assert.equal(isAuthoritativeRefusal({ success: true }), false);
+});
+
+test("a quiescing portal is retried inside the budget, not fenced", async () => {
+  const child = deferred();
+  const retries = [];
+  let heartbeatCallback;
+  const resultPromise = superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: () => child.promise,
+    renew: async () => ({ success: false, error: "portal_quiescing" }),
+    terminate: async () => { throw new Error("must not terminate"); },
+    release: async () => {},
+    schedule: (callback) => { heartbeatCallback = callback; return "heartbeat"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    scheduleRetry: (callback, delayMs) => { retries.push({ callback, delayMs }); return "retry"; },
+    cancelRetry: () => {},
+    onEvent: () => {},
+  });
+  await heartbeatCallback();
+  assert.equal(retries.length, 1);
+  child.resolve({ status: 0 });
+  const result = await resultPromise;
+  assert.equal(result.status, "completed");
+});
+
+test("a failed release is recorded and does not throw away the run's result", async () => {
+  const events = [];
+  const result = await superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: async () => ({ status: 0, verdict: "passed" }),
+    renew: async () => ({ success: true }),
+    terminate: async () => {},
+    release: async () => { throw new Error("release refused"); },
+    schedule: () => "heartbeat",
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    onEvent: (event) => events.push(event),
+  });
+  assert.equal(result.status, "completed");
+  assert.deepEqual(result.result, { status: 0, verdict: "passed" });
+  assert.ok(events.some((event) => event.type === "release-failed" && event.reason === "release refused"));
+});
+
+
+test("the cadence TTL is the authority the server granted, not the one requested (BI-E226C954)", () => {
+  const now = Date.parse("2026-10-01T14:34:00.000Z");
+  const granted = new Date(now + 120_000).toISOString();
+  assert.equal(admittedLeaseTtlMs(granted, 10 * 60_000, now), 120_000);
+  assert.equal(admittedLeaseTtlMs(undefined, 10 * 60_000, now), 10 * 60_000);
+  assert.equal(admittedLeaseTtlMs("not-a-date", 10 * 60_000, now), 10 * 60_000);
+  assert.equal(admittedLeaseTtlMs(new Date(now - 1_000).toISOString(), 10 * 60_000, now), 1);
+});
+
+test("a 2-minute grant heartbeats before its own authority deadline (BI-E226C954)", async () => {
+  const now = Date.parse("2026-10-01T14:34:00.000Z");
+  const expiresAt = new Date(now + 120_000).toISOString();
+  let intervalMs;
+  let deadlineMs;
+  const result = await superviseLeaseRun({
+    ttlMs: admittedLeaseTtlMs(expiresAt, 10 * 60_000, now),
+    expiresAt,
+    now: () => now,
+    run: async () => 0,
+    renew: async () => ({ success: true }),
+    terminate: async () => {},
+    release: async () => {},
+    schedule: (_callback, ms) => { intervalMs = ms; return "timer"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: (_callback, ms) => { deadlineMs = ms; return "deadline"; },
+    cancelDeadline: () => {},
+  });
+  assert.equal(result.status, "completed");
+  assert.ok(intervalMs < deadlineMs, `heartbeat every ${intervalMs} ms must land before the ${deadlineMs} ms deadline`);
+});
+
+
+test("failed release can retry while concurrent and completed calls are idempotent", async () => {
+  let calls = 0;
+  const pending = deferred();
+  const release = createRetryableRelease(async () => {
+    calls += 1;
+    if (calls === 1) throw new Error("network unavailable");
+    await pending.promise;
+  });
+  await assert.rejects(release(), /network unavailable/);
+  const first = release();
+  const second = release();
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  pending.resolve();
+  await Promise.all([first, second]);
+  await release();
+  assert.equal(calls, 2);
+});
+
+
+test("reservation observation stops heartbeat without claiming or executing release", async () => {
+  const events = [];
+  let releases = 0;
+  const observation = { status: "host-reservation", reservationState: "pending" };
+  const result = await superviseLeaseRun({ ttlMs: 60000,
+    run: async () => ({ status: 7 }), renew: async () => ({ success: true }), terminate: async () => {},
+    release: async () => { ++releases; }, observeReservation: async () => observation,
+    schedule: () => "timer", cancelSchedule: () => events.push({ type: "timer-cancelled" }),
+    onEvent: event => events.push(event),
+  });
+  assert.equal(result.result.status, 7);
+  assert.equal(releases, 0);
+  assert.deepEqual(events.map(e => e.type), ["started", "timer-cancelled", "reservation-observed"]);
+  assert.deepEqual(events.at(-1).observation, observation);
+});
+
+test("unavailable reservation observation preserves command outcome and redacts observer errors", async () => {
+  const events = [];
+  const result = await superviseLeaseRun({ ttlMs: 60000,
+    run: async () => ({ status: 0 }), renew: async () => ({ success: true }), terminate: async () => {},
+    release: async () => { throw new Error("must not request release"); },
+    observeReservation: async () => { throw new Error("private observer details"); },
+    schedule: () => "timer", cancelSchedule: () => {}, onEvent: event => events.push(event),
+  });
+  assert.equal(result.result.status, 0);
+  assert.equal(events.at(-1).type, "reservation-observation-unavailable");
+  assert.doesNotMatch(JSON.stringify(events), /private observer details/);
+  assert.ok(!events.some(e => e.type === "released"));
+});
+
+
+for (const outcome of ["success", "transport-error", "transient-refusal", "authority-refusal"]) {
+  test(`in-flight renewal ${outcome} cannot rearm timers or renew after finalization`, async () => {
+    const child = deferred();
+    const finalization = deferred();
+    let resolveRenew, rejectRenew, heartbeat;
+    const renewResult = new Promise((resolve, reject) => { resolveRenew = resolve; rejectRenew = reject; });
+    let renewals = 0, terminations = 0;
+    const retries = new Map(), deadlines = new Map(), oldCallbacks = [];
+    let sequence = 0;
+    const resultPromise = superviseLeaseRun({ ttlMs: 60000, now: () => 0,
+      run: () => child.promise,
+      renew: () => { ++renewals; return renewResult; },
+      terminate: async () => { ++terminations; },
+      observeReservation: async () => ({ reservationState: "pending" }),
+      schedule: fn => { heartbeat = fn; return "heartbeat"; },
+      cancelSchedule: () => finalization.resolve(),
+      scheduleRetry: fn => { const key = ++sequence; retries.set(key, fn); oldCallbacks.push(fn); return key; },
+      cancelRetry: key => retries.delete(key),
+      scheduleDeadline: fn => { const key = ++sequence; deadlines.set(key, fn); oldCallbacks.push(fn); return key; },
+      cancelDeadline: key => deadlines.delete(key),
+    });
+    const renewing = heartbeat();
+    child.resolve({ status: 0 });
+    await finalization.promise;
+    if (outcome === "transport-error") rejectRenew(new Error("temporary"));
+    else resolveRenew(outcome === "success" ? { success: true, data: { lease: { expiresAt: new Date(120000).toISOString() } } }
+      : { success: false, error: outcome === "authority-refusal" ? "lease_lost" : "portal_quiescing" });
+    await renewing;
+    assert.equal((await resultPromise).status, "completed");
+    assert.equal(retries.size, 0, "late completion must not leave a retry armed");
+    assert.equal(deadlines.size, 0, "late completion must not rearm the authority deadline");
+    await heartbeat();
+    for (const callback of oldCallbacks) await callback();
+    assert.equal(renewals, 1, "stale callbacks cannot issue another renewal");
+    assert.equal(terminations, 0, "late callbacks cannot terminate a completed command");
+  });
+}
+
+
+test("legacy in-flight authority refusal still fences before finalization settles", async () => {
+  const child = deferred(), closing = deferred(), renewal = deferred();
+  let heartbeat, terminations = 0;
+  const events = [];
+  const result = superviseLeaseRun({ ttlMs: 60000,
+    run: () => child.promise, renew: () => renewal.promise,
+    terminate: async () => { ++terminations; }, release: async () => {},
+    schedule: fn => { heartbeat = fn; return 1; }, cancelSchedule: () => closing.resolve(),
+    scheduleDeadline: () => 2, cancelDeadline: () => {},
+    onEvent: event => events.push(event),
+  });
+  const pending = heartbeat(); child.resolve({ status: 0 }); await closing.promise;
+  renewal.resolve({ success: false, error: "lease_terminal" });
+  await pending;
+  const outcome = await result;
+  assert.equal(outcome.status, "fenced");
+  assert.equal(outcome.reason, "lease_terminal");
+  assert.equal(terminations, 1);
+  assert.equal(events.filter(event => event.type === "heartbeat-lost").length, 1);
+});
+
+test("legacy authority deadline remains effective while final renewal is draining", async () => {
+  const child = deferred(), closing = deferred(), renewal = deferred();
+  let heartbeat, deadline, terminations = 0, cancelledDeadlines = 0;
+  const result = superviseLeaseRun({ ttlMs: 60000,
+    run: () => child.promise, renew: () => renewal.promise,
+    terminate: async () => { ++terminations; }, release: async () => {},
+    schedule: fn => { heartbeat = fn; return 1; }, cancelSchedule: () => closing.resolve(),
+    scheduleDeadline: fn => { deadline = fn; return 2; }, cancelDeadline: () => { ++cancelledDeadlines; },
+  });
+  const pending = heartbeat(); child.resolve({ status: 0 }); await closing.promise;
+  assert.equal(cancelledDeadlines, 0, "retain existing authority deadline while draining");
+  await deadline();
+  assert.equal(terminations, 1);
+  renewal.resolve({ success: true }); await pending;
+  const outcome = await result;
+  assert.equal(outcome.status, "fenced");
+  assert.equal(outcome.reason, "lease-authority-deadline");
+  await deadline();
+  assert.equal(terminations, 1, "no second fence after finalization");
+  assert.ok(cancelledDeadlines > 0);
+});
+
+
+test("legacy final authority refusal preserves the original thrown command error", async () => {
+  const child = deferred(), closing = deferred(), renewal = deferred();
+  const commandError = new Error("original command error");
+  let heartbeat;
+  const result = superviseLeaseRun({ ttlMs: 60000,
+    run: () => child.promise, renew: () => renewal.promise,
+    terminate: async () => {}, release: async () => {},
+    schedule: fn => { heartbeat = fn; return 1; }, cancelSchedule: () => closing.resolve(),
+    scheduleDeadline: () => 2, cancelDeadline: () => {},
+  });
+  const rejection = assert.rejects(result, error => error === commandError);
+  const pending = heartbeat(); child.reject(commandError); await closing.promise;
+  renewal.resolve({ success: false, error: "lease_terminal" });
+  await pending; await rejection;
 });

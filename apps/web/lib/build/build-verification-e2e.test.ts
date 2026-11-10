@@ -24,7 +24,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { checkPhaseGate } from "@/lib/explore/feature-build-types";
+import { checkPhaseGate } from "@/lib/explore/build-process-matrix";
 
 type UxStep = { step: string; passed: boolean; screenshotUrl: string | null; error: string | null };
 

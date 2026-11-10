@@ -2,7 +2,7 @@
 // Coworker-facing create/update of governed Policy rows as DRAFT for human review.
 // Publish remains a human lifecycle action on /compliance/policies.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import {
   generatePolicyId,

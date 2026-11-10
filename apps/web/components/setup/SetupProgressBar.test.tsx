@@ -2,17 +2,18 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SETUP_STEPS } from "@/lib/actions/setup-constants";
+import { visibleSetupSteps } from "@/lib/actions/setup-constants";
 import { SetupProgressBar } from "./SetupProgressBar";
+import { withMessages } from "@/test-support/with-messages";
 
 afterEach(cleanup);
 
 describe("SetupProgressBar", () => {
   it("names the setup journey and exposes current, completed, and skipped status without color", () => {
-    render(<SetupProgressBar
+    render(withMessages(<SetupProgressBar
       currentStep="ai-providers"
       steps={{ "business-context": "completed", "ai-providers": "pending", branding: "skipped" }}
-    />);
+    />));
 
     expect(screen.getByRole("navigation", { name: "Setup progress" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Your Business, completed/ })).toBeTruthy();
@@ -22,11 +23,12 @@ describe("SetupProgressBar", () => {
 
   it("keeps all steps in a horizontally contained mobile navigation and preserves button activation", () => {
     const onStepClick = vi.fn();
-    render(<SetupProgressBar currentStep="ai-providers" steps={{}} onStepClick={onStepClick} />);
+    render(withMessages(<SetupProgressBar currentStep="ai-providers" steps={{}} onStepClick={onStepClick} />));
 
     const nav = screen.getByRole("navigation", { name: "Setup progress" });
     expect(nav.className).toContain("overflow-x-auto");
-    expect(screen.getAllByRole("button")).toHaveLength(SETUP_STEPS.length);
+    expect(screen.getAllByRole("button")).toHaveLength(visibleSetupSteps(null).length);
+    expect(screen.queryByRole("button", { name: /Monitoring/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /AI Providers, current/ }));
     expect(onStepClick).toHaveBeenCalledWith("ai-providers");
   });

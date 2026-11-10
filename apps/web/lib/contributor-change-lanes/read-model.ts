@@ -165,6 +165,38 @@ export async function loadContributorChangeLaneReadModel(
   };
 }
 
+export type ContributorInventorySource = (typeof SNAPSHOT_SOURCES)[number];
+
+export type ContributorInventorySourceRead<T> = {
+  rows: T[];
+  freshness: LaneReadModelFreshness;
+};
+
+/**
+ * One snapshot source under the same latest-successful-per-source semantics the
+ * change-lanes dashboard uses, without the lane projection. For read tools that
+ * report the recorded inventory itself (pull requests, branches, worktrees).
+ */
+export async function loadContributorInventorySource<T>(
+  source: ContributorInventorySource,
+  args: Pick<LaneReadModelArgs, "db" | "now" | "staleHeartbeatThresholdMs"> = {},
+): Promise<ContributorInventorySourceRead<T>> {
+  const db = args.db ?? prisma;
+  const now = args.now ?? new Date();
+  const notConfigured =
+    source === "github-pr" && !(await isGithubPrCredentialBound(db)) ? "not-configured" : null;
+  const freshness: LaneReadModelFreshness[] = [];
+  const rows = await readSnapshotSource<T>(
+    db,
+    source,
+    freshness,
+    now,
+    args.staleHeartbeatThresholdMs ?? DEFAULT_STALE_THRESHOLD_MS,
+    notConfigured,
+  );
+  return { rows, freshness: freshness[0]! };
+}
+
 // ─── Snapshot source resolver (latest-successful-per-source) ────────────────
 
 async function readSnapshotSource<T>(
@@ -233,7 +265,32 @@ async function readSnapshotSource<T>(
     return [];
   }
 
-  const rows = row.snapshots.map((s) => s.payload as T);
+  // BI-BFFB9211: a run that found the source unchanged wrote no rows and points
+  // at the run that holds the current representation. Follow the pointer;
+  // freshness is still judged by THIS run, because this run proved the source
+  // current at its own startedAt.
+  let snapshotRows = row.snapshots;
+  const summary = (row.perSourceResult as Record<string, { snapshotRunId?: string }> | null)?.[source];
+  if (summary?.snapshotRunId && summary.snapshotRunId !== row.syncRunId) {
+    try {
+      const holder = (await db.contributorInventorySyncRun.findFirst({
+        where: { syncRunId: summary.snapshotRunId },
+        select: { snapshots: { where: { source }, select: { payload: true } } },
+      })) as { snapshots: SnapshotRowLike[] } | null;
+      if (holder) snapshotRows = holder.snapshots;
+    } catch (err) {
+      freshness.push({
+        source,
+        state: "error",
+        fetchedAt: now,
+        message: (err as Error).message ?? "snapshot read failed",
+        count: 0,
+      });
+      return [];
+    }
+  }
+
+  const rows = snapshotRows.map((s) => s.payload as T);
   const fetchedAt = row.completedAt ?? row.startedAt;
   const ageMs = now.getTime() - fetchedAt.getTime();
   const state: LaneReadModelFreshnessState = ageMs > staleThresholdMs ? "stale" : "ok";

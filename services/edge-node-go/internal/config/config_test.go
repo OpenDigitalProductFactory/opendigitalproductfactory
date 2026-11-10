@@ -1,9 +1,49 @@
 package config
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestManagedInferenceRequiresExplicitCompleteNativeMacProvisioning(t *testing.T) {
+	clearEnv(t)
+	t.Setenv(EnvAuthorityURL, "http://localhost:3000")
+	t.Setenv(EnvPlatformOverride, "darwin")
+	cfg, err := Load("fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ManagedInferenceConfigured() {
+		t.Fatal("feature enabled without native provisioning")
+	}
+	t.Setenv(EnvManagedInferenceEnabled, "1")
+	t.Setenv(EnvStateDir, "/state/edge-node")
+	t.Setenv(EnvManagedInferenceRoot, "/state/native-inference-controller/"+strings.Repeat("a", 40))
+	t.Setenv(EnvManagedInferenceManifest, strings.Repeat("b", 64))
+	t.Setenv(EnvManagedInferenceSource, strings.Repeat("a", 40))
+	t.Setenv(EnvManagedInferenceState, "/state")
+	t.Setenv(EnvManagedInferenceBaseline, "/host/.docker/bin/inference/llama-server")
+	cfg, err = Load("fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ManagedInferenceOptIn || cfg.ManagedInferenceSource != strings.Repeat("a", 40) {
+		t.Fatal("native installer binding not loaded")
+	}
+	if cfg.ManagedInferenceConfigured() != (runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") {
+		t.Fatal("unqualified platform configured")
+	}
+	cfg.ManagedInferenceManifest = ""
+	if cfg.ManagedInferenceConfigured() {
+		t.Fatal("partial native provisioning enabled")
+	}
+	cfg.ManagedInferenceManifest = strings.Repeat("b", 64)
+	cfg.InstallMode = "container-host"
+	if cfg.ManagedInferenceConfigured() {
+		t.Fatal("container runtime enabled native host handler")
+	}
+}
 
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
@@ -22,6 +62,7 @@ func clearEnv(t *testing.T) {
 		EnvEdgeActionURL, EnvEdgeActionCAFile, EnvEdgeActionCertFile,
 		EnvEdgeActionKeyFile, EnvEdgeActionSigningPublicKeyFile,
 		EnvInstallRoot, EnvOrganizationTrustRole, EnvPkiDir, EnvOrganizationCAURL,
+		EnvManagedInferenceEnabled, EnvManagedInferenceRoot, EnvManagedInferenceManifest, EnvManagedInferenceSource, EnvManagedInferenceState, EnvManagedInferenceBaseline,
 	} {
 		t.Setenv(k, "")
 	}
@@ -214,5 +255,37 @@ func TestResolvePlatform_mapsWindowsToWin32(t *testing.T) {
 	got := resolvePlatform()
 	if got != "win32" {
 		t.Errorf("override path returned %q", got)
+	}
+}
+
+// BI-F8F8C383: only a native Windows agent sits outside the Docker VM it would
+// restart, so only that agent offers the restart.
+func TestHostUpkeepOnlyRoleIsExplicit(t *testing.T) {
+	if (&Config{EdgeRole: "host-upkeep"}).HostUpkeepOnly() != true {
+		t.Fatal("host-upkeep role must be host-upkeep only")
+	}
+	for _, role := range []string{"", "full", "anything"} {
+		if (&Config{EdgeRole: role}).HostUpkeepOnly() {
+			t.Fatalf("role %q must keep full edge behaviour", role)
+		}
+	}
+}
+
+func TestDockerVmRestartEnabledForEveryNativeAgent(t *testing.T) {
+	cases := []struct {
+		platform, mode string
+		want           bool
+	}{
+		{"win32", "native", true},
+		{"darwin", "native", true},
+		{"linux", "native", true},
+		{"win32", "container-vm", false},
+		{"linux", "container-host", false},
+	}
+	for _, c := range cases {
+		cfg := &Config{Platform: c.platform, InstallMode: c.mode}
+		if got := cfg.DockerVmRestartEnabled(); got != c.want {
+			t.Fatalf("%s/%s: got %v want %v", c.platform, c.mode, got, c.want)
+		}
 	}
 }

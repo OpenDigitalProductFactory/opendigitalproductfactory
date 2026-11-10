@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -18,7 +18,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * attributes to. It must never be a hardcoded "system" string: TaskRun.userId
  * is a NOT NULL FK to User, so a sentinel id violates TaskRun_userId_fkey.
  */
-export const skillCurator = inngest.createFunction(
+export const skillCurator = jobs.createFunction(
   {
     id: "skills/curator",
     retries: 1,
@@ -26,7 +26,7 @@ export const skillCurator = inngest.createFunction(
     triggers: [cron("0 7 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "skills/curator");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("run-skill-curator", async () => {

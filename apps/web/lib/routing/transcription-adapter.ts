@@ -10,7 +10,7 @@
  */
 
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
-import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
+import { InferenceError, classifyHttpError } from "./inference-error";
 import {
   voiceSttCallsTotal,
   voiceSttDuration,
@@ -122,7 +122,7 @@ export const transcriptionAdapter: ExecutionAdapterHandler = {
     const startMs = Date.now();
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await request.fetchImpl(url, {
         method: "POST",
         headers: fetchHeaders,
         body: form,

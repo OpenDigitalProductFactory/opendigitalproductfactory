@@ -13,8 +13,10 @@ function mockClient(rows: {
   org?: { id: string; name: string | null } | null;
   businessContext?: {
     mission?: string | null;
+    vision?: string | null;
     industry?: string | null;
   } | null;
+  outcomes?: Array<{ id: string; statement: string; measure: string | null }>;
   storefrontConfig?: {
     archetypeId?: string | null;
     archetype?: { name?: string | null; category?: string | null } | null;
@@ -30,6 +32,7 @@ function mockClient(rows: {
     businessContext: { findUnique: vi.fn(async () => rows.businessContext ?? null) },
     storefrontConfig: { findFirst: vi.fn(async () => rows.storefrontConfig ?? null) },
     orgSettings: { findFirst: vi.fn(async () => rows.orgSettings ?? null) },
+    instanceOutcome: { findMany: vi.fn(async () => rows.outcomes ?? []) },
   } as unknown as OrgContextClient;
 }
 
@@ -60,7 +63,7 @@ describe("buildOrgContextBundle (BI-HDLEMP-02)", () => {
     // not the generic profile).
     expect(bundle!.businessProfile.howWeDecide).toMatch(/clinical|patient/i);
     // All five stance vectors are present.
-    expect(Object.keys(bundle!.stanceVectors)).toHaveLength(5);
+    expect(Object.keys(bundle!.stanceVectors)).toHaveLength(9);
   });
 
   it("falls back industry to BusinessContext.industry when no archetype category", async () => {
@@ -117,6 +120,27 @@ describe("formatOrgContextInstructions (BI-HDLEMP-02)", () => {
     expect(formatOrgContextInstructions(BASE, null)).toBe(BASE);
   });
 
+  it("bounds long organization fields without truncating authority routes", async () => {
+    const bundle = (await bundleFor())!;
+    const long = "x".repeat(10_000);
+    const out = formatOrgContextInstructions(BASE, {
+      ...bundle, organizationName: long, mission: long, archetypeName: long, industry: long,
+      locale: { locale: long, currency: long, countryCode: long },
+    });
+    expect(out.length - BASE.length).toBeLessThanOrEqual(1000);
+    expect(out).toContain("evaluate_profession_decision");
+    expect(out).toContain("Cross-scope doctrine is advisory");
+  });
+
+  it("keeps the connection briefing below 1000 characters without losing decision routes", async () => {
+    const out = formatOrgContextInstructions(BASE, await bundleFor());
+    expect(out.length - BASE.length).toBeLessThanOrEqual(1000);
+    expect(out).toContain("evaluate_org_business_decision");
+    expect(out).toContain("evaluate_profession_decision");
+    expect(out).toContain("principle_decide");
+    expect(out).not.toContain("Standing stances");
+  });
+
   it("renders mission, archetype, locale, doctrine, and the decision-routing directive", async () => {
     const out = formatOrgContextInstructions(BASE, await bundleFor());
     expect(out.startsWith(BASE)).toBe(true);
@@ -139,5 +163,70 @@ describe("formatOrgContextInstructions (BI-HDLEMP-02)", () => {
     expect(out).not.toMatch(/\bBI-[0-9A-Z]/);
     expect(out).not.toMatch(/\bPhase \d/);
     expect(out).not.toMatch(/apps\/web\//);
+  });
+});
+
+describe("instance direction in the organization context (BI-8AB6B4F7)", () => {
+  const base = {
+    org: { id: "ORG-1", name: "Acme Clinic" },
+    storefrontConfig: { archetypeId: "medical-practice", archetype: { name: "Medical Practice", category: "healthcare-wellness" } },
+  };
+
+  it("carries the vision and outcomes the owner recorded", async () => {
+    const bundle = await buildOrgContextBundle(
+      mockClient({
+        ...base,
+        businessContext: { mission: "Care for every patient", vision: "No patient waits a week", industry: null },
+        outcomes: [
+          { id: "o1", statement: "Same-week appointments", measure: "90% booked within 7 days" },
+          { id: "o2", statement: "Patients come back", measure: null },
+        ],
+      }),
+    );
+    expect(bundle!.vision).toBe("No patient waits a week");
+    expect(bundle!.instanceOutcomes.map((o) => o.statement)).toEqual(["Same-week appointments", "Patients come back"]);
+    const out = formatOrgContextInstructions(BASE, bundle);
+    expect(out).toContain("Vision: No patient waits a week");
+    expect(out).toContain("Outcomes: Same-week appointments; Patients come back");
+  });
+
+
+  it("does not replace a missing owner mission with an archetype suggestion", async () => {
+    const bundle = await buildOrgContextBundle(mockClient({ ...base, businessContext: { mission: "", industry: null } }));
+    const out = formatOrgContextInstructions(BASE, bundle);
+    expect(out).toContain("Mission: not recorded yet");
+    expect(out).not.toContain(`Mission: ${bundle!.businessProfile.missionTheme}`);
+  });
+
+  it("says the direction is not recorded rather than inventing one", async () => {
+    const bundle = await buildOrgContextBundle(mockClient({ ...base, businessContext: { mission: "M", industry: null } }));
+    const out = formatOrgContextInstructions(BASE, bundle);
+    expect(out).toContain("Vision: not recorded yet");
+    expect(out).toContain("Outcomes: not recorded yet");
+  });
+
+  it("stays within the briefing budget with the longest direction, keeping the routes", async () => {
+    const long = "y".repeat(5_000);
+    const bundle = (await buildOrgContextBundle(
+      mockClient({
+        ...base,
+        businessContext: { mission: long, vision: long, industry: null },
+        outcomes: Array.from({ length: 5 }, (_, i) => ({ id: `o${i}`, statement: long, measure: long })),
+      }),
+    ))!;
+    const out = formatOrgContextInstructions(BASE, { ...bundle, organizationName: long, archetypeName: long, industry: long });
+    expect(out.length - BASE.length).toBeLessThanOrEqual(1000);
+    expect(out).toContain("evaluate_profession_decision");
+    expect(out).toContain("principle_decide");
+  });
+
+  it("still composes when the outcome read fails", async () => {
+    const client = mockClient({ ...base, businessContext: { mission: "M", vision: "V", industry: null } });
+    (client as unknown as { instanceOutcome: { findMany: () => Promise<never> } }).instanceOutcome.findMany = async () => {
+      throw new Error("no table yet");
+    };
+    const bundle = await buildOrgContextBundle(client);
+    expect(bundle!.vision).toBe("V");
+    expect(bundle!.instanceOutcomes).toEqual([]);
   });
 });

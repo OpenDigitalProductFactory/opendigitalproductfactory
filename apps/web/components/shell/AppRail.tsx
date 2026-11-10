@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { PortalAudienceMode, ShellNavSection } from "@/lib/permissions";
 import { NAV_MODE_COOKIE } from "@/lib/navigation/nav-mode";
+import { areaHref } from "@/lib/navigation/portal-shell-sections";
 import { InlineBusy } from "@/components/ui/InlineBusy";
 import {
   SHELL_TAP_TARGET_CLASS,
@@ -120,6 +121,32 @@ export function AppRail({ sections, mode = "operator" }: Props) {
         )}
       </button>
 
+      {/* Outside #primary-navigation-menu on purpose. This group used to live
+          inside the collapsible menu, which is `hidden` below `lg`, so at
+          768px the toggle measured 0x0 with a null offsetParent and the mode
+          explanation vanished entirely (BI-6395DA89). The worker Simple mode
+          exists for — a kennel technician doing rounds on a tablet — was the
+          one worker who could not reach it, and was left looking at Build
+          Studio and Admin while recording that a dog had been fed. */}
+      <div className="flex flex-col gap-1">
+        <div
+          role="group"
+          aria-label="Navigation detail"
+          className="flex items-center gap-1 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-1 text-[11px] font-medium"
+        >
+          {toggleButton("worker", "Simple")}
+          {toggleButton("operator", "Full")}
+        </div>
+        {/* Persistent, mode-aware explanation of what this view shows (C2/C3). */}
+        <p className="px-1 text-[10px] leading-snug text-[var(--dpf-muted)]">
+          {navModeExplanation(mode)}
+        </p>
+        {/* Live region: announces the switch to assistive tech without stealing focus. */}
+        <span role="status" aria-live="polite" className="sr-only">
+          {announcement}
+        </span>
+      </div>
+
       <div
         id="primary-navigation-menu"
         className={[
@@ -127,30 +154,24 @@ export function AppRail({ sections, mode = "operator" }: Props) {
           "flex-col gap-3 lg:flex",
         ].join(" ")}
       >
-        <div className="flex flex-col gap-1">
-          <div
-            role="group"
-            aria-label="Navigation detail"
-            className="flex items-center gap-1 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-1 text-[11px] font-medium"
-          >
-            {toggleButton("worker", "Simple")}
-            {toggleButton("operator", "Full")}
-          </div>
-          {/* Persistent, mode-aware explanation of what this view shows (C2/C3). */}
-          <p className="px-1 text-[10px] leading-snug text-[var(--dpf-muted)]">
-            {navModeExplanation(mode)}
-          </p>
-          {/* Live region: announces the switch to assistive tech without stealing focus. */}
-          <span role="status" aria-live="polite" className="sr-only">
-            {announcement}
-          </span>
-        </div>
-
         <div className="grid min-w-0 gap-3 lg:overflow-visible">
           {sections.map((section) => (
             <section key={section.key} className="min-w-0">
               <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
-                {section.label}
+                {section.portfolioRole ? (
+                  // EP-2FB6C0CC (spec §9.3): a portfolio section is a workroom-shaped
+                  // area. Its heading opens the area home: Work, Team and Setup.
+                  <Link
+                    href={areaHref(section.key)}
+                    aria-current={matchesPath(pathname, `/area/${section.key}`) ? "page" : undefined}
+                    onClick={() => setMobileOpen(false)}
+                    className="hover:text-[var(--dpf-text)] aria-[current=page]:text-[var(--dpf-accent)]"
+                  >
+                    {section.label}
+                  </Link>
+                ) : (
+                  section.label
+                )}
               </p>
 
               <div className="mt-1 grid gap-1">

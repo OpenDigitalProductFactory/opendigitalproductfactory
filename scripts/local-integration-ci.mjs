@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -6,15 +8,41 @@ import {
   collectToolchainFingerprint,
   createLocalIntegrationPlan,
   createProductionArtifactIdentity,
+  projectLocalCiEvidence,
   dockerBuildTag,
   executeLocalIntegrationPlan,
   resolveGitRevision,
 } from "./lib/local-integration-ci.mjs";
+import { changedFilesAgainst } from "./lib/local-ci-vitest-selection.mjs";
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
 
+// strict: false keeps the old tolerance: flags this script does not read are ignored.
+const { values: cliValues } = utilParseArgs({
+  args: scriptArgv(),
+  strict: false,
+  allowPositionals: true,
+  options: {
+    "candidate": { type: "string" },
+    "base-ref": { type: "string" },
+    "candidate-sha": { type: "string" },
+    "base-sha": { type: "string" },
+    "base-freshness-status": { type: "string" },
+    "base-resolved-at": { type: "string" },
+    "base-fetch-mode": { type: "string" },
+    "metadata-out": { type: "string" },
+    "evidence-plan-out": { type: "string" },
+    "mode": { type: "string" },
+    "build-strategy": { type: "string" },
+    "slot-key": { type: "string" },
+    sibling: { type: "string", multiple: true },
+    "fetch-base": { type: "boolean" },
+    "migrate-deploy": { type: "boolean" },
+  },
+});
+
 function valueAfter(flag) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] : "";
+  const value = cliValues[flag.replace(/^--/, "")];
+  return value === undefined ? "" : typeof value === "string" ? value : undefined;
 }
 
 function readJsonIfPresent(path) {
@@ -39,7 +67,7 @@ const baseRef = valueAfter("--base-ref") || "origin/main";
 const candidateSha = valueAfter("--candidate-sha");
 const baseSha = valueAfter("--base-sha");
 const baseFreshnessStatus = valueAfter("--base-freshness-status")
-  || (process.argv.includes("--fetch-base") ? "remote-current" : "offline-accepted");
+  || (cliValues["fetch-base"] ? "remote-current" : "offline-accepted");
 const baseResolvedAt = valueAfter("--base-resolved-at");
 const baseFetchMode = valueAfter("--base-fetch-mode");
 const metadataOut = valueAfter("--metadata-out");
@@ -48,10 +76,8 @@ const evidencePlanOut = valueAfter("--evidence-plan-out")
 const mode = valueAfter("--mode") || "single-branch";
 const buildStrategy = valueAfter("--build-strategy");
 const slotKey = valueAfter("--slot-key") || process.env.DPF_LOCAL_CI_SLOT_KEY || "";
-const fetchBase = process.argv.includes("--fetch-base");
-const siblingBranches = process.argv
-  .filter((arg) => arg.startsWith("--sibling="))
-  .map((arg) => arg.slice("--sibling=".length));
+const fetchBase = Boolean(cliValues["fetch-base"]);
+const siblingBranches = (cliValues.sibling ?? []).filter((branch) => typeof branch === "string");
 
 if (!candidateBranch) {
   console.error("Usage: node scripts/local-integration-ci.mjs --candidate BRANCH [--base-ref REF] [--candidate-sha SHA] [--base-sha SHA] [--slot-key SLOT] [--metadata-out PATH] [--evidence-plan-out PATH] [--fetch-base] [--mode single-branch|sibling-set|post-merge-main] [--sibling=BRANCH] [--migrate-deploy]");
@@ -60,13 +86,14 @@ if (!candidateBranch) {
 
 const plan = createLocalIntegrationPlan({
   candidateBranch,
+  candidateSha: candidateSha || undefined,
   baseRef,
   mode,
   siblingBranches,
   buildStrategy: buildStrategy || undefined,
   fetchBase,
   evidencePlanOutput: evidencePlanOut || undefined,
-  includeMigrateDeploy: process.argv.includes("--migrate-deploy"),
+  includeMigrateDeploy: Boolean(cliValues["migrate-deploy"]),
   slotKey: slotKey || undefined,
 });
 
@@ -115,6 +142,9 @@ if (metadataOut) {
         nextBuildId,
       })
     : null;
+  const coverage = projectLocalCiEvidence({ evidencePlan, evidencePlanPath: evidencePlanOut,
+    vitestReceipt: vitestDiagnostics, integrationTreeSha: synthesizedTreeSha,
+    baseRef, changedFiles: changedFilesAgainst(baseRef), initialWorkers: plan.testProfile.initialWorkers });
   const payload = {
     schemaVersion: 3,
     bi: "BI-76551B2D",
@@ -134,7 +164,7 @@ if (metadataOut) {
     integrationCommitSha,
     synthesizedTreeSha,
     buildStrategy: plan.buildStrategy,
-    executionLane: evidencePlan?.executionLane ?? plan.executionLane,
+    plannedExecutionLane: coverage.plannedExecutionLane,
     productionArtifact,
     execution: {
       status: execution.status === 0 ? "passed" : "failed",
@@ -142,19 +172,15 @@ if (metadataOut) {
       completedCommandCount: execution.completedCommandCount,
       failedCommand: execution.failedCommand?.join(" ") ?? null,
       failureDiagnostics: execution.diagnostics,
+      // BI-FCC1DCB2: the paths a candidate merge left unmerged, so the gate
+      // and pregate:status can name them. Null when the merge succeeded.
+      mergeConflict: execution.mergeConflict ?? null,
       typecheck: typecheckDiagnostics,
       vitest: vitestDiagnostics,
+      vitestCoverage: coverage.vitestCoverage,
       productionBuild: buildDiagnostics,
     },
-    evidencePlan: evidencePlan ? {
-      path: evidencePlanOut,
-      digest: evidencePlan.digest,
-      plannerVersion: evidencePlan.plannerVersion,
-      policyVersion: evidencePlan.policyVersion,
-      evidenceTier: evidencePlan.evidenceTier,
-      executionLane: evidencePlan.executionLane,
-      fullSuite: evidencePlan.fullSuite,
-    } : null,
+    evidencePlan: coverage.evidencePlan,
     ...collectToolchainFingerprint({ buildStrategy: plan.buildStrategy }),
     commands: plan.commands.map((command) => command.join(" ")),
     startedAt,

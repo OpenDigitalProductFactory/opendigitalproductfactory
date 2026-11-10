@@ -125,7 +125,6 @@ function findRoots(topAgents: AgentNode[], allAgents: AgentNode[]): AgentNode[] 
     }
   }
   // Roots = agents in topAgents whose IDs are NOT delegated to by another agent in the same group
-  const topIds = new Set(topAgents.map((a) => a.agentId));
   const roots = topAgents.filter((a) => {
     // It's a root if no other agent in topAgents delegates to it
     const delegatedByOther = topAgents.some(

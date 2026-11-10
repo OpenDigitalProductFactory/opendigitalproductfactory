@@ -1,10 +1,16 @@
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { ARTIFACT_AUTHOR_RECOVERY, readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
+import type { InitiativeGateKey } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import type {
-  InitiativeGateKey,
   InitiativeReadinessDecision,
   ReadinessCode,
   ReadinessRequirementResult,
-} from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+} from "@/lib/backlog/initiative-readiness/types";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { formatInitiativeReviewObjective, IMMUTABLE_REVIEW_READER_TOOL as IMMUTABLE_READER_TOOL } from "./initiative-review-objective";
+import { BUILD_ARTIFACT_REVISION_READER_TOOL } from "./terminal-tool-policy";
 
 export type InitiativeReadinessLane = {
   capability: NonNullable<ToolDefinition["requiredCapability"]>;
@@ -14,9 +20,12 @@ export type InitiativeReadinessLane = {
   independent: boolean;
 };
 
+/** Recovery may propose objective mapping; it is not an approval receipt gate. */
+export type InitiativeRecoveryGate = InitiativeGateKey | "objective-mapping";
+
 /** One registry drives disclosure, receipt validation, and recovery routing. */
 export const INITIATIVE_READINESS_LANES: Record<string, InitiativeReadinessLane> = {
-  record_initiative_evidence: { capability: "manage_backlog", grant: "initiative_evidence_write", gates: ["classification", "research", "dependency-disposition"], accountableRoles: ["design-author", "portfolio-management"], independent: false },
+  record_initiative_evidence: { capability: "manage_backlog", grant: "initiative_evidence_write", gates: ["classification", "research", "dependency-disposition"], accountableRoles: ["design-author", "portfolio-management", "acceptance-reviewer"], independent: false },
   record_plan_backlog_coverage: { capability: "manage_backlog", grant: "backlog_write", gates: ["dependency-disposition"], accountableRoles: ["implementation-planner"], independent: false },
   record_initiative_design_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["design-spec", "spec-approval", "plan-review"], accountableRoles: ["design-checklist-reviewer", "plan-reviewer"], independent: true },
   record_initiative_architecture_review: { capability: "manage_ea_model", grant: "initiative_architecture_review", gates: ["architecture-review"], accountableRoles: ["architecture-reviewer"], independent: true },
@@ -25,6 +34,8 @@ export const INITIATIVE_READINESS_LANES: Record<string, InitiativeReadinessLane>
   record_initiative_security_review: { capability: "manage_compliance", grant: "initiative_security_review", gates: ["security-review"], accountableRoles: ["security-reviewer"], independent: true },
   record_initiative_compliance_review: { capability: "manage_compliance", grant: "initiative_compliance_review", gates: ["compliance-review"], accountableRoles: ["compliance-reviewer"], independent: true },
   record_initiative_domain_review: { capability: "manage_backlog", grant: "initiative_domain_review", gates: ["domain-review"], accountableRoles: ["domain-reviewer"], independent: true },
+  // Break-fix PIR (BI-F2FEC1EB): independent by construction — the declarer authored the repair.
+  record_initiative_post_implementation_review: { capability: "manage_backlog", grant: "initiative_design_review", gates: ["post-implementation-review"], accountableRoles: ["post-implementation-reviewer"], independent: true },
   record_initiative_archetype_review: { capability: "manage_taxonomy", grant: "initiative_archetype_review", gates: ["archetype-provisioning", "archetype-completeness"], accountableRoles: ["archetype-steward"], independent: true },
 };
 
@@ -40,9 +51,12 @@ export const INITIATIVE_READINESS_TOOL_GRANTS: Record<string, string[]> = {
   record_initiative_compliance_review: ["initiative_compliance_review"],
   record_initiative_domain_review: ["initiative_domain_review"],
   record_initiative_archetype_review: ["initiative_archetype_review"],
+  record_initiative_post_implementation_review: ["initiative_design_review"],
 };
 
 export function readinessLaneForRole(role: string): { toolName: string; lane: InitiativeReadinessLane } | null {
+  if (role === "acceptance-reviewer") return { toolName: "record_initiative_evidence",
+    lane: { ...INITIATIVE_READINESS_LANES.record_initiative_evidence!, independent: true } };
   for (const [toolName, lane] of Object.entries(INITIATIVE_READINESS_LANES)) {
     if (lane.accountableRoles.includes(role)) return { toolName, lane };
   }
@@ -57,23 +71,51 @@ export function readinessLaneForRole(role: string): { toolName: string; lane: In
 export type InitiativeReviewBindingPacket = {
   writerToolName: string;
   itemId: string;
-  gate: InitiativeGateKey;
+  gate: InitiativeRecoveryGate;
   expectedCurrentBaselineId: string | null;
-  artifactRef: {
-    kind: "repo-blob-at-commit";
+  eligibleEvidenceActivityIds?: string[];
+  workroomRef?: {
+    kind: "workroom-head";
+    workroomId: string;
     repositoryFullName: string;
-    commitSha: string;
-    path: string;
-    providerBlobId: string;
+    branchName: string;
+    headSha: string;
   };
+  artifactRef:
+    | { kind: "document-version"; repositoryFullName: string; versionId: string; valueDigest: string }
+    | {
+      kind: "repo-blob-at-commit";
+      repositoryFullName: string;
+      commitSha: string;
+      path: string;
+      providerBlobId: string;
+    }
+    | {
+      kind: "feature-build-revision";
+      repositoryFullName: string;
+      revisionId: string;
+      valueDigest: string;
+    }
+    | {
+      kind: "repo-commit-range";
+      repositoryFullName: string;
+      ranges: Array<{ baseSha: string; headSha: string }>;
+      digest: string;
+    };
 };
 
 export type InitiativeReviewerRecovery = {
+  identityRepair?: {
+    toolName: "adopt_worktree";
+    missingFields: Array<"baseSha" | "headSha">;
+    retainedFields: Record<string, string>;
+    packet: Record<string, string>;
+  };
   reviewerRoutes: Array<{
     accountableRole: string;
     toolName: string;
     grant: string;
-    gate: InitiativeGateKey;
+    gate: InitiativeRecoveryGate;
     targetAgentId: string;
     targetDisplayName: string;
     independent: boolean;
@@ -120,7 +162,7 @@ export type InitiativeReviewerRecovery = {
      * caller hunting for missing grants instead of supplying what is actually
      * missing.
      */
-    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact";
+    reason: "no-eligible-reviewer" | "dispatch-context-required" | "no-canonical-artifact" | "no-eligible-evidence" | "research-evidence-required";
     nextAction: string;
   }>;
   /**
@@ -148,23 +190,105 @@ export type InitiativeRecoveryDispatchContext = {
  * a pure routing decision over evidence it is handed.
  */
 export type InitiativeRecoveryCanonicalArtifact =
-  | { resolved: true; path: string; providerBlobId: string }
+  | { resolved: true; kind: "document-version"; versionId: string; valueDigest: string }
+  // A retained baseline already owns its immutable commit. Newly discovered
+  // branch artifacts omit it and inherit the Workroom head below.
+  | { resolved: true; kind?: "repo-blob-at-commit"; path: string; providerBlobId: string; commitSha?: string }
+  // BI-926A7E90: a Build Studio design is an accepted `BuildArtifactRevision`,
+  // bound by revision id and value digest and read with
+  // `read_build_artifact_revision`. No repository artifact exists for it.
+  | { resolved: true; kind: "feature-build-revision"; revisionId: string; valueDigest: string; buildId: string }
+  // BI-46E344FE: a merged repair's whole change, for the post-implementation review.
+  | { resolved: true; kind: "repo-commit-range"; ranges: Array<{ baseSha: string; headSha: string }>; digest: string }
   | { resolved: false; nextAction: string };
 
-type ReviewerRouteDb = {
-  agentToolGrant?: {
-    findMany(args: unknown): Promise<Array<{
-      grantKey: string;
-      agent: {
-        agentId: string;
-        displayName: string;
-        status: string;
-        archived: boolean;
-        lifecycleStage: string;
-      };
-    }>>;
+type ResolvedRecoveryArtifact = Extract<InitiativeRecoveryCanonicalArtifact, { resolved: true }>;
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type RecoveryArtifactInput = DistributiveOmit<ResolvedRecoveryArtifact, "resolved">;
+
+export type GrantHolderRow = {
+  grantKey: string;
+  agent: {
+    agentId: string;
+    displayName: string;
+    status: string;
+    archived: boolean;
+    lifecycleStage: string;
   };
 };
+
+export type ReviewerRouteDb = {
+  agentToolGrant?: { findMany(args: unknown): Promise<GrantHolderRow[]> };
+};
+
+/**
+ * The active, production, unarchived holders of any of `grants`, one row per
+ * (agent, grant), in deterministic order (agent id, then grant key). The one
+ * eligibility rule every lane owner is picked by: the reviewer routes below
+ * and the acceptance sweep's execution-evidence lane (BI-7C7E8CAC).
+ */
+export async function loadEligibleGrantHolders(db: ReviewerRouteDb, grants: readonly string[]): Promise<GrantHolderRow[]> {
+  if (!db.agentToolGrant || grants.length === 0) return [];
+  const rows = await db.agentToolGrant.findMany({
+    where: {
+      grantKey: { in: [...grants] },
+      agent: { status: "active", archived: false, lifecycleStage: "production" },
+    },
+    select: {
+      grantKey: true,
+      agent: { select: { agentId: true, displayName: true, status: true, archived: true, lifecycleStage: true } },
+    },
+  });
+  return rows
+    .filter((row) => row.agent.status === "active" && !row.agent.archived && row.agent.lifecycleStage === "production")
+    .sort((left, right) =>
+      left.agent.agentId.localeCompare(right.agent.agentId)
+      || left.grantKey.localeCompare(right.grantKey));
+}
+
+const IMMUTABLE_READER_GRANT = "file_read";
+
+function isBindableReviewWriter(toolName: string): boolean {
+  return toolName.startsWith("record_initiative_");
+}
+
+/**
+ * BI-3B323B6A: a small or medium shape owes NO canonical design (gate table,
+ * 2026-09-02 proportional-gates design §4): research is the reproduction plus
+ * the failing-to-passing proof, recorded by the author. Routing that lane
+ * through the spec-bound reviewer packet asked the author to commit a spec
+ * solely to receive a route — the terminal path already refuses to do that
+ * (shape-lane-escalations.ts researchLaneEscalation, BI-7876699F); the claim path
+ * now says the same thing. The escalation names the author's writer and the
+ * evidence it needs; it grants nothing.
+ */
+function isAuthorResearchLane(decision: InitiativeReadinessDecision, entry: ReadinessRequirementResult): boolean {
+  const shape = decision.shapeDecision?.effective;
+  return entry.code === "RESEARCH_REQUIRED" && (shape === "small" || shape === "medium");
+}
+
+const AUTHOR_RESEARCH_NEXT_ACTION =
+  "Research for this delivery shape is the reproduction, and its author records it: call record_initiative_evidence with gate \"research\", citing the defect or gap on a named ref (commit or branch + file + line) and the failing-to-passing proof. No canonical design is required — the shape does not owe one — so do not commit a spec to obtain a reviewer route.";
+
+// BI-6EB2DBBB: a small fix needs no separately granted writer. Its reproduction,
+// recorded as execution evidence, satisfies research at claim — the path an
+// external session can actually reach.
+const SMALL_FIX_RESEARCH_NEXT_ACTION =
+  "Research for a small fix is its reproduction, recorded as execution evidence: call record_execution_evidence on this item with kind \"source_verified\" (the defect on a named ref, with its URL) and kind \"test_pass\" (the failing-to-passing test), then claim again. record_initiative_evidence(gate: \"research\") also satisfies it where that grant is held. No canonical design is required, so do not commit a spec to obtain a reviewer route.";
+
+// BI-77C600B2: the research receipt cites a commit on a LIVE workroom, and an
+// implementation claim refused here binds none. Without this step the receipt is
+// refused ("claim or adopt the branch first") and the claim it points back to is
+// refused again at this gate. A design claim owes no research, so it binds the
+// room the receipt needs.
+const RESEARCH_RECEIPT_ORDER =
+  " The receipt cites a commit on a live workroom, and this refused claim bound none: first claim with workIntent \"design\" (it does not owe research), then record the receipt, then claim with workIntent \"implementation\" again.";
+
+function authorResearchNextAction(decision: InitiativeReadinessDecision): string {
+  return (decision.shapeDecision?.effective === "small" && decision.profile === "fix"
+    ? SMALL_FIX_RESEARCH_NEXT_ACTION
+    : AUTHOR_RESEARCH_NEXT_ACTION) + RESEARCH_RECEIPT_ORDER;
+}
 
 /** Resolve actionable, exact-grant reviewer routes without changing readiness. */
 export async function resolveInitiativeReviewerRecovery(input: {
@@ -173,14 +297,23 @@ export async function resolveInitiativeReviewerRecovery(input: {
   db: ReviewerRouteDb;
   dispatchContext: InitiativeRecoveryDispatchContext | null;
   canonicalArtifact?: InitiativeRecoveryCanonicalArtifact | null;
+  /** Exact plan selected by the baseline-validated coverage projection. */
+  planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
+  eligibleEvidenceActivityIds?: readonly string[];
+  /** Server-owned independent-review history predicate; the original name is retained for compatibility. */
+  isPlanReviewExhausted?: ((packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>) & {
+    /** Preserve an exact owned legacy task's identity before checking its budget. */
+    resolvePacket?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<ReturnType<typeof requestCoworkerPacket>>;
+  };
+  isReviewerEligible?: (agentId: string) => Promise<boolean>;
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
   const requested: Array<{
     entry: ReadinessRequirementResult;
     role: string;
     route: NonNullable<ReturnType<typeof readinessLaneForRole>>;
-    gate: InitiativeGateKey;
+    gate: InitiativeRecoveryGate;
   }> = [];
   const unroutable: InitiativeReviewerRecovery["unroutable"] = [];
   for (const entry of requirements) {
@@ -207,31 +340,46 @@ export async function resolveInitiativeReviewerRecovery(input: {
   ])).values()];
   if (distinct.length === 0) return { reviewerRoutes: [], escalations: [], unroutable };
 
-  const grants = [...new Set(distinct.map((entry) => entry.route.lane.grant))];
-  const rows = input.db.agentToolGrant
-    ? await input.db.agentToolGrant.findMany({
-        where: {
-          grantKey: { in: grants },
-          agent: { status: "active", archived: false, lifecycleStage: "production" },
-        },
-        select: {
-          grantKey: true,
-          agent: { select: { agentId: true, displayName: true, status: true, archived: true, lifecycleStage: true } },
-        },
-      })
-    : [];
-  const deterministicRows = [...rows].sort((left, right) =>
-    left.agent.agentId.localeCompare(right.agent.agentId));
+  const grants = [...new Set([
+    ...distinct.map((entry) => entry.route.lane.grant),
+    ...(distinct.some((entry) => isBindableReviewWriter(entry.route.toolName))
+      ? [IMMUTABLE_READER_GRANT]
+      : []),
+  ])];
+  const deterministicRows = await loadEligibleGrantHolders(input.db, grants);
+  const grantsByAgent = new Map<string, Set<string>>();
+  for (const row of deterministicRows) {
+    const held = grantsByAgent.get(row.agent.agentId) ?? new Set<string>();
+    held.add(row.grantKey);
+    grantsByAgent.set(row.agent.agentId, held);
+  }
 
   const reviewerRoutes: InitiativeReviewerRecovery["reviewerRoutes"] = [];
   const escalations: InitiativeReviewerRecovery["escalations"] = [];
   for (const entry of distinct) {
-    const candidate = deterministicRows.find((row) =>
+    if (isAuthorResearchLane(input.decision, entry.entry)) {
+      escalations.push({
+        accountableRole: entry.role,
+        toolName: entry.route.toolName,
+        grant: entry.route.lane.grant,
+        reason: "research-evidence-required",
+        nextAction: authorResearchNextAction(input.decision),
+      });
+      continue;
+    }
+    const bindable = isBindableReviewWriter(entry.route.toolName);
+    const requiredGrants = bindable
+      ? [entry.route.lane.grant, IMMUTABLE_READER_GRANT]
+      : [entry.route.lane.grant];
+    let candidates = deterministicRows.filter((row) =>
       row.grantKey === entry.route.lane.grant
-      && row.agent.status === "active"
-      && !row.agent.archived
-      && row.agent.lifecycleStage === "production"
+      && requiredGrants.every((grant) => grantsByAgent.get(row.agent.agentId)?.has(grant))
       && (!entry.route.lane.independent || row.agent.agentId !== input.currentAgentId));
+    if (input.isReviewerEligible) {
+      const eligibility = await Promise.all(candidates.map(async (row) => ({ row, allowed: await input.isReviewerEligible!(row.agent.agentId) })));
+      candidates = eligibility.filter((entry) => entry.allowed).map((entry) => entry.row);
+    }
+    let candidate: GrantHolderRow | undefined = candidates[0];
     if (candidate) {
       if (!input.dispatchContext) {
         escalations.push({
@@ -239,7 +387,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
           toolName: entry.route.toolName,
           grant: entry.route.lane.grant,
           reason: "dispatch-context-required",
-          nextAction: `Eligible reviewer ${candidate.agent.agentId} holds ${entry.route.lane.grant}; supply the Workroom branch and immutable head to dispatch. Do not synthesize reviewer artifact bindings.`,
+          nextAction: `Eligible reviewer ${candidate.agent.agentId} holds ${requiredGrants.join(" and ")}; supply the Workroom branch and immutable head to dispatch. Do not synthesize reviewer artifact bindings.`,
         });
         continue;
       }
@@ -249,8 +397,9 @@ export async function resolveInitiativeReviewerRecovery(input: {
       // rejects — the very defect this lane routing exists to end. Plan coverage
       // is not a review of immutable bytes, so it carries no artifact identity
       // and is not blocked by one being unresolvable (BI-9FE775F9).
-      const bindable = entry.route.toolName.startsWith("record_initiative_");
-      const artifact = input.canonicalArtifact ?? null;
+      const artifact = entry.gate === "plan-review"
+        ? input.planArtifact ?? { resolved: false as const, nextAction: "Record valid plan coverage against the current baseline, then retry plan review. The design cannot substitute for the implementation plan." }
+        : input.canonicalArtifact ?? null;
       if (bindable && (!artifact || !artifact.resolved)) {
         // A route without a binding is not a lesser route — it is an unusable
         // one: `request_coworker` rejects `requiredToolNames` unless the binding
@@ -267,16 +416,57 @@ export async function resolveInitiativeReviewerRecovery(input: {
         });
         continue;
       }
-      const packet = requestCoworkerPacket({
+      const eligibleEvidenceActivityIds = entry.gate === "objective-mapping"
+        ? normalizeEligibleEvidenceActivityIds(input.eligibleEvidenceActivityIds)
+        : null;
+      if (entry.gate === "objective-mapping" && !eligibleEvidenceActivityIds) {
+        escalations.push({
+          accountableRole: entry.role,
+          toolName: entry.route.toolName,
+          grant: entry.route.lane.grant,
+          reason: "no-eligible-evidence",
+          nextAction: "Record bounded passing evidence for this backlog item after the current objective baseline, then retry objective mapping. Do not invent or infer activity IDs.",
+        });
+        continue;
+      }
+      const dispatch = input.dispatchContext;
+      const preparePacket = async (targetAgentId: string) => {
+        const packet = requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
         toolName: entry.route.toolName,
-        targetAgentId: candidate.agent.agentId,
-        dispatch: input.dispatchContext,
+        targetAgentId,
+        dispatch,
         independent: entry.route.lane.independent,
         artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
-      });
+        eligibleEvidenceActivityIds,
+        });
+        // Identity belongs to the target, never its position in a mutable roster.
+        // Plan packets already bind their target. Owned legacy tasks keep their
+        // recorded identity so refresh joins them without resetting the budget.
+        const scoped = input.isPlanReviewExhausted && ["design-spec", "spec-approval", "architecture-review"].includes(entry.gate)
+          ? { ...packet, requestKey: `${packet.requestKey}:reviewer:${createHash("sha256").update(targetAgentId).digest("hex")}` }
+          : packet;
+        return input.isPlanReviewExhausted?.resolvePacket
+          ? input.isPlanReviewExhausted.resolvePacket(scoped) : scoped;
+      };
+      let packet = await preparePacket(candidate.agent.agentId);
+      if (["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(entry.gate) && input.isPlanReviewExhausted) {
+        for (const next of candidates) {
+          const nextPacket = await preparePacket(next.agent.agentId);
+          if (await input.isPlanReviewExhausted(nextPacket)) { candidate = undefined; continue; }
+          candidate = next;
+          packet = nextPacket;
+          break;
+        }
+        if (!candidate) {
+          escalations.push({ accountableRole: entry.role, toolName: entry.route.toolName,
+            grant: entry.route.lane.grant, reason: "no-eligible-reviewer",
+            nextAction: "All currently eligible independent reviewers exhausted this exact packet. Select another eligible reviewer/provider through recorded authority; do not replay exhausted tasks or reset their attempts." });
+          continue;
+        }
+      }
       reviewerRoutes.push({
         accountableRole: entry.role,
         toolName: entry.route.toolName,
@@ -298,7 +488,9 @@ export async function resolveInitiativeReviewerRecovery(input: {
       toolName: entry.route.toolName,
       grant: entry.route.lane.grant,
       reason: "no-eligible-reviewer",
-      nextAction: `Assign or activate a production reviewer with exact grant ${entry.route.lane.grant}; do not proxy the receipt.`,
+      nextAction: bindable
+        ? `Assign or activate a production reviewer with exact grants ${requiredGrants.join(" and ")} on the same agent; do not proxy the receipt.`
+        : `Assign or activate a production reviewer with exact grant ${entry.route.lane.grant}; do not proxy the receipt.`,
     });
   }
   return { reviewerRoutes, escalations, unroutable };
@@ -308,7 +500,7 @@ type RequestedRecoveryLane = {
   entry: ReadinessRequirementResult;
   role: string;
   route: NonNullable<ReturnType<typeof readinessLaneForRole>>;
-  gate: InitiativeGateKey;
+  gate: InitiativeRecoveryGate;
 };
 
 /**
@@ -342,12 +534,11 @@ function sequenceBaselineBeforePlanCoverage(
   return [
     ...withoutCoverage,
     {
-      entry: {
+      entry: readinessRequirement({
         code: "OBJECTIVE_BASELINE_REQUIRED",
         state: "missing",
         accountableRole: role,
-        evidenceRefs: [],
-      },
+      }),
       role,
       route,
       gate: "spec-approval",
@@ -361,20 +552,39 @@ function sequenceBaselineBeforePlanCoverage(
  * carrying a DCO trailer owned by the Workroom principal, not by anyone
  * recording a receipt. Inventing a lane would invent an approver.
  */
-const UNROUTABLE_REMEDIES: Partial<Record<ReadinessCode, string>> = {
-  ARTIFACT_AUTHOR_REQUIRED: "Sign the design commit off (git commit -s), push the rewritten sha, then re-sync the workroom head with adopt_worktree.",
+const UNROUTABLE_REMEDIES: Record<ReadinessCode, string | null> = {
+  ARTIFACT_AUTHOR_REQUIRED: ARTIFACT_AUTHOR_RECOVERY,
   CLASSIFICATION_REQUIRED: "Classify the demand before shaping it: set the investment bucket and score inputs on the backlog item.",
   AUTHORIZATION_DENIED: "The caller's authority does not cover this transition. Re-run from a principal holding the required capability.",
-  CAPSULE_IDENTITY_MISMATCH: "The workroom's recorded branch and head no longer match the claim. Re-sync with adopt_worktree(headBranch, headSha).",
+  CAPSULE_IDENTITY_MISMATCH: "The claim did not match the workroom's recorded identity. The reasons above name which fields differ: a stale branch or head re-syncs with adopt_worktree(headBranch, headSha), an expired lease renews with heartbeat_workroom, and a terminal or foreign-held room needs a new claim.",
   DELIVERY_EVIDENCE_REQUIRED: "Record delivery evidence for the merged change with record_execution_evidence.",
   ACCEPTANCE_EVIDENCE_REQUIRED: "Record acceptance evidence against the objective baseline before closing the item.",
   OBJECTIVE_RECONCILIATION_REQUIRED: "Reconcile delivered outcomes against the objective baseline with record_product_outcome_observation.",
   OBJECTIVE_BASELINE_CONFLICT: "Two objective baselines disagree. Supersede the stale baseline, leaving exactly one chain head.",
   READINESS_PROJECTION_FAILED: "Readiness projection failed to read this item's evidence. Report it; do not retry blindly.",
   STALE_EVIDENCE: "Recorded evidence is bound to a superseded artifact. Re-record it against the current immutable head.",
+
+  // BI-174DB909: null = this requirement HAS a writer lane, so it is never unroutable and needs no unroutable remedy. Total by construction.
+  CANONICAL_DESIGN_REQUIRED: null,
+  RESEARCH_REQUIRED: null,
+  SPEC_APPROVAL_REQUIRED: null,
+  CANONICAL_DESIGN_AMBIGUOUS: null,
+  REVIEW_REQUIRED: null,
+  REVIEW_FAILED: null,
+  BLOCKING_FINDINGS_OPEN: null,
+  PLAN_REQUIRED: null,
+  PLAN_REVIEW_REQUIRED: null,
+  PLAN_COVERAGE_REQUIRED: null,
+  TRACEABILITY_INCOMPLETE: null,
+  DEPENDENCY_UNRESOLVED: null,
+  OBJECTIVE_BASELINE_REQUIRED: null,
+  ARCHETYPE_PROVISIONING_INCOMPLETE: null,
+  ARCHETYPE_COMPLETENESS_FAILED: null,
+  POST_IMPLEMENTATION_REVIEW_REQUIRED: null,
+  DECOMPOSITION_REQUIRED: null,
 };
 
-const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeGateKey>> = {
+const REQUIREMENT_GATES: Record<ReadinessCode, InitiativeRecoveryGate | null> = {
   CANONICAL_DESIGN_REQUIRED: "design-spec",
   RESEARCH_REQUIRED: "research",
   SPEC_APPROVAL_REQUIRED: "spec-approval",
@@ -385,11 +595,31 @@ const REQUIREMENT_GATES: Partial<Record<ReadinessCode, InitiativeGateKey>> = {
   DEPENDENCY_UNRESOLVED: "dependency-disposition",
   ARCHETYPE_PROVISIONING_INCOMPLETE: "archetype-provisioning",
   ARCHETYPE_COMPLETENESS_FAILED: "archetype-completeness",
+  ACCEPTANCE_EVIDENCE_REQUIRED: "objective-mapping",
+  OBJECTIVE_RECONCILIATION_REQUIRED: "objective-mapping",
+
+  // BI-174DB909: null = no single gate owns this requirement. Some are satisfied without a receipt at all (ARTIFACT_AUTHOR_REQUIRED is the commit's DCO trailer), and recoveryGate() already falls back to the lane's only gate where there is exactly one. Total by construction.
+  CLASSIFICATION_REQUIRED: null,
+  CANONICAL_DESIGN_AMBIGUOUS: null,
+  REVIEW_REQUIRED: null,
+  REVIEW_FAILED: null,
+  BLOCKING_FINDINGS_OPEN: null,
+  PLAN_REQUIRED: null,
+  AUTHORIZATION_DENIED: null,
+  ARTIFACT_AUTHOR_REQUIRED: null,
+  CAPSULE_IDENTITY_MISMATCH: null,
+  DELIVERY_EVIDENCE_REQUIRED: null,
+  OBJECTIVE_BASELINE_CONFLICT: null,
+  READINESS_PROJECTION_FAILED: null,
+  STALE_EVIDENCE: null,
+  POST_IMPLEMENTATION_REVIEW_REQUIRED: null,
+  DECOMPOSITION_REQUIRED: null,
 };
 
-function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadinessLane): InitiativeGateKey | null {
+function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadinessLane): InitiativeRecoveryGate | null {
   const exact = REQUIREMENT_GATES[entry.code];
-  if (exact && lane.gates.includes(exact)) return exact;
+  if (exact === "objective-mapping" && lane.accountableRoles.includes("acceptance-reviewer")) return exact;
+  if (exact && exact !== "objective-mapping" && lane.gates.includes(exact)) return exact;
   if (["REVIEW_REQUIRED", "REVIEW_FAILED", "BLOCKING_FINDINGS_OPEN"].includes(entry.code)
     && lane.gates.length === 1) return lane.gates[0] ?? null;
   return lane.gates.length === 1 ? lane.gates[0] ?? null : null;
@@ -401,28 +631,40 @@ function recoveryGate(entry: ReadinessRequirementResult, lane: InitiativeReadine
  * `search_source_at_version`; a route binds one exact blob, so the point read is
  * the whole need and the broader search grant is not issued.
  */
-const IMMUTABLE_READER_TOOL = "read_source_at_version";
+const MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS = 500;
+
+function normalizeEligibleEvidenceActivityIds(value: readonly string[] | undefined): string[] | null {
+  if (!value || value.length === 0 || value.length > MAX_ELIGIBLE_EVIDENCE_ACTIVITY_IDS) return null;
+  const normalized = value.map((entry) => entry.trim());
+  if (normalized.some((entry) => !entry) || new Set(normalized).size !== normalized.length) return null;
+  return [...normalized].sort();
+}
 
 function requestCoworkerPacket(args: {
   decision: InitiativeReadinessDecision;
-  gate: InitiativeGateKey;
+  gate: InitiativeRecoveryGate;
   toolName: string;
   targetAgentId: string;
   dispatch: InitiativeRecoveryDispatchContext;
   independent: boolean;
   /** Null for a lane whose writer the binding contract does not cover. */
-  artifact: { path: string; providerBlobId: string } | null;
+  artifact: RecoveryArtifactInput | null;
   expectedCurrentBaselineId: string | null;
+  eligibleEvidenceActivityIds: string[] | null;
 }) {
-  const reviewConstraint = args.independent ? "independently " : "";
+  const repoArtifact = args.artifact && args.artifact.kind !== "feature-build-revision" && args.artifact.kind !== "document-version"
+    && args.artifact.kind !== "repo-commit-range" ? args.artifact : null;
+  const reviewSha = repoArtifact?.commitSha ?? args.dispatch.headSha;
+  const readerTool = args.artifact?.kind === "feature-build-revision" ? BUILD_ARTIFACT_REVISION_READER_TOOL : IMMUTABLE_READER_TOOL;
+  const objective = formatInitiativeReviewObjective({ ...args.dispatch,
+    itemId: args.decision.subject.id, gate: args.gate, toolName: args.toolName,
+    independent: args.independent, artifact: args.artifact,
+    eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds });
+  const questionPacketSummary = `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`;
   const base = {
     targetAgent: args.targetAgentId,
-    objective: `For ${args.decision.subject.id} in ${args.dispatch.workroomId} on ${args.dispatch.repositoryFullName}#${args.dispatch.branchName} at ${args.dispatch.headSha}, ${reviewConstraint}address ${args.gate} using ${args.toolName}.${
-      args.artifact
-        ? ` Read ${args.artifact.path} at that commit with ${IMMUTABLE_READER_TOOL},`
-        : ""
-    } record a governed receipt only when the gate passes.`,
-    questionPacketSummary: `${args.gate} for ${args.decision.subject.id} at ${args.dispatch.headSha.slice(0, 12)}`,
+    objective,
+    questionPacketSummary,
     requestKey: `initiative-readiness:${args.decision.subject.id}:${args.gate}:${args.dispatch.headSha}`,
     tier: 2 as const,
     enteredVia: "handoff" as const,
@@ -430,21 +672,75 @@ function requestCoworkerPacket(args: {
   // The two fields travel together or not at all: the adapter refuses one
   // without the other, so a partial packet is an unexecutable packet.
   if (!args.artifact) return base;
-  return {
-    ...base,
-    requiredToolNames: [args.toolName, IMMUTABLE_READER_TOOL],
-    initiativeReviewBinding: {
-      writerToolName: args.toolName,
-      itemId: args.decision.subject.id,
-      gate: args.gate,
-      expectedCurrentBaselineId: args.expectedCurrentBaselineId,
-      artifactRef: {
+  const binding = {
+    writerToolName: args.toolName,
+    itemId: args.decision.subject.id,
+    gate: args.gate,
+    expectedCurrentBaselineId: args.expectedCurrentBaselineId,
+    workroomRef: {
+      kind: "workroom-head" as const,
+      workroomId: args.dispatch.workroomId,
+      repositoryFullName: args.dispatch.repositoryFullName,
+      branchName: args.dispatch.branchName,
+      headSha: args.dispatch.headSha,
+    },
+    ...(args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
+      ? {
+        eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
+      }
+      : {}),
+    artifactRef: args.artifact.kind === "document-version"
+      ? { kind: "document-version" as const, repositoryFullName: args.dispatch.repositoryFullName,
+        versionId: args.artifact.versionId, valueDigest: args.artifact.valueDigest }
+      : args.artifact.kind === "feature-build-revision"
+      ? {
+        kind: "feature-build-revision" as const,
+        repositoryFullName: args.dispatch.repositoryFullName,
+        revisionId: args.artifact.revisionId,
+        valueDigest: args.artifact.valueDigest,
+      }
+      : args.artifact.kind === "repo-commit-range"
+      ? { kind: "repo-commit-range" as const, repositoryFullName: args.dispatch.repositoryFullName,
+        ranges: args.artifact.ranges.map((range) => ({ baseSha: range.baseSha, headSha: range.headSha })),
+        digest: args.artifact.digest }
+      : {
         kind: "repo-blob-at-commit" as const,
         repositoryFullName: args.dispatch.repositoryFullName,
-        commitSha: args.dispatch.headSha,
+        commitSha: reviewSha,
         path: args.artifact.path,
         providerBlobId: args.artifact.providerBlobId,
       },
-    },
+  };
+  const requestKey = args.gate === "objective-mapping" && args.eligibleEvidenceActivityIds
+    ? createObjectiveMappingRequestKey({
+      targetAgent: args.targetAgentId,
+      objective,
+      questionPacketSummary,
+      requiredToolNames: [args.toolName, readerTool],
+      binding: {
+        ...binding,
+        gate: "objective-mapping",
+        eligibleEvidenceActivityIds: args.eligibleEvidenceActivityIds,
+        workroomRef: binding.workroomRef!,
+      },
+    })
+    : args.gate === "plan-review"
+      ? `${base.requestKey}:plan:${createHash("sha256").update(canonicalJson({
+        binding, targetAgent: args.targetAgentId, objective,
+      })).digest("hex")}`
+      // BI-D3E1F6D9: an independent review issued once the baseline exists binds
+      // it, so it must not share a key with the same head's pre-baseline packet. The
+      // TaskRun id derives from the key, so a shared key made the refreshed packet
+      // an idempotency conflict and the review unobtainable at that head.
+      : args.independent && args.expectedCurrentBaselineId
+        ? `${base.requestKey}:baseline:${createHash("sha256").update(canonicalJson({
+          binding, targetAgent: args.targetAgentId, objective,
+        })).digest("hex")}`
+        : base.requestKey;
+  return {
+    ...base,
+    requestKey,
+    requiredToolNames: [args.toolName, readerTool],
+    initiativeReviewBinding: binding,
   };
 }

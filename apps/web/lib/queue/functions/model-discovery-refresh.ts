@@ -1,7 +1,8 @@
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 import { Pool } from "pg";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
+import type { ModelRevalidationSummary } from "@/lib/inference/model-revalidation";
 
 // jobId of the catalog ScheduledJob row this cron corresponds to.
 const JOB_ID = "model-discovery-refresh";
@@ -22,7 +23,7 @@ function getPool(): Pool {
  * while the cron fired — hiding whether discovery was healthy and making it look
  * permanently "never run". Best-effort: never fail the job over a stamp.
  */
-async function recordRun(status: "ok" | "error", error?: string): Promise<void> {
+async function recordRun(status: "ok" | "partial" | "error", error?: string): Promise<void> {
   const { prisma } = await import("@dpf/db");
   await prisma.scheduledJob
     .update({
@@ -32,7 +33,11 @@ async function recordRun(status: "ok" | "error", error?: string): Promise<void> 
     .catch(() => {});
 }
 
-export const modelDiscoveryRefresh = inngest.createFunction(
+export function scheduledModelDiscoveryStatus(summary: ModelRevalidationSummary): "ok" | "partial" {
+  return summary.outcomes.some((outcome) => outcome.status === "failed") ? "partial" : "ok";
+}
+
+export const modelDiscoveryRefresh = jobs.createFunction(
   {
     id: "inference/model-discovery-refresh",
     retries: 2,
@@ -40,17 +45,23 @@ export const modelDiscoveryRefresh = inngest.createFunction(
     triggers: [cron("10 3 * * *")], // 03:10 UTC — staggered off the 03:00 batch (EP-MODEL-CAP-001-D)
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "inference/model-discovery-refresh");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     try {
-      await step.run("refresh-all-providers", async () => {
+      const summary = await step.run("refresh-all-providers", async () => {
         const { runModelRevalidation } = await import(
           "@/lib/inference/model-revalidation"
         );
-        await runModelRevalidation({ source: "scheduled" }, getPool());
+        return runModelRevalidation({ source: "scheduled" }, getPool());
       });
-      await step.run("record-success", () => recordRun("ok"));
+      const status = scheduledModelDiscoveryStatus(summary);
+      const error = summary.outcomes
+        .filter((outcome) => outcome.status === "failed")
+        .map((outcome) => `${outcome.providerId}: ${outcome.error}`)
+        .join("; ")
+        .slice(0, 500) || undefined;
+      await step.run("record-success", () => recordRun(status, error));
     } catch (err) {
       await step.run("record-failure", () => recordRun("error", String(err).slice(0, 500)));
       throw err;

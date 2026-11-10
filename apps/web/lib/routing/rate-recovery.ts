@@ -2,13 +2,13 @@
 // Schedules model profile recovery after rate limiting.
 // Previously used in-memory setTimeout — now dispatches to Inngest durable function.
 
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 
 export function scheduleRecovery(
   providerId: string,
   modelId: string,
 ): void {
-  void inngest.send({
+  void jobs.send({
     name: "ops/rate.recover",
     data: { providerId, modelId },
   });

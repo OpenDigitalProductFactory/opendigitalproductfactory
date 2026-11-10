@@ -240,6 +240,129 @@
       ],
       "onboardingCurriculumId": "occ-intro-manufacturing-supply-planner",
       "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "kennel-technician",
+      "label": "Kennel Technician",
+      "summary": "Walks the ward: feeds, waters, records stool and condition, gives and signs for medication, and logs enrichment. Isolation is done last, as a biosecurity control.",
+      "archetypeCategories": ["nonprofit-community"],
+      "archetypeIds": ["pet-rescue", "animal-shelter"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "animal-welfare-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar"], "navEmphasis": ["/workspace", "/workspace/my-queue", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-kennel-technician",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "animal-intake-officer",
+      "label": "Animal Intake Officer",
+      "summary": "Takes in strays, owner surrenders and found-animal reports: scans for a microchip, records finder and location, starts the hold clock, and places the animal in intake housing.",
+      "archetypeCategories": ["nonprofit-community"],
+      "archetypeIds": ["pet-rescue", "animal-shelter"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "animal-welfare-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar", "unassigned-work"], "navEmphasis": ["/workspace", "/workspace/inbox", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "compliance-officer", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-animal-intake-officer",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "veterinary-technician",
+      "label": "Veterinary Technician",
+      "summary": "Runs intake exams, vaccinations and booster schedules, medication rounds, and the transport list for partner-clinic procedures.",
+      "archetypeCategories": ["nonprofit-community"],
+      "archetypeIds": ["pet-rescue", "animal-shelter"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "animal-welfare-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar", "unassigned-work"], "navEmphasis": ["/workspace", "/workspace/my-queue", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-veterinary-technician",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "adoption-counsellor",
+      "label": "Adoption Counsellor",
+      "summary": "Meets adopters, screens applications, runs home checks, and explains why an animal inside a hold cannot go home today.",
+      "archetypeCategories": ["nonprofit-community"],
+      "archetypeIds": ["pet-rescue", "animal-shelter"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "animal-welfare-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar", "unassigned-work"], "navEmphasis": ["/workspace", "/workspace/inbox", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "customer-advisor", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "storefront-advisor", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-adoption-counsellor",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "foster-coordinator",
+      "label": "Foster Coordinator",
+      "summary": "Places animals with foster carers, sends them out with supplies, keeps in touch during the placement, and takes the animal back.",
+      "archetypeCategories": ["nonprofit-community"],
+      "archetypeIds": ["pet-rescue", "animal-shelter"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "animal-welfare-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar", "unassigned-work"], "navEmphasis": ["/workspace", "/workspace/inbox", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "customer-advisor", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-foster-coordinator",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "volunteer-coordinator",
+      "label": "Volunteer Coordinator",
+      "summary": "Runs the volunteer roster: shifts, training levels, background checks and recorded hours, which together gate what a volunteer may handle.",
+      "archetypeCategories": ["nonprofit-community"],
+      "archetypeIds": ["pet-rescue", "animal-shelter"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "animal-welfare-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar", "unassigned-work"], "navEmphasis": ["/workspace", "/workspace/inbox", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "compliance-officer", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-volunteer-coordinator",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "shelter-manager",
+      "label": "Shelter Manager",
+      "summary": "Owns capacity pressure, live release rate, compliance deadlines, and the authorisations that belong to named people.",
+      "archetypeCategories": ["nonprofit-community"],
+      "archetypeIds": ["pet-rescue", "animal-shelter"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "animal-welfare-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar", "unassigned-work"], "navEmphasis": ["/workspace", "/workspace/inbox", "/performance"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "compliance-officer", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "finance-controller", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-shelter-manager",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "animal-transport-driver",
+      "label": "Animal Transport Driver",
+      "summary": "Runs vet transport, partner transfers and offsite adoption events, carrying the health certificates each movement needs.",
+      "archetypeCategories": ["nonprofit-community"],
+      "archetypeIds": ["pet-rescue", "animal-shelter"],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "animal-welfare-operations",
+      "featureSurface": { "tileAllowlist": ["today-schedule", "needs-you", "calendar"], "navEmphasis": ["/workspace", "/workspace/my-queue", "/workspace/calendar"], "workspaceHomeOccupationId": null },
+      "coworkerRoster": [
+        { "agentSlug": "ops-coordinator", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-animal-transport-driver",
+      "moverCurriculumId": null
     }
   ]
 }

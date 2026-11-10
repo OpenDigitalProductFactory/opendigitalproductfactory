@@ -1,0 +1,57 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-pass-refuse-edge",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-pass-refuse-edge",
+  "description": "Passing since GPP Phase 3c PR-3c-3 (refuse routes are executable): a gate that routes a refusal to the failure stop.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "governed-decision",
+        "condition": "The accountable owner decides stage a.",
+        "decisionScope": "drc-refuse-scope",
+        "gate": {
+          "authority": "wwmd",
+          "mode": "enforced",
+          "blocking": true,
+          "resolution": "accountable-human",
+          "onRefuse": "failure"
+        }
+      },
+      "evidence": [
+        "decision-record"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

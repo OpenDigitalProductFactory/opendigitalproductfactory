@@ -1,5 +1,7 @@
 import type { WorkCaseSourceRef } from "./case-types";
 import type { WorkroomCycleCarrierCandidate } from "./room-cycle";
+import { resolveWorkShapeClaim } from "./workroom-shape-claim";
+import { projectWorkShapeCycleBoundary } from "./work-shapes";
 import type { WorkroomOutcomePacket } from "./room-types";
 
 export const WORKROOM_CYCLE_EVIDENCE_KIND = "work-room-cycle";
@@ -145,9 +147,56 @@ function projectedStatus(
   return "open";
 }
 
+export function projectDeclaredWorkShapeCycleCarrier(input: {
+  scopeClaims: unknown;
+  capsuleId?: string | null;
+  openedAt?: Date | string | null;
+}): WorkroomCycleCarrierCandidate[] {
+  try {
+    const shape = resolveWorkShapeClaim(input.scopeClaims);
+    if (!shape) return [];
+    const openedAt = input.openedAt ?? new Date(0);
+    const startedAt = openedAt instanceof Date ? openedAt : new Date(openedAt);
+    const trigger = shape.triggers[0];
+    if (!trigger || Number.isNaN(startedAt.getTime())) return [];
+    const projected = projectWorkShapeCycleBoundary({
+      shape,
+      trigger,
+      startedAt,
+    });
+    const carrierId = input.capsuleId ?? projected.cycleKey;
+    const contextRefs = input.capsuleId
+      ? [{ kind: "work-capsule" as const, id: input.capsuleId }]
+      : projected.contextRefs;
+    return [{
+      cycleKey: projected.cycleKey,
+      carrierKind: "work-capsule" as const,
+      carrierId,
+      trigger: projected.trigger,
+      objective: projected.objective,
+      accountablePrincipalRef: projected.accountablePrincipalRef,
+      openedAt: startedAt,
+      expectedReviewAt: projected.expectedReviewAt,
+      stopConditions: projected.stopConditions,
+      measureSummary: projected.measureSummary,
+      contextRefs,
+      status: "open",
+      outcomePacket: null,
+      sourceRefs: input.capsuleId
+        ? [{ kind: "work-capsule" as const, id: input.capsuleId }]
+        : [],
+    }];
+  } catch {
+    return [];
+  }
+}
+
 export function projectWorkItemCycleCarriers(input: {
   items: readonly WorkroomCycleWorkItemRecord[];
   messages: readonly WorkroomCycleMessageRecord[];
+  scopeClaims?: unknown;
+  capsuleId?: string | null;
+  openedAt?: Date | string | null;
 }): WorkroomCycleCarrierCandidate[] {
   const packets = new Map<string, WorkroomOutcomePacket>();
   for (const message of input.messages) {
@@ -156,7 +205,13 @@ export function projectWorkItemCycleCarriers(input: {
     if (stored) packets.set(`${stored.cycleKey}:${stored.carrierId}`, stored.packet);
   }
 
-  return input.items.flatMap((item) => {
+  const declared = projectDeclaredWorkShapeCycleCarrier({
+    scopeClaims: input.scopeClaims,
+    capsuleId: input.capsuleId,
+    openedAt: input.openedAt,
+  });
+
+  const fromItems = input.items.flatMap((item) => {
     const boundary = parseStoredWorkroomCycle(item.evidence);
     if (!boundary) return [];
     const packet = packets.get(`${boundary.cycleKey}:${item.itemId}`) ?? null;
@@ -182,4 +237,5 @@ export function projectWorkItemCycleCarriers(input: {
       }],
     }];
   });
+  return [...declared, ...fromItems];
 }

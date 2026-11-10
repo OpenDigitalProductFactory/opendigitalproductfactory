@@ -3,7 +3,7 @@
 // The purpose-identity ratchet refuses to grandfather a NEW route, so the
 // workforce "Right Now" view arrives ratified. Shape mirrors graph-explorer.ts.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const RIGHT_NOW_PURPOSE_CONTRACTS: PurposeContractModule = [
   {
@@ -29,7 +29,7 @@ export const RIGHT_NOW_PURPOSE_CONTRACTS: PurposeContractModule = [
         expectedPath: ["/platform/ai/overview", "/platform/ai/right-now"],
       },
       contentRoles: {
-        defaultVisibleKeys: ["workforce-pulse", "working-now-list", "quiet-list"],
+        defaultVisibleKeys: ["workforce-pulse", "working-now-list", "platform-work-list", "quiet-list"],
         deferredRegions: [
           {
             key: "coworker-manage",

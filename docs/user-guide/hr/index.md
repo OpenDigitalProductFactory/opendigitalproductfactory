@@ -233,6 +233,23 @@ for example, "Kofi Wolfe has no manager set, so there is nobody to approve this.
 line on the **Org Chart** and the request becomes decidable. The chart's **No manager** count and
 its reporting-loop warning are the two things to check first.
 
+### When a Coworker Recommends a Leave Decision
+
+An AI coworker can review a leave request and post its recommendation in the coworker panel:
+approve, deny, or "needs your judgement", with its reasons and any rules the request trips. The
+recommendation is advice only. The card offers **Approve leave** and **Deny leave**, and the
+leave changes only when you press one of them. Deny asks for the reason the employee will see. The
+same approver rules apply as above: if you are not the approver, the platform refuses.
+
+There is no generic Approve or Reject on a leave recommendation. Approving the recommendation never
+decides the leave by itself.
+
+The **Time off** page shows the recommendation beside each pending request. When a hard rule fires
+(the balance would go negative, or cover would drop below the minimum), the page says **Needs a human
+approver** with the rules that fire as of now. Every pending request also appears in **Needs you** as
+one item that opens the Time off page. When you approve or deny, your decision is recorded against the
+advisor's recommendation, so the platform can tell how often its advice was followed.
+
 Similarly, the lifecycle timeline is visible evidence, but the current page does not provide a general-purpose control for manually appending every possible lifecycle event.
 
 ## Evidence and Recovery Checklist

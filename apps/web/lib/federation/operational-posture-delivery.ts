@@ -1,0 +1,156 @@
+// Cross-install operational control plane · Slice 2 Increment 2 (BI-648F01A0).
+//
+// Local-canonical outbox for this install's operational posture. One durable
+// FederatedRecordMirror row per trusted same-organization link (recordType
+// "operational-posture", canonicalSide "local"), drained by the shared federation
+// delivery queue exactly like a demand envelope. The peer holds the inverse
+// peer-canonical mirror and never mutates it (reconcileMirror invariant).
+
+import { createHash } from "node:crypto";
+
+import {
+  computeOperationalPosturePayloadDigest,
+  OPERATIONAL_POSTURE_ACTIVITIES,
+  type OperationalPostureActivity,
+  type OperationalPostureV1,
+} from "@dpf/db/federated-operational-posture-contract";
+import type { ProjectionContractSpec } from "@dpf/db/projection-serialization";
+
+import type { DemandDeliveryDb, DemandLinkTarget } from "./demand-delivery";
+import type { FederationIdentity } from "./demand-identity";
+import { scheduleFederationDeliveryJob } from "./delivery-queue";
+import {
+  buildOperationalPostureRecord,
+  type ProjectableOperationalPostureSource,
+} from "./operational-posture-projection";
+
+/**
+ * An unchanged posture is re-reported on this interval so the peer can tell
+ * "nothing changed" from "stopped hearing from it" — the honesty the paired-estate
+ * surface needs to age each install's data (Slice 3, BI-DD93808A).
+ */
+export const OPERATIONAL_POSTURE_HEARTBEAT_MS = 60 * 60_000;
+
+export interface OperationalPostureOutboxPayload {
+  record: OperationalPostureV1;
+  activity: OperationalPostureActivity;
+  eventId: string;
+  queuedAt: string;
+}
+
+/** The singleton local ref: one posture record per (link, reporting install). */
+export function operationalPostureLocalRef(installationId: string): string {
+  return `posture:${installationId}`;
+}
+
+function localWhere(linkId: string, localRecordRef: string) {
+  return {
+    federationLinkId_recordType_localRecordRef: {
+      federationLinkId: linkId,
+      recordType: "operational-posture",
+      localRecordRef,
+    },
+  };
+}
+
+function outboxId(linkId: string, localRecordRef: string): string {
+  return `fopo_${createHash("sha256").update(`${linkId}\x00${localRecordRef}`).digest("hex").slice(0, 24)}`;
+}
+
+function eventId(linkId: string, record: OperationalPostureV1, activity: OperationalPostureActivity): string {
+  return `fope_${createHash("sha256")
+    .update(`${linkId}\x00${record.originInstallationId}\x00${record.originVersion}\x00${activity}`)
+    .digest("hex").slice(0, 24)}`;
+}
+
+export function decodeOperationalPostureOutboxPayload(value: unknown): OperationalPostureOutboxPayload | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const payload = value as Partial<OperationalPostureOutboxPayload>;
+  if (!payload.record || typeof payload.record !== "object" || typeof payload.eventId !== "string") return null;
+  if (!(OPERATIONAL_POSTURE_ACTIVITIES as readonly string[]).includes(payload.activity ?? "")) return null;
+  return payload as OperationalPostureOutboxPayload;
+}
+
+/** Digest of the posture CONTENT — the timing fields (`capturedAt`, `originVersion`)
+ *  excluded — so a re-capture that changed nothing is recognizable as unchanged. */
+export function operationalPostureContentDigest(record: OperationalPostureV1): string {
+  const { capturedAt: _capturedAt, originVersion: _originVersion, ...content } = record;
+  return computeOperationalPosturePayloadDigest({
+    ...content,
+    capturedAt: "",
+    originVersion: 1,
+  } as OperationalPostureV1);
+}
+
+export async function queueOperationalPostureProjection(db: DemandDeliveryDb, input: {
+  link: DemandLinkTarget;
+  source: ProjectableOperationalPostureSource;
+  identity: FederationIdentity;
+  contract?: ProjectionContractSpec;
+  heartbeatMs?: number;
+  now?: Date;
+}): Promise<{ action: "queued" | "noop"; mirrorId: string; originVersion: number }> {
+  const now = input.now ?? new Date();
+  const built = buildOperationalPostureRecord({
+    source: input.source,
+    identity: input.identity,
+    ...(input.contract ? { contract: input.contract } : {}),
+  });
+  if (built.violations.length > 0) {
+    throw new Error(`Operational posture projection refused: ${built.violations.join(", ")}`);
+  }
+  const localRecordRef = operationalPostureLocalRef(input.identity.installationId);
+  const existing = await db.federatedRecordMirror.findUnique({ where: localWhere(input.link.linkId, localRecordRef) });
+  const prior = decodeOperationalPostureOutboxPayload(existing?.payload);
+  if (existing && prior) {
+    const unchanged = operationalPostureContentDigest(prior.record) === operationalPostureContentDigest(built.record);
+    const priorCapturedAt = Date.parse(prior.record.capturedAt);
+    const withinHeartbeat = Number.isFinite(priorCapturedAt)
+      && now.getTime() - priorCapturedAt < (input.heartbeatMs ?? OPERATIONAL_POSTURE_HEARTBEAT_MS);
+    // A pending/dead-lettered row is left for the queue's own retry clock; only
+    // an acknowledged, unchanged, fresh report is a noop.
+    if (unchanged && withinHeartbeat && existing.syncStatus === "synced") {
+      return { action: "noop", mirrorId: existing.mirrorId, originVersion: Number(existing.version) };
+    }
+    if (unchanged && existing.syncStatus === "pending") {
+      return { action: "noop", mirrorId: existing.mirrorId, originVersion: Number(existing.version) };
+    }
+  }
+
+  const activity: OperationalPostureActivity = "dpf.operational-posture.reported";
+  // originVersion is derived from the capture time, so it always advances past
+  // the previous report; guard against a clock that did not move.
+  if (existing && built.record.originVersion <= Number(existing.version)) {
+    built.record.originVersion = Number(existing.version) + 1;
+    built.record.payloadDigest = computeOperationalPosturePayloadDigest(built.record);
+  }
+  const payload: OperationalPostureOutboxPayload = {
+    record: built.record,
+    activity,
+    eventId: eventId(input.link.linkId, built.record, activity),
+    queuedAt: now.toISOString(),
+  };
+  const data = {
+    syncStatus: "pending",
+    version: built.record.originVersion,
+    payload,
+    deadLetteredAt: null,
+  };
+  if (existing) {
+    await db.federatedRecordMirror.update({ where: { mirrorId: existing.mirrorId }, data });
+    await scheduleFederationDeliveryJob(db, existing.mirrorId, now);
+    return { action: "queued", mirrorId: existing.mirrorId, originVersion: built.record.originVersion };
+  }
+  const mirrorId = outboxId(input.link.linkId, localRecordRef);
+  await db.federatedRecordMirror.create({ data: {
+    mirrorId,
+    federationLinkId: input.link.linkId,
+    recordType: "operational-posture",
+    canonicalSide: "local",
+    localRecordRef,
+    peerRecordRef: null,
+    ...data,
+  } });
+  await scheduleFederationDeliveryJob(db, mirrorId, now);
+  return { action: "queued", mirrorId, originVersion: built.record.originVersion };
+}

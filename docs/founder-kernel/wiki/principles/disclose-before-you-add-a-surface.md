@@ -157,6 +157,37 @@ Rendered from the frontmatter source records. CSDM supports a connected canonica
 model; IT4IT supports lifecycle separation and traceability. The compensating UX
 obligation is the operator's durable judgment recorded by this principle.
 
+## Amendment 2026-09-22 — progressive disclosure hides machinery, never the guarantee
+
+Disclosure decides how much of a model a user meets. It does not license hiding
+the words that carry the guarantee.
+
+Sort every term by WHAT IT NAMES, never by how technical it sounds:
+
+| Class | Rule | Examples |
+|---|---|---|
+| Implementation detail | **Hide** | capsule, extractor, projection, decomposition, pregate |
+| Operator vocabulary | **Use** | the words already in the surface's own stated job |
+| Standard-bearing | **TEACH** | GAID, Agent Identity Document, TAK-JSI qualification, assurance claim, chain of custody, action receipt |
+
+Sorting by "how technical does this sound" puts a published normative standard in
+the same bucket as an internal helper, and that mistake has shipped and been
+reverted here before.
+
+A standard-bearing term is not machinery standing between an owner and their work.
+It IS the evidence that the coworker is attributable and governable, which is what
+an enterprise is buying, and a consumer agent has no equivalent. That asymmetry
+only exists on the surface if the word is on the surface. Such terms must appear,
+must match the normative document, and get a first-use explanation rather than
+removal.
+
+The inverse check is the real defect: a surface performing a governed action
+WITHOUT naming the guarantee behind it. Any word list for such a check is derived
+from the normative corpus, never hand-maintained — a second glossary is drift by
+construction.
+
+CEO, 2026-08-22.
+
 ## Overlap scan (§4.3)
 
 The original overlap scan found `substrate-cleanup-before-substrate-addition` at

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { TwinSnapshot } from "@/components/twin";
+import type { TwinSnapshot } from "./twin-snapshot";
 
 import { restaurantBusyShiftFixture } from "./__fixtures__/restaurant-busy-shift";
 import {
@@ -10,7 +10,7 @@ import {
   selectOperationsScene,
   selectOperationsSummary,
   toLivingBusinessSnapshot,
-} from "./operations-snapshot";
+} from "@dpf/storefront-templates/operations";
 
 function twinFixture(): TwinSnapshot {
   return {

@@ -2,7 +2,6 @@
  * Restore wizard public types.
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.6
- * Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md (Slice 4)
  */
 
 import type { BackupTarget } from "./types";
@@ -37,8 +36,8 @@ export interface RestoreImpactPreview {
   versionWarning: string | null;
   /**
    * Service-specific warning shown before the confirmation input.
-   * null for Postgres (no extra downtime). Set for Neo4j (brief container
-   * restart) and Qdrant (full-instance replacement).
+   * null for Postgres (no extra downtime). Kept so a future engine with
+   * extra downtime can surface it without a shape change.
    */
   serviceWarning: string | null;
 }

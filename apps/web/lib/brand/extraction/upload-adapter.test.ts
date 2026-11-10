@@ -2,30 +2,20 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   sharp: vi.fn(),
-  pdfParse: vi.fn(),
-  mammothExtractRawText: vi.fn(),
 }));
 
 vi.mock("sharp", () => ({
   default: (buffer: Buffer) => mocks.sharp(buffer),
 }));
 
-vi.mock("pdf-parse", () => ({
-  default: (buffer: Buffer) => mocks.pdfParse(buffer),
-}));
-
-vi.mock("mammoth", () => ({
-  default: { extractRawText: (args: unknown) => mocks.mammothExtractRawText(args) },
-  extractRawText: (args: unknown) => mocks.mammothExtractRawText(args),
-}));
-
+import type { ParsedFileContent } from "@/lib/shared/file-parsers";
 import { uploadAdapter } from "./upload-adapter";
+
+const document = (fullText: string): ParsedFileContent => ({ type: "document", summary: `${fullText.length} characters`, fullText });
 
 describe("uploadAdapter", () => {
   beforeEach(() => {
     mocks.sharp.mockReset();
-    mocks.pdfParse.mockReset();
-    mocks.mammothExtractRawText.mockReset();
   });
 
   it("extracts dominant color and logo AssetRef from a PNG upload", async () => {
@@ -47,17 +37,39 @@ describe("uploadAdapter", () => {
     expect(result.sources?.[0]?.kind).toBe("upload");
   });
 
-  it("captures PDF text into identity.description with low confidence", async () => {
-    mocks.pdfParse.mockResolvedValue({
-      text: "Acme Corporation brand guidelines. We make widgets that delight.",
-    });
+  it("captures PDF text, read through the shared file reader, into identity.description with low confidence", async () => {
+    const parse = vi.fn(async () => document("Acme Corporation brand guidelines. We make widgets that delight."));
+    const result = await uploadAdapter(
+      [{ name: "brand.pdf", mimeType: "application/pdf", data: Buffer.from([0x25, 0x50, 0x44, 0x46]) }],
+      { parse },
+    );
 
-    const result = await uploadAdapter([
-      { name: "brand.pdf", mimeType: "application/pdf", data: Buffer.from([0x25, 0x50, 0x44, 0x46]) },
-    ]);
-
+    expect(parse).toHaveBeenCalledWith(expect.any(Buffer), "application/pdf", "brand.pdf");
     expect(result.identity?.description).toContain("Acme Corporation");
     expect(result.confidence?.perField?.["identity.description"]).toBeLessThanOrEqual(0.5);
+  });
+
+  it("captures Word text the same way, capped at 2000 characters", async () => {
+    const parse = vi.fn(async () => document(`We rescue dogs. ${"x".repeat(3000)}`));
+    const result = await uploadAdapter(
+      [{ name: "brand.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", data: Buffer.from("PK") }],
+      { parse },
+    );
+    expect(result.identity?.description?.startsWith("We rescue dogs.")).toBe(true);
+    expect(result.identity?.description?.length).toBe(2000);
+  });
+
+  it("records a gap when a document yields no text, including when the reader cannot read it", async () => {
+    const unreadable: ParsedFileContent = { type: "unsupported", format: "pdf", reason: "no converter", summary: "no converter" };
+    const result = await uploadAdapter(
+      [
+        { name: "scan.pdf", mimeType: "application/pdf", data: Buffer.from("%PDF-") },
+        { name: "empty.doc", mimeType: "application/msword", data: Buffer.from("x") },
+      ],
+      { parse: vi.fn().mockResolvedValueOnce(unreadable).mockRejectedValueOnce(new Error("boom")) },
+    );
+    expect(result.gaps).toEqual(["upload-pdf-no-text:scan.pdf", "upload-docx-no-text:empty.doc"]);
+    expect(result.identity?.description ?? null).toBeNull();
   });
 
   it("skips unsupported MIME types with a gap entry", async () => {

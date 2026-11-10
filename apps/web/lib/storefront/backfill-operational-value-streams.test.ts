@@ -61,17 +61,17 @@ describe("backfillOperationalValueStreamsOnBoot", () => {
     );
   });
 
-  it("skips a storefront that already has its operational value-stream view", async () => {
+  it("reconciles an existing EA-only storefront so missing rooms are repaired", async () => {
     prismaMock.storefrontConfigFindMany.mockResolvedValue([
       { organizationId: "org-1", archetypeId: "cuid-1" },
     ]);
     prismaMock.eaViewFindFirst.mockResolvedValue({ id: "view-existing" });
+    prismaMock.storefrontArchetypeFindUnique.mockResolvedValue({ archetypeId: "software-platform" });
 
     const res = await backfillOperationalValueStreamsOnBoot(silent);
 
     expect(res).toEqual({ created: 0, present: 1, skipped: 0 });
-    expect(projectMock).not.toHaveBeenCalled();
-    expect(prismaMock.storefrontArchetypeFindUnique).not.toHaveBeenCalled();
+    expect(projectMock).toHaveBeenCalledWith({ organizationId: "org-1", archetypeId: "software-platform" });
   });
 
   it("skips (does not crash) when the archetype row cannot be resolved", async () => {

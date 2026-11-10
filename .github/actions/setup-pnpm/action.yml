@@ -1,4 +1,4 @@
-# Shared CI setup: Node 24 + pnpm (corepack) + a restored pnpm store cache +
+# Shared CI setup: the exact .node-version Node (BI-2FAE2E5C) + pnpm (corepack) + a restored pnpm store cache +
 # a frozen-lockfile install. Before this existed, every CI job re-ran a cold
 # `pnpm install` from an empty store, paying the full download cost 5+ times
 # per PR. The pnpm store is content-addressed and keyed on the lockfile hash,
@@ -6,7 +6,7 @@
 # pnpm version is pinned by the root package.json `packageManager` field, so
 # `corepack enable` alone activates the correct pnpm — no version to drift here.
 name: Setup pnpm with cache
-description: Set up Node 24 and pnpm via corepack, restore the pnpm store cache, and install dependencies with a frozen lockfile.
+description: Set up the exact .node-version Node and pnpm via corepack, restore the pnpm store cache, and install dependencies with a frozen lockfile.
 
 runs:
   using: composite
@@ -14,15 +14,37 @@ runs:
     - name: Set up Node.js
       uses: actions/setup-node@v7
       with:
-        node-version: 24
+        node-version-file: .node-version
 
     - name: Enable pnpm (corepack)
       shell: bash
       run: corepack enable
 
+    # Corepack downloads the pinned pnpm on first use. That download has died
+    # mid-transfer on GitHub runners (Node's bundled undici asserting
+    # `!this.paused` in Parser.finish), which left PNPM_STORE_PATH empty and
+    # failed the cache step with "Input required and not supplied: path".
+    # Fetch pnpm explicitly with retries, then refuse an empty store path.
+    - name: Fetch pinned pnpm (retried)
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          if corepack install; then exit 0; fi
+          echo "::warning::corepack install failed (attempt ${attempt}/3); retrying"
+          sleep $((attempt * 5))
+        done
+        echo "::error::corepack could not fetch the pinned pnpm after 3 attempts"
+        exit 1
+
     - name: Resolve pnpm store path
       shell: bash
-      run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+      run: |
+        store_path="$(pnpm store path --silent)"
+        if [ -z "$store_path" ]; then
+          echo "::error::pnpm store path is empty; pnpm is not usable on this runner"
+          exit 1
+        fi
+        echo "PNPM_STORE_PATH=$store_path" >> "$GITHUB_ENV"
 
     - name: Cache pnpm store
       uses: actions/cache@v6

@@ -14,7 +14,8 @@ import {
 } from "@/lib/identity/agent-identity-snapshot";
 import { listInternalAgentCards } from "@/lib/tak/agent-card-service";
 // mcp-tools is imported dynamically inside the component to avoid NFT whole-project tracing
-import { PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS, can } from "@/lib/permissions";
+import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 
 // Build role list from role_registry
@@ -28,6 +29,11 @@ const ROLES = [
 ];
 
 export default async function AuditAuthorityPage() {
+  // BI-7BCC87BB: who is looking decides what a pending request on a card offers.
+  const session = await auth();
+  const viewer = session?.user?.id
+    ? { userId: session.user.id, isAdmin: can(session.user, "manage_users") }
+    : undefined;
   const [rawBmrData, bindingRecords] = await Promise.all([
     prisma.productBusinessModel.findMany({
       select: {
@@ -181,7 +187,7 @@ export default async function AuditAuthorityPage() {
         title="Supervisor agent cards"
         summary={`${agentCards.length} cards projected`}
       >
-        <AgentCardSupervisorPanel cards={agentCards} />
+        <AgentCardSupervisorPanel cards={agentCards} {...(viewer ? { viewer } : {})} />
       </AuthoritySection>
 
       <AuthoritySection

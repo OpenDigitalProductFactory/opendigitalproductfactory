@@ -55,7 +55,7 @@ import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import {
-  createPolicy, updatePolicy, transitionPolicyStatus,
+  createPolicy, transitionPolicyStatus,
   createRequirement, completeRequirement, acknowledgePolicy,
 } from "./policy";
 

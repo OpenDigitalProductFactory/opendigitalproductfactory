@@ -141,6 +141,61 @@ describe("runReleaseHealthCheck", () => {
     });
   });
 
+  it("preserves exact-bound verified registry evidence across the next matching health poll", async () => {
+    const verifiedTarget = {
+      schemaVersion: 1,
+      publisherRunId: 300,
+      verifiedAt: "2026-06-10T02:50:00Z",
+      ghcrOwner: "opendigitalproductfactory",
+      channelTag: "latest",
+      installMode: "consumer",
+      installedImageTag: "v6.0.0",
+      currentConfigDigest: `sha256:${"d".repeat(64)}`,
+      candidate: {
+        tag: "v6.1.0",
+        sourceSha: "a".repeat(40),
+        channelDigest: `sha256:${"a".repeat(64)}`,
+        platformManifestDigest: `sha256:${"b".repeat(64)}`,
+        configDigest: `sha256:${"c".repeat(64)}`,
+        platformOs: "linux",
+        platformArchitecture: "amd64",
+      },
+    };
+    const current = snapshot({ status: "verified", runId: 300, headSha: "a".repeat(40) });
+    reader.readLatestReleaseStamp.mockResolvedValue({ ok: true, latest: current });
+    db.platformConfig.findUnique.mockResolvedValue(
+      priorState({ snapshot: current, verifiedTarget }),
+    );
+
+    await runReleaseHealthCheck({ now: NOW });
+
+    expect(db.platformConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: { value: expect.objectContaining({ verifiedTarget }) },
+      }),
+    );
+  });
+
+  it("drops registry evidence when the publisher identity changes", async () => {
+    const previous = snapshot({ status: "verified", runId: 299, tag: "v6.0.0", headSha: "9".repeat(40) });
+    const current = snapshot({ status: "verified", runId: 300, headSha: "a".repeat(40) });
+    reader.readLatestReleaseStamp.mockResolvedValue({ ok: true, latest: current });
+    db.platformConfig.findUnique.mockResolvedValue(
+      priorState({
+        snapshot: previous,
+        verifiedTarget: { schemaVersion: 1, publisherRunId: 299 },
+      }),
+    );
+
+    await runReleaseHealthCheck({ now: NOW });
+
+    expect(db.platformConfig.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: { value: expect.objectContaining({ verifiedTarget: null }) },
+      }),
+    );
+  });
+
   it("does NOT resolve open notifications while a re-stamp is merely in progress", async () => {
     reader.readLatestReleaseStamp.mockResolvedValue({
       ok: true,

@@ -56,7 +56,8 @@ vi.mock("@dpf/db/wiki-taxonomy", async (importActual) => ({
 vi.mock("@/lib/wiki/embeddings", () => ({
   searchWikiPages: (...a: unknown[]) => wiki.searchWikiPages(...a),
 }));
-vi.mock("@/lib/wiki/principle-decide", () => ({
+vi.mock("@dpf/validators/judgment/option-scoring", async (importOriginal) => ({
+  ...await importOriginal<object>(),
   decide: (...a: unknown[]) => wiki.decide(...a),
 }));
 vi.mock("@/lib/wiki/calling-ring-map", () => ({
@@ -66,7 +67,8 @@ vi.mock("@/lib/inference/embedding", () => ({
   generateEmbedding: (...a: unknown[]) => wiki.generateEmbedding(...a),
   isEmbeddingAvailable: (...a: unknown[]) => wiki.isEmbeddingAvailable(...a),
 }));
-vi.mock("@/lib/decision/caller-context", () => ({
+vi.mock("@/lib/decision/caller-context", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/decision/caller-context")>()),
   resolveDecisionCallerContext: (...a: unknown[]) => decision.resolveDecisionCallerContext(...a),
 }));
 vi.mock("@/lib/decision/kernel-consult-ledger", () => ({

@@ -114,6 +114,22 @@ function validPolygon(value: unknown): value is GeographicPolygonGeometry {
   );
 }
 
+/** RFC 7946 §3.1.9: a ring must not cross the antimeridian; split it instead. */
+function crossesAntimeridian(polygon: GeographicPolygonGeometry): boolean {
+  return polygon.rings.some((ring) =>
+    ring.some((point, index) =>
+      index > 0 && Math.abs(point.longitude - ring[index - 1].longitude) > 180,
+    ),
+  );
+}
+
+const ZONE_COVERAGE_KINDS: ReadonlySet<string> = new Set(["staffing-crew", "employee"]);
+
+function validZoneCoverage(value: unknown): boolean {
+  if (value === undefined) return true;
+  return isRecord(value) && ZONE_COVERAGE_KINDS.has(value.kind as string) && validString(value.id, MAX_ID_LENGTH);
+}
+
 function validPlacementGeometry(value: unknown): value is GeographicPlacementGeometry {
   if (!isRecord(value) || typeof value.kind !== "string") return false;
   if (value.kind === "point") return validCoordinate(value);
@@ -161,9 +177,13 @@ export function validateGeographicSceneLayout(value: unknown): GeographicSceneVa
       !validString(zone.id, MAX_ID_LENGTH) ||
       !validString(zone.label, MAX_LABEL_LENGTH) ||
       !validPolygon(zone.geometry) ||
+      !validZoneCoverage(zone.coveredBy) ||
       ids.has(zone.id)
     ) {
       return { ok: false, error: "Geographic zone is invalid or reuses a feature id." };
+    }
+    if (crossesAntimeridian(zone.geometry)) {
+      return { ok: false, error: "Geographic zone crosses the antimeridian; split it into two zones." };
     }
     ids.add(zone.id);
     coordinates += zone.geometry.rings.reduce(
@@ -268,11 +288,11 @@ export function buildGeographicSceneModel(input: {
           featureId: zone.id,
           featureKind: "zone",
           label: zone.label,
-          entityKind: null,
-          entityId: null,
+          entityKind: zone.coveredBy?.kind ?? null,
+          entityId: zone.coveredBy?.id ?? null,
           selected: false,
           statusLabel: null,
-          sublabel: null,
+          sublabel: zone.coveredBy ? (presentations[zone.coveredBy.id]?.label ?? null) : null,
           intent: null,
         },
       })),

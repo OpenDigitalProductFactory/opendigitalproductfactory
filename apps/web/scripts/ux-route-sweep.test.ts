@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { resolveSweepPath } from "./ux-sweep-route-params";
+import { visibleTextFileName } from "./ux-sweep-visible-text";
+
 import {
   BROWSER_EVALUATION_RUNTIME,
   DOM_SETTLE_EXPRESSION,
@@ -352,5 +355,55 @@ describe("route sweep coordination", () => {
     expect(parseSweepWorkerCount("4")).toBe(4);
     expect(() => parseSweepWorkerCount("3")).toThrow(/supported values are 1, 2, or 4/i);
     expect(() => parseSweepWorkerCount("many")).toThrow(/supported values are 1, 2, or 4/i);
+  });
+});
+
+
+// BI-DE67A3EC — the sweep could only measure routes with no dynamic segment, so
+// 87 routes (53 owner-facing) were unmeasurable: every DETAIL surface, which is
+// where a word or field budget matters most. A gate that measures only list
+// pages reports a green it has not earned.
+describe("resolveSweepPath (BI-DE67A3EC)", () => {
+  it("returns a static route unchanged", () => {
+    expect(resolveSweepPath("/workspace/inbox", {})).toBe("/workspace/inbox");
+    // Params present but irrelevant must not perturb a static route.
+    expect(resolveSweepPath("/workspace/inbox", { "/a/[b]": "/a/1" })).toBe("/workspace/inbox");
+  });
+
+  it("substitutes the path the fixture minted for a dynamic route", () => {
+    expect(
+      resolveSweepPath("/workspace/cases/[caseKey]", {
+        "/workspace/cases/[caseKey]": "/workspace/cases/ux-sweep%3Aux-sweep-case",
+      }),
+    ).toBe("/workspace/cases/ux-sweep%3Aux-sweep-case");
+  });
+
+  // The load-bearing half. Navigating the literal "[caseKey]" would 404 — or
+  // worse, match a catch-all — and freeze a measurement for a page that does not
+  // exist. An unresolvable route must stop the run, not become a number.
+  it("throws rather than navigating an unresolved dynamic route", () => {
+    expect(() => resolveSweepPath("/workspace/cases/[caseKey]", {})).toThrow(
+      /sweep-eligible but the fixture published no path/,
+    );
+  });
+
+  it("names the route and both remedies in the failure", () => {
+    let message = "";
+    try {
+      resolveSweepPath("/ops/thing/[id]", {});
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain("/ops/thing/[id]");
+    expect(message).toContain("ux:sweep-fixture");
+    expect(message).toContain("SWEEP_RESOLVABLE_DYNAMIC_ROUTES");
+  });
+});
+
+describe("visible-text diagnostics (BI-99909E53)", () => {
+  it("names one file per route without path separators", () => {
+    expect(visibleTextFileName("/workspace/inbox")).toBe("workspace__inbox.txt");
+    expect(visibleTextFileName("/")).toBe("root.txt");
+    expect(visibleTextFileName("/platform/ai/providers")).toBe("platform__ai__providers.txt");
   });
 });

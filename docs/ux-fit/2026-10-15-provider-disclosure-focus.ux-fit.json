@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "compact-account-disclosure",
+  "decisionInteractionId": "DI-BE29BCA0E998",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ProviderAccountsOverview.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["compact-account-disclosure", "expanded-provider-catalog"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "evidenceClass": "Correction within the approved compact-disclosure design (6014/e733): return focus to the invoking account action, retain a connected Add provider fallback, and place existing recipes with the existing models controls. Reuse ProviderDetailForm and ProviderDetailSections; do not create a second models home. Recipe fetching is independent of billing and remains server-owned behind Suspense, with provider-wide attribution on additional accounts. Preserve all authentication, model, billing and permission controls. Source regression, protected qualification and containing served acceptance are separate evidence."
+  }
+}

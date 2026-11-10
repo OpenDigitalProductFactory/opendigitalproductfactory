@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   activityKindBiasFor,
+  deriveStakesBias,
   deriveStreamBiases,
   deriveTemporalBias,
   modeBiasFor,
   shapeBiasFor,
-} from "./derive";
-import { TEMPORAL_BANDS } from "./temporal-band";
+} from "@dpf/validators/workroom-policy/derive";
+import { TEMPORAL_BANDS } from "@dpf/validators/workroom-policy/temporal-band";
 
 // The trap this file guards: `proactivityLevel` can only ever RAISE cadence
 // (tighten.ts), so any bias that intends "be quieter" must express it as
@@ -107,5 +108,21 @@ describe("stream derivation", () => {
 
   it("treats an empty trustGates list as no trust gate", () => {
     expect(deriveStreamBiases({ trustGates: [] })).toEqual([]);
+  });
+});
+
+describe("build-rightsizing stakes derivation", () => {
+  it("keeps absent and inert rightsizing facts byte-compatible", () => {
+    expect(deriveStakesBias(null)).toBeNull();
+    expect(deriveStakesBias({ qualityFirst: false, deliverableSensitivity: "low" })).toBeNull();
+  });
+
+  it("requires shallow verification for quality-first or elevated work", () => {
+    expect(deriveStakesBias({ qualityFirst: true })?.verificationDepth).toBe("shallow");
+    expect(deriveStakesBias({ deliverableSensitivity: "elevated" })?.verificationDepth).toBe("shallow");
+  });
+
+  it("requires deep verification for high-sensitivity work", () => {
+    expect(deriveStakesBias({ deliverableSensitivity: "high" })?.verificationDepth).toBe("deep");
   });
 });

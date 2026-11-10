@@ -87,3 +87,18 @@ export function cardFieldLayout(
     .map((c) => c.columnId);
   return { titleColumnId, metaColumnIds };
 }
+
+/**
+ * Card layout for a saved board: its chosen `cardFields` (still-existing columns,
+ * de-duplicated, first = title), else the automatic `cardFieldLayout`.
+ */
+export function boardCardLayout(
+  columns: ColumnDefinition[],
+  groupByColumnId: string,
+  cardFields?: readonly string[],
+): { titleColumnId: string | null; metaColumnIds: string[] } {
+  const known = new Set(columns.map((c) => c.columnId));
+  const chosen = [...new Set((cardFields ?? []).filter((id) => known.has(id)))];
+  if (chosen.length === 0) return cardFieldLayout(columns, groupByColumnId);
+  return { titleColumnId: chosen[0], metaColumnIds: chosen.slice(1) };
+}

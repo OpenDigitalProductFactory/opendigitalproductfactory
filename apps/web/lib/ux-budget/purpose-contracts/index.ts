@@ -1,9 +1,8 @@
 import {
   purposeContractSourceSchema,
+  type PurposeContractModule,
   type PurposeContractSource,
 } from "../page-purpose";
-
-export type PurposeContractModule = readonly PurposeContractSource[];
 
 import { ARCHETYPE_READINESS_PURPOSE_CONTRACTS } from "./archetype-readiness";
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
@@ -15,6 +14,14 @@ import { GOVERNED_TEARDOWN_PURPOSE_CONTRACTS } from "./governed-teardown";
 import { WORDPRESS_PURPOSE_CONTRACTS } from "./wordpress";
 import { WORKROOM_PURPOSE_CONTRACTS } from "./workrooms";
 import { INSTALLATION_IDENTITY_PURPOSE_CONTRACTS } from "./installation-identity";
+import { WARD_PURPOSE_CONTRACTS } from "./ward";
+import { ADOPTION_WAITING_LIST_PURPOSE_CONTRACTS } from "./adoption-waiting-list";
+import { PET_RESCUE_PURPOSE_CONTRACTS } from "./pet-rescue";
+import { MAILROOM_PURPOSE_CONTRACTS } from "./mailroom";
+import { AREA_HOME_PURPOSE_CONTRACTS } from "./area-home";
+import { MARKET_FOOTPRINT_PURPOSE_CONTRACTS } from "./market-footprint";
+import { MONITORING_SETTINGS_PURPOSE_CONTRACTS } from "./monitoring-settings";
+import { GATE_EFFICACY_PURPOSE_CONTRACTS } from "./gate-efficacy";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
@@ -27,6 +34,14 @@ const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   WORDPRESS_PURPOSE_CONTRACTS,
   WORKROOM_PURPOSE_CONTRACTS,
   INSTALLATION_IDENTITY_PURPOSE_CONTRACTS,
+  WARD_PURPOSE_CONTRACTS,
+  ADOPTION_WAITING_LIST_PURPOSE_CONTRACTS,
+  PET_RESCUE_PURPOSE_CONTRACTS,
+  MAILROOM_PURPOSE_CONTRACTS,
+  AREA_HOME_PURPOSE_CONTRACTS,
+  MARKET_FOOTPRINT_PURPOSE_CONTRACTS,
+  MONITORING_SETTINGS_PURPOSE_CONTRACTS,
+  GATE_EFFICACY_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

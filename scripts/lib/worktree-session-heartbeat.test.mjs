@@ -12,6 +12,7 @@ import {
   isWorktreeSessionLive,
   writeHeartbeat,
   removeHeartbeat,
+  liveOtherSessionIds,
 } from "./worktree-session-heartbeat.mjs";
 
 /** Minimal in-memory fs stub matching the subset the lib uses. */
@@ -104,5 +105,50 @@ describe("write / read / remove / isWorktreeSessionLive", () => {
     const fs = memFs();
     assert.equal(readHeartbeat("/none", { fs }), null);
     assert.equal(isWorktreeSessionLive("/none", { now: 0, fs }), false);
+  });
+});
+
+// BI-296C9E24: two sessions shared one worktree. The marker held only the last
+// writer, the ending session's SessionEnd deleted it, and its reap then gutted
+// the tree under the session that was still live.
+describe("several sessions in one worktree", () => {
+  it("each session's beat is kept; a write does not erase another session", () => {
+    const fs = memFs();
+    writeHeartbeat("/wt", { now: 1000, sessionId: "live", fs });
+    writeHeartbeat("/wt", { now: 2000, sessionId: "ending", fs });
+    assert.deepEqual(liveOtherSessionIds("/wt", "ending", { now: 2000, fs }), ["live"]);
+    assert.deepEqual(liveOtherSessionIds("/wt", "live", { now: 2000, fs }), ["ending"]);
+    assert.equal(isWorktreeSessionLive("/wt", { now: 2000, fs }), true);
+  });
+
+  it("SessionEnd removes only its own entry; the other session stays live", () => {
+    const fs = memFs();
+    writeHeartbeat("/wt", { now: 1000, sessionId: "live", fs });
+    writeHeartbeat("/wt", { now: 2000, sessionId: "ending", fs });
+    removeHeartbeat("/wt", { sessionId: "ending", fs });
+    assert.deepEqual(liveOtherSessionIds("/wt", "ending", { now: 2000, fs }), ["live"]);
+    assert.equal(isWorktreeSessionLive("/wt", { now: 2000, fs }), true);
+    removeHeartbeat("/wt", { sessionId: "live", fs });
+    assert.equal(readHeartbeat("/wt", { fs }), null);
+  });
+
+  it("an ending session alone in its worktree sees no other live session", () => {
+    const fs = memFs();
+    writeHeartbeat("/wt", { now: 1000, sessionId: "ending", fs });
+    assert.deepEqual(liveOtherSessionIds("/wt", "ending", { now: 1000, fs }), []);
+  });
+
+  it("a stale other session does not block; a fresh one does", () => {
+    const fs = memFs();
+    writeHeartbeat("/wt", { now: 0, sessionId: "old", fs });
+    writeHeartbeat("/wt", { now: DEFAULT_TTL_MS + 10_000, sessionId: "ending", fs });
+    assert.deepEqual(liveOtherSessionIds("/wt", "ending", { now: DEFAULT_TTL_MS + 10_000, fs }), []);
+  });
+
+  it("a legacy single-record marker from another session still blocks (fail safe)", () => {
+    const fs = memFs({ [heartbeatPath("/wt")]: JSON.stringify({ beatAt: 1000, sessionId: "live" }) });
+    assert.deepEqual(liveOtherSessionIds("/wt", "ending", { now: 1000, fs }), ["live"]);
+    const anon = memFs({ [heartbeatPath("/wt")]: JSON.stringify({ beatAt: 1000 }) });
+    assert.equal(liveOtherSessionIds("/wt", "ending", { now: 1000, fs: anon }).length, 1);
   });
 });

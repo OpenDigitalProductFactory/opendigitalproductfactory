@@ -26,14 +26,11 @@ describe("Prometheus substrate configs", () => {
       "prometheus.macos.yml",
     ]) {
       const config = readPrometheusConfig(name);
-      // Active scrape jobs only — commented historical neo4j blocks may remain.
-      expect(config, name).not.toMatch(/^\s*-\s*job_name:\s*"qdrant"/m);
-      expect(config, name).not.toContain('targets: ["qdrant:6333"]');
-      expect(config, name).not.toMatch(/^\s*-\s*job_name:\s*"neo4j"/m);
+      // Not even a commented-out job: the retired names are gone (plan 2026-09-08 M9).
+      expect(config, name).not.toMatch(/qdrant|neo4j/i);
     }
     const alerts = readPrometheusConfig("alerts.yml");
-    expect(alerts).not.toMatch(/^\s*-\s*alert:\s*QdrantDown/m);
-    expect(alerts).not.toMatch(/^\s*-\s*alert:\s*Neo4jDown/m);
+    expect(alerts).not.toMatch(/qdrant|neo4j/i);
   });
 
   it("keeps Linux exporter scrape targets in the Linux config", () => {

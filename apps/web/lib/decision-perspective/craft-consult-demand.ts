@@ -1,0 +1,134 @@
+// Craft-consult demand: the profession-gate decisions a specialist could NOT
+// answer from its own craft corpus (BI-6BB728F1).
+//
+// THE DEFECT THIS CLOSES
+// `profession-material-promotion.ts` deliberately keeps platform-derived
+// craft pages out of the `architecture-tradeoff` class until a human confirms
+// or publishes one (derived B/0.6 rows would dilute a confirmed row below the
+// recommend band). That design makes every deferred tradeoff consult the
+// DEMAND SIGNAL for confirmation — and then nothing showed the signal: the
+// review page excludes `gateKey: "profession"` rows by construction, so 348 of
+// 351 enterprise-architecture consults in one 17-day window fell back to
+// platform doctrine with `gateFallbackUsed=true` and no human ever saw the
+// count. A hold whose demand signal is invisible is indistinguishable from a
+// silent drop (the same shape held-material-store.ts closed for high-stakes
+// families).
+//
+// This module aggregates that signal per (profession, decision class). It is
+// read-only: the release path is the existing craft page publish
+// (/coworker-decisions/craft/<key> → publish → craft-override-promotion.ts).
+
+import type { Prisma } from "@dpf/db";
+
+import { PROFESSION_GATE_KEY } from "./profession-gate";
+import type { DecisionOutcomeType } from "./types";
+
+/** Narrow client surface so tests can pass a stub. */
+export type CraftConsultDemandClient = {
+  decisionInteraction: {
+    findMany(args: unknown): Promise<unknown>;
+  };
+};
+
+/** The ledger columns the aggregation reads. */
+export type CraftConsultLedgerRow = {
+  domainClass: string;
+  question: string;
+  outcomeType: string;
+  gateFallbackUsed: boolean;
+  outcomePayload: unknown;
+  createdAt: Date;
+};
+
+export type CraftConsultDemandRow = {
+  /** Registry family key; `unbound` when the coworker maps to no family. */
+  professionKey: string;
+  domainClass: string;
+  /** Consults in the window that were not decided by the craft's own profile. */
+  consults: number;
+  /** Subset that ended `defer` (no applicable material) rather than an advisory fallback. */
+  deferred: number;
+  sampleQuestion: string;
+  latestAt: Date;
+};
+
+export const UNBOUND_PROFESSION_KEY = "unbound";
+
+const UNANSWERED_OUTCOMES: readonly DecisionOutcomeType[] = ["defer", "escalate"];
+
+function professionKeyOf(payload: unknown): string {
+  if (payload && typeof payload === "object") {
+    const key = (payload as { professionKey?: unknown }).professionKey;
+    if (typeof key === "string" && key.trim().length > 0) return key;
+  }
+  return UNBOUND_PROFESSION_KEY;
+}
+
+/**
+ * Pure aggregation — exported for tests. A row counts when the craft's own
+ * profile did not decide it (fallback used) or the gate could not answer at
+ * all (defer/escalate); a row that the craft answered itself is not demand.
+ */
+export function aggregateCraftConsultDemand(
+  rows: readonly CraftConsultLedgerRow[],
+): CraftConsultDemandRow[] {
+  const byKey = new Map<string, CraftConsultDemandRow>();
+  for (const row of rows) {
+    const unanswered = (UNANSWERED_OUTCOMES as readonly string[]).includes(row.outcomeType);
+    if (!row.gateFallbackUsed && !unanswered) continue;
+    const professionKey = professionKeyOf(row.outcomePayload);
+    const key = `${professionKey}\x00${row.domainClass}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.consults += 1;
+      if (row.outcomeType === "defer") existing.deferred += 1;
+      if (row.createdAt > existing.latestAt) {
+        existing.latestAt = row.createdAt;
+        existing.sampleQuestion = row.question;
+      }
+    } else {
+      byKey.set(key, {
+        professionKey,
+        domainClass: row.domainClass,
+        consults: 1,
+        deferred: row.outcomeType === "defer" ? 1 : 0,
+        sampleQuestion: row.question,
+        latestAt: row.createdAt,
+      });
+    }
+  }
+  return [...byKey.values()].sort(
+    (a, b) => b.consults - a.consults || a.professionKey.localeCompare(b.professionKey),
+  );
+}
+
+export const CRAFT_CONSULT_DEMAND_WINDOW_DAYS = 30;
+
+/** Window-bounded ledger read; the aggregation is `aggregateCraftConsultDemand`. */
+export async function listCraftConsultDemand(
+  db: CraftConsultDemandClient,
+  options: { sinceDays?: number; take?: number; now?: Date } = {},
+): Promise<CraftConsultDemandRow[]> {
+  const sinceDays = options.sinceDays ?? CRAFT_CONSULT_DEMAND_WINDOW_DAYS;
+  const now = options.now ?? new Date();
+  const since = new Date(now.getTime() - sinceDays * 24 * 60 * 60 * 1000);
+  const where: Prisma.DecisionInteractionWhereInput = {
+    gateKey: PROFESSION_GATE_KEY,
+    createdAt: { gte: since },
+    OR: [{ gateFallbackUsed: true }, { outcomeType: { in: [...UNANSWERED_OUTCOMES] } }],
+  };
+  const rows = (await db.decisionInteraction.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: options.take ?? 2000,
+    select: {
+      domainClass: true,
+      question: true,
+      outcomeType: true,
+      gateFallbackUsed: true,
+      outcomePayload: true,
+      createdAt: true,
+    },
+  })) as CraftConsultLedgerRow[];
+  return aggregateCraftConsultDemand(rows);
+}

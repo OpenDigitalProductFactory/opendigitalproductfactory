@@ -15,13 +15,74 @@ vi.mock("./champion-challenger", () => ({
 }));
 
 describe("routeEndpointV2 activity harness execution plans", () => {
+  it("routes a large confidential review with bounded thinking and preserves other endpoint refusals", async () => {
+    const endpoint = makeEndpoint({
+      id: "eligible-anthropic", providerId: "anthropic", modelId: "claude-opus-4-5",
+      modelFamily: "claude", maxOutputTokens: 64000, maxContextTokens: 200000,
+      sensitivityClearance: ["public", "internal", "confidential"],
+      capabilities: { ...EMPTY_CAPABILITIES, thinking: true, structuredOutput: true },
+    });
+    const decision = await routeEndpointV2([
+      endpoint,
+      { ...endpoint, id: "public-only", sensitivityClearance: ["public"] },
+      { ...endpoint, id: "no-schema", capabilities: { ...endpoint.capabilities, structuredOutput: false } },
+      { ...endpoint, id: "unknown-output", maxOutputTokens: null },
+      { ...endpoint, id: "small-output", maxOutputTokens: 8192 },
+    ], makeContract({
+      taskType: "build-review", sensitivity: "confidential", requiresStrictSchema: true,
+      reasoningDepth: "high", estimatedInputTokens: 50000,
+    }), [], [], {
+      activityContract: makeActivity({
+        successShape: "json",
+        tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: 16384, compression: "none" },
+      }),
+      capacityByProvider: new Map(),
+    });
+    expect(decision.selectedEndpoint).toBe("eligible-anthropic");
+    expect(decision.fallbackChain).toEqual(["eligible-anthropic"]);
+    expect(decision.executionPlan).toMatchObject({
+      maxTokens: 16384, completionAllowance: 16384,
+      providerSettings: { thinking: { type: "enabled", budget_tokens: 12288 } },
+      responsePolicy: { strictSchema: true },
+    });
+    expect(decision.excludedReasons.join(" ")).toContain("Sensitivity clearance missing");
+    expect(decision.excludedReasons.join(" ")).toContain("Missing required capability: structuredOutput");
+    expect(decision.excludedReasons.join(" ")).toContain("Activity completion capacity is unknown");
+    expect(decision.excludedReasons.join(" ")).toContain("Activity completion allowance exceeds known model output capacity");
+  });
+
+  it.each([
+    { maxOutputTokens: 4096 },
+    { maxOutputTokens: null },
+    { maxOutputTokens: 16384, maxContextTokens: 9000 },
+    { maxOutputTokens: 16384, maxContextTokens: null },
+  ])("excludes insufficient or unknown completion capacity: %j", async (limits) => {
+    const decision = await routeEndpointV2(
+      [makeEndpoint(limits)], makeContract(), [], [],
+      { activityContract: makeActivity(), capacityByProvider: new Map() },
+    );
+    expect(decision.selectedEndpoint).toBeNull();
+    expect(decision.executionPlan).toBeUndefined();
+    expect(decision.excludedReasons.join(" ")).toContain("Activity");
+  });
+
+  it("keeps insufficient endpoints out of fallback candidates", async () => {
+    const decision = await routeEndpointV2([
+      makeEndpoint({ id: "capable", maxOutputTokens: 16384 }),
+      makeEndpoint({ id: "too-small", maxOutputTokens: 4096 }),
+    ], makeContract(), [], [], { activityContract: makeActivity(), capacityByProvider: new Map() });
+    expect(decision.selectedEndpoint).toBe("capable");
+    expect(decision.fallbackChain).not.toContain("too-small");
+    expect(decision.executionPlan?.maxTokens).toBe(8192);
+  });
+
   it("attaches an activity harness recipe to the selected executionPlan", async () => {
     const decision = await routeEndpointV2(
-      [makeEndpoint({ providerId: "zai", modelId: "glm-5.2", modelFamily: "glm" })],
+      [makeEndpoint({ providerId: "zai", modelId: "glm-5.2", modelFamily: "glm", maxOutputTokens: 16384 })],
       makeContract({ taskType: "analysis" }),
       [],
       [],
-      { activityContract: makeActivity() },
+      { activityContract: makeActivity(), capacityByProvider: new Map() },
     );
 
     expect(decision.executionPlan?.harness).toMatchObject({
@@ -34,6 +95,9 @@ describe("routeEndpointV2 activity harness execution plans", () => {
       promptStrategy: "glm-center-distribution-packet",
       contextAssembler: "minimal-ranked-context",
     });
+    // BI-128AEC8D: the declared completion allowance must reach dispatch,
+    // not remain metadata while the no-recipe default silently stays 4096.
+    expect(decision.executionPlan?.maxTokens).toBe(8192);
   });
 
   it("applies an approved activity harness confidence override to live execution plans", async () => {
@@ -65,12 +129,14 @@ describe("routeEndpointV2 activity harness execution plans", () => {
         providerId: "openai",
         modelId: "gpt-4o-mini",
         costPerOutputMToken: 0.6,
+        maxOutputTokens: 8192,
       })],
       makeContract({ taskType: "summarization", budgetClass: "minimize_cost" }),
       [],
       [],
       {
         activityContract: activity,
+        capacityByProvider: new Map(),
         activityHarnessConfidenceOverrides: [override],
       },
     );

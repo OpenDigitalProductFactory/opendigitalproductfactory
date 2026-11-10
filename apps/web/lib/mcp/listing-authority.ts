@@ -32,6 +32,9 @@
 
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 
+/** Why a blanket deny applies: no active agent identity, or a clearance shortfall. */
+export type ListingDenyCause = "agent-unresolved" | "clearance-denied";
+
 /** The static, per-(human,agent) authority facts a faithful tools/list needs. */
 export type ListingAuthority =
   /** Token is NOT agent-bound: tools/call skips the coworker-authority gate, so
@@ -40,8 +43,10 @@ export type ListingAuthority =
   /** Agent-bound but nothing is callable: the acting agent could not be resolved
    *  to an active identity (call path → authority_evidence_unavailable) OR the
    *  human's clearance does not cover the agent's data sensitivity (call path →
-   *  sensitivity-clearance-denied). Either way EVERY agent-bound tool is denied. */
-  | { agentBound: true; blanketDeny: true }
+   *  sensitivity-clearance-denied). Either way EVERY agent-bound tool is denied.
+   *  `cause` and the resolved `agentGrants` let load_tools explain WHICH axis
+   *  refused a name (BI-949FBBAE); listing ignores both. */
+  | { agentBound: true; blanketDeny: true; cause: ListingDenyCause; agentGrants: string[] }
   /** Agent-bound and clearance-satisfied: filter each tool by the agent's grants. */
   | { agentBound: true; blanketDeny: false; agentGrants: string[] };
 
@@ -93,11 +98,11 @@ export async function resolveListingAuthority(
 
   if (agentSensitivity === null) {
     // Agent could not be verified → the call path denies every action.
-    return { agentBound: true, blanketDeny: true };
+    return { agentBound: true, blanketDeny: true, cause: "agent-unresolved", agentGrants };
   }
   const dataSensitivity = coerceDataSensitivity(agentSensitivity);
   if (!humanClearance.includes(dataSensitivity)) {
-    return { agentBound: true, blanketDeny: true };
+    return { agentBound: true, blanketDeny: true, cause: "clearance-denied", agentGrants };
   }
   return { agentBound: true, blanketDeny: false, agentGrants };
 }

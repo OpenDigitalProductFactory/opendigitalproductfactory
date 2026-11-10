@@ -33,7 +33,7 @@ In-platform coworkers in chat surfaces, external coding agents in CLI / IDE cont
 
 ## How To Apply
 
-Lead with the result: "Phase 4.2a shipped as #579" before any context about how it shipped. When deliberation surfaces a real trade-off the user must choose, name the choice as a binary or a small list, then make a recommendation. Avoid filler ("I'd be happy to," "Let me know if you have questions," "I've now completed..."). End with one concrete next-step proposal that the user can OK in one word — see the related communication principle "End every turn with a next-step proposal."
+Lead with the result: "Phase 4.2a shipped as #579" before any context about how it shipped. When deliberation surfaces a real trade-off the user must choose, name the choice as a binary or a small list, then make a recommendation. Avoid filler ("I'd be happy to," "Let me know if you have questions," "I've now completed..."). End with one concrete next-step proposal that the user can OK in one word — see [[principles/propose-acknowledge-reassign]], which states that rule as the per-turn shape of its reassign step.
 
 ## Decision Dimensions
 

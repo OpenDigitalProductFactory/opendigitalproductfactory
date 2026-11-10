@@ -98,3 +98,26 @@ test("baseline contract: version/owner/expiry (expired fails)/shapes", () => {
     /localAliases/,
   );
 });
+
+test("prose about the pattern is not a use of it (BI-6EBA0A00)", () => {
+  // The exact shapes found in the tree: all three are documentation comments
+  // teaching the very convention this guard enforces.
+  const files = [
+    { path: "apps/web/lib/a.ts", source: "// the source's `ok: true` in a comment\n" },
+    { path: "apps/web/lib/b.ts", source: "/** True when the response carried `ok: true`. */\n" },
+    { path: "apps/web/lib/c.ts", source: "/** Return `{ ok: true }` on success. */\n" },
+  ];
+  assert.equal(countInlineOkTrue(files), 0);
+
+  // A real use still counts, and a `//` inside a string is not a comment.
+  assert.equal(countInlineOkTrue([{ path: "apps/web/lib/d.ts", source: "return { ok: true };\n" }]), 1);
+  assert.equal(
+    countInlineOkTrue([{ path: "apps/web/lib/e.ts", source: 'const u = "http://x"; return { ok: true };\n' }]),
+    1,
+  );
+});
+
+test("commented-out code does not trip the alias check (BI-6EBA0A00)", () => {
+  const files = [{ path: "apps/web/lib/f.ts", source: "/*\ntype ActionResult<T> = { ok: true };\n*/\n" }];
+  assert.deepEqual(findLocalAliases(files), []);
+});

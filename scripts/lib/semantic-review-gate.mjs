@@ -2,11 +2,13 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 export const LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION = "semantic-change-review-local-gate.v1";
+export const ROLE_BOUND_LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION = "semantic-change-review-local-gate.v2";
 export const SEMANTIC_DIFF_MAX_BUFFER = 256 * 1024 * 1024;
 
-export function readGitDiffDigest(mergeBase, spawn = spawnSync) {
+export function readGitDiffDigest(mergeBase, spawn = spawnSync, cwd) {
   const diff = spawn("git", ["diff", "--binary", mergeBase, "HEAD"], {
     encoding: null,
+    ...(cwd ? { cwd } : {}),
     maxBuffer: SEMANTIC_DIFF_MAX_BUFFER,
   });
   if (diff.error?.code === "ENOBUFS") {
@@ -17,7 +19,27 @@ export function readGitDiffDigest(mergeBase, spawn = spawnSync) {
   return createHash("sha256").update(diff.stdout).digest("hex");
 }
 
+// Preserve failed-run diagnostics even when source identity cannot be resolved.
+// Null bindings cannot satisfy the server's failure-analysis evidence adapter.
+export function readFailureEvidenceBinding(sha, cwd, spawn = spawnSync) {
+  const resolve = args => {
+    const result = spawn("git", args, { cwd, encoding: "utf8" });
+    const value = result.stdout?.trim();
+    if (result.status !== 0 || !/^[a-f0-9]{40}$/.test(value ?? "")) throw new Error("Source identity is unavailable.");
+    return value;
+  };
+  try {
+    if (resolve(["rev-parse", "HEAD"]) !== sha) throw new Error("Candidate checkout changed before evidence binding.");
+    const headTreeHash = resolve(["rev-parse", `${sha}^{tree}`]);
+    const base = resolve(["merge-base", sha, "origin/main"]);
+    return { headTreeHash, diffDigest: readGitDiffDigest(base, spawn, cwd) };
+  } catch (error) {
+    return { headTreeHash: null, diffDigest: null, failureAnalysisBindingError: error.message };
+  }
+}
+
 const IDENTITY_FIELDS = [
+  "artifactType",
   "branch",
   "sha",
   "capsuleId",
@@ -34,7 +56,8 @@ function normalizedIds(value) {
 
 /** Deterministic local adapter: no model, portal, database, or network access. */
 export function validateLocalSemanticReviewGate(state, current, nowMs = Date.now()) {
-  if (!state || state.schemaVersion !== LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION) {
+  const expectedVersion = current.artifactType ? ROLE_BOUND_LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION : LOCAL_SEMANTIC_REVIEW_GATE_SCHEMA_VERSION;
+  if (!state || state.schemaVersion !== expectedVersion) {
     return { valid: false, reason: "missing-receipt" };
   }
   if (state.receiptDecision === "inconclusive") {
@@ -48,5 +71,12 @@ export function validateLocalSemanticReviewGate(state, current, nowMs = Date.now
   const stale = IDENTITY_FIELDS.some((field) => state[field] !== current[field]) ||
     JSON.stringify(normalizedIds(state.specialistIds)) !== JSON.stringify(normalizedIds(current.specialistIds));
   if (stale || !String(state.evidenceId ?? "").trim()) return { valid: false, reason: "stale-receipt" };
+  if (state.receiptDisposition === "policy-exemption") {
+    const valid = state.exemptionSchemaVersion === "semantic-change-review-exemption.v1" && state.nativeReview === "UNRUN"
+      && state.reviewBasis === "operator-accepted-client-assessment" && state.independentReview === "UNVERIFIED"
+      && Boolean(state.expiresAt && String(state.approvedByUserId ?? "").trim() && String(state.reason ?? "").trim())
+      && /^[a-f0-9]{64}$/.test(state.bindingDigest ?? "") && state.receiptDecision == null;
+    return { valid, reason: valid ? "policy-exemption" : "invalid-exemption" };
+  }
   return { valid: true, reason: "fresh-receipt" };
 }

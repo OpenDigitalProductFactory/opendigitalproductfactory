@@ -11,7 +11,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
 import { parseStdinChanges } from "./gate-context.mjs";
@@ -24,7 +27,7 @@ import {
 import { decide as specPlanDocDecide } from "../packages/dpf-skill-pack/hooks/spec-plan-doc-precheck.mjs";
 import { decide as uxFitDecide } from "../packages/dpf-skill-pack/hooks/ux-fit-precheck.mjs";
 
-const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 const build = (changedFiles, extra = {}) =>
   buildGateContext({ changedFiles, repoRoot, ...extra });
@@ -113,6 +116,25 @@ test("a baselined module reports its frozen size cap; a new .ts module gets the 
 test("docs changes report the doc-index derived artifact", () => {
   const ctx = build([{ path: "docs/testing/pre-pr-gate.md", status: "M" }]);
   assert.ok(ctx.derivedArtifacts.some((d) => d.id === "doc-index"), JSON.stringify(ctx.derivedArtifacts));
+});
+
+test("a change to graph-linked code lists the doc it affects and the Docs Impact trailer (BI-9B17E889)", () => {
+  const ctx = build([{ path: "packages/dpf-skill-pack/hooks/hooks.json", status: "M" }]);
+  const parity = ctx.docsImpact.find((d) => d.doc === "docs/architecture/agent-client-capability-parity.md");
+  assert.ok(parity, JSON.stringify(ctx.docsImpact));
+  assert.equal(parity.status, "pending");
+  assert.deepEqual(parity.because, ["code packages/dpf-skill-pack/hooks/hooks.json"]);
+  assert.ok(ctx.trailers.some((t) => t.gate === "Docs Impact" && t.trailer === "Docs-Impact-Decision:"));
+  assert.match(formatGateContextMarkdown(ctx), /Docs this change affects/);
+});
+
+test("a doc updated in the same change is reported updated and no longer demands the trailer", () => {
+  const ctx = build([
+    { path: "packages/dpf-skill-pack/hooks/hooks.json", status: "M" },
+    { path: "docs/architecture/agent-client-capability-parity.md", status: "M" },
+  ]);
+  assert.equal(ctx.docsImpact.find((d) => d.doc === "docs/architecture/agent-client-capability-parity.md")?.status, "updated");
+  assert.ok(!ctx.trailers.some((t) => t.gate === "Docs Impact"));
 });
 
 test("a net-new route lists the absolute budgets and four-companion checklist", () => {
@@ -256,4 +278,69 @@ test("planned-scope stdin keeps P status and refuses paths outside the repositor
     { path: "../../outside.ts", status: "P" },
     { path: "/tmp/outside.ts", status: "P" },
   ] })), [{ path: "apps/web/lib/new.ts", status: "P" }]);
+});
+
+// Routing fixtures prove the local contract, not a model's behavioral compliance.
+test("task briefs separate outages, authority and contention without live dependencies", async () => {
+  const { buildTaskBrief } = await import("./lib/gate-context.mjs");
+  for (const [situation, route] of Object.entries({
+    normal: "delivery", "upgrade-failed": "recovery", "mcp-unavailable": "recovery",
+    "ci-unavailable": "recovery", "review-infrastructure-unavailable": "recovery", "permission-denied": "authorization", "break-fix-occupied": "coordination",
+  })) {
+    const brief = buildTaskBrief(situation);
+    assert.equal(brief.route, route);
+    assert.equal(brief.authorizesExecution, false);
+    assert.ok(JSON.stringify(brief).length < 1000);
+    assert.ok(existsSync(join(repoRoot, brief.reference)));
+  }
+  assert.throws(() => buildTaskBrief("guess"), /Unknown situation/);
+  assert.throws(() => buildTaskBrief("toString"), /Unknown situation/);
+});
+
+test("outage brief runs outside a Git checkout without platform access", () => {
+  const result = spawnSync(process.execPath, [join(repoRoot, "scripts/gate-context.mjs"), "--situation", "mcp-unavailable", "--json"], { cwd: tmpdir(), encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).route, "recovery");
+});
+
+test("review outage routes to publication policy without inventing a review pass", async () => {
+  const { buildTaskBrief } = await import("./lib/gate-context.mjs");
+  const brief = buildTaskBrief("review-infrastructure-unavailable");
+  assert.equal(brief.reference, "docs/architecture/build-gate-runbook.md");
+  assert.match(brief.nextAction, /policy/);
+  assert.match(brief.nextAction, /unrun/);
+  assert.equal(brief.authorizesExecution, false);
+});
+
+test("an explicit candidate keeps diff scope immutable while the default includes working changes", async t => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { collectWorktreeDiff } = await import("./gate-context.mjs");
+  const cwd = mkdtempSync(join(tmpdir(), "dpf-pinned-scope-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = args => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const commit = message => { git(["add", "."]); git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", message]); };
+  git(["init", "-b", "topic"]);
+  writeFileSync(join(cwd, "AGENTS.md"), "base\n");
+  commit("base");
+  const base = git(["rev-parse", "HEAD"]);
+  writeFileSync(join(cwd, "AGENTS.md"), "base\ncandidate\n");
+  commit("candidate");
+  const head = git(["rev-parse", "HEAD"]);
+  writeFileSync(join(cwd, "later.ts"), "export const later = true;\n");
+  commit("later candidate");
+  git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  writeFileSync(join(cwd, "AGENTS.md"), "base\ncandidate\ndirty\n");
+  writeFileSync(join(cwd, "untracked.ts"), "untracked\n");
+
+  const pinned = collectWorktreeDiff({ base, head, cwd });
+  assert.deepEqual(pinned.changedFiles, [{ path: "AGENTS.md", status: "M" }]);
+  assert.deepEqual([...pinned.addedLinesByFile], [["AGENTS.md", 1]]);
+  assert.equal(pinned.mergeBase, base);
+  const working = collectWorktreeDiff({ base, cwd });
+  assert.deepEqual(working.changedFiles.map(entry => entry.path).sort(), ["AGENTS.md", "later.ts", "untracked.ts"]);
+  assert.equal(working.addedLinesByFile.get("AGENTS.md"), 2);
 });

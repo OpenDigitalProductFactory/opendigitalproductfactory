@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "one-bounded-panel-on-the-room",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/RoomWorkforcePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "rebaselined",
+    "measured": {
+      "/workspace/cases/[caseKey]": {
+        "defaultVisibleWords": 363,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  }
+}

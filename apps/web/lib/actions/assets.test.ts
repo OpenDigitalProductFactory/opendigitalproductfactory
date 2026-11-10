@@ -40,8 +40,6 @@ import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import {
   createAsset,
-  getAsset,
-  listAssets,
   calculateDepreciation,
   disposeAsset,
   runMonthlyDepreciation,

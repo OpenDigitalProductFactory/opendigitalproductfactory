@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "decidedOption": "compact-shared-inspector",
+  "decisionInteractionId": "DI-584304A4B6C8",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/ProjectionFreshness.tsx",
+      "apps/web/components/workspace/workroom/ReviewerExecutionList.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["compact-shared-inspector", "expand-arrival-budget"]
+  }
+}

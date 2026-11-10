@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   createTaskArtifact: vi.fn(),
   designSystemToThemeTokens: vi.fn(),
   taskRunUpdate: vi.fn(),
+  taskRunUpdateMany: vi.fn(),
   organizationUpdate: vi.fn(),
   brandingConfigUpsert: vi.fn(),
   agentMessageCreate: vi.fn(),
@@ -33,7 +34,7 @@ vi.mock("@/lib/brand/apply", () => ({
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    taskRun: { update: mocks.taskRunUpdate },
+    taskRun: { update: mocks.taskRunUpdate, updateMany: mocks.taskRunUpdateMany },
     organization: { update: mocks.organizationUpdate },
     brandingConfig: { upsert: mocks.brandingConfigUpsert },
     agentMessage: { create: mocks.agentMessageCreate },
@@ -106,6 +107,7 @@ describe("runBrandExtraction (core handler)", () => {
     mocks.agentAttachmentFindMany.mockReset();
 
     mocks.taskRunUpdate.mockResolvedValue({});
+    mocks.taskRunUpdateMany.mockReset().mockResolvedValue({ count: 1 });
     mocks.organizationUpdate.mockResolvedValue({});
     mocks.brandingConfigUpsert.mockResolvedValue({});
     mocks.agentMessageCreate.mockResolvedValue({});
@@ -174,21 +176,21 @@ describe("runBrandExtraction (core handler)", () => {
       sources: { url: "https://example.com" },
     });
 
-    expect(mocks.taskRunUpdate).toHaveBeenNthCalledWith(
-      1,
+    // The working transition is the guarded updateMany (BI-D208E70C).
+    expect(mocks.taskRunUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { taskRunId: "run-1" },
+        where: expect.objectContaining({ taskRunId: "run-1" }),
         data: expect.objectContaining({ status: "working" }),
       }),
     );
     expect(mocks.taskRunUpdate).toHaveBeenNthCalledWith(
-      2,
+      1,
       expect.objectContaining({
         where: { taskRunId: "run-1" },
         data: expect.objectContaining({ status: "completed" }),
       }),
     );
-    expect(mocks.taskRunUpdate.mock.calls[1]![0].data).not.toHaveProperty("state");
+    expect(mocks.taskRunUpdate.mock.calls[0]![0].data).not.toHaveProperty("state");
     expect(mocks.createTaskArtifact).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "run-1",
@@ -227,19 +229,18 @@ describe("runBrandExtraction (core handler)", () => {
       }),
     ).rejects.toThrow("URL timeout");
 
-    expect(mocks.taskRunUpdate).toHaveBeenNthCalledWith(
-      1,
+    expect(mocks.taskRunUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ status: "working" }),
       }),
     );
     expect(mocks.taskRunUpdate).toHaveBeenNthCalledWith(
-      2,
+      1,
       expect.objectContaining({
         data: expect.objectContaining({ status: "failed" }),
       }),
     );
-    expect(mocks.taskRunUpdate.mock.calls[1]![0].data).not.toHaveProperty("state");
+    expect(mocks.taskRunUpdate.mock.calls[0]![0].data).not.toHaveProperty("state");
     expect(mocks.createTaskMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "run-1",

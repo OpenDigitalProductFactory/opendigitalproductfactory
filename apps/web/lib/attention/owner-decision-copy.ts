@@ -12,19 +12,27 @@ const HEADLINE: Record<AttentionSource, string> = {
   "approval-outbound": "Send this message?",
   "approval-bill": "Approve this bill?",
   "approval-expense": "Approve this expense?",
+  "approval-leave": "Approve this time off?",
   "compliance-submission": "File this report?",
   "research-proposal": "Approve this research?",
   "coworker-memory": "Review what your coworker learned?",
   "ai-readiness-blocker": "How should we fix your intelligence setup?",
   "platform-health": "How should we handle this outage?",
+  "agent-toolchain": "What does this computer need to update its DPF tools again?",
   "provider-credential": "Reconnect this service?",
+  "contribution-setup": "Share your changes?",
+  "organization-direction": "What is your organization working towards?",
   "reservation-exception": "Handle this reservation?",
   "hospitality-capacity": "Resolve this capacity issue?",
   "storefront-inquiry": "Reply to this enquiry?",
+  "mailroom-item": "Acknowledge this message?",
   "business-journey": "How should we fix this for customers?",
   "compliance-source-freshness": "Renew this compliance evidence?",
-  "coworker-envelope": "Approve this coworker action?",
+  "coworker-envelope": "Authorize this coworker record?",
   "skill-proposal": "Approve this change to a coworker skill?",
+  "workroom-stall": "Who should own this stuck work?",
+  "workroom-rebind": "Should this room move to the newer version of its work?",
+  "orphaned-approval": "Who should answer these AI approvals?",
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -36,19 +44,27 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "approval-outbound": "Marketing",
   "approval-bill": "Finance",
   "approval-expense": "Finance",
+  "approval-leave": "People",
   "compliance-submission": "Compliance",
   "research-proposal": "Research",
   "coworker-memory": "Digital workforce",
   "ai-readiness-blocker": "Technology",
   "platform-health": "Platform operations",
+  "agent-toolchain": "Platform operations",
   "provider-credential": "Technology",
+  "contribution-setup": "Technology",
+  "organization-direction": "Leadership",
   "reservation-exception": "Front of house",
   "hospitality-capacity": "Hospitality operations",
   "storefront-inquiry": "Front of house",
+  "mailroom-item": "Mailroom",
   "business-journey": "Front of house",
   "compliance-source-freshness": "Legal and compliance",
   "coworker-envelope": "Digital workforce",
   "skill-proposal": "Digital workforce",
+  "workroom-stall": "Digital workforce",
+  "workroom-rebind": "Digital workforce",
+  "orphaned-approval": "Digital workforce",
 };
 
 export function specialistFor(source: AttentionSource): string {
@@ -60,6 +76,7 @@ export function specialistFor(source: AttentionSource): string {
 const SELF_EXPLANATORY_SOURCES = new Set<AttentionSource>([
   "approval-bill",
   "approval-expense",
+  "approval-leave",
   "approval-outbound",
   "compliance-submission",
 ]);
@@ -78,6 +95,9 @@ const OWNER_SAFE_SITUATION: Partial<Record<AttentionSource, string>> = {
  *  the rationale the owner needs to decide — it was previously discarded. */
 export function situationFor(item: AttentionItem): string | undefined {
   if (SELF_EXPLANATORY_SOURCES.has(item.source)) return undefined;
+  if (item.source === "coworker-envelope" && item.envelope?.decision) {
+    return item.envelope.decision.recordedIfAuthorized;
+  }
   const translated = OWNER_SAFE_SITUATION[item.source];
   if (translated) return translated;
   const context = (item.context ?? "").trim();
@@ -94,6 +114,9 @@ export function headlineFor(item: AttentionItem): string {
   if (item.source === "agent-proposal" && !/proactiv/i.test(item.title)) {
     return "Approve this coworker action?";
   }
+  if (item.source === "coworker-envelope" && item.envelope?.decision) {
+    return item.envelope.decision.headline;
+  }
   return HEADLINE[item.source];
 }
 
@@ -103,6 +126,8 @@ export function whyItMattersFor(item: AttentionItem): string {
       return "Paying the right bills on time keeps your business supplied and avoids late fees.";
     case "approval-expense":
       return "This pays back a team member and keeps your business records accurate.";
+    case "approval-leave":
+      return "A team member is waiting to plan their time off, and the team's cover depends on it.";
     case "approval-outbound":
       return "Customers may see this message as soon as you approve it.";
     case "compliance-submission":
@@ -145,6 +170,8 @@ export function consequenceFor(item: AttentionItem): string {
       return "If you do nothing, the bill may become late and the supplier may follow up.";
     case "approval-expense":
       return "If you do nothing, the claim stays unpaid.";
+    case "approval-leave":
+      return "If you do nothing, the request stays pending and the team member cannot plan around it.";
     case "approval-outbound":
       return "If you do nothing, the message stays private and is not sent.";
     case "compliance-submission":
@@ -158,7 +185,10 @@ export function consequenceFor(item: AttentionItem): string {
     case "agent-proposal":
       return "If you do nothing, your coworker stays stuck here and the work behind it waits.";
     case "coworker-envelope":
-      return "If you do nothing, the approval window closes and your coworker stops.";
+      if (item.envelope?.decision) {
+        return `If you do nothing, ${item.envelope.decision.ifYouDoNothing}`;
+      }
+      return "If you do nothing, the window closes and the record is not written.";
     default:
       return "If you do nothing, this work stays paused while your digital team keeps it safe.";
   }
@@ -173,10 +203,13 @@ export function recommendationFor(item: AttentionItem): string {
       return "read the customer-facing copy once, then send it if it sounds like your business.";
     case "compliance-submission":
       return "check the recipient and due date before filing.";
+    case "approval-leave":
+      return "open the time-off page, read the advisor's recommendation if there is one, then approve or deny.";
     case "agent-proposal":
       return "accept only the stated boundary; this does not give the coworker new authority.";
     case "coworker-envelope":
-      return "check the exact record and the time left, then approve only if both are right.";
+      return item.envelope?.decision.recommendation
+        ?? "this action needs a person to record it";
     case "research-proposal":
       return "keep this in the weekly review unless it affects a decision due sooner.";
     case "coworker-memory":

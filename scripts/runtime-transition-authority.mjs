@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { randomBytes } from "node:crypto";
 import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -8,8 +9,10 @@ const validId = /^RCT-[A-Za-z0-9-]{1,48}$/;
 if (!["reserve", "release", "reconcile"].includes(operation) || (operation !== "reconcile" && !validId.test(transitionId ?? ""))) {
   process.stderr.write("invalid_runtime_transition_authority_request\n"); process.exit(64);
 }
-const stateDirFlag = process.argv.indexOf("--state-dir");
-const stateDir = resolve(stateDirFlag >= 0 ? process.argv[stateDirFlag + 1] : (process.env.DPF_PROMOTER_STATE_DIR ?? "."));
+// strict: false keeps the old tolerance: the positionals above and unread flags are ignored.
+const { values: flags } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "state-dir": { type: "string" } } });
+const stateDirFlag = flags["state-dir"];
+const stateDir = resolve(stateDirFlag === undefined ? (process.env.DPF_PROMOTER_STATE_DIR ?? ".") : typeof stateDirFlag === "string" ? stateDirFlag : undefined);
 const marker = join(stateDir, "runtime-transition-authority.json");
 const leaseMs = Number(process.env.DPF_RUNTIME_TRANSITION_AUTHORITY_LEASE_MS ?? 600_000);
 if (!Number.isInteger(leaseMs) || leaseMs < 1_000 || leaseMs > 3_600_000) { process.stderr.write("invalid_authority_lease_duration\n"); process.exit(64); }

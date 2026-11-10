@@ -2,12 +2,27 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ZodError } from "zod";
 import { createExpenseClaim, submitExpenseClaim } from "@/lib/actions/expenses";
 import { EXPENSE_CATEGORIES, createExpenseClaimSchema } from "@/lib/expense-validation";
 
 const inputClasses =
   "bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] text-[var(--dpf-text)] rounded px-3 py-2 text-sm focus:border-[var(--dpf-accent)] focus:outline-none placeholder:text-[var(--dpf-muted)]";
 const labelClasses = "block text-xs text-[var(--dpf-muted)] mb-1";
+
+function expenseEntryError(error: unknown, fallback: string): string {
+  if (!(error instanceof ZodError)) return error instanceof Error ? error.message : fallback;
+  return error.issues.map(issue => {
+    if (issue.path[0] === "title") return "Enter a title.";
+    const index = issue.path[1];
+    if (typeof index !== "number") return "Add at least one expense item.";
+    const field = issue.path[2];
+    const instruction = field === "amount" ? "enter an amount greater than zero"
+      : field === "category" ? "choose a category"
+      : field === "date" ? "enter a date" : "enter a description";
+    return `Item ${index + 1}: ${instruction}.`;
+  }).join(" ");
+}
 
 interface ExpenseItem {
   date: string;
@@ -83,7 +98,7 @@ export function CreateExpenseForm({ currencySymbol }: CreateExpenseFormProps) {
       await createExpenseClaim(buildInput());
       router.push("/finance/my-expenses");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save draft");
+      setError(expenseEntryError(e, "Failed to save draft"));
     } finally {
       setLoading(null);
     }
@@ -98,7 +113,7 @@ export function CreateExpenseForm({ currencySymbol }: CreateExpenseFormProps) {
       await submitExpenseClaim(claim.id);
       router.push("/finance/my-expenses");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to submit claim");
+      setError(expenseEntryError(e, "Failed to submit claim"));
     } finally {
       setLoading(null);
     }

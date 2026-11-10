@@ -1,15 +1,93 @@
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, mkdtempSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import test from "node:test";
 
 import {
   createLocalCiPassEvidenceValidity,
+  isInconclusiveLocalCiGateStatus,
   isRecoverableInterruptedGateState,
+  isTestStubGateRecord,
+  projectReusedPassMetadata,
   readLocalCiGateState,
+  readReusedEvidenceValidity,
+  supersedeLosingSlotRecords,
   writeLocalCiGateState,
 } from "./local-ci-gate-state.mjs";
+
+const waitFor = async (predicate, timeoutMs = 10_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for the Windows file-handle fixture.");
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+};
+
+test("Windows replacement preserves complete state until a non-delete-sharing reader releases it", {
+  skip: process.platform !== "win32",
+  timeout: 30_000,
+}, async t => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-gate-share-mode-"));
+  const stateFile = join(directory, "gate.json");
+  const readyFile = join(directory, "reader-ready");
+  const shared = {
+    branch: "fix/windows-share-mode",
+    sha: "a".repeat(40),
+    gatePassed: false,
+    leaseId: "NPEL-WINDOWS-SHARE",
+    evidenceId: "",
+    expiresAt: "2026-10-31T00:00:00.000Z",
+    resilience: null,
+    leaseEvents: [],
+  };
+  writeLocalCiGateState(stateFile, { ...shared, status: "admitted" });
+  const admittedBytes = readFileSync(stateFile, "utf8");
+
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "$stream = [System.IO.File]::Open($env:DPF_TEST_STATE_FILE, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::ReadWrite)",
+    "[System.IO.File]::WriteAllText($env:DPF_TEST_READY_FILE, 'ready')",
+    "try { [Console]::In.ReadLine() | Out-Null } finally { $stream.Dispose() }",
+  ].join("; ");
+  const helper = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    windowsHide: true,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, DPF_TEST_STATE_FILE: stateFile, DPF_TEST_READY_FILE: readyFile },
+  });
+  let helperError = "";
+  helper.stderr.on("data", chunk => { helperError += String(chunk); });
+  t.after(() => {
+    if (helper.exitCode === null) helper.kill();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  await waitFor(() => existsSync(readyFile) || helper.exitCode !== null);
+  assert.equal(existsSync(readyFile), true, helperError || `helper exited ${helper.exitCode} before acquiring the handle`);
+  let replacementError;
+  try {
+    writeLocalCiGateState(stateFile, { ...shared, status: "running" });
+  } catch (error) {
+    replacementError = error;
+  }
+  assert.ok(replacementError, "the held destination must reject the atomic replacement");
+  assert.equal(replacementError.syscall, "rename");
+  assert.equal(readFileSync(stateFile, "utf8"), admittedBytes,
+    "the first complete JSON record must remain byte-for-byte intact");
+  assert.deepEqual(readdirSync(directory).filter(name =>
+    name.startsWith(`.${basename(stateFile)}.`) && name.endsWith(".tmp")), []);
+
+  helper.stdin.end("release\n");
+  const exitCode = await new Promise((resolve, reject) => {
+    helper.once("error", reject);
+    helper.once("exit", code => resolve(code));
+  });
+  assert.equal(exitCode, 0, helperError);
+
+  writeLocalCiGateState(stateFile, { ...shared, status: "running" });
+  assert.equal(readLocalCiGateState(stateFile).status, "running");
+});
 
 test("completed PASS evidence receives bounded validity independent of its lease", () => {
   const issuedAt = "2026-08-09T10:00:00.000Z";
@@ -52,6 +130,41 @@ test("local-CI gate state helper writes and reads the shared evidence shape", ()
   assert.equal(state.recovery.reason, "test");
   assert.equal(state.queueObserver.token, "observer-token");
   assert.equal(state.leaseExpiresAt, "2026-07-30T06:00:00.000Z");
+});
+
+test("a failed record persists the reason and structured summary (BI-DBED32FE, BI-465B3D60)", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-reason-")), "gate.json");
+  writeLocalCiGateState(stateFile, {
+    branch: "fix/x",
+    sha: "a".repeat(40),
+    gatePassed: false,
+    leaseId: "NPEL-1",
+    evidenceId: "",
+    status: "failed",
+    expiresAt: "2026-08-30T06:00:00.000Z",
+    resilience: null,
+    leaseEvents: [],
+    failureReason: "no stage failed; child exited 1 after local-ci-vitest",
+    failureSummary: { schema: "dpf-local-ci-failure-summary/v1", failedTests: [], failedChecks: [] },
+    childExitCode: 1,
+  });
+  const state = readLocalCiGateState(stateFile);
+  assert.equal(state.failureReason, "no stage failed; child exited 1 after local-ci-vitest");
+  assert.equal(state.childExitCode, 1);
+  assert.equal(state.failureSummary.schema, "dpf-local-ci-failure-summary/v1");
+});
+
+test("canonical PASS reuse projects current HEAD onto metadata (BI-C6B2D404)", () => {
+  const projected = projectReusedPassMetadata(
+    { candidateSha: "oldsha", candidateRef: "feat/old", execution: { status: "passed", failedCommand: "stale" } },
+    { sha: "newsha", branch: "feat/new", evidenceId: "EXT-9", leaseId: "NPEL-9" },
+  );
+  assert.equal(projected.candidateSha, "newsha");
+  assert.equal(projected.candidateRef, "feat/new");
+  assert.equal(projected.reusedEvidenceId, "EXT-9");
+  assert.equal(projected.runLeaseId, "NPEL-9");
+  assert.equal(projected.execution.status, "passed");
+  assert.equal(projected.execution.failedCommand, null);
 });
 
 test("only matching queued/admitted/running gate states are recoverable", () => {
@@ -126,4 +239,315 @@ test("queued admission diagnostics survive a later terminal state write", () => 
 
   const state = readLocalCiGateState(stateFile);
   assert.deepEqual(state.admission, admission);
+});
+
+// BI-5529B5AC: when one slot PASSES a branch+SHA, a sibling slot's non-passing
+// record for the SAME branch+SHA is a loser that would otherwise linger as a
+// live-looking claim (the shadow that refused a real PASS on 2026-09-02). It is
+// rewritten as `superseded`, naming the winner; records for other SHAs, other
+// branches, real passes, and pending evidence are left alone.
+test("a losing sibling record for the same branch+SHA is rewritten as superseded", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-supersede-"));
+  const winner = join(dir, "dpf-local-ci-gate-slot-1.json");
+  const loser = join(dir, "dpf-local-ci-gate.json");
+  const base = { leaseId: "L", evidenceId: "", expiresAt: "2026-09-03T02:00:00.000Z", resilience: null, leaseEvents: [] };
+  writeLocalCiGateState(loser, { ...base, branch: "feat/x", sha: "abc", gatePassed: false, status: "queued" });
+  writeLocalCiGateState(winner, { ...base, branch: "feat/x", sha: "abc", gatePassed: true, status: "passed", evidenceId: "E1" });
+
+  const result = supersedeLosingSlotRecords({
+    winnerStateFile: winner,
+    winnerSlotKey: "slot-1",
+    siblingStateFiles: [loser],
+    branch: "feat/x",
+    sha: "abc",
+    now: () => "2026-09-03T01:00:00.000Z",
+  });
+
+  assert.deepEqual(result.superseded, [loser]);
+  const rewritten = readLocalCiGateState(loser);
+  assert.equal(rewritten.status, "superseded");
+  assert.equal(rewritten.gatePassed, false);
+  assert.equal(rewritten.supersededStatus, "queued");
+  assert.deepEqual(rewritten.supersededBy, { slotKey: "slot-1", stateFile: winner, at: "2026-09-03T01:00:00.000Z" });
+  assert.equal(rewritten.sha, "abc");
+});
+
+test("supersession leaves other SHAs, other branches, passes, and pending evidence untouched", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-supersede-skip-"));
+  const winner = join(dir, "dpf-local-ci-gate-slot-1.json");
+  const base = { leaseId: "L", evidenceId: "", expiresAt: "2026-09-03T02:00:00.000Z", resilience: null, leaseEvents: [] };
+  const otherSha = join(dir, "a.json");
+  const otherBranch = join(dir, "b.json");
+  const realPass = join(dir, "c.json");
+  const pending = join(dir, "d.json");
+  const missing = join(dir, "e.json");
+  writeLocalCiGateState(otherSha, { ...base, branch: "feat/x", sha: "old", gatePassed: false, status: "failed" });
+  writeLocalCiGateState(otherBranch, { ...base, branch: "feat/y", sha: "abc", gatePassed: false, status: "failed" });
+  writeLocalCiGateState(realPass, { ...base, branch: "feat/x", sha: "abc", gatePassed: true, status: "passed", evidenceId: "E0" });
+  writeLocalCiGateState(pending, { ...base, branch: "feat/x", sha: "abc", gatePassed: true, status: "passed", evidencePending: true, evidencePendingReason: "quiescing" });
+
+  const result = supersedeLosingSlotRecords({
+    winnerStateFile: winner,
+    winnerSlotKey: "slot-1",
+    siblingStateFiles: [otherSha, otherBranch, realPass, pending, missing],
+    branch: "feat/x",
+    sha: "abc",
+  });
+
+  assert.deepEqual(result.superseded, []);
+  for (const file of [otherSha, otherBranch, realPass, pending]) {
+    assert.notEqual(readLocalCiGateState(file).status, "superseded", file);
+  }
+});
+
+// BI-FFCFCCE0: a starvation event that arrives AFTER a terminal PASS is a
+// separate inconclusive observation, not a re-verdict. Observed 2026-09-10 on
+// fix/principle-decide-requires-option-id: the gate passed and reported PASS at
+// 05:55Z, and at 06:15Z the same slot record was rewritten to
+// blocked_control_plane_starvation with gatePassed:false and an empty
+// evidenceRecordId. One lease, one run — the verdict was reached, then erased.
+test("an infrastructure-blocked write cannot downgrade a terminal PASS for the same branch+SHA", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-pass-guard-")), "gate.json");
+  const shared = { branch: "fix/x", sha: "d".repeat(40), leaseId: "NPEL-1", resilience: null, leaseEvents: [] };
+
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: true,
+    evidenceId: "cmtv4u0220h4301qn5r8le9ev",
+    status: "passed",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+  });
+  const result = writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: false,
+    evidenceId: "",
+    status: "blocked_control_plane_starvation",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+    evidencePending: true,
+    evidencePendingReason: "control_plane_unavailable",
+    failureReason: "control plane unreachable for two sustained rounds",
+  });
+
+  const state = readLocalCiGateState(stateFile);
+  assert.equal(state.gatePassed, true, "the reached verdict must stand");
+  assert.equal(state.status, "passed");
+  assert.equal(state.evidenceRecordId, "cmtv4u0220h4301qn5r8le9ev");
+  assert.equal(result.preservedPass, true);
+  // The event is not swallowed: it is recorded as its own inconclusive observation.
+  assert.equal(state.inconclusiveObservations.length, 1);
+  assert.equal(state.inconclusiveObservations[0].status, "blocked_control_plane_starvation");
+  assert.equal(
+    state.inconclusiveObservations[0].reason,
+    "control plane unreachable for two sustained rounds",
+  );
+});
+
+test("a PASS whose evidence is still pending is protected the same way", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-pass-pending-")), "gate.json");
+  const shared = { branch: "fix/x", sha: "e".repeat(40), leaseId: "NPEL-2", resilience: null, leaseEvents: [] };
+
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: true,
+    evidenceId: "",
+    status: "passed",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+    evidencePending: true,
+    evidencePendingReason: "tool_threw",
+  });
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: false,
+    evidenceId: "",
+    status: "blocked_child_signal_death",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+  });
+
+  const state = readLocalCiGateState(stateFile);
+  assert.equal(state.gatePassed, true);
+  assert.equal(state.evidencePending, true);
+  assert.equal(state.evidencePendingReason, "tool_threw");
+});
+
+test("a real verdict, a different candidate, and a re-run in flight still overwrite a PASS", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-pass-overwrite-"));
+  const base = { leaseId: "L", evidenceId: "", resilience: null, leaseEvents: [], expiresAt: "2026-09-11T06:00:00.000Z" };
+  const pass = { ...base, gatePassed: true, status: "passed", evidenceId: "E1" };
+
+  // A FAIL for the same tree is a claim about the diff, not infrastructure.
+  const verdict = join(dir, "verdict.json");
+  writeLocalCiGateState(verdict, { ...pass, branch: "fix/x", sha: "abc" });
+  writeLocalCiGateState(verdict, { ...base, branch: "fix/x", sha: "abc", gatePassed: false, status: "failed" });
+  assert.equal(readLocalCiGateState(verdict).status, "failed");
+
+  // A blocked write for a DIFFERENT sha describes a different candidate.
+  const other = join(dir, "other.json");
+  writeLocalCiGateState(other, { ...pass, branch: "fix/x", sha: "abc" });
+  writeLocalCiGateState(other, {
+    ...base, branch: "fix/x", sha: "def", gatePassed: false, status: "blocked_control_plane_starvation",
+  });
+  assert.equal(readLocalCiGateState(other).sha, "def");
+
+  // A re-run in flight must own the record; a stale PASS beside a live run lies.
+  const rerun = join(dir, "rerun.json");
+  writeLocalCiGateState(rerun, { ...pass, branch: "fix/x", sha: "abc" });
+  writeLocalCiGateState(rerun, { ...base, branch: "fix/x", sha: "abc", gatePassed: false, status: "running" });
+  assert.equal(readLocalCiGateState(rerun).status, "running");
+});
+
+test("every blocked_* status counts as infrastructure, including ones added later", () => {
+  for (const status of [
+    "blocked_control_plane_starvation",
+    "blocked_child_signal_death",
+    "blocked_sandbox_drift",
+    "blocked_quiescence",
+    "blocked_wrapper_exited",
+    "blocked_something_nobody_has_written_yet",
+  ]) {
+    assert.equal(isInconclusiveLocalCiGateStatus(status), true, status);
+  }
+  // Verdicts about the tree are not infrastructure and must stay able to
+  // replace a stale PASS.
+  for (const status of ["passed", "failed", "conflict", "superseded", "running", "queued", null, undefined]) {
+    assert.equal(isInconclusiveLocalCiGateStatus(status), false, String(status));
+  }
+});
+
+test("a wrapper that exited before a terminal state cannot withdraw a PASS either", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-wrapper-")), "gate.json");
+  const shared = { branch: "fix/x", sha: "a".repeat(40), leaseId: "NPEL-3", resilience: null, leaseEvents: [] };
+
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: true,
+    evidenceId: "E9",
+    status: "passed",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+  });
+  writeLocalCiGateState(stateFile, {
+    ...shared,
+    gatePassed: false,
+    evidenceId: "",
+    status: "blocked_wrapper_exited",
+    expiresAt: "2026-09-11T06:00:00.000Z",
+  });
+
+  assert.equal(readLocalCiGateState(stateFile).status, "passed");
+});
+
+test("a reused PASS is dated by the stamp it arrives with", () => {
+  const validity = readReusedEvidenceValidity({
+    issuedAt: "2026-09-12T07:52:00.000Z",
+    expiresAt: "2026-09-13T07:52:00.000Z",
+  });
+
+  assert.equal(validity.issuedAt, "2026-09-12T07:52:00.000Z");
+  assert.equal(validity.expiresAt, "2026-09-13T07:52:00.000Z");
+  assert.equal(validity.schemaVersion, 1);
+});
+
+test("an older record without an issue time still carries the expiry that decides reuse", () => {
+  const validity = readReusedEvidenceValidity({ expiresAt: "2026-09-13T07:52:00.000Z" });
+
+  assert.equal(validity.expiresAt, "2026-09-13T07:52:00.000Z");
+  assert.equal(validity.issuedAt, null);
+});
+
+test("a stamp this gate cannot read yields nothing, so the caller runs instead of guessing", () => {
+  // Each of these once reached the state file as an expiry the gate then
+  // enforced against itself (BI-03E1139A). A verdict nobody can date is not a
+  // verdict this gate may publish.
+  for (const value of [
+    null,
+    undefined,
+    "2026-09-13T07:52:00.000Z",
+    [],
+    {},
+    { issuedAt: "2026-09-12T07:52:00.000Z" },
+    { issuedAt: "2026-09-12T07:52:00.000Z", expiresAt: "whenever" },
+  ]) {
+    assert.equal(readReusedEvidenceValidity(value), null, JSON.stringify(value ?? null));
+  }
+});
+
+test("the evidence clock and the lease clock are recorded as two separate fields", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-reuse-clock-")), "gate.json");
+  const evidenceValidity = readReusedEvidenceValidity({
+    issuedAt: "2026-09-12T07:52:00.000Z",
+    expiresAt: "2026-09-13T07:52:00.000Z",
+  });
+
+  writeLocalCiGateState(stateFile, {
+    branch: "fix/x",
+    sha: "a".repeat(40),
+    gatePassed: true,
+    leaseId: "NPEL-1",
+    evidenceId: "E1",
+    status: "passed",
+    expiresAt: evidenceValidity.expiresAt,
+    // The lease died fourteen minutes before this record was written. Recorded
+    // in the evidence field it would have made the PASS unreadable.
+    leaseExpiresAt: "2026-09-12T08:08:05.061Z",
+    evidenceValidity,
+    resilience: null,
+    leaseEvents: [],
+  });
+
+  const state = readLocalCiGateState(stateFile);
+  assert.equal(state.expiresAt, "2026-09-13T07:52:00.000Z");
+  assert.equal(state.leaseExpiresAt, "2026-09-12T08:08:05.061Z");
+  assert.ok(Date.parse(state.expiresAt) > Date.parse(state.leaseExpiresAt));
+});
+
+// BI-53B189C8. The stub's record must say what it is, and keep saying it through
+// every rewrite that carries a record forward.
+test("a test-stub run is recorded as one, and a later infrastructure event keeps the mark", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-state-stub-")), "gate.json");
+  const sha = "d".repeat(40);
+  writeLocalCiGateState(stateFile, {
+    branch: "fix/admitted-owner-recovery",
+    sha,
+    gatePassed: true,
+    leaseId: "NPEL-STUB",
+    evidenceId: "EVIDENCE-STUB",
+    status: "passed",
+    expiresAt: "2999-01-01T00:00:00.000Z",
+    resilience: null,
+    leaseEvents: [],
+    testStub: true,
+  });
+  assert.equal(readLocalCiGateState(stateFile).testStub, true);
+  assert.equal(isTestStubGateRecord(readLocalCiGateState(stateFile)), true);
+
+  writeLocalCiGateState(stateFile, {
+    branch: "fix/admitted-owner-recovery",
+    sha,
+    gatePassed: false,
+    leaseId: "NPEL-STUB",
+    evidenceId: "",
+    status: "blocked_control_plane_starvation",
+    expiresAt: "",
+    resilience: null,
+    leaseEvents: [],
+  });
+  assert.equal(isTestStubGateRecord(readLocalCiGateState(stateFile)), true);
+});
+
+test("a real run's record carries no test-stub mark", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-state-real-")), "gate.json");
+  writeLocalCiGateState(stateFile, {
+    branch: "feat/real",
+    sha: "e".repeat(40),
+    gatePassed: true,
+    leaseId: "NPEL-REAL",
+    evidenceId: "EXT-REAL",
+    status: "passed",
+    expiresAt: "2999-01-01T00:00:00.000Z",
+    resilience: null,
+    leaseEvents: [],
+  });
+  const state = readLocalCiGateState(stateFile);
+  assert.equal("testStub" in state, false);
+  assert.equal(isTestStubGateRecord(state), false);
+  assert.equal(isTestStubGateRecord(null), false);
 });

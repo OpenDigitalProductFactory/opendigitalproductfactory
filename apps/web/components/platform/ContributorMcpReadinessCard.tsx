@@ -58,11 +58,13 @@ function statusMessage(readiness: ContributorMcpReadiness): string {
     case "needs_reissue":
       return "Current token is expired or revoked. Issue a replacement development token.";
     case "needs_grants":
+      if (readiness.permissionLayer === "coworker") return "The acting coworker needs approved delivery permissions. Platform install or upgrade must reconcile them.";
       if (readiness.missingGrants.length === 0) {
         return "Current token is read-only. Rotate it with development write access for Build Studio MCP.";
       }
       return `Current token is missing ${readiness.missingGrants.length} grants needed for Build Studio work.`;
     case "needs_identity_binding":
+      if (readiness.identityBinding === "bound") return "The connection has not verified every required delivery tool. Test it again after platform recovery.";
       return "Token access is not GAID-bound yet. RBAC and token grants still gate the peer.";
   }
 }

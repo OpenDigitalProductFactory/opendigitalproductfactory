@@ -1,0 +1,19 @@
+{
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "last-result-disclosure",
+      "expanded-inline-counts"
+    ]
+  },
+  "decidedOption": "last-result-disclosure",
+  "rationale": "Reuse the existing Scheduled Jobs Last run cell. Native disclosure adds two default words, preserves keyboard interaction, and reveals bounded counts and error categories on demand. Source truth is the typed ScheduledJob lastRunSummary written from persisted triage assessments. No new route or AI action.",
+  "verification": "119 affected web tests passed. Prototype saved with review, idle, outage and budget fixtures; local-file browser exercise was blocked by browser protocol policy. Served-target verification remains required. Choice evidence is not a visual test pass.",
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/scheduled-jobs/ScheduledJobsClient.tsx"
+    ]
+  },
+  "decisionInteractionId": "DI-2BCDC969B1F2"
+}

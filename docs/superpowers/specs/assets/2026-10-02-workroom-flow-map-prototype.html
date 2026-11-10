@@ -1,0 +1,271 @@
+<title>Workroom Flow Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column of four disclosure levels (L0 → L3), each a band that zooms one step closer than the last. */
+:root{
+  --bg:#f5f6f9; --surface:#ffffff; --sunk:#eceef4; --line:#d5d9e3; --fg:#1b2030; --muted:#5d6579;
+  --accent:#2f47c4; --accent-soft:#e3e7fb;
+  --work:#2f47c4; --person:#b7791f; --person-soft:#fbf0dc; --blocked:#c0392b; --blocked-soft:#f9e1de; --idle:#8a91a3; --ok:#23845a; --ok-soft:#dcf1e6;
+  --lane-out:#f1eef8; --lane-ppl:#fbf5ea; --lane-ai:#edf0fb;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",sans-serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12151d; --surface:#1a1e29; --sunk:#232837; --line:#323a4d; --fg:#e6e9f2; --muted:#9aa2b6;
+  --accent:#8a9cff; --accent-soft:#262d4d; --work:#8a9cff; --person:#e5a94a; --person-soft:#3a2f1c; --blocked:#f07d6f; --blocked-soft:#3d2422; --idle:#7c8498; --ok:#5cc792; --ok-soft:#1e3a2d;
+  --lane-out:#211d2c; --lane-ppl:#26221a; --lane-ai:#1c2133; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151d; --surface:#1a1e29; --sunk:#232837; --line:#323a4d; --fg:#e6e9f2; --muted:#9aa2b6;
+  --accent:#8a9cff; --accent-soft:#262d4d; --work:#8a9cff; --person:#e5a94a; --person-soft:#3a2f1c; --blocked:#f07d6f; --blocked-soft:#3d2422; --idle:#7c8498; --ok:#5cc792; --ok-soft:#1e3a2d;
+  --lane-out:#211d2c; --lane-ppl:#26221a; --lane-ai:#1c2133; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 64px;display:grid;gap:28px}
+h1,h2,h3{font-family:var(--display);font-weight:600;text-wrap:balance;margin:0;letter-spacing:.005em}
+h1{font-size:2rem;line-height:1.1}
+h2{font-size:1.35rem}
+h3{font-size:1rem}
+p{margin:0;max-width:68ch}
+.muted{color:var(--muted)}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header.top{display:grid;gap:10px}
+.note{font-size:.82rem;color:var(--muted);border-left:3px solid var(--line);padding-left:10px}
+.level{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:grid;gap:16px;min-width:0}
+.level-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between}
+.level-tag{font-family:var(--mono);font-size:.75rem;background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:4px;font-weight:500}
+.where{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;font-size:.82rem;padding:5px 12px;background:var(--surface);color:var(--fg);border:0;border-right:1px solid var(--line);cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.seg button:focus-visible,.stage:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* L0 */
+.question{font-family:var(--display);font-size:1.15rem}
+.strip{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
+.stage{flex:1 0 118px;min-width:118px;background:var(--sunk);border:1px solid var(--line);clip-path:polygon(0 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,0 100%,10px 50%);padding:10px 16px 10px 18px;display:grid;gap:2px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.stage:first-child{clip-path:polygon(0 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,0 100%)}
+.stage .lbl{font-size:.78rem;line-height:1.25;min-height:2.5em}
+.stage .n{font-family:var(--mono);font-size:1.4rem;font-weight:500}
+.stage .age{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.stage.h1{background:var(--person-soft)}
+.stage.h2{background:var(--blocked-soft);border-color:var(--blocked)}
+.stage.unmeasured{background:transparent;border-style:dashed}
+.stage.unmeasured .n{font-size:.8rem;color:var(--muted);font-family:var(--body)}
+.callout{display:flex;gap:12px;align-items:flex-start;background:var(--blocked-soft);border-radius:8px;padding:12px 14px}
+.callout .mark{font-family:var(--mono);font-weight:600;color:var(--blocked);flex:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.78rem;color:var(--muted)}
+.legend span{display:inline-flex;gap:6px;align-items:center}
+.sw{width:12px;height:12px;border-radius:2px;border:1px solid var(--line);display:inline-block}
+/* L1 */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.pcol{border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:10px;align-content:start;min-width:0}
+.pcol.unplaced{border-style:dashed}
+.pname{font-family:var(--display);font-weight:600;font-size:1rem}
+.tile{display:grid;grid-template-columns:1fr auto;gap:0 8px;align-items:end;border-top:1px solid var(--line);padding-top:8px}
+.tile .k{font-size:.72rem;color:var(--muted);grid-column:1/-1}
+.tile .v{font-family:var(--mono);font-size:1.15rem;font-variant-numeric:tabular-nums}
+.tile .d{font-family:var(--mono);font-size:.72rem}
+.up{color:var(--ok)} .down{color:var(--blocked)}
+.dist{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--sunk)}
+.dist i{display:block}
+/* L2 */
+.sig{font-family:var(--mono);font-size:.82rem;background:var(--sunk);border-radius:6px;padding:10px 12px;overflow-x:auto;white-space:nowrap}
+.mapbox{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+svg text{font-family:var(--body);fill:var(--fg)}
+svg .m{font-family:var(--mono)}
+.kpis{display:flex;flex-wrap:wrap;gap:8px 28px}
+.kpis div{display:grid}
+.kpis b{font-family:var(--mono);font-weight:500;font-size:1.2rem}
+.kpis span{font-size:.75rem;color:var(--muted)}
+/* L3 */
+.tl{display:grid;gap:6px}
+.tlrow{display:grid;grid-template-columns:110px 1fr 70px;gap:10px;align-items:center;font-size:.82rem}
+.bar{position:relative;height:18px;background:var(--sunk);border-radius:3px;overflow:hidden}
+.bar i{position:absolute;top:0;bottom:0}
+.bar .p50{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--fg)}
+@media (max-width:560px){.tlrow{grid-template-columns:80px 1fr 56px}h1{font-size:1.6rem}}
+@media (prefers-reduced-motion:no-preference){.stage{transition:filter .15s}.stage:hover{filter:brightness(.96)}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="eyebrow">DPF design prototype · spec 2026-10-02 · illustrative data</span>
+    <h1>Workroom flow map: one picture, one measure, four levels</h1>
+    <p class="muted">Each band zooms one step closer, from the business's main value stream down to a single room. All four sit on routes that already exist. Numbers here are illustrative, except the September pause pile in the DPF view, which mirrors the live drive log (about 200 rooms paused on a missing coordinator, 23–25 September).</p>
+    <div class="legend" aria-label="State legend">
+      <span><i class="sw" style="background:var(--work)"></i>AI working (process time)</span>
+      <span><i class="sw" style="background:var(--person)"></i>Waiting on a person</span>
+      <span><i class="sw" style="background:var(--blocked)"></i>Blocked, with cause</span>
+      <span><i class="sw" style="background:var(--idle)"></i>Waiting for next trigger (not counted)</span>
+    </div>
+  </header>
+
+  <!-- L0 -->
+  <section class="level" aria-labelledby="l0h">
+    <div class="level-head">
+      <div style="display:grid;gap:4px"><span><span class="level-tag">L0 Glance</span> <span class="where">/workspace hero</span></span><h2 id="l0h">Is the main thing flowing?</h2></div>
+      <div class="seg" role="group" aria-label="Archetype">
+        <button id="a-dpf" aria-pressed="true" data-a="dpf">DPF itself</button>
+        <button id="a-hvac" aria-pressed="false" data-a="hvac">HVAC contractor</button>
+        <button id="a-pet" aria-pressed="false" data-a="pet">Pet rescue</button>
+      </div>
+    </div>
+    <p class="question" id="q"></p>
+    <div class="strip" id="strip"></div>
+    <div class="callout" id="callout"><span class="mark">!</span><div id="calloutText"></div></div>
+    <p class="note">Heat is relative to each stage's own 4-week median, not an absolute scale. A dashed stage has no workroom bound to it yet. It says "not yet measured" instead of showing a misleading 0 (BI-AF50DBD5).</p>
+  </section>
+
+  <!-- L1 -->
+  <section class="level" aria-labelledby="l1h">
+    <div class="level-head">
+      <div style="display:grid;gap:4px"><span><span class="level-tag">L1 Portfolio</span> <span class="where">/area/[key]?view=work · /portfolio</span></span><h2 id="l1h">The same five measures in every portfolio</h2></div>
+      <span class="eyebrow">Trailing 4 weeks · Δ vs prior 4</span>
+    </div>
+    <div class="pgrid" id="pgrid"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>Feature</span><span><i class="sw" style="background:var(--blocked)"></i>Defect</span><span><i class="sw" style="background:var(--person)"></i>Risk</span><span><i class="sw" style="background:var(--idle)"></i>Debt</span><span>Bar = flow distribution of active work</span></div>
+  </section>
+
+  <!-- L2 -->
+  <section class="level" aria-labelledby="l2h">
+    <div class="level-head">
+      <div style="display:grid;gap:4px"><span><span class="level-tag">L2 Shape map</span> <span class="where">drill-in: /area/[key]?view=work&amp;shape=inquiry-response-watch</span></span><h2 id="l2h">Where the time goes, and who holds it</h2></div>
+      <div class="seg" role="group" aria-label="Shape version">
+        <button id="v1" aria-pressed="true" data-v="0">v1.0.0</button>
+        <button id="v2" aria-pressed="false" data-v="1">v1.1.0</button>
+      </div>
+    </div>
+    <div class="sig" id="sig"></div>
+    <div class="mapbox"><svg id="map" viewBox="0 0 1100 470" width="1100" height="470" role="img" aria-labelledby="mapt"><title id="mapt">Flow map of the inquiry-response shape with three lanes, data boxes and a timeline ladder</title></svg></div>
+    <div class="kpis" id="kpis"></div>
+    <p class="note">Glyphs come from the GPP catalog: ○ trigger, ▭ stage, ◇ gate (with authority and mode), ● success stop, ⊗ failure stop. Lanes are derived from each stage's accountable principal. A stage that uses an outward tool gets a touchpoint in the Outside lane. Triangles are the queue waiting at a stage. The ladder shows process time above the line and wait time below it. Switch versions to compare before and after a change.</p>
+  </section>
+
+  <!-- L3 -->
+  <section class="level" aria-labelledby="l3h">
+    <div class="level-head">
+      <div style="display:grid;gap:4px"><span><span class="level-tag">L3 Room</span> <span class="where">/workspace/cases/WC-7F3A21C0</span></span><h2 id="l3h">This room against its shape's median</h2></div>
+      <span class="mono muted" style="font-size:.8rem">inquiry-response-watch@1.1.0 · cycle 2026-10-02</span>
+    </div>
+    <div class="tl" id="tl"></div>
+    <p class="note">The black tick marks the shape's median dwell for each stage. This room is slow at send because it is waiting on the owner's decision. The decision panel and receipts below this band are unchanged from today.</p>
+  </section>
+</div>
+
+<script>
+(function(){
+const A={
+ dpf:{q:"What is waiting on a person, and for how long?",unit:"rooms",
+  st:[["Claim",14,"2h",0],["Shape &amp; coordinate",201,"3d",2],["Design / reproduce",22,"9h",0],["Implement",31,"1d",0],["Merge gate",48,"2d",1],["Deploy",6,"4h",0],["Accept",19,"4d",1]],
+  call:"<b>201 rooms paused at Shape &amp; coordinate</b>, oldest 3 days. Cause: <span class='mono'>missing_explicit_coordinator</span>. This is the 23 September pile from the live drive log. Open it to see the rooms and the fix."},
+ hvac:{q:"What has to be dispatched or rescued today?",unit:"jobs",
+  st:[["Request",9,"40m",0],["Qualify",4,"1h",0],["Schedule",11,"5h",1],["Dispatch",3,"25m",0],["On site",7,"2h",0],["Parts hold",5,"2d",2],["Invoice",6,"1d",0],["Paid",null]],
+  call:"<b>5 jobs stuck on parts hold</b>, oldest 2 days. Three are waiting on one supplier order."},
+ pet:{q:"Which animals are waiting, and on whom?",unit:"animals",
+  st:[["Intake",3,"5h",0],["Triage",2,"1h",0],["Quarantine",6,"4d",0],["Daily care",null],["Adoption ready",8,"6d",1],["Screen application",5,"3d",1],["Home check",12,"6d",2],["Transfer custody",1,"1d",0],["Follow up",null]],
+  call:"<b>12 adoptions waiting on a home check</b>, oldest 6 days. Two volunteers cover all checks this week."}
+};
+const strip=document.getElementById('strip');
+function renderA(k){
+  const a=A[k];document.getElementById('q').textContent=a.q;
+  strip.innerHTML=a.st.map(s=>s[1]==null
+    ?`<button class="stage unmeasured" type="button"><span class="lbl">${s[0]}</span><span class="n">not yet measured</span><span class="age">no room bound</span></button>`
+    :`<button class="stage ${s[3]?'h'+s[3]:''}" type="button" aria-label="${s[0]}: ${s[1]} ${a.unit}, oldest ${s[2]}"><span class="lbl">${s[0]}</span><span class="n">${s[1]}</span><span class="age">oldest ${s[2]}</span></button>`).join('');
+  document.getElementById('calloutText').innerHTML=a.call;
+  document.querySelectorAll('[data-a]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.a===k)));
+}
+document.querySelectorAll('[data-a]').forEach(b=>b.addEventListener('click',()=>renderA(b.dataset.a)));
+renderA('dpf');
+
+// L1
+const P=[
+ ["Goods and Services for Sale",[["Flow load","18","−3",1],["Flow time P50","2.4d","−0.6d",1],["Flow efficiency","14%","+3pt",1],["Throughput / wk","41","+6",1],["Cost (pts · AI)","120 · $86","+$9",0]],[55,15,20,10],[5,4.6,4.1,3.8,3.2,2.9,2.4]],
+ ["Manufacturing and Delivery",[["Flow load","241","+188",0],["Flow time P50","4.8d","+1.9d",0],["Flow efficiency","3%","−4pt",0],["Throughput / wk","22","−9",0],["Cost (pts · AI)","310 · $412","+$70",0]],[60,25,5,10],[2.6,2.7,2.9,2.8,3.1,4.4,4.8]],
+ ["Workforce",[["Flow load","7","0",1],["Flow time P50","1.1d","−0.1d",1],["Flow efficiency","22%","+1pt",1],["Throughput / wk","9","+1",1],["Cost (pts · AI)","35 · $12","+$1",0]],[40,10,30,20],[1.4,1.3,1.3,1.2,1.2,1.1,1.1]],
+ ["Foundational",[["Flow load","64","+5",0],["Flow time P50","6h","−1h",1],["Flow efficiency","9%","+2pt",1],["Throughput / wk","180","+12",1],["Cost (pts · AI)","90 · $140","−$4",1]],[10,10,45,35],[9,8.5,8,7.6,7,6.6,6]],
+ ["Unplaced",[["Flow load","512",""],["Flow time P50","—",""],["Flow efficiency","—",""],["Throughput / wk","—",""],["Cost (pts · AI)","— · $96",""]],null,null]
+];
+function spark(v){const w=70,h=20,mx=Math.max(...v),mn=Math.min(...v),r=mx-mn||1;const pts=v.map((y,i)=>[i*w/(v.length-1),h-2-(y-mn)/r*(h-4)]);
+ return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts.map(p=>p.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="1.5"/><circle cx="${pts.at(-1)[0]}" cy="${pts.at(-1)[1]}" r="2.5" fill="var(--accent)"/></svg>`;}
+document.getElementById('pgrid').innerHTML=P.map(([n,t,d,s])=>`<div class="pcol ${d?'':'unplaced'}"><div class="pname">${n}</div>${d?`<div class="dist" title="Feature ${d[0]}% · Defect ${d[1]}% · Risk ${d[2]}% · Debt ${d[3]}%"><i style="width:${d[0]}%;background:var(--accent)"></i><i style="width:${d[1]}%;background:var(--blocked)"></i><i style="width:${d[2]}%;background:var(--person)"></i><i style="width:${d[3]}%;background:var(--idle)"></i></div>`:'<div class="muted" style="font-size:.78rem">Rooms with no portfolio yet. Shown as their own column, never folded into another portfolio.</div>'}
+ ${t.map(([k,v,dl,good],i)=>`<div class="tile"><span class="k">${k}</span><span class="v">${v}</span><span>${i===1&&s?spark(s):(dl?`<span class="d ${good?'up':'down'}">${dl}</span>`:'')}</span>${i===1&&s?`<span></span><span class="d ${good?'up':'down'}">${dl}</span>`:''}</div>`).join('')}</div>`).join('');
+
+// L2 map
+const NS='http://www.w3.org/2000/svg',svg=document.getElementById('map');
+const V=[
+ {sig:"⏱ cadence · AI read-inbox → AI draft → ◇ WWWD send [owner] → ● replied | ⊗ refused→draft",
+  st:[{k:"read-inbox",lane:2,q:0,dw:"20m",pr:"12m",fpy:"100%",n:38},{k:"draft",lane:2,q:4,dw:"1.5h",pr:"35m",fpy:"81%",n:38},{k:"send",lane:1,q:9,dw:"19h",pr:"5m",fpy:"94%",n:31,gate:1,out:1}],
+  ladder:[["12m","8m"],["35m","55m"],["5m","18h 55m"]],k:[["Flow time P50","21h"],["Process","52m"],["Flow efficiency","4%"],["Throughput / wk","31"],["First-pass yield","76%"]]},
+ {sig:"⏱ cadence · AI read-inbox → AI draft → ◇ WWWD send [owner, auto-admit routine replies] → ● replied | ⊗ refused→draft",
+  st:[{k:"read-inbox",lane:2,q:0,dw:"18m",pr:"12m",fpy:"100%",n:41},{k:"draft",lane:2,q:3,dw:"1.2h",pr:"34m",fpy:"86%",n:41},{k:"send",lane:1,q:3,dw:"3h",pr:"5m",fpy:"95%",n:37,gate:1,out:1}],
+  ladder:[["12m","6m"],["34m","38m"],["5m","2h 55m"]],k:[["Flow time P50","4.5h"],["Process","51m"],["Flow efficiency","19%"],["Throughput / wk","37"],["First-pass yield","82%"]]}
+];
+function el(t,a,txt){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;svg.appendChild(e);return e;}
+function renderMap(vi){
+  const v=V[vi];svg.querySelectorAll(':not(title)').forEach(n=>n.remove());
+  document.getElementById('sig').textContent=v.sig;
+  const lanes=[["Outside","var(--lane-out)"],["People","var(--lane-ppl)"],["AI coworkers","var(--lane-ai)"]],LY=[10,100,190],LH=90;
+  lanes.forEach(([n,f],i)=>{el('rect',{x:10,y:LY[i],width:1080,height:LH,fill:f,stroke:'var(--line)'});el('text',{x:22,y:LY[i]+20,'font-size':12,fill:'var(--muted)','font-weight':600},n);});
+  const cy=i=>LY[i]+LH/2+6;
+  // trigger
+  el('circle',{cx:150,cy:cy(2),r:16,fill:'var(--surface)',stroke:'var(--fg)','stroke-width':1.5});
+  el('text',{x:150,y:cy(2)+5,'text-anchor':'middle','font-size':14},'⏱');
+  el('text',{x:150,y:cy(2)+34,'text-anchor':'middle','font-size':11,fill:'var(--muted)'},'cadence');
+  const X=[250,450,690],W=140,H=44;let px=166,py=cy(2);
+  v.st.forEach((s,i)=>{
+    const y=cy(s.lane),x=X[i];
+    // edge
+    el('path',{d:`M${px} ${py} L${x-24} ${py} L${x-24} ${y} L${x} ${y}`,fill:'none',stroke:'var(--muted)','stroke-width':1.4});
+    el('path',{d:`M${x-6} ${y-4} L${x} ${y} L${x-6} ${y+4}`,fill:'none',stroke:'var(--muted)','stroke-width':1.4});
+    // inventory triangle
+    if(s.q){const tx=x-50,ty=y-34;el('path',{d:`M${tx} ${ty+16} L${tx+9} ${ty} L${tx+18} ${ty+16} Z`,fill:s.q>5?'var(--blocked-soft)':'var(--person-soft)',stroke:s.q>5?'var(--blocked)':'var(--person)'});el('text',{x:tx+9,y:ty+13,'text-anchor':'middle','font-size':10,class:'m'},s.q);}
+    const heat=s.q>5?'var(--blocked)':(s.q>2?'var(--person)':'var(--work)');
+    el('rect',{x,y:y-H/2,width:W,height:H,rx:8,fill:'var(--surface)',stroke:heat,'stroke-width':s.q>5?3:1.6});
+    el('text',{x:x+W/2,y:y+4,'text-anchor':'middle','font-size':13,'font-weight':500},s.k);
+    if(s.gate){const gx=x+W+34;el('path',{d:`M${x+W} ${y} L${gx-18} ${y}`,stroke:'var(--muted)','stroke-width':1.4});
+      el('path',{d:`M${gx} ${y-18} L${gx+18} ${y} L${gx} ${y+18} L${gx-18} ${y} Z`,fill:'var(--surface)',stroke:'var(--fg)','stroke-width':1.5});
+      el('text',{x:gx,y:y+4,'text-anchor':'middle','font-size':9,'font-weight':600},'WWWD');
+      el('text',{x:gx,y:y-24,'text-anchor':'middle','font-size':10,fill:'var(--muted)'},vi?'enforced · auto-admit':'shadow');
+      // stops
+      el('path',{d:`M${gx+18} ${y} L${gx+120} ${y}`,stroke:'var(--muted)','stroke-width':1.4});
+      el('circle',{cx:gx+134,cy:y,r:13,fill:'var(--ok-soft)',stroke:'var(--ok)','stroke-width':3});
+      el('text',{x:gx+134,y:y+30,'text-anchor':'middle','font-size':11},'replied');
+      el('path',{d:`M${gx} ${y+18} L${gx} ${y+62}`,stroke:'var(--muted)','stroke-width':1.4,'stroke-dasharray':'4 3'});
+      el('text',{x:gx+8,y:y+50,'font-size':10,fill:'var(--muted)'},'refuse → back to draft');
+      if(s.out){el('path',{d:`M${x+W/2} ${y-H/2} L${x+W/2} ${cy(0)+12}`,stroke:'var(--accent)','stroke-width':1.2,'stroke-dasharray':'3 3'});
+        el('rect',{x:x+W/2-50,y:cy(0)-12,width:100,height:24,rx:12,fill:'var(--surface)',stroke:'var(--accent)'});
+        el('text',{x:x+W/2,y:cy(0)+4,'text-anchor':'middle','font-size':11},'customer reply');}
+    }
+    // data box (below map)
+    const by=290;el('rect',{x,y:by,width:W,height:74,rx:4,fill:'var(--sunk)',stroke:'var(--line)'});
+    [["in queue",s.q],["dwell P50",s.dw],["process P50",s.pr],["first-pass",s.fpy]].forEach(([a,b],j)=>{el('text',{x:x+8,y:by+16+j*16,'font-size':10.5,fill:'var(--muted)'},a);el('text',{x:x+W-8,y:by+16+j*16,'text-anchor':'end','font-size':10.5,class:'m'},String(b));});
+    el('text',{x:x+W/2,y:by+86,'text-anchor':'middle','font-size':9.5,fill:'var(--muted)'},`n = ${s.n} exits`);
+    px=x+W;py=y;
+  });
+  // ladder
+  const ly=410;el('text',{x:22,y:ly-14,'font-size':11,fill:'var(--muted)','font-weight':600},'Timeline');
+  el('text',{x:22,y:ly+2,'font-size':10,fill:'var(--work)'},'process ▲');el('text',{x:22,y:ly+30,'font-size':10,fill:'var(--person)'},'wait ▼');
+  let lx=110;
+  v.ladder.forEach(([p,w],i)=>{const x=X[i];
+    el('path',{d:`M${lx} ${ly+24} L${x} ${ly+24} L${x} ${ly} L${x+W} ${ly} L${x+W} ${ly+24}`,fill:'none',stroke:'var(--fg)','stroke-width':1.3});
+    el('text',{x:x+W/2,y:ly-4,'text-anchor':'middle','font-size':11,class:'m',fill:'var(--work)'},p);
+    el('text',{x:(lx+x)/2,y:ly+40,'text-anchor':'middle','font-size':11,class:'m',fill:'var(--person)'},w);
+    lx=x+W;});
+  el('path',{d:`M${lx} ${ly+24} L1000 ${ly+24}`,fill:'none',stroke:'var(--fg)','stroke-width':1.3});
+  el('text',{x:1080,y:ly+4,'text-anchor':'end','font-size':11,class:'m'},`flow ${v.k[0][1]}`);
+  el('text',{x:1080,y:ly+20,'text-anchor':'end','font-size':11,class:'m',fill:'var(--muted)'},`efficiency ${v.k[2][1]}`);
+  document.getElementById('kpis').innerHTML=v.k.map(([a,b])=>`<div><b>${b}</b><span>${a}</span></div>`).join('');
+  document.querySelectorAll('[data-v]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.v===vi)));
+}
+document.querySelectorAll('[data-v]').forEach(b=>b.addEventListener('click',()=>renderMap(+b.dataset.v)));
+renderMap(0);
+
+// L3
+const R=[["read-inbox",[["w",8]],10],["draft",[["w",30],["p",25]],45],["send",[["p",210]],110]];const max=230;
+document.getElementById('tl').innerHTML=R.map(([k,segs,med])=>{let o=0;const tot=segs.reduce((a,s)=>a+s[1],0);
+ const fmt=m=>m>=60?`${(m/60).toFixed(1)}h`:`${m}m`;
+ return `<div class="tlrow"><span class="mono">${k}</span><div class="bar">${segs.map(([t,m])=>{const s=`<i style="left:${o/max*100}%;width:${m/max*100}%;background:var(--${t==='w'?'work':'person'})"></i>`;o+=m;return s;}).join('')}<span class="p50" style="left:${med/max*100}%"></span></div><span class="mono">${fmt(tot)}</span></div>`;}).join('')
+ +`<div class="tlrow"><span class="mono">now</span><span class="muted">waiting on owner at send · 3.5h · shape median 1.8h</span><span></span></div>`;
+})();
+</script>

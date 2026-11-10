@@ -2,6 +2,7 @@ export const BACKLOG_STATUSES = [
   "triaging",
   "open",
   "in-progress",
+  "awaiting-acceptance",
   "done",
   "deferred",
   "retired",
@@ -14,12 +15,14 @@ export function isBacklogStatus(value: unknown): value is BacklogStatus {
 }
 
 const LEGAL: Record<BacklogStatus, ReadonlySet<BacklogStatus>> = {
-  triaging: new Set<BacklogStatus>(["open", "deferred", "retired"]),
+  triaging: new Set<BacklogStatus>(["open", "awaiting-acceptance", "deferred", "retired"]),
   // Retriage paths: open / in-progress / deferred items can be sent back to triaging
   // when their classification (source, triageOutcome, effortSize) needs reconsideration.
   // Closes BI-7D4AF644.
-  open: new Set<BacklogStatus>(["triaging", "in-progress", "done", "deferred", "retired"]),
-  "in-progress": new Set<BacklogStatus>(["triaging", "open", "done", "deferred", "retired"]),
+  open: new Set<BacklogStatus>(["triaging", "in-progress", "awaiting-acceptance", "done", "deferred", "retired"]),
+  "in-progress": new Set<BacklogStatus>(["triaging", "open", "awaiting-acceptance", "done", "deferred", "retired"]),
+  // PR-submit coding close (BI-7161625D). Verification owns → done; withdrawn PR returns to open.
+  "awaiting-acceptance": new Set<BacklogStatus>(["done", "open", "in-progress", "retired"]),
   done: new Set<BacklogStatus>(["done", "open", "triaging"]),
   deferred: new Set<BacklogStatus>(["triaging", "open", "in-progress", "retired"]),
   retired: new Set<BacklogStatus>(["retired", "open", "triaging"]),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import readXlsxFile from "read-excel-file/node";
+import { readZipEntry } from "@/lib/shared/odf-embedded-objects";
 import {
   crc32,
   colLetter,
@@ -56,37 +56,30 @@ describe("sheetXml", () => {
   });
 });
 
-// read-excel-file@9 returns `[{ sheet, data }]`; unwrap to the row matrix.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowsOf(parsed: any): unknown[][] {
-  if (Array.isArray(parsed) && parsed[0] && typeof parsed[0] === "object" && "data" in parsed[0]) {
-    return parsed[0].data as unknown[][];
-  }
-  return parsed as unknown[][];
+/** A part of the built package, read the way any ZIP reader would. */
+function part(bytes: Uint8Array, name: string): string {
+  const entry = readZipEntry(Buffer.from(bytes), name, 1024 * 1024);
+  if (!entry) throw new Error(`missing part ${name}`);
+  return entry.toString("utf8");
 }
 
-describe("buildXlsx round-trip through read-excel-file", () => {
-  it("produces a valid .xlsx that parses back to the same matrix", async () => {
-    const matrix: XlsxValue[][] = [
-      ["Name", "Age", "City"],
-      ["Alice", 30, "London"],
-      ["Bob", 25, "Paris"],
-    ];
-    const bytes = buildXlsx(matrix, { sheetName: "People" });
-    const rows = rowsOf(await readXlsxFile(Buffer.from(bytes)));
-    expect(rows).toEqual(matrix);
+// The engine round trip (build → dpf-doctools → the Workbooks import) is in
+// grid-xlsx.docker.test.ts; here the package itself is checked (BI-D1B40D43
+// retired the in-process .xlsx reader this used to round-trip through).
+describe("buildXlsx package", () => {
+  it("is a readable ZIP with the workbook, its relationships and the named sheet", () => {
+    const bytes = buildXlsx([["Name", "Age"], ["Alice", 30]], { sheetName: "People" });
+    expect(part(bytes, "[Content_Types].xml")).toContain("spreadsheetml.sheet.main+xml");
+    expect(part(bytes, "xl/workbook.xml")).toContain('<sheet name="People"');
+    expect(part(bytes, "xl/_rels/workbook.xml.rels")).toContain('Target="worksheets/sheet1.xml"');
+    const sheet = part(bytes, "xl/worksheets/sheet1.xml");
+    expect(sheet).toContain('<c r="A2" t="inlineStr"><is><t xml:space="preserve">Alice</t></is></c>');
+    expect(sheet).toContain('<c r="B2"><v>30</v></c>');
   });
 
-  it("preserves special characters and empty cells through the round-trip", async () => {
-    const matrix: XlsxValue[][] = [
-      ["Label", "Value"],
-      ["a & b <c>", 1],
-      ["", 2],
-    ];
-    const bytes = buildXlsx(matrix);
-    const rows = rowsOf(await readXlsxFile(Buffer.from(bytes)));
-    expect(rows[0]).toEqual(["Label", "Value"]);
-    expect(rows[1]).toEqual(["a & b <c>", 1]);
-    expect(rows[2]![1]).toBe(2);
+  it("escapes special characters and keeps empty cells in the sheet", () => {
+    const sheet = part(buildXlsx([["Label", "Value"], ["a & b <c>", 1], ["", 2]]), "xl/worksheets/sheet1.xml");
+    expect(sheet).toContain("a &amp; b &lt;c&gt;");
+    expect(sheet).toContain('<c r="B3"><v>2</v></c>');
   });
 });

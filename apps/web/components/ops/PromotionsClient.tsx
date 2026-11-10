@@ -5,10 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   approvePromotion,
   rejectPromotion,
-  markDeployed,
   executePromotionAction,
-  acknowledgeDestructiveOps,
-  getPromotionWindowStatus,
 } from "@/lib/actions/promotions";
 
 type Promotion = {
@@ -96,13 +93,6 @@ export default function PromotionsClient({ promotions }: { promotions: Promotion
         // Stop polling after 10 minutes (promoter timeout)
         setTimeout(() => clearInterval(poll), 10 * 60 * 1000);
       }
-    });
-  }
-
-  function handleAcknowledgeDestructive(promotionId: string) {
-    startTransition(async () => {
-      await acknowledgeDestructiveOps(promotionId);
-      router.refresh();
     });
   }
 

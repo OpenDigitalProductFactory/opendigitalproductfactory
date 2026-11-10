@@ -8,6 +8,7 @@ import {
   type ChannelDemandPolicy,
 } from "@dpf/db/federated-channel";
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
+import { hasFederatedWorkOriginMarker } from "@dpf/db/federated-work-contract";
 import {
   isFederationRole,
   type FederationRole,
@@ -45,6 +46,8 @@ interface ChannelBacklogItem {
   status: string;
   sensitivity: string;
   scopeKind: string | null;
+  archetypeCategories: string[];
+  archetypeIds: string[];
   workType: string | null;
   occurrenceCount: number;
   createdAt: Date;
@@ -239,6 +242,9 @@ export async function selectLocalDemandForLink(
         status: true,
         sensitivity: true,
         scopeKind: true,
+        // BI-7ED79807: archetype scope travels so a receiver can decide relevance.
+        archetypeCategories: true,
+        archetypeIds: true,
         workType: true,
         occurrenceCount: true,
         createdAt: true,
@@ -263,6 +269,9 @@ export async function selectLocalDemandForLink(
   }
   if ((item.body ?? "").includes("[origin:federatedDemand:")) {
     throw new Error("Adopted demand must use governed forwarding so original provenance is preserved.");
+  }
+  if (hasFederatedWorkOriginMarker(item.body)) {
+    throw new Error("This item is mirrored from another installation in your organization; share it from the installation that owns it.");
   }
   // Cross-org gate (BI-DC4E526E, kernel DI-3E77E48D5710) — CONTEXT-DERIVED, so no
   // manual per-item classification is required for correct behavior (cognitive-load
@@ -302,6 +311,10 @@ export async function selectLocalDemandForLink(
       workType: item.workType,
       occurrenceCount: item.occurrenceCount,
       product: item.digitalProduct?.productId ?? null,
+      // BI-7ED79807: archetype scope travels so a receiver can decide relevance.
+      scopeKind: item.scopeKind,
+      archetypeCategories: item.archetypeCategories,
+      archetypeIds: item.archetypeIds,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     },

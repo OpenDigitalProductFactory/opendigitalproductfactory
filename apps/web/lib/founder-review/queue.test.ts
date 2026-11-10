@@ -9,6 +9,16 @@ import {
 } from "./queue";
 
 describe("founder review queue", () => {
+  it.each([
+    ["damaging-critical-risk", "Critical risk"],
+    ["damaging-consequence", "Declared consequence"],
+    ["damaging-threshold", "Configured threshold crossed"],
+    ["damaging-regulated", "Regulatory review"],
+  ])("shows recorded human reason %s instead of a novelty label", (escalationReason, label) => {
+    const candidate = projectFounderReviewCandidate({ interactionId: "DI-DAMAGE", question: "Approve this commitment?", options: [], outcomeType: "recommend", escalationRoute: "human", escalationReason, outcomePayload: { stanceAlignment: "approve", coverageGap: false }, buildId: null, taskRunId: null, routeContext: "/coworker-business", createdAt: new Date() });
+    expect(candidate.unresolvedReasonLabel).toBe(label);
+    expect(candidate.primaryActionLabel).not.toBe("Weigh this new proposition");
+  });
   it("projects unresolved decision interactions into review cards", () => {
     const candidate = projectFounderReviewCandidate({
       interactionId: "DI-1",
@@ -28,7 +38,7 @@ describe("founder review queue", () => {
     expect(candidate.primaryActionLabel).toBe("Clarify founder principle");
     expect(candidate.perspective).toBe("wwmd");
     expect(candidate.links.buildHref).toBe("/build?buildId=FB-1");
-    expect(candidate.links.decisionCanvasHref).toBe("/platform/ai/decisions/DI-1");
+    expect(candidate.links.decisionCanvasHref).toBe("/coworker-decisions/decisions/DI-1");
   });
 
   it("uses operating-policy wording for WWWD principle gaps", () => {

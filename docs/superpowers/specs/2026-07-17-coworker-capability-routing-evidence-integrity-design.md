@@ -1,6 +1,10 @@
+---
+status: active
+---
+
 # Coworker Capability Routing & Evidence Integrity — Design
 
-**Status:** Draft for architecture review
+**Status:** Active — architecture review folded; phased delivery in progress
 **Epic:** EP-E431FC8A
 **Lead BI (Phase 1):** BI-B5C358B1
 **Kernel decision:** `principle_decide` DI-2A6C75048353 → **D (hybrid-hierarchical)**, composite 10.59, margin 2.15, high confidence, no commandment conflict.
@@ -111,11 +115,30 @@ Four architecturally distinct options were scored by the kernel (`principle_deci
 
 **INV-3 (Authority ≠ attachment ≠ discoverability ≠ delegation ≠ execution).** These five remain distinct: a coworker keeps full grant authority; attachment is the per-turn schema payload; discoverability is what the model can find on demand; delegation is handoff to a specialist; execution is the governed kernel gate. No change may collapse two of them.
 > **Data-flow note (INV-2/INV-3).** `FidelityPolicy.capFor(model, …)` is keyed on the *running* model, but today the cap is derived up front (`agent-coworker.ts:~1323`, `resolveLocalServedContextTokens()`) **before** the routing pipeline resolves the actual endpoint. Phase 1 therefore keeps the `localServedContext` proxy as input (no model-identity dependency); Phase 2 hoists primary-candidate resolution ahead of attachment (or threads the resolved endpoint identity into the compile step) so the policy becomes a true fidelity lookup rather than a context proxy. This is a sequencing constraint, not a concern-collapse.
+
+**INV-3a (Discovery recompiles; it never appends past the resolved ceiling).** The initial attached count is the ceiling-bound surface for that run. Every compatibility `load_tools` call and direct deferred-tool promotion MUST recompile that same surface: newly requested, already-authorized tools become pinned attachments; the lowest-ranked unpinned attachments return to the deferred pool; and the next inference turn remains at or below the initial resolved ceiling. Grants, provider suitability, and the execution gate are unchanged. Diagnostics record the initial count, requested/loaded names, displaced names, unattached names with reason, final count, and ceiling. This closes live TaskRun `TR-SCHED-FEB9C7ED`, where three deferred tools were appended to 15 and produced an ineligible 18-tool local surface.
+
 **INV-6 (Single source for tool-count policy).** `FidelityPolicy` is the **single source** from which the tool-count constants derive; `LOCAL_TOOL_SELECTION_CLIFF` (`context-economy-metrics.ts:26`), `LOCAL_FALLBACK_MAX_TOOLS` (`fallback.ts:218`), and `MAX_COWORKER_ATTACHED_TOOLS` must reference it, not restate it. No fourth copy of "15"/"48".
 
 **INV-4 (Bounded recovery, no hidden escalation).** Zero-tool on an evidence-required turn triggers a *bounded* recovery ladder (fixed max attempts, budgeted latency); it must not loop, and must not silently fall back to a paid provider. Every recovery step is logged. **Explicit reconciliation with the fallback chain:** the reduced-catalog retry is ≤15 tools, which would re-enable `callWithFallbackChain`'s local path (`fallback.ts:218` skips local fallback *above* 15) and could escalate a failed forced call to a paid cloud endpoint — exactly what this invariant forbids. The recovery retry therefore **pins the same (local) endpoint and disables the fallback chain** (local-only recovery); a test asserts the recovery path performs zero paid-provider calls.
 
 **INV-5 (Fail loud, not false).** When recovery cannot obtain evidence, the user gets an explicit "I could not verify this against live data" — never a confident fabricated answer.
+
+**INV-7 (Scheduled terminal truth follows required governed work).** A scheduled prompt that explicitly names an authorized side-effecting tool establishes a terminal obligation for that run. `lastStatus="ok"` and `TaskRun.status="completed"` require at least one successful execution of every such explicitly required tool. A pending `AgentActionProposal` is not an execution even though its synthetic loop result is successful. Zero execution, a proposal without approval and execution, a failed execution, or an attachment refusal is `error`/`failed` with the missing tool named in internal evidence; prose claiming completion is not evidence. Advisory and read-only schedules remain eligible for truthful zero-tool completion. This closes live TaskRuns `TR-SCHED-7841123E` and `TR-SCHED-2C4E040A`, where the latter proposed `promote_to_build_studio` but incorrectly recorded `ok` without a `ToolExecution` row.
+
+### BI-4738F64B objective manifest
+
+**OBJ-TOOL-CEILING:** Preserve the resolved inference-tool ceiling after deferred-tool discovery by recompiling the active surface and displacing lower-ranked unpinned tools.
+
+**OBJ-SCHEDULED-TRUTH:** Report a scheduled explicit governed mutation as successful only when the mutation actually executes; a pending proposal or prose claim is not execution evidence.
+
+| Acceptance ID | Objective IDs | Statement |
+|---|---|---|
+| AC-TOOL-CEILING-1 | OBJ-TOOL-CEILING | Starting from 15 attached tools, deferred-tool loading leaves the next inference surface at or below 15 with the requested tool attached and displaced tools diagnosed. |
+| AC-TOOL-CEILING-2 | OBJ-TOOL-CEILING | Cloud-only and measured-fidelity ceilings, grants, provider suitability, and execution gates remain unchanged. |
+| AC-SCHEDULED-TRUTH-1 | OBJ-SCHEDULED-TRUTH | A required side-effect tool with zero executions cannot yield an ok scheduled-task status. |
+| AC-SCHEDULED-TRUTH-2 | OBJ-SCHEDULED-TRUTH | A synthetic successful result whose status is proposed cannot satisfy the actual-execution requirement. |
+| AC-BI473-LIVE | OBJ-TOOL-CEILING, OBJ-SCHEDULED-TRUTH | Focused regressions, exact-tree CI, merge-queue health, canonical deployment, and live scheduled-task acceptance pass. |
 
 **Failure-state ladder for an evidence-required turn returning zero authoritative tool calls:**
 1. **Retry with a reduced, task-compiled catalog** (top-K route/message-relevant tools only) and `tool_choice = "required"`. Bounded to 1 attempt.
@@ -225,6 +248,15 @@ Each phase is independently shippable, CI-green, DCO-signed, and lands via PR ag
 
 **Phase 3 — Capability broker / progressive discovery.** Replace model-driven `load_tools` with a planner/broker-driven `discover(need)` over capability descriptors; keep `load_tools` as a compatibility shim. Extends the existing `tool-tier`/`load_tools` substrate.
 
+**Phase 3 integrity patch — BI-4738F64B (ordered fix sequence).** This is a proportional correction inside the existing Phase-3 home, not a second broker or ranking system.
+1. Preserve the initial compiled surface count as the run's resolved attachment ceiling whenever a deferred pool exists.
+2. Add a pure post-discovery compiler that pins newly requested authorized tools, displaces the lowest-ranked unpinned active tools back into the same deferred pool, reports any request that cannot fit, and never changes grants or provider eligibility.
+3. Route both compatibility `load_tools` and direct deferred-tool promotion through that compiler; emit one diagnostic containing initial, loaded, displaced, unattached, final, and ceiling fields.
+4. Extend scheduled terminal classification so an explicitly named authorized side-effecting tool is a required governed mutation and cannot yield `ok` after zero successful executions; explicitly exclude the proposal-interception result (`data.status="proposed"`) from execution evidence.
+5. Prove the live shapes red then green: `TR-SCHED-FEB9C7ED` (15→18 becomes bounded replacement at 15), `TR-SCHED-7841123E` (zero required executions becomes failed), and `TR-SCHED-2C4E040A` (proposal without execution becomes failed), then run affected tests, exact-tree pregate, merge-queue health, and canonical-install reproduction.
+
+**Fix research receipt input (2026-09-01).** On named ref `787700918778f5db56ca6c9c2701baa176650949`, `apps/web/lib/tak/agentic-loop.ts` appends `toolsToOpenAIFormat(toLoad)` to `routeOptions.tools` without reapplying a ceiling, while `apps/web/lib/actions/agent-task-scheduler.ts` only rejects zero-tool provider-failure prose before writing `lastStatus="ok"`. Focused red tests observed 18 rather than 15 and `null` rather than the required-tool failure. Candidate grant loss was ruled out because selection operates on the already-authorized deferred pool; candidate provider-suitability drift was ruled out because the 18 schemas are assembled before the next routing decision; candidate generic inference failure was ruled out because the second reproduction returns ordinary completion prose and therefore bypasses the existing provider-failure classifier.
+
 **Phase 4 — Specialist delegation (MoE).** Give coordinators an intent→specialist router and the `thread_write`/delegation grant where governance allows; specialists keep narrow, evaluable, stable surfaces. Reuse `summon_coworker`/`request_coworker`/`spawn_work_thread` and the `delegates_to` registry field. Reconcile the DB-vs-JSON grant divergence (`agent-grants.ts:80`) as a prerequisite.
 
 **Rollback:** each phase is attachment/loop-policy only (no authority change, no destructive migration); revert the module + its wiring. Phase 1 rollback restores the size-only cap.
@@ -267,3 +299,103 @@ Reviewed against `origin/main` (chief-architect lens, `dpf-architecture-review`)
 | Stale citation `prompt-assembler.ts:215` → `agent-coworker.ts:~778` | nit | **Folded** — §1.2 RC2 |
 
 **Verified-correct by review:** RC1 (`deriveCoworkerToolCap` gates the cliff cap on ≤32,768 only; 131072→48), RC3 (`COMPLETION_CLAIM_PATTERN`/`isSubstantiveReply` return factual prose verbatim), the `pipeline-v2` capability filter, `LOCAL_FALLBACK_MAX_TOOLS=15`, delegation-tool existence, and the RouteOutcome/AdapterRunTelemetry/eval-runner reuse targets. No kernel-principle conflict; no escalated option trade-off (choice already kernel-decided, DI-2A6C75048353).
+
+## 11. Local qualification runner completion (BI-C2F81AB0)
+
+This extension completes the live runner explicitly excluded by the Phase-2
+plan. It does not reopen completed federated BI-DF3092F4. The original
+invariants, taxonomy and thresholds remain authoritative. Status: design
+preparation; runtime admission and independent acceptance are outstanding.
+
+### Observed gap and reuse
+
+At source `3c6f0a51b5a6acff1ca344167a068f4f8cabe461`,
+`tool-fidelity-harness.ts` accepts only a returned tool name. Its comment names
+an absent runner. That seam proves the scorer, not real inference or governed
+execution. The nine golden prompts and `TASK_CLASSES` are reused.
+
+`eval-golden-test.ts` already binds inference to routing traces and excludes
+truncated output from quality scoring. `eval-runner.ts` and
+`EndpointTestRun` provide the evaluation/provenance home. Reuse those contracts;
+do not add a table, queue, MCP tool, provider or grant for this repair.
+BI-C5A25AB4 separately owns bounded failed-probe diagnostics; this runner does
+not replace its work or edit its claimed endpoint-test-runner source.
+
+### Bounded interaction and evidence
+
+1. Resolve an authorized local-only operation, an exact configured account and
+   model/version/adapter, current sensitivity/residency eligibility and a
+   bounded invocation budget before admission. Unavailable authority returns
+   unrun; it is not permission to call inference through another transport.
+2. Freeze the source/runtime identity, golden revision, ordered allowed tool
+   schemas and their digest. Use the existing nine cases at surfaces
+   8, 15, 24, 32 and 48. A surface must contain exactly that many distinct,
+   authorized read tools, including a correct tool for each case. If current
+   grants cannot provide it, record that surface as unrun.
+3. Run one independent turn per case per surface, serially. Defaults therefore
+   bound inference to 45 turns and at most 45 read executions, with explicit
+   deadline, token limit and cancellation. No automatic retry, fallback or
+   additional discovery can silently enlarge this budget or change the model.
+4. Record the actual first returned tool call and validate its arguments against
+   the attached canonical schema. A valid selection is separate from successful
+   execution. Execute only that validated read through the existing governed
+   execution boundary, retaining its invocation/trace and ToolExecution identity.
+5. Read back the matching terminal result. The model's own prose, a proposal or
+   a synthetic callback is never proof that the tool executed. Unknown or
+   truncated output remains incomplete. Completed wrong selection, invalid
+   arguments and failed execution remain failed observations.
+6. Report source fixtures, real selection and actual governed execution
+   separately. Retain all scheduled cases and failures; do not select only
+   successful rows or merge observations from another identity.
+
+The cohort binds configured account/model version, adapter, sensitivity,
+source/runtime, catalog revision and surface size. Task class remains an
+explicit grouping. The default nine turns give nine observations per surface
+and three per class; class-specific results cannot claim the five-observation
+minimum without a separately admitted repeat budget. Independent observations
+have distinct invocation identities; replaying a result does not add a sample.
+
+### Qualification and production isolation
+
+A cohort with unresolved identity, unknown/truncated results or incomplete
+scheduled coverage cannot qualify. Known negative cases stay in the denominator.
+Selection and execution each report their own count and accuracy. Reuse the
+policy's 0.9 threshold and minimum five observations; do not duplicate constants
+or infer review competence from selection success.
+
+This runner is observational. It does not call `persistToolFidelitySamples`,
+promote profile confidence or change production tool caps. The existing
+`resolveLocalToolFidelityCeiling` selects a maximum across active local profiles
+rather than the actual selected model; writing a new cohort into that path
+would risk transferring one model's evidence to another. Model-specific cap
+consumption remains a separate explicitly designed change.
+
+CWN-63C5BE75 / BI-CAP-FEE56611 retains the historical operation/authority question;
+bounded discovery resolved it as source work under existing diagnostic authority.
+Discovery showed missing coworker `tool_evaluation_create`; no denied action
+was invoked. That tool evaluates external dependencies, not model fidelity;
+granting it is not this runner's remedy. The already authorized
+`run_endpoint_tests` is the relevant existing diagnostic operation. Its current
+fixed probes inspect returned calls to stub tools and can update model ratings;
+it does not implement the requested surface matrix or governed-read execution.
+Extend that existing contract only after reconciling its owned source and the
+scoped observational mode. Neither diagnostic was executed during planning.
+Neither this design nor its tests grant capabilities.
+Preserve WC-35B59F09's claimed diagnostic files. A distinct fidelity leaf can
+be reached through the existing diagnostic handler without changing that runner.
+Nested reads reuse the server-provided governedDispatch closure so original
+token, human, agent and room authority is retained. A plain successful return
+does not supply the required positive ToolExecution identity/readback.
+The historical 870/941 executions remain outside the runner and cannot be
+retried, settled or replaced by its results.
+
+### Verification boundary
+
+RED-to-GREEN source tests cover catalog size/eligibility, identity mismatch,
+wrong or absent tool calls, invalid arguments, failed/proposed/foreign
+executions, truncation, duplicate invocation, cancellation and exhausted budget.
+No fixture becomes live qualification. Affected checks, exact-source independent
+review, protected publication and canonical served identity precede a live run.
+Any unavailable runtime prerequisite remains explicit, with no fabricated pass.
+
+Plan: [local runner completion](../plans/2026-10-16-local-tool-fidelity-runner.md).

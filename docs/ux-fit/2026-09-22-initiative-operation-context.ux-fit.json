@@ -1,0 +1,7 @@
+{
+  "version": "1",
+  "decidedOption": "extend-ea-operation-context",
+  "decisionInteractionId": "DI-83DB469D1ADB",
+  "scope": { "files": ["apps/web/app/(shell)/ea/workrooms/page.tsx", "apps/web/components/ui/report-kit/FilterBar.tsx"] },
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["extend-ea-operation-context", "separate-initiative-dashboard"] }
+}

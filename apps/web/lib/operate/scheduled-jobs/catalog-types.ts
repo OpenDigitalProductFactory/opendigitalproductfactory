@@ -12,7 +12,7 @@ export interface ScheduledJobCatalogEntry {
    *  IS that row's jobId; for the rest it is a stable synthetic id (an
    *  edit/enable upserts a row under this id on first mutation). */
   jobId: string;
-  /** The Inngest function id (id passed to inngest.createFunction). */
+  /** The Inngest function id (id passed to jobs.createFunction). */
   inngestId: string;
   /** Human-readable job name. */
   name: string;
@@ -30,6 +30,11 @@ export interface ScheduledJobCatalogEntry {
    *  read the column, and a switch that silently does nothing is worse than an
    *  absent one (BI-7E49FA15). */
   honorsEnabledGate?: boolean;
+  /** Declared reason a job is deliberately NOT gated on ScheduledJob.enabled.
+   *  Every entry carries exactly one of `honorsEnabledGate: true` or a
+   *  non-empty `ungatedReason` (catalog.test.ts enforces it), so "no kill
+   *  switch" is always a recorded decision rather than an omission. */
+  ungatedReason?: string;
   /** Inngest event name that triggers a one-shot manual run, or null when no
    *  manual-trigger event function exists for this job. */
   runNowEvent: string | null;

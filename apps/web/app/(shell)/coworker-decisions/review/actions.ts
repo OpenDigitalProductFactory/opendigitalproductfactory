@@ -9,6 +9,7 @@
 // clears — closing the loop instead of dead-ending at the manual stance editor.
 
 import { prisma, Prisma } from "@dpf/db";
+import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 import { revalidatePath } from "next/cache";
 
 import { requireCapability, requireUserId } from "@/lib/actions/shared/guards";
@@ -59,7 +60,7 @@ export async function answerGovernanceGap(input: {
         where: {
           profileId: orgProfile.profileId,
           domainClass,
-          outcomeType: { in: ["defer", "escalate"] },
+          AND: [humanEscalationWhere()],
           humanOutcome: { equals: Prisma.DbNull },
         },
         data: {

@@ -126,6 +126,7 @@ describe("layer-scoped capsule metadata", () => {
   it("normalizes empty scope input to nullable fields and empty relationship arrays", () => {
     expect(normalizeWorkCapsuleScopeInput(undefined)).toEqual({
       workroomShape: null,
+      workShape: null,
       decisionScope: null,
       portfolioRole: null,
       servedPersona: null,
@@ -153,6 +154,7 @@ describe("layer-scoped capsule metadata", () => {
       dependsOnPortfolioRoles: ["foundational"],
     })).toEqual({
       workroomShape: null,
+      workShape: null,
       decisionScope: "wwwd",
       portfolioRole: "productsAndServicesSold",
       servedPersona: "customer",
@@ -284,5 +286,23 @@ describe("workroom shape on the convene path", () => {
       /workroomShape must be one of/,
     );
     expect(() => normalizeWorkCapsuleScopeInput({ workroomShape: 42 })).toThrow();
+  });
+});
+
+// GPP Phase 3c PR-3c-5 (BI-8875C9DF): a sub-shape child room records no repository, so the drive can complete it.
+describe("capsuleRepositoryFullName", () => {
+  const platform = () => "Org/platform";
+  it("keeps a provided repository, defaults a development room, and leaves a business room without one", async () => {
+    const { capsuleRepositoryFullName } = await import("./work-capsules");
+    expect(capsuleRepositoryFullName("manual", " Org/other ", platform)).toBe("Org/other");
+    expect(capsuleRepositoryFullName("scheduled-steward", null, platform)).toBe("Org/platform");
+    expect(capsuleRepositoryFullName("worker-onboarding", null, platform)).toBeNull();
+  });
+  it("leaves a sub-shape child room (its idempotency key's namespace) without one", async () => {
+    const { capsuleRepositoryFullName, SUB_SHAPE_ROOM_KEY_PREFIX } = await import("./work-capsules");
+    expect(SUB_SHAPE_ROOM_KEY_PREFIX).toBe("sub-shape:");
+    expect(capsuleRepositoryFullName("scheduled-steward", null, platform, "sub-shape:WC-P:c:b:0")).toBeNull();
+    expect(capsuleRepositoryFullName("scheduled-steward", null, platform, "standing-room:x:v1")).toBe("Org/platform");
+    expect(capsuleRepositoryFullName("scheduled-steward", "Org/given", platform, "sub-shape:WC-P:c:b:0")).toBe("Org/given");
   });
 });

@@ -118,7 +118,7 @@ groups:
       # collected for every scraped target). cAdvisor's container_restart_count
       # is NOT collectable on Docker Desktop (no /proc,/sys,/var/lib/docker
       # mounts -- see monitoring/alloy/config.alloy), so this is how a crashing+
-      # recovering service is caught on Windows -- the 2026-06-24 qdrant loop that
+      # recovering service is caught on Windows -- the 2026-06-24 restart loop of the since-retired vector store that
       # ContainerRestarting missed. [BI-573438C1]
       - alert: ServiceFlapping
         expr: changes(up{job!~"prometheus|windows-host"}[15m]) > 5

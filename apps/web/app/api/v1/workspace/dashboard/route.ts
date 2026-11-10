@@ -5,28 +5,10 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
+import type { CalendarItem, DashboardResponse, DashboardTile } from "@dpf/types";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
-
-export type DashboardTile = {
-  area: string;
-  label: string;
-  value: number;
-  trend: string | null;
-};
-
-export type CalendarItem = {
-  id: string;
-  title: string;
-  date: string;
-  type: string;
-};
-
-export type DashboardResponse = {
-  tiles: DashboardTile[];
-  calendarItems: CalendarItem[];
-};
 
 export async function GET(request: Request) {
   try {
@@ -93,7 +75,7 @@ export async function GET(request: Request) {
       type: item.status,
     }));
 
-    return apiSuccess<DashboardResponse>({ tiles, calendarItems });
+    return apiSuccess({ tiles, calendarItems } satisfies DashboardResponse);
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
     return NextResponse.json(

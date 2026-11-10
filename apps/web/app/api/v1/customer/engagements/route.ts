@@ -18,7 +18,7 @@ const engagementInclude = () => ({
 
 export async function GET(request: Request) {
   try {
-    const { user } = await authenticateRequest(request);
+    await authenticateRequest(request);
 
     const url = new URL(request.url);
     const { cursor, limit } = parsePagination(url.searchParams);

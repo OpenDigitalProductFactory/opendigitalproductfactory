@@ -7,7 +7,7 @@
 
 import { Bot, Handshake, User } from "lucide-react";
 
-import type { TwinActorKind } from "./types";
+import type { TwinActorKind } from "@/lib/twin/kit-types";
 
 export interface ActorMarkProps {
   name: string;

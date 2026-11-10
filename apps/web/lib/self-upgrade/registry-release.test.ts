@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readRegistryReleaseCandidate } from "./registry-release";
 
 const OWNER = "opendigitalproductfactory";
@@ -142,6 +142,98 @@ function fixtureFetch(options: {
 }
 
 describe("readRegistryReleaseCandidate", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("replaces a failed process-lifetime transport and retries the complete registry read once", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("poisoned process-lifetime fetch pool");
+    }));
+    const closeFailed = vi.fn(async () => undefined);
+    const closeHealthy = vi.fn(async () => undefined);
+    const transportFactory = vi.fn()
+      .mockReturnValueOnce({
+        fetch: vi.fn(async () => {
+          throw new TypeError("fetch failed", {
+            cause: new Error("Connect Timeout Error"),
+          });
+        }) as typeof fetch,
+        close: closeFailed,
+      })
+      .mockReturnValueOnce({
+        fetch: fixtureFetch(),
+        close: closeHealthy,
+      });
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(transportFactory).toHaveBeenCalledTimes(2);
+    expect(closeFailed).toHaveBeenCalledOnce();
+    expect(closeHealthy).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a byte-verified candidate when transport cleanup reports an error", async () => {
+    const close = vi.fn(async () => {
+      throw new Error("dispatcher already closed");
+    });
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory: () => ({ fetch: fixtureFetch(), close }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("recovers when constructing the first isolated transport fails", async () => {
+    const close = vi.fn(async () => undefined);
+    const transportFactory = vi.fn()
+      .mockImplementationOnce(() => {
+        throw new TypeError("dispatcher construction failed");
+      })
+      .mockReturnValueOnce({ fetch: fixtureFetch(), close });
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(transportFactory).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("does not retry an integrity failure on a new transport", async () => {
+    const close = vi.fn(async () => undefined);
+    const transportFactory = vi.fn(() => ({
+      fetch: fixtureFetch({ tamperChannelDigest: true }),
+      close,
+    }));
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result).toEqual({ ok: false, reason: "channel-digest-mismatch" });
+    expect(transportFactory).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("resolves a verified channel to the immutable tag and byte identities", async () => {
     const result = await readRegistryReleaseCandidate({
       owner: OWNER,
@@ -241,5 +333,183 @@ describe("readRegistryReleaseCandidate", () => {
       fetchImpl: fixtureFetch({ revision: "main" }),
     });
     expect(result).toEqual({ ok: false, reason: "source-revision-invalid" });
+  });
+});
+
+describe("registry-unavailable carries the HTTP status", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // `registry-unavailable` is raised from three different non-OK responses and
+  // is also the bounded-fallback reason, so on its own it cannot distinguish a
+  // rate limit from a 5xx or a refused token. A live install logged it twice
+  // with no way to tell which (BI-52C6FE5A).
+  it.each([429, 503])("reports HTTP %i behind registry-unavailable", async (status) => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => new Response("", { status })),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("registry-unavailable");
+    expect(result.detail).toBe(`HTTP ${status}`);
+  });
+
+  // BI-1E8C1930 — this used to assert `detail` stayed UNSET for a non-HTTP
+  // failure, on the reasoning that a detail which is not a status would mislead.
+  // A live install disproved it: the update control vanished, every page load
+  // logged a bare `registry-unavailable`, and the whole GHCR chain succeeded
+  // when replayed by hand in the same container. The evidence excluded every
+  // lane that explains itself and said nothing about the one that does not.
+  // Silence was the misleading part.
+  it("names the error class when the failure is not an HTTP status", async () => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("registry-unavailable");
+    expect(result.detail).toBe("TypeError: fetch failed");
+  });
+
+  // Undici reports a transport fault as a bare TypeError with the real
+  // condition nested underneath, so reading `code` off the top-level error
+  // finds nothing. This is the shape that actually reaches production.
+  it("reports the nested undici cause code", async () => {
+    const nested = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("Connect Timeout Error"), {
+        code: "UND_ERR_CONNECT_TIMEOUT",
+      }),
+    });
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw nested;
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe("TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)");
+  });
+
+  it("finds a code nested more than one level down", async () => {
+    const deep = new TypeError("fetch failed", {
+      cause: new Error("socket layer", {
+        cause: Object.assign(new Error("certificate rejected"), {
+          code: "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+        }),
+      }),
+    });
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw deep;
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe(
+      "TypeError: fetch failed (UNABLE_TO_VERIFY_LEAF_SIGNATURE)",
+    );
+  });
+
+  // A registry read carries bearer tokens and signed redirect URLs, and this
+  // string reaches a log an operator reads. The message is bounded so a long
+  // error can never spill one into it.
+  it("bounds the message it reports", async () => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw new Error("x".repeat(500));
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe(`Error: ${"x".repeat(120)}`);
+  });
+
+  it("survives a throw that is not an Error at all", async () => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw "registry exploded";
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("registry-unavailable");
+    expect(result.detail).toBe("non-error throw (string)");
+  });
+
+  // The HTTP lane must keep its exact status text — the new detail must not
+  // start decorating failures that already explain themselves.
+  it("leaves an HTTP failure's detail exactly as it was", async () => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => new Response("", { status: 429 })),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe("HTTP 429");
   });
 });

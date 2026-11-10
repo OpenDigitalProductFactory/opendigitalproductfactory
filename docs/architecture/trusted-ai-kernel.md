@@ -51,10 +51,10 @@ The following implementation-neutral view places the TAK runtime boundary inside
 AI-coworker operating system. It is independently derived from DPF's TAK, GAID, TAK-JSI,
 DigitalProduct, and work-allocation semantics in response to the bounded operator direction recorded
 as `OP-CSDM-02` in the
-[FPAW source register](four-portfolio-archetype-ai-workforce-operating-standard.md#20-research-and-source-register).
+[PAAW source register](four-portfolio-archetype-ai-workforce-operating-standard.md#20-research-and-source-register).
 ServiceNow's current [Common Service Data Model (CSDM) shapes](https://www.servicenow.com/docs/r/application-portfolio-management/eaw-modeling-csdm-shapes.html)
 page, identified by `SCIT-SNOW-AICT-GUIDANCE`, is a `reference-only` implementation target for the
-source-validated [FPAW Section 13.4 bridge](four-portfolio-archetype-ai-workforce-operating-standard.md#134-source-validated-csdm-5-and-aict-bridge);
+source-validated [PAAW Section 13.4 bridge](four-portfolio-archetype-ai-workforce-operating-standard.md#134-source-validated-csdm-5-and-aict-bridge);
 its figure, terminology, and vendor data model were not copied into this view. A concrete ServiceNow
 adapter still requires release/plugin/dictionary and relationship fingerprints.
 
@@ -113,7 +113,7 @@ flowchart TB
         DEP["Deployment"]
         INS["DigitalProductInstance"]
         SVI["ServiceInstance"]
-        BND["FPAW AIProductOperatingBinding"]
+        BND["PAAW AIProductOperatingBinding"]
         EVD["Controls, provenance, observations, and evidence"]
         DP --> DES --> REL --> AST --> PKG --> DIN --> DEP --> INS --> SVI
         REL -. "referenced by" .-> OPF
@@ -140,8 +140,7 @@ services, gateways, models, directives, data, and runtime state are independent 
 `AUTH`, not a linear transformation chain. The consequential-action path crosses `AUTH` and produces attributable evidence. TAK owns the
 authority decision, runtime gate, delegation, and execution-receipt semantics. GAID owns the
 AgentSubject and operating-profile identity; TAK-JSI owns job/activity qualification; the
-[Four-Portfolio Archetype and AI Workforce Operating
-Standard](four-portfolio-archetype-ai-workforce-operating-standard.md) owns the Product, service,
+[Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md) owns the Product, service,
 work, and lifecycle bridge. Offering, accepted agreement, entitlement, usage, asset, package,
 deployment, product instance, and service instance remain separate identities. Context nodes in this
 view do not transfer that ownership to TAK.
@@ -149,7 +148,7 @@ view do not transfer that ownership to TAK.
 ### 1.2 AI-coworker lifecycle and architecture view
 
 The operator direction in `OP-CSDM-02` also calls for an implementation-neutral lifecycle picture.
-The view below is DPF's own expression. It separates the FPAW DigitalProduct lifecycle-state axis from
+The view below is DPF's own expression. It separates the PAAW DigitalProduct lifecycle-state axis from
 the IT4IT 3.0.1 seven-stream value network, architecture scope, and governed-entity maturity. The five
 product states are not aliases for IT4IT streams, and the seven streams are not a mandatory sequence.
 This is the lifecycle companion to the runtime stack above, not a vendor data model or a claim that
@@ -157,7 +156,7 @@ every state or stream is executed by TAK.
 
 ```mermaid
 flowchart LR
-    subgraph LIFE["FPAW DigitalProduct lifecycle-state axis"]
+    subgraph LIFE["PAAW DigitalProduct lifecycle-state axis"]
         IDEA["Idea<br/>Value hypothesis and candidate Product"]
         EVAL["Evaluate<br/>Outcomes, portfolio decision, feasibility and architecture"]
         BUILD["Build<br/>Design, acquire, compose, test, release and deploy"]
@@ -223,7 +222,7 @@ The solid five-state path governs Product lifecycle. The hub-and-spoke network p
 IT4IT streams without inventing a process order; dotted state-to-stream edges identify common
 touchpoints, not exclusive ownership or mandatory sequencing. Architecture bands overlap both axes:
 
-| Architecture band | FPAW product-lifecycle coverage | Typical IT4IT network touchpoints |
+| Architecture band | PAAW product-lifecycle coverage | Typical IT4IT network touchpoints |
 |---|---|---|
 | strategy and business model | Idea through Retire; stakeholder value, Outcomes, and four-portfolio decisions | Evaluate, Explore, plus Consume/Operate feedback |
 | business operational architecture | Evaluate through Operate, with retirement impact analysis | Explore, Consume, Operate |
@@ -239,7 +238,7 @@ Product state. A discovered
 operational record creates provisional typed projections and Gaps only; discovery **MUST NOT**
 synthesize a Product definition, release, or GAID subject identity.
 
-FPAW owns the Product, portfolio, work, service, and
+PAAW owns the Product, portfolio, work, service, and
 AIProductOperatingBinding semantics; GAID owns the enduring subject; TAK-JSI owns qualification; TAK
 owns the action-time authority, delegation, execution, and receipt boundary in Consume/Operate. An AI
 Agent record, design, release, asset, package, deployment, product instance, service instance,
@@ -702,6 +701,41 @@ action of its own domain rather than a generic capability probe (see §16.1).
 
 These criteria `SHOULD` be machine-evaluable. An admission rule that depends on human recollection
 degrades silently as the tool surface and the agent roster grow.
+
+### 7.13 Principle-Directed Decision Contract
+
+**Working-draft amendment, EP-B932453F / BI-A484D58F.** The stable clause IDs below
+identify proposed requirements for independent review. They are not a statement
+that DPF or another implementation currently satisfies them. A conformance claim
+to this amendment names its reviewed document revision as well as the TAK profile.
+
+A principle directs judgment; a policy constrains action; a grant establishes
+authority. A vector or other ranking mechanism can implement preferences, but
+cannot replace any of these distinct responsibilities. This contract does not
+require a particular model, scoring algorithm, numerical representation or vendor.
+
+| Clause | Requirement |
+|---|---|
+| `TAK-PD-001` | Before resolving a governed decision, the runtime `MUST` identify the owning authority scope, accountable principal and applicable doctrine. It `MUST NOT` treat advice from a neighboring scope as binding authority without an attributable decision by the owning scope. |
+| `TAK-PD-002` | The decision record `MUST` bind the evaluated versions of the work definition, operating profile, applicable principles/policies and material evidence. It `MUST` distinguish observed facts, assumptions and model judgments, including unavailable or stale evidence. |
+| `TAK-PD-003` | The decision procedure `MUST` apply hard constraints before ranking eligible alternatives. It `MUST NOT` compensate for a failed constraint with a preference score, confidence score, low cost or urgency. If vectors are used, axis definitions, direction, scale and weight versions `MUST` be recorded. |
+| `TAK-PD-004` | A recommendation `MUST` remain distinct from authorization. Before a consequential effect, the runtime `MUST` apply the current effective-permission rule of §7.2 and the applicable qualification/oversight ceilings to the exact proposed action. |
+| `TAK-PD-005` | An unresolved material fact, scope conflict or authority gap `MUST` produce a recorded disposition that prevents the dependent effect and identifies the needed evidence or accountable resolver. Bounded evidence collection may continue only within existing authority. |
+| `TAK-PD-006` | Authorization `MUST` bind the action, parameters or their canonical digest, target, purpose, operating profile and validity conditions. The execution boundary `MUST` reject material substitution, expired/revoked authority or stale preconditions before the effect. The implementation `MUST` document how it prevents or contains a race between validation and use. |
+| `TAK-PD-007` | An ambiguous result after submission `MUST` be recorded as an uncertain effect. Before retrying, the runtime `MUST` reconcile the effect or use a verified idempotency contract. It `MUST NOT` equate transport failure with evidence that no effect occurred. |
+| `TAK-PD-008` | Autonomous decision loops `MUST` have declared work, time/resource and retry bounds, stop conditions and an accountable recovery path. Exhaustion `MUST NOT` relax authority or mandatory controls. Recovery from a hold `MUST` re-evaluate changed facts and current authority. |
+
+These clauses refine §§7.2, 7.7, 8.7, 8.11 and 13.3. They do not create a second
+authorization engine. An implementation statement identifies the enforcement
+boundary for each reachable effect, including effects reachable through shell,
+browser, code execution, delegation and model-provider calls. Prompt instructions
+alone do not establish complete mediation. Host compromise and controls outside
+the declared boundary remain explicit assurance limits.
+
+The [assertion rubric](tak-conformance-tests.md#principle-directed-amendment-assertions)
+maps these clauses to observable challenges. The informative
+[composition design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-09-27-principle-directed-agent-composition-design.md)
+describes MBSE views and the DPF scope binding without adding normative owners.
 
 ## 8. Tool Execution and Action Gating
 
@@ -1228,6 +1262,24 @@ The runtime `SHOULD` document summarization and truncation behavior so operators
 ### 12.4 Memory Validation
 
 For `TAK-Assured`, memory that materially affects consequential action `SHOULD` be treated as advisory until revalidated against a current source of truth.
+
+### 12.5 Data Admission and Processing Boundaries
+
+The following working-draft clauses belong to the same amendment as §7.13.
+They make admission and downstream processing separately testable.
+
+| Clause | Requirement |
+|---|---|
+| `TAK-DG-001` | Before admitting data to an agent context, the runtime `MUST` resolve its classification, permitted purpose and source-access constraints against the actual principal, agent context and workroom. Missing classification `MUST NOT` silently become Public. |
+| `TAK-DG-002` | Where grants enumerate permitted data classes, the runtime `MUST` use set membership/intersection. It `MUST NOT` infer intermediate or lower classes from the highest listed class unless the governing policy explicitly defines that inheritance. |
+| `TAK-DG-003` | The runtime `MUST` preserve applicable source restrictions and provenance through retrieval, attachments, summaries, memory, caches and derived context. Recall and egress `MUST` apply current access, purpose and revocation rules; transformation alone `MUST NOT` declassify data. |
+| `TAK-DG-004` | Before a processing or disclosure boundary, the runtime `MUST` evaluate the actual destination account/connection and applicable data, purpose, residency and contract constraints. Fallback and outbound tool results `MUST` undergo the same evaluation. A model name, Public repository or room assignment `MUST NOT` substitute for destination approval. |
+
+Classification changes require the existing accountable data authority and an
+attributable record. These controls govern eligibility independently of whether
+the model is local, hosted or embedded in hardware. Audit visibility remains
+subject to minimization and access control; a denial need not disclose protected
+source content to explain the unsatisfied condition.
 
 ## 13. Audit, Evidence, and Non-Repudiation
 

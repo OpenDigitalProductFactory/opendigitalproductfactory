@@ -20,6 +20,7 @@ import {
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
+import { providerSetupLocation } from "@/lib/ai-provider-routes";
 
 // Timeout per task. Data-architect tasks (schema design) need more time because
 // Codex reads the full schema, plans multi-model changes, validates, and iterates.
@@ -46,7 +47,7 @@ export type CodexResult = {
 async function injectCodexAuth(providerId: string): Promise<void> {
   const credential = await getDecryptedCredential(providerId);
   if (!credential?.cachedToken) {
-    throw new Error(`No OAuth token for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
+    throw new Error(`No OAuth token for provider "${providerId}". Configure via ${providerSetupLocation(providerId)}.`);
   }
 
   // Auth.json format from openai/codex source (codex-rs/login/src/token_data.rs):
@@ -84,11 +85,12 @@ async function injectCodexAuth(providerId: string): Promise<void> {
   });
 
   // Write auth.json to ~/.codex/ in the sandbox container (root — codex runs as
-  // root). No chmod (mode omitted): matches the original default-perms write.
+  // root), 600 under umask 077 so no other user can read the OAuth tokens.
   await writeSandboxFile({
     containerId: SANDBOX_CONTAINER,
     path: "/root/.codex/auth.json",
     content: authJson,
+    ownerOnly: true,
     mkdirParents: "/root/.codex",
   });
 }
@@ -148,7 +150,7 @@ export async function dispatchCodexTask(params: {
   }
 
   const instructions = buildSpecialistInstructions({ role, buildContext, priorResults });
-  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions });
+  const taskPrompt = buildSpecialistTaskPrompt({ task, instructions, workdir });
 
   const startMs = Date.now();
 

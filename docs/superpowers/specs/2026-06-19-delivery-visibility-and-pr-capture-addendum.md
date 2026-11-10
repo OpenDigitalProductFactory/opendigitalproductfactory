@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Delivery Visibility & PR Capture — Addendum to Unified Build Studio Tracking
 
 - **Date:** 2026-06-19
@@ -8,6 +12,13 @@
 - **New backlog:** BI-620261D8 (PR capture + status node), BI-DF8537CC (delivery→change-record), BI-D3E09880 (delivery IA)
 - **Cross-epic:** [BI-7C4FDBF5](#) (EP-BUILD-STUDIO — PR merge-resolution; produces the PR-status read this addendum renders)
 - **Related:** [`2026-06-19-build-studio-pr-merge-resolution-design.md`](2026-06-19-build-studio-pr-merge-resolution-design.md)
+
+> **2026-09-03 live-backlog continuation.** The three-lens delivery experience and
+> PR-to-closeout requirement continue in
+> [`2026-09-03-local-first-agentic-delivery-throughput-design.md`](2026-09-03-local-first-agentic-delivery-throughput-design.md).
+> Its live implementation BIs are `BI-9DC43E17` (delivery rail) and
+> `BI-06AE6833` (PR/review-tail convergence); the legacy BI identifiers below are
+> retained as design history and are not current backlog dependencies.
 
 ---
 

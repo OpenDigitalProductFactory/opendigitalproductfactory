@@ -8,7 +8,7 @@ import {
 import { err, ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 
 import { createWordPressClient, type WordPressProbe } from "./client";
-import type { WordPressCredential } from "./connector";
+import { projectWordPressProbe, type WordPressCredential } from "./connector";
 import { readStoredWordPressCredential } from "./stored-credential";
 
 const CONNECTION_ID = "wordpress-self-hosted";
@@ -49,7 +49,10 @@ export async function checkWordPressConnection(input: {
   const store = input.store ?? defaultCredentialStore(input.now);
   try {
     const probe = await (input.createClient ?? ((value) => createWordPressClient(value)))({ credential }).probe();
-    await store.recordHealthProbe(CONNECTION_ID, { succeeded: true });
+    await store.recordHealthProbe(CONNECTION_ID, {
+      succeeded: true,
+      safeProjectionPatch: projectWordPressProbe(probe),
+    });
     return Object.assign(ok(), {
       siteName: probe.siteName,
       origin: probe.origin,

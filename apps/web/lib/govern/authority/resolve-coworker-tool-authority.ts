@@ -1,12 +1,29 @@
+import { isImmutablePageReader } from "@/lib/tak/terminal-tool-policy";
 import "server-only";
+
+import { coworkerSelfTaskMandatedTools } from "@/lib/operate/scheduled-jobs/coworker-self-task-mandate";
+
+/** Public task-run ids for the scheduled trigger carry this prefix (autonomous-work-run.ts). */
+const SCHEDULED_RUN_PREFIX = "TR-SCHED-";
 
 import { prisma } from "@dpf/db";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 
 import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval-envelope";
+import { resolveCallConsequence } from "@/lib/tool-consequence";
+import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
-import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute-types";
 import { getGrantedCapabilities } from "@/lib/permissions";
+import type { EscalationSteering } from "./escalation-gate";
+import { findStandingRuling, type StandingRulingDb } from "@/lib/coworker/standing-ruling";
+import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
+import { loadScheduledRoomMandate, type RoomMandateDb } from "@/lib/work-management/room-stage-mandate";
+import {
+  parseInitiativeReviewBinding,
+  type InitiativeReviewBinding,
+  validateInitiativeReviewAuthorityScope,
+} from "@/lib/mcp-task-review-contract";
 
 import {
   buildCoworkerApprovalBinding,
@@ -27,6 +44,7 @@ type AuthorityDb = {
     findFirst(args: unknown): Promise<{
       id: string;
       agentId: string;
+      slugId?: string | null;
       sensitivity: string;
       hitlTierDefault: number;
       governanceProfile: {
@@ -48,6 +66,8 @@ type AuthorityDb = {
     findUnique(args: unknown): Promise<{
       taskRunId: string;
       parentTaskRunId: string | null;
+      authorityScope: unknown;
+      a2aMetadata: unknown;
     } | null>;
   };
 };
@@ -58,7 +78,10 @@ function asString(value: unknown): string | null {
 
 export function deriveCoworkerAuthoritySubject(
   params: Record<string, unknown>,
+  toolName?: string,
 ): CoworkerAuthoritySubject {
+  // create_backlog_item mints params.itemId. That id is not an existing item.
+  const skipMintedItemId = toolName === "create_backlog_item";
   const candidates: Array<
     [keyof Record<string, unknown>, CoworkerAuthoritySubject["kind"]]
   > = [
@@ -71,6 +94,7 @@ export function deriveCoworkerAuthoritySubject(
     ["teamId", "team"],
   ];
   for (const [key, kind] of candidates) {
+    if (skipMintedItemId && key === "itemId") continue;
     const id = asString(params[key]);
     if (id) return { kind, id };
   }
@@ -79,17 +103,142 @@ export function deriveCoworkerAuthoritySubject(
 
 type InitiativeAuthorityDb = Pick<AuthorityDb, "backlogItem">;
 
+type InitiativeReviewTask = {
+  taskRunId: string;
+  parentTaskRunId: string | null;
+  authorityScope: unknown;
+  a2aMetadata: unknown;
+};
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+/** Return the server-bound initiative only for a fully validated external MCP
+ * review. Once binding metadata is present, every mismatch fails closed rather
+ * than falling back to model-visible writer arguments. */
+export function resolveBoundInitiativeReviewBinding(
+  task: InitiativeReviewTask | null,
+  executingToolName: string,
+): InitiativeReviewBinding | null {
+  if (!task) return null;
+  const metadata = objectRecord(task.a2aMetadata);
+  // `== null` catches BOTH an absent key and a persisted JSON null. It used to
+  // be `=== undefined`, which a JSON null slips past: summon_coworker stores the
+  // key unconditionally, so an ORDINARY dispatch with no review binding at all
+  // arrived here as `null`, fell through to parseInitiativeReviewBinding(null),
+  // and threw "invalid immutable initiative review binding". The gate then
+  // rejected every governed tool on that task with "verified authority context
+  // is unavailable".
+  //
+  // Observed 2026-09-06: the Compliance Officer was dispatched to research a
+  // statutory rate, loaded its tools successfully, and had search_public_web
+  // rejected twice. Nothing about that task involved an initiative review. This
+  // failed closed on the absence of a thing that was never required, which is
+  // the one direction a fail-closed check must not fire in.
+  if (!metadata || metadata["initiativeReviewBinding"] == null) return null;
+  const sourceRef = objectRecord(metadata["sourceRef"]);
+  if (
+    metadata["trigger"] !== "external-mcp"
+    || (sourceRef?.["kind"] !== "mcp-token" && sourceRef?.["kind"] !== "mcp-session")
+  ) {
+    throw new Error("Initiative review authority requires an external MCP TaskRun.");
+  }
+  const binding = parseInitiativeReviewBinding(metadata["initiativeReviewBinding"]);
+  if (!binding) {
+    throw new Error("The external TaskRun has an invalid immutable initiative review binding.");
+  }
+  if (binding.writerToolName !== executingToolName) {
+    if (
+      isImmutablePageReader(executingToolName)
+      || executingToolName === "search_source_at_version"
+    ) return null;
+    throw new Error("The immutable initiative review writer tool does not match the executing tool.");
+  }
+  const authorityScope = Array.isArray(task.authorityScope)
+    ? task.authorityScope.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const scopeError = validateInitiativeReviewAuthorityScope(binding, authorityScope);
+  if (scopeError) {
+    const required = authorityScope.includes(`tool:${binding.writerToolName}`)
+      ? `backlog-item:${binding.itemId}`
+      : `tool:${binding.writerToolName}`;
+    throw new Error(`The external TaskRun is missing exact authority scope ${required}.`);
+  }
+  return binding;
+}
+
+/**
+ * The item a bound initiative write is about, from server facts only. An
+ * external run names it in its bound packet; an acceptance steward room's
+ * scheduled run names it through the packet the platform issued its room
+ * (BI-099A0BA3, security review L1: before this the subject came from model
+ * arguments, so the decision could carry no object and a tenant item's
+ * organization could not be matched). Null when neither applies.
+ */
+export async function resolveTrustedInitiativeItemId(input: {
+  task: InitiativeReviewTask | null;
+  toolName: string;
+  boundItemId: string | null;
+  loadStewardItemId: (taskRunId: string, toolName: string) => Promise<string | null>;
+}): Promise<string | null> {
+  if (input.boundItemId) return input.boundItemId;
+  if (!STEWARD_WRITERS.has(input.toolName) || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
+  return input.loadStewardItemId(input.task.taskRunId, input.toolName);
+}
+
+/**
+ * Writers a platform-issued room packet binds for a token-less scheduled run:
+ * the acceptance steward's objective mapping (BI-099A0BA3) and the platform
+ * review steward (BI-AA47C672 PIR, BI-9CCB88C4 design-stage).
+ */
+const STEWARD_WRITERS: ReadonlySet<string> = new Set([
+  "record_initiative_evidence",
+  "record_initiative_post_implementation_review",
+  "record_initiative_design_review",
+  "record_initiative_architecture_review",
+]);
+
+async function loadAcceptanceStewardItemId(taskRunId: string, toolName: string): Promise<string | null> {
+  if (toolName !== "record_initiative_evidence") {
+    const { resolvePlatformReviewRunBinding } = await import("@/lib/backlog/initiative-readiness/platform-review-room");
+    const platform = await resolvePlatformReviewRunBinding(taskRunId);
+    return platform?.ok ? platform.data.itemId : null;
+  }
+  const { resolveAcceptanceStewardRunBinding } = await import("@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority");
+  const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
+  return steward?.ok ? steward.data.itemId : null;
+}
+
+export function resolveBoundInitiativeReviewItem(
+  task: InitiativeReviewTask | null,
+  executingToolName: string,
+): string | null {
+  return resolveBoundInitiativeReviewBinding(task, executingToolName)?.itemId ?? null;
+}
+
 /** Resolve initiative subject and organization from the canonical item. Caller
- * organization fields are ignored; authenticated context can only narrow. */
+ * organization fields are ignored; authenticated context can only narrow.
+ *
+ * create_backlog_item ignores params.itemId: that id is being minted, so the
+ * subject is the parent (authenticated organization, or the platform). Tools
+ * that address an existing item still fail closed when it is absent.
+ */
 export async function resolveInitiativeAuthorityContext(input: {
   params: Record<string, unknown>;
+  toolName?: string;
+  trustedBoundItemId?: string | null;
   authenticatedOrganizationId?: string | null;
   db: InitiativeAuthorityDb;
 }): Promise<{
   subject: CoworkerAuthoritySubject;
   organizationId: string | null;
 }> {
-  const subject = deriveCoworkerAuthoritySubject(input.params);
+  const subject: CoworkerAuthoritySubject = input.trustedBoundItemId
+    ? { kind: "backlog-item", id: input.trustedBoundItemId }
+    : deriveCoworkerAuthoritySubject(input.params, input.toolName);
   if (subject.kind !== "backlog-item") {
     return {
       subject,
@@ -104,11 +253,12 @@ export async function resolveInitiativeAuthorityContext(input: {
   if (!item.organizationId) {
     return { subject, organizationId: "platform" };
   }
-  if (!input.authenticatedOrganizationId) {
+  if (!input.authenticatedOrganizationId && !input.trustedBoundItemId) {
     throw new Error("Backlog-item authority requires an authenticated organization context.");
   }
   if (
-    input.authenticatedOrganizationId !== item.organizationId
+    input.authenticatedOrganizationId
+    && input.authenticatedOrganizationId !== item.organizationId
   ) {
     throw new Error("The governed backlog item does not match the authenticated organization.");
   }
@@ -118,9 +268,18 @@ export async function resolveInitiativeAuthorityContext(input: {
 export function deriveCoworkerApprovalPolicy(input: {
   hitlTierDefault: number;
   hitlPolicy: string | null;
+  serverBoundInitiativeReview?: boolean;
 }): CoworkerApprovalPolicy {
   const policy = input.hitlPolicy?.trim().toLowerCase() ?? "";
-  if (input.hitlTierDefault <= 1 || policy === "always") return "all";
+  // Immutable binding constrains the action but does not authorize it. Bound
+  // side effects always enter the action-specific policy seam, where routine
+  // platform receipts may receive exact WWMD authority and every exception
+  // falls back to the ordinary human decision envelope.
+  if (policy === "always") return "all";
+  if (input.serverBoundInitiativeReview && input.hitlTierDefault >= 3) {
+    return "side-effects";
+  }
+  if (input.hitlTierDefault <= 1) return "all";
   if (
     input.hitlTierDefault === 2
     || policy === "proposal_for_external_writes"
@@ -129,6 +288,90 @@ export function deriveCoworkerApprovalPolicy(input: {
     return "side-effects";
   }
   return "none";
+}
+
+/**
+ * BI-6B3DA9DD — the ONLY producers of automated steering, both server-resolved.
+ *
+ * `independent-reviewer`: the call carries a server-validated immutable
+ * initiative-review binding. `resolveBoundInitiativeReviewBinding` fails closed
+ * on every mismatch and the writer lane refuses an author reviewing their own
+ * artifact, so separation of duties is already enforced as distinct principals
+ * by the time the binding exists — a human click adds nothing to it.
+ *
+ * `room-authority`: the turn runs in a Workroom the coworker participates in
+ * whose resolved action boundary is `preauthorized` — the room definition is
+ * the recorded decision (EP-WORK-POSTURE §8.2). `advise` and `propose` supply
+ * no steering, so a room can only ever narrow what a coworker may do alone.
+ */
+export function resolveSteering(input: {
+  /** Current server-resolved profile; a numeric HITL default is not this veto. */
+  hitlPolicy?: string | null;
+  initiativeReviewBinding: InitiativeReviewBinding | null;
+  roomAuthority: { actionBoundary?: string | null; memberOfRoom?: boolean } | null;
+  /**
+   * The governed scheduled task this turn runs under, if any, and the writes
+   * its registry entry declares. Server-resolved from the self-task registry —
+   * a model cannot assert it and a client cannot send it.
+   */
+  /**
+   * The run this turn belongs to and the coworker acting. A scheduled run's
+   * public id is minted server-side with a SCHED prefix, so it is a fact about
+   * the run rather than anything a model or client can assert.
+   */
+  taskRunId?: string | null;
+  agentId?: string | null;
+  /** The tool being called, matched against the cadence's declared writes. */
+  toolName?: string;
+  /**
+   * BI-C1781121: the writes the Workroom stage that started this scheduled run
+   * declares for this agent (room-stage-mandate.ts), server-resolved from the
+   * run's sourceRef, the room's shape and its role binding.
+   */
+  roomMandatedTools?: readonly string[] | null;
+  /**
+   * BI-12E5DD91: the OAuth consent the MCP route revalidated on this request.
+   * Steers only when it names the coworker actually acting.
+   */
+  connectionDelegation?: { authorityBindingId: string; agentId: string } | null;
+  /**
+   * BI-E5631708: the approved envelope whose standing ruling covers this exact
+   * action class (this coworker, this tool, this owner), found server-side by
+   * findStandingRuling. Never read from the call's arguments.
+   */
+  standingRulingEnvelopeId?: string | null;
+}): EscalationSteering {
+  // A saved operator always policy cannot be displaced by automatic steering.
+  // The evaluator still validates an exact human approval through its normal lane.
+  if (input.hitlPolicy?.trim().toLowerCase() === "always") return "none";
+  if (input.initiativeReviewBinding) return "independent-reviewer";
+  const room = input.roomAuthority;
+  if (room && room.memberOfRoom !== false && room.actionBoundary === "preauthorized") {
+    return "room-authority";
+  }
+  // Scoped to the declared tools alone: installing a cadence authorizes the
+  // writes it named, and nothing else the run may decide to attempt.
+  if (input.taskRunId?.startsWith(SCHEDULED_RUN_PREFIX) && input.agentId && input.toolName) {
+    const mandated = coworkerSelfTaskMandatedTools(input.agentId);
+    if (mandated?.includes(input.toolName)) return "scheduled-mandate";
+    if (input.roomMandatedTools?.includes(input.toolName)) return "scheduled-mandate";
+  }
+  const connection = input.connectionDelegation;
+  if (
+    connection?.authorityBindingId.trim()
+    && input.agentId
+    && connection.agentId === input.agentId
+  ) {
+    return "connection-delegation";
+  }
+  if (input.standingRulingEnvelopeId?.trim()) return "standing-ruling";
+  return "none";
+}
+
+/** A Work Case action the registry marks consequential elevates the call. */
+function isWorkCaseConsequential(workCase: { action: string }): boolean {
+  const action = getWorkCaseAction(workCase.action);
+  return action?.consequential === true;
 }
 
 export function deriveAllowedRouteContexts(
@@ -148,18 +391,33 @@ function authSource(
 }
 
 /**
+ * BI-C8EC05C9 (spec D2 S2): the propose boundary reaches the escalation gate,
+ * and under it no policy projection may approve on a person's behalf
+ * (policy-action-judgment.ts reads policyProjectionAllowed). Without it,
+ * projection is allowed unless the operator's HITL policy is "always".
+ */
+export function proposeBoundaryAuthority(
+  context: Pick<GovernedExecuteContext, "proposeBoundary"> | undefined,
+  hitlPolicy: string | null | undefined,
+): { proposeBoundary?: true; policyProjectionAllowed: boolean } {
+  const operatorAllows = hitlPolicy?.trim().toLowerCase() !== "always";
+  return context?.proposeBoundary === true
+    ? { proposeBoundary: true, policyProjectionAllowed: false }
+    : { policyProjectionAllowed: operatorAllows };
+}
+
+/**
  * Resolve the server-owned inputs for the pure authority evaluator. Model
  * output and caller-provided policy claims never enter this function.
  */
-export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
-  async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
+export const resolveCoworkerToolAuthorityInput =
+  (async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
     const actingAgentId = execution.context?.agentId;
     if (!actingAgentId) {
       throw new Error("Coworker authority resolution requires an agent identity.");
     }
 
-    const [agent, delegation, task, initiativeAuthority] = await Promise.all([
-      db.agent.findFirst({
+    const agentPromise = db.agent.findFirst({
         where: {
           OR: [
             { id: actingAgentId },
@@ -172,14 +430,15 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         select: {
           id: true,
           agentId: true,
+          slugId: true,
           sensitivity: true,
           hitlTierDefault: true,
           governanceProfile: {
             select: { hitlPolicy: true, updatedAt: true },
           },
         },
-      }),
-      execution.context?.delegationChainId
+      });
+    const delegationPromise = execution.context?.delegationChainId
         ? db.delegationChain.findFirst({
             where: { chainId: execution.context.delegationChainId },
             orderBy: { depth: "desc" },
@@ -191,15 +450,49 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
               authorityScope: true,
             },
           })
-        : Promise.resolve(null),
-      execution.context?.taskRunId
-        ? db.taskRun.findUnique({
+        : Promise.resolve(null);
+    const task = execution.context?.taskRunId
+        ? await db.taskRun.findUnique({
             where: { taskRunId: execution.context.taskRunId },
-            select: { taskRunId: true, parentTaskRunId: true },
+            select: {
+              taskRunId: true,
+              parentTaskRunId: true,
+              authorityScope: true,
+              a2aMetadata: true,
+            },
           })
-        : Promise.resolve(null),
+        : null;
+    const initiativeReviewBinding = resolveBoundInitiativeReviewBinding(
+      task,
+      execution.toolName,
+    );
+    const engagementMetadata = objectRecord(task?.a2aMetadata);
+    if (engagementMetadata?.engagementBinding != null) {
+      const { parseEngagementTaskBinding, engagementToolAllowed, validateEngagementTask, engagementProviderIdentityRefs } = await import("@/lib/coworker-service-catalog/engagement-fulfillment");
+      const binding = parseEngagementTaskBinding(engagementMetadata.engagementBinding);
+      const tokenId = asString(engagementMetadata.apiTokenId);
+      const source = engagementMetadata.tokenSource;
+      const sourceRef = objectRecord(engagementMetadata.sourceRef);
+      if (!task || !binding || engagementMetadata.engagementReadFailure || !tokenId || (source !== "oauth" && source !== "pat")
+        || engagementMetadata.trigger !== "external-mcp" || sourceRef?.kind !== "mcp-token" || sourceRef.id !== tokenId
+        || !engagementProviderIdentityRefs(binding.providerAgentId).includes(actingAgentId) || execution.userId !== binding.userId
+        || !engagementToolAllowed(binding, execution.toolName, execution.rawParams)) throw new Error("Engagement tool is outside its immutable advisory binding.");
+      await validateEngagementTask({ binding, token: { tokenId, userId: execution.userId, capability: "write", source },
+        taskRunId: task.taskRunId, requireAssociation: true, authorityScope: Array.isArray(task.authorityScope) ? task.authorityScope.filter((scope): scope is string => typeof scope === "string") : [] });
+    }
+    const trustedBoundItemId = await resolveTrustedInitiativeItemId({
+      task,
+      toolName: execution.toolName,
+      boundItemId: initiativeReviewBinding?.itemId ?? null,
+      loadStewardItemId: loadAcceptanceStewardItemId,
+    });
+    const [agent, delegation, initiativeAuthority] = await Promise.all([
+      agentPromise,
+      delegationPromise,
       resolveInitiativeAuthorityContext({
         params: execution.rawParams,
+        toolName: execution.toolName,
+        trustedBoundItemId,
         authenticatedOrganizationId: execution.context?.organizationId,
         db,
       }),
@@ -234,6 +527,9 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     const approvalPolicy = deriveCoworkerApprovalPolicy({
       hitlTierDefault: agent.hitlTierDefault,
       hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
+      // Only an external review binding changes the approval policy; a steward
+      // run is steered by its room's declared mandate instead.
+      serverBoundInitiativeReview: Boolean(initiativeReviewBinding),
     });
     const sensitivity = coerceDataSensitivity(agent.sensitivity);
     const decisionVersionIds = [
@@ -241,21 +537,97 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       agent.governanceProfile?.updatedAt.toISOString(),
     ].filter((value): value is string => Boolean(value));
 
+    const roomAuthority = execution.context?.roomAuthority ?? null;
+    const authorResearchBinding = execution.toolName === "record_initiative_evidence" && !initiativeReviewBinding && initiativeAuthority.subject.kind === "backlog-item"
+      ? await (await import("@/lib/build/author-research-policy-binding")).resolveAuthorResearchPolicyBinding({ toolName: execution.toolName, params: execution.rawParams,
+          userId: execution.userId, agentId: agent.agentId, itemId: initiativeAuthority.subject.id,
+          routeContext: execution.context?.routeContext ?? null }, db as never)
+      : null;
+    const callConsequence = await resolveCallConsequence(tool, {
+      toolName: execution.toolName,
+      params: execution.rawParams,
+      userId: execution.userId,
+      context: { agentId: execution.context?.agentId, authSource: execution.context?.authSource },
+    });
+    // BI-E5631708: an owner's standing ruling for this exact class. Looked up
+    // only where it could matter (a side effect, no operator "always"), and
+    // keyed on the resolved coworker, tool and human alone.
+    const hitlAlways = agent.governanceProfile?.hitlPolicy?.trim().toLowerCase() === "always";
+    const rulingHumanId = effectiveAuth.actingHumanUserId ?? execution.userId;
+    const standingRuling = tool.sideEffect === true && !hitlAlways && rulingHumanId
+      ? await findStandingRuling(
+          {
+            coworkerAgentIds: [effectiveAuth.actingAgentId ?? agent.agentId, agent.agentId, agent.id, ...(agent.slugId ? [agent.slugId] : [])],
+            toolName: execution.toolName,
+            delegatingUserId: rulingHumanId,
+          },
+          db as unknown as StandingRulingDb,
+        ).catch((error: unknown) => {
+          // Fail closed to the behaviour before rulings existed: ask a person.
+          console.error(
+            "[governed-execute] standing ruling lookup failed tool=%s: %s",
+            JSON.stringify(execution.toolName),
+            JSON.stringify(error instanceof Error ? error.message : String(error)),
+          );
+          return null;
+        })
+      : null;
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
+      ...(authorResearchBinding ? { authorResearchBinding } : {}),
       organizationId: initiativeAuthority.organizationId,
       action: {
         toolName: execution.toolName,
         requiredCapability: tool.requiredCapability,
         agentGrantAllowed,
+        roomAuthorityAllowed: roomAuthorizesTool(
+          execution.toolName,
+          roomAuthority?.authorizedGrants,
+          tool.discoveredPolicyGrants,
+        ),
         sideEffect: tool.sideEffect === true,
         executionMode: tool.executionMode ?? "immediate",
         routeContext: execution.context?.routeContext ?? null,
         allowedRouteContexts: deriveAllowedRouteContexts(tool.screenSurface),
         approvalPolicy,
+        ...proposeBoundaryAuthority(execution.context, agent.governanceProfile?.hitlPolicy),
+        consequence: callConsequence.consequence,
+        ...(callConsequence.refinement ? { consequenceRefinement: callConsequence.refinement } : {}),
+        ...(execution.context?.workCase
+          ? { workCaseConsequential: isWorkCaseConsequential(execution.context.workCase) }
+          : {}),
         requiresDelegationChain: Boolean(execution.context?.delegationChainId),
       },
+      // BI-6B3DA9DD: what can decide this without a person. Recorded facts only.
+      steering: resolveSteering({
+        hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
+        taskRunId: execution.context?.taskRunId ?? null,
+        agentId: execution.context?.agentId ?? null,
+        toolName: execution.toolName,
+        initiativeReviewBinding,
+        roomAuthority: execution.context?.roomAuthority ?? null,
+        connectionDelegation: execution.context?.connectionDelegation ?? null,
+        standingRulingEnvelopeId: standingRuling?.envelopeId ?? null,
+        roomMandatedTools: task
+          ? await loadScheduledRoomMandate(db as unknown as RoomMandateDb, {
+              taskRunId: task.taskRunId,
+              a2aMetadata: task.a2aMetadata,
+              agentIds: [agent.agentId, actingAgentId, ...(agent.slugId ? [agent.slugId] : [])],
+              toolName: execution.toolName,
+              params: execution.rawParams,
+              allowBlockedReport: agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
+            })
+          : null,
+      }),
+      ...(standingRuling ? { standingRulingEnvelopeId: standingRuling.envelopeId } : {}),
       subject: initiativeAuthority.subject,
+      room: roomAuthority
+        ? {
+            workroomId: roomAuthority.workroomId ?? "",
+            collaborationShape: roomAuthority.collaborationShape,
+            workShapeKey: roomAuthority.workShapeKey,
+          }
+        : null,
       delegation: delegation
         ? {
             chainId: delegation.chainId,
@@ -267,10 +639,12 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         : null,
       integration: {
         required: tool.requiresExternalAccess === true,
+        // Server-resolved (room + standing grant, BI-947780FE): an external
+        // tool the turn was not admitted to is "disconnected", never guessed.
         state: tool.requiresExternalAccess
           ? execution.context?.externalAccessEnabled === true
             ? "connected"
-            : "unknown"
+            : "disconnected"
           : "not-required",
       },
       dataPolicy: {
@@ -280,7 +654,13 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         decisionVersionsCurrent: true,
         decisionVersionIds,
       },
-      task,
+      task: task
+        ? {
+            taskRunId: task.taskRunId,
+            parentTaskRunId: task.parentTaskRunId,
+            ...(initiativeReviewBinding ? { initiativeReviewBinding } : {}),
+          }
+        : null,
       rawParams: execution.rawParams,
       approval: null,
     };
@@ -294,4 +674,6 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       ...input,
       approval,
     };
-  };
+  // `satisfies`, not an annotation: the optional `db` stays callable, so the
+  // AC-PROBE runner can evaluate on a read-only transaction (BI-129EFFD1).
+  }) satisfies CoworkerAuthorityInputResolver;

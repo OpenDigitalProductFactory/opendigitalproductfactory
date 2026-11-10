@@ -6,6 +6,8 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    $transaction: vi.fn(),
+    agent: { findFirst: vi.fn() },
     agentToolGrant: { upsert: vi.fn(), deleteMany: vi.fn() },
     agentToolGrantRevocation: { upsert: vi.fn(), deleteMany: vi.fn() },
     skillAssignment: { upsert: vi.fn(), deleteMany: vi.fn() },
@@ -22,20 +24,37 @@ import {
   revokeCoworkerTool,
   grantCoworkerSkill,
   revokeCoworkerSkill,
+  previewCoworkerPermissions,
+  approveCoworkerPermissions,
 } from "./coworker-grants";
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  asMock(prisma.$transaction).mockImplementation(async (fn: (db: typeof prisma) => Promise<unknown>) => fn(prisma));
   asMock(auth).mockResolvedValue({ user: { id: "user_1", platformRole: "admin", isSuperuser: true } });
   asMock(can).mockReturnValue(true);
   asMock(prisma.skillDefinition.findUnique).mockResolvedValue({ skillId: "code-runner" });
+  asMock(prisma.agent.findFirst).mockResolvedValue({ id: "agent-cuid", agentId: "AGT-WS-BUILD", slugId: "build-specialist", displayName: "Build Lead" });
 });
 
 // ─── Auth gate (every action checks manage_platform FIRST) ───────────────────
 
 describe("coworker-grants — auth gate", () => {
+  it("requires administrator capability for reconciliation preview and approval", async () => {
+    asMock(can).mockReturnValue(false);
+    await expect(previewCoworkerPermissions("external-codex")).rejects.toThrow(/unauthorized/i);
+    await expect(approveCoworkerPermissions({ coworkerRef: "external-codex", digest: "stale", choices: [] })).rejects.toThrow(/unauthorized/i);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a mismatched authority target before a grant write", async () => {
+    asMock(prisma.agent.findFirst).mockResolvedValueOnce({ id: "wrong", agentId: "AGT-OTHER" })
+      .mockResolvedValueOnce({ id: "agent-cuid", agentId: "AGT-WS-BUILD" });
+    expect(await grantCoworkerTool("wrong", "registry_read", "build-specialist")).toMatchObject({ ok: false });
+    expect(prisma.agentToolGrant.upsert).not.toHaveBeenCalled();
+  });
   it("throws Unauthorized and never writes when the capability is absent", async () => {
     asMock(can).mockReturnValue(false);
     await expect(grantCoworkerTool("agent-cuid", "registry_read", "build-specialist", null)).rejects.toThrow(

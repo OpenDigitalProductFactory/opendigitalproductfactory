@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-9F6AFFA0. Migration 20260916140000_delivery_run_status_closed_sets closes the two run-status columns of the delivery plane, which carried their vocabulary in a doc comment above a TEXT column rather than in a constraint. NO field is added, removed or repurposed and no column type changes: TaskRun.status and ScheduledAgentTask.lastStatus already exist and already hold a closed set of operational state labels; only the set of values the database permits is now declared. Both CHECK constraints are created NOT VALID, matching the existing retrofit pattern (20260816111000, 20260909213000) so existing rows are never re-scanned and no upgrade can be blocked. Two narrow, idempotent backfills run first. The material one corrects exactly two TaskRun rows on the reference install where an INCONCLUSIVE semantic review had been persisted as status 'failed' (the BI-FF63D266 defect, fixed at source in #5389); the correction reads the run's own progressPayload.resultClass rather than inferring, and is scoped to semantic-review runs that recorded 'inconclusive', so the 57 genuine failures that carry no resultClass are deliberately untouched. The second normalises the legacy 'active' alias to 'working' and matches zero rows here. Verified against both the dev and the live database inside rolled-back transactions: constraints create cleanly, an unknown value is rejected with 23514, 'input-required' is accepted, and the corrective UPDATE selects exactly 2 rows. Re-running either backfill updates zero rows. Filed as a manifest rather than an exception because the change is genuinely to a persistent surface and should be declared, not waived.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "TaskRun",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "status",
+          "resolution": "not-applicable",
+          "reason": "Operational lifecycle state of a governed run — which A2A-aligned or DPF runtime state the run is in. It is not an attribute of any data subject and collects nothing about a person. The column is unchanged; the permitted set is now declared in the database instead of only in a comment, and two rows whose value contradicted the run's own recorded result are corrected to the value that result already implied.",
+          "provenance": "Written by the platform's own run machinery from the closed TASK_STATES set in apps/web/lib/tak/task-states.ts. Never operator free-text, and never derived from a person's data.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "ScheduledAgentTask",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "lastStatus",
+          "resolution": "not-applicable",
+          "reason": "Verdict of the most recent scheduled agent run: ok, error, or proposed. Operational outcome metadata about a job, not about a person. The column is unchanged and nullable — NULL still means the task has not run, which is a different statement from a task that ran and produced nothing. The declared set now includes 'proposed', which #5335 already writes and the previous doc comment ('ok | error') denied; one such row exists on the reference install and was therefore already outside the documented vocabulary.",
+          "provenance": "Written by the scheduled-run verdict classifier from the closed SCHEDULED_AGENT_TASK_STATUSES set in apps/web/lib/tak/scheduled-agent-task-status.ts. Never operator free-text.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

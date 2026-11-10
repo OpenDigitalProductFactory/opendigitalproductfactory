@@ -41,7 +41,7 @@ Mocked unit tests do not catch this class of bug. They assert what the code does
 
 Before claiming a feature is complete:
 
-1. **Stand up the dependencies.** Postgres + Qdrant + embedding endpoint as the deployment uses them, or the closest in-sandbox equivalents.
+1. **Stand up the dependencies.** Postgres (with pgvector) + embedding endpoint as the deployment uses them, or the closest in-sandbox equivalents.
 2. **Run the migrations.** `pnpm --filter @dpf/db exec prisma migrate deploy` against a fresh DB and again against one with prior data; both must apply cleanly.
 3. **Run the seed.** Confirm row counts match the source-of-truth markdown.
 4. **Build the portal.** `pnpm --filter web build`. Inspect the route manifest for the routes the feature ships.

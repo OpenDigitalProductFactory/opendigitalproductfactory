@@ -24,7 +24,9 @@ describe("buildStageFlow", () => {
   it("finds pet-rescue's day is almost entirely unobservable — the reason the strip read all zeros", () => {
     const flow = buildStageFlow(bindingFor("pet-rescue"), {});
 
-    expect(flow).toHaveLength(16);
+    // 16 leaf stages composed with the 5 universal backbone stages (BI-4B11F98E):
+    // a leaf profile extends the backbone instead of replacing it.
+    expect(flow).toHaveLength(21);
     const observable = flow.filter((s) => s.observable).map((s) => s.stageKey);
     expect(observable).toEqual(["intake-capacity-decision"]);
   });
@@ -36,6 +38,22 @@ describe("buildStageFlow", () => {
 
     const stage = flow.find((s) => s.stageKey === "intake-capacity-decision")!;
     expect(stage).toMatchObject({ observable: true, count: 3, longestWait: "2h" });
+  });
+
+  it("marks the composed backbone stages as inherited and the leaf's own as not (BI-4B11F98E)", () => {
+    const petRescue = buildStageFlow(bindingFor("pet-rescue"), {});
+    expect(petRescue.filter((s) => s.inherited).map((s) => s.stageKey)).toEqual([
+      "attract",
+      "capture",
+      "settle",
+      "trust-compliance",
+      "operate-improve",
+    ]);
+    expect(petRescue.filter((s) => !s.inherited)).toHaveLength(16);
+
+    // No leaf profile: the backbone IS the stream, nothing is inherited.
+    const restaurant = buildStageFlow(bindingFor("restaurant"), {});
+    expect(restaurant.every((s) => !s.inherited)).toBe(true);
   });
 
   it("does not report an archetype as fully unobservable when it is not", () => {

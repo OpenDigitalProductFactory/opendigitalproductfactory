@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "immediate-pause-optional-timing",
+  "decisionInteractionId": "DI-BB96A4BD8DE8",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/LocalProviderPauseControl.tsx",
+      "apps/web/components/platform/ProviderDetailForm.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["immediate-pause-optional-timing", "form-before-pause"]
+  },
+  "sourceDecision": {
+    "sourceSha": "26473872a6b670f9050cfdb44ca4a29788e2b47e",
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "structuredCoverage": "weak",
+    "autonomyEligible": false,
+    "evidenceClass": "Recorded comparative UX recommendation applied under the operator's explicit implementation authorization. Committed prototype interactions and component tests support the choice. No served-production measurement or native semantic pass is claimed."
+  }
+}

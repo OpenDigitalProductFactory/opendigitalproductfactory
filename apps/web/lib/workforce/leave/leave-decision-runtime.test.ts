@@ -73,7 +73,7 @@ describe("decideLeaveRequestFromData", () => {
       minCoverageCushion: 1,
     });
 
-    expect(mocks.getLeaveRequests).toHaveBeenCalledWith({ requestId: "LR-1" });
+    expect(mocks.getLeaveRequests).toHaveBeenCalledWith({ requestId: "LR-1", withCurrentGuards: false });
     expect(mocks.getLeaveBalances).toHaveBeenCalledWith("employee-profile-1", 2026);
     expect(mocks.getTeamLeaveCalendar).toHaveBeenCalledWith(
       "dept-1",
@@ -104,7 +104,7 @@ describe("decideLeaveRequestFromData", () => {
     });
   });
 
-  it("short-circuits to a human without calling WWWD when the balance rail fires", async () => {
+  it("sends a fired balance rail to a human, recording the route through WWWD as a crossed threshold (BI-5CA6AB34)", async () => {
     mocks.getLeaveBalances.mockResolvedValue([
       { id: "balance-1", leaveType: "vacation", year: 2026, allocated: 1, used: 0, carriedOver: 0, adjustments: 0, remaining: 1 },
     ]);
@@ -112,9 +112,9 @@ describe("decideLeaveRequestFromData", () => {
     const result = await decideLeaveRequestFromData({ requestId: "LR-1", organizationId: "org-1" });
 
     expect(result.action).toBe("escalate");
-    expect(result.interactionId).toBeNull();
     expect(result.guardReasons[0]).toContain("overdraw");
-    expect(mocks.gate).not.toHaveBeenCalled();
+    expect(mocks.gate).toHaveBeenCalledTimes(1);
+    expect(mocks.gate.mock.calls[0][0].declarations).toEqual({ thresholdExceeded: true });
   });
 
   it("fails honestly when the request does not exist", async () => {

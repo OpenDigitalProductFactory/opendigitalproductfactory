@@ -279,7 +279,8 @@ export async function resolveDecisionOrigin(
           kind: "build",
           label: build.title ?? row.buildId,
           detail: null,
-          href: `/build/${encodeURIComponent(row.buildId)}`,
+          // The build address every other surface uses; /build/<id> has no route (BI-235E9F00).
+          href: `/build?buildId=${encodeURIComponent(row.buildId)}`,
         },
         recurrence,
       };

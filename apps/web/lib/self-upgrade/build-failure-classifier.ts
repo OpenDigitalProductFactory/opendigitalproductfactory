@@ -54,6 +54,10 @@ export type BuildFailureClass =
   // so the remediation path is diagnosable instead of falling through to
   // "unknown".
   | "promoter-readiness-failed"
+  // The deployed portal could not prove the candidate image's packaged
+  // reassessment owners before quiescence; nothing was drained or swapped.
+  // SUR-F2A0D477 fell through to "unknown" with no cause (BI-578131A3).
+  | "reassessment-compatibility-unproven"
   // A migrate-step failure where the target Postgres lacks pgvector, so
   // `CREATE EXTENSION vector` cannot open `vector.control`. A pre-BET-5 install
   // on postgres:16-alpine hits this until its promoter is current; the promoter's
@@ -97,6 +101,15 @@ export type BuildFailureClass =
   // deployed in that window can't self-heal (BI-B132DF1D). Version-skew, not a
   // defect in this run's code.
   | "capability-state-preflight-unavailable"
+  // promote.sh's install-state-migrate step refused the signed handoff because
+  // /dpf-state/install-state.json no longer hashed to what readiness signed
+  // (`install_state_envelope_state_changed`) or the envelope's TTL lapsed
+  // (`install_state_envelope_expired`). Another host-side writer touched the
+  // envelope during the quiescence drain (SUR-4758058F: the agent-toolchain
+  // bootstrap, BI-95DF1BFC). The signature still verified — not tampering —
+  // so the launcher now re-binds the handoff after the drain; a run that still
+  // lands here is a writer racing the promoter's own migrate step.
+  | "install-state-envelope-changed"
   // promote.sh (#3282) requires a SIGNED install-state migration handoff
   // (DPF_INSTALL_STATE_MIGRATION_ENVELOPE + _SIGNATURE) that only a #3282+
   // launcher constructs. A pre-#3282 portal cannot produce it, so a legacy
@@ -150,7 +163,14 @@ const DOCKER_CONTEXT_PLAYBOOK = "apps/web/lib/verify/dockerfile-build-context.gu
 // route/page/action/Inngest bundle. Their presence in a Turbopack/NFT trace is
 // the bundle-boundary fingerprint.
 const HOST_ONLY_MODULE = /(promoter|self-upgrade|child_process|node:child_process|dockerode|\/queue\/functions\/|api\/inngest)/i;
-const DUPLICATE_ASSET = /(duplicate\s+emitted\s+asset|multiple\s+assets\s+emit|conflict:.*emit|emit[^\n]*to the same (file|filename))/i;
+// Bundler wording drifts, and a miss here is not a silent one: the next branch
+// down is MODULE_NOT_FOUND, so an unmatched duplicate-asset failure gets blamed
+// on whatever benign `Cannot find module` the build happened to log (SUR-7F02CA27
+// blamed the git-hooks script the portal build never imports). Keep the webpack
+// era phrasings AND Next 16 Turbopack's "Two or more assets with different
+// content were emitted to the same output path".
+const DUPLICATE_ASSET =
+  /(duplicate\s+emitted\s+asset|multiple\s+assets\s+emit|two or more assets[^\n]*emitted|conflict:.*emit|emit[^\n]*to the same (file|filename|output path))/i;
 const UNEXPECTED_NFT_PROJECT_TRACE = /encountered unexpected file in NFT list|whole project was traced unintentionally/i;
 const MODULE_NOT_FOUND = /(cannot find module ['"]([^'"]+)['"]|module not found:\s*can't resolve ['"]([^'"]+)['"])/i;
 // A relative import climbing OUT of the importing package (one or more "../"),
@@ -182,6 +202,11 @@ const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
 // ends in a compound snake/kebab token, never from later diagnostics.
 const PROMOTER_READINESS_FAILED = /promoter-readiness-failed:/i;
 const PROMOTER_READINESS_CODE = /(?:^|:)\s*([a-z0-9]+(?:[_-][a-z0-9]+)+)\s*$/i;
+// The portal-side reassessment preflight (BI-578131A3) writes
+// `reassessment-compatibility-unproven: <subcode>…`. An image the engine cannot
+// find by the reference it was handed is an addressing defect (BI-A9BA9583).
+const REASSESSMENT_UNPROVEN = /reassessment-compatibility-unproven(?::\s*([a-z0-9-]+))?/i;
+const IMAGE_NOT_FOUND = /No such image|release-image-unresolved|source-image-unresolved/i;
 // BET-5 migrate-step failures. Both recovery procedures live in the runbook.
 const BET5_PLAYBOOK = "docs/runbooks/bet5-windows-self-upgrade.md";
 // Docker Desktop mounts-denied on the /dpf-state mount (#3262).
@@ -204,6 +229,9 @@ const CAPABILITY_STATE_STALE = /^error: capability_state_stale$/im;
 // like capability_state_stale above, the live symptom this rule replaces was the
 // misleading "unknown (unclassified)" wrapper pointing at the wrong playbook.
 const MIGRATION_HANDOFF_MISSING = /^error: install_state_migration_handoff_missing$/im;
+// promoter-migration-envelope.mjs / migrate-install-state.mjs print the bare
+// code on stderr (no `error:` prefix) and exit 78 / 2 (BI-95DF1BFC).
+const INSTALL_STATE_ENVELOPE_CHANGED = /^(?:error: )?install_state_envelope_(state_changed|expired)$/im;
 // `CREATE EXTENSION vector` on a Postgres image without pgvector: the canonical
 // Postgres errors are `extension "vector" is not available` and a `DETAIL: Could
 // not open extension control file ".../vector.control"`. Deliberately anchored on
@@ -271,6 +299,21 @@ export function classifyBuildFailure(
     };
   }
 
+  const reassessment = log.match(REASSESSMENT_UNPROVEN);
+  if (reassessment) {
+    const subcode = reassessment[1] ?? "unspecified";
+    const addressing = IMAGE_NOT_FOUND.test(log);
+    return {
+      class: "reassessment-compatibility-unproven",
+      summary: `The deployed portal could not prove the candidate's packaged reassessment owners (${subcode}) before quiescence; nothing was drained or swapped.${addressing
+        ? " Docker could not find the candidate image by the reference the portal used. Compare the image store (`docker info` driver-type) with how the preflight addresses the release (BI-A9BA9583) before suspecting the release itself."
+        : " The run's failure log carries the subcode's detail."}`,
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, REASSESSMENT_UNPROVEN),
+      isMainDefectVsEnvironment: addressing ? "main-defect" : null,
+    };
+  }
+
   // After the more specific readiness refusal, a promoter timeout supersedes
   // whatever build output preceded it: the kill
   // happened because nothing ever completed, so any half-emitted trace above is
@@ -331,6 +374,23 @@ export function classifyBuildFailure(
         "promote.sh refused the governed install-state migration because the signed handoff (DPF_INSTALL_STATE_MIGRATION_ENVELOPE + DPF_INSTALL_STATE_MIGRATION_SIGNATURE) was not supplied. Only a #3282+ launcher builds and signs that envelope (signing also needs /dpf-state/runtime-transition.secret), so an install still running a PRE-#3282 portal cannot self-upgrade INTO #3282 — every fix ships into a version the install cannot reach. Do NOT retry or rebuild: the run will fail identically. Cross the boundary once, out-of-band (build the portal from current origin/main, initialize the transition secret via scripts/rotate-runtime-transition-secret.mjs --initialize, set DPF_HOST_PLATFORM/DPF_HOST_ARCH in the install .env to match install-state, then recreate portal+portal-init). After that the launcher can sign handoffs and self-upgrade resumes normally (BI-BE8BBDE9). Version-skew / environment, not a defect in this run's code.",
       playbookLink: SPEC,
       failingTrace: traceAround(log, MIGRATION_HANDOFF_MISSING),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
+  // promote.sh refused the install-state migration because the state bytes moved
+  // under the signed handoff (or its TTL lapsed). Decisive and precedes any build
+  // output; the portal was never swapped (BI-95DF1BFC, SUR-4758058F).
+  const envelopeChanged = log.match(INSTALL_STATE_ENVELOPE_CHANGED);
+  if (envelopeChanged) {
+    const expired = envelopeChanged[1] === "expired";
+    return {
+      class: "install-state-envelope-changed",
+      summary: expired
+        ? "promote.sh refused the governed install-state migration because the signed handoff EXPIRED before the promoter reached its migrate step — the quiescence drain outlived the envelope TTL. Nothing was deployed; the running portal was left serving traffic. The launcher now re-binds the handoff after the drain, so retry the upgrade; if it expires again the drain itself is the problem (check the QuiescenceRun blockers), not this run's code."
+        : "promote.sh refused the governed install-state migration because /dpf-state/install-state.json changed after readiness signed the handoff — another host-side writer (a client-session agent-toolchain bootstrap, an installer re-run, a capability transition) touched the envelope while the portal drained. The signature still verified, so this is a lost race, not tampering, and nothing was deployed. The launcher now re-binds the handoff after the drain; a run that STILL lands here has a writer racing the promoter's own migrate step — find it via install-state.json's mtime against the run's install-state-migrate stamp in self-upgrade-steps.log, then retry the upgrade (BI-95DF1BFC).",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, INSTALL_STATE_ENVELOPE_CHANGED),
       isMainDefectVsEnvironment: "environment",
     };
   }
@@ -513,4 +573,71 @@ export function formatClassifiedExcerpt(
     `[build-failure-class] playbook: ${classification.playbookLink}\n` +
     `---`;
   return `${head}\n${rawLog}`;
+}
+
+/**
+ * Longest operator-facing failure reason we persist on a run row. The column is
+ * a status line, not a log: the full output already lives in `failureLog`.
+ */
+export const FAILURE_REASON_MAX = 200;
+
+/** The verdict formatClassifiedExcerpt stamps at the top of a persisted excerpt. */
+const CLASSIFIED_HEADER = /^\[build-failure-class\]\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s*\(/im;
+
+/** A structured leading token, matching the `class: detail` shape skip reasons use. */
+const STRUCTURED_PREFIX = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:_[a-z0-9-]+)*):/;
+
+/**
+ * Derive a short, operator-readable reason for a failed self-upgrade run.
+ *
+ * Why this exists: `skipRun` has always written a structured `reason`
+ * ("activity-in-flight: coworker.reasoning-loop") that the Upgrade Center
+ * renders in plain language, while `failRun` wrote only `failureLog` — so
+ * every FAILED run showed the operator nothing but a raw Docker log behind a
+ * tooltip. Measured on this install: 55 of 55 failed runs had no reason, and
+ * that produced two multi-day invisible outages (four consecutive daily
+ * failures 2026-07-26..29, and the Git-LFS breakage of 2026-08-29).
+ *
+ * The classification this returns is not new judgement: `failRun` already
+ * classified the same log to fingerprint the corrective BI and then discarded
+ * the result. This keeps ONE classification and lets the run row carry it too.
+ *
+ * Never throws — a reason is diagnostic garnish, and must not be able to fail
+ * the write that records the failure itself.
+ */
+export function deriveFailureReason(log: string): string {
+  const text = (log ?? "").trim();
+  if (!text) return "unknown";
+
+  // Prefer a verdict already stamped on the log over re-deriving one.
+  // formatClassifiedExcerpt runs on the FULL log; what reaches failRun is that
+  // excerpt truncated to head/tail slices, so the deciding line is frequently
+  // gone by now. Re-classifying the remains produced SUR-7F02CA27's
+  // "unknown: [build-failure-class] ..." — a reason whose first token keys
+  // nothing, so describeFailureReason fell through to the generic text and the
+  // class the pipeline had correctly computed never reached the operator.
+  const stamped = CLASSIFIED_HEADER.exec(text);
+  if (stamped?.[1]) return stamped[1];
+
+  let className: BuildFailureClass = "unknown";
+  try {
+    className = classifyBuildFailure({ log: text }).class;
+  } catch {
+    // Fall through to the structured-prefix path below.
+  }
+  if (className !== "unknown") return className;
+
+  // No known class. The pipeline's own wrappers (`promoter-readiness-failed:`,
+  // `lfs-unmaterialized:`, `merge-conflict:`) are already the right shape, so
+  // prefer the first structured line over a bare "unknown".
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    const match = STRUCTURED_PREFIX.exec(line);
+    if (match) return line.slice(0, FAILURE_REASON_MAX);
+    break;
+  }
+
+  const firstLine = text.split("\n").find((l) => l.trim().length > 0)?.trim() ?? "";
+  return `unknown: ${firstLine}`.slice(0, FAILURE_REASON_MAX);
 }

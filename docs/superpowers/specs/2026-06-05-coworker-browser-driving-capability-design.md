@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Coworker Browser-Driving Capability - Design Spec
 
 | Field | Value |
@@ -11,6 +15,8 @@
 | Standing procedure | Originating thread recorded WWMD verdicts 1-4. This architect pass verified the current repo and live MCP backlog, then added verdict 5 for the discovered MCP authority gap. |
 
 ---
+
+> **Current delivery note (2026-08-30):** `EP-BROWSER-DRIVE` and the roster in §16 are a historical snapshot and no longer resolve in the live backlog. Browser-specific mappings remain valid design evidence. The remaining platform-wide authority gap for unmapped dynamically discovered tools is governed by live BI `BI-8B7B2FE9` under `EP-413F2602` and by `2026-08-30-security-authentication-hardening-successors-design.md` §11.
 
 ## 1. Architect Review Update
 
@@ -107,7 +113,7 @@ However, `apps/web/lib/mcp-tools.ts` currently:
 1. filters first-party `PLATFORM_TOOLS` by agent grant;
 2. then, when external access is enabled, appends discovered MCP tools from `getMcpServerTools()`.
 
-That means discovered MCP tools are not currently filtered through `isToolAllowedByGrants()` in the same path as first-party tools. This is acceptable for today's limited QA/debug use only because the browser-use sidecar is not yet exposed as a coworker browser-driving capability. It is not acceptable for authenticated, side-effecting browser-driving.
+The later mapped-tool filter closed the browser-specific visibility gap, but its compatibility path admits discovered tools that have no `TOOL_TO_GRANTS` mapping. That remaining platform-wide omission is not acceptable authority. BI-8B7B2FE9 owns explicit quarantine/approval and invocation-time recheck; this historical design does not create a second browser-only policy.
 
 ### 2.5 Existing data substrate
 
@@ -655,7 +661,7 @@ Functional verification is mandatory. A screenshot pile is not enough; the proof
 
 ## 16. Backlog Roster
 
-Live MCP state on 2026-06-05:
+Historical live MCP state on 2026-06-05 (not current delivery coverage):
 
 | BI | Title | Status | Means exercised | Notes |
 |---|---|---|---|---|
@@ -665,7 +671,7 @@ Live MCP state on 2026-06-05:
 | `BI-91D64AD4` | Ad-network dashboard read | `triaging` / Captured | M2 read-only | Proves `browser_read` without envelope. |
 | `BI-2F287A19` | LinkedIn/X cross-channel marketing distribution | `triaging` / Captured | M2/M3 | Stretch case; do after substrate and first proofs. |
 
-These items are captured and linked, not triaged, sized, promoted, or ready for Build Studio.
+These identifiers document the 2026-06-05 planning state only. Current work must resolve against the live backlog; the surviving external-tool authority gap is BI-8B7B2FE9.
 
 ---
 

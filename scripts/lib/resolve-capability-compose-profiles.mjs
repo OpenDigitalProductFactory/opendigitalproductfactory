@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -24,6 +25,20 @@ export const PRE_PROFILE_COMPATIBILITY_CAPABILITIES = Object.freeze([
 ]);
 
 const sortedUnique = (values) => [...new Set(values)].sort();
+
+// Operator-controlled capabilities whose on/off state a person should choose
+// (BI-83260BB3). An install-state without a recorded decision is carried as
+// "undecided" so the portal asks; the enabled set itself is never changed here.
+// Only schema v2+ states carry the map; a v1 state gains it once migrated.
+export const OPERATOR_DECIDED_CAPABILITIES = Object.freeze(["runtime:deep-observability"]);
+
+export function carryRuntimeCapabilityDecisions(state, now = new Date().toISOString()) {
+  const decisions = { ...(state?.runtimeCapabilityDecisions ?? {}) };
+  for (const capabilityId of OPERATOR_DECIDED_CAPABILITIES) {
+    if (!decisions[capabilityId]) decisions[capabilityId] = { decision: "undecided", source: "upgrade-carried", decidedAt: now };
+  }
+  return decisions;
+}
 export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform, overlays = [], aliases = [], composeProfiles = "", migrate = false }) {
   if (!catalog || !Array.isArray(catalog.capabilities) || typeof catalog.catalogHash !== "string") throw new Error("invalid_capability_service_catalog");
   if (hostPlatform !== undefined && !HOSTS.has(hostPlatform)) throw new Error(`invalid_host_platform:${hostPlatform}`);
@@ -138,19 +153,31 @@ export function resolveCapabilityComposeProfiles({ catalog, state, hostPlatform,
 }
 
 function parseArgs(argv) {
-  const result = { overlays: [], aliases: [], migrate: false, write: false };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--state") result.statePath = argv[++index];
-    else if (arg === "--catalog") result.catalogPath = argv[++index];
-    else if (arg === "--host") result.hostPlatform = argv[++index];
-    else if (arg === "--overlay") result.overlays.push(argv[++index]);
-    else if (arg === "--alias") result.aliases.push(argv[++index]);
-    else if (arg === "--compose-profiles") result.composeProfiles = argv[++index] ?? "";
-    else if (arg === "--migrate") result.migrate = true;
-    else if (arg === "--write") result.write = true;
-    else throw new Error(`unknown_argument:${arg}`);
-  }
+  const options = {
+    state: { type: "string" },
+    catalog: { type: "string" },
+    host: { type: "string" },
+    overlay: { type: "string", multiple: true },
+    alias: { type: "string", multiple: true },
+    "compose-profiles": { type: "string" },
+    migrate: { type: "boolean" },
+    write: { type: "boolean" },
+  };
+  // strict: false plus the token check below keeps the old error code for unknown input.
+  const { values, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
+  const unknown = tokens.find((token) => token.kind !== "option" || !Object.hasOwn(options, token.name));
+  if (unknown) throw new Error(`unknown_argument:${unknown.rawName ?? unknown.value ?? "--"}`);
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  const result = {
+    overlays: (values.overlay ?? []).map(text),
+    aliases: (values.alias ?? []).map(text),
+    migrate: values.migrate === true,
+    write: values.write === true,
+  };
+  if (values.state !== undefined) result.statePath = text(values.state);
+  if (values.catalog !== undefined) result.catalogPath = text(values.catalog);
+  if (values.host !== undefined) result.hostPlatform = text(values.host);
+  if (values["compose-profiles"] !== undefined) result.composeProfiles = text(values["compose-profiles"]) ?? "";
   if (!result.statePath) throw new Error("missing_install_state");
   return result;
 }
@@ -173,7 +200,7 @@ async function main() {
       const { updateInstallState } = await import("../installer/install-state-transaction.mjs");
       await updateInstallState(statePath, current => {
         projection = resolveCapabilityComposeProfiles({ catalog, state: current, ...args });
-        return { ...current, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion };
+        return { ...current, enabledRuntimeCapabilities: projection.enabledRuntimeCapabilities, capabilityCatalogHash: projection.capabilityCatalogHash, capabilityStateVersion: projection.capabilityStateVersion, ...(current.schemaVersion >= 2 ? { runtimeCapabilityDecisions: carryRuntimeCapabilityDecisions(current) } : {}) };
       });
     }
     process.stdout.write(`${JSON.stringify(projection)}\n`);

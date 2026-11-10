@@ -15,7 +15,7 @@ import {
 /** Stable queueId for the canonical queue capsule-anchored WorkItems land in. */
 const CANONICAL_ANCHOR_QUEUE_ID = "canonical-work-anchor";
 
-function prismaAnchorPorts(): WorkItemAnchorPorts {
+export function prismaAnchorPorts(): WorkItemAnchorPorts {
   return {
     findWorkItemBySource: (sourceType, sourceId) =>
       prisma.workItem.findFirst({ where: { sourceType, sourceId }, select: { id: true } }),
@@ -72,5 +72,28 @@ export async function ensureCapsuleWorkItemAnchorNonFatal(
     await ensureCapsuleWorkItemAnchorWithPrisma(capsule);
   } catch (error) {
     console.warn(`[work-convergence] WorkItem anchor skipped for ${action} ${capsule.capsuleId}: ${getErrorMessage(error)}`);
+  }
+}
+
+/**
+ * Anchor a capsule known only by id — for producers that get a capsuleId back
+ * from a lower layer (ensureExternalSessionCapsule) rather than the row. Reads
+ * the three fields the anchor needs, then runs the same non-fatal boundary as
+ * every other caller. Best-effort: a failed lookup is a warning, never a
+ * refusal of the work that produced the capsule (BI-A5EEB5D1).
+ */
+export async function anchorCapsuleByIdNonFatal(capsuleId: string, action: string): Promise<void> {
+  try {
+    const capsule = await prisma.workroom.findUnique({
+      where: { capsuleId },
+      select: { capsuleId: true, backlogItemId: true, title: true },
+    });
+    if (!capsule) {
+      console.warn(`[work-convergence] WorkItem anchor skipped for ${action} ${capsuleId}: capsule not found`);
+      return;
+    }
+    await ensureCapsuleWorkItemAnchorNonFatal(capsule, action);
+  } catch (error) {
+    console.warn(`[work-convergence] WorkItem anchor lookup failed for ${action} ${capsuleId}: ${getErrorMessage(error)}`);
   }
 }

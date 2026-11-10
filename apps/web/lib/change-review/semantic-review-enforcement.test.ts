@@ -16,6 +16,7 @@ import {
 
 const now = new Date("2026-08-01T16:00:00.000Z");
 const identity: SemanticReviewIdentity = {
+  artifactType: "code-change",
   capsuleId: "WC-CALIBRATION",
   baseTreeHash: "a".repeat(40),
   headTreeHash: "b".repeat(40),
@@ -38,6 +39,15 @@ function receipt(overrides: Partial<SemanticReviewReceipt> = {}): SemanticReview
 }
 
 describe("deterministic semantic-review publication control", () => {
+  it("uses the publication request role rather than a matching receipt and copied identity", () => {
+    const specIdentity = { ...identity, artifactType: "spec" as const };
+    const specReceipt = createSemanticReviewReceipt({ identity: specIdentity, disposition: "reviewed", risk: "high",
+      result: { decision: "pass", issues: [], summary: "Spec reviewed." } });
+    expect(evaluateSemanticReviewPublicationControl({ mode: "enforce", identity: specIdentity,
+      expectedArtifactType: "code-change", receipt: specReceipt, now })).toMatchObject({ mayPublish: false, reason: "stale-receipt" });
+    expect(evaluateSemanticReviewPublicationControl({ mode: "enforce", identity: specIdentity,
+      expectedArtifactType: "spec", receipt: specReceipt, now })).toMatchObject({ mayPublish: true, reason: "fresh-receipt" });
+  });
   it("observes a missing receipt in shadow mode and blocks it in enforce mode", () => {
     expect(evaluateSemanticReviewPublicationControl({ mode: "shadow", identity, receipt: null, now }))
       .toMatchObject({ disposition: "shadow-observe", reason: "missing-receipt", mayPublish: true });
@@ -147,5 +157,14 @@ describe("semantic-review outcome telemetry", () => {
     expect(projection.externalEvidence.target).toBe("receipt-1");
     expect(projection.activity.kind).toBe("evidence-recorded");
     expect(projection.externalEvidence.details).toEqual(projection.activity.payload);
+  });
+  it("keeps unobserved escaped failures unknown instead of claiming zero", () => {
+    const metrics = aggregateSemanticReviewOutcomes([completed({ postPublicationMissCount: null })]);
+    expect(metrics).toMatchObject({ postPublicationMissCount: null, postPublicationMissRate: null, unknownPostPublicationSamples: 1 });
+  });
+  it("retains incident and scenario follow-up in the existing outcome record", () => {
+    const followUp = { scenarioKey: "lost-response", incidentReference: "incident-record", followUpReference: "repair-work" };
+    expect(projectSemanticReviewOutcome(completed({ postPublicationMissCount: 1, escapedFailureFollowUps: [followUp] }))
+      .externalEvidence.details.escapedFailureFollowUps).toEqual([followUp]);
   });
 });

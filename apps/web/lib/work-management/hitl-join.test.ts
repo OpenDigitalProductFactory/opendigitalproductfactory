@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   boundaryCeiling,
   decisionModeRank,
+  hasPassingVerificationEvidence,
   joinAutonomy,
   resolveVerificationRequirement,
-} from "./hitl-join";
+} from "@dpf/validators/workroom-policy/hitl-join";
 import type { WorkCaseAutonomyDecisionMode } from "./autonomy-envelope";
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { RiskClass } from "@/lib/autonomy/trust-graduation";
 import type { VerificationDepth } from "@/lib/golden-triangle";
 
@@ -149,5 +150,26 @@ describe("resolveVerificationRequirement", () => {
       expect(req.reasonCode).toMatch(/^[a-z0-9_]+$/);
       expect(req.reason.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("hasPassingVerificationEvidence", () => {
+  it("accepts both case evidence and canonical passed runtime verification receipts", () => {
+    expect(hasPassingVerificationEvidence([{ verifiedAt: "2026-08-30T12:00:00.000Z" }])).toBe(true);
+    expect(
+      hasPassingVerificationEvidence([
+        { status: "passed", completedAt: "2026-08-30T12:00:00.000Z" },
+      ]),
+    ).toBe(true);
+  });
+
+  it("rejects absent, unfinished, and failed evidence", () => {
+    expect(hasPassingVerificationEvidence()).toBe(false);
+    expect(hasPassingVerificationEvidence([{ status: "running", completedAt: null }])).toBe(false);
+    expect(
+      hasPassingVerificationEvidence([
+        { status: "failed", completedAt: "2026-08-30T12:00:00.000Z" },
+      ]),
+    ).toBe(false);
   });
 });

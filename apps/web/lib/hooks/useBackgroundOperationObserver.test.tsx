@@ -8,7 +8,7 @@ const systemEvents = vi.hoisted(() => ({
   status: "open" as "connecting" | "open" | "reconnecting",
 }));
 
-vi.mock("@/components/platform/SystemEventProvider", () => ({
+vi.mock("./system-events", () => ({
   useSystemEvent: (_type: string, handler: () => void) => {
     systemEvents.handler = handler;
   },

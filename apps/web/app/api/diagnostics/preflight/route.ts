@@ -7,11 +7,13 @@
  *
  * Requires admin auth. Returns structured diagnostic report.
  */
+import { resolveLocalServedContextTokens } from "@/lib/inference/local-model-context-reconcile";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { isModelRoutingProvider, MODEL_ROUTING_ENDPOINT_TYPES } from "@/lib/routing/provider-eligibility";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { providerSetupLocation } from "@/lib/ai-provider-routes";
 
 export const dynamic = "force-dynamic";
 
@@ -124,7 +126,7 @@ export async function GET(): Promise<Response> {
     if (keyRotated.length > 0) {
       return {
         status: "fail",
-        message: `${keyRotated.length} provider(s) need re-authentication — encryption key changed since credentials were stored: ${keyRotated.map(c => c.providerId).join(", ")}. Go to Admin > AI Workforce > External Services and re-enter the API key or re-authorize OAuth.`,
+        message: `${keyRotated.length} provider(s) need re-authentication — encryption key changed since credentials were stored: ${keyRotated.map(c => c.providerId).join(", ")}. Go to ${providerSetupLocation()} and re-enter the API key or re-authorize OAuth.`,
         detail: {
           keyRotated: keyRotated.map(c => c.providerId),
           valid: valid.map(c => c.providerId),
@@ -137,7 +139,7 @@ export async function GET(): Promise<Response> {
     if (valid.length === 0) {
       return {
         status: "fail",
-        message: "No valid credentials found for any LLM provider. Go to Admin > AI Workforce > External Services.",
+        message: `No valid credentials found for any LLM provider. Go to ${providerSetupLocation()}.`,
         detail: { total: credentials.length, valid: 0, invalid: invalid.length },
       };
     }
@@ -205,7 +207,7 @@ export async function GET(): Promise<Response> {
     const { inferContract } = await import("@/lib/routing/request-contract");
     const { routeEndpointV2 } = await import("@/lib/routing/pipeline-v2");
 
-    const manifests = await loadEndpointManifests();
+    const manifests = await loadEndpointManifests(Date.now(), resolveLocalServedContextTokens);
     if (manifests.length === 0) {
       return { status: "fail", message: "No endpoint manifests loaded — routing has nothing to select from." };
     }
@@ -248,7 +250,7 @@ export async function GET(): Promise<Response> {
     const { inferContract } = await import("@/lib/routing/request-contract");
     const { routeEndpointV2 } = await import("@/lib/routing/pipeline-v2");
 
-    const manifests = await loadEndpointManifests();
+    const manifests = await loadEndpointManifests(Date.now(), resolveLocalServedContextTokens);
     const policies = await loadPolicyRules();
     const overrides = await loadOverrides("chat");
 

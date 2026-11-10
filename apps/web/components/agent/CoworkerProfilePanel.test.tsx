@@ -8,9 +8,7 @@ const getProactivityPreference = vi.fn();
 const getSelfTaskCadenceInfo = vi.fn();
 
 vi.mock("@/lib/actions/proactivity", () => ({
-  getCoworkerProactivityPreference: (agentId: string) => getProactivityPreference(agentId),
   getCoworkerSelfTaskCadenceInfo: (agentId: string) => getSelfTaskCadenceInfo(agentId),
-  saveCoworkerProactivityPreference: vi.fn(async () => ({ ok: true })),
 }));
 
 import { CoworkerProfilePanel } from "./CoworkerProfilePanel";
@@ -56,22 +54,26 @@ describe("CoworkerProfilePanel", () => {
   });
 
   it("shows the real self-task cadence for registered coworkers", async () => {
-    getProactivityPreference.mockResolvedValue("assertive");
     getSelfTaskCadenceInfo.mockResolvedValue({ registered: true, cadence: { balanced: "weekly", assertive: "daily" } });
     render(<CoworkerProfilePanel agent={makeAgent()} onClose={vi.fn()} />);
 
-    expect(await screen.findByText("Daily")).toBeTruthy();
+    // BI-87C9C91C: the level is DERIVED (balanced) rather than loaded from a
+    // saved per-coworker preference, so the cadence shown is the balanced one.
+    expect(await screen.findByText("Weekly")).toBeTruthy();
     expect(screen.getByText("Scheduled self-tasks")).toBeTruthy();
   });
 
-  it("loads the saved coworker proactivity preference for the profile summary", async () => {
-    getProactivityPreference.mockResolvedValue("assertive");
+  // BI-87C9C91C — the panel reports the level in force and does not offer to
+  // change it on the coworker. Proactivity is owned by the workroom that owns
+  // the outcome, so a control here would set a property that no longer exists.
+  it("reports the derived level read-only and offers no control", async () => {
     getSelfTaskCadenceInfo.mockResolvedValue({ registered: false, cadence: null });
 
     render(<CoworkerProfilePanel agent={makeAgent()} onClose={vi.fn()} />);
 
-    expect((await screen.findAllByText("Assertive")).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Stay on this/i)).toBeTruthy();
-    expect(screen.queryByText(/proactivity:scheduled-task:assertive/i)).toBeNull();
+    expect(await screen.findByText("Set by the room")).toBeTruthy();
+    expect(screen.queryByRole("radio")).toBeNull();
+    // The removed read path must not be called at all.
+    expect(getProactivityPreference).not.toHaveBeenCalled();
   });
 });

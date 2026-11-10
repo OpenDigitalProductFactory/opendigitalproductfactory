@@ -205,3 +205,23 @@ Acceptance criterion 4 stands unchanged — capability fields still come only fr
 2. The acceptance workflow only ever exercised readiness against a **schema-1** fixture, which is unversioned for capability purposes and skips every capability check. It now also asserts readiness against the shape every live install actually has: schema 2 carrying the **previous** release's catalog hash.
 
 **Diagnosability.** Readiness reported the bare code `capability_projection_failed` while discarding the one line that named the cause. Every readiness probe now carries its own error text into the failure `message`, and the acceptance workflow asserts a refusal message names its cause.
+
+## 8. Amendment 2026-09-08 — the envelope must survive the drain window (BI-95DF1BFC)
+
+**Incident.** `SUR-4758058F` (manual, target `9f176768d8ab`) passed readiness at 22:19:23Z, signed a handoff over the install-state bytes, then spent five minutes in the quiescence drain and recovery point. At 22:22:43Z the agent-toolchain bootstrap — launched by a client session start — rewrote `install-state.json` (`agentToolchain.appliedAt`). At 22:24:13Z `promote.sh` reached `install-state-migrate`, `promoter-migration-envelope.mjs` hashed the file, and the run died with `install_state_envelope_state_changed`, reported as `unknown (unclassified)`.
+
+**Blind spots.** Three, each a real defect:
+
+1. §3.4 bound the handoff to the readiness bytes and the launcher re-verified it "immediately before the swap" — but that re-verification ran *before* `startQuiescence`. The minutes-long drain and recovery point were an unguarded window; anything writing the file in it fenced the run.
+2. The agent-toolchain bootstrap kept its readiness block **inside** `install-state.json`. That block is agent-client state, rewritten on every session start, and had no business in the envelope the install transition signs. Any client session starting mid-upgrade was a guaranteed fence.
+3. The failure classifier had no class for the refusal, so the run reported the wrong playbook and no remedy.
+
+**Corrections.**
+
+- **Re-bind after the drain.** `refreshMigrationHandoffAfterDrain` runs immediately before `runPromoter`, after the drain and recovery point. It re-verifies the handoff against the *current* bytes. On `install_state_envelope_state_changed` or `install_state_envelope_expired` — the signature still verifies, so neither is tampering — it re-runs candidate readiness (non-mutating, seconds) and carries the fresh handoff into the promoter. Every other refusal (tampered, wrong run, wrong digest, wrong identity) stays fail-closed. The pre-drain verification is retained so an early move is caught without draining.
+- **Segregate the writer.** The bootstrap (`dpf-bootstrap-agent-toolchain.sh|.ps1`) writes `~/.dpf/agent-toolchain-state.json` via `dpf_agent_toolchain_state_write` / `Write-DpfAgentToolchainState` — a plain atomic write with no install-state lock, because nothing in the install transition reads it. `projectInstallState` drops a legacy `agentToolchain` key and reports `migrationRequired`, so existing installs converge on their next upgrade; the schema keeps the key as deprecated so those states still validate. `tests/install/lifecycle-parity.test.mjs` refuses any bootstrap that writes `install-state.json` again.
+- **Name the class.** `install-state-envelope-changed` classifies both codes as environment, names the writer to look for (file mtime against the run's `install-state-migrate` stamp in `self-upgrade-steps.log`), and states the remedy: retry.
+
+**Residual window.** A writer can still land between the post-drain re-bind and `promote.sh`'s own check — seconds, not minutes — and the promoter's CAS transaction refuses it correctly. With the only session-frequency writer removed from the file, the remaining writers are installer re-runs and capability transitions, which an operator does not run concurrently with an upgrade.
+
+Acceptance criteria 1–4 stand unchanged. §3.4's statement that the launcher re-verifies "immediately before the swap" is now true.

@@ -1,12 +1,12 @@
 // Data-model mirror applier — EP-DATA-ARCH Phase 2 (BI-2167A734).
 //
 // Thin IO layer over the pure `planMirror` diff: resolves the EA context
-// (archimate4 notation, data_object element type, associated_with relationship
-// type), ensures the managed "Data Model" view exists, loads existing mirror
+// (archimate4 notation, data_object element type, and the has_foreign_key_to and
+// composed_of relationship types a foreign key mirrors as — BI-28C22BE3), ensures the managed "Data Model" view exists, loads existing mirror
 // rows, applies the plan, writes an EaSnapshot on material delta, and (when a
 // source key is duplicated) writes a conformance issue and stops.
 //
-// Neo4j sync is optional and injected so the Postgres reconcile is testable
+// graph sync is optional and injected so the Postgres reconcile is testable
 // without a live graph.
 
 import {
@@ -20,13 +20,15 @@ import {
   type DesiredRelationship,
   type ExistingMirrorRow,
   type MirrorPlan,
+  type MirrorRelationshipTypeSlug,
 } from "./data-model-mirror";
 import type { Prisma } from "@dpf/db";
+import type { ModelMetadata } from "@dpf/db/model-metadata";
 import type { PrismaSchemaFacts } from "../build/code-graph/extractors/prisma-schema-adapter";
 
 const NOTATION_SLUG = "archimate4";
 const ELEMENT_TYPE_SLUG = "data_object";
-const RELATIONSHIP_TYPE_SLUG = "associated_with";
+const RELATIONSHIP_TYPE_SLUGS: readonly MirrorRelationshipTypeSlug[] = ["has_foreign_key_to", "composed_of"];
 const VIEWPOINT_NAME = "Data Model";
 const VIEW_SCOPE_TYPE = "data-model";
 const VIEW_SCOPE_REF = "prisma";
@@ -48,10 +50,11 @@ export type MirrorPrismaClient = {
     update(args: Record<string, unknown>): Promise<unknown>;
   };
   eaRelationship: {
-    findMany(args: Record<string, unknown>): Promise<Array<{ id: string; properties: unknown }>>;
+    findMany(args: Record<string, unknown>): Promise<Array<{ id: string; properties: unknown; relationshipType?: { slug: string } | null }>>;
     create(args: Record<string, unknown>): Promise<{ id: string }>;
     upsert(args: Record<string, unknown>): Promise<{ id: string }>;
     update(args: Record<string, unknown>): Promise<unknown>;
+    delete(args: Record<string, unknown>): Promise<unknown>;
   };
   eaViewElement: {
     findFirst(args: Record<string, unknown>): Promise<{ id: string } | null>;
@@ -68,7 +71,8 @@ export type MirrorContext = {
   notationId: string;
   notationSlug: string;
   elementTypeId: string;
-  relationshipTypeId: string;
+  /** EA relationship type id per mirrored slug. */
+  relationshipTypeIds: Record<MirrorRelationshipTypeSlug, string>;
   viewId: string;
 };
 
@@ -94,6 +98,19 @@ function toExistingRow(row: { id: string; properties: unknown }): ExistingMirror
   };
 }
 
+function toExistingRelationshipRow(row: {
+  id: string;
+  properties: unknown;
+  relationshipType?: { slug: string } | null;
+}): ExistingMirrorRow {
+  const props = asRecord(row.properties);
+  return {
+    ...toExistingRow(row),
+    typeSlug: row.relationshipType?.slug,
+    ownsForeignKey: Array.isArray(props.fkFields) ? props.fkFields.length > 0 : true,
+  };
+}
+
 export async function resolveMirrorContext(prisma: MirrorPrismaClient): Promise<MirrorContext> {
   const notation = await prisma.eaNotation.findUnique({ where: { slug: NOTATION_SLUG } });
   if (!notation) throw new Error(`EA notation '${NOTATION_SLUG}' not found — seed the ArchiMate 4 notation first.`);
@@ -103,11 +120,15 @@ export async function resolveMirrorContext(prisma: MirrorPrismaClient): Promise<
   });
   if (!elementType) throw new Error(`EA element type '${ELEMENT_TYPE_SLUG}' not found for notation '${NOTATION_SLUG}'.`);
 
-  const relationshipType = await prisma.eaRelationshipType.findUnique({
-    where: { notationId_slug: { notationId: notation.id, slug: RELATIONSHIP_TYPE_SLUG } },
-  });
-  if (!relationshipType) {
-    throw new Error(`EA relationship type '${RELATIONSHIP_TYPE_SLUG}' not found for notation '${NOTATION_SLUG}'.`);
+  const relationshipTypeIds = {} as Record<MirrorRelationshipTypeSlug, string>;
+  for (const slug of RELATIONSHIP_TYPE_SLUGS) {
+    const relationshipType = await prisma.eaRelationshipType.findUnique({
+      where: { notationId_slug: { notationId: notation.id, slug } },
+    });
+    if (!relationshipType) {
+      throw new Error(`EA relationship type '${slug}' not found for notation '${NOTATION_SLUG}'.`);
+    }
+    relationshipTypeIds[slug] = relationshipType.id;
   }
 
   const viewId = await ensureDataModelView(prisma, notation.id);
@@ -116,7 +137,7 @@ export async function resolveMirrorContext(prisma: MirrorPrismaClient): Promise<
     notationId: notation.id,
     notationSlug: notation.slug,
     elementTypeId: elementType.id,
-    relationshipTypeId: relationshipType.id,
+    relationshipTypeIds,
     viewId,
   };
 }
@@ -127,13 +148,13 @@ export async function ensureDataModelView(prisma: MirrorPrismaClient, notationId
     update: {
       description: "Logical data model mirrored from the Prisma schema.",
       allowedElementTypeSlugs: [ELEMENT_TYPE_SLUG],
-      allowedRelTypeSlugs: [RELATIONSHIP_TYPE_SLUG],
+      allowedRelTypeSlugs: [...RELATIONSHIP_TYPE_SLUGS],
     },
     create: {
       name: VIEWPOINT_NAME,
       description: "Logical data model mirrored from the Prisma schema.",
       allowedElementTypeSlugs: [ELEMENT_TYPE_SLUG],
-      allowedRelTypeSlugs: [RELATIONSHIP_TYPE_SLUG],
+      allowedRelTypeSlugs: [...RELATIONSHIP_TYPE_SLUGS],
     },
   });
 
@@ -167,11 +188,11 @@ export async function loadExistingMirror(prisma: MirrorPrismaClient): Promise<{
   });
   const relationshipRows = await prisma.eaRelationship.findMany({
     where: { properties: { path: ["sourceKey"], string_starts_with: RELATION_SOURCE_KEY_PREFIX } },
-    select: { id: true, properties: true },
+    select: { id: true, properties: true, relationshipType: { select: { slug: true } } },
   });
   return {
     elements: elementRows.map(toExistingRow),
-    relationships: relationshipRows.map(toExistingRow),
+    relationships: relationshipRows.map(toExistingRelationshipRow),
   };
 }
 
@@ -226,7 +247,7 @@ export function relationshipCreateData(
   return {
     fromElementId,
     toElementId,
-    relationshipTypeId: ctx.relationshipTypeId,
+    relationshipTypeId: ctx.relationshipTypeIds[desired.relationshipTypeSlug],
     notationSlug: ctx.notationSlug,
     properties: {
       ...desired.properties,
@@ -243,13 +264,15 @@ export function relationshipCreateData(
 export async function reconcileDataModelMirror(deps: {
   prisma: MirrorPrismaClient;
   facts: PrismaSchemaFacts;
+  /** /// @dpf declarations by model name (EP-A33A5C61 slice 4d-ii); optional for callers and tests without schema text. */
+  declarations?: ReadonlyMap<string, ModelMetadata>;
   createdById?: string | null;
-  syncNeo4j?: (ctx: MirrorContext) => Promise<void>;
+  syncGraph?: (ctx: MirrorContext) => Promise<void>;
 }): Promise<MirrorResult> {
   const { prisma, facts } = deps;
   const ctx = await resolveMirrorContext(prisma);
   const existing = await loadExistingMirror(prisma);
-  const plan = planMirror(facts, existing);
+  const plan = planMirror(facts, existing, deps.declarations);
   const summary = summarizePlan(plan);
 
   if (plan.blocked) {
@@ -290,26 +313,42 @@ export async function reconcileDataModelMirror(deps: {
   }
 
   // 2) Relationships.
+  const typeSlugById = new Map(existing.relationships.map((row) => [row.id, row.typeSlug]));
+  const upsertRelationship = async (desired: DesiredRelationship): Promise<void> => {
+    const fromId = elementIdByKey.get(desired.fromSourceKey);
+    const toId = elementIdByKey.get(desired.toSourceKey);
+    if (!fromId || !toId) return; // endpoint missing (defensive); skip.
+    if (fromId === toId) return; // skip self-loops (projection noise)
+    // Upsert on the (from, to, type) natural key so re-applies don't duplicate edges. BI-8C121D30.
+    const data = { ...relationshipCreateData(ctx, desired, fromId, toId), createdById: deps.createdById ?? null };
+    await prisma.eaRelationship.upsert({
+      where: { fromElementId_toElementId_relationshipTypeId: { fromElementId: fromId, toElementId: toId, relationshipTypeId: data.relationshipTypeId } },
+      create: data,
+      update: { properties: data.properties },
+    });
+  };
   for (const op of plan.relationshipOps) {
     if (op.kind === "create") {
-      const fromId = elementIdByKey.get(op.desired.fromSourceKey);
-      const toId = elementIdByKey.get(op.desired.toSourceKey);
-      if (!fromId || !toId) continue; // endpoint missing (defensive); skip.
-      if (fromId === toId) continue; // skip self-loops (projection noise)
-      // Upsert on the (from, to, type) natural key so re-applies don't duplicate edges. BI-8C121D30.
-      const data = { ...relationshipCreateData(ctx, op.desired, fromId, toId), createdById: deps.createdById ?? null };
-      await prisma.eaRelationship.upsert({
-        where: { fromElementId_toElementId_relationshipTypeId: { fromElementId: fromId, toElementId: toId, relationshipTypeId: ctx.relationshipTypeId } },
-        create: data,
-        update: { properties: data.properties },
-      });
+      await upsertRelationship(op.desired);
     } else if (op.kind === "update" || op.kind === "revive") {
-      await prisma.eaRelationship.update({
-        where: { id: op.id },
-        data: { properties: { ...op.desired.properties, descriptor: op.desired.descriptor, mirrorRemoved: false } },
-      });
+      const currentSlug = typeSlugById.get(op.id);
+      if (currentSlug && currentSlug !== op.desired.relationshipTypeSlug) {
+        // Retype (BI-28C22BE3): the (from, to, type) key changes, and another key between the
+        // same models may already hold the target key, so re-key through the upsert.
+        await prisma.eaRelationship.delete({ where: { id: op.id } });
+        await upsertRelationship(op.desired);
+      } else {
+        await prisma.eaRelationship.update({
+          where: { id: op.id },
+          data: { properties: { ...op.desired.properties, descriptor: op.desired.descriptor, mirrorRemoved: false } },
+        });
+      }
     } else if (op.kind === "remove") {
       await markRemoved(prisma, "eaRelationship", op.id);
+      if (op.retypeLegacy) await retypeRemovedLegacyRow(prisma, ctx, op.id);
+    } else if (op.kind === "drop") {
+      // A back-relation duplicate of a fact the FK side still mirrors: deleting it loses nothing.
+      await prisma.eaRelationship.delete({ where: { id: op.id } });
     }
   }
 
@@ -331,11 +370,11 @@ export async function reconcileDataModelMirror(deps: {
     },
   });
 
-  if (deps.syncNeo4j) {
+  if (deps.syncGraph) {
     try {
-      await deps.syncNeo4j(ctx);
+      await deps.syncGraph(ctx);
     } catch {
-      // Neo4j projection is best-effort; Postgres remains the source of truth.
+      // graph projection is best-effort; Postgres remains the source of truth.
     }
   }
 
@@ -350,6 +389,19 @@ async function ensureViewMembership(
   const existing = await prisma.eaViewElement.findFirst({ where: { viewId, elementId } });
   if (existing) return;
   await prisma.eaViewElement.create({ data: { viewId, elementId, mode: "existing" } });
+}
+
+/** A removed row still typed as the legacy generic association keeps its history under the typed key. */
+async function retypeRemovedLegacyRow(prisma: MirrorPrismaClient, ctx: MirrorContext, id: string): Promise<void> {
+  try {
+    await prisma.eaRelationship.update({
+      where: { id },
+      data: { relationshipTypeId: ctx.relationshipTypeIds.has_foreign_key_to },
+    });
+  } catch {
+    // The typed (from, to, type) key is held by a live row for the same model pair; the removed duplicate goes.
+    await prisma.eaRelationship.delete({ where: { id } });
+  }
 }
 
 async function markRemoved(

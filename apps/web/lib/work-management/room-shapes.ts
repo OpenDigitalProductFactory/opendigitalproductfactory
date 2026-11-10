@@ -1,15 +1,10 @@
 import type { WorkroomAccessLevel } from "./room-participation";
 import type { WorkroomParticipantRole } from "./room-types";
+import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
+import { preferenceFromPreset, type GoldenTriangleNamedPreset } from "@/lib/golden-triangle/presets";
 
-export const WORKROOM_SHAPE_KEYS = [
-  "specialist-alignment",
-  "approval-sign-off",
-  "outward-review",
-  "change-consequential",
-  "escalation",
-  "craft-stewardship",
-] as const;
-export type WorkroomShapeKey = (typeof WORKROOM_SHAPE_KEYS)[number];
+import type { WorkroomShapeKey } from "@dpf/validators/gpp/work-vocabulary";
+export { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "@dpf/validators/gpp/work-vocabulary";
 
 type ShapeRole = Extract<
   WorkroomParticipantRole,
@@ -22,11 +17,18 @@ export type WorkroomShapeDefinition = {
   authorityLadderLevel: WorkroomAccessLevel;
   sensitivityStepUp: boolean;
   description: string;
+  /**
+   * The Cost/Quality/Time posture a room of this shape runs at unless the room
+   * declares its own (BI-7ADEBDC1). A parameter of the room definition, chosen
+   * for the shape's expected outcome — never a coworker's identity preference.
+   */
+  defaultPriority: GoldenTriangleNamedPreset;
 };
 
 const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
   "specialist-alignment": {
     key: "specialist-alignment",
+    defaultPriority: "assured",
     inclusionOrder: ["coordinator", "specialist", "approver"],
     authorityLadderLevel: "action",
     sensitivityStepUp: true,
@@ -34,6 +36,7 @@ const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
   },
   "approval-sign-off": {
     key: "approval-sign-off",
+    defaultPriority: "assured",
     inclusionOrder: ["coordinator", "specialist", "approver"],
     authorityLadderLevel: "action",
     sensitivityStepUp: true,
@@ -41,6 +44,7 @@ const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
   },
   "outward-review": {
     key: "outward-review",
+    defaultPriority: "assured",
     inclusionOrder: ["coordinator", "specialist", "approver"],
     authorityLadderLevel: "action",
     sensitivityStepUp: true,
@@ -48,6 +52,7 @@ const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
   },
   "change-consequential": {
     key: "change-consequential",
+    defaultPriority: "assured",
     inclusionOrder: ["coordinator", "reviewer", "approver"],
     authorityLadderLevel: "action",
     sensitivityStepUp: true,
@@ -55,6 +60,7 @@ const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
   },
   escalation: {
     key: "escalation",
+    defaultPriority: "fast",
     inclusionOrder: ["coordinator", "approver"],
     authorityLadderLevel: "action",
     sensitivityStepUp: true,
@@ -62,6 +68,7 @@ const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
   },
   "craft-stewardship": {
     key: "craft-stewardship",
+    defaultPriority: "balanced",
     inclusionOrder: ["coordinator", "specialist"],
     authorityLadderLevel: "content",
     sensitivityStepUp: false,
@@ -71,6 +78,11 @@ const SHAPES: Record<WorkroomShapeKey, WorkroomShapeDefinition> = {
 
 export function getWorkroomShape(key: WorkroomShapeKey): WorkroomShapeDefinition {
   return SHAPES[key];
+}
+
+/** The full Golden Triangle preference a shape runs at by default (BI-7ADEBDC1). */
+export function shapeDefaultPriority(key: WorkroomShapeKey): GoldenTrianglePreference {
+  return preferenceFromPreset(SHAPES[key].defaultPriority);
 }
 
 export type WorkroomShapeBinding = {

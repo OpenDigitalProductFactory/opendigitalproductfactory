@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
 
 export const GATE_RUN_IDENTITY_SCHEMA_VERSION = 1 as const;
-export const GATE_KINDS = ["local-integration-ci", "semantic-review"] as const;
+/**
+ * `in-platform-preflight` is the Build Studio fast tier: the guard gauntlet only,
+ * with no typecheck, tests, production build or image, because the sandbox has no
+ * Docker socket by design. It is a SEPARATE kind rather than a flag on
+ * `local-integration-ci` precisely so a fast-tier record can never be handed back
+ * to a claim asking for the heavy one — the gate key hashes the kind, so the two
+ * tiers derive different keys for the same tree and cannot be confused
+ * (BI-4A9910A9).
+ */
+export const GATE_KINDS = ["local-integration-ci", "semantic-review", "in-platform-preflight"] as const;
 
 export type GateKind = (typeof GATE_KINDS)[number];
 
@@ -17,8 +26,32 @@ export type GateRunIdentity = GateRunIdentityInput & {
   schemaVersion: typeof GATE_RUN_IDENTITY_SCHEMA_VERSION;
 };
 
+/**
+ * The freshness stamp a local-CI PASS carries, as recorded by the run that
+ * produced it. A reuse decision is made against this and nothing else, so the
+ * caller reusing the verdict must be told the same window rather than left to
+ * infer one (BI-03E1139A).
+ */
+export type LocalCiEvidenceValidity = {
+  /** Informational. Older records predate the field. */
+  issuedAt: string | null;
+  /** The instant this reuse decision was actually made against. */
+  expiresAt: string;
+};
+
 export type LocalCiTerminalEvidenceProjection =
-  | { status: "reused"; evidenceRecordId: string; resultClass: "pass" | "fail" }
+  | {
+    status: "reused";
+    evidenceRecordId: string;
+    resultClass: "pass" | "fail";
+    /**
+     * Present whenever the reuse was decided by a real stamp. Reuse of a record
+     * that reached a product verdict always carries one; the infrastructure
+     * records that skip validity are `rerunnable`, never `reused`.
+     */
+    evidenceValidity: LocalCiEvidenceValidity | null;
+  }
+  | { status: "rerunnable" }
   | {
     status: "blocked";
     reason: "missing-evidence" | "mismatched-evidence" | "expired-evidence";
@@ -27,6 +60,7 @@ export type LocalCiTerminalEvidenceProjection =
 export type SemanticReviewGateIdentityInput = {
   repository: string;
   identity: {
+    artifactType?: string;
     capsuleId: string;
     baseTreeHash: string;
     headTreeHash: string;
@@ -34,6 +68,8 @@ export type SemanticReviewGateIdentityInput = {
     policyVersion: string;
     reviewerVersion: string;
     specialistIds: readonly string[];
+    failureAnalysisDigest?: string;
+    sourceHeadSha?: string;
   };
   risk: string;
   dispatchContractVersion: string;
@@ -103,7 +139,9 @@ export function projectLocalCiTerminalEvidence(input: {
   } | null;
   now: Date;
 }): LocalCiTerminalEvidenceProjection {
-  if (!input.evidence) return { status: "blocked", reason: "missing-evidence" };
+  // The record id was set but the row is gone (retention, or a failed write that
+  // still stamped the lease). Same reasoning as the null-id case above.
+  if (!input.evidence) return { status: "rerunnable" };
   const details = input.evidence.details && typeof input.evidence.details === "object"
     && !Array.isArray(input.evidence.details)
     ? input.evidence.details as Record<string, unknown>
@@ -113,23 +151,54 @@ export function projectLocalCiTerminalEvidence(input: {
     && !Array.isArray(details.evidenceValidity)
     ? details.evidenceValidity as Record<string, unknown>
     : null;
+  // Truly mismatched: this record does not describe this gate at all. That IS a
+  // real conclusion about the claim and still settles it.
   if (
     input.evidence.operationType !== "local_integration_ci"
     || details?.gateKey !== input.claimKey.slice("gate:".length)
-    || (details.status !== "passed" && details.status !== "failed")
   ) {
     return { status: "blocked", reason: "mismatched-evidence" };
   }
+  // BI-0F2E42D5: the right record for the right gate, carrying a status that is
+  // not a product verdict — `blocked_control_plane_starvation` and its kin. The
+  // gate writes those to say, in its own words, "this is infrastructure
+  // evidence, NOT a product build failure", and then records them; reading one
+  // back as `mismatched-evidence` bricked the tree it interrupted, because the
+  // claim key hashes the tree.
+  //
+  // That made an HONEST record strictly worse than none: a run killed before it
+  // wrote anything is rerunnable (BI-C59AC8AF), while one that recorded why it
+  // could not finish was punished for saying so. It is the same reasoning the
+  // validity check below already applies one branch down — a run that reached no
+  // verdict has no verdict to protect, so re-running it lets nobody escape one.
+  if (details.status !== "passed" && details.status !== "failed") {
+    return { status: "rerunnable" };
+  }
+  // An expiry that was never STAMPED is not an expiry that lapsed. The gate
+  // stamps validity only for a run that reached a product verdict, so evidence
+  // without one is infrastructure evidence — a killed child, a starved control
+  // plane, recorded for observability and never a verdict to reuse. Reading it
+  // as "expired" bricked the tree the same way a dropped write did, just under a
+  // different reason (BI-C59AC8AF). Only a real timestamp in the past expires.
   const expiresAt = typeof validity?.expiresAt === "string"
     ? Date.parse(validity.expiresAt)
     : Number.NaN;
-  if (!Number.isFinite(expiresAt) || expiresAt <= input.now.getTime()) {
+  if (!Number.isFinite(expiresAt)) return { status: "rerunnable" };
+  if (expiresAt <= input.now.getTime()) {
     return { status: "blocked", reason: "expired-evidence" };
   }
+  // Hand back the very stamp this decision was made against. The caller writes
+  // the verdict into its own state and needs the evidence's clock; left without
+  // one it reached for the lease's, which is minutes long, and stamped a PASS as
+  // already expired (BI-03E1139A).
   return {
     status: "reused",
     evidenceRecordId: input.evidence.id,
     resultClass: details.status === "passed" ? "pass" : "fail",
+    evidenceValidity: {
+      issuedAt: typeof validity?.issuedAt === "string" ? validity.issuedAt : null,
+      expiresAt: String(validity?.expiresAt),
+    },
   };
 }
 
@@ -143,7 +212,15 @@ export async function resolveLocalCiTerminalEvidence(input: {
     details: unknown;
   } | null>;
 }): Promise<LocalCiTerminalEvidenceProjection> {
-  if (!input.evidenceRecordId) return { status: "blocked", reason: "missing-evidence" };
+  // A terminal lease that never recorded evidence describes a run that DIED,
+  // not a verdict — the executor was killed, or the portal rejected its status
+  // write. Blocking on it made that tree permanently ungateable, because the
+  // gate key hashes the integration tree: a fresh commit of the same content
+  // lands on the same key and the same refusal (BI-C59AC8AF). Nothing is being
+  // reused here, so there is nothing to protect — the honest answer is to let
+  // the gate run again. `mismatched-evidence` and `expired-evidence` stay
+  // blocking: there, evidence EXISTS and does not fit, which is a real verdict.
+  if (!input.evidenceRecordId) return { status: "rerunnable" };
   return projectLocalCiTerminalEvidence({
     claimKey: input.claimKey,
     evidence: await input.loadEvidence(input.evidenceRecordId),
@@ -160,6 +237,10 @@ export function deriveSemanticReviewGateIdentity(input: SemanticReviewGateIdenti
   gateKey: string;
 } {
   const reviewPlan = {
+    // Omit the field for legacy packets so their persisted gate keys stay stable.
+    ...(input.identity.artifactType ? { artifactType: nonEmpty(input.identity.artifactType, "semantic-review artifact type") } : {}),
+    failureAnalysisDigest: input.identity.failureAnalysisDigest ?? null,
+    sourceHeadSha: input.identity.sourceHeadSha ?? null,
     capsuleId: nonEmpty(input.identity.capsuleId, "semantic-review capsule"),
     baseTreeHash: normalizeHex(input.identity.baseTreeHash, SHA1, "semantic-review base tree SHA"),
     diffDigest: normalizeHex(input.identity.diffDigest, SHA256, "semantic-review diff digest"),

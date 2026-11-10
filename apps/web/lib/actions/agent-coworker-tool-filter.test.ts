@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { filterToolsForCoworkerRuntime } from "./coworker-tool-filter";
-import type { ToolDefinition } from "../mcp-tools";
+import type { ToolDefinition } from "../mcp-tool-types";
 
 function tool(name: string, overrides: Partial<ToolDefinition> = {}): ToolDefinition {
   return {

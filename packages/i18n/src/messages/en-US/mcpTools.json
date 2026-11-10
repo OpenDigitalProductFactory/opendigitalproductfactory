@@ -1,0 +1,25 @@
+{
+  "review": {
+    "intro": "Coworkers can use a tool from this service only after someone approves it here. A working connection is not permission. If the service later changes a tool's description or inputs, the tool goes back to review.",
+    "waiting": "{$count} waiting for review",
+    "changedBadge": "Changed since approval",
+    "approvedText": "Approved text",
+    "reportedNow": "Reported now (not shown to coworkers)",
+    "coworkerReads": "What a coworker will read",
+    "bundledNote": "This tool ships with the platform; its access is set by the release.",
+    "permissionLabel": "Permission a coworker needs to use this tool",
+    "effectLegend": "What does this tool do?",
+    "effectRead": "Only reads information",
+    "effectChange": "Can change things outside the platform",
+    "approve": "Approve this text",
+    "returnToReview": "Return to review",
+    "block": "Block"
+  },
+  "state": {
+    "bundled-approved": "Included",
+    "approved": "Approved",
+    "quarantined": "Waiting for review",
+    "denied": "Blocked",
+    "blocked": "Not usable"
+  }
+}

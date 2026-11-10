@@ -6,9 +6,16 @@ import type {
 } from "@/lib/integrations/readiness";
 import type { IntegrationImportStagingDescriptor } from "@/lib/integrations/import-staging";
 import type { IntegrationImportReviewPosture } from "@/lib/integrations/import-review";
+import type { ResolvedNextStep } from "@/lib/backlog/next-step-pointer";
 
 interface IntegrationReadinessPanelProps {
   descriptor: IntegrationReadinessDescriptor;
+  /**
+   * The import-review next step after the page checked it against the backlog.
+   * Omitted where nothing is filed, which is why the pill below is conditional:
+   * a compact metric slot names a live item or it is not shown (BI-5BF97BAA).
+   */
+  importReviewNextStep?: ResolvedNextStep;
 }
 
 const STATE_LABELS: Record<IntegrationReadinessState, string> = {
@@ -23,7 +30,10 @@ const STATE_LABELS: Record<IntegrationReadinessState, string> = {
   "partner-led": "Partner led",
 };
 
-export function IntegrationReadinessPanel({ descriptor }: IntegrationReadinessPanelProps) {
+export function IntegrationReadinessPanel({
+  descriptor,
+  importReviewNextStep,
+}: IntegrationReadinessPanelProps) {
   return (
     <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -105,7 +115,7 @@ export function IntegrationReadinessPanel({ descriptor }: IntegrationReadinessPa
       )}
 
       {descriptor.importReview && (
-        <ImportReviewPosture posture={descriptor.importReview} />
+        <ImportReviewPosture posture={descriptor.importReview} nextStep={importReviewNextStep} />
       )}
 
       <div className="mt-4">
@@ -125,7 +135,13 @@ export function IntegrationReadinessPanel({ descriptor }: IntegrationReadinessPa
   );
 }
 
-function ImportReviewPosture({ posture }: { posture: IntegrationImportReviewPosture }) {
+function ImportReviewPosture({
+  posture,
+  nextStep,
+}: {
+  posture: IntegrationImportReviewPosture;
+  nextStep?: ResolvedNextStep;
+}) {
   return (
     <section className="mt-5 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -137,7 +153,7 @@ function ImportReviewPosture({ posture }: { posture: IntegrationImportReviewPost
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <MetricPill label="State" value={reviewStatusLabel(posture.status)} />
-          <MetricPill label="Backlog" value={posture.nextBacklogItemId} />
+          {nextStep?.kind === "filed" && <MetricPill label="Backlog" value={nextStep.label} />}
         </div>
       </div>
 

@@ -1,6 +1,18 @@
+---
+status: draft
+---
+
 # Unified Build Studio Tracking Across All Surfaces — Gap Analysis & Design
 
 > **⇢ Coordination — Unified Work Graph.** This spec is a design input to the **Collaborative Work Management × Build Studio convergence**. Before starting work traced here, read the governing memo [`2026-07-11-collaborative-work-management-convergence-memo.md`](./2026-07-11-collaborative-work-management-convergence-memo.md) and backlog epic **EP-WORK-CONVERGENCE** (9 items, write-model-first). The target is one substrate — `WorkCapsule` / `WorkItem` → `WorkCase` projection → plain approve/revise — so efforts stay coordinated and don't diverge.
+
+> **2026-09-03 canonical continuation.** The live Workroom-era implementation and
+> current backlog supersede this document's historical `WorkCapsule` wording and
+> missing BI identifiers. The operator delivery rail, worker/session rollup, and
+> Build Studio campaign use are now specified in
+> [`2026-09-03-local-first-agentic-delivery-throughput-design.md`](2026-09-03-local-first-agentic-delivery-throughput-design.md).
+> This document remains the substrate audit and rationale for one cross-surface
+> work identity.
 
 
 - **Date:** 2026-06-19

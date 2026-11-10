@@ -3,7 +3,7 @@ import { prisma } from "@dpf/db";
 import { redirect } from "next/navigation";
 
 import { StatCard } from "@/components/ui/report-kit";
-import { intentStyle } from "@/components/ui/report-kit/statusColors";
+import { intentStyle } from "@/lib/ui-model/statusColors";
 import { TablesNowView } from "@/components/storefront-admin/TablesNowView";
 import {
   HospitalityResourceManager,

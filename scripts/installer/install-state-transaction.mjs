@@ -1,9 +1,10 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, open, readFile, readdir, rename, rm, lstat, realpath } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, readlink, rename, rm, lstat, realpath } from "node:fs/promises";
 import contract from "./install-state-lock-contract.json" with { type: "json" };
 import { parseAndValidateInstallStateBytes, validateInstallState } from "./validate-install-state.mjs";
 
@@ -11,6 +12,8 @@ const PROTOCOL_VERSION = contract.protocolVersion;
 const sleep = ms => new Promise(resolveSleep => setTimeout(resolveSleep, ms));
 export const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const localHostname = hostname();
+// Live in-process capabilities, never reconstructed from caller-supplied JSON.
+const heldLocks = new WeakMap();
 const makeOwner = (ownerId, runId, leaseMs) => { const now = Date.now(); return { protocolVersion: PROTOCOL_VERSION, ownerId, runId, pid: process.pid, hostname: localHostname, acquiredAt: new Date(now).toISOString(), expiresAt: new Date(now + leaseMs).toISOString(), expiresAtEpoch: Math.ceil((now + leaseMs) / 1000) }; };
 
 const pidIsLive = pid => {
@@ -18,14 +21,41 @@ const pidIsLive = pid => {
   try { process.kill(pid, 0); return true; } catch (error) { return error?.code === "EPERM"; }
 };
 
+// Resolve an ancestor directory component by component, following a symlink
+// only when root or the invoking user owns it. System links such as macOS
+// /var -> /private/var and /tmp -> /private/tmp are root-owned, so they resolve;
+// a link another user planted (for example in a shared /tmp) is refused.
+async function resolveTrustedAncestor(directory) {
+  const trustedOwners = new Set([0, process.getuid()]);
+  const pending = directory.split(sep).filter(Boolean);
+  let current = sep;
+  for (let hops = 0; pending.length;) {
+    const next = join(current, pending.shift());
+    const stat = await lstat(next);
+    if (!stat.isSymbolicLink()) { current = next; continue; }
+    if (!trustedOwners.has(stat.uid) || ++hops > 40) throw new Error("state_path_escape");
+    const target = await readlink(next);
+    pending.unshift(...target.split(sep).filter(Boolean));
+    if (isAbsolute(target)) current = sep;
+  }
+  return current;
+}
+
+// The state directory and the state file must be real; only ancestors above
+// the state directory may be symlinks, and only trusted ones. Every lock, temp
+// and recovery path derives from the canonical target this returns.
 async function assertSafeTarget(statePath) {
   const absolute = resolve(statePath);
   const parent = dirname(absolute);
   await mkdir(parent, { recursive: true, mode: 0o700 });
-  const canonicalParent = await realpath(parent);
-  if (dirname(absolute) !== canonicalParent && process.platform !== "win32") throw new Error("state_path_escape");
-  try { if ((await lstat(absolute)).isSymbolicLink()) throw new Error("state_path_symlink"); } catch (error) { if (error?.code !== "ENOENT") throw error; }
-  return absolute;
+  let target = absolute;
+  if (process.platform !== "win32") {
+    if ((await lstat(parent)).isSymbolicLink()) throw new Error("state_path_escape");
+    target = join(await resolveTrustedAncestor(dirname(parent)), basename(parent), basename(absolute));
+    if (dirname(target) !== await realpath(parent)) throw new Error("state_path_escape");
+  }
+  try { if ((await lstat(target)).isSymbolicLink()) throw new Error("state_path_symlink"); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+  return target;
 }
 
 async function staleOwner(lockPath, now) {
@@ -89,11 +119,20 @@ export async function acquireInstallStateLock(statePath, options = {}) {
       const handle = await open(ownerPath, "wx", 0o600);
       try { await handle.writeFile(`${JSON.stringify(owner)}\n`, "utf8"); await handle.sync(); } finally { await handle.close(); }
       if ((await activeReclaimGuards(lockPath, options)).length) { await rm(ownerPath, { force: true }); continue; }
-      return { lockPath, owner, async release() {
-        let current;
-        try { current = JSON.parse(await readFile(ownerPath, "utf8")); } catch { return; }
-        if (current.ownerId === ownerId) await rm(ownerPath, { force: true });
-      }};
+      const registration = { target, ownerBytes: JSON.stringify(owner), parent: await lstat(dirname(target)), file: await lstat(ownerPath), released: false };
+      const lock = Object.freeze({ lockPath, owner: Object.freeze(owner), async release() {
+        if (registration.borrowed) throw new Error("install_state_held_lock_busy");
+        if (registration.released || registration.releasing) return;
+        registration.releasing = true;
+        try {
+          if (await heldLockStillOwned(target, lock)) await rm(ownerPath, { force: true });
+        } finally {
+          registration.released = true;
+          registration.releasing = false;
+        }
+      }});
+      heldLocks.set(lock, registration);
+      return lock;
     } catch (error) {
       if (error?.code !== "EEXIST") {
         if (error?.code === "ENOENT") continue;
@@ -115,6 +154,33 @@ export async function acquireInstallStateLock(statePath, options = {}) {
       await sleep(options.retryDelayMs ?? contract.retryDelayMs);
     }
   }
+}
+
+async function verifyHeldLock(target, lock) {
+  const registration = heldLocks.get(lock);
+  const invalid = () => { throw new Error("install_state_held_lock_invalid"); };
+  if (!registration || registration.released || registration.target !== target) invalid();
+  try {
+    const parent = await lstat(dirname(target)); const file = await lstat(`${target}.lock`);
+    if (!parent.isDirectory() || parent.dev !== registration.parent.dev || parent.ino !== registration.parent.ino
+      || !file.isFile() || file.nlink !== 1 || file.dev !== registration.file.dev || file.ino !== registration.file.ino
+      || JSON.stringify(await readOwner(`${target}.lock`)) !== registration.ownerBytes) invalid();
+  } catch { invalid(); }
+}
+
+async function heldLockStillOwned(target, lock) {
+  try { await verifyHeldLock(target, lock); return true; } catch { return false; }
+}
+
+async function transactionLock(target, options) {
+  if (!Object.hasOwn(options, "heldLock")) return { lock: await acquireInstallStateLock(target, options), borrowed: false, finishBorrow: () => {} };
+  const registration = heldLocks.get(options.heldLock);
+  if (!registration) throw new Error("install_state_held_lock_invalid");
+  if (registration.borrowed || registration.releasing) throw new Error("install_state_held_lock_busy");
+  registration.borrowed = true;
+  try { await verifyHeldLock(target, options.heldLock); }
+  catch (error) { registration.borrowed = false; throw error; }
+  return { lock: options.heldLock, borrowed: true, finishBorrow: () => { registration.borrowed = false; } };
 }
 
 const stage = async (name, context, options) => {
@@ -170,12 +236,14 @@ async function reconcileCanonical(target, recoveryPath) {
 
 export async function updateInstallState(statePath, transform, options = {}) {
   const target = await assertSafeTarget(statePath);
-  const lock = await acquireInstallStateLock(target, options);
+  const { lock, borrowed, finishBorrow } = await transactionLock(target, options);
+  const verifyOwnership = () => borrowed ? verifyHeldLock(target, lock) : Promise.resolve();
   let release = true;
   const context = { statePath: target, lockPath: lock.lockPath };
   const recoveryPath = options.recoveryPath ?? null;
   try {
     await stage("locked", context, options);
+    await verifyOwnership();
     if (recoveryPath) await reconcileCanonical(target, recoveryPath);
     await removeOrphanTemps(target);
     let source = null;
@@ -184,6 +252,7 @@ export async function updateInstallState(statePath, transform, options = {}) {
     if (Object.hasOwn(options, "expectedSourceSha256") && options.expectedSourceSha256 !== sourceSha) throw new Error("install_state_cas_mismatch");
     const current = source === null ? null : JSON.parse(source.toString("utf8").replace(/^\uFEFF/, ""));
     const next = await transform(current);
+    await verifyOwnership();
     const serialized = `${JSON.stringify(next, null, 2)}\n`;
     JSON.parse(serialized);
     const validation = await validateInstallState(next, options.schemaPath);
@@ -193,11 +262,13 @@ export async function updateInstallState(statePath, transform, options = {}) {
     const handle = await open(tempPath, "wx", 0o600);
     try { await stage("temp-created", context, options); await handle.writeFile(serialized, "utf8"); await handle.sync(); } finally { await handle.close(); }
     await stage("temp-flushed", context, options);
+    await verifyOwnership();
     if (source !== null && recoveryPath) {
       context.recoveryPath = recoveryPath;
       await writeFlushed(recoveryPath, source);
       await stage("recovery-flushed", context, options);
     }
+    await verifyOwnership();
     await atomicReplace(tempPath, target);
     await flushParentDirectory(target);
     await stage("replaced", context, options);
@@ -207,12 +278,18 @@ export async function updateInstallState(statePath, transform, options = {}) {
     const postValidation = await parseAndValidateInstallStateBytes(durable);
     if (!postValidation.valid) throw new Error("install_state_post_write_schema_validation_failed");
     await stage("verified", context, options);
+    await verifyOwnership();
     return { state: parsed, sourceSha256: sourceSha, writtenSha256: sha256(durable) };
   } catch (error) {
     if (String(error?.message).startsWith("injected_crash:")) release = false;
     throw error;
   } finally {
-    if (release) { if (context.tempPath) await rm(context.tempPath, { force: true }); await lock.release(); }
+    try {
+      if (release) {
+        if (context.tempPath && (!borrowed || await heldLockStillOwned(target, lock))) await rm(context.tempPath, { force: true });
+        if (!borrowed) await lock.release();
+      }
+    } finally { finishBorrow(); }
   }
 }
 
@@ -220,19 +297,37 @@ export async function restoreInstallState(statePath, recoveryPath, options = {})
   const target = await assertSafeTarget(statePath);
   const recovery = await readFile(recoveryPath);
   if (!(await parseAndValidateInstallStateBytes(recovery)).valid) throw new Error("install_state_recovery_missing_or_invalid");
-  const lock = await acquireInstallStateLock(target, options);
+  const { lock, borrowed, finishBorrow } = await transactionLock(target, options);
   const tempPath = join(dirname(target), `.${basename(target)}.tmp-${lock.owner.ownerId}`);
   try {
     await writeFlushed(tempPath, recovery);
+    if (borrowed) await verifyHeldLock(target, lock);
     await atomicReplace(tempPath, target);
     await flushParentDirectory(target);
     const restored = await readFile(target);
     if (sha256(restored) !== sha256(recovery)) throw new Error("install_state_restore_mismatch");
+    if (borrowed) await verifyHeldLock(target, lock);
     return { restoredSha256: sha256(restored) };
-  } finally { await rm(tempPath, { force: true }); await lock.release(); }
+  } finally {
+    try {
+      if (!borrowed || await heldLockStillOwned(target, lock)) await rm(tempPath, { force: true });
+      if (!borrowed) await lock.release();
+    } finally { finishBorrow(); }
+  }
 }
 
-function parseArgs(argv) { const result = { _: [] }; for (let i = 0; i < argv.length; i++) { if (argv[i].startsWith("--")) result[argv[i].slice(2)] = argv[++i]; else result._.push(argv[i]); } return result; }
+function parseArgs(argv) {
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values, positionals } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries(["state", "key", "value", "recovery-path"].map((name) => [name, { type: "string" }])),
+  });
+  const result = { _: positionals };
+  for (const [name, value] of Object.entries(values)) result[name] = typeof value === "string" ? value : undefined;
+  return result;
+}
 async function main() {
   const args = parseArgs(process.argv.slice(2)); const command = args._[0];
   if (!args.state) throw new Error("--state is required");

@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { activeLifecycleFiles, assertHostStateWiring, auditLifecycleSurfaces, formatAuditFailure, legacyExceptions, promoterCopyInputs } from "./lifecycle-surface-policy.mjs";
+import { activeLifecycleFiles, assertHostStateWiring, auditLifecycleSurfaces, destructivePreludes, findDestroyWithoutDump, formatAuditFailure, legacyExceptions, promoterCopyInputs } from "./lifecycle-surface-policy.mjs";
 import { classifySensitivePath } from "./self-upgrade-sensitive-paths.mjs";
 import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
 
@@ -87,4 +87,29 @@ test("compose wires the resolved host state into portal and promoter", async () 
 test("upgrade-sensitive lifecycle entrypoints are owned by the N-1 classifier", () => {
   const runtimeEntrypoints = activeLifecycleFiles.filter((path) => /^(?:install-dpf|uninstall-dpf|dpf-reinstall|scripts\/(?:fresh-install|setup|verify-install|installer\/))/.test(path));
   assert.deepEqual(runtimeEntrypoints.filter((path) => !classifySensitivePath(path)), []);
+});
+
+test("a lifecycle script that destroys the database must call the pre-destructive dump first (BI-F9939341)", () => {
+  const file = "dpf-reinstall.ps1";
+  const dumpsFirst = [
+    "function Invoke-PreDestructivePostgresDump { param($InstallDir) }",
+    "$x = Invoke-PreDestructivePostgresDump -InstallDir $DPF_DIR -Trigger 'dpf-reinstall'",
+    "docker compose down -v --remove-orphans 2>$null",
+  ].join("\n");
+  assert.deepEqual(findDestroyWithoutDump(file, dumpsFirst), []);
+
+  const onlyDefined = [
+    "function Invoke-PreDestructivePostgresDump { param($InstallDir) }",
+    "docker compose down -v --remove-orphans 2>$null",
+  ].join("\n");
+  assert.deepEqual(findDestroyWithoutDump(file, onlyDefined).map((v) => v.rule), ["reinstall-dumps-first"]);
+
+  const dumpsAfter = [
+    "docker compose down -v --remove-orphans 2>$null",
+    "$x = Invoke-PreDestructivePostgresDump -InstallDir $DPF_DIR -Trigger 'dpf-reinstall'",
+  ].join("\n");
+  assert.equal(findDestroyWithoutDump(file, dumpsAfter).length, 1);
+
+  // Every destructive script the policy names is still in the audited inventory.
+  for (const rule of destructivePreludes) assert.ok(activeLifecycleFiles.includes(rule.file), rule.file);
 });

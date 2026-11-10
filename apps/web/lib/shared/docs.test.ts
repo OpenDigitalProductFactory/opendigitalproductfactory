@@ -26,6 +26,26 @@ This is the getting started guide.`;
     expect(result.content).not.toContain("---");
   });
 
+  it("reads list fields and ignores a page with no frontmatter fence", () => {
+    const listed = parseDocFrontmatter(`---
+title: "Roles"
+area: getting-started
+order: 2
+relatedSpecs:
+  - docs/superpowers/specs/example.md
+roles:
+  - admin
+---
+
+Body.`);
+    expect(listed.relatedSpecs).toEqual(["docs/superpowers/specs/example.md"]);
+    expect(listed.roles).toEqual(["admin"]);
+
+    const bare = parseDocFrontmatter("## Just a heading\n\nNo fence.");
+    expect(bare.title).toBe("Untitled");
+    expect(bare.content).toContain("## Just a heading");
+  });
+
   it("returns defaults for missing optional fields", () => {
     const raw = `---
 title: "Test"

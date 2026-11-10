@@ -5,6 +5,11 @@ const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   update: vi.fn(),
   runSetupCompletionSeeds: vi.fn(),
+  monitoringDecision: vi.fn(async () => null as "enabled" | "disabled" | "undecided" | null),
+}));
+
+vi.mock("@/lib/platform-runtime/monitoring-switch-loader", () => ({
+  loadMonitoringCapabilityDecision: mocks.monitoringDecision,
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -29,6 +34,7 @@ function pendingSteps(): Record<string, StepStatus> {
 describe("completeSetupStepFromEvidence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.monitoringDecision.mockResolvedValue(null);
     mocks.update.mockImplementation(async ({ data }: { data: unknown }) => data);
   });
 
@@ -42,6 +48,7 @@ describe("completeSetupStepFromEvidence", () => {
         ...pendingSteps(),
         "account-bootstrap": "completed",
         "business-context": "completed",
+        "direction": "completed",
         "ai-providers": "completed",
         branding: "completed",
         "how-you-decide": "completed",
@@ -64,17 +71,19 @@ describe("completeSetupStepFromEvidence", () => {
     mocks.findFirst.mockResolvedValue({
       id: "progress-1",
       organizationId: "org-1",
-      currentStep: "platform-development",
+      currentStep: "mailroom",
       completedAt: null,
       steps: {
         ...pendingSteps(),
         "account-bootstrap": "completed",
         "business-context": "completed",
+        "direction": "completed",
         "ai-providers": "completed",
         branding: "completed",
         "how-you-decide": "completed",
         "operating-hours": "completed",
         storefront: "completed",
+        monitoring: "skipped",
       },
     });
 

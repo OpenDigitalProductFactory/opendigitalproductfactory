@@ -28,7 +28,7 @@ const envelope: DataControlOperationEnvelope = {
   risk: { band: "high" },
   targets: [
     { targetKey: "postgres", targetType: "postgres", pepKey: "pep:postgres", compensable: false },
-    { targetKey: "agent-memory", targetType: "qdrant", pepKey: "pep:qdrant", compensable: true },
+    { targetKey: "agent-memory", targetType: "pgvector", pepKey: "pep:pgvector", compensable: true },
   ],
 };
 

@@ -32,6 +32,20 @@ export type VerticalSensitiveDataPolicyPack = {
   retentionPromptCode: string;
   refusalCode: string;
   requiredProviderEvidence: string[];
+  /**
+   * Whether an UNTRANSFORMED payload of this class may leave for an external
+   * service, or whether it must be masked/tokenized first (BI-35FAE2DB follow-up).
+   *
+   * Default is `requires-transformation` — the conservative platform stance, and
+   * what every regulated class keeps. `permitted` is for classes where masking
+   * destroys the very thing being sent, so the protection is CONTRACTUAL
+   * (the pack's requiredProviderEvidence: no-training / zero-retention) rather
+   * than transformational. Source code is the case: you cannot review masked
+   * code. Without this, a pack could declare `allow-with-obligations` and still
+   * deny every real payload, because the generated policy only matched
+   * transformations the class never undergoes.
+   */
+  untransformedExternalExport: "permitted" | "requires-transformation";
   authorityRefs: string[];
   policies: DataExecutablePolicy[];
 };
@@ -70,6 +84,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-customer-purpose-limited",
     refusalCode: "boundary-customer-protection-required",
     requiredProviderEvidence: ["no-training", "retention-reviewed", "contract-reviewed"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.ftcDataSecurity, AUTHORITY.nistControls],
   },
   {
@@ -83,6 +98,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-employee-need-to-know",
     refusalCode: "boundary-employee-authorization-required",
     requiredProviderEvidence: ["no-training", "access-controls", "contract-reviewed"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.eeocAda, AUTHORITY.nistControls],
   },
   {
@@ -96,6 +112,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-financial-schedule-required",
     refusalCode: "boundary-financial-safeguards-required",
     requiredProviderEvidence: ["financial-customer-info-reviewed", "encryption", "contract-reviewed"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.ftcSafeguards, AUTHORITY.nistControls],
   },
   {
@@ -109,6 +126,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-clinical-schedule-required",
     refusalCode: "boundary-health-safeguards-required",
     requiredProviderEvidence: ["baa-on-file", "no-training", "regional-processing"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.hhsHipaa, AUTHORITY.nistControls],
   },
   {
@@ -122,6 +140,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-student-purpose-limited",
     refusalCode: "boundary-student-disclosure-authority-required",
     requiredProviderEvidence: ["student-data-terms-reviewed", "no-training", "access-controls"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.ferpa, AUTHORITY.nistControls],
   },
   {
@@ -135,6 +154,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-youth-minimize",
     refusalCode: "boundary-youth-human-authorization-required",
     requiredProviderEvidence: ["verified-parental-or-authorized-role", "purpose-reviewed"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.coppa, AUTHORITY.ferpa],
   },
   {
@@ -148,6 +168,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-legal-hold-aware",
     refusalCode: "boundary-legal-role-review-required",
     requiredProviderEvidence: ["legal-role-authorized", "confidentiality-terms-reviewed"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.abaConfidentiality, AUTHORITY.nistControls],
   },
   {
@@ -161,6 +182,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-cjis-governed",
     refusalCode: "boundary-cjis-governed-environment-required",
     requiredProviderEvidence: ["cjis-boundary-approved"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.fbiCjis, AUTHORITY.nistControls],
   },
   {
@@ -174,6 +196,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-safety-case-controlled",
     refusalCode: "boundary-safety-human-checkpoint-required",
     requiredProviderEvidence: ["accountable-human-owner", "purpose-reviewed"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.nistAiRmf, AUTHORITY.nistControls],
   },
   {
@@ -187,6 +210,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-public-record-schedule-required",
     refusalCode: "boundary-agency-purpose-review-required",
     requiredProviderEvidence: ["agency-purpose-authorized", "regional-processing"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.nistControls],
   },
   {
@@ -200,6 +224,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-security-evidence-schedule",
     refusalCode: "boundary-security-provider-evidence-required",
     requiredProviderEvidence: ["security-controls-reviewed", "no-training", "regional-processing"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.nistControls],
   },
   {
@@ -213,6 +238,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-decision-evidence-required",
     refusalCode: "boundary-regulated-human-decision-owner-required",
     requiredProviderEvidence: ["human-decision-owner", "decision-evidence-profile"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.nistAiRmf],
   },
   {
@@ -226,6 +252,12 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-source-purpose-limited",
     refusalCode: "boundary-source-provider-evidence-required",
     requiredProviderEvidence: ["no-training", "zero-retention", "repository-authorized"],
+    // Masked source code cannot be reviewed, refactored or reasoned about — the
+    // transformation destroys the payload's entire purpose. This pack already
+    // states the real control: a provider carrying no-training, zero-retention
+    // and repository-authorized evidence. So untransformed export is the
+    // supported path here, and the obligation (logUse) still applies.
+    untransformedExternalExport: "permitted",
     authorityRefs: [AUTHORITY.nistControls],
   },
   {
@@ -239,6 +271,7 @@ const DEFINITIONS: readonly PackDefinition[] = [
     retentionPromptCode: "retention-credential-none",
     refusalCode: "boundary-credential-omit-and-rotate",
     requiredProviderEvidence: ["local-secret-boundary"],
+    untransformedExternalExport: "requires-transformation",
     authorityRefs: [AUTHORITY.nistControls],
   },
 ] as const;
@@ -257,6 +290,7 @@ function executablePolicy(input: {
   dataClass: InferenceDataClass;
   assetId: DataAssetId;
   effect: VerticalSensitiveDataPolicyPack["protectedExternalEffect"];
+  untransformedExternalExport: VerticalSensitiveDataPolicyPack["untransformedExternalExport"];
   authorityRef: string;
 }): DataExecutablePolicy {
   return {
@@ -267,7 +301,11 @@ function executablePolicy(input: {
       actions: ["export"],
       assets: [input.assetId],
       destinations: ["external-service"],
-      transformations: ["masked", "tokenized"],
+      // Only classes that explicitly opt in may match an untransformed payload;
+      // every regulated class keeps the masked/tokenized-only contract.
+      transformations: input.untransformedExternalExport === "permitted"
+        ? ["none", "masked", "tokenized"]
+        : ["masked", "tokenized"],
     },
     effect: input.effect,
     ...(input.effect === "allow-with-obligations"
@@ -288,6 +326,7 @@ function materialize(definition: PackDefinition): VerticalSensitiveDataPolicyPac
     categories: [...binding.categories],
     applicableArchetypeCategories: [...definition.applicableArchetypeCategories],
     requiredProviderEvidence: [...definition.requiredProviderEvidence],
+    untransformedExternalExport: definition.untransformedExternalExport,
     authorityRefs: [...definition.authorityRefs],
     policies: [executablePolicy({
       id: definition.id,
@@ -295,6 +334,7 @@ function materialize(definition: PackDefinition): VerticalSensitiveDataPolicyPac
       dataClass: definition.dataClass,
       assetId: binding.assetId,
       effect: definition.protectedExternalEffect,
+      untransformedExternalExport: definition.untransformedExternalExport,
       authorityRef: definition.authorityRefs[0],
     })],
   };
@@ -314,6 +354,7 @@ const UNKNOWN_PACK: VerticalSensitiveDataPolicyPack = {
   retentionPromptCode: "retention-unknown-classify-first",
   refusalCode: "boundary-unknown-classify-before-dispatch",
   requiredProviderEvidence: ["governed-classification"],
+  untransformedExternalExport: "requires-transformation",
   authorityRefs: [AUTHORITY.nistControls],
   policies: [executablePolicy({
     id: "vertical-unknown-governed-data",
@@ -321,6 +362,7 @@ const UNKNOWN_PACK: VerticalSensitiveDataPolicyPack = {
     dataClass: "unknown-governed-data",
     assetId: "data:inference-payload",
     effect: "deny",
+    untransformedExternalExport: "requires-transformation",
     authorityRef: AUTHORITY.nistControls,
   })],
 };

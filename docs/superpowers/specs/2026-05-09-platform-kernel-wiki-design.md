@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # EP-WIKI-001: Platform Kernel Wiki + Per-Org Overlay
 
 | Field | Value |
@@ -34,6 +38,8 @@ EP-TAK-3F9A21 defined a five-class taxonomy that all DPF memory now lives under:
 The five-class model also reviewed Letta, mem0/OpenMemory, Anthropic memory blocks, and Logseq/Obsidian/SiliconBrain-style "open brain" personal wikis, and decided: **personal-wiki is an optional knowledge layer, not the runtime control plane** (TAK rules, immutable directives, and `AgentGovernanceProfile` remain the authoritative control plane). EP-WIKI-001 lives inside that frame — it is a knowledge layer, not a policy layer.
 
 ### 0.2 Vector storage is Qdrant, not pgvector
+
+> **Superseded 2026-10-14.** BET-5 replaced Qdrant with pgvector in Postgres (`vector_embedding`). The correction of this section is owned by BI-67F04B3F; see [knowledge linking design §6](2026-10-14-knowledge-linking-design.md).
 
 EP-MEMORY-001 (implemented) defines two Qdrant collections — `agent-memory` and `platform-knowledge` — embedded with `nomic-embed-text` (768-dim, Ollama). The `wiki-pages` collection introduced in §5 is a **third sibling** in the same Qdrant deployment, not a new substrate. Where this spec previously could be read to imply pgvector or a parallel index, treat it as Qdrant throughout.
 
@@ -411,6 +417,8 @@ Choice of `docs/founder-kernel/` (not `data/`): it is documentation-shaped (mark
 ---
 
 ## 11. Migration: `KnowledgeArticle` → `WikiPage`
+
+> **Superseded 2026-10-14.** `KnowledgeArticle` now holds rows and `WikiPage` has its own revisions, so the rename below is no longer possible. The migration and compatibility plan is §6 of the [knowledge linking design](2026-10-14-knowledge-linking-design.md) (BI-67F04B3F). The direction here — one knowledge model, wiki search as the search surface — still stands.
 
 Per §0.3, [EP-KM-001](2026-04-02-knowledge-management-design.md) was drafted but the `KnowledgeArticle` table was never populated in production. This spec absorbs it. The migration is therefore additive in shape, not destructive:
 

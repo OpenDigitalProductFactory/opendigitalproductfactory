@@ -27,6 +27,7 @@ import { callProvider } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import { callWithFallbackChain } from "./fallback";
 import { LocalProviderCapacityDeferredError } from "./local-provider-capacity";
+import { markEndpointUnavailable } from "./rate-tracker";
 import type { RouteDecision, SensitivityLevel } from "./types";
 
 const mockCallProvider = vi.mocked(callProvider);
@@ -69,6 +70,54 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("fallback local-CI capacity arbitration", () => {
+  it("stops a cancelled request before trying another provider or changing health", async () => {
+    const controller = new AbortController();
+    mockCallProvider.mockReset().mockResolvedValue({ content: "late fallback", inputTokens: 1, outputTokens: 1, inferenceMs: 1 });
+    mockCallProvider.mockImplementationOnce(async () => {
+      controller.abort(new DOMException("utility deadline reached", "AbortError"));
+      throw controller.signal.reason;
+    });
+    try {
+      const outcome = callWithFallbackChain(decisionWithCloudFallback(), [], "", undefined, undefined,
+        undefined, undefined, undefined, undefined, controller.signal)
+        .then(() => ({ error: undefined }), error => ({ error }));
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect((await outcome).error).toMatchObject({ name: "AbortError" });
+      expect(mockCallProvider).toHaveBeenCalledOnce();
+      expect(markEndpointUnavailable).not.toHaveBeenCalled();
+      expect(prisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(prisma.modelProfile.updateMany).not.toHaveBeenCalled();
+    } finally { mockCallProvider.mockReset(); }
+  });
+
+  it.each([
+    "local-ci-active-capacity-reservation",
+    "local-ci-queued-capacity-reservation",
+    "local-ci-capacity-reservation-unavailable",
+  ] as const)("retains %s as the cause alongside the failed cloud attempt", async (reason) => {
+    const deferred = new LocalProviderCapacityDeferredError(reason);
+    mockCallProvider
+      .mockRejectedValueOnce(new Error("cloud transport unavailable"))
+      .mockRejectedValueOnce(deferred);
+    const decision = decisionWithCloudFallback();
+    decision.selectedEndpoint = "cloud-endpoint";
+    decision.selectedModelId = "gpt-cloud";
+    decision.fallbackChain = ["local-endpoint"];
+
+    const pending = callWithFallbackChain(
+      decision, [{ role: "user", content: "review" }], "system",
+    ).catch((error: unknown) => error);
+    await vi.runAllTimersAsync();
+    const error = await pending;
+    expect(error).toMatchObject({ cause: deferred });
+    expect((error as Error).message).toContain("cloud transport unavailable");
+    expect((error as Error).message).toContain(reason);
+    expect(mockCallProvider.mock.calls.map((call) => call.slice(0, 2))).toEqual([
+      ["openai", "gpt-cloud"],
+      ["local", "qwen3-coder"],
+    ]);
+  });
+
   it("returns the typed deferral for a local-only chain", async () => {
     mockCallProvider.mockRejectedValueOnce(
       new LocalProviderCapacityDeferredError("local-ci-active-capacity-reservation"),

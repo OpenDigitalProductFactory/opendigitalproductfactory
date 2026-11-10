@@ -19,6 +19,19 @@ The Customer area is the internal relationship and revenue workspace. The public
 Storefront receives interest; Customer turns that interest into owned follow-up
 and a traceable commercial lifecycle.
 
+For a **Pet Rescue** or **Animal Shelter**, the same records and permissions are
+presented around the relationships the organization actually manages. The
+section is titled **Adoption & community** and its primary views are **People &
+partners**, **Adoption enquiries**, and **Community outreach**. Commercial
+pipeline, quote, order, and sales-funnel tabs are hidden because they are not
+part of the rescue's normal operating model. **Add person or partner** still
+creates the canonical relationship record; it does not create a second kind of
+customer database. The shared rail, breadcrumbs, and Relationship Manager use
+the same rescue-facing language, so opening the coworker panel does not bring
+the suppressed commercial concepts back into view. The daily attention band is
+**Adoption follow-up** and describes people and community relationships rather
+than customers or a CRM.
+
 ## The Customer Lifecycle
 
 ```mermaid
@@ -48,6 +61,13 @@ work; a quote states an offer; and a sales order records an accepted commitment.
 
 ## Find the Right View
 
+**Customer follow-up** shows up to three open sales opportunities with an
+overdue or missing next step, alongside inbound work. Overdue steps appear first.
+Choose **Set next step** to open that deal's existing pipeline inspector, record
+the next action, or ask Customer Advisor for a draft to review. This does not
+send a message. Open **Pipeline** for the remaining opportunities. Rescue views
+keep their existing adoption and community follow-up instead.
+
 The section navigation is permission-aware:
 
 - **Accounts** (`/customer`) — daily attention summary, revenue posture,
@@ -65,12 +85,25 @@ The section navigation is permission-aware:
   of the funnel is fed by your **direct and reseller leads** (accounts in the
   early prospect/qualified lifecycle stages), so a direct- or channel-sourced
   pipeline is represented without a storefront.
+- **Customer map** (`/customer?view=map`) — your customer sites on a street
+  map, the sites that are not on it yet, and your service areas. Administrators
+  also see which street maps your locations need and whether they are
+  installed. See [Customer map](customer-map.md) and
+  [Map packs](../platform/map-packs.md).
+- **Footprint** (`/customer/footprint`) — a world map by country of where you
+  sell, where your customers are, where you are deployed, and where an
+  English-only product fits, with a table of the same numbers. Customers with no
+  site address are counted as "Not placed". See [Market footprint](market-footprint.md).
 - **Marketing** (`/customer/marketing`) — acquisition strategy, campaigns,
   approval queues, publishing, and proposed automation. This tab requires the
   marketing capability and is covered in [Marketing](marketing.md).
 
 If you do not have the required Customer or Marketing capability, DPF hides the
 route rather than exposing a read-only version.
+
+Pet Rescue and Animal Shelter organizations see the bounded relationship views
+described above. Other archetypes continue to see the full commercial
+navigation in this section.
 
 ## Start the Day With Attention, Not the Database
 
@@ -244,6 +277,8 @@ pitch (how many tools the platform consolidates) before a sales conversation.
 
 ## Related Guides
 
+- [Market footprint](market-footprint.md)
+- [Customer map](customer-map.md)
 - [Marketing](marketing.md)
 - [Storefront setup and launch](../storefront/setup-and-launch.md)
 - [Storefront inbox and enquiries](../storefront/inbox-and-enquiries.md)

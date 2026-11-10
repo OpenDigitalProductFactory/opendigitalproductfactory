@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   setGovernedToolAuditOverridesForTests,
+  updateGovernedToolAudit,
   writeGovernedToolAudit,
 } from "./governed-tool-audit";
-import type { ToolDefinition } from "./mcp-tools";
+import type { ToolDefinition } from "./mcp-tool-types";
 
 const baseTool: ToolDefinition = {
   name: "read_source_at_version",
@@ -27,6 +28,28 @@ const baseTool: ToolDefinition = {
 afterEach(() => setGovernedToolAuditOverridesForTests({}));
 
 describe("writeGovernedToolAudit", () => {
+  it("retains only the server-captured execution fence for an approved continuation", async () => {
+    const create = vi.fn(async (_data: Record<string, unknown>) => ({ id: "audit-1" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: null, dispatchClaim: "original", authorityDigest: null, requestDigest: "9".repeat(64) };
+    await writeGovernedToolAudit({ toolName: baseTool.name, tool: { ...baseTool, retainAuditParameters: true },
+      rawParams: { path: "spec.md", _taskExecutionFence: { forged: true } }, result: { success: false, error: "approval_required", message: "Approval required." },
+      userId: "user-1", source: "internal-mcp-session", durationMs: 1, context: { taskRunId: "TR-1", taskExecutionFence } });
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ parameters: { path: "spec.md", _taskExecutionFence: taskExecutionFence } });
+    const { originalToolParameters } = await import("./attention/coworker-envelope-decision");
+    expect(originalToolParameters((create.mock.calls[0]?.[0] as Record<string, unknown>).parameters)).toEqual({ path: "spec.md" });
+  });
+
+  it("does not let a caller plant a recovery fence in a retained audit", async () => {
+    const create = vi.fn(async (_data: Record<string, unknown>) => ({ id: "audit-1" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    await writeGovernedToolAudit({ toolName: baseTool.name, tool: { ...baseTool, retainAuditParameters: true },
+      rawParams: { path: "spec.md", _taskExecutionFence: { forged: true } }, result: { success: true, message: "Read completed." },
+      userId: "user-1", source: "external-jsonrpc", durationMs: 1 });
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ parameters: { path: "spec.md" } });
+    expect(((create.mock.calls[0]?.[0] as Record<string, unknown>).parameters as Record<string, unknown>)._taskExecutionFence).toBeUndefined();
+  });
+
   it("retains redacted parameters for an opted-in metrics-only tool while suppressing its result", async () => {
     const create = vi.fn(async () => ({ id: "tool-execution-1" }));
     setGovernedToolAuditOverridesForTests({ create });
@@ -78,7 +101,182 @@ describe("writeGovernedToolAudit", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       auditClass: "metrics_only",
       parameters: {},
-      result: {},
+      result: { error: "missing" },
     }));
+  });
+});
+
+describe("writeGovernedToolAudit — payload ceiling (BI-39AAE9B8)", () => {
+  it("replaces an oversized ledger parameter with a digest marker and keeps the rest verbatim", async () => {
+    const create = vi.fn(async () => ({ id: "tool-execution-2" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    const log = "L".repeat(200 * 1024);
+
+    await writeGovernedToolAudit({
+      // Audit class is derived from the PLATFORM registry by tool name, so use
+      // a real ledger tool: the one that actually carried multi-megabyte logs.
+      toolName: "record_local_integration_result",
+      rawParams: { candidateBranch: "feat/x", evidence: { output: log, sha: "abc" } },
+      result: { success: true, message: "recorded" },
+      userId: "user-1",
+      source: "external-jsonrpc",
+      durationMs: 5,
+    });
+
+    const row = (create.mock.calls as unknown as Array<[Record<string, unknown>]>)[0]?.[0] as unknown as { auditClass: string; parameters: { candidateBranch: string; evidence: { sha: string; output: unknown } } };
+    expect(row.auditClass).toBe("ledger");
+    expect(row.parameters.candidateBranch).toBe("feat/x");
+    expect(row.parameters.evidence.sha).toBe("abc");
+    expect(row.parameters.evidence.output).toMatchObject({ __dpfBounded: true, byteLength: 200 * 1024 });
+    expect(JSON.stringify(row.parameters).length).toBeLessThan(8 * 1024);
+  });
+});
+
+describe("writeGovernedToolAudit — the summary is an identity, not a timing trace", () => {
+  async function summaryFor(durationMs: number): Promise<string | null> {
+    const create = vi.fn(async () => ({ id: "tool-execution-3" }));
+    setGovernedToolAuditOverridesForTests({ create });
+
+    await writeGovernedToolAudit({
+      toolName: "query_backlog",
+      rawParams: { title: "x" },
+      result: { success: true, message: "ok" },
+      userId: "user-1",
+      source: "rest",
+      durationMs,
+    });
+
+    const row = (create.mock.calls as unknown as Array<[{ summary: string | null; durationMs: number }]>)[0]![0];
+    expect(row.durationMs).toBe(durationMs);
+    return row.summary;
+  }
+
+  // AC-ENFORCE deep-equals two consecutive runs of the same call. Any wall-clock
+  // in `summary` makes that assertion a coin flip under a loaded host — 0ms
+  // rendered nothing, 1ms rendered " (1ms)". The duration belongs to its own
+  // numeric column, so identical calls must produce byte-identical summaries.
+  it("renders the same summary regardless of how long the call took", async () => {
+    // Sequential: each case installs its own create override on shared state.
+    const summaries: Array<string | null> = [];
+    for (const ms of [0, 1, 7, 1234]) summaries.push(await summaryFor(ms));
+
+    expect(new Set(summaries).size).toBe(1);
+    expect(summaries[0]).toBe("query_backlog: ok");
+  });
+
+  it("never renders a duration fragment into the summary", async () => {
+    expect(await summaryFor(42)).not.toMatch(/\d+\s*ms/);
+  });
+});
+
+describe("writeGovernedToolAudit — a tool that never ran has no duration", () => {
+  it("passes a null duration through to the row rather than coercing it to 0", async () => {
+    const create = vi.fn(async () => ({ id: "tool-execution-4" }));
+    setGovernedToolAuditOverridesForTests({ create });
+
+    await writeGovernedToolAudit({
+      toolName: "query_backlog",
+      rawParams: { title: "x" },
+      result: { success: false, error: "forbidden_capability", message: "refused" },
+      userId: "user-1",
+      source: "rest",
+      durationMs: null,
+    });
+
+    const row = (create.mock.calls as unknown as Array<[{ summary: string | null; durationMs: number | null }]>)[0]![0];
+    // Null, not 0: the aggregate in tool-execution-data.ts filters on
+    // `durationMs: { not: null }`, so a refusal must not enter the average.
+    expect(row.durationMs).toBeNull();
+    expect(row.summary).toBe("query_backlog: failed");
+  });
+});
+
+// Approval convergence A3 (BI-C8EC05C9, spec D3): the `_approvalResume`
+// marker. Server-written on the park row only when the caller asked the
+// platform to complete the approval, it carries what the platform runner
+// replays: the original source, the server-set baselines and boundary, the
+// room and build, and the external-access INPUTS (not the resolved boolean).
+describe("writeGovernedToolAudit — the approval resume marker", () => {
+  const parked = { success: false, error: "approval_required", message: "waiting", data: { envelopeId: "ENV-1" } };
+  const sideEffectTool: ToolDefinition = { ...baseTool, name: "run_discovery_triage", sideEffect: true };
+
+  async function write(context: Record<string, unknown>, result: Record<string, unknown> = parked) {
+    const create = vi.fn(async (_row: Record<string, unknown>) => ({ id: "row-1" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    await writeGovernedToolAudit({
+      toolName: sideEffectTool.name, tool: sideEffectTool, rawParams: { trigger: "cadence" },
+      result: result as never, userId: "user-1", source: "agentic-loop", context: context as never, durationMs: null,
+    });
+    return create.mock.calls[0]![0] as { parameters: Record<string, unknown>; envelopeId: string | null };
+  }
+
+  it("writes the marker on a parked call the platform completes", async () => {
+    const row = await write({
+      agentId: "AGT-OPS", threadId: "thread-1", taskRunId: "TR-SCHED-1", routeContext: "/platform/ops",
+      approvalCompletion: "platform", proposeBoundary: true, coworkerReadBaseline: true,
+      coworkerAuthorizedSurfaceBaseline: true, authorizedSurfaceContext: { mode: "background", workroomId: "WC-1" },
+      roomAuthority: { workroomId: "WC-1" }, externalAccessEnabled: true, featureBuildId: "FB-1",
+    });
+    expect(row.envelopeId).toBe("ENV-1");
+    expect(row.parameters).toEqual({
+      trigger: "cadence",
+      _approvalResume: {
+        v: 1,
+        source: "agentic-loop",
+        coworkerReadBaseline: true,
+        coworkerAuthorizedSurfaceBaseline: true,
+        authorizedSurfaceMode: "background",
+        proposeBoundary: true,
+        workroomId: "WC-1",
+        featureBuildId: "FB-1",
+        externalAccess: { workroomId: "WC-1", standingGrantAgentId: "AGT-OPS" },
+      },
+    });
+  });
+
+  it("records no external-access input when the call carried no external-access decision", async () => {
+    const row = await write({ agentId: "AGT-OPS", threadId: "thread-1", approvalCompletion: "platform" });
+    expect(row.parameters._approvalResume).toMatchObject({
+      externalAccess: null, workroomId: null, featureBuildId: null, proposeBoundary: false,
+      coworkerReadBaseline: false, coworkerAuthorizedSurfaceBaseline: false, authorizedSurfaceMode: null,
+    });
+  });
+
+  it("writes nothing new for any other caller or any other result", async () => {
+    expect((await write({ agentId: "AGT-OPS", threadId: "thread-1" })).parameters).toEqual({ trigger: "cadence" });
+    expect((await write({ agentId: "AGT-OPS", approvalCompletion: "platform" }, { success: true, message: "ran" })).parameters)
+      .toEqual({ trigger: "cadence" });
+  });
+
+  it("is never read back as a tool argument", async () => {
+    const { GOVERNED_AUDIT_PARAMETER_KEYS, originalToolParameters } = await import("./attention/coworker-envelope-decision");
+    expect(GOVERNED_AUDIT_PARAMETER_KEYS.has("_approvalResume")).toBe(true);
+    expect(originalToolParameters({ trigger: "cadence", _approvalResume: { v: 1 } })).toEqual({ trigger: "cadence" });
+  });
+});
+
+// BI-84C1F526: a tool that hands the caller a secret (the Grok credentials
+// client) keeps a ledger row, but the secret never lands in it.
+describe("secretResultKeys", () => {
+  const secretTool: ToolDefinition = { ...baseTool, name: "issue_grok_credentials_client", sideEffect: true, secretResultKeys: ["credentialsClient"] };
+  const result = { success: true, message: "issued", data: { credentialsClient: { clientId: "dpfoc_x", clientSecret: "dpfocs_secret" }, created: true } };
+
+  it("redacts the declared result keys on write", async () => {
+    const create = vi.fn(async () => ({ id: "row-1" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    await writeGovernedToolAudit({
+      toolName: secretTool.name, tool: secretTool, rawParams: {}, result, userId: "u1", source: "external-jsonrpc", durationMs: 3,
+    });
+    const row = (create.mock.calls[0] as unknown[])[0] as { result: { data: Record<string, unknown> } };
+    expect(row.result.data).toEqual({ credentialsClient: "[REDACTED]", created: true });
+    expect(JSON.stringify(row)).not.toContain("dpfocs_secret");
+  });
+
+  it("redacts the declared result keys when a reserved row is finalized", async () => {
+    const update = vi.fn(async () => ({}));
+    setGovernedToolAuditOverridesForTests({ update });
+    await updateGovernedToolAudit("row-1", result, 3, secretTool);
+    expect(JSON.stringify(update.mock.calls[0])).not.toContain("dpfocs_secret");
+    expect(result.data.credentialsClient.clientSecret).toBe("dpfocs_secret");
   });
 });

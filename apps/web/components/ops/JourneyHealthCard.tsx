@@ -11,7 +11,7 @@
 // before hydration.
 
 import { StatusBadge } from "@/components/ui/report-kit";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import type { JourneyHealthRow } from "@/lib/business-journeys/journey-health";
 
 const STATUS_PRESENTATION: Record<

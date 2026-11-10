@@ -137,6 +137,10 @@ details**. The surface adds no new route, tab, dashboard, or prompt-sending acti
 
 ## Rollout and rollback
 
+0. Turn on the **governed backlog lane** in Admin -> Platform Development (BI-CEFF2535). Until it is
+   on, a promoted draft waits for a manual "Record Approve Start" and the daily tee-up sweep
+   (`build/governed-backlog-tee-up-scheduled`, 14:00 UTC) refuses to run, so none of the switches
+   below ever see a build to act on. The same control sets the daily tee-up cap.
 1. Keep all three switches off while deploying the code.
 2. Enable autonomous playbook `shadow` and compare recorded decisions with existing gates.
 3. Enable one contained, low-risk `dpf_dogfood` binding whose evidence scope exactly matches.

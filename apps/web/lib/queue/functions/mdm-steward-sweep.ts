@@ -10,8 +10,8 @@
 // self-upgrade drain), concurrency 1, honors the ScheduledJob.enabled kill
 // switch inside the runner.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   MDM_STEWARD_CRON,
@@ -21,18 +21,15 @@ import {
   MDM_STEWARD_JOB_ID,
 } from "@/lib/mdm/steward-schedule-constants";
 
-/** Kill switch: operators pause the Data Steward via ScheduledJob.enabled=false. */
+/** Kill switch: operators pause the Data Steward via ScheduledJob.enabled=false.
+ *  Routed through the one shared implementation (BI-7E49FA15); default-on when
+ *  no row exists or the read fails. */
 async function isEnabled(): Promise<boolean> {
-  const { prisma } = await import("@dpf/db");
-  const row = await prisma.scheduledJob.findUnique({
-    where: { jobId: MDM_STEWARD_JOB_ID },
-    select: { enabled: true },
-  });
-  // Default-on: no row means never toggled, so it runs.
-  return row?.enabled ?? true;
+  const { isJobEnabled } = await import("@/lib/operate/scheduled-jobs/core");
+  return isJobEnabled(MDM_STEWARD_JOB_ID);
 }
 
-export const mdmStewardSweepScheduled = inngest.createFunction(
+export const mdmStewardSweepScheduled = jobs.createFunction(
   {
     id: MDM_STEWARD_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -40,7 +37,7 @@ export const mdmStewardSweepScheduled = inngest.createFunction(
     triggers: [cron(MDM_STEWARD_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, MDM_STEWARD_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     if (!(await step.run("mdm-steward-enabled", isEnabled))) {
       return { skipped: true, reason: "disabled" };
@@ -53,7 +50,7 @@ export const mdmStewardSweepScheduled = inngest.createFunction(
 );
 
 // Manual one-shot trigger for the admin "run now" action; supports dry-run.
-export const mdmStewardSweepRequested = inngest.createFunction(
+export const mdmStewardSweepRequested = jobs.createFunction(
   {
     id: MDM_STEWARD_REQUESTED_INNGEST_ID,
     retries: 1,

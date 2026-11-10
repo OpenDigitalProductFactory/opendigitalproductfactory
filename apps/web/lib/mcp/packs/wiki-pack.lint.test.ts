@@ -12,7 +12,7 @@ const runWikiLint = vi.fn();
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
-  QDRANT_COLLECTIONS: { WIKI_PAGES: "wiki-pages" },
+  VECTOR_COLLECTIONS: { WIKI_PAGES: "wiki-pages" },
 }));
 
 vi.mock("@/lib/wiki/lint", () => ({

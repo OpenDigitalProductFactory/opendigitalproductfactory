@@ -17,23 +17,23 @@
 // client. This is the one place the house error contract must yield to the wire
 // contract; the raw-route-error baseline records it deliberately.
 
+import { currentOAuthHuman } from "@/lib/auth/oauth-identity-binding";
+import { credentialsClientConsentBindingId } from "@/lib/auth/credentials-client-consent";
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { findClientByClientId, touchClient } from "@/lib/auth/oauth-clients";
 import { canonicalResourceUri, resolveResourceOrigin, resourceMatches } from "@/lib/auth/oauth-metadata";
 import { clientCredentialsTtlSeconds } from "@/lib/auth/oauth-policy";
+import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import {
-  consumeAuthorizationCode,
-  consumeRefreshToken,
+  exchangeOAuthCode,
+  rotateOAuthRefreshToken,
   issueAccessToken,
-  issueRefreshToken,
-  markRefreshRotated,
   secretMatches,
 } from "@/lib/auth/oauth-tokens";
 import {
   formatScopeParam,
   parseScopeParam,
-  type PublicScope,
 } from "@/lib/auth/oauth-scope-map";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +52,18 @@ function tokenResponse(body: Record<string, unknown>): Response {
     status: 200,
     headers: { "Cache-Control": "no-store", Pragma: "no-cache" },
   });
+}
+
+async function quiescenceRefusal(grantType: string): Promise<Response | null> {
+  try {
+    const { level } = await getQuiescenceConfig();
+    if (level === "normal" || (level === "draining" && grantType === "refresh_token")) return null;
+  } catch {
+    // Unknown state cannot admit a token exchange.
+  }
+  const response = oauthError("temporarily_unavailable", "Platform upgrade in progress.", 503);
+  response.headers.set("Retry-After", "30");
+  return response;
 }
 
 /** Client authentication: `client_secret_basic` (Authorization header) or
@@ -96,6 +108,8 @@ export async function POST(request: Request) {
   }
 
   const grantType = form.get("grant_type")?.trim() ?? "";
+  const refusal = await quiescenceRefusal(grantType);
+  if (refusal) return refusal;
   const { clientId, clientSecret } = readClientCredentials(request, form);
   if (!clientId) return oauthError("invalid_client", "client_id is required.");
 
@@ -145,29 +159,10 @@ async function handleAuthorizationCode(
   if (!redirectUri) return oauthError("invalid_request", "redirect_uri is required.");
   if (!codeVerifier) return oauthError("invalid_request", "code_verifier is required.");
 
-  const consumed = await consumeAuthorizationCode(code, {
-    oauthClientRowId: client.rowId,
-    redirectUri,
-    codeVerifier,
-    resource: rawResource,
-  });
-  if (!consumed.accepted) return oauthError(consumed.error, consumed.detail);
-
-  const issued = await issueAccessToken({
-    userId: consumed.userId,
-    agentId: client.agentId,
-    oauthClientRowId: client.rowId,
-    clientLabel: client.clientName,
-    publicScopes: consumed.scopes,
-    origin,
-  });
-  const refresh = await issueRefreshToken({
-    userId: consumed.userId,
-    agentId: client.agentId,
-    oauthClientRowId: client.rowId,
-    publicScopes: consumed.scopes,
-    origin,
-  });
+  const result = await exchangeOAuthCode({ code, clientId: client.rowId,
+    clientLabel: client.clientName, origin, redirectUri, codeVerifier, resource: rawResource });
+  if (!result.accepted) return oauthError(result.error, result.detail);
+  const { issued, refresh } = result;
 
   touchClient(client.rowId);
   return tokenResponse({
@@ -187,38 +182,14 @@ async function handleRefresh(
   const presented = form.get("refresh_token")?.trim() ?? "";
   if (!presented) return oauthError("invalid_request", "refresh_token is required.");
 
-  const consumed = await consumeRefreshToken(presented, origin);
-  if (!consumed.accepted) return oauthError(consumed.error, consumed.detail);
-  if (consumed.oauthClientRowId !== client.rowId) {
-    return oauthError("invalid_grant", "Refresh token belongs to another client.");
-  }
-
-  // A refresh may narrow scope but never widen it (RFC 6749 §6).
-  const requested = parseScopeParam(form.get("scope")).granted;
-  const scopes: PublicScope[] =
-    requested.length > 0 ? consumed.scopes.filter((s) => requested.includes(s)) : consumed.scopes;
-  if (scopes.length === 0) {
-    return oauthError("invalid_scope", "Requested scopes exceed the granted set.");
-  }
-
-  const issued = await issueAccessToken({
-    userId: consumed.userId,
-    agentId: consumed.agentId,
-    oauthClientRowId: client.rowId,
-    clientLabel: client.clientName,
-    publicScopes: scopes,
-    origin,
+  const parsedScope = parseScopeParam(form.get("scope"));
+  if (parsedScope.unknown.length) return oauthError("invalid_scope", "Request only supported permissions.");
+  const result = await rotateOAuthRefreshToken({ token: presented,
+    clientId: client.rowId, clientLabel: client.clientName, origin,
+    ...(form.has("scope") ? { requestedScopes: parsedScope.granted } : {}),
   });
-  const rotated = await issueRefreshToken({
-    userId: consumed.userId,
-    agentId: consumed.agentId,
-    oauthClientRowId: client.rowId,
-    publicScopes: scopes,
-    origin,
-  });
-  // Link old → new so a later presentation of the old one is a detectable
-  // replay rather than an accepted renewal.
-  await markRefreshRotated(presented, rotated);
+  if (!result.accepted) return oauthError(result.error, result.detail);
+  const { issued, refresh: rotated } = result;
 
   touchClient(client.rowId);
   return tokenResponse({
@@ -238,6 +209,11 @@ async function handleRefresh(
  * is created in Admin > Platform Development: `allowedScopes` is the grant, and
  * `ownerUserId` is the human whose role caps it. A request may narrow that set
  * and can never exceed it.
+ *
+ * When the operator also bound an approved assistant (`agentId`), that act is
+ * the consent (BI-79D26E39): the token carries the owner's consent binding for
+ * this client, resource and assistant, so its routine writes are steered like
+ * a consented connection instead of parking on a human approval.
  */
 async function handleClientCredentials(
   form: URLSearchParams,
@@ -272,9 +248,27 @@ async function handleClientCredentials(
     return oauthError("invalid_scope", "No requested scope is granted.");
   }
 
-  const issued = await issueAccessToken({
+  if (!await currentOAuthHuman(client.ownerUserId)) {
+    return oauthError("invalid_client", "The authorizing account is not active.");
+  }
+  const agent = client.agentId ? await prisma.agent.findUnique({
+    where: { id: client.agentId }, select: { agentId: true, status: true, archived: true },
+  }) : null;
+  if (client.agentId && (!agent || agent.status !== "active" || agent.archived)) {
+    return oauthError("invalid_client", "The approved assistant is not active.");
+  }
+  const authorityBindingId = await credentialsClientConsentBindingId({
     userId: client.ownerUserId,
-    agentId: client.agentId,
+    clientRowId: client.rowId,
+    publicClientId: client.clientId,
+    resource: canonicalResourceUri(origin),
+    agentId: agent?.agentId ?? null,
+    scopes,
+  });
+  const issued = await issueAccessToken({
+    authorityBindingId,
+    userId: client.ownerUserId,
+    agentId: agent?.agentId ?? null,
     oauthClientRowId: client.rowId,
     clientLabel: client.clientName,
     publicScopes: scopes,

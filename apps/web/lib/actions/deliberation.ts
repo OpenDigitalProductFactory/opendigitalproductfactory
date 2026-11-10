@@ -4,13 +4,15 @@ import { prisma } from "@dpf/db";
 
 import { resolve } from "../deliberation/activation";
 import { orchestrateDeliberation } from "../deliberation/orchestrator";
-import { inngest } from "../queue/inngest-client";
+import { startDeliberationRun } from "../deliberation/start-run";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type StartDeliberationInput = {
   userId: string;
   patternSlug: string;
   taskRunId?: string;
+  /** Coworker on whose behalf the deliberation runs (BI-B3AB7FC9). */
+  agentId?: string | null;
   artifactType:
     | "spec"
     | "plan"
@@ -191,6 +193,7 @@ export async function startDeliberation(input: StartDeliberationInput) {
   const orchestration = await orchestrateDeliberation({
     userId: input.userId,
     taskRunId: input.taskRunId,
+    agentId: input.agentId ?? null,
     threadId: input.threadId ?? null,
     buildId: input.buildId ?? null,
     patternSlug: resolved.patternSlug,
@@ -212,14 +215,11 @@ export async function startDeliberation(input: StartDeliberationInput) {
   // it up and dispatches through the routing pipeline. Fail loud per project
   // memory "contribute_to_hive silent-success precedent".
   try {
-    await inngest.send({
-      name: "deliberation/run.start",
-      data: {
-        deliberationRunId: orchestration.deliberationRunId,
-        taskRunId: orchestration.taskRunId,
-        threadId: input.threadId ?? null,
-        userId: input.userId,
-      },
+    await startDeliberationRun({
+      deliberationRunId: orchestration.deliberationRunId,
+      taskRunId: orchestration.taskRunId,
+      threadId: input.threadId ?? null,
+      userId: input.userId,
     });
   } catch (err) {
     const message = getErrorMessage(err);

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { EmptyState } from "@/components/ui/report-kit";
 import { BusinessPerformanceDashboard } from "@/components/performance/BusinessPerformanceDashboard";
 import { loadBusinessPerformance } from "@/lib/performance/business-performance-provider";
@@ -23,9 +24,10 @@ export default async function PerformancePage({
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
+  const locale = await getLocaleContext();
   const query = await searchParams;
   const performance = await loadBusinessPerformance(
-    { userId: session.user.id, ...(query?.period ? { period: query.period } : {}) },
+    { userId: session.user.id, formatLocale: locale.formatLocale, ...(query?.period ? { period: query.period } : {}) },
   );
   const watches = performance.status === "ready"
     ? await listBusinessAnalysisWatchesFor(session.user.id, performance.organizationId)
@@ -45,19 +47,27 @@ export default async function PerformancePage({
       </header>
 
       {performance.status === "ready" ? (
-        <BusinessPerformanceDashboard performance={performance} watches={watches} />
+        <BusinessPerformanceDashboard performance={performance} watches={watches} language={locale.language} />
       ) : (
         <EmptyState
-          title="Performance history is not ready yet"
-          description={`${performance.reason} We will not show made-up numbers.`}
+          title={
+            performance.applicable
+              ? "Performance history is not ready yet"
+              : "Performance isn't available for this business type"
+          }
+          description={
+            performance.applicable
+              ? `${performance.reason} We will not show made-up numbers.`
+              : performance.reason
+          }
           action={
             <Link
-              href="/workspace"
+              href={performance.nextAction?.href ?? "/workspace"}
               data-dpf-primary-action
               data-owner-first-next-action
               className="inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
             >
-              Open Operations
+              {performance.nextAction?.label ?? "Open Operations"}
             </Link>
           }
         />

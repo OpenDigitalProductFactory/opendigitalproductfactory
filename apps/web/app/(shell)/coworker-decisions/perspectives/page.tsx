@@ -9,6 +9,7 @@ import { prisma } from "@dpf/db"
 import { notFound } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile"
+import { RatifyPolicyButton } from "./ratify-policy-button"
 
 export const dynamic = "force-dynamic"
 
@@ -52,11 +53,24 @@ export default async function PerspectivesIndexPage() {
       name: true,
       kind: true,
       voiceEnabled: true,
+      currentVersionId: true,
       voiceProfile: {
         select: { status: true },
       },
     },
   })
+  // BI-9C384562: a scope-owning policy (platform / organization) must be
+  // ratified once by a human before the authority projector can act on its
+  // answers; show who did, or the one-time button.
+  const versionIds = profiles.map((p) => p.currentVersionId).filter((v): v is string => Boolean(v))
+  const versions = versionIds.length
+    ? await prisma.decisionPerspectiveProfileVersion.findMany({
+        where: { versionId: { in: versionIds } },
+        select: { versionId: true, promotedByPrincipalId: true },
+      })
+    : []
+  const promoterByVersion = new Map(versions.map((v) => [v.versionId, v.promotedByPrincipalId]))
+  const RATIFIABLE = new Set(["platform", "organization"])
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4">
@@ -105,6 +119,15 @@ export default async function PerspectivesIndexPage() {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0 ml-4">
+                  {RATIFIABLE.has(profile.kind) && profile.currentVersionId ? (
+                    promoterByVersion.get(profile.currentVersionId) ? (
+                      <span className="text-xs text-[var(--dpf-success)]" title="This policy version was ratified by a person; your AI may act on its high-confidence answers.">
+                        ✓ Ratified
+                      </span>
+                    ) : (
+                      <RatifyPolicyButton profileId={profile.profileId} />
+                    )
+                  ) : null}
                   {badge && (
                     <span className={`text-xs px-2 py-0.5 rounded ${badge.className}`}>
                       {badge.label}
@@ -122,7 +145,7 @@ export default async function PerspectivesIndexPage() {
                     href={`/coworker-decisions/perspectives/${profile.profileId}/voice`}
                     className="text-sm text-primary hover:underline"
                   >
-                    Voice config →
+                    Voice →
                   </Link>
                 </div>
               </div>

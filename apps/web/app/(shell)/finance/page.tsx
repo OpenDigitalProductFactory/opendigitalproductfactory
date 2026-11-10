@@ -225,15 +225,20 @@ export default async function FinancePage() {
   // collapsed advanced region. Supersedes the generic owner-first summary band
   // (BI-3BCAF95F) for food-hospitality, so it returns before that is built.
   if (financeSurface.mode === "owner-first") {
+    const metricCopy = financeSurface.metricCopy;
     const moneyJobMetrics: Partial<Record<FinanceMetricKey, MoneyJobMetric>> = {
       "outstanding-receivables": {
         value: `${sym}${formatMoney(owedAmount)}`,
-        hint: `${owedCount} invoice${owedCount !== 1 ? "s" : ""} outstanding`,
+        hint: `${owedCount} ${owedCount === 1
+          ? (metricCopy?.outstandingSingular ?? "invoice")
+          : (metricCopy?.outstandingPlural ?? "invoices")} outstanding`,
         intent: owedAmount > 0 ? "warning" : "neutral",
       },
       "money-in-month": {
         value: `${sym}${formatMoney(paidAmount)}`,
-        hint: `${paidCount} invoice${paidCount !== 1 ? "s" : ""} paid this month`,
+        hint: metricCopy
+          ? `${paidCount} ${paidCount === 1 ? metricCopy.receivedSingular : metricCopy.receivedPlural} received this month`
+          : `${paidCount} invoice${paidCount !== 1 ? "s" : ""} paid this month`,
         intent: paidAmount > 0 ? "success" : "neutral",
       },
       "overdue-count": {
@@ -243,7 +248,7 @@ export default async function FinancePage() {
             ? `oldest: ${oldestOverdue.account.name}`
             : hasAnyInvoices
               ? "all up to date"
-              : "no invoices recorded yet",
+              : (metricCopy?.emptyOverdue ?? "no invoices recorded yet"),
         intent: overdueCount > 0 ? "danger" : hasAnyInvoices ? "success" : "neutral",
       },
       "supplier-bills-due": {
@@ -263,9 +268,9 @@ export default async function FinancePage() {
 
     return (
       <div>
-        {!setupStatus.isConfigured && <SetupBanner />}
+        {!setupStatus.isConfigured && <SetupBanner description={financeSurface.setupDescription} />}
 
-        <FinanceTabNav />
+        <FinanceTabNav labels={financeSurface.navigationLabels} />
 
         <OwnerFirstFinanceView
           surface={financeSurface}
@@ -276,14 +281,19 @@ export default async function FinancePage() {
         {/* Recent invoices — owner-relevant, kept below the money jobs */}
         <section>
           <h2 className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
-            Recent Invoices
+            {financeSurface.recentRecordsLabel}
           </h2>
           {recentInvoices.length === 0 ? (
             <p className="text-sm text-[var(--dpf-muted)]">
-              No invoices yet. Bill a booking, order, or catering job to get started.
+              {financeSurface.recentRecordsEmpty}
             </p>
           ) : (
-            <RecentInvoicesTable rows={recentInvoiceRows} currencySymbol={sym} />
+            <RecentInvoicesTable
+              rows={recentInvoiceRows}
+              currencySymbol={sym}
+              accountHeader={metricCopy?.recentAccountHeader}
+              emptyLabel={metricCopy?.recentEmpty}
+            />
           )}
         </section>
       </div>
@@ -760,14 +770,14 @@ export default async function FinancePage() {
   );
 }
 
-function SetupBanner() {
+function SetupBanner({ description }: { description?: string }) {
   return (
     <div className="mb-6 rounded-lg border border-[color-mix(in_srgb,var(--dpf-warning)_35%,var(--dpf-border))] bg-[color-mix(in_srgb,var(--dpf-warning)_10%,transparent)] p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-[var(--dpf-warning)]">Complete your financial setup</p>
           <p className="text-xs text-[var(--dpf-muted)] mt-0.5">
-            Set up your finances based on your business type to get started with invoicing, expenses, and reporting.
+            {description ?? "Set up your finances based on your business type to get started with invoicing, expenses, and reporting."}
           </p>
         </div>
         <Link

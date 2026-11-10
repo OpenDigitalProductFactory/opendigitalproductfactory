@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -11,7 +11,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * run, so a missed tick is recovered automatically on the next one. On-
  * demand admin invocation lives in `apps/web/lib/actions/skills-observatory.ts`.
  */
-export const skillMetricsAggregator = inngest.createFunction(
+export const skillMetricsAggregator = jobs.createFunction(
   {
     id: "skills/metrics-aggregator",
     retries: 1,
@@ -19,7 +19,7 @@ export const skillMetricsAggregator = inngest.createFunction(
     triggers: [cron("0 5 * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "skills/metrics-aggregator");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("aggregate-current-period", async () => {

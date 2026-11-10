@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-A442F129. Migration 20260918000000_adoption_application_screening adds one nullable JSONB column, AnimalAdoptionApplication.screening, holding the answers a rescue decides on (housing situation, other pets, children in the home, landlord permission, experience). No other column changes and no rows are touched. The same change introduces the first application writers of AnimalAdoptionApplication and AnimalPlacement (creation, stage transitions, exclusive reservation, completion, cancellation, return) and a StorefrontDonation writer for the adoption fee; those models already exist and already carry confidential sensitivity in the animal-welfare asset registry. The bounded adoptions queue projects applicant name and stage only; screening never leaves the application detail.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "AnimalAdoptionApplication",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "screening",
+          "resolution": "governed",
+          "reason": "Free-text and closed-choice answers about an applicant's household: where they live, other animals, children, whether a landlord consented, and their experience. It is personal data about the applicant and their household, supplied for one purpose: deciding whether to place this animal with them.",
+          "provenance": "Entered by the adoption coordinator from the applicant's answers and validated server-side (validateScreening); never inferred and never imported from the storefront enquiry.",
+          "flags": ["subject", "sensitive"],
+          "fieldPolicy": {
+            "basis": "legitimate-interest-animal-welfare-placement",
+            "access": "Readable by operators holding operate_animal_welfare or view_animal_welfare inside the owning organization, on the application detail only. The bounded queue projects the applicant's name and stage; screening answers are never listed, never exposed on storefront or public surfaces, and never enumerable across organizations.",
+            "retention": "Bound to the application; retained and disposed with it under the animal-welfare asset registry's domain lifecycle, so a return can still be read against the original screening.",
+            "obligations": "Used only by a person deciding on this application. Never an input to any automated ranking, scoring or selection of applicants, and never shared with the adopter of another animal. A decline records a reason on the application, not a judgement about the household."
+          }
+        }
+      ]
+    }
+  ]
+}

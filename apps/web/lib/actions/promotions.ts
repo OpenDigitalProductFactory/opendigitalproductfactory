@@ -2,13 +2,13 @@
 
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { requireCapability } from "@/lib/actions/shared/guards";
+import { requireCapability, requireCapabilityContext } from "@/lib/actions/shared/guards";
 import { prisma, type Prisma } from "@dpf/db";
 import { slugify } from "@/lib/shared/slugify";
 import { revalidatePath } from "next/cache";
 import { generateRfcId } from "./change-management";
 import { generatePromotionId } from "@/lib/version-tracking";
-import { getSelfUpgradeConfig, nextMaintenanceWindowStart } from "@/lib/self-upgrade/config";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { resolveReleaseBatchStatus } from "@/lib/self-upgrade/release-batch-status";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
 import { resolveSelfUpgradeStatusTarget } from "@/lib/self-upgrade/status-target";
@@ -17,7 +17,12 @@ import { isShaFresh } from "@/lib/self-upgrade/version";
 import { getDeployedSha } from "@/lib/self-upgrade/completion";
 import { readCurrentContainerConfigDigest } from "@/lib/self-upgrade/runtime-image-identity";
 import { getJobEngineHealth } from "@/lib/queue/job-engine-health";
-import { createRun, failRun, getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { getLatestRun, getLatestSucceededRun } from "@/lib/self-upgrade/run-store";
+import { resolveRecoveryPredecessor } from "@/lib/self-upgrade/recovery-predecessor";
+import { admitSelfUpgrade, resolveCurrentSelfUpgradeTarget } from "@/lib/self-upgrade/admission";
+import { selectSelfUpgradeAdmissionTarget } from "@/lib/self-upgrade/target-admission";
+import { operatorRunTrigger, portalRequesterKind } from "@/lib/self-upgrade/upgrade-timing";
+import { requestUpgradeAsPortalAgent } from "@/lib/self-upgrade/portal-agent-request";
 import {
   getCurrentImpactSummaryId,
   loadRunImpactDigest,
@@ -28,18 +33,15 @@ import type {
   RunImpactDigest,
   UpgradeImpactSummary,
 } from "@/lib/self-upgrade/impact/types";
+import { isStoreOpen } from "@/lib/self-upgrade/window";
+import { describeWindows } from "@/lib/self-upgrade/auto-window";
 import {
-  isStoreOpen,
-  isUpgradeWindowOpen,
-  nextUpgradeWindowOpen,
-} from "@/lib/self-upgrade/window";
-import {
-  resolveAutoUpgradeWindow,
-  nextAutoWindowOpen,
-  describeWindows,
-} from "@/lib/self-upgrade/auto-window";
+  currentWindowOpenedAt,
+  followingWindowStart,
+  resolveEffectiveUpgradeWindow,
+} from "@/lib/self-upgrade/effective-window";
+import { getWindowDecline, missedWindowDecline } from "@/lib/self-upgrade/scheduled-gate";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
-import { resolveOperatingScheduleForSystem } from "@/lib/operating-hours-read";
 import { getLastCheckedAt } from "@/lib/self-upgrade/last-check";
 import {
   getQuiescenceActivity,
@@ -48,10 +50,8 @@ import {
 } from "@/lib/self-upgrade/quiescence";
 import { getCooldownUntil } from "@/lib/self-upgrade/cooldown";
 import { loadPlatformVersion } from "@/lib/platform/version";
-import { inngest } from "@/lib/queue/inngest-client";
 import { readBuildPipelineLimit } from "@/lib/queue/admission";
 import { buildAdmissionSnapshot } from "@/lib/queue/admission-observability";
-import { SELF_UPGRADE_EVENT } from "@/lib/queue/functions/self-upgrade";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 async function requireOpsAccess(): Promise<string> {
@@ -365,7 +365,7 @@ export async function rejectPromotion(promotionId: string, rationale: string) {
 }
 
 export async function markDeployed(promotionId: string, deploymentLog?: string) {
-  const userId = await requireOpsAccess();
+  await requireOpsAccess();
   await prisma.changePromotion.update({
     where: { promotionId },
     data: {
@@ -492,6 +492,7 @@ export async function getPromotionWindowStatus(promotionId: string) {
 
 export type SelfUpgradeRunDto = {
   runId: string;
+  recoveryOfRunId: string | null;
   status: string;
   trigger: string | null;       // schema: trigger (was: triggeredBy)
   currentSha: string | null;    // schema: currentSha (was: fromVersion)
@@ -528,6 +529,7 @@ export async function listSelfUpgradeRuns(opts?: {
     take: limit + 1,
     select: {
       runId: true,
+      recoveryOfRunId: true,
       status: true,
       trigger: true,
       currentSha: true,
@@ -592,6 +594,7 @@ export async function getSelfUpgradeStatus() {
     cooldownUntil,
     jobEngine,
     selfUpgradeBlackout,
+    windowDecline,
   ] = await Promise.all([
     getSelfUpgradeConfig(),
     getLatestRun(),
@@ -613,6 +616,8 @@ export async function getSelfUpgradeStatus() {
     // Active operator blackout that pauses scheduled upgrades (BI-59591B14), so
     // the panel explains a paused schedule instead of leaving it opaque.
     getActiveSelfUpgradeBlackout(),
+    // BI-EF1AC111 (AC-3): why the last window passed without an upgrade check.
+    getWindowDecline(),
   ]);
   const support = await readSelfUpgradeSupport(config.enabled);
 
@@ -626,59 +631,25 @@ export async function getSelfUpgradeStatus() {
   // truth: operating hours). inMaintenanceWindow = "upgrades may run now" = store
   // closed (or inside an explicit override / auto-overnight window). storeOpen
   // lets the panel explain WHY truthfully.
-  const { schedule, timezone, timezoneKnown, lowTrafficWindows } =
-    await resolveOperatingScheduleForSystem();
-  const hasExplicitWindows = config.maintenanceWindows.length > 0;
-  const storeOpen = isStoreOpen(schedule, new Date(), timezone);
+  // Precedence (explicit > auto-overnight for a 24/7 store with a known
+  // timezone > operating hours) lives in effective-window.ts, shared with the
+  // scheduled gate and the agent request path (BI-2128872C), so the window the
+  // panel shows is the one a deferred request is promised. windowSource tells
+  // the panel which model is in play; "needs-timezone" is the only state that
+  // asks the operator for input. (BI-A6382FB9)
   const now = new Date();
-  // A 24/7 store has no derived "closed" window. With a known timezone we
-  // auto-pick a low-traffic overnight window (observed trough if available, else
-  // ~02:00-04:00 local); with no known timezone we surface a prompt instead of
-  // guessing. Explicit operator windows still win. (BI-A6382FB9)
-  const auto = hasExplicitWindows
-    ? null
-    : resolveAutoUpgradeWindow({ schedule, timeZone: timezone, timezoneKnown, lowTrafficWindows, now });
-  const effectiveWindows = hasExplicitWindows
-    ? config.maintenanceWindows
-    : auto?.kind === "auto-overnight"
-      ? auto.windows
-      : undefined;
-  const inMaintenanceWindow = isUpgradeWindowOpen({
-    explicitWindows: effectiveWindows,
-    schedule,
-    timeZone: timezone,
-  });
-  // The window is always defined now (operating-hours or auto-overnight), so it
-  // is never "unconfigured". windowSource tells the panel which model is in play;
-  // "needs-timezone" is the only state that asks the operator for input.
+  const effectiveWindow = await resolveEffectiveUpgradeWindow({ config, now });
+  const { schedule, timezone } = effectiveWindow;
+  const storeOpen = isStoreOpen(schedule, now, timezone);
+  const inMaintenanceWindow = effectiveWindow.open;
   const windowConfigured = true;
-  const windowSource: "explicit" | "operating-hours" | "auto-overnight" | "needs-timezone" =
-    hasExplicitWindows
-      ? "explicit"
-      : auto?.kind === "auto-overnight"
-        ? "auto-overnight"
-        : auto?.kind === "needs-timezone"
-          ? "needs-timezone"
-          : "operating-hours";
+  const windowSource = effectiveWindow.source;
   // Friendly "2:00 AM-4:00 AM" summary for the auto-overnight schedule note (display only).
   const autoWindowSummary =
-    auto?.kind === "auto-overnight" ? describeWindows(auto.windows) : null;
+    windowSource === "auto-overnight" && effectiveWindow.windows ? describeWindows(effectiveWindow.windows) : null;
   // Next time the upgrade window opens, so the panel can show WHEN scheduled
-  // upgrades will next be eligible. Explicit + auto-overnight windows use their
-  // configured/derived start; the operating-hours model derives it from the next
-  // store-close transition (null while already in-window, or for needs-timezone,
-  // where the panel asks for a timezone instead).
-  const nextWindowStart = hasExplicitWindows
-    ? nextMaintenanceWindowStart(config, now, timezone)?.toISOString() ?? null
-    : auto?.kind === "auto-overnight"
-      ? inMaintenanceWindow
-        ? null
-        : nextAutoWindowOpen(auto.windows, now, timezone)?.toISOString() ?? null
-      : auto?.kind === "needs-timezone"
-        ? null
-        : inMaintenanceWindow
-          ? null
-          : nextUpgradeWindowOpen(schedule, now, timezone)?.toISOString() ?? null;
+  // upgrades will next be eligible (null while in-window, or for needs-timezone).
+  const nextWindowStart = effectiveWindow.nextWindowStart?.toISOString() ?? null;
   const nextWindowStartDate = nextWindowStart ? new Date(nextWindowStart) : null;
   const nextScheduledCheckAt = computeNextScheduledUpgradeCheckAt({
     enabled: support.enabled,
@@ -687,7 +658,11 @@ export async function getSelfUpgradeStatus() {
     lastCheckedAt,
     checkIntervalHours: config.checkIntervalHours,
     now,
+    // BI-EF1AC111: the interval is anchored to the window opening.
+    windowOpenedAt: currentWindowOpenedAt(effectiveWindow, now),
+    followingWindowStart: inMaintenanceWindow ? followingWindowStart(effectiveWindow, now) : null,
   });
+  const missedWindow = missedWindowDecline(windowDecline, lastCheckedAt);
   const {
     targetSha,
     targetTag,
@@ -735,6 +710,9 @@ export async function getSelfUpgradeStatus() {
     windowTimezone: timezone,
     nextWindowStart,
     nextScheduledCheckAt: nextScheduledCheckAt?.toISOString() ?? null,
+    // BI-EF1AC111 (AC-3): a window that went without a check, and why. Cleared
+    // by the next check.
+    missedWindow: missedWindow ? { reason: missedWindow.reason, at: missedWindow.at } : null,
     deployedSha,
     deployedShaSource: platformVersion.imageVersion?.source ?? "unknown",
     targetSha,
@@ -772,12 +750,15 @@ export async function getSelfUpgradeStatus() {
   };
 }
 
-export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: boolean }) {
-  const userId = await requireOpsAccess();
-  const triggeredBy = `manual:${userId}`;
+export async function triggerSelfUpgrade(opts?: {
+  dryRun?: boolean; force?: boolean;
+  targetBinding?: string;
+}) {
+  const { userId, email } = await requireCapabilityContext("view_operations");
+  // BI-2128872C: an agent-driven browser session is routine, never an override.
+  if (!opts?.dryRun && portalRequesterKind(email) === "agent") return await requestUpgradeAsPortalAgent(`manual:${userId}`);
   const config = await getSelfUpgradeConfig();
   const support = await readSelfUpgradeSupport(config.enabled);
-
   if (!support.supported) {
     return {
       queued: false,
@@ -785,17 +766,14 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
       message: support.message,
     } as const;
   }
-
   if (!opts?.dryRun) {
     if (!support.enabled) {
       return { queued: false, reason: "disabled" } as const;
     }
-    // A manual trigger is NOT window-gated: the operator clicking "Upgrade now"
-    // has chosen this moment. The store-closed window only governs the unattended
-    // scheduled poll (runSelfUpgrade skips the window for non-scheduled runs).
-    // `force` is reserved for bypassing the quiescence drain in an emergency.
+    // Manual triggers skip the routine window (the trigger records the bypass);
+    // force is only for an emergency drain override.
   }
-
+  const triggeredBy = opts?.dryRun ? `manual:${userId}` : await operatorRunTrigger(`manual:${userId}`, config);
   const latestRun = await getLatestRun();
   if (latestRun?.status === "running") {
     return { queued: false, reason: "already-running", runId: latestRun.runId } as const;
@@ -803,34 +781,33 @@ export async function triggerSelfUpgrade(opts?: { dryRun?: boolean; force?: bool
   if (latestRun?.status === "queued" || latestRun?.status === "pending") {
     return { queued: false, reason: "already-queued", runId: latestRun.runId } as const;
   }
-
+  if (latestRun?.status === "failed" && latestRun.completedAt == null) return { queued: false, reason: "recovery-predecessor-not-terminal", runId: latestRun.runId } as const;
+  const recoveryRun = await resolveRecoveryPredecessor(latestRun);
+  if (recoveryRun && !opts?.targetBinding) return { queued: false, reason: "recovery-binding-required", runId: recoveryRun.runId } as const;
+  const resolvedTarget = await resolveCurrentSelfUpgradeTarget();
+  const selection = selectSelfUpgradeAdmissionTarget({
+    targetBinding: opts?.targetBinding,
+    supportTargetKind: support.targetKind,
+    resolvedTarget,
+  });
+  if (!selection.ok) return { queued: false, reason: selection.error } as const;
+  const target = selection.data;
   // Attach the "What's in this update?" summary the operator just reviewed (if
   // any) so the run records the changes it carried. Best effort — the upgrade
   // proceeds whether or not a summary was generated.
   const impactSummaryId = await getCurrentImpactSummaryId();
-
-  const run = await createRun({
-    triggeredBy,
+  const admission = await admitSelfUpgrade({ triggeredBy, target, recoveryOfRunId: recoveryRun?.runId ?? null,
+    requestedForce: opts?.force === true,
+    dryRun: opts?.dryRun === true,
+    routine: false,
     impactSummaryId,
   });
-
-  try {
-    await inngest.send({
-      name: SELF_UPGRADE_EVENT,
-      data: {
-        runId: run.runId,
-        triggeredBy,
-        ...(opts?.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
-        ...(opts?.force ? { force: true } : {}),
-      },
-    });
-  } catch (err) {
-    const message = getErrorMessage(err);
-    await failRun(run.runId, `queue-dispatch-failed: ${message}`);
-    return { queued: false, reason: "queue-dispatch-failed", runId: run.runId } as const;
-  }
-
-  return { queued: true, runId: run.runId } as const;
+  if (!admission.admitted) return { queued: false,
+    reason: admission.disposition === "recovery_conflict" ? "recovery-conflict"
+      : admission.disposition === "recovery_refused" ? admission.reason : "already-active",
+    runId: admission.runId } as const;
+  return { queued: true, admitted: true, runId: admission.runId,
+    dispatchStatus: admission.dispatchStatus } as const;
 }
 
 /**

@@ -25,7 +25,7 @@
 ## What you'll have at the end
 
 - **Host A** runs the full DPF Authority Core (portal, postgres,
-  neo4j, etc.) from a normal `bash install-dpf.sh` install.
+  inngest, etc.) from a normal `bash install-dpf.sh` install.
 - **Host B** runs a single Edge Node container against Host A. The
   container reports its hostname, NICs, ARP table, and (in later T
   threads) ARP / nmap / SNMP collector output back to Host A.
@@ -267,9 +267,16 @@ Output files (under `~/.dpf/tls` by default):
 
 ### B — Start the TLS sidecar (Host A)
 
+The sidecar publishes 80, 443 and 8443 through `DPF_HOST_BIND_ADDRESS`, like
+every other host port. A fresh install defaults to `127.0.0.1` (this machine
+only); installs upgraded from before that setting existed keep `0.0.0.0`. For
+multi-host, set `DPF_HOST_BIND_ADDRESS=0.0.0.0` in Host A's `.env` so the
+Edge Node can reach it.
+
 ```bash
 # Same shell where you ran issue-authority-tls-cert.sh:
 export DPF_TLS_DIR="$HOME/.dpf/tls"
+export DPF_HOST_BIND_ADDRESS=0.0.0.0   # or set it in .env
 docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
 
 # Verify from the LAN:
@@ -382,6 +389,54 @@ nmap results — they share the same observedKey.
 
 Filtered subnets surface on `envelope.warnings` so the operator sees
 why a subnet got skipped without grepping container logs.
+
+### Finding nearby DPF installs (federation candidates)
+
+Alongside the sweep, the Edge Node runs a **federation scan** every 90 seconds. It
+asks each host on your segment one question — `GET /.well-known/dpf-federation.json`
+— and reports back any that answer as a DPF install. That list is what the portal's
+**Platform → Federation links** page offers you as a nearby peer to pair with.
+
+It is a separate loop from the sweep on purpose: the Authority forgets a nearby
+candidate after two minutes, and the sweep only runs every five.
+
+What a peer answers with is a *setup suggestion*, never a credential. Pairing still
+requires the peer's certificate to validate against your organization's root — so a
+peer found here is either something you confirm by hand, or, when both installs
+chain to the same organization CA, one that enrols on that evidence.
+
+**Configure via env vars on the Edge Node host:**
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `DPF_FEDERATION_SCAN` | on | Set to `0`, `false`, `no`, or `off` to stop looking for peers. |
+| `DPF_FEDERATION_SCAN_HOSTS` | (from the ARP cache) | Comma-separated hosts to probe. **Replaces** the ARP-cache list when set. |
+| `DPF_FEDERATION_SCAN_ENDPOINTS` | `https:443,http:3000` | Comma-separated `scheme:port` pairs to try on each host — the TLS sidecar above, and a plain compose install. |
+| `DPF_FEDERATION_SCAN_INTERVAL_SEC` | `90` | How often to look. |
+| `DPF_FEDERATION_SCAN_MAX_TARGETS` | `256` | Probe ceiling per pass. A pass that hits it logs how many hosts it left out. |
+
+**On Docker Desktop you must set `DPF_FEDERATION_SCAN_HOSTS`.** The container sees
+only Docker's own network there (the same reason [Why not Docker
+Desktop](#why-not-docker-desktop) exists), so its ARP cache never shows your LAN
+and the scan has nothing to probe. Name the peers directly:
+
+```ini
+DPF_FEDERATION_SCAN_HOSTS=192.168.1.50,192.168.1.51
+```
+
+On the Linux host-network profile the ARP cache *is* your LAN, so leave it empty.
+
+Only private and link-local addresses are probed — `10/8`, `172.16/12`,
+`192.168/16`, `169.254/16`, `.local` names, and their IPv6 equivalents. A routable
+address in `DPF_FEDERATION_SCAN_HOSTS` is skipped and counted in the pass log, not
+dialled. The Edge Node also never reports the install it is enrolled against as a
+peer.
+
+To be found rather than to find, an install has to answer that request. Every
+install does by default; set `DPF_FEDERATION_ADVERTISE=0` **on the portal** to stay
+unfindable. What it answers with is a rotating id, a capability digest, the pairing
+path, and the estate name — no hostname, no organization id, nothing about the
+host it runs on.
 
 ### SNMP polling (C3) — discovering switches, routers, APs
 

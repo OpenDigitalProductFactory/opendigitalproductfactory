@@ -1,4 +1,4 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 
 type ExperimentQueueCell = {
   taskRunId: string;
@@ -52,14 +52,14 @@ export async function enqueueWorkPatternExperiment(
   experimentRunId: string,
   parentTaskRunId: string,
 ) {
-  return inngest.send({
+  return jobs.send({
     id: `work-pattern-experiment:${experimentRunId}`,
     name: "build/work-pattern-experiment.run",
     data: { parentTaskRunId },
   });
 }
 
-export const workPatternExperimentRun = inngest.createFunction(
+export const workPatternExperimentRun = jobs.createFunction(
   {
     id: "build/work-pattern-experiment",
     retries: 2,

@@ -59,7 +59,7 @@ describe("buildQuickBooksReadinessDescriptor", () => {
     ).toBe(true);
     expect(descriptor.importReview).toMatchObject({
       status: "ready-to-review",
-      nextBacklogItemId: "BI-4025EF5F",
+      nextStep: { kind: "open", intent: "Entity links and review queue" },
       readOnly: true,
       sourceProvider: "quickbooks",
     });
@@ -90,7 +90,7 @@ describe("buildQuickBooksReadinessDescriptor", () => {
       "Review non-editable import staging fields before creating local accounting links",
     );
     expect(descriptor.nextSafeActions).toContain(
-      "Persist reviewed import candidates through BI-4025EF5F before reconciliation",
+      "Persist reviewed import candidates before reconciliation",
     );
   });
 

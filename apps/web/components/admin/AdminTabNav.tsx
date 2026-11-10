@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { ADMIN_FAMILIES, getAdminFamily } from "@/components/admin/admin-nav";
+import { ADMIN_FAMILIES, getAdminFamily } from "@/lib/navigation/admin-nav";
 import { SectionNav } from "@/components/shell/SectionNav";
 
 // EP-NAV-COHERENCE: the admin secondary nav shows ONLY admin families — it never links

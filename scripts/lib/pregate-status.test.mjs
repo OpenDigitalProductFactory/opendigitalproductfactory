@@ -1,17 +1,28 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { worktreeContextFromGit } from "../pregate-status.mjs";
+import { projectGateStatus, worktreeContextFromGit } from "../pregate-status.mjs";
+import { readLocalCiGateState, writeLocalCiGateState } from "./local-ci-gate-state.mjs";
 
 import {
+  applyLiveGate,
   classifySlotRecord,
   exitCodeForVerdict,
   formatStatusReport,
+  poolClosedReasonFromState,
+  PREGATE_LIVE_VERDICTS,
   reconcileSlots,
 } from "./pregate-status.mjs";
+import {
+  liveGateRefusal,
+  readLivePregate,
+  removePregateLiveMarker,
+  updatePregateLiveStage,
+  writePregateLiveMarker,
+} from "./pregate-live.mjs";
 
 const HEAD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OLD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -65,6 +76,82 @@ function passingState(overrides = {}) {
     ...overrides,
   };
 }
+
+test("atomic documentation evidence survives a previous sandbox candidate without erasing it", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-doc-gate-contract-"));
+  try {
+    const file = join(directory, "state.json");
+    const metadata = { candidateSha: OLD, execution: { status: "failed", failedCommand: "old diagnostic" } };
+    writeLocalCiGateState(file, {
+      ...passingState(), evidenceId: "EXT-DOC", leaseId: "", leaseEvents: [],
+      executionLane: "documentation",
+      producerEvidence: {
+        schemaVersion: 1, producer: "documentation-evidence-lane",
+        candidateSha: HEAD, candidateBranch: "claude/topic", evidenceRecordId: "EXT-DOC",
+        headTreeSha: "c".repeat(40), integrationTreeSha: "d".repeat(40), evidencePlanDigest: "e".repeat(64),
+      },
+    });
+    const result = classifySlotRecord({ state: readLocalCiGateState(file), metadata, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+    assert.equal(result.verdict, "PASS");
+    assert.equal(result.candidateSha, HEAD);
+    assert.equal(metadata.execution.failedCommand, "old diagnostic");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+function documentationState() {
+  return passingState({
+    executionLane: "documentation", leaseId: "",
+    producerEvidence: {
+      schemaVersion: 1, producer: "documentation-evidence-lane", candidateSha: HEAD,
+      candidateBranch: "claude/topic", evidenceRecordId: "EXT-1",
+      headTreeSha: "c".repeat(40), integrationTreeSha: "d".repeat(40), evidencePlanDigest: "e".repeat(64),
+    },
+  });
+}
+
+test("documentation evidence rejects partial, unsupported and mismatched bindings even without sandbox metadata", () => {
+  const changes = [
+    (s) => { delete s.producerEvidence; },
+    (s) => { s.producerEvidence = null; },
+    (s) => { s.producerEvidence.schemaVersion = 2; },
+    (s) => { s.producerEvidence.producer = "unknown"; },
+    (s) => { s.producerEvidence.candidateSha = OLD; },
+    (s) => { s.producerEvidence.candidateBranch = "other"; },
+    (s) => { s.producerEvidence.evidenceRecordId = "other"; },
+    (s) => { s.evidenceRecordId = ""; s.producerEvidence.evidenceRecordId = ""; },
+    (s) => { s.producerEvidence.headTreeSha = ""; },
+    (s) => { s.producerEvidence.integrationTreeSha = ""; },
+    (s) => { s.producerEvidence.evidencePlanDigest = ""; },
+    (s) => { s.expiresAt = "invalid"; },
+    (s) => { s.recordedAt = "invalid"; },
+    (s) => { s.status = "running"; },
+    (s) => { s.leaseId = "unrelated-sandbox"; },
+    (s) => { s.executionLane = "unknown"; },
+    (s) => { delete s.executionLane; },
+  ];
+  for (const change of changes) {
+    const state = documentationState();
+    change(state);
+    assert.notEqual(classifySlotRecord({ state, metadata: null, headSha: HEAD, headBranch: "claude/topic", now: NOW }).verdict, "PASS", String(change));
+  }
+});
+
+test("documentation evidence retains expiry, source, pending, failure and legacy protections", () => {
+  for (const [overrides, expected] of [
+    [{ expiresAt: "2026-08-04T11:00:00.000Z" }, "STALE"],
+    [{ sha: OLD }, "STALE"],
+    [{ branch: "other" }, "STALE"],
+    [{ evidencePending: true }, "PENDING"],
+    [{ gatePassed: false, status: "failed" }, "FAIL"],
+    [{ gatePassed: false, status: "running" }, "INCONCLUSIVE"],
+    [{ testStub: true }, "INCONCLUSIVE"],
+    [{ executionLane: undefined, producerEvidence: undefined, leaseEvents: [{ type: "documentation-lane" }] }, "INCONCLUSIVE"],
+  ]) {
+    assert.equal(classifySlotRecord({ state: { ...documentationState(), ...overrides }, metadata: { candidateSha: HEAD }, headSha: HEAD, headBranch: "claude/topic", now: NOW }).verdict, expected);
+  }
+});
 
 test("PASS requires a passing record bound to THIS head", () => {
   const r = classifySlotRecord({
@@ -145,17 +232,66 @@ test("FAIL when the record exists for this SHA but did not pass", () => {
   assert.equal(exitCodeForVerdict(r.verdict), 1);
 });
 
-test("a run that gave up while queued reads FAIL, not PASS", () => {
-  // BI-2C7F51BA Defect 3: that path exits 0 having gated nothing. The record is
-  // what makes the silent exit-0 detectable.
+test("a run that gave up while queued reads INCONCLUSIVE, not PASS (BI-8392DA16)", () => {
+  // BI-2C7F51BA Defect 3: that path used to exit 0 having gated nothing. The
+  // record is what makes the silent exit-0 detectable. A `blocked_*` status
+  // is infrastructure, not a product FAIL — same class as SIGTERM.
   const r = classifySlotRecord({
     state: passingState({ gatePassed: false, status: "blocked_quiescence", evidenceRecordId: "" }),
     metadata: null,
     headSha: HEAD,
     now: NOW,
   });
-  assert.equal(r.verdict, "FAIL");
+  assert.equal(r.verdict, "INCONCLUSIVE");
   assert.match(r.reason, /blocked_quiescence/);
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
+});
+
+test("a claim parked behind a CLOSED pool names the host pressure, not a queue (BI-D908DA0A)", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      admission: {
+        queuePosition: 1,
+        poolPolicy: { effectiveCapacity: 0, rollbackReason: "host-stage-headroom-low" },
+      },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /pool was CLOSED \(host-stage-headroom-low\)/);
+  assert.match(r.reason, /not a queue and not a failure of the diff/);
+});
+
+test("an older parked record carries the closure on its queued lease event", () => {
+  assert.equal(
+    poolClosedReasonFromState({
+      leaseEvents: [{ type: "queued", queuePosition: 2, poolClosedReason: "host-memory-low" }],
+    }),
+    "host-memory-low",
+  );
+  assert.equal(poolClosedReasonFromState({ admission: { poolPolicy: { effectiveCapacity: 1 } } }), null);
+  assert.equal(poolClosedReasonFromState(null), null);
+});
+
+test("a claim queued behind a live slot still reads as a plain queue", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      admission: { queuePosition: 2, poolPolicy: { effectiveCapacity: 1, rollbackReason: "host-build-capacity-one" } },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(r.reason, /CLOSED/);
 });
 
 test("PENDING when the gate passed but evidence publication is unfinished", () => {
@@ -168,6 +304,69 @@ test("PENDING when the gate passed but evidence publication is unfinished", () =
   assert.equal(r.verdict, "PENDING");
   assert.match(r.reason, /finalize-evidence/);
   assert.equal(exitCodeForVerdict(r.verdict), 1, "pending evidence is not a green light to push");
+});
+
+test("PENDING requires the gate to have PASSED — a blocked run carrying stale pending evidence is INCONCLUSIVE", () => {
+  // Observed 2026-09-10 on fix/principle-decide-requires-option-id @ 04f681eae8d6.
+  // gate-worktree.mjs writes gatePassed:false WITH evidencePending:true for
+  // blocked_control_plane_starvation — the local evidence is preserved for later
+  // publication even though the run never graded the diff. Reading evidencePending
+  // as a verdict of its own headlined "gate passed" over a record that says it did not.
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_control_plane_starvation",
+      evidenceRecordId: "",
+      evidencePending: true,
+      evidencePendingReason: "tool_threw",
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(r.reason, /gate passed/, "must not assert a pass the record contradicts");
+  assert.doesNotMatch(
+    r.reason,
+    /finalize-evidence/,
+    "must not send the operator to a finalizer that refuses without a published PASS",
+  );
+  assert.match(r.reason, /blocked_control_plane_starvation/);
+});
+
+test("a failing record carrying pending evidence is still FAIL, not PENDING", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "failed",
+      evidenceRecordId: "",
+      evidencePending: true,
+      evidencePendingReason: "tool_threw",
+      failureReason: "vitest exited 1",
+    }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "FAIL");
+  assert.doesNotMatch(r.reason, /gate passed/);
+});
+
+test("a queued record carrying pending evidence is INCONCLUSIVE, not PENDING", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      evidencePending: true,
+      evidencePendingReason: "control_plane_unavailable",
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(r.reason, /gate passed/);
 });
 
 test("reconcile takes the best slot so a sibling's stale record cannot fake a failure", () => {
@@ -189,6 +388,18 @@ test("reconcile still reports the worst available when nothing passed", () => {
 
 test("reconcile of nothing is NO-RECORD, never a pass", () => {
   assert.equal(reconcileSlots([]).verdict, "NO-RECORD");
+});
+
+test("same-source admitted progress wins over a queued sibling without inventing PASS", () => {
+  const queued = {slotKey:"slot-0",verdict:"INCONCLUSIVE",gateStatus:"queued",boundSha:HEAD,boundBranch:"fix/topic",recordedAt:"2026-10-13T00:00:00Z"};
+  const admitted = {...queued,slotKey:"slot-1",gateStatus:"admitted",recordedAt:"2026-10-13T01:00:00Z"};
+  for (const slots of [[queued, admitted], [admitted, queued]]) {
+    const result = reconcileSlots(slots);
+    assert.equal(result.slot,"slot-1");
+    assert.equal(result.verdict,"INCONCLUSIVE");
+    assert.equal(result.gateStatus,"admitted");
+  }
+  assert.equal(reconcileSlots([queued,{...admitted,boundSha:OLD}]).slot,"slot-0", "foreign source progress cannot replace this claim");
 });
 
 test("the report is short enough that nobody pipes it, and names the next step", () => {
@@ -232,7 +443,26 @@ test("failing record says outright that no reason was recorded", () => {
   assert.match(out.reason, /NO recorded reason/);
 });
 
-test("a started-then-released run with no failing command is a retry, not a verdict", () => {
+// BI-C1121FFB: the gate stores the failing test on failureSummary, and status
+// used to ignore it and print "NO recorded reason".
+test("failing record quotes the failure summary when no failureReason was stored", () => {
+  const out = classifySlotRecord({
+    state: failingRecord({
+      failureSummary: {
+        schema: "dpf-local-ci-failure-summary/v1",
+        failedTests: [{ line: 12, text: "FAIL apps/web/lib/foo.test.ts > the widget" }],
+        failedChecks: [],
+      },
+    }),
+    metadata: null,
+    ...atHead,
+  });
+  assert.equal(out.verdict, "FAIL");
+  assert.match(out.reason, /FAIL apps\/web\/lib\/foo.test.ts > the widget/);
+  assert.doesNotMatch(out.reason, /NO recorded reason/);
+});
+
+test("a started-then-released run requires reconciliation and has no product verdict", () => {
   // The observed shape: the run held the slot, ended early, recorded nothing.
   // local-integration-ci runs at effectiveCapacity 1 and several sessions on
   // this host gate at once.
@@ -247,7 +477,7 @@ test("a started-then-released run with no failing command is a retry, not a verd
     }),
     metadata: null, ...atHead,
   });
-  assert.match(out.reason, /contended slot is a retry/);
+  assert.match(out.reason, /stop this attempt and reconcile/);
   assert.match(out.reason, /not a verdict on your diff/);
 });
 
@@ -365,6 +595,28 @@ test("the state's own failureReason outranks metadata either way", () => {
 
 // BI-51353470: a record whose status is queued/cancelled never ran. FAIL is a
 // claim about the diff; INCONCLUSIVE is "this is not a verdict".
+// BI-D088D06D. The writer half of the same injustice. `pregate.mjs` recovers a
+// wrapper that exited before a terminal state; that run never graded the diff.
+// It used to write status "failed", which landed here as FAIL and consumed the
+// SHA's verdict, forcing an amend. It now writes `blocked_wrapper_exited`, and
+// this asserts the round trip actually reads as infrastructure.
+test("a wrapper that exited before grading reads INCONCLUSIVE, not FAIL (BI-D088D06D)", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_wrapper_exited",
+      evidenceRecordId: "",
+      recovery: { reason: "gate-wrapper-exited-before-terminal-state" },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.notEqual(r.verdict, "FAIL");
+  assert.match(r.reason, /infrastructure/i);
+});
+
 test("a queued record that never ran is INCONCLUSIVE, not FAIL (BI-51353470)", () => {
   const r = classifySlotRecord({
     state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
@@ -377,6 +629,36 @@ test("a queued record that never ran is INCONCLUSIVE, not FAIL (BI-51353470)", (
   assert.match(r.reason, /did not run|never ran|not a failure of the diff/i);
   assert.doesNotMatch(r.reason, /local-ci-vitest-runner/);
   assert.equal(exitCodeForVerdict(r.verdict), 1, "inconclusive is not a green light to push");
+});
+
+test("a SIGTERM-killed / blocked_child_signal_death record is INCONCLUSIVE, not FAIL (BI-8392DA16, BI-2AB94B5A)", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_child_signal_death",
+      evidenceRecordId: "",
+      failureReason: "the build child was killed by SIGTERM",
+    }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
+  assert.match(r.reason, /SIGTERM/);
+  assert.doesNotMatch(r.reason, /this SHA has not passed/);
+});
+
+test("blocked_sandbox_drift is INCONCLUSIVE, not FAIL (BI-2AB94B5A)", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "blocked_sandbox_drift", evidenceRecordId: "" }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /infrastructure, not a product verdict/i);
 });
 
 test("a cancelled record is INCONCLUSIVE, not FAIL (BI-51353470)", () => {
@@ -422,4 +704,525 @@ test("a candidateSha/HEAD mismatch on an unfinished record is STALE in the headl
     now: NOW,
   });
   assert.equal(lines[0], "local-CI gate: STALE");
+});
+
+// BI-5529B5AC: once another slot PASSES the same branch+SHA, the losing
+// record is rewritten as `superseded`. That is not a verdict on the diff — it
+// is bookkeeping — so it must read as INCONCLUSIVE and name the winner, never
+// as FAIL.
+test("a superseded slot record is INCONCLUSIVE and names the winning slot", () => {
+  const result = classifySlotRecord({
+    state: {
+      branch: "feat/x",
+      sha: HEAD,
+      gatePassed: false,
+      status: "superseded",
+      supersededStatus: "queued",
+      supersededBy: { slotKey: "slot-1", at: "2026-09-03T01:00:00.000Z" },
+    },
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+  });
+  assert.equal(result.verdict, "INCONCLUSIVE");
+  assert.match(result.reason, /superseded/);
+  assert.match(result.reason, /slot-1/);
+});
+
+// BI-A9031FF3: the winner is re-read, not trusted. Observed 2026-10-08: slot-0
+// said "slot-1 passed this SHA" while slot-1's own record had since become
+// blocked_control_plane_starvation — no slot held a pass, yet the reason said one did.
+const SUPERSEDED_BY_SLOT_1 = {
+  branch: "feat/x",
+  sha: HEAD,
+  gatePassed: false,
+  status: "superseded",
+  supersededStatus: "queued",
+  supersededBy: { slotKey: "slot-1", at: "2026-10-08T02:50:00.000Z" },
+};
+
+test("a superseded record whose winner no longer holds a pass does not claim one", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: { branch: "feat/x", sha: HEAD, gatePassed: false, status: "blocked_control_plane_starvation" },
+  });
+  assert.equal(result.verdict, "INCONCLUSIVE");
+  assert.doesNotMatch(result.reason, /passed/);
+  assert.match(result.reason, /slot-1/);
+  assert.match(result.reason, /blocked_control_plane_starvation/);
+  assert.match(result.reason, /reconcile/i);
+});
+
+test("a superseded record whose winner record is gone says so instead of claiming a pass", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: null,
+  });
+  assert.doesNotMatch(result.reason, /passed/);
+  assert.match(result.reason, /no record/);
+});
+
+test("a superseded record whose winner still passed this SHA keeps the passed wording", () => {
+  const result = classifySlotRecord({
+    state: SUPERSEDED_BY_SLOT_1,
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "feat/x",
+    now: NOW,
+    supersedingWinner: { branch: "feat/x", sha: HEAD, gatePassed: true, status: "passed" },
+  });
+  assert.match(result.reason, /slot-1 passed this SHA/);
+});
+
+test("reconciliation still prefers the PASS over a superseded sibling", () => {
+  const passed = {
+    slotKey: "slot-1",
+    ...classifySlotRecord({
+      state: { branch: "feat/x", sha: HEAD, gatePassed: true, status: "passed", expiresAt: "2026-08-04T13:00:00.000Z" },
+      metadata: { candidateSha: HEAD },
+      headSha: HEAD,
+      headBranch: "feat/x",
+      now: NOW,
+    }),
+  };
+  const superseded = {
+    slotKey: "slot-0",
+    ...classifySlotRecord({
+      state: { branch: "feat/x", sha: HEAD, gatePassed: false, status: "superseded", supersededBy: { slotKey: "slot-1" } },
+      metadata: null,
+      headSha: HEAD,
+      headBranch: "feat/x",
+      now: NOW,
+    }),
+  };
+  const result = reconcileSlots([superseded, passed]);
+  assert.equal(result.verdict, "PASS");
+  assert.equal(result.slot, "slot-1");
+});
+
+test("a run released mid-flight reads INCONCLUSIVE, never FAIL (BI-8A136F4E)", () => {
+  // The gate writes status "running" when it starts the long stage and only
+  // overwrites it on a verdict. A record left at "running" was preempted or is
+  // still in flight — it graded nothing. Falling through to FAIL turned "your
+  // run lost the slot" into "your code is broken", the exact inversion
+  // AGENTS.md §4 forbids, and blocked pushes for branches whose own logs
+  // recorded no failing command.
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "running", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /has not recorded a verdict/);
+  assert.match(r.reason, /not a failure of the code/i);
+});
+
+test("a running record parked behind a CLOSED pool still names the host pressure", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "running",
+      evidenceRecordId: "",
+      admission: {
+        queuePosition: 3,
+        poolPolicy: { effectiveCapacity: 0, rollbackReason: "host-cpu-high" },
+      },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /pool was CLOSED \(host-cpu-high\)/);
+});
+
+test("a released run still refuses the push — it proved nothing either way", () => {
+  // This fix corrects the CLAIM, not the gating. INCONCLUSIVE and FAIL share a
+  // non-zero exit deliberately: a run that graded nothing must not let a push
+  // through any more than a failing one does. What changes is that the operator
+  // is no longer told their diff failed when it was never examined.
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "running", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.notEqual(exitCodeForVerdict(r.verdict), 0);
+});
+
+test("a genuinely finished failing run is still FAIL", () => {
+  // The fix must not launder real failures into INCONCLUSIVE.
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "failed", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "FAIL");
+});
+
+// BI-53B189C8. `DPF_ALLOW_LOCAL_CI_STUB=1` exercises the gate's lease and
+// evidence plumbing without building anything, and its record says
+// status "passed", gatePassed true. Bound to the real HEAD and branch it read as
+// PASS here, and this reader is the pre-push hook's verdict. The stub marks its
+// record; a marked record is never evidence for a push, whatever it binds to.
+test("a test-stub record bound to THIS head and branch is not a PASS", () => {
+  const r = classifySlotRecord({
+    state: passingState({ testStub: true }),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.notEqual(r.verdict, "PASS");
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /DPF_ALLOW_LOCAL_CI_STUB/);
+  assert.match(r.reason, /not evidence/);
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("a test-stub record names itself even after HEAD has moved past it", () => {
+  // Observed 2026-09-24: a fixture record reported as an ordinary STALE gate,
+  // quoting the fixture's evidence id as if a real run had produced it.
+  const r = classifySlotRecord({
+    state: passingState({ sha: OLD, branch: "fix/admitted-owner-recovery", testStub: true }),
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /test stub/i);
+  assert.match(r.reason, /fix\/admitted-owner-recovery/);
+});
+
+test("a real PASS in the sibling slot still wins over a test-stub record", () => {
+  const stub = classifySlotRecord({
+    state: passingState({ testStub: true }),
+    metadata: null,
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  const real = classifySlotRecord({
+    state: passingState(),
+    metadata: { candidateSha: HEAD },
+    headSha: HEAD,
+    headBranch: "claude/topic",
+    now: NOW,
+  });
+  const best = reconcileSlots([
+    { slotKey: "slot-0", ...stub },
+    { slotKey: "slot-1", ...real },
+  ]);
+  assert.equal(best.verdict, "PASS");
+  assert.equal(best.slot, "slot-1");
+});
+
+// BI-27A37D27: a queued record whose waiter is dead is not a queue. Saying
+// "queued" sent sessions to wait hours on a claim nothing would ever run.
+test("a queued claim with no live waiter says so instead of 'queued'", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: false, pids: [53956] },
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /no waiter is alive/i);
+  assert.match(r.reason, /53956/);
+  assert.match(r.reason, /resume|reconcile/i);
+});
+
+test("a queued claim with a live waiter keeps the queued wording", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "queued", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: true, pids: [1] },
+  });
+  assert.doesNotMatch(r.reason, /no waiter is alive/i);
+});
+
+// BI-27A37D27: "admitted" is written when the slot is granted and stays while
+// the stages run. Headlining it as FAIL stopped callers mid-run (observed live:
+// a gate reported FAIL while its log was inside check-guards).
+test("an admitted record is an in-flight run, never a FAIL", () => {
+  const r = classifySlotRecord({
+    state: passingState({ gatePassed: false, status: "admitted", evidenceRecordId: "" }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /has not recorded a verdict/);
+});
+
+// BI-277ECBDB (B): "queued" and "the substrate is dead" used the same words, so
+// nobody could tell "wait" from "this cannot work". They must read differently.
+test("a plain queued claim says how many claims are ahead of it", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "queued",
+      evidenceRecordId: "",
+      leaseEvents: [{ type: "queued", queuePosition: 4 }],
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+    queuedWaiter: { checked: true, alive: true, pids: [1] },
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /queued behind 3 other claim/i);
+});
+
+test("an unavailable slot substrate is BLOCKED, names the container, and does not advise a re-run", () => {
+  const r = classifySlotRecord({
+    state: passingState({
+      gatePassed: false,
+      status: "blocked_slot_substrate_unavailable",
+      evidenceRecordId: "",
+      substrate: { container: "dpf-local-ci-postgres-1", state: "exited (255)", remedy: "the platform substrate reconciler or `docker start dpf-local-ci-postgres-1` brings it back" },
+    }),
+    metadata: null,
+    headSha: HEAD,
+    now: NOW,
+  });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.match(r.reason, /^BLOCKED — slot substrate unavailable: dpf-local-ci-postgres-1 is exited \(255\)/);
+  assert.doesNotMatch(r.reason, /re-run/i);
+  assert.equal(r.rerun, false);
+  const lines = formatStatusReport(r, { headBranch: "topic", headSha: HEAD, now: NOW });
+  assert.ok(!lines.some((l) => l.includes("pnpm run pregate")), "a substrate block must not advise a re-run");
+  assert.ok(lines.some((l) => /next\s+.*dpf-local-ci-postgres-1/.test(l)), "it names the remedy instead");
+});
+
+test("raw gate state remains visible while metadata belongs to an older run", () => {
+  const result = classifySlotRecord({ state: { sha: HEAD, branch: "codex/topic", status: "admitted" },
+    metadata: { candidateSha: OLD }, headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  assert.equal(result.verdict, "STALE");
+  assert.equal(result.gateStatus, "admitted");
+});
+
+test("status JSON carries the active claim through stale metadata and names durable observation", () => {
+  const result = classifySlotRecord({ state: { sha: HEAD, branch: "codex/topic", status: "admitted" },
+    metadata: { candidateSha: OLD }, headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  const report = projectGateStatus(result, { headSha: HEAD, headBranch: "codex/topic", worktreePath: "/source" });
+  assert.equal(JSON.parse(JSON.stringify(report, null, 2)).gateStatus, "admitted");
+  const lines = formatStatusReport(result, { headSha: HEAD, headBranch: "codex/topic", now: NOW });
+  assert.ok(lines.some(line => line.includes("durable")));
+  assert.ok(!lines.some(line => line.includes("pnpm run pregate ")));
+});
+
+test('unfinished current claims consistently recommend durable observation or reconciliation', () => {
+  for (const status of ['queued', 'admitted', 'running']) {
+    for (const extra of [{}, { queuedWaiter: { checked: true, alive: false, pids: [1] } }, { stateExtra: { leaseEvents: [{ type: 'queued', poolClosedReason: 'host-memory-low' }] } }]) {
+      const result = classifySlotRecord({ state: passingState({ status, gatePassed: false, ...extra.stateExtra }), headSha: HEAD, headBranch: 'claude/topic', now: NOW, queuedWaiter: extra.queuedWaiter });
+      assert.doesNotMatch(result.reason, /re-run pregate|rerun pregate/i);
+      assert.match(result.reason, /observe|resume|reconcile|waiter runs/i);
+    }
+  }
+});
+
+// BI-FCC1DCB2. A candidate that does not merge onto origin/main is the author's
+// to fix, and the fix is not a re-run: name the paths and the merge to do.
+test("a merge conflict with the base is a FAIL that names the paths and the merge remedy", () => {
+  const mergeConflict = { mergedRef: HEAD, baseRef: "origin/main", paths: ["agent_registry.json", "apps/web/lib/tak/coworker-grants.ts"] };
+  const state = passingState({
+    status: "conflict",
+    gatePassed: false,
+    evidenceRecordId: "",
+    mergeConflict,
+    failureReason: "local-CI gate stopped before grading: the candidate does not merge cleanly onto origin/main.",
+  });
+  const result = classifySlotRecord({ state, metadata: { candidateSha: HEAD }, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+
+  assert.equal(result.verdict, "FAIL");
+  assert.doesNotMatch(result.reason, /infrastructure|starvation/i);
+  assert.match(result.reason, /merge conflict with origin\/main/);
+  assert.match(result.reason, /agent_registry\.json, apps\/web\/lib\/tak\/coworker-grants\.ts/);
+
+  const lines = formatStatusReport(result, { headSha: HEAD, headBranch: "claude/topic", now: NOW });
+  assert.ok(
+    lines.includes("  next        merge origin/main into your branch and resolve: agent_registry.json, apps/web/lib/tak/coworker-grants.ts"),
+    lines.join("\n"),
+  );
+  assert.ok(!lines.some((line) => line.includes("pnpm run pregate ")), "re-running the gate cannot fix a conflict");
+});
+
+test("a merge-conflict record falls back to this run's metadata for the paths", () => {
+  const state = passingState({ status: "conflict", gatePassed: false, evidenceRecordId: "", leaseId: "NPEL-1" });
+  const metadata = { candidateSha: HEAD, runLeaseId: "NPEL-1", execution: { mergeConflict: { paths: ["f.txt"] } } };
+  const result = classifySlotRecord({ state, metadata, headSha: HEAD, headBranch: "claude/topic", now: NOW });
+  assert.equal(result.verdict, "FAIL");
+  assert.equal(result.remedy, "merge origin/main into your branch and resolve: f.txt");
+});
+
+test('terminal or uncertain current claims never recommend unqualified replacement', () => {
+  for (const status of ['failed', 'blocked_source_drift', 'blocked_control_plane_starvation', 'cancelled', 'released']) {
+    for (const metadata of [null, { candidateSha: OLD, execution: { status: 'passed' } }]) {
+      const result = classifySlotRecord({ state: passingState({ status, gatePassed: false, evidencePending: true }), metadata, headSha: HEAD, headBranch: 'claude/topic', now: NOW });
+      assert.doesNotMatch(result.reason, /re-run|rerun/i);
+      assert.match(result.reason, /stop.*reconcile/i);
+    }
+  }
+});
+
+// ── BI-F039AA83: a live gate is never reported as terminal ───────────────────
+
+const liveMarker = (overrides = {}) => ({
+  pid: 4144, stage: "preflight", branch: "claude/topic", sha: HEAD,
+  startedAt: "2026-08-04T11:59:00.000Z", stageAt: "2026-08-04T11:59:00.000Z", ...overrides,
+});
+const head = { headSha: HEAD, headBranch: "claude/topic" };
+const NO_RECORD = { verdict: "NO-RECORD", reason: "no gate record for this worktree — pregate has not run here", slot: null };
+const recordFor = (status, extra = {}) => ({
+  ...classifySlotRecord({
+    state: passingState({ gatePassed: false, status, evidenceRecordId: "", ...extra }),
+    metadata: null, headSha: HEAD, headBranch: "claude/topic", now: NOW,
+  }),
+  slot: "slot-0",
+});
+
+test("live: preflight running before any gate record is PREFLIGHT with its pid, never NO-RECORD (Codex 2026-10-28)", () => {
+  const r = applyLiveGate(NO_RECORD, { live: liveMarker(), ...head });
+  assert.equal(r.verdict, "PREFLIGHT");
+  assert.equal(r.live.pid, 4144);
+  assert.match(r.live.stage, /preflight/);
+  assert.doesNotMatch(r.reason, /has not run/);
+  assert.equal(exitCodeForVerdict(r.verdict), 75);
+});
+
+test("live: a re-run in preflight over an earlier FAIL record for HEAD is PREFLIGHT, not FAIL", () => {
+  const failed = recordFor("failed", { failureReason: "vitest failed" });
+  assert.equal(failed.verdict, "FAIL");
+  const r = applyLiveGate(failed, { live: liveMarker(), ...head });
+  assert.equal(r.verdict, "PREFLIGHT");
+  assert.equal(r.priorVerdict, "FAIL");
+});
+
+test("live: an admitted record with a live gate process is ADMITTED, not FAIL or INCONCLUSIVE", () => {
+  const r = applyLiveGate(recordFor("admitted"), {
+    queuedWaiter: { checked: true, alive: true, pids: [15776], alivePids: [15776] }, ...head,
+  });
+  assert.equal(r.verdict, "ADMITTED");
+  assert.equal(r.live.pid, 15776);
+  assert.equal(exitCodeForVerdict(r.verdict), 75);
+});
+
+test("live: a running record under a live pregate is RUNNING and names the stage", () => {
+  const r = applyLiveGate(recordFor("running"), { live: liveMarker({ stage: "gate" }), ...head });
+  assert.equal(r.verdict, "RUNNING");
+  assert.equal(r.live.pid, 4144);
+  assert.match(r.live.stage, /sandbox/);
+});
+
+test("live: a queued record with a live waiter is QUEUED with its queue position", () => {
+  const queued = recordFor("queued", { leaseEvents: [{ type: "queued", queuePosition: 3 }] });
+  const r = applyLiveGate(queued, { queuedWaiter: { checked: true, alive: true, pids: [77], alivePids: [77] }, ...head });
+  assert.equal(r.verdict, "QUEUED");
+  assert.equal(r.live.queuePosition, 3);
+  assert.match(r.reason, /position 3/);
+});
+
+test("live: pregate past preflight with no record yet for HEAD is QUEUED (requesting admission)", () => {
+  const r = applyLiveGate(NO_RECORD, { live: liveMarker({ stage: "gate" }), ...head });
+  assert.equal(r.verdict, "QUEUED");
+  assert.equal(r.live.queuePosition, null);
+});
+
+test("live: an admitted record whose gate process is gone stays INCONCLUSIVE — not live, not FAIL", () => {
+  const r = applyLiveGate(recordFor("admitted"), { queuedWaiter: { checked: true, alive: false, pids: [9], alivePids: [] }, ...head });
+  assert.equal(r.verdict, "INCONCLUSIVE");
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("live: a recorded FAIL with no live gate stays FAIL (exit 1)", () => {
+  const r = applyLiveGate(recordFor("failed", { failureReason: "tsc" }), { ...head });
+  assert.equal(r.verdict, "FAIL");
+  assert.equal(exitCodeForVerdict(r.verdict), 1);
+});
+
+test("live: a PASS for HEAD is never downgraded by a live re-run", () => {
+  const pass = { ...classifySlotRecord({ state: passingState(), metadata: null, headSha: HEAD, now: NOW }), slot: "slot-0" };
+  assert.equal(applyLiveGate(pass, { live: liveMarker(), ...head }).verdict, "PASS");
+});
+
+test("live: a pregate gating another SHA does not stand in for HEAD", () => {
+  const r = applyLiveGate(NO_RECORD, { live: liveMarker({ sha: OLD }), ...head });
+  assert.equal(r.verdict, "NO-RECORD");
+  assert.match(r.reason, /pid 4144/);
+  assert.match(r.reason, /not HEAD/);
+});
+
+test("live verdicts are the four non-terminal words and print pid, stage and the wait instruction", () => {
+  assert.deepEqual([...PREGATE_LIVE_VERDICTS], ["PREFLIGHT", "QUEUED", "ADMITTED", "RUNNING"]);
+  const queued = recordFor("queued", { leaseEvents: [{ type: "queued", queuePosition: 2 }] });
+  const r = applyLiveGate(queued, { live: liveMarker({ stage: "gate" }), ...head });
+  const text = formatStatusReport(r, { ...head, now: NOW }).join("\n");
+  assert.match(text, /^local-CI gate: QUEUED/);
+  assert.match(text, /pid\s+4144/);
+  assert.match(text, /queue\s+position 2/);
+  assert.match(text, /next\s+wait/);
+  assert.doesNotMatch(text, /FAIL|NO-RECORD/);
+});
+
+test("live marker: written, staged and read back while its process is alive; removed only by its owner", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-pregate-live-"));
+  try {
+    const path = join(dir, "dpf-pregate-live.json");
+    const alive = () => ({ alive: true });
+    writePregateLiveMarker({ path, branch: "claude/topic", sha: HEAD, pid: 4144, startedAt: "2026-08-04T11:59:00.000Z" });
+    assert.equal(readLivePregate({ path, observerAlive: alive }).stage, "preflight");
+    assert.equal(updatePregateLiveStage({ path, stage: "gate", pid: 999 }), null, "another pid cannot restage it");
+    updatePregateLiveStage({ path, stage: "gate", pid: 4144 });
+    assert.equal(readLivePregate({ path, observerAlive: alive }).stage, "gate");
+    assert.equal(readLivePregate({ path, observerAlive: () => ({ alive: false }) }), null, "a dead or recycled pid is not live");
+    assert.equal(removePregateLiveMarker({ path, pid: 999 }), false);
+    assert.equal(removePregateLiveMarker({ path, pid: 4144 }), true);
+    assert.equal(readLivePregate({ path, observerAlive: alive }), null);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("live marker: a second pregate is refused with a pointer at the running one", () => {
+  assert.equal(liveGateRefusal(null), null);
+  assert.match(liveGateRefusal(liveMarker()), /already running.*pid 4144.*pregate:status/s);
+});
+
+// Observed live 2026-11-03: slot-0 held this HEAD's queued claim (pool closed,
+// detached resumer alive) while slot-1 still held a 5-day-old record for the
+// pre-rebase SHA. Reconciliation ranks STALE above the queued claim, so the
+// overlay must look for HEAD's in-flight record across every slot.
+test("live: a queued claim for HEAD in one slot is QUEUED even when another slot's stale record wins reconciliation", () => {
+  const stale = { ...classifySlotRecord({
+    state: passingState({ sha: OLD, gatePassed: false, status: "running", evidenceRecordId: "" }),
+    metadata: null, headSha: HEAD, headBranch: "claude/topic", now: NOW,
+  }), slotKey: "slot-1" };
+  const queued = { ...recordFor("queued", { leaseEvents: [{ type: "queued", queuePosition: 3 }] }), slotKey: "slot-0" };
+  const slots = [queued, stale];
+  const reconciled = reconcileSlots(slots);
+  assert.equal(reconciled.verdict, "STALE");
+  const r = applyLiveGate(reconciled, {
+    slots, queuedWaiter: { checked: true, alive: true, pids: [52976], alivePids: [52976] }, ...head,
+  });
+  assert.equal(r.verdict, "QUEUED");
+  assert.equal(r.live.queuePosition, 3);
+  assert.equal(r.live.pid, 52976);
+  assert.equal(r.slot, "slot-0");
 });

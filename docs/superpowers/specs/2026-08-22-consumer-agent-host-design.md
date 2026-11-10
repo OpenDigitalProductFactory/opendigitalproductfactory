@@ -6,6 +6,7 @@ status: binding
 
 **Date:** 2026-08-22  
 **Status:** approved for implementation  
+**Amendment:** 2026-08-24 interaction-shape clarification is pending fresh P0 review; the approved self-upgrade contract is unchanged
 **Backlog:** BI-11D611B3, BI-DD7DC141  
 **Workroom:** WC-E08BD92F  
 **Kernel decisions:** DI-06201F1778E9, DI-88D1C6E4B937
@@ -30,15 +31,23 @@ can nevertheless describe that pipeline as enabled, eligible, or up to date.
 `DI-06201F1778E9` selected `mcp-plus-pointer` at 0.9 confidence with no
 principle conflict.
 
-- MCP instructions are the behavioral source of truth. They are generated from
-  the served install profile and the token's effective authority, so they cannot
-  drift from the running platform.
-- A minimal `AGENTS.md` is shipped as a consumer release asset. It identifies the
-  directory as runtime material, forbids treating it as a source checkout, and
-  points the agent to the MCP instructions. It does not duplicate contributor
-  doctrine.
-- The existing progressive-disclosure bootstrap remains first in the instruction
-  string. Host orientation follows it, then organization context.
+The P0 operating-profile design at
+`2026-08-23-external-agent-operating-profile-design.md` mechanically supersedes
+the agent-contract, instruction-ordering, release-pointer, and corresponding
+acceptance-criterion details in this document. The self-upgrade support projection
+and every unrelated decision below remain binding.
+
+- MCP `initialize` instructions are the bootstrap transport. The authenticated,
+  principal-bound `operating_profile_get` result is the behavioral operating
+  source of truth and is generated from canonical install, organization, and
+  effective-authority inputs.
+- A minimal generated `AGENTS.md` remains a consumer release asset. It identifies
+  runtime material, forbids treating the install as source, carries release-bound
+  schema compatibility metadata, and points the agent to the authenticated
+  operating profile. It does not duplicate contributor doctrine or authority.
+- The initialize instruction string directs a capable client to fetch and obey
+  the operating profile before `load_tools`. Existing host and organization prose
+  remains as a compatibility projection from the same canonical inputs.
 
 A full file contract was rejected because it would fork contributor rules into a
 release artifact. MCP-only was rejected because instruction-aware clients that
@@ -64,8 +73,10 @@ overlay preservation, migrations, activation, rollback, or Windows recovery.
 ## Research and benchmarking
 
 - MCP 2025-11-25 defines initialization as the first client/server interaction
-  and provides server `instructions` in the initialize result. DPF adopts that
-  protocol seam instead of a client-specific prompt wrapper:
+  and provides server `instructions` in the initialize result. DPF uses that
+  protocol seam to direct the client to the authenticated operating profile,
+  rather than treating duplicated prose as the authority or adding a
+  client-specific prompt wrapper:
   <https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle> and
   <https://modelcontextprotocol.io/specification/2025-11-25/schema>.
 - The newer MCP discovery proposal returns server instructions through
@@ -115,27 +126,51 @@ Custom tokens are classified by their effective grants. Instructions describe
 the ceiling and required workflow but never broaden authorization; tool dispatch
 continues to enforce the existing scope/grant intersection.
 
+The authority tier does not select the agent's use shape. The operating profile
+derives `business-operations` versus `platform-development` from confirmed
+primary/secondary installation purpose, then applies the token/grant intersection
+inside that context. A development-capable token cannot silently turn a customer
+business interaction into source work, and a declared `evolve-dpf` purpose does
+not grant development authority.
+
 ### Instruction ordering
 
 The initialize result is composed in this order:
 
-1. existing bounded `load_tools`/catalog recovery contract;
-2. install-mode and effective-authority host contract;
-3. existing organization context and decision routing.
+1. fetch `operating_profile_get` before any business or platform action and stop
+   when it is unavailable or incompatible;
+2. obey its active brakes and refresh on its invalidators;
+3. begin in the profile's default interaction shape and enter an alternate only
+   when the profile advertises it and the task explicitly requires it;
+4. use the existing bounded `load_tools`/catalog recovery contract only after
+   orientation identifies the relevant capability;
+5. render compatibility host and organization context from the same canonical
+   inputs for clients that do not call the profile tool.
 
-The consumer contract tells an external development agent to coordinate through
-MCP and use a separate source checkout/worktree for code. It explicitly forbids
-editing the installed Compose/scripts as if they were the repository.
+The consumer contract is business-first. For a normal customer installation it
+routes the agent to organization purpose, WWWD business judgment, WSID profession
+practice, authorized Work Cases, and business outcome Workrooms. It does not lead
+with backlog, worktree, PR, CI, or Build Studio instructions.
+
+When the installation explicitly declares `evolve-dpf` as a primary or secondary
+purpose and the task enters that available shape, the same contract tells the
+external development agent to coordinate through MCP and use a separate governed
+source checkout/worktree for code. It explicitly forbids editing the installed
+Compose/scripts as if they were the repository. Purpose, environment class,
+source capability, and token authority remain independent facts.
 
 ### Release pointer
 
-`config/consumer-install/agent-pointer.md` is copied into
-`/dpf-release-assets/AGENTS.md`
-and covered by the release-asset contract test and checksum manifest. Installers
-already extract and verify the entire release-asset bundle, so no second copy
-list is introduced. The neutral source filename is deliberate: it must not become
-an active nested `AGENTS.md` that overrides the repository rulebook while source
-is being edited. The pointer contains no operational details that could drift.
+`config/consumer-install/agent-pointer.md` remains the neutral source template for
+the installer-owned generated `/dpf-release-assets/AGENTS.md`. Generation projects
+the canonical profile-schema version, schema digest, digest algorithm, and
+installer-owned release-image digest, plus the exact MCP discovery and fail-closed
+recovery rules. The generated asset is covered by the release-asset contract test
+and checksum manifest. Installers already extract and verify the entire
+release-asset bundle, so no second copy list is introduced. The neutral source
+filename must not become an active nested `AGENTS.md` that overrides the repository
+rulebook while source is being edited. It contains no principal-bound profile or
+authority digest and cannot grant authority.
 
 ### Self-upgrade support projection
 
@@ -189,10 +224,12 @@ established.
 
 ## Acceptance criteria
 
-1. Every consumer release contains the minimal root pointer and checksum coverage.
-2. MCP initialize instructions identify consumer/source/unknown mode and the
-   token's effective authority before organization context, without displacing
-   the existing progressive-disclosure prefix.
+1. Every consumer release contains the minimal generated root pointer, its
+   profile-schema and release identities, and checksum coverage.
+2. MCP initialize instructions direct capable clients to fetch the authenticated
+   operating profile before `load_tools`; compatibility host and organization
+   prose is formatted from the same canonical inputs and never overrides the
+   profile.
 3. Consumer instructions say runtime assets are not a source checkout and route
    code work to a separate governed checkout/worktree.
 4. Consumer self-upgrade is effectively disabled and ineligible across the
@@ -201,3 +238,6 @@ established.
    Git target could not be resolved.
 6. Source-backed contributor behavior and authorization enforcement remain green.
 7. Unit, route, release-asset, owner UI, style, build, and exact-tree gates pass.
+8. Customer/business-purpose profiles lead with WWWD/WSID Work Case operation and
+   suppress development-workroom concepts until an explicit, available
+   `platform-development` shape is selected.

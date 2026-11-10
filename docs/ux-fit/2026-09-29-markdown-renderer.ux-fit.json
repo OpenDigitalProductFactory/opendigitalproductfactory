@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "visual-parity-port",
+  "decisionInteractionId": "DI-13C0D245A382",
+  "scope": {
+    "files": [
+      "apps/web/components/docs/DocRenderer.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["visual-parity-port", "shared-prose-restyle", "unstyled-default"]
+  }
+}

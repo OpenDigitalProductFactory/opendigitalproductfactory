@@ -8,6 +8,7 @@ function deps(overrides: Partial<WriteThroughDeps> = {}): WriteThroughDeps {
     adoptOption: vi.fn(async () => {}),
     ruleWeight: vi.fn(async () => ({ applied: true })),
     recordNoChange: vi.fn(async () => {}),
+    releaseHeldMaterial: vi.fn(async () => ({ ok: true as const, data: 4 })),
     ...overrides,
   };
 }
@@ -112,13 +113,37 @@ describe("applyAcceptedProposal", () => {
   });
 
   it("refuses an action kind whose write path is not wired, rather than reporting a silent success", async () => {
-    for (const actionKind of ["amend_stance", "release_material"] as const) {
-      const result = await applyAcceptedProposal(deps(), {
-        actionKind,
-        payload: { slug: "some-page" },
-        interactionRowId: "row-1",
-      });
-      expect(result.ok).toBe(false);
-    }
+    const result = await applyAcceptedProposal(deps(), {
+      actionKind: "amend_stance",
+      payload: { slug: "some-page" },
+      interactionRowId: "row-1",
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  // BI-1A2FD647: the held-material release path.
+  it("releases a craft's held material and says how much reached the gate", async () => {
+    const d = deps();
+    const result = await applyAcceptedProposal(d, {
+      actionKind: "release_material",
+      payload: { profileId: "wsid-bookkeeping" },
+      interactionRowId: null,
+    });
+    expect(result).toMatchObject({ ok: true, data: expect.stringContaining("Released 4 held material row(s)") });
+    expect(d.releaseHeldMaterial).toHaveBeenCalledWith({ profileId: "wsid-bookkeeping" });
+  });
+
+  it("refuses a release that names no craft, and says so when nothing was held", async () => {
+    expect((await applyAcceptedProposal(deps(), {
+      actionKind: "release_material",
+      payload: { slug: "some-page" },
+      interactionRowId: "row-1",
+    })).ok).toBe(false);
+
+    const nothingHeld = await applyAcceptedProposal(
+      deps({ releaseHeldMaterial: async () => ({ ok: false as const, error: "no-held-material" }) }),
+      { actionKind: "release_material", payload: { profileId: "wsid-bookkeeping" }, interactionRowId: null },
+    );
+    expect(nothingHeld).toMatchObject({ ok: false, error: expect.stringContaining("nothing was released") });
   });
 });

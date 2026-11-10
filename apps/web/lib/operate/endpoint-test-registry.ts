@@ -2,7 +2,7 @@
 // Defines capability probes and task scenarios for the agent test harness.
 
 import type { PromptInput } from "@/lib/prompt-assembler";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

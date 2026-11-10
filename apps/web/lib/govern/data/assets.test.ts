@@ -7,8 +7,8 @@ import {
   lookupAsset,
   lookupAssetByPrismaModel,
   resolveField,
-  type DataAssetDefinition,
 } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 
 function baseAsset(overrides: Partial<DataAssetDefinition> = {}): DataAssetDefinition {
   return {

@@ -8,6 +8,7 @@ import {
   type WorkroomConversationParticipant,
   type WorkroomParticipantAssignment,
 } from "./room-participation";
+import { mapPersistedParticipantRow } from "./room-participant-assignment.server";
 import type { WorkspaceRoomParticipantLoader } from "./workspace-case-loader";
 
 type ResolvedPrincipal = {
@@ -109,61 +110,86 @@ export const loadPrismaWorkroomParticipants: WorkspaceRoomParticipantLoader = as
   );
   const assignments: WorkroomParticipantAssignment[] = [];
 
+  if (input.workroomIds.length > 0 && typeof prisma.workroomParticipant?.findMany === "function") {
+    const persisted = await prisma.workroomParticipant.findMany({
+      where: { workroomId: { in: [...input.workroomIds] }, lifecycle: "active" },
+      include: {
+        principal: {
+          select: {
+            principalId: true,
+            displayName: true,
+            kind: true,
+            authorityMode: true,
+            sponsorPrincipal: { select: { principalId: true, displayName: true } },
+          },
+        },
+      },
+    });
+    for (const row of persisted) {
+      assignments.push(mapPersistedParticipantRow(row));
+    }
+  }
+
   const policyPrincipalByRef = new Map(
     policyPrincipals.map((principal) => [principal.principalId, principal]),
   );
-  for (const participant of input.policyParticipants) {
-    const principal = policyPrincipalByRef.get(participant.principalRef);
-    if (!principal) continue;
-    assignments.push({
-      principalRef: principal.principalId,
-      displayName: principal.displayName,
-      kind: principal.kind === "agent"
-        ? "agent"
-        : principal.kind === "system" || principal.kind === "service"
-          ? "system"
-          : "person",
-      roles: [...participant.roles],
-      currentWorkSummary: participant.currentWorkSummary,
-      enteredReason: participant.enteredReason ?? "Named in this room's participation policy",
-      sponsorPrincipalRef: principal.sponsorPrincipal?.principalId ?? null,
-      sponsorDisplayName: principal.sponsorPrincipal?.displayName ?? null,
-      authoritySummary: authoritySummary(principal),
-    });
-  }
+  if (assignments.length === 0) {
+    for (const participant of input.policyParticipants) {
+      const principal = policyPrincipalByRef.get(participant.principalRef);
+      if (!principal) continue;
+      assignments.push({
+        principalRef: principal.principalId,
+        displayName: principal.displayName,
+        kind: principal.kind === "agent"
+          ? "agent"
+          : principal.kind === "system" || principal.kind === "service"
+            ? "system"
+            : "person",
+        roles: [...participant.roles],
+        currentWorkSummary: participant.currentWorkSummary,
+        enteredReason: participant.enteredReason ?? "Named in this room's participation policy",
+        sponsorPrincipalRef: principal.sponsorPrincipal?.principalId ?? null,
+        sponsorDisplayName: principal.sponsorPrincipal?.displayName ?? null,
+        authoritySummary: authoritySummary(principal),
+        assignmentSource: "explicit",
+      });
+    }
 
-  const assignedPerson = input.assignedToUserId
-    ? principalByAlias.get(`user:${input.assignedToUserId}`)
-    : null;
-  if (assignedPerson) {
-    assignments.push({
-      principalRef: assignedPerson.principalId,
-      displayName: assignedPerson.displayName,
-      kind: "person",
-      roles: ["accountable"],
-      currentWorkSummary: input.title,
-      enteredReason: "Assigned to this room's work",
-      sponsorPrincipalRef: null,
-      sponsorDisplayName: null,
-      authoritySummary: authoritySummary(assignedPerson),
-    });
-  }
+    const assignedPerson = input.assignedToUserId
+      ? principalByAlias.get(`user:${input.assignedToUserId}`)
+      : null;
+    if (assignedPerson) {
+      assignments.push({
+        principalRef: assignedPerson.principalId,
+        displayName: assignedPerson.displayName,
+        kind: "person",
+        roles: ["accountable"],
+        currentWorkSummary: input.title,
+        enteredReason: "Assigned to this room's work",
+        sponsorPrincipalRef: null,
+        sponsorDisplayName: null,
+        authoritySummary: authoritySummary(assignedPerson),
+        assignmentSource: "legacy",
+      });
+    }
 
-  const assignedAgent = input.assignedToAgentId
-    ? principalByAlias.get(`agent:${input.assignedToAgentId}`)
-    : null;
-  if (assignedAgent) {
-    assignments.push({
-      principalRef: assignedAgent.principalId,
-      displayName: assignedAgent.displayName,
-      kind: "agent",
-      roles: [assignedPerson ? "contributor" : "accountable"],
-      currentWorkSummary: input.title,
-      enteredReason: "Assigned to this room's work",
-      sponsorPrincipalRef: assignedAgent.sponsorPrincipal?.principalId ?? null,
-      sponsorDisplayName: assignedAgent.sponsorPrincipal?.displayName ?? null,
-      authoritySummary: authoritySummary(assignedAgent),
-    });
+    const assignedAgent = input.assignedToAgentId
+      ? principalByAlias.get(`agent:${input.assignedToAgentId}`)
+      : null;
+    if (assignedAgent) {
+      assignments.push({
+        principalRef: assignedAgent.principalId,
+        displayName: assignedAgent.displayName,
+        kind: "agent",
+        roles: [assignedPerson ? "contributor" : "accountable"],
+        currentWorkSummary: input.title,
+        enteredReason: "Assigned to this room's work",
+        sponsorPrincipalRef: assignedAgent.sponsorPrincipal?.principalId ?? null,
+        sponsorDisplayName: assignedAgent.sponsorPrincipal?.displayName ?? null,
+        authoritySummary: authoritySummary(assignedAgent),
+        assignmentSource: "legacy",
+      });
+    }
   }
 
   const conversationParticipants: WorkroomConversationParticipant[] = lineage.flatMap((participant) => {

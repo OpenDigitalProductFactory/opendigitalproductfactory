@@ -20,13 +20,13 @@ import {
   type TwinProfile,
 } from "@dpf/storefront-templates";
 
-import { buildDemoTwinSnapshot } from "@/components/twin/demo-snapshot";
-import type { TwinSnapshot } from "@/components/twin/snapshot";
+import { buildDemoTwinSnapshot } from "@/lib/twin/demo-twin-snapshot";
+import type { TwinSnapshot } from "@/lib/twin/twin-snapshot";
 import { loadVersionedOperationsSnapshot } from "@/lib/twin/operations-loader";
 import {
   toLivingBusinessSnapshot,
   type OperationsSnapshotTelemetry,
-} from "@/lib/twin/operations-snapshot";
+} from "@dpf/storefront-templates/operations";
 import {
   loadOrCreateRestaurantScene,
   type OperationalSceneLayoutDatabase,
@@ -280,6 +280,9 @@ export async function loadWorkspaceTwinPresentation(
       },
       scene,
       restaurantFloor,
+      ...(base.archetypeId === "pet-rescue" || base.archetypeId === "animal-shelter"
+        ? { roomsOperations: null, roomsOperationsDemo: false }
+        : {}),
       demo: false,
     };
   }

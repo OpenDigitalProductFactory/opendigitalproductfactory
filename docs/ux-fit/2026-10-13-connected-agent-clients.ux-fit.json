@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "plain-section-on-self-upgrade",
+  "decisionInteractionId": "DI-A8332D34DBA5",
+  "scope": {
+    "files": ["apps/web/components/ops/ConnectedAgentClients.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["plain-section-on-self-upgrade", "inside-advanced-disclosure", "new-agent-clients-route"]
+  }
+}

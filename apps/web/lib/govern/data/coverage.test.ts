@@ -6,7 +6,8 @@ import {
   computeCoverage,
   type SchemaModelFacts,
 } from "./coverage";
-import { buildAssetRegistry, type DataAssetDefinition } from "./assets";
+import { buildAssetRegistry } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { LegacyCoverageBaseline } from "./legacy-coverage-baseline";
 
 const MODELS: SchemaModelFacts[] = [

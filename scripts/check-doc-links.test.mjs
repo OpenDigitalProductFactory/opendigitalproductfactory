@@ -18,7 +18,6 @@ import { checkFile } from "./check-doc-links.mjs";
 
 // A minimal synthetic index so tests don't depend on the live corpus.
 const INDEX = {
-  pageCount: 4,
   pages: {
     "docs/user-guide/getting-started/agent-dev-environments.md": {
       publicHref: "/user-guide/getting-started/agent-dev-environments/",

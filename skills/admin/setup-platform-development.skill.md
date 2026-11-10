@@ -3,7 +3,7 @@ name: setup-platform-development
 description: "Help set up the platform development policy — contribution mode, governance, and sharing"
 category: admin
 assignTo: ["onboarding-coo"]
-capability: "manage_platform_config"
+capability: "manage_platform"
 taskType: "conversation"
 triggerPattern: "platform development|contribution|governance|sharing|fork|contribute"
 userInvocable: true

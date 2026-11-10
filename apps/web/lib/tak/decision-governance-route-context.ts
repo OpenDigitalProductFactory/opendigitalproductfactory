@@ -4,6 +4,7 @@ import {
   WWWD_ORGANIZATION_PROFILE_ID,
 } from "@/lib/decision/caller-context";
 import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
+import { humanEscalationWhere, isHumanEscalation } from "@/lib/decision-perspective/human-escalation";
 import {
   dedupeFounderReviewCandidates,
   isFounderActionable,
@@ -14,13 +15,12 @@ import {
 
 // EP-0AF96937 / BI-C888E1B6. The /coworker-decisions landing is the Decision
 // Governance hub: WWMD, WWWD, and WSID open reviews awaiting a human.
-const WIKI_UNRESOLVED_OUTCOMES = ["defer", "escalate"];
 
 function openDecisionReviewWhere(
   profileId?: Prisma.DecisionInteractionWhereInput["profileId"],
 ): Prisma.DecisionInteractionWhereInput {
   return {
-    outcomeType: { in: WIKI_UNRESOLVED_OUTCOMES },
+    AND: [humanEscalationWhere()],
     humanOutcome: { equals: Prisma.DbNull },
     question: { not: "" },
     // Mirror of isFounderActionable at the DB (BI-6EC1EE25): advisory
@@ -47,6 +47,8 @@ const openDecisionReviewSelect = {
   question: true,
   options: true,
   outcomeType: true,
+  escalationRoute: true,
+  escalationReason: true,
   outcomePayload: true,
   buildId: true,
   taskRunId: true,
@@ -59,6 +61,7 @@ const openDecisionReviewSelect = {
 
 function countUniqueOpenReviews(rows: DecisionInteractionQueueRow[]): number {
   const candidates = rows
+    .filter(isHumanEscalation)
     .filter((row) => !isBlankFounderReviewQuestion(row))
     .filter((row) => isFounderActionable(row))
     .map((row) => projectFounderReviewCandidate(row));

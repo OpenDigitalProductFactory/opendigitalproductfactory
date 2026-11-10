@@ -278,6 +278,14 @@ export function PlatformDevelopmentForm(props: PlatformDevelopmentFormProps) {
         </div>
       )}
 
+      {/* The "Connect GitHub" deep link (Needs-you item, token-expiry banner)
+          must land in every state. Until the card itself renders, the target
+          sits here, at the contribution decision that leads to it
+          (EP-2FB6C0CC, BI-BB74D6C6). */}
+      {!(isContributionMode && (wizardStep === "connect" || wizardStep === "done")) && (
+        <div id="connect-github" className="scroll-mt-4" />
+      )}
+
       {/* ─── Contribution Modes: Guided Wizard ──────────────────────────── */}
       {isContributionMode && wizardStep === "mode" && !isAlreadySetUp && (
         <div className="rounded-lg border border-[var(--dpf-accent)]/30 bg-[var(--dpf-accent)]/5 p-4">

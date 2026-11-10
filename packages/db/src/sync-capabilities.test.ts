@@ -4,6 +4,14 @@ import { join } from "path";
 import { RUNTIME_CAPABILITY_IDS, syncCapabilities, validateRuntimeCapabilitySeeds } from "./sync-capabilities";
 
 const canonicalSeed = JSON.parse(readFileSync(join(__dirname, "../data/platform-runtime-capabilities.json"), "utf8"));
+const runtimeCatalog = JSON.parse(readFileSync(join(__dirname, "../../../scripts/capability-service-catalog.generated.json"), "utf8"));
+async function coreOnlyHost() {
+  // @ts-expect-error - the canonical hash helper is runtime-native ESM without DB declarations.
+  const hashing = await import("../../../scripts/lib/capability-state-hash.mjs");
+  return { schemaVersion: 2, installerVersion: "fixture", platform: "linux", arch: "amd64", enabledRuntimeCapabilities: ["runtime:core"],
+    capabilityCatalogHash: runtimeCatalog.catalogHash,
+    capabilityStateVersion: hashing.computeCapabilityStateVersion(runtimeCatalog.catalogHash, ["runtime:core"], runtimeCatalog.capabilities.map((capability: { capabilityId: string }) => capability.capabilityId)) };
+}
 
 function prismaMock(existingState = "disabled") {
   const upsert = vi.fn();
@@ -55,10 +63,31 @@ describe("runtime capability synchronization", () => {
       call.where.capabilityId.startsWith("runtime:"));
     expect(runtimeCalls.every(([call]) => !("state" in call.update))).toBe(true);
     expect(Object.fromEntries(runtimeCalls.map(([call]) => [call.where.capabilityId, call.create.state])))
-      .toEqual(Object.fromEntries(canonicalSeed.capabilities.map((capability: { capabilityId: string; state: string }) => [capability.capabilityId, capability.state])));
+      .toEqual(Object.fromEntries(canonicalSeed.capabilities.map((capability: { capabilityId: string }) => [capability.capabilityId, "disabled"])));
     expect(runtimeCalls.every(([call]) => call.update.manifest.retained === true)).toBe(true);
     expect(mock.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
     expect(mock.$queryRaw).toHaveBeenCalledTimes(RUNTIME_CAPABILITY_IDS.length);
+  });
+
+  it("creates fresh runtime state from the validated host without activating seed defaults", async () => {
+    const mock = prismaMock(); mock.platformCapability.findUnique.mockResolvedValue(null);
+    await syncCapabilities(mock as never, { installState: coreOnlyHost });
+    const rows = mock.upsert.mock.calls.filter(([call]) => call.where.capabilityId.startsWith("runtime:"));
+    expect(Object.fromEntries(rows.map(([call]) => [call.create.capabilityId, call.create.state])))
+      .toEqual(Object.fromEntries(canonicalSeed.capabilities.map((capability: { capabilityId: string }) => [capability.capabilityId, capability.capabilityId === "runtime:core" ? "active" : "disabled"])));
+  });
+
+  it("preserves existing unknown operator intent without requiring bootstrap evidence", async () => {
+    const mock = prismaMock("operator-paused"), installState = vi.fn(async () => { throw new Error("fixture-absent"); });
+    await syncCapabilities(mock as never, { installState });
+    expect(installState).not.toHaveBeenCalled();
+    expect(mock.upsert.mock.calls.filter(([call]) => call.where.capabilityId.startsWith("runtime:")).every(([call]) => !("state" in call.update))).toBe(true);
+  });
+
+  it("refuses a fresh bootstrap when host hash is stale before creating runtime rows", async () => {
+    const mock = prismaMock(); mock.platformCapability.findUnique.mockResolvedValue(null);
+    await expect(syncCapabilities(mock as never, { installState: async () => ({ ...await coreOnlyHost(), capabilityStateVersion: "f".repeat(64) }) })).rejects.toThrow("runtime_bootstrap_host_stale");
+    expect(mock.upsert).not.toHaveBeenCalled();
   });
 
   it("syncs runtime rows when the platform tool snapshot is unavailable", async () => {

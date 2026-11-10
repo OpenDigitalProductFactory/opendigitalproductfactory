@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { LOCKFILE_ROOTS, rootFile } from "./sbom/lockfile-roots.mjs";
 import { readFile } from "node:fs/promises";
 
 import { isEntryModule } from "./lib/entry-module.mjs";
@@ -61,30 +62,37 @@ export function auditBuildScriptPolicy(text) {
 }
 
 async function main() {
-  const text = await readFile("pnpm-workspace.yaml", "utf8");
-  let result;
-  try {
-    result = auditBuildScriptPolicy(text);
-  } catch (error) {
-    console.error(`Build-script policy guard failed — ${error.message}`);
-    process.exitCode = 1;
-    return;
+  // Every lockfile root declares its own build-script decisions
+  // (scripts/sbom/lockfile-roots.mjs), so each workspace file is audited.
+  let scanned = 0;
+  for (const root of LOCKFILE_ROOTS) {
+    const file = rootFile(root, "pnpm-workspace.yaml");
+    const text = await readFile(file, "utf8");
+    let result;
+    try {
+      result = auditBuildScriptPolicy(text);
+    } catch (error) {
+      console.error(`Build-script policy guard failed (${file}) — ${error.message}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    if (result.unresolved.length > 0 || result.duplicates.length > 0) {
+      console.error(`Build-script policy guard failed (${file}) — every allowBuilds entry must have one explicit boolean decision.`);
+      for (const entry of result.unresolved) {
+        console.error(`  - ${entry.name}: unresolved value ${JSON.stringify(entry.value)}`);
+      }
+      for (const name of result.duplicates) {
+        console.error(`  - ${name}: duplicate decision`);
+      }
+      console.error("Set each package to true only after review, or false when its install script is unnecessary.");
+      process.exitCode = 1;
+      return;
+    }
+    scanned += result.scanned;
   }
 
-  if (result.unresolved.length > 0 || result.duplicates.length > 0) {
-    console.error("Build-script policy guard failed — every allowBuilds entry must have one explicit boolean decision.");
-    for (const entry of result.unresolved) {
-      console.error(`  - ${entry.name}: unresolved value ${JSON.stringify(entry.value)}`);
-    }
-    for (const name of result.duplicates) {
-      console.error(`  - ${name}: duplicate decision`);
-    }
-    console.error("Set each package to true only after review, or false when its install script is unnecessary.");
-    process.exitCode = 1;
-    return;
-  }
-
-  console.log(`Build-script policy guard passed (${result.scanned} explicit decisions).`);
+  console.log(`Build-script policy guard passed (${scanned} explicit decisions across ${LOCKFILE_ROOTS.length} workspace files).`);
 }
 
 if (isEntryModule(import.meta.url)) {

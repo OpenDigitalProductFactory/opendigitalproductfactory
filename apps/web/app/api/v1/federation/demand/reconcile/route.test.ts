@@ -33,7 +33,6 @@ function request(data: unknown = digest, type = "dpf.demand.reconcile"): NextReq
 
 beforeEach(() => {
   vi.resetAllMocks();
-  process.env.DPF_FEDERATION_EXCHANGE_ENABLED = "1";
   mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1" });
   mockCompare.mockResolvedValue({ checked: 1, needs: [{ originRecordRef: "ref_1", reason: "missing" }] });
   mockBindPeerIdentity.mockResolvedValue({ action: "bound", peerInstallationId: "inst_origin" });

@@ -7,6 +7,7 @@ import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummar
 import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
 import { loadOwnerFirstContext } from "@/lib/owner-first/context";
 import { buildCustomerOwnerSummary } from "@/lib/owner-first/domain-summary";
+import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
 import { isSimpleNavMode, NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { NewCustomerButton } from "@/components/customer/NewCustomerButton";
 import { DuplicateAccountsPanel } from "@/components/customer/DuplicateAccountsPanel";
@@ -23,6 +24,18 @@ import {
   classifyAccountAttention,
   sortAccountsByAttention,
 } from "@/lib/crm/account-attention";
+import { CustomerMapView } from "@/components/customer/map/CustomerMapView";
+import { GeocodingAdminPanel } from "@/components/customer/map/GeocodingAdminPanel";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { auth } from "@/lib/auth";
+import { loadCustomerMap } from "@/lib/crm/customer-map.server";
+import { readGeocodingSettings } from "@/lib/geocoding/backfill.server";
+import { loadMapRegionRecommendation } from "@/lib/twin/map-region-recommendation.server";
+import { isInstallRunning, readInstallStatus } from "@/lib/twin/map-pack-install/status.server";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
+import { getT } from "@/lib/i18n/t.server";
+import { can, getAccessibleSectionNavEntries } from "@/lib/permissions";
+import { namespaceMessages } from "@dpf/i18n";
 import {
   PlatformGridSection,
   parseSurfaceDataScope,
@@ -36,6 +49,8 @@ export default async function CustomerPage({
 }) {
   const sp = await searchParams;
   const view = parseSurfaceView(sp?.view);
+  // BI-560128FB: `?view=map` shows customer sites on a map above the account list.
+  const mapView = sp?.view === "map";
   const dataScope = parseSurfaceDataScope(sp?.dataScope);
   // Kick off the retain rollup in parallel with the main batch (avoids a serial round-trip).
   const retainPromise = getWorkspaceRetainMetrics();
@@ -194,7 +209,8 @@ export default async function CustomerPage({
   const simple = isSimpleNavMode(
     resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
   );
-  const [{ vocab }, pendingReservations, newInquiries, pendingOrders] = await Promise.all([
+  const [session, { vocab, archetypeId }, pendingReservations, newInquiries, pendingOrders] = await Promise.all([
+    auth(),
     loadOwnerFirstContext(),
     prisma.storefrontBooking.count({ where: { status: "pending" } }),
     prisma.storefrontInquiry.count({ where: { status: "new" } }),
@@ -203,6 +219,26 @@ export default async function CustomerPage({
   const unworkedEngagements = engagementCounts
     .filter((e) => e.status === "new" || e.status === "contacted")
     .reduce((sum, e) => sum + e._count, 0);
+  const user = session?.user;
+  const access = user ? { platformRole: user.platformRole, isSuperuser: user.isSuperuser } : null;
+  const allowed = (capability: Parameters<typeof can>[1]) => access ? can(access, capability) : false;
+  const accessibleTabs = access ? getAccessibleSectionNavEntries(access, "/customer") : [];
+  const salesVisible = resolveCustomerSurface(archetypeId, accessibleTabs)
+    .tabs.some((tab) => tab.href === "/customer/opportunities");
+  const opportunityFollowups = salesVisible ? await prisma.opportunity.findMany({
+    where: {
+      stage: { in: [...OPEN_OPPORTUNITY_STAGES] },
+      account: EXCLUDE_TOMBSTONED,
+      OR: [{ nextActivityAt: null }, { nextActivityAt: { lt: now } }],
+    },
+    orderBy: [
+      { nextActivityAt: { sort: "asc", nulls: "last" } },
+      { stageChangedAt: "asc" },
+      { id: "asc" },
+    ],
+    take: 3,
+    select: { id: true, title: true, stage: true, nextActivityAt: true, account: { select: { name: true } } },
+  }) : undefined;
   const ownerSummary = buildCustomerOwnerSummary(
     {
       pendingReservations,
@@ -211,17 +247,29 @@ export default async function CustomerPage({
       unworkedEngagements,
       overdueInvoices: overdueInvoiceCount,
       renewalsDueSoon: renewalsDueSoonCount,
+      opportunityFollowups,
+      now,
     },
     vocab,
   );
+  const customerSurface = resolveCustomerSurface(archetypeId, []);
+  const [mapT, locale] = await Promise.all([getT("customerMap"), getLocaleContext()]);
+  const [customerMap, geocoding, mapRegions, mapPackInstall] = mapView
+    ? await Promise.all([
+        loadCustomerMap(),
+        allowed("manage_platform") ? readGeocodingSettings() : null,
+        allowed("manage_platform") ? loadMapRegionRecommendation() : null,
+        allowed("manage_platform") ? readInstallStatus() : null,
+      ])
+    : [null, null, null, null];
 
   return (
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-[var(--dpf-text)]">Customer</h1>
+          <h1 className="text-xl font-bold text-[var(--dpf-text)]">{customerSurface.title}</h1>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-            {accounts.length} account{accounts.length !== 1 ? "s" : ""}
+            {accounts.length} {customerSurface.accountCountLabel}
             {attentionCount > 0 && (
               <>
                 {" · "}
@@ -232,22 +280,51 @@ export default async function CustomerPage({
             )}
           </p>
         </div>
-        <NewCustomerButton />
+        <NewCustomerButton copy={customerSurface.newEntry} />
       </div>
 
       {/* Owner-first: what guest work needs you today, before the CRM. */}
       <OwnerFirstSummaryBand summary={ownerSummary} density={simple ? "simple" : "full"} />
+
+      <p className="mb-3 text-sm">
+        <Link href={mapView ? "/customer" : "/customer?view=map"} className="text-[var(--dpf-accent)] underline">
+          {mapView ? mapT("hideMap") : mapT("showMap")}
+        </Link>
+      </p>
+      {customerMap ? (
+        <MessagesProvider
+          locale={locale.language}
+          messages={{
+            customerMap: namespaceMessages(locale.language, "customerMap"),
+            geographic: namespaceMessages(locale.language, "geographic"),
+          }}
+        >
+          <div className="mb-6 space-y-4">
+            <CustomerMapView map={customerMap} canEdit={allowed("operate_customer")} />
+            {geocoding ? (
+              <GeocodingAdminPanel
+                config={geocoding.config}
+                opencageKeyConfigured={geocoding.opencageKeyConfigured}
+                status={geocoding.status}
+                regions={mapRegions}
+                install={mapPackInstall}
+                installRunning={mapPackInstall ? isInstallRunning(mapPackInstall) : false}
+              />
+            ) : null}
+          </div>
+        </MessagesProvider>
+      ) : null}
 
       {/* CRM structure — revenue, duplicates, pipeline grid, and the account list —
           is the professional detail behind the daily work. Full mode keeps it one
           click away; Simple mode drops it to reduce body content (BI-3BCAF95F). A
           grid/surface deep-link (`?view=`) still renders, opened, so the demotion
           never strands that navigation. */}
-      {(!simple || view) && (
+      {(!simple || view || mapView) && (
         <OwnerFirstDisclosure
-          summary="All CRM detail"
-          hint="Revenue, accounts, and pipeline"
-          defaultOpen={Boolean(view)}
+          summary={customerSurface.detailSummary}
+          hint={customerSurface.detailHint}
+          defaultOpen={Boolean(view) || mapView}
         >
           <RevenueCockpit summary={revenueSummary} />
 

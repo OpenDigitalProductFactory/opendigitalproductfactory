@@ -19,9 +19,10 @@ const PROVIDER_ACCOUNT_CLASSES = ["regular", "business-team", "enterprise", "unk
  */
 export async function updateProviderConnectionPosture(input: {
   providerId: string;
+  connectionId?: string;
   accountClass: (typeof PROVIDER_ACCOUNT_CLASSES)[number];
   noTraining: boolean | null;
-  enabledRegions: string[];
+  enabledRegions?: string[];
   zeroRetention?: boolean | null;
   regionalProcessing?: boolean | null;
   approvedUnderlyingProviderSlugs?: string[];
@@ -30,18 +31,21 @@ export async function updateProviderConnectionPosture(input: {
   if (!PROVIDER_ACCOUNT_CLASSES.includes(input.accountClass)) {
     return { error: "Choose a valid account type" };
   }
-  const connectionId = `provider-default-${input.providerId}`;
+  const connectionId = input.connectionId ?? `provider-default-${input.providerId}`;
   const connection = await prisma.aiProviderConnection.findUnique({
     where: { connectionId },
-    select: { id: true, entitlements: true, evidenceStatus: true },
+    select: { id: true, providerId: true, entitlements: true, evidenceStatus: true },
   });
   if (!connection) return { error: "Provider connection not found" };
+  if (connection.providerId !== input.providerId) return { error: "Connection belongs to a different provider" };
   const existingEntitlements = connection.entitlements && typeof connection.entitlements === "object" && !Array.isArray(connection.entitlements)
     ? connection.entitlements as Record<string, unknown>
     : {};
   const reviewedAt = new Date();
   const expiresAt = new Date(reviewedAt.getTime() + 90 * 86_400_000);
-  const enabledRegions = [...new Set(input.enabledRegions.map((region) => region.trim().toLowerCase()).filter(Boolean))].sort();
+  const enabledRegions = input.enabledRegions == null
+    ? undefined
+    : [...new Set(input.enabledRegions.map((region) => region.trim().toLowerCase()).filter(Boolean))].sort();
   const approvedUnderlyingProviderSlugs = [...new Set(
     (input.approvedUnderlyingProviderSlugs ?? [])
       .map((slug) => slug.trim().toLowerCase())
@@ -56,10 +60,10 @@ export async function updateProviderConnectionPosture(input: {
       entitlements: {
         ...existingEntitlements,
         noTraining: input.noTraining,
-        enabledRegions,
+        ...(enabledRegions === undefined ? {} : { enabledRegions }),
+        ...(input.regionalProcessing === undefined ? {} : { regionalProcessing: input.regionalProcessing }),
         ...(input.providerId === "openrouter" ? {
           zeroRetention: input.zeroRetention ?? null,
-          regionalProcessing: input.regionalProcessing ?? null,
           approvedUnderlyingProviderSlugs,
         } : {}),
       },
@@ -83,12 +87,12 @@ export async function updateProviderConnectionPosture(input: {
     });
   const evidenceWrites = [
     recordDeclaration("no-training", input.noTraining, "Connected-account no-training declaration"),
-    recordDeclaration("enabled-regions", enabledRegions, "Connected-account enabled-region declaration"),
+    ...(enabledRegions === undefined ? [] : [recordDeclaration("enabled-regions", enabledRegions, "Connected-account enabled-region declaration")]),
+    ...(input.regionalProcessing === undefined ? [] : [recordDeclaration("regional-processing", input.regionalProcessing, "Connected-account regional-processing declaration")]),
   ];
   if (input.providerId === "openrouter") {
     evidenceWrites.push(
       recordDeclaration("zero-retention", input.zeroRetention, "Connected-account zero-retention declaration"),
-      recordDeclaration("regional-processing", input.regionalProcessing, "Connected-account regional-processing declaration"),
       recordDeclaration("approved-underlying-providers", approvedUnderlyingProviderSlugs, "Connected-account router-provider declaration"),
     );
   }
@@ -97,7 +101,7 @@ export async function updateProviderConnectionPosture(input: {
     where: { providerId: input.providerId },
     select: { status: true },
   });
-  if (provider?.status === "active") {
+  if (provider?.status === "active" && connectionId === `provider-default-${input.providerId}`) {
     await activateProvider(input.providerId, { trigger: "test_auth", skipDiscovery: true });
   }
   return {};

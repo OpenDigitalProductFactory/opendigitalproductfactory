@@ -206,6 +206,29 @@ implies the adopt stance. Update the stated 80/20 allocation wherever touched.
 implies DPF adopts authentik as a runtime service; every one of the 111 tasks has a
 recorded disposition.
 
+## Phase 6 — Serve it (`BI-A91004A7`)
+
+Phase 3 delivered the protocol and no install served it: `createLdapServer` was
+exported and never invoked outside tests. Phase 6 is the entrypoint that turns a
+built listener into a served one — `startLdapListener` composing
+`buildDirectoryProjection` with `createBindVerifier`, the `DPF_LDAP_ENABLED` gate,
+the three-state operator surface (disabled / listening / refused), the published
+compose port, and org-PKI material read through the existing `DPF_STATE_DIR` mount
+rather than a second certificate or a second mount.
+
+This phase was not in the original sequence. It exists because "no deliverable in
+this design exists only as a checkbox" has to mean *running*, not *merged* — the
+epic's own verification passed 78 unit tests and six real-`ldapsearch` runs while
+no install served LDAP, because every one of those tests starts the listener itself.
+
+**Verification:** `ldapsearch` against the **running install**, not a test-spawned
+server. Satisfied 2026-08-29 on the canonical runtime: portal log
+`[ldap] Serving the directory over LDAPS on port 636`, `:::636` bound in-container,
+TLS chain verified to the organization CA (`Verify return code: 0`), and a real
+OpenLDAP client receiving the bind verifier's own diagnostic. Survived a subsequent
+self-upgrade. A successful bind returning entries is **not** demonstrated: that
+needs a credential for a production principal, which was deliberately not minted.
+
 ## Cross-cutting verification
 
 Per the change-impact contract for this branch and AGENTS.md §4:
@@ -236,6 +259,7 @@ deliverable maps to a live backlog item — none is stored as a checkbox.
 | 3 | LDAP listener over org-PKI TLS | yes | `BI-F7317D65` | 2 |
 | 4 | Principal becomes the authentication root | yes | `BI-CEACBD0D` | 2 |
 | 5 | Supersede the 2026-04-22 plan across 10 documents | yes | `BI-5167932D` | 0 |
+| 6 | Serve the listener: runtime entrypoint, config, operator surface, org-PKI wiring | yes | `BI-A91004A7` | 3 |
 
 **Governed coverage receipt: blocked by `BI-72F368BC`.**
 
@@ -249,12 +273,24 @@ and refused:
 | 2 | `plan-artifact-invalid` — "…has no recorded head" | branch claimed via `claim_backlog_item_for_work`; capsule bound to the repo but `headSha` unset |
 | 3 | `traceability-incomplete` — "BacklogItem BI-C7362CA5 has no initiative scope baseline" | `headSha` synced to `58126dce0` via `adopt_worktree`; plan blob `77e1faf42f` pushed and confirmed on the remote |
 
-Failure 3 is the live blocker and is not surface-specific: per `BI-72F368BC`,
-**zero `initiative_scope_baseline` activities exist install-wide**, and the only
-writer (`approveInitiativeBaseline`, reachable through `record_initiative_design_review`
-gate `spec-approval`) hard-codes `requiresIndependentReviewer: true`. This install
-has one human principal, so the author can never be independent of the reviewer and
-the baseline can never be written — by any surface, Build Studio included.
+Failure 3 **was** the live blocker, and as of 2026-09-01 it no longer holds. The
+mechanism is unchanged — `approveInitiativeBaseline` (reachable through
+`record_initiative_design_review` gate `spec-approval`) still hard-codes
+`requiresIndependentReviewer: true` at `baseline-repository.ts:440` — but the two
+facts that made it unsatisfiable have both moved:
+
+| Claim when this was written | Measured 2026-09-01 |
+|---|---|
+| zero `initiative_scope_baseline` activities install-wide | **7**, minted 2026-08-31 and 2026-09-01 |
+| one human principal, so no reviewer can be independent | **3 active human principals** |
+
+So the baseline *can* now be written on this install, and has been — for other
+items. None of the seven belongs to this epic, which is why every `EP-24741BBF`
+item still reads unbaselined. The remaining work is to route this plan's gates to
+an eligible independent reviewer, not to wait on a platform fix.
+
+Do not re-derive the old conclusion from this section: it is retained because the
+sequencing lessons below are still true, not because the blocker still stands.
 
 Failures 1 and 2 were self-inflicted sequencing and are recorded because the
 ordering is not obvious: a workroom must be **repository-bound and head-synced**
@@ -265,4 +301,5 @@ before a receipt is attempted, and `create_workroom` alone does neither.
 > `BI-B9403248` was closed 2026-08-21 by PR #4422. The live blocker is
 > `BI-72F368BC`. The message should be repointed when the gate is fixed.
 
-Restore the governed receipt on this plan when `BI-72F368BC` ships.
+Restore the governed receipt on this plan by routing gate `spec-approval` to an
+eligible independent reviewer; it is no longer gated on `BI-72F368BC` shipping.

@@ -1,5 +1,6 @@
 import type { FeatureBrief } from "@/lib/feature-build-types";
 import type { Prisma } from "@dpf/db";
+import { isRecord } from "@/lib/shared/coerce";
 
 export type BusinessBuildBriefSource =
   | "user_conversation"
@@ -432,10 +433,6 @@ function confidenceForBusinessEdit(openQuestions: string[]): BusinessBriefConfid
   if (openQuestions.length === 0) return "high";
   if (openQuestions.length <= 3) return "medium";
   return "low";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringField(record: Record<string, unknown>, key: string): string {

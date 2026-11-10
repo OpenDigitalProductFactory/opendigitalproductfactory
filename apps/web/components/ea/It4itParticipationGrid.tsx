@@ -8,7 +8,7 @@
 // coverage status. Tokens only, no hex.
 
 import { Fragment } from "react";
-import { intentStyle, resolveIntent } from "@/components/ui/report-kit/statusColors";
+import { intentStyle, resolveIntent } from "@/lib/ui-model/statusColors";
 import type { It4itParticipationGrid as It4itParticipationGridData } from "@/lib/explore/it4it-participation-view";
 
 export function It4itParticipationGrid({ data }: { data: It4itParticipationGridData }) {

@@ -14,7 +14,18 @@
 // Plan: docs/superpowers/plans/2026-04-29-cli-execution-adapter-routing-plan.md (Task A7)
 // Spec: docs/superpowers/specs/2026-04-29-cli-execution-adapter-routing-design.md §4.3
 
-import { prisma } from "@dpf/db";
+import { prisma, type InvestmentWorkClass, type InvestmentWorkPurpose } from "@dpf/db";
+
+export type InvestmentAttemptSnapshot = {
+  investmentPrincipalId: string;
+  investmentOrganizationId: string;
+  investmentItemId: string;
+  investmentPurpose: InvestmentWorkPurpose;
+  investmentClass: InvestmentWorkClass | null;
+  investmentPolicyRef: string;
+  investmentInstallationRef: string;
+  investmentCapturedAt: Date;
+};
 
 /**
  * Caller-provided fields for one `AdapterRunTelemetry` row.
@@ -25,6 +36,8 @@ import { prisma } from "@dpf/db";
  * placeholder noise.
  */
 export type AdapterTelemetryInput = {
+  /** Preallocated by the server dispatch; absent callers retain the DB default. */
+  id?: string;
   // Required
   adapterKind: string;
   adapterVersion: string;
@@ -41,6 +54,8 @@ export type AdapterTelemetryInput = {
   buildId?: string;
   agentId?: string;
   skillId?: string;
+  /** Server-resolved before dispatch; unchanged on success, failure and retries. */
+  investment?: InvestmentAttemptSnapshot | null;
 
   // Race / shadow grouping
   raceCohortId?: string;
@@ -117,6 +132,7 @@ export async function writeAdapterTelemetry(
       startedAt: input.startedAt,
       status: input.status,
     };
+    if (input.id !== undefined) data.id = input.id;
     if (input.traceId !== undefined) data.traceId = input.traceId;
     if (input.threadId !== undefined) data.threadId = input.threadId;
     if (input.agentMessageId !== undefined) data.agentMessageId = input.agentMessageId;
@@ -144,6 +160,17 @@ export async function writeAdapterTelemetry(
     if (input.userAccepted !== undefined) data.userAccepted = input.userAccepted;
     if (input.acceptedAt !== undefined) data.acceptedAt = input.acceptedAt;
     if (input.rawEventDigest !== undefined) data.rawEventDigest = input.rawEventDigest;
+    if (input.investment) {
+      // Explicit allowlist: context can never overwrite attempt identity or usage.
+      data.investmentPrincipalId = input.investment.investmentPrincipalId;
+      data.investmentOrganizationId = input.investment.investmentOrganizationId;
+      data.investmentItemId = input.investment.investmentItemId;
+      data.investmentPurpose = input.investment.investmentPurpose;
+      data.investmentClass = input.investment.investmentClass;
+      data.investmentPolicyRef = input.investment.investmentPolicyRef;
+      data.investmentInstallationRef = input.investment.investmentInstallationRef;
+      data.investmentCapturedAt = input.investment.investmentCapturedAt;
+    }
 
     if (_writeOverride) {
       await _writeOverride(data);

@@ -69,7 +69,7 @@ export async function createKnowledgeArticle(input: KnowledgeArticleInput): Prom
     },
   });
 
-  // Index into Qdrant
+  // Index into the vector store
   const { storeKnowledgeArticle } = await import("@/lib/semantic-memory");
   await storeKnowledgeArticle({
     articleId,
@@ -81,7 +81,7 @@ export async function createKnowledgeArticle(input: KnowledgeArticleInput): Prom
     portfolioIds: input.portfolioIds ?? [],
     valueStreams: input.valueStreams ?? [],
     tags: input.tags ?? [],
-  }).catch((err) => console.error("[qdrant] storeKnowledgeArticle failed:", err));
+  }).catch((err) => console.error("[vector-store] storeKnowledgeArticle failed:", err));
 
   revalidatePath("/knowledge");
   revalidatePath("/portfolio");
@@ -135,7 +135,7 @@ export async function updateKnowledgeArticle(
     }),
   ]);
 
-  // Re-index in Qdrant
+  // Re-index in the vector store
   const { storeKnowledgeArticle } = await import("@/lib/semantic-memory");
   await storeKnowledgeArticle({
     articleId: existing.articleId,
@@ -147,7 +147,7 @@ export async function updateKnowledgeArticle(
     portfolioIds: existing.portfolios.map((p) => p.portfolioId),
     valueStreams: existing.valueStreams,
     tags: existing.tags,
-  }).catch((err) => console.error("[qdrant] storeKnowledgeArticle failed:", err));
+  }).catch((err) => console.error("[vector-store] storeKnowledgeArticle failed:", err));
 
   revalidatePath("/knowledge");
   revalidatePath("/portfolio");
@@ -198,7 +198,7 @@ export async function publishKnowledgeArticle(id: string): Promise<void> {
     portfolioIds: article.portfolios.map((p) => p.portfolioId),
     valueStreams: article.valueStreams,
     tags: article.tags,
-  }).catch((err) => console.error("[qdrant] storeKnowledgeArticle failed:", err));
+  }).catch((err) => console.error("[vector-store] storeKnowledgeArticle failed:", err));
 
   revalidatePath("/knowledge");
   revalidatePath("/portfolio");
@@ -240,7 +240,7 @@ export async function archiveKnowledgeArticle(id: string): Promise<void> {
     portfolioIds: article.portfolios.map((p) => p.portfolioId),
     valueStreams: article.valueStreams,
     tags: article.tags,
-  }).catch((err) => console.error("[qdrant] storeKnowledgeArticle failed:", err));
+  }).catch((err) => console.error("[vector-store] storeKnowledgeArticle failed:", err));
 
   revalidatePath("/knowledge");
   revalidatePath("/portfolio");

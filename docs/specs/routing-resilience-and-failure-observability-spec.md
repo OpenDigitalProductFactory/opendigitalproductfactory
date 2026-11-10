@@ -47,6 +47,32 @@ This proves the user-visible delay is not a single slow model call. It is a chai
 
 ### 1.2 Current Repo Truth
 
+Account-aware routing adds an explicit credential owner to eligible candidates
+and attempts. Authentication, billing and model-access failures stay with that
+account; provider-wide failures and quota of uncertain ownership remain shared.
+Current health is a revision-fenced mutable projection, while usage and outcome
+`recordedProviderConnectionRef` values are immutable attribution snapshots that
+outlive account deletion. Native execution with uncertain side effects stops
+fallback and redispatch. The [capacity refactor plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
+records source qualification and served acceptance separately.
+
+The R2 source for [restricted present reassessment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+adds a stricter execution mode. It binds one qualified in-process HTTP
+composition under normal routing, sensitivity and account constraints. A changed
+account, configuration, tool surface or required bound refuses further execution;
+it cannot select another provider, native adapter or textual tool fallback.
+Credential reads cannot renew credentials or mutate the account. Ordinary
+fallback behavior below is unchanged.
+
+Each actual HTTP request, including an adapter retry, requires a captured
+reservation and consumes the immutable start and time limits. Each tool effect
+uses the same pre-effect capture boundary. Failed observation after a start
+retains uncertain consumption and holds subsequent effects, while a genuine
+committed writer receipt takes precedence. These source controls neither settle
+historical effects nor prove served acceptance. Finite total-token execution
+still requires a qualified input-bound producer; the normal 50,000-token
+positive case remains incomplete.
+
 The material repo anchors are:
 
 - `apps/web/lib/routing/fallback.ts`
@@ -55,6 +81,7 @@ The material repo anchors are:
   - The `rate_limit` branch waits up to 60 seconds for the selected endpoint before falling through.
   - Error outcomes are recorded as `RouteOutcome.latencyMs = 0`, so the route outcome row captures the failed attempt but not the wait that preceded the next attempt.
   - A typed local-CI capacity deferral skips a local endpoint without degrading it and preserves an eligible cloud fallback. The policy uses lease ownership; it does not infer RAM consumption from Docker's displayed model residency or conflate GPU VRAM, WSL/shared memory, and Windows physical-memory telemetry.
+  - If a cloud call fails and a local fallback is capacity-deferred, the aggregate failure keeps the failed-attempt details and the typed local deferral as its `cause`. Local-only deferral remains a direct typed error. Semantic reviews rely on this provider boundary instead of vetoing eligible cloud routes before dispatch.
 - `apps/web/lib/routing/pipeline-v2.ts`
   - `getExclusionReasonV2()` allows both `active` and `degraded` endpoints through the hard filter.
   - Cost-per-success ranking then applies the normal endpoint scoring path.
@@ -153,11 +180,14 @@ Implementation shape:
    - `getExclusionReasonV2()` returns a clear reason such as `runtime_cooldown:rate_limit` when `unavailableUntilMs > now`.
 4. Preserve lifecycle writes only for durable conditions:
    - Auth/billing failures may disable provider lifecycle state after explicit classification.
+   - The platform's own daily paid AI allowance is not a provider billing failure. `AgentAllowanceExhaustedError` is skipped without a cooldown, degradation or lifecycle write, so a free endpoint can still serve; only when every endpoint refused does the chain surface it, typed (BI-F3B6713F).
+   - For a subscription OAuth sign-in, the explicit classification is the renewal's answer: only a confirmed refusal (RFC 6749 `invalid_grant`, or no refresh token) takes the account out of routing. A bare 401/403 from the token endpoint, or a second auth error after a successful renewal, keeps it routable behind the runtime cooldown; background renewal (`ops/subscription-oauth-renewal`) retries with backoff and raises a "sign in again" attention item only on a confirmed refusal (BI-A53C594E).
    - Rate limit and transient provider overload should open the runtime circuit, not permanently mutate `ModelProvider.status`.
    - Existing `ModelProfile.modelStatus = "degraded"` can remain for model quality/profile degradation, but it is not sufficient as the circuit gate because degraded endpoints are intentionally eligible today.
 5. Recovery:
    - For rate limit/overload/transient: use retry headers where present; otherwise capped cooldown with jitter.
    - For auth/billing: open until manual remediation or a successful explicit provider test clears the condition.
+   - An account-bound auth/billing switch-off (`AiProviderConnection.status = "unconfigured"`, set from `callWithFallbackChain`) is recorded as automatic. It goes through `routing/provider-account-auto-disable.ts`, which writes a per-connection recovery job and sends `ops/provider.recover` with the `connectionId`. Recovery renews the OAuth sign-in through the guarded account path, then reopens the account half-open, with backoff from 15 minutes up to 6 hours. Before this, the account path wrote the status and nothing else: it never recovered, renewal skipped it, and the capacity watch never saw it (BI-0ADD46C3). At boot, default accounts already stranded this way are adopted into recovery.
    - Recovery probe clears runtime cooldown only after a successful provider/model call or provider-specific health check.
 
 Acceptance:
@@ -166,6 +196,53 @@ Acceptance:
 - Subsequent agentic-loop iterations skip `codex` while cooldown is active.
 - `pipeline-v2` candidate traces explain the runtime exclusion.
 - No rate-limit-only path flips `ModelProvider.status` from `active` to `disabled`.
+
+#### 4.1a Local pool refusal is not an upstream rate limit (implemented)
+
+The wait-and-retry in step 2 is correct for an **upstream** 429: the provider was
+asked, answered "later", and may answer on retry.
+
+It is wrong for a **local** refusal. `ai-inference.ts` consults `getCliPoolStatus`
+and throws `rate_limit` *before the call leaves the process* when a CLI pool is
+known-saturated, expressly so the chain falls through — nothing was asked of the
+provider, and the reset is wall-clock, so waiting cannot make it answer sooner.
+Honouring the wait there defeats the pool check's whole purpose, and the two
+mechanisms cancelled each other out.
+
+Measured cost on a live install: every governed review ended
+`missing-terminal-writer`. The reviewer read its artifact successfully with
+`toolAccuracy=1.00`, then its next inference call spent the entire
+`MAX_DURATION_REVIEW_MS` (300s) budget on repeated 30s sleeps against a saturated
+`codex` pool — one turn ran 344s with `provider=unknown`, never binding a model —
+while a healthy provider sat at index 1 of the chain.
+
+Implemented shape:
+
+- `InferenceError` carries `localPoolExhausted`, set **only** by the EP-COST pool
+  check in `ai-inference.ts`.
+- `callWithFallbackChain` skips its wait-and-retry for that case **and only when
+  an untried entry remains in the chain**.
+
+The second condition is load-bearing for installs other than the one this was
+found on. Where the saturated pool is the *whole* chain — a single-provider
+install — the wait is the only recovery there is, and skipping it would convert a
+30 second delay into an immediate hard failure. The first draft of this change
+skipped unconditionally and would have regressed exactly those installs; a
+regression test now pins the single-provider case.
+
+Residual case, deliberately not handled: if every remaining entry is itself a
+saturated CLI pool, the chain now exhausts without the one extra post-wait
+attempt it previously got. That is a narrow shape (two CLI adapters, both
+saturated, no API adapter configured) and it fails fast rather than silently
+consuming a turn budget, but it is a real behaviour change and belongs in the
+next revision if it is observed.
+
+Acceptance:
+
+- A local pool refusal with an untried alternative advances immediately; the
+  `Rate limited on pinned provider` log does not appear.
+- A local pool refusal with no alternative still waits and retries.
+- A genuine upstream 429 still waits and retries unchanged.
 
 ### 4.2 Error Classification and Remediation Propagation
 

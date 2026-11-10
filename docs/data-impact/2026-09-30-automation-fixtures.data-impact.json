@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": ["User fixture provenance and absolute expiry", "RuntimeVerification fixture ownership", "AdminActivity lifecycle audit"],
+  "privacyAssessment": {
+    "personalData": true,
+    "sensitivity": "Internal: synthetic accounts linked to the authorizing user and assistant.",
+    "dataSubjectRights": "Existing User and audit access controls apply. No human credentials or real-person profile data are copied.",
+    "reviewDisposition": "Retain provenance and audit under existing retention rules. Disable fixtures and revoke connections on cleanup."
+  },
+  "migration": {
+    "name": "20260928030000_automation_fixtures",
+    "backfill": "None. All new columns are nullable. Existing populated User rows satisfy the all-null constraint.",
+    "rollback": "Forward-only. Retire every fixture before reverting expiry enforcement. Preserve schema and provenance."
+  },
+  "tests": ["apps/web/lib/govern/automation-fixture.test.ts", "apps/web/lib/govern/automation-fixture-provisioning.test.ts", "apps/web/lib/govern/current-user-context.test.ts", "apps/web/lib/identity/authentication.test.ts"],
+  "changes": [{
+    "kind": "model", "assetId": "data:user", "prismaModel": "User",
+    "lifecycleDisposition": "Synthetic users expire absolutely and are disabled on retirement. Referenced verification provenance cannot be deleted.",
+    "fields": [
+      {"fieldId":"data:user#automationVerificationId","resolution":"governed","reason":"Bind fixtures to an authorized run.","provenance":"BI-9369DEB5","flags":["personal"],"fieldPolicy":"Server assigned; immutable on renewal."},
+      {"fieldId":"data:user#automationProfile","resolution":"governed","reason":"Bound role profiles without superuser fixtures.","provenance":"BI-9369DEB5","flags":[],"fieldPolicy":"Closed enum; assign roles only at creation."},
+      {"fieldId":"data:user#automationSlot","resolution":"governed","reason":"Bound identities to two slots per profile.","provenance":"BI-9369DEB5","flags":[],"fieldPolicy":"Database constraint and unique run/profile/slot identity."},
+      {"fieldId":"data:user#automationExpiresAt","resolution":"governed","reason":"Deny expired fixtures independently of cleanup timing.","provenance":"BI-9369DEB5","flags":[],"fieldPolicy":"Absolute lifetime capped by lease; renewal cannot extend it."}
+    ]
+  }]
+}

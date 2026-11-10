@@ -13,7 +13,7 @@ import type {
   AiReadinessDomain,
   AiReadinessSummary,
   ReadinessState,
-} from "@/lib/ai-readiness/readiness-summary";
+} from "@/lib/ai-readiness/readiness-summary-types";
 
 const VERDICT: Record<
   AiReadinessSummary["state"],

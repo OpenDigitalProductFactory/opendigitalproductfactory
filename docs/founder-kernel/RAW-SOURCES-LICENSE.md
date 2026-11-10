@@ -39,7 +39,7 @@ compiled publication, and the publication's restrictions do not erase the proven
 separately supplied concepts.
 
 The normative decision contract is defined once in
-[`DPF-FPAW` Section 13.1.1](../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md#1311-source-use-decisions-and-contributor-origin-material).
+[`DPF-PAAW` Section 13.1.1](../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md#1311-source-use-decisions-and-contributor-origin-material).
 Raw-source entries point to the applicable SourceUseDecision and ContributorAttestation rather than
 duplicating the rights analysis here.
 
@@ -96,4 +96,4 @@ fail-closed and is not a completed SourceUseDecision.
 | `papers/knowledge-acquisition-bottleneck.md` | metadata + original abstract; migration required |
 | `papers/shift-to-digital-product-w205.md` | migrated abstract-only entry under `SUD-W205-2026-08-01` |
 
-Migration and seed enforcement are tracked as `GAP-SOURCE-004` in the FPAW source register.
+Migration and seed enforcement are tracked as `GAP-SOURCE-004` in the PAAW source register.

@@ -67,7 +67,9 @@ export async function backfillOrgWwwdOnBoot(
       try {
         // Cheap presence check — a healthy install does no seed work on boot.
         // Shape-aware (BI-70ADC71F): "present" means the profile exists AND
-        // the corpus carries the current shape (all 5 stance-vector pages).
+        // the corpus carries the current shape (every stance-vector page in
+        // STANCE_VECTOR_KEYS — the count is derived, so adding a vector makes
+        // existing installs re-seed once and converge, BI-7728C3B7).
         // Installs seeded before the stance-vector redistribution re-run the
         // idempotent chain once — it adds the missing pages/materials, retags
         // org-supply-chain, and never downgrades an owner-confirmed material.

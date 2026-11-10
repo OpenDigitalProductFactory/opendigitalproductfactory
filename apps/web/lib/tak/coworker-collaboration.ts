@@ -58,9 +58,9 @@ async function recordDelegationHop(p: {
   status: "active" | "blocked";
   reason: string;
   originUserId: string;
-}): Promise<void> {
+}): Promise<string | null> {
   try {
-    await prisma.delegationChain.create({
+    const link = await prisma.delegationChain.create({
       data: {
         chainId: randomUUID(),
         depth: 0,
@@ -72,9 +72,12 @@ async function recordDelegationHop(p: {
         originUserId: p.originUserId,
         originAuthority: [],
       },
+      select: { id: true },
     });
+    return link.id;
   } catch {
     // non-fatal — audit row only.
+    return null;
   }
 }
 
@@ -152,6 +155,8 @@ export type RequestCoworkerInput = {
   callerAgentId?: string | null;
   questionPacketSummary?: string;
   routeContext?: string;
+  /** The delegating turn's mode; the child never runs wider (BI-FAD98137). */
+  runtimeMode?: "advise" | "act";
 };
 
 export type SummonCoworkerInput = {
@@ -163,6 +168,7 @@ export type SummonCoworkerInput = {
   callerAgentId?: string | null;
   byUserId?: string;
   routeContext?: string;
+  runtimeMode?: "advise" | "act";
 };
 
 /**
@@ -257,16 +263,16 @@ export async function requestCoworker(
     userId,
   );
 
-  // Record the accepted hop for chain-of-custody.
-  if (input.callerAgentId) {
-    await recordDelegationHop({
+  // Record the accepted hop for chain-of-custody; the child's return closes it.
+  const delegationLinkId = input.callerAgentId
+    ? await recordDelegationHop({
       fromAgentId: input.callerAgentId,
       toAgentId: target.agentId,
       status: "active",
       reason: "coworker handoff",
       originUserId: userId,
-    });
-  }
+    })
+    : null;
 
   const tier = input.tier ?? 2;
   const enteredVia = input.enteredVia ?? "handoff";
@@ -277,6 +283,8 @@ export async function requestCoworker(
     enteredVia,
     tier,
     summary: input.questionPacketSummary,
+    ...(input.runtimeMode === "advise" ? { runtimeMode: "advise" as const } : {}),
+    ...(delegationLinkId ? { delegationLinkId } : {}),
   });
 
   agentEventBus.emit(input.parentThreadId, {
@@ -327,6 +335,7 @@ export async function summonCoworker(
     enteredVia: "summon",
     tier,
     byUserId,
+    ...(input.runtimeMode === "advise" ? { runtimeMode: "advise" as const } : {}),
   });
 
   agentEventBus.emit(input.parentThreadId, {

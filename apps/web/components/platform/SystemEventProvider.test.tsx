@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SystemEventProvider, useSystemEvent } from "./SystemEventProvider";
+import { useSystemEvent } from "@/lib/hooks/system-events";
+import { SystemEventProvider } from "./SystemEventProvider";
 
 const resilient = vi.hoisted(() => ({
   options: null as null | { onMessage: (event: MessageEvent) => void },

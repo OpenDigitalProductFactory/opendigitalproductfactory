@@ -59,3 +59,17 @@ describe("loadComplianceSourceFreshnessItems", () => {
     expect(first[0]?.id.startsWith("compliance-source-freshness:")).toBe(true);
   });
 });
+
+describe("the caller's clock is the only clock (BI-99909E53)", () => {
+  it("stamps createdAtIso from the injected `now`, so a pinned sweep clock reaches the whole item", () => {
+    const items = loadComplianceSourceFreshnessItems({ now: AFTER_60D_EXPIRY });
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) expect(item.createdAtIso).toBe(AFTER_60D_EXPIRY.toISOString());
+  });
+
+  it("renders the frozen-baseline state on the pinned instant: the final valid day reads \"lapses after today\"", () => {
+    // 2026-09-18T12:00Z is the instant .github/workflows/ux-route-sweep.yml pins.
+    const items = loadComplianceSourceFreshnessItems({ now: new Date("2026-09-18T12:00:00.000Z") });
+    expect(items.map((i) => i.context.includes("lapses after today"))).toEqual(items.map(() => true));
+  });
+});

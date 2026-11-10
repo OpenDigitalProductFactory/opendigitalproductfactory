@@ -16,7 +16,8 @@ describe("dropDualSeedAliasAgents (BI-74FD6420)", () => {
       { agentId: "external-catalog-scout", displayName: "External Catalog Scout" },
       { agentId: "AGT-WS-INVENTORY", displayName: "Digital Product Estate Specialist" },
       { agentId: "inventory-specialist", displayName: "Digital Product Estate Specialist" },
-      { agentId: "storefront-advisor", displayName: "Storefront Operations Manager" }, // no twin
+      { agentId: "AGT-WS-STOREFRONT", displayName: "Storefront Operations Manager" },
+      { agentId: "storefront-advisor", displayName: "Storefront Operations Manager" },
     ];
 
     const kept = dropDualSeedAliasAgents(agents);
@@ -29,7 +30,7 @@ describe("dropDualSeedAliasAgents (BI-74FD6420)", () => {
         "AGT-WS-BUILD",
         "AGT-WS-INVENTORY",
         "AGT-WS-SCOUT",
-        "storefront-advisor",
+        "AGT-WS-STOREFRONT",
       ].sort(),
     );
     // No residual dual-seed aliases for the known map keys.
@@ -58,7 +59,7 @@ describe("dropDualSeedAliasAgents (BI-74FD6420)", () => {
 
   it("keeps an unmapped coworker whose canonical and runtime identity are the same", () => {
     const agents = [
-      { agentId: "storefront-advisor", displayName: "Storefront Advisor" },
+      { agentId: "unmapped-advisor", displayName: "Unmapped Advisor" },
     ];
     expect(dropDualSeedAliasAgents(agents)).toEqual(agents);
   });

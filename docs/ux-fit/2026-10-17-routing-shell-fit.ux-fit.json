@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "compact-existing-controls",
+  "decisionInteractionId": "DI-7454E56AB6DC",
+  "scope": {
+    "files": [
+      "apps/web/components/shell/Header.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["compact-existing-controls", "wrap-all-chrome"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "evidenceClass": "Actual release104 screenshots establish header overlap and excessive chrome. Existing routing body containment passed independently. This platform choice supports bounded correction; containing-release mobile/desktop/menu verification and native UX coworker WSID acceptance remain owed. No passing sweep or profession receipt is claimed."
+  }
+}

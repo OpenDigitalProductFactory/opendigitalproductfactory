@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { colors, spacing } from "@/src/lib/theme";
 import { Card } from "@/src/components/ui/Card";
 import type { DashboardTile as DashboardTileType } from "@dpf/types";
 

@@ -10,6 +10,7 @@
 import type { ModelCardCapabilities } from "./model-card-types";
 import { isAnthropic, isOpenAI, usesResponsesApi } from "./provider-utils";
 import { buildProviderTools } from "./provider-tools";
+import { expressEffort, resolveEffort } from "./effort-expression";
 
 // EP-INF-009c: Model class → execution adapter mapping
 const MODEL_CLASS_ADAPTER: Record<string, string> = {
@@ -35,12 +36,13 @@ const REASONING_EFFORT_MAP: Record<string, string> = {
   high: "high",
 };
 
-const OPENAI_CHAT_TEMPERATURE: Record<string, number> = {
-  minimize_cost: 0.3,
-  balanced: 0.7,
-  quality_first: 1.0,
-};
-
+// BI-40DA6D05: OPENAI_CHAT_TEMPERATURE (minimize_cost 0.3 / balanced 0.7 /
+// quality_first 1.0) is deleted. Budget class says what we will SPEND; it says
+// nothing about how much we will VARY, and the mapping was inverted for the case
+// that matters most — a deterministic extraction on a quality_first budget got
+// temperature 1.0. Temperature now follows the contract family
+// (contract-family-sampling.ts) and the model's vendor profile, resolved on every
+// dispatch path by sampling-profile.ts rather than frozen into a seeded recipe.
 // ── Core ─────────────────────────────────────────────────────────────────────
 
 export function buildSeedRecipe(
@@ -131,8 +133,6 @@ function buildProviderSettings(
     applyAnthropicSettings(settings, modelCard.capabilities, contract.reasoningDepth, maxTokens);
   } else if (isOpenAI(providerId) && modelCard.modelClass === "reasoning") {
     applyOpenAIReasoningSettings(settings, contract.reasoningDepth);
-  } else if (isOpenAI(providerId) && modelCard.modelClass !== "reasoning") {
-    applyOpenAIChatSettings(settings, contract.budgetClass);
   } else if (providerId === "local" || providerId === "ollama") {
     settings.keep_alive = -1;
   }
@@ -148,11 +148,14 @@ function applyAnthropicSettings(
   outputMaxTokens: number,
 ): void {
   if (
-    reasoningDepth === "medium" &&
+    (reasoningDepth === "medium" || reasoningDepth === "high") &&
     capabilities.adaptiveThinking === true
   ) {
-    settings.thinking = { type: "adaptive" };
-    // Adaptive thinking manages its own budget — no max_tokens adjustment needed
+    const decision = resolveEffort({ reasoningDepth, estimatedInputTokens: 0,
+      maxOutputTokens: outputMaxTokens, capabilities });
+    const expression = expressEffort("anthropic", decision, capabilities);
+    Object.assign(settings, expression.settings);
+    // Adaptive thinking manages its own budget inside the existing allowance.
   } else if (
     (reasoningDepth === "medium" || reasoningDepth === "high") &&
     capabilities.thinking === true
@@ -178,12 +181,3 @@ function applyOpenAIReasoningSettings(
   }
 }
 
-function applyOpenAIChatSettings(
-  settings: Record<string, unknown>,
-  budgetClass: string,
-): void {
-  const temp = OPENAI_CHAT_TEMPERATURE[budgetClass];
-  if (temp !== undefined) {
-    settings.temperature = temp;
-  }
-}

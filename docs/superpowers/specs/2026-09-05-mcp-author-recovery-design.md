@@ -1,0 +1,357 @@
+---
+status: draft
+---
+
+# External-author MCP recovery and actionable governance handoff
+
+Backlog: BI-CF118B6D. Workroom: WC-0B137E7F.
+
+This is the independently reviewable recovery slice of the [published consolidation design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/99f5703813ac7290fe694325836f544e9857ae2f/docs/superpowers/specs/2026-09-04-mcp-client-contract-consolidation-design.md). It carries that design's section 2 acceptance unchanged. Efficiency aggregation, pagination and hook metadata are separate backlog items and are not part of this scope baseline.
+
+## Purpose and authority boundaries
+
+**OBJ-MCP-RECOVERY:** An external author can identify and execute the next authorized step across artifact adoption, readiness and independent review without losing valid identity or guessing unavailable writer tools.
+
+**OBJ-MCP-PROCESS:** Recovery guidance matches the actual readiness profile and scope binding, so following it produces an actionable result rather than a silent approval loop.
+
+## Scope acceptance manifest
+
+These stable entries bind the detailed AC-MCP-RECOVERY cases below to the scope baseline.
+
+| Acceptance | Objectives | Required outcome |
+| --- | --- | --- |
+| AC-MCP-RECOVERY-1 | OBJ-MCP-RECOVERY | Missing baseSha yields its exact repair and preserves the valid head; the packet conforms to adopt_worktree. |
+| AC-MCP-RECOVERY-2 | OBJ-MCP-RECOVERY | Read and transition projections agree on missing facts, responsible role and next action. |
+| AC-MCP-RECOVERY-3 | OBJ-MCP-RECOVERY | An already signed and pushed artifact is not told to be rewritten solely because baseSha is absent. |
+| AC-MCP-RECOVERY-4 | OBJ-MCP-RECOVERY | Adoption through independent reviewer dispatch reaches persisted approval readback with separate author and referee identities. |
+| AC-MCP-RECOVERY-5 | OBJ-MCP-RECOVERY | Unknown tools, missing grants or identity, inaccessible or stale artifacts and provider failures yield finite authorized recovery without an impossible writer retry loop. |
+| AC-MCP-RECOVERY-6 | OBJ-MCP-RECOVERY | Readiness and Workroom list/detail agree on prerequisite blockers and actual reviewer execution, including terminal states and real pending dispatch ids. |
+| AC-MCP-RECOVERY-7 | OBJ-MCP-PROCESS | Following coverage recovery for doc-only, fix and feature profiles produces a supported action or explicit parent-binding correction while preserving baseline and independent-review controls. |
+
+An external author must receive an executable next step when identity, evidence or reviewer prerequisites are missing. Preserve the existing initiative readiness projector, Workroom identity, reviewerRoutes, TaskRun lifecycle, scope baseline and ToolExecution ledger. No new orchestration service, ledger or receipt-writer tool. No database migration is proposed. Additive diagnostics preserve existing inputs and grant enforcement; missing identity must never become permission to self-approve.
+
+The audited process failure is a documentation parent receiving coverage recovery that cannot produce the promised reviewer route. Bind this implementation slice to its actual refactor BI, preserving that BI's feature review gates. Do not reclassify the documentation parent or exempt it from baseline validation merely to pass a test.
+
+### Research & Benchmarking
+
+| Reference | Adopt | Do not infer or adopt |
+| --- | --- | --- |
+| [MCP tools, 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) | Human titles, explicit input/output contracts, valid structured results. | Metadata alone guarantees a client's UI or permission enforcement. Serialized text alongside structured data is a compatibility recommendation, so deduplication must be measured at the host boundary. |
+| [MCP pagination](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/pagination) | Opaque continuation and unambiguous completion for listings. | Protocol tools/list pagination automatically paginates a domain list_workrooms result; implement its domain contract explicitly. |
+| [MCP 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28) | Record the negotiated revision in every benchmark; note `ttlMs`/`cacheScope` on `tools/list` and the `io.modelcontextprotocol/tasks` extension (`tasks/get`, `tasks/update`) as inputs to EP-E1F1DB58 scoping. Claude Code's v2 runtime already asks HTTP servers whether they speak it. | Re-platforming the route on the new revision inside this iteration, or treating the current experimental `tasks/submit|result` surface as the standard one. |
+| [Claude Code MCP docs](https://code.claude.com/docs/en/mcp) | Per-tool `_meta["anthropic/maxResultSizeChars"]` on list tools; `list_changed` over the v2 held stream; `/usage` per-server attribution as an independent context-cost measure. | That the 100,000-character route cap "matches" Claude Code: the client keeps what the server discards. That ToolSearch ranks the way `tool-intent.ts` does. |
+| [Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference) | Per-tool output truncation budgets, verified against the supported host and configuration adapter. | Raising `output_token_limit` guarantees lossless persistence, or a CLI setting automatically applies to the installed Desktop client. |
+| [Codex hooks](https://learn.chatgpt.com/docs/hooks) · [Claude Code hooks](https://code.claude.com/docs/en/hooks) | Source inspection, exact-definition trust, and the `statusMessage` field both clients document; generate it once into the managed `hooks.json` that feeds all three hook planes; verify the rendered client. | Unsupported hook title fields, automatic trust changes, or assuming `statusMessage` names the list row on either client. |
+| [OpenTelemetry GenAI conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) | Align future measurements with tool execution identity, latency and outcome vocabulary; keep the existing ledger. | A new telemetry backend or prompt-content collection as a prerequisite for this repair. |
+
+Compared implementation patterns: DPF's existing domain-pack registry (retain), the MCP standard's typed tool/result boundary (adopt), and the hosts' own hook/trust adapters and result persistence (respect and test). A generic action facade is rejected for this iteration because it moves risk into hidden action schemas and duplicates existing governance. No third-party dependency is required.
+
+## 2. External-author recovery — BI-CF118B6D
+
+Contract CT-MCP-RECOVERY, journey FLOW-MCP-AUTHOR.
+
+Consolidate missing-identity diagnosis and repair construction into the existing initiative recovery subsystem. Both read-only readiness and attempted transitions consume that projection. A read does not dispatch reviewers or mutate readiness. Expensive artifact resolution stays outside write transactions and should reuse existing immutable artifact information.
+
+Adoption remains compatible with legitimate early work that has no commit yet, but returns missing baseSha/headSha and the gates they prevent. Do not label missing identity as a provider outage. Repairs include all required adoption identity, retain supplied valid values, and identify values that must still be resolved. Never invent SHAs. Do not advise re-signing unless signature evidence actually fails. The ARTIFACT_AUTHOR_REQUIRED remedy currently lives in two files with identical text; one of them goes.
+
+Discovery distinguishes a callable tool from a workflow route. When authority permits revealing the distinction, identify unknown names, unavailable direct grants and reviewer-only execution; otherwise use a non-enumerating unavailable reason plus a safe supported entry point. Route author review through existing readiness/reviewerRoutes/request_coworker. The incorrect record_initiative_plan_review name must not be created as a workaround.
+
+A blocked room must be distinguishable from a waiting one. The audit snapshot of WC-375F098A records unmet reviewer-role gates without a dispatched reviewer. Project prerequisite readiness separately from reviewer execution: missing author identity or artifact evidence carries exact missing fields and a repair packet; an unavailable provider carries its observed error, retryability and next action. Neither proves that no eligible reviewer exists. Once prerequisites permit routing, expose an eligible route, an actual pending dispatch with an inspectable id, or a confirmed reviewer-availability escalation naming the role and capability gap. Preserve the existing TaskRun lifecycle for completed, failed or cancelled dispatches; terminal work must not appear as still pending. Unknown availability remains explicitly unknown with a finite diagnostic or escalation step. Reuse existing state types and projectors rather than adding an independent status ledger.
+
+Acceptance AC-MCP-RECOVERY:
+
+1. An adopted room missing only baseSha reports that exact field, preserves its valid head and yields a repair packet matching the actual adopt_worktree schema.
+2. Read-only and transition recovery agree on missing facts, responsible role and next action.
+3. A valid already-signed/pushed artifact does not produce re-sign/rewrite advice solely because baseSha is absent.
+4. A complete author journey crosses adoption, published immutable artifact, readiness, independent reviewer dispatch, and persisted approval. Test author/referee identities separately and read the receipt back.
+5. Negative cases include unknown writer name, author without direct writer grants, no eligible reviewer, missing base, missing head, inaccessible artifact, stale head and provider failure. Each has a finite next step or explicit escalation; no retry loop to an impossible direct writer.
+6. Readiness, get_workroom and the Workroom list agree on prerequisite blockers, responsible role, next action and reviewer execution state. Missing baseSha yields an author repair, provider failure does not claim reviewer absence, and pending work cites a real dispatch. Failed, cancelled and completed dispatches are not shown as pending. An operator can distinguish blocked, actionable, queued and terminal work without reading the activity log.
+
+Current reproduction: WC-375F098A / BI-154689E7, base expected f62c1edb4b5cead926f8f69913fa29b73845f9cb, head 4053e900d8d178f9a4c61b0defc79e2d69c1c5a6. Its owner tests repair; this design does not authorize another task to take over that room.
+
+Additional acceptance AC-MCP-RECOVERY 7: recovery must be valid for the actual readiness profile and plan parent. Coverage on documentation parent BI-DC0F14E0 returned `traceability-incomplete` and prescribed an implementation claim; that claim returned IRD-52AD360FFE11, `doc-only`, `allowed`, and no reviewerRoutes. `planning/plan-backlog-coverage.ts` requires a baseline unconditionally, while `backlog/initiative-readiness/evaluate.ts` exempts documentation-only work from the gates that create it. This confirms unusable recovery guidance, not that baseline enforcement should be removed. BI-CF118B6D owns this regression alongside the other recovery failures.
+
+Resolve the documentation-authoring versus implementation-parent binding in the existing planning contract. A profile-aware refusal must supply a valid supported next action or an explicit parent-binding correction with the required evidence; it must not promise reviewer routes that its recommended call cannot return. Reuse existing profile policy. Test the coverage refusal followed by its actual prescribed readiness call for doc-only, fix and feature profiles, including a documentation parent mapping feature children. Preserve immutable scope binding, feature/refactor approval and author/reviewer separation. No automatic reclassification, new umbrella or baseline exemption is authorized by this acceptance criterion. Keep the live blocking condition separate from the defect's tracking id.
+
+Implementation clarification: `record_plan_backlog_coverage` remains a governed implementation receipt writer, so it never mints or bypasses a scope baseline for documentation or fix artifacts. A feature-class item without a baseline continues through independent spec approval. A documentation/fix item instead receives a typed `implementation-parent-binding-required` correction; when its deliverables name eligible implementation children, the response names those candidates. This keeps authoring evidence on the documentation item while binding implementation coverage to the item that owns the baseline.
+
+
+## Implementation and verification boundary
+
+Inspect the existing readiness guidance, canonical artifact discovery, governed-work-claim, workroom read projections, plan-backlog-coverage and readiness profile consumers. Consolidate repeated guidance and derive recovery from the existing profile policy. Allocate 20–30% of the slice effort to this consolidation and measure definitions removed and consumers covered.
+
+Before implementation, publish a plan for this BI and bind its atomic internal steps to the approved scope baseline; obtain independent plan review. The first failing integration case follows the coverage error's own recommended call and detects the doc-only allowed/no-route dead end. Verify all AC-MCP-RECOVERY 1–7 scenarios across advertised schema, handler, persistence and readback. Use separate author and reviewer identities; preserve negative grant cases. Record actual dispatch ids and read persisted approval back before claiming reviewer completion.
+
+Source-local checks precede canonical shared nonproduction verification. Check operator-visible state in the Workroom list and detail as well as MCP projections. Unit mocks cannot be the only authority/provider test. No implementation or runtime verification has been performed by this design publication.
+
+Risk: inconsistent consumer state or accidental authority expansion. Revert the scoped projector/adapter change together while preserving immutable records and existing receipts. A needed schema migration or altered governance rule requires explicit design revision before implementation.
+
+## 2026-09-27 regression addendum: validate the requested review gate
+
+Existing coverage: BI-CF118B6D, AC-MCP-RECOVERY-2, -4 and -5. Repair Workroom:
+WC-A11C9B8E. This addendum does not supersede the historical design or represent
+independent approval. It excludes the separately owned approval-outcome UI repair.
+
+Evidence `cmuk47kpb0eu101up14lh8x61` records the following reproduced failure:
+an implementation-readiness design-spec packet for BI-224E6E82/WC-0829A222 at
+`021f8a8525f4f2f042df2ecf62a34fae23537865` was rejected unchanged by
+`request_coworker`. One instructed refresh (IRD-E24198830365) produced an identical
+packet and the same rejection. No reviewer task or approval receipt was created.
+
+At inspected source `71b9df9f08705fd1ff67b2c5f01cfc87a05e71b0`,
+`apps/web/lib/mcp/independent-review-request.ts` unconditionally selects
+`readiness.decisions.completion` and `resolveTerminalInitiativeRecovery` before
+comparing the complete canonical packet. A packet issued for a different phase
+therefore need not equal the completion packet. Repeated refresh cannot repair
+that disagreement.
+
+### Bounded repair
+
+Reuse the canonical readiness lane and phase policy. Select the decision and
+recovery issuer appropriate to the validated writer/gate, using one shared
+selection path for issuance and validation. Do not accept client-supplied phase
+claims as authority and do not broaden acceptance to arbitrary packet shapes.
+Where several phases can issue the same gate, define the canonical selection in
+the existing policy and test the actual producer and validator together.
+
+Retain full packet equality and every current control: fresh human authority,
+OAuth consent and scope, coworker grants, lane capability, exact room action
+admission, independent reviewer identity, immutable artifact/head/blob, baseline
+binding and eligible evidence. Unknown or unsupported gates remain denied.
+Completed replay may return only an existing matching task and real writer
+receipt; it must never dispatch fresh work from stale input. Terminal completion
+and post-implementation review continue using their terminal recovery semantics.
+
+### Ordered implementation and acceptance
+
+1. Add a failing producer-to-validator regression for the live design-spec packet
+   mismatch with separate author/reviewer identities and valid exact room access.
+2. Refactor the existing gate/phase selection into shared policy rather than a
+   second independently maintained table; update the bounded OAuth validator.
+3. Cover design-spec, spec-approval, architecture-review, plan-review, objective
+   mapping and post-implementation review where their lane contracts apply.
+   Keep negative tests for forged fields, stale head/baseline, wrong room,
+   revoked human/agent authority, self-review and absent completed receipts.
+4. Verify actual dispatch and persisted independent receipt through the live
+   repaired route, then resume BI-224E6E82 from its unchanged immutable design.
+
+Implementation files are expected in `apps/web/lib/mcp/independent-review-request.ts`,
+its tests and the existing readiness/recovery policy and tests identified by the
+impact contract. Preserve the old canonical design and research. The server's
+medium-shape readiness resolved this regression through author reproduction
+evidence and acceptance criteria in the existing item body: research receipt
+`initiative-f9aafe66-ec1b-4b4b-b643-52464134c2b1`, implementation allowed by
+`IRD-55128EA3D7BD`. No new spec approval or plan coverage was owed by that shape.
+Independent semantic review and actual live acceptance remain delivery gates.
+No grant migration, new authentication mechanism, new BI or new review writer is
+part of the repair. Unit tests do not substitute for the live accepted review.
+
+Rollback is a scoped reviewed revert, preserving task and receipt history.
+Authority is never widened to make the recovery test pass.
+
+## 2026-09-27 source-review activity classification
+
+BI-CF118B6D / AC-RECOVERY-GATE-4; repair room WC-068FE3AD.
+WWMD DI-FC20931D1CE9 selects validated activity classification. The earlier
+DI-57E03E6F5647 had insufficient scoring input and is not a decision.
+
+The delivered validator now admits the original review, but inference inherits
+the coworker's general confidential classification in `mcp-task-execution.ts`.
+Build Studio already classifies platform source work as `development`, with
+payload screening still authoritative. A review binding alone is not proof:
+`tasks/submit` accepts caller-supplied binding metadata.
+
+Before choosing development for a source-only design/spec/plan review, revalidate
+the exact server-issued request through the existing independent-review policy,
+including current OAuth authority, author room admission, independent reviewer,
+immutable source identity and current readiness. Require platform scope and the
+canonical source-only request/tool contract. A raw binding, route name, client
+name or source filename must never suffice. Preserve the existing classification
+when this proof is absent or cannot be read. General delegation is not proof of
+source-only activity. Mixed evidence, objective mapping, PIR and unknown gates
+retain their existing classification. Restricted classifications remain local.
+
+Do not change provider clearances, model capability floors, residency assignments,
+or screening. Customer records, secrets and sensitive tool output must still
+raise or block dispatch through the canonical screening path. Apply the same
+proof on resumed attempts; preserve the original task, idempotency key, deadline
+and retry budget. No migration or alternate credential is required.
+
+Verification extends AC-RECOVERY-GATE-4: prove validated source-only routing,
+deny classification changes for forged/stale/unbound or mixed-evidence requests,
+retain secret/customer screening and explicit residency, and prove capacity
+resume does not reset authority or budgets. The unchanged live design must yield
+an actual independent receipt before acceptance is claimed. Revert this scoped
+adapter change without deleting task or receipt history.
+
+Further source reconciliation found the earlier related BI-817556D8 design-phase
+repair already on main. Reuse its `designPhaseReviewDecision` policy. Terminal
+recovery can still return early for research before reaching that policy, and the
+old validator test supplied the same decision to both phases. Four new distinct
+decision regressions reproduced the refusal before the repair; the repaired
+request uses filtered implementation obligations for design/architecture writers
+and retains completion for terminal writers. Targeted tests pass; deployment and
+live acceptance are not yet claimed.
+
+## 2026-10-15: declared designs survive reviewer revalidation
+
+Backlog: BI-C56AE9A2. Repair room: WC-B37DBE9A. This bounded follow-up extends
+AC-MCP-RECOVERY-4 and -5; it does not approve the evaluator design or implement it.
+
+On BI-1B7BB954, claim issuance returned an exact design-spec packet for an existing
+design declared in the live item body on an unchanged branch. Dispatch rejected
+the unchanged packet twice, including after its prescribed refresh. At source
+b6a710031ac2264ec3aef7b8b8abaa3961350a59, claim discovery passes that declaration
+to the canonical provider reader, while terminal revalidation omits it. The
+first regression uses the real reader and grant-based packet resolver: issuance
+produces one packet and revalidation produces none. Provider/grant/identity inputs
+are held constant. This is distinct from truncated output; both can prevent a
+caller from using the returned remedy.
+
+### Ordered atomic fix
+
+1. Retain the failing unchanged-branch producer/revalidator comparison and add
+   negative controls for changed, ambiguous and missing declared designs.
+2. Load the declaration from the live backlog owner in terminal design recovery;
+   pass it through the existing provider-verified discovery path. Never trust a
+   candidate-supplied artifact, skip exact packet equality, or weaken author,
+   reviewer, room, OAuth, grant, baseline or immutable-source checks.
+3. Correct the author-facing discovery/refusal remedy to name the actual exact
+   claim and recovery packet location. Keep terminal review and ordinary grants
+   unchanged. Consolidate the declaration-discovery seam rather than adding a
+   packet store or reviewer authority.
+4. Run related routing, discovery, authorization and negative-control tests plus
+   official web typechecks. Independently assess the committed delta, publish
+   normally and verify an actual unchanged server packet reaches a native task
+   after the containing release is served. Dispatch is not approval.
+
+The steps are one revertible repair under BI-C56AE9A2, not independently
+shippable products. No schema or runtime configuration changes are needed.
+At least 20% of effort consolidates the existing artifact discovery and actionable
+remedy contract. Rollback reverts this repair without deleting historical packets,
+refusals, tasks or receipts.
+
+### Follow-up acceptance
+
+| Acceptance | Objectives | Required outcome |
+| --- | --- | --- |
+| AC-C56-PACKET | OBJ-MCP-RECOVERY | On an unchanged branch, the exact packet for the live item's declared design survives native revalidation; the caller does not reconstruct it. |
+| AC-C56-REFUSAL | OBJ-MCP-RECOVERY | A changed, missing or ambiguous declaration refuses the old packet; altered packet fields and author-as-reviewer remain denied. |
+| AC-C56-REMEDY | OBJ-MCP-PROCESS | Discovery and refusal name the supported exact claim recovery location instead of promising a packet absent from the item reader. |
+
+Original BI acceptance concerning bounded delivery of six or more routes remains
+an explicit verification obligation; this repair does not claim a new paginated
+reader or durable packet store. Installed dispatch and independent review remain
+unrun until the release and real task evidence are recorded.
+
+The item's retained medium acceptance criteria are quoted here for coverage;
+quoting them does not assert they have passed:
+
+- On an effective-large item with six or more unmet gates, the caller can obtain the exact `research` packet through a call whose response fits the client budget.
+- A packet obtained that way dispatches successfully.
+- `workIntent: design`/`review` either return the routes or name the call that will.
+- The refusal text distinguishes "you altered the packet" from "the packet was never delivered".
+
+The historical research-packet wording must be reconciled with the current
+author-owned research lane during acceptance; no reviewer-only research writer
+is created by this repair. The bounded packet-size and retained-packet criteria
+remain unverified, rather than being silently excused by this declaration fix.
+
+Verification references: `terminal-recovery.test.ts` compares real provider
+discovery and real packet construction; `independent-review-request.test.ts`
+retains negative authority and exact-equality controls; `load-tools.test.ts`
+checks the returned remedy. Official web typechecks and protected CI precede
+installed native dispatch. One atomic `reviewer-packet-contract` deliverable maps
+to BI-C56AE9A2, AC-C56-PACKET, AC-C56-REFUSAL and AC-C56-REMEDY under
+OBJ-MCP-RECOVERY and OBJ-MCP-PROCESS; its flow is the Ordered atomic fix above.
+
+## 2026-10-15: completion-issued review lanes remain requestable
+
+Continue BI-C56AE9A2 in WC-B37DBE9A. On served recovery96, the original
+provider parent BI-71ABBD95 has completed children and retains its xlarge shape,
+plan commit 99986af2 and plan blob 7bde23c6. Its ordinary plan claim is allowed,
+while implementation is correctly denied with DECOMPOSITION_REQUIRED. A typed
+completion attempt returns a plan-review packet, but unchanged dispatch refuses
+it because validation selects only the implementation decision. The exact
+provider evidence is retained separately; it is not an approval or a test fixture
+containing private operational records.
+
+This atomic continuation extends AC-C56-PACKET and AC-C56-REMEDY above:
+
+1. Add a failing issuer/validator regression using an allowed plan decision,
+   decomposition-only implementation decision and completion-owned plan review.
+   Include stale/completed review, altered packet and self-review controls.
+2. Reuse the shared design-phase decision policy to recognize the owed terminal
+   plan-review lane without reviving unrelated completed design gates. Preserve
+   immutable coverage/baseline validation, exact packet equality and caller,
+   reviewer, OAuth, grant and Workroom checks. Never allow xlarge implementation.
+3. Add a failing canonical item-read regression for objective-reconciliation-only
+   recovery. Project the existing terminal resolver's result for owed terminal
+   reviews, including its refusals/escalations; do not create a packet store,
+   alternate objective writer or new authority lane. A plan review can retain
+   precedence over objective mapping until it has a real receipt.
+4. Run the affected resolver, authorization, item-read and negative-control tests,
+   both official web TypeScript programs and applicable guards. Independently
+   review the immutable change, publish through the protected queue, and let the
+   existing provider owner exercise the newly served exact route. Neither source
+   verification nor task submission establishes review or parent acceptance.
+
+The steps form one revertible delivery mapped to BI-C56AE9A2 under
+OBJ-MCP-RECOVERY and OBJ-MCP-PROCESS, covering AC-C56-PACKET, AC-C56-REFUSAL and
+AC-C56-REMEDY. More than 20% of effort consolidates the existing decision and
+recovery projection contract. There is no schema, UI renderer or runtime config
+change. The original quoted medium criteria and six-route obligations above
+remain applicable and unverified beyond their actual evidence. Rollback reverts
+this continuation without deleting original refusals, tasks, budgets or receipts.
+The separate missing-terminal-writer task remains an execution recovery matter.
+
+## 2026-10-16: bounded recovery read on the existing item reader
+
+Finish BI-C56AE9A2's retained medium criteria in the same Workroom. The live
+evaluator claim delivered three complete review requests, but that is not the
+original six-or-more-unmet-gates/client-budget qualification. The existing
+`get_backlog_item` still includes the whole body, activity payloads and all
+recovery requests; retrying that large response cannot recover a cut-off packet.
+
+Extend that existing reader with an optional `recoveryGate` projection. Reuse
+the canonical readiness and terminal recovery issuer, caller identity, live
+Workroom, immutable artifact and baseline. Return only the requested gate's exact
+request, its source identity, available gate names and the issuer's finite
+escalations. Omit unrelated body/history and other request objects. Never trim a
+request to fit a budget, reconstruct a request or create an alternate store.
+If a single request exceeds the declared bounded-response budget, refuse it
+explicitly without returning a partial packet. Re-reading unchanged inputs must
+return the identical request; stale source or readiness yields the issuer's new
+refusal or current packet, never a cached approval.
+
+Research is now author-owned. Its bounded read must return the existing
+`record_initiative_evidence` recovery, not invent an independent research writer.
+Design/review claim and dispatch refusal guidance must name this reader and the
+specific gate, distinguishing a mismatched request from delivery that was not
+completed. This changes no reviewer eligibility, grant, equality or task budget.
+
+Ordered atomic fix:
+
+1. Reproduce with an effective-large six-or-more-unmet-gate decision, six issued
+   requests and large body/history. Assert one complete bounded request, exact
+   reread equality, unknown/missing gate refusal, oversized single-request
+   refusal and author-owned research escalation before production edits.
+2. Share one bounded recovery projection in the existing item read. Retain the
+   normal unfiltered item response for callers not requesting it. Resolve owed
+   pre-delivery and terminal lanes through the same canonical issuer.
+3. Update advertised schema and author guidance; preserve negative permission,
+   self-review, stale binding and altered-packet tests. Use actual caller/task
+   authority and never resume either existing missing-writer task as a test.
+4. Run affected tests, both official web typechecks and guards; independently
+   assess the committed delta, protect publication, then verify the bounded read
+   on the containing served version. Existing provider acceptance remains with
+   its owner and independent reviewer completion remains separately required.
+
+This is one atomic `reviewer-packet-contract` deliverable for BI-C56AE9A2,
+OBJ-MCP-RECOVERY/OBJ-MCP-PROCESS and AC-C56-PACKET/AC-C56-REFUSAL/AC-C56-REMEDY.
+The four original medium acceptance bullets quoted above remain unchanged;
+current author-owned research is explicitly qualified rather than silently
+converted into self-review. More than 20% of effort consolidates packet
+projection, validation and recovery guidance in the existing owners. No schema,
+UI, credential, provider or runtime configuration changes. Rollback reverts the
+optional projection while retaining all earlier packets, refusals and TaskRuns.

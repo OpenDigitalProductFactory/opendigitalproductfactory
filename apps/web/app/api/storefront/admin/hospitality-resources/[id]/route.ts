@@ -9,6 +9,7 @@ import {
   isAdminResourceCapacityValid,
   resolveAdminResourceProfile,
 } from "@/lib/resource-scheduling/admin-resource-profile";
+import { upsertCanonicalResourceDraft } from "@/lib/resource-scheduling/admin-resource-repository";
 import {
   fromHospitalityAvailability,
   fromHospitalityResource,
@@ -176,11 +177,10 @@ export async function PUT(
     const exceptions = body.exceptions!;
     const updated = await prisma.$transaction(async (transaction) => {
       const canonical = canonicalResourceData(current);
-      const canonicalResource = await transaction.resource.upsert({
-        where: { sourceRef: canonical.draft.sourceRef },
-        create: canonical.data,
-        update: canonical.data,
-      });
+      const canonicalResource = await upsertCanonicalResourceDraft(
+        transaction.resource,
+        canonical.data,
+      );
       await transaction.hospitalityResourceAvailability.deleteMany({
         where: {
           resourceId: current.id,
@@ -431,11 +431,7 @@ export async function PUT(
       });
       if (updated) {
         const canonical = canonicalResourceData(updated);
-        await transaction.resource.upsert({
-          where: { sourceRef: canonical.draft.sourceRef },
-          create: canonical.data,
-          update: canonical.data,
-        });
+        await upsertCanonicalResourceDraft(transaction.resource, canonical.data);
       }
       return updated;
     });

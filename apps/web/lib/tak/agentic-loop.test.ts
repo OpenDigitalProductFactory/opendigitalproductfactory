@@ -7,7 +7,6 @@ import {
   buildRepeatedQuestionNudge,
   buildRepeatedToolStopMessage,
   buildRuntimeLimitToolLoopMessage,
-  buildMaxIterationsExhaustedMessage,
   detectToolRefusedDespiteAvailability,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
@@ -279,71 +278,6 @@ describe("buildRuntimeLimitToolLoopMessage (BI-0C19AFDD)", () => {
 // configured provider is active but wasn't eligible" (banner) and "My usual AI
 // was unavailable" (this message). The message branched on the `downgraded`
 // boolean, which conflated a dispatch failure with pre-dispatch ineligibility.
-describe("buildMaxIterationsExhaustedMessage (BI-F4D3B9E9d)", () => {
-  const anyTools = [{ name: "query_backlog", result: { ok: true } as never }];
-
-  it("says 'unavailable' only when a dispatch actually failed", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "provider-unavailable",
-      executedTools: anyTools,
-    });
-    expect(msg).toContain("My usual AI was unavailable");
-    expect(msg).toContain("query_backlog");
-  });
-
-  it("never claims 'unavailable' when the provider was merely ineligible", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "not-eligible",
-      executedTools: anyTools,
-    });
-    // The exact contradiction with the downgrade banner.
-    expect(msg).not.toContain("was unavailable");
-    expect(msg).toContain("wasn't a fit for this particular request");
-  });
-
-  it("does not tell an owner to connect a provider they already have connected", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "not-eligible",
-      executedTools: anyTools,
-    });
-    // Old copy: "Connecting a stronger provider (Claude, Gemini, or OpenAI)…"
-    expect(msg).not.toMatch(/connecting a stronger provider/i);
-    expect(msg).toMatch(/shorter request/i);
-  });
-
-  it("points at restoring the failed provider when one genuinely failed", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: "provider-unavailable",
-      executedTools: anyTools,
-    });
-    expect(msg).toContain("Platform > AI > Providers");
-  });
-
-  it("adds no downgrade lead at all on a healthy-provider exhaustion", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: null,
-      executedTools: anyTools,
-    });
-    expect(msg).not.toMatch(/my usual ai/i);
-    expect(msg).toMatch(/^I made several attempts/);
-    expect(msg).toMatch(/smaller piece/i);
-  });
-
-  it("falls back to a generic work note when no tools ran", () => {
-    const msg = buildMaxIterationsExhaustedMessage({
-      downgradeReason: null,
-      executedTools: [],
-    });
-    expect(msg).toContain("I worked through several attempts");
-  });
-
-  it("always names the safety limit rather than an opaque failure", () => {
-    for (const downgradeReason of ["provider-unavailable", "not-eligible", null] as const) {
-      const msg = buildMaxIterationsExhaustedMessage({ downgradeReason, executedTools: anyTools });
-      expect(msg).toContain("safety limit");
-    }
-  });
-});
 
 describe("buildToolSessionHintMessage — review-fail veto + tool-error notes in the messages tail", () => {
   // BI-56804810: these notes now ride in a per-turn user message (not tool
@@ -637,6 +571,56 @@ describe("runAgenticLoop", () => {
     threadId: "thread-1",
   };
 
+  // Preserve typed pre-inference causes even after this TaskRun banked reader work.
+  it.each([
+    ["Local provider dispatch deferred: local-ci-queued-capacity-reservation", "capacity", false],
+    ["Provider is overloaded, status: 529", "busy", false],
+    ["required-terminal-writer-not-enforceable: claude-code-cli cannot require record_initiative_evidence", "required-terminal-writer-not-enforceable", true],
+  ])("keeps a pre-inference refusal classified (%s) instead of blaming the writer", async (message, expectedKind, banksReader) => {
+    const mockRoute = vi.mocked(routeAndCall);
+    const deferral = new Error(message);
+    deferral.name = expectedKind === "capacity" ? "LocalProviderCapacityDeferredError" : "Error";
+    if (banksReader) {
+      mockRoute.mockResolvedValueOnce(mockResult({ content: "Read.", toolCalls: [{ id: "r1", name: "search_project_files", arguments: { query: "bound source" } }] })).mockRejectedValueOnce(deferral);
+      vi.mocked(executeTool).mockResolvedValueOnce({ success: true, message: "Bound source" });
+    } else mockRoute.mockRejectedValue(deferral);
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["search_project_files"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure?.kind).toBe(expectedKind);
+    expect(result.failure?.kind).not.toBe("terminal-writer-missing");
+    expect(result.content).not.toContain("could not be dispatched");
+    expect(result.executedTools).toHaveLength(banksReader ? 1 : 0);
+  });
+
+  it("still blames the writer when the route fails for a reason it cannot classify", async () => {
+    // The unclassified path is unchanged: without a known cause there is nothing
+    // truer to say than that the receipt was not recorded.
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute.mockRejectedValue(new Error("something entirely unexpected"));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      terminalToolPolicy: {
+        writerToolName: "record_initiative_evidence",
+        readerToolNames: ["read_source_at_version"],
+        minimumSuccessfulReaderCalls: 1,
+        maximumReaderCalls: 3,
+      },
+    });
+
+    expect(result.failure?.kind).toBe("terminal-writer-missing");
+    expect(result.content).toContain("record_initiative_evidence");
+  });
+
   it("points to the real provider surface when no tool-capable endpoint is active", async () => {
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
@@ -656,42 +640,29 @@ describe("runAgenticLoop", () => {
     expect(result.modelId).toBe("unknown");
   });
 
-  it("returns could-not-verify instead of fabricated prose when an evidence-required turn makes zero tool calls (BI-B5C358B1)", async () => {
-    // The Scrum Master incident: a live-state backlog question on /ops, a local
-    // model that ignores its tools and answers from memory with fabricated
-    // numbers. The loop must NOT surface that answer — it nudges once for a tool,
-    // then returns the explicit could-not-verify message.
-    const mockRoute = vi.mocked(routeAndCall);
-    const FABRICATED =
-      "Yes — 59 of 60 backlog items are done or deferred, and only one is still in progress. " +
-      "The team has resolved nearly all of the pressing issues on the self-upgrade board.";
-    mockRoute.mockResolvedValue(
-      mockResult({
-        content: FABRICATED,
-        providerId: "local",
-        modelId: "docker.io/ai/qwen3.6:latest",
-        toolCalls: [],
-      }) as never,
-    );
-
+  it.each([
+    {
+      name: "withholds unsupported live-state claims after one bounded nudge",
+      route: "/ops/self-upgrade", request: "have the pressing issues been resolved?",
+      answer: "Yes - 59 of 60 backlog items are done or deferred, and only one is still in progress. The team has resolved nearly all of the pressing issues.",
+      expected: INV5_UNVERIFIED_MESSAGE, calls: 2,
+    },
+    {
+      name: "returns supplied source analysis without a live-data recovery task",
+      route: "/build",
+      request: "Read the attached historical source diff and explain its worker cap and reserve.\n\ndiff --git a/build.mjs b/build.mjs\n--- a/build.mjs\n+++ b/build.mjs\n@@ -1 +1 @@\n-const workers = 11;\n+const workers = available ? 2 : 1;",
+      answer: "The source caps page workers at two and reserves 16 GiB for admission. These are admission budgets, not measured peak-memory guarantees.",
+      expected: null, calls: 1,
+    },
+  ].flatMap((testCase) => (["chat", "autonomous"] as const).map((interactionMode) => ({ ...testCase, interactionMode }))))("$name ($interactionMode)", async ({ route, request, answer, expected, calls, interactionMode }) => {
+    vi.mocked(routeAndCall).mockResolvedValue(mockResult({ content: answer, toolCalls: [] }) as never);
     const result = await runAgenticLoop({
-      ...baseParams,
-      chatHistory: [{ role: "user" as const, content: "have the pressing issues been resolved?" }],
-      routeContext: "/ops/self-upgrade",
-      agentId: "ops-coordinator",
-      interactionMode: "chat",
-      tools: [
-        { name: "query_backlog", description: "Query backlog items and epics", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
-      ],
-      toolsForProvider: [
-        { type: "function", function: { name: "query_backlog", description: "Query backlog items and epics", parameters: {} } },
-      ],
+      ...baseParams, routeContext: route, interactionMode,
+      chatHistory: [{ role: "user", content: request }],
     });
-
-    expect(result.content).toBe(INV5_UNVERIFIED_MESSAGE);
-    expect(result.content).not.toContain("59");
-    // One bounded recovery nudge before refusing → routeAndCall invoked twice.
-    expect(mockRoute.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(result.content).toBe(expected ?? answer);
+    expect(routeAndCall).toHaveBeenCalledTimes(calls);
+    expect(result.executedTools).toEqual([]);
   });
 
   it("tells the operator to reconnect a provider (not 'wait 30s') when every endpoint is eliminated", async () => {
@@ -747,7 +718,7 @@ describe("runAgenticLoop", () => {
     // first and said "nothing is misconfigured / wait a minute" — wrong (BI-AUDIT-003).
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
-      'All endpoints failed for onboarding. Attempts: [{"endpointId":"codex","error":"No credential for \\"codex\\". Configure via Admin > AI Workforce > External Services."},{"endpointId":"local","error":"skipped local fallback: 80 tools exceeds threshold for small local models"}]',
+      'All endpoints failed for onboarding. Attempts: [{"endpointId":"codex","error":"No credential for \\"codex\\". Configure via External Services (/platform/ai/providers/codex)."},{"endpointId":"local","error":"skipped local fallback: 80 tools exceeds threshold for small local models"}]',
     ));
 
     const result = await runAgenticLoop({
@@ -863,40 +834,6 @@ describe("runAgenticLoop", () => {
         }),
       }),
     );
-  });
-
-  it("breaks early with a blocked status when every tool call is forbidden_grant (no full-duration spin)", async () => {
-    const mockRoute = vi.mocked(routeAndCall);
-
-    // Model keeps emitting tool calls with VARYING args (as the real
-    // grant-starved loop did) so the exact-args repetition detector never
-    // fires — only the grant-starvation circuit breaker should stop it.
-    let call = 0;
-    mockRoute.mockImplementation(async () =>
-      mockResult({
-        content: "Let me use a tool.",
-        toolCalls: [
-          { id: `toolu_${call}`, name: "search_project_files", arguments: { query: `attempt-${call++}` } },
-        ],
-      }),
-    );
-
-    // Every governed execution is rejected for a missing grant.
-    vi.mocked(governedExecuteTool).mockResolvedValue({
-      success: false,
-      error: "forbidden_grant",
-      message: "search_project_files rejected: agent lacks a required grant",
-    } as never);
-
-    const result = await runAgenticLoop({ ...baseParams, agentId: "build-architect" });
-
-    // Honest, actionable blocked message that names the agent + the tool.
-    expect(result.content).toContain("Blocked");
-    expect(result.content).toContain("forbidden_grant");
-    expect(result.content).toContain("search_project_files");
-    expect(result.content).toContain("build-architect");
-    // Broke on the streak (3), did NOT burn toward MAX_ITERATIONS (200).
-    expect(vi.mocked(governedExecuteTool).mock.calls.length).toBeLessThan(10);
   });
 
   it("returns a visible diagnostic instead of issuing a second local-model nudge on non-build tool turns", async () => {
@@ -1070,7 +1007,6 @@ describe("runAgenticLoop", () => {
       success: true,
       message: "Found files",
     });
-
     await runAgenticLoop({
       ...baseParams,
       taskRunId: "TR-SCHED-TESTRUN",
@@ -1113,13 +1049,14 @@ describe("runAgenticLoop", () => {
       ...baseParams,
       taskRunId: "TR-MCP-TESTRUN",
       apiTokenId: "tok_remote",
+      tokenScope: "write", tokenGrantScopes: ["file_read"],
     });
-
     expect(governedExecuteTool).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
           taskRunId: "TR-MCP-TESTRUN",
           apiTokenId: "tok_remote",
+          tokenScope: "write", tokenGrantScopes: ["file_read"], // BI-F8C661D0
         }),
       }),
     );

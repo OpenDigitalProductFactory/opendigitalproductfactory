@@ -29,18 +29,30 @@ export function ReferenceModelSummary({ models }: Props) {
           <Link
             key={model.id}
             href={`/ea/models/${model.slug}`}
-            className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 transition-colors hover:border-[var(--dpf-accent)]"
+            className={`rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 transition-colors hover:border-[var(--dpf-accent)]${
+              model.applies ? "" : " opacity-70"
+            }`}
+            data-applies={model.applies ? "true" : "false"}
           >
+            {/* A model this install does not serve is NOT "active with nothing
+                in it" — its counts are zero because its hierarchy was never
+                imported, which is correct. Showing the lifecycle status there
+                made a banking standard look live and broken on a pet rescue
+                (BI-C44EAEE6). */}
             <p className="mb-1 text-[10px] font-mono uppercase tracking-widest text-[var(--dpf-muted)]">
-              {model.status}
+              {model.applies ? model.status : "not this archetype"}
             </p>
             <p className="text-sm font-semibold text-[var(--dpf-text)]">{model.name}</p>
             <p className="mb-2 text-xs text-[var(--dpf-muted)]">{model.version}</p>
-            <div className="space-y-1 text-xs text-[var(--dpf-muted)]">
-              <p>{model.criteriaCount} criteria</p>
-              <p>{model.assessmentCount} assessments</p>
-              <p>{model.proposalCount} proposals</p>
-            </div>
+            {model.applies ? (
+              <div className="space-y-1 text-xs text-[var(--dpf-muted)]">
+                <p>{model.criteriaCount} criteria</p>
+                <p>{model.assessmentCount} assessments</p>
+                <p>{model.proposalCount} proposals</p>
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--dpf-muted)]">{model.applicabilityReason}</p>
+            )}
           </Link>
         ))}
       </div>

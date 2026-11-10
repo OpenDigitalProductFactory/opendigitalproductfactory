@@ -75,7 +75,6 @@ import {
   revokeRefreshToken,
 } from "../../api/jwt.js";
 import { authenticateRequest } from "../../api/auth-middleware.js";
-import { getGrantedCapabilities } from "../../permissions.js";
 
 // Route handlers — imported dynamically per test to get fresh modules
 import { POST as loginHandler } from "../../../app/api/v1/auth/login/route.js";

@@ -5,6 +5,7 @@ import { newId } from "@/lib/shared/new-id";
 import { ok, err as fail, type ActionResult } from "@/lib/shared/action-result";
 import { generateInvoiceFromStorefrontOrder } from "@/lib/actions/finance";
 import { isExclusionViolation } from "@/lib/db/exclusion-violation";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import {
   createProductSoldDraft,
   createTypedFulfillmentInstance,
@@ -570,7 +571,7 @@ export async function submitOrder(
   }, 0);
 
   const ref = makeRef("ORD");
-  const currency = data.currency ?? "GBP";
+  const currency = data.currency ?? (await getOrgBaseCurrency());
   const purchasedAt = new Date();
   const productManagementChanges = createProductManagementChangeCollector();
   const created = await prisma.$transaction(async (tx) => {
@@ -722,7 +723,15 @@ export async function submitDonation(
       donorEmail: data.donorEmail,
       donorName: data.donorName,
       amount: data.amount,
-      currency: data.currency ?? "GBP",
+      // The workspace's own currency, never a hardcoded one. This read
+      // `data.currency ?? "GBP"`, and `DonationForm` passes no currency, so on
+      // every non-GBP install the donate page showed the org's symbol while the
+      // row was written GBP (BI-685ADDCD). A USD rescue took $50 and $25 and its
+      // books said GBP. Resolved on the server so the stored code cannot drift
+      // from the symbol the donor saw — the donate page derives that symbol from
+      // this same `OrgSettings.baseCurrency`. An explicit currency still wins, so
+      // a later multi-currency flow is not foreclosed.
+      currency: data.currency ?? (await getOrgBaseCurrency()),
       campaignId: data.campaignId,
       message: data.message,
       isAnonymous: data.isAnonymous ?? false,

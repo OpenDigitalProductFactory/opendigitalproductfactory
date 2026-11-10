@@ -4,7 +4,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const probeDir = dirname(fileURLToPath(import.meta.url));
-const imageTag = "dpf-marketing-media-probe:hyperframes-0.7.87";
+const packageManifest = JSON.parse(await readFile(resolve(probeDir, "package.json"), "utf8"));
+const imageTag = `dpf-marketing-media-probe:hyperframes-${packageManifest.dependencies.hyperframes}`;
+// ffprobe-static ships Linux x64 binaries, but no Linux ARM64 binary.
+const platform = "linux/amd64";
 const receiptPath = resolve(probeDir, "local-render-receipt.json");
 
 function run(command, args, options = {}) {
@@ -23,6 +26,7 @@ function run(command, args, options = {}) {
 
 run("docker", [
   "build",
+  "--platform", platform,
   "--file", "Dockerfile.probe",
   "--label", "org.opendpf.evaluation=BI-0C891AC7",
   "--tag", imageTag,
@@ -33,6 +37,7 @@ const imageIdentity = run("docker", ["image", "inspect", imageTag, "--format", "
 
 run("docker", [
   "run",
+  "--platform", platform,
   "--rm",
   "--cpus", "4",
   "--memory", "8g",
@@ -44,6 +49,7 @@ run("docker", [
 const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
 receipt.container = {
   imageTag,
+  platform,
   imageIdentity,
   baseImage: "node:24-bookworm-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7",
   network: "none",

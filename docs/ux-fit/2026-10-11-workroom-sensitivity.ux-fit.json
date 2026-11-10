@@ -1,0 +1,7 @@
+{
+  "version": "1",
+  "decisionInteractionId": "DI-39A04215CD02",
+  "decidedOption": "canonical-select",
+  "scope": { "files": ["apps/web/components/workspace/workroom/WorkroomBoundaryControl.tsx"] },
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["canonical-select", "validated-text"] }
+}

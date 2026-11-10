@@ -1,10 +1,12 @@
 // EP-ASYNC-COWORKER-001: Cancel a running agent task.
-// Sets an in-memory flag checked by the agentic loop at each iteration boundary.
+// Sets an in-memory flag checked by the agentic loop at each iteration boundary,
+// and cancels the turn's open delegated children (BI-97EE6DE9).
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
-import { agentEventBus } from "@/lib/agent-event-bus";
+import { ok } from "@/lib/shared/action-result";
+import { stopThreadTurn } from "@/lib/tak/thread-cancellation";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +36,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
-  agentEventBus.requestCancel(body.threadId);
-  return NextResponse.json({ ok: true });
+  // BI-97EE6DE9: Stop also stops the work this turn delegated; the thread stays usable.
+  const { cancelledThreadIds } = await stopThreadTurn(body.threadId, session.user.id);
+  return NextResponse.json({ ...ok(), cancelledThreadIds });
 }

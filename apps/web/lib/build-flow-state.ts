@@ -17,6 +17,7 @@ import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { recordReadyDependentsAfterCompletion } from "@/lib/build/feature-build-dependencies";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { completeFeatureBuildTransition } from "@/lib/backlog/initiative-readiness/build-terminal-transition";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -294,6 +295,29 @@ export async function getBuildFlowState(buildId: string): Promise<BuildFlowState
 
 // ─── Fork derivation ────────────────────────────────────────────────────────
 
+/** The upstream fork as the room's PR delivery state reports it. */
+function forkFromRoomDelivery(
+  workspaceState: unknown,
+  prUrl: string,
+  prNumber: number | null,
+  packId: string | null,
+): UpstreamFork {
+  const delivery = readBuildPrDeliveryState(workspaceState);
+  if (delivery?.status === "awaiting-release" || delivery?.status === "deployed") {
+    return { state: "shipped", prUrl, prNumber, packId, errorMessage: null };
+  }
+  if (delivery?.status === "escalated" || delivery?.status === "closed") {
+    return {
+      state: "errored",
+      prUrl,
+      prNumber,
+      packId,
+      errorMessage: delivery.lastError ?? "Pull request delivery needs an owner decision",
+    };
+  }
+  return { state: "in_progress", prUrl, prNumber, packId, errorMessage: null };
+}
+
 async function deriveUpstreamFork(
   buildRowId: string,
   humanBuildId: string,
@@ -327,7 +351,17 @@ async function deriveUpstreamFork(
   const prNumber = pack?.prNumber ?? manifestPrNumber ?? null;
 
   if (!pack) {
-    // Ship reached but no pack yet — contribute_to_hive hasn't been called or
+    // BI-1CDA479D: the automatic create_portal_pr path writes no pack; its PR
+    // lives on the build's own room, so follow that room's delivery state.
+    const room = await prisma.workroom.findFirst({
+      where: { featureBuildId: buildRowId, pullRequestNumber: { not: null } },
+      orderBy: { updatedAt: "desc" },
+      select: { workspaceState: true, pullRequestUrl: true, pullRequestNumber: true },
+    });
+    if (room?.pullRequestUrl) {
+      return forkFromRoomDelivery(room.workspaceState, room.pullRequestUrl, room.pullRequestNumber, null);
+    }
+    // Ship reached but no PR yet — contribute_to_hive hasn't been called or
     // the user declined. Without a pack we can't tell failure from not-yet-run;
     // treat as in_progress so the UI shows the fork as pending user decision.
     return { state: "in_progress", prUrl: null, prNumber: null, packId: null, errorMessage: null };
@@ -342,20 +376,7 @@ async function deriveUpstreamFork(
       orderBy: { updatedAt: "desc" },
       select: { workspaceState: true },
     });
-    const delivery = readBuildPrDeliveryState(capsule?.workspaceState);
-    if (delivery?.status === "awaiting-release" || delivery?.status === "deployed") {
-      return { state: "shipped", prUrl, prNumber, packId: pack.packId, errorMessage: null };
-    }
-    if (delivery?.status === "escalated" || delivery?.status === "closed") {
-      return {
-        state: "errored",
-        prUrl,
-        prNumber,
-        packId: pack.packId,
-        errorMessage: delivery.lastError ?? "Pull request delivery needs an owner decision",
-      };
-    }
-    return { state: "in_progress", prUrl, prNumber, packId: pack.packId, errorMessage: null };
+    return forkFromRoomDelivery(capsule?.workspaceState, prUrl, prNumber, pack.packId);
   }
 
   // Pack exists but no prUrl — check BuildActivity for a failure record on
@@ -445,21 +466,31 @@ function extractScheduleDescription(deploymentLog: string | null): string | null
 
 // ─── Reconciler (§3.6) ──────────────────────────────────────────────────────
 
+export type BuildCompletionPreconditions =
+  | { satisfied: true }
+  | {
+      satisfied: false;
+      reason: "build-not-found" | "not-in-ship" | "forks-not-terminal" | "not-deployed";
+      message: string;
+    };
+
 /**
- * Advance `phase: "ship"` → `phase: "complete"` when every applicable fork
- * has reached a terminal state. Idempotent: safe to call multiple times;
- * no-op if the build is not currently in ship or the forks aren't all
- * dispositioned. Called from the fork tool sites (contribute_to_hive,
- * execute_promotion, schedule_promotion) and any ChangePromotion.status
- * update path.
- *
- * Returns true if a transition actually happened.
+ * The delivery preconditions for ship → complete (BI-BDB63485), in one place:
+ * the build is in `ship`, every applicable fork is terminal, and the deployed
+ * runtime includes the build's merged SHA — unless the upstream fork is
+ * skipped. Every path that completes a build checks these before the terminal
+ * transition (`completeFeatureBuildTransition`, which checks initiative
+ * readiness only). Reads, never writes.
  */
-export async function reconcileBuildCompletion(buildId: string): Promise<boolean> {
+export async function evaluateBuildCompletionPreconditions(buildId: string): Promise<BuildCompletionPreconditions> {
   const state = await getBuildFlowState(buildId);
-  if (!state) return false;
-  if (state.currentPhase !== "ship") return false;
-  if (!state.allApplicableForksTerminal) return false;
+  if (!state) return { satisfied: false, reason: "build-not-found", message: "Build not found." };
+  if (state.currentPhase !== "ship") {
+    return { satisfied: false, reason: "not-in-ship", message: `Cannot complete this build: it is in ${state.currentPhase}, not ship.` };
+  }
+  if (!state.allApplicableForksTerminal) {
+    return { satisfied: false, reason: "forks-not-terminal", message: "Cannot complete this build: not every release fork has finished." };
+  }
   // Confirm the deployed runtime includes the build's merge SHA before
   // completing — UNLESS there is no upstream deploy path at all. When the
   // install's contributionMode is private/fork_only the upstream fork resolves
@@ -471,9 +502,42 @@ export async function reconcileBuildCompletion(buildId: string): Promise<boolean
   // forks-terminal. A real upstream PR ("shipped"/in-flight) keeps the
   // deploy-confirmation gate (#2188: complete once the merged SHA is live).
   if (state.upstream.state !== "skipped" && !(await isFeatureBuildDeployed(buildId))) {
-    return false;
+    return { satisfied: false, reason: "not-deployed", message: "Cannot complete this build: the merged change is not deployed yet." };
   }
-  const readiness = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship" });
+  return { satisfied: true };
+}
+
+/**
+ * Complete a build on request (the Build Studio owner's advance to `complete`,
+ * or `completeBuild`): the delivery preconditions above, then the terminal
+ * transition. Returns a refusal instead of throwing. The refusal text for a
+ * readiness block is the one `assertFeatureBuildCompletion` threw before.
+ */
+export async function completeBuildWhenDelivered(buildId: string): Promise<ActionResult> {
+  const preconditions = await evaluateBuildCompletionPreconditions(buildId);
+  if (!preconditions.satisfied) return err(preconditions.message);
+  const terminal = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship", deliveryProven: true });
+  if (!terminal.ok) {
+    const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
+    return err(`Cannot complete this build: ${codes.join(", ")}.`);
+  }
+  return ok();
+}
+
+/**
+ * Advance `phase: "ship"` → `phase: "complete"` when every applicable fork
+ * has reached a terminal state. Idempotent: safe to call multiple times;
+ * no-op if the build is not currently in ship or the forks aren't all
+ * dispositioned. Called from the fork tool sites (contribute_to_hive,
+ * execute_promotion, schedule_promotion) and any ChangePromotion.status
+ * update path.
+ *
+ * Returns true if a transition actually happened.
+ */
+export async function reconcileBuildCompletion(buildId: string): Promise<boolean> {
+  const preconditions = await evaluateBuildCompletionPreconditions(buildId);
+  if (!preconditions.satisfied) return false;
+  const readiness = await completeFeatureBuildTransition({ buildId, expectedPhase: "ship", deliveryProven: true });
   if (!readiness.ok) return false;
   await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
     console.error("[reconcileBuildCompletion] dependency readiness check failed:", err);

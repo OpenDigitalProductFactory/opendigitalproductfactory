@@ -29,7 +29,10 @@ function policy(overrides: Partial<RegulatoryAutonomyPolicyRecord>): RegulatoryA
 }
 
 describe("resolveRegulatoryAutonomyCeiling", () => {
-  it("defaults unknown policy state to human-controlled propose", () => {
+  // Operator decision 2026-10-07 (BI-E30C0F4F): a policy gap is a setup finding,
+  // not a reason to wait for a person. The work runs supervised: an independent
+  // AI reviewer approves, and the gap is reported for a policy to be written.
+  it("runs a policy gap supervised under an independent reviewer, not under human control", () => {
     const result = resolveRegulatoryAutonomyCeiling({
       policies: [],
       profile: { ...emptyProfile, operatesIn: ["eu"] },
@@ -38,11 +41,11 @@ describe("resolveRegulatoryAutonomyCeiling", () => {
       asOf: "2026-06-28T12:00:00.000Z",
     });
 
-    expect(result.ceiling).toBe("propose");
+    expect(result.ceiling).toBe("supervised");
     expect(result.defaulted).toBe(true);
-    expect(result.humanControlRequired).toBe(true);
-    expect(result.requiredEvidence).toContain("operator-policy-review");
-    expect(result.reason).toMatch(/No active regulatory autonomy policy/);
+    expect(result.humanControlRequired).toBe(false);
+    expect(result.requiredEvidence).toEqual(expect.arrayContaining(["independent-review", "policy-gap-report"]));
+    expect(result.reason).toMatch(/policy gap/i);
   });
 
   it("matches industry, activity, and jurisdiction basis", () => {

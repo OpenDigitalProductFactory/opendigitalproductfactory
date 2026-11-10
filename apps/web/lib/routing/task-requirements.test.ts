@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getTaskRequirement, BUILT_IN_TASK_REQUIREMENTS } from "./task-requirements";
+import { BUILT_IN_TASK_REQUIREMENTS } from "./task-requirements";
 import { TIER_MINIMUM_DIMENSIONS } from "./quality-tiers";
 
 const { mockPrisma } = vi.hoisted(() => ({

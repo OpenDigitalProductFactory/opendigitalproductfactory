@@ -74,6 +74,15 @@ export const AGENT_IDENTITY_OVERRIDES: Record<string, { displayName?: string; ki
  * collapses dual-seed pairs via `dropDualSeedAliasAgents` (prefer AGT-*).
  */
 export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string>> = {
+  "evaluate-orchestrator": "AGT-ORCH-100",
+  "explore-orchestrator": "AGT-ORCH-200",
+  "integrate-orchestrator": "AGT-ORCH-300",
+  "deploy-orchestrator": "AGT-ORCH-400",
+  "release-orchestrator": "AGT-ORCH-500",
+  "consume-orchestrator": "AGT-ORCH-600",
+  "operate-orchestrator": "AGT-ORCH-700",
+  "governance-orchestrator": "AGT-ORCH-800",
+  "finance-agent": "AGT-900",
   coo: "AGT-ORCH-000",
   "build-specialist": "AGT-WS-BUILD",
   "change-reviewer": "AGT-WS-REVIEW",
@@ -100,6 +109,33 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   // canonical record — and therefore no escalation target, which is what the
   // Governance plane needs to reach level 3.
   "compliance-officer": "AGT-WS-COMPLIANCE",
+  // EP-32B0E693: workforce-seeded coworkers are canonical identities, not a
+  // second namespace. These mirrors preserve the slug rows required by legacy
+  // FK consumers while collapsing the roster onto the AGT-* registry.
+  "data-architect": "AGT-WS-DATA-ARCHITECT",
+  "data-steward": "AGT-WS-DATA-STEWARD",
+  dispatcher: "AGT-WS-DISPATCHER",
+  "mailroom-coordinator": "AGT-WS-MAILROOM",
+  "integration-engineer": "AGT-WS-INTEGRATION",
+  "legal-operations-counsel": "AGT-WS-LEGAL",
+  "security-engineer": "AGT-WS-SECURITY",
+  "storefront-advisor": "AGT-WS-STOREFRONT",
+  "finance-controller": "AGT-WS-FINANCE",
+  "market-research-analyst": "AGT-WS-MARKET-RESEARCH",
+  "doc-specialist": "AGT-WS-DOC",
+  // Already-active registry identities are staffed by definition. The
+  // workforce seed projects that existing state; it does not activate a
+  // declared-only role or widen authority.
+  "licensing-specialist": "AGT-905",
+  "ux-accessibility-agent": "AGT-903",
+  "soc-triage-analyst": "AGT-SOC-TRIAGE",
+  "soc-investigator": "AGT-SOC-INVESTIGATOR",
+  "soc-threat-hunter": "AGT-SOC-HUNTER",
+  "soc-incident-commander": "AGT-SOC-IR-LEAD",
+  "external-claude-code": "AGT-EXT-CLAUDE",
+  "external-codex": "AGT-EXT-CODEX",
+  "external-grok": "AGT-EXT-GROK",
+  bookkeeper: "AGT-907",
 };
 
 /** Reverse map: canonical AGT-* → preferred slug handle. */

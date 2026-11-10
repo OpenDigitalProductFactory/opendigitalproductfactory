@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { FINANCE_FAMILIES, getFinanceFamily } from "@/components/finance/finance-nav";
+import { FINANCE_FAMILIES, getFinanceFamily } from "@/lib/navigation/finance-nav";
 import { SectionNav } from "@/components/shell/SectionNav";
 
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
@@ -12,7 +12,9 @@ function isSubItemActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function FinanceTabNav() {
+type FinanceNavigationLabels = Partial<Record<"revenue" | "spend" | "close" | "configuration", string>>;
+
+export function FinanceTabNav({ labels }: { labels?: FinanceNavigationLabels } = {}) {
   const pathname = usePathname();
   const activeFamily = getFinanceFamily(pathname);
 
@@ -24,7 +26,7 @@ export function FinanceTabNav() {
         dataComponent: "finance-tab-nav",
         families: FINANCE_FAMILIES.map((family) => ({
           key: family.key,
-          label: family.label,
+          label: labels?.[family.key as keyof FinanceNavigationLabels] ?? family.label,
           href: family.href,
           active: activeFamily.href === family.href,
         })),

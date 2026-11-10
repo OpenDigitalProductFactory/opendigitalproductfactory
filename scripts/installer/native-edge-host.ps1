@@ -1,5 +1,8 @@
 # Host-native Edge Node installation for Windows. Docker Desktop does not
-# expose the Windows host multicast interfaces to Linux containers.
+# expose the Windows host multicast interfaces to Linux containers, and host
+# upkeep (the operator-approved Docker VM restart, BI-28EFE18A) must run
+# outside the VM it restarts. Every install gets the node; -Role host-upkeep
+# keeps it to heartbeat and host upkeep when edge features are not enabled.
 
 function Get-DPFNativeEdgeReleaseUri {
     param([string]$Version, [Parameter(Mandatory)][string]$Asset)
@@ -12,9 +15,12 @@ function Get-DPFNativeEdgeReleaseUri {
 function Install-DPFNativeEdgeNode {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
-        [Parameter(Mandatory)][string]$BootstrapToken,
+        # Empty when the node is already enrolled: its identity lives in its
+        # state directory and no new one-time token is minted.
+        [Parameter(Mandatory)][AllowEmptyString()][string]$BootstrapToken,
         [string]$AuthorityUrl = $env:DPF_LAN_AUTHORITY_URL,
-        [string]$Version = "latest"
+        [string]$Version = "latest",
+        [ValidateSet("full", "host-upkeep")][string]$Role = "full"
     )
 
     if (-not $AuthorityUrl) {
@@ -140,16 +146,25 @@ function Install-DPFNativeEdgeNode {
 `$env:DPF_EDGE_NODE_NAME = '$escapedNodeName'
 `$env:DPF_INSTALL_MODE = 'native'
 `$env:DPF_EDGE_STATE_DIR = '$escapedState'
+`$env:DPF_AUTOSTART_TASK_NAME = 'DPF-AutoStart'
+`$env:DPF_EDGE_ROLE = '$Role'
 $organizationEnvironment
 $actionEnvironment& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-node.log'
 "@ | Set-Content -LiteralPath $runner -Encoding ASCII
 
     icacls $stateRoot /inheritance:r /grant:r "$env:USERNAME`:(OI)(CI)F" 2>&1 | Out-Null
+    # The mDNS rule needs an elevated session. The logon-time convergence
+    # (BI-084F85E5) is not elevated, and host upkeep does not use mDNS, so a
+    # refused rule is reported and the agent still installs.
     $firewallName = "DPF Native Edge Node mDNS"
-    if (-not (Get-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule -DisplayName $firewallName -Direction Inbound -Action Allow -Protocol UDP -LocalPort 5353 -Program $binary -Profile Private | Out-Null
-    } else {
-        Set-NetFirewallRule -DisplayName $firewallName -Enabled True -Action Allow | Out-Null
+    try {
+        if (-not (Get-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue)) {
+            New-NetFirewallRule -DisplayName $firewallName -Direction Inbound -Action Allow -Protocol UDP -LocalPort 5353 -Program $binary -Profile Private -ErrorAction Stop | Out-Null
+        } else {
+            Set-NetFirewallRule -DisplayName $firewallName -Enabled True -Action Allow -ErrorAction Stop | Out-Null
+        }
+    } catch {
+        Write-Warn "The mDNS firewall rule needs an elevated session; nearby discovery stays off until the installer runs elevated."
     }
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NoLogo -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runner`""
     $trigger = New-ScheduledTaskTrigger -AtLogOn

@@ -57,6 +57,13 @@ never in a portable package.
   [`scripts/check-package-boundaries.mjs`](../../scripts/check-package-boundaries.mjs),
   run both as a CI job (`Package Boundary Guard`) and as a web unit test
   ([`apps/web/lib/contracts/package-boundaries.test.ts`](../../apps/web/lib/contracts/package-boundaries.test.ts)).
+- **A contract type has one declaration.** A route that produces a `@dpf/types` shape
+  imports it and checks the payload with `satisfies <Type>`, so a drift between producer and
+  contract fails typecheck. A request schema in `apps/web` pins its `z.input` to the
+  contract type both ways (see `lib/finance/finance-validation.ts`). No copy of a contract
+  type may be declared elsewhere:
+  [`scripts/check-no-local-dpf-type-redeclaration.mjs`](../../scripts/check-no-local-dpf-type-redeclaration.mjs)
+  fails on one, with a closed allowlist for unrelated types that share a name.
 
 ## Keep / reshape / evaluate table
 

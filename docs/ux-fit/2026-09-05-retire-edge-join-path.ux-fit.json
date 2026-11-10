@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "two-acts-only-retire-edge-cards",
+  "decisionInteractionId": "DI-DE665E842CD3",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/federation-links/OrganizationJoinPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "two-acts-only-retire-edge-cards",
+      "keep-edge-cards-as-legacy-section"
+    ],
+    "note": "EP-ZERO-CONFIG-FEDERATION slice 3 (spec docs/superpowers/specs/2026-09-03-portal-mediated-organization-membership-design.md §6.3). 'Connect your own installations' now shows exactly two acts, 'Create join file' and 'Join this installation', both portal-mediated since slices 1–2. The edge-node readiness cards ('Enable secure host actions' / 'Enable secure setup'), the host-action progress cards and their six unreachable server actions are removed; no control was added, the two forms are unchanged. The kernel scored the two-acts shape highest (composite 9.80, margin 5.55, confidence high) against keeping the retired cards under a disclosure."
+  }
+}

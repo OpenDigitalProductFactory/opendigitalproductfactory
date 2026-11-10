@@ -1,0 +1,73 @@
+{
+ "formats": [
+  "odg",
+  "svg",
+  "pdf"
+ ],
+ "previews": {
+  "maxPages": 5,
+  "dpi": 48
+ },
+ "issuedAt": "2026-09-25T12:00:00Z",
+ "content": {
+  "family": "drawing",
+  "title": "DPFRENDERDRAWING Intake flow",
+  "pages": [
+   {
+    "name": "Intake",
+    "shapes": [
+     {
+      "id": "intake",
+      "kind": "rect",
+      "x": 20,
+      "y": 30,
+      "width": 50,
+      "height": 25,
+      "label": "Intake",
+      "fill": "#aaccee"
+     },
+     {
+      "id": "vet",
+      "kind": "diamond",
+      "x": 100,
+      "y": 30,
+      "width": 50,
+      "height": 25,
+      "label": "Vet check"
+     },
+     {
+      "id": "foster",
+      "kind": "ellipse",
+      "x": 180,
+      "y": 30,
+      "width": 50,
+      "height": 25,
+      "label": "Foster",
+      "fill": "#e07a5f",
+      "textColour": "#ffffff"
+     },
+     {
+      "id": "note",
+      "kind": "text",
+      "x": 20,
+      "y": 80,
+      "width": 120,
+      "height": 10,
+      "label": "DPFRENDERDRAWING every animal is vet-checked first"
+     }
+    ],
+    "connectors": [
+     {
+      "from": "intake",
+      "to": "vet",
+      "label": "arrives"
+     },
+     {
+      "from": "vet",
+      "to": "foster"
+     }
+    ]
+   }
+  ]
+ }
+}

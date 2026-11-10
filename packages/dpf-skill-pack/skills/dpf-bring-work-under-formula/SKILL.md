@@ -49,9 +49,14 @@ Clear stale active links and release retryable claims. Abandoned work returns to
 
 Write the failing adapter/projection tests first, then run the focused suites and `node --test scripts/check-work-unit-conformance.test.mjs && node scripts/check-work-unit-conformance.mjs`. Finish through `dpf-pr-with-dco` and validate the case on the canonical runtime.
 
+## 7. Make the room reachable
+
+An addressable case is not the same as a reachable one. Compose the room's URL with `encodeWorkCaseKey`, never by spelling the path out; resolve it from the `Workroom.workItemId` anchor, not from a naming convention; and do not emit a link the read model cannot honour. Let a room whose projection fails degrade inside its own frame rather than taking the page down. `scripts/check-no-unreachable-room-links.mjs` enforces this; the reasoning is the kernel principle *A Room Is Reachable by Construction*.
+
 ## Hard rules
 
 - One unit of work has one addressable case and one canonical WorkItem anchor.
+- A room that exists can be opened: composed address, canonical anchor, no link the read model cannot honour.
 - `status-projection.ts` is the single company-facing projection authority.
 - A new carrier requires an adapter + registry entry, never a forked formula.
 - No terminal carrier may silently mark implementation done without evidence.

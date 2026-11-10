@@ -399,6 +399,18 @@ export function mergeReviews(r1: ReviewResult, r2: ReviewResult): ReviewResult {
   // produced before the flag existed.
   const r1ParseFail = r1.parseError ?? r1.issues.some(i => i.description.includes("unparseable response"));
   const r2ParseFail = r2.parseError ?? r2.issues.some(i => i.description.includes("unparseable response"));
+  // BI-15E1D4CA: two unreadable reviews are not a review. Without this, both "inconclusive"
+  // results fell through to "neither said fail, so pass" and FB-1FAAA146
+  // (2026-09-24) advanced into build on a plan nobody had read. Report it with
+  // the BI-D33F968A contract so resume backs off instead of "fixing" the plan.
+  if (r1ParseFail && r2ParseFail) {
+    return {
+      decision: "fail",
+      issues: [{ severity: "critical", description: "No reviewer produced a readable verdict — the review did not happen; retry it." }],
+      summary: `Review could not be completed — neither reviewer's response could be read. Reviewer 1: ${r1.summary} | Reviewer 2: ${r2.summary}`,
+      reviewIncomplete: true,
+    };
+  }
   const decision =
     r1ParseFail && !r2ParseFail ? r2.decision :
     r2ParseFail && !r1ParseFail ? r1.decision :

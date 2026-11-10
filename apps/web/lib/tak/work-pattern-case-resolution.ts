@@ -7,8 +7,8 @@ import {
   type WorkCaseStagedTransitionProjection,
   type WorkCaseStagedTransitionStatus,
 } from "@/lib/work-management/staged-transition";
+import { isRecord } from "@/lib/shared/coerce";
 import {
-  isRecord,
   parseWorkCaseStagedTransitionProjection,
   stringArray,
   stringField,

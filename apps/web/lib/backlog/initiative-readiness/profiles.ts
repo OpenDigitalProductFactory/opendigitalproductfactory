@@ -1,3 +1,5 @@
+import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
+
 import type { ReadinessProfile } from "./types";
 
 const PROFILE_STRENGTH: Record<ReadinessProfile, number> = {
@@ -30,14 +32,29 @@ export type InitiativeProfileSignals = {
   recordedProfiles?: readonly ReadinessProfile[];
 };
 
+const READINESS_PROFILE_BY_WORK_TYPE = {
+  bug: "fix",
+  chore: "fix",
+  refactor: "feature",
+  feature: "feature",
+  tool: "feature",
+  skill: "feature",
+  doc: "doc-only",
+} satisfies Record<BacklogWorkType, ReadinessProfile>;
+
+function profileFromWorkType(value: string | null | undefined): ReadinessProfile | null {
+  if (!value || !(BACKLOG_WORK_TYPE_VALUES as readonly string[]).includes(value)) return null;
+  return READINESS_PROFILE_BY_WORK_TYPE[value as BacklogWorkType];
+}
+
 function profileFromString(value: string | null | undefined): ReadinessProfile | null {
   const normalized = value?.trim().toLocaleLowerCase("en-US").replaceAll("_", "-");
   if (!normalized) return null;
   if (["archetype", "new-archetype", "vertical"].includes(normalized)) return "archetype";
   if (["cross-domain", "crossdomain", "platform-wide"].includes(normalized)) return "cross-domain";
-  if (["bug", "defect", "fix"].includes(normalized)) return "fix";
+  if (["bug", "defect", "fix", "chore"].includes(normalized)) return "fix";
   if (["doc", "docs", "documentation", "doc-only"].includes(normalized)) return "doc-only";
-  if (["feature", "enhancement", "build"].includes(normalized)) return "feature";
+  if (["feature", "enhancement", "build", "tool", "skill", "refactor"].includes(normalized)) return "feature";
   return null;
 }
 
@@ -55,10 +72,12 @@ function profileFromScopeKind(value: string | null | undefined): ReadinessProfil
 
 /** Monotonic profile projection from immutable history and current structured substrate. */
 export function deriveAuthoritativeReadinessProfile(signals: InitiativeProfileSignals): ReadinessProfile | null {
+  const workTypeProfile = profileFromWorkType(signals.workType);
+  if (signals.workType != null && workTypeProfile === null) return null;
   const candidates = [
     profileFromString(signals.type),
     profileFromString(signals.source),
-    profileFromString(signals.workType),
+    workTypeProfile,
     profileFromScopeKind(signals.scopeKind),
     profileFromString(signals.activeBuildKind),
     ...(signals.recordedProfiles ?? []),

@@ -21,44 +21,7 @@ import {
   getMcpTokenTemplate,
 } from "@/lib/mcp-token-scopes";
 import type { ModelSelectionOverview } from "@/lib/inference/phase-model-resolution";
-
-export type ReadinessState = "ready" | "attention" | "blocked" | "diagnostic";
-
-export type AiReadinessDomainId =
-  | "model-supply"
-  | "build-execution"
-  | "tool-access"
-  | "routing-confidence";
-
-export interface AiReadinessEvidence {
-  label: string;
-  value: string;
-  at?: string;
-}
-
-export interface AiReadinessBlocker {
-  code: string;
-  message: string;
-  primaryActionLabel: string;
-  href?: string;
-}
-
-export interface AiReadinessDomain {
-  id: AiReadinessDomainId;
-  label: string;
-  state: ReadinessState;
-  summary: string;
-  evidence: AiReadinessEvidence[];
-  blocker?: AiReadinessBlocker;
-  diagnosticsHref: string;
-}
-
-export interface AiReadinessSummary {
-  state: Exclude<ReadinessState, "diagnostic">;
-  summary: string;
-  generatedAt: string;
-  domains: AiReadinessDomain[];
-}
+import type { AiReadinessDomain, AiReadinessSummary } from "./readiness-summary-types";
 
 export interface AiReadinessProviderInput {
   providerId: string;
@@ -134,7 +97,7 @@ export function projectModelSupplyDomain(
   }
 
   const firstActionable = providers.find((provider) =>
-    ["needs_credentials", "no_models", "unconfigured", "disabled"].includes(
+    ["needs_credentials", "no_models", "public_only", "unconfigured", "disabled"].includes(
       provider.eligibility.state,
     ),
   );
@@ -415,6 +378,7 @@ async function loadModelSupplyProviders(): Promise<AiReadinessProviderInput[]> {
           discoveredModelCount: summary?.totalModels ?? 0,
           cliPoolExhausted: pool?.isExhausted ?? false,
           cliPoolResetHint: pool ? poolResetHint(pool) : null,
+          sensitivityClearance: provider.sensitivityClearance,
         }),
       };
     });

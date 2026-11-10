@@ -24,7 +24,9 @@ export function makeSidecarTransport(): SidecarTransport {
     for (const [k, v] of Object.entries(args)) {
       if (v !== undefined) cleaned[k] = v;
     }
-    const res = await executeMcpServerTool(BROWSER_USE_SERVER_SLUG, toolName, cleaned);
+    // drive_browser_task is grant-gated (browser_drive); the call below still
+    // re-resolves the bundled policy and refuses any non-bundled tool.
+    const res = await executeMcpServerTool(BROWSER_USE_SERVER_SLUG, toolName, cleaned, { kind: "bundled-orchestrator" });
     if (!res.success) {
       return { error: res.error ?? res.message ?? "sidecar tool failed" };
     }

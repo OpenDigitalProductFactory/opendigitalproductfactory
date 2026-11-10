@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { colors, spacing } from "@/src/lib/theme";
 import { api } from "@/src/lib/apiClient";
 import { SpaceSwitcher } from "@/src/features/spaces/SpaceSwitcher";
 import type { DynamicFormSchema, DynamicViewSchema } from "@dpf/types";

@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Plan — Engine-aware inference admission budget
 
 Date: 2026-07-07. Epic: EP-B9DD37C7 (coworker trust/transparency) · relates to
@@ -85,3 +89,34 @@ Integration (two seams, minimal):
   rate limit.
 - Adaptive sizing from observed engine latency, and a runtime-health surface tile
   for live admission depth.
+
+## 2026-10-12 follow-up — local interactive priority
+
+Live operation proved that local HTTP inference and the sandbox build engine
+were not actually governed by one ordering contract: the host-busy probe ran
+before both queues, and local HTTP calls crossed both the inference semaphore and
+the FIFO ResourceLane. An internal autonomous request therefore looked like an
+external busy runner and an interactive turn failed before it could queue.
+
+The canonical follow-up design is
+[`2026-10-12-local-inference-interactive-priority-design.md`](../specs/2026-10-12-local-inference-interactive-priority-design.md).
+Its atomic delivery extends the existing local ResourceLane with explicit
+interactive/autonomous priority plus bounded aging, makes it the one local
+execution admission boundary, and moves host probing inside admission. Remote
+provider admission remains here unchanged. A PostgreSQL distributed queue stays
+deferred until multi-replica portal execution is a supported topology.
+
+### Atomic coverage and traceability
+
+The follow-up is one atomic safety boundary: the admission authority, scheduler,
+probe ordering, producer migration and observability cannot ship independently
+without leaving contradictory local-GPU paths. It remains owned by
+`BI-285EF102` and covers these immutable objectives and acceptance statements:
+
+| Criterion | Objective | Acceptance statement | Verification |
+| --- | --- | --- | --- |
+| AC-LIP-1 | OBJ-LIP-1 | Portal HTTP inference and the local sandbox build engine use one `compute:local-inference` admission authority; local HTTP dispatch does not hold a second semaphore while waiting for that lane. | Local-provider dispatch tests plus the shared-lane integration test. |
+| AC-LIP-2 | OBJ-LIP-2 | With one autonomous holder, one older autonomous waiter and one interactive waiter, execution order is holder → interactive → autonomous; bounded aging still lets an old autonomous waiter progress under repeated interactive arrivals. | Deterministic priority and aging unit tests. |
+| AC-LIP-3 | OBJ-LIP-3 | Docker Model Runner and host-GPU probes execute only after local-lane admission, so internal contention queues while a genuinely external or unexpected owner still returns the existing typed busy result. | Probe-order composition test and host-busy regression test. |
+| AC-LIP-4 | OBJ-LIP-4 | Aggregate queue-depth, cancellation/failure cleanup, idempotent release, single-GPU exclusion and remote-provider admission tests pass without weakening the host safety fence. | ResourceLane telemetry, bounded-depth, failure and remote-admission regression tests. |
+| AC-LIP-5 | OBJ-LIP-4 | On the canonical live install, an interactive coworker selects and executes an attached governed DPF tool within its admission budget while autonomous local inference is active or queued; Operations evidence distinguishes queued internal contention from external host busy. | Protected delivery, exact-live identity and browser/runtime evidence. |

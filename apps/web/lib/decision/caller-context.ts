@@ -40,6 +40,22 @@ export type DecisionDomain = "org-business" | "platform-development";
 
 export type GoverningProfileKind = "platform" | "organization";
 
+/**
+ * Read a caller-supplied decisionDomain (closed set) from raw tool params.
+ * A call carrying a policy projection is an exact-bound platform authority
+ * consult and is forced to platform-development whatever population asked
+ * (BI-9C384562): the population heuristic alone routed it to the org profile.
+ */
+export function resolveDecisionDomainParam(
+  params: Record<string, unknown>,
+  forcePlatform: boolean,
+): DecisionDomain | null {
+  if (forcePlatform) return "platform-development";
+  const value = params["decisionDomain"];
+  return value === "org-business" || value === "platform-development" ? value : null;
+}
+
+
 /** WWMD — founder / platform-development profile (`kind: "platform"`). */
 export const WWMD_PLATFORM_PROFILE_ID = "mark-dpf-platform";
 /** WWWD — customer / organization business-operating-principles profile (`kind: "organization"`). */

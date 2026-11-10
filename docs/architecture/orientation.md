@@ -34,3 +34,17 @@ The subsystems the platform runs that this page previously omitted entirely (pas
 ## Channel adapter capabilities
 
 When an operation is contractually defined on a channel adapter interface but operationally unsupported by a specific provider, the adapter must explicitly signal support status using capability flags rather than silent failure. Unimplemented methods must throw a typed error or return a structured unsupported response (e.g., throwing an `IntegrationApiError` with status code `UNSUPPORTED_OPERATION` or returning a `supported: false` status) to allow the caller to degrade gracefully. For example, a marketing channel adapter that contractually implements engagement tracking but lacks underlying API support on a specific provider must advertise this via its capability registration. (`BI-IMP-27126FA9`)
+
+## Task-specific operating rules
+
+Read these when this domain is touched. These statements are relocated from AGENTS.md; its invariant core still applies.
+
+- **Every deployment target wraps the same canonical contracts.** Substrate-specific deltas live in their owning specs; universal rules live in the doctrine. Before adding anything host-coupled (scrape target, service, bind mount, host path, default URL/port, shell builtin), check `docs/install/platform-support-watchlist.md` and add a row when you fix a new platform-specific defect.
+- **A migration must apply cleanly against ANY existing data state, not just a clean schema.** Migrations are forward-only and immutable after commit; backfill SQL goes inline in the same migration file.
+- **Shell scripts run in Linux containers** (LF only, enforced by `.gitattributes`); **PowerShell scripts target Windows + PS 5.1+** and are plain ASCII only. Use `pnpm --filter <pkg> exec <tool>`, never `npx` — it ignores pinned versions.
+
+Before autonomous multi-step work or doctrine curation:
+
+- **Commons are curated, not just appended.** Each corpus is reviewed on a cadence by its accountable human for altitude (is this an instance of a rule already here?), lapsed contingency, scope drift, and rules a machine now enforces. Guards nominate; only the human consolidates or retires. A rule true only under conditions carries them in a contingency marker — three clocks: environment, model era, circumstance. → [kernel principle](../founder-kernel/wiki/principles/commons-are-curated-not-just-appended.md)
+- **Use paid AI capacity responsibly.** → [kernel principle](../founder-kernel/wiki/principles/responsible-capacity-utilization.md)
+- **An autonomous directive is bounded by descent, not effort.** Fix a blocker of the named objective; hand back at a blocker of *that* blocker, or on a second same-class failure. → [kernel principle](../founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md)

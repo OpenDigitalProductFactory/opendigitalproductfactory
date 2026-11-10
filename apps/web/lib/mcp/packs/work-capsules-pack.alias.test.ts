@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+const getRoom = vi.hoisted(() => vi.fn(async () => ({ success: true })));
+vi.mock("@/lib/work-capsules/mcp-handlers", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/work-capsules/mcp-handlers")>(), getWorkCapsuleTool: getRoom,
+}));
 
 import { workCapsulesPack } from "./work-capsules-pack";
 
@@ -54,5 +59,12 @@ describe("workroom alias window", () => {
       expect(workCapsulesPack.grants[legacy], `${legacy} needs a grant row or it is denied`).toBeDefined();
       expect(workCapsulesPack.grants[legacy]).toEqual(workCapsulesPack.grants[canonical]);
     }
+  });
+  it.each(["get_workroom", "get_work_capsule"])("%s preserves the authenticated actor for recovery hydration", async name => {
+    getRoom.mockClear();
+    const params = { capsuleId: "WC-READ", userId: "untrusted-person" };
+    const context = { agentId: "codex" };
+    await workCapsulesPack.handlers[name]!(params, "authenticated-person", context);
+    expect(getRoom).toHaveBeenCalledExactlyOnceWith(params, "authenticated-person", context);
   });
 });

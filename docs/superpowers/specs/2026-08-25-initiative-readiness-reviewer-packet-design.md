@@ -81,6 +81,81 @@ No existing helper reads the GitHub compare endpoint.
 
 ## 5. Canonical artifact discovery
 
+### Break-fix completion recovery — BI-594CF003
+
+A missing post-implementation review routes through the existing immutable
+reviewer packet before objective-baseline lookup. A break-fix does not owe an
+objective baseline. The packet uses the unique live Workroom's authored head
+and a provider-verified review blob from its base-to-head range. A squash
+merge does not replace the authored head in review provenance. Missing or
+ambiguous ownership and unavailable source still produce explicit refusals.
+
+For a repair without a changed design, PIR may bind the unique surviving
+implementation artifact, including a workflow. Accompanying tests and docs
+do not make that implementation identity ambiguous. A single-file test or
+documentation repair may bind that file. Multiple implementation artifacts
+remain an explicit ambiguity; never choose one alphabetically or invent a
+design to unlock a three-line repair. Design approval lanes remain design-only.
+Reuse the provider transport, immutable SHA checks, reader and independent
+writer contract. No schema, grant or receipt-policy change is needed.
+
+The regression is BI-6BF129EA: PR5547 restored the alarm and its actual GitHub
+dry run passed, but completion IRD-0C57E93D9CF0 demanded a changed design.
+Follow-up under BI-594CF003: reproduce source-only discovery failure; factor
+the existing discovery boundary by review purpose; retain design-only callers;
+test unique, ambiguous, removed and invalid source plus bound PIR routing;
+then deploy and execute the original completion journey with its real evidence.
+
+The canonical `get_backlog_item` read returns this completion recovery packet
+as `data.recovery`; attempting completion invokes the same resolver. Neither
+read creates a receipt or grants reviewer authority. Dispatch the unchanged
+`requestCoworker` packet, including both `requiredToolNames` and
+`initiativeReviewBinding`. The receipt handler supplies immutable identity
+from that binding; the independent reviewer supplies its assessment.
+
+This uses the existing terminal-writer recovery contract. Capacity loss after
+source reads leaves a bounded, resumable writer wait on that TaskRun. An exact
+request replay reuses persisted immutable evidence, and successful writer
+effects are not replayed. Generic handoffs without the binding do not acquire
+this contract. Do not churn request keys or ask the operator to reconstruct
+commit/blob fields after each refusal.
+
+Implementation sequence: reproduce the baseline-free failure; connect PIR to
+canonical discovery and the existing reviewer resolver; expose the same
+packet on the item read; test binding hydration, missing source, independent
+authority, and post-read capacity recovery; release and exercise live
+completion. No schema migration, new grant, or parallel retry mechanism.
+
+### Existing design reuse — BI-7272643A
+
+A successor Workroom may reuse a design already merged into its base. Requiring
+a new spec diff to issue its research route forces an unrelated document edit.
+The governed claim therefore supplies the live backlog body to discovery. If it
+references one distinct repository-relative Markdown file under
+`docs/superpowers/specs/`, discovery verifies that exact regular file through
+`GET /contents/<path>?ref=<headSha>` and takes the blob id from the provider.
+Repeated links or section anchors to the same file count as one reference.
+
+Ambiguous references, traversal paths, missing files, mismatched returned paths,
+non-file objects and invalid blob ids do not produce a binding. A broken explicit
+reference never falls back to a different changed design. With no explicit
+reference, the compare-range discovery below remains unchanged.
+
+This is artifact selection, not a research verdict or approval. The existing
+writer re-verifies the immutable locator and authorship; the reviewer still
+assesses sufficiency. No grant, receipt schema, readiness rule, database model or
+customer configuration changes. General item-body research snapshots and
+shape-aware plan coverage are outside this repair.
+
+Acceptance: a medium Phase D claim referencing the existing coordinated-workrooms
+design returns an executable research route at its recorded head without a new
+design commit. Tests cover discovery and the claim-to-discovery seam, plus the
+failure cases above. Live acceptance follows governed deployment; a green unit
+test alone does not close the repair. Rollback reverts selection and claim wiring
+together; existing receipts retain their immutable identities.
+
+### Changed design discovery
+
 New module `apps/web/lib/backlog/initiative-readiness/canonical-artifact-discovery.ts`.
 
 ```
@@ -169,6 +244,34 @@ dropped.
 
 ## 8. Security and separation of duties
 
+### Historical artifact and current Workroom — BI-CAP-EF2B04BB
+
+An issued review may bind an unchanged plan at its original commit while the
+Workroom has advanced. The governed handler carries `workroomRef` from the
+accepted TaskRun alongside `artifactRef`; callers cannot select that context.
+The resolver requires the exact live subject, repository, room, branch and
+current head. For plan review, the writer resolves the same current baseline-
+validated coverage projection that issued the packet, including inherited parent
+scope. It requires the accepted baseline, original locator and digest to match
+that canonical plan. A later file's front matter does not replace the recorded
+immutable plan or constitute a byte-equivalence claim. The scope owner's item
+row is locked and canonical coverage is revalidated before publication. A removed
+child, changed baseline, locator, digest or scope owner refuses publication.
+The receipt retains the original commit, blob, bytes, digest and DCO evidence.
+Other bound artifact lanes require the same provider path/blob at the current
+head. Without a trusted binding, the unique exact-artifact-head rule remains.
+
+Missing or malformed context, stale heads, foreign subjects, changed reviewed blobs and
+ambiguous ownership refuse publication. The receipt transaction locks and
+revalidates the room and accountable owner after provider verification. Existing
+reviewer independence, grant intersection, immutable reader evidence and receipt
+validation still apply. Do not adopt a historical plan commit as the current
+branch head or churn the request key to avoid a writer rejection. WWMD decision
+`DI-65FBD03E0230` selected reuse of current canonical coverage over reissuing
+unchanged plan work or adding Markdown metadata-normalization policy; it grants
+no missing tool authority. Deploy the
+source repair and use the original TaskRun's supported recovery.
+
 - No grant expansion. `authorityScope` is per-dispatch and names exactly the
   bound writer plus one immutable reader.
 - No self-approval. The existing `independent` exclusion of `currentAgentId` is
@@ -232,3 +335,12 @@ forwards them. This change is the producer half that half was waiting on, and it
 is what makes that item's acceptance criterion 1 — "a readiness recovery packet
 passed through threadless request/summon carries an immutable
 `initiativeReviewBinding` and exact required tool names" — reachable end to end.
+## PIR evidence validation — BI-CAP-A42496AB
+
+On release `55e6603b2c519eac794b1aaccd62a2c21d3f7bbe`, the bound PIR for BI-70B2ED84 reached its writer after same-task recovery, but all 13 successful source-reader audit results were intentionally content-free. The writer only matched citations against `ToolExecution.result.data`, while the existing recovery hydrator already re-read the exact bound blob for content-free audits. The reviewer also saw an earlier design statement about pending deployment without the later typed runtime evidence.
+
+Extend the existing source hydration contract rather than persist another copy of source or create another retry engine. Citation validation must accept a verifiable quote after a successful, exact-bound reader execution even when its audit omits content; mismatched identity, absent authority, unavailable source, and fabricated quotes remain refusals. Render source with absolute line numbers for review while retaining raw bytes for quote validation. For PIR only, supply bounded, dated delivery/runtime evidence from the existing item and Workroom records on initial execution and recovery; distinguish these recorded observations from the source artifact and never infer deployment success from a release tag alone.
+
+Implementation order: first reproduce content-free audit rejection, line provenance, and absent PIR evidence in focused tests; share hydration for validation; add the bounded PIR evidence projection; test valid failure receipts, invalid citations, wrong identities, missing/stale runtime proof, and same-task recovery; then run canonical verification, independent review, release, and the original live receipt/completion journey. No database migration or grant expansion is required. Preserve existing request identity and prior failures. A passing assessment remains the independent reviewer's decision.
+
+Independent review found that citation validation must read only the cited range, not hydrate a whole artifact: an artifact over 64k must still permit a short verifiable finding. Reuse the same reader-authority, immutable identity, pagination and bounded-content validators for these reads. The PIR observation projection has a 16k serialized aggregate budget; compact detail uniformly while retaining all selected observation IDs, dates, provenance and outcomes, including failures. Mark omitted detail explicitly, and report evidence unavailable if metadata alone exceeds the budget.

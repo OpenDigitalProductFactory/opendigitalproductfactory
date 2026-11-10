@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "contextual",
+  "decisionInteractionId": "DI-41A3E45ADBFE",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx",
+      "apps/web/components/platform/ProviderRoutingControlPanel.tsx",
+      "apps/web/components/platform/ServiceRow.tsx",
+      "apps/web/components/platform/ProviderPauseControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["contextual", "separate-tab"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "structuredCoverage": "strong",
+    "autonomyEligible": true,
+    "evidenceClass": "Recorded comparative choice: contextual status/controls with simultaneous restrictions versus a separate routing tab. Prototype is simulated; served runtime evidence is recorded separately. Advisory critique CE-85978F80 requested."
+  }
+}

@@ -3,23 +3,38 @@ import { modelDiscoveryRefresh } from "./model-discovery-refresh";
 import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
 import { rateRecovery } from "./rate-recovery";
+import { providerRecovery } from "./provider-recovery";
+import { providerPauseExpiry, providerPauseReconcile } from "./provider-operator-pause";
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
+import { ecosystemInboundTriage, ecosystemInboundTriageRequested } from "./ecosystem-inbound-triage";
+import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
+import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
+import { documentRenditionBackfill, documentRenditionGenerate } from "./document-renditions";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
 import { agentTaskDispatch } from "./agent-task-dispatch";
+import { foregroundWorkRun } from "./foreground-work";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
+import { geocodeOnSave } from "./geocode-on-save";
+import { mapPackInstall } from "./map-pack-install";
 import { materialFreshnessDecay } from "./material-freshness-decay";
+import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
+import { budgetReservationSettle } from "./budget-reservation-settle";
 import { researchExecute } from "./research-execute";
 import { researchScheduleScan } from "./research-schedule";
 import { buildReviewVerification } from "./build-review-verification";
 import { buildExecute } from "./build-execute";
 import { preBuildReviewRepair } from "./pre-build-review-repair";
+import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
+import { buildGauntletRepair } from "./build-gauntlet-repair";
+import { agentChildThreadRun } from "./agent-child-thread-run";
+import { workroomQueueHoldRelease } from "./workroom-queue-hold-release";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -31,6 +46,9 @@ import { capacityDrainScheduled } from "./capacity-drain";
 import { assuranceRemediationTeeUpScheduled } from "./assurance-remediation-teeup";
 import { assuranceMergeGateScheduled } from "./assurance-merge-gate-teeup";
 import { tokenExpiryMonitor } from "./token-expiry-monitor";
+import { subscriptionOAuthRenewal } from "./subscription-oauth-renewal";
+import { legacyProposalExpirySweep } from "./legacy-proposal-expiry-sweep";
+import { backlogOutcomeReconcile } from "./backlog-outcome-reconcile";
 import {
   contributorInventorySyncCron,
   contributorInventorySyncOnDemand,
@@ -42,9 +60,12 @@ import { wikiLint } from "./wiki-lint";
 import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verification";
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { queueMetricsAggregator } from "./queue-metrics-aggregator";
+import { workroomFlowReview } from "./workroom-flow-review";
 import { businessMetricsAggregator } from "./business-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
+import { guardOutcomeClassify } from "./guard-outcome-classify";
+import { guardRetirementReview } from "./guard-retirement-review";
 import { a2aCollaborationHealthScan } from "./a2a-collaboration-health-scan";
 import { workPatternProfileReview } from "./work-pattern-profile-review";
 import {
@@ -54,13 +75,21 @@ import {
   postgresTrialRestoreRequested,
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
+import { substrateReconciler } from "./substrate-reconciler";
+import { edgeNodeJanitor } from "./edge-node-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
 import { worktreeJanitor } from "./worktree-janitor";
+import { pullRequestMergedBinding } from "./pull-request-merged-binding";
+import { pullRequestMergedReap } from "./pull-request-merged-reap";
 import { sandboxBuildGc } from "./sandbox-build-gc";
 import {
   dataRetentionSweepScheduled,
   dataRetentionSweepRequested,
 } from "./data-retention-sweep";
+import {
+  regulatoryMonitorScanScheduled,
+  regulatoryMonitorScanRequested,
+} from "./regulatory-monitor-scan";
 import {
   qualityIssueDriftSweepScheduled,
   qualityIssueDriftSweepRequested,
@@ -75,9 +104,18 @@ import { remoteActionClaimTimeout } from "./remote-action-claim-timeout";
 import { alertDeliveryBridge } from "./alert-delivery-bridge";
 import { releaseHealthCheck } from "./release-health-check";
 import { marketingSchedulerDispatch, postmarkCallbackDispatchRequested, postmarkCallbackDispatchSweep } from "./marketing-scheduler-dispatch";
+import { mailroomMailboxPoll, mailroomMailboxPollRequested } from "./mailroom-poll";
 import { recurringInvoiceDispatch } from "./recurring-invoice-dispatch";
 import { siemCorrelationSweep } from "./siem-correlation-sweep";
 import { patchAssessmentSweep } from "./patch-assessment-sweep";
+import {
+  decisionConciergeSweepScheduled,
+  decisionConciergeSweepRequested,
+} from "./decision-concierge-sweep";
+import {
+  decisionTrustRecomputeScheduled,
+  decisionTrustRecomputeRequested,
+} from "./decision-trust-recompute";
 import {
   catalogEnrichmentSweepScheduled,
   catalogEnrichmentSweepRequested,
@@ -87,6 +125,7 @@ import {
   identityInferenceFallbackRequested,
 } from "./identity-inference-fallback";
 import { canonicalImprovementDigest } from "./canonical-improvement-digest";
+import { localOnlyKnowledgeSweep } from "./local-only-knowledge-sweep";
 import {
   coworkerCertificationNightly,
   coworkerCertificationRunNow,
@@ -99,6 +138,10 @@ import {
   obligationAssuranceWatchScheduled,
   obligationAssuranceWatchRunNow,
 } from "./obligation-assurance-watch";
+import {
+  workroomDriveScheduled,
+  workroomDriveRunNow,
+} from "./workroom-drive";
 import {
   embeddingCoverageReconcileScheduled,
   embeddingCoverageReconcileRunNow,
@@ -118,8 +161,25 @@ import {
 } from "./data-control-operation";
 import { indexIntegritySweep } from "./index-integrity-sweep";
 import { localModelInstall } from "./local-model-install";
+import { providerCatalogRefresh } from "./provider-catalog-refresh";
+import { nonprodCapacityAvailable, nonprodLeaseWaitReconciliation } from "./nonprod-lease-wait";
+import {
+  mcpTaskRunDispatchReconciliation,
+  mcpTaskRunExecute,
+} from "./mcp-task-run-execute";
+import {
+  asyncInferenceOperationOutbox,
+  asyncInferenceOperationReconciliation,
+  asyncInferenceOperationRun,
+  asyncInferenceOperationTaskRunTransition,
+} from "./async-inference-operation";
+import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
+  workroomQueueHoldRelease, // BI-95638941: provider-held Workrooms release themselves
+  providerPauseReconcile,
+  decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
+  decisionTrustRecomputeScheduled, // BI-7D1E43DE: governed-decision TrustState from the shadow ledger, report only, every 6h
   prometheusPoll,
   fullDiscoverySweep,
   modelDiscoveryRefresh,
@@ -127,6 +187,9 @@ export const scheduledFunctions = [
   infraPrune,
   codeGraphReconcileScheduled,
   issueReportTriage,
+  ecosystemInboundTriage,
+  ecosystemSubmissionSweep,
+  ecosystemWatchdog,
   backlogTriageDrain,
   coworkerRegressionDetect,
   agentTaskDispatch,
@@ -136,26 +199,37 @@ export const scheduledFunctions = [
   assuranceRemediationTeeUpScheduled, // BI-7C121CCF: off-hours, budget-capped assurance remediation lane
   assuranceMergeGateScheduled, // BI-204EE70B P2.2: WWMD merge gate (dark — escalate-only until actuation enabled)
   tokenExpiryMonitor,
+  subscriptionOAuthRenewal, // BI-A53C594E: renew subscription OAuth sign-ins ahead of expiry, retry with backoff
+  legacyProposalExpirySweep, // BI-753D69A9: expire undecided legacy proposals under the approval lifetime
+  backlogOutcomeReconcile, // BI-8DE5429B: every open item gets an outcome; reopens and failures measured against it
   contributorInventorySyncCron,
   wikiLint,
   skillMetricsAggregator,
   queueMetricsAggregator, // EP-3516E23D P1: hourly QueueTelemetryEvent → QueueMetricSnapshot rollup
+  workroomFlowReview, // EP-B70E718D F8: daily flow review → ImprovementSignal per sustained bottleneck
   businessMetricsAggregator, // BI-PLAN-005: hourly operational sources → owner/manager BusinessMetricRollup
   skillCurator,
   mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
+  guardOutcomeClassify, // BI-FEDD8F45: daily guard refusal classification + 365-day guard-outcome prune
+  guardRetirementReview, // BI-FEDD8F45: daily guard retirement review → one review item per guard (never disables)
   a2aCollaborationHealthScan, // BI-3003EE63: daily A2A edge health (failed/blocked/stuck/orphan) — slice 1 analyze+log
 
   workPatternProfileReview,
   researchScheduleScan,
   materialFreshnessDecay,
+  prSubmitAwaitingAcceptanceReconcile,
+  budgetReservationSettle,
   allBackupsDailyScheduled,
   postgresDailyBackupScheduled,
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
+  substrateReconciler,   // BI-903FB5F9/BI-547B788D: restart stopped required substrate; report a wedged Docker VM, every 5 min
+  edgeNodeJanitor, // BI-D4F79CE2: retire an installer enrollment a live one has superseded, hourly
   runtimeArtifactJanitor, // BI-DBF3F426/BI-A55BE432: orphaned CI images + stray compose projects (+ their volumes), daily 05:20; DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED=observe, +DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=live
-  worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
+  worktreeJanitor, // BI-42FA7DD8/BI-99395B29: platform-owned worktree reaper (Tier-A); daily 05:40
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
+  regulatoryMonitorScanScheduled, // BI-DA37A602: weekly regulatory rescan so the compliance surface self-heals instead of aging into a false green, Mon 06:00
 
   qualityIssueDriftSweepScheduled, // BI-0B420A1D: runtime governance — self-heal recovery/orphan backstop + detect per-type open-count drift vs registry budgets, daily 05:00
 
@@ -166,6 +240,7 @@ export const scheduledFunctions = [
   alertDeliveryBridge,   // BI-5FE8656F: EP-FULL-OBS Tier 2 item #6 — Prometheus+Loki firing alerts -> PortfolioQualityIssue, every 1m
   releaseHealthCheck,    // BI-3630773C: EP-FULL-OBS release stamp verify-gate watch, every 15m
   marketingSchedulerDispatch, // BI-SCHED-DORMANT: wire ScheduledOutboundAction dispatch, every 30m
+  mailroomMailboxPoll, // BI-9C362E23: Mailroom — read every due mailbox (per-mailbox interval, default 60m), every 15m
   recurringInvoiceDispatch,   // BI-SCHED-DORMANT: wire recurring-invoice generation, daily 06:30
   siemCorrelationSweep,       // BI-6D9496F1: EP-SOVEREIGN-SOC P1 — project internal audit -> SecurityEvent + run detection rules, every 15m
   patchAssessmentSweep,       // EP-PATCH-MANAGEMENT P0: daily estate patch posture sweep (OSV+KEV -> AssuranceFinding), 05:00
@@ -176,7 +251,9 @@ export const scheduledFunctions = [
   embeddingCoverageReconcileScheduled, // BI-ED117C82: re-embeds published pages a boot hook could not reach; retries every 2h so a silent corpus gap self-heals
   businessJourneyWatchdogScheduled, // BI-E105303D / EP-PROACTIVE-OPS: exercises the install's critical business journeys against the running system, Mon/Wed/Fri 06:00
   obligationAssuranceWatchScheduled, // TAK §8.11: deadline-horizon sweep over recorded obligations, control reviews, and licence expiries, daily 05:40
+  workroomDriveScheduled, // BI-FCD639D9: standing Workroom drive — wake, lease, dispatch, attention, stop, every 15m
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
+  localOnlyKnowledgeSweep, // BI-1281A164: weekly report of findings captured here and never routed to a commons lane
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
   demandReconciliationScheduled, // BI-44AA45BF: trusted-link demand projection, retry, and reconciliation every five minutes
@@ -184,26 +261,45 @@ export const scheduledFunctions = [
   dataControlOperationRecoveryScheduled, // BI-DG-014: durable cross-store data mutation recovery and reconciliation
   indexIntegritySweep, // BI-D9C20A97: daily live-database btree/collation integrity sweep
   postmarkCallbackDispatchSweep,
+  nonprodLeaseWaitReconciliation,
+  mcpTaskRunDispatchReconciliation,
+  asyncInferenceOperationReconciliation,
+  asyncInferenceOperationOutbox,
 ];
 
 export const eventFunctions = [
+  ecosystemInboundTriageRequested,
+  pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
+  pullRequestMergedReap, // BI-848360EF: reap the merged branch's worktree, via the janitor's own rules
+  decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
+  decisionTrustRecomputeRequested, // BI-7D1E43DE: the same recompute, on demand
   localModelInstall,
+  providerCatalogRefresh, // BI-7F2FBDA3: on-demand provider re-discovery after a model refusal — event-triggered, NOT a cron
   rateRecovery,
+  providerRecovery,
+  providerPauseExpiry,
   mcpCatalogSync,
   codeGraphReconcileEvent,
   routeWorkItem,
   evalBackground,
   probeBackground,
   brandExtract,
+  geocodeOnSave,
+  mapPackInstall,
   researchExecute,
   buildReviewVerification,
   buildExecute,
   preBuildReviewRepair,
+  buildResumeAfterUpgradePause, // BI-E9DAA23F: on platform.quiescence-cleared, resume builds the pause held
+  buildGauntletRepair,
+  agentChildThreadRun, // BI-287E1DD0: delegated child threads run as durable jobs
   assuranceBomGenerate,
   assuranceScanRun,
   deliberationRun,
   governedBacklogTeeUpRequested,
   issueReportProjectOnCreate,
+  documentRenditionGenerate, // BI-9D43CBEF: office file saved -> PDF + text renditions, indexed
+  documentRenditionBackfill, // BI-9D43CBEF/BI-153EC72C: bounded, draining sweep at portal start, on a pin change, and when the converter becomes available
   contributorInventorySyncOnDemand,
   gitPromotionSandboxVerification,
   postgresBackupRequested,
@@ -211,6 +307,7 @@ export const eventFunctions = [
   selfUpgradeManual,
   quiescenceRun,
   dataRetentionSweepRequested, // EP-DATA-RETENTION: operator "run now" / dry-run
+  regulatoryMonitorScanRequested, // BI-DA37A602: operator "run now" off-cadence regulatory rescan
   qualityIssueDriftSweepRequested, // BI-0B420A1D: operator "run now" for the quality-issue drift sweep
 
   inngestRetentionSweepRequested, // BI-0AB96FE7: operator "run now" / dry-run for the Inngest retention sweep
@@ -221,10 +318,18 @@ export const eventFunctions = [
   embeddingCoverageReconcileRunNow, // BI-ED117C82: operator/agent "run now" embedding-coverage reconcile
   businessJourneyWatchdogRunNow, // BI-E105303D: operator "run now" business-journey watchdog sweep
   obligationAssuranceWatchRunNow, // TAK §8.11: operator "run now" obligation assurance watch
+  workroomDriveRunNow, // BI-FCD639D9: operator "run now" standing Workroom drive
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,
+  mailroomMailboxPollRequested, // BI-9C362E23: Mailroom — poll one mailbox now (connect first read, Check now)
   workPatternExperimentRun,
   dataControlOperationRecoveryRequested,
+  nonprodCapacityAvailable,
+  mcpTaskRunExecute,
+  asyncInferenceOperationRun,
+  foregroundWorkRun,
+  asyncInferenceOperationTaskRunTransition,
+  asyncOperationTaskHub,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

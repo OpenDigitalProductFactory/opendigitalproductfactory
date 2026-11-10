@@ -261,6 +261,7 @@ model RuntimeTarget {
 }
 
 model RuntimeVerification {
+  automationUsers         User[]
   id                      String                 @id @default(cuid())
   verificationId          String                 @unique
   kind                    String
@@ -291,6 +292,7 @@ model RuntimeVerification {
   @@index([featureBuildId, kind, status])
   @@index([workCapsuleId, kind, status])
   @@index([kind, status])
+  @@index([gitPromotionCandidateId])
 }
 
 // Per-run audit row for the contributor-inventory-sync Inngest cron. Mirrors
@@ -353,6 +355,7 @@ model ContributorInventorySnapshot {
   @@unique([source, sourceKey, syncRunId])
   @@index([source, syncRunId])
   @@index([source, fetchedAt])
+  @@index([syncRunId])
 }
 
 model CodeGraphIndexState {
@@ -418,50 +421,54 @@ model ExternalEvidenceRecord {
 }
 
 model NonProductionEnvironmentLease {
-  id                  String    @id @default(cuid())
-  leaseId             String    @unique
+  id                   String    @id @default(cuid())
+  leaseId              String    @unique
   // Stable identity for one gate attempt. Repeated claims with the same key
   // observe the same queued/admitted row instead of creating polling races.
-  claimKey            String?   @unique
-  environmentKey      String
+  claimKey             String?   @unique
+  environmentKey       String
   // Mirrors "<environmentKey>:<slotKey>" only while admitted. slotKey retains
   // the assigned slot for terminal audit/telemetry; activeKey becomes NULL.
   // The @@unique below makes "at most one active lease per environmentKey" a DB
   // invariant at capacity one (Postgres allows many NULLs). Phase 2 expands the
   // same invariant to independently isolated slot keys.
-  activeKey           String?
-  slotKey             String?
-  status              String    @default("queued")
-  ownerProvider       String
-  ownerSessionId      String
-  purpose             String
-  worktreePath        String?
-  branchName          String?
-  buildId             String?
-  taskRunId           String?
+  activeKey            String?
+  slotKey              String?
+  status               String    @default("queued")
+  ownerProvider        String
+  ownerSessionId       String
+  purpose              String
+  worktreePath         String?
+  branchName           String?
+  buildId              String?
+  taskRunId            String?
   // Typed host-resource admission. Null retains compatibility for preview and
   // local-CI leases created before BI-30EDD4B0.
-  resourceClass       String?
-  expectedMemoryBytes BigInt?
-  ownerPid            Int?     @map("ownerProcessId")
+  resourceClass        String?
+  expectedMemoryBytes  BigInt?
+  ownerPid             Int?      @map("ownerProcessId")
   ownerProcessIdentity String?
   // Null means a legacy singleton-only claimant. Version 1 proves the runner
   // can bind the server-assigned slot manifest before any host mutation.
-  slotManifestVersion Int?
-  url                 String
-  ports               Int[]     @default([])
-  cleanupCommand      String?
-  evidenceRecordId    String?
-  requestedTtlMs      Int       @default(900000)
-  expiresAt           DateTime
-  releasedAt          DateTime?
-  queuedAt            DateTime?
-  admittedAt          DateTime?
-  cancelledAt         DateTime?
-  heartbeatAt         DateTime?
-  phase               String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  slotManifestVersion  Int?
+  url                  String
+  ports                Int[]     @default([])
+  cleanupCommand       String?
+  evidenceRecordId     String?
+  requestedTtlMs       Int       @default(900000)
+  expiresAt            DateTime
+  releasedAt           DateTime?
+  queuedAt             DateTime?
+  admittedAt           DateTime?
+  // Database-owned forward-only facts. Legacy NULL version means unknown
+  // history; admittedAt is last-state data and can be reset during gate revival.
+  admissionHistoryVersion Int?
+  firstAdmittedAt      DateTime?
+  cancelledAt          DateTime?
+  heartbeatAt          DateTime?
+  phase                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@unique([activeKey])
   @@index([environmentKey, status])
@@ -705,6 +712,7 @@ model AssuranceRun {
   @@index([buildId, startedAt(sort: Desc)])
   @@index([digitalProductId, startedAt(sort: Desc)])
   @@index([adapterKey, status])
+  @@index([releaseBundleId])
 }
 
 model BomDocument {
@@ -738,6 +746,8 @@ model BomDocument {
   @@index([digitalProductId, generatedAt(sort: Desc)])
   @@index([digest])
   @@index([status])
+  @@index([artifactRevisionId])
+  @@index([assuranceRunId])
 }
 
 model BomComponent {
@@ -928,6 +938,8 @@ model ReleaseBundle {
   @@index([status])
 }
 
+/// Tool runs during a build. Operational build trail; 90 days covers post-build investigation.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=telemetry timeAxis=createdAt
 model BuildActivity {
   id        String       @id @default(cuid())
   buildId   String
@@ -940,6 +952,8 @@ model BuildActivity {
   @@index([createdAt])
 }
 
+/// One row per AI specialist dispatch attempt/retry. Build telemetry; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=startedAt
 model BuildDispatchAttempt {
   id               String       @id @default(cuid())
   buildId          String
@@ -1051,7 +1065,13 @@ model TaskRun {
   title                String
   objective            String                   @db.Text
   source               String                   @default("coworker") // coworker | build | skill | proactive
-  /// A2A-aligned task states: submitted | working | input-required | auth-required | completed | failed | canceled | rejected | archived
+  /// Closed set, enforced by "TaskRun_status_closed_set" (20260916140000) and
+  /// single-sourced from TASK_STATES in apps/web/lib/tak/task-states.ts, which a
+  /// parity test pins against the constraint (BI-9F6AFFA0). The nine A2A-aligned
+  /// states — submitted | working | input-required | auth-required | completed |
+  /// failed | canceled | rejected | archived — plus four DPF runtime states:
+  /// stalled, quiescing, paused-for-upgrade, paused-for-upgrade-forced. This
+  /// comment is no longer the constraint; do not widen the set here alone.
   status               String                   @default("submitted")
   authorityScope       Json?
   a2aMetadata          Json?
@@ -1082,6 +1102,7 @@ model TaskRun {
   stallEvents          StallEvent[]
   actionEnvelopes      CoworkerActionEnvelope[]
   workrooms            Workroom[]               @relation("WorkroomTaskRun")
+  asyncInferenceOps    AsyncInferenceOp[]        @relation("TaskRunAsyncInferenceOperations")
 
   @@index([userId, status])
   @@index([threadId])
@@ -1101,6 +1122,8 @@ model TaskRun {
 // thresholds in effect) and the resulting operator outcome (retry,
 // abandon, escalate). Used by the Build Studio phase panel history
 // strip and as candidate WWMD profile material in v2.
+/// Build Studio stall detections + operator outcomes. Operational; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=createdAt
 model StallEvent {
   id                  String    @id @default(cuid())
   taskRunId           String
@@ -1147,6 +1170,8 @@ model StallEvent {
 // substrate (e.g., SelfUpgradeRun.runId).
 //
 // Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.1
+/// Activity-quiescence drain orchestration records. Coordination audit; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=startedAt
 model QuiescenceRun {
   id           String  @id @default(cuid())
   // Public/human-readable id (e.g., "QR-2026-05-24-abc123"). Used in event
@@ -1221,6 +1246,14 @@ model QuiescenceRun {
   // never escalated; an audit entry is also appended to forcedSurfaces.
   shipForceEscalatedAt DateTime?
   shipForceEscalatedBy String?
+
+  // BI-F9EE05E5: operator Abort, recorded durably before any wake-up event is
+  // sent. The job engine delivers an event only to a step already waiting for
+  // it, so an Abort sent while the coordinator is mid-check would otherwise be
+  // lost. The coordinator reads these on every check and ends the drain as
+  // aborted; the swap guard refuses a run that carries them. First writer wins.
+  abortRequestedAt DateTime?
+  abortRequestedBy String?
 
   @@index([trigger, startedAt])
   // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
@@ -1344,6 +1377,16 @@ model FeaturePack {
   updatedAt DateTime @updatedAt
 }
 
+enum SelfUpgradeDispatchStatus {
+  admission_pending
+  dispatching
+  dispatched
+  indeterminate
+  dispatch_failed
+}
+
+/// Platform self-upgrade orchestration history. Low volume but operationally valuable; one year of deployment history.
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal categories=telemetry timeAxis=createdAt
 model SelfUpgradeRun {
   id                    String    @id @default(cuid())
   runId                 String    @unique
@@ -1361,6 +1404,28 @@ model SelfUpgradeRun {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  // A recovery admission never rewrites its terminal predecessor. The unique
+  // self-relation makes the one permitted successor explicit and auditable.
+  recoveryOfRunId String?         @unique
+  recoveryOf      SelfUpgradeRun? @relation("SelfUpgradeRecovery", fields: [recoveryOfRunId], references: [runId], onDelete: Restrict, onUpdate: Cascade)
+  recoveredBy     SelfUpgradeRun? @relation("SelfUpgradeRecovery")
+
+  // BI-3FD07259 — durable admission precedes queue I/O. Nullable dispatch
+  // state preserves historical rows created before the admission contract.
+  targetTag              String?
+  requestedForce         Boolean                    @default(false)
+  dryRun                 Boolean                    @default(false)
+  routine                Boolean                    @default(false)
+  admissionFingerprint   String?
+  dispatchStatus         SelfUpgradeDispatchStatus?
+  dispatchAttemptCount   Int                        @default(0)
+  dispatchLeaseToken     String?
+  dispatchLeaseExpiresAt DateTime?
+  dispatchEventIds       String[]                   @default([])
+  dispatchAttemptedAt    DateTime?
+  dispatchAcknowledgedAt DateTime?
+  dispatchError          String?                    @db.Text
+
   // The "What's in this update?" summary the operator reviewed when launching
   // this upgrade — attached so the run records the changes it carried, and so
   // the summary survives the process restart the swap triggers.
@@ -1375,6 +1440,8 @@ model SelfUpgradeRun {
   changeRequest   ChangeRequest? @relation("SelfUpgradeChangeRecord", fields: [changeRequestId], references: [id])
 
   @@index([status, createdAt])
+  @@index([dispatchStatus, dispatchLeaseExpiresAt])
+  @@index([admissionFingerprint])
   @@index([targetSha])
   @@index([impactSummaryId])
 }

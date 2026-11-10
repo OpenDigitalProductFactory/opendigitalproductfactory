@@ -1,12 +1,10 @@
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
-
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /** Automatic same-organization demand sync plus durable retry safety-net. */
-export const demandReconciliationScheduled = inngest.createFunction(
+export const demandReconciliationScheduled = jobs.createFunction(
   {
     id: "federation/demand-reconciliation",
     retries: 1,
@@ -14,15 +12,46 @@ export const demandReconciliationScheduled = inngest.createFunction(
     triggers: [cron("1,6,11,16,21,26,31,36,41,46,51,56 * * * *")],
   },
   async ({ step }) => {
-    if (!envFlagEnabled(process.env, "DPF_FEDERATION_EXCHANGE_ENABLED")) {
-      return { skipped: true, reason: "federation-exchange-disabled" };
-    }
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "federation/demand-reconciliation");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return step.run("reconcile-federated-demand", async () => {
+    // This install's operational posture goes to every trusted same-organization
+    // peer on the same cadence (BI-648F01A0 Slice 2.2). Queued first so the demand
+    // step's outbox drain delivers it in this cycle; its own drain is a no-op then.
+    const posture = await step.run("project-operational-posture", async () => {
+      const { runOperationalPostureReconciliation } = await import("@/lib/federation/operational-posture-reconciliation");
+      return runOperationalPostureReconciliation();
+    });
+    // Receiving side of the same exchange: every peer's mirrored posture is
+    // reflected into this install's runtime-target registry, so the coordination
+    // map shows both installs (BI-648F01A0 Slice 3).
+    const peerTargets = await step.run("reflect-peer-runtime-targets", async () => {
+      const { syncPeerRuntimeTargets } = await import("@/lib/federation/operational-posture-peer-targets");
+      return syncPeerRuntimeTargets();
+    });
+    const demand = await step.run("reconcile-federated-demand", async () => {
       const { runDemandReconciliation } = await import("@/lib/federation/demand-reconciliation");
       return runDemandReconciliation();
     });
+    // Same cadence, separate step: pull every same-organization peer's backlog
+    // into local mirrors (BI-FF8A57EF). A demand failure never blocks work sync
+    // and vice versa.
+    const work = await step.run("sync-federated-work", async () => {
+      const { runWorkSync } = await import("@/lib/federation/work-sync");
+      return runWorkSync();
+    });
+    // Keep the peer ledger and link set honest on the same cadence: one link per
+    // peer, and the teardown-surviving ledger current (EP-ZERO-CONFIG-FEDERATION).
+    const links = await step.run("reconcile-federation-links", async () => {
+      const { reconcileFederationLinks } = await import("@/lib/federation/boot-reconcile");
+      return reconcileFederationLinks();
+    });
+    // A member with organization material and no trusted link to its authority
+    // enrols now, on proof of membership (EP-ZERO-CONFIG-FEDERATION §5.6).
+    const membership = await step.run("enrol-organization-membership", async () => {
+      const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
+      return reconcileOrganizationMembership();
+    });
+    return { posture, peerTargets, demand, work, links, membership };
   },
 );

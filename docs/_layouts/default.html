@@ -32,7 +32,20 @@
   {% endif %}
 
   <article class="doc-content">
+    {%- comment -%}
+      A Markdown page is served at a pretty URL (/architecture/foo/), one level
+      below its source directory, so a relative image such as
+      `tak-diagrams/png/x.png` would resolve under /architecture/foo/ and 404.
+      Rewrite relative <img src> to the source file's directory; absolute,
+      root-relative and data: sources are restored unchanged.
+    {%- endcomment -%}
+    {%- assign source_ext = page.path | split: "." | last -%}
+    {%- if source_ext == "md" and page.url != "/" -%}
+      {%- assign source_dir = page.path | prepend: "/" | split: "/" | pop | join: "/" | append: "/" | relative_url -%}
+      {{ content | replace: '<img src="', '<img src="@@DPF_ASSET_BASE@@' | replace: '@@DPF_ASSET_BASE@@http', 'http' | replace: '@@DPF_ASSET_BASE@@/', '/' | replace: '@@DPF_ASSET_BASE@@data:', 'data:' | replace: '@@DPF_ASSET_BASE@@', source_dir }}
+    {%- else -%}
     {{ content }}
+    {%- endif %}
   </article>
 
   <p class="doc-edit-link"><a href="https://github.com/{{ site.repository }}/edit/main/docs/{{ page.path }}" rel="noopener">Edit this page on GitHub</a></p>

@@ -3,7 +3,7 @@ name: dpf-route-learning-to-commons
 description: "Use in the DPF codebase at a task or session boundary when a finding has been confirmed and is durable."
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: mcp__dpf__propose_improvement mcp__dpf__doc_save mcp__dpf__propose_skill_improvement mcp__dpf__create_backlog_item mcp__dpf__save_build_notes mcp__dpf__contribute_to_hive mcp__dpf__escalate_feedback_upstream mcp__dpf__flag_stale_knowledge
+allowed-tools: mcp__dpf__contribute_finding_to_hive mcp__dpf__propose_improvement mcp__dpf__doc_save mcp__dpf__propose_skill_improvement mcp__dpf__create_backlog_item mcp__dpf__save_build_notes mcp__dpf__contribute_to_hive mcp__dpf__escalate_feedback_upstream mcp__dpf__flag_stale_knowledge
 category: governance
 assignTo: ["documentation-specialist", "doc-specialist", "platform-engineer", "external-coding-agent"]
 capability: null
@@ -11,7 +11,7 @@ taskType: reflection
 triggerPattern: "route .*(learning|finding|insight)|share (this|the) (learning|finding)|capture .*(learning|insight)|propagate|to the commons|to the hive|don't silo|remember this for (everyone|all agents)|promote to (WWMD|WWWD|WSID)|end of (session|task) learnings"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["mcp__dpf__propose_improvement", "mcp__dpf__doc_save", "mcp__dpf__propose_skill_improvement", "mcp__dpf__create_backlog_item", "mcp__dpf__save_build_notes", "mcp__dpf__contribute_to_hive", "mcp__dpf__escalate_feedback_upstream", "mcp__dpf__flag_stale_knowledge"]
+allowedTools: ["mcp__dpf__contribute_finding_to_hive", "mcp__dpf__propose_improvement", "mcp__dpf__doc_save", "mcp__dpf__propose_skill_improvement", "mcp__dpf__create_backlog_item", "mcp__dpf__save_build_notes", "mcp__dpf__contribute_to_hive", "mcp__dpf__escalate_feedback_upstream", "mcp__dpf__flag_stale_knowledge"]
 composesFrom: ["dpf-capture-kernel-gap", "dpf-record-decision-outcome", "dpf-file-backlog-item"]
 contextRequirements: ["DPF MCP write tools reachable or explicit scope escalation path", "A confirmed, durable finding (not a situational scratch note)"]
 riskBand: medium
@@ -58,7 +58,17 @@ Do **not** use this for install-specific configuration (secrets, host paths, thi
    | WSID | `mcp__dpf__propose_skill_improvement` against the target skill; or author a `SKILL.md` in `packages/dpf-skill-pack/skills/` | Techniques seed as governed skills for both surfaces. |
    | code+AGENTS.md | `mcp__dpf__create_backlog_item` (BI) then PR the code + doc together | A code contract isn't real until it's in the tree and the rulebook. |
 
-4. **Contribute it to the hive** so other installs inherit it: `mcp__dpf__contribute_to_hive` for a shipped improvement, or `mcp__dpf__escalate_feedback_upstream` for feedback-shaped findings. This is the step that turns install-local knowledge into platform-wide knowledge. Skipping it leaves the learning robust on one install only.
+4. **Contribute it to the hive** so other installs inherit it. This is the step that turns install-local knowledge into platform-wide knowledge; skipping it leaves the learning true on one install only. Pick by what you are contributing:
+
+   | You are contributing | Tool | Needs |
+   |---|---|---|
+   | A durable FINDING you captured with `propose_improvement` | `mcp__dpf__contribute_finding_to_hive` (pass the `IP-...` id) | nothing else — no build, no diff |
+   | SHIPPED CODE | `mcp__dpf__contribute_to_hive` | an active FeatureBuild and its extracted diff |
+   | A quality report already filed as a `PIR-...` | `mcp__dpf__escalate_feedback_upstream` | the report id |
+
+   **If you are an external session — Claude Code, Codex, Grok — you almost certainly want the first row.** `contribute_to_hive` resolves an active build before doing anything else and answers "No active build" without one, which is why findings raised outside Build Studio used to stop here. That was a structural dead end, not a discipline failure, and it is why one install accumulated 239 proposals and contributed none.
+
+   Everything sends under the install's pseudonym, redacted, and behind the same private / fork-only refusals. A refusal saying the install keeps everything local is a CORRECT answer, not a failure — record it and move on rather than retrying.
 
 5. **Record the route** so the boundary is auditable: note which lane, which tool, the proposal/PR/BI id, and the hive contribution id. If local memory was the origin record, leave a pointer from it to the commons entry — do not leave the local copy as the source of truth.
 

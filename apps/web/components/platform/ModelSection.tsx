@@ -170,7 +170,7 @@ export function ModelSection({
         )}
 
         <span style={{ color: "var(--dpf-muted)", fontSize: 10, flexGrow: 1 }}>
-          {profiles.length} model{profiles.length !== 1 ? "s" : ""} ready
+          {profiles.length} saved model profile{profiles.length !== 1 ? "s" : ""}
           {showDiagnostics && searchLower ? ` - ${filtered.length} matching` : ""}
           {showDiagnostics && !searchLower && filtered.length !== profiles.length ? ` - ${filtered.length} shown` : ""}
           {unprofiledCount > 0 ? ` — ${unprofiledCount} unprofiled` : ""}

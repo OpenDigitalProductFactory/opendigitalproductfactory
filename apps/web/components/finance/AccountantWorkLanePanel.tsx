@@ -1,7 +1,7 @@
 import { ArrowRight, Plug, ShieldCheck, Workflow } from "lucide-react";
 import Link from "next/link";
 import {
-  type AccountantWorkLane,
+  type ResolvedAccountantWorkLane,
   type AccountantProviderBoundary,
   type AccountantWorkstream,
 } from "@/lib/finance/accountant-work-lane";
@@ -13,7 +13,7 @@ const POSTURE_LABELS: Record<AccountantProviderBoundary["posture"], string> = {
   "not-mapped": "Not mapped",
 };
 
-export function AccountantWorkLanePanel({ lane }: { lane: AccountantWorkLane }) {
+export function AccountantWorkLanePanel({ lane }: { lane: ResolvedAccountantWorkLane }) {
   return (
     <section className="mb-8 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -102,7 +102,7 @@ export function AccountantWorkLanePanel({ lane }: { lane: AccountantWorkLane }) 
                     </Link>
                     <p className="mt-1 text-xs text-[var(--dpf-muted)]">{POSTURE_LABELS[boundary.posture]}</p>
                     <p className="mt-2 font-mono text-xs text-[var(--dpf-text)]">
-                      {boundary.nextBacklogItemId}
+                      {boundary.nextStep.label}
                     </p>
                   </td>
                   <td className="px-4 py-4">
@@ -129,7 +129,7 @@ export function AccountantWorkLanePanel({ lane }: { lane: AccountantWorkLane }) 
           href={lane.nextWorkflow.route}
           className="inline-flex max-w-full items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
         >
-          <span className="shrink-0">{lane.nextWorkflow.backlogItemId}</span>
+          <span className="shrink-0">{lane.nextWorkflow.nextStep.label}</span>
           <span className="min-w-0 truncate">{lane.nextWorkflow.title}</span>
           <ArrowRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         </Link>

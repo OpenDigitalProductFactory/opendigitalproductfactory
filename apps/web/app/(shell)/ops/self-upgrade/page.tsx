@@ -8,15 +8,21 @@ import { buildOwnerReleaseSummary } from "@/lib/self-upgrade/owner-summary";
 import SelfUpgradeClient from "@/components/ops/SelfUpgradeClient";
 import SelfUpgradeTriggerControl from "@/components/ops/SelfUpgradeTriggerControl";
 import { OwnerReleaseCard } from "@/components/ops/OwnerReleaseCard";
-import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
 import { LocalChangesLedger } from "@/components/ops/LocalChangesLedger";
+import { ConnectedAgentClients } from "@/components/ops/ConnectedAgentClients";
+import { loadConnectedAgentClients } from "@/lib/agent-toolchain/connected-clients";
 import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
-import { hasGovernedRecoveryPoint } from "@/lib/self-upgrade/rollback";
+import { getSelfUpgradeRecoveryState } from "@/lib/self-upgrade/recovery-eligibility";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 import { SelfUpgradeLiveProvider } from "@/components/ops/SelfUpgradeLiveProvider";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import type { SelfUpgradeStatusSnapshot } from "@/lib/self-upgrade/status-snapshot";
 import { UNKNOWN_SELF_UPGRADE_SUPPORT } from "@/lib/self-upgrade/support";
+import { createSelfUpgradeTargetBinding } from "@/lib/self-upgrade/target-binding";
 
 export default async function SelfUpgradePage() {
   // BI-D43EB266: Self-Upgrade is the single operator entry point for "update
@@ -24,11 +30,14 @@ export default async function SelfUpgradePage() {
   // primary path; the source-merge sub-step (PlatformUpdateApplyPanel) is
   // folded in below and surfaces only when the install customises source
   // (updatePending). getPlatformDevConfig can be null on a fresh install.
-  const [status, runsResult, devConfig, localChanges] = await Promise.all([
+  const now = new Date();
+  const [status, runsResult, devConfig, localChanges, agentClients] = await Promise.all([
     getSelfUpgradeStatus().catch(() => null),
     listSelfUpgradeRuns().catch(() => ({ runs: [], nextCursor: null })),
     getPlatformDevConfig().catch(() => null),
     getLocalChangesLedger().catch(() => ({ available: false, note: "Local changes ledger temporarily unavailable.", changes: [] })),
+    // BI-E7974C18: which agent clients loaded the tools this update ships. Null renders "could not be read".
+    loadConnectedAgentClients(now).catch(() => null),
   ]);
 
   const runs = runsResult?.runs ?? [];
@@ -72,6 +81,7 @@ export default async function SelfUpgradePage() {
     windowTimezone: "UTC",
     nextWindowStart: null,
     nextScheduledCheckAt: null,
+    missedWindow: null,
     deployedSha: null,
     deployedShaSource: "unknown",
     targetSha: null,
@@ -160,12 +170,13 @@ export default async function SelfUpgradePage() {
         version: effectiveStatus.platformVersion.version,
         gitSha: effectiveStatus.platformVersion.gitSha,
       },
-      rollbackAvailable: hasGovernedRecoveryPoint(effectiveStatus.latestRun?.completionEvidence ?? null),
+      recovery: getSelfUpgradeRecoveryState(effectiveStatus.latestRun),
       latestRun: effectiveStatus.latestRun
         ? {
             status: effectiveStatus.latestRun.status,
             reason: effectiveStatus.latestRun.reason,
             targetSha: effectiveStatus.latestRun.targetSha,
+            deployedSha: effectiveStatus.latestRun.deployedSha,
           }
         : null,
       latestRunImpact: effectiveStatus.latestRunImpact,
@@ -186,17 +197,42 @@ export default async function SelfUpgradePage() {
     cooldownUntil: effectiveStatus.cooldownUntil,
     jobEngine: effectiveStatus.jobEngine,
   };
+  // Single source of truth for "is there something to install": the summary's
+  // own updatePending, derived from support/target/freshness rather than from
+  // its run-state machine. This used to re-derive the failed case here
+  // (`state === "failed" && targetAvailability === "resolved" && !isFresh`),
+  // which enabled the button correctly but left the card above it still
+  // claiming "You're current" — the workaround was applied to the action and
+  // never pushed back into the summary it contradicted.
   const updateActionState = ownerSummary.state === "unavailable"
     ? "unavailable"
-    : ownerSummary.state === "update-available" || (
-        ownerSummary.state === "failed" &&
-        effectiveStatus.targetAvailability === "resolved" &&
-        !effectiveStatus.isFresh
-      )
+    : ownerSummary.updatePending
       ? "update-available"
       : "no-update";
+  let targetBinding: string | null = null;
+  if (
+    effectiveStatus.support.targetKind === "release-artifact" &&
+    effectiveStatus.targetAvailability === "resolved" &&
+    effectiveStatus.targetSha &&
+    effectiveStatus.targetTag
+  ) {
+    try {
+      targetBinding = createSelfUpgradeTargetBinding({
+        targetKind: "release-artifact",
+        targetSha: effectiveStatus.targetSha,
+        targetTag: effectiveStatus.targetTag,
+      });
+    } catch {
+      // Missing server signing material must fail closed without taking down
+      // the operator status surface. With no binding, a later action may use
+      // only a freshly resolved server target; source-free fallback is denied.
+      targetBinding = null;
+    }
+  }
 
+  const { language } = await getLocaleContext();
   return (
+    <MessagesProvider locale={language} messages={{ upgrade: namespaceMessages(language, "upgrade") }}>
     <SelfUpgradeLiveProvider initialSnapshot={initialLiveSnapshot}>
     <div>
       <div className="mb-6">
@@ -206,7 +242,7 @@ export default async function SelfUpgradePage() {
         </p>
       </div>
 
-      <OpsTabNav />
+      <PlatformTabNav />
 
       <div className="mt-4">
         <OwnerReleaseCard
@@ -222,9 +258,14 @@ export default async function SelfUpgradePage() {
               latestRun={clientProps.latestRun}
               quiescence={clientProps.quiescence}
               jobEngine={clientProps.jobEngine}
+              targetBinding={targetBinding}
             />
           }
         />
+      </div>
+
+      <div className="mt-6">
+        <ConnectedAgentClients view={agentClients} now={now} />
       </div>
 
       {/* Run history, runtime/security ledgers and logs. BI-D77BF495: the
@@ -262,5 +303,6 @@ export default async function SelfUpgradePage() {
       </details>
     </div>
     </SelfUpgradeLiveProvider>
+    </MessagesProvider>
   );
 }

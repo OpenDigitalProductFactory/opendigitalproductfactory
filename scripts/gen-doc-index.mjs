@@ -90,7 +90,9 @@ export function buildIndex() {
       anchors: extractAnchors(raw),
     };
   }
-  return { generatedBy: "scripts/gen-doc-index.mjs", root: "docs", pageCount: Object.keys(pages).length, pages };
+  // A stored aggregate conflicts when independent page additions merge.
+  // The page map is authoritative; readers derive its size when needed.
+  return { generatedBy: "scripts/gen-doc-index.mjs", root: "docs", pages };
 }
 
 function serialize(index) {
@@ -100,6 +102,7 @@ function serialize(index) {
 function main() {
   const check = process.argv.includes("--check");
   const index = buildIndex();
+  const pageCount = Object.keys(index.pages).length;
   const next = serialize(index);
   if (check) {
     const current = fs.existsSync(OUT_PATH) ? fs.readFileSync(OUT_PATH, "utf-8") : "";
@@ -107,11 +110,11 @@ function main() {
       console.error("doc-index.generated.json is stale. Run: node scripts/gen-doc-index.mjs");
       process.exit(1);
     }
-    console.log(`doc index fresh (${index.pageCount} pages).`);
+    console.log(`doc index fresh (${pageCount} pages).`);
     return;
   }
   fs.writeFileSync(OUT_PATH, next);
-  console.log(`Wrote ${path.relative(REPO_ROOT, OUT_PATH)} (${index.pageCount} pages).`);
+  console.log(`Wrote ${path.relative(REPO_ROOT, OUT_PATH)} (${pageCount} pages).`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("gen-doc-index.mjs")) {

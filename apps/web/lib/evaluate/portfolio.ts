@@ -27,11 +27,12 @@ export type OwnerRoleInfo = {
 };
 
 /** Portfolio root accent colours (keyed by nodeId). */
+/** Portfolio identity colours as theme tokens (globals.css), so light, dark and branding all apply. */
 export const PORTFOLIO_COLOURS: Record<string, string> = {
-  foundational: "#7c8cf8",
-  manufacturing_and_delivery: "#fb923c",
-  for_employees: "#a78bfa",
-  products_and_services_sold: "#f472b6",
+  foundational: "var(--dpf-portfolio-foundational)",
+  manufacturing_and_delivery: "var(--dpf-portfolio-manufacturing-and-delivery)",
+  for_employees: "var(--dpf-portfolio-for-employees)",
+  products_and_services_sold: "var(--dpf-portfolio-products-and-services-sold)",
 };
 
 /** Portfolio owner HR role codes (keyed by nodeId). */
@@ -137,6 +138,30 @@ export function buildPortfolioTree(
     return { total: node.totalCount, active: node.activeCount };
   }
   for (const root of roots) sumSubtree(root);
+
+  // BI-A5576D1A: products with a null taxonomyNodeId are real portfolio products that
+  // simply have not been placed in the taxonomy yet. The counts above skip them (the
+  // `if (c.taxonomyNodeId)` guards), so the tree total silently undercounted the estate
+  // (225 of 375). Surface them under a synthetic "Uncategorized" root so they are both
+  // counted and visible, instead of vanishing.
+  const uncategorizedTotal = totalCounts.find((c) => c.taxonomyNodeId === null)?._count.id ?? 0;
+  const uncategorizedActive = activeCounts.find((c) => c.taxonomyNodeId === null)?._count.id ?? 0;
+  if (uncategorizedTotal > 0) {
+    roots.push({
+      id: "__uncategorized__",
+      nodeId: "__uncategorized__",
+      name: "Uncategorized",
+      parentId: null,
+      portfolioId: null,
+      directCount: uncategorizedTotal,
+      totalCount: uncategorizedTotal,
+      activeCount: uncategorizedActive,
+      description: "Products not yet placed in the taxonomy.",
+      governance: null,
+      enrichment: null,
+      children: [],
+    });
+  }
 
   const { pruneEmpty = false, flattenThreshold = 20 } = options;
 

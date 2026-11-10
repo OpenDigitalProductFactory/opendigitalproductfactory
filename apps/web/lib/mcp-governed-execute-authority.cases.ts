@@ -2,12 +2,15 @@ import { expect, it, vi } from "vitest";
 
 import {
   buildCoworkerApprovalBinding,
+  evaluateCoworkerAuthority,
   type CoworkerAuthorityInput,
 } from "./govern/authority/coworker-authority-decision";
 import {
   governedExecuteTool,
   type _setGovernanceForTests,
 } from "./mcp-governed-execute";
+
+import { resolveSteering } from "./govern/authority/resolve-coworker-tool-authority";
 
 type AuditRow = Record<string, unknown>;
 type GovernanceOverrides = Parameters<typeof _setGovernanceForTests>[0];
@@ -222,12 +225,305 @@ export function registerCoworkerAuthorityCases(
         },
       },
     });
+
+    // BI-7561687F: the model must tell a wait apart from a refusal. When it
+    // could not, coworkers filed tech debt asking for tools that already exist —
+    // record_initiative_evidence had 139 successful executions at the time.
+    expect(result.message).toContain("waiting for a person to approve it");
+    expect(result.message).toContain("ENV-1");
+    expect(result.message).toContain("is available to you");
+    expect(result.message).toContain("calling it again will not advance it");
+    expect(result.message).not.toContain("rejected:");
     expect(harness.executeMock()).not.toHaveBeenCalled();
     expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledOnce();
     expect(JSON.stringify(result)).not.toContain("private title");
     expect(harness.authorityRows().at(-1)).toMatchObject({
       decision: "require-approval",
     });
+  });
+
+  it("runs a routine write under the human's OAuth consent with no envelope and records why (BI-12E5DD91)", async () => {
+    const steered = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+      },
+      steering: "connection-delegation",
+    });
+    harness.applyOverrides({ resolveCoworkerAuthorityInput: async () => steered });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "requested by the human" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: {
+        agentId: "AGT-100",
+        authSource: "oauth",
+        connectionDelegation: { authorityBindingId: "binding-row-1", agentId: "AGT-100" },
+        // Simulate untyped caller input; the public context intentionally has no approval field.
+        ...{ approvedAuthorityEnvelopeId: "ENV-FORGED" },
+      },
+      source: "external-jsonrpc",
+    });
+
+    expect(result.success).toBe(true);
+    expect(harness.executeMock()).toHaveBeenCalledOnce();
+    expect(harness.executeMock()).toHaveBeenCalledWith(
+      "create_backlog_item", expect.anything(), "user-1",
+      expect.objectContaining({ approvedAuthorityEnvelopeId: null }),
+    );
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "allow",
+      authorityBindingId: "binding-row-1",
+      rationale: expect.objectContaining({
+        escalationReason: "steered-by-connection-delegation",
+        escalationSteering: "connection-delegation",
+        damaging: false,
+      }),
+    });
+    // A current-authority check inside the handler must see the same verified
+    // delegation. Losing it changes an already-authorized call to approval-required.
+    const forwarded = (harness.executeMock() as { mock: { calls: unknown[][] } }).mock.calls[0][3] as {
+      agentId?: string; connectionDelegation?: { authorityBindingId: string; agentId: string };
+      governedAuthorityTool?: () => { name: string; sideEffect?: boolean };
+    };
+    expect(forwarded.governedAuthorityTool?.()).toMatchObject({ name: "create_backlog_item", sideEffect: true });
+    const currentSteering = resolveSteering({ initiativeReviewBinding: null, roomAuthority: null,
+      agentId: forwarded.agentId, connectionDelegation: forwarded.connectionDelegation });
+    expect(evaluateCoworkerAuthority({ ...steered, steering: currentSteering })).toMatchObject({
+      outcome: "allow", escalation: { steering: "connection-delegation" },
+    });
+  });
+
+  it("runs the next equivalent write under the owner's standing ruling with no envelope, and names the ruling (BI-E5631708)", async () => {
+    const steered = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+      },
+      steering: "standing-ruling",
+      standingRulingEnvelopeId: "ENV-RULED",
+    });
+    harness.applyOverrides({ resolveCoworkerAuthorityInput: async () => steered });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "routine record the owner always approves" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result.success).toBe(true);
+    expect(harness.executeMock()).toHaveBeenCalledOnce();
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "allow",
+      rationale: expect.objectContaining({
+        escalationReason: "steered-by-standing-ruling",
+        escalationSteering: "standing-ruling",
+        damaging: false,
+        standingRulingEnvelopeId: "ENV-RULED",
+      }),
+    });
+  });
+
+  it("still puts a damaging call of the same class to a person under a standing ruling (BI-E5631708)", async () => {
+    const damaging = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "release_nonprod_environment_lease",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+        consequence: "authority",
+      },
+      steering: "standing-ruling",
+      standingRulingEnvelopeId: "ENV-RULED",
+    });
+    harness.applyOverrides({ resolveCoworkerAuthorityInput: async () => damaging });
+
+    const result = await governedExecuteTool({
+      toolName: "release_nonprod_environment_lease",
+      rawParams: { leaseId: "NPEL-FOREIGN" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "approval_required" });
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledOnce();
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "require-approval",
+      rationale: expect.objectContaining({ escalationReason: "damaging-consequence", damaging: true }),
+    });
+    expect(harness.authorityRows().at(-1)?.rationale).not.toHaveProperty("standingRulingEnvelopeId");
+  });
+
+  it("still puts an authority-changing write to a person under the same consent (BI-12E5DD91)", async () => {
+    const damaging = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+        consequence: "authority",
+      },
+      steering: "connection-delegation",
+    });
+    harness.applyOverrides({ resolveCoworkerAuthorityInput: async () => damaging });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "grant change" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: {
+        agentId: "AGT-100",
+        connectionDelegation: { authorityBindingId: "binding-row-1", agentId: "AGT-100" },
+      },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "approval_required" });
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledWith(expect.objectContaining({
+      explanation: expect.stringContaining("changes someone's authority"),
+    }));
+    expect(harness.authorityRows().at(-1)).toMatchObject({
+      decision: "require-approval",
+      rationale: expect.objectContaining({ escalationReason: "damaging-consequence" }),
+    });
+  });
+
+  it("returns the recorded outcome to a retry after an approved run, without running or asking again (BI-12E5DD91)", async () => {
+    const pending = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+        consequence: "authority",
+      },
+    });
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      authorityExecutedOutcome: async () => ({
+        envelopeId: "ENV-DONE", status: "executed",
+        result: { success: true, message: "Created BI-9.", entityId: "BI-9", data: { itemId: "BI-9" } },
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "same request" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      entityId: "BI-9",
+      data: { itemId: "BI-9" },
+      governance: { approvalReplayOf: "ENV-DONE" },
+    });
+    expect(result.message).toContain("was not run again");
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+    expect(harness.approvalEnvelopeCreate()).not.toHaveBeenCalled();
+  });
+
+  it("never spends one approval twice: a consumed approval refuses the second run (BI-12E5DD91)", async () => {
+    const base = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "all",
+        consequence: "authority",
+      },
+    });
+    const approved = {
+      ...base,
+      approval: {
+        envelopeId: "ENV-APPROVED",
+        status: "approved" as const,
+        expiresAt: new Date(Date.now() + 60_000),
+        binding: buildCoworkerApprovalBinding(base),
+      },
+    };
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => approved,
+      authorityExecutedOutcome: async () => null,
+      policyAuthorityEnvelopeReserve: async () => false,
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: approved.rawParams,
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100" },
+      source: "external-jsonrpc",
+    });
+
+    expect(result).toMatchObject({ success: false, error: "authority_evidence_unavailable" });
+    expect(result.message).toContain("already used by another run");
+    expect(harness.executeMock()).not.toHaveBeenCalled();
+  });
+
+  it("puts the unresolved WWMD residue on the human decision card", async () => {
+    const pending = harness.authorityInput({
+      action: {
+        ...harness.authorityInput().action,
+        toolName: "create_backlog_item",
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+        approvalPolicy: "side-effects",
+      },
+    });
+    harness.applyOverrides({
+      resolveCoworkerAuthorityInput: async () => pending,
+      policyAuthorityProjectionAttempt: async () => ({
+        outcome: "not-authorized" as const,
+        explanation: "Human decision required: commandment conflict.",
+      }),
+    });
+
+    const result = await governedExecuteTool({
+      toolName: "create_backlog_item",
+      rawParams: { title: "bounded exception" },
+      userId: "user-1",
+      userContext: harness.normalUser,
+      context: { agentId: "AGT-100", taskRunId: "TASK-EXCEPTION" },
+      source: "agentic-loop",
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "approval_required",
+      message: expect.stringContaining("Human decision required: commandment conflict."),
+    });
+    expect(harness.approvalEnvelopeCreate()).toHaveBeenCalledWith(expect.objectContaining({
+      // BI-12E5DD91: the stored reason also names the escalation branch.
+      explanation: expect.stringMatching(/^Human decision required: commandment conflict\. \S/),
+    }));
+    expect(harness.executeMock()).not.toHaveBeenCalled();
   });
 
   it("consumes a server-projected exact-call policy authorization before execution", async () => {
@@ -447,6 +743,10 @@ export function registerCoworkerAuthorityCases(
     expect(harness.approvalEnvelopeFinalize()).toHaveBeenCalledWith(
       "ENV-APPROVED",
       true,
+    );
+    expect(harness.executeMock()).toHaveBeenCalledWith(
+      "create_backlog_item", { title: "approved title" }, "user-1",
+      expect.objectContaining({ agentId: "AGT-100", approvedAuthorityEnvelopeId: "ENV-APPROVED" }),
     );
   });
 

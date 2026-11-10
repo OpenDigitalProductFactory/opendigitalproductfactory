@@ -5,6 +5,24 @@ import { presentAgentSession, hasAgentActivity } from "./agent-activity-presente
 const at = new Date("2026-07-12T00:00:00.000Z");
 
 describe("presentAgentSession (BI-C41AB195)", () => {
+  it("does not present a pending handoff as completed work", () => {
+    const [pending, completed, refused] = presentAgentSession([
+      { id: "request", kind: "command-accepted", summary: "Handoff requested; waiting for the receiving assistant", recordedAt: at,
+        payload: { commandType: "reassign-executor", result: { success: true, data: { handoff: { kind: "bounded-handoff", state: "pending-acknowledgement" } } } } },
+      { id: "complete", kind: "command-accepted", summary: "Receiving assistant acknowledged; handoff completed", recordedAt: at,
+        payload: { commandType: "reassign-executor", result: { success: true, data: { handoff: { kind: "bounded-handoff", state: "completed" } } } } },
+      { id: "refused", kind: "command-rejected", summary: "reassign-executor refused (command ack)", recordedAt: at,
+        payload: { commandType: "reassign-executor", rejection: { data: { result: { message: "The room lease was renewed; request a fresh handoff.", data: { handoff: { state: "refused" } } } } } } },
+    ]);
+    expect(pending).toMatchObject({ label: "Waiting for receiver", tone: "lifecycle" });
+    expect(completed).toMatchObject({ label: "Handoff completed", tone: "action" });
+    expect(refused).toMatchObject({ label: "Handoff refused", tone: "error", summary: "The room lease was renewed; request a fresh handoff." });
+  });
+  it("does not promote arbitrary action JSON to a verified handoff status", () => {
+    const [entry] = presentAgentSession([{ id: "self-report", kind: "action", summary: "Claimed handoff", recordedAt: at,
+      payload: { kind: "bounded-handoff", state: "completed" } }]);
+    expect(entry.label).toBe("Did");
+  });
   it("gives typed agent activities a plain label, their own tone, and the agent actor", () => {
     const [thought, action] = presentAgentSession([
       { id: "1", kind: "thought", summary: "Deciding the approach", recordedAt: at, recordedByAgentId: "AGT-1" },

@@ -122,8 +122,10 @@ describe("buildInstallationIdentityImpact", () => {
       to: "Never",
       direction: "tightens",
     });
-    expect(byStance.peerWrite).toMatchObject({ direction: "loosens", to: "Governed writes" });
-    expect(result.loosenedStances.map((d) => d.stance)).toEqual(["peerWrite"]);
+    // BI-0716C8A8: becoming production no longer grants governed writes to a
+    // peer whose class the organization CA never attested.
+    expect(byStance.peerWrite).toMatchObject({ direction: "tightens", to: "No peer" });
+    expect(result.loosenedStances).toEqual([]);
   });
 
   it("loosens teardown and credentials when production becomes development", () => {

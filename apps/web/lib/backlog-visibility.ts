@@ -9,6 +9,10 @@ export const ACTIVE_BACKLOG_STATUSES = [
   "in-progress",
 ] as const satisfies readonly BacklogStatus[];
 
+export const AWAITING_ACCEPTANCE_BACKLOG_STATUSES = [
+  "awaiting-acceptance",
+] as const satisfies readonly BacklogStatus[];
+
 export const TERMINAL_BACKLOG_STATUSES = [
   "done",
   "retired",
@@ -17,12 +21,16 @@ export const TERMINAL_BACKLOG_STATUSES = [
 export const PARKED_BACKLOG_STATUSES = ["deferred"] as const satisfies readonly BacklogStatus[];
 
 const terminalStatuses = new Set<string>(TERMINAL_BACKLOG_STATUSES);
+const activeStatuses = new Set<string>(ACTIVE_BACKLOG_STATUSES);
 
 // Keep the operator visibility split exhaustive when the canonical lifecycle
 // registry changes. The lists remain readonly so List/Grid consumers cannot
 // quietly redefine the domain lens at their call site.
 if (
-  ACTIVE_BACKLOG_STATUSES.length + PARKED_BACKLOG_STATUSES.length + TERMINAL_BACKLOG_STATUSES.length
+  ACTIVE_BACKLOG_STATUSES.length
+    + AWAITING_ACCEPTANCE_BACKLOG_STATUSES.length
+    + PARKED_BACKLOG_STATUSES.length
+    + TERMINAL_BACKLOG_STATUSES.length
   !== BACKLOG_STATUS_VALUES.length
 ) {
   throw new Error("Backlog visibility statuses do not cover the lifecycle registry");
@@ -36,6 +44,7 @@ export type BacklogStatusSummary = {
   triaging: number;
   open: number;
   inProgress: number;
+  awaitingAcceptance: number;
   done: number;
   deferred: number;
   retired: number;
@@ -52,6 +61,7 @@ export function summarizeBacklogStatuses<T extends { status: string }>(
     triaging: 0,
     open: 0,
     inProgress: 0,
+    awaitingAcceptance: 0,
     done: 0,
     deferred: 0,
     retired: 0,
@@ -65,13 +75,14 @@ export function summarizeBacklogStatuses<T extends { status: string }>(
     if (item.status === "triaging") summary.triaging += 1;
     else if (item.status === "open") summary.open += 1;
     else if (item.status === "in-progress") summary.inProgress += 1;
+    else if (item.status === "awaiting-acceptance") summary.awaitingAcceptance += 1;
     else if (item.status === "done") summary.done += 1;
     else if (item.status === "deferred") summary.deferred += 1;
     else if (item.status === "retired") summary.retired += 1;
 
     if (isTerminalBacklogItemStatus(item.status)) summary.terminal += 1;
     else if (item.status === "deferred") summary.parked += 1;
-    else summary.active += 1;
+    else if (activeStatuses.has(item.status)) summary.active += 1;
   }
 
   return summary;
@@ -96,6 +107,6 @@ export function visibleUnderActiveOnly<T extends { status: string }>(
   activeOnly: boolean,
 ): T[] {
   return activeOnly
-    ? items.filter((item) => item.status !== "deferred" && !isTerminalBacklogItemStatus(item.status))
+    ? items.filter((item) => activeStatuses.has(item.status))
     : items;
 }

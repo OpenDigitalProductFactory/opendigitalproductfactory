@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "reuse-report-kit-search-recovery",
+  "decisionInteractionId": "DI-4774C8E0D10D",
+  "scope": { "files": ["apps/web/components/platform/RoutingManagementWorkspace.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["reuse-report-kit-search-recovery", "introduce-routing-catalog-component"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "recommendationVerdict": "proceed",
+    "confidence": "high",
+    "resolvedBy": "agent",
+    "evidenceClass": "After-implementation author engineering selection under existing AC-GRAPH. Reuse the provider EmptyState and FilterBar count for assignment search, retaining scoped rows and current controls. Kernel feature scores are estimates, not UX measurements. Profession request DI-2F3E71A8B353 selected software-engineer with an insufficient-corpus interim; it is not a UX borrow or Critic verdict. The actual native UX Critic contribution and containing-release measurements remain outstanding. No prior UX approval or human design ratification is claimed."
+  }
+}

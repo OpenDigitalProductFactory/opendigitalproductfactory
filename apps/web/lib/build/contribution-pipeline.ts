@@ -10,7 +10,7 @@
  */
 
 import { prisma } from "@dpf/db";
-import { slugify as kebab } from "@/lib/shared/slugify";
+import { slugify } from "@/lib/shared/slugify";
 import { scanDiffForSecurityIssues, formatScanForDisplay } from "@/lib/security-scan";
 import { redactHostnames } from "@/lib/build/identity-privacy";
 import type { ChangeImpactReport } from "@/lib/change-impact";
@@ -48,12 +48,8 @@ interface SubmitBuildAsPRInput {
 
 // ─── Branch Name Generation ─────────────────────────────────────────────────
 
-function slugify(text: string): string {
-  return kebab(text).slice(0, 50);
-}
-
 function generateBranchName(buildId: string, title: string): string {
-  return `build/${buildId}/${slugify(title)}`;
+  return `build/${buildId}/${slugify(title).slice(0, 50)}`;
 }
 
 /**

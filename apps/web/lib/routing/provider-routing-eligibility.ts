@@ -34,6 +34,7 @@ export type RoutingEligibilityState =
   | "rate_limited" // temporarily blocked at the provider (CLI pool 429); self-recovers
   | "needs_credentials" // enabled, but credentials are missing or expired
   | "no_models" // enabled + credentialed, but no model has been discovered yet
+  | "public_only" // cleared only for public work: its account is not reviewed for company data
   | "disabled" // an administrator turned it off
   | "unconfigured" // never set up
   | "not_routable"; // not a model/voice endpoint (an MCP tool/service) — routing never selects it
@@ -46,6 +47,8 @@ export interface RoutingEligibility {
   label: string;
   /** One-line, plain-language reason — the "why" half. No model IDs / internals. */
   reason: string;
+  /** Contextual read models can suppress the generic enable/reconnect suggestion. */
+  recommendedAction?: string | null;
 }
 
 export interface RoutingEligibilityInput {
@@ -71,6 +74,12 @@ export interface RoutingEligibilityInput {
   cliPoolExhausted?: boolean;
   /** Human reset hint for the exhausted pool, e.g. "~5min" or "any moment". */
   cliPoolResetHint?: string | null;
+  /**
+   * ModelProvider.sensitivityClearance. A provider cleared only for `public`
+   * takes no company (internal) work, which is what coworker turns ask for
+   * (BI-1BF425BF). Omit to skip the check.
+   */
+  sensitivityClearance?: readonly string[] | null;
 }
 
 const LABELS: Record<RoutingEligibilityState, string> = {
@@ -78,6 +87,7 @@ const LABELS: Record<RoutingEligibilityState, string> = {
   rate_limited: "Rate-limited",
   needs_credentials: "Needs credentials",
   no_models: "No models",
+  public_only: "Public work only",
   disabled: "Disabled",
   unconfigured: "Not set up",
   not_routable: "Not routable",
@@ -107,7 +117,8 @@ function isNonRoutableSurface(input: RoutingEligibilityInput): boolean {
  *   4. creds present but expired              → needs_credentials
  *   5. CLI subscription pool exhausted        → rate_limited
  *   6. model endpoint with nothing discovered → no_models
- *   7. otherwise                              → routable
+ *   7. not cleared for internal work          → public_only
+ *   8. otherwise                              → routable
  */
 export function deriveRoutingEligibility(input: RoutingEligibilityInput): RoutingEligibility {
   const mk = (state: RoutingEligibilityState, reason: string): RoutingEligibility => ({
@@ -164,7 +175,19 @@ export function deriveRoutingEligibility(input: RoutingEligibilityInput): Routin
     return mk("no_models", "Enabled, but no models have been discovered yet.");
   }
 
-  // 7. Eligible.
+  // 7. Cleared only for public work (BI-1BF425BF). deriveActivationClearance
+  // keeps a hosted account public-only until it is reviewed as a business
+  // account with no-training treatment. Coworker turns route as internal, so
+  // the provider is healthy but none of that work can use it: it is not pool
+  // capacity, and the operator's step is the account review.
+  if (input.sensitivityClearance && !input.sensitivityClearance.includes("internal")) {
+    return mk(
+      "public_only",
+      "Signed in, but its account has not been reviewed for company data, so it takes only public and code-development work. Company work never routes here.",
+    );
+  }
+
+  // 8. Eligible.
   if (status === "degraded") {
     return mk("routable", "Routing can use it now, though recent requests showed some errors.");
   }
@@ -184,6 +207,7 @@ export function deriveRoutingEligibility(input: RoutingEligibilityInput): Routin
  * unit-testable and can render from data already on the admin page.
  */
 export function recommendedActionFor(eligibility: RoutingEligibility): string | null {
+  if (eligibility.recommendedAction !== undefined) return eligibility.recommendedAction;
   switch (eligibility.state) {
     case "unconfigured":
       return "Set this provider up to make it available to routing.";
@@ -193,6 +217,8 @@ export function recommendedActionFor(eligibility: RoutingEligibility): string | 
       return "Connect (or reconnect) this provider's credentials.";
     case "no_models":
       return "Run a model sync to discover this provider's models.";
+    case "public_only":
+      return "Review this provider's account (a business or enterprise account with no-training treatment) to clear it for company work.";
     case "routable":
     case "rate_limited":
     case "not_routable":

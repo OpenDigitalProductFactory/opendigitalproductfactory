@@ -81,6 +81,32 @@ describe("scheduledTaskNeedsExternalResearch", () => {
       expect(scheduledTaskNeedsExternalResearch({ prompt })).toBe(false);
     }
   });
+
+  // BI-PIR-dc81be34: live 2026-10-28, two post-implementation reviews were
+  // refused before they ran because the packet named a branch or file with
+  // "research" in it. The review reads a bound change; it needs no web.
+  it("ignores \"research\" inside a branch name, file path or identifier", () => {
+    const prompts = [
+      "| For BI-7272643A in WC-FA1FEA9F on OpenDigitalProductFactory/opendigitalproductfactory#codex/research-artifact-reuse at Workroom head 8d73c768, independently address post-implementation-review.",
+      "| For BI-0B2C3F6D in WC-FB10BA66 on OpenDigitalProductFactory/opendigitalproductfactory#fix/research-receipt-fields at Workroom head d8892bb2. Read apps/web/lib/build/record-ideate-research-receipt.ts at d8892bb2 with read_source_at_version.",
+      "Call start_ideate_research only if the item is still owed, then record the receipt.",
+      "Read research.md and research_notes.ts from the bound change.",
+    ];
+    for (const prompt of prompts) {
+      expect(scheduledTaskNeedsExternalResearch({ prompt })).toBe(false);
+    }
+  });
+
+  it("still detects research written as prose, at a sentence end or beside identifiers", () => {
+    const prompts = [
+      "Do some research.",
+      "Research: who are the leading vendors?",
+      "Read fix/research-receipt-fields, then research current industry practice for receipts.",
+    ];
+    for (const prompt of prompts) {
+      expect(scheduledTaskNeedsExternalResearch({ prompt })).toBe(true);
+    }
+  });
 });
 
 describe("assertScheduledResearchCapability", () => {

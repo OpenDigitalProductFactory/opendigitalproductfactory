@@ -71,7 +71,7 @@ describe("resolveDecisionOrigin", () => {
     );
     expect(origin.matchedVia).toBe("build");
     expect(origin.workroom?.capsuleId).toBe("WC-1234");
-    expect(origin.activity?.href).toBe("/build/BUILD-9");
+    expect(origin.activity?.href).toBe("/build?buildId=BUILD-9");
   });
 
   it("resolves the task run before the room, because the key spaces differ", async () => {

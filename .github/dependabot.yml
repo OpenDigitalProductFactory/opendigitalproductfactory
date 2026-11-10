@@ -2,6 +2,14 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    # apps/mobile has its own entry below. Dependabot does not honour the
+    # `!apps/mobile` negation in pnpm-workspace.yaml, so without this the root
+    # entry still reads apps/mobile/package.json and opens cross-SDK bumps
+    # (expo-location 58, expo-status-bar 57, react-native-worklets 0.13) that
+    # skip the mobile entry's Expo lockstep rules and leave apps/mobile's
+    # lockfile unchanged (#5683 merged that way and broke the frozen install).
+    exclude-paths:
+      - "apps/mobile/**"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
@@ -19,27 +27,10 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
-  # BI-32F2BE47: probe has its own lockfile; security alerts fire but UPDATE PRs
-  # never did because only directory "/" was declared. Same cooldown as root.
-  - package-ecosystem: "npm"
-    directory: "/scripts/probes/marketing-media"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 2
-    cooldown:
-      default-days: 5
-      semver-major-days: 14
-      semver-minor-days: 7
-      semver-patch-days: 3
-    labels:
-      - "dependencies"
-      - "javascript"
-      - "probe"
+    # Coordinate compatible root updates so shared transitive pins move together.
     groups:
       minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
+        update-types: ["minor", "patch"]
     ignore:
       # Expo SDK is a lockstep upgrade: `expo` core and every `expo-*`
       # companion package must move together to the same SDK line.
@@ -103,28 +94,82 @@ updates:
       # then be free to propose.
       - dependency-name: "react-data-grid"
         versions: ["7.0.0-alpha.*", "7.0.0-canary.*", "7.0.0-beta.60"]
-      # Mermaid is pinned to an exact line and enforced by the Diagram
-      # Dependency Pin Guard (scripts/check-diagram-dependency-pins.mjs):
-      # package.json must retain "@mermaid-js/mermaid-cli": "11.16.0", the
-      # pnpm-workspace override pins `mermaid: '11.16.1'`, and the lockfile guard
-      # rejects newer @zenuml/@mermaid-zenuml transitives. Dependabot bumps here
-      # always fail that gate, so block them — the pin moves deliberately in
-      # lockstep with the guard, not via Dependabot. (11.15.0 → 11.16.0 moved
-      # that way to widen the puppeteer peer range to ^25 for GHSA-jmr9-qjv8-65gv.)
-      - dependency-name: "@mermaid-js/mermaid-cli"
-      - dependency-name: "mermaid"
       # @floating-ui/* is pinned via pnpm-workspace overrides and the same
       # Diagram Dependency Pin Guard, whose rejected-lock list blocks
       # @floating-ui/react@0.27.20 and its sibling bumps. Dependabot proposals
       # (0.27.19 → 0.27.20) fail the guard, so block the family; it moves with
       # the guard's override list, not independently.
       - dependency-name: "@floating-ui/*"
-      # read-excel-file is pinned to an exact 9.2.0. The 9.3.x line is a breaking
-      # change — `readFiles(...)` no longer returns a thenable, so
-      # excel-sheet-reader.test.ts fails with "readFiles(...).then is not a
-      # function". Block until the reader is migrated to the new 9.3+ API and the
-      # pin is bumped deliberately.
-      - dependency-name: "read-excel-file"
+
+  # BI-32F2BE47: probe has its own lockfile; security alerts fire but UPDATE PRs
+  # never did because only directory "/" was declared. Same cooldown as root.
+  - package-ecosystem: "npm"
+    directory: "/scripts/probes/marketing-media"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "probe"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+  # apps/mobile resolves in its own workspace and lockfile (plan 2026-09-08 M6),
+  # so root updates no longer reach it. Same cooldown as the root. The Expo /
+  # React Native lockstep rules live here, where they apply to the mobile tree.
+  - package-ecosystem: "npm"
+    directory: "/apps/mobile"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 5
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "mobile"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Expo SDK is a lockstep upgrade: `expo` core and every `expo-*` companion
+      # moves to the same SDK line together, so only patches flow automatically.
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # React Native minors (0.x) are breaking and follow the Expo SDK.
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@react-native/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      # React must EXACTLY equal the renderer React Native embeds (BI-E5E72FE3;
+      # pinned in apps/mobile/pnpm-workspace.yaml), so even a patch breaks boot
+      # ("Incompatible React versions"). No update type flows automatically; it
+      # moves by hand with an SDK upgrade. Patches used to flow and kept landing
+      # 19.2.8 against the 19.2.3 renderer (#5705, #5736).
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "react-test-renderer"
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

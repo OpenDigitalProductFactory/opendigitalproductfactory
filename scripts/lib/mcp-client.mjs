@@ -18,6 +18,8 @@
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { spawn } from "node:child_process";
+import { materializeBearer } from "./mcp-credential.mjs";
+import { resolveHostMcpTrust, describeMcpTransportError } from "./mcp-host-trust.mjs";
 
 let callId = 0;
 
@@ -33,6 +35,36 @@ const LOOPBACK_MCP_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 // username and the real host is remote.
 const LOOPBACK_MCP_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?(?:\/.*)?$/i;
 
+/** Parse `value` into a URL origin key (`scheme//host[:port]`, lowercased,
+ *  default port dropped), or null when it is absent, malformed, not http(s)
+ *  or carries credentials in its authority. */
+function originKey(value) {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  let parsed;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  if (parsed.username !== "" || parsed.password !== "") return null;
+  return `${parsed.protocol}//${parsed.host.toLowerCase()}`;
+}
+
+/**
+ * The origins the install is CONFIGURED on, from the environment: the
+ * canonical `PUBLIC_URL` (design §12.4.1) and the origin of the operator-set
+ * `DPF_MCP_URL` / `DPF_MCP_ENDPOINT`, which S2 persists as
+ * `<PUBLIC_URL>/api/mcp/v1?tier=full`. Environment is stated configuration,
+ * unlike an on-disk `.mcp.json`, so an endpoint on one of these origins is the
+ * install itself rather than whatever host a file happens to name.
+ */
+function configuredMcpOrigins(env) {
+  return [env?.PUBLIC_URL, env?.DPF_MCP_URL, env?.DPF_MCP_ENDPOINT]
+    .map(originKey)
+    .filter((origin) => origin !== null);
+}
+
 /**
  * Is this an MCP endpoint a `dpfmcp_...` bearer token may be sent to?
  *
@@ -43,12 +75,14 @@ const LOOPBACK_MCP_URL = /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1
  * the token to whatever host it names, which is uncontrolled credential
  * disclosure (CWE-200) rather than a connection failure.
  *
- * Operators who genuinely front the portal from another host say so explicitly
- * with `DPF_MCP_URL` / `--mcp-url`, which is intent rather than ambient state
- * and is not narrowed here.
+ * Allowed: loopback (`127.0.0.1`, `localhost`, `[::1]`), and an endpoint whose
+ * origin (scheme, host and port) equals one the install is configured on in
+ * the environment -- `PUBLIC_URL`, `DPF_MCP_URL` or `DPF_MCP_ENDPOINT`
+ * (BI-8A562681, design §12.4.5). Everything else is refused, including a
+ * credentials-in-authority URL that merely looks like an allowed host.
  */
-export function isAllowedMcpEndpoint(candidate) {
-  if (typeof candidate !== "string" || !LOOPBACK_MCP_URL.test(candidate)) return false;
+export function isAllowedMcpEndpoint(candidate, env = process.env) {
+  if (typeof candidate !== "string") return false;
   let parsed;
   try {
     parsed = new URL(candidate);
@@ -57,7 +91,151 @@ export function isAllowedMcpEndpoint(candidate) {
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
   if (parsed.username !== "" || parsed.password !== "") return false;
-  return LOOPBACK_MCP_HOSTS.has(parsed.hostname);
+  if (LOOPBACK_MCP_URL.test(candidate) && LOOPBACK_MCP_HOSTS.has(parsed.hostname)) return true;
+  const candidateOrigin = originKey(candidate);
+  return candidateOrigin !== null && configuredMcpOrigins(env).includes(candidateOrigin);
+}
+
+/**
+ * Serialize one JSON-RPC 2.0 request. The only place in scripts/ that builds
+ * the envelope (plan 2026-09-08 §10.5 S8; ratchet
+ * scripts/check-no-hand-rolled-mcp-jsonrpc.mjs).
+ */
+export function buildJsonRpcBody(method, params) {
+  callId += 1;
+  return JSON.stringify({
+    jsonrpc: "2.0",
+    id: callId,
+    method,
+    ...(params === undefined ? {} : { params }),
+  });
+}
+
+/**
+ * POST one JSON-RPC request to the MCP endpoint and return the raw reply as
+ * `{ status, text }`. The HTTP status is NOT interpreted: a caller that must
+ * fail open on a 401 or 5xx decides that itself. Throws on a missing URL or
+ * credential, a refused endpoint, a transport error and a timeout.
+ *
+ * Transport, first match wins:
+ *   - `fetchImpl`: a fetch-compatible function (tests; callers that already
+ *     inject one). It gets an AbortSignal for the deadline.
+ *   - DPF_GATE_CURL_BIN: the contract-test curl seam below.
+ *   - plain node:http/https with `agent: false` + `Connection: close` (see the
+ *     header comment for why not the global fetch).
+ *
+ * `label` names the call in the timeout message; it defaults to the tool name
+ * for tools/call and to the method otherwise.
+ */
+export async function mcpPost(method, params, {
+  mcpUrl,
+  bearerToken,
+  timeoutMs = 10_000,
+  allowNonLoopbackEndpoint = false,
+  accept,
+  fetchImpl,
+  requestImpl,
+  resolveTrust = resolveHostMcpTrust,
+  connection,
+  label,
+  env = process.env,
+} = {}) {
+  if (!mcpUrl) throw new Error("mcpCall: mcpUrl is required");
+  if (!bearerToken) throw new Error("mcpCall: bearerToken is required");
+  // BI-78B653D5: `bearerToken` is a PAT string or a self-refreshing
+  // client_credentials bearer (scripts/lib/mcp-credential.mjs). Materialize
+  // it once per call so a long-running gate always sends a live token.
+
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("mcpCall: timeoutMs must be a positive number");
+  }
+  // Default-deny, checked HERE rather than left to each caller.
+  //
+  // isAllowedMcpEndpoint has existed for a while, but only one of the sixteen
+  // call sites ever ran it, so everywhere else the rule documented above it was
+  // a convention rather than an invariant: a caller resolving its endpoint from
+  // on-disk config would send a live `dpfmcp_...` credential to whatever host
+  // that file named (CWE-200, and what CodeQL's js/file-access-to-http reports
+  // on this module). Enforcing it here inverts the failure mode -- a caller that
+  // never thought about the endpoint now fails closed instead of leaking.
+  //
+  // The install's configured origins (PUBLIC_URL, and the origin of an
+  // operator-set DPF_MCP_URL / DPF_MCP_ENDPOINT) are configuration, so an
+  // endpoint on one of them is honoured off loopback. An endpoint that merely
+  // appeared in ambient state -- a copied-in, stale or tampered `.mcp.json`
+  // -- naming any other host is refused. Callers with their own operator signal
+  // (a --mcp-url flag) can still pass allowNonLoopbackEndpoint directly.
+  if (!allowNonLoopbackEndpoint && !isAllowedMcpEndpoint(mcpUrl, env)) {
+    throw new Error(
+      `mcpCall: refusing to send a bearer token to ${mcpUrl}. Only loopback MCP `
+      + "endpoints and the install's configured origin (PUBLIC_URL, DPF_MCP_URL or "
+      + "DPF_MCP_ENDPOINT) are allowed. An endpoint read from on-disk config is "
+      + "ambient state, not operator intent, and a live credential is not sent to it.",
+    );
+  }
+
+  // A token refresh can send client credentials: authorize its endpoint first.
+  const bearerValue = await materializeBearer(bearerToken);
+  const callLabel = label ?? (method === "tools/call" && params?.name ? params.name : method);
+  const body = buildJsonRpcBody(method, params);
+  const headers = {
+    Authorization: `Bearer ${bearerValue}`,
+    "Content-Type": "application/json",
+    ...(accept ? { Accept: accept } : {}),
+  };
+
+  if (fetchImpl) {
+    const response = await fetchImpl(mcpUrl, {
+      method: "POST",
+      headers,
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { status: response.status, text: await response.text(), via: "fetch" };
+  }
+
+  const injectedTransport = env.DPF_GATE_CURL_BIN;
+  if (injectedTransport) {
+    const text = await callInjectedCurlTransport({
+      command: injectedTransport,
+      mcpUrl,
+      bearerToken: bearerValue,
+      body,
+      timeoutMs,
+    });
+    return { status: 200, text, via: "injected" };
+  }
+
+  const url = new URL(mcpUrl);
+  const trust = url.protocol === "https:" ? resolveTrust({ mcpUrl, env, connection }) : null;
+  const requestFn = requestImpl ?? (url.protocol === "https:" ? httpsRequest : httpRequest);
+  return new Promise((resolve, reject) => {
+    const timeoutError = () => Object.assign(
+      new Error(`mcpCall: ${callLabel} timed out after ${timeoutMs}ms`), { code: "ETIMEDOUT" });
+    const req = requestFn(url, {
+      method: "POST",
+      agent: false,
+      ...trust?.tlsOptions,
+      headers: {
+        ...headers,
+        "Content-Length": Buffer.byteLength(body),
+        Connection: "close",
+      },
+    }, (res) => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, text: data, via: "http" }));
+    });
+    // Socket inactivity is not a whole-request bound: a trickling response
+    // resets it indefinitely. Keep the same allowance, bound wall execution.
+    const deadline = setTimeout(() => req.destroy(timeoutError()), timeoutMs);
+    req.once("close", () => clearTimeout(deadline));
+    req.setTimeout(timeoutMs, () => req.destroy(timeoutError()));
+    req.on("error", error => reject(url.protocol === "https:" ? describeMcpTransportError(error, { phase: "request" }) : error));
+    req.write(body);
+    req.end();
+  });
 }
 
 /**
@@ -68,69 +246,25 @@ export function isAllowedMcpEndpoint(candidate) {
  * (the shape the DPF MCP server returns tool results in), which is itself
  * JSON and holds the actual `{ success, entityId, error, ... }` payload.
  * Falls back to `result.structuredContent` or `result` for other transports.
+ * Throws on a reply that is not JSON; the HTTP status is not checked, so a
+ * JSON-RPC error envelope comes back through extractToolResult as before.
  */
-export async function mcpCall(toolName, args, {
-  mcpUrl,
-  bearerToken,
-  timeoutMs = 10_000,
-} = {}) {
-  if (!mcpUrl) throw new Error("mcpCall: mcpUrl is required");
-  if (!bearerToken) throw new Error("mcpCall: bearerToken is required");
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    throw new Error("mcpCall: timeoutMs must be a positive number");
+export async function mcpCall(toolName, args, options = {}) {
+  const reply = await mcpPost("tools/call", { name: toolName, arguments: args }, options);
+  if (reply.status === 401 || reply.status === 403) {
+    const code = reply.status === 401 ? "mcp_authentication_failed" : "mcp_authorization_failed";
+    throw Object.assign(new Error(`${code}: HTTP ${reply.status}; verified transport succeeded. ${reply.status === 401
+      ? "Check the existing credential's validity; no identity was changed."
+      : "The current identity lacks authority for this operation; use its governed grant remedy."}`), { code });
   }
-
-  callId += 1;
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: callId,
-    method: "tools/call",
-    params: { name: toolName, arguments: args },
-  });
-
-  const url = new URL(mcpUrl);
-  const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
-
-  const injectedTransport = process.env.DPF_GATE_CURL_BIN;
-  const payload = injectedTransport
-    ? await callInjectedCurlTransport({
-      command: injectedTransport,
-      mcpUrl,
-      bearerToken,
-      body,
-      timeoutMs,
-    })
-    : await new Promise((resolve, reject) => {
-    const req = requestFn(url, {
-      method: "POST",
-      agent: false,
-      headers: {
-        Authorization: `Bearer ${bearerToken}`,
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body),
-        Connection: "close",
-      },
-    }, (res) => {
-      let data = "";
-      res.setEncoding("utf8");
-      res.on("data", (chunk) => { data += chunk; });
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(data));
-        } catch (error) {
-          reject(new Error(`mcpCall: invalid JSON response from ${mcpUrl} (status ${res.statusCode}): ${error.message}`));
-        }
-      });
-    });
-    req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`mcpCall: ${toolName} timed out after ${timeoutMs}ms`));
-    });
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-    });
-
-  return extractToolResult(payload);
+  try {
+    return extractToolResult(JSON.parse(reply.text));
+  } catch (error) {
+    if (reply.via === "injected") {
+      throw new Error(`mcpCall: injected transport returned invalid JSON: ${error.message}`);
+    }
+    throw new Error(`mcpCall: invalid JSON response from ${options.mcpUrl} (status ${reply.status}): ${error.message}`);
+  }
 }
 
 // Contract-test seam retained while the POSIX gate converges on this canonical
@@ -157,12 +291,18 @@ async function callInjectedCurlTransport({
     "--data",
     body,
   ];
-  const executable = process.platform === "win32" ? "sh" : command;
-  const executableArgs = process.platform === "win32" ? [command, ...args] : args;
-  const output = await new Promise((resolve, reject) => {
+  const win32 = process.platform === "win32";
+  const executable = win32 ? "sh" : command;
+  // MSYS/Git Bash `sh` splits its command line by Cygwin rules, where `\\`
+  // inside a quoted argument collapses to `\`. Node quotes by MSVC rules, so a
+  // JSON body carrying a Windows path arrived at the stub as invalid JSON
+  // (BI-1B4910B4). Quote every argument for sh and pass the line verbatim.
+  const executableArgs = win32 ? [command, ...args].map(quoteForMsysArgv) : args;
+  return new Promise((resolve, reject) => {
     const child = spawn(executable, executableArgs, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+      windowsVerbatimArguments: win32,
     });
     let stdout = "";
     let stderr = "";
@@ -174,14 +314,14 @@ async function callInjectedCurlTransport({
         reject(new Error(`mcpCall: injected transport exited ${code}: ${stderr.trim()}`));
         return;
       }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (error) {
-        reject(new Error(`mcpCall: injected transport returned invalid JSON: ${error.message}`));
-      }
+      resolve(stdout);
     });
   });
-  return output;
+}
+
+/** Quote one argument so MSYS `sh` reads it back byte for byte (Cygwin rules). */
+export function quoteForMsysArgv(arg) {
+  return `"${String(arg).replace(/[\\"]/g, (c) => `\\${c}`)}"`;
 }
 
 export function extractToolResult(payload) {

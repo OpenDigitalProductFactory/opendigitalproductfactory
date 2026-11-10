@@ -65,6 +65,15 @@ export default function NearbyScreen(): React.JSX.Element {
   }
 
   const err = geoError ?? nearbyError;
+  // A location failure needs a new fix; a lookup failure only needs the same
+  // lookup again.
+  const retry = geoError
+    ? refresh
+    : () => {
+        if (latitude !== null && longitude !== null) {
+          void fetchNearby({ latitude, longitude });
+        }
+      };
 
   return (
     <FlatList
@@ -94,6 +103,16 @@ export default function NearbyScreen(): React.JSX.Element {
             <Text style={styles.error} testID="nearby-error">
               {err}
             </Text>
+          ) : null}
+          {err ? (
+            <Pressable
+              style={styles.retry}
+              onPress={retry}
+              accessibilityRole="button"
+              testID="nearby-retry"
+            >
+              <Text style={styles.ctaText}>Try again</Text>
+            </Pressable>
           ) : null}
         </View>
       }
@@ -126,7 +145,9 @@ export default function NearbyScreen(): React.JSX.Element {
         </Pressable>
       )}
       ListEmptyComponent={
-        !isLoadingNearby ? (
+        // A failed location or lookup says nothing about what is nearby, so
+        // the error above stands alone.
+        !isLoadingNearby && !err ? (
           <Text style={styles.muted}>No businesses found near you yet.</Text>
         ) : null
       }
@@ -170,6 +191,7 @@ function makeStyles({ colors, spacing, borderRadius }: ReturnType<typeof useThem
     error: { color: colors.error, fontSize: 13, marginBottom: spacing.sm },
     muted: { color: colors.textMuted, fontSize: 14, textAlign: "center" },
     cta: { backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.lg },
+    retry: { alignSelf: "flex-start", backgroundColor: colors.primary, borderRadius: borderRadius.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
     ctaText: { color: colors.white, fontSize: 15, fontWeight: "600" },
     footer: { color: colors.textMuted, fontSize: 12, textAlign: "center", marginTop: spacing.md },
   });

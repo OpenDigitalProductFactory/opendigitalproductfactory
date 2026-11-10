@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "compact-account-disclosure",
+  "decisionInteractionId": "DI-BE29BCA0E998",
+  "scope": {
+    "files": [
+      "apps/web/components/ui/report-kit/DataTable.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["compact-account-disclosure", "expanded-provider-catalog"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "evidenceClass": "Existing founder-approved compact disclosure choice extended to confirmed viewport and history defects. Opt-in single-DOM report-kit reflow retains Allowed work, models, capacity and account actions; unchanged callers keep their table layout. Dimension score labels follow persisted results.dimensions, legacy scenario scales remain unchanged, and absent probes are omitted. Queued acknowledgements refer to Test Runs without claiming ongoing execution. The additional advisory consult failed ledger recording and had low confidence; it is not represented as an accepted decision. Actual responsive/theme/permission acceptance remains required against the served source."
+  }
+}

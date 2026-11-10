@@ -35,6 +35,7 @@
 
 import type { SysmlDesiredModel, SysmlDesiredConformanceIssue } from "./sysml-model-seed";
 import type { PortalNavRecord } from "../navigation/portal-navigation-model";
+import type { InteractionStepRole } from "./interaction-shape";
 
 export const NAVIGATION_PACKAGE_KEY = "navigation:pkg";
 
@@ -58,6 +59,14 @@ export interface NavSourceEntry {
   /** True when the target domain is reached by following a redirect shim rather than the
    *  href directly — the teleport the parity engine's href-only check used to miss. */
   viaRedirect?: boolean;
+  /** Optional interaction-shape lane when a richer extractor has already resolved it. */
+  jobLane?: string;
+  /** Optional role of this surface inside a human job path. Includes `delegate`. */
+  stepRole?: InteractionStepRole;
+  /** Next surface keys, or for `delegate`, the receiving job lane(s). */
+  continuesTo?: readonly string[];
+  /** Optional operational value-stream stage this entry serves. */
+  spineStage?: string;
 }
 
 /** A map of redirect-shim route path → its destination route path (query stripped),
@@ -150,6 +159,10 @@ export function buildNavigationModel(input: NavigationModelInput): SysmlDesiredM
         targetPath: entry.path,
         targetDomain: entry.targetDomain,
         ...(entry.viaRedirect ? { viaRedirect: true, effectivePath: entry.effectivePath } : {}),
+        ...(entry.jobLane ? { jobLane: entry.jobLane } : {}),
+        ...(entry.stepRole ? { stepRole: entry.stepRole } : {}),
+        ...(entry.continuesTo?.length ? { continuesTo: [...entry.continuesTo] } : {}),
+        ...(entry.spineStage ? { spineStage: entry.spineStage } : {}),
       },
     });
     relationships.push({ fromKey: surfaceKey, toKey: entryKey, relSlug: "contains" });

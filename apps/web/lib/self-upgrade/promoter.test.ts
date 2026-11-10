@@ -1,12 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
+import { createHash } from "node:crypto";
+const hashText = (text: string) => createHash("sha256").update(text).digest("hex");
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { buildCompatiblePromoterCommand } from "./promoter-artifact";
 import { PROMOTER_BUILD_CONTEXT_FILES, PROMOTER_BUILD_CONTEXT_SOURCES } from "./promoter-build-context";
 import {
   buildPromoterCommand,
+  buildRuntimeCapabilityProtocolProbeCommand,
+  runRuntimeCapabilityProtocolProbe,
   buildCandidatePromoterImage,
   buildPromoterReadinessCommand,
   decidePromoterEnsureAction,
@@ -32,6 +38,68 @@ const BASE = {
   healthUrl: "http://localhost:3000/api/health",
 };
 
+describe("runtime capability protocol probe", () => {
+  const artifact = { digest: `sha256:${"a".repeat(64)}` as const, sourceSha: "b".repeat(40), contractSchema: 1 as const, contractDigest: `sha256:${"c".repeat(64)}` as const, callerProtocol: { min: 1, max: 2 } };
+  const expected = { sourceSha: artifact.sourceSha, actuatorSha256: "d".repeat(64), signerSha256: "e".repeat(64) };
+  const info = { schemaVersion: 1, ...expected, signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [] };
+  const probeResult = (stdout = JSON.stringify(info), exitCode = 0, outputLimitExceeded = false) => ({ exitCode, stdout, stderr: "", stdoutBytes: Buffer.from(stdout), outputLimitExceeded });
+
+  it("executes discovery with the existing owned-container budget and validates its bytes", async () => {
+    const execute = vi.fn().mockResolvedValue(probeResult());
+    expect(await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: "dpf-runtime-protocol-test" }, execute)).toEqual(info);
+    expect(execute).toHaveBeenCalledWith("docker", buildRuntimeCapabilityProtocolProbeCommand(artifact, "dpf-runtime-protocol-test").args,
+      { timeoutMs: 60_000, containerName: "dpf-runtime-protocol-test", maxStdoutBytes: 4096 });
+  });
+
+  it.each([
+    ["failed execution", probeResult("", 1)],
+    ["budget expiry", probeResult("", 124)],
+    ["output overrun", probeResult(JSON.stringify(info), 0, true)],
+    ["invalid JSON", probeResult("not-json")],
+    ["changed packaged signer", probeResult(JSON.stringify({ ...info, signerSha256: "f".repeat(64) }))],
+    ["contradictory support", probeResult(JSON.stringify({ ...info, applyVersions: [1, 2], signingVersions: [1] }))],
+  ])("refuses %s without accepting protocol evidence", async (_name, result) => {
+    await expect(runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: "dpf-runtime-protocol-test" }, vi.fn().mockResolvedValue(result))).rejects.toThrow();
+  });
+
+  it("refuses a different server source identity before executing discovery", async () => {
+    const execute = vi.fn().mockResolvedValue(probeResult());
+    await expect(runRuntimeCapabilityProtocolProbe({ artifact, expected: { ...expected, sourceSha: "f".repeat(40) }, containerName: "dpf-runtime-protocol-test" }, execute)).rejects.toThrow("runtime_protocol_probe_identity_mismatch");
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("binds expected bytes before awaiting the image rather than following a changed caller object", async () => {
+    const callerIdentity = { ...expected };
+    const execute = vi.fn().mockImplementation(async () => {
+      callerIdentity.signerSha256 = "f".repeat(64);
+      return probeResult(JSON.stringify({ ...info, signerSha256: callerIdentity.signerSha256 }));
+    });
+    await expect(runRuntimeCapabilityProtocolProbe({ artifact, expected: callerIdentity, containerName: "dpf-runtime-protocol-test" }, execute)).rejects.toThrow("runtime_protocol_probe_identity_mismatch");
+  });
+
+  it("uses the verified immutable image without mounts, credentials, socket or network", () => {
+    const command = buildRuntimeCapabilityProtocolProbeCommand(artifact, "dpf-runtime-protocol-test");
+    expect(command).toEqual({ command: "docker", args: ["run", "--rm", "--name", "dpf-runtime-protocol-test", "--read-only", "--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "128m", "--cpus", "1", "--pids-limit", "64", "--pull", "never", artifact.digest, "--runtime-capability-protocol-info"] });
+    expect(() => buildRuntimeCapabilityProtocolProbeCommand({ ...artifact, digest: "latest" as never }, "dpf-runtime-protocol-test")).toThrow("runtime_protocol_probe_identity_invalid");
+    expect(() => buildRuntimeCapabilityProtocolProbeCommand(artifact, "another-owner")).toThrow("runtime_protocol_probe_identity_invalid");
+  });
+
+  it("the packaged entrypoint returns support without installing or applying", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "dpf-protocol-entrypoint-"));
+    const root = resolve(__dirname, "../../../..");
+    const result = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-protocol-info"], {
+      encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, DPF_CANDIDATE_SOURCE_SHA: artifact.sourceSha, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "absent-secret") },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ sourceSha: artifact.sourceSha, signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [2] });
+    expect(readdirSync(dir)).toEqual([]);
+    const mixed = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-transition", "RCT-test", "--runtime-capability-protocol-info"], { encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir } });
+    expect(mixed.status, mixed.stderr).toBe(64);
+    expect(mixed.stderr).toContain("invalid_runtime_protocol_probe_arguments");
+    expect(readdirSync(dir)).toEqual([]);
+  });
+});
+
 it("mechanically closes every staged promoter input through portal baking and JIT staging", () => {
   // Keyed on the staged closure, not on Dockerfile.promoter's COPY lines:
   // the Dockerfile copies `scripts/` as a directory so a candidate stays
@@ -50,7 +118,7 @@ it("mechanically closes every staged promoter input through portal baking and JI
 });
 
 describe("validateResolvedPromoterArtifact", () => {
-  const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
+  const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 2 } });
   const digest = "sha256:" + "a".repeat(64);
   const labels = {
     "org.opencontainers.image.revision": "abc1234",
@@ -58,20 +126,26 @@ describe("validateResolvedPromoterArtifact", () => {
     "org.opendpf.promoter.contract-digest": "sha256:" + "b".repeat(64),
   };
 
+  it("cannot lower the scope-writer compatibility floor through legacy configuration", () => {
+    const oldManifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
+    expect(() => validateResolvedPromoterArtifact({ targetSha: "abc1234", callerProtocol: 1, digest,
+      manifest: oldManifest, labels, computedContractDigest: labels["org.opendpf.promoter.contract-digest"] })).toThrow("promoter_caller_protocol_unsupported");
+  });
+
   it("returns an immutable artifact when identity and protocol agree", () => {
     expect(validateResolvedPromoterArtifact({ targetSha: "abc1234", callerProtocol: 1, digest, manifest, labels, computedContractDigest: labels["org.opendpf.promoter.contract-digest"] })).toEqual({
       digest,
       sourceSha: "abc1234",
       contractSchema: 1,
       contractDigest: labels["org.opendpf.promoter.contract-digest"],
-      callerProtocol: { min: 1, max: 1 },
+      callerProtocol: { min: 1, max: 2 },
     });
   });
 
   it.each([
     ["source SHA mismatch", { targetSha: "other" }],
-    ["unknown schema", { manifest: JSON.stringify({ schemaVersion: 2, callerProtocol: { min: 1, max: 1 } }) }],
-    ["caller protocol mismatch", { callerProtocol: 2 }],
+    ["unknown schema", { manifest: JSON.stringify({ schemaVersion: 2, callerProtocol: { min: 1, max: 2 } }) }],
+    ["caller protocol mismatch", { callerProtocol: 3 }],
     ["contract digest mismatch", { computedContractDigest: "sha256:" + "c".repeat(64) }],
     ["mutable image reference", { digest: "dpf-promoter:latest" }],
   ])("rejects %s", (_name, override) => {
@@ -83,7 +157,7 @@ describe("buildPromoterReadinessCommand", () => {
   it("runs readiness against the immutable digest", () => {
     const artifact = validateResolvedPromoterArtifact({
       targetSha: "abc1234", callerProtocol: 1, digest: "sha256:" + "a".repeat(64),
-      manifest: JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } }),
+      manifest: JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 2 } }),
       labels: { "org.opencontainers.image.revision": "abc1234", "org.opendpf.promoter.contract-schema": "1", "org.opendpf.promoter.contract-digest": "sha256:" + "b".repeat(64) },
       computedContractDigest: "sha256:" + "b".repeat(64),
     });
@@ -91,6 +165,7 @@ describe("buildPromoterReadinessCommand", () => {
       ...BASE,
       stateDirHostPath: "/Users/me/.dpf",
       backupHostPath: "/Users/me/dpf-backups",
+      composeEnvFileHostPath: "/Users/me/dpf/.env",
       artifact,
     };
     const { args } = buildPromoterReadinessCommand(readinessParams);
@@ -100,11 +175,12 @@ describe("buildPromoterReadinessCommand", () => {
     expect(args).not.toContain("/var/run/docker.sock:/var/run/docker.sock");
     expect(args).toContain(`${readinessParams.stateDirHostPath}:/dpf-state:ro`);
     expect(args).toContain(`${readinessParams.backupHostPath}:/backups:ro`);
+    expect(args).toContain(`${readinessParams.composeEnvFileHostPath}:/install-env/.env:ro`);
     expect(args).toContain("DPF_PROMOTER_DOCKER_PREFLIGHT=ready");
   });
 
   it("passes verified host provenance while keeping install state read-only", () => {
-    const artifact = { digest: `sha256:${"a".repeat(64)}`, sourceSha: "abc1234", contractSchema: 1, contractDigest: `sha256:${"b".repeat(64)}`, callerProtocol: { min: 1, max: 1 } } as const;
+    const artifact = { digest: `sha256:${"a".repeat(64)}`, sourceSha: "abc1234", contractSchema: 1, contractDigest: `sha256:${"b".repeat(64)}`, callerProtocol: { min: 1, max: 2 } } as const;
     const { args } = buildPromoterReadinessCommand({ ...BASE, stateDirHostPath: "/state", artifact, hostIdentity: { platform: "linux", arch: "arm64", provenance: "explicit" } });
     expect(args).toContain("/state:/dpf-state:ro");
     expect(args).toContain("DPF_HOST_PLATFORM=linux");
@@ -125,7 +201,7 @@ describe("install-state migration promotion carrier", () => {
 
 describe("resolvePromoterArtifact", () => {
   it("pulls an exact verified release-tag reference while validating its source SHA", async () => {
-    const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
+    const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 2 } });
     const contractDigest = `sha256:${(await import("node:crypto")).createHash("sha256").update(manifest).digest("hex")}`;
     const digest = `sha256:${"e".repeat(64)}`;
     const calls: string[][] = [];
@@ -139,7 +215,7 @@ describe("resolvePromoterArtifact", () => {
   });
 
   it("pulls a target-SHA tag once and returns its immutable digest", async () => {
-    const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 1 } });
+    const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 2 } });
     const contractDigest = `sha256:${(await import("node:crypto")).createHash("sha256").update(manifest).digest("hex")}`;
     const digest = `sha256:${"d".repeat(64)}`;
     const calls: string[][] = [];
@@ -220,6 +296,7 @@ describe("buildPromoterCommand", () => {
   it("launches release promotion with a narrowly writable install and immutable release identity", () => {
     const { args } = buildPromoterCommand({
       ...BASE,
+      canonicalInstallPath: "/Users/me/canonical-dpf",
       release: {
         tag: "v2026.08.23",
         ghcrOwner: "opendigitalproductfactory",
@@ -230,8 +307,9 @@ describe("buildPromoterCommand", () => {
         platformArchitecture: "amd64",
       },
     });
-    expect(args).toContain("/Users/me/dpf:/host-source");
-    expect(args).not.toContain("/Users/me/dpf:/host-source:ro");
+    expect(args).toContain("/Users/me/dpf:/host-source:ro");
+    expect(args).toContain("/Users/me/canonical-dpf:/canonical-install");
+    expect(args).toContain("PROMOTE_INSTALL_ROOT=/canonical-install");
     expect(args).toContain("DPF_PROMOTION_MODE=release");
     expect(args).toContain("DPF_RELEASE_TAG=v2026.08.23");
     expect(args).toContain(`DPF_RELEASE_CONFIG_DIGEST=sha256:${"c".repeat(64)}`);
@@ -241,6 +319,24 @@ describe("buildPromoterCommand", () => {
     expect(args).toContain("DPF_RELEASE_PLATFORM_ARCHITECTURE=amd64");
     expect(args).toContain("GHCR_OWNER=opendigitalproductfactory");
     expect(args).toContain("PROMOTE_TARGET_SHA=abc1234");
+  });
+
+  it("keeps legacy release callers on the writable source mount when no canonical root is supplied", () => {
+    const release = {
+      tag: "v2026.08.23", ghcrOwner: "opendigitalproductfactory",
+      channelDigest: `sha256:${"a".repeat(64)}`, platformManifestDigest: `sha256:${"b".repeat(64)}`,
+      configDigest: `sha256:${"c".repeat(64)}`, platformOs: "linux", platformArchitecture: "amd64",
+    } as const;
+    const { args } = buildPromoterCommand({ ...BASE, release });
+    expect(args).toContain("/Users/me/dpf:/host-source");
+    expect(args).not.toContain("PROMOTE_INSTALL_ROOT=/canonical-install");
+    const sameRoot = buildPromoterCommand({ ...BASE, canonicalInstallPath: BASE.hostInstallPath, release }).args;
+    expect(sameRoot).toContain("PROMOTE_INSTALL_ROOT=/host-source");
+    expect(sameRoot).not.toContain("/Users/me/dpf:/canonical-install");
+  });
+
+  it("rejects an unsafe canonical install root before launching Docker", () => {
+    expect(() => buildPromoterCommand({ ...BASE, canonicalInstallPath: "../dpf" })).toThrow("invalid_canonical_install_path");
   });
 
   it("reserves host transition authority without requiring an apply envelope", () => {
@@ -377,8 +473,22 @@ describe("buildPromoterCommand", () => {
     });
 
     expect(args).toContain("/Users/me/dpf/.upgrade-workspace:/host-source:ro");
-    expect(args).toContain("/Users/me/dpf/.env:/install-env/.env:ro");
+    // Writable for a real self-upgrade: promote.sh persists the Inngest keys
+    // it generated (BI-3267763F).
+    expect(args).toContain("/Users/me/dpf/.env:/install-env/.env");
     expect(args).toContain("PROMOTE_COMPOSE_ENV_FILE=/install-env/.env");
+  });
+
+  it("mounts the install env file read-only for dry runs and runtime transitions", () => {
+    const dry = buildPromoterCommand({ ...BASE, composeEnvFileHostPath: "/Users/me/dpf/.env", dryRun: true });
+    expect(dry.args).toContain("/Users/me/dpf/.env:/install-env/.env:ro");
+    const rotate = buildPromoterCommand({
+      ...BASE,
+      composeEnvFileHostPath: "/Users/me/dpf/.env",
+      stateDirHostPath: "/Users/me/.dpf",
+      runtimeTransitionAuthorityOperation: "rotate-secret",
+    });
+    expect(rotate.args).toContain("/Users/me/dpf/.env:/install-env/.env:ro");
   });
 
   it("passes the install's recorded compose chain so the wrong-substrate overlay is never force-applied", () => {
@@ -567,4 +677,68 @@ describe("runProcessWithBudget (the runPromoter timeout path)", () => {
     expect(result.exitCode).toBe(3);
     expect(result.stderr).not.toContain("[promoter-timeout]");
   });
+});
+
+
+describe("privileged promoter command compatibility", () => {
+  function runner(max: number) {
+    const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max } });
+    const contractDigest = "sha256:" + (hashText(manifest));
+    const digest = "sha256:" + "a".repeat(64);
+    const run = vi.fn(async (args: string[]) => ({ exitCode: 0, stderr: "", stdout: args[0] === "image"
+      ? JSON.stringify({ Id: digest, Config: { Labels: { "org.opencontainers.image.revision": "abc1234", "org.opendpf.promoter.contract-schema": "1", "org.opendpf.promoter.contract-digest": contractDigest } } }) : manifest }));
+    return { run, digest };
+  }
+  it.each([false, true])("refuses an old actual actuator before building privileged commands (readiness=%s)", async readiness => {
+    const f = runner(1), build = vi.fn(() => ({ command: "docker", args: [] }));
+    const params = { targetSha: "abc1234", promoterImage: f.digest,
+      ...(readiness ? { artifact: { digest: f.digest as `sha256:${string}`, sourceSha: "abc1234", contractSchema: 1 as const,
+        contractDigest: `sha256:${"b".repeat(64)}` as const, callerProtocol: { min: 1, max: 2 } } } : {}) };
+    await expect(buildCompatiblePromoterCommand(params, build, f.run)).rejects.toThrow("promoter_caller_protocol_unsupported");
+    expect(build).not.toHaveBeenCalled();
+    expect(f.run.mock.calls.every(([args]) => !args.includes("/var/run/docker.sock:/var/run/docker.sock"))).toBe(true);
+  });
+  it("passes the same verified immutable digest to the actual command builder", async () => {
+    const f = runner(2), build = vi.fn((params: { targetSha: string; promoterImage?: string }) => ({ command: "docker", args: [params.promoterImage!] }));
+    expect(await buildCompatiblePromoterCommand({ targetSha: "abc1234", promoterImage: f.digest }, build, f.run)).toEqual({ command: "docker", args: [f.digest] });
+    expect(f.run.mock.calls.some(([args]) => args[0] === "pull")).toBe(false);
+  });
+});
+
+
+it("a recovery launch resolves the qualified target tag before a stale mutable default", async () => {
+  const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 2 } });
+  const contractDigest = "sha256:" + hashText(manifest), image = "sha256:" + "a".repeat(64), calls: string[][] = [];
+  const run = async (args: string[]) => {
+    calls.push(args);
+    return { exitCode: 0, stderr: "", stdout: args[0] === "image" ? JSON.stringify({ Id: image, Config: { Labels: {
+      "org.opencontainers.image.revision": args[2] === "dpf-promoter:abc1234" ? "abc1234" : "stale-source",
+      "org.opendpf.promoter.contract-schema": "1", "org.opendpf.promoter.contract-digest": contractDigest } } }) : manifest };
+  };
+  const build = vi.fn((params: { targetSha: string; promoterImage?: string }) => ({ command: "docker", args: [params.promoterImage!] }));
+  expect(await buildCompatiblePromoterCommand({ targetSha: "abc1234" }, build, run)).toEqual({ command: "docker", args: [image] });
+  expect(calls[0]).toEqual(["image", "inspect", "dpf-promoter:abc1234", "--format", "{{json .}}"]);
+});
+
+
+it("uses the existing qualified local JIT image only when the target tag is positively absent", async () => {
+  const manifest = JSON.stringify({ schemaVersion: 1, callerProtocol: { min: 1, max: 2 } });
+  const contractDigest = "sha256:" + hashText(manifest), image = "sha256:" + "a".repeat(64), inspected: string[] = [];
+  const run = async (args: string[]) => {
+    if (args[0] === "image") {
+      inspected.push(args[2]!);
+      if (args[2] === "dpf-promoter:abc1234") return { exitCode: 1, stdout: "", stderr: "Error: No such image: dpf-promoter:abc1234" };
+      return { exitCode: 0, stderr: "", stdout: JSON.stringify({ Id: image, Config: { Labels: {
+        "org.opencontainers.image.revision": "abc1234", "org.opendpf.promoter.contract-schema": "1", "org.opendpf.promoter.contract-digest": contractDigest } } }) };
+    }
+    return { exitCode: 0, stdout: manifest, stderr: "" };
+  };
+  const build = (params: { targetSha: string; promoterImage?: string }) => ({ command: "docker", args: [params.promoterImage!] });
+  expect(await buildCompatiblePromoterCommand({ targetSha: "abc1234" }, build, run)).toEqual({ command: "docker", args: [image] });
+  expect(inspected).toEqual(["dpf-promoter:abc1234", "dpf-promoter"]);
+});
+it.each(["permission denied", "Cannot connect to the Docker daemon", "inspect transport unavailable"])("does not substitute an image after %s", async stderr => {
+  const run = vi.fn(async () => ({ exitCode: 1, stdout: "", stderr })), build = vi.fn(() => ({ command: "docker", args: [] }));
+  await expect(buildCompatiblePromoterCommand({ targetSha: "abc1234" }, build, run)).rejects.toThrow("promoter_inspect_failed");
+  expect(run).toHaveBeenCalledOnce(); expect(build).not.toHaveBeenCalled();
 });

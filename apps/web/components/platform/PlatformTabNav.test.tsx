@@ -28,6 +28,20 @@ import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { PLATFORM_FAMILIES } from "@/components/platform/platform-nav";
 
 describe("PlatformTabNav", () => {
+  it("replaces the AI sub-navigation with workspace views on desktop and mobile", () => {
+    pathname = "/platform/ai/providers";
+    const html = renderToStaticMarkup(<PlatformTabNav workspace={{ label: "Routing views", items: [
+      { label: "Traffic", href: "/platform/ai/operations-map?routingView=traffic", active: false, primary: true },
+      { label: "Providers", href: "/platform/ai/providers", active: true, primary: true },
+      { label: "All AI workspaces", href: "/platform/ai/overview", active: false, primary: true },
+    ] }} />);
+    expect(html).toContain('aria-label="Routing views"');
+    expect(html).toContain('selected="">Providers</option>');
+    expect(html).toContain(">Traffic<");
+    expect(html).toContain(">All AI workspaces<");
+    expect(html).not.toContain(">Providers &amp; Routing<");
+    expect(html).not.toContain(">More tools<");
+  });
   it("renders grouped top-level workflow tabs", () => {
     pathname = "/platform";
     const html = renderToStaticMarkup(<PlatformTabNav />);
@@ -102,7 +116,7 @@ describe("PlatformTabNav", () => {
     expect(html).toContain('aria-label="AI Operations view"');
     expect(html).toContain('class="grid gap-2 lg:hidden"');
     expect(html).toContain('class="hidden lg:block"');
-    expect(html).toContain('<option value="/platform/ai" selected="">AI Operations</option>');
+    expect(html).toContain('<option value="/platform/ai/overview" selected="">AI Operations</option>');
     expect(html).toContain('<option value="/platform/ai/overview" selected="">Workforce</option>');
   });
 

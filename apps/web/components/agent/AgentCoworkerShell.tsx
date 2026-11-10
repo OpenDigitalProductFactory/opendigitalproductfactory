@@ -13,8 +13,10 @@ import {
 } from "@/lib/feedback/feedback-event";
 import { AgentFAB } from "./AgentFAB";
 import { AgentCoworkerPanel } from "./AgentCoworkerPanel";
+import { withOpeningBriefing } from "./agent-message-state";
 import type { ThreadLoadState } from "./composer-state";
 import type { ProviderReviewPacket } from "@/lib/routing/provider-suitability/provider-review-packet";
+import { useCoworkerJourneys } from "./use-coworker-journeys";
 import {
   planAutoMessage,
   queuedAutoMessageIsForThread,
@@ -93,31 +95,6 @@ function getShellContentTop(): number {
   return shellContent?.getBoundingClientRect().top ?? 16;
 }
 
-// BI-DED493BA: proactive on-load briefing. Ephemeral assistant bubble appended
-// to the loaded history — server-composed from the attention read-model, never
-// persisted, so it is fresh on every open. Id is stable per thread context so a
-// load retry doesn't duplicate it.
-function withOpeningBriefing(
-  messages: AgentMessageRow[],
-  briefing: { content: string; agentId: string | null } | null | undefined,
-  threadContext: string,
-): AgentMessageRow[] {
-  if (!briefing?.content) return messages;
-  const id = `opening-briefing:${threadContext}`;
-  if (messages.some((message) => message.id === id)) return messages;
-  return [
-    ...messages,
-    {
-      id,
-      role: "assistant",
-      content: briefing.content,
-      createdAt: new Date().toISOString(),
-      agentId: briefing.agentId,
-      routeContext: threadContext,
-    },
-  ];
-}
-
 function withSupportWelcomeMessage(messages: AgentMessageRow[]): AgentMessageRow[] {
   if (messages.some((message) => message.content === SUPPORT_WELCOME_MESSAGE)) {
     return messages;
@@ -165,6 +142,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
   // (seen when a stale tab's server actions 404 after a self-upgrade swap).
   const [threadLoadState, setThreadLoadState] = useState<ThreadLoadState>("loading");
   const [threadLoadRetryToken, setThreadLoadRetryToken] = useState(0);
+  useCoworkerJourneys(isOpen, threadLoadState); // BI-BD0B0DCC
   const threadAutoRetryUsedRef = useRef(false);
   const prevThreadContextRef = useRef<string | null>(null);
   const [pendingAutoMessage, setPendingAutoMessage] = useState<string | null>(null);

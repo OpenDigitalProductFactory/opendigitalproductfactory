@@ -16,7 +16,7 @@
 //
 // Pure + dependency-light so it unit-tests without the action surface.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { classifyTaskClass } from "./intent-taxonomy";
 import { tokenizeIntent, scoreToolIntentRelevance } from "@/lib/tak/tool-intent";
 

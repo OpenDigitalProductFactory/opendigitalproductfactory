@@ -1,0 +1,49 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-c1-uncovered-agent-stage",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-c1-uncovered-agent-stage",
+  "description": "Seeded C-1: an agent stage of a cadence shape declares no tools and is not a known gap.",
+  "triggers": [
+    "cadence"
+  ],
+  "stages": [
+    {
+      "key": "read",
+      "title": "Stage read",
+      "accountablePrincipalRef": "agent:customer-advisor",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage read recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

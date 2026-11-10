@@ -18,6 +18,32 @@ vi.mock("@/lib/inference/utility-inference", () => ({
 
 import { prisma } from "@dpf/db";
 
+// BI-7BCC87BB: an activity-routing override is a platform configuration fact
+// kept in UserFact; it is not something the coworker learned about the person,
+// so recall into a prompt never includes it.
+describe("fact recall excludes configuration facts", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.userFact.findMany).mockResolvedValue([] as never);
+  });
+
+  it("the person's own facts leave out activity-routing overrides", async () => {
+    const { loadUserFacts } = await import("./user-facts");
+    await loadUserFacts("user-1", "platform");
+    expect(prisma.userFact.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ category: { notIn: ["activity-routing-override"] } }),
+    }));
+  });
+
+  it("org-shared facts leave out activity-routing overrides", async () => {
+    const { loadOrgSharedFacts } = await import("./user-facts");
+    await loadOrgSharedFacts("user-1");
+    expect(prisma.userFact.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ category: { notIn: ["activity-routing-override"] } }),
+    }));
+  });
+});
+
 describe("loadGovernedUserFacts", () => {
   beforeEach(() => {
     vi.clearAllMocks();

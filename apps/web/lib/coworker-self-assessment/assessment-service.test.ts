@@ -213,6 +213,47 @@ describe("buildCapabilityNeedBacklogInput", () => {
       origin: { kind: "capability-need", id: "finance-controller:tool:read tax remittance configuration." },
     });
   });
+
+  // BI-891E4E11: a repeated tool failure is a defect of the TOOL. Coworkers that
+  // each observe it are occurrences of one item, not one item per coworker.
+  it("files a repeated tool failure under one tool-scoped origin whichever coworker saw it", () => {
+    const need = (agentId: string) => ({
+      needId: `CWN-${agentId}`,
+      agentId,
+      kind: "tool",
+      severity: "important",
+      need: "Stabilize repeated read_source_at_version tool failure",
+      blocks: "The same read_source_at_version failure recurred.",
+      evidenceJson: { signal: "tool-failure", toolName: "read_source_at_version" },
+    });
+    const links = { digitalProductId: null, taxonomyNodeId: null };
+
+    const review = buildCapabilityNeedBacklogInput(need("AGT-WS-REVIEW"), links);
+    const build = buildCapabilityNeedBacklogInput(need("AGT-WS-BUILD"), links);
+
+    expect(review.origin).toEqual({ kind: "tool-defect", id: "read_source_at_version" });
+    expect(build.origin).toEqual(review.origin);
+  });
+
+  it("keeps grant denials per coworker: a missing grant is the coworker's gap", () => {
+    const input = buildCapabilityNeedBacklogInput(
+      {
+        needId: "CWN-000002",
+        agentId: "AGT-WS-REVIEW",
+        kind: "grant",
+        severity: "important",
+        need: "Missing read_source_at_version authority",
+        blocks: "Repeated grant denials.",
+        evidenceJson: { signal: "grant-denial", toolName: "read_source_at_version" },
+      },
+      { digitalProductId: null, taxonomyNodeId: null },
+    );
+
+    expect(input.origin).toEqual({
+      kind: "capability-need",
+      id: "AGT-WS-REVIEW:grant:missing read_source_at_version authority",
+    });
+  });
 });
 
 describe("fileCapabilityNeedToBacklog", () => {

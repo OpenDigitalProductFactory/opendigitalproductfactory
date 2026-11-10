@@ -15,8 +15,10 @@
 // shadow_audit, margin 0.015 / low confidence — a genuine judgment call, so this
 // ships BOTH: it enforces a NARROW, unambiguous tool subset by default AND is
 // mode-configurable so the operator can drop to shadow/off without a redeploy):
-//   - Scope: DECLARED-consequential tools, only source "agentic-loop" (external
-//     CLI = plane 1; direct REST/JSON-RPC = operator, out of scope). The set is
+//   - Scope: DECLARED-consequential tools on the agent surfaces: "agentic-loop"
+//     (in-portal coworkers, Build Studio) and, since BI-638024F9, "external-jsonrpc"
+//     (external coding agents over /api/mcp/v1). Direct REST/JSON-RPC and the
+//     portal's own MCP session are operator traffic and stay out of scope. The set is
 //     DERIVED from ToolDefinition.consequence (TAK §8.4.1) by
 //     consequential-tool-coverage.ts, unioned with CONSEQUENTIAL_DECISION_TOOLS
 //     as a transitional seed. It was an allowlist of two names and therefore
@@ -27,6 +29,12 @@
 //   - Mode DPF_DECISION_GATE_MODE = enforce (default) | shadow (audit only, no
 //     deny) | off. An unconsulted consequential decision always emits a structured
 //     audit signal (except off), regardless of enforce/shadow.
+//   - External agents (BI-638024F9, WWMD DI-F3C0940A38E9): the same decision table
+//     governs them, so an internal coworker and an external agent get one verdict
+//     for one act. Their mode is DPF_DECISION_GATE_EXTERNAL_MODE, default shadow, so
+//     the rollout audits before it denies; the operator enforces with that one
+//     switch. DPF_DECISION_GATE_MODE=off still turns the gate off for every source.
+//     Plane 1 (the client PreToolUse hook) remains an accelerator only.
 //   - Fail-open everywhere: any error → allow. A governance guard must never wedge
 //     the loop (onPreToolUse throwing is NOT caught by the runner — see
 //     mcp-governed-execute runPreToolHooks — so this wraps its own body).
@@ -37,11 +45,12 @@
 // follow-up if multi-instance portals land.
 
 import type {
+  GovernedExecuteSource,
   ToolLifecycleDecision,
   ToolLifecycleEvent,
   ToolLifecyclePostEvent,
   ToolLifecycleHook,
-} from "@/lib/mcp-governed-execute";
+} from "@/lib/mcp-governed-execute-types";
 
 export type DecisionGateMode = "enforce" | "shadow" | "off";
 
@@ -91,11 +100,29 @@ const DENY_GUIDANCE =
   "Act on a high-confidence recommendation; only escalate to a human on low confidence or a commandment conflict. " +
   "Operator override: set DPF_DECISION_GATE_MODE=shadow (audit-only) or off.";
 
+/** The agent surfaces this gate governs; everything else is operator traffic. */
+export const GOVERNED_DECISION_SOURCES: ReadonlySet<GovernedExecuteSource> = new Set([
+  "agentic-loop",
+  "external-jsonrpc",
+]);
+
+function parseMode(raw: string | undefined, fallback: DecisionGateMode): DecisionGateMode {
+  const value = (raw ?? "").trim().toLowerCase();
+  return value === "enforce" || value === "shadow" || value === "off" ? value : fallback;
+}
+
+/**
+ * The gate's mode for a source. Internal agents follow DPF_DECISION_GATE_MODE
+ * (default enforce); external agents follow DPF_DECISION_GATE_EXTERNAL_MODE
+ * (default shadow). A global "off" wins for every source.
+ */
 export function resolveDecisionGateMode(
   env: Record<string, string | undefined> = process.env,
+  source?: GovernedExecuteSource,
 ): DecisionGateMode {
-  const raw = (env.DPF_DECISION_GATE_MODE ?? "enforce").trim().toLowerCase();
-  return raw === "shadow" || raw === "off" ? raw : "enforce";
+  const global = parseMode(env.DPF_DECISION_GATE_MODE, "enforce");
+  if (global === "off" || source !== "external-jsonrpc") return global;
+  return parseMode(env.DPF_DECISION_GATE_EXTERNAL_MODE, "shadow");
 }
 
 /** ToolResult is a success when `success === true`. */
@@ -121,11 +148,11 @@ export function _resetConsultationLedgerForTests(): void {
 }
 
 /**
- * Is this event a consequential decision-action on the in-portal/Build-Studio
- * surface? (The only surface + tool class this gate governs.)
+ * Is this event a consequential decision-action taken by an agent, internal or
+ * external? (The surfaces and tool class this gate governs.)
  */
 export function isGovernedDecisionAction(event: Pick<ToolLifecycleEvent, "toolName" | "source">): boolean {
-  return event.source === "agentic-loop" && gatedToolNames().has(event.toolName);
+  return GOVERNED_DECISION_SOURCES.has(event.source) && gatedToolNames().has(event.toolName);
 }
 
 /**
@@ -146,8 +173,9 @@ export function decidePreTool(
 function emitAuditSignal(event: ToolLifecycleEvent, mode: DecisionGateMode): void {
   // Structured, tainted-format-safe (mirrors runPostToolHooks logging style).
   console.warn(
-    "[decision-routing-gate] unconsulted consequential decision mode=%s tool=%s user=%s agent=%s",
+    "[decision-routing-gate] unconsulted consequential decision mode=%s source=%s tool=%s user=%s agent=%s",
     JSON.stringify(mode),
+    JSON.stringify(event.source),
     JSON.stringify(event.toolName),
     JSON.stringify(event.userId),
     JSON.stringify(event.context?.agentId ?? null),
@@ -160,13 +188,14 @@ function emitAuditSignal(event: ToolLifecycleEvent, mode: DecisionGateMode): voi
 export function createDecisionRoutingGovernanceHook(deps: {
   now?: () => number;
   mode?: DecisionGateMode;
+  env?: Record<string, string | undefined>;
 } = {}): ToolLifecycleHook {
   const now = deps.now ?? (() => Date.now());
   return {
     id: "decision-routing-governance",
     onPreToolUse: (event: ToolLifecycleEvent): ToolLifecycleDecision => {
       try {
-        const mode = deps.mode ?? resolveDecisionGateMode();
+        const mode = deps.mode ?? resolveDecisionGateMode(deps.env ?? process.env, event.source);
         const consulted = hasRecentConsultation(event.userId, now());
         if (isGovernedDecisionAction(event) && !consulted && mode !== "off") {
           emitAuditSignal(event, mode);

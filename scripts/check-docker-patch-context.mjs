@@ -14,17 +14,112 @@
 // workspace bootstrap copies before installing.
 //
 // Fails closed: an unparseable Dockerfile stage graph is a failure, not a skip.
+//
+// Second check, same input: every `pnpm install` in every Dockerfile in the repo
+// runs `--frozen-lockfile`, and nothing turns it off. services/edge-node shipped
+// with `--no-frozen-lockfile` from its first skeleton (#501, which had no
+// lockfile in the build context at all) until plan 2026-09-08 S12's follow-up:
+// a lockfile that disagreed with a package.json or the catalog was re-resolved
+// from the registry inside the image instead of failing the build, so the image
+// could ship versions nobody vetted. A bare `pnpm install` counts too: outside
+// CI, pnpm only freezes when told to (the harness image used one until S12).
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseStages, isDockerignored } from "./lib/docker-stage-graph.mjs";
+export { parseStages, isDockerignored } from "./lib/docker-stage-graph.mjs";
+import { checkEdgeWorkspaceContext, checkFileDependencyContext } from "./check-docker-workspace-context.mjs";
 
 const REPO_ROOT = process.cwd();
 
-// Dockerfiles whose stages may run `pnpm install`. Every Dockerfile in the repo
-// is inspected; this list only records which ones are EXPECTED to be checked, so
-// a newly added Dockerfile cannot quietly opt out.
-const DOCKERFILES = ["Dockerfile", "Dockerfile.sandbox", "Dockerfile.promoter"];
+// Dockerfiles built with the repo root as their context, so repo-relative COPY
+// sources (patches/, scripts/...) mean what they say. The patch check and
+// check-dockerfile-copied-script-imports.mjs inspect these. Listing them keeps a
+// root-context Dockerfile from quietly opting out; the frozen-lockfile check
+// below needs no list and walks every Dockerfile.
+export const ROOT_CONTEXT_DOCKERFILES = [
+  "Dockerfile",
+  "Dockerfile.sandbox",
+  "Dockerfile.promoter",
+  "services/adp/Dockerfile",
+  "services/edge-node/Dockerfile",
+  "services/integration-test-harness/Dockerfile",
+];
+const DOCKERFILES = ROOT_CONTEXT_DOCKERFILES;
+
+const WALK_SKIP = new Set(["node_modules", ".git", ".next", "dist", ".worktrees", ".pnpm-store"]);
+
+/** Is this file name a Dockerfile (Dockerfile, Dockerfile.x, x.Dockerfile)? */
+export function isDockerfileName(name) {
+  if (name.endsWith(".dockerignore")) return false;
+  return name === "Dockerfile" || name.startsWith("Dockerfile.") || name.endsWith(".Dockerfile");
+}
+
+/** Repo-relative paths of every Dockerfile under `root`, sorted. */
+export function findDockerfiles(root = REPO_ROOT) {
+  const out = [];
+  const walk = (rel) => {
+    for (const entry of readdirSync(join(root, rel), { withFileTypes: true })) {
+      if (WALK_SKIP.has(entry.name)) continue;
+      const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(childRel);
+      else if (entry.isFile() && isDockerfileName(entry.name)) out.push(childRel);
+    }
+  };
+  walk("");
+  return out.sort();
+}
+
+// Anything that switches frozen-lockfile off: the CLI flag, `=false` spellings
+// of the flag or config key, and the npm_config/pnpm env form.
+const UNFROZEN_RE =
+  /--no-frozen-lockfile\b|frozen[-_]lockfile\s*=\s*false\b|frozen[-_]lockfile["']?\s+["']?false\b/i;
+
+/**
+ * Instructions in a Dockerfile that install without a frozen lockfile.
+ * Comments are ignored, continuations joined; each `&&`/`;`/`||` segment of a
+ * RUN that invokes `pnpm install` (or `pnpm i`) must carry `--frozen-lockfile`.
+ *
+ * @returns {{ line: string, reason: string }[]}
+ */
+export function findUnfrozenInstalls(dockerfileText) {
+  const problems = [];
+  const text = dockerfileText.replace(/\\\r?\n\s*/g, " ");
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (!/^(RUN|ENV|ARG)\b/i.test(line)) continue;
+    if (UNFROZEN_RE.test(line)) {
+      problems.push({ line, reason: "turns frozen-lockfile off" });
+      continue;
+    }
+    if (!/^RUN\b/i.test(line)) continue;
+    for (const segment of line.slice(3).split(/&&|\|\||;/)) {
+      if (!/\bpnpm\s+(?:install|i)(?:\s|$)/.test(segment)) continue;
+      if (!/--frozen-lockfile\b/.test(segment)) {
+        problems.push({ line, reason: "runs `pnpm install` without --frozen-lockfile" });
+      }
+    }
+  }
+  return problems;
+}
+
+/** The frozen-lockfile check over every Dockerfile in the repo. */
+export function checkFrozenLockfile(root = REPO_ROOT) {
+  const problems = [];
+  const checked = findDockerfiles(root);
+  for (const dockerfile of checked) {
+    for (const { line, reason } of findUnfrozenInstalls(readFileSync(join(root, dockerfile), "utf8"))) {
+      problems.push(
+        `${dockerfile} ${reason}: \`${line.length > 160 ? `${line.slice(0, 157)}...` : line}\`. ` +
+          "An image install must use --frozen-lockfile so a lockfile that disagrees with a " +
+          "package.json or the catalog fails the build instead of resolving unvetted registry versions.",
+      );
+    }
+  }
+  return { ok: problems.length === 0, problems, checked };
+}
 
 // Shell entrypoints baked into an image that run `pnpm install` against a
 // directory they populate themselves, rather than against the build context.
@@ -60,97 +155,6 @@ export function parsePatchedDependencies(yamlText) {
     entries.push({ spec, patchPath });
   }
   return entries;
-}
-
-/**
- * Would `.dockerignore` exclude this path from the build context?
- * Deliberately conservative: it only understands the plain prefix and
- * single-segment-glob forms this repo actually uses, and reports a pattern it
- * cannot classify as exclusion so the guard errs toward failing.
- */
-export function isDockerignored(patchPath, dockerignoreText) {
-  let excluded = false;
-  for (const raw of dockerignoreText.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === "" || line.startsWith("#")) continue;
-    const negated = line.startsWith("!");
-    const pattern = (negated ? line.slice(1) : line).replace(/\/+$/, "");
-    if (pattern === "") continue;
-
-    const regex = new RegExp(
-      `^${pattern
-        .split("/")
-        .map((seg) =>
-          seg === "**"
-            ? ".*"
-            : seg.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*"),
-        )
-        .join("/")}(/.*)?$`,
-    );
-    if (regex.test(patchPath)) excluded = !negated;
-  }
-  return excluded;
-}
-
-/**
- * Build the stage graph of a Dockerfile.
- *
- * Each stage records its parent (for `FROM <stage>`), its WORKDIR, the COPY
- * instructions it issues, and whether it runs `pnpm install`.
- */
-export function parseStages(dockerfileText) {
-  const stages = [];
-  let current = null;
-  // Join line continuations so a wrapped COPY/RUN is seen whole.
-  const text = dockerfileText.replace(/\\\r?\n\s*/g, " ");
-
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === "" || line.startsWith("#")) continue;
-
-    const from = line.match(/^FROM\s+(\S+)(?:\s+AS\s+(\S+))?/i);
-    if (from) {
-      current = {
-        name: from[2] ?? `#${stages.length}`,
-        parent: from[1],
-        workdir: null,
-        copies: [],
-        runsPnpmInstall: false,
-      };
-      stages.push(current);
-      continue;
-    }
-    if (!current) continue;
-
-    const workdir = line.match(/^WORKDIR\s+(\S+)/i);
-    if (workdir) {
-      current.workdir = workdir[1];
-      continue;
-    }
-
-    const copy = line.match(/^COPY\s+(.*)$/i);
-    if (copy) {
-      const parts = copy[1].split(/\s+/).filter(Boolean);
-      const flags = parts.filter((p) => p.startsWith("--"));
-      const operands = parts.filter((p) => !p.startsWith("--"));
-      if (operands.length >= 2) {
-        current.copies.push({
-          sources: operands.slice(0, -1),
-          dest: operands[operands.length - 1],
-          fromStage:
-            flags
-              .find((f) => f.toLowerCase().startsWith("--from="))
-              ?.slice("--from=".length) ?? null,
-        });
-      }
-      continue;
-    }
-
-    if (/^RUN\b/i.test(line) && /\bpnpm\s+install\b/.test(line)) {
-      current.runsPnpmInstall = true;
-    }
-  }
-  return stages;
 }
 
 function resolveWorkdir(stage, byName) {
@@ -278,14 +282,18 @@ const isMain =
 
 if (isMain) {
   const result = checkPatchContext();
-  if (!result.ok) {
+  const frozen = checkFrozenLockfile();
+  const workspace = checkEdgeWorkspaceContext();
+  const archives = checkFileDependencyContext(REPO_ROOT, ROOT_CONTEXT_DOCKERFILES);
+  if (!result.ok || !frozen.ok || !workspace.ok || !archives.ok) {
     console.error("Docker Patch Context Guard: FAIL\n");
-    console.error(result.problems.map((p) => `  - ${p}`).join("\n"));
+    console.error([...result.problems, ...frozen.problems, ...workspace.problems, ...archives.problems].map((p) => `  - ${p}`).join("\n"));
     process.exit(1);
   }
   console.log(
     `Docker Patch Context Guard: ${result.entries.length} patched ` +
       `${result.entries.length === 1 ? "dependency" : "dependencies"} reachable from ` +
-      `${new Set(result.checkedStages).size} installing stage(s) — ok.`,
+      `${new Set(result.checkedStages).size} installing stage(s); every pnpm install in ` +
+      `${frozen.checked.length} Dockerfile(s) uses --frozen-lockfile — ok.`,
   );
 }

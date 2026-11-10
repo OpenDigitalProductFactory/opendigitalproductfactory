@@ -261,6 +261,67 @@ describe("connector credential store", () => {
     });
   });
 
+  it("atomically records successful health and a bounded safe-projection patch", async () => {
+    const now = new Date("2026-08-22T06:00:00.000Z");
+    const fields = {
+      schemaVersion: 1,
+      reconnectFields: { tenant: "north" },
+      secretFields: { password: "secret" },
+      safeProjection: { accountName: "Old", publicPublicationEnabled: true },
+    };
+    const database = repository(row({
+      fieldsEnc: `encrypted:${JSON.stringify(fields)}`,
+      tokenCacheEnc: `encrypted:${JSON.stringify({ schemaVersion: 1, tokenEnvelope: {} })}`,
+      lastErrorAt: new Date("2026-08-22T05:00:00.000Z"),
+      lastErrorMsg: "old failure",
+    }));
+    const crypt = crypto();
+    const store = createConnectorCredentialStore({ repository: database.repo, crypto: crypt, now: () => now });
+
+    await store.recordHealthProbe("acme", {
+      succeeded: true,
+      safeProjectionPatch: { accountName: "Current", canCreateDrafts: true },
+    });
+
+    expect(database.tx.update).toHaveBeenCalledOnce();
+    expect(database.current()).toMatchObject({
+      status: "connected",
+      lastTestedAt: now,
+      lastErrorAt: null,
+      lastErrorMsg: null,
+    });
+    expect(crypt.assertReadyForWrite).toHaveBeenCalledOnce();
+    expect(crypt.encryptJson).toHaveBeenCalledWith({
+      ...fields,
+      safeProjection: {
+        accountName: "Current",
+        publicPublicationEnabled: true,
+        canCreateDrafts: true,
+      },
+    });
+  });
+
+  it("rejects a successful-probe patch that contains a stored credential secret", async () => {
+    const fields = {
+      schemaVersion: 1,
+      reconnectFields: {},
+      secretFields: { password: "secret-value" },
+      safeProjection: { accountName: "Old" },
+    };
+    const database = repository(row({
+      fieldsEnc: `encrypted:${JSON.stringify(fields)}`,
+      tokenCacheEnc: null,
+    }));
+    const store = createConnectorCredentialStore({ repository: database.repo, crypto: crypto() });
+
+    await expect(store.recordHealthProbe("acme", {
+      succeeded: true,
+      safeProjectionPatch: { accountName: "secret-value" },
+    })).rejects.toThrow(/cannot contain credential secrets/i);
+
+    expect(database.tx.update).not.toHaveBeenCalled();
+  });
+
   it("updates only the encrypted safe projection while preserving secrets and lifecycle timestamps", async () => {
     const fields = {
       schemaVersion: 1,
@@ -311,6 +372,37 @@ describe("connector credential store", () => {
     });
     expect(JSON.stringify(state)).not.toContain("secret");
     expect(database.tx.update).not.toHaveBeenCalled();
+  });
+
+  it("derives degraded from persisted probe ordering and recovers after a later success", async () => {
+    const database = repository(row({
+      fieldsEnc: `encrypted:${JSON.stringify({
+        schemaVersion: 1,
+        reconnectFields: {},
+        secretFields: {},
+        safeProjection: { accountName: "North Division" },
+      })}`,
+      tokenCacheEnc: null,
+      lastTestedAt: new Date("2026-08-22T05:00:00.000Z"),
+      lastErrorAt: new Date("2026-08-22T05:01:00.000Z"),
+      lastErrorMsg: "Provider unavailable.",
+    }));
+    const store = createConnectorCredentialStore({
+      repository: database.repo,
+      crypto: crypto(),
+      now: () => new Date("2026-08-22T06:00:00.000Z"),
+    });
+
+    await expect(store.readSetupState("acme")).resolves.toMatchObject({
+      status: "degraded",
+      lastErrorMsg: "Provider unavailable.",
+    });
+
+    await store.recordHealthProbe("acme", { succeeded: true });
+    await expect(store.readSetupState("acme")).resolves.toMatchObject({
+      status: "connected",
+      lastErrorMsg: null,
+    });
   });
 
   it("returns unconfigured for an absent credential", async () => {

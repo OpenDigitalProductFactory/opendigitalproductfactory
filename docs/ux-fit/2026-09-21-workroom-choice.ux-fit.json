@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "choose-room-in-existing-case",
+  "decisionInteractionId": "DI-1544D18CEAE3",
+  "scope": {
+    "files": ["apps/web/components/workspace/WorkCaseDetailView.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["choose-room-in-existing-case", "automatically-pick-latest-room"]
+  }
+}

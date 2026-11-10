@@ -63,13 +63,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Regenerate the capability measure from source
         run: node scripts/measure-capability-completeness.mjs
 
       - name: Fail if the committed artifact was stale
         run: node scripts/measure-capability-completeness.mjs --check
+
+      - name: Test the measure and completeness ratchet
+        run: node --test scripts/measure-capability-completeness.test.mjs scripts/check-agent-capability-integrity.test.mjs
 
       - name: Check agent capability integrity
         run: node scripts/check-agent-capability-integrity.mjs

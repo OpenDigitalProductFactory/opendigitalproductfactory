@@ -51,4 +51,44 @@ describe("appendRoomPolicyParticipant", () => {
     expect(xs[0].roles).toEqual(["contributor"]);
     expect(policy.actionPrincipalRefs).toContain("PRN-x");
   });
+
+  // BI-16DA79C5: the first invite into a room wrote a policy admitting only the
+  // invitee. Access treats an explicit policy as a restriction, so the room's
+  // own coordinator and assistant were locked out of their room.
+  it("keeps the room's current members admitted when it writes the first policy", () => {
+    const out = appendRoomPolicyParticipant(
+      null,
+      { principalRef: "PRN-reviewer", roles: ["contributor"], canAct: true },
+      [
+        { principalRef: "PRN-owner", canAct: true },
+        { principalRef: "PRN-assistant", canAct: true },
+        { principalRef: "PRN-reader", canAct: false },
+      ],
+    );
+    const policy = latestPolicy(out);
+    expect(policy.admittedPrincipalRefs).toEqual(expect.arrayContaining(["PRN-owner", "PRN-assistant", "PRN-reader", "PRN-reviewer"]));
+    expect(policy.actionPrincipalRefs).toEqual(expect.arrayContaining(["PRN-owner", "PRN-assistant", "PRN-reviewer"]));
+    expect(policy.actionPrincipalRefs).not.toContain("PRN-reader");
+  });
+
+  it("re-admits current members a narrower earlier invite policy left out", () => {
+    const broken = [{ workroomPolicy: { admittedPrincipalRefs: ["PRN-reviewer"], actionPrincipalRefs: ["PRN-reviewer"], discoverablePrincipalRefs: [], participants: [] } }];
+    const out = appendRoomPolicyParticipant(broken, { principalRef: "PRN-ea", roles: ["contributor"], canAct: true }, [{ principalRef: "PRN-owner", canAct: true }]);
+    expect(latestPolicy(out).actionPrincipalRefs).toEqual(expect.arrayContaining(["PRN-reviewer", "PRN-owner", "PRN-ea"]));
+  });
+
+  // BI-C649809F: an invite must not drop the room's charter, or the next
+  // invite would fall back to the platform default the owner had narrowed.
+  it("carries an explicit room charter forward across invites", () => {
+    const charter = { admits: ["org-coworker"], classCeiling: "observe", expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString() };
+    const prior = [{ workroomPolicy: { admittedPrincipalRefs: ["PRN-a"], actionPrincipalRefs: ["PRN-a"], discoverablePrincipalRefs: [], participants: [], charter } }];
+    const out = appendRoomPolicyParticipant(prior, { principalRef: "PRN-b", roles: ["observer"], canAct: false });
+    expect(latestPolicy(out).charter).toEqual(charter);
+  });
+
+  it("writes no charter when the room had none", () => {
+    const out = appendRoomPolicyParticipant(null, { principalRef: "PRN-b", roles: ["observer"], canAct: false });
+    expect(latestPolicy(out).charter).toBeUndefined();
+  });
 });
+

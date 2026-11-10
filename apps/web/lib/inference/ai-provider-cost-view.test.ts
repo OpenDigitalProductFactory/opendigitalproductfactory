@@ -66,8 +66,28 @@ describe("buildProviderCostView", () => {
 
     expect(view.routingCostBand.value).toBe("economy");
     expect(view.routingCostBand.provenance.sourceTable).toBe("ModelProvider.costBand");
-    expect(view.externalProviderBilling.value).toBe("Not connected");
+    expect(view.externalProviderBilling.value).toBe("Not set up");
     expect(view.externalProviderBilling.provenance.kind).toBe("not-connected");
+  });
+
+  // BI-986B9DEB: a missing finance reconciliation import sat beside a working
+  // API key as a red "Not connected" pill and read as a credential failure.
+  it("names a missing billing import as reconciliation, never as a connection state", () => {
+    const view = buildProviderCostView({
+      provider: provider(),
+      financeProfile: null,
+      internalUsage: null,
+    });
+
+    expect(view.externalProviderBilling.label).toBe("Billing reconciliation");
+    expect(view.externalProviderBilling.provenance.label).toBe("Not set up");
+    const shown = [
+      view.externalProviderBilling.label,
+      view.externalProviderBilling.value,
+      view.externalProviderBilling.provenance.label,
+    ].join(" ");
+    expect(shown).not.toMatch(/connected/i);
+    expect(view.externalProviderBilling.provenance.description).toMatch(/credential/i);
   });
 
   it("treats seeded finance profiles as configuration, not billing evidence", () => {
@@ -79,7 +99,7 @@ describe("buildProviderCostView", () => {
 
     expect(view.configuredBillingProfile.value).toBe("Seeded finance profile");
     expect(view.configuredBillingProfile.provenance.kind).toBe("seed-default");
-    expect(view.externalProviderBilling.value).toBe("Not connected");
+    expect(view.externalProviderBilling.value).toBe("Not set up");
   });
 
   it("classifies provider usage snapshots as connected external billing", () => {

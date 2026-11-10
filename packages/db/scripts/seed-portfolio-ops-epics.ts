@@ -1,6 +1,5 @@
 // One-off script: seed the 5 portfolio operations & ontology epics
 // Run from repo root: pnpm --filter @dpf/db exec tsx scripts/seed-portfolio-ops-epics.ts
-import { randomUUID } from "crypto";
 import { prisma } from "../src/client";
 
 async function main() {
@@ -14,8 +13,6 @@ async function main() {
 
   const foundational = bySlug["foundational"];
   const mfgDelivery = bySlug["manufacturing_and_delivery"];
-  const forEmployees = bySlug["for_employees"];
-  const productsSold = bySlug["products_and_services_sold"];
 
   if (!foundational || !mfgDelivery) {
     throw new Error("Expected portfolios not found — run the seed first.");

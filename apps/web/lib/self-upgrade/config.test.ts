@@ -29,6 +29,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { prisma } from "@dpf/db";
+import { DEFAULT_DRAIN_WAIT_BUDGET_MS } from "./drain-wait";
 const mockFindUnique = vi.mocked(prisma.platformConfig.findUnique);
 
 describe("parseSelfUpgradeConfig", () => {
@@ -55,6 +56,7 @@ describe("parseSelfUpgradeConfig", () => {
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -65,12 +67,20 @@ describe("parseSelfUpgradeConfig", () => {
     });
   });
 
+  it("parses drainWaitBudgetMs and falls back to 60 minutes when invalid (BI-F9EE05E5)", () => {
+    expect(parseSelfUpgradeConfig({ drainWaitBudgetMs: 900_000 }).drainWaitBudgetMs).toBe(900_000);
+    for (const bad of [0, -5, "60", Number.NaN, null]) {
+      expect(parseSelfUpgradeConfig({ drainWaitBudgetMs: bad }).drainWaitBudgetMs).toBe(60 * 60 * 1000);
+    }
+  });
+
   it("returns disabled defaults when raw is undefined", () => {
     expect(parseSelfUpgradeConfig(undefined)).toEqual({
       enabled: false,
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -87,6 +97,7 @@ describe("parseSelfUpgradeConfig", () => {
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -100,6 +111,7 @@ describe("parseSelfUpgradeConfig", () => {
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -146,6 +158,13 @@ describe("parseSelfUpgradeConfig", () => {
     expect(cfg.repositoryBranch).toBe("main");
     expect(cfg.healthUrl).toBe("http://localhost:3000/api/health");
     expect(cfg.promoterImage).toBe("dpf-promoter");
+  });
+
+  it("resolves doctoolsImage through the same channel as promoterImage (BI-52E565DA)", () => {
+    const pinned = `ghcr.io/o/dpf-doctools@sha256:${"e".repeat(64)}`;
+    expect(parseSelfUpgradeConfig({ doctoolsImage: pinned }).doctoolsImage).toBe(pinned);
+    expect(parseSelfUpgradeConfig({ doctoolsImage: "  " }).doctoolsImage).toBeUndefined();
+    expect(parseSelfUpgradeConfig({}).doctoolsImage).toBeUndefined();
   });
 
   it("parses the seeded disabled config", () => {
@@ -414,6 +433,7 @@ describe("getSelfUpgradeConfig", () => {
       channel: "stable",
       checkIntervalHours: 24,
       cooldownMinutes: 30,
+      drainWaitBudgetMs: 60 * 60 * 1000,
       batchMinPendingPrs: 10,
       batchMaxWaitHours: 168,
       healthTarget: 100,
@@ -493,6 +513,7 @@ describe("nextMaintenanceWindowStart", () => {
     channel: "stable",
     checkIntervalHours: 24,
     cooldownMinutes: 30,
+    drainWaitBudgetMs: DEFAULT_DRAIN_WAIT_BUDGET_MS,
     batchMinPendingPrs: 10,
     batchMaxWaitHours: 168,
     healthTarget: 100,

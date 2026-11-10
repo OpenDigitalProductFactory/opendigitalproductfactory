@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "separate saved account posture from restricted-work evidence limits inside the existing provider detail panels",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ProviderAccountPostureForm.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "pre-existing-route",
+    "measured": {
+      "/platform/ai/providers": {
+        "defaultVisibleWords": 348,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 4
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "The committed provider-list sweep remains exactly at its recorded baseline. Dynamic provider-detail fixtures are not registered in the route-budget baseline, so their runtime exercise is required after canonical deployment rather than mislabeled as a new route.",
+    "fit": "The changed form control stays in the existing Platform provider-detail route and component family, changes no navigation or action count, and derives its empty state from the existing connection projection. The UX gate classifies the adjacent evidence-panel copy and server projection changes as non-control changes, so they are intentionally absent from scope.files.",
+    "failureState": "Missing evidence names the restricted-work consequence and distinguishes on-page declaration repair from an unavailable DPA workflow; no dead-end action is added.",
+    "theme": "All touched styles use existing dpf theme tokens and introduce no literal color or new visual primitive."
+  }
+}

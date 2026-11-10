@@ -119,6 +119,7 @@ describe("Work Room participation", () => {
         enteredReason: "Assigned owner",
         sponsorPrincipalRef: null,
         authoritySummary: "May review and approve",
+        assignmentSource: "explicit",
       }, {
         principalRef: "PRN-REVIEWER",
         displayName: "Noah Williams",
@@ -128,6 +129,7 @@ describe("Work Room participation", () => {
         enteredReason: "Named reviewer",
         sponsorPrincipalRef: null,
         authoritySummary: "May review evidence",
+        assignmentSource: "explicit",
       }],
       conversationParticipants: [{
         principalRef: "PRN-AGENT",

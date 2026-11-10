@@ -9,14 +9,14 @@ interpretation, and no affiliation, endorsement, certification, or trademark lic
 IT4IT™ is a trademark of The Open Group.
 
 This paper is the proposal record for the Workforce terminology. The
-[Four-Portfolio Archetype and AI Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
+[Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
 is the current normative DPF authority for the two-lens Workforce model, AI-coworker
 DigitalProduct/Performer semantics, work allocation, and conformance.
 
 External-standard statements in this proposal are discussion questions, not verified equivalence or
 conformance claims. Mark Bodman's IT4IT Reference Architecture contribution provenance,
 retained-rights assertion, and separate DPPM design direction are recorded by
-`CA-MB-2026-08-01-IT4IT-PROVENANCE` and the bounded operator-source records; the FPAW authority
+`CA-MB-2026-08-01-IT4IT-PROVENANCE` and the bounded operator-source records; the PAAW authority
 applies source- and use-specific decisions so his
 direct contribution-origin concepts remain admissible without treating the restricted compiled
 publications as AI inputs. Precise published equivalence and external conformance still require an
@@ -24,7 +24,7 @@ authorized edition and qualified human review.
 
 ## Executive Summary
 
-DPF's operator-directed portfolio model uses four roles historically described as Provided Externally, Provided Internally, Foundational, and Manufacture and Delivery. In DPF, the internal role has historically appeared as `For Employees`, with the current platform key `forEmployees` and the FPAW target exchange key `for_employees`.
+DPF's operator-directed portfolio model uses four roles historically described as Provided Externally, Provided Internally, Foundational, and Manufacture and Delivery. In DPF, the internal role has historically appeared as `For Employees`, with the current platform key `forEmployees` and the PAAW target exchange key `for_employees`.
 
 This paper proposes that standards-facing language evolve from `For Employees` to **Workforce**. The change is intentionally small in structure and significant in meaning: it preserves the four-portfolio model while recognizing that modern work is performed by a mixed set of accountable actors, including employees, contractors, AI coworkers, robots, non-human identities, managed-service roles, and future actor classes not yet common.
 
@@ -77,7 +77,7 @@ published DPPM model remains an external review question.
 
 The Workforce change is not a fifth portfolio. It is a terminology correction and scope clarification for the internal portfolio.
 
-`Manufacture and Delivery` remains the historical operator-contributed source wording; **Manufacturing and Delivery** is the current FPAW standards-facing label.
+`Manufacture and Delivery` remains the historical operator-contributed source wording; **Manufacturing and Delivery** is the current PAAW standards-facing label.
 
 ## What Changes Conceptually
 
@@ -194,11 +194,11 @@ The Workforce portfolio gives financial managers a more complete view of interna
 
 DPF now treats this as a platform terminology and architecture direction:
 
-- The current runtime/persisted key remains `forEmployees`; the FPAW target exchange key is
+- The current runtime/persisted key remains `forEmployees`; the PAAW target exchange key is
   `for_employees` until adapter convergence is implemented.
 - The operator-facing portfolio label is **Workforce**.
 - `For Employees` is retained as a legacy display alias and discussion cross-reference.
-- A managed AI coworker has linked DigitalProduct and Performer aspects. The current Agent-to-DigitalProduct projection establishes a candidate lifecycle association. The original FPAW managed-product qualification additionally requires verified product, offer, economic treatment, terms, and instance readiness; only an `operated` state requires a managed instance. This is not an IT4IT Reference Architecture conformance claim.
+- A managed AI coworker has linked DigitalProduct and Performer aspects. The current Agent-to-DigitalProduct projection establishes a candidate lifecycle association. The original PAAW managed-product qualification additionally requires verified product, offer, economic treatment, terms, and instance readiness; only an `operated` state requires a managed instance. This is not an IT4IT Reference Architecture conformance claim.
 - The AI Workforce surface is treated as an internal Workforce digital product, not a detached platform administration page.
 - Tax remittance and other internal operating surfaces remain under Workforce when they are internal capabilities used by the business to perform work.
 
@@ -241,6 +241,6 @@ between employees and AI coworkers without creating a new portfolio type.
 - The Open Group, [IT4IT Standard Version 3.0 licensed downloads](https://www.opengroup.org/IT4IT/downloads)
 - The Open Group, [Digital Portfolio Work Group](https://www.opengroup.org/forum/digital-practitioners-work-group)
 - The Open Group, [Digital Portfolio of Open Standards](https://www.opengroup.org/digitalportfolio)
-- The Open Group Guide G252, [public product page](https://publications.opengroup.org/g252); this is bibliographic design lineage only, while Mark Bodman's direct statements and IT4IT involvement are separately recorded under the FPAW source-use policy
+- The Open Group Guide G252, [public product page](https://publications.opengroup.org/g252); this is bibliographic design lineage only, while Mark Bodman's direct statements and IT4IT involvement are separately recorded under the PAAW source-use policy
 - DPF, [`Business Operating Model - Portfolio Wiring Design`](../superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md)
 - DPF, [`IT4IT` entity reference](../founder-kernel/wiki/entities/it4it.md)

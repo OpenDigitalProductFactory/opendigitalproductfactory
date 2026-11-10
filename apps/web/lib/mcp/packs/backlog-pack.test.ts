@@ -74,12 +74,14 @@ const specPlanSearch = vi.hoisted(() => ({
 vi.mock("@/lib/backlog/spec-plan-search", () => specPlanSearch);
 
 import { backlogPack } from "./backlog-pack";
+import * as backlogReadTools from "./backlog-pack-read-tools";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = [
   "create_backlog_item",
   "triage_backlog_item",
   "retire_backlog_item",
+  "retire_peer_demand_intake_copies",
   "size_backlog_item",
   "process_backlog_for_build_studio",
   "update_backlog_item",
@@ -122,7 +124,7 @@ beforeEach(() => {
 });
 
 describe("backlog pack — registration", () => {
-  it("exposes exactly the fifteen backlog/epic tools with a handler each", () => {
+  it("exposes exactly the sixteen backlog/epic tools with a handler each", () => {
     expect(backlogPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(backlogPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(backlogPack.grants).sort()).toEqual([...EXPECTED_TOOLS].sort());
@@ -142,11 +144,22 @@ describe("backlog pack — registration", () => {
     }
   });
 
+  it("retire_peer_demand_intake_copies asks for approval only when it retires", async () => {
+    const def = backlogPack.definitions.find((d) => d.name === "retire_peer_demand_intake_copies")!;
+    expect(def.consequence).toBe("irreversible");
+    const call = { toolName: def.name, userId: "u" };
+    await expect(def.consequenceForCall!({ ...call, params: {} })).resolves.toMatchObject({ consequence: null });
+    await expect(def.consequenceForCall!({ ...call, params: { mode: "dry-run" } })).resolves.toMatchObject({ consequence: null });
+    await expect(def.consequenceForCall!({ ...call, params: { mode: "retire", selectionDigest: "x" } }))
+      .resolves.toMatchObject({ consequence: "irreversible" });
+  });
+
   it("grants mirror agent-grants: read tools need read grants, mutating tools need write/triage grants", () => {
     expect(backlogPack.grants.create_backlog_item).toEqual(["backlog_write"]);
     expect(backlogPack.grants.triage_backlog_item).toEqual(["backlog_triage"]);
     expect(backlogPack.grants.size_backlog_item).toEqual(["backlog_triage"]);
     expect(backlogPack.grants.retire_backlog_item).toEqual(["backlog_write"]);
+    expect(backlogPack.grants.retire_peer_demand_intake_copies).toEqual(["backlog_write"]);
     expect(backlogPack.grants.process_backlog_for_build_studio).toEqual(["build_lifecycle"]);
     expect(backlogPack.grants.query_backlog).toEqual(["backlog_read"]);
     expect(backlogPack.grants.list_epics).toEqual(["backlog_read"]);
@@ -244,6 +257,16 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     const res = await backlogPack.handlers.get_backlog_item({}, "u1");
     expect(res.success).toBe(false);
     expect(res.error).toBe("missing_itemId");
+  });
+
+  it("passes server execution context to the bounded recovery reader", async () => {
+    const read = vi.spyOn(backlogReadTools, "getBacklogItem").mockResolvedValue({ success: true, message: "bounded" });
+    const context = { agentId: "AGT-AUTHOR", authSource: "oauth", apiTokenId: "token-row" };
+    const params = { itemId: "BI-ONE", recoveryGate: "plan-review" };
+    try {
+      await backlogPack.handlers.get_backlog_item(params, "user-1", context);
+      expect(read).toHaveBeenCalledWith(params, "AGT-AUTHOR", "user-1", context);
+    } finally { read.mockRestore(); }
   });
 
   it("update_backlog_item_status rejects an invalid target status", async () => {
@@ -439,6 +462,49 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     );
     expect(res.success).toBe(true);
     expect(res.message).toContain("no-op");
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("update_backlog_item_status reconciles completion evidence onto an already-done item", async () => {
+    db.backlogItemFindUnique.mockResolvedValue({
+      id: "row-1",
+      status: "done",
+      epicId: null,
+      triageOutcome: "build",
+      effortSize: "medium",
+      activeBuildId: null,
+      claimStatus: "released",
+      claimedById: "u1",
+      claimedByAgentId: "agent-1",
+      claimedAt: new Date("2026-07-26T09:00:00Z"),
+    });
+    const completionEvidence = {
+      workClass: "implementation" as const,
+      evidenceActivityIds: ["source", "tests"],
+      useActiveBuildEvidence: false,
+      ux: { disposition: "not-applicable" as const, reason: "No user interface files or routes changed." },
+      migration: { disposition: "not-applicable" as const, reason: "No database schema or persisted data changed." },
+      callerVerdict: "allow" as const,
+    };
+
+    const res = await backlogPack.handlers.update_backlog_item_status(
+      {
+        itemId: "BI-1",
+        status: "done",
+        resolution: "Reconciled governed delivery evidence.",
+        completionEvidence,
+      },
+      "u1",
+      { agentId: "agent-1" },
+    );
+
+    expect(res.success).toBe(true);
+    expect(terminalTransition.completeBacklogItemTransition).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-1",
+      expectedStatus: "done",
+      resolution: "Reconciled governed delivery evidence.",
+      completionEvidence,
+    }));
     expect(db.transaction).not.toHaveBeenCalled();
   });
 

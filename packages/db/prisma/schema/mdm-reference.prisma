@@ -59,6 +59,7 @@ model MdmMatchConfig {
   createdAt DateTime @default(now())
 }
 
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model Country {
   id          String   @id @default(cuid())
   name        String
@@ -75,6 +76,7 @@ model Country {
 }
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model Region {
   id           String   @id @default(cuid())
   name         String
@@ -96,6 +98,7 @@ model Region {
 }
 
 /// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model City {
   id             String    @id @default(cuid())
   name           String
@@ -199,6 +202,7 @@ model MasterDataSourceRef {
 /// vendors that DID appear came from the UniFi controller's own lookup, supplied
 /// per-client — so anything the controller did not hand us stayed unidentified,
 /// including every UniFi device itself (BI-9632B15B).
+/// @dpf lifecycle=ephemeral retention=reference sensitivity=public categories=configuration owner=platform-operator steward=data-steward
 model MacVendorOui {
   /// Upper-case 24-bit prefix, no separators (e.g. "AC8BA9").
   oui       String   @id

@@ -233,14 +233,101 @@ export function parseFrontmatter<T extends Record<string, unknown>>(
 // ─── Wikilink extractor ─────────────────────────────────────────────────────
 
 /**
- * Extract all `[[slug]]` tokens from a body. Returns deduped slugs.
- * Allowed slug characters: letters, digits, slashes, hyphens, underscores.
+ * Extract the target slugs of every `[[slug]]` and `[[slug|label]]` link in a
+ * body. Returns deduped slugs in first-seen order. Allowed slug characters:
+ * letters, digits, slashes, hyphens, underscores.
+ *
+ * This is the ONE link extractor (BI-23900D0A): the commit paths, both
+ * seeders, the backfill and the lint detectors all call it, so a link the
+ * renderer shows is a link that gets stored. Links inside fenced code blocks,
+ * and inside inline code spans that hold more than the link, are syntax
+ * examples, not links, and are skipped.
+ *
+ * A code span that is exactly one link (`` `[[entities/csdm]]` ``) IS a link:
+ * the founder kernel writes its "Relationships" lists that way, and on the dev
+ * install 127 of the 657 stored links were written in that form. Skipping them
+ * would have erased most of the kernel's link graph.
  */
 export function extractWikilinks(body: string): string[] {
-  const matches = body.matchAll(/\[\[([a-zA-Z0-9/_-]+)\]\]/g);
+  const matches = stripMarkdownCode(body).matchAll(/\[\[([a-zA-Z0-9/_-]+)(?:\|[^\]\n]*)?\]\]/g);
   const slugs = new Set<string>();
   for (const m of matches) {
     if (m[1]) slugs.add(m[1]);
   }
   return Array.from(slugs);
+}
+
+const SOLE_WIKILINK = /^\[\[[a-zA-Z0-9/_-]+(?:\|[^\]\n]*)?\]\]$/;
+
+/** Blank out fenced code blocks (``` or ~~~) and inline code spans, keeping a
+ *  span whose whole content is one wikilink. */
+function stripMarkdownCode(body: string): string {
+  const lines = body.split("\n");
+  let fence: string | null = null;
+  const kept: string[] = [];
+  for (const line of lines) {
+    const opener = /^\s{0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence === null && opener) {
+      fence = opener;
+      kept.push("");
+      continue;
+    }
+    if (fence !== null) {
+      if (line.trim().startsWith(fence[0]!.repeat(fence.length))) fence = null;
+      kept.push("");
+      continue;
+    }
+    kept.push(line.replace(/`([^`\n]*)`/g, (_span, inner: string) => (SOLE_WIKILINK.test(inner.trim()) ? inner : "")));
+  }
+  return kept.join("\n");
+}
+
+// ─── Slug rules ─────────────────────────────────────────────────────────────
+// The single home of the path→slug rules both seeders use. Exported so a
+// cited slug (BI-DEDAC950) can be resolved against the page files by the
+// same rule that writes WikiPage.slug, never a re-implementation.
+
+/**
+ * Derive a slug from a kernel markdown path.
+ * - `docs/founder-kernel/wiki/entities/digital-product.md`
+ *   → `entities/digital-product`
+ * - `docs/founder-kernel/raw-sources/papers/it4it-overview.md`
+ *   → `papers/it4it-overview`
+ *
+ * The `wiki/` and `raw-sources/` prefixes are stripped because the slug
+ * is namespaced by what kind of folder it lives in (subfolder name).
+ */
+export function deriveSlug(absolutePath: string, baseDir: string): string {
+  const rel = absolutePath.startsWith(baseDir)
+    ? absolutePath.slice(baseDir.length).replace(/^[/\\]+/, "")
+    : absolutePath;
+  // Normalise Windows backslashes to forward slashes so slugs are
+  // consistent across platforms and the upsert key never duplicates.
+  return rel.replace(/\\/g, "/").replace(/\.md$/, "");
+}
+
+/** Kernel wiki page slug: frontmatter `slug:` when present, else the path under `wikiDir`. */
+export function kernelWikiPageSlug(
+  frontmatter: { slug?: string },
+  absolutePath: string,
+  wikiDir: string,
+): string {
+  return frontmatter.slug ?? deriveSlug(absolutePath, wikiDir);
+}
+
+/**
+ * Profession corpus page slug.
+ *   docs/professions/data-architect/wiki/parameterized-queries-commandment.md
+ *   -> professions/data-architect/parameterized-queries-commandment
+ *
+ * Strips the `wiki/` path segment and prefixes with `professions/` so
+ * profession corpus pages are distinguishable from kernel pages by
+ * their slug prefix, which the `detectUnsourcedProfessionPages` lint
+ * detector uses as its identification mechanism. Frontmatter `slug:` is
+ * not honoured for profession pages.
+ */
+export function professionCorpusPageSlug(absolutePath: string, professionsDir: string): string {
+  const rel = deriveSlug(absolutePath, professionsDir);
+  const stripped = rel.replace(/^([^/]+)\/wiki\//, "$1/");
+  return `professions/${stripped}`;
 }

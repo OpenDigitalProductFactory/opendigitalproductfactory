@@ -8,18 +8,30 @@ afterEach(() => cleanup());
 
 describe("GridExportMenu", () => {
   it("hides the format choices until the Export button is clicked", () => {
-    render(<GridExportMenu onExportCsv={vi.fn()} onExportXlsx={vi.fn()} />);
+    render(<GridExportMenu onExportCsv={vi.fn()} onExportXlsx={vi.fn()} onExportOds={vi.fn()} />);
     expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.click(screen.getByText("Export"));
     expect(screen.getByRole("menu")).toBeTruthy();
     expect(screen.getByText(/CSV \(\.csv\)/)).toBeTruthy();
     expect(screen.getByText(/Excel \(\.xlsx\)/)).toBeTruthy();
+    expect(screen.getByText(/OpenDocument \(\.ods\)/)).toBeTruthy();
+  });
+
+  it("invokes the OpenDocument handler and closes the menu", () => {
+    const onExportOds = vi.fn();
+    const onExportXlsx = vi.fn();
+    render(<GridExportMenu onExportCsv={vi.fn()} onExportXlsx={onExportXlsx} onExportOds={onExportOds} />);
+    fireEvent.click(screen.getByText("Export"));
+    fireEvent.click(screen.getByText(/OpenDocument \(\.ods\)/));
+    expect(onExportOds).toHaveBeenCalledTimes(1);
+    expect(onExportXlsx).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("invokes the CSV handler and closes the menu", () => {
     const onExportCsv = vi.fn();
     const onExportXlsx = vi.fn();
-    render(<GridExportMenu onExportCsv={onExportCsv} onExportXlsx={onExportXlsx} />);
+    render(<GridExportMenu onExportCsv={onExportCsv} onExportXlsx={onExportXlsx} onExportOds={vi.fn()} />);
     fireEvent.click(screen.getByText("Export"));
     fireEvent.click(screen.getByText(/CSV \(\.csv\)/));
     expect(onExportCsv).toHaveBeenCalledTimes(1);
@@ -30,7 +42,7 @@ describe("GridExportMenu", () => {
   it("invokes the Excel handler and closes the menu", () => {
     const onExportCsv = vi.fn();
     const onExportXlsx = vi.fn();
-    render(<GridExportMenu onExportCsv={onExportCsv} onExportXlsx={onExportXlsx} />);
+    render(<GridExportMenu onExportCsv={onExportCsv} onExportXlsx={onExportXlsx} onExportOds={vi.fn()} />);
     fireEvent.click(screen.getByText("Export"));
     fireEvent.click(screen.getByText(/Excel \(\.xlsx\)/));
     expect(onExportXlsx).toHaveBeenCalledTimes(1);
@@ -39,7 +51,7 @@ describe("GridExportMenu", () => {
   });
 
   it("does not open when disabled", () => {
-    render(<GridExportMenu disabled onExportCsv={vi.fn()} onExportXlsx={vi.fn()} />);
+    render(<GridExportMenu disabled onExportCsv={vi.fn()} onExportXlsx={vi.fn()} onExportOds={vi.fn()} />);
     fireEvent.click(screen.getByText("Export"));
     expect(screen.queryByRole("menu")).toBeNull();
   });

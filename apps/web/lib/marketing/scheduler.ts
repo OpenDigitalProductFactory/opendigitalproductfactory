@@ -11,13 +11,14 @@
 // each schedule's failure goes to status=failed with the error message.
 
 import { prisma } from "@dpf/db";
+import { ACTIVE_MARKETING_WORK } from "./retire-work";
 import {
   isAllowedScheduledTransition,
   type ScheduledActionKind,
   type ScheduledActionStatus,
 } from "./execution";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 const ADVANCE_DAYS_FOR_DUE_WINDOW = 3;
 
@@ -176,7 +177,7 @@ export async function planUpcomingForAssetTasks(input: {
   }
 
   const tasks = await prisma.marketingAssetTask.findMany({
-    where: { organizationId: input.organizationId },
+    where: { organizationId: input.organizationId, ...ACTIVE_MARKETING_WORK },
     orderBy: { createdAt: "desc" },
     take: 50,
   });

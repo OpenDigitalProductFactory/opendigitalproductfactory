@@ -106,21 +106,23 @@ export function createStageReceiptWriter({
   identity,
   now = () => new Date(),
   hostPid = process.pid,
+  persistImpl = (target, next) => atomicWriteJson(target, next),
 } = {}) {
   if (!stage || !identity) {
     throw new TypeError("stage receipt requires stage and identity");
   }
   let payload = null;
 
-  const persist = () => {
-    atomicWriteJson(path, payload);
+  const persist = next => {
+    persistImpl(path, next, payload);
+    payload = next;
     return payload;
   };
 
   return {
     start(details = {}) {
       const observedAt = now().toISOString();
-      payload = {
+      return persist({
         ...details,
         schemaVersion: 1,
         stage,
@@ -131,13 +133,12 @@ export function createStageReceiptWriter({
         lastHeartbeatAt: observedAt,
         completedAt: null,
         observations: [],
-      };
-      return persist();
+      });
     },
     heartbeat(observation = {}) {
       if (!payload) throw new Error("stage receipt must start before heartbeat");
       const observedAt = now().toISOString();
-      payload = {
+      return persist({
         ...payload,
         status: "running",
         lastHeartbeatAt: observedAt,
@@ -145,13 +146,12 @@ export function createStageReceiptWriter({
           ...(payload.observations ?? []),
           { observedAt, ...observation },
         ].slice(-MAX_OBSERVATIONS),
-      };
-      return persist();
+      });
     },
     complete(status, details = {}) {
       if (!payload) throw new Error("stage receipt must start before completion");
       const observedAt = now().toISOString();
-      payload = {
+      return persist({
         ...payload,
         ...details,
         schemaVersion: 1,
@@ -160,8 +160,7 @@ export function createStageReceiptWriter({
         status,
         lastHeartbeatAt: observedAt,
         completedAt: observedAt,
-      };
-      return persist();
+      });
     },
     snapshot() {
       return payload;

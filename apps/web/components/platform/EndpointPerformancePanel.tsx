@@ -38,6 +38,10 @@ type TestRun = {
   scenariosFailed: number;
   avgScore: number | null;
   results: {
+    /** Canonical run explanation, including partial measurement or unknown disposition. */
+    summary?: string;
+    /** Dimension evaluations record scores on the model quality 0–100 scale. */
+    dimensions?: unknown[];
     modelId?: string;
     friendlyName?: string;
     probes?: Array<{ id: string; category: string; name: string; pass: boolean; reason: string }>;
@@ -109,8 +113,7 @@ export default function EndpointPerformancePanel({
     startTransition(async () => {
       const result = await triggerEndpointTests(endpointId, probesOnly) as { queued?: boolean; message?: string };
       if (result?.queued) {
-        setTestMessage(result.message ?? "Running in background...");
-        setTimeout(() => router.refresh(), 8000);
+        setTestMessage("Tests requested. See Test Runs for their status and results.");
       } else {
         router.refresh();
       }
@@ -294,9 +297,9 @@ export default function EndpointPerformancePanel({
                     </span>
                   </div>
                   <div className="flex gap-4 mt-2 text-xs">
-                    <span className={allProbesPass ? "text-green-400" : "text-red-400"}>
+                    {totalProbes > 0 && <span className={allProbesPass ? "text-green-400" : "text-red-400"}>
                       Probes: {tr.probesPassed}/{totalProbes} passed
-                    </span>
+                    </span>}
                     {totalScenarios > 0 && (
                       <span className={tr.scenariosFailed === 0 ? "text-green-400" : "text-yellow-400"}>
                         Scenarios: {tr.scenariosPassed}/{totalScenarios} passed
@@ -304,10 +307,14 @@ export default function EndpointPerformancePanel({
                     )}
                     {tr.avgScore !== null && (
                       <span className="text-[var(--dpf-muted)]">
-                        Avg score: {tr.avgScore.toFixed(1)}/5
+                        Avg score: {tr.avgScore.toFixed(1)}/{Array.isArray(tr.results?.dimensions) ? 100 : 5}
                       </span>
                     )}
                   </div>
+
+                  {typeof tr.results?.summary === "string" && tr.results.summary && (
+                    <p className="mt-2 text-xs text-[var(--dpf-muted)]">{tr.results.summary}</p>
+                  )}
 
                   {/* Probe details */}
                   {probes.length > 0 && (

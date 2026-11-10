@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "Migration 20260916120000_backfill_model_reference_pricing fills ModelProfile.inputPricePerMToken / outputPricePerMToken on rows model discovery left NULL (49 of 102 on this install). No schema change and no new column: both fields already exist and are already populated on the other rows. The values are published list prices in USD per million tokens, retrieved 2026-09-16 from the providers' own public pricing pages (OpenAI, Anthropic, Z.ai) — commercial rate-card facts about a vendor's product, carrying no personal data and no customer data. The living source is apps/web/lib/routing/model-pricing-reference.ts, which prices models at discovery from now on; this migration is a one-time snapshot generated from that file to repair rows already written. Idempotent and non-destructive: it fills only NULL columns via COALESCE, never overwrites a price already recorded, matches on exact modelId, and updates zero rows on a second run. Models the reference does not cover are deliberately left NULL rather than interpolated from a sibling. Verified against the live populated database inside a rolled-back transaction before commit: UPDATE 44, with the 5 deliberate refusals still NULL.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "ModelProfile",
+      "lifecycleDisposition": "retain-with-provider-catalog",
+      "fields": [
+        {
+          "name": "inputPricePerMToken",
+          "resolution": "not-applicable",
+          "reason": "A vendor's published list price for prompt tokens, in USD per million. Commercial rate-card data about a third-party product, not a data-subject attribute and not customer data. The column already exists and is already populated on other rows; this only fills NULLs.",
+          "provenance": "The providers' own public pricing pages, retrieved 2026-09-16 — OpenAI (developers.openai.com/api/docs/pricing), Anthropic (platform.claude.com/docs/en/docs/about-claude/pricing), Z.ai (docs.z.ai/guides/overview/pricing). Recorded with that provenance in apps/web/lib/routing/model-pricing-reference.ts.",
+          "flags": []
+        },
+        {
+          "name": "outputPricePerMToken",
+          "resolution": "not-applicable",
+          "reason": "A vendor's published list price for completion tokens, in USD per million. Same character as inputPricePerMToken: third-party commercial rate-card data, no personal or customer content. A list rate is not a statement of what this business is billed — budget-gate.ts consults AiProviderFinanceProfile.valuationMethod before treating any rate as cash, so a subscription provider's already-bought tokens are not reported as incremental spend.",
+          "provenance": "The providers' own public pricing pages, retrieved 2026-09-16, as above.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

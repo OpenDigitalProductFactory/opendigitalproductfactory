@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { SignJWT, jwtVerify } from "jose";
+import { isCustomerAccountSessionCapable } from "@/lib/identity/customer-auth-policy";
 
 function getTempTokenSecret(): Uint8Array {
   const authSecret = process.env.AUTH_SECRET;
@@ -9,6 +10,17 @@ function getTempTokenSecret(): Uint8Array {
   return new TextEncoder().encode(authSecret);
 }
 const TEMP_TOKEN_EXPIRY = "5m";
+
+/**
+ * Issuer and audience of the social-login temp token (BI-7B4B5F5D). Other
+ * tokens are HS256-signed with the same AUTH_SECRET (mobile access, MCP
+ * session, automation sign-in), so the verifier requires these exact values
+ * and refuses every other kind. A temp token minted before this change is
+ * refused too; the link/complete-profile page reports an expired session and
+ * the person signs in with their provider again.
+ */
+export const SOCIAL_TEMP_TOKEN_ISSUER = "dpf-portal";
+export const SOCIAL_TEMP_TOKEN_AUDIENCE = "dpf-social-link";
 
 export type SocialProfile = {
   provider: string;
@@ -20,7 +32,6 @@ export type SocialProfile = {
 export type SocialAuthFlow =
   | { flow: "sign-in"; contact: ContactWithAccount }
   | { flow: "link"; contact: ContactWithAccount }
-  | { flow: "auto-link"; contact: ContactWithAccount }
   | { flow: "onboard" }
   | { flow: "blocked" };
 
@@ -52,7 +63,7 @@ export async function determineSocialAuthFlow(
   });
 
   if (identity) {
-    if (!identity.contact.isActive || identity.contact.account.status === "inactive") {
+    if (!identity.contact.isActive || !isCustomerAccountSessionCapable(identity.contact.account.status)) {
       return { flow: "blocked" };
     }
     return { flow: "sign-in", contact: identity.contact };
@@ -66,12 +77,13 @@ export async function determineSocialAuthFlow(
       },
     });
     if (contact) {
-      if (!contact.isActive || contact.account.status === "inactive") {
+      if (!contact.isActive || !isCustomerAccountSessionCapable(contact.account.status)) {
         return { flow: "blocked" };
       }
-      if (!contact.passwordHash) {
-        return { flow: "auto-link", contact };
-      }
+      // Email only identifies which guarded linking ceremony to offer. It
+      // never selects an identity for session issuance. The ceremony must
+      // independently prove the existing credential; contacts without one
+      // therefore fail closed in linkSocialIdentity.
       return { flow: "link", contact };
     }
   }
@@ -87,17 +99,28 @@ export async function createTempToken(profile: SocialProfile): Promise<string> {
     name: profile.name,
   })
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(SOCIAL_TEMP_TOKEN_ISSUER)
+    .setAudience(SOCIAL_TEMP_TOKEN_AUDIENCE)
     .setExpirationTime(TEMP_TOKEN_EXPIRY)
     .setIssuedAt()
     .sign(getTempTokenSecret());
 }
 
 export async function verifyTempToken(token: string): Promise<SocialProfile> {
-  const { payload } = await jwtVerify(token, getTempTokenSecret());
+  const { payload } = await jwtVerify(token, getTempTokenSecret(), {
+    issuer: SOCIAL_TEMP_TOKEN_ISSUER,
+    audience: SOCIAL_TEMP_TOKEN_AUDIENCE,
+    algorithms: ["HS256"],
+    requiredClaims: ["exp", "iat"],
+  });
+  const { provider, providerAccountId, email, name } = payload;
+  if (typeof provider !== "string" || typeof providerAccountId !== "string" || typeof email !== "string") {
+    throw new Error("Social temp token is missing its profile claims");
+  }
   return {
-    provider: payload.provider as string,
-    providerAccountId: payload.providerAccountId as string,
-    email: payload.email as string,
-    name: (payload.name as string) ?? null,
+    provider,
+    providerAccountId,
+    email,
+    name: typeof name === "string" ? name : null,
   };
 }

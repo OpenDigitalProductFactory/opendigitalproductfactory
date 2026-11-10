@@ -1,3 +1,4 @@
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 // apps/web/lib/explore/build-process-matrix.ts
 //
 // Right-sizing matrix for Build Studio. Maps (work-type, work-size) -> a
@@ -17,11 +18,15 @@
 //     falls back to "medium". Existing in-flight builds keep working.
 
 import type { BacklogItemWithRelations } from "./backlog";
+import { deliveryShapeSize } from "@/lib/work-management/delivery-shapes";
 import { BACKLOG_EFFORT_SIZES } from "./backlog";
 import type { BuildPhase, FeatureBuildKind } from "./feature-build-types";
+import { checkTypecheckPassed, checkVerificationDepthRequirement } from "./verification-depth-requirement";
 import {
   FEATURE_BUILD_KIND_VALUES,
 } from "./feature-build-types";
+import { matchDeliverableSensitivityKeyword } from "./sensitivity-keywords";
+
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
@@ -79,12 +84,16 @@ export const GATE_REQUIREMENTS = [
   "buildPlan-present",
   "planReview-passed",
   "verification-typecheck-passed",
+  "verification-depth-satisfied",
   "acceptance-evaluated",
   "acceptance-all-met-if-array",
   "uxVerification-not-blocking",
   "happyPathIntake-ready",
 ] as const;
 export type GateRequirement = (typeof GATE_REQUIREMENTS)[number];
+
+import { GATE_REQUIREMENT_DISPOSITION } from "./phase-gate-disposition";
+export { GATE_REQUIREMENT_DISPOSITION }; // classification lives there (module-size ratchet)
 
 // ─── Lifecycle policy ───────────────────────────────────────────────────────
 
@@ -454,22 +463,13 @@ function escalatePolicy(
  * to keep this module decoupled from govern/risk-posture; an unknown value is
  * treated as the balanced (no-floor) default.
  */
-// Bare "card"/"charge" are deliberately excluded — they over-match benign UI
-// copy ("dashboard card", "charge up"). Payment exposure is caught by the
-// billing/payment/PCI/cardholder/credit-card terms instead.
-const HIGH_SENSITIVITY_PATTERN =
-  /\b(auth|authn|authz|authentication|authorization|login|sign[- ]?in|password|credential|secret|token|api[- ]?key|billing|payment|invoice|pci|cardholder|credit[- ]?card|debit[- ]?card|customer[- ]?data|pii|personal[- ]?data|gdpr|hipaa|security|vulnerab|encrypt|crypto|kernel|governance|rbac|permission|access[- ]?control|compliance)\b/i;
-const ELEVATED_SENSITIVITY_PATTERN =
-  /\b(database|migration|schema|prisma|integration|external|webhook|email|outbound|federation|edge|endpoint|deploy|infrastructure)\b/i;
+export { matchDeliverableSensitivityKeyword };
 
 export function deriveDeliverableSensitivity(
   input: { text?: string | null; workType?: string | null },
   riskPosture?: string | null,
 ): DeliverableSensitivity {
-  const text = input.text ?? "";
-  let keyword: DeliverableSensitivity = "low";
-  if (HIGH_SENSITIVITY_PATTERN.test(text)) keyword = "high";
-  else if (ELEVATED_SENSITIVITY_PATTERN.test(text)) keyword = "elevated";
+  const keyword: DeliverableSensitivity = matchDeliverableSensitivityKeyword(input.text).level;
   // Org posture is a floor that can only RAISE caution: a conservative org
   // starts everything at least "elevated". Balanced/progressive add no floor.
   const postureFloor: DeliverableSensitivity = riskPosture === "conservative" ? "elevated" : "low";
@@ -574,10 +574,8 @@ export function deriveBuildProcessType(
   return "feature";
 }
 
-export function deriveBuildProcessSize(
-  bi: { effortSize?: string | null },
-): BuildProcessSize {
-  return normalizeSize(bi.effortSize ?? null);
+export function deriveBuildProcessSize(bi: { effortSize?: string | null; workShape?: string | null }): BuildProcessSize {
+  return deliveryShapeSize(bi.workShape) ?? normalizeSize(bi.effortSize ?? null);
 }
 
 // ─── Model tier (EP-MODEL-TIER-ROUTING) ──────────────────────────────────────
@@ -633,7 +631,7 @@ import type { FixContext, ReviewResult } from "./feature-build-types";
 
 type GateEvidence = Record<string, unknown>;
 
-export type RequirementResult = { allowed: true } | { allowed: false; reason: string };
+export type RequirementResult = { allowed: true } | { allowed: false; reason: string; disposition?: OutcomeDisposition };
 
 function missingHappyPathAnchorsFromState(state: ReturnType<typeof normalizeHappyPathState>): string[] {
   const missing: string[] = [];
@@ -664,6 +662,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
           reason: isFix
             ? "Fix review failed. Revise the diagnosis and re-run the review before advancing."
             : describeDesignReviewFailure(review),
+          disposition: "refused", // a review that RAN and said no is a verdict
         };
       }
       return { allowed: true };
@@ -675,6 +674,7 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
         return {
           allowed: false,
           reason: "Fix review failed. Revise the diagnosis and re-run the review before advancing.",
+          disposition: "refused",
         };
       }
       return { allowed: true };
@@ -696,16 +696,14 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       const planReview = evidence.planReview as ReviewResult | undefined;
       if (!planReview) return { allowed: false, reason: "Plan review is required before building." };
       if ((planReview as { decision?: string }).decision === "fail") {
-        return { allowed: false, reason: describePlanReviewFailure(planReview) };
+        return { allowed: false, reason: describePlanReviewFailure(planReview), disposition: "refused" };
       }
       return { allowed: true };
     }
-    case "verification-typecheck-passed": {
-      const verification = evidence.verificationOut as { testsFailed?: number; typecheckPassed?: boolean } | null | undefined;
-      if (!verification) return { allowed: false, reason: "A verification run (tests + typecheck) is required before review." };
-      if (!verification.typecheckPassed) return { allowed: false, reason: "Typecheck must pass before review." };
-      return { allowed: true };
-    }
+    case "verification-typecheck-passed":
+      return checkTypecheckPassed(evidence);
+    case "verification-depth-satisfied":
+      return checkVerificationDepthRequirement(evidence);
     case "acceptance-evaluated": {
       if (!evidence.acceptanceMet) return { allowed: false, reason: "Acceptance criteria not evaluated." };
       return { allowed: true };
@@ -730,7 +728,8 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       const status = evidence.uxVerificationStatus as
         | "running" | "complete" | "failed" | "skipped" | null | undefined;
       if (status === "running") {
-        return { allowed: false, reason: "UX verification is still running. Retry in a moment." };
+        // Not finished, so nothing was determined: re-run unchanged (AGENTS.md §4).
+        return { allowed: false, reason: "UX verification is still running. Retry in a moment.", disposition: "inconclusive" };
       }
       return { allowed: true };
     }
@@ -763,8 +762,8 @@ export function describePolicy(type: BuildProcessType, size: BuildProcessSize): 
 // ─── checkPhaseGate — policy-driven gate ────────────────────────────────────
 //
 // Lives here (not in feature-build-types.ts) so the matrix module owns the
-// gate logic + policy table together. feature-build-types.ts re-exports
-// `checkPhaseGate` so existing import sites keep working unchanged.
+// gate logic + policy table together. The lib/feature-build-types.ts shim re-exports
+// it; lib/explore/feature-build-types.ts must not (that closes a load-order cycle).
 
 import type { PhaseGateResult } from "./feature-build-types";
 
@@ -790,9 +789,7 @@ import type { PhaseGateResult } from "./feature-build-types";
  *                          happyPathIntake-ready reason string only)
  *   (everything else)    — same as before
  */
-/** Read the additive rightsizing opts a caller threaded through the gate
- *  evidence. Returns undefined when neither field is present, so gates for
- *  callers that don't set them are byte-identical (EP-QUALITY-RIGHTSIZING). */
+/** Read additive rightsizing opts; absent fields preserve byte identity. */
 function rightsizingOptsFromEvidence(evidence: GateEvidence): RightsizingOpts | undefined {
   const qualityFirst = evidence.qualityFirst === true;
   const sensitivity = evidence.deliverableSensitivity as DeliverableSensitivity | undefined;
@@ -817,15 +814,17 @@ export function checkPhaseGate(
   const transition = `${from}->${to}` as BuildTransition;
   const required = policy.gates[transition] ?? [];
 
-  // The happyPathIntake-ready check has two callers (ideate->plan and
-  // plan->build) with different reason verbs. Surface the verb through
-  // evidence so the matrix's requirement enum stays compact.
+  // Surface the transition-specific intake verb without widening the enum.
   const verb = transition === "plan->build" ? "building" : "planning";
   const evidenceWithVerb = { ...evidence, intakeVerb: evidence.intakeVerb ?? verb };
 
   for (const req of required) {
     const result = checkRequirement(req, evidenceWithVerb);
-    if (!result.allowed) return result;
+    if (!result.allowed) {
+      // The branch's own answer wins where it knows more; otherwise the
+      // requirement's declared kind, which is total by construction.
+      return { ...result, requirement: req, disposition: result.disposition ?? GATE_REQUIREMENT_DISPOSITION[req] };
+    }
   }
   return { allowed: true };
 }

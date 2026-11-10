@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockPrisma, mockAutoDiscoverAndProfile } = vi.hoisted(() => ({
+const { mockPrisma, mockAutoDiscoverAndProfile, mockRefreshDefaultOwners } = vi.hoisted(() => ({
   mockPrisma: {
     modelProvider: {
       findUnique: vi.fn(),
@@ -20,10 +20,12 @@ const { mockPrisma, mockAutoDiscoverAndProfile } = vi.hoisted(() => ({
     },
   },
   mockAutoDiscoverAndProfile: vi.fn(),
+  mockRefreshDefaultOwners: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
+  refreshDefaultProviderConnectionOwners: mockRefreshDefaultOwners,
 }));
 
 vi.mock("@/lib/ai-provider-internals", () => ({
@@ -214,7 +216,7 @@ describe("activateProvider", () => {
     });
   });
 
-  it("brings a disabled or unconfigured default connection to active with the provider", async () => {
+  it("activates an unconfigured default without enabling a disabled account", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "anthropic-sub",
       category: "direct",
@@ -224,12 +226,11 @@ describe("activateProvider", () => {
 
     await activateProvider("anthropic-sub", { trigger: "test_auth" });
 
-    // Routing filters on connection status, not provider status — activation
-    // that leaves the default connection disabled is the BI-04E4F111 dead end.
+    // Authentication never overrides an operator's disabled-account choice.
     expect(mockPrisma.aiProviderConnection.updateMany).toHaveBeenCalledWith({
       where: {
         connectionId: "provider-default-anthropic-sub",
-        status: { in: ["unconfigured", "disabled"] },
+        status: "unconfigured",
       },
       data: { status: "active" },
     });
@@ -237,6 +238,14 @@ describe("activateProvider", () => {
     const healOrder = mockPrisma.aiProviderConnection.updateMany.mock.invocationCallOrder[0];
     const readOrder = mockPrisma.aiProviderConnection.findMany.mock.invocationCallOrder[0];
     expect(healOrder).toBeLessThan(readOrder);
+  });
+
+  it("reconciles default authentication after persisting OAuth mode and before discovery", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "codex", category: "direct", endpointType: "responses", status: "active" });
+    await activateProvider("codex", { trigger: "oauth_exchange", authMethod: "oauth2_authorization_code" });
+    expect(mockRefreshDefaultOwners).toHaveBeenCalledWith(mockPrisma, "codex", { credentialReplaced: true });
+    expect(mockPrisma.modelProvider.update.mock.invocationCallOrder[0]).toBeLessThan(mockRefreshDefaultOwners.mock.invocationCallOrder[0]!);
+    expect(mockRefreshDefaultOwners.mock.invocationCallOrder[0]).toBeLessThan(mockAutoDiscoverAndProfile.mock.invocationCallOrder[0]!);
   });
 
   it("returns gracefully when provider does not exist", async () => {

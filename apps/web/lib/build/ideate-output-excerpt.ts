@@ -15,21 +15,14 @@
 // test's module graph.
 
 /** Max characters of model output kept as evidence, split across head and tail. */
+
+import { excerptHeadAndTail as sharedExcerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
+
 export const IDEATE_EXCERPT_BUDGET = 1200;
 
-/**
- * Bounded excerpt that keeps BOTH ends of the output.
- *
- * Truncating only the head hides exactly the place a malformed JSON object
- * usually fails. Short output is returned whole; longer output keeps the first
- * and last halves of the budget with a marker naming how much was elided, so an
- * excerpt can never be mistaken for the complete response.
- */
+/** Bounded excerpt keeping both ends (shared primitive; re-exported for existing callers). */
 export function excerptHeadAndTail(text: string, budget = IDEATE_EXCERPT_BUDGET): string {
-  if (text.length <= budget) return text;
-  const half = Math.floor(budget / 2);
-  const elided = text.length - budget;
-  return `${text.slice(0, half)}\n… [${elided} chars elided] …\n${text.slice(-half)}`;
+  return sharedExcerptHeadAndTail(text, budget);
 }
 
 /**

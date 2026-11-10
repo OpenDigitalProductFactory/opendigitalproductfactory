@@ -41,6 +41,7 @@ import {
   listWorkPatternBindingsForAgent,
   type WorkPatternBindingRecord,
 } from "./work-pattern-binding-reader";
+import { isRecord } from "@/lib/shared/coerce";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_TAKE = 200;
@@ -242,10 +243,6 @@ function defaultDb(): WorkPatternReadModelDb {
         },
       }) as Promise<WorkPatternReadModelNeedRow[]>,
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function stringField(source: unknown, field: string): string | null {

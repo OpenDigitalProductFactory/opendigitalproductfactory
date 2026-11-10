@@ -9,7 +9,7 @@ import {
 function link(overrides: Partial<PairingLink> = {}): PairingLink {
   return {
     linkId: "FL-0001",
-    linkState: "active",
+    linkState: "trusted",
     relationshipPreset: "same-organization",
     peerLabel: "operator-production",
     ...overrides,
@@ -47,6 +47,8 @@ describe("resolveInstallationPairing", () => {
       ref: "operator-production",
       source: "declared-intent",
       declaredButUnconfirmed: true,
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
     });
   });
 
@@ -55,6 +57,8 @@ describe("resolveInstallationPairing", () => {
       ref: null,
       source: "none",
       declaredButUnconfirmed: false,
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
     });
   });
 
@@ -76,6 +80,20 @@ describe("resolveInstallationPairing", () => {
     expect(resolveInstallationPairing({ links: [link({ linkState: "pending" })] }).source).toBe(
       "none",
     );
+  });
+
+  it("counts only the trust state a link can actually hold (BI-D92A50F4)", () => {
+    // `resolveLinkTrust` produces pending | trusted | quarantined | revoked and
+    // nothing else. Any other spelling means the resolver can never match a real
+    // row and work sync reports "nowhere to mirror" while mirroring succeeds.
+    expect(resolveInstallationPairing({ links: [link({ linkState: "trusted" })] }).source).toBe(
+      "federation-link",
+    );
+    for (const impossible of ["active", "approved", "quarantined", "revoked"]) {
+      expect(resolveInstallationPairing({ links: [link({ linkState: impossible })] }).source).toBe(
+        "none",
+      );
+    }
   });
 
   it("ignores cross-organization links — those are not a pairing", () => {
@@ -117,5 +135,25 @@ describe("pairingSupportsWorkSync", () => {
 
   it("refuses when there is no pairing at all", () => {
     expect(pairingSupportsWorkSync(resolveInstallationPairing({ links: [] }))).toBe(false);
+  });
+});
+
+describe("resolveInstallationPairing — attested peer (BI-0716C8A8)", () => {
+  it("carries the link's attested class and the peer installation's own name", () => {
+    const result = resolveInstallationPairing({
+      links: [link({ peerEnvironmentClass: "development", peerInstallationLabel: "Windows DEV (did_ab12…9f0c)" })],
+    });
+    expect(result).toMatchObject({
+      ref: "operator-production",
+      peerEnvironmentClass: "development",
+      peerInstallationLabel: "Windows DEV (did_ab12…9f0c)",
+    });
+  });
+
+  it("knows no class or installation for a pairing that is only declared", () => {
+    expect(resolveInstallationPairing({ declaredRef: "operator-production", links: [] })).toMatchObject({
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
+    });
   });
 });

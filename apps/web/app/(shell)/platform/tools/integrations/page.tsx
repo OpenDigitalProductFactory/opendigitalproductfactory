@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { resolveNextSteps } from "@/lib/backlog/next-step-pointer";
 import { IntegrationCoverageDisclosure } from "@/components/integrations/IntegrationCoverageDisclosure";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 import { getMatrixByOrg } from "@/lib/actions/integration-coverage";
@@ -15,6 +16,9 @@ import {
 export default async function EnterpriseIntegrationsPage() {
   const org = await prisma.organization.findFirst({ select: { id: true } });
   const dbCoverageMatrix = org ? await getMatrixByOrg(org.id) : [];
+  const coverageNextSteps = await resolveNextSteps(
+    INTEGRATION_COVERAGE_MATRIX.map((row) => row.nextStep),
+  );
 
   const [configuredIntegrations, errorStates] = await Promise.all([
     prisma.integrationCredential.count({
@@ -245,7 +249,7 @@ export default async function EnterpriseIntegrationsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--dpf-border)]">
-              {INTEGRATION_COVERAGE_MATRIX.map((row) => (
+              {INTEGRATION_COVERAGE_MATRIX.map((row, rowIndex) => (
                 <tr key={row.id} className="align-top">
                   <td className="py-4 pr-4">
                     <p className="font-medium text-[var(--dpf-text)]">{row.productName}</p>
@@ -303,7 +307,9 @@ export default async function EnterpriseIntegrationsPage() {
                   </td>
                   <td className="py-4 pl-4">
                     <div className="max-w-[220px] space-y-1">
-                      <p className="font-mono text-xs font-medium text-[var(--dpf-text)]">{row.nextBacklogItemId}</p>
+                      <p className="font-mono text-xs font-medium text-[var(--dpf-text)]">
+                        {coverageNextSteps[rowIndex].label}
+                      </p>
                       <p className="text-xs text-[var(--dpf-muted)]">{row.notes}</p>
                     </div>
                   </td>

@@ -1,0 +1,117 @@
+// packages/db/scripts/lib/it4it-reference-document.ts
+//
+// DEV-TIME ONLY. Builds the committed IT4IT reference JSON from the LFS-tracked
+// workbook (BI-B470264D). Nothing under packages/db/src may import this module:
+// it pulls in the spreadsheet parser, which the portal-init seed must not load.
+//
+// The row normalization below is moved verbatim from the former
+// loadIt4itWorkbook() in src/seed-ea-reference-models.ts, so the seed imports
+// exactly the rows it imported before.
+
+import { createHash } from "crypto";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+import {
+  IT4IT_REFERENCE_FORMAT_VERSION,
+  type It4itReferenceDocument,
+  type It4itReferenceRows,
+} from "../../src/it4it-reference-data.js";
+import type {
+  FunctionalCriteriaRow,
+  ParticipationMatrixRow,
+  ValueStreamActivityRow,
+} from "../../src/reference-model-types.js";
+import { readWorkbook, requireSheetData, sheetDataToObjects } from "./excel-sheet-reader.js";
+
+const REPO_ROOT = join(__dirname, "..", "..", "..", "..");
+export const IT4IT_WORKBOOK_REPO_PATH = "docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx";
+export const IT4IT_WORKBOOK_PATH = join(REPO_ROOT, ...IT4IT_WORKBOOK_REPO_PATH.split("/"));
+
+const LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1";
+
+export interface WorkbookIdentity {
+  kind: "content" | "lfs-pointer";
+  sha256: string;
+  size: number;
+}
+
+/**
+ * The workbook's identity from whatever the checkout holds: the real bytes, or
+ * the Git LFS pointer, whose oid is the sha256 of those bytes.
+ */
+export function describeWorkbookIdentity(bytes: Buffer): WorkbookIdentity {
+  const head = bytes.subarray(0, LFS_POINTER_PREFIX.length).toString("utf8");
+  if (head === LFS_POINTER_PREFIX) {
+    const text = bytes.toString("utf8");
+    const oid = /^oid sha256:([0-9a-f]{64})$/m.exec(text)?.[1];
+    const size = /^size (\d+)$/m.exec(text)?.[1];
+    if (!oid || !size) throw new Error("Malformed Git LFS pointer for the IT4IT workbook.");
+    return { kind: "lfs-pointer", sha256: oid, size: Number(size) };
+  }
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    return { kind: "content", sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.length };
+  }
+  throw new Error("The IT4IT workbook is neither a zip archive nor a Git LFS pointer.");
+}
+
+export function normalizeIt4itSheets(sheets: {
+  functional: Array<Record<string, unknown>>;
+  valueStream: Array<Record<string, unknown>>;
+  participation: Array<Record<string, unknown>>;
+}): It4itReferenceRows {
+  return {
+    functionalRows: sheets.functional.map<FunctionalCriteriaRow>((row) => ({
+      capabilityGroup: String(row["Level 1: Capability Group"] ?? "").trim(),
+      functionName: String(row["Level 2: Function"] ?? "").trim(),
+      componentName: String(row["Level 3: Functional Component"] ?? "").trim(),
+      criteria: String(row["Functional Criteria"] ?? "").trim(),
+      referenceSection: row["Reference Section"] == null ? null : String(row["Reference Section"]).trim(),
+    })),
+    valueStreamRows: sheets.valueStream.map<ValueStreamActivityRow>((row) => ({
+      valueStream: String(row["Value Stream"] ?? "").trim(),
+      valueStreamStage: String(row["Value Stream Stage"] ?? "").trim(),
+      criteria: String(row["Activity Criteria"] ?? "").trim(),
+      referenceSection: row["Reference Section"] == null ? null : String(row["Reference Section"]).trim(),
+    })),
+    participationRows: sheets.participation.map<ParticipationMatrixRow>((row) => {
+      const participationByColumn: Record<string, string | null> = {};
+      for (const [key, value] of Object.entries(row)) {
+        if (key === "Value Stream" || key === "Value Stream Stage" || key === "Ref") continue;
+        participationByColumn[key] = value == null ? null : String(value).trim();
+      }
+
+      return {
+        valueStream: String(row["Value Stream"] ?? "").trim(),
+        valueStreamStage: String(row["Value Stream Stage"] ?? "").trim(),
+        reference: row["Ref"] == null ? null : String(row["Ref"]).trim(),
+        participationByColumn,
+      };
+    }),
+  };
+}
+
+export async function buildIt4itReferenceDocument(
+  workbookPath: string = IT4IT_WORKBOOK_PATH,
+): Promise<It4itReferenceDocument> {
+  const bytes = readFileSync(workbookPath);
+  const identity = describeWorkbookIdentity(bytes);
+  if (identity.kind === "lfs-pointer") {
+    throw new Error(`${IT4IT_WORKBOOK_REPO_PATH} is a Git LFS pointer. Run 'git lfs pull' before generating.`);
+  }
+
+  const workbook = await readWorkbook(workbookPath);
+  const rows = normalizeIt4itSheets({
+    functional: sheetDataToObjects(requireSheetData(workbook, "IT4IT Functional Criteria")),
+    valueStream: sheetDataToObjects(requireSheetData(workbook, "Value Stream Activities")),
+    participation: sheetDataToObjects(requireSheetData(workbook, "FC Participation Matrix")),
+  });
+
+  return {
+    $comment:
+      "GENERATED by packages/db/scripts/generate-it4it-reference-json.ts from the workbook named in source. Do not edit by hand; regenerate.",
+    formatVersion: IT4IT_REFERENCE_FORMAT_VERSION,
+    source: { path: IT4IT_WORKBOOK_REPO_PATH, sha256: identity.sha256, size: identity.size },
+    ...rows,
+  };
+}

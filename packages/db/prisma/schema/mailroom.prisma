@@ -1,0 +1,90 @@
+// Mailroom — declared mailboxes and their poll state (BI-1DDFC3D1).
+// Design: docs/superpowers/specs/2026-09-09-mailroom-email-triage-and-dispatch-design.md §4.3.
+//
+// A MailboxAccount is WHERE the business listens: an address, a provider, a
+// purpose, a schedule and a cursor. It is organisation-scoped and there are
+// several per business, which is why it is not an IntegrationCredential (one row
+// per install) and not a CommunicationChannelBinding (a principal's address for
+// reach and trust — who may talk to us, not where we listen).
+//
+// Secrets (a password or client secret) live in `secretsEnc`, written only
+// through lib/govern/credential-crypto; `settings` holds the non-secret
+// connection facts and is safe to project.
+
+enum MailboxProvider {
+  imap
+  microsoft365
+  postmark_inbound @map("postmark-inbound")
+}
+
+enum MailboxStatus {
+  pending
+  connected
+  error
+  paused
+}
+
+/// Outcome of the last poll.
+enum MailboxPollStatus {
+  ok
+  error
+}
+
+/// Platform-closed urgency ladder; each maps to an acknowledgement window
+/// (immediate 1h, hours 4h, days 2d, weeks 7d — design §4.1).
+enum MailroomUrgency {
+  immediate
+  hours
+  days
+  weeks
+}
+
+/// Lifecycle of one ingested message inside the Mailroom.
+enum MailroomItemStatus {
+  received
+  noise
+  quarantined
+  routed
+  acknowledged
+  replied
+  closed
+}
+
+/// @dpf lifecycle=operational retention=domain sensitivity=restricted categories=credential-secret,configuration owner=platform-architecture steward=data-steward
+model MailboxAccount {
+  id                  String          @id @default(cuid())
+  /// Public reference, `MBX-` prefixed.
+  mailboxRef          String          @unique
+  organizationId      String
+  address             String
+  displayName         String?
+  /// Registry key from the archetype's Mailroom profile (e.g. `adoptions`).
+  purposeKey          String
+  provider            MailboxProvider
+  status              MailboxStatus   @default(pending)
+  /// Non-secret connection facts: host, port, secure, folder, user, tenantId,
+  /// clientId, mailboxUserPrincipalName — never a password or client secret.
+  settings            Json
+  /// credential-crypto encrypted JSON: { password } or { clientSecret }.
+  secretsEnc          String?         @db.Text
+  /// Provider cursor: IMAP { uidValidity, lastUid } or Graph { deltaLink }.
+  cursor              Json?
+  pollIntervalMinutes Int             @default(60)
+  lastPolledAt        DateTime?
+  nextPollAt          DateTime?
+  lastPollStatus      MailboxPollStatus?
+  lastError           String?
+  lastMessageAt       DateTime?
+  createdByPrincipalId String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    Principal?              @relation("MailboxAccountCreatedBy", fields: [createdByPrincipalId], references: [principalId], onDelete: SetNull)
+  items        InboundChannelMessage[]
+
+  @@unique([organizationId, address])
+  @@index([organizationId, status])
+  @@index([nextPollAt])
+  @@index([createdByPrincipalId])
+}

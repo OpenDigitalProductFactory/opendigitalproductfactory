@@ -2,11 +2,20 @@ import { prisma } from "@dpf/db";
 
 import type { DpfSession } from "@/lib/govern/auth";
 
+/** A live authority refusal is distinct from an unavailable identity database. */
+export class EffectiveAuthContextError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EffectiveAuthContextError";
+  }
+}
+
 import {
   buildEffectiveAuthContext,
   type AuthSource,
   type EffectiveAuthContext,
 } from "./effective-auth-context";
+import { isCustomerAccountSessionCapable } from "./customer-auth-policy";
 
 type PrincipalRow = {
   principalId: string;
@@ -23,6 +32,17 @@ type EmployeeRow = {
 };
 
 type EffectiveAuthContextDb = {
+  principal?: {
+    findUnique(args: unknown): Promise<PrincipalRow | null>;
+  };
+  customerContact?: {
+    findUnique(args: unknown): Promise<{
+      id: string;
+      isActive: boolean;
+      mergedIntoId: string | null;
+      account: { accountId: string; status: string };
+    } | null>;
+  };
   principalAlias: {
     findFirst(args: unknown): Promise<{ principal: PrincipalRow } | null>;
   };
@@ -103,8 +123,18 @@ export async function loadEffectiveAuthContext(
   const now = input.now ?? new Date();
   const aliasTypes = principalAliasTypes(input.user.type);
 
-  const [principalAlias, employeeRows, teamMemberships, delegationGrants] = await Promise.all([
-    db.principalAlias.findFirst({
+  const principalLookup = input.user.principalId && db.principal
+    ? db.principal.findUnique({
+        where: { principalId: input.user.principalId },
+        select: {
+          principalId: true,
+          kind: true,
+          status: true,
+          sensitivityClearance: true,
+          aliases: { select: { aliasType: true, aliasValue: true, issuer: true } },
+        },
+      }).then((principal) => principal ? { principal } : null)
+    : db.principalAlias.findFirst({
       where: {
         aliasType: { in: aliasTypes },
         aliasValue: input.user.type === "admin" ? input.user.id : input.user.contactId ?? input.user.id,
@@ -127,7 +157,23 @@ export async function loadEffectiveAuthContext(
           },
         },
       },
-    }),
+    });
+
+  const contactStateLookup = input.user.type === "customer" && db.customerContact
+    ? db.customerContact.findUnique({
+        where: { id: input.user.contactId ?? input.user.id },
+        select: {
+          id: true,
+          isActive: true,
+          mergedIntoId: true,
+          account: { select: { accountId: true, status: true } },
+        },
+      })
+    : Promise.resolve(null);
+
+  const [principalAlias, contactState, employeeRows, teamMemberships, delegationGrants] = await Promise.all([
+    principalLookup,
+    contactStateLookup,
     input.user.type === "admin"
       ? db.employeeProfile.findMany({
           select: { id: true, userId: true, managerEmployeeId: true },
@@ -155,8 +201,20 @@ export async function loadEffectiveAuthContext(
   ]);
 
   const principal = principalAlias?.principal ?? null;
+  if (input.user.principalId && !principal) {
+    throw new EffectiveAuthContextError(`Principal ${input.user.principalId} could not be resolved`);
+  }
   if (principal && principal.status !== "active") {
-    throw new Error(`Principal ${principal.principalId} is not active`);
+    throw new EffectiveAuthContextError(`Principal ${principal.principalId} is not active`);
+  }
+  if (input.user.type === "customer") {
+    if (!contactState
+      || !contactState.isActive
+      || contactState.mergedIntoId
+      || !isCustomerAccountSessionCapable(contactState.account.status)
+      || contactState.account.accountId !== input.user.accountId) {
+      throw new EffectiveAuthContextError("Customer session scope is no longer active or canonical");
+    }
   }
 
   const managerScope =

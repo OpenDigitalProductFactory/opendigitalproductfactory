@@ -75,14 +75,14 @@ describe("scoreTrustVector", () => {
       dimensions: [
         dimension("freshness", 1, "Postgres records were read now."),
         dimension("sourceAuthority", 1, "Postgres is authoritative for products."),
-        dimension("runtimeAvailability", 0.1, "Neo4j was unavailable."),
+        dimension("runtimeAvailability", 0.1, "The graph mirror was unavailable."),
       ],
     });
 
     expect(assessment.tier).toBe("low");
     expect(assessment.statementKind).toBe("low-confidence-result");
     expect(assessment.action).not.toBe("present");
-    expect(assessment.primaryRationale).toContain("Neo4j");
+    expect(assessment.primaryRationale).toContain("graph mirror");
   });
 
   it("escalates contradicted source claims", () => {

@@ -1,0 +1,520 @@
+# Initiative-Readiness Runbook — who does what, when, through the gates
+
+**Purpose.** A single human- and agent-readable map of the governed path a piece of work travels from a raw backlog item to a completed, accepted initiative: the **roles × gates × sequence × actor**, and the **routing mechanism** that hands each gate to the coworker who can satisfy it. Written because that end-to-end map previously existed **only in code** — agents (this one included) were reverse-engineering it from gate-refusal errors, which is exactly how a governed process gets misused.
+
+> **Source of truth is the code, not this file.** This runbook orients; it does not re-implement. The policy is `initiative-readiness.v3`, evaluated by a pure function. When this doc and the code disagree, the code wins — and this doc is stale and must be fixed.
+> - Gate machine: [`apps/web/lib/backlog/initiative-readiness/evaluate.ts`](../../apps/web/lib/backlog/initiative-readiness/evaluate.ts) (`evaluateInitiativeReadiness`), [`types.ts`](../../apps/web/lib/backlog/initiative-readiness/types.ts) (codes, targets, profiles), [`readiness-guidance.ts`](../../apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts) (per-profile evidence definitions + writer tools).
+> - Independence enforcement: [`receipt-schema.ts`](../../apps/web/lib/backlog/initiative-readiness/receipt-schema.ts), reviewer identity in [`reviewer-identity.ts`](../../apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts).
+> - Lane → gate → grant → role + the reviewer packet builder: [`apps/web/lib/tak/initiative-readiness-tool-grants.ts`](../../apps/web/lib/tak/initiative-readiness-tool-grants.ts).
+> - Where the recovery packet is issued: [`apps/web/lib/work-capsules/governed-work-claim.ts`](../../apps/web/lib/work-capsules/governed-work-claim.ts).
+> - Packet consumption: [`apps/web/lib/mcp/packs/coworker-pack.ts`](../../apps/web/lib/mcp/packs/coworker-pack.ts), [`external-coworker-task-adapter.ts`](../../apps/web/lib/mcp/external-coworker-task-adapter.ts).
+
+## 0. Two "shapes" — do not conflate them
+
+### Approval status is separate from original action evidence
+
+The exact caller-scoped `get_my_approval_status` reader includes a separate
+`actionEvidence` projection for stored provider-account test outcomes. It proves
+the original envelope, tool, actor and input before returning a bounded typed
+result; missing, conflicting and unsupported evidence remain explicit. Pending
+discovery retains its status-only contract. This read never dispatches or replays
+an action, and generic test success supplies neither a Responses verification
+receipt nor a selected-quota transaction receipt. It cannot settle an uncertain
+initiative review or substitute for the gate's independent writer.
+
+### Delivery closes non-contractual work (BI-B1B44777)
+
+Founder direction, 2026-10-27: outcomes define done. A merge through CI and the
+merge queue closes every item that is not an aggregate (xlarge) and is not
+tagged `contractual`. The tag lives in `BacklogItem.lifecycleTags` (kernel
+decision DI-1263D968DC26). For these items the merge satisfies delivery,
+acceptance and objective reconciliation, and design, plan and specialist-review
+lanes are not owed after the change has landed.
+
+These still block:
+
+- a recorded failed review;
+- the newest `ux` or `manual` evidence being a failure;
+- a conflicting or malformed objective reconciliation.
+
+The predicate is `deliveryClosesItem` in `backlog-completion-evaluation.ts`.
+The acceptance sweep reads the same evaluation, so it closes these items under
+its recorded pre-authorisation. The independent-acceptance lanes below apply
+to contractual items. A regression found in use becomes a new item.
+
+### Medium body criteria and independent acceptance
+
+Effective medium work, including product-linked work, can satisfy its objective
+baseline from an Acceptance heading with criterion bullets, or explicit
+`AC-<id>:` bullets. It does not owe a separate spec approval for that baseline.
+After delivery passes and acceptance remains unmet, the existing authorized,
+serialized completion mutation retains a DocumentVersion and baseline activity.
+Approved and inherited baselines retain precedence. The retained version binds
+criteria and anchors, item/organization, author provenance and delivered source
+identity; it creates no approval or acceptance receipt.
+
+Recovery requires one current source Workroom, fresh post-baseline passing
+evidence, and an independent reviewer with the existing reader/writer grants
+and room admission. `get_backlog_item` and completion refusals return the exact
+server-issued packet. Its existing `read_source_at_version` reader hydrates the
+bound retained criteria only for that authorized TaskRun. Room admission is
+checked before reading and again before receipt writing. Automatic reviewer
+dispatch carries the recorded requesting person into these checks.
+
+A merged author's room can remain archived throughout body acceptance. The
+shared author resolver admits only the current unambiguous attempt with an exact
+server-owned, verified merged PR observation matching repository, number, branch
+and head. A newer incomplete or superseded attempt blocks historical fallback.
+This retains source authorship; it grants no execution lease or room admission.
+The reviewer TaskRun, OAuth authority, content access and author separation must
+remain current. Missing merge proof calls for source/observation reconciliation,
+not repeated reopening of a room the reaper correctly considers delivered.
+Spec review retains its live-room requirement. Post-implementation review after
+merge does not; see the break-fix paragraph in §1.
+
+Changed criteria, source identity, organization or eligible evidence reject old
+requests. Refresh recovery for a current successor; unchanged retries reuse the
+TaskRun and proposal. Historical authority stays auditable. Research and
+dependency-disposition remain author lanes; only the acceptance mapping lane
+becomes independent. Missing prerequisites are reported as recovery actions,
+without unlinking the product, lowering shape or weakening completion gates.
+
+Implementation: [body baseline retention](../../apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts),
+[terminal recovery](../../apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts),
+and [objective mapping writer](../../apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts).
+Operator procedure: [acceptance sweep](../operations/acceptance-sweep.md).
+
+The word *shape* is overloaded across the platform. Two distinct machines:
+
+1. **The initiative-readiness gate machine** (this runbook). Decides whether a backlog item / epic / build may transition `design → plan → implementation → completion`, by checking that the required **evidence receipts** exist and passed review. Roles are *governance accountabilities* (design-author, design-checklist-reviewer, …).
+2. **The Workroom collaboration shape** ([`apps/web/lib/work-management/room-shapes.ts`](../../apps/web/lib/work-management/room-shapes.ts), documented for humans in [`docs/user-guide/ai-workforce/how-governed-work-runs.md`](../user-guide/ai-workforce/how-governed-work-runs.md)). Decides *which collaboration roles staff a room* (coordinator → specialist/reviewer → approver). A different axis.
+
+They meet at one edge: a readiness **review gate** is *routed into* a Workroom, to the reviewer coworker, via the recovery packet (§3).
+
+Ordinary `record_initiative_evidence` artifact receipts check deterministic
+prerequisites before asking a person for approval. The preflight uses the
+handler's trusted TaskRun binding and canonical artifact/reviewer readers;
+missing provenance or authenticated writer context must be repaired by the
+source owner, rather than approved. A successful preflight grants no authority.
+The final receipt writer still checks current authorization and provenance.
+Objective-mapping proposals and independent review writers retain their own
+issued-packet contracts. Already approved calls keep their normal settlement
+path, so a later execution refusal remains a recorded failure.
+
+Exact semantic-review exception requests also reuse their existing parameter
+validator before approval. An expired, malformed or overlong request needs a
+fresh exact request; a click cannot repair its immutable arguments. Valid
+parameters still require the existing operator approval, DEV scope and evidence
+checks. The final writer rechecks expiry after approval; historic envelopes are
+not rewritten or replayed by admission.
+
+## 1. The lifecycle sequence
+
+An xlarge initiative does not enter implementation itself. After decomposition,
+close it through the existing completion writer using its current governed plan
+coverage, at least two distinct mapped children and actual parent outcome
+reconciliation. Every explicitly mapped child must be done, including a mapped
+sequencing child. A parent PR merge or deployment does not replace child delivery,
+independent plan review or hypothesis outcomes. Coverage and delivery refusals
+name the evidence to repair; reuse those records rather than creating duplicate
+children or changing the initiative's shape.
+
+Break-fix post-implementation review uses the authored Workroom head and a
+provider-verified artifact. A workflow or code repair with one implementation
+file can be reviewed without a changed design document; accompanying tests
+and explanatory docs do not change that identity. A repair with several
+implementation files is reviewed whole (BI-46E344FE): the review binds a
+`repo-commit-range` artifact, the compared range plus a digest of every path's
+post-change blob. The reviewer reads it with `read_source_at_version` at the
+virtual path `repo-commit-range/<base>..<head>`, bound to that digest, and the
+read fails closed if the digest differs. Use the returned reviewer packet
+unchanged; deployment evidence and an independent receipt are still required.
+This does not relax design-approval gates: only a post-implementation review
+binds a commit range.
+
+After merge the delivering room is usually archived or idle, so no live room
+exists (BI-CE661173). The review then reads the merged squash commit on
+`origin/main`, comparing its parent with the commit. The commit is the one
+that delivered the item under the PR-submit rule, or the squash commit of the
+PR the room recorded. It must be committed after the latest reopen and must not
+be reverted. The item's newest delivery room is the request's anchor: its
+recorded branch and head are what admission, the PIR evidence context and the
+receipt writer match. A room whose recorded base equals its head reads the same
+merged commit. A room that never recorded its base or head is anchored to the
+newest merged commit, and the writer accepts that missing head only with its
+own trunk proof. No live room is reopened.
+
+An item delivered by several standing squash commits is reviewed as their
+union, oldest first, in one `repo-commit-range` artifact with one range per
+commit (at most eight). The writer accepts the receipt only if the trunk still
+names exactly those commits, in that order, and the provider's change still
+matches the digest. Every commit's sign-off must name the same author.
+
+Every delivery actor is excluded from reviewing a merged repair, not just the
+caller. That set is everyone who created, held or worked in any of the item's
+rooms, plus its claimant (`delivery-actors.ts`). The receipt writer re-reads the
+trunk before it publishes. If the reviewed commit is no longer the item's
+merged delivery from that room, or the reviewer is a delivery actor, the write
+is refused.
+
+Escalations: `merged-delivery-not-found` means no standing delivering commit
+exists. `merged-delivery-ambiguous` means more than eight commits delivered the
+item.
+`delivery-actors-unbounded` means the item has too many rooms to bound the
+actor set.
+
+Every two minutes the platform reviewer dispatch
+([`server-reviewer-dispatch.ts`](../../apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts))
+checks awaiting-acceptance break-fix items whose rooms are all retired. These
+items are sampled on their own budget (five per tick), apart from the general
+pool, because most items in that pool owe nothing. It sends the issued packet on
+the authoring assistant's own live connection, so no person is involved. A room
+a person opened with no assistant (BI-D3BAF945) is carried on any live
+connection of that person. Review admission then accepts the retired anchor on
+the person's room admission, because the carrying assistant was never in the
+room. A delivery room retired by its status (`archived` or `complete`) is a
+retired anchor even when its `archivedAt` is still empty, as every merged
+break-fix room on the live install was on 2026-10-28 (BI-AA47C672).
+
+When neither the author nor the person has a live connection, the platform
+hands the review to its own reviewer instead of waiting (BI-AA47C672,
+[`platform-review-room.ts`](../../apps/web/lib/backlog/initiative-readiness/platform-review-room.ts)).
+It opens one review room per item, `WC-PIR-<id>`, keyed
+`platform-review:<itemId>`. The room names the item only through its outcome
+anchor, so it is never a delivery room. It declares the
+`platform-post-implementation-review` shape and binds its one stage to the
+packet's reviewer. The person accountable for the platform's automatic work
+owns the room. The platform appends the packet under its own issuer id, and the
+Workroom drive dispatches the reviewer through the ordinary scheduled-task path.
+The reviewer must run in-platform, hold `initiative_design_review` and not be a
+delivery actor. Otherwise nothing is opened and the anchor room records
+`no-author-connection` with a detail naming the coworker or grant that is
+missing. The writer admits the room's run only when every link is a fact the
+platform wrote and readiness, re-derived now for the same issuer identity,
+still issues that exact packet. The run writes under the platform's own
+authority, recorded with token scope `organization`. The receipt repository's
+trunk and delivery-actor checks apply unchanged. The anchor room records the
+hand-off once as `platform-reviewer`, with a growing back-off, until the review
+lands. When the author-assistant carrier is missing or credentials-kind, the
+same steward takes design-spec, spec-approval, and architecture-review packets
+in per-gate rooms (`WC-DSR-*`, `WC-SAR-*`, `WC-ARR-*`; see
+[design-stage platform reviewer](../superpowers/specs/2026-11-06-design-stage-platform-reviewer-design.md),
+BI-9CCB88C4). The dispatcher passes the same issuer identity PIR already uses
+(`liveReviewerDispatch` and `dispatchOwedIndependentReviews` when the candidate
+target is `design`; BI-CAB5D233); without it `routeToPlatformReviewer` is
+not-applicable and the steward never opens. Token-bound `request_coworker` from
+a credentials client stays refused.
+
+Build Studio plan rooms (BI-27519C1A): review admission asks the Build Studio
+issuer the dispatcher used whether a review is owed, never the item projection.
+A build whose plan raised its shape owes a plan review the projection does not
+see, and admission had refused every such dispatch as "no pending review".
+
+Refusal back-off across a deploy (BI-D1DAB5AF): a standing refusal
+(`refused` or `no-author-connection`) last attempted before the current portal
+process started is retried on the first tick after the start, whatever its
+`nextAttemptAt`. The code that refused it may have been fixed by the deploy. If
+it is refused again for the same reason, the same row keeps counting attempts
+and its back-off resumes. A refusal recorded by the running process keeps its
+back-off.
+
+The readiness **targets** are ordered and cumulative — each includes every prior target's requirements ([`types.ts`](../../apps/web/lib/backlog/initiative-readiness/types.ts), the cumulative call chain in `evaluate.ts`):
+
+```
+design  →  plan  →  implementation  →  completion
+```
+
+The backlog-item **status** vocabulary (`triaging / open / in-progress / done / deferred / retired`) is a *separate* axis. Status is where the item sits; the readiness targets gate the transitions between phases of real work. An item must be **triaged** (out of `triaging`) before any readiness target is reachable.
+
+**Depth is set by the profile** (`doc-only ⊂ fix ⊂ feature ⊂ cross-domain ⊂ archetype`). A `doc-only` change skips the reviewer gates a `feature` must pass; strongest applicable profile wins.
+
+## 2. The gates — role × actor × evidence (feature profile)
+
+Each row: the gate, the **accountable role**, **who actually acts** (Author = the coworker doing the work; Independent = a reviewer coworker that is *not* the author; Human/System = authority), and the **tool** that records the receipt. "Independent" gates carry `independent: true` on their writer lane and are **refused** if the reviewer principal equals the author principal (`receipt-schema.ts` — *no self-approval override exists*).
+
+| Target | Gate | Accountable role | Actor | Recorded by |
+|---|---|---|---|---|
+| design | CLASSIFICATION | product-owner | Author | `record_initiative_evidence(gate:"classification")` |
+| design | AUTHORIZATION | platform-governance | System/Human authority | authority intersection (token ∩ grant ∩ capability) |
+| plan | RESEARCH | design-author | Author | `record_initiative_evidence(gate:"research")` |
+| plan | CANONICAL_DESIGN | design-checklist-reviewer | **Independent** | `record_initiative_design_review(gate:"design-spec")` |
+| plan | **SPEC_APPROVAL** | design-checklist-reviewer | **Independent** | `record_initiative_design_review(gate:"spec-approval")` — **mints the scope baseline** |
+| plan | REVIEW (architecture) | architecture-reviewer | **Independent** | `record_initiative_architecture_review` |
+| plan | OBJECTIVE_BASELINE | design-checklist-reviewer | **Independent** | minted *by* the spec-approval receipt |
+| plan | ARTIFACT_AUTHOR | artifact-resolver | Author (git identity) | DCO-signed commit (author principal == workroom principal), **pushed**, then `adopt_worktree` re-sync |
+| implementation | PLAN | implementation-planner | Author | `record_plan_backlog_coverage` |
+| implementation | DEPENDENCY_DISPOSITION | portfolio-management | Author | `record_initiative_evidence(gate:"dependency-disposition")` |
+| implementation | CAPSULE_IDENTITY | delivery-coordinator | Author | `adopt_worktree(headBranch, headSha)` |
+| implementation | PLAN_REVIEW | plan-reviewer | **Independent** | `record_initiative_design_review(gate:"plan-review")` |
+| implementation | PLAN_COVERAGE + TRACEABILITY | portfolio-management | Author | `record_plan_backlog_coverage` (binds to the baseline) |
+| completion | DELIVERY_EVIDENCE | delivery-coordinator | Author | `record_execution_evidence`, cited in `completionEvidence.evidenceActivityIds` |
+| completion | ACCEPTANCE_EVIDENCE | acceptance-reviewer | **Independent** | acceptance evidence vs the objective baseline |
+| completion | OBJECTIVE_RECONCILIATION | acceptance-reviewer | **Independent** | `record_product_outcome_observation` |
+
+Cross-domain / archetype profiles add specialist review gates (data / ux / security / compliance / domain / archetype), each an independent lane.
+
+**Evidence must be a gate receipt.** A plain timeline "evidence" activity is deliberately *not* accepted (the load-bearing distinction reported as `gate-receipt` vs `recorded-unread` vs `none`). Recording `record_execution_evidence` alone does **not** satisfy a review gate.
+
+## 3. How a gate is handed to the right coworker — the recovery packet
+
+You do **not** choose the reviewer or hand-build the review call. The server issues a **recovery packet** naming, per unmet gate, the exact coworker and a ready-to-send handoff. The flow:
+
+**Native source identity.** Supplied `baseSha` and `headSha` may be full
+40-character commit IDs or a prefix of at least 7 hex characters. The server
+expands a prefix that the repository provider resolves to exactly one commit
+(BI-DF34D948). It refuses an ambiguous or unknown prefix, names the commits this
+installation already recorded with that prefix, and returns the caller's own
+call corrected. An unpushed head cannot be expanded server-side, so pass the full
+`git rev-parse HEAD`. Malformed values are refused before claim or adoption
+writes. Source-less design and planning remain valid. Implementation requires
+both usable persisted values even when the optional claim inputs are omitted.
+Exact claim readback returns `baseSha`, `headSha` and `sourceIdentityComplete`.
+That flag describes recorded SHA syntax, not observed Git state, approval or
+publication authority. The existing local Git capture observes the actual
+repository, branch, worktree, merge base and head on the caller's host.
+
+**Current and historical review readback.** `get_workroom` and room liveness use
+the same bounded recovery projection. A complete history containing only older
+source is not a failed read, and its outcomes remain explicitly historical.
+Readback includes at most five historical executions and marks truncation;
+their requester-bound `tasks/result` actions retain the existing access check.
+No historical pass, task completion or source identity flag approves the current
+source. Missing current review, incomplete observation and conflicting identity
+remain distinct unknown states. Their recovery names the existing room holder
+principal when recorded and the delivery-coordinator role, then directs callers
+to `get_backlog_item(itemId, recoveryGate: "post-implementation-review")` for the
+current issuer's action. An unlinked room must first be linked by its coordinator.
+Repeating the identical room read does not repair that condition; historical
+unknown provider work must not be replayed or assigned a new request nonce.
+
+An unusable legacy value is named in `identityRepair.missingFields` and excluded
+from the repair packet; valid recorded values are retained. Capture the actual
+missing values locally, then use the issued `adopt_worktree` packet or retry the
+claim with the full values. No reviewer artifact lookup or dispatch uses an
+incomplete source identity. Never invent a base or substitute the running
+install's commit for unpublished work. Other readiness and authority gates
+still apply.
+
+**Repository artifacts from a path.** On an unbound `record_initiative_*` call,
+`artifactRef` may be just `{path, headSha}` for a pushed file. The server fills in
+`kind`, the canonical repository and the full commit. It also derives
+`providerBlobId` from the provider, the equivalent of `git rev-parse <head>:<path>`.
+A supplied `providerBlobId` is still verified. Every `malformed-receipt` refusal
+from these writers ends with `Retry: <tool>({...})`, the caller's own call corrected.
+
+1. **Bind a Workroom to the item, with a real base *and* head.** `adopt_worktree(title, objective, repositoryFullName, headBranch, headSha, baseBranch, baseSha, worktreePath, backlogItemId)`. Without **both** an immutable `baseSha` and `headSha`, no reviewer binding can be issued (`no-canonical-artifact`) — the review has nothing immutable to pin. The artifact commit must be **resolvable on the provider** (a squash-merged, deleted branch will not resolve — re-publish it).
+2. **Attempt the governed claim.** `claim_backlog_item_for_work(itemId, worktreePath, branchName, provider, sessionRef)`. When the item is not ready it *refuses* and returns `data.recovery`:
+   - `reviewerRoutes[]` — per gate: `accountableRole`, `gate`, `targetAgentId`, `independent`, and a ready `requestCoworker` packet with `requiredToolNames` + `initiativeReviewBinding` (the writer tool + the immutable `artifactRef` — repo, commitSha, path, providerBlobId).
+   - `escalations[]` — `no-eligible-reviewer` (activate a production reviewer holding the grant) / `no-canonical-artifact` (fix the base/head per step 1) / `dispatch-context-required` / `research-evidence-required` (a **small or medium** shape's research is the author's reproduction plus failing-to-passing proof, recorded with `record_initiative_evidence(gate:"research")`; no spec is owed and none is demanded — BI-3B323B6A. For a **small fix** the reproduction itself satisfies research at claim: `record_execution_evidence` with kind `source_verified` (the defect on a named ref, with its URL) and kind `test_pass` (the failing-to-passing test, not superseded by a later `test_fail`), which an external session can reach without `initiative_evidence_write` — BI-6EB2DBBB. The claim loads those `evidence` rows alongside its receipts, so recording them and claiming again is admitted — BI-5C992261. Build Studio's entry gate (`build-entry-gate.ts`) reads the same activity kinds, so a small fix advanced out of ideate without a design review is admitted to plan on the same reproduction — BI-7027C26E. Medium shapes and net-new work still need the recorded research receipt. That receipt cites a commit on a live workroom, and a refused implementation claim binds none, so the order is: claim with `workIntent: "design"` (it does not owe research and binds the room), record the receipt, then claim with `workIntent: "implementation"` again. Both the claim's research escalation and the no-workroom artifact refusal name this step — BI-77C600B2. A development connection includes `initiative_evidence_write` and no other initiative grant (BI-B9B196FD). A write connection already in use whose stored grants are an earlier prefix of that template gains the grants added later on its next use, without a new secret (BI-E9F1C116). A read connection, an admin connection, an OAuth connection, and a custom set with a hole keep the grants they already have).
+   - `unroutable[]` — gates whose role owns no writer lane (e.g. `ARTIFACT_AUTHOR` — you push a signed commit; nobody records it for you).
+
+   The refusal also carries `data.governingPrinciples`: for each unmet or blocking code whose rule a principle page states, the page's slug (`{ "CAPSULE_IDENTITY_MISMATCH": "claim-a-workroom-before-you-work" }`). The message ends with the same list as a `Governing rules:` line. Look a slug up with `wiki_query` before inferring the rule from code. The completion refusal (`update_backlog_item_status` to `done`) carries the same field, and `get_backlog_item` / `list_backlog_items` return `readiness.governingPrinciples` keyed by target. A code with no page cites nothing; the table and its unwritten-rule inventory live in [`apps/web/lib/kernel/governing-principles.ts`](../../apps/web/lib/kernel/governing-principles.ts) (BI-DEDAC950).
+3. **Dispatch each packet** with `request_coworker` (or `summon_coworker`), passing the `targetAgent`, `objective`, `requestKey`, **and** the packet's `requiredToolNames` + `initiativeReviewBinding` verbatim. The two travel together or not at all; the adapter refuses a binding without its required tools, and refuses any tool outside the bound writer + `read_source_at_version`. The dispatched coworker reads the pinned artifact and records the gate receipt **only if the gate passes** — it cannot invent or reshape the identity.
+4. **Re-attempt the claim / transition.** Passing receipts satisfy their gates; `spec-approval` mints the baseline, which unblocks `record_plan_backlog_coverage`; the item advances.
+
+**Claim identity, when a room was owned by a prior session.** The claim matches the Workroom's recorded executor identity and lease-holder. A room left by a dead session (idle-stale, no live signal) can refuse a fresh claim with `capsule_identity_mismatch` even after `adopt_worktree`, and `force` does **not** override an identity mismatch (only live-ownership conflict). Take the room over with `reassign_workroom_executor(capsuleId, toExecutorKind, toExecutorRef, reason)` — it transfers the lease to the caller and sets the executor — then re-claim. Renew a still-owned but expiring lease with `heartbeat_workroom`; do not thrash heartbeat on an already-expired lease.
+
+## 4. The reviewer roster (who holds which grant)
+
+**Exhausted independent review.** If an exact design-spec, spec-approval,
+architecture-review or plan-review task reports
+`terminal-writer-retry-exhausted`, refresh the governed claim instead of
+replaying that task. For the same user and current OAuth task family, the
+server excludes only that recorded exhausted packet and issues the next
+currently eligible independent reviewer with both writer and reader grants.
+The artifact, baseline and Workroom binding stay fixed; the replacement key
+includes the new target independently of roster order. An exact owned legacy
+task retains its recorded key and retry budget, including while active.
+Submit the newly issued packet unchanged. Issuance
+and authorization use the same exact task-history check. Writer refusals,
+capacity or approval waits, active tasks and uncertain provider outcomes do
+not authorize replacement. If all eligible reviewers are exhausted, the
+server returns a bounded escalation; attempts, grants and receipts are never
+reset or synthesized. This recovery applies to the external OAuth review lanes.
+
+Live assignment in [`packages/db/data/agent_registry.json`](../../packages/db/data/agent_registry.json); the recovery packet resolves the current holder, so prefer the packet over this table.
+
+| Grant | Coworker | Gates it records |
+|---|---|---|
+| `initiative_design_review` | **AGT-WS-REVIEW** (Change Reviewer) | design-spec, spec-approval, plan-review |
+| `initiative_architecture_review` | **AGT-WS-EA** (ea-architect) | architecture-review |
+| `initiative_data_review` | AGT-902 (data-governance) | data-review |
+| `initiative_ux_review` | AGT-903 (ux-accessibility) | ux-review |
+| `initiative_security_review` | AGT-190 (security-auditor) | security-review |
+| `initiative_compliance_review` | AGT-905 (licensing-specialist) | compliance-review |
+| `initiative_archetype_review` | AGT-WS-INVENTORY (inventory-specialist) | archetype-review |
+| `initiative_evidence_write` | **AGT-WS-BUILD** (Build Lead), AGT-WS-PORTFOLIO | research, dependency-disposition, plan-coverage, delivery (author-side) |
+
+**Independence is by principal.** A reviewer coworker's receipt is attributed to that coworker's principal; on a single-human-principal install the reviewer coworker is the *only* independent reviewer available, which is *why* the author (human or external agent) cannot self-approve and must route (`reviewer-identity.ts`). If no production coworker holds the grant, the packet escalates `no-eligible-reviewer` — activate one; do not proxy the receipt.
+
+**One eligibility rule picks every lane owner.** `loadEligibleGrantHolders` (same file) returns the active, production, unarchived holders of a lane's grants, ordered by agent id. The reviewer routes use it, and so does the daily acceptance sweep for a **small or break-fix** item's delivery-coordinator evidence (`ACCEPTANCE_EVIDENCE_REQUIRED`, `DELIVERY_EVIDENCE_REQUIRED`). That lane has no reviewer packet: the sweep names the first in-platform holder of a grant that authorizes `record_execution_evidence` who did not deliver the item (the whole delivery-actor set is excluded: every agent that created, held or worked any of the item's rooms, its claimant, and the item's own agent — `delivery-actors.ts`, BI-099A0BA3), and its acceptance-verification room asks that coworker to record the runtime check (`apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts`, BI-7C7E8CAC). The terminal refusal still gives the author the small-shape hint.
+
+## 5. Drive-to-completion checklist
+
+For a `feature` initiative:
+
+1. **Triage** the item (`triage_backlog_item`) — leaves `triaging`.
+2. **Author the artifacts**: canonical design spec (with the Research & Benchmarking section) + phased plan under `docs/superpowers/`, DCO-signed and **pushed** to a resolvable branch.
+3. **Bind the Workroom** to the item with real `baseSha` + `headSha` pointing at the pushed artifact (`adopt_worktree`).
+4. **Get the recovery packet** (`claim_backlog_item_for_work`) → dispatch: research (AGT-WS-BUILD), design-spec + spec-approval (AGT-WS-REVIEW), architecture-review (AGT-WS-EA).
+5. **Baseline minted** by spec-approval → **record plan-coverage** (`record_plan_backlog_coverage`, binds to the baseline) → dispatch plan-review (AGT-WS-REVIEW).
+6. **Implement**; land the change via the normal PR/merge-queue path (build gate is provenance-blind — governance approves the *evidence*).
+7. **Completion**: `record_execution_evidence` (delivery) → dispatch acceptance-review + `record_product_outcome_observation` (AGT-WS acceptance-reviewer) → close.
+
+At every step, the **recovery packet is the authority on the next action** — read its `reviewerRoutes` / `escalations` / `unroutable`, act on them, and re-attempt. Do not guess the reviewer, and do not treat a reviewer requirement as a dead-end: it is a routing step.
+
+## 6. Known limitation — reviewer dispatch can complete without writing a receipt
+
+Routing a review correctly is necessary but not currently *sufficient*. A dispatched external reviewer coworker can finish a bound task **without executing its governed writer** — the coworker reads the pinned artifact, returns evidence-confirming prose, and completes with `executedToolCount: 0`, so no `record_initiative_*` receipt is ever written and the gate stays unmet. When this happens the initiative correctly refuses to advance (it has no receipt), but it also cannot be advanced by re-dispatching — the work strands at the reviewer step even though the operator routed it exactly right.
+
+This is a tracked platform defect, **BI-ECFE0AC2** ("External initiative reviewers complete with zero tool executions, blocking governed terminal transitions"), under epic EP-E1F1DB58, with two observed contributing causes: the reviewer's terminal-writer context not hydrating its bound tools, and a stale Codex model catalog forcing a fallback that omits the writer. Until it is fixed, a `feature` initiative on a single-principal install can be fully authored, correctly bound, and correctly routed, yet still not reach `completion` — and that is the defect's fault, not a step the operator or author missed. Do not proxy the receipt from the author principal to "unblock" it: that would defeat the independence rule the gate exists to enforce (§2). Read the live BI for current status before assuming the strand is unfixed.
+
+**A CLI reviewer that did write its receipt is no longer reported as missing it (BI-2E479619).** On a subscription install the reviewer usually runs on the Claude Code CLI adapter, which mounts the platform MCP server and runs `read_source_at_version` and the `record_initiative_*` writer itself. Those calls are recorded as `ToolExecution` rows with `executionMode: internal-mcp-session` and the TaskRun id, but the adapter does not return them to the loop, so runs that had minted a verified receipt were parked `input-required` with `noncompliance: prose-without-required-writer` and `executedToolCount: 0`. Now the loop and the executor fold this attempt's native rows into the run's tool records (`apps/web/lib/tak/native-mcp-executions.ts`), and the executor consults the TaskRun's persisted receipt (`loadTaskInitiativeReviewOutcome`) before it classifies a missing writer. A verified receipt completes the run with its `reviewOutcome`. A writer that ran and refused the packet is reported as a writer refusal with the writer's error text, not as prose noncompliance. Runs already parked that way are settled to their recorded receipt by the background dispatch reconciler (`healParkedReviewFromReceipt`), never re-dispatched. Native reader rows persist no result (`metrics_only`), so a native-reads-only turn still gets the ordinary "read the bound evidence" nudge: those rows count as tool calls but neither prove the traversal nor spend the read budget.
+
+## 7. Closing a small or medium item: the baseline is the body (BI-0F8E39D5)
+
+For ordinary small or medium work without prior approved scope, the objective
+baseline is the acceptance criteria in its body. Do not create a spec solely
+for that gate. A medium item retaining an independently approved repository
+baseline keeps that approval's amendment writer: when the current design is
+stale, use the server-issued independent spec-approval packet bound to the
+existing baseline and current immutable artifact. Author body criteria cannot
+overwrite it. Inherited scope remains owned by its parent; this route never
+lets a child amend that parent. BI-31159978 repairs this ownership distinction.
+
+For body-owned scope, the recovery packet distinguishes two refusals (DI-FDAB20135537):
+
+- **`acceptance-criteria-missing`: the body has no criteria the parser can read.** Put them under a heading that contains "Acceptance" (for example `## Acceptance criteria`), one criterion per bullet, or use bullets that start with `AC-<id>:`. A bold line is not a heading. Update the body with `update_backlog_item` and retry. BI-FA769D87 was refused this way and closed minutes after its criteria moved under a heading.
+- **`body-baseline-unpersisted`: the criteria are readable but no version is retained.** Follow the authorized body-baseline retention procedure above: a valid completion transition can retain the criteria and source identity, then fresh passing evidence and the exact independent acceptance packet are required. It never replaces an approved or inherited baseline or creates a passing receipt. Do not claim completion merely to obtain a baseline; the completion manifest must describe actual delivered work.
+
+## Approval outcome readback
+
+When a governed call returns an approval request, retain its `envelopeId` and
+`inboxHref`. After the human decides, use `get_my_approval_status(envelopeId)` to
+read the durable result before considering a retry. The tool requires the same
+authenticated human and acting coworker; another user's or coworker's request
+returns the same unavailable response as an unknown ID. It reveals no arguments
+or raw tool results and confers no workroom admission or reviewer authority.
+
+`get_my_approval_status(mode: "pending")` lists requests from the acting
+coworker only. Its result carries `scope.coversOwnerInbox: false` and
+`ownerInboxTotal: null`. Never report its count, including zero, as the owner's
+Inbox total; other coworkers' requests are excluded (BI-83638ACC).
+
+An approved request without execution evidence remains unknown. Confirm the
+target operation's actual state before retrying; HTTP success from the approval
+route alone is not delivery or acceptance evidence. The Inbox projects the same
+safe outcome and recovery guidance, including execution refusals and expiry.
+
+## Anti-patterns (observed)
+
+- **Driving the workroom from gate-refusal errors instead of the packet.** Get the packet; it names every actor and hands you the call.
+- **Self-approving, or declaring "the author can't do this, so it can't be done."** The author routes to the reviewer coworker; that is the design, not a blocker.
+- **Guessing the reviewer coworker.** The packet resolves the current grant-holder; a guessed target (e.g. an architecture agent for a design-spec gate) will not hold the grant.
+- **Binding a Workroom with a head but no base, or to a deleted/unresolvable commit.** No immutable artifact → no reviewer binding (`no-canonical-artifact`). Push the artifact; anchor base **and** head.
+- **Proxying a stranded reviewer receipt from the author principal.** If a review strands (§6), that is a defect to report, not a licence to self-approve.
+
+
+### Original review recovery across connection changes
+
+For a paused independent review whose interactive OAuth connection changed,
+read `get_backlog_item` with its exact `itemId` and `recoveryGate`. Submit the
+returned `request_coworker` packet unchanged, including its `reviewRecovery`
+target. Current paired Workroom access, human/coworker permissions and immutable
+source must still authorize that review. Recovery retains the original TaskRun,
+reader evidence and retry budget; it does not create a new assessment or transfer
+another person's work. A stale or ambiguous target requires a fresh bounded read
+and actual execution reconciliation. Never remove the locator to obtain a new
+connection's task or treat uncertain provider effects as settled.
+
+The [MCP authorization procedure](mcp-tool-authorization-runbook.md#recovering-an-original-initiative-review-after-a-connection-change)
+describes the current-authority checks, generation reservation and approval
+continuation. Completion still requires the original task's genuine governed
+writer receipt and the readiness finding it actually records.
+
+### Bounded qualification research admission
+
+`RESEARCH_REQUIRED` can expose a `qualificationAdmission` recovery route when the refused Workroom has one exact immutable qualification protocol. The route carries an opaque, signed token for `claim_workroom_scope`; replaying it admits one bounded test-only experiment and does not satisfy research or authorize ordinary implementation.
+
+The protocol is deliberately two-phase. **Prepare** is pinned to the item, Workroom, repository, base/head, protocol path/commit/blob, installation, accountable principal, authority decision, shape/stage, production blob set, exact test/helper paths, allowed tools, expiry, duration, and one start. It may produce only a test-only candidate and cannot run tests. A separate independent semantic review must accept that exact candidate head, diff digest, test blobs, and unchanged production blobs before terminal recovery can issue **Verify**. Verify receives a fresh signed one-start binding for the reviewed candidate; it may run the exact qualification test, cannot edit, and rejects `auto_fix`.
+
+The scheduled task, stage mandate, Workroom state, tool effects, and recorded evidence all recheck the same binding digest. A token cannot be rearmed after start or settlement, and pages from another identity, path, phase, attempt, or outcome never combine into evidence. Only complete positive terminal Verify evidence can be selected for the governed research writer. Negative, inconclusive, blocked, stale, conflicting, or failed-only evidence remains audit history and readiness stays closed. The design author must still persist the normal `record_initiative_evidence(gate:"research")` receipt; qualification evidence never writes that receipt directly.
+
+Verify can settle only through the machine-authenticated native Edge result
+path. That path validates the immutable action, phase and qualification binding
+before it records the terminal result; it remains a closed capability and is
+not a general remote shell. Historical `workroom-host` activity and lease rows
+remain audit history only. A lease proves admission and process ownership, not
+that the child executed or produced the claimed output, so caller-authored host
+rows never contribute qualification evidence even when every stored field
+matches. Sandbox-labelled, caller-asserted, foreign, expired or duplicate
+receipts likewise cannot support research. Qualification evidence is still
+only an input to the independently governed research writer and never counts as
+a research PASS by itself.
+
+The source contract is [qualification research admission](../../apps/web/lib/backlog/initiative-readiness/qualification-research-admission.ts); routing and progression live in [terminal recovery](../../apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts). The design is [qualification research admission](../superpowers/specs/2026-10-28-qualification-research-admission-design.md).
+
+### A present assessment authorized by an approved policy
+
+Original recovery cannot restart uncertain or exhausted work. A separately
+approved retained policy may explicitly authorize a present assessment of its
+exact unchanged requirements. Supply its `reassessmentAuthorizationItemId` on
+the bounded `get_backlog_item` read alongside `itemId` and `recoveryGate`, then
+use the returned complete `request_coworker` packet. The current human,
+connection, author, independent reviewer and both Workrooms must still authorize
+it. A policy identifier never supplies those permissions.
+
+Every accepted assessment consumes that policy's allowance in every state.
+Retrying a request returns the existing assessment without another execution
+window. An initial qualification failure also consumes its accepted allocation;
+do not issue another key or connection family to replace it. The original
+unknown result remains unchanged. Only genuine governed receipts satisfy the
+requirements, and the parent's next normal admission check must still pass.
+See the [present reassessment authorization procedure](mcp-tool-authorization-runbook.md#explicitly-authorized-present-reassessments)
+for capture, budget, compatibility and restore restrictions.
+
+**Workroom review observations.**
+
+A Workroom includes both native semantic reviews and ordinary initiative reviews
+bound to its existing `initiativeReviewBinding.workroomRef`. The bounded reader
+qualifies the room, repository, branch, subject, source SHA, original requester
+and request digest through the canonical binding parser and readiness lane
+registry. A reviewed plan's immutable artifact version may precede the room's
+source head. Those are separate identities.
+
+Each ordinary gate and original request remains visible. Competing originals,
+unknown identity, unresolved historical executions and incomplete observations
+hold readiness; a newer result cannot silently erase them. The existing review
+disclosure shows the gate, artifact version and original request. Its result
+reference uses `tasks/result` with the exact request digest. Ordinary reviews
+never inherit the semantic-review retry action. The canonical wait projector
+supplies the recorded blocker reason, while `hasExecutionUncertainty` supplies
+uncertainty. Neither task completion nor generic resume hints prove a verdict.
+
+Room admission permits this bounded metadata observation. Full original results
+continue to require the original requester and current subject, room and content
+access. This reader does not grant access, dispatch work, publish a review receipt
+or reconcile unknown remote effects.
+
+Candidate discovery reads at most 21 rows per room and review family, retains 20,
+and explicitly identifies incomplete rooms. Pages are capped at 100 rooms;
+node checkpoints and payload subobjects are independently bounded. One busy room
+cannot consume another's allowance. Two partial ordered expression indexes serve
+the existing immutable request-binding predicates. They do not introduce a new
+metadata writer, relationship or result ledger; canonical identity still comes
+from the existing request and Workroom models. Broader migration of historic
+metadata relationships to typed fields is outside this repair.
+
+The index-only migration changes no row values and needs no data backfill. A
+rollback can leave the indexes present while restoring the previous reader;
+removing them later only affects query cost. Actual-query PostgreSQL tests apply
+the exact index DDL in an isolated schema and inspect the plan with unrelated
+history present. Source tests are not evidence of deployed behavior.
+
+This continuation belongs to BI-CAP-21C511CA / WC-062B8D41, extending the July 27
+shared change reviewer control design. The refactoring separates candidate
+selection, identity qualification and common execution presentation rather than
+creating parallel orchestration. It accounts for at least 20% of this repair.
+UX decision DI-0FFB15FBEE77 selects the existing disclosure over a new status page.
+The original identity repair BI-CAP-437F7745, role-and-room BI-56E9CEC2, original
+settlement BI-7906C73E and release acceptance BI-E3B918C2 retain their own scope.

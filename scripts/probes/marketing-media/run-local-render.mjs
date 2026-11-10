@@ -106,7 +106,7 @@ const receipt = {
   kind: "marketing-media-local-render",
   backlogItemId: "BI-0C891AC7",
   toolEvaluationId: "cmsb7dhyr06z601tcngsqzwyg",
-  candidate: { tool: "HyperFrames", version: "0.7.87" },
+  candidate: { tool: "HyperFrames", version: compactVersion(versions.hyperframes) },
   composition: { durationSeconds: 50, width: 1920, height: 1080, sha256: compositionHash },
   toolchain: {
     hyperframes: {

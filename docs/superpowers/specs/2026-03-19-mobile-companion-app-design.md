@@ -200,7 +200,7 @@ HTTP status codes: 400 (validation), 401 (unauthenticated), 403 (insufficient ca
 **Mobile auth flow:**
 
 1. `POST /api/v1/auth/login` with email + password → returns `{ accessToken, refreshToken, expiresIn }`
-2. Access token: JWT, 15-minute TTL, signed with the same `AUTH_SECRET` NextAuth uses
+2. Access token: JWT, 15-minute TTL, signed with the same `AUTH_SECRET` NextAuth uses. Because other portal tokens share that secret (MCP session tokens, automation sign-in links, social-login temp tokens), the access token carries its own issuer, audience and type, and the verifier requires them (BI-7B4B5F5D)
 3. Refresh token: stored as an `ApiToken` record in the database (reuses existing model), 30-day TTL, 64 bytes / 128-char hex, rotated on each refresh
 4. `POST /api/v1/auth/refresh` with refresh token → issues new access + refresh pair, invalidates old refresh token
 5. `POST /api/v1/auth/logout` invalidates the refresh token (deletes `ApiToken` record)
@@ -212,13 +212,16 @@ HTTP status codes: 400 (validation), 401 (unauthenticated), 403 (insufficient ca
   email: string,         // User.email
   platformRole: string,  // PlatformRole.roleId (e.g., "HR-300")
   isSuperuser: boolean,
+  iss: "dpf-portal",     // MOBILE_ACCESS_ISSUER (lib/api/jwt.ts)
+  aud: "dpf-mobile-api", // MOBILE_ACCESS_AUDIENCE (lib/api/jwt.ts)
   iat: number,
   exp: number
 }
+// protected header: { alg: "HS256", typ: "at+jwt" }  (RFC 9068)
 ```
 
 **Dual auth middleware:** The `/api/v1/*` middleware checks in order:
-1. `Authorization: Bearer <token>` header → validate JWT signature + expiry
+1. `Authorization: Bearer <token>` header → validate JWT signature, expiry, issuer, audience, type (HS256 only; `sub`, `iat`, `exp` required). A token minted for another surface, or an access token minted before BI-7B4B5F5D, gets a 401 before any user lookup; the app answers that 401 with its refresh token and retries
 2. NextAuth session cookie → call `auth()` as today
 3. Neither present → 401
 

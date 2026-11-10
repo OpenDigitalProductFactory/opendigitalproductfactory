@@ -6,7 +6,7 @@
 
 import Link from "next/link";
 
-import { intentStyle, type Intent } from "./statusColors";
+import { intentStyle, type Intent } from "@/lib/ui-model/statusColors";
 
 export interface StatDelta {
   /** Text shown in the delta chip, e.g. "+12%" or "3 overdue". */

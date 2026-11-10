@@ -28,6 +28,21 @@ import { projectInstallState } from "./installer/migrate-install-state.mjs";
 
 const HERE = new URL("./", import.meta.url);
 
+/** The prebuild caller mounts state, but older launchers omit the separate secret mount. */
+export async function readMigrationSecret({ env = process.env, read = readFile } = {}) {
+  if (env.DPF_RUNTIME_TRANSITION_SECRET_FILE != null) {
+    return (await read(env.DPF_RUNTIME_TRANSITION_SECRET_FILE, "utf8")).trim();
+  }
+  try {
+    return (await read("/run/secrets/dpf-runtime-transition", "utf8")).trim();
+  } catch (error) {
+    // Only an absent default mount is an N-1 launcher compatibility case.
+    // Explicit paths, permission errors and invalid signatures still fail closed.
+    if (error.code !== "ENOENT") throw error;
+    return (await read(`${env.DPF_PROMOTER_STATE_DIR ?? "/dpf-state"}/runtime-transition.secret`, "utf8")).trim();
+  }
+}
+
 /**
  * Build the envelope for a caller that never sent one, by recomputing the same
  * projection readiness produces from the install-state the promoter mounts.
@@ -61,7 +76,7 @@ export async function resolveMigrationEnvelope({ env = process.env, now = Date.n
   if (Boolean(rawEnvelope) !== Boolean(rawSignature)) throw new Error("install_state_migration_handoff_incomplete");
   const carried = Boolean(rawEnvelope);
 
-  const secret = (await readFile(env.DPF_RUNTIME_TRANSITION_SECRET_FILE ?? "/run/secrets/dpf-runtime-transition", "utf8")).trim();
+  const secret = await readMigrationSecret({ env });
   const stateBytes = await readFile(`${env.DPF_PROMOTER_STATE_DIR ?? "/dpf-state"}/install-state.json`);
   const sourceHash = createHash("sha256").update(stateBytes).digest("hex");
 

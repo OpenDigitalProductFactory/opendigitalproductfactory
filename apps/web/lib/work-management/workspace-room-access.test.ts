@@ -6,6 +6,10 @@ import {
 } from "./workspace-room-access";
 
 describe("Workspace Work Room access", () => {
+  it("distinguishes absent admission restrictions from explicit deny-all", () => {
+    expect(readWorkspaceRoomPolicy([{ workroomPolicy: { sensitivityCeiling: "internal" } }]).actionPrincipalRefs).toBeUndefined();
+    expect(readWorkspaceRoomPolicy([{ workroomPolicy: { actionPrincipalRefs: [] } }]).actionPrincipalRefs).toEqual([]);
+  });
   it("separates explicit content admission from action authority", () => {
     const item = {
       assignedToUserId: "user-2",
@@ -67,6 +71,21 @@ describe("Workspace Work Room access", () => {
         isSuperuser: false,
       },
     }).level).toBe("none");
+  });
+
+  it("parses specialist and approver roles on the policy roster", () => {
+    expect(readWorkspaceRoomPolicy([{ workroomPolicy: {
+      participants: [{
+        principalRef: "PRN-SPEC",
+        roles: ["specialist", "approver"],
+        enteredReason: "Named specialist-approver",
+      }],
+    } }]).participants).toEqual([{
+      principalRef: "PRN-SPEC",
+      roles: ["specialist", "approver"],
+      enteredReason: "Named specialist-approver",
+      currentWorkSummary: null,
+    }]);
   });
 
   it("parses explicitly named participants separately from access admission", () => {

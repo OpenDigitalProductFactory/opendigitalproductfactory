@@ -356,15 +356,48 @@ model InboundChannelMessage {
   subject            String?
   body               String
   receivedAt         DateTime     @default(now())
-  classification     String? // qualified-inquiry | support | spam | other
+  classification     String? // marketing responder: qualified-inquiry | support | spam | other
   routedEngagementId String?
   draftedReplyId     String?
   metadata           Json?
-  organization       Organization @relation(fields: [organizationId], references: [id])
 
+  // ── Mailroom (design 2026-09-09 §4.3, BI-1DDFC3D1). Nullable: marketing rows
+  // never carry these. `reasonKey` / `queueKey` are registry keys validated
+  // against the archetype's Mailroom profile; status and urgency are closed sets.
+  mailboxAccountId          String?
+  toAddress                 String?
+  mailroomStatus            MailroomItemStatus?
+  reasonKey                 String?
+  urgency                   MailroomUrgency?
+  queueKey                  String?
+  /// The business record the message concerns (e.g. an animal reference).
+  subjectRef                String?
+  triageSummary             String?
+  /// Set when triage fell back to the default reason (classifier failure or an
+  /// answer outside the profile) so an operator can see the item was guessed.
+  triageFlagged             Boolean      @default(false)
+  routedWorkItemId          String?
+  acknowledgeBy             DateTime?
+  acknowledgedAt            DateTime?
+  acknowledgedByPrincipalId String?
+  repliedAt                 DateTime?
+
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  mailboxAccount MailboxAccount? @relation(fields: [mailboxAccountId], references: [id], onDelete: SetNull)
+  routedWorkItem WorkItem?       @relation("MailroomRoutedWorkItem", fields: [routedWorkItemId], references: [itemId], onDelete: SetNull)
+  acknowledgedBy Principal?      @relation("MailroomAcknowledgedBy", fields: [acknowledgedByPrincipalId], references: [principalId], onDelete: SetNull)
+
+  // Idempotency as a database fact: a provider message id is ingested once per
+  // channel. Postgres treats NULL message ids as distinct, so rows without one
+  // (legacy marketing rows) are unaffected.
+  @@unique([channelId, externalMessageId])
   @@index([organizationId, domain, receivedAt])
   @@index([channelId, externalThreadId])
   @@index([classification])
+  @@index([mailboxAccountId, receivedAt])
+  @@index([mailroomStatus, acknowledgeBy])
+  @@index([routedWorkItemId])
+  @@index([acknowledgedByPrincipalId])
 }
 
 // Phase 4: per-channel weekly spend ceiling. The hard backstop for paid

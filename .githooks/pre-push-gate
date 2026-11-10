@@ -20,6 +20,17 @@
 #   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="why" git push
 # The skip reason is persisted into the gate state file so `pnpm pr:health`
 # can surface it as an explicit operator attestation at PR time.
+#
+# One code is evidence-gated rather than attestation-gated (BI-02E5F2A1,
+# DI-FC5699629694): `gate-infrastructure-unavailable` is accepted ONLY when
+# this hook can itself capture machine evidence that the gate's infrastructure
+# failed. It re-attempts the gate's own lease claim
+# (scripts/pre-push-gate-infrastructure-probe.mjs) and embeds the failure
+# response — HTTP 401 `unauthorized: invalid or expired token`, connection
+# refused, server error — in the record. Prose in the reason is not evidence.
+# If the claim SUCCEEDS the gate can run, so the code is refused. The record is
+# gate-UNRUN, never a pass; cloud CI stays the safety net. Per push; nothing
+# persists beyond the record.
 
 set -eu
 
@@ -69,6 +80,44 @@ branch="$(git rev-parse --abbrev-ref HEAD)"
 sha="$(git rev-parse HEAD)"
 state_file="$(git rev-parse --git-path dpf-local-ci-gate.json)"
 
+# BI-5529B5AC: gate state is written PER SLOT — slot-0 to dpf-local-ci-gate.json
+# and slot-1 to dpf-local-ci-gate-slot-1.json (scripts/lib/local-ci-slot-manifest.mjs).
+# `pregate:status` reconciles across slots; this hook used to read the slot-0
+# filename and nothing else, so a gate that ran and PASSED on slot-1 was
+# invisible here and the push was refused with gatePassed=false for a SHA that
+# had genuinely passed. Observed 2026-09-02 on this repository: slot-1 recorded
+# status=passed with an evidence id while a stale slot-0 record from an earlier
+# unadmitted attempt still said queued, and the push was refused.
+#
+# That defect activates exactly when the two-slot pool starts working, and it
+# presents as gate flakiness rather than as a slot bug, so it drives re-runs.
+# Prefer any slot record that passes for THIS branch and SHA; otherwise keep the
+# default file so every "no record" and "did not pass" message below is unchanged.
+if [ -f "scripts/lib/local-ci-gate-state.mjs" ] || [ -d "$(dirname "$state_file")" ]; then
+  passing_state_file="$(node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const [dir, branch, sha] = process.argv.slice(1);
+let entries = [];
+try { entries = fs.readdirSync(dir); } catch { process.exit(0); }
+for (const name of entries) {
+  if (!/^dpf-local-ci-gate.*\.json$/.test(name)) continue;
+  const file = path.join(dir, name);
+  let state;
+  try { state = JSON.parse(fs.readFileSync(file, "utf8")); } catch { continue; }
+  // BI-53B189C8: a DPF_ALLOW_LOCAL_CI_STUB record (testStub) built nothing.
+  if (state.branch === branch && state.sha === sha && state.gatePassed === true && state.testStub !== true) {
+    process.stdout.write(file);
+    break;
+  }
+}
+' "$(dirname "$state_file")" "$branch" "$sha" 2>/dev/null || true)"
+  if [ -n "$passing_state_file" ] && [ "$passing_state_file" != "$state_file" ]; then
+    echo "[pre-push-gate] using the passing slot record $(basename "$passing_state_file")"
+    state_file="$passing_state_file"
+  fi
+fi
+
 if [ "$branch" = "HEAD" ]; then
   echo "[pre-push-gate] detached HEAD — gate applies to branch pushes only; skipping."
   exit 0
@@ -77,6 +126,26 @@ if [ "$branch" = "main" ]; then
   echo "[pre-push-gate] main is governed by the merge queue — local-CI gate skipped."
   exit 0
 fi
+
+# BI-FEDD8F45: from here on every exit is a gate decision, so record it as a
+# guard outcome run (hook:pre-push-gate) on the way out. Observation only: the
+# recorder runs in the background, its output is discarded, and it can never
+# change this hook's exit status. Overrides are read from the environment by
+# the recorder itself. Checkouts without the recorder (contract-test fixtures)
+# skip it.
+guard_outcome_started="$(date +%s 2>/dev/null || echo 0)"
+guard_outcome_verdict=""
+record_guard_outcome() {
+  [ -f "scripts/record-guard-outcome.mjs" ] || return 0
+  verdict="$guard_outcome_verdict"
+  if [ -z "$verdict" ]; then
+    if [ "$1" = "0" ]; then verdict="passed"; else verdict="refused"; fi
+  fi
+  ended="$(date +%s 2>/dev/null || echo 0)"
+  duration_ms=$(( (ended - guard_outcome_started) * 1000 ))
+  ( node scripts/record-guard-outcome.mjs --runner pre-push-gate --verdict "$verdict" --duration-ms "$duration_ms" >/dev/null 2>&1 & ) || true
+}
+trap 'record_guard_outcome $?' EXIT
 
 # DCO sign-off is mandatory for EVERY commit that will become part of the PR,
 # and it is checked here — before any skip/exempt exit below — because an
@@ -105,13 +174,18 @@ if [ -f "scripts/pre-push-dco-check.mjs" ]; then
 fi
 
 # Recorded override: allowed, but never silent. The reason is persisted so the
-# PR-health guard can read it back as an explicit operator attestation.
-if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
+# PR-health guard can read it back as an explicit operator attestation. It is a
+# function so the cloud-agent-session path below records through the same
+# validation, record writer and guard-parity preflight; it always exits.
+recorded_override() {
   reason="${DPF_SKIP_PREPUSH_GATE_REASON:-}"
   if [ -z "$reason" ]; then
     echo "[pre-push-gate] DPF_SKIP_PREPUSH_GATE=1 requires DPF_SKIP_PREPUSH_GATE_REASON." >&2
     echo "[pre-push-gate] Use a closed reason code (BI-563F6AB6), e.g.:" >&2
     echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"operator-emergency: brief why\" git push" >&2
+    echo "[pre-push-gate] When the gate's own infrastructure is down (lease unclaimable: dead token, portal unreachable), the hook" >&2
+    echo "[pre-push-gate] captures that failure itself and records the push as gate-UNRUN (never passed):" >&2
+    echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"gate-infrastructure-unavailable: brief why\" git push" >&2
     exit 1
   fi
   # Validate allowlisted code before writing the skip record (BI-563F6AB6).
@@ -125,6 +199,7 @@ const codes = new Set([
   "operator-emergency",
   "external-contribution-no-install",
   "install-bootstrap-recovery",
+  "gate-infrastructure-unavailable",
 ]);
 const raw = reason.trim();
 const m = raw.match(/^([a-z0-9-]+)(?:\s*[:\u2014\-]\s*(.*))?$/i);
@@ -139,20 +214,60 @@ if (!m || !codes.has(m[1].toLowerCase())) {
 ' "$reason"; then
     exit 1
   fi
+  # gate-infrastructure-unavailable is evidence-gated (BI-02E5F2A1): the hook
+  # re-attempts the gate's lease claim and accepts the code only when that
+  # attempt fails for an infrastructure reason. The probe's JSON result is
+  # embedded in the record as `infrastructureEvidence`; a checkout without the
+  # probe cannot capture evidence, so the code is refused there.
+  infra_evidence=""
+  if node -e '
+const raw = (process.argv[1] || "").trim();
+const m = raw.match(/^([a-z0-9-]+)/i);
+process.exit(m && m[1].toLowerCase() === "gate-infrastructure-unavailable" ? 0 : 1);
+' "$reason"; then
+    if [ ! -f "scripts/pre-push-gate-infrastructure-probe.mjs" ]; then
+      echo "[pre-push-gate] gate-infrastructure-unavailable needs scripts/pre-push-gate-infrastructure-probe.mjs to capture the failure; this checkout has none — refusing." >&2
+      exit 1
+    fi
+    echo "[pre-push-gate] gate-infrastructure-unavailable: re-attempting the local-CI lease claim to capture the failure..."
+    if probe_json="$(node scripts/pre-push-gate-infrastructure-probe.mjs --branch "$branch" --sha "$sha")"; then
+      infra_evidence="$probe_json"
+    else
+      echo "[pre-push-gate] gate-infrastructure-unavailable refused: no infrastructure failure was captured (see above)." >&2
+      echo "[pre-push-gate] If the lease claim succeeded the gate can run:  pnpm run pregate" >&2
+      exit 1
+    fi
+  fi
   mkdir -p "$(dirname "$state_file")"
   node -e '
 const fs = require("node:fs");
-const [file, branch, sha, reason] = process.argv.slice(1);
-fs.writeFileSync(file, JSON.stringify({
+const [file, branch, sha, reason, probeJson] = process.argv.slice(1);
+const record = {
   branch,
   sha,
   gatePassed: false,
   skipped: true,
   skipReason: reason,
   recordedAt: new Date().toISOString()
-}, null, 2) + "\n");
-' "$state_file" "$branch" "$sha" "$reason"
-  echo "[pre-push-gate] override recorded for $branch@$sha: $reason"
+};
+if (probeJson) {
+  const probe = JSON.parse(probeJson);
+  if (probe.ok !== true || !probe.evidence) {
+    console.error("[pre-push-gate] probe returned no evidence; refusing to record gate-infrastructure-unavailable.");
+    process.exit(1);
+  }
+  // Gate-UNRUN, never passed: the status names it and the evidence proves it.
+  record.status = "gate-unrun";
+  record.gateUnrun = true;
+  record.infrastructureEvidence = probe.evidence;
+}
+fs.writeFileSync(file, JSON.stringify(record, null, 2) + "\n");
+' "$state_file" "$branch" "$sha" "$reason" "$infra_evidence" || exit 1
+  if [ -n "$infra_evidence" ]; then
+    echo "[pre-push-gate] gate-UNRUN recorded for $branch@$sha (infrastructure unavailable; evidence captured) — cloud CI is the safety net."
+  else
+    echo "[pre-push-gate] override recorded for $branch@$sha: $reason"
+  fi
   echo "[pre-push-gate] NOTE: pnpm pr:health accepts only allowlisted override codes."
 
   # A recorded sandbox-gate skip — the standard source-only agent path via
@@ -166,7 +281,7 @@ fs.writeFileSync(file, JSON.stringify({
   # Escape hatch for the rare case even the preflight must be skipped:
   # DPF_SKIP_PREGATE_PREFLIGHT_REASON, honoured inside the preflight itself.
   if [ -f "scripts/pregate-preflight.mjs" ]; then
-    if node scripts/pregate-preflight.mjs; then
+    if DPF_GUARD_OUTCOME_RUNNER=pre-push-gate node scripts/pregate-preflight.mjs; then
       echo "[pre-push-gate] guard-parity preflight clean on override path."
     else
       echo "[pre-push-gate] guard-parity preflight found a deterministic guard violation — refusing the override push." >&2
@@ -178,6 +293,10 @@ fs.writeFileSync(file, JSON.stringify({
 
   completion_notice
   exit 0
+}
+
+if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
+  recorded_override
 fi
 
 # Docs-only diffs need no sandbox run UNLESS the diff invalidates a
@@ -204,6 +323,7 @@ if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
   if [ -n "$merge_base" ]; then
     if [ -f "scripts/derived-artifacts-gate.mjs" ]; then
       if node scripts/derived-artifacts-gate.mjs push-exempt "$merge_base"; then
+        guard_outcome_verdict="skipped"
         echo "[pre-push-gate] docs-only diff vs $base_ref — no gate record required."
         completion_notice
         exit 0
@@ -211,6 +331,7 @@ if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
     else
       non_docs="$(git diff --name-only "$merge_base" HEAD 2>/dev/null | grep -Ev '^(docs/|memory/)|\.md$' || true)"
       if [ -z "$non_docs" ]; then
+        guard_outcome_verdict="skipped"
         echo "[pre-push-gate] docs-only diff vs $base_ref — no gate record required."
         completion_notice
         exit 0
@@ -227,6 +348,76 @@ if [ -f "scripts/semantic-review-gate.mjs" ]; then
   node scripts/semantic-review-gate.mjs validate || exit $?
 fi
 
+# BI-A167CF8A: ask the canonical, slot-aware reader for the verdict.
+#
+# `pregate` writes SLOT-SCOPED records (dpf-local-ci-gate-slot-N.json). The
+# unslotted "$state_file" this hook used to stat is written by exactly one path
+# — the override branch above, as {gatePassed:false, skipped:true} — so it can
+# never contain a pass. A genuine PASS was therefore invisible here, and the
+# only way past the gate was the override, which is how a mandatory gate decays
+# into a formality.
+#
+# pregate-status.mjs already enumerates slots and exits 0 only when the verdict
+# is PASS for the CURRENT HEAD, applying the same branch/sha, evidence-pending
+# and expiry checks the legacy block below duplicates. Defer to it rather than
+# keeping a second reader that can drift from the writer again.
+if [ -f "scripts/pregate-status.mjs" ]; then
+  status_rc=0
+  node scripts/pregate-status.mjs || status_rc=$?
+  if [ "$status_rc" -eq 0 ]; then
+    echo "[pre-push-gate] local-CI gate passed for $branch@$sha"
+    completion_notice
+    exit 0
+  fi
+  # BI-F039AA83: 75 = a pregate for this HEAD is still working. Its verdict is
+  # minutes away; no override or correction route should race it.
+  if [ "$status_rc" -eq 75 ]; then
+    echo "[pre-push-gate] a pregate for $branch@$sha is still running (status above). Not a failure — wait for its verdict, then push again." >&2
+    exit 1
+  fi
+  # A published correction has its own machine-bound affected-check contract.
+  # This writes only an existing stage receipt and never a canonical gate PASS.
+  # The initial publication anchor, current PR and protected queue are checked
+  # before execution; unknown mappings or failed checks refuse this route.
+  if [ -f "scripts/published-correction.mjs" ]; then
+    if node scripts/published-correction.mjs --status >/dev/null 2>&1; then
+      echo "[pre-push-gate] affected correction proof reused; full integration UNRUN/delegated to protected GitHub."
+      completion_notice
+      exit 0
+    fi
+    if node scripts/published-correction.mjs --eligible >/dev/null 2>&1; then
+      if node scripts/published-correction.mjs; then
+        completion_notice
+        exit 0
+      fi
+      echo "[pre-push-gate] affected correction verification unresolved; no full local gate was restarted." >&2
+      exit 1
+    fi
+  fi
+  # A cloud agent session (claude.ai/code container, CLAUDE_CODE_REMOTE=true)
+  # has no local DPF install and cannot reach the local-CI lease, so pregate can
+  # never run there. Record the push under external-contribution-no-install —
+  # never a pass, PR-visible, still DCO-checked and preflighted — instead of
+  # refusing it. A genuine PASS and the docs-only exemption above still win.
+  # Reason mirrors CLOUD_AGENT_SESSION_OVERRIDE_REASON in
+  # packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs; keep in sync.
+  if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+    echo "[pre-push-gate] cloud agent session (CLAUDE_CODE_REMOTE=true): pregate cannot run here — recording the push as gate-not-run."
+    DPF_SKIP_PREPUSH_GATE_REASON="external-contribution-no-install: cloud agent session (CLAUDE_CODE_REMOTE=true), no local DPF install or local-CI lease; cloud CI is the gate"
+    recorded_override
+  fi
+  echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2
+  echo "[pre-push-gate] (claims the shared local-integration-ci lease, runs the checked-in" >&2
+  echo "[pre-push-gate]  CI-equivalent runner, records MCP evidence, writes the gate record)" >&2
+  echo "[pre-push-gate] Recorded override for a verified-clean push:" >&2
+  echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"<code>: why\" git push" >&2
+  echo "[pre-push-gate] Gate infrastructure itself down (lease unclaimable)? The hook captures the failure and records gate-UNRUN:" >&2
+  echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"gate-infrastructure-unavailable: why\" git push" >&2
+  exit 1
+fi
+
+# Legacy fallback: a checkout without pregate-status.mjs (older tree, consumer
+# bundle). Keeps the gate strict rather than passing when the reader is absent.
 if [ ! -f "$state_file" ]; then
   echo "[pre-push-gate] No local-CI gate record exists for this worktree." >&2
   echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2
@@ -246,6 +437,11 @@ if (state.branch !== branch || state.sha !== sha || state.gatePassed !== true) {
   console.error(`[pre-push-gate] expected ${branch}@${sha}`);
   console.error(`[pre-push-gate] found ${state.branch || "(none)"}@${state.sha || "(none)"} gatePassed=${state.gatePassed}${state.skipped ? " (recorded override, not a pass)" : ""}`);
   console.error("[pre-push-gate] Run: pnpm run pregate   (or a recorded override — see above)");
+  process.exit(1);
+}
+if (state.testStub === true) {
+  console.error("[pre-push-gate] The latest local-CI gate record was written by the DPF_ALLOW_LOCAL_CI_STUB=1 test stub; no sandbox build ran, so it is not evidence.");
+  console.error("[pre-push-gate] Run: pnpm run pregate");
   process.exit(1);
 }
 if (state.evidencePending === true) {

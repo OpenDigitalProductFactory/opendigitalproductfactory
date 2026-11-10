@@ -28,8 +28,16 @@ describe("integration coverage matrix", () => {
           /^(business-capability|business-service|application-service|technical-service|service-offering)$/,
         );
         expect(row.it4itValueStreams.length).toBeGreaterThan(0);
-        expect(row.nextBacklogItemId).toMatch(/^BI-/);
-        expect(row.nextBacklogItemId).not.toBe("BI-861433C0");
+        // A declared next step states intent or names a filed item. It must NOT
+        // be forced into id shape: the old /^BI-/ assertion is what pushed 25
+        // rows into carrying identifiers nothing had filed (BI-5BF97BAA).
+        expect(row.nextStep.kind).toMatch(/^(backlog-item|open)$/);
+        if (row.nextStep.kind === "open") {
+          expect(row.nextStep.intent.trim().length).toBeGreaterThan(0);
+          expect(row.nextStep.intent).not.toMatch(/^BI-/);
+        } else {
+          expect(row.nextStep.itemId).toMatch(/^BI-[0-9A-F]{8}$/);
+        }
       }
     }
   });
@@ -42,7 +50,10 @@ describe("integration coverage matrix", () => {
       productName: "QuickBooks Online",
       maturity: "stage",
       posture: "hybrid",
-      nextBacklogItemId: "BI-07D76D6B",
+    });
+    expect(quickBooksRows[0]?.nextStep).toEqual({
+      kind: "open",
+      intent: "Entity links before write-back",
     });
     expect(quickBooksRows[0]?.employeeRoles).toContain("bookkeeper_accountant");
     expect(quickBooksRows[0]?.taxonomyNodeIds).toContain("for_employees/financial_management");

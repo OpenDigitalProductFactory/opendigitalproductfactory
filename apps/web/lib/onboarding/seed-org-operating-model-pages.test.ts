@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/wiki/page-links", () => ({ syncWikiPageLinks: vi.fn(async () => ({ error: null })) }));
+
 import {
   seedOrgOperatingModelPages,
   OPERATING_MODEL_SEED_MARKER,
   type SeedOperatingModelPagesClient,
 } from "./seed-org-operating-model-pages";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 const ORG_ID = "org-1";
 
@@ -147,6 +150,8 @@ describe("seedOrgOperatingModelPages", () => {
     expect(writes.pageCreates).toHaveLength(3);
     expect(writes.revisions).toHaveLength(3);
     expect(writes.materials).toHaveLength(3);
+    // BI-23900D0A: every body write replaces the page's out-links.
+    expect(syncWikiPageLinks).toHaveBeenCalledTimes(3);
 
     const sell = writes.pageCreates.find((p) => p.slug === "org-what-we-sell");
     expect(sell).toBeDefined();

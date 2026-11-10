@@ -1,6 +1,12 @@
 const SURFACES = ["portal", "mcp", "docker", "postgres"];
 
 export const EXIT_CONTROL_PLANE_STARVATION = 5;
+export const DEFAULT_BUILD_WATCHDOG_FAILURE_LIMITS = Object.freeze({
+  portal: 3,
+  mcp: 3,
+  docker: 2,
+  postgres: 2,
+});
 
 export function classifyControlPlaneSample(probes) {
   const failures = SURFACES.flatMap((surface) => {
@@ -17,10 +23,16 @@ export async function monitorControlPlane({
   isComplete,
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   intervalMs = 5_000,
-  consecutiveFailureLimit = 2,
+  consecutiveFailureLimit,
   onSample = () => {},
 }) {
   const samples = [];
+  const consecutiveFailureLimits = Object.fromEntries(
+    SURFACES.map((surface) => [
+      surface,
+      consecutiveFailureLimit ?? DEFAULT_BUILD_WATCHDOG_FAILURE_LIMITS[surface],
+    ]),
+  );
   const consecutiveFailures = Object.fromEntries(
     SURFACES.map((surface) => [surface, 0]),
   );
@@ -37,11 +49,14 @@ export async function monitorControlPlane({
       probes,
       ...classification,
       consecutiveFailures: { ...consecutiveFailures },
+      consecutiveFailureLimits: { ...consecutiveFailureLimits },
     };
     samples.push(observed);
     await onSample(observed);
     const breachedSurfaces = SURFACES.filter(
-      (surface) => consecutiveFailures[surface] >= consecutiveFailureLimit,
+      (surface) => (
+        consecutiveFailures[surface] >= consecutiveFailureLimits[surface]
+      ),
     );
     if (breachedSurfaces.length > 0) {
       return {

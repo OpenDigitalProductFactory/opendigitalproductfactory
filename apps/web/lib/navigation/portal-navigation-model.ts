@@ -1,8 +1,10 @@
 import type { CapabilityKey } from "@/lib/govern/permissions";
+import { MAILROOM_NAV_ROUTES } from "./mailroom-nav-routes";
 
 export type PortalAudienceMode = "worker" | "operator" | "customer" | "diagnostic";
 
 import type { PortalShellSectionKey } from "./portal-shell-sections";
+import { AREA_HOME_ROUTES, AREA_UPKEEP_AND_SETUP_ROUTES } from "./area-nav-routes";
 import { BUSINESS_VIEW_ROUTES } from "./business-view-routes";
 
 export {
@@ -57,6 +59,8 @@ export type PortalNavRecord = {
     description: string;
   };
   sectionSiblings?: readonly string[];
+  /** EP-2FB6C0CC §9.4: listed in this area's Setup view (the area whose runtime reads it). */
+  setupFor?: PortalShellSectionKey;
 };
 
 export type PortalNavEntry = Pick<
@@ -102,7 +106,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: null,
   },
   { key: "workspace-work-cases", label: "Work Cases", path: "/workspace/my-queue", parentPath: "/workspace", domain: "workspace", audienceModes: ["worker", "operator"], destinationKind: "section-page", capabilityKey: null },
-  { key: "workspace-case-detail", label: "Work Case Detail", path: "/workspace/cases/[caseKey]", parentPath: "/workspace", domain: "workspace", audienceModes: ["worker", "operator"], destinationKind: "detail", capabilityKey: null },
+  { key: "workspace-case-detail", label: "Work Case Detail", path: "/workspace/cases/[caseKey]", parentPath: "/workspace/my-queue", domain: "workspace", audienceModes: ["worker", "operator"], destinationKind: "detail", capabilityKey: null },
   {
     key: "documents",
     label: "Documents",
@@ -117,6 +121,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       description: "Search, open, publish, and trace managed documents.",
     },
   },
+  ...MAILROOM_NAV_ROUTES,
   {
     key: "workbooks",
     label: "Workbooks",
@@ -153,6 +158,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       "/customer/quotes",
       "/customer/sales-orders",
       "/customer/funnel",
+      "/customer/footprint",
       "/customer/marketing",
     ],
   },
@@ -212,6 +218,17 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: "view_customer",
   },
   {
+    key: "customer-footprint",
+    label: "Market footprint",
+    sectionNavLabel: "Footprint",
+    path: "/customer/footprint",
+    parentPath: "/customer",
+    domain: "customer",
+    audienceModes: ["worker", "operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_customer",
+  },
+  {
     key: "customer-marketing",
     label: "Marketing",
     path: "/customer/marketing",
@@ -231,7 +248,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_employee",
     shellNav: {
-      sectionKey: "business",
+      sectionKey: "team",
       description: "Human users, contractors, and workforce records.",
     },
   },
@@ -252,7 +269,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_platform",
     shellNav: {
-      sectionKey: "business",
+      sectionKey: "team",
       description: "Your AI coworkers as identities — what they do, cost, engagements, and skills.",
     },
   },
@@ -354,7 +371,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "storefront",
-    label: "Portal",
+    label: "Storefront",
     path: "/storefront",
     parentPath: "/storefront",
     domain: "business",
@@ -364,7 +381,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     primaryOrder: 50,
     shellNav: {
       sectionKey: "business",
-      description: "Customer-facing portal experience and setup.",
+      description: "Run the public storefront your customers and supporters use.",
     },
   },
   {
@@ -389,7 +406,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "portfolio",
-    label: "Portfolio",
+    label: "Products",
     path: "/portfolio",
     parentPath: "/portfolio",
     domain: "delivery",
@@ -397,13 +414,28 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_portfolio",
     shellNav: {
-      sectionKey: "products",
-      description: "Digital products and their lifecycle homes.",
+      sectionKey: "business",
+      description: "What you offer and each product's lifecycle home.",
     },
   },
   {
+    // One operator entry for work activity (PWA-08), onto the canonical
+    // destination. Distinct from the coworker directory at `/workforce`.
+    key: "work_activity",
+    label: "Work in progress",
+    path: "/ops/workrooms",
+    parentPath: "/ops",
+    domain: "delivery",
+    audienceModes: ["operator"],
+    destinationKind: "section-page",
+    capabilityKey: "view_operations",
+    primaryOrder: 55,
+    // The one entry for all work in motion (PWA-08); area Work views filter it.
+    shellNav: { sectionKey: "delivery", description: "Every Workroom in motion, across all areas." },
+  },
+  {
     key: "backlog",
-    label: "Backlog",
+    label: "Requests",
     path: "/ops",
     parentPath: "/ops",
     domain: "delivery",
@@ -412,8 +444,8 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: "view_operations",
     primaryOrder: 60,
     shellNav: {
-      sectionKey: "products",
-      description: "Cross-cutting work queues and improvements.",
+      sectionKey: "delivery",
+      description: "Ask for a change and follow it from idea to delivery.",
     },
   },
   {
@@ -426,7 +458,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_ea_modeler",
     shellNav: {
-      sectionKey: "products",
+      sectionKey: "knowledge",
       description: "Capability map, value streams, EA views, and data architecture.",
     },
     sectionSiblings: [
@@ -446,14 +478,10 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["operator"],
     destinationKind: "section-page",
     capabilityKey: "view_platform",
-    shellNav: {
-      sectionKey: "platform",
-      description: "Oversee AI specialists and their authority.",
-    },
   },
   platformAiRoute("platform-ai-readiness", "Readiness", "/platform/ai/readiness"),
   platformAiRoute("platform-ai-overview", "AI Workforce Directory", "/platform/ai/overview"),
-  platformAiRoute("platform-ai-catalog", "Catalog", "/platform/ai/catalog"),
+  { ...platformAiRoute("platform-ai-catalog", "Catalog", "/platform/ai/catalog"), setupFor: "team" },
   {
     // BI-ARCH-DELIVERY-IA: one operator home for delivery work. A hub that
     // launches the delivery surfaces (Build Studio, work capsules, change lanes,
@@ -467,13 +495,10 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     parentPath: "/delivery",
     domain: "delivery",
     audienceModes: ["operator"],
-    destinationKind: "domain-home",
+    destinationKind: "legacy-redirect",
     capabilityKey: "view_platform",
     primaryOrder: 65,
-    shellNav: {
-      sectionKey: "delivery",
-      description: "Build, ship, and track delivery work from one operator home.",
-    },
+    // EP-2FB6C0CC: superseded by the /area/delivery home; kept as a redirect.
   },
   {
     key: "build",
@@ -495,7 +520,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform",
-    label: "Platform Hub",
+    label: "Platform",
     path: "/platform",
     parentPath: "/platform",
     domain: "platform",
@@ -529,6 +554,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["operator"],
     destinationKind: "section-page",
     capabilityKey: "view_platform",
+    setupFor: "platform",
     sectionSiblings: [
       "/platform/identity",
       "/platform/identity/principals",
@@ -602,7 +628,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform-identity-agents",
-    label: "AI Coworkers",
+    label: "Coworker Identity",
     path: "/platform/identity/agents",
     parentPath: "/platform/identity",
     domain: "platform",
@@ -620,15 +646,15 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   // likewise has no nav record). Redirect-only routes carry neither a nav subItem
   // nor a record.
   platformAiRoute("platform-ai-capacity-continuity", "Capacity Continuity", "/platform/ai/capacity-continuity"),
-  platformAiRoute("platform-ai-assignments", "Priority & Models", "/platform/ai/assignments"),
-  platformAiRoute("platform-ai-prompts", "Prompts", "/platform/ai/prompts"),
-  platformAiRoute("platform-ai-skills", "Skills", "/platform/ai/skills"),
+  { ...platformAiRoute("platform-ai-assignments", "Priority & Models", "/platform/ai/assignments"), setupFor: "team" },
+  { ...platformAiRoute("platform-ai-prompts", "Prompts", "/platform/ai/prompts"), setupFor: "team" },
+  { ...platformAiRoute("platform-ai-skills", "Skills", "/platform/ai/skills"), setupFor: "team" },
   platformAiRoute("platform-ai-memory", "Coworker Memory", "/platform/ai/memory"),
   // Capability needs converged into the Backlog (EP-INTAKE-UNIFY); this route stays
   // known as a redirect shim without rendering an AI Operations tab.
   platformAiRoute("platform-ai-capability-needs", "Capability Needs", "/platform/ai/capability-needs", "legacy-redirect"),
-  platformAiRoute("platform-ai-providers", "Providers & Routing", "/platform/ai/providers"),
-  platformAiRoute("platform-ai-build-studio", "Build Runtime", "/platform/ai/build-studio", "settings"),
+  { ...platformAiRoute("platform-ai-providers", "Providers & Routing", "/platform/ai/providers"), setupFor: "team" },
+  { ...platformAiRoute("platform-ai-build-studio", "Build Runtime", "/platform/ai/build-studio", "settings"), setupFor: "delivery" },
   {
     key: "platform-tools",
     label: "Tools & Services",
@@ -638,6 +664,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["operator"],
     destinationKind: "section-page",
     capabilityKey: "view_platform",
+    setupFor: "platform",
     sectionSiblings: [
       "/platform/tools",
       "/platform/tools/catalog",
@@ -744,6 +771,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     audienceModes: ["operator"],
     destinationKind: "section-page",
     capabilityKey: "view_platform",
+    setupFor: "platform",
     sectionSiblings: [
       "/platform/audit",
       "/platform/audit/ledger",
@@ -786,7 +814,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "platform-audit-operations",
-    label: "Operations",
+    label: "Jobs",
     path: "/platform/audit/operations",
     parentPath: "/platform/audit",
     domain: "platform",
@@ -824,11 +852,9 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     destinationKind: "domain-home",
     capabilityKey: "view_admin",
     primaryOrder: 90,
-    shellNav: {
-      sectionKey: "platform",
-      description: "Core platform configuration and access.",
-    },
+    setupFor: "platform",
   },
+  ...AREA_UPKEEP_AND_SETUP_ROUTES,
   {
     key: "admin-storefront-redirect",
     label: "Storefront Admin Redirect",
@@ -861,7 +887,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "knowledge",
-    label: "Knowledge",
+    label: "Knowledge Base",
     path: "/knowledge",
     parentPath: "/knowledge",
     domain: "knowledge",
@@ -876,21 +902,19 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
   },
   {
     key: "wiki",
-    label: "Coworker Decision Engine",
+    label: "How coworkers decide",
     path: "/coworker-decisions",
     parentPath: "/coworker-decisions",
     domain: "knowledge",
     audienceModes: ["worker", "operator"],
     destinationKind: "domain-home",
     capabilityKey: null,
-    shellNav: {
-      sectionKey: "knowledge",
-      description: "How your AI decides on your behalf - WWMD, WWWD, WSID - and where you shape it.",
-    },
+    // EP-2FB6C0CC: coworker stance and proactivity are set here, so it is Team setup.
+    setupFor: "team",
   },
   {
     key: "docs",
-    label: "All docs",
+    label: "User Guide",
     path: "/docs",
     parentPath: "/docs",
     domain: "knowledge",
@@ -902,19 +926,20 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
       description: "Reference documentation and specs.",
     },
   },
+  ...AREA_HOME_ROUTES,
 ] as const;
+
+export function getAreaSetupEntries(area: PortalShellSectionKey): PortalNavEntry[] {
+  return PORTAL_NAV_ROUTES.filter((route) => route.setupFor === area).map(toEntry);
+}
 
 const ROUTES_BY_PATH = new Map(
   PORTAL_NAV_ROUTES.map((route) => [normalizePath(route.path), route] as const),
 );
-
+const PARAMETERIZED_ROUTES = PORTAL_NAV_ROUTES.filter((route) => route.path.includes("["));
 function normalizePath(path: string): string {
-  if (path.length > 1 && path.endsWith("/")) {
-    return path.slice(0, -1);
-  }
-  return path;
+  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 }
-
 function toEntry(route: PortalNavRecord): PortalNavEntry {
   return {
     key: route.key,
@@ -928,7 +953,6 @@ function toEntry(route: PortalNavRecord): PortalNavEntry {
     orgCapabilityKey: route.orgCapabilityKey ?? null,
   };
 }
-
 function toSectionEntry(route: PortalNavRecord): PortalNavEntry {
   return {
     ...toEntry(route),
@@ -937,7 +961,12 @@ function toSectionEntry(route: PortalNavRecord): PortalNavEntry {
 }
 
 export function getRouteNavRecord(path: string): PortalNavRecord | undefined {
-  return ROUTES_BY_PATH.get(normalizePath(path));
+  const normalized = normalizePath(path), segments = normalized.split("/");
+  return ROUTES_BY_PATH.get(normalized) ?? PARAMETERIZED_ROUTES.find((route) => {
+    const pattern = route.path.split("/");
+    return pattern.length === segments.length && pattern.every((part, index) =>
+      part === segments[index] || (/^\[\w+\]$/.test(part) && segments[index] !== ""));
+  });
 }
 
 export function getPrimaryNavEntries(audienceMode: PortalAudienceMode): PortalNavEntry[] {
