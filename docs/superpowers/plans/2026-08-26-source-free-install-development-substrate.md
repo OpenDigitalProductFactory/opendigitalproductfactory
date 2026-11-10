@@ -13,7 +13,7 @@ spec: docs/superpowers/specs/2026-08-26-source-free-install-development-substrat
 > implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate
 > before any success claim, and `dpf-pr-with-dco` for handoff.
 
-**Date:** 2026-08-26; reconciled with `main` 2026-08-27
+**Date:** 2026-08-26; reconciled with deployed source `cc34280b` on 2026-11-10
 
 **Status:** review-ready; implementation starts only after design and plan approval
 
@@ -27,9 +27,10 @@ spec: docs/superpowers/specs/2026-08-26-source-free-install-development-substrat
 
 A source-free release install receives the exact release source as a verified
 baseline, Build Studio and all impact intelligence operate on one Workroom
-snapshot, business and development agents receive the correct contract, dead
-Workrooms reconcile without losing work, and Platform updates presents a calm,
-state-specific experience.
+instance/record snapshot, business and development agents receive the correct
+scope/shape/posture contract, dead Workrooms reconcile without losing work, and
+Platform updates presents a calm, state-specific experience. Decision bands map
+to the canonical five dispositions without creating a second status vocabulary.
 
 ## Existing substrate to preserve
 
@@ -39,11 +40,16 @@ state-specific experience.
   migration/transaction helpers, recovery points, and rollback.
 - `sandbox_workspace`, Build Studio per-build worktrees, Workroom lease and
   evidence fields, and the shared worktree janitors.
+- Workroom definition/instance projections, activity and collaboration shapes,
+  proportional delivery gates, posture, stage receipts, Process Overseer duty,
+  outcome packets, and the bounded standing-room drive.
 - `CodeGraphIndexState`, `CodeGraphFileHash`, `CodebaseManifest`, graph projection
   registry/reconcilers, PR #4711's boot invoker, and PR #4719's default-branch
   selection.
 - Consumer host profile, MCP instruction builder, minimal agent pointer, external
-  operating contract, token-grant intersection, and `decisionScope`.
+  operating contract, authorized-surface/exposure catalog, token-grant
+  intersection, three-band verdict, shared five-disposition contract, gate
+  shaping, and `decisionScope`.
 - Existing `/ops/self-upgrade` action/orchestrator, `OwnerReleaseCard`, trigger,
   history, and delivery IA.
 
@@ -51,7 +57,7 @@ state-specific experience.
 
 | Order | Deliverable | Backlog | Dependency |
 |---:|---|---|---|
-| 0 | Reconcile landed graph invoker/default-branch work | BI-86EF5900 / PRs #4711 and #4719 | None |
+| 0 | Preserve delivered graph/source-reader repairs and retire disproven EA premise | BI-86EF5900, BI-6CFC5429 done; BI-4501D3C8 retired | None |
 | 1 | Publish and transactionally activate verified source baseline | BI-48951394 | Existing consumer release updater |
 | 2 | Align Workroom, tools, graph, manifests, and impact to one snapshot | BI-89CD90D4 | Slice 1; preserve merged PRs #4711 and #4719 |
 | 3 | Route agent instructions by engagement scope | BI-1BA8F46C | Slice 2 projection contract |
@@ -61,17 +67,20 @@ state-specific experience.
 
 ## Slice 0 — reconcile landed graph work
 
-**Goal:** preserve the graph repairs already on `main` and establish the remaining
-source-identity gap before touching projection invocation.
+**Goal:** preserve the accepted graph/source-reader repairs and establish the
+remaining release/source-identity gap before touching projection invocation.
 
 1. Treat PR #4711 (`fe30d461c`) as the existing `refresh-projections` registry
    invoker and PR #4719 (`b88cd81c2`) as the existing default-branch selector.
 2. Do not implement a second boot scheduler or regress graph selection to the
    incidental host checkout branch.
-3. Reproduce BI-86EF5900 against the canonical source-free install and capture
-   graph identity, file count, relationship families, and known-symbol queries.
-4. Record which failures remain source-identity/coverage defects after the two
-   landed repairs; use those observations as Slice 2's red acceptance fixtures.
+3. Treat BI-86EF5900 and BI-6CFC5429 as delivered behavior. Add regression
+   fixtures only where the new snapshot contract touches their repaired seams.
+4. Exclude retired BI-4501D3C8 from scope; its original stale-EA premise was
+   disproven by live evidence.
+5. Capture graph identity, file count, relationship families, known-symbol
+   queries, and release/worktree source identity on the current source-free
+   install. Use only the remaining mismatch as Slice 2's red fixture.
 
 **Verification:** captured baseline distinguishes invocation coverage from source
 identity/freshness and names the exact release/worktree snapshot.
@@ -142,10 +151,12 @@ support docs; retain contributor/source-install guidance unchanged.
 
 1. Implement pure `SourceBaselineIdentity` and `SourceSnapshotIdentity`
    projections. Resolve contributor checkout or consumer baseline through the host
-   profile, then overlay the claimed Workroom's branch/head/worktree.
-2. Make Workroom claim precede branch creation. Create the branch from the
-   activated baseline, persist existing branch/SHA/path fields, and verify them on
-   resume.
+   profile, then bind the claimed Workroom instance and durable record's
+   branch/head/worktree. Never attach occurrence state to the reusable definition.
+2. Make the exact Workroom definition version and instance precede the durable
+   record claim, and the claim precede branch creation. Create the branch from the
+   activated baseline, persist existing branch/SHA/path fields, and verify the
+   definition, instance, baseline, and head together on resume.
 3. Thread the resolved Workroom workdir into every ideate/plan/build/verify agent,
    file tool, diff collector, and preview operation. Remove implicit `/workspace`
    defaults from Workroom-scoped paths while preserving safe non-Workroom callers.
@@ -185,8 +196,10 @@ read-only results. Do not restore the old unqualified `ready` state.
 
 **Steps:**
 
-1. Define one pure `AgentEngagementProfile` projection over principal, effective
-   grants, host profile, `decisionScope`, work type, and claimed Workroom.
+1. Extend the authorized-surface/exposure catalog with one pure
+   `AgentEngagementProfile` projection over principal, effective grants, host
+   profile, `decisionScope`, exact Workroom definition/instance, activity shape,
+   collaboration shape, posture, and durable record.
 2. For organization operation, serve the external operating contract, org context,
    Work Case/Packet, and authorized surfaces without contributor doctrine.
 3. For platform development, serve repository governance pointers, MCP coordination,
@@ -197,6 +210,9 @@ read-only results. Do not restore the old unqualified `ready` state.
 5. Apply the same projection to MCP clients, Build Studio, in-platform coworkers,
    and federation adapters through the exposure catalog; do not fork copy per
    surface.
+6. Route consequential judgment to WWMD, WWWD, or WSID. Record the three-band
+   result and map it to `proceed | awaiting-input | awaiting-person | refused |
+   inconclusive`; do not expose decision-engine labels as user instructions.
 
 **Verification:** golden instruction snapshots for both engagement types and
 unknown scope; grant-intersection tests; a headless business agent completes a
@@ -208,21 +224,23 @@ consumer pointer; never copy the root developer rulebook into release assets.
 
 ## Slice 4 — Workroom liveness and overlay reaping (BI-9A353411)
 
-**Likely files:** existing Workroom liveness query/reconciler, lease reaper,
-inert-build reaper, sandbox GC, unified WIP query, status projections, metrics,
-and their tests.
+**Likely files:** existing Workroom drive and Process Overseer duty, liveness
+query/reconciler, lease reaper, sandbox GC, unified WIP/status projections,
+outcome-packet projection, metrics, and their tests.
 
 **Steps:**
 
-1. Convert existing liveness observations into a closed transition policy for
-   active, durable wait, expired mid-flight, finished, merged, abandoned, and
-   identity-invalid Workrooms.
+1. Extend the current drive/overseer transition policy for active, durable wait,
+   expired mid-flight, finished, merged, abandoned, and identity-invalid
+   Workroom records. Do not add another lifecycle engine.
 2. Record a durable-wait reason/deadline/owner in existing Workroom state; age
    alone cannot reap it.
-3. Auto-close merged/terminal Workrooms after required evidence is durable.
+3. Seal the instance and archive the record after merged/terminal evidence and
+   its outcome packet are durable; preserve the reusable definition.
 4. Surface finished-but-stranded work for promotion rather than deleting it.
 5. Reap only the derived worktree/branch/cache after transition safety checks.
-   Preserve baseline, canonical evidence, and dirty or identity-invalid overlays.
+   Preserve definitions, sealed instance history, baseline, outcome packets,
+   canonical evidence, and dirty or identity-invalid overlays.
 6. Emit counts and age for each liveness class and alert on stranded finished work.
 
 **Verification:** clock-driven transition tests, killed-session recovery, durable
@@ -247,18 +265,24 @@ destructive sweep.
    available, confirmation, in-flight, success, actual failure with recovery
    outcome, conflict, and unavailable.
 2. Make Simple and Full render the same calm first viewport and primary action.
-   Full adds compact operational facts below it, not a separate mental model.
-3. Remove speculative failure/recovery sections, ordinary emergency override,
-   raw identifiers, open logs, and historical failures from arrival.
+   Full adds compact operational facts below it, not an auto-open history panel
+   or a separate mental model.
+3. Remove `OwnerReleaseCard.whatCouldGoWrong`, the pre-action `riskNotice`, the
+   ordinary `Emergency override`, raw identifiers, open logs, and historical
+   failures from arrival. Preserve actual state-specific failure disclosure.
 4. Open confirmation only after `Install now`. State consequence, expected
    duration, automatic recovery, and `Install` / `Not now`.
 5. Make progress, success, failure, rollback, and conflict copy state-specific.
    Put diagnostics/history behind explicit disclosure in both modes. Show an
    override only when the authoritative state says it is relevant and allowed.
-6. Use **Platform updates** in navigation. Preserve `/ops/self-upgrade`; add a
-   `/delivery/updates` compatibility/convergence path only through the existing IA
-   decision, without duplicating page logic.
-7. Render and measure every state at desktop/narrow widths, light/dark themes,
+6. Use **Platform updates** in navigation and preserve `/ops/self-upgrade` as the
+   one canonical operator route. Do not add `/delivery/updates` or duplicate page
+   logic.
+7. Keep deterministic preflight separate from judgment. Target binding,
+   quiescence, recovery-point, migration, and identity blockers render as typed
+   readiness states. Only autonomous judgment uses the scoped decision gate, and
+   its bands remain backstage.
+8. Render and measure every state at desktop/narrow widths, light/dark themes,
    keyboard focus, and screen reader. Record the UX-fit artifact before handoff.
 
 **Verification:** component/view-model tests prove forbidden arrival content is
@@ -275,15 +299,18 @@ and presentation. No migration or upgrade-run data is removed.
 2. Install clean consumer instances on Windows and one Unix target from images
    only. Remove network access after pulls and prove baseline initialization.
 3. Exercise Build Studio through claim → plan → overlay edit → graph/manifest
-   reconcile → verify → review evidence. Confirm the production runtime did not
-   advance from Workroom bytes.
+   reconcile → verify → review evidence. Prove the definition version, instance,
+   record, both shape claims, posture, decision scope, snapshot, receipts, and
+   outcome packet agree. Confirm the production runtime did not advance from
+   Workroom bytes.
 4. Exercise external organization-operation and platform-development agents and
    compare their served profiles and effective tools.
 5. Kill sessions in active, durable-wait, finished, and merged states; prove the
    liveness policy and overlay preservation/removal.
 6. Publish N+1 and execute Platform updates: available → confirmation → progress
    → success. Inject baseline activation and health failures and prove rollback
-   plus actual-failure UX. Exercise a dirty overlay conflict.
+   plus actual-failure UX. Exercise a dirty overlay conflict. Verify speculative
+   failures and emergency override are absent from arrival in both nav modes.
 7. Record image, source, tree, bundle, Workroom, projection, and upgrade-run
    identities as canonical acceptance evidence. Reconcile every umbrella
    acceptance criterion before marking any BI done.
@@ -295,7 +322,7 @@ and presentation. No migration or upgrade-run data is removed.
 | Release workflow/assets | workflow contract tests, installer tests, shell/PowerShell syntax | multi-arch publish + clean install + N-1 rollback |
 | Snapshot/projections | affected Vitest, typecheck, graph/manifest fixtures | live source-free Build Studio exercise |
 | Agent contract | instruction/grant snapshot tests, typecheck | MCP sessions in both engagement scopes |
-| Workroom liveness | clock/state tests, janitor safety tests | killed-session and durable-wait exercise |
+| Workroom/decision contract | definition-instance-record projection, shape/posture, band/disposition, clock/state, and janitor tests | killed-session, durable-wait, receipt/outcome-packet, and scoped-decision exercise |
 | Platform updates UI | component/copy/a11y tests, typecheck, measured UX artifact | governed browser state matrix + real upgrade |
 | Docs only | documentation/reference guards | none until implementation |
 
@@ -313,6 +340,8 @@ apply to populated v2 install state and arbitrary supported database state.
 | Workdir threading misses a dispatcher | Registry/contract test enumerates every engine and tool consumer. |
 | Projection invokers race or duplicate PR #4711 | Rebase after slice 0 and reuse the one registry/invoker. |
 | Agent scope leaks developer authority | Closed engagement projection plus token-grant intersection and unknown fail-closed. |
+| Decision band or gate refusal becomes a second status system | Map both into the canonical five dispositions; conformance-test the mapping. |
+| Source state is attached to a reusable definition | Contract tests require it only on the exact instance and durable record. |
 | Reaper destroys useful work | Transition evidence before deletion; dirty/finished/waiting states are non-destructive. |
 | UX simplification hides actionable failure | State-specific message plus explicit diagnostics; only hypothetical content is removed. |
 
@@ -328,9 +357,11 @@ surface still promises `my-changes`, an auto-advancing source volume, or develop
 
 - Decision: decomposed
 - Parent: BI-357792B1
-- Receipt: blocked — no initiative scope baseline exists for BI-357792B1 because
-  the commit-bound independent reviewer routes completed without executing their
-  required read or receipt-writer tools. No coverage receipt has been minted.
+- Receipt: not yet minted. Live initiative-readiness v3 currently permits design
+  work but requires current research, canonical design, independent spec
+  approval, architecture review, objective baseline, and artifact-author evidence
+  before plan approval. This table is the proposed decomposition, not a governed
+  coverage receipt.
 - Dependencies: release-baseline → snapshot-intelligence → agent-engagement and
   workroom-liveness; platform-updates-ux is parallel; canonical acceptance waits
   for all five independent slices.
@@ -342,11 +373,12 @@ surface still promises `my-changes`, an auto-advancing source volume, or develop
 - `canonical-acceptance` -> BI-357792B1 (integration-only; depends on all five
   independent slices)
 
-Reviewer/runtime failures are delivery blockers, not design decisions. This
-branch may advance only when an independent reviewer writes the required
-commit-bound initiative receipts, the resulting scope baseline exists, and the
-canonical runtime mints and revalidates a live coverage receipt for the final
-deliverable graph. The coverage table above is not a substitute receipt.
+This branch may advance to implementation only when the current independent
+review route writes the required commit-bound initiative receipts, the resulting
+scope baseline exists, and the canonical runtime mints and revalidates live plan
+coverage for the final deliverable graph. Historical August reviewer failures and
+old upgrade waits are not current evidence. The coverage table above is not a
+substitute receipt.
 
 ## Approval boundary
 
