@@ -27,9 +27,7 @@ Consequences (evidenced in the source analysis):
 
 **OBJ-WORKFORCE-001:** Give operators one canonical AI Coworkers journey that connects governed identities with current and retained recent work from roster, external-agent, specialist, Build Studio, and native-runtime executors without relabeling execution envelopes as coworker identities.
 
-**OBJ-WORKFORCE-002:** Preserve and expose the exact operational context needed to explain AI load and blocked work after live activity ends, including TaskRun, Workroom, actor, provider/model usage, self-upgrade blocker, evidence, and status identities.
-
-**OBJ-WORKFORCE-003:** Make historical AI operations investigation explicit and reproducible through resolvable Workroom details and URL-addressable Operations Map time windows with named presets and bounded navigation.
+**OBJ-WORKFORCE-002:** Preserve and expose enough governed context to explain AI work after live activity ends, including TaskRun, Workroom, actor, and status identities, while routing deeper cost and historical analysis to their canonical surfaces.
 
 **Non-goals:**
 - Not a rewrite of the nav model. `portal-navigation-model.ts` stays the single source; this changes the *section taxonomy* it maps into (`shellNav.sectionKey`), not the per-route records.
@@ -62,14 +60,13 @@ The two cross-cuts (Workspace, Knowledge) stay first-class but are *labeled as c
 
 ### 4.2 First slice — one AI Coworkers home inside Workforce
 
-The original “group the existing routes” slice is too weak. Live operator evidence on 2026-08-28 showed the failure mode: self-upgrade reported an AI coworker working, its generic link opened a live-only activity page that was already empty, and identity versus operational details were split between the top-level **AI Coworkers** and **AI Workforce** destinations. Finding the complete picture took roughly ten minutes.
+The original “group the existing routes” slice is too weak. Live operator evidence on 2026-08-28 showed the failure mode: an operational message reported AI work in flight, its generic link opened a live-only activity page that was already empty, and identity versus operational details were split between the top-level **AI Coworkers** and **AI Workforce** destinations. Finding the complete picture took roughly ten minutes. The former upgrade-specific early-skip behavior has since been replaced by the deployed drain-and-wait workflow; this design retains only the still-open navigation and activity-continuity problem.
 
 The slice therefore establishes `/workforce` as the one canonical AI Coworkers home:
 
 - the directory remains the front door and every row still opens the coworker's identity;
 - current and retained recent activity are part of the same page, not a competing platform-admin destination;
-- live and recent activity cover every governed AI actor that can block an upgrade, even when that actor's registry type is `specialist` rather than `coworker`;
-- a skipped self-upgrade persists the blocker task-run identity, actor identity, title, and capture time in its existing completion-evidence envelope, then deep-links to that retained activity;
+- live and recent activity reuse the existing governed activity read model rather than inventing a second roster or ledger;
 - provider/routing, skills, scheduling, governance, and build-runtime controls remain advanced links from this home and from an individual identity; they are not another top-level roster;
 - `/platform/ai/right-now` remains a compatibility deep link into the activity view, while the primary navigation exposes only the canonical home.
 
@@ -77,11 +74,11 @@ The activity view distinguishes identities from execution envelopes:
 
 - **Coworkers** are the governed roster identities the organization can configure, schedule, and supervise.
 - **External & platform work** is governed activity from Codex/Claude/Grok desktop sessions, Build Studio, specialists, and native runtimes, projected through their Workrooms and TaskRuns. It is visible in the same journey but is never relabeled as a roster coworker.
-- **Usage reconciliation** derives from TokenUsage and reports roster, external/specialist, and unattributed buckets. A missing join is an explicit limitation, not permission to infer a Workroom from timing or prompt text.
-- **Workroom detail** is the context boundary: objective, executor, branch/build context, activity journal, evidence, and status. An inventory link using a semantic `WC-*` identity must resolve to that same projection.
-- **Operations Map history** is the deeper replay altitude. Its selected time window is explicit, URL-addressable, and traversable backward/forward so the operator can investigate an earlier load spike without dragging an unlabeled scrubber across months of evidence.
+- **Usage detail** stays on the existing activity surface in this slice. Lossless roster/external/unattributed reconciliation remains owned by `BI-3EC91596`; a missing join is never permission to infer a Workroom from timing or prompt text.
+- **Workroom detail** remains the context boundary: objective, executor, branch/build context, activity journal, evidence, and status. Raw `WC-*` route repair remains owned by `BI-496CD36E`.
+- **Operations Map history** remains the deeper replay altitude. URL-backed historical-window controls remain owned by `BI-75D5ABCD`.
 
-This is still one concern: an operator must be able to answer “which AI coworker is this, what is it doing, and how do I manage it?” without choosing between identity and operations taxonomies. It reuses the existing roster, workforce-activity, TaskRun, self-upgrade evidence, and navigation models; no new registry or event store is introduced.
+This is still one concern: an operator must be able to answer “which AI coworker is this, what is it doing, and how do I manage it?” without choosing between identity and operations taxonomies. It reuses the existing roster, workforce-activity, TaskRun, Workroom, and navigation models; no new registry or event store is introduced.
 
 ### 4.3 Mechanism
 
@@ -136,10 +133,10 @@ The 2026-08-31 operator-activity amendment benchmarked execution and observabili
 - **No new nav model.** Extends `portal-navigation-model.ts` / `portal-shell-sections.ts`; no second registry.
 - **No new taxonomy.** Reuses the FPAW four-portfolio keys already persisted on `PortfolioDecomposition`; adds only a section→portfolio adapter map (the standard already mandates the key adapter).
 - **No new mode system.** Reuses the `nav-mode` cookie for operator preview.
-- **No new activity ledger.** Recent activity projects existing `TaskRun` rows; self-upgrade retains the exact blocker reference in `SelfUpgradeRun.completionEvidence`.
+- **No new activity ledger.** The canonical home composes the existing workforce-activity projection and its current retention behavior.
 - **Workroom is the external-execution envelope.** Desktop coding agents and Build Studio remain external/platform executors projected through existing Workroom and WorkroomActivity records, not synthetic coworker identities.
 - **Usage gaps stay visible.** TokenUsage is reconciled losslessly into known roster, external/specialist, and unattributed buckets; the read model never invents attribution.
-- **Actor parity at the safety boundary.** The activity projection covers the same live TaskRun population as the self-upgrade quiescence detector instead of assuming every governed actor has `Agent.type=coworker`.
+- **Identity and execution stay distinct.** The directory remains bounded to coworker identities; external and platform work is labeled as Workroom-backed execution.
 - **No coherence regression.** Section-scoped nav, breadcrumb, and the one-renderer ratchet are unchanged; only `sectionKey` groupings move.
 
 ## 7. Phased plan
@@ -147,7 +144,7 @@ The 2026-08-31 operator-activity amendment benchmarked execution and observabili
 | Phase | Deliverable | Size |
 |---|---|---|
 | 0 | Section→FPAW-portfolio adapter map + trace test asserting every `shellNav` entry resolves to a portfolio or an explicit cross-cut | S |
-| 1 | **Workforce unification slice** — one `/workforce` directory + current/recent roster and governed-executor activity; usage reconciliation; compatibility deep links; one primary AI-coworker destination; retained self-upgrade blocker identity; resolvable Workroom detail links; navigable Operations Map history | L |
+| 1 | **Workforce unification slice** — one `/workforce` directory + current/recent governed activity; contextual Workroom and Operations Map links; compatibility redirect; one primary AI-coworker destination | M |
 | 2 | Label & de-dupe pass (folds in the quick wins: "Portal"→"Storefront Setup", drop `/platform/ai` vs `/overview` duplicate, "AI Coworkers"→"Agent Identities", rail-label↔H1 alignment) | S |
 | 3 | Reconcile remaining sections to the portfolio spine; make it the default after live-install validation | L |
 | 3b | **Connections cockpit (§4.5)** — unified external-dependency registry + one Foundation surface + uniform cost/billing + in-dialog provisioning (BI-2A0180A9); first concrete instance of the §4.4 capability | L |
@@ -166,24 +163,19 @@ The companion spec's lexicon rule has been corrected accordingly (*Interaction S
 | Acceptance ID | Objective IDs | Statement |
 |---|---|---|
 | AC-WORKFORCE-001 | OBJ-WORKFORCE-001 | The primary navigation presents one AI-coworker destination whose canonical Workforce home combines coworker identity, ordinary controls, current activity, and retained recent activity while advanced fleet plumbing remains nested. |
-| AC-WORKFORCE-002 | OBJ-WORKFORCE-001, OBJ-WORKFORCE-002 | Current and retained activity includes every governed TaskRun actor that can block self-upgrade, visibly separates external and platform executors from roster coworkers, and reconciles TokenUsage into roster, external or specialist, and unattributed buckets without inference. |
-| AC-WORKFORCE-003 | OBJ-WORKFORCE-002 | An activity-in-flight self-upgrade skip persists and renders the exact actor and TaskRun identity, and its link lands on matching retained activity after the live window closes. |
-| AC-WORKFORCE-004 | OBJ-WORKFORCE-002, OBJ-WORKFORCE-003 | Every semantic WC identifier in inventory or activity resolves to the matching Workroom detail with objective, executor, branch or build context, activity, evidence, and status while legacy case keys continue to resolve. |
-| AC-WORKFORCE-005 | OBJ-WORKFORCE-003 | Operations Map exposes named time presets, exact start and end timestamps, one-window backward and forward movement, reset-to-live, and refresh-stable URL state. |
-| AC-WORKFORCE-006 | OBJ-WORKFORCE-001, OBJ-WORKFORCE-002, OBJ-WORKFORCE-003 | The reconciled experience is previewable on a live install without regressing section-scoped navigation, breadcrumb, single-renderer, or canonical-ledger guarantees. |
+| AC-WORKFORCE-002 | OBJ-WORKFORCE-001, OBJ-WORKFORCE-002 | The Activity view reuses the governed current/recent read model and visibly distinguishes external and platform Workroom execution from roster coworkers. |
+| AC-WORKFORCE-003 | OBJ-WORKFORCE-001 | `/platform/ai/right-now` is a compatibility redirect to `/workforce?view=activity` and does not retain a second activity implementation. |
+| AC-WORKFORCE-004 | OBJ-WORKFORCE-002 | Workrooms and Operations Map remain contextual drill-downs from Activity, while their deeper route and history enhancements remain in their existing backlog carriers. |
+| AC-WORKFORCE-005 | OBJ-WORKFORCE-001, OBJ-WORKFORCE-002 | The reconciled experience is verified on a served target without regressing section-scoped navigation, breadcrumb, single-renderer, or canonical-ledger guarantees. |
 
 - Every `shellNav` entry resolves — via a checked-in test — to exactly one FPAW portfolio key or an explicitly declared cross-cut; none is silently unclassified.
 - People, AI Workforce, and Coworker Decisions are reachable under one Workforce section without violating section-scoped nav or the breadcrumb guarantee.
 - The primary navigation presents one AI-coworker destination; operators do not choose between “AI Coworkers” and “AI Workforce.”
 - `/workforce` moves from fleet status to a coworker identity and ordinary controls without crossing to another main-menu domain; advanced fleet plumbing is nested, not competing.
-- Current activity includes every governed TaskRun actor that can block self-upgrade, regardless of whether its registry type is `coworker` or `specialist`.
-- Recent activity retains completed/failed/waiting TaskRuns long enough to explain an operational event after live work ends.
-- An `activity-in-flight` self-upgrade skip persists and renders the named actor and task-run identity, and its link lands on the matching retained activity.
+- Current and recent activity reuse the existing governed workforce-activity projection and retention policy.
 - `/platform/ai/right-now` remains a non-competing compatibility route into the canonical activity experience.
 - Live and recent Workrooms from external/platform executors appear in a clearly labeled lane with objective, executor kind, status, time, and a working detail link.
-- TokenUsage totals reconcile into roster, external/specialist, and unattributed buckets without dropping or guessing rows.
-- Every `WC-*` inventory link resolves to its matching Workroom detail while legacy encoded case keys continue to work.
-- Operations Map offers named time presets, exact start/end, one-window backward/forward movement, reset-to-live, and refresh-stable URL state.
+- Detailed TokenUsage attribution, raw `WC-*` route repair, and Operations Map history controls remain explicitly deferred to their existing backlog items.
 - The reconciled spine is previewable via nav-mode on a live install before it becomes default.
 - No regression in the EP-NAV-COHERENCE guarantees (§3), asserted by the existing nav tests plus the new trace test.
 
