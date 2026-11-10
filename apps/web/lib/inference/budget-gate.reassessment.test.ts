@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@dpf/db";
 
-const db = vi.hoisted(() => ({ agent: { findUnique: vi.fn() }, tokenUsage: { aggregate: vi.fn() } }));
+const db = vi.hoisted(() => ({ agent: { findUnique: vi.fn() }, tokenUsage: { aggregate: vi.fn() }, modelProvider: { findMany: vi.fn(async (): Promise<Array<{ providerId: string }>> => []) } }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 import { checkReassessmentBudget, readReassessmentBudgetConfiguration } from "./budget-gate";
 
@@ -25,6 +25,17 @@ describe("restricted review current normal budget", () => {
     vi.resetAllMocks();
     db.agent.findUnique.mockResolvedValue(currentRow());
   });
+  it.each(["ux-design-critic", "AGT-906"])("loads the real bundled Critic registry for %s and keeps narrower live limits", async agentId => {
+    db.agent.findUnique.mockResolvedValue({ id: "canonical-critic-row", agentId: "AGT-906", executionConfig: {
+      id: "critic-execution-config", agentId: "canonical-critic-row", executionType: "in_process",
+      dailyTokenLimit: 100000, perTaskTokenLimit: 10000, timeoutSeconds: 90, maxTokens: 4096,
+    } });
+    const config = await readReassessmentBudgetConfiguration(agentId);
+    expect(db.agent.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: "AGT-906" } }));
+    expect(config).toMatchObject({ registryAgentId: "AGT-906", registryAgentName: "ux-design-critic",
+      registryLimits: { dailyTokenLimit: 200000, perTaskTokenLimit: 20000, timeoutSeconds: 180, maxTokens: 8192 },
+      configuredDailyLimit: 100000, configuredPerTaskLimit: 10000, configuredTimeoutMs: 90000, configuredMaxOutputTokens: 4096 });
+  });
   it("reads the canonical execution row and retains both origins with stable digests", async () => {
     const config = await read();
     expect(db.agent.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: "AGT-REVIEW" } }));
@@ -38,8 +49,9 @@ describe("restricted review current normal budget", () => {
   });
   it("uses the supplied transaction for current configuration and observed daily totals", async () => {
     const owner = { agent: { findUnique: vi.fn(async () => currentRow({ perTaskTokenLimit: 40000 })) },
-      tokenUsage: { aggregate: vi.fn(async () => ({ _sum: { inputTokens: 150000, outputTokens: 10000 } })) } };
-    const tx = owner as unknown as Pick<Prisma.TransactionClient, "agent" | "tokenUsage">;
+      tokenUsage: { aggregate: vi.fn(async () => ({ _sum: { inputTokens: 150000, outputTokens: 10000 } })) },
+      modelProvider: { findMany: vi.fn(async () => []) } };
+    const tx = owner as unknown as Pick<Prisma.TransactionClient, "agent" | "tokenUsage" | "modelProvider">;
     const loadRegistry = vi.fn(() => registry());
     const config = await readReassessmentBudgetConfiguration("reviewer", loadRegistry, tx);
     expect(config.configuredPerTaskLimit).toBe(40000);
@@ -50,8 +62,9 @@ describe("restricted review current normal budget", () => {
   it("refuses transaction-local exhaustion even when ambient usage is below the ceiling", async () => {
     const config = await read(registry(100));
     db.tokenUsage.aggregate.mockResolvedValue({ _sum: { inputTokens: 0, outputTokens: 0 } });
-    const owner = { tokenUsage: { aggregate: vi.fn(async () => ({ _sum: { inputTokens: 100, outputTokens: 0 } })) } };
-    await expect(checkReassessmentBudget(config, owner as unknown as Pick<Prisma.TransactionClient, "tokenUsage">)).rejects.toThrow(/exhausted/);
+    const owner = { tokenUsage: { aggregate: vi.fn(async () => ({ _sum: { inputTokens: 100, outputTokens: 0 } })) },
+      modelProvider: { findMany: vi.fn(async () => []) } };
+    await expect(checkReassessmentBudget(config, owner as unknown as Pick<Prisma.TransactionClient, "tokenUsage" | "modelProvider">)).rejects.toThrow(/exhausted/);
     expect(db.tokenUsage.aggregate).not.toHaveBeenCalled();
   });
   it("intersects narrowed live limits without widening any registry ceiling", async () => {
@@ -137,5 +150,14 @@ describe("restricted review current normal budget", () => {
     const config = await read();
     db.tokenUsage.aggregate.mockResolvedValue({ _sum: { inputTokens: -1, outputTokens: null } });
     await expect(checkReassessmentBudget(config)).rejects.toThrow(/usage/i);
+  });
+  it("does not count local or flat-rate subscription usage against the reviewer's daily cap (BI-F3B6713F)", async () => {
+    const config = await read(registry(100));
+    db.modelProvider.findMany.mockResolvedValueOnce([{ providerId: "local" }, { providerId: "anthropic-sub" }]);
+    db.tokenUsage.aggregate.mockResolvedValue({ _sum: { inputTokens: 40, outputTokens: 0 } });
+    expect(await checkReassessmentBudget(config)).toMatchObject({ status: "ok", actualTokens: 40 });
+    expect(db.tokenUsage.aggregate).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      providerId: { notIn: ["local", "anthropic-sub"] },
+    }) }));
   });
 });

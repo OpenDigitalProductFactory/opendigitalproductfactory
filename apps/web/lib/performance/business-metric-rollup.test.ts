@@ -4,6 +4,7 @@ import {
   aggregateBusinessMetrics,
   buildRestaurantMetricRows,
   restaurantMetricWindow,
+  type BusinessMetricRollupInput,
 } from "./business-metric-rollup";
 
 const at = new Date("2026-08-01T02:00:00.000Z");
@@ -129,6 +130,42 @@ describe("buildRestaurantMetricRows", () => {
 });
 
 describe("aggregateBusinessMetrics", () => {
+  it("dispatches software UTC months to one coherent three-row persistence call per period", async () => {
+    const context = { organizationId: "org-software", storefrontId: "sf-software" };
+    const listContexts = vi.fn(async () => [context]);
+    const loadReport = vi.fn(async (_context: typeof context, window: { periodKey: string }, checkedAt: Date) => ({
+      organizationId: context.organizationId, periodKey: window.periodKey, checkedAt,
+      availability: "unavailable" as const, currency: null, reason: "The ledger needs configured accounts.",
+    }));
+    const upsertPeriod = vi.fn(async (_rows: readonly BusinessMetricRollupInput[], _computedAt: Date) => undefined);
+    const restaurantLoader = vi.fn();
+    const result = await aggregateBusinessMetrics({
+      listRestaurantContexts: async () => [], loadRestaurantSource: restaurantLoader, upsert: vi.fn(),
+      software: { listContexts, loadReport, upsertPeriod },
+    } as never, new Date("2027-01-01T00:30:00Z"));
+    expect(result).toEqual({ organizations: 1, periods: 2, upserted: 6 });
+    expect(restaurantLoader).not.toHaveBeenCalled();
+    expect(loadReport.mock.calls.map(call => call[1].periodKey)).toEqual(["2026-12", "2027-01"]);
+    expect(upsertPeriod).toHaveBeenCalledTimes(2);
+    for (const [rows] of upsertPeriod.mock.calls) {
+      expect(rows).toHaveLength(3);
+      expect(new Set(rows.map(row => row.sourceLineage.generation)).size).toBe(1);
+      expect(rows.every(row => row.sourceLineage.generation === "2027-01-01T00:30:00.000Z")).toBe(true);
+      expect(rows.every(row => row.value === null && row.availability === "unavailable")).toBe(true);
+      expect(rows.every(row => row.sourceLineage.sourceRows === null)).toBe(true);
+    }
+  });
+
+  it("does not replace a prior valid software snapshot when its source read fails", async () => {
+    const upsertPeriod = vi.fn();
+    await expect(aggregateBusinessMetrics({
+      listRestaurantContexts: async () => [], loadRestaurantSource: vi.fn(), upsert: vi.fn(),
+      software: { listContexts: async () => [{ organizationId: "org-a", storefrontId: "sf-a" }],
+        loadReport: async () => { throw new Error("fixture ledger read failed"); }, upsertPeriod },
+    } as never, at)).rejects.toThrow("fixture ledger read failed");
+    expect(upsertPeriod).not.toHaveBeenCalled();
+  });
+
   it("recomputes current and prior periods through idempotent upserts", async () => {
     const upserted: string[] = [];
     const result = await aggregateBusinessMetrics({

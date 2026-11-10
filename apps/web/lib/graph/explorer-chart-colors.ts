@@ -61,7 +61,7 @@ export const REL_TYPE_COLORS: Record<string, string> = {
   HAS_FIELD: "#fcd34d",
   TESTED_BY: "#34d399",
   ASSOCIATED_WITH: "#86efac",
-  RELATES_TO: "#4ade80",
+  HAS_FOREIGN_KEY_TO: "#4ade80",
   IMPLEMENTS_ROUTE: "#a78bfa",
   EXPOSES_TOOL: "#f472b6",
   BELONGS_TO: "#818cf8",

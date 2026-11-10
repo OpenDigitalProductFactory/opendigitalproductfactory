@@ -61,14 +61,20 @@ const TASK_SELECT = {
 type OwnerAliases = { aliases: Array<{ aliasValue: string }> } | null;
 export type MandateRoomRow = MandateRoom & { requestedByPrincipal?: OwnerAliases; createdByPrincipal?: OwnerAliases };
 
-/** The declared writes the room grants one of `agentIds` on its own drive task. Pure. */
-export function roomStageMandatedTools(input: {
+type RoomStageMandateInput = {
   scheduledTaskId: string;
   room: MandateRoom;
   agentIds: readonly string[];
   /** Server-read task assignment for a role stage the drive assigned dynamically. */
   assignedStageKey?: string | null;
-} & ReportCall): string[] {
+} & ReportCall;
+
+/** The declared writes the room grants one of `agentIds` on its own drive task. Pure. */
+export function roomStageMandatedTools(input: RoomStageMandateInput): string[] {
+  return declaredRoomStageTools(input, false);
+}
+
+function declaredRoomStageTools(input: RoomStageMandateInput, blockedReportOnly: boolean): string[] {
   const { room } = input;
   if (room.archivedAt !== null || TERMINAL_WORKROOM_STATUSES.has(room.status)) return [];
   const shape = resolveWorkShapeClaim(room.scopeClaims);
@@ -81,7 +87,7 @@ export function roomStageMandatedTools(input: {
     if (stage.advance.kind === "governed-decision") continue;
     const principal = parseAccountablePrincipalRef(boundStagePrincipal(stage.accountablePrincipalRef, false, bindings));
     // Delivery completion also requires current funding and dispatch provenance below.
-    if (!isDeliveryShapeKey(shape.key) && principal.kind === "agent" && input.agentIds.includes(principal.value)) {
+    if (!blockedReportOnly && !isDeliveryShapeKey(shape.key) && principal.kind === "agent" && input.agentIds.includes(principal.value)) {
       for (const tool of stage.mandatedTools ?? []) tools.add(tool);
     }
     // Reporting failure does not authorize success or the stage's business act.
@@ -152,7 +158,28 @@ function checkpointKey(c: DispatchCheckpoint): string {
     c.confirmedEffect.kind, c.confirmedEffect.taskId, c.confirmedEffect.recordedAt,
     c.stage.shapeKey, c.stage.shapeVersion, c.stage.stageKey, [...c.stage.tools].sort(),
     c.authority.holderPrincipalId, c.authority.leaseExpiresAt,
-    c.dispatchScope?.runKey, c.dispatchScope?.cycleKey, c.dispatchScope?.iteration]);
+    c.dispatchScope?.runKey, c.dispatchScope?.cycleKey, c.dispatchScope?.iteration,
+    c.source !== undefined, c.source?.repositoryFullName, c.source?.headSha]);
+}
+
+/** Legacy nonrepository work remains valid; missing source never proves repository authority. */
+function dispatchSourceIsCurrent(input: {
+  room: MandateRoom; runCheckpoint: unknown; taskCheckpoint: unknown;
+  taskId: string; shapeKey: string; shapeVersion: string; assignedStageKey: string | null;
+}): boolean {
+  const { room, runCheckpoint, taskCheckpoint } = input;
+  const hasSource = (value: unknown) => isRecord(value) && "source" in value;
+  if (room.repositoryFullName == null && room.headSha == null
+    && !hasSource(runCheckpoint) && !hasSource(taskCheckpoint)) return true;
+  const run = readDispatchCheckpoint(runCheckpoint), task = readDispatchCheckpoint(taskCheckpoint);
+  // A standing room's latest checkpoint may belong to another concurrent branch.
+  // Its task and immutable run receipt are the source admission being exercised.
+  return Boolean(run?.source && task?.source && checkpointKey(run) === checkpointKey(task)
+    && run.roomId === room.id && run.confirmedEffect.taskId === input.taskId
+    && run.stage.shapeKey === input.shapeKey && run.stage.shapeVersion === input.shapeVersion
+    && run.stage.stageKey === input.assignedStageKey
+    && run.source.repositoryFullName === (room.repositoryFullName ?? null)
+    && run.source.headSha === (room.headSha ?? null));
 }
 
 /** One reconstruction for attachment, proposal interception and the reference monitor. */
@@ -223,6 +250,15 @@ export async function loadScheduledRoomAuthority(
         return withheld("The qualification tool effect is outside the exact path, duration, or terminal-evidence binding.");
       }
       return { ...EMPTY, mandatedTools: [input.toolName] };
+    }
+    const taskState = isRecord(task?.taskConfig) ? task.taskConfig : {};
+    const runState = isRecord(metadata) ? metadata : {};
+    if (!dispatchSourceIsCurrent({ room, taskId, shapeKey: shape.key, shapeVersion: shape.version, assignedStageKey,
+      runCheckpoint: runState.workroomDispatchCheckpoint, taskCheckpoint: taskState.workroomDispatchCheckpoint })) {
+      const blockedReport = declaration?.actionBoundary !== "advise" && declaration?.actionBoundary !== "propose"
+        ? declaredRoomStageTools({ ...input, scheduledTaskId: taskId, room, assignedStageKey }, true) : [];
+      return blockedReport.length ? { ...EMPTY, mandatedTools: blockedReport }
+        : withheld("The dispatch source is missing, changed, or no longer bound to this run. Reconcile the dispatch before continuing.");
     }
     // BI-E458A9CB: an exact blocked report survives lost completion authority.
     if (!isDeliveryShapeKey(shape.key) || (input.params?.outcome === "blocked" && declared.includes(EVIDENCE_WRITER)

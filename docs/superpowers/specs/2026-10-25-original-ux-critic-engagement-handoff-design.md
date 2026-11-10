@@ -58,6 +58,28 @@ immutable plan coverage and claim implementation normally before code changes.
 Do not create a feature merely to manufacture a scope baseline, borrow BI-285EF102
 policy, or resume the E27 unknown spec-approval task.
 
+### November 2 current-authority context correction
+
+A live no-allocation refusal demonstrated a second boundary: the outer governed
+call allowed a routine action under verified OAuth connection delegation, but
+its handler-side recheck received a reduced context and required approval again.
+The original executor must carry that server-resolved delegation into the handler;
+a caller argument, new grant or synthetic approval must never supply it.
+
+The recheck uses the exact canonical tool definition selected by the original
+executor and its trusted room getter, not a raw pack definition or an assumed
+unroomed context. The read-only reader catalog is unchanged and cannot describe
+this mutating action. Missing getters or a mismatched tool refuse before
+allocation. Preserve the existing canonical
+engagement validation of current credential/consent, actor, grants, room and
+immutable binding before admission, effects and publication. Passing the
+original tuple does not make revoked authority valid.
+
+Retain the actual current refusal code, explanation and supported next action.
+Expose its redacted reason in structured tool data as well as the message, so
+a client does not reduce a diagnosis to a generic configuration/authority hold.
+A refusal is not permission to retry or select another provider.
+
 ### One additive, bounded present assessment
 
 An explicit supported action may authorize one separately attributed present

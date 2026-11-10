@@ -184,6 +184,9 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   // BI-49BC21C1: the room's own recurring misses recorded as harness-edit
   // candidates, once per room per day, by the harness evolution loop.
   "harness-evolution-candidate",
+  // BI-B8DAEB71: the probe's verdict on one of those candidates (ADOPT,
+  // KEEP_BASE or KERNEL_GAP) with its outcome, load and gate-burden deltas.
+  "harness-evolution-verdict",
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];
@@ -280,6 +283,9 @@ export const WORK_CAPSULE_EVIDENCE_KINDS = [
   "verification",
   "lint",
   "note",
+  // Room-level, not a stage kind: it settles the affected docs before handoff
+  // (BI-9B17E889, work-capsules/docs-impact-disposition.ts) and never completes a stage.
+  "docs-impact-disposition",
   ...WORK_SHAPE_EVIDENCE_KINDS,
 ] as const;
 
@@ -311,6 +317,8 @@ export type ScopeClaim = {
   intent: "edit" | "read";
   recordedAt: string;
   recordedByPrincipalId: string;
+  /** Server-owned prospective protection; absence is legacy, not birth proof. */
+  releaseEpoch?: string;
 };
 
 const STATUS_SET = new Set<string>(WORK_CAPSULE_STATUSES);

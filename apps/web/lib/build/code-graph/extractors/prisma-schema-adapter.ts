@@ -97,6 +97,10 @@ export type PrismaRelationFact = {
   /** Local scalar FK fields (only on the owning side; may be empty). */
   fkFields: string[];
   references: string[];
+  /** `onDelete` of the owning side's @relation, when declared. */
+  onDelete: string | null;
+  /** True when the relation field is required (not optional, not a list). */
+  isRequired: boolean;
   /** True when fkFields are covered by an index/unique/id (FK-without-index check). */
   isFkIndexed: boolean;
   line: number;
@@ -382,6 +386,8 @@ function deriveRelations(models: PrismaModelFact[]): PrismaRelationFact[] {
         cardinality: deriveCardinality(field.isList, inverseIsList),
         fkFields,
         references: field.relation?.references ?? [],
+        onDelete: field.relation?.onDelete ?? null,
+        isRequired: field.isRequired,
         isFkIndexed: fieldsCoveredByIndex(fkFields, model),
         line: field.line,
       });
@@ -423,4 +429,4 @@ export function parsePrismaSchema(sourceText: string): PrismaSchemaFacts {
 }
 
 /** Adapter version — bump when the parsing contract changes. */
-export const PRISMA_SCHEMA_ADAPTER_VERSION = "prisma-schema-adapter-v1";
+export const PRISMA_SCHEMA_ADAPTER_VERSION = "prisma-schema-adapter-v2";

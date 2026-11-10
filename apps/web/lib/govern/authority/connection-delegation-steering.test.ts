@@ -91,4 +91,15 @@ describe("approvalExplanation — the envelope names why a person is asked", () 
       approvalBinding: {} as never,
     })).toBe("Rule.");
   });
+
+  it("leads with what will happen when the call says so in plain words (BI-88D51B8F)", () => {
+    expect(approvalExplanation({
+      outcome: "require-approval",
+      reasonCode: "approval-required",
+      explanation: "Rule.",
+      nextAction: "request-approval",
+      approvalBinding: {} as never,
+    }, "  This frees the shared test machine another session is still holding.  "))
+      .toBe("This frees the shared test machine another session is still holding. Rule.");
+  });
 });

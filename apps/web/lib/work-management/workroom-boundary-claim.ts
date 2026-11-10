@@ -1,3 +1,4 @@
+import { withoutScopeMetadataFields } from "../work-capsules/scope-metadata.mjs";
 // Workroom declared-boundary claim.
 //
 // WHY THIS EXISTS. The room detail page computes a boundary and reports what is
@@ -148,7 +149,7 @@ export function withWorkroomBoundaryClaim(
     : scopeClaims && typeof scopeClaims === "object"
       ? [scopeClaims]
       : [];
-  const others = existing.filter((entry) => claimFrom(entry) === null);
+  const others = withoutScopeMetadataFields(scopeClaims, ["workroomBoundary"]);
 
   const priorEntry = existing.find((entry) => claimFrom(entry) !== null) as WorkroomBoundaryClaimEntry | undefined;
   const prior = priorEntry?.workroomBoundary.sensitivityCeiling;

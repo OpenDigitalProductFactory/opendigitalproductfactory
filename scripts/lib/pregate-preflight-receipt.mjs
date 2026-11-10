@@ -37,10 +37,34 @@ export function readGuardInputStamp(input, fs = { realpathSync, openSync, fstatS
   } finally { fs.closeSync(fd); }
 }
 
-// Include incidental changes conservatively, but not the pnpm wrapper's name:
-// standalone preflight and the identical preflight invoked by pregate must match.
-// Codex changes its tracing call id for each invocation; it is not a guard input.
-const WRAPPER_ENV = /^(?:npm_lifecycle_event|npm_lifecycle_script|npm_command|npm_execpath|npm_node_execpath|npm_config_user_agent|INIT_CWD|SHLVL|_|CODEX_TOOL_CALL_ID)$/i;
+// Receipt identity is the executed guard contract, not the host process.  A
+// publish hook necessarily has a different session, tracing and provider
+// environment from the shell that recorded a correction proof.  Keep only
+// inputs that select an executable or can change Node/CI guard behaviour.
+const GUARD_RESULT_ENV = /^(?:CI|NODE_ENV|NODE_OPTIONS|PATH|PATHEXT|COMSPEC|SYSTEMROOT|WINDIR|PROGRAMFILES(?:\(X86\))?|LOCALAPPDATA|TZ|LANG|LC_ALL|LC_CTYPE|FORCE_COLOR|NO_COLOR|BASE_SHA|BASE_REF|NPM_CONFIG_[A-Z0-9_]+|PNPM_[A-Z0-9_]+|GIT_CONFIG(?:_COUNT|_KEY_\d+|_VALUE_\d+)?|DPF_(?:TEST_POWERSHELL|PREPUSH_BASE_REF|GUARD_SPAWN_RETRIES|SKIP_COMPILE_READY_GATE|PREFLIGHT_SKIP|GATE_POLICY))$/i;
+const GIT_HOOK_PATH_PREFIX = /(?:[\\/]Git[\\/]mingw64[\\/]libexec[\\/]git-core|[\\/]usr[\\/]lib[\\/]git-core|[\\/]usr[\\/]libexec[\\/]git-core)[\\/]*$/i;
+
+function guardPath(value, platform) {
+  // Git prepends this directory while invoking hooks. It resolves Git's own
+  // helpers, not the OpenSSL/Bash/PowerShell tools executed by guard plans.
+  // Preserve every other PATH entry because those tools are selected from it.
+  const delimiter = platform === "win32" ? ";" : ":";
+  return String(value).split(delimiter).filter(entry => !GIT_HOOK_PATH_PREFIX.test(entry)).join(delimiter);
+}
+
+export function guardResultEnvironment(env = process.env, { platform = process.platform } = {}) {
+  const selected = new Map();
+  for (const [key, value] of Object.entries(env)) {
+    if (!GUARD_RESULT_ENV.test(key)) continue;
+    // Windows treats names case-insensitively, while POSIX intentionally does
+    // not. Canonicalize the Windows spelling so the hook's PATH overrides an
+    // inherited Path without collapsing distinct POSIX inputs.
+    selected.set(platform === "win32" ? key.toUpperCase() : key, value);
+  }
+  return [...selected]
+    .map(([key, value]) => [key, key === "PATH" ? guardPath(value, platform) : value])
+    .sort(([left], [right]) => left.localeCompare(right));
+}
 
 export function identifyGuardExecution({ cwd = process.cwd(), plan, env = process.env, source = null } = {}) {
   try {
@@ -66,7 +90,7 @@ export function identifyGuardExecution({ cwd = process.cwd(), plan, env = proces
       plan: digest(plan),
       toolchain: { node: process.version, executable: process.execPath, pnpm: pnpm.stdout.trim(), git: git(["--version"]), platform: process.platform, arch: process.arch },
       dependencies: ["pnpm-lock.yaml", "node_modules/.modules.yaml", "node_modules/.pnpm/lock.yaml", "packages/db/generated/client/client.ts"].map(fileStamp),
-      environment: digest(Object.entries(env).filter(([key]) => !WRAPPER_ENV.test(key)).sort(([a], [b]) => a.localeCompare(b))),
+      environment: digest(guardResultEnvironment(env)),
     };
   } catch {
     // Missing identity is a cache miss, never permission to omit execution.

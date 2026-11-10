@@ -93,6 +93,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/tsc-compiler.test.mjs"),
       // BI-D2FE6931: the weekly TS7 pin currency audit classifies correctly.
       node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
+      // BI-2FAE2E5C: CI Node is the exact, qualified .node-version.
+      node("--test", "scripts/check-ci-node-qualified.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
@@ -324,6 +326,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-F1C680C7: the Build Studio sandbox, where agent CLIs run unprompted,
       // never receives the portal's AUTH_SECRET / NEXTAUTH_SECRET.
       conformanceTest("scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs"),
+      // BI-4F89896B: the sandbox image carries every binary a guard command
+      // execs, because the Build Studio gauntlet runs the guards there.
+      conformanceTest("scripts/installer/sandbox-guard-toolchain-contract.test.mjs"),
       // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
       // keys never reach the sandbox either.
       conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
@@ -493,7 +498,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // build (SUR-8AB3353C, regression from #4321).
       // The same guard refuses an unfrozen `pnpm install` in any Dockerfile.
       node("scripts/check-docker-patch-context.mjs"),
-      node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      node("--test", "scripts/check-docker-patch-context.test.mjs", "scripts/check-docker-workspace-context.test.mjs"),
       // The service images (adp, edge-node, integration-test-harness) run
       // this after `pnpm deploy`: the legacy deploy skips the lockfile under
       // node-linker=hoisted, so each image asserts its deploy tree against
@@ -1092,7 +1097,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
       // BI-F87BD9BF: raw tsc / root-level vitest / npx are refused with the
       // checked-in routine named, instead of costing an OOM and a retry.
-      node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
+      // BI-F17F2188: where the package resolves, Claude gets the rewritten command instead.
+      node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs", "packages/dpf-skill-pack/hooks/raw-tool-guard-rewrite.test.mjs"),
+      // BI-5DD46FDA: every hooks.json hook, per client, emits output that client honours.
+      node("--test", "packages/dpf-skill-pack/hooks/hook-output-contract.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
       conformanceTest("packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-77BE1389: install-folder sessions get the source contract at start.
@@ -1151,6 +1159,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/lib/dev-portal-lease-claim-key.test.mjs",
+        "scripts/lib/dev-preview-port-binding.test.mjs",
       ),
       node(
         "--test",

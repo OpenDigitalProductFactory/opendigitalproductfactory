@@ -193,6 +193,7 @@ const baseStatus = {
   windowTimezone: "UTC",
   nextWindowStart: null,
   nextScheduledCheckAt: null,
+  missedWindow: null,
   deployedSha: null,
   deployedShaSource: "unknown" as const,
   targetSha: null,

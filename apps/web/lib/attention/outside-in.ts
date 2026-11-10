@@ -99,6 +99,7 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   "agent-toolchain": "foundational", // a computer's DPF agent tools stopped updating (BI-3E66F76F)
   "provider-credential": "foundational", // an AI provider's saved sign-in expired
   "contribution-setup": "manufacturing-and-delivery", // how built changes reach the DPF project
+  "organization-direction": "foundational", // the instance's own direction (BI-916216E7)
   "compliance-source-freshness": "foundational", // governed compliance evidence lapsing — platform posture
 };
 

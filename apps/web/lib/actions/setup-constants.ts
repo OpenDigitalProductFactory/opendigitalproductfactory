@@ -6,6 +6,7 @@
 export const SETUP_STEPS = [
   "account-bootstrap",   // /setup — the ONE custom page (org + user creation)
   "business-context",    // /storefront/settings/business — tell us about your business
+  "direction",           // /storefront/settings/business?section=direction — mission, vision, 1-3 outcomes; skippable (BI-916216E7)
   "ai-providers",        // /platform/ai/providers — choose governed AI connections
   "branding",            // /admin/branding — logo, colors, tagline
   "how-you-decide",      // /coworker-decisions/stance — confirm the archetype-prefilled stance cards (BI-D6DC2432)
@@ -24,6 +25,9 @@ export const STEP_ROUTES: Record<string, string> = {
   "ai-providers": "/platform/ai/providers",
   "branding": "/admin/branding",
   "business-context": "/storefront/settings/business",
+  // Same page, its own panel. A query string (not a hash) so the overlay's
+  // full-reload navigation re-renders the step.
+  "direction": "/storefront/settings/business?section=direction",
   "how-you-decide": "/coworker-decisions/stance",
   "operating-hours": "/storefront/settings/operations",
   "storefront": "/storefront",

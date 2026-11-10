@@ -6,12 +6,18 @@ import { resolveRuntimeConnectionStatus } from "@/lib/routing/provider-suitabili
 /** A routing hold is retryable, not evidence of a failed provider connection. */
 export class ProviderRoutingDeferredError extends InferenceError {
   readonly reason: string;
-  constructor(providerId: string, local: boolean, connectionStatus?: string) {
-    super(local ? "Local provider is not enabled for routing" : "Provider account is not enabled for routing", "provider_error", providerId);
+  constructor(providerId: string, local: boolean, connectionStatus?: string, eligibilityFailure?: { cause: unknown }) {
+    const unavailableReason = "Provider routing eligibility could not be verified. Retry when routing state is available.";
+    super(
+      eligibilityFailure ? unavailableReason : local ? "Local provider is not enabled for routing" : "Provider account is not enabled for routing",
+      eligibilityFailure ? "transient" : "provider_error",
+      providerId,
+    );
     this.name = "ProviderRoutingDeferredError";
-    this.reason = connectionStatus === "paused"
+    this.reason = eligibilityFailure ? unavailableReason : connectionStatus === "paused"
       ? "Provider routing is paused by an operator. Resume the provider before retrying."
       : "Provider routing is disabled or not configured. Enable the provider before retrying.";
+    if (eligibilityFailure) this.cause = eligibilityFailure.cause;
   }
 }
 

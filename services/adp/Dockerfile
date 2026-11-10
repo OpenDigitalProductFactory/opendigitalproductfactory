@@ -26,6 +26,8 @@ RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
 # after the deploy fails the build if that ever stops being true.
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json ./
 COPY patches ./patches
+# The workspace lock includes a private first-party file archive even in filtered installs.
+COPY packages/validators/vendor ./packages/validators/vendor
 COPY packages/integration-shared ./packages/integration-shared
 COPY services/adp/package.json services/adp/tsconfig.json ./services/adp/
 RUN pnpm install --filter dpf-adp-mcp... --frozen-lockfile --ignore-scripts

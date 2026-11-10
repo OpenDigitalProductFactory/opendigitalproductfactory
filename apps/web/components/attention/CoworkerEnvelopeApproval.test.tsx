@@ -219,6 +219,49 @@ describe("CoworkerEnvelopeApproval", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/inbox\?approval=.+#approval-result$/)));
   });
 
+  // BI-E5631708: an owner's written approval, made standing.
+  it("offers no standing choice unless the server says it applies, and sends no body without it", async () => {
+    render(<CoworkerEnvelopeApproval approval={approval()} />);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect((fetchMock.mock.calls[0][1] as RequestInit).body).toBeUndefined();
+  });
+
+  it("keeps the card and says why when the server will not make it standing", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, standing: { recorded: false, message: "This approval covers this request only; it could not be made standing." } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={approval({ standingRulingOffered: true })} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Don't ask me again/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
+    expect(await screen.findByText(/could not be made standing/)).toBeTruthy();
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Ask me again next time" })).toBeNull();
+  });
+
+  it("makes the approval standing when the owner ticks it, then lets them undo it", async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, standing: { recorded: true } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ revoked: 1 }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={approval({ standingRulingOffered: true })} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Don't ask me again when this coworker does this/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual({ makeStanding: true });
+    expect(await screen.findByText(/you won't be asked again when this coworker does this/)).toBeTruthy();
+    // The card stays so the ruling can be withdrawn on the spot.
+    expect(replace).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask me again next time" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(fetchMock.mock.calls[1]).toEqual([
+      "/api/agent/envelope/cmt932fn301el01p7vfb2gas7/standing-ruling",
+      expect.objectContaining({ method: "DELETE" }),
+    ]);
+    expect(await screen.findByText(/you'll be asked again next time/)).toBeTruthy();
+  });
+
   it("declines through the envelope endpoint and never the proposal actions", async () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
@@ -293,6 +336,23 @@ describe("CoworkerEnvelopeApproval", () => {
 });
 
 describe("OwnerDecisionCards routing", () => {
+  it.each([
+    ["request_self_upgrade", { reason: "Ready release batch" }, "Request an update for this app?"],
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?"],
+    ["release_nonprod_environment_lease", { leaseId: "NPEL-TEST" }, "Release this shared test reservation?"],
+  ])("shows the %s question before opening technical evidence", (toolName, proposedParameters, title) => {
+    const entry = entryFor({ manifestActionId: toolName, proposedParameters, taskRun: null });
+    const { container } = render(<OwnerDecisionCards entries={[entry]} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).toContain(title);
+    expect(visible).toContain("Keep this on hold until its effect is clear.");
+    expect(visible).not.toContain("BI-KEEP");
+    expect(visible).not.toContain("NPEL-TEST");
+    expect(container.querySelector("pre")?.closest("details")?.open).toBe(false);
+    expect(screen.getByRole("button", { name: "Authorize" }).closest("details")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   function entryFor(over = {}) {
     const item = coworkerEnvelopeToAttentionItem(
       {
@@ -682,5 +742,38 @@ describe("CoworkerEnvelopeApproval — expired unanswered", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("can be asked again"));
     expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+// BI-6AE64074 — admitting a coworker and raising its data access reads as one plain choice.
+describe("CoworkerEnvelopeApproval — room admission with a data access raise", () => {
+  const admission = () => approval({
+    coworkerAgentId: "AGT-EXT-CLAUDE",
+    manifestActionId: "invite_room_participant",
+    taskRunId: null,
+    reviewBinding: undefined,
+    decision: summarizeCoworkerEnvelopeDecision({
+      toolName: "invite_room_participant",
+      proposedParameters: { caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer", raiseClearanceTo: "internal" },
+      recommenderAgentId: "AGT-EXT-CLAUDE",
+      authorizerUserId: "owner",
+      consequence: "authority",
+      targetLabel: "Quarterly supplier review",
+    }),
+  });
+
+  it("says who joins, what it can read, and how to undo it", () => {
+    render(<CoworkerEnvelopeApproval approval={admission()} />);
+    expect(screen.getByText("Let change-reviewer into Quarterly supplier review and let it read internal information?")).toBeTruthy();
+    expect(screen.getByText(/joins Quarterly supplier review/)).toBeTruthy();
+    expect(screen.getByText(/lower it again under Coworker data access/)).toBeTruthy();
+    expect(screen.getByText("If you authorize")).toBeTruthy();
+  });
+
+  it("keeps the tool name and parameters in collapsed technical details", () => {
+    render(<CoworkerEnvelopeApproval approval={admission()} />);
+    const details = screen.getByText("Technical details").closest("details")!;
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain("invite_room_participant");
   });
 });

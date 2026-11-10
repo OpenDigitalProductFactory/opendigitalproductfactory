@@ -77,6 +77,11 @@ const ITEM_SELECT = { id: true, itemId: true, status: true, body: true, claimSta
 
 /** The `consequenceForCall` refiner for merge_backlog_items. */
 export async function mergeBacklogItemsConsequence({ params }: ToolCallConsequenceInput): Promise<ToolCallConsequence> {
+  // This is safe by the handler's execution contract, not a mutable state read:
+  // reconcileOnly can never enter the demand-fold transaction (BI-8EC69BE0).
+  if (params["reconcileOnly"] === true) {
+    return { consequence: null, reason: "completed-merge-reconciliation-only" };
+  }
   const canonicalItemId = typeof params["canonicalItemId"] === "string" ? params["canonicalItemId"] : "";
   const duplicateItemId = typeof params["duplicateItemId"] === "string" ? params["duplicateItemId"] : "";
   if (!canonicalItemId || !duplicateItemId) return { consequence: KEEP, reason: "merge-items-unresolved" };

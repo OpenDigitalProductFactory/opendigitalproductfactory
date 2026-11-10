@@ -15,6 +15,45 @@ const RESEARCH = {
 };
 
 describe("primary decision disclosure", () => {
+  it.each([
+    ["request_self_upgrade", { reason: "Approved release batch" }, "Request an update for this app?"],
+    ["request_self_upgrade", {}, "Request an update for this app?"],
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP" }, "Combine these duplicate work requests?"],
+    ["release_nonprod_environment_lease", { leaseId: "NPEL-TEST" }, "Release this shared test reservation?"],
+  ])("names %s without claiming verified effects or work names", (toolName, proposedParameters, title) => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, proposedParameters, consequence: "irreversible" });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.title).toBe(title);
+    expect(primary.unresolved).toBe(true);
+    expect(primary.recommendation).toBe("Keep this on hold until its effect is clear.");
+    expect(primary.consequence).toContain("Cannot be undone");
+    expect(primary.target).toBe(toolName === "request_self_upgrade" ? "This app" : "Work name unavailable");
+    expect(JSON.parse(decision.completeProposedContent!)).toEqual(proposedParameters);
+  });
+
+  it.each([
+    ["request_self_upgrade", { reason: 4 }],
+    ["request_self_upgrade", { reason: "Update", scope: "another app" }],
+    ["merge_backlog_items", { canonicalItemId: "BI-KEEP" }],
+    ["release_nonprod_environment_lease", { leaseId: "" }],
+  ])("keeps malformed %s proposals generic with material facts visible", (toolName, proposedParameters) => {
+    const primary = envelopePrimaryDecision(summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, proposedParameters }));
+    expect(primary.title).toBe("Review this coworker request?");
+    expect(primary.unresolved).toBe(true);
+  });
+
+  it("retains consequential fields even when a registered operation is named", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "merge_backlog_items", proposedParameters: {
+      canonicalItemId: "BI-KEEP", duplicateItemId: "BI-DUP", payment: { amount: 125, currency: "USD", recipient: "review@example.test" }, access: false,
+    } });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.title).toBe("Combine these duplicate work requests?");
+    expect(primary.facts).toEqual(expect.arrayContaining([
+      { label: "Payment · Amount", value: "125" }, { label: "Payment · Currency", value: "USD" },
+      { label: "Payment · Recipient", value: "review@example.test" }, { label: "Access", value: "false" },
+    ]));
+  });
+
   it("formats the handover summary using the viewer locale", () => {
     const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "reassign_workroom_executor", recommenderAgentId: "AGT-EXT-CODEX",
       proposedParameters: { capsuleId: "WC-1", toExecutorKind: "codex-desktop" } });
@@ -317,5 +356,41 @@ describe("envelopeIdFromExecutionResult", () => {
       data: { envelopeId: "cmti2racd18zq01lht28321dp" },
       error: "approval_required",
     })).toBe("cmti2racd18zq01lht28321dp");
+  });
+});
+
+// BI-6AE64074: admitting a coworker and raising its data access is one plain choice.
+describe("room admission with a data access raise", () => {
+  const admission = (params: Record<string, unknown> = {}) => summarizeCoworkerEnvelopeDecision({
+    toolName: "invite_room_participant",
+    proposedParameters: { caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer", raiseClearanceTo: "internal", ...params },
+    recommenderAgentId: "AGT-EXT-CLAUDE",
+    authorizerUserId: "owner",
+    consequence: "authority",
+    targetLabel: "Quarterly supplier review",
+  });
+
+  it("says who joins which room and what data it can then read", () => {
+    const decision = admission();
+    expect(decision.kind).toBe("admission");
+    expect(decision.headline).toBe("Let change-reviewer into Quarterly supplier review and let it read internal information?");
+    expect(decision.admission?.changes.join(" ")).toMatch(/joins Quarterly supplier review/);
+    expect(decision.admission?.changes.join(" ")).toMatch(/internal information in any room it is admitted to/);
+    expect(decision.admission?.keeps.join(" ")).toMatch(/Coworker data access/);
+  });
+
+  it("gives the primary decision a plain title instead of an unresolved one", () => {
+    const primary = envelopePrimaryDecision(admission());
+    expect(primary.unresolved).toBe(false);
+    expect(primary.title).toBe("Let change-reviewer into this room with internal data access?");
+  });
+
+  it("keeps an ordinary invite on the exact-content card", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "invite_room_participant",
+      proposedParameters: { caseKey: "backlog-item:BI-ORG", agentId: "change-reviewer" },
+      recommenderAgentId: "AGT-EXT-CLAUDE", authorizerUserId: "owner", consequence: "authority",
+    });
+    expect(decision.kind).not.toBe("admission");
   });
 });

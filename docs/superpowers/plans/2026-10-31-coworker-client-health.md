@@ -36,4 +36,3 @@ Risk: adding a surface could make unrelated upgrade questions appear grounded in
 
 ## Backlog coverage
 One atomic deliverable maps to BI-7CE02DE9. Projection, permission, route context and trusted surface form one user-visible read contract and cannot independently satisfy it. No dependencies on the separate provider-status/foreground-recovery/grounding-failure implementations. Coverage receipt cmvx3qkjk0euw01poampo10z1 binds the immutable plan at e41eb5f71092d89d1dc95c8148bc93c802d2aeba; implementation admission IRD-9E72B6ACA425.
-

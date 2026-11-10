@@ -108,4 +108,36 @@ describe("generateArchimateXml", () => {
     const parsed = parseArchimateXml(original);
     expect(parsed.elements[0].slug).toBe("digital_product");
   });
+
+  it("maps aggregation and specialization to their own slugs and keeps an association's name as its role (BI-E487F6D9)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<archimate:model xmlns:archimate="http://www.archimatetool.com/archimate" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="M">
+  <folder name="Business"><element xsi:type="archimate:BusinessActor" id="a" name="A"/><element xsi:type="archimate:BusinessActor" id="b" name="B"/></folder>
+  <relationships>
+    <element xsi:type="archimate:AggregationRelationship" id="r1" source="a" target="b"/>
+    <element xsi:type="archimate:SpecializationRelationship" id="r2" source="a" target="b"/>
+    <element xsi:type="archimate:AssociationRelationship" id="r3" source="a" target="b" name="mentors"/>
+    <element xsi:type="archimate:FutureRelationship" id="r4" source="a" target="b"/>
+  </relationships>
+</archimate:model>`;
+    const parsed = parseArchimateXml(xml);
+    expect(parsed.relationships.map((r) => r.slug)).toEqual(["aggregates", "specializes", "associated_with"]);
+    expect(parsed.relationships[2].role).toBe("mentors");
+    // An unknown type is reported, never coerced into a generic association.
+    expect(parsed.unknownRelationships).toEqual([{ archimateId: "r4", xmlType: "archimate:FutureRelationship" }]);
+  });
+
+  it("round-trips a DPF type ArchiMate lacks as a named association carrying its slug", () => {
+    const xml = generateArchimateXml({
+      modelName: "RT",
+      elements: [],
+      relationships: [{ archimateId: "r1", fromArchimateId: "a", toArchimateId: "b", slug: "has_foreign_key_to", role: "author" }],
+    });
+    expect(xml).toContain('xsi:type="archimate:AssociationRelationship"');
+    expect(xml).toContain('name="author"');
+    const parsed = parseArchimateXml(xml);
+    expect(parsed.relationships).toEqual([
+      expect.objectContaining({ archimateId: "r1", slug: "has_foreign_key_to" }),
+    ]);
+  });
 });

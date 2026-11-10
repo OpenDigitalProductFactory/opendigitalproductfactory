@@ -209,6 +209,14 @@ The panel reports; it never changes a coworker's authority. Granting a
 permission, assigning a skill, or raising an autonomy level remains a deliberate
 human action.
 
+## Paid AI allowance
+
+Only paid AI counts against a daily limit. Local models and flat-rate subscriptions cost nothing extra per call, so they are never limited. A provider counts as paid when its recorded price per token is above zero. One with no price recorded is treated as paid, and its cost is estimated from the model's known price, or at $3 per million tokens when that is unknown too. Local models are costed from how long they run.
+
+An owner can set one **Paid AI allowance** for the whole installation in **Admin → Platform Development**, under **Daily limits and the autopilot switches**. It is a dollar amount per day, shared by every coworker, and it resets at 00:00 UTC. Setting it needs the platform and finance permissions and a recorded reason. While no allowance is set, each coworker's built-in daily cap limits its paid use instead.
+
+When the allowance is used, a coworker says so, gives the reset time and keeps working on local or subscription models where they can serve. An independent change review reports **daily allowance used** with the reset time. Retrying it before the reset is refused, so no recovery attempt is wasted. Raise the allowance or wait for the reset, then request a fresh review.
+
 ## Authority & Governance
 
 The **Authority** tab (`/platform/ai/authority`) provides visibility into the agent governance model:
@@ -238,6 +246,19 @@ Agent tool availability is the **intersection** of two authority systems:
 2. **Agent tool grants** — what the agent's declared grants in `agent_registry.json` permit
 
 An action is only possible if BOTH allow it. This prevents agents from exceeding their design scope, even when triggered by a user with broad permissions.
+
+### Knowledge Corpus Grants
+A coworker reads three bodies of knowledge, and each has its own grant:
+
+| Knowledge | Grant |
+|---|---|
+| Platform kernel (principles and doctrine) | `wiki_kernel_read` |
+| Your organization's knowledge | `wiki_org_read` |
+| Profession knowledge, for the coworker's own profession family | `wiki_profession_read` |
+
+Every coworker holds all three by default. Revoking one removes that knowledge from search, recall and decision tools for that coworker. If a coworker's job spans several professions, grant it `wiki_profession_read:<family>` once for each extra family.
+
+The coworker's record page shows its **Knowledge corpus** section: which grants it holds and which profession families it can read. The family limit starts in report-only mode, so a coworker that maps to no profession family still reads every family. Each of those reads is recorded, which lets you map the coworker before the limit is enforced. People are never limited by family.
 
 ## Reading Decision Separation
 

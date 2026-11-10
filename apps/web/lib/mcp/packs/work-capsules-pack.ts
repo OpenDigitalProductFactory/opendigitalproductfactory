@@ -12,6 +12,7 @@ import { workroomRuntimeConsequence } from "@/lib/workroom-runtime/runtime-conse
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
+import { ATLAS_HEALTH_STATES } from "@/lib/work-management/atlas-health";
 import { PRINCIPAL_SENSITIVITIES } from "@dpf/db/principal-sensitivity";
 import type { ToolPack } from "../tool-pack";
 
@@ -89,14 +90,15 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        view: { type: "string", enum: ["instances", "definitions"], description: "Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
+        view: { type: "string", enum: ["instances", "definitions", "atlas"], description: "atlas returns the Work Atlas picture: health counts, plus up to limit (max 400) rows, optionally filtered by health. Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
+        health: { type: "string", enum: [...ATLAS_HEALTH_STATES], description: "view atlas only: rows in this health state." },
         status: { type: "string", enum: ENUMS.statuses, description: "Filter by Workroom status." },
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
         headBranch: { type: "string", maxLength: 255, description: "Find the room for this branch, including one another assistant made for you." },
         pullRequestNumber: { type: "integer", minimum: 1, description: "Find the room for this pull request, including one another assistant made for you." },
-        limit: { type: "integer", minimum: 1, maximum: 100, description: "Requested page size (default 5, maximum 100); whole rows are reduced to fit the client budget." },
+        limit: { type: "integer", minimum: 1, maximum: 400, description: "Requested page size (default 5, maximum 100; view atlas default 10, maximum 400); whole rows are reduced to fit the client budget." },
         cursor: { type: "string", maxLength: 1024, description: "Opaque continuation for the selected view. Instance and definition cursors cannot be mixed. Keep instance filters unchanged. Instance expiry or changed definition inventory requires a fresh traversal." },
       },
       required: [],
@@ -107,7 +109,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_workroom",
-    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Use activityMode:bounded for finite metadata pages or exact selected-value detail. Metadata defers payload evidence; it is not a complete receipt. Read-only.",
+    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Use activityMode:bounded for finite metadata pages or exact selected-value detail. Use continuationMode:bounded separately for one current assignment under fresh content admission; its facts grant no execution or replay authority. Metadata defers payload evidence; it is not a complete receipt. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -120,6 +122,10 @@ const definitions: ToolDefinition[] = [
         activityField: { type: "string", enum: ["payload", "summary"], description: "Detail field; defaults to payload. Large values are refused with a narrower-path instruction." },
         payloadPath: { type: "array", maxItems: 16, items: { type: "string", maxLength: 200 }, description: "Detail only: object keys or array indexes within payload. Empty selects the whole payload; a selected value is not a full activity receipt." },
         reviewTaskRunId: { type: "string", minLength: 1, maxLength: 512, description: "Optional exact native review task to recover. Returns bounded recovery only for the authenticated task owner and this exact room, including historical source versions. Does not authorize retry or approve the current source." },
+        continuationMode: { type: "string", enum: ["bounded"], description: "Read bounded current assignment facts separately from activity, review and cursor reads. Does not create an external session or authorize effects." },
+        continuationTaskId: { type: "string", minLength: 1, maxLength: 512, description: "Continuation only: exact scheduled task whose own checkpoint must match this current room, branch, source and lease." },
+        continuationStageKey: { type: "string", minLength: 1, maxLength: 512, description: "Continuation only: select a current manual branch instead of a task. Required when several stages are current; no task identity is invented." },
+        continuationVersion: { type: "string", pattern: "^[a-f0-9]{64}$", description: "Continuation only: prior digest. Changed facts or authenticated authority require a fresh read; this is not an execution permit." },
       },
       required: ["capsuleId"],
     },
@@ -163,7 +169,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "adopt_worktree",
-    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. Pass backlogItemId to bind the work: the returned Workroom carries the binding or the call fails, never a partly-bound record. A branch has one durable workroom identity; a terminal Workroom with no backlog item is resumed and rebound rather than blocking the branch, while a foreign binding returns branch_occupied instead of overwriting history.",
+    description: "Adopt an existing local branch/worktree pair into a Workroom without creating a new worktree. Pass backlogItemId to bind the work: the returned Workroom carries the binding or the call fails, never a partly-bound record. A branch has one durable workroom identity; a terminal Workroom with no backlog item is resumed and rebound rather than blocking the branch, while a foreign binding returns branch_occupied instead of overwriting history. Worked example: adopt_worktree({\"title\":\"Fix short-SHA refusals\",\"objective\":\"Tools resolve short SHAs\",\"repositoryFullName\":\"OpenDigitalProductFactory/opendigitalproductfactory\",\"headBranch\":\"fix/short-sha\",\"worktreePath\":\"D:/DPF-source-root-worktrees/short-sha\",\"backlogItemId\":\"BI-XXXXXXXX\",\"baseSha\":\"7fb295c\",\"headSha\":\"7fb295c\",\"sessionRef\":\"<your session id>\"}).",
     inputSchema: {
       type: "object",
       properties: {
@@ -174,8 +180,8 @@ const definitions: ToolDefinition[] = [
         worktreePath: { type: "string", description: "Local worktree path for the branch." },
         backlogItemId: { type: "string", description: "BacklogItem this work delivers (BI-*). Bound onto the Workroom and read back; an unknown id is refused rather than dropped." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
-        baseSha: { type: "string", description: "Optional current base SHA." },
-        headSha: { type: "string", description: "Optional current head SHA." },
+        baseSha: { type: "string", description: "Optional current base SHA: full, or a prefix of 7+ hex characters the server expands against the repository." },
+        headSha: { type: "string", description: "Optional current head SHA: full, or a prefix of 7+ hex characters the server expands against the repository (an unpushed head must be full)." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor adopting the worktree." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef. Without it a claim can be shown to exist but not shown to be yours." },
         ...scopeProperties,
@@ -188,7 +194,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
+      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason. Worked example: claim_backlog_item_for_work({\"itemId\":\"BI-XXXXXXXX\",\"worktreePath\":\"D:/DPF-source-root-worktrees/short-sha\",\"branchName\":\"fix/short-sha\",\"provider\":\"claude\",\"sessionRef\":\"<your session id>\",\"baseSha\":\"7fb295c\",\"headSha\":\"7fb295c\",\"workIntent\":\"design\"}).",
     inputSchema: {
       type: "object",
       properties: {
@@ -197,8 +203,8 @@ const definitions: ToolDefinition[] = [
         branchName: { type: "string", description: "Branch (head) for this work — the workroom is keyed on (repo, branch)." },
         repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
-        baseSha: { type: "string", description: "Full 40-character SHA of the base commit. With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
-        headSha: { type: "string", description: "Full 40-character SHA of the branch head." },
+        baseSha: { type: "string", description: "SHA of the base commit: full, or a prefix of 7+ hex characters the server expands against the repository (an ambiguous prefix is refused with its candidates). With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
+        headSha: { type: "string", description: "SHA of the branch head: full, or a 7+ character prefix of a pushed commit. An unpushed head must be the full git rev-parse HEAD output." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workShape: {
@@ -405,31 +411,33 @@ const definitions: ToolDefinition[] = [
   {
     name: "release_workroom_scope",
     description:
-      "Release previously claimed Workroom scope items by kind and value. " +
-      "Requires capsuleId (WC-*) plus claims: [{kind, value}, ...] matching prior claim_capsule_scope entries. " +
-      "Call once per handoff with the full claim set — do not release item-by-item in a loop. " +
-      "Do NOT retry on invalid_input — fix the payload (claims must be a non-empty array of {kind,value}). " +
-      "Do NOT call for an abandoned/unknown workroom (retryable: false). " +
-      "If nothing matched, success still returns (idempotent no-op on empty released set).",
+      "Release the complete original Workroom claim targets in one call. " +
+      "Requires the semantic capsuleId, original persistent expectedRoomId and claims with kind, value, intent, recordedByPrincipalId and releaseEpoch returned by the claim. " +
+      "Never replace an old request's targets with current claims. Invalid or stale requests are refused; a new release intent needs fresh original targets. " +
+      "An optional commandId replays only its exact bound stored outcome.",
     inputSchema: {
       type: "object",
       properties: {
         commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        expectedRoomId: { type: "string", description: "Original persistent Workroom row id returned with the claim." },
         claims: {
           type: "array",
           items: {
             type: "object",
             properties: {
               kind: { type: "string", enum: ["path", "module", "package", "route", "skill", "prompt"] },
-              value: { type: "string", description: "Scope value to release (exact match to the prior claim)." },
+              value: { type: "string", description: "Original exact scope value." },
+              intent: { type: "string", enum: ["read", "edit"] },
+              recordedByPrincipalId: { type: "string", description: "Original claim owner principal." },
+              releaseEpoch: { type: "string", description: "Original server-issued claim epoch." },
             },
-            required: ["kind", "value"],
+            required: ["kind", "value", "intent", "recordedByPrincipalId", "releaseEpoch"],
           },
           description: "Scope claims to release — array required, not a single object.",
         },
       },
-      required: ["capsuleId", "claims"],
+      required: ["capsuleId", "expectedRoomId", "claims"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
@@ -562,6 +570,16 @@ const receipted = (commandType: string, pick: (m: WorkroomHandlers) => WorkroomH
   (params: Record<string, unknown>, userId: string, context: ToolExecutionContext | undefined) => Promise.all([HANDLERS(), import("@/lib/work-capsules/receipted-tool")])
     .then(([m, r]) => r.receiptedWorkroomTool(commandType, pick(m) as never)(params, userId, context as never));
 
+const releaseScope: WorkroomHandler = (params, userId, context) => Promise.all([
+      HANDLERS(), import("@/lib/work-capsules/receipted-tool"), import("@/lib/work-capsules/scope-release-targets"),
+    ]).then(([m, r, targets]) => r.receiptedWorkroomTool("release-scope", m.releaseCapsuleScopeTool as never,
+      { prepare: targets.prepareScopeRelease })(params, userId, context as never));
+
+const claimScope: WorkroomHandler = (params, userId, context) => Promise.all([
+  HANDLERS(), import("@/lib/work-capsules/receipted-tool"), import("@/lib/work-capsules/scope-claim-store"),
+]).then(([m, r, claim]) => r.receiptedWorkroomTool("claim-scope", m.claimCapsuleScopeTool as never,
+  { prepareAsync: claim.prepareScopeClaim })(params, userId, context));
+
 export const workCapsulesPack: ToolPack = {
   packId: "work-capsules",
   definitions,
@@ -576,10 +594,10 @@ export const workCapsulesPack: ToolPack = {
     claim_backlog_item_for_work: (params, userId, context) => HANDLERS().then((m) => m.claimBacklogItemForWorkTool(params, userId, context)),
     declare_break_fix: (params, userId, context) =>
       import("@/lib/work-capsules/declare-break-fix-tool").then((m) => m.declareBreakFixTool(params, userId, context)),
-    claim_workroom_scope: (params, userId, context) => receipted("claim-scope", (m) => m.claimCapsuleScopeTool)(params, userId, context),
+    claim_workroom_scope: claimScope,
     heartbeat_workroom: (params, userId, context) => receipted("heartbeat", (m) => m.heartbeatCapsuleTool)(params, userId, context),
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
-    release_workroom_scope: (params, userId, context) => receipted("release-scope", (m) => m.releaseCapsuleScopeTool)(params, userId, context),
+    release_workroom_scope: releaseScope,
     drive_workroom_runtime: (params, userId, context) =>
       import("@/lib/workroom-runtime/runtime-tools").then((m) => m.driveWorkroomRuntimeTool(params, userId, context)),
     approve_runtime_permission: (params, userId, context) =>
@@ -601,10 +619,10 @@ export const workCapsulesPack: ToolPack = {
     get_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
-    claim_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
+    claim_capsule_scope: claimScope,
     heartbeat_capsule: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
     update_work_capsule_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
-    release_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
+    release_capsule_scope: releaseScope,
     record_capsule_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
     reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
   },

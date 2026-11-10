@@ -77,6 +77,30 @@ one whenever they like:
   and tick **Emergency override** if it must not wait for running work. Releases
   carry no urgency flag that would let an agent skip the window for you.
 
+### When the scheduled upgrade runs
+
+The scheduler wakes every hour, but it checks for an upgrade only inside the
+maintenance window. Each time the window opens, the portal makes one check, and
+it does not count the hours since your last upgrade before that check:
+
+- **Upgrading by hand during the day does not skip that night.** If you press
+  **Upgrade now** in the afternoon, the scheduled check still runs when the
+  window opens that night.
+- **The nightly time does not drift.** A check that ran at 23:02 last night does
+  not delay tonight's 23:00 check.
+- **Check interval** (`checkIntervalHours`, default 24) limits how often a long
+  window is checked, such as a store that is closed all weekend. An interval
+  longer than a day, such as a week, is still respected: the check runs at the
+  window opening nearest to when the interval ends.
+
+If a window goes by without a check, the Upgrade Center says so and gives the
+reason. For example, another upgrade was still running, or a failed upgrade
+attempt was still in its wait period. The message stays during the day that
+follows and goes away after the next check. Agents see the same information as
+`missedWindow` in `get_self_upgrade_queue_status`. Blackouts and switched-off
+scheduled upgrades already show their own notice, so they do not add a missed
+window message.
+
 An agent working in your browser, signed in as you, looks the same to the
 portal as you do. Agents are told to request upgrades through
 `request_self_upgrade` instead of pressing the button for you.

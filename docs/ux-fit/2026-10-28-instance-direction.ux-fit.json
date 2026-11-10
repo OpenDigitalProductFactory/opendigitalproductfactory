@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "direction-panel-on-business-page-plus-own-step",
+  "decisionInteractionId": "DI-475144E38C9E",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/storefront/settings/business/page.tsx",
+      "apps/web/components/admin/DirectionPanel.tsx",
+      "apps/web/components/admin/DirectionSummary.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "direction-panel-on-business-page-plus-own-step",
+      "extend-business-context-form-only",
+      "new-standalone-direction-page"
+    ]
+  }
+}

@@ -22,15 +22,27 @@
 //   node scripts/pr-health.mjs            # the PR for the current branch
 //   node scripts/pr-health.mjs <number>   # a specific PR
 //   pnpm pr:health <number>
+//   pnpm pr:health <number> --wait [--timeout <minutes, default 30>]
+//                                         # poll until the verdict is terminal
 //
-// Exit 0 = READY (every check terminal+green, mergeable != CONFLICTING, zero
-// unresolved threads). Exit 1 = NOT READY (blockers enumerated). Exit 2 = usage/IO.
+// The first output line is the verdict word, and the exit code says the same
+// thing (BI-F197C997 — "still running" used to exit 1, and agents read it as a
+// failure 154 times in 15 threads):
+//   0  READY or MERGED — every check terminal+green, mergeable, zero unresolved threads
+//   1  FAILED          — a check failed; the line names it
+//   2  BLOCKED-ACTION  — someone must act (conflict, review thread, draft, missing
+//                        local-CI evidence, closed PR); the line names who
+//   3  UNREADABLE      — usage error, or GitHub could not be read
+//   75 WAITING         — only pending checks stand between the PR and READY;
+//                        wait (or pass --wait), never treat it as a failure
 //
 // Pure verdict logic lives in `evaluatePrHealth()` (unit-tested in
 // scripts/pr-health.test.mjs); the rest is GitHub I/O via the `gh` CLI.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import {
   createEvidencePlan,
   loadEvidencePolicy,
@@ -150,6 +162,37 @@ export function isDocsOnlyFileSet(files) {
 }
 
 /**
+ * BI-F197C997. One exit code per kind of answer, so a caller can tell "wait"
+ * from "fix" from "someone must act" without parsing text. 75 is EX_TEMPFAIL,
+ * the same code pregate and pregate:status use for "still working".
+ */
+export const PR_HEALTH_EXIT = Object.freeze({
+  READY: 0,
+  MERGED: 0,
+  FAILED: 1,
+  "BLOCKED-ACTION": 2,
+  UNREADABLE: 3,
+  WAITING: 75,
+});
+
+/**
+ * Longest remaining time across pending checks whose workflow has a typical
+ * duration, or null when none does. An estimate, never a promise: a check
+ * already past its typical duration reports 0, not a negative.
+ */
+function estimateRemainingMs(pending, typicalDurationsMs, now) {
+  let longest = null;
+  for (const check of pending) {
+    const typical = typicalDurationsMs?.[check.workflow];
+    const started = Date.parse(check.startedAt || "");
+    if (!Number.isFinite(typical) || !Number.isFinite(started)) continue;
+    const remaining = Math.max(0, typical - (now - started));
+    longest = longest === null ? remaining : Math.max(longest, remaining);
+  }
+  return longest;
+}
+
+/**
  * Decide whether a PR is merge-ready from its raw GitHub state. Pure + total.
  *
  * @param {{
@@ -165,18 +208,37 @@ export function isDocsOnlyFileSet(files) {
  *                     skipped?: boolean, skipReason?: string } | null,
  *   } | null,
  * }} input
- * @returns {{ ready: boolean, blockers: string[], notes: string[],
+ * `typicalDurationsMs` maps a check's workflow name to its usual run time, for
+ * the WAITING ETA; absent or unknown workflows simply have no ETA.
+ *
+ * @returns {{ ready: boolean, verdict: "READY"|"MERGED"|"FAILED"|"BLOCKED-ACTION"|"WAITING",
+ *             exitCode: number, failingChecks: string[], waitingOn: string[],
+ *             actions: Array<{ actor: string, text: string }>, etaMs: number|null,
+ *             blockers: string[], notes: string[],
  *             counts: { checksTotal: number, failing: number, pending: number, unresolvedThreads: number } }}
  */
-export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi = null, now = Date.now() } = {}) {
-  const blockers = [];
+export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi = null, typicalDurationsMs = {}, now = Date.now() } = {}) {
   const notes = [];
+  // BI-F197C997: every blocker is one of three kinds, because each asks for a
+  // different response. A failed check needs a fix; an action needs a named
+  // actor; a pending check needs nothing but time. `blockers` keeps the full
+  // human list; the kinds drive the verdict and the exit code.
+  const blockers = [];
+  const actions = [];
+  const author = meta.author?.login ? `PR author (@${meta.author.login})` : "PR author";
+  const actBy = (actor, text) => {
+    actions.push({ actor, text });
+    blockers.push(text);
+  };
+  // The local-CI section below names the author for every blocker it raises.
+  const localCiBlockers = { push: (text) => actBy(author, text) };
 
   if (meta.state && meta.state !== "OPEN") {
-    blockers.push(`PR state is ${meta.state} (not OPEN)`);
+    if (meta.state === "MERGED") blockers.push("PR state is MERGED (not OPEN)");
+    else actBy("PR owner", `PR state is ${meta.state} (not OPEN) — the owner must reopen it, or the work lands through another PR`);
   }
   if (meta.isDraft) {
-    blockers.push("PR is a draft — mark it ready for review");
+    actBy(author, "PR is a draft — mark it ready for review");
   }
   // AGENTS.md §3: "All changes land via PR against `main`." That is not just
   // convention here — .github/workflows/ci.yml triggers on
@@ -187,7 +249,7 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
   // mechanical merge-readiness answer doctrine points at, so it is where the
   // off-contract base has to stop being invisible (#4483, 2026-08-23).
   if (meta.baseRefName && meta.baseRefName !== "main") {
-    blockers.push(
+    actBy(author,
       `base is ${meta.baseRefName}, not main — AGENTS.md §3 requires PRs against main, and ` +
         "ci.yml only runs the heavy suite (Typecheck, Unit Tests, Policy Guards, Production " +
         "Build) for main-based PRs. Green here does NOT mean verified. Rebase onto origin/main " +
@@ -195,7 +257,7 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
     );
   }
   if (meta.mergeable === "CONFLICTING") {
-    blockers.push("mergeable=CONFLICTING — rebase onto origin/main and resolve conflicts");
+    actBy(author, "mergeable=CONFLICTING — rebase onto origin/main and resolve conflicts");
   } else if (meta.mergeable === "UNKNOWN") {
     notes.push("mergeable=UNKNOWN — GitHub is still computing mergeability; re-run in a few seconds");
   }
@@ -214,7 +276,7 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
 
   const unresolved = threads.filter((t) => !t.isResolved);
   if (unresolved.length) {
-    blockers.push(
+    actBy(author,
       `${unresolved.length} unresolved review thread(s): ` +
         `${unresolved.map((t) => `${t.path ?? "?"}:${t.line ?? "?"}`).join(", ")} — ` +
         "address and resolve each conversation (the repo requires conversation resolution)",
@@ -227,6 +289,9 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
   // (Evidence id, or Override with allowlisted code). Free-text overrides are
   // blockers — agents cannot green-wash "unit tests only".
   if (localCi) {
+    // Every local-CI blocker is an author action (run the gate, fix the override),
+    // so this block's pushes go through actBy.
+    const blockers = localCiBlockers;
     const rec = localCi.stateRecord;
     // BI-53B189C8: a DPF_ALLOW_LOCAL_CI_STUB record says passed without building
     // anything. It counts as no record at all, and the blocker names it.
@@ -326,8 +391,21 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
     );
   }
 
+  let verdict = "READY";
+  if (meta.state === "MERGED") verdict = "MERGED";
+  else if (failing.length) verdict = "FAILED";
+  else if (actions.length) verdict = "BLOCKED-ACTION";
+  else if (pending.length) verdict = "WAITING";
+  else if (blockers.length) verdict = "BLOCKED-ACTION";
+
   return {
     ready: blockers.length === 0,
+    verdict,
+    exitCode: PR_HEALTH_EXIT[verdict],
+    failingChecks: failing.map((c) => c.name),
+    waitingOn: pending.map((c) => c.name),
+    actions,
+    etaMs: verdict === "WAITING" ? estimateRemainingMs(pending, typicalDurationsMs, now) : null,
     blockers,
     notes,
     counts: {
@@ -365,11 +443,11 @@ function fetchPrState(prArg) {
   }
 
   const meta = JSON.parse(
-    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,baseRefName,headRefName,headRefOid,body,files,commits"]),
+    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,baseRefName,headRefName,headRefOid,body,files,commits,author"]),
   );
 
   let checks = [];
-  const rawChecks = gh(["pr", "checks", number, "--json", "name,state,bucket"], { allowFail: true });
+  const rawChecks = gh(["pr", "checks", number, "--json", "name,state,bucket,workflow,startedAt"], { allowFail: true });
   if (rawChecks.trim()) {
     try {
       checks = JSON.parse(rawChecks);
@@ -445,19 +523,107 @@ function fetchPrState(prArg) {
   return { meta, checks, threads, localCi };
 }
 
-function main() {
-  let state;
-  try {
-    state = fetchPrState(process.argv[2]);
-  } catch (e) {
-    console.error(`pr-health: ${e.message}`);
-    process.exit(2);
+/**
+ * Typical successful run time per workflow, from its recent runs on main — the
+ * basis for a WAITING ETA. Best-effort: any workflow gh cannot answer for is
+ * simply absent, and the verdict then says the ETA is unknown.
+ */
+function fetchTypicalWorkflowDurations(workflows, cache = new Map()) {
+  const out = {};
+  for (const workflow of new Set(workflows.filter(Boolean))) {
+    if (!cache.has(workflow)) {
+      let median = null;
+      try {
+        const runs = JSON.parse(gh([
+          "run", "list", "--workflow", workflow, "--branch", "main", "--status", "success",
+          "--limit", "5", "--json", "startedAt,updatedAt",
+        ]));
+        const durations = runs
+          .map((run) => Date.parse(run.updatedAt) - Date.parse(run.startedAt))
+          .filter((ms) => Number.isFinite(ms) && ms > 0)
+          .sort((a, b) => a - b);
+        if (durations.length) median = durations[Math.floor(durations.length / 2)];
+      } catch {
+        /* unknown — no ETA for this workflow */
+      }
+      cache.set(workflow, median);
+    }
+    if (cache.get(workflow) !== null) out[workflow] = cache.get(workflow);
   }
+  return out;
+}
 
-  const result = evaluatePrHealth(state);
+/** `[<pr>] [--wait] [--timeout <minutes>] [--interval <seconds>]` */
+export function parsePrHealthArgs(argv = process.argv.slice(2)) {
+  const { values, positionals } = utilParseArgs({
+    args: scriptArgv(argv),
+    options: {
+      wait: { type: "boolean", default: false },
+      timeout: { type: "string" },
+      interval: { type: "string" },
+    },
+    allowPositionals: true,
+    strict: true,
+  });
+  const number = (flag, raw, fallback) => {
+    if (raw === undefined) return fallback;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${flag} needs a positive number, got ${JSON.stringify(raw)}`);
+    return parsed;
+  };
+  return {
+    pr: positionals[0] ?? "",
+    wait: values.wait === true,
+    timeoutMinutes: number("--timeout", values.timeout, 30),
+    intervalSeconds: number("--interval", values.interval, 30),
+  };
+}
+
+/**
+ * `--wait`: read until the verdict is terminal (anything but WAITING) or the
+ * timeout passes. The tool does the polling so an agent makes ONE bounded call
+ * instead of interpreting each intermediate state.
+ */
+export async function waitForPrHealth({ read, sleep, now = () => Date.now(), timeoutMs, intervalMs, onPoll = () => {} }) {
+  const deadline = now() + timeoutMs;
+  for (;;) {
+    const result = await read();
+    onPoll(result);
+    if (result.verdict !== "WAITING") return result;
+    if (now() + intervalMs > deadline) return { ...result, timedOut: true };
+    await sleep(intervalMs);
+  }
+}
+
+function formatEta(ms) {
+  if (ms === null || ms === undefined) return "ETA unknown";
+  const minutes = Math.round(ms / 60_000);
+  return minutes < 1 ? "ETA under a minute" : `ETA ~${minutes}m`;
+}
+
+/** The verdict line: one word, then what to do about it. */
+export function verdictHeadline(result) {
+  switch (result.verdict) {
+    case "MERGED":
+      return "MERGED — nothing left to do.";
+    case "READY":
+      return "READY — every check terminal+green, mergeable, zero unresolved threads.";
+    case "FAILED":
+      return `FAILED — ${result.failingChecks.join(", ")}: read the failing check's log and fix it.`;
+    case "BLOCKED-ACTION":
+      return `BLOCKED-ACTION — ${[...new Set(result.actions.map((a) => a.actor))].join(", ") || "PR author"} must act (below).`;
+    case "WAITING":
+      return `WAITING — ${result.waitingOn.length} check(s) still running (${formatEta(result.etaMs)}). `
+        + "Not a failure: wait, or re-run with --wait.";
+    default:
+      return result.verdict;
+  }
+}
+
+function report(state, result) {
   const { meta } = state;
   const { counts } = result;
-
+  console.log(verdictHeadline(result));
   console.log(`PR #${meta.number}: ${meta.title}`);
   console.log(`  state=${meta.state} mergeable=${meta.mergeable} mergeStateStatus=${meta.mergeStateStatus}`);
   console.log(
@@ -465,14 +631,56 @@ function main() {
       `${counts.unresolvedThreads} unresolved review thread(s)`,
   );
   for (const n of result.notes) console.log(`  note: ${n}`);
-
-  if (result.ready) {
-    console.log("READY TO MERGE — every check terminal+green, mergeable, zero unresolved threads.");
-    process.exit(0);
+  if (result.verdict === "BLOCKED-ACTION") {
+    for (const a of result.actions) console.log(`   - [${a.actor}] ${a.text}`);
+  } else if (result.blockers.length && result.verdict !== "MERGED") {
+    for (const b of result.blockers) console.log(`   - ${b}`);
   }
-  console.log(`NOT READY — ${result.blockers.length} blocker(s):`);
-  for (const b of result.blockers) console.log(`   - ${b}`);
-  process.exit(1);
+  if (result.timedOut) console.log("  --wait timed out with checks still running; the verdict is still WAITING, not a failure.");
+}
+
+async function main() {
+  let args;
+  try {
+    args = parsePrHealthArgs();
+  } catch (e) {
+    console.error(`pr-health: ${e.message}`);
+    process.exit(PR_HEALTH_EXIT.UNREADABLE);
+  }
+  const durationCache = new Map();
+  const read = () => {
+    const state = fetchPrState(args.pr);
+    const pendingWorkflows = state.checks.filter((c) => PENDING_BUCKETS.has(c.bucket)).map((c) => c.workflow);
+    const typicalDurationsMs = pendingWorkflows.length ? fetchTypicalWorkflowDurations(pendingWorkflows, durationCache) : {};
+    return { state, result: evaluatePrHealth({ ...state, typicalDurationsMs }) };
+  };
+
+  let last;
+  try {
+    if (args.wait) {
+      const final = await waitForPrHealth({
+        read: async () => {
+          last = read();
+          return last.result;
+        },
+        sleep: (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
+        timeoutMs: args.timeoutMinutes * 60_000,
+        intervalMs: args.intervalSeconds * 1000,
+        onPoll: (result) => {
+          if (result.verdict === "WAITING") console.error(`pr-health: ${verdictHeadline(result)}`);
+        },
+      });
+      last = { ...last, result: final };
+    } else {
+      last = read();
+    }
+  } catch (e) {
+    console.error(`pr-health: ${e.message}`);
+    process.exit(PR_HEALTH_EXIT.UNREADABLE);
+  }
+
+  report(last.state, last.result);
+  process.exit(last.result.exitCode);
 }
 
 if (isEntryModule(import.meta.url)) main();

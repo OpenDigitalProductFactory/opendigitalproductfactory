@@ -495,8 +495,8 @@ test("pinned readiness source survives shared-main movement but never candidate 
   f.options.identify = originalIdentify;
   assert.equal((await runWithGuardReceipt(f.options)).reused, false, "restore a receipt for the original source pair");
   assert.equal((await runWithGuardReceipt(f.options)).reused, true, "confirm that exact source and environment can reuse before changing only environment");
-  env = { ...env, DPF_FIXTURE_INPUT: "changed" };
-  assert.equal((await runWithGuardReceipt(f.options)).reused, false, "environment still invalidates reuse");
+  env = { ...env, CI: "changed" };
+  assert.equal((await runWithGuardReceipt(f.options)).reused, false, "a guard-result environment input still invalidates reuse");
   writeFileSync(join(cwd, "untracked"), "changed");
   assert.equal(f.options.identify(), null, "dirty source cannot inherit a pass");
   rmSync(join(cwd, "untracked"));

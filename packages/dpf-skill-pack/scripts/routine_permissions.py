@@ -13,6 +13,7 @@ from datetime import date, datetime, time
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -79,6 +80,14 @@ def read_toml(path: Path) -> dict:
     return _load(path, 'toml')[0]
 
 
+def _key(value: str) -> str:
+    if not isinstance(value, str):
+        raise PermissionPlanError('Unsupported TOML key.')
+    # Codex desktop runtime replacement recognizes bare notify only. Standard
+    # bare keys also keep our output compatible with its other native writers.
+    return value if re.fullmatch(r'[A-Za-z0-9_-]+', value) else json.dumps(value)
+
+
 def _value(value) -> str:
     if isinstance(value, str): return json.dumps(value, ensure_ascii=False)
     if isinstance(value, bool): return 'true' if value else 'false'
@@ -86,7 +95,7 @@ def _value(value) -> str:
     if isinstance(value, float) and math.isfinite(value): return repr(value)
     if isinstance(value, (datetime, date, time)): return value.isoformat()
     if isinstance(value, list): return '[' + ', '.join(_value(x) for x in value) + ']'
-    if isinstance(value, dict): return '{' + ', '.join(json.dumps(k) + ' = ' + _value(v) for k,v in value.items()) + '}'
+    if isinstance(value, dict): return '{' + ', '.join(_key(k) + ' = ' + _value(v) for k,v in value.items()) + '}'
     raise PermissionPlanError('Unsupported TOML value; existing configuration was not changed.')
 
 
@@ -94,10 +103,10 @@ def dump_toml(data: dict) -> str:
     if tomllib is None: raise PermissionPlanError('TOML validation unavailable; configuration unchanged.')
     lines = []
     def table(value, path):
-        if path: lines.extend(['', '[' + '.'.join(json.dumps(x) for x in path) + ']'])
+        if path: lines.extend(['', '[' + '.'.join(_key(x) for x in path) + ']'])
         for k,v in value.items():
             if not isinstance(k,str): raise PermissionPlanError('Unsupported TOML key.')
-            if not isinstance(v,dict): lines.append(json.dumps(k) + ' = ' + _value(v))
+            if not isinstance(v,dict): lines.append(_key(k) + ' = ' + _value(v))
         for k,v in value.items():
             if isinstance(v,dict): table(v,[*path,k])
     table(data,[])
@@ -131,6 +140,28 @@ def _merge_rules(data: dict, key: str, rules: list[str]) -> None:
     existing.extend(x for x in rules if x not in existing)
 
 
+def _codex_rules(path: Path, rules: str) -> tuple[bytes | None, bytes]:
+    """Planned bytes for one DPF-owned Codex rules file; never takes over a foreign file."""
+    raw=_bytes(path)
+    if raw is None: return None,rules.encode('utf-8')
+    try:
+        existing=raw.decode('utf-8-sig')
+        if not existing.startswith(MARKER): raise ValueError()
+        # Validate the supported literal prefix-rule subset without executing
+        # user code. Preserve every existing deny/prompt rule and comment.
+        parsed=ast.parse(existing)
+        for statement in parsed.body:
+            call=statement.value if isinstance(statement,ast.Expr) else None
+            if not isinstance(call,ast.Call) or not isinstance(call.func,ast.Name) or call.func.id!='prefix_rule' or call.args: raise ValueError()
+            fields={arg.arg:ast.literal_eval(arg.value) for arg in call.keywords}
+            if set(fields)-{'pattern','decision','justification'} or fields.get('decision') not in ('allow','prompt','forbidden'): raise ValueError()
+            if not isinstance(fields.get('pattern'),list) or any(not isinstance(x,str) for x in fields['pattern']): raise ValueError()
+        additions=[line for line in rules.splitlines()[1:] if line not in existing.splitlines()]
+        return raw,(existing.rstrip('\n')+'\n'+''.join(line+'\n' for line in additions)).encode('utf-8')
+    except (ValueError,UnicodeError,SyntaxError):
+        raise PermissionPlanError('Existing dpf-routine.rules is unowned or unsupported; reconcile it without overwriting restrictions.') from None
+
+
 @dataclass(frozen=True)
 class PlannedFile:
     path: Path
@@ -162,8 +193,9 @@ def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, client
     try:
         policy=json.loads((skill_pack/'contracts/client-permission-baseline.json').read_text(encoding='utf-8-sig'))
         if policy['schemaVersion'] != 1: raise ValueError()
-        prefixes=policy['commandPrefixes']
-        if not isinstance(prefixes,list) or any(not isinstance(p,list) or not p or any(not isinstance(x,str) or not x for x in p) for p in prefixes): raise ValueError()
+        prefixes,reviewed=policy['commandPrefixes'],policy['reviewedPrefixes']
+        for group in (prefixes,reviewed):
+            if not isinstance(group,list) or any(not isinstance(p,list) or not p or any(not isinstance(x,str) or not x for x in p) for p in group): raise ValueError()
     except (OSError,ValueError,KeyError,TypeError): raise PermissionPlanError('Invalid delivered routine permission policy.') from None
     files=[]
     def document(path, client, kind, change):
@@ -172,7 +204,14 @@ def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, client
         new=deepcopy(old)
         change(new)
         text=json.dumps(new,indent=2,ensure_ascii=False)+'\n' if kind=='json' else dump_toml(new)
-        if selected: files.append(PlannedFile(path,raw,raw if old==new and raw is not None else text.encode('utf-8'),client))
+        # BI-34E03B27: converge an existing quoted notify even on a semantic
+        # permission no-op. Otherwise a later desktop runtime update appends a
+        # duplicate root key. The validated serializer preserves all values.
+        quoted_notify = (kind == 'toml' and client == 'codex' and 'notify' in new
+                         and raw is not None and re.search(
+                             r"(?m)^[ \t]*(?:\"notify\"|'notify')[ \t]*=", raw.decode('utf-8-sig')) is not None)
+        unchanged = old == new and raw is not None and not quoted_notify
+        if selected: files.append(PlannedFile(path,raw,raw if unchanged else text.encode('utf-8'),client))
         return new
 
     # Only this named project's trust is created. An explicit untrusted decision
@@ -204,27 +243,16 @@ def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, client
                 target=_table(_table(_table(_table(c,'plugins'),name),'mcp_servers'),'dpf')
                 target.setdefault('default_tools_approval_mode',inherited.get('default_tools_approval_mode','auto'))
     codex_config=document(root/'.codex/config.toml','codex','toml',codex)
-    path=root/'.codex/rules/dpf-routine.rules'
-    raw=_bytes(path) if 'codex' in clients else None
+    # Destructive and outbound forms of an allowed prefix stay reviewed: the
+    # stricter decision wins in Codex (prompt) and Claude (ask). Matching is on
+    # leading tokens only, so the DPF PreToolUse guards remain the backstop.
     rules=MARKER+''.join('prefix_rule(pattern='+json.dumps(p)+', decision="allow")\n' for p in prefixes if p!=['node','scripts/'])
-    if raw is not None:
-        try:
-            existing=raw.decode('utf-8-sig')
-            if not existing.startswith(MARKER): raise ValueError()
-            # Validate the supported literal prefix-rule subset without executing
-            # user code. Preserve every existing deny/prompt rule and comment.
-            parsed=ast.parse(existing)
-            for statement in parsed.body:
-                call=statement.value if isinstance(statement,ast.Expr) else None
-                if not isinstance(call,ast.Call) or not isinstance(call.func,ast.Name) or call.func.id!='prefix_rule' or call.args: raise ValueError()
-                fields={arg.arg:ast.literal_eval(arg.value) for arg in call.keywords}
-                if set(fields)-{'pattern','decision','justification'} or fields.get('decision') not in ('allow','prompt','forbidden'): raise ValueError()
-                if not isinstance(fields.get('pattern'),list) or any(not isinstance(x,str) for x in fields['pattern']): raise ValueError()
-            additions=[line for line in rules.splitlines()[1:] if line not in existing.splitlines()]
-            rules=existing.rstrip('\n')+'\n'+''.join(line+'\n' for line in additions)
-        except (ValueError,UnicodeError,SyntaxError):
-            raise PermissionPlanError('Existing dpf-routine.rules is unowned or unsupported; reconcile it without overwriting restrictions.') from None
-    if 'codex' in clients: files.append(PlannedFile(path,raw,rules.encode('utf-8'),'codex'))
+    rules+=''.join('prefix_rule(pattern='+json.dumps(p)+', decision="prompt")\n' for p in reviewed)
+    # The project file loads only when that trusted project is the session's
+    # own; the user layer reaches sessions in the install folder and sibling
+    # worktrees too (BI-1B0D1416).
+    rule_files=[(path,_codex_rules(path,rules)) for path in (root/'.codex/rules/dpf-routine.rules',home/'.codex/rules/dpf-routine.rules')] if 'codex' in clients else []
+    files.extend(PlannedFile(path,raw,after,'codex') for path,(raw,after) in rule_files)
     shell_rules=['Bash('+' '.join(p)+'*)' if p==['node','scripts/'] else 'Bash('+' '.join(p)+' *)' for p in prefixes]
     claude_user,_=_load(home/'.claude/settings.json','json') if 'claude-code' in clients else ({},None)
     inherited_mode=_mapping(claude_user,'permissions').get('defaultMode')
@@ -236,6 +264,7 @@ def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, client
             if key in perms and (not isinstance(perms[key],list) or any(not isinstance(x,str) for x in perms[key])):
                 raise PermissionPlanError('Unsupported Claude restriction list.')
         _merge_rules(perms,'allow',policy['claudeTools']+shell_rules+['mcp__'+s+'__*' for s in policy['claudeMcpServers']])
+        _merge_rules(perms,'ask',['Bash('+' '.join(p)+' *)' for p in reviewed])
     cc=document(root/'.claude/settings.local.json','claude-code','json',claude)
     def grok(c):
         _merge_rules(_table(c,'permission'),'allow',policy['grokTools']+shell_rules+['MCPTool('+s+'__*)' for s in policy['grokMcpServers']])

@@ -12,6 +12,7 @@ import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
 import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
+import { THREAD_TOOL_GRANTS } from "./thread-tool-grants";
 import { SURFACE_READINESS_TOOL_GRANTS } from "./surface-readiness-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
@@ -126,6 +127,11 @@ export const COWORKER_READ_BASELINE_GRANTS: readonly string[] = [
   // EP-WORKROOM-COMMS (BI-3F21C4D5): every coworker may read a room it is admitted
   // to (room admission is the real gate; this is the baseline capability).
   "work_room_read",
+  // BI-825D3487: the three knowledge corpora. Unlike the rest of this baseline,
+  // a revocation row removes one (lib/tak/corpus-read-scope.ts reads them).
+  "wiki_kernel_read",
+  "wiki_org_read",
+  "wiki_profession_read",
 ];
 /** Maps tools to grants. [] means identity-scoped universal access; absence means deny. */
 export const TOOL_TO_GRANTS: Record<string, string[]> = {
@@ -198,6 +204,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_backlog_item: ["backlog_read"],
   update_backlog_item_status: ["backlog_write"],
   retire_backlog_item: ["backlog_write"],
+  retire_peer_demand_intake_copies: ["backlog_write"],
   link_backlog_item_to_epic: ["backlog_write"],
   search_specs_and_plans: ["spec_plan_read", "backlog_read"],
   // Build-scoped evidence uses build_evidence; backlog_write implies it for compatibility (BI-B2F7ABF5).
@@ -398,11 +405,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_deliberation_outcome:  ["deliberation_read"],
   deliberate_on:             ["deliberation_create"],
 
-  // Specialist subtask thread spawning
-  spawn_work_thread:         ["thread_write"],
-  cancel_thread:             ["thread_write"],
-  get_thread_result:         ["thread_read"],
-  get_child_threads:         ["thread_read"],
+  // Thread delegation and exact-response feedback
+  ...THREAD_TOOL_GRANTS,
 
   // Multi-agent collaboration (EP-A2A) — targeted handoff / summon spawn a
   // child work thread, so they require the same thread_write grant as spawn.
