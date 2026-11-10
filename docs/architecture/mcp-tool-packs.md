@@ -175,6 +175,12 @@ its own lazy module (`work-capsules/workroom-shape-rebind-handler.ts`), so
 `workShape` pin to a newer version. The rule it carries is in
 [work shapes and the decision gate](work-shapes-and-the-decision-gate.md).
 
+`update_workroom_status` keeps factual infrastructure blockers lightweight, but
+a decision-shaped blocked reason must carry a pre-human routing disposition.
+Resolved-scope and legitimate-escalation dispositions also carry the existing
+`DecisionInteraction` id, so durable Workroom state cannot replace WWMD/WWWD/WSID
+with a free-text request for the operator to choose.
+
 The pack also owns bounded classification recovery. `review_workroom_sensitivity`
 requires `manage_platform` and `admin_read`, returning only classification state
 and an exact revision digest, never room contents or historical prose.

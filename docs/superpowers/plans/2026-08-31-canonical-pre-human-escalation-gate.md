@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Canonical Pre-Human Escalation Gate Implementation Plan
 
 **Design:** `docs/superpowers/specs/2026-08-31-canonical-pre-human-escalation-gate-design.md`  
@@ -13,9 +17,9 @@ This is one atomic fix. None of the steps below is independently shippable: the 
 - [x] Claim the governed Workroom and declare the medium delivery shape.
 - [x] Reproduce the current-tree gap against the deployed runtime (`WC-618084CF`) and archive the probe.
 - [x] Reconcile the design against current `main`; preserve improvements that landed independently.
-- [ ] Add failing tests for the incident and Workroom routing disposition.
-- [ ] Implement the canonical disposition and Workroom blocker gate.
-- [ ] Align the external guard, coworker prompt, WWMD skill, and doctrine.
+- [x] Add failing tests for the incident and Workroom routing disposition.
+- [x] Implement the canonical disposition and Workroom blocker gate.
+- [x] Align the external guard, coworker prompt, WWMD skill, and doctrine.
 - [ ] Run affected tests, instruction-plane guards, preflight, and production build.
 - [ ] Record evidence, independent semantic review, push, create the PR, and verify PR health.
 

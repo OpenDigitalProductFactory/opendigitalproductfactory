@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Canonical Pre-Human Escalation Gate
 
 **Backlog:** BI-51821119  
