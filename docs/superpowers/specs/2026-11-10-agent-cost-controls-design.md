@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Experience-driven agent cost controls and tooling repair
 
 Status: draft; implementation not admitted. Backlog: BI-7B1D74B3. Workroom: WC-37CCCC19.
