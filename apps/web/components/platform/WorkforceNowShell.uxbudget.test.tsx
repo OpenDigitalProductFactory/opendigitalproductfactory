@@ -105,7 +105,7 @@ describe("WorkforceNowShell UX budget", () => {
 
   it("names the platform work instead of an empty board", () => {
     const { container } = render(<WorkforceNowShell initialData={DATA} />);
-    expect(container.textContent).toContain("Platform work in flight");
+    expect(container.textContent).toContain("Unattached platform runs");
     expect(container.textContent).toContain("Deliberation: review");
     expect(container.textContent).toContain("FB-FCAC756D");
     expect(container.textContent).toContain("unattributed");

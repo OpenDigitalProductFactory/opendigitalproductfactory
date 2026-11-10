@@ -938,7 +938,8 @@ const ROUTES_BY_PATH = new Map(
 );
 const PARAMETERIZED_ROUTES = PORTAL_NAV_ROUTES.filter((route) => route.path.includes("["));
 function normalizePath(path: string): string {
-  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  const pathname = path.split(/[?#]/, 1)[0] || "/";
+  return pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
 }
 function toEntry(route: PortalNavRecord): PortalNavEntry {
   return {

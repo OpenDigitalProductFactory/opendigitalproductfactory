@@ -17,12 +17,12 @@ The self-upgrade skip defect from the original report is no longer part of this 
 ## Backlog and dependency disposition
 
 - This PR delivers `BI-4BF1FF9C`: one canonical identity-and-activity journey.
-- `BI-3EC91596` retains detailed TokenUsage attribution and cost reconciliation. This slice preserves the existing activity KPI but does not claim a new attribution model.
-- `BI-496CD36E` retains raw `WC-*` route resolution beyond links already emitted by the existing Workroom projection.
-- `BI-75D5ABCD` retains Operations Map historical-window controls.
+- This PR delivers the operator-visible portion of `BI-3EC91596`: today&rsquo;s usage is split into coworker-roster, Workroom-attributed, and genuinely unattributed buckets. Workroom rows show their own recorded token and dollar use.
+- `BI-496CD36E` was independently delivered on `main`: emitted Workroom links use the canonical work-case key and the detail loader resolves raw `WC-*` identities. This PR reuses and verifies that route instead of duplicating it.
+- This PR delivers `BI-75D5ABCD`: named Operations Map windows plus previous/next traversal over the existing bounded evidence API.
 - `BI-7BEDF08A` is superseded by the deployed upgrade drain/wait behavior and is not implemented here.
 
-These dispositions keep the operator-requested consolidation atomic while preserving the existing specialist carriers for deeper observability work.
+The delivery stays in one PR because the operator journey depends on all three visible layers: one home, retained governing context, and traversable historical evidence.
 
 ## Existing substrate
 
@@ -48,14 +48,27 @@ These dispositions keep the operator-requested consolidation atomic while preser
 - Explain on the Activity view that coworker rows are governed identities while external and platform execution is governed through Workrooms. Link to the canonical Workroom inventory and Operations Map for deeper context.
 - Add a secondary **Advanced AI operations** disclosure linking to the existing provider/routing, skills, governance, scheduling, and build-runtime controls.
 
-### 3. Remove the competing entry and preserve compatibility
+### 3. Retain Workroom context and attribute usage
+
+- Add current and recently completed Workrooms to the activity read model without creating a second execution ledger.
+- Resolve room ownership from the existing TokenUsage `contextKey` conventions and keep non-room, non-roster use explicitly unattributed.
+- Show Workroom objective, executor, status, freshness, tokens, cost, and a canonical detail link.
+- Keep live TaskRuns with neither coworker nor Workroom context in a separate **Unattached platform runs** lane.
+
+### 4. Remove the competing entry and preserve compatibility
 
 - Remove the `ai_workforce` primary/navigation destination while retaining its operational subroutes and capability checks.
 - Redirect `/platform/ai/right-now` to the canonical Activity view.
 - Preserve supported query parameters so links can focus the same activity after the redirect.
 - Update affected navigation extraction, permission, workspace-home, and route-purpose expectations rather than adding exceptions.
 
-### 4. Verify the operator journey
+### 5. Make historical activity traversable
+
+- Add 1-hour, 6-hour, 24-hour, and 7-day evidence presets to the Operations Map.
+- Add previous/next-window movement and a return-to-live-edge action while preserving the selected window during refresh.
+- Reuse the existing `start` / `end` evidence API and replay surface; do not add another history store.
+
+### 6. Verify the operator journey
 
 - Run the focused page, navigation, activity-shell, permission, and extraction tests after the red-to-green cycle.
 - Run affected lint and type checks plus the repository gate selected by `pnpm gate:context`.
@@ -67,6 +80,8 @@ These dispositions keep the operator-requested consolidation atomic while preser
 - The primary navigation has one AI-coworker destination: `/workforce`.
 - `/workforce` defaults to the roster and exposes Activity without sending the operator to a different main-menu domain.
 - Activity uses the existing current/recent read model and explicitly distinguishes coworker identity from external/platform Workroom execution.
+- Token totals reconcile across roster, Workroom, and unattributed buckets, and every displayed Workroom links to its retained detail.
+- The Operations Map can move through named and adjacent historical windows without relying on an imprecise scrub gesture.
 - `/platform/ai/right-now` is a compatibility redirect into `/workforce?view=activity`, with supported focus query state preserved.
 - Advanced fleet controls remain reachable contextually and are not presented as a competing roster.
 - No schema, identity registry, TaskRun ledger, Workroom ledger, or refresh implementation is duplicated.
