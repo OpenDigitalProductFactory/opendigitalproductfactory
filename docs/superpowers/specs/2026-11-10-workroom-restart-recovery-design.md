@@ -43,20 +43,19 @@ Only the canonical runtime owner may advance that install through its governed p
 1. **R1 / V1 — reproduce and bind.** Use this implementation item's current
    workroom and immutable design as the ordered fix plan. Record actual red/green
    research. Reconcile source identity and covered plan through governed writers.
-2. **R2 / C1 / F1 / V2 — qualify restart continuity.** Extend the existing
+2. **R3 / C2 / F2 / V3 — resolve qualification before ordinary implementation.**
+   The selected evidence strategy is a bounded qualification experiment using
+   the existing current-process proof and transaction-scoped canonical admission
+   locks, not a new timestamp-derived authority. It must establish the complete
+   lifetime described below before admitting the ordinary correction. If that
+   mechanism cannot satisfy AC-3, retain the hold and obtain scoped correction
+   admission; the candidate is not a substitute for that decision.
+3. **R2 / C1 / F1 / V2 — qualify restart continuity.** Extend the existing
    `scope-epoch-enrollment.server.ts` predicate and its colocated tests. Exact
    authenticated IDs must remain equal; accept only finite, non-backward starts
    no later than observation. Preserve receipt verification, image/writer checks,
    absence of retired IDs and canonical admission serialization. No migration,
    new persistence concept, dependency or runtime service is proposed.
-3. **R3 / C2 / F2 / V3 — prove qualification through commit.** Resolve original
-   reviewer obligations before publication: actual loaded production generation
-   and sandbox/production DB isolation, post-qualification mutation behavior,
-   transaction barriers and both canonical admission lock orders, and process
-   death/rollback. Reuse `scope-epoch.pg.test.ts`, `scope-claim-store.ts` and the
-   receipted-tool transaction owner. Existing PG fixture races prove lock behavior
-   only, not Docker/source generation. If the architecture cannot supply the
-   lifetime invariant, obtain scoped correction admission; do not silently relax it.
 4. **R4 / C3 / F3 / V4 — deliver and observe.** Run affected tests/typecheck,
    deterministic guards and the exact-tree shared gate; obtain independent
    review against immutable source. Publish DCO-signed through protected PR.
@@ -69,6 +68,42 @@ deliverables. No separate cost-control feature or stale-proof recovery is includ
 Rollback reverts this source correction through protected release; it does not
 rewrite signed proof or reset protected claims. Unknown lifetime evidence holds
 acceptance and is never recorded as a passing check.
+
+## Selected qualification mechanism and falsification plan
+
+The generation under test is the actual production Node process and its loaded
+writer closure, not the mutable Docker start timestamp. Candidate qualification
+retains a frozen process-bound proof; acquisition and receipt publication must
+remain inside the same database transaction holding both canonical admission
+locks. Test the claim/receipt path from qualification through the transaction's
+actual commit or rollback. The image identity and packaged source comparison
+alone do not prove loaded-code immutability: live read-only inspection found a
+writable container root filesystem. Enumerate writable overlays, mounts, dynamic
+loads and admitted production code-changing writers; prove they cannot change
+the qualified writer closure during that lifetime, or require a scoped correction.
+Do not describe this unresolved guarantee as already enforced.
+
+Source anchors below are immutable blobs at main
+`4fff0a44d8b957e479a1d17379eab3041c2e2432`:
+
+| Path | Blob | Obligation |
+|---|---|---|
+| `apps/web/lib/work-capsules/scope-epoch-enrollment.server.ts` | `788135e546588b9255a4cb13dcc81f68e0a54427` | Current process proof, packaged bytes and admission locks |
+| `apps/web/lib/work-capsules/scope-claim-store.ts` | `7e9ff5a98791a4692d38f6f50ee7e14aaae374bc` | Qualification before receipt transaction; same transaction retained through effect |
+| `apps/web/lib/work-capsules/command-receipts.ts` | `2bdda63a729f82f7bd6abe391a1875cc7433cea3` | Actual commit/rollback and no partial effect/activity/receipt |
+| `apps/web/lib/work-capsules/scope-epoch.pg.test.ts` | `534170053590cb481fad2ea80fe80191f05b6432` | Both lock orders and real database barriers; qualifier remains mocked |
+| `Dockerfile` | `1ae237f2282e36f31361f8ae247a6d9655b8f667` | Production standalone process and packaged writer generation |
+| `docker-compose.yml` | `007b9d4790b78240ab61eb5c9cdcc2f3cca4411b` | Sandbox database isolation and actual mounts; dev-preview services are distinct |
+
+Use a governed nonproduction target and real isolated database for a child writer
+bound to the exact candidate. Terminate it after qualification, after the room
+lock and before commit; independently observe complete commit or complete abort.
+Force a generation/cohort change after qualification and demonstrate actual
+exclusion or refusal. Predicate mocks and PG fixture locks are separate evidence
+layers, never proof of production process/image isolation. Current sandbox
+inspection confirmed no `PRODUCTION_DATABASE_URL` variable, but that observation
+alone is not complete network, credential or writer isolation proof. No ad hoc
+runtime, production crash injection or manual retirement-proof change is allowed.
 
 ## Admission and evidence status
 
