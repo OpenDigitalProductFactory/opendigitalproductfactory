@@ -34,6 +34,9 @@ This is one atomic fix. None of the steps below is independently shippable: the 
       `target-binding.test.ts` depended on wall-clock time after its migration
       grace cutoff. The test now supplies its declared fixture time and passes
       9/9 locally; runtime behavior is unchanged.
+- [x] Repair the CI image-store dependency exposed after the runner default
+      changed to containerd: both `classic` and `containerd` matrix legs now
+      configure the daemon explicitly before testing the frozen digest path.
 - [ ] Observe the repaired-tree production build and merge-queue checks, then
       merge PR #6940 and close the Workroom and BI.
 
