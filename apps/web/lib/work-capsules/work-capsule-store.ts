@@ -599,6 +599,7 @@ export async function updateWorkCapsuleStatus(args: {
   capsuleId: string;
   status: WorkCapsuleStatus;
   reason: string;
+  routing?: { disposition: string; decisionInteractionId: string | null };
   actor: WorkCapsuleActor;
   now?: Date;
 }) {
@@ -630,14 +631,13 @@ export async function updateWorkCapsuleStatus(args: {
     return completed;
   }
 
-  const currentWorkspaceState =
-    capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
-      ? capsule.workspaceState as Record<string, unknown>
-      : {};
+  const currentWorkspaceState = capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
+    ? capsule.workspaceState as Record<string, unknown> : {};
   const now = args.now ?? new Date();
   const statusOverride = {
     reason: args.reason,
     until: new Date(now.getTime() + STATUS_OVERRIDE_TTL_MS).toISOString(),
+    ...(args.routing ? { routingDisposition: args.routing.disposition, ...(args.routing.decisionInteractionId ? { decisionInteractionId: args.routing.decisionInteractionId } : {}) } : {}),
   };
 
   const updated = await inTransaction(args.db, async (tx) => {
