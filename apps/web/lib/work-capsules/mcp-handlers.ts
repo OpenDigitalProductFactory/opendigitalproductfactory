@@ -59,6 +59,7 @@ import { describeStageEvidenceReach } from "@/lib/work-management/stage-evidence
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
+import { validatePreHumanRouting } from "./pre-human-routing";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
@@ -306,7 +307,30 @@ export async function updateWorkCapsuleStatusTool(
     };
   }
 
+  const routing = validatePreHumanRouting({
+    status,
+    reason,
+    routingDisposition: params.routingDisposition,
+    decisionInteractionId: params.decisionInteractionId,
+  });
+  if (!routing.valid) {
+    return { success: false, error: routing.error, message: routing.message };
+  }
+
   const db = workCapsuleDb();
+  if (routing.decisionInteractionId) {
+    const interaction = await (db as unknown as Pick<typeof prisma, "decisionInteraction">).decisionInteraction.findUnique({
+      where: { interactionId: routing.decisionInteractionId },
+      select: { id: true },
+    });
+    if (!interaction) {
+      return {
+        success: false,
+        error: "decision_interaction_not_found",
+        message: `DecisionInteraction ${routing.decisionInteractionId} does not exist. Record the owning-scope decision before retrying this Workroom transition.`,
+      };
+    }
+  }
   let renewedCapsule;
   try {
     renewedCapsule = await runAutoRenewedCapsuleWrite({
@@ -318,6 +342,9 @@ export async function updateWorkCapsuleStatusTool(
         capsuleId,
         status,
         reason,
+        routing: routing.disposition
+          ? { disposition: routing.disposition, decisionInteractionId: routing.decisionInteractionId }
+          : undefined,
         actor: currentActor,
       }),
     });
