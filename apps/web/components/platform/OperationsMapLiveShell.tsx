@@ -23,6 +23,7 @@ import type { OperationsMapData } from "@/lib/ai-operations-map/load-map-data";
 import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
 import { useSearchParams } from "next/navigation";
 import { readRoutingScope, routingWindow } from "@/lib/ai-operations-map/routing-management-scope";
+import { Surface } from "@/components/ui/Surface";
 
 const REFRESH_INTERVAL_MS = 45_000;
 const SCRUB_SETTLE_MS = 600;
@@ -254,7 +255,7 @@ function HistoryWindowControls({
   const buttonClass = "inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] disabled:opacity-40";
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2" aria-label="Operations history window">
+    <Surface className="flex flex-wrap items-center gap-2 px-3 py-2" aria-label="Operations history window">
       <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--dpf-muted)]">
         <Clock3 aria-hidden className="h-4 w-4" /> History
       </span>
@@ -275,7 +276,7 @@ function HistoryWindowControls({
           Return to live edge
         </button>
       ) : null}
-    </div>
+    </Surface>
   );
 }
 

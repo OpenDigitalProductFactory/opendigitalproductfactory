@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Unified AI Coworkers implementation plan
 
 **Backlog item:** `BI-4BF1FF9C`
