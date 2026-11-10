@@ -24,6 +24,7 @@ import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-co
 import { useSearchParams } from "next/navigation";
 import { readRoutingScope, routingWindow } from "@/lib/ai-operations-map/routing-management-scope";
 import { Surface } from "@/components/ui/Surface";
+import { useT } from "@/lib/i18n/use-t";
 
 const REFRESH_INTERVAL_MS = 45_000;
 const SCRUB_SETTLE_MS = 600;
@@ -235,10 +236,10 @@ export function OperationsMapLiveShell({
 }
 
 const HISTORY_PRESETS = [
-  { label: "1 hour", duration: 60 * 60_000 },
-  { label: "6 hours", duration: 6 * 60 * 60_000 },
-  { label: "24 hours", duration: 24 * 60 * 60_000 },
-  { label: "7 days", duration: 7 * 24 * 60 * 60_000 },
+  { key: "aiCoworkers.historyOneHour" as const, duration: 60 * 60_000 },
+  { key: "aiCoworkers.historySixHours" as const, duration: 6 * 60 * 60_000 },
+  { key: "aiCoworkers.historyTwentyFourHours" as const, duration: 24 * 60 * 60_000 },
+  { key: "aiCoworkers.historySevenDays" as const, duration: 7 * 24 * 60 * 60_000 },
 ];
 
 function HistoryWindowControls({
@@ -250,30 +251,31 @@ function HistoryWindowControls({
   refreshing: boolean;
   onSelect: (window: EvidenceWindowMs) => void;
 }) {
+  const t = useT("shell");
   const base = window ?? windowForHistoryPreset(24 * 60 * 60_000);
   const atLiveEdge = base.end >= Date.now() - LIVE_EDGE_SLACK_MS;
   const buttonClass = "inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] disabled:opacity-40";
 
   return (
-    <Surface className="flex flex-wrap items-center gap-2 px-3 py-2" aria-label="Operations history window">
-      <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--dpf-muted)]">
-        <Clock3 aria-hidden className="h-4 w-4" /> History
+    <Surface className="flex flex-wrap items-center gap-2 px-3 py-2" aria-label={t("aiCoworkers.historyAriaLabel")}>
+      <span className="me-1 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--dpf-muted)]">
+        <Clock3 aria-hidden className="h-4 w-4" /> {t("aiCoworkers.historyLabel")}
       </span>
       {HISTORY_PRESETS.map((preset) => (
-        <button key={preset.label} type="button" disabled={refreshing} className={buttonClass} onClick={() => onSelect(windowForHistoryPreset(preset.duration))}>
-          {preset.label}
+        <button key={preset.key} type="button" disabled={refreshing} className={buttonClass} onClick={() => onSelect(windowForHistoryPreset(preset.duration))}>
+          {t(preset.key)}
         </button>
       ))}
       <span className="mx-1 h-6 w-px bg-[var(--dpf-border)]" aria-hidden />
       <button type="button" disabled={refreshing} className={buttonClass} onClick={() => onSelect(shiftEvidenceWindow(base, -1))}>
-        <ChevronLeft aria-hidden className="h-4 w-4" /> Previous window
+        <ChevronLeft aria-hidden className="h-4 w-4" /> {t("aiCoworkers.historyPrevious")}
       </button>
       <button type="button" disabled={refreshing || atLiveEdge} className={buttonClass} onClick={() => onSelect(shiftEvidenceWindow(base, 1))}>
-        Next window <ChevronRight aria-hidden className="h-4 w-4" />
+        {t("aiCoworkers.historyNext")} <ChevronRight aria-hidden className="h-4 w-4" />
       </button>
       {!atLiveEdge ? (
         <button type="button" disabled={refreshing} className={buttonClass} onClick={() => onSelect(windowForHistoryPreset(base.end - base.start))}>
-          Return to live edge
+          {t("aiCoworkers.historyLive")}
         </button>
       ) : null}
     </Surface>

@@ -13,6 +13,7 @@ import { auth } from "@/lib/auth";
 import { getGrantedCapabilities } from "@/lib/permissions";
 import { loadWorkforceActivity } from "@/lib/platform-runtime/workforce-activity";
 import { WorkforceNowShell } from "@/components/platform/WorkforceNowShell";
+import { getT } from "@/lib/i18n/t.server";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -23,12 +24,13 @@ export default async function WorkforceDirectoryPage({
 } = {}) {
   const params = searchParams ? await searchParams : {};
   const view = params.view === "activity" ? "activity" : "directory";
+  const t = await getT("shell");
 
   if (view === "activity") {
     const initialData = await loadWorkforceActivity();
     return (
       <div className="space-y-5">
-        <CoworkerHeader view={view} />
+        <CoworkerHeader view={view} t={t} />
         <WorkforceNowShell initialData={initialData} />
       </div>
     );
@@ -47,7 +49,7 @@ export default async function WorkforceDirectoryPage({
 
   return (
     <div className="space-y-5">
-      <CoworkerHeader view={view}>
+      <CoworkerHeader view={view} t={t}>
         <p className="max-w-2xl text-sm leading-5 text-[var(--dpf-muted)]">
           {coworkerCount > 0
             ? `You have ${coworkerCount} AI coworkers. Search or open a name.`
@@ -77,26 +79,25 @@ export default async function WorkforceDirectoryPage({
   );
 }
 
-function CoworkerHeader({ view, children }: { view: "directory" | "activity"; children?: React.ReactNode }) {
+function CoworkerHeader({ view, t, children }: { view: "directory" | "activity"; t: Awaited<ReturnType<typeof getT<"shell">>>; children?: React.ReactNode }) {
   return (
     <header className="space-y-3" data-dpf-lead>
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">AI Coworkers</h1>
         {view === "activity" ? (
           <p className="mt-1 max-w-3xl text-sm leading-5 text-[var(--dpf-muted)]">
-            See what coworkers and external executors are doing, the Workrooms that retain their context,
-            and where today&rsquo;s model use belongs.
+            {t("aiCoworkers.activityDescription")}
           </p>
         ) : children}
       </div>
-      <div aria-label="AI coworker views" className="flex flex-wrap gap-2">
+      <div aria-label={t("aiCoworkers.viewsLabel")} className="flex flex-wrap gap-2">
         <ViewLink href="/workforce" current={view === "directory"}>Coworkers</ViewLink>
         <ViewLink href="/workforce?view=activity" current={view === "activity"}>Activity</ViewLink>
         {view === "activity" ? (
           <>
             <a className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]" href="/ops/workrooms">Workrooms</a>
-            <a className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]" href="/platform/ai/operations-map">Operations Map</a>
-            <a className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]" href="/platform/ai/overview">Advanced AI operations</a>
+            <a className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]" href="/platform/ai/operations-map">{t("aiCoworkers.operationsMap")}</a>
+            <a className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-sm text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]" href="/platform/ai/overview">{t("aiCoworkers.advancedOperations")}</a>
           </>
         ) : null}
       </div>

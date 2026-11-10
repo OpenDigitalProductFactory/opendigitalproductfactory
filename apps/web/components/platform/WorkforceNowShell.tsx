@@ -18,6 +18,7 @@ import type {
 } from "@/lib/platform-runtime/workforce-activity";
 import { BREAK_FIX_SHARE_FINDING_THRESHOLD } from "@/lib/platform-runtime/break-fix-share";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import { useT } from "@/lib/i18n/use-t";
 
 const REFRESH_INTERVAL_MS = 12_000;
 
@@ -48,6 +49,7 @@ function daysSince(iso: string | null): string {
 }
 
 export function WorkforceNowShell({ initialData }: { initialData: WorkforceActivity }) {
+  const t = useT("shell");
   const [data, setData] = useState(initialData);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -123,7 +125,12 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
         <Kpi
           label="Tokens today"
           value={fmtTokens(pulse.tokensToday)}
-          sub={`${fmtTokens(pulse.tokensRoster ?? Math.max(0, pulse.tokensToday - (pulse.tokensWorkroom ?? 0) - pulse.tokensUnattributed))} roster · ${fmtTokens(pulse.tokensWorkroom ?? 0)} Workrooms · ${fmtTokens(pulse.tokensUnattributed)} unattributed · ~${fmtCost(pulse.costToday)}`}
+          sub={t("aiCoworkers.usageBreakdown", {
+            roster: fmtTokens(pulse.tokensRoster ?? Math.max(0, pulse.tokensToday - (pulse.tokensWorkroom ?? 0) - pulse.tokensUnattributed)),
+            workrooms: fmtTokens(pulse.tokensWorkroom ?? 0),
+            unattributed: fmtTokens(pulse.tokensUnattributed),
+            cost: fmtCost(pulse.costToday),
+          })}
           flag={pulse.tokensUnattributed > 0}
         />
         <Kpi
@@ -156,9 +163,9 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
         </ul>
       )}
 
-      <SectionHead title="Governed Workrooms — current and recent" hint="retained context, executor, status, and model use" />
+      <SectionHead title={t("aiCoworkers.workroomsHeading")} hint={t("aiCoworkers.workroomsHint")} />
       {(data.workrooms ?? []).length === 0 ? (
-        <Empty>No current or recently completed Workrooms were found.</Empty>
+        <Empty>{t("aiCoworkers.workroomsEmpty")}</Empty>
       ) : (
         <ul className="space-y-2">
           {(data.workrooms ?? []).map((room) => (
@@ -183,7 +190,7 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
                     </a>
                     <p className="mt-1 line-clamp-2 text-sm text-[var(--dpf-muted)]">{room.objective}</p>
                   </div>
-                  <div className="shrink-0 text-right text-dpf-caption text-[var(--dpf-muted)]">
+                  <div className="shrink-0 text-end text-dpf-caption text-[var(--dpf-muted)]">
                     <div>{fmtTokens(room.tokensToday)} tokens · {fmtCost(room.costToday)}</div>
                     <div>{room.executorKind ?? "unassigned"}{room.executorRef ? ` · ${room.executorRef}` : ""}</div>
                     <div>updated {daysSince(room.updatedAt).replace("quiet ", "")}</div>
@@ -198,8 +205,8 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
       {data.platformWork.length > 0 ? (
         <>
           <SectionHead
-            title="Unattached platform runs"
-            hint="live runs with no coworker or Workroom context"
+            title={t("aiCoworkers.unattachedHeading")}
+            hint={t("aiCoworkers.unattachedHint")}
           />
           <ul className="space-y-1.5">
             {data.platformWork.map((run) => (
