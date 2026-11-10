@@ -20,7 +20,11 @@ This is one atomic fix. None of the steps below is independently shippable: the 
 - [x] Add failing tests for the incident and Workroom routing disposition.
 - [x] Implement the canonical disposition and Workroom blocker gate.
 - [x] Align the external guard, coworker prompt, WWMD skill, and doctrine.
-- [ ] Run affected tests, instruction-plane guards, preflight, and production build.
+- [x] Run affected tests, instruction-plane guards, and preflight.
+- [ ] Obtain a clean exact-tree integration run and production build. The first
+      admitted run is preserved as failed evidence: three unrelated
+      `build-flow-state.test.ts` cases timed out under shared-run load, while
+      the complete file passed locally (40/40) immediately afterward.
 - [ ] Record evidence, independent semantic review, push, create the PR, and verify PR health.
 
 ## Traceability
