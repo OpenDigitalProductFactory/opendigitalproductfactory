@@ -4,6 +4,7 @@ const mockPrisma = {
   $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(mockPrisma)),
   $executeRawUnsafe: vi.fn(),
   authorizationDecisionLog: { findUnique: vi.fn() },
+  decisionInteraction: { findUnique: vi.fn() },
   workroom: {
     create: vi.fn(),
     findFirst: vi.fn(),
@@ -49,6 +50,7 @@ describe("Workroom pre-human routing boundary", () => {
   });
 
   it("records a ledger-bound legitimate escalation on a decision-shaped blocker", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue({ id: "decision-row-1" });
     mockPrisma.workroom.findUnique.mockResolvedValue({
       id: "row-1",
       capsuleId: "WC-STATUS",
@@ -77,6 +79,25 @@ describe("Workroom pre-human routing boundary", () => {
         }),
       }),
     }));
+  });
+
+  it("rejects a well-formed DecisionInteraction id that is not in the ledger", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(null);
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("update_workroom_status", {
+      capsuleId: "WC-STATUS",
+      status: "blocked",
+      reason: "WWMD returned low confidence; the operator must choose the finishing scope.",
+      routingDisposition: "legitimate-escalation",
+      decisionInteractionId: "DI-FABRICATED01",
+    }, "user-1", { agentId: "codex" });
+
+    expect(result).toEqual(expect.objectContaining({
+      success: false,
+      error: "decision_interaction_not_found",
+    }));
+    expect(mockPrisma.workroom.update).not.toHaveBeenCalled();
   });
 
   it("keeps factual infrastructure blockers representable without a fake decision ledger", async () => {

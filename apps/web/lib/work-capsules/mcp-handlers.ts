@@ -318,6 +318,19 @@ export async function updateWorkCapsuleStatusTool(
   }
 
   const db = workCapsuleDb();
+  if (routing.decisionInteractionId) {
+    const interaction = await (db as unknown as Pick<typeof prisma, "decisionInteraction">).decisionInteraction.findUnique({
+      where: { interactionId: routing.decisionInteractionId },
+      select: { id: true },
+    });
+    if (!interaction) {
+      return {
+        success: false,
+        error: "decision_interaction_not_found",
+        message: `DecisionInteraction ${routing.decisionInteractionId} does not exist. Record the owning-scope decision before retrying this Workroom transition.`,
+      };
+    }
+  }
   let renewedCapsule;
   try {
     renewedCapsule = await runAutoRenewedCapsuleWrite({

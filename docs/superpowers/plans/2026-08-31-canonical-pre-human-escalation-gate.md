@@ -21,6 +21,9 @@ This is one atomic fix. None of the steps below is independently shippable: the 
 - [x] Implement the canonical disposition and Workroom blocker gate.
 - [x] Align the external guard, coworker prompt, WWMD skill, and doctrine.
 - [x] Run affected tests, instruction-plane guards, and preflight.
+- [x] Repair independent review finding `cmwaec1ob0ckz01p0ykq07wdn`: a
+      consult-required transition now verifies that the supplied `DI-*` exists
+      in the DecisionInteraction ledger, rather than accepting format alone.
 - [ ] Obtain a clean exact-tree integration run and production build. The first
       admitted run is preserved as failed evidence: three unrelated
       `build-flow-state.test.ts` cases timed out under shared-run load, while
