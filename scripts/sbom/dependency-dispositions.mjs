@@ -108,7 +108,6 @@ export function renderDependencyDispositionMatrix(current, allowlist) {
     );
   }
 
-  lines.push("");
   return `${lines.join("\n")}\n`;
 }
 

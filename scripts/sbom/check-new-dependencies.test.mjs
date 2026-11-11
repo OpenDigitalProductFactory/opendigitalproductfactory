@@ -154,6 +154,7 @@ test("the generated package matrix is deterministic and contains the required ob
   assert.match(first, /Keep \| 1/);
   assert.match(first, /Absorb \| 1/);
   assert.ok(first.endsWith("\n"));
+  assert.equal(first.endsWith("\n\n"), false, "generated matrix must not add a blank line at EOF");
 });
 
 test("rendering refuses to publish an incomplete ledger", () => {
