@@ -74,4 +74,11 @@ The implementation plan is
 fixtures precede implementation, followed by applicable gates and independent
 review, a signed protected PR, canonical delivery and measured convergence.
 Current worktree readiness is source-only until the managed probe proves more.
-The running service and its saved configuration have not been changed.
+The initial source diagnosis changed no running service. A subsequent explicitly
+authorized configuration qualification changed only the existing native
+service's saved authority to the verified canonical HTTPS origin and used its
+normal graceful restart. The same trusted node then recorded a fresh heartbeat;
+the pinned binary, controller, enrollment and all other configuration bytes were
+preserved. This proves the configuration path, not the default installer repair.
+The standalone remote-node preflight still reports its generic loopback warning;
+that check is recorded as failed, not as a passing co-located qualification.
