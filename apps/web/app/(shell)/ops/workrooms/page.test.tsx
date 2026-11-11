@@ -62,6 +62,16 @@ vi.mock("@/lib/work-management/held-workrooms", () => ({
   }]),
 }));
 
+vi.mock("@/lib/work-management/standing-run-history.server", async () => {
+  const { classifyStandingRhythm } = await import("@/lib/work-management/standing-run-history");
+  return {
+    loadStandingRhythms: vi.fn(async () => [{
+      capsuleId: "WC-PAYABLES", title: "Payables watch",
+      rhythm: classifyStandingRhythm({ rows: [], currentRunKey: "payables-watch@1.1.0:2026-10-07", now: new Date() }),
+    }]),
+  };
+});
+
 import WorkroomsPage from "./page";
 
 describe("Work activity page", () => {
@@ -108,5 +118,20 @@ describe("Work activity page", () => {
     expect(html).toContain("Onboard new foster");
     expect(html).toContain("missing explicit coordinator");
     expect(html).toContain("3 h");
+  });
+
+  it("gives standing operations their own band with each room's last 14 days (BI-D8A6F0F2)", async () => {
+    const html = renderToStaticMarkup(await WorkroomsPage());
+    expect(html).toContain("Day-to-day operations");
+    expect(html).toContain("Last 14 days for Payables watch");
+    expect(html).toContain("Running since Oct 7");
+  });
+
+  it("adds nothing to the page when the install has no standing rooms (BI-D8A6F0F2)", async () => {
+    const { loadStandingRhythms } = await import("@/lib/work-management/standing-run-history.server");
+    vi.mocked(loadStandingRhythms).mockResolvedValueOnce([]);
+    const html = renderToStaticMarkup(await WorkroomsPage());
+    expect(html).not.toContain("Day-to-day operations");
+    expect(html).not.toContain("standing-rhythm-heading");
   });
 });
