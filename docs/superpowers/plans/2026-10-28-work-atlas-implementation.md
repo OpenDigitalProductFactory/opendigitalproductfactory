@@ -140,14 +140,8 @@ A4 and A5 can run in parallel with A2 and A3 because they touch different compon
 
 | File | Change |
 |---|---|
-| `lib/work-management/standing-run-history.ts` (new, pure) | Last 14 cycles per standing room, classed on time, late or missed against its schedule. Nothing is inferred when no run is recorded |
-| `lib/work-management/standing-run-history.server.ts` (new) | Reads the live standing rooms and their drive log rows for the window |
+| `lib/work-management/standing-run-history.ts` (new, pure) | Last 14 recorded runs per standing room, classed on time, late or missed against its schedule. Nothing is inferred when no run is recorded |
 | `components/ops/workrooms/atlas/RhythmStrip.tsx` | Missed uses the stuck mark and late uses the need colour, so missed and late differ without colour |
-| `app/(shell)/ops/workrooms/page.tsx` | A "Day-to-day operations" band until A2's Atlas absorbs it |
-
-**Run source (as built).** The schedule is the cycle: one run per UTC date, and the run key ends with that date. Runs come from the drive's own log. Every drive row carries its run key (BI-853120EE), and a run's concluding tick (`stop`/`success`, or `do_not_wake`/`cycle_complete`) always changes the hold, so it is always written.
-
-Cycle carriers are unused on the live install (one row in total), and evidence receipts are irregular rather than one per run, so neither is the run source. No new run record is written.
 
 ### A5: stage lens (BI-AC930585)
 
