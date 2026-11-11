@@ -9,7 +9,11 @@ type Copy = Record<"result" | "recent" | "unavailable" | "details" | "open", str
 /** Read-only history; these are not fresh decisions and do not enter the queue. */
 /** `onBehalfText`: "Decided by ADMIN on behalf of OWNER: REASON", formatted by the page (BI-7BCC87BB). */
 export function ApprovalOutcomeHistory({ outcomes, exact = false, copy = SOURCE_CATALOG.approvals }: { outcomes: Array<ApprovalOutcome & { onBehalfText?: string }>; exact?: boolean; copy?: Copy }) {
-  if (!outcomes.length && !exact) return null;
+  const history = outcomes.filter((outcome) => outcome.state !== "waiting");
+  // A waiting request is the actionable card immediately below this history.
+  // Repeating its status and next action here spends arrival budget while adding
+  // no result; keep the exact unavailable-ID message, but omit fresh requests.
+  if ((outcomes.length > 0 && history.length === 0) || (!history.length && !exact)) return null;
   return (
     <details id="approval-result" open={exact} className="scroll-mt-4">
       <summary className="cursor-pointer py-3 text-dpf-body font-dpf-medium text-dpf-text">
@@ -17,7 +21,7 @@ export function ApprovalOutcomeHistory({ outcomes, exact = false, copy = SOURCE_
       </summary>
       <div className="space-y-3">
         {!outcomes.length ? <p className="text-dpf-body text-dpf-muted">{copy.unavailable}</p> : null}
-        {outcomes.map((outcome) => (
+        {history.map((outcome) => (
           <Surface key={outcome.envelopeId} padding="sm" rounded="md">
             <StatusBadge label={outcome.label} intent={outcome.state === "executed" ? "success" : "neutral"} />
             {outcome.failureExplanation ? <p className="mt-2 text-dpf-body text-dpf-text">{outcome.failureExplanation}</p> : null}

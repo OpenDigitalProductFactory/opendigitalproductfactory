@@ -24,6 +24,12 @@ describe("approval results after a new server render", () => {
     render(<ApprovalOutcomeHistory outcomes={[]} exact />);
     expect(screen.getByText("This request is not available in your Inbox.")).toBeTruthy();
   });
+  it("does not duplicate a waiting request above its actionable Inbox card", () => {
+    const waiting = projectApprovalOutcome({ id: "e1", status: "proposed", expiresAt: null, createdAt: now, toolExecutions: [] }, now);
+    const { container } = render(<ApprovalOutcomeHistory outcomes={[waiting]} exact />);
+    expect(container.childElementCount).toBe(0);
+    expect(screen.queryByText("Waiting for your decision")).toBeNull();
+  });
 });
 
 it("explains a proven refusal and offers inspection without another approval or retry", () => {
