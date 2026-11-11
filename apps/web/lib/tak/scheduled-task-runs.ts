@@ -161,12 +161,16 @@ export function scheduledToolsNeedingPin(input: {
   /** The task's taskConfig; its workroomStage record supplies declaredStageTools
    *  when they are not passed directly (BI-43C3E914, GPP element 5). */
   taskConfig?: unknown;
+  /** A coworker cadence's declared writes (mandatedTools). Pinned only for a run
+   *  with no Workroom stage, and only those the run is authorized for (BI-3F641F91). */
+  cadenceTools?: readonly string[] | null;
 }): string[] {
-  const promptRequired = scheduledRequiredToolNames({
-    prompt: input.prompt,
-    authorizedTools: [...input.attached, ...input.deferred],
-  });
-  const required = [...new Set([...promptRequired, ...(input.declaredStageTools ?? workroomStageToolsFromTaskConfig(input.taskConfig))])];
+  const authorized = [...input.attached, ...input.deferred];
+  const promptRequired = scheduledRequiredToolNames({ prompt: input.prompt, authorizedTools: authorized });
+  const stageTools = input.declaredStageTools ?? workroomStageToolsFromTaskConfig(input.taskConfig);
+  const authorizedNames = new Set(authorized.map((tool) => tool.name));
+  const cadence = stageTools.length > 0 ? [] : (input.cadenceTools ?? []).filter((name) => authorizedNames.has(name));
+  const required = [...new Set([...promptRequired, ...stageTools, ...cadence])];
   if (required.length === 0) return [];
   const deferredNames = new Set(input.deferred.map((tool) => tool.name));
   return required.some((name) => deferredNames.has(name)) ? required : [];

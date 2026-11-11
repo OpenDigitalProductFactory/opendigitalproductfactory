@@ -65,6 +65,9 @@ const DELIVERY_LANGUAGE = [
   /\bfold(?:ed|ing)?\s+into\b/i,
   /\b(?:build|ship)\s+(?:it\s+)?(?:first|now|later|order)\b/i,
   /\bfirst\s+pass\b/i,
+  /\bfinishing\s+(?:task|work|pass)\b/i,
+  /\bif\s+you\s+(?:say|want)\b.{0,80}\b(?:create|continue|proceed|finish|complete)\b/i,
+  /\bhow\s+(?:should\s+I|do\s+I)\s+(?:proceed|continue|finish|complete)\b/i,
 ];
 
 // High-precision structural signal (BI-0F0BE69A): a question carrying a code

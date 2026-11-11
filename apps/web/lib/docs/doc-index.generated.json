@@ -5886,6 +5886,20 @@
         "managed-mac-inference-qualification"
       ]
     },
+    "docs/install/runtime-secret-providers.md": {
+      "publicHref": "/install/runtime-secret-providers/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "runtime-secret-providers",
+        "default-environment-provider",
+        "1password-connect-setup",
+        "startup-and-failure-behavior",
+        "recovery-and-rollback",
+        "acceptance-boundary"
+      ]
+    },
     "docs/install/scratch-install-rehearsal.md": {
       "publicHref": "/install/scratch-install-rehearsal/",
       "portalHref": null,
@@ -13741,6 +13755,7 @@
       "anchors": [
         "overview",
         "what-you-see-first",
+        "delivery-outcomes",
         "activity-and-participants",
         "delegation-and-recovery",
         "inspecting-the-process",
@@ -13749,8 +13764,10 @@
         "how-work-flows-in-each-area",
         "the-main-value-stream-on-your-home-page",
         "when-work-keeps-piling-up",
+        "asking-a-coworker-in-the-room",
         "access-and-other-channels",
         "finite-and-standing-rooms",
+        "day-to-day-operations",
         "defining-the-room",
         "pace-and-priority",
         "changing-it",

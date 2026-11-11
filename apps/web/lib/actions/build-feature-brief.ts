@@ -16,7 +16,7 @@ import { prisma, type Prisma } from "@dpf/db";
 export async function updateFeatureBrief(
   buildId: string,
   brief: FeatureBrief,
-  options: { actorUserId?: string } = {},
+  options: { actorUserId?: string; expectedUpdatedAt?: string } = {},
 ): Promise<void> {
   const userId = options.actorUserId
     ?? (await requireCapability("view_platform")).userId;
@@ -50,10 +50,18 @@ export async function updateFeatureBrief(
   const jsonPayload = businessBriefJsonPayload(businessBrief);
 
   await prisma.$transaction(async (tx) => {
-    await tx.featureBuild.update({
-      where: { buildId },
-      data: { brief: brief as unknown as Prisma.InputJsonValue },
-    });
+    const data = { brief: brief as unknown as Prisma.InputJsonValue };
+    if (options.expectedUpdatedAt !== undefined) {
+      const expected = new Date(options.expectedUpdatedAt);
+      if (!Number.isFinite(expected.getTime())) throw new Error("Invalid expected build version");
+      const written = await tx.featureBuild.updateMany({
+        where: { buildId, createdById: userId, phase: "ideate", abandonedAt: null, updatedAt: expected },
+        data,
+      });
+      if (written.count !== 1) throw new Error("Build changed before the diagnosis could be saved");
+    } else {
+      await tx.featureBuild.update({ where: { buildId }, data });
+    }
 
     await tx.businessBuildBrief.upsert({
       where: { featureBuildId: build.id },

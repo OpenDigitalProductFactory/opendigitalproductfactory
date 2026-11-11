@@ -65,6 +65,7 @@ describe("workroomInventoryWhere", () => {
     console.info(`Workroom fixture payload: ${JSON.stringify(rooms).length} → ${serialized.length} characters`);
     expect(serialized).not.toMatch(/large-outcome-packet|scope-private|source-path/);
     expect(serialized).toContain("Recorded person");
+    expect((payload as Array<{ attribution: unknown }>)[0]?.attribution).toEqual(rooms[0]!.attribution);
     expect(serialized).toContain("inventory.actor.delivery");
     expect(serialized).toContain("inventory.action.source");
     expect(serialized).toContain("/workspace/cases/work-capsule%3AWC-0");

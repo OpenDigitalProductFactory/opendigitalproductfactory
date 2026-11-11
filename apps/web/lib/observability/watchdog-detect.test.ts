@@ -86,3 +86,23 @@ describe("decideStall", () => {
     expect(d?.reason).toBe("total_timeout");
   });
 });
+
+// BI-4FDE4050: time the host spent asleep is not silence from the run.
+describe("decideStall under host suspension", () => {
+  it("does not time out a heartbeat that went quiet only because the host slept", () => {
+    // 9 min since the last beat on the wall clock, of which 8.5 min were host sleep.
+    const slept = () => 510_000;
+    expect(decideStall(candidate({ startedAgoMs: 600_000, heartbeatAgoMs: 540_000 }), TH, NOW, slept)).toBeNull();
+  });
+  it("does not report never_started while the host slept through the first beat", () => {
+    expect(decideStall(candidate({ startedAgoMs: 300_000, heartbeatAgoMs: null }), TH, NOW, () => 280_000)).toBeNull();
+  });
+  it("still times out a run that is silent for the window in process time", () => {
+    const d = decideStall(candidate({ startedAgoMs: 600_000, heartbeatAgoMs: 540_000 }), TH, NOW, () => 400_000);
+    expect(d?.reason).toBe("heartbeat_timeout");
+  });
+  it("keeps the total budget on the wall clock", () => {
+    const d = decideStall(candidate({ startedAgoMs: 1_000_000, heartbeatAgoMs: 10_000 }), TH, NOW, () => 900_000);
+    expect(d?.reason).toBe("total_timeout");
+  });
+});

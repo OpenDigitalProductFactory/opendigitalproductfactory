@@ -30,6 +30,8 @@ Use the arrow beside a portfolio to expand it. Expanding lists the Workrooms in 
 
 Counts describe the Workrooms the page read, not everything in the portfolio. When the page reads its limit, each count reads "N rooms read" and a note below the tree says so. To see beyond that, narrow the inventory below or open the portfolio itself.
 
+**Day-to-day operations** lists every standing room with its last 14 days. A missed day shows as an outlined cross, so it stands out as clearly as a stuck project. See [Day-to-day operations](../workspace/work-rooms.md#day-to-day-operations) for what each mark means.
+
 ## Key Concepts
 
 - **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, awaiting acceptance, done, deferred, or retired.
@@ -367,3 +369,5 @@ that stops describing this installation. Nothing is saved until you confirm it.
 The operator name is different: it is a label rather than a change to what your
 coworkers may do, so it saves directly without an impact preview. The preview
 step is reserved for changes that actually move a brake.
+
+Work in progress keeps recorded executor and invocation details inside each row’s Technical evidence disclosure. These identify the recorded execution path independently of the accountable person. Missing historical evidence is identified explicitly; a schedule alone does not establish agent-to-agent delegation.
