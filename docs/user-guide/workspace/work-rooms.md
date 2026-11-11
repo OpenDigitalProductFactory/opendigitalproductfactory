@@ -20,6 +20,8 @@ relatedCode:
   - apps/web/lib/work-management/room-participation.ts
   - apps/web/lib/work-management/workspace-case-loader.ts
   - apps/web/lib/work-management/workspace-room-access.ts
+  - apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx
+  - apps/web/lib/delivery-outcomes/read-model.ts
 ---
 
 ## Overview
@@ -43,6 +45,27 @@ Coworker service engagements can also appear as Work Cases. When a requested cow
 A human decision shows its recorded question and condition from the room's declared process. A delivery status alone does not mean the owner must approve something, and a waiting lease does not establish progress. Open the original room to review its evidence and use its supported decision controls.
 
 Shared recovery groups retain every room link. A shared action appears only when the rooms agree; different remedies remain on their own rows. **Technical evidence** links to the room's recorded evidence, while cycle and supervision details remain disclosed. The inventory does not preload branch, session and lease diagnostics for every row.
+
+### Delivery outcomes
+
+On **Development Workrooms**, choose **Delivery outcomes** to inspect a fixed
+30-day cohort of rooms you can read. The summary separates source-qualified
+verified outcomes from completed rooms and merged pull requests. Open **Where
+time goes** for process, wait and cycle percentiles, including the number of
+complete and missing observations.
+
+Open **Cohort and sources** before comparing periods. A partial or stale source,
+row limit or missing claim timestamp changes what the numbers can establish.
+Process means recorded execution time; it does not measure human touch time or
+value added. A low completed sample is not proof of low productivity.
+
+**Usage and cost** separates direct work from unique task descendants and keeps
+cache reads, cache writes, output, reasoning, estimated API price and actual
+spend distinct. Unavailable values stay explicit. **Workrooms and evidence**
+provides a bounded search by campaign, model, installation, work kind,
+repository or effort and links back to the underlying records. The view does
+not rank workers by lines changed or PR count, or infer an improvement from a
+correlation.
 
 For development work, a verified repository observation can update the room's
 pull request when it matches the room's current commit. The room journal retains
