@@ -203,7 +203,7 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
       ...(target.portfolioId ? { portfolioId: target.portfolioId } : {}),
     },
     select: { itemId: true, title: true, body: true },
-    take: 500,
+    orderBy: { itemId: "asc" },
   });
   const { findDuplicateCandidates } = await import("@/lib/demand/dedup");
   const candidates = findDuplicateCandidates(target, pool, threshold).slice(0, limit);
@@ -214,7 +214,10 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
       candidates.length > 0
         ? `${candidates.length} possible duplicate(s) of ${itemId}.`
         : `No open items above similarity ${threshold} for ${itemId}.`,
-    data: { candidates },
+    data: {
+      candidates,
+      coverage: { eligible: pool.length, scanned: pool.length, complete: true },
+    },
   };
 }
 
@@ -377,17 +380,21 @@ export async function sweepDuplicateDemandHandler(params: Record<string, unknown
       ...(portfolioId ? { portfolioId } : {}),
     },
     select: { itemId: true, title: true, body: true },
-    take: 500,
+    orderBy: { itemId: "asc" },
   });
   const { findDuplicatePairs } = await import("@/lib/demand/dedup");
-  const pairs = findDuplicatePairs(items, threshold).slice(0, limit);
+  const pairs = findDuplicatePairs(items, threshold, limit);
   return {
     success: true,
     message:
       pairs.length > 0
         ? `${pairs.length} likely-duplicate pair(s) across ${items.length} open item(s).`
         : `No pairs above similarity ${threshold} across ${items.length} open item(s).`,
-    data: { pairs, scanned: items.length },
+    data: {
+      pairs,
+      scanned: items.length,
+      coverage: { eligible: items.length, scanned: items.length, complete: true },
+    },
   };
 }
 
