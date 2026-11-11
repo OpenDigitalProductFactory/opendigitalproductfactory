@@ -30,6 +30,8 @@ import {
 
 import { shortDeviceId } from "@/lib/federation/instance-identity";
 import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
+import { normalizeOrganizationRef } from "@/lib/install/estate-identity-contract";
+import { loadEstateNameResolution } from "@/lib/install/estate-identity";
 import { readInstallHostProfile } from "@/lib/install/host-profile";
 
 // The installer-state read lives with the precedence chain that ranks it.
@@ -196,6 +198,7 @@ export function prismaInstanceStanceStore(
           role: true,
           peerOrganizationRef: true,
           peerDeviceId: true,
+          peerInstallationId: true,
           peerEnvironmentClass: true,
           revokedAt: true,
           quarantinedAt: true,
@@ -214,6 +217,8 @@ export function prismaInstanceStanceStore(
         // declaration is compared against.
         peerEnvironmentClass: isInstallationEnvironmentClass(row.peerEnvironmentClass) ? row.peerEnvironmentClass : null,
         peerInstallationLabel: peerInstallationLabel(row.principal?.displayName, row.peerDeviceId),
+        peerDeviceId: row.peerDeviceId,
+        peerInstallationId: row.peerInstallationId,
         revokedAt: row.revokedAt,
         quarantinedAt: row.quarantinedAt,
       }));
@@ -289,6 +294,17 @@ export async function loadInstanceStance(
     declaredRef: snapshot.pairedProductionInstallationRef,
     links,
   });
+  // BI-B50BE189: the relationship needs the peer to be of this estate. The
+  // link's organization ref is the peer's normalised estate name.
+  let peerEstateMatches = false;
+  if (pairing.source === "federation-link") {
+    try {
+      const local = normalizeOrganizationRef((await loadEstateNameResolution(store, options)).estateName);
+      peerEstateMatches = local !== null && local === normalizeOrganizationRef(pairing.ref);
+    } catch {
+      peerEstateMatches = false;
+    }
+  }
   let workSyncHealthLine: string | undefined;
   try {
     workSyncHealthLine = (await store.readWorkSyncHealthLine?.()) ?? undefined;
@@ -303,6 +319,10 @@ export async function loadInstanceStance(
       pairingIsEstablished: pairingSupportsWorkSync(pairing),
       peerEnvironmentClass: pairing.peerEnvironmentClass,
       ...(pairing.peerInstallationLabel ? { peerInstallationLabel: pairing.peerInstallationLabel } : {}),
+      peerEstateMatches,
+      ...(pairing.staleDeclaredRef
+        ? { stalePairedRef: { ...pairing.staleDeclaredRef, repairRef: pairing.repairRef } }
+        : {}),
       ...(workSyncHealthLine ? { workSyncHealthLine } : {}),
     },
     {

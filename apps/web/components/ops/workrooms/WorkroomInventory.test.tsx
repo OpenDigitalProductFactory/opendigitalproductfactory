@@ -16,6 +16,7 @@ const summary = { scanned: 3, live: 2, working: 1, history: 1, reapable: 1, byLi
 const row = (capsuleId: string, liveness: string, title: string): WorkroomInventoryRow => ({
   capsuleId, backlogItemId: null, title, status: "working",
   portfolioRole: "foundational", pullRequestUrl: null,
+  attribution: { executor: "codex-desktop", invocation: "Recorded external session" },
   liveness, isLive: liveness !== "lease-expired", accountableName: "Dana Reyes",
 });
 const rows = [row("WC-NOW", "live", "Prepare adoption event"), row("WC-WAIT", "paused", "Update user guide"), row("WC-OLD", "lease-expired", "Stopped review")];
@@ -106,4 +107,17 @@ describe("operator Workrooms inventory", () => {
     supervision.open = true; fireEvent(supervision, new Event("toggle"));
     expect(screen.getByText("Busy · 8")).toBeVisible();
   });
+});
+
+it.each([
+  ["dpf-native", "Scheduled · customer-advisor · task-original · stage read"],
+  ["callee", "A2A: caller → callee · TR-child · parent TR-parent"],
+  ["Executor not recorded", "No invocation recorded"],
+])("shows recorded provenance in technical details: %s", (executor, invocation) => {
+  renderInventory(<WorkroomInventory workrooms={[{ ...row("WC-PROVENANCE", "live", "Recorded work"), attribution: { executor, invocation } }]} summary={summary} />);
+  const details = screen.getByText("Technical evidence").closest("details")!;
+  expect(screen.getByText(invocation)).not.toBeVisible();
+  details.open = true; fireEvent(details, new Event("toggle"));
+  expect(screen.getByText(executor)).toBeVisible();
+  expect(screen.getByText(invocation)).toBeVisible();
 });
