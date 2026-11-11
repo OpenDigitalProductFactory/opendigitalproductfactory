@@ -7,7 +7,7 @@
 // These run the generated step in a real shell against a stub pnpm, so the
 // condition is proven, not string-matched.
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,7 +39,7 @@ function buildTree(state: { install: boolean; modulesAt?: Date; lockfileAt: Date
   const run = (command: string) => execFileSync("sh", ["-c", command], {
     env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, encoding: "utf8",
   });
-  const installs = () => existsSync(join(root, "pnpm-calls")) ? execFileSync("cat", [join(root, "pnpm-calls")], { encoding: "utf8" }) : "";
+  const installs = () => existsSync(join(root, "pnpm-calls")) ? readFileSync(join(root, "pnpm-calls"), "utf8") : "";
   return { tree, run, installs };
 }
 
