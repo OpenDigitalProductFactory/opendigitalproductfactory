@@ -45,6 +45,10 @@ The current platform runtime is a containerized application stack centered on th
 - `portal` is the only service that needs to be directly exposed to end users in the target customer deployment.
 - `postgres` remains an internal service by default. Docker Model Runner is built into Docker Desktop and does not run as a separate container.
 - `portal` can route AI work to either local models (via Docker Model Runner) or enabled external providers.
+- Before portal migrations run, the image resolves its application root secrets
+  through a provider-neutral startup boundary. Environment injection remains the
+  default; an operator may instead select the optional startup-only 1Password
+  Connect adapter described in [Runtime secret providers](../install/runtime-secret-providers.md).
 - Governance, auditability, and human approval sit above the execution layer rather than outside it.
 
 > **One datastore, not three.** Earlier releases ran Neo4j (graph) and Qdrant (vectors) as separate services. **BET-5 (BI-A1E864A5) retired both onto PostgreSQL** — graph traversals moved to the `graph_node` / `graph_edge` mirror queried with recursive CTEs (`packages/db/src/pg-graph.ts`), and vectors moved to `pgvector` (`packages/db/src/pgvector-store.ts`). Both swaps were parity-verified against the live services before cutover. Existing installs remove the retired containers and volumes with `scripts/decommission-neo4j-qdrant.{sh,ps1}`.

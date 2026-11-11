@@ -464,6 +464,8 @@ RUN chmod +x /docker-entrypoint.sh
 # path so it is invoked directly, not shadowed by the Node base image's
 # /usr/local/bin/docker-entrypoint.sh passthrough.
 COPY scripts/portal-migrate-boot.sh /usr/local/bin/portal-migrate-boot.sh
+COPY scripts/runtime-secret-bootstrap.mjs /usr/local/bin/runtime-secret-bootstrap.mjs
+COPY scripts/lib/script-argv.mjs /usr/local/bin/lib/script-argv.mjs
 RUN chmod +x /usr/local/bin/portal-migrate-boot.sh
 
 # Source for Build Studio — copied to -src paths to avoid collision with standalone output
@@ -586,4 +588,4 @@ EXPOSE 3000
 # restart) can never leave the DB drifted. It is fail-closed: if migrations
 # can't apply, the portal does not start. portal-init is unaffected — it
 # overrides CMD with /docker-entrypoint.sh.
-CMD ["/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
+CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
