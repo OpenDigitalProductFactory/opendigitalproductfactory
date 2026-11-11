@@ -314,25 +314,20 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
   return { messageId, plan: plan.kind, woken };
 }
 
-export type RoomWakeRunResult =
-  | { outcome: "ran"; taskId: string }
-  | { outcome: "skipped"; reason: string };
+export const AGENT_TASK_RUN_NOW_EVENT = "agent/task.run-now";
 
-/** The job function supplies the executor, so this module never imports the task runtime. */
-export interface RoomWakeRunDeps {
-  execute: (taskId: string) => Promise<void>;
-  quiescenceLevel: () => Promise<string>;
-  db?: Db;
-  now?: () => Date;
-}
+export type RoomWakeRunResult =
+  | { outcome: "requested"; taskId: string }
+  | { outcome: "skipped"; reason: string };
 
 /**
  * Wake one coworker for one room: schedule a one-shot reply task under the
- * poster's authority and run it now through the same executor the drive uses,
- * so it inherits that path's grants, funding and quiescence gates.
+ * poster's authority and ask agent/task-run-now to run it at once. That runs it
+ * through the scheduled-task executor the drive uses, so the drive's grants,
+ * funding and quiescence gates apply; a drain leaves it due for the cron.
  */
-export async function runRoomWake(event: RoomWakeRequestedEvent, run: RoomWakeRunDeps): Promise<RoomWakeRunResult> {
-  const deps = { ...run, db: run.db ?? (await import("@dpf/db")).prisma };
+export async function runRoomWake(event: RoomWakeRequestedEvent, depsIn?: RoomWakeDeps): Promise<RoomWakeRunResult> {
+  const deps = depsIn ?? await defaultDeps();
   if (!event.caseKey) return { outcome: "skipped", reason: "The message has no room case key to reply in." };
   const [agent, owner] = await Promise.all([
     deps.db.agent.findUnique({ where: { agentId: event.agentId }, select: { agentId: true, status: true } }),
@@ -347,7 +342,7 @@ export async function runRoomWake(event: RoomWakeRequestedEvent, run: RoomWakeRu
     orderBy: [{ createdAt: "desc" }, { messageId: "desc" }],
     select: { createdAt: true, messageId: true },
   });
-  const now = deps.now ? deps.now() : new Date();
+  const now = clock(deps);
   const taskId = roomReplyTaskId(event.workItemId, event.agentId);
   const fields = {
     agentId: event.agentId,
@@ -369,11 +364,8 @@ export async function runRoomWake(event: RoomWakeRequestedEvent, run: RoomWakeRu
     update: fields,
   });
 
-  const level = await deps.quiescenceLevel();
-  // A drain leaves the task due; the dispatch cron runs it once the drain ends.
-  if (level !== "normal") return { outcome: "skipped", reason: `Portal is ${level}; the reply runs after it.` };
-  await deps.execute(taskId);
-  return { outcome: "ran", taskId };
+  await deps.send({ name: AGENT_TASK_RUN_NOW_EVENT, id: `run-now:${taskId}:${now.getTime()}`, data: { taskId } });
+  return { outcome: "requested", taskId };
 }
 
 /**

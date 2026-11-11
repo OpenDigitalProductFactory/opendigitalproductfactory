@@ -10,8 +10,6 @@ vi.mock("@/lib/work-management/room-message-wake.server", () => ({
   dispatchRoomMessage: mocks.dispatch,
   runRoomWake: mocks.run,
 }));
-vi.mock("@/lib/actions/agent-task-scheduler", () => ({ executeScheduledAgentTask: vi.fn() }));
-vi.mock("@/lib/self-upgrade/quiescence", () => ({ getQuiescenceLevel: vi.fn(async () => "normal") }));
 
 import { roomMessageDispatch, roomWakeRun } from "./room-message-wake";
 
@@ -51,7 +49,7 @@ describe("room/wake-run", () => {
     const data = { workItemId: "wi-1", agentId: "AGT-B", laneKey: "wi-1:AGT-B", closesAt: "2026-11-11T05:00:15.000Z" };
     await fn.handler({ event: { data }, step });
     expect(step.sleepUntil).toHaveBeenCalledWith("await-window-close", new Date(data.closesAt));
-    expect(mocks.run).toHaveBeenCalledWith(data, expect.objectContaining({ execute: expect.any(Function), quiescenceLevel: expect.any(Function) }));
+    expect(mocks.run).toHaveBeenCalledWith(data);
     expect(mocks.gate).not.toHaveBeenCalled();
   });
 });

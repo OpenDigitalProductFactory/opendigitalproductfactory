@@ -248,7 +248,7 @@ The per-participant cursor is the one schema change in item B2, so it is deliver
   - Otherwise it sends `room/wake.requested` with id `room-wake:<workItem>:<agent>:<15 s window>`. Bursts coalesce without a debounce primitive, which the jobs facade lacks.
 - **Runner** (`room/wake-run`, one lane per coworker per room).
   - After the window closes, it upserts a one-shot task `room-reply-<workItem>-<agent>`. The task is owned by the user whose authority the message was posted under.
-  - It runs that task at once through `executeScheduledAgentTask`, the drive's own executor, so the drive's grants, funding and quiescence gates apply.
+  - It asks `agent/task-run-now`, which sits beside the five-minute dispatch, to run that task at once. That runs it through `executeScheduledAgentTask`, the drive's own executor, so the drive's grants, funding and quiescence gates apply.
   - During a drain, the task stays due for the dispatch cron.
 
 The single-room drive event `workroom/drive.room-requested` named in §6.3 is not built. The runner's reply task reaches the addressed coworker directly, which is what an addressed message asks for. The drive's stage work is unchanged.

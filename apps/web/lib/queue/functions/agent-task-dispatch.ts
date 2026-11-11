@@ -146,6 +146,32 @@ export const agentTaskDispatch = jobs.createFunction(
   },
 );
 
+/**
+ * BI-31C1FDEC: run one due task now instead of at the next five-minute tick. A room
+ * wake schedules a coworker's reply task and asks for it here, so the reply
+ * starts within seconds through the same quiescence check and executor as the
+ * batch. A drain leaves the task due for the cron.
+ */
+export const agentTaskRunNow = jobs.createFunction(
+  {
+    id: "agent/task-run-now",
+    retries: 0,
+    concurrency: [{ limit: 1, key: "event.data.taskId" }],
+    triggers: [{ event: "agent/task.run-now" }],
+  },
+  async ({ event, step }) => {
+    const taskId = String(event.data.taskId ?? "");
+    if (!taskId) return { status: "skipped", reason: "no task id" };
+    return step.run(`dispatch-${taskId}`, async () => {
+      const run: TaskRunner = {
+        ...(await import("@/lib/self-upgrade/quiescence")),
+        ...(await import("@/lib/actions/agent-task-scheduler")),
+      };
+      return dispatchOne(run, taskId);
+    });
+  },
+);
+
 type DispatchOutcome =
   | { status: "ran"; taskId: string }
   | { status: "failed"; taskId: string; error: string }

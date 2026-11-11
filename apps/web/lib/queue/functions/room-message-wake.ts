@@ -38,18 +38,11 @@ export const roomWakeRun = jobs.createFunction(
   async ({ event, step }) => {
     // Let the 15-second window close, so every message in it is in the room when the coworker reads.
     await step.sleepUntil("await-window-close", new Date(event.data.closesAt));
-    // No entry gate: the run schedules the reply task first and checks quiescence
-    // itself, so a drain leaves the task due for the dispatch cron instead of dropping it.
+    // No entry gate: the run schedules the reply task first, and agent/task-run-now
+    // checks quiescence, so a drain leaves the task due for the cron instead of dropping it.
     return step.run("run-room-wake", async () => {
-      const [{ runRoomWake }, { executeScheduledAgentTask }, { getQuiescenceLevel }] = await Promise.all([
-        import("@/lib/work-management/room-message-wake.server"),
-        import("@/lib/actions/agent-task-scheduler"),
-        import("@/lib/self-upgrade/quiescence"),
-      ]);
-      return runRoomWake(event.data as RoomWakeRequestedEvent, {
-        execute: executeScheduledAgentTask,
-        quiescenceLevel: () => getQuiescenceLevel(),
-      });
+      const { runRoomWake } = await import("@/lib/work-management/room-message-wake.server");
+      return runRoomWake(event.data as RoomWakeRequestedEvent);
     });
   },
 );

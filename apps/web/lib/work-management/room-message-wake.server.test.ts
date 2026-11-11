@@ -236,24 +236,28 @@ describe("runRoomWake", () => {
     closesAt: NOW.toISOString(),
   };
 
-  it("schedules a one-shot reply task under the poster's authority and runs it at once (AC-1)", async () => {
+  it("schedules a one-shot reply task under the poster's authority and asks for it to run now (AC-1)", async () => {
     const { db, tasks } = fakeDb({ messages: [] });
-    const execute = vi.fn(async () => undefined);
-    const result = await runRoomWake(event, { db, now: () => NOW, execute, quiescenceLevel: async () => "normal" });
-    expect(result).toEqual({ outcome: "ran", taskId: "room-reply-wi-1-AGT-B" });
-    expect(execute).toHaveBeenCalledWith("room-reply-wi-1-AGT-B");
+    const send = vi.fn(async (_event: unknown) => ({}));
+    const result = await runRoomWake(event, { db, send, now: () => NOW });
+    expect(result).toEqual({ outcome: "requested", taskId: "room-reply-wi-1-AGT-B" });
+    expect(send).toHaveBeenCalledWith({
+      name: "agent/task.run-now",
+      id: `run-now:room-reply-wi-1-AGT-B:${NOW.getTime()}`,
+      data: { taskId: "room-reply-wi-1-AGT-B" },
+    });
     const task = tasks.get("room-reply-wi-1-AGT-B")!;
     expect(task).toMatchObject({ agentId: "AGT-B", ownerUserId: "user-1", schedule: "0 5 11 11 *", isActive: true, nextRunAt: NOW });
     expect(String(task.prompt)).toContain("backlog-item:BI-1");
   });
 
-  it("leaves the task due for the dispatch cron while the portal drains", async () => {
+  it("skips a wake it cannot reply to, scheduling nothing", async () => {
     const { db, tasks } = fakeDb({ messages: [] });
-    const execute = vi.fn(async () => undefined);
-    const result = await runRoomWake(event, { db, now: () => NOW, execute, quiescenceLevel: async () => "draining" });
+    const send = vi.fn(async (_event: unknown) => ({}));
+    const result = await runRoomWake({ ...event, caseKey: null }, { db, send, now: () => NOW });
     expect(result.outcome).toBe("skipped");
-    expect(execute).not.toHaveBeenCalled();
-    expect(tasks.has("room-reply-wi-1-AGT-B")).toBe(true);
+    expect(tasks.size).toBe(0);
+    expect(send).not.toHaveBeenCalled();
   });
 });
 
