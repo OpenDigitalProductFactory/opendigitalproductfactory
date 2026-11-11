@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/federation-links/page.tsx",
+      "apps/web/components/workspace/InstallationIdentityPanel.tsx"
+    ]
+  },
+  "decidedOption": "existing-stance-row-and-panel-notice",
+  "decisionInteractionId": "DI-BDC81F6D7707",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "existing-stance-row-and-panel-notice",
+      "new-relationship-card-on-connections",
+      "briefing-only"
+    ]
+  },
+  "authority": "BI-B50BE189 implementation admission IRD-66D20B7503A0 under companion design §3 and §8 (DI-973C39F336D1). DI-BDC81F6D7707 records where the relationship and the stale-reference repair appear, not new approval.",
+  "limitations": "DI-BDC81F6D7707 ranked the existing-surface option first (composite 9.22, margin 4.24, high confidence, autonomy eligible). The relationship is one more row in the identity panel's existing stance list; the stale-reference repair is a notice and one button under the existing Paired installation field, shown only when the saved reference names a dead connection; Connections gains one sentence only when a relationship exists. The panel's UX budget test measured /ops/installation at 243 default visible words, 0 primary actions, 0 axe violations with the companion fixture. Behaviour is pinned in InstallationIdentityPanel.test.tsx and installation-identity-view.test.ts. Author measurement only: no served route sweep or independent UX review was run for this change."
+}

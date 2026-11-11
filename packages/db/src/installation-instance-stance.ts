@@ -42,6 +42,23 @@ export const PEER_WRITE_STANCES = ["read-only", "governed-write", "none"] as con
 export type PeerWriteStance = (typeof PEER_WRITE_STANCES)[number];
 
 /**
+ * The July designation as this installation sees it (companion design §3,
+ * BI-B50BE189). Derived from attested facts, never stored as a role, and a
+ * brake rather than a grant: it changes what an agent is told, not what any
+ * principal may do.
+ */
+export const INSTALLATION_RELATIONSHIPS = ["authority", "companion", "none"] as const;
+export type InstallationRelationship = (typeof INSTALLATION_RELATIONSHIPS)[number];
+
+/** A declared paired reference that names a link no longer live. */
+export interface StalePairedRef {
+  ref: string;
+  reason: "revoked" | "quarantined" | "not-trusted";
+  /** The installation DID to repair the reference to, when a live peer exists. */
+  repairRef: string | null;
+}
+
+/**
  * The resolved operating stances for one installation.
  *
  * `rationale` explains the resolution in one sentence per stance so agent-facing
@@ -58,9 +75,12 @@ export interface InstanceStanceProfile {
   sourceAuthority: SourceAuthorityStance;
   peerWrite: PeerWriteStance;
   workSync: WorkSyncStance;
+  relationship: InstallationRelationship;
   pairedProductionInstallationRef?: string;
   /** The paired peer installation as an operator recognises it; display only. */
   pairedInstallationLabel?: string;
+  /** A declared paired reference that names a dead link, with its repair. */
+  stalePairedRef?: StalePairedRef;
   /** The paired peer's CA-attested class; null when unattested. */
   pairedEnvironmentClass?: InstallationEnvironmentClass | null;
   rationale: {
@@ -69,6 +89,7 @@ export interface InstanceStanceProfile {
     sourceAuthority: string;
     peerWrite: string;
     workSync: string;
+    relationship: string;
   };
 }
 
@@ -102,6 +123,13 @@ export interface InstanceStanceHostFacts {
   peerEnvironmentClass?: InstallationEnvironmentClass | null;
   /** The linked peer installation's own name and DID suffix, for display (AC-3). */
   peerInstallationLabel?: string;
+  /**
+   * True when the linked peer's organization reference is this installation's
+   * estate (BI-B50BE189). Absent or false: no authority/companion relationship.
+   */
+  peerEstateMatches?: boolean;
+  /** Set when the operator's declared paired reference names a dead link. */
+  stalePairedRef?: StalePairedRef;
 }
 
 function resolveCredentials(
@@ -202,6 +230,39 @@ function resolvePeerWrite(
   };
 }
 
+function resolveRelationship(
+  environmentClass: InstallationEnvironmentClass,
+  host: InstanceStanceHostFacts,
+  peer: string,
+): { stance: InstallationRelationship; rationale: string } {
+  const none = (rationale: string) => ({ stance: "none" as const, rationale });
+  if (!host.pairingIsEstablished) {
+    return none("No trusted same-organization link backs a pairing, so this installation is neither an authority nor a companion.");
+  }
+  if (!host.peerEstateMatches) {
+    return none(`${peer} belongs to a different estate, so there is no authority or companion relationship.`);
+  }
+  const peerClass = host.peerEnvironmentClass;
+  if (!peerClass) {
+    return none(`The organization CA has not attested ${peer}'s environment class, so no relationship is derived until it re-joins with a class.`);
+  }
+  if (environmentClass === "production" && peerClass !== "production") {
+    return {
+      stance: "authority",
+      rationale: `This production installation is the authority for ${peer}, an attested ${peerClass} companion of the same estate. It issues guidance; it grants nothing by this relationship.`,
+    };
+  }
+  if (environmentClass !== "production" && peerClass === "production") {
+    return {
+      stance: "companion",
+      rationale: `This ${environmentClass} installation is a companion of ${peer}, the attested production authority of the same estate. It follows that authority's guidance; it gains no permission by it.`,
+    };
+  }
+  return environmentClass === "production"
+    ? none(`Both installations are production, so they are peers, not an authority and a companion.`)
+    : none(`Neither installation is production, so neither is the authority.`);
+}
+
 /**
  * Decide whether this instance mirrors its own work to same-organization peers.
  *
@@ -261,6 +322,11 @@ export function resolveInstanceStance(
     snapshot.pairedProductionInstallationRef ? host.peerInstallationLabel ?? snapshot.pairedProductionInstallationRef : undefined,
     host.peerEnvironmentClass,
   );
+  const relationship = resolveRelationship(
+    snapshot.environmentClass,
+    host,
+    host.peerInstallationLabel ?? snapshot.pairedProductionInstallationRef ?? "the paired installation",
+  );
   const workSync = resolveWorkSync(
     snapshot.pairedProductionInstallationRef,
     host.pairingIsEstablished ?? false,
@@ -277,8 +343,10 @@ export function resolveInstanceStance(
     sourceAuthority: sourceAuthority.stance,
     peerWrite: peerWrite.stance,
     workSync: workSync.stance,
+    relationship: relationship.stance,
     pairedProductionInstallationRef: snapshot.pairedProductionInstallationRef,
     ...(host.peerInstallationLabel ? { pairedInstallationLabel: host.peerInstallationLabel } : {}),
+    ...(host.stalePairedRef ? { stalePairedRef: host.stalePairedRef } : {}),
     ...(snapshot.pairedProductionInstallationRef ? { pairedEnvironmentClass: host.peerEnvironmentClass ?? null } : {}),
     rationale: {
       credentials: credentials.rationale,
@@ -286,6 +354,7 @@ export function resolveInstanceStance(
       sourceAuthority: sourceAuthority.rationale,
       peerWrite: peerWrite.rationale,
       workSync: workSync.rationale,
+      relationship: relationship.rationale,
     },
   };
 }
@@ -326,5 +395,12 @@ export function formatInstanceStanceBriefing(
   lines.push(`Source — ${stance.sourceAuthority}: ${stance.rationale.sourceAuthority}`);
   lines.push(`Peer — ${stance.peerWrite}: ${stance.rationale.peerWrite}`);
   lines.push(`Work sync — ${stance.workSync}: ${stance.rationale.workSync}`);
+  lines.push(`Relationship — ${stance.relationship}: ${stance.rationale.relationship}`);
+  if (stance.stalePairedRef) {
+    const repair = stance.stalePairedRef.repairRef
+      ? ` Repair it to ${stance.stalePairedRef.repairRef} under "Change what this installation is".`
+      : "";
+    lines.push(`Paired reference — stale: the declared reference ${stance.stalePairedRef.ref} names a ${stance.stalePairedRef.reason} connection.${repair}`);
+  }
   return lines.join("\n");
 }
