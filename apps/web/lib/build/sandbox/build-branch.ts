@@ -227,9 +227,18 @@ const WORKTREE_SHARED_NODE_MODULES = [
  * `--force` on `worktree add` lets the same branch be (re)attached after a prior
  * crash left the registry pointing at a now-gone path.
  */
-/** Offline-first dependency install for a build tree, skipped once it has one. */
-function buildTreeInstallStep(buildId: string, path: string): string {
-  return `{ [ -d ${path}/node_modules/.pnpm ] || (cd ${path} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-worktree-install-${buildId}.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-worktree-install-${buildId}.log 2>&1; }); }`;
+/**
+ * Offline-first dependency install for a build tree. It runs when the tree has
+ * no install of its own, or when its lockfile is newer than its install: a
+ * refresh rebases the build onto newer main and changes the lockfile
+ * (BI-A78C0965). The staleness test is the readiness probe's
+ * (installPredatesLockfile). A successful frozen install marks the tree current,
+ * so an "already up to date" install is not repeated on every ensure.
+ */
+export function buildTreeInstallStep(buildId: string, path: string): string {
+  const log = `/tmp/dpf-worktree-install-${buildId}.log`;
+  const needed = `[ ! -d ${path}/node_modules/.pnpm ] || { [ -f ${path}/node_modules/.modules.yaml ] && [ ${path}/pnpm-lock.yaml -nt ${path}/node_modules/.modules.yaml ]; }`;
+  return `{ if ${needed}; then (cd ${path} && { CI=true pnpm install --offline --frozen-lockfile >${log} 2>&1 || CI=true pnpm install --frozen-lockfile >>${log} 2>&1; } && touch -c ${path}/node_modules/.modules.yaml); fi; }`;
 }
 
 export function buildSandboxWorktreeAddCommand(
@@ -239,18 +248,17 @@ export function buildSandboxWorktreeAddCommand(
 ): string {
   const path = buildWorktreePath(buildId, workspace);
   // Idempotent, so the reuse branch below can re-assert it on every ensure:
-  // drop links left by the shared-install design, then install only when the
-  // worktree has no real install yet. Offline first (the sandbox store already
-  // holds every locked package); online only if the branch changed the lockfile.
-  // `node_modules` also goes in the repository's shared info/exclude, so a
-  // branch cut before .gitignore ignored links never shows one as untracked.
+  // drop links left by the shared-install design, then install when the
+  // worktree has no real install or its lockfile has moved past it
+  // (buildTreeInstallStep). `node_modules` also goes in the repository's shared
+  // info/exclude, so a branch cut before .gitignore ignored links never shows
+  // one as untracked.
   const excludeFile = `"$(git rev-parse --git-common-dir)/info/exclude"`;
-  const install = `(cd ${path} && { CI=true pnpm install --offline --frozen-lockfile >/tmp/dpf-worktree-install-${buildId}.log 2>&1 || CI=true pnpm install --frozen-lockfile >>/tmp/dpf-worktree-install-${buildId}.log 2>&1; })`;
   const symlinks = [
     `mkdir -p "$(git rev-parse --git-common-dir)/info"`,
     `{ grep -qx node_modules ${excludeFile} 2>/dev/null || echo node_modules >> ${excludeFile}; }`,
     ...WORKTREE_SHARED_NODE_MODULES.map((rel) => `{ [ ! -L ${path}/${rel} ] || rm -f ${path}/${rel}; }`),
-    `{ [ -d ${path}/node_modules/.pnpm ] || ${install}; }`,
+    buildTreeInstallStep(buildId, path),
   ].join(" && ");
   // An orphaned directory — present on disk but unknown to git because the
   // registry under .git/worktrees is gone — defeats both halves of the
