@@ -120,4 +120,12 @@ describe("Work activity page", () => {
     expect(html).toContain("Last 14 days for Payables watch");
     expect(html).toContain("Running since Oct 7");
   });
+
+  it("adds nothing to the page when the install has no standing rooms (BI-D8A6F0F2)", async () => {
+    const { loadStandingRhythms } = await import("@/lib/work-management/standing-run-history.server");
+    vi.mocked(loadStandingRhythms).mockResolvedValueOnce([]);
+    const html = renderToStaticMarkup(await WorkroomsPage());
+    expect(html).not.toContain("Day-to-day operations");
+    expect(html).not.toContain("standing-rhythm-heading");
+  });
 });
