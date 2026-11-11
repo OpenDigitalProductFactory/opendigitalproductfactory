@@ -83,12 +83,12 @@ function fakeDb(opts: {
       }),
     },
     workroom: {
-      findFirst: vi.fn(async (args: { where: { workItemId: string; status?: { notIn: string[] } } }) => {
-        if (!opts.rooms) return opts.room ?? null;
+      findMany: vi.fn(async (args: { where: { workItemId: string; status?: { notIn: string[] } } }) => {
+        if (!opts.rooms) return opts.room ? [opts.room] : [];
         const closed = args.where.status?.notIn ?? [];
         return opts.rooms
           .filter((r) => r.workItemId === args.where.workItemId && !closed.includes(r.status))
-          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null;
+          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
       }),
     },
     workItem: { findUnique: vi.fn(async () => ({ title: "Room title", parentItemId: null })) },
@@ -209,11 +209,26 @@ describe("dispatchRoomMessage", () => {
     const send = vi.fn(async (_event: unknown) => ({}));
     const result = await dispatchRoomMessage("MSG-1", { db, send, now: () => NOW });
     expect(result.plan).toBe("wake");
-    expect(db.workroom.findFirst.mock.calls[0]![0]).toMatchObject({
+    expect(db.workroom.findMany.mock.calls[0]![0]).toMatchObject({
       where: { workItemId: "wi-1", archivedAt: null, status: { notIn: ["abandoned", "archived"] } },
       orderBy: { updatedAt: "desc" },
     });
     expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("woken");
+  });
+
+  it("holds while any live room on the item is worked by an external executor, even an older one", async () => {
+    const { db, messages } = fakeDb({
+      messages: [message()],
+      rooms: [
+        { id: "new", capsuleId: "WC-NEW", workItemId: "wi-1", status: "ready", updatedAt: new Date(NOW.getTime() + 1_000), executorKind: null, executorRef: null },
+        { id: "ext", capsuleId: "WC-EXT", workItemId: "wi-1", status: "working", updatedAt: NOW, executorKind: "codex-desktop", executorRef: "sess-x" },
+      ],
+    });
+    const send = vi.fn(async (_event: unknown) => ({}));
+    const result = await dispatchRoomMessage("MSG-1", { db, send, now: () => NOW });
+    expect(result.plan).toBe("hold");
+    expect(send).not.toHaveBeenCalled();
+    expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("held-for-executor");
   });
 
   it("wakes the coordinator at the hop limit and says why in the room (AC-4)", async () => {

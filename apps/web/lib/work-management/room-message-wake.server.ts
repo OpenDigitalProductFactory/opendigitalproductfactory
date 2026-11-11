@@ -16,6 +16,7 @@ import { APPROVED_EXTERNAL_ROLES } from "@/lib/auth/oauth-identity-binding";
 import {
   buildRoomReplyPrompt,
   computeRoomMessageHop,
+  isExternalRoomExecutor,
   oneShotCronAt,
   parseAddressedTo,
   planRoomWake,
@@ -189,18 +190,24 @@ export async function publishRoomMessagePosted(
 
 // A work item can carry several Workrooms over its life, and a room can reach
 // status "archived" or "abandoned" without archivedAt being set. Only a live room
-// speaks for the item, newest first, so a closed room's old executor never holds
-// a wake (seen live on BI-926A7E90, Nov 2026).
+// speaks for the item, so a closed room's old executor never holds a wake (seen
+// live on BI-926A7E90, Nov 2026). When several rooms are live, one an external
+// executor is working wins, so that executor's work is never joined by a
+// platform coworker; otherwise the most recently updated room does.
 const CLOSED_ROOM_STATUSES = ["abandoned", "archived"];
+
+type RoomRow = { id: string; capsuleId: string; executorKind: string | null; executorRef: string | null };
 
 async function loadRoomForWorkItem(deps: RoomWakeDeps, workItemId: string) {
   const select = { id: true, capsuleId: true, executorKind: true, executorRef: true };
-  const liveRoomOf = (id: string) =>
-    deps.db.workroom.findFirst({
+  const liveRoomOf = async (id: string): Promise<RoomRow | null> => {
+    const rooms: RoomRow[] = await deps.db.workroom.findMany({
       where: { workItemId: id, archivedAt: null, status: { notIn: CLOSED_ROOM_STATUSES } },
       orderBy: { updatedAt: "desc" },
       select,
     });
+    return rooms.find((r) => isExternalRoomExecutor(r.executorKind)) ?? rooms[0] ?? null;
+  };
   const own = await liveRoomOf(workItemId);
   if (own) return own;
   const item = await deps.db.workItem.findUnique({ where: { id: workItemId }, select: { parentItemId: true } });
