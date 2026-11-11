@@ -13,8 +13,9 @@ vi.mock("@/lib/build-agent-prompts", () => ({ getBuildContextSection: vi.fn() })
 vi.mock("@/lib/feature-build-data", () => ({ getFeatureBuildForContext: vi.fn() }));
 
 import { prisma } from "@dpf/db";
+import { formatVerificationSummary } from "@/lib/build/verification-output";
 
-import { buildBuildContextSections, formAssistSection, resolveRouteBuildId } from "./coworker-context-sections";
+import { buildCoworkerExtraSections, buildBuildContextSections, formAssistSection, resolveRouteBuildId } from "./coworker-context-sections";
 
 const asMock = (fn: unknown) => fn as ReturnType<typeof vi.fn>;
 
@@ -33,6 +34,15 @@ describe("formAssistSection", () => {
 });
 
 describe("build verification prompt context", () => {
+  it("takes the verification projection from its outer build adapter", async () => {
+    const raw = { typecheckPassed: null, testsPassed: 4, testsFailed: 1 };
+    asMock(prisma.featureBuild.findUnique).mockResolvedValue({ phase: "build", buildExecState: { step: "tests_run" }, verificationOut: raw });
+    const formatVerification = vi.fn(() => "Build adapter: current source unverified");
+    const out = await buildCoworkerExtraSections({ buildId: "FB-FIXTURE", routeContext: "/build", userId: "u1",
+      chatHistory: [], formatVerification });
+    expect(formatVerification).toHaveBeenCalledWith(raw);
+    expect(out.sections.join("\n")).toContain("Build adapter: current source unverified");
+  });
   it.each([
     { value: { typecheckPassed: true, testsPassed: 4, testsFailed: 2, testsExecuted: true, testsApplicable: true, testSummariesComplete: true, testCommandPassed: false }, expected: "Tests: 4 passed / 2 failed. Typecheck: passed." },
     { value: { typecheckPassed: null, testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: null }, expected: "Tests: no execution observed. Typecheck: not verified." },
@@ -40,7 +50,7 @@ describe("build verification prompt context", () => {
     { value: { typecheckPassed: true, testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: false }, expected: "Tests: not applicable; no tests ran. Typecheck: passed." },
   ])("does not turn a count into a Boolean verdict: $expected", async ({ value, expected }) => {
     asMock(prisma.featureBuild.findUnique).mockResolvedValue({ phase: "build", buildExecState: { step: "tests_run" }, verificationOut: value });
-    const text = (await buildBuildContextSections({ buildId: "FB-FIXTURE", userId: "u1", chatHistory: [] })).join("\n");
+    const text = (await buildBuildContextSections({ formatVerification: formatVerificationSummary, buildId: "FB-FIXTURE", userId: "u1", chatHistory: [] })).join("\n");
     expect(text).toContain(expected);
     expect(text).not.toContain("Tests: PASS");
     expect(text).not.toContain("Tests: FAIL");

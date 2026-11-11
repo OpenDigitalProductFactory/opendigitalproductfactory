@@ -15,6 +15,7 @@
 // stays the gating source.
 
 import { prisma } from "@dpf/db";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import { SANDBOX_RECOVERY_ACTIONS, isSandboxRecoveryAction } from "@/lib/build/sandbox/sandbox-admin-types";
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
@@ -389,10 +390,22 @@ async function startSandbox(_params: Record<string, unknown>, userId: string): P
   }
 }
 
+type SandboxRepairDispatch = (input: {
+  buildId: string; userId: string; task: { title: string; implement: string; verify: string };
+}) => Promise<boolean>;
+
+/** Composition supplies the existing build dispatcher without importing its runtime hub into the pack. */
+export function withSandboxRepairDispatch(dispatch: SandboxRepairDispatch): ToolPack {
+  return { ...sandboxPack, handlers: { ...sandboxPack.handlers,
+    run_sandbox_tests: (params, userId, context) => runSandboxTestsTool(params, userId, context, dispatch),
+  } };
+}
+
 async function runSandboxTestsTool(
   params: Record<string, unknown>,
   userId: string,
   context?: { threadId?: string },
+  dispatchRepair?: SandboxRepairDispatch,
 ): Promise<ToolResult> {
   const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
   if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
@@ -421,7 +434,7 @@ async function runSandboxTestsTool(
       typeCheckOutput = current.result.typeCheckOutput;
     } catch (error) {
       // No check of another branch or a guessed scope can stand in for this build.
-      output = `Verification unavailable: ${error instanceof Error ? error.message : String(error)}. Current source was not verified.`;
+      output = `Verification unavailable: ${getErrorMessage(error)}. Current source was not verified.`;
       testOutput = output;
       typeCheckOutput = "";
       observed = { ...verificationFromSandboxResult({ passed: false, typeCheckPassed: false,
@@ -446,7 +459,6 @@ async function runSandboxTestsTool(
   const initial = await verify();
   if (params.auto_fix === true && observed!.verificationSource?.unchanged === true
     && (initial.typecheckPassed === false || (initial.testsFailed ?? 0) > 0)) {
-    const { runGauntletRepairTask } = await import("@/lib/build/build-orchestrator");
     const loop = await runVerificationRepairLoop({ initial, changedFiles, maxRounds: 3,
       invalidateVerification: async (attempt) => {
         observed = invalidateVerificationForRepair(observed);
@@ -456,7 +468,7 @@ async function runSandboxTestsTool(
       // Reuse the normal build dispatcher, source isolation, liveness and budget
       // controls. The native tool does not make ad-hoc provider calls or root writes.
       dispatchRepair: async (spec) => {
-        const completed = await runGauntletRepairTask({ buildId, userId, task: spec }).catch(() => false);
+        const completed = dispatchRepair ? await dispatchRepair({ buildId, userId, task: spec }).catch(() => false) : false;
         if (!completed) {
           observed = { ...observed, typecheckPassed: null, testsQualified: false,
             ...(observed.verificationSource ? { verificationSource: { ...observed.verificationSource, unchanged: false } } : {}) };

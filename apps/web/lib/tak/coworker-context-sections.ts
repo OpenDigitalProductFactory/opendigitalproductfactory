@@ -15,7 +15,6 @@
 // over the same helpers the legacy path already calls, so output is identical.
 
 import { prisma } from "@dpf/db";
-import { formatVerificationSummary } from "@/lib/build/verification-output";
 
 import { buildFormAssistInstruction, type AgentFormAssistContext } from "@/lib/agent-form-assist";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
@@ -82,6 +81,8 @@ export async function buildBuildContextSections(input: {
   buildId: string;
   userId: string;
   chatHistory: ChatMessage[];
+  /** Outer build adapter supplies its canonical evidence projection. */
+  formatVerification: (value: unknown) => string;
 }): Promise<string[]> {
   const sections: string[] = [];
   const buildCtx = await getFeatureBuildForContext(input.buildId, input.userId);
@@ -124,7 +125,7 @@ export async function buildBuildContextSections(input: {
         if (tasks.toolsExecuted) progressLines.push(`Tools executed: ${(tasks.toolsExecuted as string[]).join(", ")}`);
       }
       if (buildRecord.verificationOut) {
-        progressLines.push(formatVerificationSummary(buildRecord.verificationOut));
+        progressLines.push(input.formatVerification(buildRecord.verificationOut));
       }
       sections.push(progressLines.join("\n"));
     }
@@ -146,6 +147,8 @@ export async function buildCoworkerExtraSections(input: {
   routeContext: string;
   userId: string;
   chatHistory: ChatMessage[];
+  /** Outer build adapter supplies its canonical evidence projection. */
+  formatVerification: (value: unknown) => string;
   elevatedFormFillEnabled?: boolean;
   formAssistContext?: AgentFormAssistContext;
 }): Promise<{ resolvedBuildId: string | undefined; sections: string[] }> {
@@ -155,7 +158,7 @@ export async function buildCoworkerExtraSections(input: {
 
   const resolvedBuildId = await resolveRouteBuildId(input);
   if (resolvedBuildId) {
-    sections.push(...(await buildBuildContextSections({ buildId: resolvedBuildId, userId: input.userId, chatHistory: input.chatHistory })));
+    sections.push(...(await buildBuildContextSections({ buildId: resolvedBuildId, userId: input.userId, chatHistory: input.chatHistory, formatVerification: input.formatVerification })));
   }
   return { resolvedBuildId, sections };
 }

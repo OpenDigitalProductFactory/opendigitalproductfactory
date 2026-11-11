@@ -687,7 +687,7 @@ async function stepRunTests(
     console.warn("[stepRunTests] could not resolve changed files for scoping:", (err as Error)?.message);
     results = { passed: false, typeCheckPassed: false, scope: "none", testsExecuted: false,
       testsApplicable: null, testsPassed: 0, testsFailed: 0, testSummariesComplete: false,
-      testOutput: `Current source could not be established; no checks ran. ${err instanceof Error ? err.message : String(err)}`,
+      testOutput: `Current source could not be established; no checks ran. ${getErrorMessage(err)}`,
       typeCheckOutput: "" };
     observed = { ...verificationFromSandboxResult(results), typecheckPassed: null };
   }

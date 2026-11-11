@@ -864,6 +864,7 @@ export async function sendMessage(input: {
     // too). Empty when neither applies, so this is a no-op for ordinary turns.
     const { buildCoworkerExtraSections } = await import("@/lib/tak/coworker-context-sections");
     const coworkerExtra = await buildCoworkerExtraSections({
+      formatVerification: formatVerificationSummary,
       buildId: resolvedBuildId,
       routeContext: input.routeContext,
       userId: user.id!,
