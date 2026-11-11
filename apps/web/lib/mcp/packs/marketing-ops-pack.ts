@@ -34,7 +34,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_marketing_summary",
     description:
-      "Start here for the whole marketing picture: campaigns with ids, next step, channel readiness, evidence freshness, blockers, inbox, pipeline, playbook.",
+      "Start here for the whole marketing picture: next step, draftable asset task ids (for draft_marketing_asset), campaigns with ids, channel readiness, evidence freshness, blockers, inbox, pipeline, playbook.",
     inputSchema: {
       type: "object",
       properties: {
@@ -299,12 +299,8 @@ async function getMarketingSummaryHandler(params: Record<string, unknown>): Prom
     "@/lib/marketing/operating-snapshot"
   );
   const { loadAcquisitionSignals } = await import("@/lib/marketing/acquisition-signals");
-
-  const [operating, signals] = await Promise.all([
-    getMarketingOperatingSnapshot(),
-    loadAcquisitionSignals({ storefrontId, days }),
-  ]);
-
+  const { listDraftableAssetTasks } = await import("@/lib/marketing/draftable-assets");
+  const [operating, signals] = await Promise.all([getMarketingOperatingSnapshot(), loadAcquisitionSignals({ storefrontId, days })]);
   const projection = operating ? projectOperatingSnapshotForTools(operating) : null;
   const nextStep = projection?.["nextStep"] as { headline?: string } | undefined;
   return {
@@ -312,20 +308,22 @@ async function getMarketingSummaryHandler(params: Record<string, unknown>): Prom
     message: nextStep?.headline
       ? `Marketing summary for ${archetype.name} (${archetype.ctaType}) — next: ${nextStep.headline}`
       : `Marketing summary for ${archetype.name} (${archetype.ctaType})`,
+    // Actionable fields lead so a capped result keeps them (BI-3F641F91): the next
+    // step, the asset task ids draft_marketing_asset takes, then campaigns. An install
+    // with no workspace yet reports empty, never absent.
     data: {
-      archetype: { id: archetype.archetypeId, name: archetype.name, category: archetype.category, ctaType: archetype.ctaType },
-      playbook,
-      inbox: signals.inbox,
-      pipeline: signals.pipeline,
-      // Campaign identities and the one next step come from the canonical
-      // snapshot; an install with no workspace yet reports empty, never absent.
-      campaigns: projection?.["campaigns"] ?? [],
-      channels: projection?.["channels"] ?? [],
-      evidence: projection?.["evidence"] ?? null,
-      blockers: projection?.["blockers"] ?? [],
       nextStep: projection?.["nextStep"] ?? null,
+      draftable: operating ? await listDraftableAssetTasks(operating.organizationId) : [],
+      campaigns: projection?.["campaigns"] ?? [],
+      archetype: { id: archetype.archetypeId, name: archetype.name, category: archetype.category, ctaType: archetype.ctaType },
       strategy: projection?.["strategy"] ?? null,
       approvals: projection?.["approvals"] ?? null,
+      blockers: projection?.["blockers"] ?? [],
+      channels: projection?.["channels"] ?? [],
+      evidence: projection?.["evidence"] ?? null,
+      inbox: signals.inbox,
+      pipeline: signals.pipeline,
+      playbook,
     },
   };
 }
