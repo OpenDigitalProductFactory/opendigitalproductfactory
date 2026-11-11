@@ -4,6 +4,38 @@ status: active
 
 # Retained foreground coworker requests
 
+## Served safety-limit failure correction — 11 November 2026
+
+Native task TR-CHAT-1a0d271ca9c95d28c42adf96a466a114 on served3aa5 retained
+its identity and prompt through reload, but completed with zero tool executions,
+no requested checkpoint and a local fallback's safety-limit message. The caveat
+asked the owner to send the message again. Canonical failed acceptance evidence
+is cmwc59o7z01xi0emf93ymlu2a; a completed turn was not a completed delegation.
+
+Keep the existing privacy screen, provider/capability policy, deadline, attempt
+limits and publication fence. This correction adds no provider, grant, retry
+engine or schema. Ordered work under the existing BI-D0D2FF0D medium fix:
+
+1. First fail regressions for synthetic safety exhaustion being returned without
+   a failure, and the caveat's futile resend instruction. Preserve a real earlier
+   draft and ordinary conversational responses as non-failures.
+2. Mark only synthetic safety-limit output as an existing unknown dead-end,
+   so the existing foreground system-failure/publication path retains blocked
+   work instead of recording a successful response. Partial effects still need
+   reconciliation; do not create automatic retry authority. Remove the caveat's
+   resend instruction without claiming recovery or live evidence.
+3. Run affected loop, evidence, proposal, local continuation, foreground and
+   caveat controls; both package typechecks; current guards and the canonical
+   exact-tree gate. Independent review and served acceptance remain required.
+   Verify an actual requested stored artifact separately. Until then, useful
+   delegation and the full permitted real-email chain remain unproven.
+
+Observed routing receipt screen_14555bbb68060e50 required local-only handling;
+the selected local model is recorded tool-capable, while no tools executed.
+That does not establish the attached tool count or why it failed. Do not clear
+history or reroute confidential data to avoid the failure. Roll back this source
+delta if valid answer preservation or approval/uncertainty fences regress.
+
 ## Verified progress wording and measured disclosure
 
 A governed preview of source7aa retained one fresh read-only Finance Spend
