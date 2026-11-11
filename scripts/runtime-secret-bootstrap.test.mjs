@@ -214,6 +214,54 @@ test("a timed-out Connect request refuses before command execution", async () =>
   assertValueFree(error);
 });
 
+test("the Connect timeout covers a response body that stalls after headers", async () => {
+  const error = await captureError(() =>
+    Promise.race([
+      resolveRuntimeSecrets({
+        env: connectEnv({ DPF_SECRET_PROVIDER_TIMEOUT_MS: "10" }),
+        fetch: async (_url, { signal }) => ({
+          ok: true,
+          json: () =>
+            new Promise((_resolve, reject) => {
+              signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+            }),
+        }),
+      }),
+      new Promise((_resolve, reject) => {
+        const watchdog = setTimeout(
+          () => reject(new Error("response body was not covered by the provider timeout")),
+          100,
+        );
+        watchdog.unref?.();
+      }),
+    ]),
+  );
+
+  assert.equal(error.code, "connect-timeout");
+  assertValueFree(error);
+});
+
+test("Connect redirects fail closed without forwarding the bearer token", async () => {
+  let redirectTargetCalled = false;
+  const error = await captureError(() =>
+    resolveRuntimeSecrets({
+      env: connectEnv(),
+      fetch: async (_url, options) => {
+        if (options.redirect !== "manual") {
+          redirectTargetCalled = true;
+          assert.equal(options.headers.Authorization, "Bearer token-canary-never-print");
+          return response(item());
+        }
+        return { ok: false, status: 302, async json() { return {}; } };
+      },
+    }),
+  );
+
+  assert.equal(error.code, "connect-http");
+  assert.equal(redirectTargetCalled, false);
+  assertValueFree(error);
+});
+
 test("launcher overlays resolved values only in the child environment", async () => {
   const parent = connectEnv();
   let childOptions;

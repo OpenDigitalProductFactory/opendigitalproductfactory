@@ -161,47 +161,50 @@ async function resolveOnePasswordConnect({ env, fetch, readFile, signal, names, 
   const basePath = host.pathname.replace(/\/+$/, "");
   url.pathname = `${basePath}/v1/vaults/${encodeURIComponent(vaultId)}/items/${encodeURIComponent(itemId)}`;
 
-  let response;
   try {
-    response = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      signal: controller.signal,
-    });
-  } catch {
-    refuse(didTimeout ? "connect-timeout" : "connect-network", { provider });
+    let response;
+    try {
+      response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        redirect: "manual",
+        signal: controller.signal,
+      });
+    } catch {
+      refuse(didTimeout ? "connect-timeout" : "connect-network", { provider });
+    }
+
+    if (!response || response.ok !== true) refuse("connect-http", { provider });
+
+    let body;
+    try {
+      body = await response.json();
+    } catch {
+      refuse(didTimeout ? "connect-timeout" : "connect-json", { provider });
+    }
+    if (!body || typeof body !== "object" || !Array.isArray(body.fields)) {
+      refuse("connect-shape", { provider });
+    }
+
+    const overlay = {};
+    for (const name of names) {
+      const matches = body.fields.filter((field) => field?.label === name);
+      if (matches.length === 0) refuse("secret-missing", { provider, secretName: name });
+      if (matches.length > 1) refuse("secret-duplicate", { provider, secretName: name });
+      const value = matches[0]?.value;
+      if (typeof value !== "string" || value.length === 0) {
+        refuse("secret-empty", { provider, secretName: name });
+      }
+      overlay[name] = value;
+    }
+    return overlay;
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener?.("abort", abortFromCaller);
   }
-
-  if (!response || response.ok !== true) refuse("connect-http", { provider });
-
-  let body;
-  try {
-    body = await response.json();
-  } catch {
-    refuse("connect-json", { provider });
-  }
-  if (!body || typeof body !== "object" || !Array.isArray(body.fields)) {
-    refuse("connect-shape", { provider });
-  }
-
-  const overlay = {};
-  for (const name of names) {
-    const matches = body.fields.filter((field) => field?.label === name);
-    if (matches.length === 0) refuse("secret-missing", { provider, secretName: name });
-    if (matches.length > 1) refuse("secret-duplicate", { provider, secretName: name });
-    const value = matches[0]?.value;
-    if (typeof value !== "string" || value.length === 0) {
-      refuse("secret-empty", { provider, secretName: name });
-    }
-    overlay[name] = value;
-  }
-  return overlay;
 }
 
 export async function resolveRuntimeSecrets({
