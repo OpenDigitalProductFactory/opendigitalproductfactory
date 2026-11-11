@@ -53,8 +53,17 @@ describe("RhythmStrip", () => {
     expect(html).toContain("Nov 10: Running now");
   });
 
-  it("links each room to its detail page and says so when there are none", () => {
+  it("links each room to its detail page, and draws no band when there are none", () => {
     expect(render([mixed])).toContain("/workspace/cases/");
-    expect(render([])).toContain("No standing rooms are set up yet.");
+    expect(render([])).toBe("");
+  });
+
+  it("keeps the explanation and legend behind a disclosure, so arrival shows only the rooms", () => {
+    const html = render([mixed]);
+    const disclosure = html.indexOf("<details");
+    expect(html).toContain("Day-to-day operations");
+    expect(html).toContain("What the marks mean");
+    expect(disclosure).toBeGreaterThan(-1);
+    expect(html.indexOf("Each standing room runs once a day")).toBeGreaterThan(disclosure);
   });
 });

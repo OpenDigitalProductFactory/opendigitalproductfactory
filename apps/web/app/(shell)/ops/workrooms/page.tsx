@@ -8,15 +8,14 @@ import { RhythmStrip } from "@/components/ops/workrooms/atlas/RhythmStrip";
 import { WorkroomActivitySection } from "@/components/ops/workrooms/WorkroomActivitySection";
 import { Surface } from "@/components/ui/Surface";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
-import { getT } from "@/lib/i18n/t.server";
 import { loadHeldWorkrooms } from "@/lib/work-management/held-workrooms";
 import { loadStandingRhythms } from "@/lib/work-management/standing-run-history.server";
 
 export const dynamic = "force-dynamic";
 
 export default async function WorkroomsPage() {
-  const [held, rhythms, locale, t] = await Promise.all([
-    loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(), getT("workrooms"),
+  const [held, rhythms, locale] = await Promise.all([
+    loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(),
   ]);
   // Awaited here rather than rendered as <WorkroomActivitySection>, so the page
   // resolves in one pass (and renders in tests without a Suspense boundary).
@@ -42,13 +41,9 @@ export default async function WorkroomsPage() {
       <OpsTabNav />
       {activity}
       {/* Work Atlas A4 (BI-D8A6F0F2): standing operations get their own band, so a missed day is as visible as a stuck project. */}
-      <Surface aria-labelledby="standing-rhythm-heading" className="mt-6" rounded="xl">
-        <h2 id="standing-rhythm-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("rhythm.heading")}</h2>
-        <p className="mb-3 mt-0.5 max-w-3xl text-sm text-[var(--dpf-muted)]">{t("rhythm.intro")}</p>
-        <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
-          <RhythmStrip rows={rhythms} locale={locale.language} />
-        </MessagesProvider>
-      </Surface>
+      <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
+        <RhythmStrip rows={rhythms} locale={locale.language} />
+      </MessagesProvider>
     </div>
   );
 }

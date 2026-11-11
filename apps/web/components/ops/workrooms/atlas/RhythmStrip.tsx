@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 
+import { Surface } from "@/components/ui/Surface";
 import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
 import type { RhythmSlotState } from "@/lib/work-management/standing-run-history";
 import type { StandingRhythmRow } from "@/lib/work-management/standing-run-history.server";
@@ -36,12 +37,18 @@ function Mark({ state, label }: { state: RhythmSlotState; label: string }) {
   );
 }
 
+/**
+ * The Day-to-day operations band. An install with no standing rooms gets no
+ * band, and what the marks mean sits behind a disclosure, so the page on
+ * arrival carries only the rooms and their days.
+ */
 export function RhythmStrip({ rows, locale }: { rows: StandingRhythmRow[]; locale: string }) {
   const t = useT("workrooms");
-  if (rows.length === 0) return <p className="text-dpf-caption text-dpf-muted">{t("rhythm.empty")}</p>;
+  if (rows.length === 0) return null;
   return (
-    <div>
-      <ul className="divide-y divide-[var(--dpf-border)]">
+    <Surface aria-labelledby="standing-rhythm-heading" className="mt-6" rounded="xl">
+      <h2 id="standing-rhythm-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("rhythm.heading")}</h2>
+      <ul className="mt-2 divide-y divide-[var(--dpf-border)]">
         {rows.map((row) => {
           const { slots, runningSince, counts } = row.rhythm;
           const summary = runningSince
@@ -66,14 +73,18 @@ export function RhythmStrip({ rows, locale }: { rows: StandingRhythmRow[]; local
           );
         })}
       </ul>
-      <ul aria-hidden="true" className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-dpf-caption text-dpf-muted">
-        {LEGEND.map((state) => (
-          <li key={state} className="flex items-center gap-1.5">
-            <Mark state={state} label={t(`rhythm.state.${state}`)} />
-            {t(`rhythm.state.${state}`)}
-          </li>
-        ))}
-      </ul>
-    </div>
+      <details className="mt-3">
+        <summary className="cursor-pointer text-dpf-caption text-[var(--dpf-accent)]">{t("rhythm.explain")}</summary>
+        <p className="mt-2 max-w-3xl text-dpf-caption text-dpf-muted">{t("rhythm.intro")}</p>
+        <ul aria-hidden="true" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-dpf-caption text-dpf-muted">
+          {LEGEND.map((state) => (
+            <li key={state} className="flex items-center gap-1.5">
+              <Mark state={state} label={t(`rhythm.state.${state}`)} />
+              {t(`rhythm.state.${state}`)}
+            </li>
+          ))}
+        </ul>
+      </details>
+    </Surface>
   );
 }

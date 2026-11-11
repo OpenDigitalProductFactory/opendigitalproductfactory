@@ -407,7 +407,7 @@
     "runningSince": "Running since {$date}",
     "missedCount": "{$count} days did not run",
     "steady": "Every recorded day ran",
-    "empty": "No standing rooms are set up yet."
+    "explain": "What the marks mean"
   },
   "outcomes": {
     "title": "Delivery outcomes",
