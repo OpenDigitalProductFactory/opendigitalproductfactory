@@ -17,8 +17,12 @@ const VALID = new Set(VALID_DISPOSITIONS);
 const FIRST_PARTY_PROTOCOL = /^(?:workspace|file|link):/;
 const ACTIONABLE_ROUTE = /^(?:BI-[A-Z0-9]+|DI-[A-Z0-9]+|PR #\d+|#\d+|docs\/superpowers\/(?:plans|specs)\/)/;
 
+function byteCompare(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 function sorted(values) {
-  return [...(values ?? [])].map(String).sort((a, b) => a.localeCompare(b));
+  return [...(values ?? [])].map(String).sort(byteCompare);
 }
 
 function isExternalRegistryDependency(info) {
@@ -29,7 +33,7 @@ export function externalDependencyNames(current) {
   return [...current.entries()]
     .filter(([, info]) => isExternalRegistryDependency(info))
     .map(([name]) => name)
-    .sort((a, b) => a.localeCompare(b));
+    .sort(byteCompare);
 }
 
 export function validateDependencyDispositions(current, allowlist) {
@@ -57,7 +61,7 @@ export function validateDependencyDispositions(current, allowlist) {
     }
   }
 
-  return issues.sort((a, b) => a.name.localeCompare(b.name) || a.code.localeCompare(b.code));
+  return issues.sort((a, b) => byteCompare(a.name, b.name) || byteCompare(a.code, b.code));
 }
 
 function markdownCell(value) {

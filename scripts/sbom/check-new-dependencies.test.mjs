@@ -44,6 +44,7 @@ test("updating the allowlist preserves decisions but leaves a new external depen
     ["new-package", { workspaces: new Set(["apps/web"]), kinds: new Set(["dev"]), versions: new Set(["2.0.0"]) }],
   ]);
   const prior = {
+    note: "Canonical dependency governance note that the updater must preserve.",
     dependencies: {
       existing: {
         added: "2026-01-01",
@@ -59,9 +60,21 @@ test("updating the allowlist preserves decisions but leaves a new external depen
   };
 
   const updated = createUpdatedAllowlist(current, prior, "2026-10-13");
+  assert.equal(updated.note, prior.note);
   assert.equal(updated.dependencies.existing.disposition, "keep");
   assert.equal(updated.dependencies["new-package"].disposition, undefined);
   assert.equal(updated.dependencies["new-package"].note, "Vetting pending — record provenance, maintenance, license, OSV result, overlap review, and a keep/reduce/absorb disposition.");
+});
+
+test("dependency ordering is byte-stable instead of host-locale dependent", () => {
+  const current = new Map([
+    ["z-package", info()],
+    ["@scope/z", info()],
+    ["a-package", info()],
+    ["0-zero", info()],
+  ]);
+
+  assert.deepEqual(externalDependencyNames(current), ["0-zero", "@scope/z", "a-package", "z-package"]);
 });
 
 function info({ workspaces = ["apps/web"], kinds = ["prod"], versions = ["1.2.3"] } = {}) {

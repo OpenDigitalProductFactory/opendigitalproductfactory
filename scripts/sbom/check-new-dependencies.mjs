@@ -53,7 +53,7 @@ function loadAllowlist() {
   }
 }
 
-const NOTE = "Acknowledged DIRECT dependencies. The New Dependency Gate (scripts/sbom/check-new-dependencies.mjs) fails a PR that adds a direct dependency not listed here, so every acquired package is a deliberate, recorded decision. Add an entry ONLY after vetting: npm provenance attestation, package age + downloads, maintainer count, license, `pnpm scan:deps` (OSV), and whether an existing dep already covers it — record the outcome in `note`. See docs/architecture/dependency-reduction-routine.md.";
+const NOTE = "Acknowledged DIRECT dependencies and canonical keep/reduce/absorb dispositions. The New Dependency Gate (scripts/sbom/check-new-dependencies.mjs) fails a PR that adds an unlisted direct dependency, leaves a new external package without a complete disposition, or drifts the generated matrix. Add an entry ONLY after vetting provenance, package age and downloads, maintainers, license, `pnpm scan:deps` (OSV), overlap with existing dependencies, and the ongoing disposition. See docs/architecture/dependency-reduction-routine.md.";
 
 /** Declared direct dependencies that a recorded decision retired. */
 export function findRetiredInUse(declaredNames, retired = {}) {
@@ -77,7 +77,7 @@ export function createUpdatedAllowlist(current, priorAllowlist, today) {
       note: "Vetting pending — record provenance, maintenance, license, OSV result, overlap review, and a keep/reduce/absorb disposition.",
     };
   }
-  return { note: NOTE, dependencies, retired };
+  return { note: priorAllowlist?.note ?? NOTE, dependencies, retired };
 }
 
 function main() {
