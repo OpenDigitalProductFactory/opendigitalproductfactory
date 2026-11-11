@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { redactDiagnosticEvidenceText } from "../shared/diagnostic-evidence-redaction";
+import { excerptHeadAndTail } from "../shared/excerpt-head-and-tail";
 import {
   PROMOTER_DOCKERFILE,
   stageMinimalPromoterBuildContext,
@@ -40,7 +42,17 @@ function isLocalPromoterReference(image: string): boolean {
 
 function requireDockerSuccess(result: ArtifactDockerResult, operation: string): string {
   if (result.exitCode !== 0) {
-    throw new Error(`${operation}_failed: ${(result.stderr || result.stdout).trim().slice(-500)}`);
+    const streams = ([["stderr", result.stderr], ["stdout", result.stdout]] as const)
+      .filter(([, text]) => text.trim());
+    // Reserve room for labels and the shared excerpt helper's omission markers.
+    // Redact whole streams before slicing: a token can span an excerpt boundary.
+    const budget = Math.floor((12_000 - 128) / Math.max(streams.length, 1));
+    const output = streams.map(([label, text]) =>
+      `--- ${label} ---\n${excerptHeadAndTail(redactDiagnosticEvidenceText(text.trim(), {
+        credentialAssignments: true,
+      }), budget)}`,
+    ).join("\n");
+    throw new Error(`${operation}_failed: exit code ${result.exitCode}\n${output || "No Docker diagnostic output was captured; cause unknown."}`);
   }
   return result.stdout;
 }

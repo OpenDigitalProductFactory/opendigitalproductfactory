@@ -177,8 +177,11 @@ upgrade. Nothing is lost by waiting.
 - A failure recorded after the target version starts does not prove a rollback
   occurred. The card identifies when that version is running and the failure
   still needs review; it does not claim the previous version is running.
-- The deployment log remains the full diagnosis behind that summary. Read it
-  when the stated cause is not enough, not to discover what the cause was.
+- **Error details** keeps a bounded diagnostic excerpt behind that summary.
+  Candidate updater failures retain the beginning and end of both output
+  streams, with known credentials excluded. Omitted text is marked explicitly.
+  An excerpt may not establish the cause; missing output stays unknown rather
+  than being treated as a successful check or a reason to retry automatically.
 - If dispatch is indeterminate, leave the action alone while the server
   reconciles the admitted `SUR-*` run. A definite pre-dispatch refusal is shown
   against that same run identity and means no upgrade mutation began.
