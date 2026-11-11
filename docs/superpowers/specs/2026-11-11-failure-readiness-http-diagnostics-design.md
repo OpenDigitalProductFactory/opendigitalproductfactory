@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Failure Readiness HTTP denial diagnostics
 
 Backlog: BI-9ED0B273. Workroom: WC-7B5194D4.
