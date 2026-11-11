@@ -118,6 +118,16 @@ class LoadsAnyTest(unittest.TestCase):
             via_codex.assert_not_called()
 
 
+class GenericTransportGuardTest(unittest.TestCase):
+    def test_lossy_values_are_refused_before_cli_dispatch_even_without_a_parser(self):
+        documents = ('dates = [1979-05-27]', '"when" = 07:32:00', 'n = { key = [nan] }')
+        with patch.object(codex_toml, "_stdlib_parser", return_value=None), patch.object(codex_toml, "loads") as cli:
+            for document in documents:
+                with self.assertRaises(codex_toml.UnsupportedToml):
+                    codex_toml.loads_any(document)
+            cli.assert_not_called()
+
+
 @unittest.skipUnless(updater.resolve_codex_binary(), "no Codex CLI on this host")
 class GenericFallbackTest(unittest.TestCase):
     def parse(self, text):
@@ -153,6 +163,22 @@ class GenericFallbackTest(unittest.TestCase):
     def test_empty_document_and_namespace_named_by_user_are_preserved(self):
         self.assertEqual(self.parse(''), {})
         self.assertEqual(self.parse('[dpf_generic_toml]\nx = 1\n'), {"dpf_generic_toml": {"x": 1}})
+
+    def test_json_lossy_values_are_refused_at_every_nesting_level(self):
+        for value in ('1979-05-27', '07:32:00', '1979-05-27T07:32:00Z', 'nan', '+nan', '-inf', 'inf'):
+            for assignment in ('"when" = ' + value, 'values = [' + value + ']',
+                    'values = [\n [' + value + ']\n]', 'values = { nested = ' + value + ' }', 'values = { x = 1, nested = ' + value + ' }'):
+                with self.subTest(assignment=assignment):
+                    with self.assertRaises(codex_toml.UnsupportedToml):
+                        self.parse('plugins = ["dpf-platform"]\n' + assignment + '\n')
+
+    def test_date_and_nonfinite_looking_keys_and_strings_are_preserved(self):
+        text = 'nan = "nan"\n1979-05-27 = "1979-05-27"\nvalues = { nan = 1, inf = 2, 1979-05-27 = "date" }\n[1979-05-27]\nx = "07:32:00"\n'
+        # Use separate documents: a scalar and a table cannot own the same key.
+        text = text.replace('[1979-05-27]', '[07-32-00]')
+        self.assertEqual(self.parse('[1979-05-27]\nx = "nan"\n'), {'1979-05-27': {'x': 'nan'}})
+        self.assertEqual(self.parse(text), {'nan': 'nan', '1979-05-27': '1979-05-27',
+            'values': {'nan': 1, 'inf': 2, '1979-05-27': 'date'}, '07-32-00': {'x': '07:32:00'}})
 
     def test_malformed_and_date_values_remain_refused(self):
         with self.assertRaises(ValueError): self.parse('[broken\n')

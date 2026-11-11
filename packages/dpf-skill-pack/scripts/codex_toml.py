@@ -192,26 +192,33 @@ def _loads_uncached(text: str, binary: Optional[str] = None, timeout: float = DE
 
 
 _GENERIC_ROOT = "dpf_generic_toml"
+_JSON_LOSSY_VALUE = re.compile(
+    r"(?:\d{4}-\d{2}-\d{2}|\d{2}:\d{2}:\d{2}|[-+]?(?:nan|inf)(?=[\s,\]}#]|$))"
+)
 
 
 def _scope_generic_document(text: str) -> str:
     """Hide client schema keys, without interpreting TOML values.
 
-    Codex parses the grammar. This scanner only prefixes real table headers;
+    Codex parses the grammar. This scanner scopes real table headers;
     quoted tokens and comments are copied verbatim, including multiline strings.
     An unknown root table keeps Codex's reserved settings out of the document.
+    Unquoted values that JSON cannot preserve are refused before dispatch.
     """
     pieces = ["[" + _GENERIC_ROOT + "]\n"]
     i = 0
     line_start = True
-    value_depth = 0
+    containers = []
+    last_significant = None
+    in_header = False
     while i < len(text):
         if line_start:
             start = i
             while i < len(text) and text[i] in " \t":
                 i += 1
             pieces.append(text[start:i])
-            if value_depth == 0 and text.startswith("[", i):
+            if not containers and text.startswith("[", i):
+                in_header = True
                 width = 2 if text.startswith("[[", i) else 1
                 pieces.append(text[i:i + width] + _GENERIC_ROOT + ".")
                 i += width
@@ -219,6 +226,15 @@ def _scope_generic_document(text: str) -> str:
             if i == len(text):
                 break
         char = text[i]
+        expects_value = last_significant in ("=", "[") or (
+            last_significant == "," and containers and containers[-1] == "["
+        )
+        if not in_header and expects_value:
+            token = _JSON_LOSSY_VALUE.match(text, i)
+            if token:
+                raise UnsupportedToml(
+                    "TOML date/time and non-finite values cannot survive the JSON fallback; configuration unchanged"
+                )
         if char == "#":
             end = text.find("\n", i)
             end = len(text) if end < 0 else end
@@ -240,14 +256,20 @@ def _scope_generic_document(text: str) -> str:
                     end += 1
             pieces.append(text[i:end])
             i = end
+            last_significant = "quoted"
         else:
-            if char in "[{":
-                value_depth += 1
-            elif char in "]}":
-                value_depth = max(0, value_depth - 1)
+            if not in_header:
+                if char in "[{":
+                    containers.append(char)
+                elif char in "]}" and containers:
+                    containers.pop()
             pieces.append(char)
             i += 1
             line_start = char == "\n"
+            if line_start:
+                in_header = False
+            if not char.isspace():
+                last_significant = char
     return "".join(pieces)
 
 
