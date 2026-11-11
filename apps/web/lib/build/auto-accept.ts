@@ -3,7 +3,7 @@ import { saveBuildArtifactRevision } from "@/lib/build/build-artifact-provenance
 import { getProcessPolicy } from "@/lib/explore/build-process-matrix";
 import type { AcceptanceCriterion, VerificationOutput } from "@/lib/explore/feature-build-types";
 import { isEvidenceAutoAcceptEnabled } from "@/lib/build/build-studio-config";
-import { normalizeVerificationOutput, retainReportedQa, type TestExecutionFacts } from "./verification-output";
+import { normalizeVerificationOutput, projectVerificationEvidence, retainReportedQa, type TestExecutionFacts } from "./verification-output";
 
 /**
  * Evidence-gated autonomous build acceptance + the shared acceptance write.
@@ -178,15 +178,12 @@ export async function autoAcceptBuildOnEvidence(
           : [];
     if (criteria.length === 0) return { accepted: false, reason: "no-criteria" };
 
-    const facts = normalizeVerificationOutput(v);
-    const testNotice = facts.testEvidenceConflict
-      ? "Earlier reported test failures remain unresolved. "
-      : facts.testsExecuted === false ? "No tests executed. "
-        : facts.testsQualified === false && facts.testsFailed === null ? "Test qualification remains unresolved. " : "";
+    const facts = projectVerificationEvidence(normalizeVerificationOutput(v));
+    const testEvidence = `${facts.testsLabel}${facts.conflictNotice ? ` ${facts.conflictNotice}` : ""}`;
 
     const evidence =
       `Auto-accepted (evidence-gated): typecheck clean; UX ${ux}; ` +
-      `tests ${v.testsPassed ?? 0} passed / ${v.testsFailed ?? 0} failed (recorded tests, advisory). ${testNotice}` +
+      `Tests advisory. ${testEvidence} ` +
       `Governed autopilot — BUILD_EVIDENCE_AUTO_ACCEPT (kernel DI-53037C92BC0A).`;
     const acceptanceMet = buildAcceptanceEvidenceRecord(criteria, evidence);
 
@@ -197,7 +194,7 @@ export async function autoAcceptBuildOnEvidence(
       activityTool: "auto_record_acceptance",
       activitySummary:
         `Evidence-gated auto-acceptance: ${criteria.length} criteria met ` +
-        `(typecheck clean, UX ${ux}; tests ${v.testsPassed ?? 0} passed / ${v.testsFailed ?? 0} failed, advisory). ${testNotice}`.trim(),
+        `(typecheck clean, UX ${ux}; tests advisory). ${testEvidence}`,
     });
     return { accepted: true, acceptanceMet };
   } catch (err) {

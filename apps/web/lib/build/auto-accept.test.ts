@@ -85,6 +85,22 @@ beforeEach(() => {
 });
 
 describe("autoAcceptBuildOnEvidence — accepts on fully-green evidence", () => {
+  it.each([
+    [{ testsExecuted: false, testsPassed: 1, testsFailed: 0 }, "No tests ran."],
+    [{ testsExecuted: true, testsPassed: null, testsFailed: null }, "Unknown passes observed; failure verdict not established."],
+  ])("records truthful advisory evidence for incomplete test facts %j", async (facts, expected) => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: { typecheckPassed: true, ...facts } }));
+    const result = await autoAcceptBuildOnEvidence("FB-UNKNOWN");
+    expect(result.accepted).toBe(true);
+    const evidence = result.acceptanceMet?.[0]?.evidence;
+    expect(evidence).toContain(expected);
+    expect(evidence).not.toMatch(/tests [01] passed \/ 0 failed/);
+    const activity = mockPrisma.buildActivity.create.mock.calls.find(([input]) => input.data.tool === "auto_record_acceptance");
+    expect(activity?.[0].data.summary).toContain(expected);
+    expect(activity?.[0].data.summary).not.toMatch(/tests [01] passed \/ 0 failed/);
+    expect(mockSaveBuildArtifactRevision.mock.calls.every(([input]) => input.field === "acceptanceMet")).toBe(true);
+  });
+
   it("ACCEPTS a fully-green feature build, writing acceptanceMet exactly once", async () => {
     // Sanity: the REAL feature·standard policy gates review->ship on acceptance.
     expect(getProcessPolicy("feature", "medium").gates["review->ship"]).toContain(
