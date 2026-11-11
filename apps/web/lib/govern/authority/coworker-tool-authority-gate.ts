@@ -9,7 +9,7 @@ import type {
   GovernedExecuteRejection,
 } from "@/lib/mcp-governed-execute-types";
 import type { ScopeReleasePreflightResult } from "@/lib/work-capsules/scope-release-preflight";
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 import {
   buildCoworkerApprovalBinding,
@@ -105,6 +105,7 @@ export type AuthorityExecutedOutcome = (
 
 export type CoworkerToolAuthorityGateResult =
   | Exclude<ScopeReleasePreflightResult, { outcome: "reject" }>
+  | { outcome: "not-admitted"; result: ToolResult }
   | {
       /** The identical call already ran once on a person's approval. */
       outcome: "settled";
@@ -333,6 +334,9 @@ async function writeAuthorizationDecision(
             escalationReason: decision.escalation.reasonCode,
             escalationSteering: decision.escalation.steering,
             damaging: decision.escalation.damaging,
+            ...(decision.escalation.reasonCode === "steered-by-standing-ruling" && input.standingRulingEnvelopeId
+              ? { standingRulingEnvelopeId: input.standingRulingEnvelopeId }
+              : {}),
           }
         : {}),
     },
@@ -365,14 +369,19 @@ async function writeAuthorizationDecision(
   }
 }
 
-/** The envelope's stored reason: the rule, then the branch that decided it. */
+/**
+ * The envelope's stored reason. When the call says in plain words what will
+ * happen (BI-88D51B8F), that leads; then the rule and the branch that decided it.
+ */
 export function approvalExplanation(
   decision: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>,
+  approverSummary?: string,
 ): string {
   const why = decision.escalation
     ? escalationReasonSentence(decision.escalation.reasonCode)
     : null;
-  return why ? `${decision.explanation} ${why}` : decision.explanation;
+  const rule = why ? `${decision.explanation} ${why}` : decision.explanation;
+  return approverSummary?.trim() ? `${approverSummary.trim()} ${rule}` : rule;
 }
 
 async function ensureApproval(
@@ -479,6 +488,14 @@ export async function enforceCoworkerToolAuthority(
   }
 
   let decision = evaluateCoworkerAuthority(input);
+  if (decision.outcome === "require-approval" && !input.approval
+    && execution.context?.approvalCompletion !== "platform"
+    && execution.context?.allowApprovalRequest !== false
+    && execution.toolName === "request_self_upgrade") {
+    const { preflightUnadmittedUpgrade } = await import("@/lib/self-upgrade/request-approval-preflight");
+    const result = await preflightUnadmittedUpgrade(execution, decision.approvalBinding);
+    if (result) return { outcome: "not-admitted", result };
+  }
   if (decision.outcome !== "deny" && ["release_workroom_scope", "release_capsule_scope"].includes(execution.toolName)) {
     const { preflightOriginalScopeRelease } = await import("@/lib/work-capsules/scope-release-preflight");
     const precondition = await preflightOriginalScopeRelease(execution,
@@ -571,7 +588,7 @@ export async function enforceCoworkerToolAuthority(
         binding: decision.approvalBinding,
         authorityDecisionId: decisionId,
         threadId: execution.context?.threadId ?? null,
-        explanation: approvalExplanation(decision),
+        explanation: approvalExplanation(decision, input.action.consequenceRefinement?.approverSummary),
         // The call's resolved consequence sizes how long the person has to
         // answer: outward stays short, everything else waits for them.
         ...(input.action.consequence !== undefined ? { consequence: input.action.consequence } : {}),

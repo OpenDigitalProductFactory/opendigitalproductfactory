@@ -69,6 +69,13 @@ The guard is part of the canonical source policy-guard profile and is also avail
 
 ## Ownership and successor work
 
+The [November 2 per-edge review](application-boundary-review-2026-11-02.md)
+records the current bounded dispositions: one obsolete exception removed,
+42 existing exact edges retained only through the existing November 16 budget,
+with unchanged context owners and a dated shrink schedule. WWMD decision
+`DI-16446C24A439` records the agent's choice; it is not a claim that the
+remaining reverse dependencies have been repaired.
+
 - BI-2E9F6D37 owns this registry and guard.
 - BI-963F4226 introduces the transport-neutral ActorContext/application-service boundary.
 - BI-58810028 proves that boundary through the Finance canary.

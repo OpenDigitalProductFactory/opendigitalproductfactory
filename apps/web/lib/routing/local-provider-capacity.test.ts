@@ -31,16 +31,29 @@ describe("local provider capacity reservation", () => {
     });
   });
 
-  it("reserves the next safe admission window for an established local-CI queue", async () => {
+  it("BI-0B1DF949: a queued (not yet admitted) local-CI claim does not defer local inference", async () => {
+    // DI-4369768D28F8 supersedes BI-94D44FDB: a claim that holds no host
+    // resources cannot contend with inference, and on a busy host the queue
+    // never empties (4-7 standing rows; a closed pool admits nobody).
     const listCapacityLeases = vi.fn().mockResolvedValue([
       { environmentKey: "local-integration-ci", status: "queued" },
+      { environmentKey: "local-integration-ci", status: "queued" },
+    ]);
+
+    await expect(assertLocalProviderCapacityAvailable({ listCapacityLeases })).resolves.toBeUndefined();
+  });
+
+  it("an active lease still defers even while other claims are queued", async () => {
+    const listCapacityLeases = vi.fn().mockResolvedValue([
+      { environmentKey: "local-integration-ci", status: "queued" },
+      { environmentKey: "local-integration-ci", status: "active" },
     ]);
 
     await expect(
       assertLocalProviderCapacityAvailable({ listCapacityLeases }),
     ).rejects.toMatchObject({
       name: "LocalProviderCapacityDeferredError",
-      reason: "local-ci-queued-capacity-reservation",
+      reason: "local-ci-active-capacity-reservation",
     });
   });
 
@@ -132,11 +145,11 @@ describe("the resident-model policy is untouched by the embedding exemption (BI-
     expect(status).toMatchObject({ available: false, reason: "local-ci-active-capacity-reservation" });
   });
 
-  it("still defers on a QUEUED claim", async () => {
+  it("BI-0B1DF949: no longer defers on a QUEUED claim", async () => {
     const status = await inspectLocalProviderCapacity({
       listCapacityLeases: async () => [lease("queued")],
     });
-    expect(status).toMatchObject({ available: false, reason: "local-ci-queued-capacity-reservation" });
+    expect(status).toEqual({ available: true, reason: null });
   });
 
   it("still fails closed when capacity ownership cannot be proven", async () => {

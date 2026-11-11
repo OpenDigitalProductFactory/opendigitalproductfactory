@@ -35,6 +35,20 @@ describe("classifySan / membershipSanSet", () => {
     expect(classifySan("Dev.Internal")).toEqual({ kind: "dns", value: "dev.internal" });
     expect(membershipSanSet("192.168.0.200", ["192.168.0.200", " dev.internal ", "DEV.internal", ""])).toEqual(["192.168.0.200", "dev.internal"]);
   });
+
+  it("keeps a URN as a URI SAN, case intact, the way step-ca splits it (BI-0716C8A8)", () => {
+    expect(classifySan("urn:dpf:environment-class:development")).toEqual({ kind: "uri", value: "urn:dpf:environment-class:development" });
+  });
+});
+
+describe("buildCertificateSigningRequest — environment class", () => {
+  it("carries the class URN as a uniformResourceIdentifier [6] SAN", () => {
+    const kp = generateMembershipKeypair();
+    const urn = "urn:dpf:environment-class:development";
+    const pem = buildCertificateSigningRequest({ privateKeyPem: kp.privateKeyPem, commonName: "dev.internal", extraSans: [urn] });
+    const der = derOf(pem);
+    expect(der.includes(Buffer.concat([Buffer.from([0x86, urn.length]), Buffer.from(urn, "ascii")]))).toBe(true);
+  });
 });
 
 describe("buildCertificateSigningRequest", () => {

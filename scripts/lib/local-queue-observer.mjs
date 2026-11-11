@@ -336,10 +336,12 @@ export function findQueueWaiter({
     .map(({ record }) => record)
     .filter((record) => record.branch === branch && record.sha === sha)
     .filter((record) => !excluded.has(record.pid));
+  const alivePids = records.filter((record) => observerAlive(record).alive).map((record) => record.pid);
   return {
     checked: true,
-    alive: records.some((record) => observerAlive(record).alive),
+    alive: alivePids.length > 0,
     pids: records.map((record) => record.pid),
+    alivePids,
   };
 }
 

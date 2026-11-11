@@ -19,7 +19,7 @@ export type CodeGraphEdgeKind =
   | "USES_PROMPT"
   | "TESTED_BY"
   | "HAS_FIELD"
-  | "RELATES_TO";
+  | "HAS_FOREIGN_KEY_TO";
 
 export type CodeGraphConfidence = "exact" | "heuristic";
 

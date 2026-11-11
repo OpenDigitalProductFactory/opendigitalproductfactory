@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildArchitectureDrillthrough,
   inspectRoutingDecision,
+  inspectArchitectureSource,
 } from "./architecture-drillthrough";
 
 describe("buildArchitectureDrillthrough", () => {
@@ -252,5 +253,50 @@ describe("inspectRoutingDecision", () => {
         latestEvidenceAt: null,
       }),
     ).toBeNull();
+  });
+});
+
+
+describe("inspectArchitectureSource reference classification", () => {
+  it.each([
+    "it4it:value_stream:value_stream__evaluate",
+    "urn:dpf:architecture:evaluate",
+    "https://example.invalid/reference",
+    "javascript:alert(1)",
+    "../outside.ts",
+    "/etc/passwd",
+    "C:\\source\\example.ts",
+    "unresolved",
+  ])("keeps %s as a reference without a repository-file link", (sourceKey) => {
+    expect(inspectArchitectureSource({ sourceKey })).toEqual({
+      path: sourceKey,
+      symbol: null,
+      version: null,
+      implementationStatus: null,
+      href: null,
+    });
+  });
+
+  it("preserves repository paths, symbols and source metadata", () => {
+    expect(inspectArchitectureSource({
+      sourceKey: "apps/web/lib/ea/architecture-drillthrough.ts#inspectArchitectureSource",
+      sourceVersion: "routing/v1",
+      implementationStatus: "implemented",
+    })).toEqual({
+      path: "apps/web/lib/ea/architecture-drillthrough.ts",
+      symbol: "inspectArchitectureSource",
+      version: "routing/v1",
+      implementationStatus: "implemented",
+      href: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/ea/architecture-drillthrough.ts",
+    });
+  });
+
+  it("preserves extensionless repository file references", () => {
+    expect(inspectArchitectureSource({ sourceKey: "Dockerfile" })?.href)
+      .toBe("https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/Dockerfile");
+  });
+
+  it.each([undefined, null, "", "  ", 42])("retains absent-source behavior for %s", (sourceKey) => {
+    expect(inspectArchitectureSource({ sourceKey })).toBeNull();
   });
 });

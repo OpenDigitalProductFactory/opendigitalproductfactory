@@ -25,10 +25,14 @@ import { Prisma, prisma, loadDiscoveryAttributionInputs, normalizeDiscoveredFact
 import { flagUnconfiguredGateways } from "../../../packages/db/src/discovery-runner";
 
 import { convergeUxSweepFixture, convergeUxSweepEstate } from "./ux-sweep-fixture-core.mjs";
+import { assertForegroundFixtureRuntime } from "./foreground-work-recovery-fixtures";
 import { SWEEP_ROUTE_PARAMS_REL } from "@/lib/ux-budget/route-shells";
 
 void (async () => {
   try {
+    const profile = process.env.DPF_UX_FIXTURE_PROFILE || "route-sweep";
+    if (!["route-sweep", "foreground-finance"].includes(profile)) throw new Error("Unknown UX fixture profile");
+    if (profile === "foreground-finance") assertForegroundFixtureRuntime(process.env);
     // The estate represents a declared test scenario, never the developer's
     // live observations. Both existing CI passes run before authentication.
     if (process.env.CI === "true" && process.env.UX_SWEEP_BASE_URL) {
@@ -45,6 +49,7 @@ void (async () => {
     }
     const result = await convergeUxSweepFixture(prisma, new Date(), {
       dbNull: Prisma.DbNull,
+      storefrontArchetype: profile === "foreground-finance" ? "software-platform" : "pet-rescue",
     });
     console.error(
       result.setupChanged

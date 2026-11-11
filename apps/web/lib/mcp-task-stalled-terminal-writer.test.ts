@@ -202,6 +202,7 @@ describe("reaper-stalled terminal writer resumption", () => {
       },
       data: {
         status: "working",
+        startedAt: expect.any(Date),
         lastHeartbeatAt: expect.any(Date),
         completedAt: null,
         progressPayload: expect.objectContaining({

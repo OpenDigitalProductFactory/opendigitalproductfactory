@@ -118,6 +118,38 @@ function scheduledMinutesFor(item: DemoDemandItem, index: number): number {
   return 5 + index * 5; // in-flight, imminent
 }
 
+/** Reserve provider time without changing demand identity, assignment or status. */
+function reserveProviderCapacity(bookings: DemoBookingUpsert[]): void {
+  const byProvider = new Map<string, DemoBookingUpsert[]>();
+  for (const booking of bookings) {
+    if (booking.durationMinutes <= 0) continue;
+    // A caller-supplied long duration must not turn settled work into future work.
+    if (booking.status === "completed") {
+      booking.scheduledInMinutes = Math.min(booking.scheduledInMinutes, -booking.durationMinutes);
+    }
+    if (!booking.providerId) continue;
+    const reservations = byProvider.get(booking.providerId) ?? [];
+    reservations.push(booking);
+    byProvider.set(booking.providerId, reservations);
+  }
+  for (const reservations of byProvider.values()) {
+    // Keep completed reservations entirely before now, packing conflicts backward.
+    let latestEnd = 0;
+    for (const booking of reservations.filter(b => b.status === "completed")
+      .sort((a, b) => b.scheduledInMinutes - a.scheduledInMinutes)) {
+      booking.scheduledInMinutes = Math.min(booking.scheduledInMinutes, latestEnd - booking.durationMinutes);
+      latestEnd = booking.scheduledInMinutes;
+    }
+    // Stable chronological order preserves preferred starts wherever capacity permits.
+    let earliestStart = 0;
+    for (const booking of reservations.filter(b => b.status !== "completed")
+      .sort((a, b) => a.scheduledInMinutes - b.scheduledInMinutes)) {
+      booking.scheduledInMinutes = Math.max(booking.scheduledInMinutes, earliestStart);
+      earliestStart = booking.scheduledInMinutes + booking.durationMinutes;
+    }
+  }
+}
+
 /**
  * Map a demo business onto its load plan. Pure and total. `input.itemIds` must
  * be non-empty (bookings need a real item to attach to); throws otherwise so the
@@ -206,6 +238,7 @@ export function planDemoLoad(demo: DemoBusiness, input: PlanDemoLoadInput): Demo
       status: bookingStatusFor(item),
     };
   });
+  reserveProviderCapacity(bookings);
 
   return {
     archetypeId,

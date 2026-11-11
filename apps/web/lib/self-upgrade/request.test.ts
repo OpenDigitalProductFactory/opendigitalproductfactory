@@ -85,7 +85,7 @@ vi.mock("@/lib/self-upgrade/admission", () => ({
   admitSelfUpgrade: mocks.admitSelfUpgrade,
 }));
 
-import { requestSelfUpgrade } from "./request";
+import { readSelfUpgradeAdmission, requestSelfUpgrade } from "./request";
 
 const CONFIG = {
   enabled: true,
@@ -488,6 +488,17 @@ describe("requestSelfUpgrade", () => {
     expect(result).toMatchObject({ success: true, status: "queued" });
     expect(mocks.resolveReleaseBatchStatus).not.toHaveBeenCalled();
     expect(mocks.admitSelfUpgrade).toHaveBeenCalled();
+  });
+
+  it("observes eligible admission without resolving a target, deferring or admitting a run", async () => {
+    const input = { requestedBy: "mcp:codex", actorKind: "agent" as const };
+    expect(await readSelfUpgradeAdmission(input)).toMatchObject({ kind: "ready" });
+    expect(mocks.resolveCurrentSelfUpgradeTarget).not.toHaveBeenCalled();
+    expect(mocks.admitSelfUpgrade).not.toHaveBeenCalled();
+    expect(mocks.recordDeferredUpgradeRequest).not.toHaveBeenCalled();
+    expect(mocks.inngestSend).not.toHaveBeenCalled();
+    expect(await requestSelfUpgrade(input)).toMatchObject({ status: "queued" });
+    expect(mocks.admitSelfUpgrade).toHaveBeenCalledOnce();
   });
 
   it("requires human override when a 24/7 install has no known timezone", async () => {

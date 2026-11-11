@@ -19,6 +19,7 @@ import {
   type RepoIdentity,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok } from "@/lib/shared/action-result";
 
 const DEFAULT_MAX_PAGES = 10;
 const DEFAULT_PER_PAGE = 100;
@@ -48,6 +49,24 @@ export interface UpstreamIssueReaderDeps {
   /** Only issues updated at or after this instant, so a sweep is incremental. */
   since?: Date | null;
   maxPages?: number;
+}
+
+/** Always retain open intake/review coverage, plus state changes since the
+ * previous scan's START (not end), so a closure during pagination is not lost. */
+export async function readControllerIssues(
+  repo: RepoIdentity,
+  cursor: string | null,
+  read = readUpstreamIssues,
+): Promise<UpstreamIssueReadResult> {
+  const open = await read({ repo, state: "open" });
+  if (!open.ok || !cursor) return open;
+  const since = new Date(cursor);
+  if (!Number.isFinite(since.getTime())) return { ok: false, state: "error", error: "Invalid issue reconciliation cursor" };
+  const changes = await read({ repo, state: "all", since });
+  if (!changes.ok) return changes;
+  const issues = new Map(open.issues.map(issue => [issue.number, issue]));
+  for (const issue of changes.issues) issues.set(issue.number, issue);
+  return { ...ok(), issues: [...issues.values()] };
 }
 
 interface RawIssue {

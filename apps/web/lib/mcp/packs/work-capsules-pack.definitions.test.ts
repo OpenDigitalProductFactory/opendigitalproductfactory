@@ -29,7 +29,7 @@ describe("Workroom definition catalogue through the installed pack handler", () 
   it("advertises the opt-in view while keeping instance listing the default", () => {
     const tool = workCapsulesPack.definitions.find(row => row.name === "list_workrooms")!;
     const properties = tool.inputSchema.properties as Record<string, unknown>;
-    expect(properties.view).toMatchObject({ type: "string", enum: ["instances", "definitions"] });
+    expect(properties.view).toMatchObject({ type: "string", enum: ["instances", "definitions", "atlas"] });
     expect(tool.inputSchema.required).not.toContain("view");
     expect(tool).toMatchObject({ sideEffect: false, executionMode: "immediate" });
   });

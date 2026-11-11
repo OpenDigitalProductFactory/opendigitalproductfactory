@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "inline-reference",
+  "decisionInteractionId": "DI-6B757DC58D56",
+  "scope": {
+    "files": [
+      "apps/web/components/ea/ArchitectureDrillthroughPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-reference",
+      "details-reference"
+    ]
+  },
+  "decisionProvenance": {
+    "resolvedBy": "agent",
+    "autonomyEligible": true,
+    "limitation": "Prospective publication/adoption choice after a source experiment; not a human ratification, UX-specialist verdict or served-runtime acceptance."
+  }
+}
