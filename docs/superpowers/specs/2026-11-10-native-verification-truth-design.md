@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Native verification truth (BI-57AF5162)
 
 **Status:** proportional medium-fix design and ordered implementation plan.
@@ -43,6 +47,17 @@ invalid base printed a Git fatal error but returned an empty array. The
 fixture was removed. This rules out a prose-parser-only diagnosis and proves
 the discovery defects on current source; it still does not prove why F765's
 runtime projection was missing. No live container or product source changed.
+
+Read-only CLIENT review of the first design commit
+`f8e894e253a54c93d7e89672364d6cffadd4613f` found a propagation gap:
+normalization drops scope/confidence and the default phase requirement checks
+only typecheck. The author then actually invoked the existing required-depth
+check with `verificationDepth: shallow`, transition `build->review`, clean
+typecheck and `scope: none`, zero tests and low confidence. It returned
+`allowed: true`; the assertion that unknown/unrun required tests must not
+qualify failed with exit 1. The advisory typecheck-only check also allowed
+progression, as its existing policy permits. The former is the required-check
+defect; the latter is not authority to claim tests passed.
 
 Reuse the existing [scoped-agent-test design](2026-10-08-sandbox-scoped-agent-tests-design.md),
 especially recording only what ran and catching related test failures. Preserve
@@ -91,14 +106,45 @@ A no-test deterministic result may establish its actual typecheck result. It
 cannot qualify required feature tests or silently supersede unresolved failure
 evidence. Preserve the reported QA result and provenance as a conflict until
 actual source-bound scoped checks resolve it. Do not turn a parsed sentence
-into verified execution. Existing low-confidence/unknown handling must keep
-such a result from becoming an authoritative test pass.
+into verified execution. A low-confidence label alone is insufficient: carry
+observed execution, applicability, unresolved conflict and source provenance
+through the existing normalized output, persisted artifact and reload. The
+existing required-depth check must consume those facts before qualifying tests.
 
 Distinguish unknown scope from an observed empty diff and from legitimate
 exempt/no-covering-test work. Read only the build's existing isolated workdir;
 include its intended committed, staged, unstaged and untracked files. A failed
 reader or missing merge base is not an empty change. Do not sweep another
 build's workspace or fall back to the whole suite.
+
+## Existing policy boundary
+
+The [July 25 evidence-auto-accept plan](../plans/2026-07-25-evidence-gated-autonomous-build-acceptance.md)
+records the operator's June 7 policy: repo-wide test results are informational;
+build-relevant typecheck blocks. It explicitly separates a possible future
+scoped-test refinement. The [verification-first plan](../plans/2026-08-28-verification-first-workroom-gates.md)
+restricts required-depth changes to policy cells that declare that depth.
+
+This fix preserves the current default typecheck-only policy and does not add
+depth requirements to new cells. Permitted advisory phase progression must
+remain visibly typecheck-only; it cannot turn unknown, unrun or conflicting
+tests into qualified or executed passes. At an existing required shallow/deep
+check, zero failures alone is insufficient: consume observed execution and
+applicability, reject unknown/unrun required tests and unresolved relevant
+failures, and honor positively established exemptions without inventing test
+passes. A future change to default hard-gating is separate work, not an
+implicit consequence of this fix.
+
+Keep original QA evidence and provenance when a later deterministic check
+cannot resolve it. Only relevant current-source execution or demonstrated
+out-of-scope exclusion resolves a conflict. Preserve these structured facts
+through save and reload rather than relying on an excerpt that is truncated
+to 500 or 2,000 characters. Do not rewrite historical records as new execution.
+
+The CLIENT reviewer confirmed these conditions address the design finding;
+that critique is not native approval or implementation evidence. A kernel
+options call returned low-confidence advisory advice with missing dimensions,
+not ratification for a new default policy. No such policy change is executed.
 
 ## Ordered work and traceability
 
@@ -123,10 +169,16 @@ V-INTEGRATION and V-SERVED are defined by these steps.
 4. **V-GIT / C-SCOPE / F-WIP:** reproduce discovery with temporary git fixtures,
    then correct committed/staged/unstaged/untracked handling and reader errors.
    Prove isolation and empty-diff versus unknown behavior. No live Docker action.
-5. **V-INTEGRATION:** exercise the actual producer-to-saved-output-to-gate path
-   with the existing orchestrator tests. Known relevant failures stay blocked;
-   real scoped verification can advance; legitimate exempt work retains
-   proportional checks and truthful counters.
+5. **V-INTEGRATION:** exercise initial verification, the repair callback and
+   post-repair save, including their independent Boolean-to-count conversions.
+   Test normalized output, actual artifact save/reload and the existing
+   required-depth requirement together. Unknown/unrun required tests and
+   unresolved relevant failures do not qualify; real relevant scoped checks
+   can resolve them. Positively established exemptions remain distinct from
+   unknown scope and record no executed passes. Add controls proving unchanged
+   advisory typecheck-only progression and truthful unqualified/conflicted
+   test signals. Assert structured source/conflict provenance survives output
+   truncation and reload, not merely the resolver's returned string.
 6. Run affected tests and package typecheck, independent source review and the
    required exact-tree shared/cloud gate. Preserve every failure or unrun
    result. Publish through a signed-off protected PR and normal canonical
@@ -136,10 +188,17 @@ V-INTEGRATION and V-SERVED are defined by these steps.
    failure recovery and reload. Record actual evidence before completion.
 
 Expected implementation surface is the existing
-`apps/web/lib/build/deterministic-build-verification.ts` and its tests,
-`coding-agent.ts` and its tests only where runner contract changes require it,
-and `build-orchestrator.ts` and its tests for actual integration. Claim exact
-paths and consume the change-impact contract before editing product source.
+`apps/web/lib/build/deterministic-build-verification.ts` and its tests;
+`coding-agent.ts` for observed runner facts; `build-orchestrator.ts` and
+`build-pipeline.ts` for initial/repair/post-repair writers;
+`verification-output.ts` for normalization; `verification-preflight.ts` for
+qualification reuse; and
+`apps/web/lib/explore/verification-depth-requirement.ts` for its already
+required check. Cover their affected tests. Inspect `owner-change-view.ts` and
+`auto-accept.ts` for claims made from those shared facts; change them only if
+the existing normalized contract cannot preserve truthful advisory meaning.
+No default lifecycle matrix cell changes. Claim exact paths and consume the
+change-impact contract before editing product source.
 No separate plan document is required for this medium fix; record and check
 live plan coverage against this immutable design's ordered work.
 
