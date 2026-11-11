@@ -19,6 +19,7 @@
  */
 import { prisma, type Prisma } from "@dpf/db";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
+import { observeHostClock } from "@/lib/shared/host-suspension";
 import { resolveThresholdForTaskRun } from "./threshold-lookup";
 
 export async function heartbeat(taskRunId: string): Promise<boolean> {
@@ -30,6 +31,9 @@ export async function heartbeat(taskRunId: string): Promise<boolean> {
   // Filter accepts both "working" (canonical A2A) and "active" (legacy
   // value still written by deliberation-run.ts and a couple of paths that
   // haven't been migrated). The watchdog uses the same dual-state filter.
+  // BI-4FDE4050: a beat is the instant the stale checks measure from, so
+  // record the clock relationship here to place any later suspension exactly.
+  observeHostClock();
   try {
     const result = await prisma.taskRun.updateMany({
       where: { taskRunId, status: { in: [...TASK_LIVE_STATES] } },

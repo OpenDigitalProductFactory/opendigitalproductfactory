@@ -21,6 +21,8 @@ import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
+import { isStale } from "@/lib/shared/staleness";
+import { livenessNow } from "@/lib/shared/host-suspension";
 import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait, readCapacityRecoveryWait, readSemanticReviewBudget, semanticReviewNodeEligibility,
   semanticReviewCapacityWaitMs, semanticReviewEffectiveDeadline } from "./semantic-review-recovery-policy";
 import { readSemanticReviewRemediation } from "./semantic-review-remediation";
@@ -701,7 +703,11 @@ export async function reconcileSemanticReviews(now = new Date()) {
     if (row.status === "submitted" && now.getTime() >= Date.parse(String(state(row).deadlineAt))
       && row.updatedAt.getTime() >= now.getTime() - STALE_MS) continue;
     if (row.status !== "submitted") {
-      if (row.lastHeartbeatAt && now.getTime() - row.lastHeartbeatAt.getTime() < STALE_MS) continue;
+      // BI-4FDE4050: measure silence in this process's running time. After the
+      // host wakes, this wall-clock cron can fire before the executor's ticker
+      // (monotonic) beats again; host sleep is not executor loss.
+      const heartbeatAt = row.lastHeartbeatAt;
+      if (heartbeatAt && !isStale(livenessNow(now, heartbeatAt), heartbeatAt, STALE_MS)) continue;
       const unfinished = await prisma.taskNode.findFirst({ where: { taskRunId: row.id, status: { notIn: ["completed", "superseded"] } }, select: { id: true } });
       if (unfinished) {
         if ((await parkLostReview(row, "provider-outcome-uncertain-after-restart")).changed) waiting += 1;
