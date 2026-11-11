@@ -3,10 +3,8 @@
   "decidedOption": "existing-cards-truthful",
   "decisionInteractionId": "DI-0624E2130697",
   "scope": { "files": [
-    "apps/web/components/build/BuildVerificationScopedCard.tsx",
     "apps/web/components/build/EvidenceSummary.tsx",
-    "apps/web/components/build/ReviewPanel.tsx",
-    "apps/web/components/build/WorkflowStageInspector.tsx"
+    "apps/web/components/build/ReviewPanel.tsx"
   ] },
   "evidence": { "kind": "propose-n-pick", "consideredOptions": ["existing-cards-truthful", "separate-verification-workspace"] },
   "sourceDecision": {
