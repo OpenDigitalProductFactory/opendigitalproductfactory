@@ -1,6 +1,8 @@
 # Security and authentication stack assessment
 
 **As assessed:** 2026-08-30 against `origin/main` at `9b31fa091` and the live PostgreSQL backlog
+
+**Delivery update:** 2026-11-10—the provider-neutral startup boundary and first optional 1Password Connect adapter are implemented under BI-E7553A1C.
 **Backlog:** BI-E7553A1C  
 **Scope:** identity, authentication, sessions, authorization, LDAP, PKI/mTLS, machine tokens, connector credentials, and runtime root-secret custody
 
@@ -10,7 +12,7 @@ The architecture has converged substantially since the older enterprise-auth pla
 
 The largest remaining security risks are at the edges of that architecture:
 
-1. root secrets are single environment values with no executable external-provider boundary and no key-version rotation path;
+1. root secrets have an optional external-custody boundary, but no key-version rotation path;
 2. production's `operator-only` credential stance is advisory at several host/container access boundaries rather than universally enforced;
 3. local workforce login has no native MFA/passkey assurance tier even though policy surfaces refer to step-up;
 4. customer/social authentication does not consult the Principal spine at the same sign-in boundary used by workforce credentials;
@@ -34,7 +36,7 @@ The largest remaining security risks are at the edges of that architecture:
 | PKI / mTLS | One organization CA issues portal/edge/directory material; no self-signed downgrade. | pinned Step CA image, bootstrap scripts, TLS overlays, PKI contract tests, LDAP TLS loader. | Implemented foundation. | Continue certificate-expiry, renewal, revocation, recovery, and canonical-runtime evidence; 1Password may hold keys but never becomes issuer/trust authority. |
 | Connector credentials | One provider-neutral store owns schemas, encrypted fields/token cache, redaction, health, reconnect, and audit. | `IntegrationCredential`; connector kernel credential store; AES-256-GCM guard. | Strong lifecycle boundary. | Ciphertext format has no key id/version; changing `CREDENTIAL_ENCRYPTION_KEY` makes old ciphertext unreadable. File separate rotation work. |
 | Social-provider secrets | Secret values should use the same protected credential boundary. | Auth sync reads `google_client_secret` and `apple_client_secret` from `PlatformConfig` into env. | Gap: this is outside the connector credential kernel and its encrypted envelope. | Migrate to the canonical credential store in a focused BI; do not route it through the 1Password bootstrap item. |
-| Runtime root secrets | Logical secrets are portable across `.env`, cloud managers, Kubernetes, and external vaults. | Deployment contract §8 says this; compose currently injects `AUTH_SECRET` and `CREDENTIAL_ENCRYPTION_KEY` from `.env`. | Design exists, adapter substrate absent. | BI-E7553A1C implements the provider boundary and first 1Password Connect adapter. |
+| Runtime root secrets | Logical secrets are portable across `.env`, cloud managers, Kubernetes, and external vaults. | `runtime-secret-bootstrap.mjs` resolves the environment default or one explicitly selected 1Password Connect item before migrations; Compose forwards only provider-edge configuration. | Provider-neutral boundary and first optional adapter implemented by BI-E7553A1C. | Add future providers behind the same contract; key rotation remains separate BI-32935E47. |
 | Production agent access | Production credentials are operator-only and an agent cannot mint/read them merely because it can exec a container. | Installation stance reports `operator-only`; recovery backlog captured the missing enforcement problem. | Critical policy/enforcement gap; not live backlog-covered after installation replacement. | Re-file as live governed work; external custody reduces persistence but cannot protect a secret from a fully privileged process that legitimately consumes it. |
 | Assurance / MFA | Sensitive actions require real step-up, not merely an approval label. | OAuth scope challenges and channel policies model `auth-required`; GitHub upstream auth delegates 2FA to GitHub. | Partial. | DPF portal workforce MFA/passkeys and consistent AAL/session policy need design and live BI coverage. |
 
@@ -49,7 +51,7 @@ The largest remaining security risks are at the edges of that architecture:
 
 ## Priority order
 
-1. **Now—BI-E7553A1C:** externalize startup root-secret custody behind a provider-neutral, fail-closed boundary; keep environment as default and 1Password optional.
+1. **Delivered—BI-E7553A1C:** startup root-secret custody is provider-neutral and fail-closed; environment remains the default and 1Password Connect is optional.
 2. **Next—BI-32935E47:** version the encrypted credential envelope, support read-old/write-new, controlled re-encryption, recovery, and compromise rotation before encouraging routine key rotation.
 3. **Next—BI-80E4A139:** enforce `operator-only` at grants, host/runtime actions, diagnostics, and container-exec exposure boundaries; external vault use is defense in depth, not the enforcement mechanism.
 4. **Next—BI-C9656270:** choose and implement workforce passkeys/MFA plus session/reauthentication tiers against NIST SP 800-63B-4.
