@@ -4,8 +4,7 @@
   "decisionInteractionId": "DI-A64D5B09381E",
   "scope": {
     "files": [
-      "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx",
-      "apps/web/app/(shell)/ops/workrooms/page.tsx"
+      "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx"
     ]
   },
   "evidence": {
