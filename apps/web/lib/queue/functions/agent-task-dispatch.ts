@@ -49,6 +49,19 @@ export const agentTaskDispatch = jobs.createFunction(
       }
     });
 
+    // BI-31C1FDEC: re-send room wakes an outage left undecided (the outbox half
+    // of the addressed-message wake). Idempotent per message; the room store
+    // stays the record either way.
+    await step.run("republish-pending-room-wakes", async () => {
+      try {
+        const { sweepPendingRoomWakes } = await import("@/lib/work-management/room-message-wake.server");
+        return await sweepPendingRoomWakes();
+      } catch (error) {
+        console.warn("[agent-task-dispatch] room wake sweep unavailable", error);
+        return { outcome: "unavailable" };
+      }
+    });
+
     // Once an hour (on the top-of-hour :00 tick of this */5 poll), converge every
     // coworker self-task with its owner's Proactivity toggle so the two can't
     // silently desync — create tasks for coworkers turned up before they were

@@ -13,6 +13,7 @@ import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
 import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
+import { roomMessageDispatch, roomWakeRun } from "./room-message-wake";
 import { documentRenditionBackfill, documentRenditionGenerate } from "./document-renditions";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
@@ -298,6 +299,8 @@ export const eventFunctions = [
   deliberationRun,
   governedBacklogTeeUpRequested,
   issueReportProjectOnCreate,
+  roomMessageDispatch, // BI-31C1FDEC: an addressed room message wakes its recipient
+  roomWakeRun, // BI-31C1FDEC: one coalesced reply run per coworker per room
   documentRenditionGenerate, // BI-9D43CBEF: office file saved -> PDF + text renditions, indexed
   documentRenditionBackfill, // BI-9D43CBEF/BI-153EC72C: bounded, draining sweep at portal start, on a pin change, and when the converter becomes available
   contributorInventorySyncOnDemand,
