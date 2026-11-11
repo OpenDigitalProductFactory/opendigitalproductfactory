@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { InvocationAttribution } from "@/lib/work-capsules/invocation-attribution";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { DataTable, StatCard, StatusBadge, type Column } from "@/components/ui/report-kit";
@@ -38,6 +39,7 @@ export type WorkroomInventoryRow = {
   capsuleId: string; backlogItemId: string | null; title: string; status: string;
   portfolioRole: string | null; pullRequestUrl: string | null;
   liveness: string; isLive: boolean;
+  attribution: InvocationAttribution;
   accountableName?: string | null; operator?: WorkroomOperatorSummary;
   coo?: WorkroomCooFields | null;
 };
@@ -65,6 +67,8 @@ const columns: Column<WorkroomInventoryRow>[] = [
   { key: "detail", header: t("inventory.details"), cell: room => <details>
     <summary className="cursor-pointer text-dpf-accent">{t("inventory.technical")}</summary>
     <div className="mt-2 max-w-xs space-y-2 break-words text-dpf-caption text-dpf-muted">
+      <p>{room.attribution.executor}</p>
+      <p>{room.attribution.invocation}</p>
       <Link className="text-dpf-accent hover:underline" href={roomHref(room)}>{t("inventory.openEvidence")}</Link>
       {viewOf(room).recoveryCondition && <p>{t("inventory.recovery", { condition: viewOf(room).recoveryCondition ?? "" })}</p>}
       {room.pullRequestUrl && <Link className="text-dpf-accent hover:underline" href={room.pullRequestUrl}>{t("inventory.change")}</Link>}
