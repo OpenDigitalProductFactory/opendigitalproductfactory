@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { GRANT_IMPLICATIONS, TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+import { WIKI_CORPUS_GRANTS } from "@/lib/tak/corpus-read-scope";
 import { listWorkShapes } from "./work-shapes";
 import { roomGrantsFromWorkShape, roomAuthorizesTool } from "./room-turn-authority";
 
@@ -12,6 +13,10 @@ import { roomGrantsFromWorkShape, roomAuthorizesTool } from "./room-turn-authori
 const grantsAnyToolRequires = new Set<string>([
   ...Object.values(TOOL_TO_GRANTS).flat(),
   ...Object.keys(GRANT_IMPLICATIONS),
+  // BI-825D3487: the corpus grants admit no tool (tool grants are alternatives,
+  // so listing them would widen access). They scope what the knowledge read
+  // paths return, enforced at runtime by lib/tak/corpus-read-scope.ts.
+  ...WIKI_CORPUS_GRANTS,
 ]);
 
 /**

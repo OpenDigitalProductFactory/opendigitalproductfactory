@@ -1,7 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-decision-via-kernel
-description: "Use when an open DPF question has two or more architecturally-distinct options that need kernel scoring."
+description: "Use for DPF ambiguity, stuck recovery, build scope, or delegation needing WWMD before a human ask."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
@@ -13,7 +13,7 @@ category: governance
 assignTo: ["*"]
 capability: null
 taskType: deliberation
-triggerPattern: "open question|trade-off|which approach|2-3 options|architectural decision|how should we"
+triggerPattern: "open question|ambiguity|blocked|stuck|recovery|work scope|delegation|which approach|how should I proceed"
 userInvocable: true
 agentInvocable: true
 allowedTools: ["mcp__dpf__principle_decide", "mcp__dpf__wiki_query"]
@@ -30,7 +30,7 @@ enforces:
 
 # DPF Decision via Kernel (WWMD)
 
-When you face an open question with 2+ architecturally-distinct options inside the DPF codebase, **do not pick by gut**. Map each option to the closed `PRINCIPLE_DIMENSIONS` registry, call the `principle_decide` MCP tool, and surface the contribution ledger to the operator. This is "What Would Mark Do" (WWMD) as a tool, not a guess — and it sits in front of `dpf-brainstorming` whenever the brainstorm produces multiple viable options.
+When you face an open platform/build question with 2+ distinct options inside the DPF codebase, **do not pick by gut or ask the operator cold**. This includes ambiguity about recovery, work scope, delegation, or how to finish an autonomous directive. Enumerate the viable paths from governed context, map them to the closed `PRINCIPLE_DIMENSIONS` registry, call `principle_decide`, and act on an autonomy-eligible result. This is "What Would Mark Do" (WWMD) as a tool, not a guess.
 
 > **Surface boundary (WWMD vs WWWD).** This skill is the **platform-development (WWMD)** decision surface — it scores against the founder kernel and is for DPF contributors and Build Studio *platform* work. It is **not** the path for a customer's *business* decision: those route through the Decision Perspective Gate against the organization's **WWWD** profile, which enforces the non-inherit boundary (a customer profile does not inherit platform business judgment as authority). The two surfaces are being consolidated so the Gate is the single governed door (BI-E1FB2307). See [AGENTS.md §11](../../../../AGENTS.md) and `docs/user-guide/ai-workforce/decision-perspective.md`.
 >
@@ -42,6 +42,8 @@ When you face an open question with 2+ architecturally-distinct options inside t
 - Reviewing a design doc with open questions in §X.
 - Mid-implementation choice: refactor vs special-case, schema migration shape A vs B, tool surface async vs sync, eager vs lazy materialization.
 - Operator asks "which way should we go on X?" with no obvious answer.
+- A task is blocked or stuck and the next recovery, finishing scope, or delegation path is ambiguous.
+- You are about to ask "how should I proceed?" on a platform/build objective the system can classify and score.
 
 ## When NOT to use
 

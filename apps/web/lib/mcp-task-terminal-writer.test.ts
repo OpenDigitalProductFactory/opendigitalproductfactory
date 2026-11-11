@@ -144,6 +144,7 @@ describe("terminal writer resumption", () => {
       where: { taskRunId: "TR-MCP-SAME-WRITER-RUN", status: "input-required", updatedAt },
       data: {
         status: "working",
+        startedAt: expect.any(Date),
         lastHeartbeatAt: expect.any(Date),
         completedAt: null,
         progressPayload: expect.objectContaining({

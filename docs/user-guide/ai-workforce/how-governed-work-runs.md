@@ -247,6 +247,11 @@ you to approve its attempt to invite itself. The call stops without creating an 
 request and names the recovery control instead: the room's current human owner opens the
 room and uses **Participants** to add the approved assistant. Retrying the unchanged call
 returns the same guidance rather than filling the inbox with approvals that can only fail.
+Similarly, an invited coworker whose data access is below the room's level is stopped
+before any approval. The refusal names both levels. The inviting coworker can then ask
+again for the one approval that admits the invitee and raises its data access to the
+room's level. A restricted room is the exception: its access is granted under
+**Coworker data access** first.
 An owner change takes effect immediately; a historical creator or lease holder does not
 override a current accountable owner or coordinator.
 
@@ -308,6 +313,10 @@ including access to the release queue. This answer does not start or schedule
 an update. Existing pending or approved requests and recent completed outcomes
 keep their original handling. When an update could proceed, or the check is
 uncertain, the normal approval rules remain.
+
+### A "no" is answered once
+
+When the gate refuses a call, the answer says what happens next. Sometimes there is an exact call to make instead, such as checking an approval's status. Sometimes the answer is "do not retry", together with what would change it: your decision on a request, a change to the coworker's access, or a missing input. A coworker or connected assistant that sends the identical call again gets the same answer back. That repeat is not checked again, and it never puts a second card in front of you. Changing the coworker's access or the call's details makes it a new call, which is checked at once. Once you approve or decline a request, the approved call can run. Repeated identical refusals are recorded as an improvement signal, so a coworker that keeps hitting the same wall shows up as one item of work rather than thousands of attempts.
 
 ### The floors nothing crosses
 

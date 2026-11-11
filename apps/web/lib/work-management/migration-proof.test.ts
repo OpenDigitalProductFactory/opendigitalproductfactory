@@ -57,6 +57,8 @@ const PRE_MIGRATION_KEYS = readJson<string[]>(join(FIXTURES, "work-shape-keys.pr
 const REGISTERED_AFTER_MIGRATION: readonly string[] = [
   "acceptance-verification",
   "platform-post-implementation-review",
+  "platform-design-review",
+  "platform-architecture-review",
   "source-inquiry",
   "backlog-steward-watch",
 ];

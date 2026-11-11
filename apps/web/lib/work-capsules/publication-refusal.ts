@@ -54,7 +54,7 @@ async function resolveDeliveredCloseout(input: Parameters<typeof assertWorkroomP
 
 /** The MCP answer for a refusal: the code, the reason, and what to do next. */
 export function publicationRefusedToolResult(
-  error: Pick<WorkCapsulePublicationRefusedError, "code" | "reason" | "deliveredCloseout">,
+  error: Pick<WorkCapsulePublicationRefusedError, "code" | "reason" | "deliveredCloseout" | "undisposedDocs">,
   input: { capsuleId: string; status: string },
 ): ToolResult {
   const delivered = error.deliveredCloseout;
@@ -66,7 +66,13 @@ export function publicationRefusedToolResult(
       capsuleId: input.capsuleId,
       requestedStatus: input.status,
       ...(delivered ? { deliveredCloseout: delivered } : {}),
-      nextAction: delivered
+      ...(error.undisposedDocs ? { undisposedDocs: error.undisposedDocs } : {}),
+      nextAction: error.code === "docs_impact_disposition_required"
+        ? "Update each listed doc in this change (then re-claim its path with claim_workroom_scope), or call "
+          + 'record_workroom_evidence kind "docs-impact-disposition" with result '
+          + '{ docs: [{ doc, disposition: "updated" | "not-affected", reason }] }; not-affected needs a reason. '
+          + "Then retry update_workroom_status."
+        : delivered
         ? `This room is delivered: PR #${delivered.pullRequestNumber} is bound and ${delivered.backlogItemId} is done. `
           + "The failure review gates publication of unpublished changes, so do not re-gate merged code. "
           + `Close it as delivered with update_workroom_status status "archived" and a reason naming the merge and the done item, `

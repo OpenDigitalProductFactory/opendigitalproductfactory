@@ -35,6 +35,7 @@ function stanceFor(
     pairedRef?: string;
     primaryPurpose?: InstallationOperatingPurpose;
     pairingIsEstablished?: boolean;
+    peerEnvironmentClass?: InstallationEnvironmentClass | null;
   } = {},
 ) {
   const snapshot = buildInstallationOperatingProfileSnapshot({
@@ -51,6 +52,7 @@ function stanceFor(
       // Default to an established pairing so the existing cases keep asserting
       // the linked behaviour; the unestablished case is covered explicitly.
       pairingIsEstablished: options.pairingIsEstablished ?? true,
+      peerEnvironmentClass: options.peerEnvironmentClass,
     },
     { holdsIrreplaceableWork: options.holdsIrreplaceableWork ?? false },
   );
@@ -102,9 +104,25 @@ describe("resolveInstanceStance", () => {
   });
 
   it("allows governed peer writes only between production installations", () => {
-    expect(stanceFor("production", { pairedRef: "operator-production" }).peerWrite).toBe(
+    expect(stanceFor("production", { pairedRef: "operator-production", peerEnvironmentClass: "production" }).peerWrite).toBe(
       "governed-write",
     );
+  });
+
+  // BI-0716C8A8: the peer's class is read, not assumed from our own.
+  it("holds an attested development peer read-only from production (AC-1)", () => {
+    const stance = stanceFor("production", { pairedRef: "Windows DEV", peerEnvironmentClass: "development" });
+    expect(stance.peerWrite).toBe("read-only");
+    expect(stance.rationale.peerWrite).toContain("attested development installation");
+    expect(stance.rationale.peerWrite).not.toContain("Both installations are production");
+  });
+
+  it("neither writes to nor tasks a peer whose class the CA never attested", () => {
+    for (const peerEnvironmentClass of [null, undefined]) {
+      const stance = stanceFor("production", { pairedRef: "Windows DEV", peerEnvironmentClass });
+      expect(stance.peerWrite).toBe("none");
+      expect(stance.rationale.peerWrite).toContain("not attested");
+    }
   });
 
   it("reports no peer when none is paired", () => {
@@ -133,7 +151,7 @@ describe("formatInstanceStanceBriefing", () => {
       }),
     );
     expect(briefing).toContain("development installation, purpose evolve-dpf");
-    expect(briefing).toContain("Paired installation: operator-production.");
+    expect(briefing).toContain("Paired installation: operator-production, class not attested.");
     expect(briefing).toContain("Teardown — capture-required");
     expect(briefing).toContain("Peer — read-only");
   });
@@ -209,5 +227,22 @@ describe("workSync requires an established link, not a typed name", () => {
     // Without a link the sentence is never shown: a declared peer is intent, not evidence.
     const unlinked = resolveInstanceStance(snapshot, { sourceCapable: false, pairingIsEstablished: false, workSyncHealthLine: line });
     expect(unlinked.rationale.workSync).not.toBe(line);
+  });
+});
+
+describe("formatInstanceStanceBriefing — paired installation (BI-0716C8A8 AC-3)", () => {
+  it("names the peer installation, not the organization, when the link knows it", () => {
+    const snapshot = buildInstallationOperatingProfileSnapshot({
+      intent: intent({ pairedProductionInstallationRef: "operator-organization" }),
+      environmentClass: "production",
+    });
+    const stance = resolveInstanceStance(
+      snapshot,
+      { sourceCapable: false, pairingIsEstablished: true, peerEnvironmentClass: "development", peerInstallationLabel: "Windows DEV (did_ab12…9f0c)" },
+      { holdsIrreplaceableWork: false },
+    );
+    const briefing = formatInstanceStanceBriefing(stance);
+    expect(briefing).toContain("Paired installation: Windows DEV (did_ab12…9f0c), an attested development installation.");
+    expect(briefing).not.toContain("Paired installation: operator-organization");
   });
 });

@@ -31,6 +31,14 @@ export type SystemLocalModelEvent = {
   observedAt: string;
 };
 
+export type SystemMapPackInstallEvent = {
+  /** The street-map install status changed (BI-43BBCC26); observers re-read the status projection. */
+  type: "system:map-pack-install";
+  packId: string | null;
+  state: "idle" | "planning" | "downloading" | "finalizing" | "done" | "failed";
+  observedAt: string;
+};
+
 export type AgentEvent =
   // Attention Surface (EP-ATTENTION-SURFACE, BI-094A124F): a new pending-human
   // item appeared. Broadcast system-wide so the "Needs you" inbox refreshes live.
@@ -150,7 +158,8 @@ export type AgentEvent =
   // functions waiting on platform.quiescence-cleared. Spec §7.1.
   | SystemQuiescenceEvent
   | SystemSelfUpgradeEvent
-  | SystemLocalModelEvent;
+  | SystemLocalModelEvent
+  | SystemMapPackInstallEvent;
 
 type Handler = (event: AgentEvent) => void;
 

@@ -790,9 +790,12 @@ export async function sendMessage(input: {
     const wikiQuery = perspective.needsPageContext
       ? buildPerspectiveQuery(input.content, pageTopic)
       : input.content;
+    // BI-825D3487: recall skips a corpus whose grant this coworker does not hold.
+    const { resolveCorpusReadScope } = await import("@/lib/tak/corpus-read-scope");
     let wikiContext = await recallWikiContext({
       query: wikiQuery,
       organizationId: wikiOrg?.id ?? null,
+      corpusScope: await resolveCorpusReadScope(agent.agentId),
       limit: 4,
       preferredPageKinds: perspective.perspective
         ? PERSPECTIVE_PAGE_KINDS[perspective.perspective]

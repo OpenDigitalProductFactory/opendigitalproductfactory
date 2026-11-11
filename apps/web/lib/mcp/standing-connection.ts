@@ -48,6 +48,9 @@ async function firstLiveConnection(
 ): Promise<StandingConnection | null> {
   const tool = PLATFORM_TOOLS.find((candidate) => candidate.name === toolName);
   for (const row of rows) {
+    // BI-9CCB88C4: credentials clients cannot carry independent review.
+    // Skip only this tool so Grok credentials connections still write elsewhere.
+    if (toolName === "request_coworker" && row.oauthClient?.registrationKind === "credentials") continue;
     if (!tokenAdmitsTool(tool, getToolGrantMapping()[toolName], row)) continue;
     if (!await isCurrentOAuthExecutionAuthority(row)) continue;
     const userContext = await currentUserContext(userId);

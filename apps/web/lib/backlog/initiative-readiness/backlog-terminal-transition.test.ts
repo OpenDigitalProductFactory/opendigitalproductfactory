@@ -79,6 +79,32 @@ const authority = {
 };
 
 describe("completeBacklogItemTransition", () => {
+  it.each([" refactor ", "future-kind", ""])("refuses malformed workType %j without a terminal mutation", async (workType) => {
+    const fake = fakeDb(1, workType, { activeBuild: { kind: "feature" } });
+    const result = await completeBacklogItemTransition({
+      db: fake.db,
+      itemId: "BI-1",
+      expectedStatus: "in-progress",
+      resolution: "Attempted completion with an invalid persisted classification.",
+      completionEvidence: {},
+      actor,
+      authority,
+      dependencies: {
+        resolveDeploymentClosure: async () => ({ kind: "unavailable", reason: "isolated legacy fixture" }),
+        resolveCompletionEvidence: async () => ({
+          kind: "evaluated",
+          item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType },
+          verdict: { allowed: true, noOp: false, normalizedManifest: null, blockers: [], nextAction: null },
+        }),
+        reconcileObjectives: () => ({ state: "missing", baselineId: null, evidenceRefs: [], requiredStatementIds: [] }),
+        resolveMergeDelivery: async () => "signal-unavailable",
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "CLASSIFICATION_REQUIRED" });
+    expect(fake.updateMany).not.toHaveBeenCalled();
+  });
+
   it("refuses a refactor completion with missing governed evidence instead of passing as doc-only", async () => {
     const fake = fakeDb(1, "refactor");
     const result = await completeBacklogItemTransition({
