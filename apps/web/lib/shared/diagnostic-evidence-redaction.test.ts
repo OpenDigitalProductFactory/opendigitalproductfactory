@@ -24,6 +24,9 @@ it.each([
  ['"password": "synthetic fixture value"', '"password": "[redacted-token]"'],
  [String.raw`secret="synthetic \"quoted\" fixture value"`, 'secret="[redacted-token]"'],
  ["https://synthetic-user@registry.invalid/path", "https://[redacted-token]@registry.invalid/path"],
+ ["GITHUB_TOKEN=synthetic-fixture-value", 'GITHUB_TOKEN="[redacted-token]"'],
+ ["AWS_SECRET_ACCESS_KEY=synthetic-fixture-value", 'AWS_SECRET_ACCESS_KEY="[redacted-token]"'],
+ ["ANTHROPIC_API_KEY=synthetic-fixture-value", 'ANTHROPIC_API_KEY="[redacted-token]"'],
 ])("excludes the complete Docker credential while preserving context", (value, expected) => {
  expect(redactDiagnosticEvidenceText(value, { credentialAssignments: true })).toBe(expected);
 });
@@ -34,4 +37,8 @@ it("removes complete URL userinfo through its final authority separator", () => 
 it("preserves existing callers' assignment-like evidence by default", () => {
  const value="password=labelled-test-prose; https://fixture:labelled@registry.invalid";
  expect(redactDiagnosticEvidenceText(value)).toBe(value);
+});
+it("preserves ordinary diagnostic counters with credential-like prefixes", () => {
+ const value='token_count=2000 secretCount=0 passwordPolicy="length"';
+ expect(redactDiagnosticEvidenceText(value, { credentialAssignments: true })).toBe(value);
 });

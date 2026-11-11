@@ -17,5 +17,5 @@ export function redactDiagnosticEvidenceText(text:string, options: { credentialA
   if (!options.credentialAssignments) return redacted;
   return redacted
     .replace(/(https?:\/\/)[^\s/?#]+@/gi, "$1[redacted-token]@")
-    .replace(/(\b(?:token|secret|password|authorization)["']?\s*[=:]\s*)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s,;]+)/gi, '$1"[redacted-token]"');
+    .replace(/(\b[\w-]*(?:token|secret|password|authorization|api[_-]?key|access[_-]?key)["']?\s*[=:]\s*)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s,;]+)/gi, '$1"[redacted-token]"');
 }
