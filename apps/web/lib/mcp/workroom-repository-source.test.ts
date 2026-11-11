@@ -80,3 +80,16 @@ describe("read-only research authority boundaries", () => {
     expect(await prepareWorkroomRepositorySource(args)).toBeNull();
   });
 });
+
+it("rechecks actor access on the supplied publication transaction, not global state", async () => {
+  io.room.mockResolvedValue({ ...room, headBranch: null, baseSha: null, headSha: null,
+    scopeClaims: [{ workShape: "source-inquiry@1.0.0" }] });
+  const tx = { workroom: { findFirst: io.room }, backlogItem: { findFirst: io.item }, $queryRaw: io.lock };
+  io.access.mockImplementation(async (_input, store) => ({ decision: { level: store === tx ? "none" : "action" } }));
+  const result = await prepareSourceInquiryResearch({ ...args, artifactRef: {
+    kind: "repo-blob-at-commit", repositoryFullName: room.repositoryFullName, commitSha: "c".repeat(40),
+    path: "package.json", providerBlobId: "d".repeat(40) } });
+  expect(result).not.toBeNull();
+  expect(await result?.admissionGuard(tx as never)).toBe(false);
+  expect(io.access).toHaveBeenLastCalledWith(expect.objectContaining({ requested: "action" }), tx);
+});

@@ -62,10 +62,10 @@ export async function prepareWorkroomRepositorySource(args: {
 export async function prepareSourceInquiryResearch(args: {
   workroomId: unknown; itemId: string; userId: string; agentId: string | null;
   artifactRef: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
-}, db: SourceDb = prisma) {
+}, db: Prisma.TransactionClient = prisma) {
   if (typeof args.workroomId !== "string" || !args.userId || !args.agentId) return null;
   const locator = { ...args.artifactRef };
-  const load = async (store: SourceDb) => {
+  const load = async (store: Prisma.TransactionClient) => {
     const room = await store.workroom.findFirst({ where: { capsuleId: args.workroomId as string },
       select: { id: true, capsuleId: true, backlogItemId: true, repositoryFullName: true,
         status: true, archivedAt: true, scopeClaims: true, headBranch: true, headSha: true,
@@ -79,10 +79,10 @@ export async function prepareSourceInquiryResearch(args: {
       select: { id: true, itemId: true } });
     if (!item || item.itemId !== args.itemId
       || (await resolveAgentWorkroomAccess({ userId: args.userId, agentId: args.agentId!, workroomId: room.id,
-        requested: "action" })).decision.level !== "action") return { kind: "unavailable" as const };
+        requested: "action" }, store)).decision.level !== "action") return { kind: "unavailable" as const };
     return { kind: "bound" as const, itemRowId: item.id, room, locator };
   };
-  const observation = await prepareCurrentArtifactObservation({ db, load: store => load(store as SourceDb),
+  const observation = await prepareCurrentArtifactObservation({ db, load: store => load(store as Prisma.TransactionClient),
     read: async binding => binding, unbound: () => null, unavailable: null,
     isUnavailable: value => value === null });
   if (!observation.evidence) return null;

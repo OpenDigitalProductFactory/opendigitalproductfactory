@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Verified-existing source inquiry closure
 
 Backlog: BI-CAP-EB412C95. Delivery workroom: WC-2A5A8FC7.
@@ -99,3 +102,13 @@ branch-scoped get_backlog_item selector remains a delivery-source selector; it
 does not invent source identity for inquiries. The receipt retains the inquiry
 room id for freshness observation; completion still requires source and manual
 verification evidence.
+
+Client review found transaction-local access was initially read through global
+Prisma. A regression now distinguishes revoked transaction access from admitted
+global access; the inquiry loader passes its actual transaction to the shared
+access resolver. This is a client finding, not a native review receipt. The old
+exact-tree gate was interrupted before shared admission and remains unrun.
+
+After the transaction fix: all 265 affected tests across 10 files and both
+TypeScript programs pass. The module-size guard and status-frontmatter guard
+pass. Full build, protected publication and live acceptance are still pending.
