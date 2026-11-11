@@ -62,6 +62,9 @@ const CAUTION_RANK: Record<StanceKey, Record<string, number>> = {
   // Having somewhere to mirror work is the safer state: losing the peer means a
   // teardown would take the backlog with it.
   workSync: { "same-organization": 0, none: 1 },
+  // BI-B50BE189: a relationship adds a brake (guidance flows from the
+  // authority), so having one is the more cautious state.
+  relationship: { none: 0, authority: 1, companion: 1 },
 };
 
 const EMPTY_REF_LABEL = "None";
