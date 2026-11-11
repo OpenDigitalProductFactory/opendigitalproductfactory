@@ -8,9 +8,10 @@ import type { StandingRhythmRow } from "@/lib/work-management/standing-run-histo
 import { RhythmStrip } from "./RhythmStrip";
 
 const now = new Date("2026-11-10T15:00:00.000Z");
+const LOCALE = "en-US";
 const render = (rows: StandingRhythmRow[]) => renderToStaticMarkup(
   <MessagesProvider locale="en-US" messages={{ workrooms: namespaceMessages("en-US", "workrooms") }}>
-    <RhythmStrip rows={rows} />
+    <RhythmStrip rows={rows} locale={LOCALE} />
   </MessagesProvider>,
 );
 

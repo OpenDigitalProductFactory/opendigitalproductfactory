@@ -36,7 +36,7 @@ function Mark({ state, label }: { state: RhythmSlotState; label: string }) {
   );
 }
 
-export function RhythmStrip({ rows, locale = "en-US" }: { rows: StandingRhythmRow[]; locale?: string }) {
+export function RhythmStrip({ rows, locale }: { rows: StandingRhythmRow[]; locale: string }) {
   const t = useT("workrooms");
   if (rows.length === 0) return <p className="text-dpf-caption text-dpf-muted">{t("rhythm.empty")}</p>;
   return (
