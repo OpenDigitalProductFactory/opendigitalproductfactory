@@ -59,6 +59,7 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
 function fakeDb(opts: {
   messages: Row[];
   room?: { id: string; capsuleId: string; executorKind: string | null; executorRef: string | null } | null;
+  rooms?: Array<{ id: string; capsuleId: string; workItemId: string; status: string; updatedAt: Date; executorKind: string | null; executorRef: string | null }>;
   participants?: Array<{ principalId: string; roles: string[] }>;
   agentAliases?: Array<{ principalId: string; aliasValue: string }>;
 }) {
@@ -81,7 +82,15 @@ function fakeDb(opts: {
         return row;
       }),
     },
-    workroom: { findFirst: vi.fn(async () => opts.room ?? null) },
+    workroom: {
+      findFirst: vi.fn(async (args: { where: { workItemId: string; status?: { notIn: string[] } } }) => {
+        if (!opts.rooms) return opts.room ?? null;
+        const closed = args.where.status?.notIn ?? [];
+        return opts.rooms
+          .filter((r) => r.workItemId === args.where.workItemId && !closed.includes(r.status))
+          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null;
+      }),
+    },
     workItem: { findUnique: vi.fn(async () => ({ title: "Room title", parentItemId: null })) },
     workroomParticipant: { findMany: vi.fn(async () => opts.participants ?? []) },
     principalAlias: { findMany: vi.fn(async () => opts.agentAliases ?? []) },
@@ -187,6 +196,24 @@ describe("dispatchRoomMessage", () => {
     expect(result.plan).toBe("hold");
     expect(send).not.toHaveBeenCalled();
     expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("held-for-executor");
+  });
+
+  it("decides against the item's live room, not a closed room left without archivedAt", async () => {
+    const { db, messages } = fakeDb({
+      messages: [message()],
+      rooms: [
+        { id: "old", capsuleId: "WC-OLD", workItemId: "wi-1", status: "archived", updatedAt: new Date(NOW.getTime() + 1_000), executorKind: "claude-desktop", executorRef: "sess-old" },
+        { id: "live", capsuleId: "WC-LIVE", workItemId: "wi-1", status: "ready", updatedAt: NOW, executorKind: null, executorRef: null },
+      ],
+    });
+    const send = vi.fn(async (_event: unknown) => ({}));
+    const result = await dispatchRoomMessage("MSG-1", { db, send, now: () => NOW });
+    expect(result.plan).toBe("wake");
+    expect(db.workroom.findFirst.mock.calls[0]![0]).toMatchObject({
+      where: { workItemId: "wi-1", archivedAt: null, status: { notIn: ["abandoned", "archived"] } },
+      orderBy: { updatedAt: "desc" },
+    });
+    expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("woken");
   });
 
   it("wakes the coordinator at the hop limit and says why in the room (AC-4)", async () => {

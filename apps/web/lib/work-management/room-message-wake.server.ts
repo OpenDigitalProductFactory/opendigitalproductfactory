@@ -187,13 +187,25 @@ export async function publishRoomMessagePosted(
   return true;
 }
 
+// A work item can carry several Workrooms over its life, and a room can reach
+// status "archived" or "abandoned" without archivedAt being set. Only a live room
+// speaks for the item, newest first, so a closed room's old executor never holds
+// a wake (seen live on BI-926A7E90, Nov 2026).
+const CLOSED_ROOM_STATUSES = ["abandoned", "archived"];
+
 async function loadRoomForWorkItem(deps: RoomWakeDeps, workItemId: string) {
   const select = { id: true, capsuleId: true, executorKind: true, executorRef: true };
-  const own = await deps.db.workroom.findFirst({ where: { workItemId, archivedAt: null }, select });
+  const liveRoomOf = (id: string) =>
+    deps.db.workroom.findFirst({
+      where: { workItemId: id, archivedAt: null, status: { notIn: CLOSED_ROOM_STATUSES } },
+      orderBy: { updatedAt: "desc" },
+      select,
+    });
+  const own = await liveRoomOf(workItemId);
   if (own) return own;
   const item = await deps.db.workItem.findUnique({ where: { id: workItemId }, select: { parentItemId: true } });
   if (!item?.parentItemId) return null;
-  return deps.db.workroom.findFirst({ where: { workItemId: item.parentItemId, archivedAt: null }, select });
+  return liveRoomOf(item.parentItemId);
 }
 
 /** Agent ids of the room's active participants holding each role. */
