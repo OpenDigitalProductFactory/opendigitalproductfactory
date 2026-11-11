@@ -97,6 +97,17 @@ paired installation saved on **Ops → Installation** points at a connection tha
 was revoked, the page says so and offers to switch it to the installation
 actually connected.
 
+The authority sends its companion your organization's decision guidance: the
+stance you approved on the authority, signed by it and valid for fourteen days.
+It is refreshed automatically while the two can reach each other. On the
+companion, business decisions follow that guidance, and stance recorded on the
+companion can only add caution to it. If the companion has no valid guidance,
+or its guidance has expired while the authority was out of reach, it does not
+fall back to platform defaults. It records each business decision as a gap in
+guidance and says so in its installation briefing. Guidance that is unsigned,
+altered, older than the one held, or meant for another installation is refused,
+and the guidance already held stays in force.
+
 If the candidate uses HTTP, its certificate cannot be verified, or discovery is
 unavailable, use the invitation controls on the same page. Never bypass the TLS
 warning: issue the one-time invitation on one installation and enter it with the

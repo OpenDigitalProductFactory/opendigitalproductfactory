@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Build Studio Phase Stall Detection and Recovery
 
 | Field | Value |
@@ -251,6 +255,8 @@ await withHeartbeatTicker(taskRunId, async () => {
    - Insert `Notification` to the build owner (or platform admin if no owner).
    - Insert `BuildActivity` row scoped to the parent `buildId` so the Build Studio activity stream reflects the stall.
 5. Emit an `AgentEvent` `taskrun:stalled` so live UIs subscribed via the event bus update without polling.
+
+**Host suspension is not silence (BI-4FDE4050).** On a laptop install, Docker Desktop pauses its VM while the host sleeps. The guest's monotonic clock stops, and its wall clock is stepped forward on wake. Heartbeat tickers use `setInterval`, which runs on the monotonic clock, so they beat again up to one interval after wake. A wall-clock cron can fire first and see a heartbeat that looks minutes old. Liveness checks therefore measure silence in the process's running time. `lib/shared/host-suspension.ts` records how far the wall clock has moved ahead of the monotonic clock: every `heartbeat()` write and every check observes it. `decideStall` (`heartbeat_timeout`, `never_started`) and the semantic-review reconciler subtract any suspension that happened after the signal. `total_timeout` and review deadlines stay on the wall clock. A process that started after the signal credits nothing, so a restart still counts as loss.
 
 ### 6.3 Operator Recovery
 
