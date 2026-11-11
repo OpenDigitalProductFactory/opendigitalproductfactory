@@ -59,11 +59,61 @@ Standalone external chats require independently verified client observation/inje
 
 ## Research and benchmarking
 
-- Microsoft TokenEconomizer: <https://github.com/microsoft/TokenEconomizer>. The README was retrieved in the originating assessment. Adopt repeated-evidence learning, reversible disclosure changes, bounded redirects and accounting for optimization overhead. Do not install a competing local-only knowledge store or indiscriminately prune whole Codex capability packages. Its reported benchmark savings are not a DPF result.
-- Existing DPF memory consolidation names mem0's consolidation controller as prior art; tool-efficiency analysis references OpenTelemetry GenAI execute-tool concepts. Their current primary-source behavior still needs verification before research is finalized.
-- Existing DPF workroom executor contract records T3 Code as prior art. Reuse that implemented supervision boundary instead of introducing another executor manager.
+Primary sources inspected during this work:
 
-Upstream implementation inspection, current standards verification and a second comparable implementation comparison are incomplete because GitHub access timed out. This section is a research checklist, not a passing research receipt.
+| Implementation / standard | Adopt | Reject / DPF difference |
+|---|---|---|
+| [Microsoft TokenEconomizer](https://github.com/microsoft/TokenEconomizer), including `docs/ARCHITECTURE.md` | Separate mechanisms from host/domain adapters; repeated-session learning; reversible disclosure; bounded redirects; count mechanism overhead in billed cost. | Do not add another Python runtime, local-only knowledge store or competing cost ledger. Whole-package Codex pruning cannot replace DPF's existing fine-grained discovery. Published benchmark savings are not DPF results. |
+| [Mem0 memory operations](https://docs.mem0.ai/core-concepts/memory-operations/add) | Stable user/agent/session scoping and explicit expiry are useful memory boundaries. | Its documented add flow is additive; DPF must retain its existing consolidation/supersession and independently deduplicate session evidence. Do not install a second memory service or equate raw insert with verified learning. |
+| [Microsoft AutoGen termination](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/termination.html) | Stateful conditions scoped/reset per run; token/time/external-stop conditions can be composed with behavioral detection. | A message-count or token threshold alone does not prove failure. Keep DPF's progress checks, authority refusals and human cancellation; the adaptive redirect cannot grant more budget or override a hard stop. |
+| [MCP 2025-11-25 tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) | Preserve `tools/list`, pagination, invocation and advertised list-change behavior. Use existing `load_tools` and the session-store owner for reversible disclosure. | Discovery is not authorization. Do not assume every host refreshes its catalog, or interpret untrusted tool annotations as authority. |
+
+TokenEconomizer's architecture document was successfully retrieved; additional
+host-specific implementation inspection remains required before claiming a
+standalone client supported. The three comparisons select an extension of
+existing DPF owners over installing a parallel agent framework.
+
+## Concrete evidence and integration contract
+
+Use the existing `ImprovementSignal.evidence` JSON and its stable source identity
+for bounded learning candidates and tooling findings. Correlate distinct persisted
+session/task identities; repeated events within one session cannot establish
+cross-session confirmation. A candidate is promoted through existing scoped memory
+writers only after the configured evidence threshold and current access/currency
+checks. `CoworkerMemoryNote` already has provenance, supersession and usage expiry;
+its `useCount` measures recall and MUST NOT be reused as a confirmation count.
+Record contradictions against the existing candidate and withdraw recall before
+reconfirmation. Personal facts remain subject to the existing privacy classifier.
+
+Retain per-session exposure manifests and observed usage in existing task/workroom
+artifact evidence, joined to actual executor/session identity. Missing exposure
+manifests mean unknown opportunity, not an unused tool. Tool-selection decisions
+compose the existing tool-intent/tier/session-store contracts; preserve the
+protected floor, requested tools and restore/discovery paths. Changes take effect
+at session boundaries, with bounded evidence and explicit override/restore behavior.
+
+Extend existing runtime issue detection and reflection/improvement writers for
+repeated failures, including changed-argument failures. Stable structured failure
+categories outrank error-text similarity. A successful recovery resets the failure
+streak. Emit at most one redirect per configured run allowance; further actions
+use the existing hard-stop/escalation policy. A permission denial never triggers
+an alternate-authority workaround or becomes a reported tool defect.
+
+Normalize actual tool-outcome, usage and session-completion events through the
+existing supervised executor adapters. Standalone clients use only individually
+verified plugin events and the existing evidence intake; client-provided material
+is untrusted data and cannot manufacture authority or a completion receipt.
+Unsupported observation/injection is explicit. Confirmed tooling gaps update the
+existing improvement signal/backlog origin, with bounded evidence and repair
+ownership; close only after functional repair evidence.
+
+The pure decision functions, persistence adapters and served integrations must be
+verified separately. Evaluation includes repeated-session confirmation/replay,
+contradiction/privacy/expiry, exposed-but-unused versus unavailable tools,
+restoration/cache-prefix stability, failure versus progress/refusal, tool-gap
+deduplication and complete net cost. No additional paid model call is required for
+the deterministic observation path; any optional proposer/judge call is attributed
+to the task's existing cost and authority limits.
 
 ## Delivery, compatibility and rollback
 
@@ -71,4 +121,4 @@ Deliver learning, disclosure, loop recovery, tooling feedback and external adapt
 
 ## Current evidence and remaining gates
 
-The governed worktree was created on cached `origin/main` after a 25-second refresh timeout on 2026-11-10. Source freshness remains unverified; rebase/reconcile against a successfully refreshed main before implementation. The managed readiness probe reports source-only with missing node_modules and Prisma client. Unit tests, typecheck, served verification, independent reviews and publication are unrun. This draft is not approved design, covered implementation plan or delivery evidence.
+The feature branch is reconciled onto verified current source `41afd6e6bb5bce14b3fd84068cdaac5a2e930402`. After canonical recovery, its real normal edit-path claim succeeded. The unrelated restart candidate is preserved at tag `codex-restart-candidate-BI224` and removed from this feature diff. Managed dependencies were provisioned in the existing worktree. Feature implementation, feature tests, served verification, independent design approval and covered implementation plan remain pending. This draft and infrastructure test evidence are not delivery of the feature.
