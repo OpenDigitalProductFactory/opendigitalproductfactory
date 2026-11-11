@@ -112,3 +112,12 @@ exact-tree gate was interrupted before shared admission and remains unrun.
 After the transaction fix: all 265 affected tests across 10 files and both
 TypeScript programs pass. The module-size guard and status-frontmatter guard
 pass. Full build, protected publication and live acceptance are still pending.
+
+The shared integration gate executed at b4411f4 after the documented host-only
+preflight omission (the interrupted host receipt and lock remain preserved).
+Both TypeScript programs passed; 11,863 tests passed and one build-flow unit test
+timed out. Gate evidence cmwbnrxm90qct0emsy5124atu remains failed, not waived.
+The unit suite invoked real sandbox cleanup and an incompletely mocked dependent
+notification. It now mocks those separate effects and asserts their invocation;
+all 57 completion-flow and dependency tests pass. This test-only correction does
+not alter production behavior. A new exact-tree full gate remains required.
