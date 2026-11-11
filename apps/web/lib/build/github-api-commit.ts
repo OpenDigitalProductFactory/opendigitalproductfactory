@@ -269,6 +269,51 @@ export async function isAncestorCommit(
   }
 }
 
+/** The `Build: FB-…` trailer the platform writes on every published build commit. */
+export function buildTrailerOf(commitMessage: string): string | null {
+  return /^Build:\s*(\S+)\s*$/m.exec(commitMessage)?.[1] ?? null;
+}
+
+/**
+ * Whether the commit a ref points at is this platform's own earlier publication
+ * of the SAME build, sitting directly on the base branch's history.
+ *
+ * BI-93CB58D6: a first attempt that pushed the branch and then failed to open
+ * the PR (FB-2F2D46D5, 2026-11-11, a transient `fetch failed`) left that
+ * commit behind. Every retry builds a new commit on the current base, which
+ * never descends from it, so the overwrite guard below refused the build's own
+ * publication forever. Replacing such a commit discards nothing: it is the
+ * same build, by the same signed identity, with no other commit under it.
+ *
+ * All three must hold, and anything unreadable answers false — the guard's
+ * direction stays "refuse" (BI-9A405652): the same `Build:` trailer (a
+ * similarly titled build carries a different id), the same DCO author, and a
+ * single parent that is on the base's history.
+ */
+export async function isEarlierPublicationOfSameBuild(
+  apiBase: string,
+  existingSha: string,
+  expected: { commitMessage: string; authorEmail: string; baseSha: string },
+  token: string,
+): Promise<boolean> {
+  const build = buildTrailerOf(expected.commitMessage);
+  if (!build) return false;
+  try {
+    const existing = await githubGet<{
+      message?: unknown;
+      author?: { email?: unknown };
+      parents?: Array<{ sha?: unknown }>;
+    }>(`${apiBase}/git/commits/${encodeURIComponent(existingSha)}`, token);
+    const parent = existing.parents?.length === 1 ? existing.parents[0]?.sha : null;
+    if (typeof existing.message !== "string" || buildTrailerOf(existing.message) !== build) return false;
+    if (typeof existing.author?.email !== "string" || existing.author.email !== expected.authorEmail) return false;
+    if (typeof parent !== "string" || parent.length === 0) return false;
+    return await isAncestorCommit(apiBase, parent, expected.baseSha, token);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Build a specific error for a base-branch lookup failure.
  *
@@ -488,7 +533,13 @@ export async function publishBranchCommit(input: {
     const fastForward = existingSha
       ? await isAncestorCommit(headApiBase, existingSha, commit.sha, token)
       : false;
-    if (!fastForward) {
+    // BI-93CB58D6: the platform's own earlier publication of this same build
+    // is replaced, not refused; see isEarlierPublicationOfSameBuild.
+    const ownEarlierPublication = !fastForward && existingSha
+      ? await isEarlierPublicationOfSameBuild(headApiBase, existingSha,
+        { commitMessage, authorEmail: dcoIdentity.email, baseSha }, token)
+      : false;
+    if (!fastForward && !ownEarlierPublication) {
       throw new Error(
         `Refusing to overwrite ${branchName}: it already exists at ${existingSha ?? "an unreadable commit"} `
         + `and the new commit ${commit.sha} does not descend from it. `
@@ -498,7 +549,7 @@ export async function publishBranchCommit(input: {
     const response = await fetch(`${headApiBase}/git/refs/heads/${branchName}`, {
       method: "PATCH",
       headers: getHeaders(token),
-      body: JSON.stringify({ sha: commit.sha, force: false }),
+      body: JSON.stringify({ sha: commit.sha, force: ownEarlierPublication }),
     });
     if (!response.ok) {
       throw new Error(`Failed to create/update branch: ${(err as Error).message}`);
