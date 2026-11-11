@@ -90,7 +90,8 @@ export async function updateFeatureBrief(params: Record<string, unknown>, userId
       // The MCP server resolved this actor from the authenticated subject and
       // active build. Preserve it across the session-less action boundary;
       // updateFeatureBrief still enforces exact build ownership.
-      { actorUserId: userId },
+      { actorUserId: userId, ...(params.expectedUpdatedAt !== undefined
+        ? { expectedUpdatedAt: String(params.expectedUpdatedAt) } : {}) },
     );
     await updateBuildHappyPathState(userId, {
       intake: {
