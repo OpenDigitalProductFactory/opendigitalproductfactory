@@ -24,6 +24,8 @@ import {
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 import { loadDeliveryTaskHubPage } from "@/lib/work-capsules/delivery-task-hub-store";
 import { createDeliveryTaskHubAsyncProjectionLoader } from "@/lib/work-capsules/delivery-task-hub-async";
+import { loadDeliveryOutcomes } from "@/lib/delivery-outcomes/read-model";
+import { resolveHumanWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 
 type AuthorizedWorkUser = { id: string; isSuperuser: boolean };
 
@@ -123,6 +125,15 @@ export async function getWorkControlData() {
     livenessSummary: inventory.livenessSummary,
     adoptable,
   };
+}
+
+export async function getDeliveryOutcomeData(filters: {query?:string;dimension?:string} = {}) {
+  const user=await requireBuildAccess();
+  return loadDeliveryOutcomes({db:prisma,userId:user.id,filters:{query:(filters.query??"").slice(0,120),dimension:filters.dimension??"all"},
+    canReadRoom:async workroomId=>{
+      const access=await resolveHumanWorkroomAccess({userId:user.id,workroomId,requested:"content"});
+      return access.decision.level==="content"||access.decision.level==="action";
+    }});
 }
 
 export async function createGovernedWorkAction(input: {
