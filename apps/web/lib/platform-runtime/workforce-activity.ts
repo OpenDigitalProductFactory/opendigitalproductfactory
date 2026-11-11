@@ -20,7 +20,7 @@ export type WorkforceCoworker = {
   agentId: string;
   name: string;
   role: string | null;
-  now: { title: string; status: string; taskRunId: string } | null;
+  now: { title: string; status: string; taskRunId: string; workroomId?: string | null } | null;
   didToday: Outcome[];
   /** Any of today's actions touched sensitive data (aggregate flag — no detail). */
   handlesSensitive: boolean;
@@ -128,6 +128,7 @@ type TaskRunRow = {
   source?: string | null;
   buildId?: string | null;
   routeContext?: string | null;
+  workrooms?: Array<{ capsuleId: string }>;
 };
 type GroupRow = {
   agentId: string;
@@ -183,6 +184,11 @@ export async function loadWorkforceActivity(
         source: true,
         buildId: true,
         routeContext: true,
+        workrooms: {
+          select: { capsuleId: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
     }),
     prisma.toolExecution.groupBy({
@@ -371,7 +377,12 @@ export async function loadWorkforceActivity(
       agentId: agent.agentId,
       name: agent.displayName || agent.name,
       role: agent.valueStream,
-      now: live ? { title: live.title ?? "Untitled task", status: live.status, taskRunId: live.taskRunId } : null,
+      now: live ? {
+        title: live.title ?? "Untitled task",
+        status: live.status,
+        taskRunId: live.taskRunId,
+        workroomId: live.workrooms?.[0]?.capsuleId ?? null,
+      } : null,
       didToday,
       handlesSensitive: sensitiveActionCount > 0,
       sensitiveActionCount,
