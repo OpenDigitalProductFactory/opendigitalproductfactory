@@ -7,7 +7,11 @@ import { BuildSandboxCard } from "./BuildSandboxCard";
 import { BuildVerificationScopedCard } from "./BuildVerificationScopedCard";
 import { TruthSourceBadge } from "./TruthSourceBadge";
 import { StallEventHistoryStrip } from "./StallEventHistoryStrip";
-import { BuildPhaseCostCard } from "./BuildPhaseCostCard";
+import { DataTable, StatusBadge, type Column } from "@/components/ui/report-kit";
+import { formatDuration } from "@/lib/datetime";
+import { formatMoney } from "@/lib/org-locale/org-locale";
+import { useT } from "@/lib/i18n/use-t";
+import { useMessagesContext } from "@/lib/i18n/messages-context";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
 type Props = {
@@ -17,6 +21,9 @@ type Props = {
 };
 
 export function BuildProgressOperationalPanel({ projection, engineerView = false }: Props) {
+  const t = useT("workrooms");
+  const locale = useMessagesContext();
+  const formatLocale = locale.formatLocale ?? locale.locale;
   if (!projection) {
     return (
       <div className="flex flex-1 items-center justify-center p-6 text-sm text-[var(--dpf-muted)]">
@@ -29,6 +36,33 @@ export function BuildProgressOperationalPanel({ projection, engineerView = false
   const total = projection.progress.primary.total;
   const percent = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
   const primaryAge = getTruthSourceAge(projection.progress.primary.observedAt);
+  const phaseOrder = ["ideate", "plan", "build", "review", "ship"] as const;
+  const phaseRank = new Map<string,number>(phaseOrder.map((phase,index)=>[phase,index]));
+  const phaseRows = [...projection.phaseRuns]
+    .sort((a,b)=>(phaseRank.get(a.phase)??99)-(phaseRank.get(b.phase)??99))
+    .map(r => ({
+      phase:r.phase, active:!r.completedAt, total:false, durationMs:r.durationMs,
+      input:r.inputTokens, output:r.outputTokens, calls:r.inferenceCount,
+      estimate:r.costUsd !== null && r.costUsd.trim() !== "" && Number.isFinite(Number(r.costUsd)) ? Number(r.costUsd) : null,
+    }));
+  const totals = {
+    input:phaseRows.reduce((sum,r)=>sum+r.input,0),
+    output:phaseRows.reduce((sum,r)=>sum+r.output,0),
+    calls:phaseRows.reduce((sum,r)=>sum+r.calls,0),
+    cost:phaseRows.some(r=>r.estimate===null)?null:phaseRows.reduce((sum,r)=>sum+(r.estimate??0),0),
+  };
+  if (phaseRows.length > 1) {
+    phaseRows.push({phase:"",active:false,total:true,durationMs:null,input:totals.input,output:totals.output,calls:totals.calls,estimate:totals.cost});
+  }
+  const phaseNames = Object.fromEntries(phaseOrder.map(key=>[key,t(`phaseCost.phases.${key}`)]));
+  const phaseColumns: Column<typeof phaseRows[number]>[] = [
+    {key:"phase",header:t("phaseCost.phase"),cell:r=><span>{r.total?t("phaseCost.total"):phaseNames[r.phase]??r.phase} {r.active?<StatusBadge label={t("phaseCost.active")} intent="neutral"/>:null}</span>,mobileFullWidth:true},
+    {key:"duration",header:t("phaseCost.duration"),cell:r=>r.durationMs===null?t("outcomes.unavailable"):formatDuration(r.durationMs,{includeSeconds:true}),align:"right"},
+    {key:"input",header:t("phaseCost.input"),cell:r=>formatMoney(r.input,null,formatLocale,{maximumFractionDigits:0}),align:"right"},
+    {key:"output",header:t("phaseCost.output"),cell:r=>formatMoney(r.output,null,formatLocale,{maximumFractionDigits:0}),align:"right"},
+    {key:"calls",header:t("phaseCost.calls"),cell:r=>formatMoney(r.calls,null,formatLocale,{maximumFractionDigits:0}),align:"right"},
+    {key:"cost",header:t("phaseCost.estimate"),cell:r=>r.estimate===null?t("outcomes.unavailable"):formatMoney(r.estimate,"USD",formatLocale,{maximumFractionDigits:4}),align:"right"},
+  ];
 
   return (
     <div className="flex-1 overflow-auto p-4">
@@ -127,7 +161,12 @@ export function BuildProgressOperationalPanel({ projection, engineerView = false
         </section>
 
         <div className="grid gap-3 xl:grid-cols-3">
-          <BuildPhaseCostCard phaseRuns={projection.phaseRuns} />
+          {phaseRows.length > 0 ? <section className="rounded-dpf-md border border-dpf-border bg-dpf-surface-1 p-4 space-y-3">
+            <h3 className="text-base font-dpf-semibold text-dpf-text">{t("phaseCost.title")}</h3>
+            <p className="text-sm text-dpf-muted">{t("phaseCost.summary",{tokens:formatMoney(totals.input+totals.output,null,formatLocale,{maximumFractionDigits:0}),calls:formatMoney(totals.calls,null,formatLocale,{maximumFractionDigits:0})})}</p>
+            <DataTable ariaLabel={t("phaseCost.title")} responsive columns={phaseColumns} rows={phaseRows} getRowKey={r=>r.total?"summary:total":"phase:"+r.phase}/>
+            <p className="text-sm text-dpf-muted">{t("phaseCost.note")}</p>
+          </section> : null}
           <BuildSandboxCard sandbox={projection.sandbox} />
           <BuildDispatchHistoryCard attempts={projection.dispatchHistory} engineerView={engineerView} />
           <BuildVerificationScopedCard verification={projection.verification} />
