@@ -191,7 +191,7 @@ describe("escalateBuildToHuman (orchestration)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (createPlatformIssueReport as ReturnType<typeof vi.fn>).mockResolvedValue({ reportId: "PIR-TEST1" });
-    (prisma.featureBuild.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.featureBuild.updateMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 1 });
     (prisma.backlogItem.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
     (prisma.buildActivity.create as ReturnType<typeof vi.fn>).mockResolvedValue({});
     mockFn(prisma.backlogItem.findUnique).mockResolvedValue({ status: "in-progress" });
@@ -216,7 +216,7 @@ describe("escalateBuildToHuman (orchestration)", () => {
 
   it("frees the WIP slot by abandoning the build (by FB-* buildId)", async () => {
     const res = await escalateBuildToHuman(args());
-    const call = (prisma.featureBuild.update as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const call = (prisma.featureBuild.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(call.where).toEqual({ buildId: "FB-ABC123" });
     expect(call.data.phase).toBe("abandoned");
     expect(call.data.abandonedAt).toBe(NOW);
@@ -250,7 +250,7 @@ describe("escalateBuildToHuman (orchestration)", () => {
     (createPlatformIssueReport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("dupe"));
     const res = await escalateBuildToHuman(args());
     expect(res.reportId).toBeNull();
-    expect(prisma.featureBuild.update).toHaveBeenCalledTimes(1); // WIP freed anyway
+    expect(prisma.featureBuild.updateMany).toHaveBeenCalledTimes(1); // WIP freed anyway
     expect(res.wipFreed).toBe(true);
   });
 

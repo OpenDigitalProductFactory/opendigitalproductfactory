@@ -246,6 +246,13 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
   const { title, description } = formatEscalationReport({
     buildId, featureTitle, biTitle, phase, rounds, issues, selfFixClass,
   });
+  // One phase writer for both existing and version-guarded escalation. The
+  // caller supplies the fence and reason; the terminal transition stays shared.
+  const abandonBuild = (where: { buildId: string; phase?: string; abandonedAt?: null; updatedAt?: Date }, abandonReason: string) =>
+    prisma.featureBuild.updateMany({
+      where,
+      data: { phase: "abandoned", abandonedAt: now, updatedAt: now, abandonReason },
+    });
 
   // Claim the reviewed source atomically before filing an owner question or
   // deferring work. A read followed by an unconditional write loses edits.
@@ -255,13 +262,7 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
     try {
       const expected = new Date(args.expectedUpdatedAt);
       if (!Number.isFinite(expected.getTime())) throw new Error("Invalid expected build version");
-      const claimed = await prisma.featureBuild.updateMany({
-        where: { buildId, phase, abandonedAt: null, updatedAt: expected },
-        data: {
-          phase: "abandoned", abandonedAt: now, updatedAt: now,
-          abandonReason,
-        },
-      });
+      const claimed = await abandonBuild({ buildId, phase, abandonedAt: null, updatedAt: expected }, abandonReason);
       if (claimed.count !== 1) {
         await safeLog("Escalation stopped: the reviewed build changed; newer work is preserved.");
         return { reportId: null, wipFreed: false, backlogItemDeferred: false };
@@ -334,18 +335,13 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
   //    WIP cap counts only abandonedAt-null builds, so this clears the slot.
   let wipFreed = guardedWipFreed;
   try {
-    if (!guardedWipFreed) await prisma.featureBuild.update({
-      where: { buildId },
-      data: {
-        phase: "abandoned",
-        abandonedAt: now,
-        abandonReason:
+    if (!guardedWipFreed) {
+      const claimed = await abandonBuild({ buildId },
           `Escalated to the owner after ${rounds} self-repair round(s) at ${phase} review ` +
           `(${selfFixClass})${reportId ? `; tracked as ${reportId}` : ""}. ` +
-          `Freed a Build Studio WIP slot. (BI-3E0EE3BA)`,
-        updatedAt: now,
-      },
-    });
+          `Freed a Build Studio WIP slot. (BI-3E0EE3BA)`);
+      if (claimed.count !== 1) throw new Error("Build not found while freeing escalation WIP");
+    }
     wipFreed = true;
     await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { now });
     // BI-8BD61C30: tear down isolation worktree when escalating (same as self-abandon).
