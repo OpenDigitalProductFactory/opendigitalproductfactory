@@ -177,6 +177,28 @@ describe("native verification writer", () => {
     expect(out.data).toMatchObject({ testsPassed: 4, testsQualified: false, testEvidenceConflict: true,
       reportedQa: { testsFailed: 3, content: "Incomplete prior failure scope" } });
   });
+  it("persists invalidation before a partial repair, even if the final save fails", async () => {
+    nativeVerification.verify.mockResolvedValue(observed(result(1, 3, true)));
+    let saved: unknown;
+    nativeVerification.save.mockImplementationOnce(async (args) => { saved = JSON.parse(JSON.stringify(args.value)); return { status: "accepted" }; })
+      .mockRejectedValueOnce(new Error("final writer unavailable"));
+    nativeVerification.repair.mockImplementation(async () => {
+      expect(saved).toMatchObject({ typecheckPassed: null, testsQualified: false,
+        verificationSource: { unchanged: false }, testsPassed: 3, testsFailed: 1 });
+      throw new Error("partial mutation interrupted");
+    });
+    await expect(sandboxPack.handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1"))
+      .rejects.toThrow("final writer unavailable");
+    expect(nativeVerification.repair).toHaveBeenCalledOnce();
+    expect(saved).toMatchObject({ typecheckPassed: null, testsQualified: false });
+  });
+  it("does not mutate source if the pre-dispatch artifact write fails", async () => {
+    nativeVerification.verify.mockResolvedValue(observed(result(1, 3, true)));
+    nativeVerification.save.mockRejectedValue(new Error("invalidation writer refused"));
+    await expect(sandboxPack.handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1"))
+      .rejects.toThrow("invalidation writer refused");
+    expect(nativeVerification.repair).not.toHaveBeenCalled();
+  });
   it("uses central bounded repair and rediscovers the same build for each retry", async () => {
     nativeVerification.verify.mockResolvedValueOnce(observed(result(1, 3, true))).mockResolvedValueOnce(observed(result(0, 4, true)));
     nativeVerification.legacy.mockResolvedValue(result(1, 3, true));

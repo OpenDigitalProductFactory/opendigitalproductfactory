@@ -402,7 +402,7 @@ async function runSandboxTestsTool(
   }
   const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
   const { runDeterministicBuildVerificationFor } = await import("@/lib/build/deterministic-build-verification");
-  const { verificationFromSandboxResult, normalizeVerificationOutput, retainReportedQa } = await import("@/lib/build/verification-output");
+  const { verificationFromSandboxResult, normalizeVerificationOutput, retainReportedQa, invalidateVerificationForRepair } = await import("@/lib/build/verification-output");
   const { runVerificationRepairLoop } = await import("@/lib/build/verification-repair");
   let observed: import("@/lib/build/deterministic-build-verification").DeterministicVerification;
   let output = "";
@@ -434,11 +434,25 @@ async function runSandboxTestsTool(
       testsFailed: observed.testsFailed > 0 ? observed.testsFailed : observed.testsQualified ? 0 : null,
       failureAxis: normalizeVerificationOutput(observed).failureAxis, output };
   };
+  const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
+  const persist = async <T extends import("@/lib/build/verification-output").TestExecutionFacts>(value: T) => {
+    const prior = await prisma.featureBuild.findUnique({ where: { buildId }, select: { verificationOut: true } });
+    const previous = normalizeVerificationOutput(prior?.verificationOut);
+    const retained = retainReportedQa(value, previous.reportedQa, previous.testEvidenceConflict === true);
+    await saveBuildArtifactRevision({ buildId, field: "verificationOut", savedByUserId: userId,
+      threadId: context?.threadId, value: retained });
+    return retained;
+  };
   const initial = await verify();
   if (params.auto_fix === true && observed!.verificationSource?.unchanged === true
     && (initial.typecheckPassed === false || (initial.testsFailed ?? 0) > 0)) {
     const { runGauntletRepairTask } = await import("@/lib/build/build-orchestrator");
     const loop = await runVerificationRepairLoop({ initial, changedFiles, maxRounds: 3,
+      invalidateVerification: async (attempt) => {
+        observed = invalidateVerificationForRepair(observed);
+        await persist({ ...observed, fullOutput: output.slice(0, 5000), scopedToChangedFiles: changedFiles,
+          autoFixAttempts: attempt, autoFixEnabled: true });
+      },
       // Reuse the normal build dispatcher, source isolation, liveness and budget
       // controls. The native tool does not make ad-hoc provider calls or root writes.
       dispatchRepair: async (spec) => {
@@ -458,15 +472,10 @@ async function runSandboxTestsTool(
   }
   // Read immediately before saving so a retained report from the intervening
   // verification is included. The normal writer retains artifact revision history.
-  const prior = await prisma.featureBuild.findUnique({ where: { buildId }, select: { verificationOut: true } });
-  const previous = normalizeVerificationOutput(prior?.verificationOut);
-  const verificationData = { ...retainReportedQa(observed!, previous.reportedQa, previous.testEvidenceConflict === true),
+  const verificationData = await persist({ ...observed!,
     testOutput: testOutput.slice(0, 5000), typeCheckOutput: typeCheckOutput.slice(0, 5000),
     scopedToChangedFiles: changedFiles, fullOutput: output.slice(0, 5000), timestamp: new Date().toISOString(),
-    autoFixAttempts: fixAttempts, autoFixEnabled: params.auto_fix === true };
-  const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
-  await saveBuildArtifactRevision({ buildId, field: "verificationOut", savedByUserId: userId,
-    threadId: context?.threadId, value: verificationData });
+    autoFixAttempts: fixAttempts, autoFixEnabled: params.auto_fix === true });
   const { agentEventBus } = await import("@/lib/agent-event-bus");
   if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "verificationOut" });
   const fixed = repairCompleted && verificationData.typecheckPassed === true && verificationData.testsQualified === true;

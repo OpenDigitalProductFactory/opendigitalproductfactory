@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { saveVerificationOutForBuild, resolveBuildVerificationForGate, saveVerificationRepairForBuild } from "./build-orchestrator";
 import { runVerificationRepairLoop } from "./verification-repair";
 import { resolveQaVerification, runDeterministicBuildVerification } from "./deterministic-build-verification";
-import { normalizeVerificationOutput } from "./verification-output";
+import { checkRequirement } from "../explore/build-process-matrix";
+import { invalidateVerificationForRepair, normalizeVerificationOutput } from "./verification-output";
 import { checkVerificationDepthRequirement } from "../explore/verification-depth-requirement";
 
 /**
@@ -14,6 +15,31 @@ import { checkVerificationDepthRequirement } from "../explore/verification-depth
  * build stalled at review->ship.
  */
 describe("saveVerificationOutForBuild", () => {
+  it("reloads a durable unknown verdict after a later dispatch mutates then throws", async () => {
+    const prior = { typecheckPassed: true, testsPassed: 3, testsFailed: 1, testsQualified: false,
+      fullOutput: "FAIL apps/web/lib/fixture.test.ts", verificationSource: { workdir: "/isolated", baseRef: "main",
+        digest: "old", unchanged: true, checkedAt: "2026-11-11T00:00:00Z" } };
+    let current = prior;
+    let saved: unknown = prior;
+    const execute = vi.fn(async (_name, input) => { saved = JSON.parse(JSON.stringify(input.value)); return { success: true }; });
+    await expect(runVerificationRepairLoop({ initial: { typecheckPassed: true, testsFailed: 1, failureAxis: "test-failure", output: prior.fullOutput },
+      changedFiles: ["apps/web/lib/fixture.ts"], maxRounds: 2,
+      invalidateVerification: () => saveVerificationOutForBuild(execute as never, "FB-FIXTURE",
+        invalidateVerificationForRepair(current), "fixture-owner", undefined),
+      dispatchRepair: async ({ attempt }) => {
+        expect(saved).toMatchObject({ typecheckPassed: null, testsQualified: false, verificationSource: { unchanged: false } });
+        if (attempt === 2) throw new Error("partially mutated source, dispatch interrupted");
+        return true;
+      },
+      reverify: async () => { current = { ...prior, testsPassed: 4 }; return { typecheckPassed: true,
+        testsFailed: 1, failureAxis: "test-failure", output: prior.fullOutput }; },
+    })).rejects.toThrow("dispatch interrupted");
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(saved).toMatchObject({ typecheckPassed: null, testsPassed: 4, testsFailed: 1, testsQualified: false });
+    expect(checkRequirement("verification-typecheck-passed", { verificationOut: saved }).allowed).toBe(false);
+    expect(checkVerificationDepthRequirement({ verificationDepth: "shallow", transition: "build->review", verificationOut: saved }).allowed).toBe(false);
+  });
+
   it.each(["success", "scope-reader-failure", "dispatch-refusal", "later-dispatch-refusal"] as const)("keeps actual initial/retry/post-repair saved facts: %s", async (scenario) => {
     let round = 0;
     const runTests = vi.fn(async () => ({ passed: round > 0 && scenario !== "later-dispatch-refusal", typeCheckPassed: true,
@@ -36,7 +62,7 @@ describe("saveVerificationOutForBuild", () => {
     });
     const initial = await resolve();
     let latest: typeof initial | undefined;
-    const loop = await runVerificationRepairLoop({ initial: initial.verdict, changedFiles: initial.changedFiles, maxRounds: 2,
+    const loop = await runVerificationRepairLoop({ invalidateVerification: vi.fn(), initial: initial.verdict, changedFiles: initial.changedFiles, maxRounds: 2,
       dispatchRepair: async () => { round += 1; return scenario !== "dispatch-refusal" && !(scenario === "later-dispatch-refusal" && round === 2); },
       reverify: async () => { latest = await resolve(); return latest.verdict; },
     });

@@ -26,6 +26,13 @@ export type TestExecutionFacts = {
   reportedQa?: { testsPassed: number; testsFailed: number; content: string };
 };
 
+/** Persist before any repair can mutate source. Counts and timestamps remain
+ * historical observations; only a fresh check may restore current qualification. */
+export function invalidateVerificationForRepair<T extends TestExecutionFacts>(value: T) {
+  return { ...value, typecheckPassed: null, testsQualified: false, verificationRepaired: false,
+    ...(value.verificationSource ? { verificationSource: { ...value.verificationSource, unchanged: false } } : {}) };
+}
+
 /** A specialist report has no native completeness provenance. Keep its failure
  * separately until an independent reconciliation establishes complete scope.
  * Passing a few named files, even beside plausible summary prose, cannot do so. */

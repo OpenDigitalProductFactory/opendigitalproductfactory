@@ -1663,6 +1663,12 @@ async function runBuildOrchestratorInner(params: {
               taskTitle: "verification-repair",
               message: m,
             }),
+          invalidateVerification: async (attempt) => {
+            const { invalidateVerificationForRepair } = await import("./verification-output");
+            await saveVerificationOutForBuild(executeTool, buildId,
+              { ...invalidateVerificationForRepair((repairedVerification ?? resolved).value), verificationRepairRounds: attempt },
+              userId, parentThreadId);
+          },
           dispatchRepair: async (spec) => {
             const repairTask: AssignedTask = {
               taskIndex: allResults.length,
@@ -1812,18 +1818,18 @@ async function runBuildOrchestratorInner(params: {
       // build->review even though the build's OWN files are clean — observed
       // live: a build's full-suite verification hit an unrelated rolldown parse
       // error and never advanced. getScopedVerificationForBuild nulls
-      // out-of-scope failures; treat null (out-of-scope only) as a pass, keep an
-      // in-scope failure (false) blocking.
+      // out-of-scope failures. Only known, current checks can be neutralized;
+      // an interrupted repair's saved unknown verdict must remain unknown.
       let verificationForGate: Record<string, unknown> | unknown = updatedBuild.verificationOut;
       try {
         const { getScopedVerificationForBuild } = await import("@/lib/build/scoped-verification");
         const scoped = await getScopedVerificationForBuild(buildId);
         if (scoped) {
-          verificationForGate = {
-            ...((updatedBuild.verificationOut ?? {}) as Record<string, unknown>),
-            typecheckPassed: scoped.buildScoped.typecheckPassed ?? true,
-            testsFailed: scoped.buildScoped.testsFailed ?? 0,
-          };
+          const { normalizeVerificationOutput } = await import("./verification-output");
+          const { scopeVerificationOutputForGate } = await import("./scoped-verification");
+          verificationForGate = { ...((updatedBuild.verificationOut ?? {}) as Record<string, unknown>),
+            ...scopeVerificationOutputForGate({ verification: normalizeVerificationOutput(updatedBuild.verificationOut),
+              changedFiles: scoped.buildScoped.affectedFiles }) };
         }
       } catch (scopeErr) {
         console.warn("[orchestrator] scoped verification for gate failed; using raw verificationOut:", (scopeErr as Error)?.message);

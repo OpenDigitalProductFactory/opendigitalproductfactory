@@ -127,7 +127,9 @@ that report stays visible for independent reconciliation. Saved
 evidence retains that report, the commands and the source identity after reload.
 Checks requested by a coworker use the same build and evidence record. If a
 repair stops before a new check, earlier counts remain observations and current
-verification stays unknown.
+verification stays unknown. The platform saves that invalidation before allowing
+the repair to change files, so an interrupted process cannot leave an old check
+looking current. If that save fails, the repair does not start.
 
 If a task stops before it finishes, Build Studio distinguishes *why*. When the coding session died on infrastructure — a timeout, a provider outage, a rate limit, the process being killed — that is not a verdict on your feature, so the same task is re-run once automatically and you see a "retrying" note in the activity feed. When the session instead stopped because it needs something only you can supply — an unresolved product question, a contradiction in the spec — it is **not** retried, because re-running will not answer the question. That one surfaces as a blocked task for you to resolve.
 
