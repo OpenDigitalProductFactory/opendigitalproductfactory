@@ -144,7 +144,7 @@
   "expiredUnanswered": {
     "label": "Expired unanswered",
     "context": "Nobody answered this request before its window closed, so nothing was changed.",
-    "explanation": "Nobody answered this request in time, so nothing was changed. If it is still wanted, ask again and it comes back to you for a decision.",
+    "explanation": "No decision was made. Ask again if needed.",
     "askAgain": "Ask again",
     "asking": "Asking again…",
     "asked": "Asked again. The new request is waiting for your decision.",

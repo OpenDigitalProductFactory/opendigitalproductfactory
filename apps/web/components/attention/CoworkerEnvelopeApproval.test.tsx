@@ -735,6 +735,7 @@ describe("CoworkerEnvelopeApproval — expired unanswered", () => {
     expect(screen.queryByRole("button", { name: "Authorize" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
     expect(screen.getAllByText(/Expired unanswered/).length).toBeGreaterThan(0);
+    expect(screen.getByText("No decision was made. Ask again if needed.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Ask again" })).toBeTruthy();
   });
 
