@@ -118,6 +118,47 @@ class LoadsAnyTest(unittest.TestCase):
             via_codex.assert_not_called()
 
 
+@unittest.skipUnless(updater.resolve_codex_binary(), "no Codex CLI on this host")
+class GenericFallbackTest(unittest.TestCase):
+    def parse(self, text):
+        with patch.object(codex_toml, "_stdlib_parser", return_value=None):
+            return codex_toml.loads_any(text)
+
+    def test_foreign_plugins_and_reserved_keys_are_syntax_not_codex_settings(self):
+        text = 'plugins = ["dpf-platform"]\nmodel = 123\nsandbox_mode = "grok-native"\n[feature]\nenabled = true\n'
+        self.assertEqual(self.parse(text), {"plugins": ["dpf-platform"], "model": 123,
+            "sandbox_mode": "grok-native", "feature": {"enabled": True}})
+        with self.assertRaises(ValueError):
+            codex_toml.loads(text)
+
+    def test_tables_arrays_and_quoted_keys_preserve_values(self):
+        text = '\n'.join(['# [comment] stays inert', '"key.with.dot" = { value = [1, true, "# [literal]"] }',
+            '["table.with.dot".child]', 'name = "child"', '[[items]]', 'id = 1', '[[items]]', 'id = 2'])
+        self.assertEqual(self.parse(text), {"key.with.dot": {"value": [1, True, "# [literal]"]},
+            "table.with.dot": {"child": {"name": "child"}}, "items": [{"id": 1}, {"id": 2}]})
+
+    def test_multiline_string_headers_are_not_rewritten(self):
+        for delimiter in ('"""', "'" * 3):
+            text = 'notes = ' + delimiter + '\n[not_a_table]\n[[not_an_array_table]]\n# text\n' + delimiter + '\n[real]\nx = 1\n'
+            self.assertEqual(self.parse(text), {"notes": '[not_a_table]\n[[not_an_array_table]]\n# text\n', "real": {"x": 1}})
+
+    def test_escaped_and_extra_closing_quotes_do_not_hide_real_headers(self):
+        text = 'notes = """escaped \\" and extra closing quote""""\n[real]\nx = 1\n'
+        self.assertEqual(self.parse(text), {"notes": 'escaped " and extra closing quote"', "real": {"x": 1}})
+
+    def test_multiline_nested_arrays_are_values_not_headers(self):
+        text = 'matrix = [\n  [1, 2], # [comment]\n  [3, 4],\n]\n[real]\nx = 1\n'
+        self.assertEqual(self.parse(text), {"matrix": [[1, 2], [3, 4]], "real": {"x": 1}})
+
+    def test_empty_document_and_namespace_named_by_user_are_preserved(self):
+        self.assertEqual(self.parse(''), {})
+        self.assertEqual(self.parse('[dpf_generic_toml]\nx = 1\n'), {"dpf_generic_toml": {"x": 1}})
+
+    def test_malformed_and_date_values_remain_refused(self):
+        with self.assertRaises(ValueError): self.parse('[broken\n')
+        with self.assertRaises(codex_toml.UnsupportedToml): self.parse('when = 1979-05-27T07:32:00Z\n')
+
+
 class DiscoveryTest(unittest.TestCase):
     def test_the_codex_cli_bundled_in_the_chatgpt_app_is_found(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -125,7 +166,8 @@ class DiscoveryTest(unittest.TestCase):
             bundled.parent.mkdir(parents=True)
             bundled.write_text("#!/bin/sh\n")
             bundled.chmod(0o755)
-            with patch.object(updater, "MACOS_APP_DIRS", (Path(tmp),)), patch.object(updater.platform, "system", return_value="Darwin"), \
+            with patch.object(Path, "exists", lambda path: str(path) == str(bundled)), \
+                    patch.object(updater, "MACOS_APP_DIRS", (Path(tmp),)), patch.object(updater.platform, "system", return_value="Darwin"), \
                     patch.object(updater.shutil, "which", return_value=None), patch.dict(os.environ, {"CODEX_CLI_PATH": ""}):
                 self.assertEqual(updater.resolve_codex_binary(), str(bundled))
 
