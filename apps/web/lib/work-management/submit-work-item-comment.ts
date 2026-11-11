@@ -13,6 +13,7 @@ import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-con
 import { getGrantedCapabilities } from "@/lib/permissions";
 import { loadWorkspaceMentionRoster } from "./mention-roster.server";
 import { postWorkItemComment, type PostCommentDb } from "./post-work-item-comment";
+import { prepareRoomAddressing, publishRoomMessagePosted } from "./room-message-wake.server";
 import { encodeWorkCaseKey } from "./workspace-case-loader";
 import { authorizeWorkspaceRoomItem } from "./workspace-room-access";
 
@@ -85,6 +86,13 @@ export async function submitWorkItemComment(input: {
   }
 
   const roster = await loadWorkspaceMentionRoster();
+  // BI-31C1FDEC: a person's @mention of a coworker wakes it to reply.
+  const prepared = await prepareRoomAddressing({
+    workItemId: input.workItemId,
+    sender: { type: "user", id: userId },
+    actingUserId: userId,
+    addressedTo: undefined,
+  });
 
   const result = await postWorkItemComment({
     db: commentDb,
@@ -102,7 +110,9 @@ export async function submitWorkItemComment(input: {
       label: me?.email?.split("@")[0] || "Someone",
     },
     roster,
+    ...(prepared.refused ? {} : { addressing: prepared.build }),
   });
+  if (result.addressed) await publishRoomMessagePosted(result.messageId);
 
   return { ok: true, ...result };
 }

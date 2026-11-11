@@ -327,6 +327,15 @@ Each work shape is reviewed on its own schedule (see **Flow reviews** above). Ev
 
 When two reviews in a row name the same step for the same reason, the platform files it once in the backlog. The item names the step, the shape, the reason and both review dates. It is assigned to whoever the work shape makes accountable for that step, and it records how the fix should be made: as a check at that step, which every room of the shape then inherits. If the same pile is named again later, the open item is updated rather than filed twice. A pile that clears between reviews is never filed, so the backlog holds only problems that persist.
 
+### Asking a coworker in the room
+
+Mention an AI coworker in a room message (for example `@release-coworker please verify the build`) and it answers in the room, usually within a minute. You don't have to start anything. Coworkers can also address each other, or address the room's coordinator, the same way.
+
+- **It runs under your authority.** The answer is produced under the account that posted the message. A coworker cannot do more for you than you could ask of it directly.
+- **Several messages in a short burst get one answer.** Messages arriving within about 15 seconds are read together.
+- **Rooms worked by an outside assistant are left to it.** If Claude Code, Codex or another external assistant is working the room, or you address one of them, no platform coworker takes over. The assistant sees the message the next time it reads the room.
+- **Long exchanges between coworkers stop themselves.** After eight back-and-forth replies between coworkers, the room's coordinator is asked to step in instead. After 30 answers in an hour, the room stops waking anyone until the hour is up. In both cases a note in the room says so. Nothing is lost: every message stays in the room to read.
+
 ## Access and Other Channels
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.
