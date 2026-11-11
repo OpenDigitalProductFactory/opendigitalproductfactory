@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { translate } from "@dpf/i18n";
 
 const {
   mockPrisma,
@@ -6,6 +7,7 @@ const {
   mockGetVocabulary,
   mockResolveOrgProfileId,
   mockGetSelfUpgradeConfig,
+  mockGetLocaleContext,
 } = vi.hoisted(() => ({
   mockPrisma: {
     organization: { findFirst: vi.fn() },
@@ -43,6 +45,7 @@ const {
   mockGetVocabulary: vi.fn(),
   mockResolveOrgProfileId: vi.fn(),
   mockGetSelfUpgradeConfig: vi.fn(),
+  mockGetLocaleContext: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ Prisma: { DbNull: "DbNull" }, prisma: mockPrisma }));
@@ -53,10 +56,13 @@ vi.mock("@/lib/decision-perspective/material", () => ({ resolveOrgProfileId: moc
 // tak may not import the actions/queue contexts). Mock the config loader; the
 // job-engine + run signals come from the mocked prisma above.
 vi.mock("@/lib/self-upgrade/config", () => ({ getSelfUpgradeConfig: mockGetSelfUpgradeConfig }));
+vi.mock("@/lib/i18n/locale-context.server", () => ({ getLocaleContext: mockGetLocaleContext }));
 
 import { getRouteDataContext } from "./route-context";
 
 beforeEach(() => {
+  mockGetLocaleContext.mockReset();
+  mockGetLocaleContext.mockResolvedValue({ language: "en-US" });
   mockPrisma.businessContext.findFirst.mockReset();
   mockPrisma.storefrontConfig.findFirst.mockReset();
   mockPrisma.organizationLicenseProfile.findFirst.mockReset();
@@ -224,6 +230,38 @@ describe("getRouteDataContext", () => {
     expect(context).toContain("Investigation mode: expanding");
     expect(context).toContain("Requirement reference hints:");
     expect(context).toContain("Nevada State Contractors Board");
+  });
+
+  it.each([false, true])("provides native expense guidance with a configured tax profile: %s", async (hasTaxProfile) => {
+    if (hasTaxProfile) {
+      mockPrisma.organizationTaxProfile.findFirst.mockResolvedValue({
+        setupMode: "existing", setupStatus: "complete", homeCountryCode: "US",
+        primaryRegionCode: "NV", taxModel: "hybrid", filingOwner: "human",
+        handoffMode: "manual", externalSystem: null, footprintSummary: null,
+      });
+    }
+    mockPrisma.recurringSchedule.count.mockResolvedValue(3);
+
+    const context = await getRouteDataContext("/finance", "user-1");
+
+    expect(context).toContain("/finance/my-expenses/new");
+    expect(context).toContain(translate("en-US", "shell", "finance.expenseEntryDetails"));
+    expect(context).toContain(translate("en-US", "shell", "finance.expenseProfileRequired"));
+    expect(context).toContain("Recurring schedules: 3");
+    expect(context).toContain(hasTaxProfile
+      ? "Tax setup mode: existing"
+      : "No organization tax profile has been configured yet.");
+    expect(context).not.toContain("Expense claims: 0");
+  });
+
+  it("uses the resolved native catalog language for expense follow-up guidance", async () => {
+    mockGetLocaleContext.mockResolvedValue({ language: "en-XA" });
+
+    const context = await getRouteDataContext("/finance/spend", "user-1");
+
+    expect(context).toContain("/finance/my-expenses/new");
+    expect(context).toContain(translate("en-XA", "shell", "finance.expenseEntryDetails"));
+    expect(context).toContain(translate("en-XA", "shell", "finance.expenseProfileRequired"));
   });
 
   it("includes tax coworker investigation guidance and jurisdiction hints for finance tax setup", async () => {
