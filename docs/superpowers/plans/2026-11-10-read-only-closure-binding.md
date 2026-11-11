@@ -2,7 +2,7 @@
 
 Backlog: BI-CAP-EB412C95. Delivery workroom: WC-2A5A8FC7.
 Read-only reproduction: WC-E83F6482 (preserved).
-Status: design; implementation and coverage receipt pending.
+Status: implemented locally; verification and publication in progress.
 
 ## Problem and grounding
 
@@ -75,5 +75,27 @@ depth blocking is part of this change.
 ## Backlog coverage
 
 Atomic mapping: REQ-RO-1, CONTRACT-RO-1, FLOW-RO-1 and VERIFY-RO-1 all map to
-BI-CAP-EB412C95. Live coverage receipt pending immutable publication of this plan;
-do not treat this document as a substitute for that receipt.
+BI-CAP-EB412C95. Live atomic coverage: cmwbm4hee09jz0emszg3t6zys at debc5d5aa370.
+Research receipt: initiative-16d50f8e-7c43-4c68-8c77-5442930e736b.
+Implementation admission: IRD-EA3C2700E464.
+
+The implementation updates evidence-preflight.ts and receipt-repository.ts
+together so preflight and publication use the same author-research-only binding.
+It also updates current-research-artifact.ts: persisted research
+uses its exact inquiry room and immutable locator during later freshness checks.
+It never converts an inquiry receipt into permission for a delivery branch.
+Provider DCO author checks remain unchanged. No code author identity is inferred
+from the researcher. A missing sign-off or mismatched author still refuses.
+
+Verification so far: initial regression failed (12 existing tests passed); 245
+tests across eight affected suites passed, followed by 106 tests across the four
+preflight/author/publication/freshness suites after wiring the preflight seam.
+Production TypeScript and style guard passed. Production build, independent review,
+PR and canonical acceptance remain pending.
+
+For a source inquiry, submit the exact room id with the full immutable repository
+artifact locator to record_initiative_evidence(gate: research). The generic
+branch-scoped get_backlog_item selector remains a delivery-source selector; it
+does not invent source identity for inquiries. The receipt retains the inquiry
+room id for freshness observation; completion still requires source and manual
+verification evidence.
