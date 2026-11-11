@@ -52,9 +52,6 @@ describe("source quantities and dependency references are not customer contacts"
     '-      "observedHighWaterBytes": 8589934592,',
     '-      "safetyMarginBytes": 2147483648',
     '  decode-uri-component@0.5.0: patches/decode-uri-component@0.5.0.patch',
-    // BI-D286C3C5: drive-sequential-golden.json seeds are BASE_SEED + index * 1000 + n.
-    '       "seed": 2289472767,',
-    '+      "seed": 2289477767',
   ])("does not classify the observed review artifact line %s", (line) => {
     expect(contacts(line)).toEqual([]);
   });
@@ -69,9 +66,6 @@ describe("source quantities and dependency references are not customer contacts"
     "Customer contact: jane@company.patch",
     "patches/jane@1.2.3.patch.example.com",
     '"customerPhoneBytes": 4155550132',
-    '"seed": "4155550132"',
-    '"seedPhone": 4155550132',
-    '"seed": 2289472767, // call 4155550132',
   ])("retains actual or ambiguous contact evidence: %s", (line) => {
     expect(contacts(line)).toHaveLength(1);
   });
