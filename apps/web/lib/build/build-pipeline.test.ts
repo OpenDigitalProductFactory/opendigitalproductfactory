@@ -13,6 +13,19 @@ import { getResumeStep, shouldRetry, nextStep, buildFailedState, executeStep } f
 import type { BuildExecutionState } from "./build-exec-types";
 
 describe("BI-57AF5162: persisted pipeline verification", () => {
+  it("does not substitute a typecheck of unidentified source after discovery fails", async () => {
+    verificationFixture.update.mockClear();
+    verificationFixture.run.mockClear();
+    verificationFixture.exec.mockRejectedValue(new Error("fixture source unavailable"));
+    verificationFixture.run.mockResolvedValue({ passed: false, typeCheckPassed: true,
+      scope: "none", testsExecuted: false, testsApplicable: null, testsPassed: 0, testsFailed: 0,
+      testOutput: "Unknown source.", typeCheckOutput: "", testCommands: [] });
+    await executeStep("code_generated", "FB-VERIFICATION-FIXTURE", { step: "code_generated", retryCount: 0, containerId: "fixture-container" } as BuildExecutionState, () => {});
+    expect(verificationFixture.run).not.toHaveBeenCalled();
+    expect(verificationFixture.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      verificationOut: expect.objectContaining({ typecheckPassed: null, testsPassed: 0, testsQualified: false }),
+    }) }));
+  });
   it("persists a no-test exemption without inventing a passing test", async () => {
     verificationFixture.update.mockClear();
     verificationFixture.exec.mockImplementation(async (_id, command) => command.startsWith("node -e ") ? "a".repeat(64) : "docs/current-source.md\0");

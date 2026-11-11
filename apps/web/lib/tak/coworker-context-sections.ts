@@ -15,6 +15,7 @@
 // over the same helpers the legacy path already calls, so output is identical.
 
 import { prisma } from "@dpf/db";
+import { formatVerificationSummary } from "@/lib/build/verification-output";
 
 import { buildFormAssistInstruction, type AgentFormAssistContext } from "@/lib/agent-form-assist";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
@@ -123,8 +124,7 @@ export async function buildBuildContextSections(input: {
         if (tasks.toolsExecuted) progressLines.push(`Tools executed: ${(tasks.toolsExecuted as string[]).join(", ")}`);
       }
       if (buildRecord.verificationOut) {
-        const verify = buildRecord.verificationOut as Record<string, unknown>;
-        progressLines.push(`Tests: ${verify.testsPassed ? "PASS" : "FAIL"}. Typecheck: ${verify.typeCheckPassed ? "PASS" : "FAIL"}.`);
+        progressLines.push(formatVerificationSummary(buildRecord.verificationOut));
       }
       sections.push(progressLines.join("\n"));
     }

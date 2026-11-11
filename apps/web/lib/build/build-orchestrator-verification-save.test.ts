@@ -53,7 +53,7 @@ describe("saveVerificationOutForBuild", () => {
       expect(saved).toMatchObject({ typecheckPassed: null, testsPassed: 0, testsFailed: null, testsQualified: false, verificationRepaired: false });
       expect(runTests).toHaveBeenCalledTimes(1);
     } else {
-      expect(saved).toMatchObject({ testsPassed: 3, testsFailed: 1, testsQualified: false, verificationRepaired: false });
+      expect(saved).toMatchObject({ typecheckPassed: null, testsPassed: 3, testsFailed: 1, testsQualified: false, verificationRepaired: false });
       expect(runTests).toHaveBeenCalledTimes(1);
     }
     expect(checkVerificationDepthRequirement({ verificationDepth: "shallow", transition: "build->review", verificationOut: saved }).allowed)

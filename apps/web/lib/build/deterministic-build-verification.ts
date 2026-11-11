@@ -74,6 +74,7 @@ export async function runDeterministicBuildVerification(input: {
     output: [
       `Deterministic scoped verification (${result.scope ?? "none"}${result.scopedTestsRun ? `, ${result.scopedTestsRun} test file(s)` : ""}) in ${input.deps.workdir}.`,
       `Typecheck: ${result.typeCheckPassed ? "passed" : "not passed"}. Observed tests: ${verification.testsPassed} passed, ${verification.testsFailed} failed; ${verification.testsExecuted ? "executed" : "no executed tests observed"}.`,
+      result.typeCheckOutput.slice(-1500),
       result.testOutput.slice(-1500),
       ...(!unchanged ? ["Current source could not be bound to these checks; execution counts are retained without qualification."] : []),
     ].join("\n"),

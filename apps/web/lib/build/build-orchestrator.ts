@@ -788,8 +788,13 @@ export async function saveVerificationRepairForBuild(args: {
   const current = args.latest ?? args.initial;
   const repaired = args.loop.repaired && args.latest?.verification.typecheckPassed === true
     && args.latest.verification.testsQualified === true;
+  // A refused/interrupted repair may have changed files before returning. Keep
+  // prior counts as observations, but do not renew their current-source verdict.
+  const reverified = args.latest !== undefined;
   await saveVerificationOutForBuild(args.executeTool, args.buildId, { ...current.value,
-    typecheckPassed: args.loop.final.typecheckPassed, testsFailed: args.loop.final.testsFailed,
+    ...(!reverified ? { testsQualified: false,
+      ...(current.verification.verificationSource ? { verificationSource: { ...current.verification.verificationSource, unchanged: false } } : {}) } : {}),
+    typecheckPassed: reverified ? args.loop.final.typecheckPassed : null, testsFailed: args.loop.final.testsFailed,
     failureAxis: args.loop.final.failureAxis, fullOutput: args.loop.final.output.slice(0, 2000),
     timestamp: new Date().toISOString(), verificationRepairRounds: args.loop.rounds, verificationRepaired: repaired,
   }, args.userId, args.threadId);

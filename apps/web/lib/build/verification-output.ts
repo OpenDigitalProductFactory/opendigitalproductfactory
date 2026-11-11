@@ -81,7 +81,9 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
     return emptyVerification();
   }
 
-  const typecheckPassed = booleanOrNull(value.typecheckPassed) ?? booleanOrNull(value.typeCheckPassed);
+  // An explicit current unknown must not revive a stale legacy spelling.
+  const typecheckPassed = Object.prototype.hasOwnProperty.call(value, "typecheckPassed")
+    ? booleanOrNull(value.typecheckPassed) : booleanOrNull(value.typeCheckPassed);
   const testsPassed = numberOrNull(value.testsPassed);
   const observedFailed = numberOrNull(value.testsFailed);
   const hasTestFacts = ["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict", "testSummariesComplete", "verificationSource"]
@@ -127,6 +129,19 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
       output: outputExcerpt,
     }),
   };
+}
+
+/** One prompt summary for both coworker context paths; a positive count is not PASS. */
+export function formatVerificationSummary(value: unknown): string {
+  const observed = normalizeVerificationOutput(value);
+  const tests = observed.testsExecuted === false
+    ? observed.testsApplicable === false ? "Tests: not applicable; no tests ran." : "Tests: no execution observed."
+    : observed.testsExecuted === true
+      ? observed.testsFailed === null ? `Tests: ${observed.testsPassed ?? "unknown"} passes observed; failure verdict not established.`
+        : `Tests: ${observed.testsPassed ?? "unknown"} passed / ${observed.testsFailed} failed.`
+      : "Tests: execution not established.";
+  const typecheck = observed.typecheckPassed === null ? "not verified" : observed.typecheckPassed ? "passed" : "failed";
+  return `${tests} Typecheck: ${typecheck}.${observed.testEvidenceConflict ? " Earlier reported test failures remain unresolved." : ""}`;
 }
 
 export function classifyVerificationFailureAxis(args: {

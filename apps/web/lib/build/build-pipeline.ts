@@ -672,7 +672,7 @@ async function stepRunTests(
   state: BuildExecutionState,
 ): Promise<BuildExecutionState> {
   const { prisma } = await import("@dpf/db");
-  const { runSandboxTests, diagnoseTestFailures } = await import("./coding-agent");
+  const { diagnoseTestFailures } = await import("./coding-agent");
   const { verificationFromSandboxResult } = await import("./verification-output");
   const { runDeterministicBuildVerificationFor } = await import("./deterministic-build-verification");
   // The saved projection may precede intended WIP. Use the same actual isolated
@@ -685,9 +685,11 @@ async function stepRunTests(
     observed = deterministic.verification;
   } catch (err) {
     console.warn("[stepRunTests] could not resolve changed files for scoping:", (err as Error)?.message);
-    const { resolveBuildWorkdir } = await import("./sandbox/build-branch");
-    results = await runSandboxTests(state.containerId!, { changedFiles: [], changedFilesKnown: false, workdir: resolveBuildWorkdir(buildId) });
-    observed = verificationFromSandboxResult(results);
+    results = { passed: false, typeCheckPassed: false, scope: "none", testsExecuted: false,
+      testsApplicable: null, testsPassed: 0, testsFailed: 0, testSummariesComplete: false,
+      testOutput: `Current source could not be established; no checks ran. ${err instanceof Error ? err.message : String(err)}`,
+      typeCheckOutput: "" };
+    observed = { ...verificationFromSandboxResult(results), typecheckPassed: null };
   }
   const diagnosis = results.passed ? null : diagnoseTestFailures(results);
 

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { classifyVerificationFailureAxis, normalizeVerificationOutput } from "./verification-output";
 
 describe("normalizeVerificationOutput", () => {
+  it("does not resurrect an old camel-case verdict over an explicit current unknown", () => {
+    expect(normalizeVerificationOutput({ typecheckPassed: null, typeCheckPassed: true,
+      testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: null })).toMatchObject({ typecheckPassed: null, testsQualified: false });
+  });
   it("preserves qualification and original report through a saved JSON roundtrip", () => {
     const original = {
       typecheckPassed: true, testsPassed: 0, testsFailed: 0,

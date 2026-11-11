@@ -121,6 +121,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        buildId: { type: "string", description: "Optional explicit owned build ID. Required when more than one active build could be targeted." },
         auto_fix: { type: "boolean", description: "When true, automatically diagnose test failures and attempt fixes (max 3 retries). Default: false." },
       },
     },
@@ -395,221 +396,83 @@ async function runSandboxTestsTool(
 ): Promise<ToolResult> {
   const buildId = await resolveActiveBuildId(userId, extractBuildIdHint(params));
   if (!buildId) return { success: false, error: "No active build.", message: "No active build." };
-
-  const { isSandboxAvailable: rstAvail } = await import("@/lib/build/sandbox/build-branch");
-  if (!(await rstAvail())) {
-    return { success: false, error: "Sandbox not running.", message: "The sandbox (dpf-sandbox-1) is not running. Call start_build first." };
+  const { isSandboxAvailable } = await import("@/lib/build/sandbox/build-branch");
+  if (!(await isSandboxAvailable())) {
+    return { success: false, error: "Sandbox not running.", message: "The sandbox is not running. Use the existing recovery action before verification." };
   }
-  const rstSandboxId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
-  const { runSandboxTests, diagnoseTestFailures } = await import("@/lib/coding-agent");
-  const autoFix = params.auto_fix === true;
-  const MAX_FIX_ATTEMPTS = 3;
-
-  // Scope verification to the build's changed files so the feature's OWN
-  // tests gate the build (not just typecheck) and their output isn't
-  // truncated behind the full monorepo suite.
-  let rstChangedFiles: string[] = [];
-  try {
-    const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
-    const rstState = await getSandboxStateForBuild(buildId);
-    rstChangedFiles = rstState?.sourceDiffstat.map((entry) => entry.path) ?? [];
-  } catch (err) {
-    console.warn("[run_sandbox_tests] could not resolve changed files for scoping:", (err as Error)?.message);
-  }
-
-  // Verify the build's OWN tree, as build-pipeline.ts does. Omitting the workdir
-  // verified the shared root instead — silently (BI-CA6769FE).
-  const { resolveBuildWorkdir: rstWorkdir } = await import("@/lib/build/sandbox/build-branch");
-  let results = await runSandboxTests(rstSandboxId, { changedFiles: rstChangedFiles, workdir: rstWorkdir(buildId) });
+  const containerId = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
+  const { runDeterministicBuildVerificationFor } = await import("@/lib/build/deterministic-build-verification");
+  const { verificationFromSandboxResult, normalizeVerificationOutput, retainReportedQa } = await import("@/lib/build/verification-output");
+  const { runVerificationRepairLoop } = await import("@/lib/build/verification-repair");
+  let observed: import("@/lib/build/deterministic-build-verification").DeterministicVerification;
+  let output = "";
+  let testOutput = "";
+  let typeCheckOutput = "";
+  let changedFiles: string[] = [];
   let fixAttempts = 0;
-
-  // Auto-fix loop: diagnose failures, apply fixes via LLM, re-test
-  if (autoFix && !results.passed) {
-    const { execInSandbox } = await import("@/lib/sandbox");
-    const { routeAndCall } = await import("@/lib/routed-inference");
-    const { agentEventBus } = await import("@/lib/agent-event-bus");
-
-    while (!results.passed && fixAttempts < MAX_FIX_ATTEMPTS) {
-      fixAttempts++;
-      if (context?.threadId) {
-        agentEventBus.emit(context.threadId, {
-          type: "coding:test_fix_attempt" as "evidence:update",
-          buildId,
-          field: `attempt_${fixAttempts}_of_${MAX_FIX_ATTEMPTS}`,
-        });
-      }
-
-      const diagnosis = diagnoseTestFailures(results);
-      if (diagnosis.failingTests.length === 0) break;
-
-      // Read failing source files for context
-      const fileContents: string[] = [];
-      const readFiles = new Set<string>();
-      for (const failure of diagnosis.failingTests.slice(0, 3)) {
-        for (const filePath of [failure.testFile, failure.sourceFile].filter(Boolean)) {
-          if (readFiles.has(filePath!)) continue;
-          readFiles.add(filePath!);
-          try {
-            const content = await execInSandbox(
-              rstSandboxId,
-              `cat "/workspace/${filePath}" 2>/dev/null | head -100 || echo "[not found]"`,
-            );
-            if (!content.includes("[not found]")) {
-              fileContents.push(`### ${filePath}\n\`\`\`\n${content}\n\`\`\``);
-            }
-          } catch { /* skip */ }
-        }
-      }
-
-      // On retry attempts, gather deeper context: follow imports and find
-      // codebase patterns. The first attempt has the error + source file.
-      // If that wasn't enough, the LLM needs to see HOW the imported modules
-      // work and how other files solve similar problems.
-      const deepContext: string[] = [];
-      if (fixAttempts >= 2) {
-        // 1. Follow imports: extract import paths from failing files, read their exports
-        for (const filePath of readFiles) {
-          try {
-            const importLines = await execInSandbox(
-              rstSandboxId,
-              `grep -n "^import" "/workspace/${filePath}" 2>/dev/null || true`,
-            );
-            for (const line of importLines.split("\n")) {
-              // Match package imports like @dpf/db, @/lib/foo
-              const pkgMatch = line.match(/from\s+["'](@dpf\/[^"']+|@\/[^"']+)["']/);
-              if (!pkgMatch) continue;
-              const importPath = pkgMatch[1]!;
-              // Resolve to a file path
-              let resolvedPath = "";
-              if (importPath.startsWith("@dpf/db")) {
-                resolvedPath = "packages/db/src/index.ts";
-              } else if (importPath.startsWith("@/")) {
-                resolvedPath = `apps/web/${importPath.replace("@/", "lib/")}.ts`;
-              }
-              if (resolvedPath && !readFiles.has(resolvedPath)) {
-                readFiles.add(resolvedPath);
-                const modContent = await execInSandbox(
-                  rstSandboxId,
-                  `cat "/workspace/${resolvedPath}" 2>/dev/null | head -50 || echo "[not found]"`,
-                );
-                if (!modContent.includes("[not found]")) {
-                  deepContext.push(`### ${resolvedPath} (imported by ${filePath})\n\`\`\`\n${modContent}\n\`\`\``);
-                }
-              }
-            }
-          } catch { /* skip */ }
-        }
-
-        // 2. Find codebase patterns: how do other files handle similar imports?
-        if (!results.typeCheckPassed && results.typeCheckOutput) {
-          // Extract the problematic symbol from the error (e.g. "'Prisma'")
-          const symbolMatch = results.typeCheckOutput.match(/['"](\w+)['"]\s+cannot be used as a value/);
-          if (symbolMatch) {
-            try {
-              const grepResult = await execInSandbox(
-                rstSandboxId,
-                `grep -rn "import.*${symbolMatch[1]}" /workspace/apps/web/lib/ 2>/dev/null | grep -v node_modules | head -10 || true`,
-              );
-              if (grepResult.trim()) {
-                deepContext.push(`### How other files import "${symbolMatch[1]}"\n\`\`\`\n${grepResult}\n\`\`\``);
-              }
-            } catch { /* skip */ }
-          }
-        }
-      }
-
-      // Ask LLM to produce a fix
-      const fixPrompt = [
-        "The following tests are failing. Diagnose and fix the SOURCE files (not the tests).",
-        "",
-        "## Test Output",
-        "```",
-        results.testOutput.slice(0, 3000),
-        "```",
-        "",
-        results.typeCheckPassed ? "" : `## Type Check Errors\n\`\`\`\n${results.typeCheckOutput.slice(0, 2000)}\n\`\`\`\n`,
-        "## Diagnosis",
-        diagnosis.summary,
-        "",
-        "## Relevant Files",
-        ...fileContents,
-        ...(deepContext.length > 0 ? [
-          "",
-          "## Import Chain & Codebase Patterns (follow these — they show how the project actually works)",
-          ...deepContext,
-        ] : []),
-        "",
-        "IMPORTANT: If an import is type-only (export type) but used as a value, find an alternative approach.",
-        "Look at how other files in this codebase solve the same problem.",
-        "",
-        "Output ONLY the fixed files in this format:",
-        "### FILE: <path>",
-        "```typescript",
-        "<full file content>",
-        "```",
-      ].join("\n");
-
-      try {
-        const fixResult = await routeAndCall(
-          [{ role: "user", content: fixPrompt }],
-          "You are a debugging agent. Fix the failing code. Output only changed files.",
-          "internal",
-          { taskType: "code_generation" },
-        );
-
-        // Parse and write fixed files
-        const filePattern = /### FILE: (.+?)\n```(?:typescript|tsx|ts|prisma|sql)?\n([\s\S]*?)```/g;
-        let fixMatch;
-        let filesFixed = 0;
-        while ((fixMatch = filePattern.exec(fixResult.content)) !== null) {
-          const cleanPath = fixMatch[1]!.trim().replace(/^\/?workspace\//, "");
-          const dir = cleanPath.includes("/") ? cleanPath.substring(0, cleanPath.lastIndexOf("/")) : "";
-          if (dir) await execInSandbox(rstSandboxId, `mkdir -p '/workspace/${dir}'`);
-          const encoded = Buffer.from(fixMatch[2]!).toString("base64");
-          await execInSandbox(rstSandboxId, `echo ${encoded} | base64 -d > '/workspace/${cleanPath}'`);
-          filesFixed++;
-        }
-
-        if (filesFixed === 0) break; // LLM couldn't produce a fix
-
-        logBuildActivity(buildId, "run_sandbox_tests", `Auto-fix attempt ${fixAttempts}: applied fixes to ${filesFixed} file(s).`);
-      } catch {
-        break; // LLM call failed — stop retrying
-      }
-
-      // Re-run tests (same scoping as the initial run)
-      results = await runSandboxTests(rstSandboxId, { changedFiles: rstChangedFiles });
+  let repairCompleted = false;
+  const verify = async () => {
+    try {
+      const current = await runDeterministicBuildVerificationFor(buildId, [], containerId);
+      observed = current.verification;
+      changedFiles = current.changedFiles;
+      output = current.output;
+      testOutput = current.result.testOutput;
+      typeCheckOutput = current.result.typeCheckOutput;
+    } catch (error) {
+      // No check of another branch or a guessed scope can stand in for this build.
+      output = `Verification unavailable: ${error instanceof Error ? error.message : String(error)}. Current source was not verified.`;
+      testOutput = output;
+      typeCheckOutput = "";
+      observed = { ...verificationFromSandboxResult({ passed: false, typeCheckPassed: false,
+        testOutput: output, typeCheckOutput: "", scope: "none", testsApplicable: null,
+        testsExecuted: false, testsPassed: 0, testsFailed: 0, testSummariesComplete: false }),
+        typecheckPassed: null, testsQualified: false };
+      changedFiles = [];
     }
+    return { typecheckPassed: observed.typecheckPassed,
+      testsFailed: observed.testsFailed > 0 ? observed.testsFailed : observed.testsQualified ? 0 : null,
+      failureAxis: normalizeVerificationOutput(observed).failureAxis, output };
+  };
+  const initial = await verify();
+  if (params.auto_fix === true && observed!.verificationSource?.unchanged === true
+    && (initial.typecheckPassed === false || (initial.testsFailed ?? 0) > 0)) {
+    const { runGauntletRepairTask } = await import("@/lib/build/build-orchestrator");
+    const loop = await runVerificationRepairLoop({ initial, changedFiles, maxRounds: 3,
+      // Reuse the normal build dispatcher, source isolation, liveness and budget
+      // controls. The native tool does not make ad-hoc provider calls or root writes.
+      dispatchRepair: async (spec) => {
+        const completed = await runGauntletRepairTask({ buildId, userId, task: spec }).catch(() => false);
+        if (!completed) {
+          observed = { ...observed, typecheckPassed: null, testsQualified: false,
+            ...(observed.verificationSource ? { verificationSource: { ...observed.verificationSource, unchanged: false } } : {}) };
+          output += "\nRepair did not complete; current source has not been reverified.";
+        }
+        return completed;
+      },
+      reverify: verify,
+      log: (message) => logBuildActivity(buildId, "run_sandbox_tests", message),
+    });
+    fixAttempts = loop.rounds;
+    repairCompleted = loop.repaired;
   }
-
-  const verificationData = {
-    testsPassed: results.passed ? 1 : 0,
-    testsFailed: results.passed ? 0 : 1,
-    typecheckPassed: results.typeCheckPassed,
-    testOutput: results.testOutput.slice(0, 5000),
-    typeCheckOutput: results.typeCheckOutput.slice(0, 5000),
-    autoFixAttempts: fixAttempts,
-    autoFixEnabled: autoFix,
-  };
-  await prisma.featureBuild.update({
-    where: { buildId },
-    data: { verificationOut: verificationData as unknown as import("@dpf/db").Prisma.InputJsonValue },
-  });
-  const { agentEventBus: eventBus } = await import("@/lib/agent-event-bus");
-  if (context?.threadId) eventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "verificationOut" });
-  const statusMsg = results.typeCheckPassed
-    ? `Verification recorded: typecheck clean, unit test output captured for review.${fixAttempts > 0 ? ` Fixed after ${fixAttempts} attempt(s).` : ""}`
-    : `Verification recorded: typecheck failed, unit test output captured for review.${fixAttempts > 0 ? ` Auto-fix attempted ${fixAttempts} time(s).` : ""}`;
+  // Read immediately before saving so a retained report from the intervening
+  // verification is included. The normal writer retains artifact revision history.
+  const prior = await prisma.featureBuild.findUnique({ where: { buildId }, select: { verificationOut: true } });
+  const previous = normalizeVerificationOutput(prior?.verificationOut);
+  const verificationData = { ...retainReportedQa(observed!, previous.reportedQa, previous.testEvidenceConflict === true),
+    testOutput: testOutput.slice(0, 5000), typeCheckOutput: typeCheckOutput.slice(0, 5000),
+    scopedToChangedFiles: changedFiles, fullOutput: output.slice(0, 5000), timestamp: new Date().toISOString(),
+    autoFixAttempts: fixAttempts, autoFixEnabled: params.auto_fix === true };
+  const { saveBuildArtifactRevision } = await import("@/lib/build/build-artifact-provenance");
+  await saveBuildArtifactRevision({ buildId, field: "verificationOut", savedByUserId: userId,
+    threadId: context?.threadId, value: verificationData });
+  const { agentEventBus } = await import("@/lib/agent-event-bus");
+  if (context?.threadId) agentEventBus.emit(context.threadId, { type: "evidence:update", buildId, field: "verificationOut" });
+  const fixed = repairCompleted && verificationData.typecheckPassed === true && verificationData.testsQualified === true;
+  const statusMsg = `Verification recorded: typecheck ${verificationData.typecheckPassed === null ? "unverified" : verificationData.typecheckPassed ? "clean" : "failed"}; observed tests ${verificationData.testsPassed} passed / ${verificationData.testsFailed} failed.${verificationData.testEvidenceConflict ? " Earlier reported failures remain unresolved." : ""}${verificationData.testsExecuted ? "" : " No tests ran."}${fixed ? ` Fixed after ${fixAttempts} attempt(s).` : fixAttempts > 0 ? ` Repair attempted ${fixAttempts} time(s); no qualified recovery claimed.` : ""}`;
   logBuildActivity(buildId, "run_sandbox_tests", statusMsg);
-
-  return {
-    success: true,
-    message: statusMsg,
-    data: {
-      ...verificationData,
-      buildId,
-    },
-  };
+  return { success: true, message: statusMsg, data: { ...verificationData, buildId } };
 }
 
 // Shared body for the sandbox file/command tools. Previously a single
