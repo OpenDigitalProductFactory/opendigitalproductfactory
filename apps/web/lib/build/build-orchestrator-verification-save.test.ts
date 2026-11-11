@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { saveVerificationOutForBuild } from "./build-orchestrator";
+import { saveVerificationOutForBuild, resolveBuildVerificationForGate, saveVerificationRepairForBuild } from "./build-orchestrator";
+import { runVerificationRepairLoop } from "./verification-repair";
 import { resolveQaVerification, runDeterministicBuildVerification } from "./deterministic-build-verification";
 import { normalizeVerificationOutput } from "./verification-output";
 import { checkVerificationDepthRequirement } from "../explore/verification-depth-requirement";
@@ -13,6 +14,51 @@ import { checkVerificationDepthRequirement } from "../explore/verification-depth
  * build stalled at review->ship.
  */
 describe("saveVerificationOutForBuild", () => {
+  it.each(["success", "scope-reader-failure", "dispatch-refusal"] as const)("keeps actual initial/retry/post-repair saved facts: %s", async (scenario) => {
+    let round = 0;
+    const runTests = vi.fn(async () => ({ passed: round > 0, typeCheckPassed: true,
+      scope: "scoped" as const, testsPassed: round > 0 ? 4 : 3, testsFailed: round > 0 ? 0 : 1,
+      testsExecuted: true, testsApplicable: true, testCommandPassed: round > 0, testSummariesComplete: true,
+      testOutput: round > 0 ? "Tests 4 passed" : "Tests 1 failed | 3 passed", typeCheckOutput: "",
+      testCommands: ['cd /isolated/apps/web && pnpm exec vitest run "lib/fixture.test.ts"'],
+    }));
+    const run = () => runDeterministicBuildVerification({ changedFiles: ["stale-projection.ts"], deps: {
+      containerId: "fixture", workdir: "/isolated", baseRef: "fixture-base",
+      exec: async (_id, command) => {
+        if (round > 0 && scenario === "scope-reader-failure") throw new Error("fixture reader unavailable");
+        return command.startsWith("node -e ") ? String(round).repeat(64)
+          : `apps/web/lib/fixture.ts\0${round > 0 ? "apps/web/lib/added.ts\0" : ""}`;
+      }, runTests,
+    } });
+    const resolve = () => resolveBuildVerificationForGate({
+      parsed: { typecheckPassed: true, testsPassed: 0, testsFailed: 0, parseConfidence: "low" },
+      qaContent: "Checks require native verification.", changedFiles: ["stale-projection.ts"], runDeterministic: run,
+    });
+    const initial = await resolve();
+    let latest: typeof initial | undefined;
+    const loop = await runVerificationRepairLoop({ initial: initial.verdict, changedFiles: initial.changedFiles, maxRounds: 2,
+      dispatchRepair: async () => { round += 1; return scenario !== "dispatch-refusal"; },
+      reverify: async () => { latest = await resolve(); return latest.verdict; },
+    });
+    let saved: unknown;
+    const execute = vi.fn(async (_name, input) => { saved = JSON.parse(JSON.stringify(input.value)); return { success: true }; });
+    const repaired = await saveVerificationRepairForBuild({ executeTool: execute as never,
+      buildId: "FB-REPAIR-FIXTURE", userId: "fixture-owner", initial, latest, loop });
+    expect(repaired).toBe(scenario === "success");
+    if (scenario === "success") {
+      expect(saved).toMatchObject({ testsPassed: 4, testsFailed: 0, testsQualified: true, verificationRepaired: true,
+        scopedToChangedFiles: ["apps/web/lib/fixture.ts", "apps/web/lib/added.ts"] });
+      expect(runTests).toHaveBeenCalledTimes(2);
+    } else if (scenario === "scope-reader-failure") {
+      expect(saved).toMatchObject({ typecheckPassed: null, testsPassed: 0, testsFailed: null, testsQualified: false, verificationRepaired: false });
+      expect(runTests).toHaveBeenCalledTimes(1);
+    } else {
+      expect(saved).toMatchObject({ testsPassed: 3, testsFailed: 1, testsQualified: false, verificationRepaired: false });
+      expect(runTests).toHaveBeenCalledTimes(1);
+    }
+    expect(checkVerificationDepthRequirement({ verificationDepth: "shallow", transition: "build->review", verificationOut: saved }).allowed)
+      .toBe(scenario === "success");
+  });
   it("cannot save a Boolean-derived pass over explicit unrun test facts", async () => {
     const execute = vi.fn(async () => ({ success: true }));
     await saveVerificationOutForBuild(execute as never, "FB-VERIFICATION-FIXTURE", {

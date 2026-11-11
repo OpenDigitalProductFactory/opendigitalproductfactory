@@ -15,7 +15,7 @@ const deps = (overrides: Partial<Parameters<typeof runDeterministicBuildVerifica
   baseRef: "client/abc",
   exec: vi.fn().mockImplementation(async (_id, command) => command.startsWith("node -e ") ? "a".repeat(64) : "packages/db/src/seed-wiki-kernel.ts\npackages/db/src/seed-wiki-kernel.test.ts\n"),
   runTests: vi.fn().mockResolvedValue({ passed: true, typeCheckPassed: true, testOutput: "Tests 57 passed", typeCheckOutput: "", scope: "scoped", scopedTestsRun: 1,
-    testsPassed: 57, testsFailed: 0, testsExecuted: true, testsApplicable: true, testCommandPassed: true }),
+    testsPassed: 57, testsFailed: 0, testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true }),
   ...overrides,
 });
 
@@ -50,7 +50,7 @@ describe("BI-57AF5162: observed execution and unresolved QA", () => {
     const out = await runDeterministicBuildVerification({
       changedFiles: ["apps/web/lib/example.test.ts"],
       deps: noTests({ passed: false, scope: "scoped", scopedTestsRun: 1,
-        testsExecuted: true, testsApplicable: true, testCommandPassed: false,
+        testsExecuted: true, testsApplicable: true, testCommandPassed: false, testSummariesComplete: true,
         testsPassed: 9, testsFailed: 2, testOutput: "9 passed, 2 failed" }),
     });
     expect(out.verification).toMatchObject({ testsPassed: 9, testsFailed: 2, testsExecuted: true });
@@ -87,15 +87,26 @@ describe("BI-57AF5162: observed execution and unresolved QA", () => {
     expect(out.verification).toMatchObject({ testsQualified: false, testEvidenceConflict: true });
   });
 
-  it("resolves a named failure only through that test's qualified current-source rerun", async () => {
+  it("retains prose-only failures even with a plausible complete summary and named rerun", async () => {
     const det = await runDeterministicBuildVerification({ changedFiles: [], deps: deps({
       runTests: vi.fn().mockResolvedValue({ passed: true, typeCheckPassed: true, testOutput: "Tests 57 passed", typeCheckOutput: "",
-        scope: "scoped", testsPassed: 57, testsFailed: 0, testsExecuted: true, testsApplicable: true, testCommandPassed: true,
+        scope: "scoped", testsPassed: 57, testsFailed: 0, testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true,
         testCommands: ['cd /isolated/packages/db && { pnpm exec vitest run "src/seed-wiki-kernel.test.ts"; }'] }),
     }) });
     const out = await resolveQaVerification({ parsed: { typecheckPassed: true, testsPassed: 99, testsFailed: 3, parseConfidence: "high" },
-      qaContent: "FAIL packages/db/src/seed-wiki-kernel.test.ts\nTests 3 failed", changedFiles: [], runDeterministic: async () => det });
-    expect(out.verification).toMatchObject({ testsQualified: true, testEvidenceConflict: false, reportedQa: { testsFailed: 3 } });
+      qaContent: "FAIL packages/db/src/seed-wiki-kernel.test.ts\nTest Files 1 failed (1)\nTests 3 failed (3)", changedFiles: [], runDeterministic: async () => det });
+    expect(out.verification).toMatchObject({ testsQualified: false, testEvidenceConflict: true, reportedQa: { testsFailed: 3 } });
+  });
+
+  it("does not treat a partial list of named failing files as the whole report", async () => {
+    const det = await runDeterministicBuildVerification({ changedFiles: [], deps: deps({
+      runTests: vi.fn().mockResolvedValue({ passed: true, typeCheckPassed: true, testOutput: "Tests 2 passed", typeCheckOutput: "",
+        scope: "scoped", testsPassed: 2, testsFailed: 0, testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true,
+        testCommands: ['cd /isolated/packages/db && { pnpm exec vitest run "src/seed-wiki-kernel.test.ts"; }'] }),
+    }) });
+    const out = await resolveQaVerification({ parsed: { typecheckPassed: true, testsPassed: 99, testsFailed: 3, parseConfidence: "high" },
+      qaContent: "FAIL packages/db/src/seed-wiki-kernel.test.ts\nOther failure details unavailable\nTests 3 failed", changedFiles: [], runDeterministic: async () => det });
+    expect(out.verification).toMatchObject({ testsQualified: false, testEvidenceConflict: true, reportedQa: { testsFailed: 3 } });
   });
 });
 
@@ -137,7 +148,7 @@ describe("BI-57AF5162: isolated Git source discovery", () => {
         ...discoveryDeps(root), runTests: async () => {
           writeFileSync(join(root, "untracked.ts"), "after\n");
           return { passed: true, typeCheckPassed: true, testOutput: "Tests 2 passed", typeCheckOutput: "",
-            testsPassed: 2, testsFailed: 0, testsExecuted: true, testsApplicable: true, testCommandPassed: true };
+            testsPassed: 2, testsFailed: 0, testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true };
         },
       } });
       expect(out.verification).toMatchObject({ typecheckPassed: null, testsPassed: 2, testsQualified: false, verificationSource: { unchanged: false } });
@@ -178,7 +189,7 @@ describe("runDeterministicBuildVerification", () => {
 
   it("records a real failure as a failure", async () => {
     const d = deps({ runTests: vi.fn().mockResolvedValue({ passed: false, typeCheckPassed: true, testOutput: "Tests 1 failed", typeCheckOutput: "", scope: "scoped",
-      testsPassed: 0, testsFailed: 1, testsExecuted: true, testsApplicable: true, testCommandPassed: false }) });
+      testsPassed: 0, testsFailed: 1, testsExecuted: true, testsApplicable: true, testCommandPassed: false, testSummariesComplete: true }) });
     const result = await runDeterministicBuildVerification({ changedFiles: ["a.ts"], deps: d });
     expect(d.exec).toHaveBeenCalled();
     expect(result.verification.testsFailed).toBe(1);

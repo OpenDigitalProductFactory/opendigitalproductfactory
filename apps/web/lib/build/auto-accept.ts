@@ -3,6 +3,7 @@ import { saveBuildArtifactRevision } from "@/lib/build/build-artifact-provenance
 import { getProcessPolicy } from "@/lib/explore/build-process-matrix";
 import type { AcceptanceCriterion, VerificationOutput } from "@/lib/explore/feature-build-types";
 import { isEvidenceAutoAcceptEnabled } from "@/lib/build/build-studio-config";
+import { normalizeVerificationOutput, retainReportedQa, type TestExecutionFacts } from "./verification-output";
 
 /**
  * Evidence-gated autonomous build acceptance + the shared acceptance write.
@@ -74,7 +75,7 @@ export async function writeAcceptanceMet(args: {
  * tests need no sandbox.
  */
 export type MissingVerdictVerifier = (buildId: string) => Promise<{
-  verification: { typecheckPassed: boolean | null; testsPassed: number; testsFailed: number; source: string; scope: string };
+  verification: { typecheckPassed: boolean | null; testsPassed: number; testsFailed: number; source: string; scope: string } & TestExecutionFacts;
   changedFiles: string[];
   output: string;
 }>;
@@ -141,7 +142,7 @@ export async function autoAcceptBuildOnEvidence(
         : {};
       const recorded = {
         ...base,
-        ...ran.verification,
+        ...retainReportedQa(ran.verification, normalizeVerificationOutput(base).reportedQa, base.testEvidenceConflict === true),
         scopedToChangedFiles: ran.changedFiles,
         fullOutput: ran.output.slice(0, 2000),
         timestamp: new Date().toISOString(),
@@ -157,7 +158,7 @@ export async function autoAcceptBuildOnEvidence(
           data: {
             buildId,
             tool: "review_verification_backfill",
-            summary: `No typecheck verdict was recorded; ran scoped checks at review: typecheck ${ran.verification.typecheckPassed === null ? "unqualified" : ran.verification.typecheckPassed ? "passed" : "failed"}, tests ${ran.verification.testsPassed} passed / ${ran.verification.testsFailed} failed${ran.verification.scope === "none" ? "; no test execution" : ""} (${ran.verification.scope}).`,
+            summary: `No typecheck verdict was recorded; ran scoped checks at review: typecheck ${ran.verification.typecheckPassed === null ? "unqualified" : ran.verification.typecheckPassed ? "passed" : "failed"}, tests ${ran.verification.testsPassed} passed / ${ran.verification.testsFailed} failed${ran.verification.scope === "none" ? "; no test execution" : ""} (${ran.verification.scope}).${recorded.testEvidenceConflict ? " Earlier reported test failures remain unresolved." : ""}`,
           },
         })
         .catch(() => {});
@@ -177,9 +178,15 @@ export async function autoAcceptBuildOnEvidence(
           : [];
     if (criteria.length === 0) return { accepted: false, reason: "no-criteria" };
 
+    const facts = normalizeVerificationOutput(v);
+    const testNotice = facts.testEvidenceConflict
+      ? "Earlier reported test failures remain unresolved. "
+      : facts.testsExecuted === false ? "No tests executed. "
+        : facts.testsQualified === false && facts.testsFailed === null ? "Test qualification remains unresolved. " : "";
+
     const evidence =
       `Auto-accepted (evidence-gated): typecheck clean; UX ${ux}; ` +
-      `tests ${v.testsPassed ?? 0} passed / ${v.testsFailed ?? 0} failed (repo-wide suite, advisory). ` +
+      `tests ${v.testsPassed ?? 0} passed / ${v.testsFailed ?? 0} failed (recorded tests, advisory). ${testNotice}` +
       `Governed autopilot — BUILD_EVIDENCE_AUTO_ACCEPT (kernel DI-53037C92BC0A).`;
     const acceptanceMet = buildAcceptanceEvidenceRecord(criteria, evidence);
 
@@ -190,7 +197,7 @@ export async function autoAcceptBuildOnEvidence(
       activityTool: "auto_record_acceptance",
       activitySummary:
         `Evidence-gated auto-acceptance: ${criteria.length} criteria met ` +
-        `(typecheck clean, UX ${ux}; tests ${v.testsPassed ?? 0} passed / ${v.testsFailed ?? 0} failed, advisory).`,
+        `(typecheck clean, UX ${ux}; tests ${v.testsPassed ?? 0} passed / ${v.testsFailed ?? 0} failed, advisory). ${testNotice}`.trim(),
     });
     return { accepted: true, acceptanceMet };
   } catch (err) {

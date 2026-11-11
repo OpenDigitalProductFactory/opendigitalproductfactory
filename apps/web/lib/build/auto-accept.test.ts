@@ -337,6 +337,20 @@ describe("autoAcceptBuildOnEvidence — never throws (fail-closed)", () => {
 });
 
 describe("autoAcceptBuildOnEvidence — a missing verdict is checked, not assumed (BI-1CC992A5)", () => {
+  it("retains unresolved QA during deterministic backfill without changing advisory progression", async () => {
+    const reportedQa = { testsPassed: 99, testsFailed: 3, content: "Three failures; complete failure identities unavailable" };
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: {
+      typecheckPassed: null, testsPassed: 0, testsFailed: null, testsQualified: false, testEvidenceConflict: true, reportedQa,
+    } }));
+    const result = await autoAcceptBuildOnEvidence("FB-CONFLICT", { verifyMissingVerdict: async () => ({
+      verification: { typecheckPassed: true, testsPassed: 2, testsFailed: 0, source: "deterministic-scoped", scope: "scoped", testEvidenceConflict: false },
+      changedFiles: ["apps/web/lib/x.test.ts"], output: "Tests 2 passed",
+    }) });
+    expect(result.accepted).toBe(true);
+    const backfill = mockSaveBuildArtifactRevision.mock.calls.find(([input]) => input.field === "verificationOut");
+    expect(backfill?.[0].value).toMatchObject({ testEvidenceConflict: true, testsQualified: false, reportedQa });
+    expect(result.acceptanceMet?.[0]?.evidence).toContain("Earlier reported test failures remain unresolved");
+  });
   it("keeps advisory progression without calling a no-test exemption passing tests", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: null }));
     const result = await autoAcceptBuildOnEvidence("FB-NO-TESTS", { verifyMissingVerdict: async () => ({

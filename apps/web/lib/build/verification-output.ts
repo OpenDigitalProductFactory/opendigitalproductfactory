@@ -20,10 +20,20 @@ export type TestExecutionFacts = {
   testsApplicable?: boolean | null;
   testsQualified?: boolean;
   testCommandPassed?: boolean | null;
+  testSummariesComplete?: boolean | null;
   testCommands?: string[];
   testEvidenceConflict?: boolean;
   reportedQa?: { testsPassed: number; testsFailed: number; content: string };
 };
+
+/** A specialist report has no native completeness provenance. Keep its failure
+ * separately until an independent reconciliation establishes complete scope.
+ * Passing a few named files, even beside plausible summary prose, cannot do so. */
+export function retainReportedQa<T extends TestExecutionFacts>(verification: T, reportedQa: TestExecutionFacts["reportedQa"], priorConflict = false) {
+  const testEvidenceConflict = priorConflict || verification.testEvidenceConflict === true || (reportedQa?.testsFailed ?? 0) > 0;
+  return { ...verification, ...(reportedQa ? { reportedQa } : {}), testEvidenceConflict,
+    ...(testEvidenceConflict ? { testsQualified: false, parseConfidence: "low" as const } : {}) };
+}
 
 /** Qualification is separate from both a case count and the typecheck verdict. */
 export function testsAreQualified(value: unknown): boolean {
@@ -32,7 +42,7 @@ export function testsAreQualified(value: unknown): boolean {
   if (value.testsApplicable === false && value.testsExecuted === false) {
     return value.testsPassed === 0 && value.testsFailed === 0;
   }
-  return value.testsApplicable === true && value.testsExecuted === true && value.testCommandPassed === true
+  return value.testsApplicable === true && value.testsExecuted === true && value.testCommandPassed === true && value.testSummariesComplete === true
     && typeof value.testsPassed === "number" && Number.isSafeInteger(value.testsPassed) && value.testsPassed > 0 && value.testsFailed === 0;
 }
 
@@ -43,12 +53,13 @@ export function verificationFromSandboxResult(result: SandboxTestResult) {
   const testsExecuted = result.testsExecuted === true;
   const testsApplicable = typeof result.testsApplicable === "boolean" ? result.testsApplicable : null;
   const testCommandPassed = typeof result.testCommandPassed === "boolean" ? result.testCommandPassed : null;
-  const facts = { testsPassed, testsFailed, testsExecuted, testsApplicable, testCommandPassed };
+  const testSummariesComplete = result.testSummariesComplete === true;
+  const facts = { testsPassed, testsFailed, testsExecuted, testsApplicable, testCommandPassed, testSummariesComplete };
   return {
     typecheckPassed: result.typeCheckPassed,
     ...facts,
     testsQualified: testsAreQualified(facts),
-    parseConfidence: testsApplicable === false || (testsExecuted && testCommandPassed !== null) ? "high" as const : "low" as const,
+    parseConfidence: testsApplicable === false || (testsExecuted && testCommandPassed !== null && testSummariesComplete) ? "high" as const : "low" as const,
     source: "deterministic-scoped" as const,
     scope: result.scope ?? "none" as const,
     testCommands: result.testCommands ?? [],
@@ -73,7 +84,7 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
   const typecheckPassed = booleanOrNull(value.typecheckPassed) ?? booleanOrNull(value.typeCheckPassed);
   const testsPassed = numberOrNull(value.testsPassed);
   const observedFailed = numberOrNull(value.testsFailed);
-  const hasTestFacts = ["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict"]
+  const hasTestFacts = ["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict", "testSummariesComplete", "verificationSource"]
     .some((key) => Object.prototype.hasOwnProperty.call(value, key)) || value.scope === "none";
   // Unqualified zero is not a passing verdict. Retain actual positive failures.
   const testsFailed = hasTestFacts && !testsAreQualified(value) && observedFailed === 0 ? null : observedFailed;
@@ -86,6 +97,7 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
     testsApplicable: booleanOrNull(value.testsApplicable),
     testsQualified: testsAreQualified(value),
     testCommandPassed: booleanOrNull(value.testCommandPassed),
+    testSummariesComplete: booleanOrNull(value.testSummariesComplete),
     testEvidenceConflict: value.testEvidenceConflict === true,
     ...(Array.isArray(value.testCommands) ? { testCommands: value.testCommands.filter((v): v is string => typeof v === "string") } : {}),
     ...(isRecord(value.reportedQa) && typeof value.reportedQa.content === "string" ? {

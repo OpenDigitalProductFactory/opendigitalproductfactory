@@ -9,7 +9,7 @@
 // checks itself, in the build's own worktree, and records what it observed.
 
 import type { SandboxTestResult } from "./coding-agent";
-import { verificationFromSandboxResult, type TestExecutionFacts } from "./verification-output";
+import { verificationFromSandboxResult, retainReportedQa, type TestExecutionFacts } from "./verification-output";
 import { shellQuote } from "../platform/platform-dev-config-core";
 
 export type DeterministicVerification = Omit<ReturnType<typeof verificationFromSandboxResult>, "typecheckPassed"> & { typecheckPassed: boolean | null } & TestExecutionFacts;
@@ -72,7 +72,7 @@ export async function runDeterministicBuildVerification(input: {
     verification,
     changedFiles,
     output: [
-      `Deterministic scoped verification (${result.scope ?? "full"}${result.scopedTestsRun ? `, ${result.scopedTestsRun} test file(s)` : ""}) in ${input.deps.workdir}.`,
+      `Deterministic scoped verification (${result.scope ?? "none"}${result.scopedTestsRun ? `, ${result.scopedTestsRun} test file(s)` : ""}) in ${input.deps.workdir}.`,
       `Typecheck: ${result.typeCheckPassed ? "passed" : "not passed"}. Observed tests: ${verification.testsPassed} passed, ${verification.testsFailed} failed; ${verification.testsExecuted ? "executed" : "no executed tests observed"}.`,
       result.testOutput.slice(-1500),
       ...(!unchanged ? ["Current source could not be bound to these checks; execution counts are retained without qualification."] : []),
@@ -119,22 +119,7 @@ export async function resolveQaVerification(input: {
   const reportedQa = { testsPassed: input.parsed.testsPassed, testsFailed: input.parsed.testsFailed, content: input.qaContent };
   try {
     const det = await input.runDeterministic(input.changedFiles);
-    // A scoped execution is required to resolve a reported failure. An exemption
-    // does not establish which source or tests produced the earlier report.
-    // Only named failure files actually rerun on unchanged source can resolve
-    // the earlier report. Unknown failure identity cannot be cleared by an
-    // unrelated green scoped run. Report text selects scope; it never supplies
-    // passing counts or the command verdict.
-    const failedFiles = [...input.qaContent.matchAll(/(?:^|\n)\s*FAIL\s+((?:apps|packages)\/[^\s]+\.(?:test|spec)\.[tj]sx?)(?=\s|$)/g)].map((match) => match[1]!);
-    const rerunCoversReport = failedFiles.length > 0 && det.verification.testsQualified === true
-      && det.verification.verificationSource?.unchanged === true
-      && failedFiles.every((file) => (det.verification.testCommands ?? []).some((command) => {
-        const segments = file.split('/'); const pkg = segments.slice(0, 2).join('/'); const relative = segments.slice(2).join('/');
-        return command.includes(`/${pkg} &&`) && command.includes(`"${relative}"`);
-      }));
-    const testEvidenceConflict = input.parsed.testsFailed > 0 && !rerunCoversReport;
-    return { verification: { ...det.verification, reportedQa, testEvidenceConflict,
-      ...(testEvidenceConflict ? { testsQualified: false, parseConfidence: "low" as const } : {}) },
+    return { verification: retainReportedQa(det.verification, reportedQa),
       changedFiles: det.changedFiles, content: `${det.output}\n\nQA specialist reported (not an execution record): ${input.qaContent.slice(0, 500)}` };
   } catch (err) {
     console.warn("[deterministic-verification] could not run scoped checks:", (err as Error)?.message);

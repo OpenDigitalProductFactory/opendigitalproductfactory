@@ -324,6 +324,7 @@ export type SandboxTestResult = {
   testsPassed?: number;
   testsFailed?: number;
   testCommandPassed?: boolean | null;
+  testSummariesComplete?: boolean;
   testCommands?: string[];
 };
 
@@ -608,6 +609,7 @@ export async function runSandboxTests(
     scope,
     scopedTestsRun,
     testsExecuted, testsApplicable, testsPassed, testsFailed, testCommandPassed, testCommands,
+    testSummariesComplete: summariesObserved && !existenceUnknown,
   };
 }
 

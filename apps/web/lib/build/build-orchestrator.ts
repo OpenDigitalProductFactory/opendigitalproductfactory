@@ -739,7 +739,7 @@ export async function saveVerificationOutForBuild(
 ): Promise<void> {
   // Keep an explicit unrun/conflicted result from becoming green at the save
   // boundary, including older repair producers that still supply a Boolean count.
-  if (["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict"]
+  if (["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict", "testSummariesComplete", "verificationSource"]
     .some((key) => Object.prototype.hasOwnProperty.call(value, key))) {
     const { normalizeVerificationOutput } = await import("./verification-output");
     const normalized = normalizeVerificationOutput(value);
@@ -755,6 +755,45 @@ export async function saveVerificationOutForBuild(
   if (!result.success) {
     throw new Error(`verificationOut not saved for ${buildId}: ${result.error ?? result.message ?? "unknown"}`);
   }
+}
+
+/** Shared initial/retry projection, exercised without dispatching a provider. */
+export async function resolveBuildVerificationForGate(input: Parameters<typeof import("./deterministic-build-verification").resolveQaVerification>[0]) {
+  const { resolveQaVerification } = await import("./deterministic-build-verification");
+  const { normalizeVerificationOutput } = await import("./verification-output");
+  const { scopeVerificationOutputForGate } = await import("./scoped-verification");
+  const resolved = await resolveQaVerification(input);
+  const scoped = scopeVerificationOutputForGate({
+    verification: normalizeVerificationOutput({ ...resolved.verification, fullOutput: resolved.content }),
+    changedFiles: resolved.changedFiles,
+  });
+  return { ...resolved, scoped,
+    verdict: { typecheckPassed: scoped.typecheckPassed, testsFailed: scoped.testsFailed, failureAxis: scoped.failureAxis, output: resolved.content },
+    value: { ...resolved.verification,
+      typecheckPassed: scoped.typecheckPassed ?? resolved.verification.typecheckPassed,
+      testsPassed: scoped.testsPassed ?? resolved.verification.testsPassed, testsFailed: scoped.testsFailed,
+      outOfScopeNoise: scoped.outOfScopeNoise, globalTestsFailed: scoped.globalTestsFailed,
+      failureAxis: scoped.failureAxis, scopedToChangedFiles: resolved.changedFiles,
+      fullOutput: resolved.content.slice(0, 2000), timestamp: new Date().toISOString() },
+  };
+}
+
+/** Save the latest retry's observations, including an unknown retry or failed dispatch. */
+export async function saveVerificationRepairForBuild(args: {
+  executeTool: ExecuteTool; buildId: string; userId: string; threadId?: string;
+  initial: Awaited<ReturnType<typeof resolveBuildVerificationForGate>>;
+  latest?: Awaited<ReturnType<typeof resolveBuildVerificationForGate>>;
+  loop: import("./verification-repair").RepairLoopResult;
+}) {
+  const current = args.latest ?? args.initial;
+  const repaired = args.loop.repaired && args.latest?.verification.typecheckPassed === true
+    && args.latest.verification.testsQualified === true;
+  await saveVerificationOutForBuild(args.executeTool, args.buildId, { ...current.value,
+    typecheckPassed: args.loop.final.typecheckPassed, testsFailed: args.loop.final.testsFailed,
+    failureAxis: args.loop.final.failureAxis, fullOutput: args.loop.final.output.slice(0, 2000),
+    timestamp: new Date().toISOString(), verificationRepairRounds: args.loop.rounds, verificationRepaired: repaired,
+  }, args.userId, args.threadId);
+  return repaired;
 }
 
 /** Stored task result shape from saveBuildEvidence("taskResults", ...) */
@@ -1574,38 +1613,19 @@ async function runBuildOrchestratorInner(params: {
         console.warn("[orchestrator] could not resolve changed files for gate scoping:", (err as Error)?.message);
       }
       // An unread QA verdict is not a failing one: run the scoped checks instead.
-      const { resolveQaVerification, runDeterministicBuildVerificationFor } = await import("./deterministic-build-verification");
+      const { runDeterministicBuildVerificationFor } = await import("./deterministic-build-verification");
       const parsedQa = parseQAVerification(rawQaContent);
-      const resolved = await resolveQaVerification({
+      const resolved = await resolveBuildVerificationForGate({
         parsed: parsedQa,
         qaContent: rawQaContent,
         changedFiles,
         runDeterministic: (files) => runDeterministicBuildVerificationFor(buildId, files, sandboxContainer),
       });
-      const verification = resolved.verification;
-      let repairedVerification: typeof verification | undefined;
+      let repairedVerification: typeof resolved | undefined;
       const qaContent = resolved.content;
       changedFiles = resolved.changedFiles;
-      const { scopeVerificationOutputForGate } = await import("@/lib/build/scoped-verification");
-      const { normalizeVerificationOutput } = await import("@/lib/build/verification-output");
-      const scoped = scopeVerificationOutputForGate({
-        verification: normalizeVerificationOutput({ ...verification, fullOutput: qaContent }),
-        changedFiles,
-      });
-
-      await saveVerificationOutForBuild(executeTool, buildId, {
-        ...verification,
-        // Gate-facing fields reflect the changed surface, not the whole repo.
-        typecheckPassed: scoped.typecheckPassed ?? verification.typecheckPassed,
-        testsFailed: scoped.testsFailed,
-        testsPassed: scoped.testsPassed ?? verification.testsPassed,
-        outOfScopeNoise: scoped.outOfScopeNoise,
-        globalTestsFailed: scoped.globalTestsFailed,
-        failureAxis: scoped.failureAxis,
-        scopedToChangedFiles: changedFiles,
-        fullOutput: qaContent.slice(0, 2000),
-        timestamp: new Date().toISOString(),
-      }, userId, parentThreadId);
+      const scoped = resolved.scoped;
+      await saveVerificationOutForBuild(executeTool, buildId, resolved.value, userId, parentThreadId);
 
       // BI-99B06AD1 — build/codegen verification → bounded fix loop. If THIS
       // build's own changed surface failed typecheck/tests, don't just stall at
@@ -1654,44 +1674,19 @@ async function runBuildOrchestratorInner(params: {
             return res.success;
           },
           reverify: async () => {
-            const rerun = await resolveQaVerification({
+            const rerun = await resolveBuildVerificationForGate({
               parsed: parsedQa, qaContent: rawQaContent, changedFiles,
               runDeterministic: (files) => runDeterministicBuildVerificationFor(buildId, files, containerId),
             });
-            repairedVerification = rerun.verification;
+            repairedVerification = rerun;
             changedFiles = rerun.changedFiles;
-            const fullOutput = rerun.content;
-            const reNorm = normalizeVerificationOutput({ ...rerun.verification, fullOutput });
-            const reScoped = scopeVerificationOutputForGate({ verification: reNorm, changedFiles });
-            return {
-              typecheckPassed: reScoped.typecheckPassed,
-              testsFailed: reScoped.testsFailed,
-              failureAxis: reScoped.failureAxis,
-              output: fullOutput,
-            };
+            return rerun.verdict;
           },
         });
 
         if (loop.rounds > 0) {
-          const repairQualified = loop.repaired && repairedVerification?.typecheckPassed === true
-            && repairedVerification.testsQualified === true;
-          // Persist the post-repair verdict so the phase gate evaluates the
-          // repaired state rather than the pre-repair failure.
-          await saveVerificationOutForBuild(executeTool, buildId, {
-            ...verification,
-            ...repairedVerification,
-            typecheckPassed: loop.final.typecheckPassed,
-            testsFailed: loop.final.testsFailed,
-            testsPassed: repairedVerification?.testsPassed ?? scoped.testsPassed ?? verification.testsPassed,
-            outOfScopeNoise: scoped.outOfScopeNoise,
-            globalTestsFailed: scoped.globalTestsFailed,
-            failureAxis: loop.final.failureAxis,
-            scopedToChangedFiles: changedFiles,
-            fullOutput: (loop.final.output ?? qaContent).slice(0, 2000),
-            timestamp: new Date().toISOString(),
-            verificationRepairRounds: loop.rounds,
-            verificationRepaired: repairQualified,
-          }, userId, parentThreadId);
+          const repairQualified = await saveVerificationRepairForBuild({ executeTool, buildId, userId,
+            threadId: parentThreadId, initial: resolved, latest: repairedVerification, loop });
           await prisma.buildActivity.create({
             data: {
               buildId,

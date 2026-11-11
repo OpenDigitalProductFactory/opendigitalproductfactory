@@ -160,13 +160,13 @@ export function gatherPreflightSignals(
   // Keep the existing advisory test policy, but require an actual typecheck
   // verdict. New explicit unknown/unrun/conflicted facts cannot be reused as
   // completed verification; legacy records retain their original interpretation.
-  const hasTestFacts = vo != null && (["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict"]
+  const hasTestFacts = vo != null && (["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict", "testSummariesComplete", "verificationSource"]
     .some((key) => Object.prototype.hasOwnProperty.call(vo, key)) || vo.scope === "none");
   const sourceStillQualified = vo?.verificationSource === undefined
     || (isRecord(vo.verificationSource) && vo.verificationSource.unchanged === true);
   const observedTests = !hasTestFacts || (vo?.testEvidenceConflict !== true && sourceStillQualified
     && ((vo?.testsApplicable === false && vo.testsExecuted === false && vo.testsPassed === 0 && vo.testsFailed === 0)
-      || (vo?.testsApplicable === true && vo.testsExecuted === true && typeof vo.testCommandPassed === "boolean")));
+      || (vo?.testsApplicable === true && vo.testsExecuted === true && vo.testSummariesComplete === true && typeof vo.testCommandPassed === "boolean")));
   const verificationAlreadyPassed = vo?.typecheckPassed === true && observedTests;
 
   // Something is testable only once the build phase has produced an artifact —

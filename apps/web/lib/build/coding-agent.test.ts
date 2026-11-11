@@ -201,6 +201,15 @@ describe("runSandboxTests picks each package's own test runner", () => {
     });
   });
 
+  it("keeps incomplete mixed-package summaries unqualified after save and normalization", async () => {
+    const { result } = await run(pkgs, { jest: "Tests: 2 passed, 2 total", vitest: "Runner ended without a case summary", exit: 0 });
+    const { verificationFromSandboxResult, normalizeVerificationOutput } = await import("./verification-output");
+    const observed = verificationFromSandboxResult(result);
+    expect(result.passed).toBe(false);
+    expect(observed).toMatchObject({ testsPassed: 2, testsQualified: false, testSummariesComplete: false });
+    expect(normalizeVerificationOutput(JSON.parse(JSON.stringify(observed)))).toMatchObject({ testsQualified: false, testsFailed: null });
+  });
+
   it("does not invent test failures from a runner startup crash", async () => {
     const { result } = await run(pkgs, {
       jest: "Error: Cannot find module 'jest-expo/jest-preset'",

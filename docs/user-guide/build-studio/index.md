@@ -121,8 +121,9 @@ Test totals count cases that actually ran. **No tests ran** can mean that no
 test covers the change, or that the platform could not establish what to test;
 the evidence distinguishes those situations. A clean type check alone never
 counts as a passing test. If the source changes during checking, the observed
-counts remain in the record but do not qualify the new source. An earlier
-reported failure stays visible until a relevant rerun resolves it. Saved
+counts remain in the record but do not qualify the new source. A passing scoped
+run cannot resolve an earlier report whose complete failure scope is unknown;
+that report stays visible for independent reconciliation. Saved
 evidence retains that report, the commands and the source identity after reload.
 
 If a task stops before it finishes, Build Studio distinguishes *why*. When the coding session died on infrastructure — a timeout, a provider outage, a rate limit, the process being killed — that is not a verdict on your feature, so the same task is re-run once automatically and you see a "retrying" note in the activity feed. When the session instead stopped because it needs something only you can supply — an unresolved product question, a contradiction in the spec — it is **not** retried, because re-running will not answer the question. That one surfaces as a blocked task for you to resolve.

@@ -14,7 +14,7 @@ import { evaluateVerificationDepthShadow } from "./verification-depth-shadow";
 // phase can add earlier-transition evidence without re-scoping.
 
 const green = { typecheckPassed: true, testsPassed: 1, testsFailed: 0,
-  testsExecuted: true, testsApplicable: true, testCommandPassed: true, testsQualified: true };
+  testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true, testsQualified: true };
 
 describe("BI-57AF5162: required test qualification", () => {
   it("does not treat unknown, unrun tests as satisfying shallow verification", () => {
