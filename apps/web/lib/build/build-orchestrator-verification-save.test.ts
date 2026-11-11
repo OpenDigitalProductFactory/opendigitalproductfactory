@@ -14,12 +14,12 @@ import { checkVerificationDepthRequirement } from "../explore/verification-depth
  * build stalled at review->ship.
  */
 describe("saveVerificationOutForBuild", () => {
-  it.each(["success", "scope-reader-failure", "dispatch-refusal"] as const)("keeps actual initial/retry/post-repair saved facts: %s", async (scenario) => {
+  it.each(["success", "scope-reader-failure", "dispatch-refusal", "later-dispatch-refusal"] as const)("keeps actual initial/retry/post-repair saved facts: %s", async (scenario) => {
     let round = 0;
-    const runTests = vi.fn(async () => ({ passed: round > 0, typeCheckPassed: true,
-      scope: "scoped" as const, testsPassed: round > 0 ? 4 : 3, testsFailed: round > 0 ? 0 : 1,
-      testsExecuted: true, testsApplicable: true, testCommandPassed: round > 0, testSummariesComplete: true,
-      testOutput: round > 0 ? "Tests 4 passed" : "Tests 1 failed | 3 passed", typeCheckOutput: "",
+    const runTests = vi.fn(async () => ({ passed: round > 0 && scenario !== "later-dispatch-refusal", typeCheckPassed: true,
+      scope: "scoped" as const, testsPassed: round > 0 ? 4 : 3, testsFailed: round > 0 && scenario !== "later-dispatch-refusal" ? 0 : 1,
+      testsExecuted: true, testsApplicable: true, testCommandPassed: round > 0 && scenario !== "later-dispatch-refusal", testSummariesComplete: true,
+      testOutput: round > 0 ? scenario === "later-dispatch-refusal" ? "Tests 1 failed | 4 passed" : "Tests 4 passed" : "Tests 1 failed | 3 passed", typeCheckOutput: "",
       testCommands: ['cd /isolated/apps/web && pnpm exec vitest run "lib/fixture.test.ts"'],
     }));
     const run = () => runDeterministicBuildVerification({ changedFiles: ["stale-projection.ts"], deps: {
@@ -37,7 +37,7 @@ describe("saveVerificationOutForBuild", () => {
     const initial = await resolve();
     let latest: typeof initial | undefined;
     const loop = await runVerificationRepairLoop({ initial: initial.verdict, changedFiles: initial.changedFiles, maxRounds: 2,
-      dispatchRepair: async () => { round += 1; return scenario !== "dispatch-refusal"; },
+      dispatchRepair: async () => { round += 1; return scenario !== "dispatch-refusal" && !(scenario === "later-dispatch-refusal" && round === 2); },
       reverify: async () => { latest = await resolve(); return latest.verdict; },
     });
     let saved: unknown;
@@ -52,6 +52,10 @@ describe("saveVerificationOutForBuild", () => {
     } else if (scenario === "scope-reader-failure") {
       expect(saved).toMatchObject({ typecheckPassed: null, testsPassed: 0, testsFailed: null, testsQualified: false, verificationRepaired: false });
       expect(runTests).toHaveBeenCalledTimes(1);
+    } else if (scenario === "later-dispatch-refusal") {
+      expect(saved).toMatchObject({ typecheckPassed: null, testsPassed: 4, testsFailed: 1, testsQualified: false,
+        verificationRepaired: false, verificationRepairRounds: 2, verificationSource: { unchanged: false } });
+      expect(runTests).toHaveBeenCalledTimes(2);
     } else {
       expect(saved).toMatchObject({ typecheckPassed: null, testsPassed: 3, testsFailed: 1, testsQualified: false, verificationRepaired: false });
       expect(runTests).toHaveBeenCalledTimes(1);

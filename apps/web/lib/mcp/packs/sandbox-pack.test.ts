@@ -202,6 +202,14 @@ describe("native verification writer", () => {
     expect(nativeVerification.verify).toHaveBeenCalledOnce();
     expect(out.message).toContain("no qualified recovery claimed");
   });
+  it("also invalidates a later refused repair after an earlier retry was verified", async () => {
+    nativeVerification.verify.mockResolvedValueOnce(observed(result(1, 3, true))).mockResolvedValueOnce(observed(result(1, 4, true)));
+    nativeVerification.repair.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const out = await sandboxPack.handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");
+    expect(out.data).toMatchObject({ typecheckPassed: null, testsPassed: 4, testsFailed: 1,
+      testsQualified: false, autoFixAttempts: 2, verificationSource: { unchanged: false } });
+    expect(nativeVerification.verify).toHaveBeenCalledTimes(2);
+  });
   it("records an unknown retry without resurrecting the pre-repair verdict", async () => {
     nativeVerification.verify.mockResolvedValueOnce(observed(result(1, 3, true))).mockRejectedValueOnce(new Error("fixture retry unavailable"));
     const out = await sandboxPack.handlers.run_sandbox_tests({ buildId: "FB-FIXTURE", auto_fix: true }, "u1");

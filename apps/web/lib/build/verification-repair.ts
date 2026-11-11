@@ -84,6 +84,8 @@ export type RepairLoopResult = {
   rounds: number;
   repaired: boolean;
   final: RepairVerdict;
+  /** The retained verdict was obtained after the most recent repair dispatch. */
+  reverifiedAfterLastDispatch: boolean;
 };
 
 /**
@@ -111,9 +113,11 @@ export async function runVerificationRepairLoop(args: {
   const { initial, changedFiles, maxRounds, dispatchRepair, reverify, log } = args;
   let verdict = initial;
   let rounds = 0;
+  let reverifiedAfterLastDispatch = false;
 
   while (verificationNeedsRepair(verdict) && rounds < maxRounds) {
     rounds += 1;
+    reverifiedAfterLastDispatch = false;
     const failingFiles = selectFailingFiles(verdict.output, changedFiles);
     const prompt = buildRepairPrompt({
       attempt: rounds,
@@ -129,7 +133,8 @@ export async function runVerificationRepairLoop(args: {
       break;
     }
     verdict = await reverify();
+    reverifiedAfterLastDispatch = true;
   }
 
-  return { rounds, repaired: !verificationNeedsRepair(verdict), final: verdict };
+  return { rounds, repaired: !verificationNeedsRepair(verdict), final: verdict, reverifiedAfterLastDispatch };
 }

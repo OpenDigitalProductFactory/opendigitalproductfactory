@@ -454,7 +454,7 @@ async function runSandboxTestsTool(
       log: (message) => logBuildActivity(buildId, "run_sandbox_tests", message),
     });
     fixAttempts = loop.rounds;
-    repairCompleted = loop.repaired;
+    repairCompleted = loop.repaired && loop.reverifiedAfterLastDispatch;
   }
   // Read immediately before saving so a retained report from the intervening
   // verification is included. The normal writer retains artifact revision history.

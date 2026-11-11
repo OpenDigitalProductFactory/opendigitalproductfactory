@@ -77,6 +77,15 @@ describe("runVerificationRepairLoop", () => {
     expect(reverify).toHaveBeenCalledTimes(1);
   });
 
+  it("does not treat an earlier verification as current after a later refused dispatch", async () => {
+    const dispatchRepair = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const reverify = vi.fn().mockResolvedValue({ typecheckPassed: true, testsFailed: 1, failureAxis: "test-failure", output: "one failure remains" });
+    const out = await runVerificationRepairLoop({ initial: failing, changedFiles: ["apps/web/lib/foo.ts"], maxRounds: 2, dispatchRepair, reverify });
+    expect(out.rounds).toBe(2);
+    expect(reverify).toHaveBeenCalledOnce();
+    expect(out.reverifiedAfterLastDispatch).toBe(false);
+  });
+
   it("stops after maxRounds when it can't fix it (falls through to the gate)", async () => {
     const dispatchRepair = vi.fn().mockResolvedValue(true);
     const reverify = vi.fn().mockResolvedValue(failing); // never clean
