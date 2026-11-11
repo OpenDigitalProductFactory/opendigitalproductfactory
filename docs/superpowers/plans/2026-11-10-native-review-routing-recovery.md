@@ -19,7 +19,7 @@ Coverage receipt: **not recorded**. Use the live fix-profile remedy: coverage be
 
 | Deliverable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- |
-| DEL-ROUTING-1 / BI-C51C266A | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8 | CONTRACT-POLICY, CONTRACT-ARTIFACT, CONTRACT-CARRIER | FLOW-ISSUE, FLOW-ADMIT, FLOW-RECORD | VERIFY-ROUTES, VERIFY-PARITY, VERIFY-CARRIER, VERIFY-LIVE |
+| DEL-ROUTING-1 / BI-C51C266A | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7, AC-8, AC-9 | CONTRACT-POLICY, CONTRACT-ARTIFACT, CONTRACT-CARRIER | FLOW-ISSUE, FLOW-ADMIT, FLOW-RECORD | VERIFY-ROUTES, VERIFY-PARITY, VERIFY-CARRIER, VERIFY-LIVE |
 
 CONTRACT-POLICY is the existing `decisionForIndependentReview` plus authoritative `loadPlanBaselinePrerequisite`. CONTRACT-ARTIFACT is the native accepted revision id/digest and exact server-issued packet. CONTRACT-CARRIER is the existing OAuth, continuity, tool and grant intersection with an explicit search-completeness result.
 
@@ -62,3 +62,9 @@ The anticipated implementation surface is the existing route module/test, dispat
 The code change is one concern: correct native review dispatch. Reuse existing shared policy and current source protections. New substrate, generalized executor lanes, runtime/container operations, witness privileges, threshold changes, old review replay, receipt rewriting and the separate sandbox/diagnosis repairs are excluded.
 
 Rollback through a protected revert; preserve immutable receipts and artifact history. Infrastructure failures remain inconclusive, and a changed plan requires an exact-current review rather than reuse of a stale pass.
+
+## Explicit author-research amendment
+
+The linked canonical design now owns AC-9 and VERIFY-AUTHOR under recorded decision DI-67D2B37519D1. Reuse the existing bounded revision orchestration with separately attributed authenticated current-artifact research findings; preserve the independent three-gate contract, shared limits and genuine new revision/plan provenance. No new worker, provider, schema or replay. Existing revision/resume modules and tests, plus ideate/test only if needed, are anticipated additional paths and remain unclaimed. Native design/current plan must incorporate this amendment through actual authoring, normal coverage, review and implementation admission. Backlog prose and this companion supply no approval.
+
+The current denied research-failure decision has a null plan-baseline prerequisite; this does not waive a later actually owed large-plan baseline. Re-read the current decision after research disposition and preserve the shared missing-baseline fallback.
