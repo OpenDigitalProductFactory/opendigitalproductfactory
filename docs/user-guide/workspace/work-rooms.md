@@ -344,6 +344,21 @@ platform team rather than shown to you.
 
 **Completed cycles** are ordered by completion time. Open a completed cycle to read its Outcome Packet, durable-record count, verification state, and unresolved work. Each unresolved item has an explicit disposition: carry it into the next cycle, open a separate case, defer it, or accept it. Retrying carry-over does not create duplicate work.
 
+### Day-to-day operations
+
+**Operations > Work in progress** has a **Day-to-day operations** band listing every standing room. Each room runs once a day, and its row shows the last 14 days, oldest on the left:
+
+- **Filled:** that day's run finished the same day.
+- **Filled amber:** the run finished, but on a later day.
+- **Outlined cross:** the day did not run, usually because an earlier run was still waiting.
+- **Dot:** the run is in progress today.
+- **Dashed:** today's run has not started yet.
+- **Dotted:** no record yet. Days before the room's first recorded run are not counted as missed.
+
+A missed day keeps its cross even without colour, so it is never mistaken for a late one. Beside the marks, the row says how long a stuck run has been going ("Running since Oct 7") or how many days did not run. Select a room's name to open it.
+
+The marks come from the room's own drive record, so nothing is guessed.
+
 ## Defining the Room
 
 A room shows a yellow **"This room needs a clearer boundary"** panel when it has
