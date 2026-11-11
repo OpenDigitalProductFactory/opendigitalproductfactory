@@ -34,6 +34,7 @@ const VIEW: InstallationIdentityView = {
     sourceAuthority: "governed-worktree",
     peerWrite: "read-only",
     workSync: "same-organization",
+    relationship: "none",
     pairedProductionInstallationRef: "dpf-prod-acme",
     rationale: {
       credentials: "Local test credentials may be rotated here.",
@@ -41,6 +42,7 @@ const VIEW: InstallationIdentityView = {
       sourceAuthority: "Source changes belong in a governed worktree.",
       peerWrite: "Read from that peer but never write to it.",
       workSync: "Mirror the backlog this installation owns so the work survives a teardown.",
+      relationship: "No trusted same-organization link backs a pairing, so this installation is neither an authority nor a companion.",
     },
   },
   environment: {
@@ -321,4 +323,18 @@ describe("InstallationIdentityPanel other jobs (DI-A6148958CADB)", () => {
       expect.objectContaining({ primaryPurpose: "operate-organization", secondaryPurposes: [] }),
     ));
   });
+
+  it("offers to repair a saved paired reference that names a revoked connection (BI-B50BE189)", () => {
+    const did = "did_" + "a".repeat(64);
+    render(<InstallationIdentityPanel view={{ ...VIEW, pairingRepair: {
+      message: "The saved paired installation, link_old, names a connection that is revoked. Point it at Windows DEV instead.",
+      repairRef: did,
+      actionLabel: "Use Windows DEV",
+    } }} />);
+    fireEvent.click(screen.getByRole("button", { name: /change what this installation is/i }));
+    expect(screen.getByText(/names a connection that is revoked/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use Windows DEV" }));
+    expect((screen.getByLabelText(/Paired installation/i) as HTMLInputElement).value).toBe(did);
+  });
 });
+

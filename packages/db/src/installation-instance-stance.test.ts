@@ -246,3 +246,63 @@ describe("formatInstanceStanceBriefing — paired installation (BI-0716C8A8 AC-3
     expect(briefing).not.toContain("Paired installation: operator-organization");
   });
 });
+
+describe("resolveInstanceStance — authority and companion (BI-B50BE189)", () => {
+  function related(
+    local: InstallationEnvironmentClass,
+    host: { peerEnvironmentClass?: InstallationEnvironmentClass | null; pairingIsEstablished?: boolean; peerEstateMatches?: boolean },
+  ) {
+    const snapshot = buildInstallationOperatingProfileSnapshot({
+      intent: intent({ pairedProductionInstallationRef: "operator-organization" }),
+      environmentClass: local,
+    });
+    return resolveInstanceStance(
+      snapshot,
+      { sourceCapable: false, pairingIsEstablished: true, peerEstateMatches: true, peerInstallationLabel: "Windows DEV (did_ab12…9f0c)", ...host },
+      { holdsIrreplaceableWork: false },
+    );
+  }
+
+  it("makes production the authority for an attested development peer of the same estate (AC-1)", () => {
+    const stance = related("production", { peerEnvironmentClass: "development" });
+    expect(stance.relationship).toBe("authority");
+    expect(stance.rationale.relationship).toContain("Windows DEV (did_ab12…9f0c)");
+  });
+
+  it("makes a development install the companion of an attested production peer (AC-1)", () => {
+    expect(related("development", { peerEnvironmentClass: "production" }).relationship).toBe("companion");
+    expect(related("test", { peerEnvironmentClass: "production" }).relationship).toBe("companion");
+  });
+
+  it("derives no relationship, and says why, on a mismatch (AC-2)", () => {
+    const cases: Array<[InstallationEnvironmentClass, Parameters<typeof related>[1], string]> = [
+      ["production", { peerEnvironmentClass: "development", peerEstateMatches: false }, "estate"],
+      ["production", { peerEnvironmentClass: null }, "not attested"],
+      ["production", { peerEnvironmentClass: "production" }, "both installations are production"],
+      ["development", { peerEnvironmentClass: "test" }, "neither installation is production"],
+      ["production", { peerEnvironmentClass: "development", pairingIsEstablished: false }, "no trusted"],
+    ];
+    for (const [local, host, why] of cases) {
+      const stance = related(local, host);
+      expect(stance.relationship).toBe("none");
+      expect(stance.rationale.relationship.toLowerCase()).toContain(why);
+    }
+  });
+
+  it("states the relationship and a stale paired reference in the briefing (AC-3)", () => {
+    const snapshot = buildInstallationOperatingProfileSnapshot({
+      intent: intent({ pairedProductionInstallationRef: "operator-organization" }),
+      environmentClass: "production",
+    });
+    const stance = resolveInstanceStance(snapshot, {
+      sourceCapable: false, pairingIsEstablished: true, peerEstateMatches: true, peerEnvironmentClass: "development",
+      peerInstallationLabel: "Windows DEV (did_ab12…9f0c)",
+      stalePairedRef: { ref: "link_old", reason: "revoked", repairRef: "did_" + "a".repeat(64) },
+    }, { holdsIrreplaceableWork: false });
+    const briefing = formatInstanceStanceBriefing(stance);
+    expect(briefing).toContain("Relationship — authority:");
+    expect(briefing).toContain("link_old");
+    expect(briefing).toContain("revoked");
+    expect(stance.stalePairedRef).toMatchObject({ ref: "link_old", repairRef: "did_" + "a".repeat(64) });
+  });
+});
