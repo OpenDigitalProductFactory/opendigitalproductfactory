@@ -6,7 +6,7 @@ vi.mock("@dpf/db", () => {
   // $transaction hands the callback the same mock, so assertions on
   // prisma.backlogItem.update see the transactional write too.
   const prisma: Record<string, unknown> = {
-    featureBuild: { update: vi.fn().mockResolvedValue({}) },
+    featureBuild: { update: vi.fn().mockResolvedValue({}), updateMany: vi.fn(), findUnique: vi.fn() },
     backlogItem: {
       update: vi.fn().mockResolvedValue({}),
       findUnique: vi.fn().mockResolvedValue({ status: "in-progress" }),
@@ -25,6 +25,12 @@ vi.mock("@/lib/attention/notify-live", () => ({
   resolveOperatorRecipient: vi.fn().mockResolvedValue("user-1"),
   notifyAttentionLive: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("./close-terminal-phase-runs", () => ({
+  closeOpenBuildPhaseRunsForTerminalBuild: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("./sandbox/sandbox-build-gc", () => ({
+  releaseSandboxForTerminalBuild: vi.fn().mockResolvedValue(undefined),
+}));
 
 import {
   buildEscalationDedupeKey,
@@ -37,10 +43,67 @@ import {
 import { prisma } from "@dpf/db";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
 import { notifyAttentionLive, resolveOperatorRecipient } from "@/lib/attention/notify-live";
+import { releaseSandboxForTerminalBuild } from "./sandbox/sandbox-build-gc";
 
 const mockFn = (f: unknown) => f as ReturnType<typeof vi.fn>;
 
 const NOW = new Date("2026-06-19T18:00:00.000Z");
+
+describe("guarded diagnosis escalation", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("does not abandon, notify or defer when the reviewed version changed", async () => {
+    mockFn(prisma.featureBuild.updateMany).mockResolvedValueOnce({ count: 0 });
+    const expectedUpdatedAt = "2026-06-19T17:00:00.000Z";
+    const result = await escalateBuildToHuman(args({ phase: "ideate", expectedUpdatedAt }));
+    expect(result).toEqual({ reportId: null, wipFreed: false, backlogItemDeferred: false });
+    expect(prisma.featureBuild.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { buildId: "FB-ABC123", phase: "ideate", abandonedAt: null,
+        updatedAt: new Date(expectedUpdatedAt) },
+    }));
+    expect(prisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(createPlatformIssueReport).not.toHaveBeenCalled();
+    expect(notifyAttentionLive).not.toHaveBeenCalled();
+    expect(prisma.backlogItem.update).not.toHaveBeenCalled();
+    expect(releaseSandboxForTerminalBuild).not.toHaveBeenCalled();
+  });
+
+  it("claims a matching version before reporting and never abandons it a second time", async () => {
+    mockFn(prisma.featureBuild.updateMany).mockResolvedValueOnce({ count: 1 });
+    const result = await escalateBuildToHuman(args({ expectedUpdatedAt: "2026-06-19T17:00:00.000Z" }));
+    expect(result).toEqual({ reportId: "PIR-TEST1", wipFreed: true, backlogItemDeferred: true });
+    expect(mockFn(prisma.featureBuild.updateMany).mock.invocationCallOrder[0]).toBeLessThan(
+      mockFn(createPlatformIssueReport).mock.invocationCallOrder[0],
+    );
+    expect(prisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(releaseSandboxForTerminalBuild).toHaveBeenCalledWith("FB-ABC123", { deleteBranch: false });
+  });
+
+  it("does not create owner work after an uncertain version claim", async () => {
+    mockFn(prisma.featureBuild.updateMany).mockRejectedValueOnce(new Error("connection lost"));
+    mockFn(prisma.featureBuild.findUnique).mockRejectedValueOnce(new Error("still unavailable"));
+    const result = await escalateBuildToHuman(args({ expectedUpdatedAt: "2026-06-19T17:00:00.000Z" }));
+    expect(result.wipFreed).toBe(false);
+    expect(result.transitionUncertain).toBe(true);
+    expect(createPlatformIssueReport).not.toHaveBeenCalled();
+    expect(notifyAttentionLive).not.toHaveBeenCalled();
+    expect(prisma.backlogItem.update).not.toHaveBeenCalled();
+    expect(prisma.featureBuild.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("continues the claimed escalation when commit succeeded before the connection failed", async () => {
+    mockFn(prisma.featureBuild.updateMany).mockImplementationOnce(async ({ data }) => {
+      // PostgreSQL committed; the acknowledgement was lost.
+      mockFn(prisma.featureBuild.findUnique).mockResolvedValueOnce(data);
+      throw new Error("connection lost after commit");
+    });
+    const result = await escalateBuildToHuman(args({ expectedUpdatedAt: "2026-06-19T17:00:00.000Z" }));
+    expect(result).toMatchObject({ reportId: "PIR-TEST1", wipFreed: true, backlogItemDeferred: true });
+    expect(prisma.featureBuild.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(createPlatformIssueReport).toHaveBeenCalledTimes(1);
+  });
+});
 
 const ISSUES = [
   { severity: "critical", description: "Task 3 combines two unrelated file edits" },
