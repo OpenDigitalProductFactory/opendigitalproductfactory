@@ -210,12 +210,13 @@ export function createLiveReviewStageDeps(): ReviewStageDeps {
 /** The live reviewer dispatch: the BI-A835D300 runner. */
 export const liveReviewerDispatch: ReviewerDispatchEffect = async (input) => {
   const { dispatchReviewerRequest } = await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch");
+  const agentId = input.author.kind === "agent" ? input.author.agentId : null;
   const outcome = await dispatchReviewerRequest({
     room: {
       roomId: input.roomId,
       capsuleId: input.capsuleId,
       userId: input.userId,
-      agentId: input.author.kind === "agent" ? input.author.agentId : null,
+      agentId,
     },
     itemId: input.itemId,
     requestCoworker: input.requestCoworker,
@@ -223,8 +224,12 @@ export const liveReviewerDispatch: ReviewerDispatchEffect = async (input) => {
     // authoring assistant; the person's own live connection carries it.
     carrier: input.author.kind === "agent" ? "author-assistant" : "requesting-user",
     now: input.now,
+    // Same issuer identity PIR already uses; without it the steward never opens (BI-CAB5D233).
+    ...(input.userId ? { issuer: { userId: input.userId, agentId } } : {}),
   });
   if (outcome.outcome === "dispatched" || outcome.outcome === "cooling-down") return { outcome: outcome.outcome };
+  // A steward hand-off is the review in motion, not a failed send.
+  if (outcome.outcome === "platform-reviewer") return { outcome: "dispatched" };
   return { outcome: "unavailable", detail: outcome.detail ?? outcome.outcome };
 };
 

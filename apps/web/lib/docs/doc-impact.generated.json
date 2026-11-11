@@ -2934,6 +2934,9 @@
       "docs/architecture/dependency-reduction-routine.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/runtime-secret-bootstrap.mjs": [
+      "docs/security/tool-evaluations/2026-08-30-1password.md"
+    ],
     "scripts/safety/transcript-snapshot.ps1": [
       "docs/operations/session-transcript-recovery.md"
     ],
@@ -4378,6 +4381,9 @@
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "packages/db/data/approved_tools_registry.json",
       "scripts/probes/marketing-media/local-render-receipt.json"
+    ],
+    "docs/security/tool-evaluations/2026-08-30-1password.md": [
+      "scripts/runtime-secret-bootstrap.mjs"
     ],
     "docs/security/tool-evaluations/2026-09-15-bmad-method.md": [
       "apps/web/lib/explore/build-process-matrix.ts"

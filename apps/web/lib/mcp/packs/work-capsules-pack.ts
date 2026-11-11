@@ -312,6 +312,15 @@ const definitions: ToolDefinition[] = [
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         status: { type: "string", enum: ENUMS.statuses, description: "Next Workroom status." },
         reason: { type: "string", description: "Reason for the status update or override." },
+        routingDisposition: {
+          type: "string",
+          enum: ["factual-clarification", "owner-consent", "scope-resolved", "legitimate-escalation"],
+          description: "Pre-human routing outcome. Required for decision-shaped blocked reasons; factual infrastructure blockers may omit it.",
+        },
+        decisionInteractionId: {
+          type: "string",
+          description: "Existing DI-* ledger id. Required for scope-resolved and legitimate-escalation.",
+        },
       },
       required: ["capsuleId", "status", "reason"],
     },

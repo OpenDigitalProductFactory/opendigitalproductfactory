@@ -460,6 +460,14 @@ describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () 
     expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-PIR00001", "record_initiative_post_implementation_review");
   });
 
+  it("takes a design-spec platform review run's subject from the platform-issued packet (BI-9CCB88C4)", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-DESIGN");
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-SCHED-DSR00001"), toolName: "record_initiative_design_review", boundItemId: null, loadStewardItemId,
+    })).resolves.toBe("BI-DESIGN");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-DSR00001", "record_initiative_design_review");
+  });
+
   it("asks nothing for another tool or a non-scheduled run", async () => {
     const loadStewardItemId = vi.fn(async () => "BI-ROUTED");
     await expect(resolveTrustedInitiativeItemId({ task: task("TR-SCHED-1"), toolName: "record_workroom_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();

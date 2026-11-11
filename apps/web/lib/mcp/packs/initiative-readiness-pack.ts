@@ -415,8 +415,8 @@ async function resolvePlatformReviewBinding(
   actionKey: string,
   taskRunId: string | undefined,
 ): Promise<{ binding: ExternalInitiativeReviewBinding } | { refusal: ToolResult } | null> {
-  const { PLATFORM_REVIEW_WRITER } = await import("@/lib/work-management/platform-review-shape");
-  if (actionKey !== PLATFORM_REVIEW_WRITER) return null;
+  const { PLATFORM_REVIEW_WRITERS } = await import("@/lib/work-management/platform-review-shape");
+  if (!(PLATFORM_REVIEW_WRITERS as readonly string[]).includes(actionKey)) return null;
   const { resolvePlatformReviewRunBinding } = await import("@/lib/backlog/initiative-readiness/platform-review-room");
   const platform = await resolvePlatformReviewRunBinding(taskRunId);
   if (!platform) return null;
