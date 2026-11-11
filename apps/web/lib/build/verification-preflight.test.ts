@@ -128,6 +128,28 @@ describe("gatherPreflightSignals", () => {
     expect(gatherPreflightSignals({ ...buildRow, verificationOut: null }, healthyRuntime).verificationAlreadyPassed).toBe(false);
   });
 
+  it("does not reuse unknown or conflicted tests as completed verification", () => {
+    for (const verificationOut of [
+      { typecheckPassed: true, testsPassed: 0, testsFailed: 0, scope: "none", testsExecuted: false, testsApplicable: null, testsQualified: false },
+      { typecheckPassed: true, testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: false, testEvidenceConflict: true },
+      { typecheckPassed: true, testsPassed: 2, testsFailed: 0, testsExecuted: true, testsApplicable: null, testCommandPassed: true, testsQualified: false },
+      { typecheckPassed: true, testsPassed: 2, testsFailed: 0, testsExecuted: true, testsApplicable: true, testCommandPassed: true, verificationSource: { unchanged: false } },
+      { typecheckPassed: true, testsPassed: 0, testsFailed: 2, testsExecuted: false, testsApplicable: false },
+      {},
+    ]) {
+      expect(gatherPreflightSignals({ ...buildRow, verificationOut }, healthyRuntime).verificationAlreadyPassed).toBe(false);
+    }
+  });
+
+  it("reuses observed advisory outcomes and positive exemptions without changing test policy", () => {
+    for (const verificationOut of [
+      { typecheckPassed: true, testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: false, testsQualified: true },
+      { typecheckPassed: true, testsPassed: 2, testsFailed: 1, testsExecuted: true, testsApplicable: true, testCommandPassed: false, testsQualified: false },
+    ]) {
+      expect(gatherPreflightSignals({ ...buildRow, verificationOut }, healthyRuntime).verificationAlreadyPassed).toBe(true);
+    }
+  });
+
   it("buildArtifactPresent only at/after build phase WITH execution state", () => {
     expect(gatherPreflightSignals({ ...buildRow, phase: "review", buildExecState: { step: "x" } }, healthyRuntime).buildArtifactPresent).toBe(true);
     expect(gatherPreflightSignals({ ...buildRow, phase: "plan", buildExecState: { step: "x" } }, healthyRuntime).buildArtifactPresent).toBe(false);

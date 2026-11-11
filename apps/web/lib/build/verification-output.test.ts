@@ -2,6 +2,25 @@ import { describe, expect, it } from "vitest";
 import { classifyVerificationFailureAxis, normalizeVerificationOutput } from "./verification-output";
 
 describe("normalizeVerificationOutput", () => {
+  it("preserves qualification and original report through a saved JSON roundtrip", () => {
+    const original = {
+      typecheckPassed: true, testsPassed: 0, testsFailed: 0,
+      testsExecuted: false, testsApplicable: null, testsQualified: false,
+      testEvidenceConflict: true,
+      verificationSource: { workdir: "/isolated-fixture", baseRef: "fixture-base", digest: "a".repeat(64), unchanged: true, checkedAt: "2026-11-11T00:00:00Z" },
+      reportedQa: { testsPassed: 99, testsFailed: 3, content: "retained report" },
+      fullOutput: "No tests ran; original QA remains unresolved.",
+    };
+    const normalized = normalizeVerificationOutput(JSON.parse(JSON.stringify(original)));
+    expect(normalized).toMatchObject({
+      testsExecuted: false, testsApplicable: null, testsQualified: false,
+      testEvidenceConflict: true, reportedQa: original.reportedQa,
+      verificationSource: original.verificationSource,
+    });
+    // The existing owner/readiness view must not read an unqualified zero as green.
+    expect(normalized.testsFailed).toBeNull();
+  });
+
   it("normalizes current verification output", () => {
     expect(normalizeVerificationOutput({
       typecheckPassed: false,

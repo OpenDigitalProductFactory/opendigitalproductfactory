@@ -74,7 +74,7 @@ export async function writeAcceptanceMet(args: {
  * tests need no sandbox.
  */
 export type MissingVerdictVerifier = (buildId: string) => Promise<{
-  verification: { typecheckPassed: boolean; testsPassed: number; testsFailed: number; source: string; scope: string };
+  verification: { typecheckPassed: boolean | null; testsPassed: number; testsFailed: number; source: string; scope: string };
   changedFiles: string[];
   output: string;
 }>;
@@ -157,7 +157,7 @@ export async function autoAcceptBuildOnEvidence(
           data: {
             buildId,
             tool: "review_verification_backfill",
-            summary: `No typecheck verdict was recorded; ran scoped checks at review: typecheck ${ran.verification.typecheckPassed ? "passed" : "failed"}, tests ${ran.verification.testsFailed === 0 ? "passed" : "failed"} (${ran.verification.scope}).`,
+            summary: `No typecheck verdict was recorded; ran scoped checks at review: typecheck ${ran.verification.typecheckPassed === null ? "unqualified" : ran.verification.typecheckPassed ? "passed" : "failed"}, tests ${ran.verification.testsPassed} passed / ${ran.verification.testsFailed} failed${ran.verification.scope === "none" ? "; no test execution" : ""} (${ran.verification.scope}).`,
           },
         })
         .catch(() => {});

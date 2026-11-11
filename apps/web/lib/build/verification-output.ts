@@ -12,8 +12,51 @@ export type VerificationOutput = {
 
 import type { BuildFailureAxis } from "./progress-visibility-types";
 import { isRecord } from "@/lib/shared/coerce";
+import type { SandboxTestResult } from "./coding-agent";
 
-export type NormalizedVerificationOutput = {
+export type TestExecutionFacts = {
+  verificationSource?: { workdir: string; baseRef: string; digest: string | null; unchanged: boolean; checkedAt: string };
+  testsExecuted?: boolean;
+  testsApplicable?: boolean | null;
+  testsQualified?: boolean;
+  testCommandPassed?: boolean | null;
+  testCommands?: string[];
+  testEvidenceConflict?: boolean;
+  reportedQa?: { testsPassed: number; testsFailed: number; content: string };
+};
+
+/** Qualification is separate from both a case count and the typecheck verdict. */
+export function testsAreQualified(value: unknown): boolean {
+  if (!isRecord(value) || value.testEvidenceConflict === true || value.testsQualified === false) return false;
+  if (isRecord(value.verificationSource) && value.verificationSource.unchanged !== true) return false;
+  if (value.testsApplicable === false && value.testsExecuted === false) {
+    return value.testsPassed === 0 && value.testsFailed === 0;
+  }
+  return value.testsApplicable === true && value.testsExecuted === true && value.testCommandPassed === true
+    && typeof value.testsPassed === "number" && Number.isSafeInteger(value.testsPassed) && value.testsPassed > 0 && value.testsFailed === 0;
+}
+
+/** Only native runner observations enter executed counters; overall success is not a count. */
+export function verificationFromSandboxResult(result: SandboxTestResult) {
+  const testsPassed = numberOrNull(result.testsPassed) ?? 0;
+  const testsFailed = numberOrNull(result.testsFailed) ?? 0;
+  const testsExecuted = result.testsExecuted === true;
+  const testsApplicable = typeof result.testsApplicable === "boolean" ? result.testsApplicable : null;
+  const testCommandPassed = typeof result.testCommandPassed === "boolean" ? result.testCommandPassed : null;
+  const facts = { testsPassed, testsFailed, testsExecuted, testsApplicable, testCommandPassed };
+  return {
+    typecheckPassed: result.typeCheckPassed,
+    ...facts,
+    testsQualified: testsAreQualified(facts),
+    parseConfidence: testsApplicable === false || (testsExecuted && testCommandPassed !== null) ? "high" as const : "low" as const,
+    source: "deterministic-scoped" as const,
+    scope: result.scope ?? "none" as const,
+    testCommands: result.testCommands ?? [],
+    testEvidenceConflict: false,
+  };
+}
+
+export type NormalizedVerificationOutput = TestExecutionFacts & {
   typecheckPassed: boolean | null;
   testsPassed: number | null;
   testsFailed: number | null;
@@ -29,7 +72,27 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
 
   const typecheckPassed = booleanOrNull(value.typecheckPassed) ?? booleanOrNull(value.typeCheckPassed);
   const testsPassed = numberOrNull(value.testsPassed);
-  const testsFailed = numberOrNull(value.testsFailed);
+  const observedFailed = numberOrNull(value.testsFailed);
+  const hasTestFacts = ["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict"]
+    .some((key) => Object.prototype.hasOwnProperty.call(value, key)) || value.scope === "none";
+  // Unqualified zero is not a passing verdict. Retain actual positive failures.
+  const testsFailed = hasTestFacts && !testsAreQualified(value) && observedFailed === 0 ? null : observedFailed;
+  const facts: TestExecutionFacts = hasTestFacts ? {
+    ...(isRecord(value.verificationSource) && typeof value.verificationSource.workdir === "string" && typeof value.verificationSource.baseRef === "string" && typeof value.verificationSource.checkedAt === "string" ? {
+      verificationSource: { workdir: value.verificationSource.workdir, baseRef: value.verificationSource.baseRef,
+        digest: stringOrNull(value.verificationSource.digest), unchanged: value.verificationSource.unchanged === true, checkedAt: value.verificationSource.checkedAt },
+    } : {}),
+    testsExecuted: value.testsExecuted === true,
+    testsApplicable: booleanOrNull(value.testsApplicable),
+    testsQualified: testsAreQualified(value),
+    testCommandPassed: booleanOrNull(value.testCommandPassed),
+    testEvidenceConflict: value.testEvidenceConflict === true,
+    ...(Array.isArray(value.testCommands) ? { testCommands: value.testCommands.filter((v): v is string => typeof v === "string") } : {}),
+    ...(isRecord(value.reportedQa) && typeof value.reportedQa.content === "string" ? {
+      reportedQa: { testsPassed: numberOrNull(value.reportedQa.testsPassed) ?? 0,
+        testsFailed: numberOrNull(value.reportedQa.testsFailed) ?? 0, content: value.reportedQa.content },
+    } : {}),
+  } : {};
   const output = firstString(
     value.fullOutput,
     value.testOutput,
@@ -40,6 +103,7 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
   const outputExcerpt = output ? output.slice(0, 2000) : null;
 
   return {
+    ...facts,
     typecheckPassed,
     testsPassed,
     testsFailed,

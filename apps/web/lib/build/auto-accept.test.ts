@@ -337,6 +337,17 @@ describe("autoAcceptBuildOnEvidence — never throws (fail-closed)", () => {
 });
 
 describe("autoAcceptBuildOnEvidence — a missing verdict is checked, not assumed (BI-1CC992A5)", () => {
+  it("keeps advisory progression without calling a no-test exemption passing tests", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: null }));
+    const result = await autoAcceptBuildOnEvidence("FB-NO-TESTS", { verifyMissingVerdict: async () => ({
+      verification: { typecheckPassed: true, testsPassed: 0, testsFailed: 0, source: "deterministic-scoped", scope: "none" },
+      changedFiles: ["docs/fixture.md"], output: "No tests ran.",
+    }) });
+    expect(result.accepted).toBe(true);
+    const backfill = mockPrisma.buildActivity.create.mock.calls.find(([input]) => input.data.tool === "review_verification_backfill");
+    expect(backfill?.[0].data.summary).toContain("0 passed / 0 failed; no test execution");
+    expect(backfill?.[0].data.summary).not.toContain("tests passed");
+  });
   const ran = (typecheckPassed: boolean) => vi.fn(async () => ({
     verification: { typecheckPassed, testsPassed: 1, testsFailed: 0, source: "deterministic-scoped", scope: "scoped" },
     changedFiles: ["apps/web/lib/x.ts"],

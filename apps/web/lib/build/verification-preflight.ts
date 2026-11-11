@@ -23,6 +23,8 @@
 // the rule pure makes it trivially unit-testable and reusable by the review
 // phase, an MCP tool, or a CI check without dragging in runtime deps.
 
+import { isRecord } from "@/lib/shared/coerce";
+
 export type PreflightVerdict = "MUST_ADVANCE" | "BLOCKED" | "CAN_TEST";
 
 export type PreflightBlocker =
@@ -154,11 +156,18 @@ export function gatherPreflightSignals(
   const acc = Array.isArray(build.acceptanceMet) ? (build.acceptanceMet as Array<{ met?: unknown }>) : [];
   const acceptanceAlreadyMet = acc.length > 0 && acc.every((a) => a?.met === true);
 
-  const vo = build.verificationOut as { typecheckPassed?: unknown } | null | undefined;
-  // A prior verification "passed" if a verification record exists and typecheck
-  // didn't explicitly fail (test failures are informational per the build→review
-  // gate, so they don't negate a recorded verification).
-  const verificationAlreadyPassed = vo != null && (vo as { typecheckPassed?: unknown }).typecheckPassed !== false;
+  const vo = build.verificationOut as Record<string, unknown> | null | undefined;
+  // Keep the existing advisory test policy, but require an actual typecheck
+  // verdict. New explicit unknown/unrun/conflicted facts cannot be reused as
+  // completed verification; legacy records retain their original interpretation.
+  const hasTestFacts = vo != null && (["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict"]
+    .some((key) => Object.prototype.hasOwnProperty.call(vo, key)) || vo.scope === "none");
+  const sourceStillQualified = vo?.verificationSource === undefined
+    || (isRecord(vo.verificationSource) && vo.verificationSource.unchanged === true);
+  const observedTests = !hasTestFacts || (vo?.testEvidenceConflict !== true && sourceStillQualified
+    && ((vo?.testsApplicable === false && vo.testsExecuted === false && vo.testsPassed === 0 && vo.testsFailed === 0)
+      || (vo?.testsApplicable === true && vo.testsExecuted === true && typeof vo.testCommandPassed === "boolean")));
+  const verificationAlreadyPassed = vo?.typecheckPassed === true && observedTests;
 
   // Something is testable only once the build phase has produced an artifact —
   // i.e. we're at/after the build phase AND execution state exists.
