@@ -15,6 +15,13 @@ export const demandReconciliationScheduled = jobs.createFunction(
     const gate = await gateAtEntry(step, "federation/demand-reconciliation");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    // A production authority queues its guidance snapshot for its development
+    // companion (BI-1B165D02) ahead of the posture step, whose outbox drain then
+    // delivers it in this cycle. A no-op everywhere that is not an authority.
+    const guidance = await step.run("publish-guidance-snapshot", async () => {
+      const { runGuidanceSnapshotPublication } = await import("@/lib/federation/guidance-snapshot-publication");
+      return runGuidanceSnapshotPublication();
+    });
     // This install's operational posture goes to every trusted same-organization
     // peer on the same cadence (BI-648F01A0 Slice 2.2). Queued first so the demand
     // step's outbox drain delivers it in this cycle; its own drain is a no-op then.
@@ -52,6 +59,6 @@ export const demandReconciliationScheduled = jobs.createFunction(
       const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
       return reconcileOrganizationMembership();
     });
-    return { posture, peerTargets, demand, work, links, membership };
+    return { guidance, posture, peerTargets, demand, work, links, membership };
   },
 );

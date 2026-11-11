@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   postComment: vi.fn(), heartbeat: vi.fn(), loadMembers: vi.fn(), workrooms: vi.fn(), workroomByCapsule: vi.fn(), workroomAccess: vi.fn(),
   executeAppointment: vi.fn(), currentUser: vi.fn(), can: vi.fn(),
   broadcastAsk: vi.fn(), broadcastAck: vi.fn(), setDataAccess: vi.fn(), mentionRoster: vi.fn(),
+  gaidMap: vi.fn(), prepareAddressing: vi.fn(), publishPosted: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   workItem: { findFirst: mocks.item, findMany: mocks.children, update: mocks.updateItem },
@@ -14,7 +15,8 @@ vi.mock("@dpf/db", () => ({ prisma: {
   agent: { findUnique: vi.fn() },
   backlogItem: { findFirst: vi.fn().mockResolvedValue(null) },
 } }));
-vi.mock("@/lib/identity/principal-linking", () => ({ ensureAgentPrincipalIdentity: mocks.ensureAgent, syncUserPrincipal: mocks.syncUser }));
+vi.mock("@/lib/identity/principal-linking", () => ({ ensureAgentPrincipalIdentity: mocks.ensureAgent, syncUserPrincipal: mocks.syncUser, getAgentGaidMap: mocks.gaidMap }));
+vi.mock("@/lib/work-management/room-message-wake.server", () => ({ prepareRoomAddressing: mocks.prepareAddressing, publishRoomMessagePosted: mocks.publishPosted }));
 vi.mock("@/lib/work-management/coworker-room-engagement.server", () => ({ getCoworkerRoomEngagement: mocks.engagement }));
 vi.mock("@/lib/work-management/room-agent-presence.server", () => ({ heartbeatAgentWorkItemPresence: mocks.heartbeat }));
 vi.mock("@/lib/work-management/post-work-item-comment", () => ({ postWorkItemComment: mocks.postComment }));
@@ -43,6 +45,8 @@ beforeEach(() => {
   mocks.item.mockImplementation(async ({ where }) => ({ id: where.OR[0].sourceId, evidence: [], assignedToUserId: "alice", assignedToAgentId: "agent" }));
   mocks.access.mockImplementation(async ({ workItem }) => ({ decision: { level: workItem.id === "parent" ? "content" : "none" }, agentPrincipalId: "PRN-agent" }));
   mocks.messages.mockResolvedValue([]);
+  mocks.gaidMap.mockResolvedValue(new Map());
+  mocks.prepareAddressing.mockResolvedValue({ refused: false, build: () => null });
   mocks.ensureAgent.mockResolvedValue({ principalId: "PRN-other", displayName: "Other coworker", sensitivityClearance: ["public", "internal"] });
   mocks.syncUser.mockResolvedValue({ principalId: "PRN-alice", displayName: "Alice" });
   mocks.appendPolicy.mockReturnValue([{ workroomPolicy: {} }]);
@@ -305,6 +309,78 @@ it("resolves @mentions in an agent's post against the workspace mention roster",
 
   expect(result.success).toBe(true);
   expect(mocks.postComment).toHaveBeenCalledWith(expect.objectContaining({ roster }));
+});
+
+// BI-31C1FDEC: an addressed post records who must act and wakes them after commit.
+describe("addressed room messages", () => {
+  beforeEach(() => {
+    mocks.mentionRoster.mockResolvedValue({});
+    mocks.item.mockResolvedValue({ id: "room-item", itemId: "WI-ROOM", sourceType: "backlog-item", sourceId: "BI-ROOM", title: "Room", evidence: [] });
+    mocks.access.mockResolvedValue({ decision: { level: "action", reason: "authorized" }, agentPrincipalId: "PRN-agent" });
+  });
+
+  it("passes addressedTo through under the caller's authority and publishes the wake after commit", async () => {
+    const build = vi.fn();
+    mocks.prepareAddressing.mockResolvedValue({ refused: false, build });
+    mocks.postComment.mockResolvedValue({ messageId: "msg-1", notifiedUserIds: [], mentionedAgentIds: [], addressed: true });
+
+    const result = await roomMessagingPack.handlers.post_room_message(
+      { caseKey: "backlog-item:BI-ROOM", body: "Can you review this?", addressedTo: ["AGT-WS-REVIEW"] },
+      "alice",
+      { agentId: "agent" },
+    );
+
+    expect(result.success).toBe(true);
+    expect(mocks.prepareAddressing).toHaveBeenCalledWith({
+      workItemId: "room-item",
+      sender: { type: "agent", id: "agent" },
+      actingUserId: "alice",
+      addressedTo: ["AGT-WS-REVIEW"],
+    });
+    expect(mocks.postComment).toHaveBeenCalledWith(expect.objectContaining({ addressing: build }));
+    expect(mocks.publishPosted).toHaveBeenCalledWith("msg-1");
+  });
+
+  it("refuses an address it cannot resolve and posts nothing", async () => {
+    mocks.prepareAddressing.mockResolvedValue({ refused: true, message: "No coworker AGT-NOPE." });
+    const result = await roomMessagingPack.handlers.post_room_message(
+      { caseKey: "backlog-item:BI-ROOM", body: "hello", addressedTo: ["AGT-NOPE"] },
+      "alice",
+      { agentId: "agent" },
+    );
+    expect(result).toMatchObject({ success: false, error: "invalid_input" });
+    expect(mocks.postComment).not.toHaveBeenCalled();
+  });
+
+  it("publishes nothing for an unaddressed post", async () => {
+    mocks.postComment.mockResolvedValue({ messageId: "msg-2", notifiedUserIds: [], mentionedAgentIds: [], addressed: false });
+    await roomMessagingPack.handlers.post_room_message({ caseKey: "backlog-item:BI-ROOM", body: "fyi" }, "alice", { agentId: "agent" });
+    expect(mocks.publishPosted).not.toHaveBeenCalled();
+  });
+
+  it("returns the sender's GAID and the addressing on every read (AC-5)", async () => {
+    mocks.access.mockResolvedValue({ decision: { level: "content", reason: "authorized" }, agentPrincipalId: "PRN-agent" });
+    mocks.children.mockResolvedValue([]);
+    mocks.gaidMap.mockResolvedValue(new Map([["AGT-OLD", "gaid:priv:dpf.internal:agt-old"]]));
+    const at = new Date("2026-11-11T05:00:00.000Z");
+    mocks.messages.mockResolvedValue([
+      {
+        messageId: "m2", senderType: "agent", senderAgentId: "AGT-A", senderUserId: null, messageType: "comment", body: "over to you",
+        createdAt: at,
+        structuredPayload: { addressing: { agents: ["AGT-B"], roles: [], sessions: [], hop: 1, senderGaid: "gaid:priv:dpf.internal:agt-a", actingUserId: "alice", wake: { state: "woken", at: at.toISOString(), detail: "Woke AGT-B." } } },
+      },
+      { messageId: "m1", senderType: "agent", senderAgentId: "AGT-OLD", senderUserId: null, messageType: "comment", body: "before B2", createdAt: at, structuredPayload: null },
+      { messageId: "m0", senderType: "user", senderAgentId: null, senderUserId: "alice", messageType: "comment", body: "hi", createdAt: at, structuredPayload: null },
+    ]);
+
+    const result = await roomMessagingPack.handlers.read_room_messages({ caseKey: "backlog-item:BI-ROOM" }, "alice", { agentId: "agent" });
+    const messages = (result.data as { messages: Array<Record<string, unknown>> }).messages;
+
+    expect(messages[0]).toMatchObject({ senderGaid: "gaid:priv:dpf.internal:agt-a", addressedTo: ["AGT-B"], hop: 1, wake: { state: "woken", detail: "Woke AGT-B." } });
+    expect(messages[1]).toMatchObject({ senderGaid: "gaid:priv:dpf.internal:agt-old" });
+    expect(messages[1]).not.toHaveProperty("addressedTo");
+    expect(messages[2]).toMatchObject({ senderGaid: null });
+  });
 });
 
 // BI-6AE64074: an approved invite that asks for a raise raises the invitee's data

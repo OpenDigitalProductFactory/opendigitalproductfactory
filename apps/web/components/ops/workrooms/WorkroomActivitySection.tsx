@@ -85,6 +85,7 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
       portfolioRole: display.portfolioRole,
       pullRequestUrl: display.pullRequestUrl,
       liveness: display.liveness, isLive: display.isLive,
+      attribution: display.attribution,
       accountableName: owner?.accountableDisplayName ?? null,
       operator: projectWorkroomOperatorSummary({ ...display, recovery: room.recovery,
         executorKind: typeof room.executorKind === "string" ? room.executorKind : null,

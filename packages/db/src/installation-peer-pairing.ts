@@ -46,9 +46,16 @@ export interface PairingLink {
   peerEnvironmentClass?: InstallationEnvironmentClass | null;
   /** The peer installation itself, e.g. `Windows DEV (did_ab12…9f0c)`. Display only. */
   peerInstallationLabel?: string | null;
+  /** The peer's installation DID: what a paired reference should name (BI-B50BE189). */
+  peerDeviceId?: string | null;
+  /** The peer's pseudonymous installation id, also accepted as a declaration. */
+  peerInstallationId?: string | null;
   revokedAt?: Date | null;
   quarantinedAt?: Date | null;
 }
+
+/** Why a declared paired reference no longer points at a live connection. */
+export type StalePairedRefReason = "revoked" | "quarantined" | "not-trusted";
 
 export interface ResolvedPairing {
   /** The peer to show and mirror work to, or null when there is none. */
@@ -66,6 +73,32 @@ export interface ResolvedPairing {
   peerEnvironmentClass: InstallationEnvironmentClass | null;
   /** The linked peer installation's display label; null when no link names it. */
   peerInstallationLabel: string | null;
+  /**
+   * Set when the operator's declaration names a link that is no longer live
+   * (BI-B50BE189). The fallback to a live link still happens; this keeps the
+   * dead reference visible instead of hiding it behind the live one.
+   */
+  staleDeclaredRef: { ref: string; reason: StalePairedRefReason } | null;
+  /**
+   * The installation DID the declaration should name instead, when it is stale
+   * or names a link id. Null when the declaration is already right or there is
+   * no live peer to point at.
+   */
+  repairRef: string | null;
+}
+
+/** A declaration names a link by its peer label, link id, installation DID or installation id. */
+function namesLink(declared: string, link: PairingLink): boolean {
+  return [link.peerLabel, link.linkId, link.peerDeviceId, link.peerInstallationId]
+    .some((value) => value?.trim() === declared);
+}
+
+/** The declaration names a link that is no longer live. */
+function staleReference(declared: string, links: readonly PairingLink[]): ResolvedPairing["staleDeclaredRef"] {
+  const named = links.find((link) => link.linkId === declared);
+  if (!named || isUsable(named)) return null;
+  const reason: StalePairedRefReason = named.revokedAt ? "revoked" : named.quarantinedAt ? "quarantined" : "not-trusted";
+  return { ref: declared, reason };
 }
 
 function isUsable(link: PairingLink): boolean {
@@ -92,29 +125,43 @@ export function resolveInstallationPairing(input: {
 
   const sameOrgLinks = input.links
     .filter((link) => link.relationshipPreset === "same-organization")
-    .filter(isUsable);
+    .filter(isUsable)
+    // Deterministic order: linkId, so equal input gives equal output and a
+    // multi-peer organization does not flap between renders.
+    .sort((a, b) => a.linkId.localeCompare(b.linkId));
 
-  // Deterministic pick: linkId ordering, so equal input gives equal output and
-  // a multi-peer organization does not flap between renders.
-  const chosen = [...sameOrgLinks].sort((a, b) => a.linkId.localeCompare(b.linkId))[0];
+  // A declaration naming one of the live peers picks that peer; otherwise the first.
+  const chosen = (declared ? sameOrgLinks.find((link) => namesLink(declared, link)) : undefined) ?? sameOrgLinks[0];
+  const staleDeclaredRef = declared ? staleReference(declared, input.links) : null;
 
   if (chosen) {
     const ref = chosen.peerLabel?.trim() || chosen.linkId;
+    const did = chosen.peerDeviceId?.trim() || null;
+    // A link id is not an installation: point the declaration at the peer's DID.
+    const repairRef = did && declared !== did && (staleDeclaredRef || declared === chosen.linkId) ? did : null;
     return {
       ref,
       source: "federation-link",
       linkId: chosen.linkId,
-      declaredButUnconfirmed: declared !== null && declared !== ref,
+      declaredButUnconfirmed: declared !== null && !namesLink(declared, chosen),
       peerEnvironmentClass: chosen.peerEnvironmentClass ?? null,
       peerInstallationLabel: chosen.peerInstallationLabel?.trim() || null,
+      staleDeclaredRef,
+      repairRef,
     };
   }
 
   if (declared) {
-    return { ref: declared, source: "declared-intent", declaredButUnconfirmed: true, peerEnvironmentClass: null, peerInstallationLabel: null };
+    return {
+      ref: declared, source: "declared-intent", declaredButUnconfirmed: true,
+      peerEnvironmentClass: null, peerInstallationLabel: null, staleDeclaredRef, repairRef: null,
+    };
   }
 
-  return { ref: null, source: "none", declaredButUnconfirmed: false, peerEnvironmentClass: null, peerInstallationLabel: null };
+  return {
+    ref: null, source: "none", declaredButUnconfirmed: false,
+    peerEnvironmentClass: null, peerInstallationLabel: null, staleDeclaredRef: null, repairRef: null,
+  };
 }
 
 /**

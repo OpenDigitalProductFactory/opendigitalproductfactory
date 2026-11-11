@@ -7,7 +7,7 @@ import {
 import { OPERATING_INTENT_CONFIG_KEY } from "@/lib/install/instance-stance";
 import type { InstallationIntentDb } from "@/lib/installation-journey/operating-intent";
 
-import { buildIdentityHeadline, loadInstallationIdentityView } from "./installation-identity-view";
+import { buildIdentityHeadline, loadInstallationIdentityView, pairingRepair } from "./installation-identity-view";
 
 const CONFIRMED_DEV_INTENT = {
   schemaVersion: 1,
@@ -124,6 +124,7 @@ describe("loadInstallationIdentityView", () => {
       "sourceAuthority",
       "peerWrite",
       "workSync",
+      "relationship",
     ]);
     const peer = view.stances.find((row) => row.stance === "peerWrite");
     expect(peer).toMatchObject({ valueLabel: "Read only", intent: "warning" });
@@ -253,3 +254,26 @@ describe("loadInstallationIdentityView", () => {
     expect(workSync?.rationale).toContain("only this side may change");
   });
 });
+
+describe("pairingRepair (BI-B50BE189)", () => {
+  const base = { pairedInstallationLabel: "Windows DEV (did_aaaa…aaaa)" } as Parameters<typeof pairingRepair>[0];
+
+  it("offers the companion's installation when the saved reference names a revoked connection", () => {
+    const repair = pairingRepair({ ...base, stalePairedRef: { ref: "link_old", reason: "revoked", repairRef: "did_" + "a".repeat(64) } });
+    expect(repair).toEqual({
+      message: "The saved paired installation, link_old, names a connection that is revoked. Point it at Windows DEV (did_aaaa…aaaa) instead.",
+      repairRef: "did_" + "a".repeat(64),
+      actionLabel: "Use Windows DEV (did_aaaa…aaaa)",
+    });
+  });
+
+  it("says so plainly when there is nothing live to repair to", () => {
+    const repair = pairingRepair({ ...base, stalePairedRef: { ref: "link_old", reason: "revoked", repairRef: null } });
+    expect(repair).toMatchObject({ repairRef: null, actionLabel: null });
+  });
+
+  it("offers nothing when the saved reference is live", () => {
+    expect(pairingRepair(base)).toBeUndefined();
+  });
+});
+
