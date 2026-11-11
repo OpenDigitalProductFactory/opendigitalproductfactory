@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Native host-upkeep stable origin implementation plan
 
 BI-7EE97802 / WC-C41B707A. This is one atomic installer-address repair.

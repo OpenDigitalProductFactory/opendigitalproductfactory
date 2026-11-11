@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Stable origin for a co-located host-upkeep agent
 
 Backlog: BI-7EE97802. Workroom: WC-C41B707A.
