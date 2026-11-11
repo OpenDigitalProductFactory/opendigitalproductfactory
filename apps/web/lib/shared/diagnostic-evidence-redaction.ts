@@ -16,6 +16,6 @@ export function redactDiagnosticEvidenceText(text:string, options: { credentialA
   // Opt in at that capture boundary; preserve existing structured readers' policy.
   if (!options.credentialAssignments) return redacted;
   return redacted
-    .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted-token]@")
-    .replace(/\b(?:token|secret|password|authorization)\s*[=:]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi, "[redacted-token]");
+    .replace(/(https?:\/\/)[^\s/?#]+@/gi, "$1[redacted-token]@")
+    .replace(/(\b(?:token|secret|password|authorization)["']?\s*[=:]\s*)(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|[^\s,;]+)/gi, '$1"[redacted-token]"');
 }

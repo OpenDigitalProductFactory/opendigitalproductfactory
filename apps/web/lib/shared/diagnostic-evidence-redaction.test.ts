@@ -18,11 +18,18 @@ it("preserves ordinary diagnostic prose and structured contribution bytes",()=>{
  expect(redactDiagnosticEvidenceText(value)).toBe(value);
 });
 it.each([
- "password=synthetic-fixture-value",
- "TOKEN: 'synthetic fixture value'",
- "https://fixture:synthetic-fixture-value@registry.invalid/path",
-])("excludes common Docker diagnostic credentials when requested", value => {
- expect(redactDiagnosticEvidenceText(value, { credentialAssignments: true })).not.toContain("synthetic");
+ ["password=synthetic-fixture-value", 'password="[redacted-token]"'],
+ ["TOKEN: 'synthetic fixture value'", 'TOKEN: "[redacted-token]"'],
+ ["https://fixture:synthetic-fixture-value@registry.invalid/path", "https://[redacted-token]@registry.invalid/path"],
+ ['"password": "synthetic fixture value"', '"password": "[redacted-token]"'],
+ [String.raw`secret="synthetic \"quoted\" fixture value"`, 'secret="[redacted-token]"'],
+ ["https://synthetic-user@registry.invalid/path", "https://[redacted-token]@registry.invalid/path"],
+])("excludes the complete Docker credential while preserving context", (value, expected) => {
+ expect(redactDiagnosticEvidenceText(value, { credentialAssignments: true })).toBe(expected);
+});
+it("removes complete URL userinfo through its final authority separator", () => {
+ const value="https://fixture:synthetic@private-suffix@registry.invalid/path";
+ expect(redactDiagnosticEvidenceText(value, { credentialAssignments: true })).toBe("https://[redacted-token]@registry.invalid/path");
 });
 it("preserves existing callers' assignment-like evidence by default", () => {
  const value="password=labelled-test-prose; https://fixture:labelled@registry.invalid";
