@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "recorded-provenance-in-existing-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/workrooms/WorkroomActivitySection.tsx",
+      "apps/web/components/ops/workrooms/WorkroomInventory.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "measured": {
+      "/ops/workrooms": {
+        "defaultVisibleWords": 168,
+        "leadBandWords": 24,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "sourceSha": "1d5d40110b1214efbb2ec7c418c9a03141e5bef9",
+    "workflowRun": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/42972159500",
+    "artifactId": 13833992900,
+    "artifactSha256": "554d165ac871ca0621972ba0967389b0002fca20975feb782d6676f96e1d0773"
+  },
+  "rationale": "Restore the recorded executor and invocation path inside the existing closed Technical evidence disclosure, independently of accountability. The measured structure deliberately adds paragraph/text inside that group. Only this route's measured ariaSnapshot is spliced into the retained baseline; all numeric ceilings, the other 203 route entries, and route coverage remain unchanged. The arrival view measures 168 words against its retained 176-word ceiling. The existing normaliseSnapshot contract coalesces consecutive identically shaped sibling subtrees: the executor and invocation paragraphs therefore produce one paragraph/text subtree before the evidence link. The link-separated recovery paragraph remains distinct. The focused ratchet regression exercises this exact layout; no normalizer behavior or numeric limit is changed.",
+  "verification": "The calibration workflow succeeded on the cited source and accounted for all 216 eligible routes. Both downloaded artifact hashes were verified. The earlier enforcing PR sweep confirmed the same one-route paragraph/text difference on a second measurement while every numeric axis passed. Corrected route, mapper and disclosure tests pass (20 total), and both web typechecks pass. Fresh enforcing CI and live acceptance remain owed after this snapshot correction. Advisory UX engagement CE-BE9ABEF5 is requested but has not executed; it is not a critique pass."
+}

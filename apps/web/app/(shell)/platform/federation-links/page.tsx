@@ -6,6 +6,7 @@ import { isFederationPairingDirection } from "@dpf/db/federation-pairing-types";
 import { isFederationRelationshipPreset } from "@dpf/db/federation-link-types";
 import { resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
 
+import { loadInstanceStance, prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import { auth } from "@/lib/auth";
 import { getT } from "@/lib/i18n/t.server";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
@@ -52,7 +53,13 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const [t, locale, sharing] = await Promise.all([getT("shell"), getLocaleContext(), readDeploymentCountrySharing()]);
+  const [t, locale, sharing, stance] = await Promise.all([
+    getT("shell"),
+    getLocaleContext(),
+    readDeploymentCountrySharing(),
+    // BI-B50BE189: the authority/companion relationship this installation is in.
+    loadInstanceStance(prismaInstanceStanceStore(prisma)).catch(() => null),
+  ]);
   const [links, edgeNodes, partnerAccounts, nearbyPairingSessions, introducedCandidates] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
@@ -231,8 +238,16 @@ export default async function FederationLinksPage() {
           {" · "}
           <Link href="/platform/service-desk" className="text-[var(--dpf-accent)] hover:underline">{t("federation.serviceDesk")}</Link>
         </p>
+        {stance && stance.relationship !== "none" ? (
+          <p className="mt-1 text-sm text-[var(--dpf-text)]">{stance.rationale.relationship}</p>
+        ) : null}
       </div>
-      <OrganizationJoinPanel candidates={joinCandidates} />
+      <MessagesProvider
+        locale={locale.language}
+        messages={{ organizationJoin: namespaceMessages(locale.language, "organizationJoin") }}
+      >
+        <OrganizationJoinPanel candidates={joinCandidates} />
+      </MessagesProvider>
       <MessagesProvider
         locale={locale.language}
         messages={{ deploymentSharing: namespaceMessages(locale.language, "deploymentSharing") }}

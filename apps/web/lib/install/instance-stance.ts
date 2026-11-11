@@ -23,11 +23,15 @@ import {
 } from "@dpf/db/installation-peer-pairing";
 import {
   buildInstallationOperatingProfileSnapshot,
+  isInstallationEnvironmentClass,
   parseOperatingIntent,
   type InstallationOperatingIntentV1,
 } from "@dpf/db/installation-operating-intent";
 
+import { shortDeviceId } from "@/lib/federation/instance-identity";
 import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
+import { normalizeOrganizationRef } from "@/lib/install/estate-identity-contract";
+import { loadEstateNameResolution } from "@/lib/install/estate-identity";
 import { readInstallHostProfile } from "@/lib/install/host-profile";
 
 // The installer-state read lives with the precedence chain that ranks it.
@@ -114,6 +118,13 @@ export function holdsIrreplaceableWork(input: {
   return latestChange > capturedAt;
 }
 
+/** The peer installation as an operator recognises it: its name and DID suffix. */
+function peerInstallationLabel(displayName: string | null | undefined, deviceId: string | null): string | null {
+  const name = displayName?.trim();
+  if (!name) return null;
+  return deviceId ? `${name} (${shortDeviceId(deviceId)})` : name;
+}
+
 /** Minimal store shape so callers can pass Prisma without this module importing it. */
 export interface InstanceStanceStore {
   readConfig(key: string): Promise<unknown>;
@@ -186,8 +197,12 @@ export function prismaInstanceStanceStore(
           linkState: true,
           role: true,
           peerOrganizationRef: true,
+          peerDeviceId: true,
+          peerInstallationId: true,
+          peerEnvironmentClass: true,
           revokedAt: true,
           quarantinedAt: true,
+          principal: { select: { displayName: true } },
         },
       });
       return rows.map((row) => ({
@@ -197,6 +212,13 @@ export function prismaInstanceStanceStore(
         // itself is not a column, so the role is what identifies the pairing.
         relationshipPreset: row.role === "same-org-peer" ? "same-organization" : row.role,
         peerLabel: row.peerOrganizationRef,
+        // BI-0716C8A8: the CA-attested class, and the peer installation itself
+        // for display. `peerLabel` stays the organization ref the operator's
+        // declaration is compared against.
+        peerEnvironmentClass: isInstallationEnvironmentClass(row.peerEnvironmentClass) ? row.peerEnvironmentClass : null,
+        peerInstallationLabel: peerInstallationLabel(row.principal?.displayName, row.peerDeviceId),
+        peerDeviceId: row.peerDeviceId,
+        peerInstallationId: row.peerInstallationId,
         revokedAt: row.revokedAt,
         quarantinedAt: row.quarantinedAt,
       }));
@@ -272,6 +294,17 @@ export async function loadInstanceStance(
     declaredRef: snapshot.pairedProductionInstallationRef,
     links,
   });
+  // BI-B50BE189: the relationship needs the peer to be of this estate. The
+  // link's organization ref is the peer's normalised estate name.
+  let peerEstateMatches = false;
+  if (pairing.source === "federation-link") {
+    try {
+      const local = normalizeOrganizationRef((await loadEstateNameResolution(store, options)).estateName);
+      peerEstateMatches = local !== null && local === normalizeOrganizationRef(pairing.ref);
+    } catch {
+      peerEstateMatches = false;
+    }
+  }
   let workSyncHealthLine: string | undefined;
   try {
     workSyncHealthLine = (await store.readWorkSyncHealthLine?.()) ?? undefined;
@@ -284,6 +317,12 @@ export async function loadInstanceStance(
     {
       sourceCapable: hostProfile.sourceCapable,
       pairingIsEstablished: pairingSupportsWorkSync(pairing),
+      peerEnvironmentClass: pairing.peerEnvironmentClass,
+      ...(pairing.peerInstallationLabel ? { peerInstallationLabel: pairing.peerInstallationLabel } : {}),
+      peerEstateMatches,
+      ...(pairing.staleDeclaredRef
+        ? { stalePairedRef: { ...pairing.staleDeclaredRef, repairRef: pairing.repairRef } }
+        : {}),
       ...(workSyncHealthLine ? { workSyncHealthLine } : {}),
     },
     {

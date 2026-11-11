@@ -1,10 +1,22 @@
 import { WorkControlPanel } from "@/components/build/work-control/WorkControlPanel";
-import { createGovernedWorkAction, getWorkControlData } from "@/lib/actions/work-capsules";
+import { createGovernedWorkAction, getWorkControlData, getDeliveryOutcomeData } from "@/lib/actions/work-capsules";
+import { DeliveryOutcomeScorecard } from "@/components/build/delivery-outcomes/DeliveryOutcomeScorecard";
 import { auth } from "@/lib/auth";
+import { namespaceMessages, translate } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { can } from "@/lib/permissions";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 
-export default async function WorkControlPage() {
+export default async function WorkControlPage({searchParams}:{searchParams?:Promise<Record<string,string|string[]|undefined>>} = {}) {
+  const locale = await getLocaleContext();
+  const params=await searchParams??{};
+  if(params.view==="outcomes") {
+    const query=typeof params.q==="string"?params.q.slice(0,120):"";
+    const dimension=typeof params.dimension==="string"?params.dimension:"all";
+    const outcomes=await getDeliveryOutcomeData({query,dimension});
+    return <MessagesProvider locale={locale.language} messages={{workrooms:namespaceMessages(locale.language,"workrooms")}}><DeliveryOutcomeScorecard data={outcomes} query={query} dimension={dimension} formatLocale={locale.formatLocale}/></MessagesProvider>;
+  }
   const session = await auth();
   const data = await getWorkControlData();
   // BI-E167A8A6: the "Plan governed work" form is door 2 of Build Studio's two
@@ -37,6 +49,7 @@ export default async function WorkControlPage() {
       createAction={createGovernedWorkAction}
       canCreateGovernedWork={canCreateGovernedWork}
       portalContext={portalContext}
+      outcomesLabel={translate(locale.language,"workrooms","outcomes.title")}
     />
   );
 }

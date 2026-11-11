@@ -194,6 +194,36 @@ describe("dispatchOwedIndependentReviews — design-stage reviews of open items 
     expect(d.execute).not.toHaveBeenCalled();
   });
 
+  it("hands an owed design-spec packet to the platform reviewer when the author has no live connection (BI-CAB5D233)", async () => {
+    prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1", status: "open" }]);
+    const designSpecPacket = {
+      ...packet,
+      requestKey: "initiative-readiness:BI-1:design-spec:cab5",
+      initiativeReviewBinding: { writerToolName: "record_initiative_design_review", gate: "design-spec", itemId: "BI-1" },
+    };
+    const routeToPlatformReviewer = vi.fn(async () => ({
+      kind: "routed" as const, capsuleId: "WC-DSR-1", targetAgent: "AGT-WS-REVIEW", issued: "issued" as const,
+    }));
+    const d = deps({
+      findConnection: vi.fn(async () => null),
+      owedRoutes: vi.fn(async () => [{ workroomId: "WC-1", requestCoworker: designSpecPacket }]),
+      routeToPlatformReviewer,
+    });
+    await expect(dispatchOwedIndependentReviews(d as never)).resolves.toEqual([
+      expect.objectContaining({
+        outcome: "platform-reviewer",
+        carriedByAgentId: "AGT-WS-REVIEW",
+        detail: expect.stringContaining("WC-DSR-1"),
+      }),
+    ]);
+    expect(routeToPlatformReviewer).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-1",
+      requestCoworker: designSpecPacket,
+      issuer: { userId: "user-1", agentId: "AGT-EXT-CODEX" },
+    }));
+    expect(d.execute).not.toHaveBeenCalled();
+  });
+
   it("does nothing for an open item whose design reviews are not owed", async () => {
     prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1", status: "open" }]);
     const d = deps({ owedRoutes: vi.fn(async () => []) });

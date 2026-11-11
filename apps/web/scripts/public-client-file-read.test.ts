@@ -11,6 +11,7 @@ import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, rea
 import { publicActionReference } from "./subscription-calibration-verification";
 
 const id = "a".repeat(40), descriptor = 71;
+const portableNoFollowFlag = constants.O_NOFOLLOW ?? 0x20_000;
 const publicBytes = Buffer.from(`createServerReference("${id}", callServer, undefined, findSourceMapURL, "publicStatusAction")`);
 const swappedPathBytes = `createServerReference("${id}", callServer, undefined, findSourceMapURL, "getOrCreateThreadSnapshot")`;
 let cursor = 0;
@@ -34,22 +35,22 @@ afterEach(() => vi.resetAllMocks());
 
 describe("public client metadata file reads", () => {
   it("reads the opened file when its pathname is replaced after inspection", () => {
-    expect(publicActionReference(id)?.publicProxyExportName).toBe("publicStatusAction");
+    expect(publicActionReference(id, portableNoFollowFlag)?.publicProxyExportName).toBe("publicStatusAction");
     expect(readFileSync).not.toHaveBeenCalled();
-    expect(openSync).toHaveBeenCalledWith(expect.any(String), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    expect(openSync).toHaveBeenCalledWith(expect.any(String), constants.O_RDONLY | portableNoFollowFlag | constants.O_NONBLOCK);
     expect(closeSync).toHaveBeenCalledExactlyOnceWith(descriptor);
   });
 
   it("refuses a symlink instead of following it to another bundle", () => {
     vi.mocked(openSync).mockImplementation(() => { throw Object.assign(new Error("symlink"), { code: "ELOOP" }); });
-    expect(publicActionReference(id)?.publicProxyExportName).toBeNull();
+    expect(publicActionReference(id, portableNoFollowFlag)?.publicProxyExportName).toBeNull();
     expect(readSync).not.toHaveBeenCalled(); expect(readFileSync).not.toHaveBeenCalled();
   });
 
   it("closes an opened non-regular or oversized file without reading it", () => {
     for (const stat of [{ isFile: () => false, size: 10 }, { isFile: () => true, size: 8 * 1024 * 1024 + 1 }]) {
       vi.clearAllMocks(); vi.mocked(fstatSync).mockReturnValue(stat as never);
-      expect(publicActionReference(id)?.publicProxyExportName).toBeNull();
+      expect(publicActionReference(id, portableNoFollowFlag)?.publicProxyExportName).toBeNull();
       expect(readSync).not.toHaveBeenCalled(); expect(closeSync).toHaveBeenCalledExactlyOnceWith(descriptor);
     }
   });
@@ -59,7 +60,7 @@ describe("public client metadata file reads", () => {
       expect(fd).toBe(descriptor); expect(buffer.length).toBeLessThanOrEqual(publicBytes.length + 1);
       buffer.fill("x", offset, offset + length); return length;
     }) as typeof readSync);
-    expect(publicActionReference(id)?.publicProxyExportName).toBeNull();
+    expect(publicActionReference(id, portableNoFollowFlag)?.publicProxyExportName).toBeNull();
     expect(readFileSync).not.toHaveBeenCalled(); expect(closeSync).toHaveBeenCalledExactlyOnceWith(descriptor);
   });
 
@@ -71,7 +72,7 @@ describe("public client metadata file reads", () => {
     vi.mocked(readSync).mockImplementation(((_fd: number, buffer: Buffer, offset: number, length: number) => {
       requestedBytes += length; buffer.fill("x", offset, offset + length); return length;
     }) as typeof readSync);
-    expect(publicActionReference(id)?.publicProxyExportName).toBeNull();
+    expect(publicActionReference(id, portableNoFollowFlag)?.publicProxyExportName).toBeNull();
     expect(openSync).toHaveBeenCalledTimes(4); expect(closeSync).toHaveBeenCalledTimes(4);
     expect(requestedBytes).toBe(32 * 1024 * 1024);
     expect(readFileSync).not.toHaveBeenCalled();
@@ -79,7 +80,12 @@ describe("public client metadata file reads", () => {
 
   it("closes the descriptor when reading fails", () => {
     vi.mocked(readSync).mockImplementation(() => { throw new Error("read failed"); });
-    expect(publicActionReference(id)?.publicProxyExportName).toBeNull();
+    expect(publicActionReference(id, portableNoFollowFlag)?.publicProxyExportName).toBeNull();
     expect(closeSync).toHaveBeenCalledExactlyOnceWith(descriptor);
+  });
+
+  it.runIf(constants.O_NOFOLLOW === undefined)("fails closed when the host cannot request a no-follow open", () => {
+    expect(publicActionReference(id)?.publicProxyExportName).toBeNull();
+    expect(openSync).not.toHaveBeenCalled(); expect(readSync).not.toHaveBeenCalled();
   });
 });

@@ -81,6 +81,7 @@ export default async function SelfUpgradePage() {
     windowTimezone: "UTC",
     nextWindowStart: null,
     nextScheduledCheckAt: null,
+    missedWindow: null,
     deployedSha: null,
     deployedShaSource: "unknown",
     targetSha: null,

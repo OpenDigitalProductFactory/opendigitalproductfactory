@@ -18,10 +18,15 @@ import { prisma } from "@dpf/db";
 import { getActiveSelfUpgradeBlackout } from "@/lib/self-upgrade/blackout";
 import type { SelfUpgradeConfig } from "@/lib/self-upgrade/config";
 import { getDeferredUpgradeRequest, isDeferredRequestPending } from "@/lib/self-upgrade/deferred-request";
-import { resolveEffectiveUpgradeWindow } from "@/lib/self-upgrade/effective-window";
+import { currentWindowOpenedAt, resolveEffectiveUpgradeWindow } from "@/lib/self-upgrade/effective-window";
+import { scheduledCheckEligibleAt } from "@/lib/self-upgrade/interval-anchor";
 import { getLastCheckedAt, isCheckIntervalElapsed } from "@/lib/self-upgrade/last-check";
 
 const DECLINE_CONFIG_KEY = "self_upgrade.lastScheduledDecline";
+// BI-EF1AC111 (AC-3): the last decline made while the window was open and had
+// not had its check. Kept apart from the latest decline so the next daytime
+// "outside-window" tick cannot overwrite why the night was skipped.
+const WINDOW_DECLINE_CONFIG_KEY = "self_upgrade.lastWindowDecline";
 
 /** A gate declined the unattended tick: the reason, plus what the caller reports. */
 export type ScheduledGateDecline = {
@@ -55,7 +60,10 @@ type ScheduledGateConfig = Pick<SelfUpgradeConfig, "maintenanceWindows" | "check
  * timezone — never a silent never-runs.
  *
  * Interval: only the scheduled cron is rate-limited, so the hourly tick polls
- * no more often than the operator configured. A request an agent deferred to
+ * no more often than the operator configured. The interval is anchored to the
+ * window opening (BI-EF1AC111): an opening with no check yet forgives up to a
+ * day of it, so a daytime manual upgrade or last night's 23:02 run does not
+ * skip tonight's window. A request an agent deferred to
  * the window (BI-2128872C) waives the interval while no check has run since it
  * was made, so the first in-window tick honours it.
  *
@@ -80,8 +88,9 @@ export async function evaluateScheduledGate(args: {
   if (!window.open) return { reason: "outside-window" };
   if (!args.dryRun) {
     const lastCheckedAt = await getLastCheckedAt();
+    const windowOpenedAt = currentWindowOpenedAt(window, now);
     if (
-      !isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, now) &&
+      !isCheckIntervalElapsed(lastCheckedAt, config.checkIntervalHours, now, windowOpenedAt) &&
       !isDeferredRequestPending(await getDeferredUpgradeRequest(), lastCheckedAt)
     ) {
       return { reason: "interval-not-elapsed" };
@@ -96,19 +105,20 @@ export type ScheduledDecline = {
 };
 
 /**
- * When the next unattended check becomes due. Null when it is due now (never
- * checked, or a non-positive interval, which means no throttle). Mirrors
- * `isCheckIntervalElapsed` exactly so the status a caller reads and the gate
- * the cron applies can never disagree.
+ * When the interval next lets an unattended check run. Null when it does not
+ * hold the check back now (never checked, a non-positive interval, or already
+ * elapsed). `windowOpenedAt` is the opening the check would run in (see
+ * `schedulingWindowOpening`). Mirrors `isCheckIntervalElapsed` exactly so the
+ * status a caller reads and the gate the cron applies can never disagree.
  */
 export function nextScheduledCheckAt(
   lastCheckedAt: Date | null,
   intervalHours: number,
   now: Date,
+  windowOpenedAt: Date | null = null,
 ): Date | null {
-  if (!lastCheckedAt) return null;
-  if (!(intervalHours > 0)) return null;
-  const next = new Date(lastCheckedAt.getTime() + intervalHours * 60 * 60 * 1000);
+  const next = scheduledCheckEligibleAt(lastCheckedAt, intervalHours, windowOpenedAt);
+  if (!next) return null;
   return next.getTime() <= now.getTime() ? null : next;
 }
 
@@ -117,8 +127,9 @@ export function scheduledCheckIsThrottled(
   lastCheckedAt: Date | null,
   intervalHours: number,
   now: Date,
+  windowOpenedAt: Date | null = null,
 ): boolean {
-  return nextScheduledCheckAt(lastCheckedAt, intervalHours, now) !== null;
+  return nextScheduledCheckAt(lastCheckedAt, intervalHours, now, windowOpenedAt) !== null;
 }
 
 /**
@@ -137,8 +148,19 @@ export function declineIsCurrent(
   return at.getTime() >= lastCheckedAt.getTime();
 }
 
-/** Record why an unattended tick declined. Never throws into the caller. */
-export async function recordScheduledDecline(reason: string, now: Date): Promise<void> {
+/**
+ * Record why an unattended tick declined. Never throws into the caller.
+ *
+ * With `config`, a decline made while the window is open and has not had its
+ * check is also kept as the window decline (BI-EF1AC111, AC-3): that is the
+ * reason the window may pass without an upgrade, and the daytime ticks that
+ * follow must not erase it.
+ */
+export async function recordScheduledDecline(
+  reason: string,
+  now: Date,
+  config?: Pick<SelfUpgradeConfig, "maintenanceWindows">,
+): Promise<void> {
   const value = { reason, at: now.toISOString() };
   try {
     await prisma.platformConfig.upsert({
@@ -149,6 +171,83 @@ export async function recordScheduledDecline(reason: string, now: Date): Promise
   } catch {
     // Observability must never break the upgrade path it observes.
   }
+  if (!config || !reasonMayMissWindow(reason)) return;
+  try {
+    const window = await resolveEffectiveUpgradeWindow({ config, now });
+    if (!window.open || window.source === "needs-timezone") return;
+    const windowOpenedAt = currentWindowOpenedAt(window, now);
+    const lastCheckedAt = await getLastCheckedAt();
+    if (windowOpeningHasHadCheck(lastCheckedAt, windowOpenedAt)) return;
+    const windowValue = {
+      reason,
+      at: now.toISOString(),
+      windowOpenedAt: windowOpenedAt?.toISOString() ?? null,
+    };
+    await prisma.platformConfig.upsert({
+      where: { key: WINDOW_DECLINE_CONFIG_KEY },
+      update: { value: windowValue },
+      create: { key: WINDOW_DECLINE_CONFIG_KEY, value: windowValue },
+    });
+  } catch {
+    // Observability must never break the upgrade path it observes.
+  }
+}
+
+// Declines that never need the window record: they are either decided by the
+// window itself (outside it, or no timezone to place it) or already shown to
+// the operator on their own (a declared blackout, upgrades turned off). Not
+// resolving the window for them also keeps the gate's ordering intact: a
+// blackout or a missing timezone is decided without consulting the window.
+const SELF_EXPLAINING_DECLINES = new Set([
+  "outside-window",
+  "no-window-needs-timezone",
+  "blackout-period",
+  "disabled",
+]);
+
+function reasonMayMissWindow(reason: string): boolean {
+  const code = reason.split(":")[0]?.trim() ?? reason;
+  return !SELF_EXPLAINING_DECLINES.has(code);
+}
+
+/**
+ * True when the current opening already had its check, so a later decline in
+ * it (the hourly interval throttle) is not a missed window. With no bounded
+ * opening (an always-open window), any earlier check counts.
+ */
+export function windowOpeningHasHadCheck(lastCheckedAt: Date | null, windowOpenedAt: Date | null): boolean {
+  if (!lastCheckedAt) return false;
+  return windowOpenedAt === null || lastCheckedAt.getTime() >= windowOpenedAt.getTime();
+}
+
+export type WindowDecline = ScheduledDecline & {
+  /** Start of the window opening it declined in, or null when unbounded. */
+  windowOpenedAt: string | null;
+};
+
+/** The last in-window decline, or null. Never throws: a status read must not break on it. */
+export async function getWindowDecline(): Promise<WindowDecline | null> {
+  try {
+    const row = await prisma.platformConfig.findUnique({ where: { key: WINDOW_DECLINE_CONFIG_KEY } });
+    const value = row?.value as { reason?: unknown; at?: unknown; windowOpenedAt?: unknown } | null;
+    const reason = typeof value?.reason === "string" ? value.reason : null;
+    const at = typeof value?.at === "string" ? value.at : null;
+    const windowOpenedAt = typeof value?.windowOpenedAt === "string" ? value.windowOpenedAt : null;
+    return reason && at ? { reason, at, windowOpenedAt } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The window decline the operator should still see: no check has run since it
+ * was recorded, so that window went (or is going) without an upgrade check.
+ */
+export function missedWindowDecline(
+  decline: WindowDecline | null,
+  lastCheckedAt: Date | null,
+): WindowDecline | null {
+  return declineIsCurrent(decline, lastCheckedAt) ? decline : null;
 }
 
 export async function getScheduledDecline(): Promise<ScheduledDecline | null> {

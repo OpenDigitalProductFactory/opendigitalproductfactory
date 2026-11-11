@@ -67,6 +67,7 @@ No proactivity setting can bypass them:
 - **Confirm** the derived levels if they look right.
 - **Adjust** any coworker in place — the change saves immediately and takes effect on its next scheduled work.
 - A coworker may also **propose** its own adjustment after a repeated pattern; you accept, keep, or narrow it from the ["Needs you" inbox](../workspace/attention-inbox.md).
+- When you approve a routine request in the inbox, you can tick **Don't ask me again when this coworker does this**. From then on that coworker does that one kind of action for you without asking. It never covers money leaving, anything public, anything permanent or a change to someone's access, and a coworker you set to always ask still asks. See [Not being asked the same thing again](../workspace/attention-inbox.md#not-being-asked-the-same-thing-again).
 
 ## Internal Learning Recommendations
 

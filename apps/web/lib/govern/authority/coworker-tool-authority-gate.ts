@@ -334,6 +334,9 @@ async function writeAuthorizationDecision(
             escalationReason: decision.escalation.reasonCode,
             escalationSteering: decision.escalation.steering,
             damaging: decision.escalation.damaging,
+            ...(decision.escalation.reasonCode === "steered-by-standing-ruling" && input.standingRulingEnvelopeId
+              ? { standingRulingEnvelopeId: input.standingRulingEnvelopeId }
+              : {}),
           }
         : {}),
     },
@@ -366,14 +369,19 @@ async function writeAuthorizationDecision(
   }
 }
 
-/** The envelope's stored reason: the rule, then the branch that decided it. */
+/**
+ * The envelope's stored reason. When the call says in plain words what will
+ * happen (BI-88D51B8F), that leads; then the rule and the branch that decided it.
+ */
 export function approvalExplanation(
   decision: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>,
+  approverSummary?: string,
 ): string {
   const why = decision.escalation
     ? escalationReasonSentence(decision.escalation.reasonCode)
     : null;
-  return why ? `${decision.explanation} ${why}` : decision.explanation;
+  const rule = why ? `${decision.explanation} ${why}` : decision.explanation;
+  return approverSummary?.trim() ? `${approverSummary.trim()} ${rule}` : rule;
 }
 
 async function ensureApproval(
@@ -580,7 +588,7 @@ export async function enforceCoworkerToolAuthority(
         binding: decision.approvalBinding,
         authorityDecisionId: decisionId,
         threadId: execution.context?.threadId ?? null,
-        explanation: approvalExplanation(decision),
+        explanation: approvalExplanation(decision, input.action.consequenceRefinement?.approverSummary),
         // The call's resolved consequence sizes how long the person has to
         // answer: outward stays short, everything else waits for them.
         ...(input.action.consequence !== undefined ? { consequence: input.action.consequence } : {}),

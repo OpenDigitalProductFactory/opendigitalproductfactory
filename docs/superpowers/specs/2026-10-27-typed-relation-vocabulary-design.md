@@ -290,7 +290,14 @@ the edge when the qualifier is missing or empty. The qualifier is free text
 only for `role`, which carries a domain-specific name such as a Prisma
 `fieldName`. `traceKind` is a closed enum.
 
-Under this rule, the data-model mirror (BI-28C22BE3) writes:
+**Superseded in delivery (BI-28C22BE3).** The mirror no longer needs a
+qualified association. A foreign key now has a typed EA relationship,
+`has_foreign_key_to`, whose graph key is `HAS_FOREIGN_KEY_TO`, the same key the
+code graph uses. An ArchiMate exchange file carries it as an association named
+by the foreign-key field. The mirror writes each key once, from the model that
+holds it, and deletes the back-relation duplicates.
+
+The original plan read: under this rule, the data-model mirror (BI-28C22BE3) writes:
 
 - `composed_of` for a required foreign key with `onDelete: Cascade`, because
   the child cannot outlive its parent (ArchiMate composition);

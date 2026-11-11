@@ -99,6 +99,7 @@ describe("reserveSubmittedTaskRunWorking()", () => {
       where: { taskRunId: "TR-CAPACITY", status: "submitted", updatedAt },
       data: {
         status: "working",
+        startedAt: expect.any(Date),
         lastHeartbeatAt: expect.any(Date),
         completedAt: null,
         progressPayload,
@@ -108,6 +109,18 @@ describe("reserveSubmittedTaskRunWorking()", () => {
 });
 
 describe("reserveTaskRunGenerationWorking()", () => {
+  it("restarts the watchdog's wall-clock window for the new generation (BI-79141B50)", async () => {
+    mockUpdateMany.mockResolvedValue({ count: 1 });
+    await reserveTaskRunGenerationWorking({
+      taskRunId: "TR-RESUMED", expectedStatus: "submitted",
+      updatedAt: new Date("2026-11-05T20:36:00.000Z"), progressPayload: {},
+    });
+    const { data } = mockUpdateMany.mock.calls[0]![0];
+    // One instant: the generation starts at its first liveness evidence.
+    expect(data.startedAt).toBeInstanceOf(Date);
+    expect(data.startedAt).toBe(data.lastHeartbeatAt);
+  });
+
   it("CAS-reserves an exact nonterminal generation with its first heartbeat atomically", async () => {
     mockUpdateMany.mockResolvedValue({ count: 1 });
     const updatedAt = new Date("2026-08-28T01:00:00.000Z");
@@ -125,6 +138,7 @@ describe("reserveTaskRunGenerationWorking()", () => {
       where: { taskRunId: "TR-WRITER", status: "input-required", updatedAt },
       data: {
         status: "working",
+        startedAt: expect.any(Date),
         lastHeartbeatAt: expect.any(Date),
         completedAt: null,
         progressPayload,

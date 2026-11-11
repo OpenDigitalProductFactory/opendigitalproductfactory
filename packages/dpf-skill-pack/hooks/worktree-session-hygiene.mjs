@@ -281,15 +281,12 @@ function removeThisWorktree(mainRoot, wtPath) {
   return { ok, detail };
 }
 
+// SessionEnd has no hookSpecificOutput on Claude or Codex: Claude rejects it as
+// invalid output (BI-5DD46FDA, caught by hook-output-contract.test.mjs). The model
+// is gone by then anyway, so SessionEnd tells the operator via systemMessage.
 function emitContext(hookEventName, text) {
-  process.stdout.write(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName,
-        additionalContext: text,
-      },
-    }),
-  );
+  const output = hookEventName === "SessionEnd" ? { systemMessage: text } : { hookSpecificOutput: { hookEventName, additionalContext: text } };
+  process.stdout.write(JSON.stringify(output));
 }
 
 async function main() {

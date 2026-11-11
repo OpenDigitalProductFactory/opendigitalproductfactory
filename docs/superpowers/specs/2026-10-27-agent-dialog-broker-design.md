@@ -228,6 +228,31 @@ Each participant has a delivery cursor on its existing `WorkroomParticipant` row
 
 A disconnected client loses nothing: every channel in §6.3 is an accelerator over this read.
 
+The per-participant cursor is the one schema change in item B2, so it is delivered separately as `BI-31E0C874`. Until it lands, a woken coworker is handed a cursor at its own last post in the room.
+
+### 6.6 What the first B2 slice builds (`BI-31C1FDEC`)
+
+- **Addressing on the message.**
+  - `post_room_message` takes `addressedTo`, a list of agent ids, GAIDs (optionally with `#session=`), `coordinator` and `accountable`. @mentions, from agents and from people, add to it.
+  - The resolved set, the hop and the sender GAID are stored at `structuredPayload.addressing` with a wake state.
+  - A GAID that no coworker on this installation holds is refused, because a remote GAID is provenance only (§5.2).
+- **Read results.** `read_room_messages` returns `senderGaid` for every coworker message (people have none), plus `addressedTo`, `hop` and the wake state when a message was addressed.
+- **Event, outbox and sweep.**
+  - The message is written with its wake `pending`, and `room/message.posted` is sent after commit.
+  - The wake stays pending until the dispatcher decides it.
+  - `agent/task-dispatch` re-sends wakes still pending after 30 seconds, using a fresh event id. The engine ignores a repeat of an id it already holds, and the dispatcher acts only on a pending wake.
+- **Dispatcher** (`room/message-dispatch`).
+  - An external executor's room, or an external client agent (`AGT-EXT-*`), is held for that executor: no platform task is created.
+  - At the hop limit, the room's coworker coordinator is woken instead, and a notice in the room says why.
+  - Past the hourly budget, delivery is pull-only, with one "paused" notice per hour.
+  - Otherwise it sends `room/wake.requested` with id `room-wake:<workItem>:<agent>:<15 s window>`. Bursts coalesce without a debounce primitive, which the jobs facade lacks.
+- **Runner** (`room/wake-run`, one lane per coworker per room).
+  - After the window closes, it upserts a one-shot task `room-reply-<workItem>-<agent>`. The task is owned by the user whose authority the message was posted under.
+  - It asks `agent/task-run-now`, which sits beside the five-minute dispatch, to run that task at once. That runs it through `executeScheduledAgentTask`, the drive's own executor, so the drive's grants, funding and quiescence gates apply.
+  - During a drain, the task stays due for the dispatch cron.
+
+The single-room drive event `workroom/drive.room-requested` named in §6.3 is not built. The runner's reply task reaches the addressed coworker directly, which is what an addressed message asks for. The drive's stage work is unchanged.
+
 ### 6.2 The event
 
 On commit, the write path sends `room/message.posted` through `@/lib/jobs` with the message id and the addressed refs. The event is idempotent on the message id. Inngest and the Postgres engine both carry it, and it survives a restart.
@@ -318,6 +343,7 @@ Each line is one independently shippable item. **A** ships first, on its own.
 | A | `BI-3C837677` (break-fix) | `read_room_messages` newest-first with cursors; mention roster for agent posts | — |
 | B1 | `BI-C649809F` | Room charter and per-call admission consequence; batched admission card; archetype posture seed | A |
 | B2 | `BI-31C1FDEC` | Addressed messages; the `room/message.posted` event; single-room wake; loop and cost controls; GAID on messages | A; respects `BI-A659C3BD` |
+| B2b | `BI-31E0C874` | Per-participant delivery cursor and the "unread for me" read (the one schema change in B2) | B2 |
 | C | `BI-ED52AB82` | MCP resources and subscriptions on a resumable, cross-process GET stream | B2; shares the stream with `BI-2014236E` |
 | D | `BI-F5D58F29` | Durable supervision; addressed messages become supervised turns | B2 |
 | E0 | `BI-32AA3A7C`, `BI-7E73D523`, `BI-0716C8A8`, `BI-FD00E416`, `BI-D00C5FD4` | Existing prerequisites | — |

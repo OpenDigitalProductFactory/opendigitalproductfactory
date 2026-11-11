@@ -34,6 +34,19 @@ test("blocks the meta 'how far should I take this' menu (this session's own slip
   assert.equal(v.block, true);
 });
 
+test("blocks the observed cold ask to create a finishing task", () => {
+  const v = decide(
+    "AskUserQuestion",
+    q(
+      "If you say create the finishing task, I'll do it.",
+      "Recovery",
+      ["Create the finishing task", "Leave the work here"],
+    ),
+  );
+  assert.equal(v.block, true);
+  assert.match(v.reason, /principle_decide|dpf-decision-via-kernel/);
+});
+
 test("blocks which-approach / architecture / refactor / schema-migration forks", () => {
   assert.equal(decide("AskUserQuestion", q("Which approach should we use?", "Approach", ["A", "B"])).block, true);
   assert.equal(decide("AskUserQuestion", q("Pick the architecture", "Arch", ["Monolith", "Services"])).block, true);

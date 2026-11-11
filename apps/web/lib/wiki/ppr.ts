@@ -27,6 +27,7 @@ import {
   searchWikiPages,
   type WikiSearchResult,
 } from "./embeddings";
+import { corpusScopeAllowsPage, type CorpusReadScope } from "@/lib/tak/corpus-read-scope";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,12 @@ export type PPRSearchInput = {
   iterations?: number;
   /** Blend factor: final = β × PPR + (1 − β) × cosine. Default 0.6. */
   beta?: number;
+  /**
+   * The caller's corpus grants (BI-825D3487). Unreadable pages leave the
+   * subgraph before the walk, so they neither surface nor move a readable
+   * page's score; a family-limited caller's seeds include its family pages.
+   */
+  corpusScope?: CorpusReadScope;
 };
 
 export type PPRSearchResult = WikiSearchResult & {
@@ -109,8 +116,10 @@ export type SubgraphDbClient = {
  */
 export async function loadOverlaySubgraph(
   db: SubgraphDbClient,
-  organizationId: string | null,
+  requestedOrganizationId: string | null,
+  corpusScope?: CorpusReadScope,
 ): Promise<WikiSubgraph> {
+  const organizationId = corpusScope && !corpusScope.organization ? null : requestedOrganizationId;
   const pageWhere: Record<string, unknown> = { status: "published" };
   if (organizationId === null) {
     pageWhere.organizationId = null;
@@ -118,7 +127,7 @@ export async function loadOverlaySubgraph(
     pageWhere.OR = [{ organizationId }, { organizationId: null }];
   }
 
-  const pages = (await db.wikiPage.findMany({
+  const loaded = (await db.wikiPage.findMany({
     where: pageWhere,
     select: {
       id: true,
@@ -127,6 +136,7 @@ export async function loadOverlaySubgraph(
       pageKind: true,
       isKernel: true,
       abstract: true,
+      ...(corpusScope ? { organizationId: true } : {}),
     },
   })) as Array<{
     id: string;
@@ -135,7 +145,13 @@ export async function loadOverlaySubgraph(
     pageKind: string;
     isKernel: boolean;
     abstract: string | null;
+    organizationId?: string | null;
   }>;
+  // The corpus filter runs in code: a family is a slug prefix, which the page
+  // where clause above cannot express without a column of its own.
+  const pages = corpusScope
+    ? loaded.filter((p) => corpusScopeAllowsPage(corpusScope, { slug: p.slug, organizationId: p.organizationId ?? null }))
+    : loaded;
 
   const nodeIds = pages.map((p) => p.id);
   const visible = new Set(nodeIds);
@@ -295,14 +311,16 @@ export async function searchByPPR(
   const limit = input.limit ?? 5;
   const beta = input.beta ?? 0.6;
 
+  const scope = input.corpusScope;
   const seeds = await searchWikiPages({
     query: input.query,
     organizationId: input.organizationId,
     limit: seedLimit,
+    ...(scope ? { corpusScope: scope, includeProfessionCorpus: scope.professionFamilies !== null } : {}),
   });
   if (seeds.length === 0) return [];
 
-  const subgraph = await loadOverlaySubgraph(input.db, input.organizationId);
+  const subgraph = await loadOverlaySubgraph(input.db, input.organizationId, scope);
 
   // Build the seed map keyed by page id (cosine score as the reset weight).
   // Seeds that don't appear in the subgraph (e.g. status changed since
@@ -381,10 +399,10 @@ export async function searchByPPR(
         pageKind: m.pageKind,
         contentPreview: m.abstract ?? "",
         isKernel: m.isKernel,
-        organizationId: input.organizationId,
+        organizationId: m.isKernel || m.slug.startsWith("professions/") ? null : input.organizationId,
         kernelPageId: null,
         score: s.combinedScore,
-        source: m.isKernel ? "kernel" : "org",
+        source: m.isKernel ? "kernel" : m.slug.startsWith("professions/") ? "profession" : "org",
         cosineScore: s.cosineScore,
         pprScore: s.pprScore,
         combinedScore: s.combinedScore,

@@ -75,6 +75,28 @@ file, or one created for another installation, before contacting anyone. This
 establishes machine trust only—it does not share backlog data. Demand sharing
 is a separate, explicit choice in Delivery Flow.
 
+When you create the file you also say **what that installation is**:
+production, development or test. There is no default. The organization's
+certificate authority certifies that class in the installation's membership,
+and every other installation in the organization reads it from there to decide
+what it may ask of that installation. A production installation paired with an
+attested development installation treats it as read-only; one whose class was
+never certified is neither written to nor asked to run anything. The joining
+installation refuses the file if it has not declared its own class, or if the
+class in the file differs from what it declared. Installations that joined
+before classes were certified show **class not attested** until they join again
+with a new file.
+
+Once both sides are certified, each installation works out its relationship to
+the other. Your production installation is the **authority** for a certified
+development or test installation of the same estate, and that installation is
+its **companion**. **Ops → Installation** shows the relationship with the reason
+for it, and Connections states it in one line. The relationship only adds
+caution: it never gives anyone a permission they did not already have. If the
+paired installation saved on **Ops → Installation** points at a connection that
+was revoked, the page says so and offers to switch it to the installation
+actually connected.
+
 If the candidate uses HTTP, its certificate cannot be verified, or discovery is
 unavailable, use the invitation controls on the same page. Never bypass the TLS
 warning: issue the one-time invitation on one installation and enter it with the
