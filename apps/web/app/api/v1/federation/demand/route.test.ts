@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockHandleIncomingPosture, mockResolveIdentity } = vi.hoisted(() => ({
+const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockHandleIncomingPosture, mockResolveIdentity, mockHandleIncomingGuidance } = vi.hoisted(() => ({
+  mockHandleIncomingGuidance: vi.fn(),
   mockResolveAuth: vi.fn(),
   mockHandleIncomingDemand: vi.fn(),
   mockHandleIncomingDemandResponse: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock("@/lib/federation/demand-response", () => ({ handleIncomingDemandRespons
 vi.mock("@/lib/federation/demand-identity", () => ({ resolveFederationIdentity: mockResolveIdentity }));
 vi.mock("@/lib/federation/demand-disposition", () => ({ handleIncomingDemandDisposition: mockHandleIncomingDisposition }));
 vi.mock("@/lib/federation/operational-posture-exchange", () => ({ handleIncomingOperationalPosture: mockHandleIncomingPosture }));
+vi.mock("@/lib/federation/guidance-snapshot-exchange", () => ({ handleIncomingGuidanceSnapshot: mockHandleIncomingGuidance }));
 
 import { POST } from "./route";
 
@@ -164,5 +166,45 @@ describe("POST /api/v1/federation/inbox — operational posture (BI-648F01A0)", 
 
     mockHandleIncomingPosture.mockResolvedValueOnce({ action: "conflict", mirrorId: "fopm_1", originVersion: 9, reason: "origin-version-not-advancing" });
     expect((await POST(request("dpf.operational-posture.reported", posture))).status).toBe(409);
+  });
+});
+
+describe("POST /api/v1/federation/demand — guidance snapshot (BI-1B165D02)", () => {
+  const snapshot = { specVersion: "dpf.guidance-snapshot/1" };
+  const did = `did_${"c".repeat(64)}`;
+
+  it("hands a same-organization peer's snapshot to the guidance handler with this installation's DID", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "same-org-peer" });
+    mockResolveIdentity.mockResolvedValue({ installationId: "inst_receiver", deviceId: did });
+    mockHandleIncomingGuidance.mockResolvedValue({ action: "created", originVersion: 10 });
+
+    const response = await POST(request("dpf.guidance-snapshot.published", snapshot));
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ originVersion: 10 });
+    expect(mockHandleIncomingGuidance).toHaveBeenCalledWith(
+      expect.anything(), "link_1", snapshot, expect.objectContaining({ selfInstallationDid: did }),
+    );
+  });
+
+  it("refuses a snapshot from any other kind of link", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "managed-by" });
+    const response = await POST(request("dpf.guidance-snapshot.published", snapshot));
+    expect(response.status).toBe(403);
+    expect(mockHandleIncomingGuidance).not.toHaveBeenCalled();
+  });
+
+  it("maps refused, rejected and older-version outcomes to 403, 422 and 409", async () => {
+    mockResolveAuth.mockResolvedValue({ ok: true, linkId: "link_1", role: "same-org-peer" });
+    mockResolveIdentity.mockResolvedValue({ installationId: "inst_receiver", deviceId: did });
+    const cases: Array<[unknown, number]> = [
+      [{ action: "refused", reason: "link-not-authority" }, 403],
+      [{ action: "rejected", reason: "bad-signature" }, 422],
+      [{ action: "conflict", reason: "version-not-advancing", originVersion: 10 }, 409],
+    ];
+    for (const [receipt, status] of cases) {
+      mockHandleIncomingGuidance.mockResolvedValueOnce(receipt);
+      expect((await POST(request("dpf.guidance-snapshot.published", snapshot))).status).toBe(status);
+    }
   });
 });

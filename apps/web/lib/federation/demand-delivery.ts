@@ -11,8 +11,15 @@ import type {
 import { computeDemandPayloadDigest } from "@dpf/db/federated-demand-contract";
 import type { ProjectionContractSpec } from "@dpf/db/projection-serialization";
 
-import { sendDemandToPeer, sendDeploymentDeclarationToPeer, sendOperationalPostureToPeer, type PeerPostResult } from "./client";
+import {
+  sendDemandToPeer,
+  sendDeploymentDeclarationToPeer,
+  sendGuidanceSnapshotToPeer,
+  sendOperationalPostureToPeer,
+  type PeerPostResult,
+} from "./client";
 import { decodeDeploymentDeclarationOutboxPayload } from "./deployment-declaration-exchange";
+import { decodeGuidanceSnapshotOutboxPayload } from "./guidance-snapshot-exchange";
 import { buildDemandEnvelope, type ProjectableDemandSource } from "./demand-projection";
 import type { FederationIdentity } from "./demand-identity";
 import { decodeOperationalPostureOutboxPayload } from "./operational-posture-delivery";
@@ -331,6 +338,7 @@ type SendPosture = typeof sendOperationalPostureToPeer;
 /** Every local-canonical record type that rides the shared federation outbox. */
 export const FEDERATION_OUTBOX_RECORD_TYPES = [
   "demand-envelope", "demand-response", "demand-disposition", "operational-posture", "deployment-declaration",
+  "guidance-snapshot",
 ] as const;
 
 /**
@@ -380,6 +388,7 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   send?: SendDemand;
   sendPosture?: SendPosture;
   sendDeclaration?: typeof sendDeploymentDeclarationToPeer;
+  sendGuidance?: typeof sendGuidanceSnapshotToPeer;
 } = {}): Promise<{
   attempted: number;
   delivered: number;
@@ -520,7 +529,22 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     let result: PeerPostResult;
     let payload: DemandOutboxPayload | null = null;
     let acknowledged = false;
-    if (row.recordType === "deployment-declaration") {
+    if (row.recordType === "guidance-snapshot") {
+      // BI-1B165D02: the authority's guidance snapshot for its companion rides
+      // the same inbox; the companion acknowledges with the version it holds.
+      const guidance = decodeGuidanceSnapshotOutboxPayload(row.payload);
+      if (!guidance) result = { ok: false, status: 0, error: "invalid outbox payload" };
+      else if (!token) result = { ok: false, status: 0, error: "missing peer token" };
+      else result = await (options.sendGuidance ?? sendGuidanceSnapshotToPeer)(
+        { ...target, linkToken: token },
+        guidance.activity,
+        guidance.record,
+        { eventId: guidance.eventId, now },
+      );
+      acknowledged = result.ok
+        && typeof result.body === "object" && result.body !== null
+        && Number((result.body as { originVersion?: unknown }).originVersion) === Number(row.version);
+    } else if (row.recordType === "deployment-declaration") {
       // BI-06EA3167: a country declaration rides the posture path unchanged.
       const declaration = decodeDeploymentDeclarationOutboxPayload(row.payload);
       if (!declaration) result = { ok: false, status: 0, error: "invalid outbox payload" };
