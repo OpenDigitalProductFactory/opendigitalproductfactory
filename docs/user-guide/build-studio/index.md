@@ -127,7 +127,11 @@ that report stays visible for independent reconciliation. Saved
 evidence retains that report, the commands and the source identity after reload.
 Checks requested by a coworker use the same build and evidence record. If a
 repair stops before a new check, earlier counts remain observations and current
-verification stays unknown. The platform saves that invalidation before allowing
+verification stays unknown. Saved review sections, evidence summaries and the
+owner's proof view show **Unverified** for incomplete or conflicting checks.
+A confirmed exemption says **Typecheck only** and that no tests ran. The existing
+raw-output disclosure retains the earlier QA report, source identity and commands.
+The platform saves that invalidation before allowing
 the repair to change files, so an interrupted process cannot leave an old check
 looking current. If that save fails, the repair does not start.
 

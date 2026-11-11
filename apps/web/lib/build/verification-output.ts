@@ -1,11 +1,11 @@
 import type { FailureAnalysis } from "@/lib/change-review/failure-analysis";
 
 /** Existing Build Studio verification payload, shared by authoring and review. */
-export type VerificationOutput = {
+export type VerificationOutput = TestExecutionFacts & {
   failureAnalysis?: FailureAnalysis;
-  testsPassed: number;
-  testsFailed: number;
-  typecheckPassed: boolean;
+  testsPassed: number | null;
+  testsFailed: number | null;
+  typecheckPassed: boolean | null;
   fullOutput: string;
   timestamp: string;
 };
@@ -149,6 +149,31 @@ export function formatVerificationSummary(value: unknown): string {
       : "Tests: execution not established.";
   const typecheck = observed.typecheckPassed === null ? "not verified" : observed.typecheckPassed ? "passed" : "failed";
   return `${tests} Typecheck: ${typecheck}.${observed.testEvidenceConflict ? " Earlier reported test failures remain unresolved." : ""}`;
+}
+
+/** Saved-reader projection. Presentation never decides whether a lifecycle may advance. */
+export function projectVerificationEvidence(verification: NormalizedVerificationOutput) {
+  const qualified = verification.typecheckPassed === true && testsAreQualified(verification);
+  const exempt = qualified && verification.testsExecuted === false && verification.testsApplicable === false;
+  const failed = verification.verificationSource?.unchanged !== false
+    && (verification.typecheckPassed === false || (verification.testsFailed ?? 0) > 0);
+  const label = failed ? "Failed" : exempt ? "Typecheck only" : qualified ? "Passed" : "Unverified";
+  const typecheckLabel = verification.typecheckPassed === null ? "Not verified" : verification.typecheckPassed ? "No errors" : "Failed";
+  const testsLabel = verification.testsExecuted === false
+    ? verification.testsApplicable === false ? "Not applicable; no tests ran." : "No tests ran."
+    : verification.testsExecuted === true
+      ? verification.testsFailed === null ? `${verification.testsPassed ?? "Unknown"} passes observed; failure verdict not established.`
+        : `${verification.testsPassed ?? "Unknown"} passed, ${verification.testsFailed} failed${qualified ? "" : " (observed)"}`
+      : (verification.testsFailed ?? 0) > 0 ? `${verification.testsFailed} failures recorded; execution not established.` : "Execution not established.";
+  const conflictNotice = verification.testEvidenceConflict ? "Earlier reported test failures remain unresolved." : null;
+  const source = verification.verificationSource;
+  const rawOutput = [verification.outputExcerpt,
+    verification.reportedQa ? `Earlier QA report (retained):\n${verification.reportedQa.content}` : null,
+    source ? `Source: ${source.workdir}\nBase: ${source.baseRef}\nDigest: ${source.digest ?? "Not recorded"}\nSource unchanged: ${source.unchanged}\nChecked: ${source.checkedAt}` : null,
+    verification.testCommands?.length ? `Recorded commands:\n${verification.testCommands.join("\n")}` : null,
+  ].filter(Boolean).join("\n\n");
+  return { qualified, exempt, failed, label, typecheckLabel, testsLabel, conflictNotice, rawOutput,
+    summary: `${label}. Typecheck: ${typecheckLabel}. ${testsLabel}${conflictNotice ? ` ${conflictNotice}` : ""}` };
 }
 
 export function classifyVerificationFailureAxis(args: {
