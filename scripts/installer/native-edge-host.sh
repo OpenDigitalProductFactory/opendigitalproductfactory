@@ -26,6 +26,8 @@ _dpf_native_edge_valid_ipv6() {
   if [[ "$literal" == *::* ]]; then
     local left="${literal%%::*}" right="${literal#*::}"
     [[ "$right" != *::* ]] || return 1
+    case "$left" in :*|*:) return 1 ;; esac
+    case "$right" in :*|*:) return 1 ;; esac
     compressed=1
     groups_text="${left}${left:+:}${right}"
   else

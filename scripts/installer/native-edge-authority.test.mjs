@@ -3,6 +3,7 @@ import { execFile, spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isIP } from "node:net";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { promisify } from "node:util";
@@ -100,12 +101,34 @@ for (const platform of ["Darwin", "Linux"]) {
   }));
 
   shellTest(`${platform}: malformed canonical origins refuse before installation`, () => fixture(async root => {
-    for (const origin of ["https://localhost/not-an-origin", "https://userinfo@example.test", "https://localhost?other=1", "file:///tmp/authority", "https://localhost:0", "https://localhost:65536", " https://localhost", "https://[::::]", "https://[123]", "https://[12345::1]", "https://[1::2::3]", "https://[1:2:3:4:5:6:7]", "https://[1:2:3:4:5:6:7:8:9]", "https://[1:2:3:4:5:6:7:8::]"]) {
+    for (const origin of ["https://localhost/not-an-origin", "https://userinfo@example.test", "https://localhost?other=1", "file:///tmp/authority", "https://localhost:0", "https://localhost:65536", " https://localhost", "https://[::::]", "https://[123]", "https://[12345::1]", "https://[1::2::3]", "https://[1:2:3:4:5:6:7]", "https://[1:2:3:4:5:6:7:8:9]", "https://[1:2:3:4:5:6:7:8::]", "https://[1::2:]", "https://[::1:]"]) {
       await writeFile(join(root, ".env"), `PUBLIC_URL=${origin}\n`);
       await assert.rejects(chooseShell(root, platform, "host-upkeep"), /canonical|origin/i);
     }
   }));
 }
+
+shellTest("hex IPv6 syntax agrees with the standard parser across compression boundaries", () => fixture(async root => {
+  const literals = new Set(["::", "", "::::", "12345::1"]);
+  for (let count = 1; count <= 9; count++) {
+    const groups = Array.from({ length: count }, (_, index) => (index + 1).toString(16));
+    literals.add(groups.join(":"));
+    for (let position = 0; position <= count; position++) {
+      const literal = `${groups.slice(0, position).join(":")}::${groups.slice(position).join(":")}`;
+      for (const candidate of [literal, `:${literal}`, `${literal}:`, `${literal}::1`]) literals.add(candidate);
+    }
+  }
+  // One source-only Bash process covers the generated matrix; no DNS or host effects.
+  const command = `set -euo pipefail
+source "$DPF_FIXTURE_SCRIPT"
+while IFS= read -r literal; do
+  if _dpf_native_edge_valid_ipv6 "$literal"; then printf '6\\n'; else printf '0\\n'; fi
+done <<< "$DPF_FIXTURE_LITERALS"`;
+  const result = await exec("bash", ["-c", command], {
+    env: environment(root, { DPF_FIXTURE_SCRIPT: shellPath, DPF_FIXTURE_LITERALS: [...literals].join("\n") }), timeout: 5000,
+  });
+  assert.deepEqual(result.stdout.trim().split("\n").map(Number), [...literals].map(value => isIP(value)), "literal syntax differs from node:net.isIP");
+}));
 
 const powershell = process.platform === "win32" ? "powershell" : "pwsh";
 const hasPowerShell = spawnSync(powershell, ["-NoProfile", "-Command", "exit 0"], { timeout: 5000 }).status === 0;
