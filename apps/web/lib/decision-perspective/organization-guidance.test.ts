@@ -19,13 +19,13 @@ function material(overrides: Partial<GuidanceMaterialV1> = {}): GuidanceMaterial
   };
 }
 
-function snapshot(materials: GuidanceMaterialV1[], expiresAt = "2026-11-25T00:00:00.000Z"): GuidanceSnapshotV1 {
+function snapshot(materials: GuidanceMaterialV1[], expiresAt = "2026-11-25T00:00:00.000Z"): GuidanceSnapshotV1 { // clock-bomb-guard: allow expiry is judged against the fixed `now` each test passes
   return {
     specVersion: "dpf.guidance-snapshot/1",
     meta: {
       authorityInstallationDid: `did_${"a".repeat(64)}`, authoritySigningPublicKey: "k",
       companionInstallationDid: `did_${"c".repeat(64)}`, version: 10,
-      issuedAt: "2026-11-11T00:00:00.000Z", expiresAt,
+      issuedAt: "2026-11-11T00:00:00.000Z", expiresAt, // clock-bomb-guard: allow judged against the fixed `now`
     },
     wwwd: {
       profile: { profileId: "wwwd-authority-org", name: "Authority organization", fallbackProfileId: null, autonomyPolicy: null, defaultResolver: null },

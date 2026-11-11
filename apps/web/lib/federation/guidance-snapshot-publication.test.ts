@@ -43,7 +43,7 @@ describe("buildAuthorityWwwd", () => {
       meta: {
         authorityInstallationDid: `did_${"a".repeat(64)}`, authoritySigningPublicKey: "key",
         companionInstallationDid: `did_${"c".repeat(64)}`, version: 1,
-        issuedAt: "2026-11-11T00:00:00.000Z", expiresAt: "2026-11-25T00:00:00.000Z",
+        issuedAt: "2026-11-11T00:00:00.000Z", expiresAt: "2026-11-25T00:00:00.000Z", // clock-bomb-guard: allow shape validation only; no clock is read
       },
       wwwd, manifest: computeGuidanceSnapshotManifest(wwwd!), signature: "a.b.c",
     });

@@ -190,7 +190,7 @@ export async function handleIncomingGuidanceSnapshot(
     heldVersion: held ? Number(held.version) : null,
     now: context.now,
   });
-  if (!verified.ok) {
+  if (!verified.accepted) {
     if (verified.reason === "version-not-advancing" && held) {
       return { action: "conflict", reason: "version-not-advancing", originVersion: Number(held.version) };
     }
@@ -245,5 +245,5 @@ export async function readHeldGuidanceSnapshot(
     now: new Date(),
     checkExpiry: false,
   });
-  return verified.ok ? verified.snapshot : null;
+  return verified.accepted ? verified.snapshot : null;
 }

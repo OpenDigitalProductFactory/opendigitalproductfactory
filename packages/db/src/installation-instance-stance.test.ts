@@ -320,13 +320,13 @@ describe("resolveInstanceStance — organization guidance on a companion (BI-1B1
   }
 
   it("states current guidance with its version and expiry", () => {
-    const stance = companion({ state: "current", version: 12, expiresAt: "2026-11-25T00:00:00.000Z" });
+    const stance = companion({ state: "current", version: 12, expiresAt: "2026-11-25T00:00:00.000Z" }); // clock-bomb-guard: allow pure briefing text; no clock is read
     expect(formatInstanceStanceBriefing(stance))
       .toContain("Organization guidance — current: organization-business decisions follow the production authority's snapshot version 12, valid until 2026-11-25T00:00:00.000Z");
   });
 
   it("AC-PAC-04 (guidance): reports guidance expired", () => {
-    const stance = companion({ state: "expired", expiresAt: "2026-11-25T00:00:00.000Z" });
+    const stance = companion({ state: "expired", expiresAt: "2026-11-25T00:00:00.000Z" }); // clock-bomb-guard: allow pure briefing text; no clock is read
     expect(formatInstanceStanceBriefing(stance)).toContain("Organization guidance — expired:");
   });
 

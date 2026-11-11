@@ -71,8 +71,8 @@ export type GuidanceSnapshotRefusal =
   | "version-not-advancing";
 
 export type GuidanceSnapshotVerification =
-  | { ok: true; snapshot: GuidanceSnapshotV1 }
-  | { ok: false; reason: GuidanceSnapshotRefusal; violations?: string[] };
+  | { accepted: true; snapshot: GuidanceSnapshotV1 }
+  | { accepted: false; reason: GuidanceSnapshotRefusal; violations?: string[] };
 
 function signatureVerifies(snapshot: GuidanceSnapshotV1): boolean {
   const [header, payload, signature] = snapshot.signature.split(".");
@@ -112,7 +112,7 @@ export function verifyGuidanceSnapshot(
   },
 ): GuidanceSnapshotVerification {
   const violations = validateGuidanceSnapshotV1(value);
-  if (violations.length > 0) return { ok: false, reason: "malformed", violations };
+  if (violations.length > 0) return { accepted: false, reason: "malformed", violations };
   const snapshot = value as GuidanceSnapshotV1;
 
   let keyDid: string | null = null;
@@ -122,15 +122,15 @@ export function verifyGuidanceSnapshot(
     keyDid = null;
   }
   if (keyDid !== snapshot.meta.authorityInstallationDid || keyDid !== expected.expectedAuthorityDid) {
-    return { ok: false, reason: "authority-mismatch" };
+    return { accepted: false, reason: "authority-mismatch" };
   }
-  if (!signatureVerifies(snapshot)) return { ok: false, reason: "bad-signature" };
+  if (!signatureVerifies(snapshot)) return { accepted: false, reason: "bad-signature" };
   if (snapshot.meta.companionInstallationDid !== expected.selfInstallationDid) {
-    return { ok: false, reason: "not-for-this-installation" };
+    return { accepted: false, reason: "not-for-this-installation" };
   }
   const freshness = judgeGuidanceSnapshotFreshness({ snapshot, heldVersion: expected.heldVersion, now: expected.now });
-  if (!freshness.ok && (freshness.reason !== "expired" || expected.checkExpiry !== false)) {
-    return { ok: false, reason: freshness.reason };
+  if (!freshness.fresh && (freshness.reason !== "expired" || expected.checkExpiry !== false)) {
+    return { accepted: false, reason: freshness.reason };
   }
-  return { ok: true, snapshot };
+  return { accepted: true, snapshot };
 }

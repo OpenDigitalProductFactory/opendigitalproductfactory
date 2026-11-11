@@ -205,8 +205,8 @@ export function validateGuidanceSnapshotV1(value: unknown): string[] {
 }
 
 export type GuidanceFreshnessJudgement =
-  | { ok: true }
-  | { ok: false; reason: "expired" | "version-not-advancing" };
+  | { fresh: true }
+  | { fresh: false; reason: "expired" | "version-not-advancing" };
 
 /** TUF freshness: unexpired, and a version above the one held (null when none is held). */
 export function judgeGuidanceSnapshotFreshness(input: {
@@ -214,9 +214,9 @@ export function judgeGuidanceSnapshotFreshness(input: {
   heldVersion: number | null;
   now: Date;
 }): GuidanceFreshnessJudgement {
-  if (Date.parse(input.snapshot.meta.expiresAt) <= input.now.getTime()) return { ok: false, reason: "expired" };
+  if (Date.parse(input.snapshot.meta.expiresAt) <= input.now.getTime()) return { fresh: false, reason: "expired" };
   if (input.heldVersion !== null && input.snapshot.meta.version <= input.heldVersion) {
-    return { ok: false, reason: "version-not-advancing" };
+    return { fresh: false, reason: "version-not-advancing" };
   }
-  return { ok: true };
+  return { fresh: true };
 }

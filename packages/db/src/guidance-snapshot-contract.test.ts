@@ -92,21 +92,21 @@ describe("judgeGuidanceSnapshotFreshness", () => {
   const now = new Date("2026-11-12T00:00:00.000Z");
 
   it("accepts the first snapshot and a newer version", () => {
-    expect(judgeGuidanceSnapshotFreshness({ snapshot: snapshot(), heldVersion: null, now })).toEqual({ ok: true });
-    expect(judgeGuidanceSnapshotFreshness({ snapshot: snapshot(), heldVersion: 5, now })).toEqual({ ok: true });
+    expect(judgeGuidanceSnapshotFreshness({ snapshot: snapshot(), heldVersion: null, now })).toEqual({ fresh: true });
+    expect(judgeGuidanceSnapshotFreshness({ snapshot: snapshot(), heldVersion: 5, now })).toEqual({ fresh: true });
   });
 
   it("refuses a version that does not advance past the one held", () => {
     const record = snapshot();
     expect(judgeGuidanceSnapshotFreshness({ snapshot: record, heldVersion: record.meta.version, now }))
-      .toEqual({ ok: false, reason: "version-not-advancing" });
+      .toEqual({ fresh: false, reason: "version-not-advancing" });
     expect(judgeGuidanceSnapshotFreshness({ snapshot: record, heldVersion: record.meta.version + 1, now }))
-      .toEqual({ ok: false, reason: "version-not-advancing" });
+      .toEqual({ fresh: false, reason: "version-not-advancing" });
   });
 
   it("refuses an expired snapshot", () => {
     expect(judgeGuidanceSnapshotFreshness({
       snapshot: snapshot(), heldVersion: null, now: new Date("2026-11-25T00:00:00.001Z"),
-    })).toEqual({ ok: false, reason: "expired" });
+    })).toEqual({ fresh: false, reason: "expired" });
   });
 });
