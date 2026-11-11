@@ -1,9 +1,9 @@
 "use client";
 
 // Work Atlas rhythm strip (BI-D8A6F0F2, design §3.5): a standing room's last 14
-// days, one mark per day. Finished on time is filled, finished late is filled
-// in the need colour, and a day that did not run is an outlined cross, so
-// missed and late differ without colour.
+// days, one mark per day. Each state has its own shape as well as its colour:
+// on time is filled, late is half filled in the need colour, a day that did not
+// run is an outlined cross, so no two states differ by colour alone.
 
 import Link from "next/link";
 
@@ -20,15 +20,21 @@ function shortDate(date: string, locale: string): string {
   return new Date(`${date}T00:00:00.000Z`).toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
-function Mark({ state, label }: { state: RhythmSlotState; label: string }) {
+function markFill(state: RhythmSlotState, colour: string): string {
+  if (state === "on-time") return colour;
+  if (state === "late") return `linear-gradient(135deg, ${colour} 50%, transparent 50%)`;
+  return "transparent";
+}
+
+/** `decorative` marks sit beside their own words (the legend), so they are hidden from screen readers. */
+function Mark({ state, label, decorative = false }: { state: RhythmSlotState; label: string; decorative?: boolean }) {
   const style = intentStyle(resolveIntent("standingRhythm", state));
-  const filled = state === "on-time" || state === "late";
   const border = state === "due" ? "dashed" : state === "no-record" ? "dotted" : "solid";
   return (
-    <span role="img" aria-label={label} title={label} data-rhythm-state={state}
+    <span {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": label, title: label })} data-rhythm-state={state}
       className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm text-dpf-caption font-bold leading-none"
       style={{
-        background: filled ? style.fg : "transparent",
+        background: markFill(state, style.fg),
         border: `1.5px ${border} ${state === "no-record" ? "var(--dpf-border)" : style.border}`,
         color: style.fg,
       }}>
@@ -56,7 +62,7 @@ export function RhythmStrip({ rows, locale }: { rows: StandingRhythmRow[]; local
             : counts.missed > 0 ? t("rhythm.missedCount", { count: counts.missed }) : t("rhythm.steady");
           return (
             <li key={row.capsuleId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2">
-              <Link className="min-w-[12rem] flex-1 text-dpf-body font-medium text-[var(--dpf-accent)] hover:underline"
+              <Link className="min-w-[12rem] flex-1 rounded-sm text-dpf-body font-medium text-[var(--dpf-accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
                 href={`/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: row.capsuleId })}`}>
                 {row.title}
               </Link>
@@ -74,12 +80,12 @@ export function RhythmStrip({ rows, locale }: { rows: StandingRhythmRow[]; local
         })}
       </ul>
       <details className="mt-3">
-        <summary className="cursor-pointer text-dpf-caption text-[var(--dpf-accent)]">{t("rhythm.explain")}</summary>
+        <summary className="cursor-pointer rounded-sm text-dpf-caption text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">{t("rhythm.explain")}</summary>
         <p className="mt-2 max-w-3xl text-dpf-caption text-dpf-muted">{t("rhythm.intro")}</p>
-        <ul aria-hidden="true" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-dpf-caption text-dpf-muted">
+        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-dpf-caption text-dpf-muted">
           {LEGEND.map((state) => (
             <li key={state} className="flex items-center gap-1.5">
-              <Mark state={state} label={t(`rhythm.state.${state}`)} />
+              <Mark state={state} label={t(`rhythm.state.${state}`)} decorative />
               {t(`rhythm.state.${state}`)}
             </li>
           ))}

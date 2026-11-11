@@ -61,7 +61,9 @@ export async function loadStandingRhythms(db: Db, now = new Date()): Promise<Sta
     db.workroomActivity.findMany({
       where: { workCapsuleId: { in: ids }, kind: { in: DRIVE_KINDS }, recordedAt: { gte: windowStart } },
       select: { workCapsuleId: true, payload: true, recordedAt: true },
-      orderBy: { recordedAt: "asc" },
+      // Newest first: if the cap is ever reached, the rows dropped are the oldest
+      // in the window, never today's run. The classifier is order-independent.
+      orderBy: { recordedAt: "desc" },
       take: DRIVE_ROW_LIMIT,
     }),
     db.workroomActivity.findMany({

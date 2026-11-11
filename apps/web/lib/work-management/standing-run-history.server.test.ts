@@ -48,7 +48,9 @@ describe("loadStandingRhythms", () => {
     );
     const [room] = await loadStandingRhythms(reader as never, now);
     expect(room?.rhythm.slots[0]?.state).toBe("missed");
-    const [, earlierQuery] = reader.workroomActivity.findMany.mock.calls;
+    const [windowQuery, earlierQuery] = reader.workroomActivity.findMany.mock.calls;
+    // Newest first, so a capped read drops the oldest rows rather than today's.
+    expect(windowQuery?.[0]).toMatchObject({ orderBy: { recordedAt: "desc" } });
     expect(earlierQuery?.[0]).toMatchObject({ distinct: ["workCapsuleId"], where: { recordedAt: { lt: new Date("2026-10-28T00:00:00.000Z") } } });
   });
 });

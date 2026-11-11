@@ -39,12 +39,23 @@ describe("RhythmStrip", () => {
     expect(html).toContain("Nov 9: Finished late");
   });
 
-  it("tells missed from late without colour: missed carries a cross, late does not", () => {
+  it("gives on time, late and missed each its own shape, so none differs by colour alone", () => {
     const html = render([mixed]);
-    const late = /data-rhythm-state="late"[^>]*>([^<]*)</.exec(html)?.[1];
-    const missed = /data-rhythm-state="missed"[^>]*>([^<]*)</.exec(html)?.[1];
-    expect(late).toBe("");
-    expect(missed).toBe("×");
+    const mark = (state: string) => new RegExp(`data-rhythm-state="${state}"[^>]*style="([^"]*)"[^>]*>([^<]*)<`).exec(html);
+    const [onTime, late, missed] = [mark("on-time"), mark("late"), mark("missed")];
+    expect(onTime?.[1]).toContain("background:var(--dpf-success)");
+    expect(late?.[1]).toContain("linear-gradient(135deg");
+    expect(missed?.[1]).toContain("background:transparent");
+    expect(missed?.[2]).toBe("×");
+    expect(late?.[2]).toBe("");
+  });
+
+  it("keeps the legend's words readable by screen readers and hides only its sample marks", () => {
+    const html = render([mixed]);
+    const legend = html.slice(html.indexOf("<details"));
+    expect(legend).not.toMatch(/<ul aria-hidden/);
+    expect(legend).toMatch(/aria-hidden="true" data-rhythm-state="late"/);
+    expect(legend).toContain("Finished late");
   });
 
   it("says how long a stuck room has been running instead of a count", () => {
