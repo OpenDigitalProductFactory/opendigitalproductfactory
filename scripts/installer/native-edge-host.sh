@@ -17,6 +17,34 @@ _dpf_native_edge_env_value() {
   sed -n "s/^${key}=//p" "$file" | tail -1
 }
 
+# Validate the hex-only IPv6 literals admitted by the origin expression below.
+# Keep this sourceable before Node, Python or any runtime has been installed.
+_dpf_native_edge_valid_ipv6() {
+  local literal="$1" groups_text compressed=0 group count=0
+  local -a groups=()
+  case "$literal" in *:::*) return 1 ;; esac
+  if [[ "$literal" == *::* ]]; then
+    local left="${literal%%::*}" right="${literal#*::}"
+    [[ "$right" != *::* ]] || return 1
+    compressed=1
+    groups_text="${left}${left:+:}${right}"
+  else
+    case "$literal" in :*|*:) return 1 ;; esac
+    groups_text="$literal"
+  fi
+  if [ -n "$groups_text" ]; then
+    IFS=: read -r -a groups <<< "$groups_text" || true
+  fi
+  local group_pattern='^[0-9A-Fa-f]{1,4}$'
+  if [ -n "$groups_text" ]; then
+    for group in "${groups[@]}"; do
+      [[ "$group" =~ $group_pattern ]] || return 1
+      count=$((count + 1))
+    done
+  fi
+  if [ "$compressed" = 1 ]; then [ "$count" -lt 8 ]; else [ "$count" = 8 ]; fi
+}
+
 # Co-located upkeep calls this installation; it does not advertise a LAN
 # endpoint. An explicit DPF_LAN_AUTHORITY_URL still wins at the caller.
 _dpf_native_edge_local_authority() {
@@ -41,6 +69,14 @@ _dpf_native_edge_local_authority() {
     return 64
   fi
   port="${BASH_REMATCH[4]:-}"
+  local authority="${candidate#*://}" literal
+  if [[ "$authority" == \[* ]]; then
+    literal="${authority#\[}"; literal="${literal%%\]*}"
+    if ! _dpf_native_edge_valid_ipv6 "$literal"; then
+      echo 'Canonical host-upkeep origin has an invalid IPv6 literal; no service was changed.' >&2
+      return 64
+    fi
+  fi
   if [ -n "$port" ] && { [ "${#port}" -gt 5 ] || [ "$((10#$port))" -lt 1 ] || [ "$((10#$port))" -gt 65535 ]; }; then
     echo 'Canonical host-upkeep origin has an invalid port; no service was changed.' >&2
     return 64

@@ -36,7 +36,8 @@ async function chooseShell(root, platform, role, extra = {}) {
   // Run the actual installer's selection block, stopping before any host file,
   // service, binary or enrollment mutation. HOME and real service commands are
   // never changed; only read-only address discovery is stubbed.
-  const command = `source "$DPF_FIXTURE_SCRIPT"
+  const command = `set -euo pipefail
+source "$DPF_FIXTURE_SCRIPT"
 uname() { if [ "$1" = -s ]; then printf '%s' "$DPF_FIXTURE_PLATFORM"; else printf arm64; fi; }
 hostname() { printf fixture; }
 ipconfig() { printf '%s' "$DPF_FIXTURE_LAN"; }
@@ -52,45 +53,54 @@ dpf_fixture_select "$DPF_FIXTURE_REPO" "" fixture "$DPF_FIXTURE_ROLE"`;
   })).stdout.trim();
 }
 
+const shellTest = (name, body) => test(name, { skip: process.platform === "win32" }, body);
+
 for (const platform of ["Darwin", "Linux"]) {
-  test(`${platform}: co-located upkeep follows the canonical origin across LAN changes`, () => fixture(async root => {
+  shellTest(`${platform}: co-located upkeep follows the canonical origin across LAN changes`, () => fixture(async root => {
     await writeFile(join(root, ".env"), "PUBLIC_URL=https://localhost\n");
     for (const lan of ["192.0.2.4", "198.51.100.9"]) {
       assert.equal(await chooseShell(root, platform, "host-upkeep", { DPF_FIXTURE_LAN: lan }), "https://localhost");
     }
   }));
 
-  test(`${platform}: setup's resolved canonical origin has precedence over saved defaults`, () => fixture(async root => {
+  shellTest(`${platform}: setup's resolved canonical origin has precedence over saved defaults`, () => fixture(async root => {
     await writeFile(join(root, ".env"), "PUBLIC_URL=https://saved.example.test\n");
     assert.equal(await chooseShell(root, platform, "host-upkeep", {
       DPF_CANONICAL_PUBLIC_URL: "https://configured.example.test:9443",
     }), "https://configured.example.test:9443");
   }));
 
-  test(`${platform}: an explicit Edge authority retains its precedence`, () => fixture(async root => {
+  shellTest(`${platform}: an explicit Edge authority retains its precedence`, () => fixture(async root => {
     await writeFile(join(root, ".env"), "PUBLIC_URL=https://localhost\n");
     assert.equal(await chooseShell(root, platform, "host-upkeep", {
       DPF_LAN_AUTHORITY_URL: "https://remote.example.test:9443",
     }), "https://remote.example.test:9443");
   }));
 
-  test(`${platform}: full Edge selection keeps its existing LAN behavior`, () => fixture(async root => {
+  shellTest(`${platform}: full Edge selection keeps its existing LAN behavior`, () => fixture(async root => {
     await writeFile(join(root, ".env"), "PUBLIC_URL=https://localhost\n");
     assert.equal(await chooseShell(root, platform, "full"),
       platform === "Darwin" ? "http://192.0.2.4:3000" : "http://127.0.0.1:3000");
   }));
 
-  test(`${platform}: unconfigured local upkeep uses the existing loopback fallback`, () => fixture(async root => {
+  shellTest(`${platform}: unconfigured local upkeep uses the existing loopback fallback`, () => fixture(async root => {
     assert.equal(await chooseShell(root, platform, "host-upkeep"), "http://127.0.0.1:3000");
   }));
 
-  test(`${platform}: quoted canonical origins are read without shell evaluation`, () => fixture(async root => {
+  shellTest(`${platform}: quoted canonical origins are read without shell evaluation`, () => fixture(async root => {
     await writeFile(join(root, ".env"), 'PUBLIC_URL="https://localhost/"\n');
     assert.equal(await chooseShell(root, platform, "host-upkeep"), "https://localhost");
   }));
 
-  test(`${platform}: malformed canonical origins refuse before installation`, () => fixture(async root => {
-    for (const origin of ["https://localhost/not-an-origin", "https://userinfo@example.test", "https://localhost?other=1", "file:///tmp/authority", "https://localhost:0", "https://localhost:65536", " https://localhost"]) {
+  shellTest(`${platform}: valid IPv6 origins preserve their authority`, () => fixture(async root => {
+    for (const origin of ["https://[::1]", "https://[2001:db8::1]:9443", "https://[1:2:3:4:5:6:7:8]", "https://[1::]", "https://[::]"]) {
+      await writeFile(join(root, ".env"), `PUBLIC_URL=${origin}\n`);
+      assert.equal(await chooseShell(root, platform, "host-upkeep"), origin);
+    }
+  }));
+
+  shellTest(`${platform}: malformed canonical origins refuse before installation`, () => fixture(async root => {
+    for (const origin of ["https://localhost/not-an-origin", "https://userinfo@example.test", "https://localhost?other=1", "file:///tmp/authority", "https://localhost:0", "https://localhost:65536", " https://localhost", "https://[::::]", "https://[123]", "https://[12345::1]", "https://[1::2::3]", "https://[1:2:3:4:5:6:7]", "https://[1:2:3:4:5:6:7:8:9]", "https://[1:2:3:4:5:6:7:8::]"]) {
       await writeFile(join(root, ".env"), `PUBLIC_URL=${origin}\n`);
       await assert.rejects(chooseShell(root, platform, "host-upkeep"), /canonical|origin/i);
     }

@@ -73,7 +73,8 @@ The implementation plan is
 `../plans/2026-11-11-native-host-upkeep-stable-origin.md`. Source-local script
 fixtures precede implementation, followed by applicable gates and independent
 review, a signed protected PR, canonical delivery and measured convergence.
-Current worktree readiness is source-only until the managed probe proves more.
+The managed worktree probe established compile-ready dependencies; it does not
+prove host installation acceptance.
 The initial source diagnosis changed no running service. A subsequent explicitly
 authorized configuration qualification changed only the existing native
 service's saved authority to the verified canonical HTTPS origin and used its
