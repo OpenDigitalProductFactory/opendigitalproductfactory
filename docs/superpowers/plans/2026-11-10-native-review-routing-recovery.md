@@ -7,7 +7,7 @@ status: draft
 **BacklogItem:** BI-C51C266A
 **Workroom:** WC-EC8AF261
 **Design:** [corrective design](../specs/2026-11-10-native-review-routing-recovery-design.md)
-**Status:** proposed; no implementation admission or plan-coverage receipt yet
+**Status:** historical drafting companion; the linked repair design owns the ordered sequence; no implementation admission or coverage receipt
 
 For agentic workers: execute one independently reviewable backlog item at a time. Use the DPF test-first, local merged-code verification and protected PR procedures. Do not edit code before normal implementation admission and exact scope claims.
 
@@ -15,7 +15,7 @@ For agentic workers: execute one independently reviewable backlog item at a time
 
 Decision proposed: **atomic**. BI-C51C266A owns DEL-ROUTING-1: a reliable native independent-review dispatch path with truthful failure and carrier-search results. Policy selection, packet parity, diagnostic detail and carrier discovery jointly establish whether that one path works; they are internal sequencing rather than separately accepted features. Original AC-1 through AC-4 remain required. There is no new child or duplicate build.
 
-Coverage receipt: **not recorded**. The real independent scope baseline, immutable pushed plan identity and four-way mapping must be accepted by `record_plan_backlog_coverage` before implementation. This section supplies no authority by itself.
+Coverage receipt: **not recorded**. Use the live fix-profile remedy: coverage belongs to the governed implementation parent and its actual canonical plan, not this documentation artifact. Completion separately owes its objective baseline. The writer must accept the actual required immutable identities and four-way mapping before implementation. This section supplies no authority by itself.
 
 | Deliverable | Requirement refs | Contract refs | Flow refs | Verification refs |
 | --- | --- | --- | --- | --- |
@@ -27,9 +27,9 @@ FLOW-ISSUE resolves only currently owed independent requests. FLOW-ADMIT recompu
 
 ## Phase 0: finish authoring and obtain legitimate authority
 
-Publish this design and plan from the admitted dedicated branch, preserve existing native artifacts and resolve the shared documentation-index claim with its owner. Run documentation checks. Obtain the current server-issued independent approval request, submit it unchanged once, and retain its real receipt. Record source-bound research and correct scope disposition through the governing writer; IF-D23604E098C2079C stays open until a legitimate resolution is accepted.
+The linked design now contains the canonical ordered sequence. Publish the admitted source and run documentation checks; the current index is fresh with no additional content change or claim needed. The live fix-profile readiness offers author research, not an independent design-spec request at this stage. Record source-bound research and correct scope disposition through the governing writer; IF-D23604E098C2079C stays open until a legitimate resolution is accepted. Independent baseline and acceptance obligations remain required at completion.
 
-Record plan coverage against the resulting own baseline and claim implementation plus the exact code paths. Reconcile any current native writer before switching the source author. No parallel source author, default-active brief write, fabricated review or guard override is allowed.
+Record coverage against the governed implementation parent and its actual current canonical plan, then claim implementation plus the exact code paths. Reconcile any current native writer before switching the source author. No parallel source author, default-active brief write, fabricated review or guard override is allowed.
 
 ## Phase 1: reproduce and repair prerequisite selection
 

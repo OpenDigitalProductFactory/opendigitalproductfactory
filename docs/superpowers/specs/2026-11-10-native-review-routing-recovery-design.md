@@ -6,7 +6,7 @@ status: draft
 
 **BacklogItem:** BI-C51C266A
 **Workroom:** WC-EC8AF261
-**Status:** proposed corrective design; independent approval and implementation admission pending
+**Status:** proposed corrective repair design; research disposition, implementation coverage and admission pending
 **Source baseline:** `41afd6e6bb5bce14b3fd84068cdaac5a2e930402`
 
 ## Scope
@@ -66,13 +66,27 @@ Return one of three explicit outcomes: admitted connection; exhaustive no-admitt
 
 ### Artifact and source integrity
 
-The client-authored nine-task plan revision `cmwbbbslz4l0k01p0mn6pf949`, digest `17f8a4920dcf9234089554f0308a00f4232c13a893d13875e0a3a9ff74402262`, is preparation, not independently reviewed implementation authority. The retained earlier plan-review pass covers the old native ten-task plan only. This design and its repository plan require their own legitimate source-bound review and coverage.
+The client-authored nine-task plan revision `cmwbbbslz4l0k01p0mn6pf949`, digest `17f8a4920dcf9234089554f0308a00f4232c13a893d13875e0a3a9ff74402262`, is preparation, not independently reviewed implementation authority. The retained earlier plan-review pass covers the old native ten-task plan only. Use the current repair readiness route for source-bound research and implementation-parent coverage. Completion still requires the independently established objective baseline, acceptance and reconciliation; the author supplies none of those verdicts.
 
 Native design revision `cmwbav63t4hs301p0jihevnzh` still contains the unapproved registry requirement. Open author-research finding IF-D23604E098C2079C is not resolved by authoring this proposal. Record a resolution only after the governing writer validates the corrected scope and its immutable identity. Do not clear reviewer fields, impersonate native authors or treat a Plan-phase design-save no-op as a revision.
 
 ## Verification and delivery boundaries
 
-The [implementation plan](../plans/2026-11-10-native-review-routing-recovery.md) gives one atomic BI with ordered internal phases. No code edits begin until independent design approval, valid plan coverage, normal implementation admission and exact path claims succeed.
+The live readiness decision observed at 2026-11-11T04:37:57Z selects profile `fix`. At this stage it offers no independent design-spec request: author research is required, and implementation coverage belongs to the governed implementation parent. Completion separately retains the objective baseline, acceptance and reconciliation obligations. Do not invent an earlier review gate or treat this distinction as implementation approval.
+
+BI-C51C266A is the atomic implementation parent for DEL-ROUTING-1 and AC-1 through AC-8. Its current canonical native plan is still the unreviewed client revision identified above. Record coverage against the actual accepted implementation plan and baseline through the normal writer; this document is not a coverage receipt. No code edits begin until the open research finding is legitimately disposed of, valid implementation-parent coverage, normal implementation admission and exact path claims succeed. The [earlier planning companion](../plans/2026-11-10-native-review-routing-recovery.md) retains drafting history; the ordered repair sequence below is canonical.
+
+### Ordered repair deliverables
+
+1. Bind the published current source to the existing workroom. Record named-ref reproduction, executed alternative-cause controls and the governing disposition of IF-D23604E098C2079C. Preserve the original native design and stale plan-review history. Do not manufacture a passing research receipt while its findings remain open.
+2. Confirm the current implementation plan and parent coverage through the governed writer, then claim implementation and exact existing source/test paths. Reconcile any native author before changing the source author.
+3. VERIFY-ROUTES: reproduce the sole-PLAN_REQUIRED counterexample in `build-studio-owed-routes.test.ts`, then repair its module using the shared policy and authoritative prerequisite. Test explicit null, unavailable reads, own/inherited baseline, resolved coverage, unrelated obligations, allowed decisions and changed immutable identity.
+4. VERIFY-PARITY: exercise the actual issuer/admission and packet-roundtrip tests, including default wiring. Preserve both callers and fail-closed source, actor and packet checks. No admission refactor without an executed counterexample and explicit scope amendment.
+5. VERIFY-RECORD: update `server-reviewer-dispatch.ts` and its test to preserve bounded specific denial detail alongside the machine code, retaining current recovery, cooldown and idempotency.
+6. VERIFY-CARRIER: update `standing-connection.ts` and its test for deterministic pagination, deduplication, rotation, credentials exclusions, exhaustive absence and explicit incomplete scans. Audit existing callers before adapting the return contract.
+7. Update the claimed architecture paragraph, run affected suites and package typecheck, obtain required independent implementation review, then complete exact-source gate, DCO PR and merge queue. VERIFY-LIVE requires normal deployment, genuine native dispatch and an independent feature-build-revision receipt. Record baseline, acceptance and outcome reconciliation before closure. No source-only pass closes AC-4.
+
+The anticipated existing implementation paths and detailed test cases remain in the planning companion. They are not admitted by authoring these documents.
 
 Tests must cover the live missing-baseline counterexample, authoritative null versus unavailable reads, existing/inherited baseline, resolved coverage, allowed decisions, product-owned/unrelated prerequisites, changed immutable artifacts, real default-port wiring, precise refusal payloads, candidate deduplication, stable pagination, rotation/credentials exclusions and incomplete scans. Use meaningful failing behavior tests before the correction, then affected suites and typechecks.
 
