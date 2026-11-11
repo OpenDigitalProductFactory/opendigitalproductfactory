@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -81,13 +82,18 @@ describe("Work activity page", () => {
 
   it("opens each room in one click from its activity line", async () => {
     const html = renderToStaticMarkup(await WorkroomsPage());
-    expect(html).toContain("/workspace/cases/work-capsule%3AWC-BLOCK");
-    expect(html).toContain("/workspace/cases/work-capsule%3AWC-RUN");
-    expect(html).not.toContain("Session payables-session");
-    // Session attribution remains on the linked room evidence. The bounded
-    // owner projection deliberately does not duplicate raw executor identity.
-    expect(html).not.toContain("Session release-session");
-    expect(html).toContain("blocked: waiting on reviewer");
+    const document = new DOMParser().parseFromString(html, "text/html");
+    const details = Array.from(document.querySelectorAll("details"));
+    const activity = details.find((detail) => detail.querySelector("summary")?.textContent === "Activity by portfolio");
+    expect(activity).toBeDefined();
+    expect(activity!.innerHTML).toContain("/workspace/cases/work-capsule%3AWC-BLOCK");
+    expect(activity!.innerHTML).toContain("/workspace/cases/work-capsule%3AWC-RUN");
+    expect(activity!.textContent).not.toContain("Session payables-session");
+    expect(activity!.textContent).not.toContain("Session release-session");
+    expect(activity!.textContent).toContain("blocked: waiting on reviewer");
+    const provenance = details.find((detail) => detail.textContent?.includes("Session release-session"));
+    expect(provenance?.querySelector("summary")?.textContent).toBe("Technical evidence");
+    expect(provenance?.open).toBe(false);
   });
 
   it("does not claim work is executing without evidence", async () => {
