@@ -441,22 +441,6 @@
         "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
       ]
     },
-    "@types/markdown-it": {
-      "added": "2026-09-29",
-      "workspaces": [
-        "apps/web"
-      ],
-      "kinds": [
-        "dev"
-      ],
-      "note": "Type definitions for markdown-it 14 (DefinitelyTyped, MIT); dev-only. markdown-it 14 ships no types.",
-      "disposition": "keep",
-      "rationale": "Keep upstream: this development, test, or build tool is not an owned product capability; upstream maintenance and security response outweigh vendoring, and no approved removal route exists.",
-      "evidence": [
-        "docs/superpowers/specs/2026-07-21-dependency-sovereignty-and-supply-chain-intake-hardening-design.md#tier-0--stay-on-upstream-harden-the-intake-the-99",
-        "docs/superpowers/plans/2026-09-08-dependency-diet-and-vertical-integration-plan.md#M12"
-      ]
-    },
     "@types/net-snmp": {
       "added": "2026-06-21",
       "workspaces": [
