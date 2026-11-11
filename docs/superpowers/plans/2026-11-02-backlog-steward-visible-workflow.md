@@ -62,7 +62,7 @@ This is one atomic medium delivery. Full-population detection, a recurring Workr
 - Receipt: `cmw0cb95j0fqy01lncj3c0ire`
 - Receipt artifact: commit `80a30f468be417a85817b8e75f6fe639a39c90fd`, plan blob `e23803d4135c365f1088403d1208927ab658dc8b`
 - Rationale: The complete-population detector, recurring activity shape, Workroom projection and contextual Right Now link form one delivery boundary. Shipping any phase alone would either produce an unobservable steward, a visible task without the complete review contract, or a detector with no recurring accountable owner.
-- Dependencies: BI-44ABB02A, BI-049409BF, BI-8EC69BE0, BI-A63A9476, BI-FF8A57EF, BI-B18B1DE2, BI-C1781121, BI-75080736
+- Dependencies: BI-44ABB02A, BI-049409BF, BI-8EC69BE0, BI-A63A9476, BI-FF8A57EF, BI-C1781121, BI-75080736. The origin install's route for origin-owned classification corrections is owned by the paired install and not mirrored here; BI-D6337582 records it.
 
 ## Risks and rollback
 
