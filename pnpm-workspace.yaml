@@ -19,7 +19,7 @@ packages:
 # docs/architecture/dependency-reduction-routine.md.
 catalog:
   "@axe-core/playwright": ^4.14.0
-  "@types/node": ^26.6.5
+  "@types/node": ^26.6.6
   "@types/pg": ^8.23.1
   "@vitest/coverage-v8": ^5.0.4
   bcryptjs: ^3.0.3
