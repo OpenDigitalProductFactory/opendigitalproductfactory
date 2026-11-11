@@ -117,11 +117,34 @@ Each plan task names the acceptance criteria it delivers. When the work is large
 
 The AI Coworker generates code inside the isolated Build runtime. It runs tests and typecheck, gathers concrete evidence, and can use bounded disposable spikes to answer uncertain UX or implementation questions. A spike is evidence, not production code: the normal design, review, and release gates still decide what may ship.
 
+Test totals count cases that actually ran. **No tests ran** can mean that no
+test covers the change, or that the platform could not establish what to test;
+the evidence distinguishes those situations. A clean type check alone never
+counts as a passing test. If the source changes during checking, the observed
+counts remain in the record but do not qualify the new source. A passing scoped
+run cannot resolve an earlier report whose complete failure scope is unknown;
+that report stays visible for independent reconciliation. Saved
+evidence retains that report, the commands and the source identity after reload.
+Checks requested by a coworker use the same build and evidence record. If a
+repair stops before a new check, earlier counts remain observations and current
+verification stays unknown. Saved review sections, evidence summaries and the
+owner's proof view show **Unverified** for incomplete or conflicting checks.
+A confirmed exemption says **Typecheck only** and that no tests ran. The existing
+raw-output disclosure retains the earlier QA report, source identity and commands.
+The platform saves that invalidation before allowing
+the repair to change files, so an interrupted process cannot leave an old check
+looking current. If that save fails, the repair does not start.
+
 If a task stops before it finishes, Build Studio distinguishes *why*. When the coding session died on infrastructure — a timeout, a provider outage, a rate limit, the process being killed — that is not a verdict on your feature, so the same task is re-run once automatically and you see a "retrying" note in the activity feed. When the session instead stopped because it needs something only you can supply — an unresolved product question, a contradiction in the spec — it is **not** retried, because re-running will not answer the question. That one surfaces as a blocked task for you to resolve.
 
 ### Review
 
-Quality gates verify the feature is ready: documentation evidence is present, all tests pass, typecheck is clean, acceptance criteria are met, and accessibility checks pass. The AI Coworker presents a plain-language summary of the results.
+Quality gates apply the change's existing verification requirements, including
+documentation, typecheck, acceptance and accessibility. Test failures remain
+advisory where the delivery policy says so. Where shallow or deep verification
+requires tests, unknown or unrun tests and unresolved conflicting evidence do
+not satisfy that requirement; a confirmed no-covering-test exemption remains
+distinct. The AI Coworker presents a plain-language summary of the results.
 
 If the repository's automated checks, the independent code review, or the build's own risk analysis find problems in the build's own change, such as a missing data-impact note, out-of-date generated files, a bug the reviewer spotted, or a risk the change does not guard against, Build Studio hands the build back to the AI Coworker with the findings to fix, then reviews it again. This happens at most twice. If the checks still fail, the build is escalated to you with the remaining findings instead of retrying forever.
 

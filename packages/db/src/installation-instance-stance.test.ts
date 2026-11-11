@@ -306,3 +306,45 @@ describe("resolveInstanceStance — authority and companion (BI-B50BE189)", () =
     expect(stance.stalePairedRef).toMatchObject({ ref: "link_old", repairRef: "did_" + "a".repeat(64) });
   });
 });
+
+describe("resolveInstanceStance — organization guidance on a companion (BI-1B165D02)", () => {
+  function companion(organizationGuidance?: Parameters<typeof resolveInstanceStance>[1]["organizationGuidance"]) {
+    const snapshot = buildInstallationOperatingProfileSnapshot({
+      intent: intent({ pairedProductionInstallationRef: "operator-organization" }),
+      environmentClass: "development",
+    });
+    return resolveInstanceStance(snapshot, {
+      sourceCapable: false, pairingIsEstablished: true, peerEstateMatches: true, peerEnvironmentClass: "production",
+      ...(organizationGuidance ? { organizationGuidance } : {}),
+    }, { holdsIrreplaceableWork: false });
+  }
+
+  it("states current guidance with its version and expiry", () => {
+    const stance = companion({ state: "current", version: 12, expiresAt: "2026-11-25T00:00:00.000Z" }); // clock-bomb-guard: allow pure briefing text; no clock is read
+    expect(formatInstanceStanceBriefing(stance))
+      .toContain("Organization guidance — current: organization-business decisions follow the production authority's snapshot version 12, valid until 2026-11-25T00:00:00.000Z");
+  });
+
+  it("AC-PAC-04 (guidance): reports guidance expired", () => {
+    const stance = companion({ state: "expired", expiresAt: "2026-11-25T00:00:00.000Z" }); // clock-bomb-guard: allow pure briefing text; no clock is read
+    expect(formatInstanceStanceBriefing(stance)).toContain("Organization guidance — expired:");
+  });
+
+  it("reports no guidance when none is held, rather than staying silent", () => {
+    expect(companion().organizationGuidance).toEqual({ state: "none" });
+    expect(formatInstanceStanceBriefing(companion())).toContain("Organization guidance — none:");
+  });
+
+  it("says nothing about organization guidance on an installation that is not a companion", () => {
+    const snapshot = buildInstallationOperatingProfileSnapshot({
+      intent: intent({ pairedProductionInstallationRef: "operator-organization" }),
+      environmentClass: "production",
+    });
+    const stance = resolveInstanceStance(snapshot, {
+      sourceCapable: false, pairingIsEstablished: true, peerEstateMatches: true, peerEnvironmentClass: "development",
+      organizationGuidance: { state: "none" },
+    }, { holdsIrreplaceableWork: false });
+    expect(stance.organizationGuidance).toBeUndefined();
+    expect(formatInstanceStanceBriefing(stance)).not.toContain("Organization guidance");
+  });
+});

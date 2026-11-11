@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "existing-cards-truthful",
+  "decisionInteractionId": "DI-0624E2130697",
+  "scope": { "files": [
+    "apps/web/components/build/EvidenceSummary.tsx",
+    "apps/web/components/build/ReviewPanel.tsx"
+  ] },
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["existing-cards-truthful", "separate-verification-workspace"] },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform", "verdict": "proceed", "confidence": "high",
+    "evidenceClass": "Correct existing saved-reader labels from normalized execution/source/conflict facts. Retain existing layout and controls; no navigation, data action or advisory lifecycle change. Clickable six-state prototype DOC-E62050EDv1 exists; browser file-protocol preview was refused and is UNRUN, not UI acceptance. Native UX critique CE-F8FF8FEB was refused by grant intersection and is UNRUN; no fallback or grant bypass. Component regressions and containing-release served owner verification remain required. Earlier cost-only consultation DI-087A4529F3C4 declined; clarified disclosed fact vectors produced this current decision before source edits."
+  }
+}

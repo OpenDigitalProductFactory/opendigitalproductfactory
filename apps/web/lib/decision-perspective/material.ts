@@ -19,7 +19,7 @@ import type {
 
 export const DPF_ORGANIZATIONAL_PRINCIPLES_PROFILE_ID = "dpf-organizational-principles";
 
-type DbDecisionPerspectiveProfile = {
+export type DbDecisionPerspectiveProfile = {
   profileId: string;
   name?: string;
   kind?: string;
@@ -47,7 +47,7 @@ type DbPerspectiveMaterial = {
   lastValidatedAt: Date | null;
 };
 
-type PerspectiveMaterialClient = {
+export type PerspectiveMaterialClient = {
   decisionPerspectiveProfile: {
     findUnique(args: {
       where: { profileId: string };
@@ -68,7 +68,7 @@ type PerspectiveMaterialClient = {
  * fakes. Kept separate from {@link PerspectiveMaterialClient} so callers that
  * only resolve material do not have to provide `findFirst`.
  */
-type OrgProfileClient = {
+export type OrgProfileClient = {
   decisionPerspectiveProfile: {
     findFirst(args: {
       where: Record<string, unknown>;
@@ -84,7 +84,19 @@ export type ResolvedProfileMaterial = {
   resolvedProfileChain: string[];
   coverageGap: boolean;
   materials: PerspectiveMaterial[];
+  /**
+   * Whose organization guidance governed (BI-1B165D02). Absent on paths that
+   * predate it; "local" when this installation is not a development companion.
+   * A notice is set whenever the companion could not use its authority's guidance.
+   */
+  organizationGuidance?: OrganizationGuidanceState;
 };
+
+export type OrganizationGuidanceState =
+  | { state: "local" }
+  | { state: "current"; version: number; expiresAt: string; authorityInstallationDid: string }
+  | { state: "none"; notice: string }
+  | { state: "expired"; version: number; expiresAt: string; notice: string };
 
 const FRESHNESS_FACTORS: Record<PerspectiveMaterialFreshness, number> = {
   current: 1,
@@ -234,7 +246,7 @@ function toPerspectiveMaterial(row: DbPerspectiveMaterial): PerspectiveMaterial 
   };
 }
 
-function toDecisionPerspectiveProfile(row: DbDecisionPerspectiveProfile): DecisionPerspectiveProfile {
+export function toDecisionPerspectiveProfile(row: DbDecisionPerspectiveProfile): DecisionPerspectiveProfile {
   const autonomyPolicy = (row.autonomyPolicy ?? {}) as Partial<DecisionAutonomyPolicy>;
   const defaultResolver = (row.defaultResolver ?? {}) as Partial<DecisionResolverRule>;
   return {

@@ -59,6 +59,15 @@ export interface StalePairedRef {
 }
 
 /**
+ * Whether a development companion holds usable guidance from its production
+ * authority (BI-1B165D02, companion design §4.3). Reported only on a companion.
+ */
+export type OrganizationGuidanceFact =
+  | { state: "current"; version: number; expiresAt: string }
+  | { state: "none" }
+  | { state: "expired"; expiresAt: string };
+
+/**
  * The resolved operating stances for one installation.
  *
  * `rationale` explains the resolution in one sentence per stance so agent-facing
@@ -83,6 +92,8 @@ export interface InstanceStanceProfile {
   stalePairedRef?: StalePairedRef;
   /** The paired peer's CA-attested class; null when unattested. */
   pairedEnvironmentClass?: InstallationEnvironmentClass | null;
+  /** Present only when this installation is a companion. */
+  organizationGuidance?: OrganizationGuidanceFact;
   rationale: {
     credentials: string;
     teardown: string;
@@ -130,6 +141,8 @@ export interface InstanceStanceHostFacts {
   peerEstateMatches?: boolean;
   /** Set when the operator's declared paired reference names a dead link. */
   stalePairedRef?: StalePairedRef;
+  /** The guidance snapshot this installation holds from its paired authority, if any. */
+  organizationGuidance?: OrganizationGuidanceFact;
 }
 
 function resolveCredentials(
@@ -348,6 +361,9 @@ export function resolveInstanceStance(
     ...(host.peerInstallationLabel ? { pairedInstallationLabel: host.peerInstallationLabel } : {}),
     ...(host.stalePairedRef ? { stalePairedRef: host.stalePairedRef } : {}),
     ...(snapshot.pairedProductionInstallationRef ? { pairedEnvironmentClass: host.peerEnvironmentClass ?? null } : {}),
+    ...(relationship.stance === "companion"
+      ? { organizationGuidance: host.organizationGuidance ?? { state: "none" as const } }
+      : {}),
     rationale: {
       credentials: credentials.rationale,
       teardown: teardown.rationale,
@@ -357,6 +373,17 @@ export function resolveInstanceStance(
       relationship: relationship.rationale,
     },
   };
+}
+
+function organizationGuidanceLine(guidance: OrganizationGuidanceFact): string {
+  switch (guidance.state) {
+    case "current":
+      return `Organization guidance — current: organization-business decisions follow the production authority's snapshot version ${guidance.version}, valid until ${guidance.expiresAt}; local stance can only narrow it.`;
+    case "expired":
+      return `Organization guidance — expired: the production authority's snapshot expired at ${guidance.expiresAt}, so organization-business decisions are recorded as guidance gaps until a new snapshot arrives.`;
+    case "none":
+      return "Organization guidance — none: no valid snapshot from the production authority is held, so organization-business decisions are recorded as guidance gaps instead of using platform defaults.";
+  }
 }
 
 /**
@@ -396,6 +423,7 @@ export function formatInstanceStanceBriefing(
   lines.push(`Peer — ${stance.peerWrite}: ${stance.rationale.peerWrite}`);
   lines.push(`Work sync — ${stance.workSync}: ${stance.rationale.workSync}`);
   lines.push(`Relationship — ${stance.relationship}: ${stance.rationale.relationship}`);
+  if (stance.organizationGuidance) lines.push(organizationGuidanceLine(stance.organizationGuidance));
   if (stance.stalePairedRef) {
     const repair = stance.stalePairedRef.repairRef
       ? ` Repair it to ${stance.stalePairedRef.repairRef} under "Change what this installation is".`
