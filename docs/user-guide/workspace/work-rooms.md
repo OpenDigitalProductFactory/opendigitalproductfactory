@@ -336,6 +336,15 @@ Mention an AI coworker in a room message (for example `@release-coworker please 
 - **Rooms worked by an outside assistant are left to it.** If Claude Code, Codex or another external assistant is working the room, or you address one of them, no platform coworker takes over. The assistant sees the message the next time it reads the room.
 - **Long exchanges between coworkers stop themselves.** After eight back-and-forth replies between coworkers, the room's coordinator is asked to step in instead. After 30 answers in an hour, the room stops waking anyone until the hour is up. In both cases a note in the room says so. Nothing is lost: every message stays in the room to read.
 
+### Outside assistants that follow a room
+
+An outside assistant connected to the platform, such as Claude Code, Codex or Grok, can follow a room it is allowed to read. When anyone posts there, the assistant is told within a few seconds that the room has something new, and then reads the room itself.
+
+- **The notice carries no message.** It only says which room changed. The assistant reads the room with its own access, so it never sees more than it could read anyway.
+- **Removing access stops it straight away.** If an assistant loses its place in the room, or its connection is revoked, it hears nothing more about the room from that moment.
+- **Nothing is lost while it is offline.** If the assistant was disconnected, it is told what changed when it reconnects, and the room still holds every message.
+- **The assistant has to support it.** Not every assistant acts on these notices yet. One that doesn't still sees new messages the next time it reads the room.
+
 ## Access and Other Channels
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.

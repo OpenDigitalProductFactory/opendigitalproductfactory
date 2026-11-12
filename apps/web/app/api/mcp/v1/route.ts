@@ -81,6 +81,13 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
+import {
+  defaultRoomResourceDeps,
+  dispatchRoomResourceMethod,
+  governedReadVia,
+  isRoomResourceMethod,
+} from "@/lib/mcp/room-resources.server";
+import { roomUpdateFanout } from "@/lib/mcp/room-update-fanout.server";
 import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveLoadToolsRequest, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
@@ -91,65 +98,18 @@ import { permitResultMeta, presentedPermitHandle } from "@/lib/gpp/permit-carria
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
-// JSON-RPC 2.0 standard error codes
-const JSONRPC_PARSE_ERROR = -32700;
-const JSONRPC_INVALID_REQUEST = -32600;
-const JSONRPC_METHOD_NOT_FOUND = -32601;
-const JSONRPC_INVALID_PARAMS = -32602;
-const JSONRPC_INTERNAL_ERROR = -32603;
-
-type JsonRpcId = string | number | null;
-
-type JsonRpcRequest = {
-  jsonrpc: "2.0";
-  id?: JsonRpcId;
-  method: string;
-  params?: Record<string, unknown>;
-};
-
-type JsonRpcResponse =
-  | {
-      jsonrpc: "2.0";
-      id: JsonRpcId;
-      result: unknown;
-    }
-  | {
-      jsonrpc: "2.0";
-      id: JsonRpcId;
-      error: { code: number; message: string; data?: unknown };
-    };
-
-type McpToolsCallResult = {
-  content: { type: "text"; text: string }[];
-  structuredContent?: unknown;
-  isError: boolean;
-};
-
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function jsonRpcError(
-  id: JsonRpcId,
-  code: number,
-  message: string,
-  data?: unknown,
-  httpStatus = 200,
-): Response {
-  const body: JsonRpcResponse = {
-    jsonrpc: "2.0",
-    id,
-    error: { code, message, ...(data !== undefined ? { data } : {}) },
-  };
-  return jsonResponse(body, httpStatus);
-}
-
-function jsonRpcOk(id: JsonRpcId, result: unknown): Response {
-  return jsonResponse({ jsonrpc: "2.0", id, result } satisfies JsonRpcResponse);
-}
+import {
+  JSONRPC_INTERNAL_ERROR,
+  JSONRPC_INVALID_PARAMS,
+  JSONRPC_INVALID_REQUEST,
+  JSONRPC_METHOD_NOT_FOUND,
+  JSONRPC_PARSE_ERROR,
+  jsonRpcError,
+  jsonRpcOk,
+  type JsonRpcId,
+  type JsonRpcRequest,
+  type McpToolsCallResult,
+} from "@/lib/mcp/jsonrpc-response";
 
 function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
   return scope === "read" ? "read" : "write";
@@ -381,6 +341,25 @@ async function handleTasksLifecycle(
   }
   if (result.kind === "ok") return jsonRpcOk(id, result.value);
   return jsonRpcError(id, JSONRPC_INVALID_PARAMS, result.message);
+}
+
+// BI-ED52AB82: Work Rooms as MCP resources (spec 2026-10-27 §6.7). Reads and
+// subscribes go through this route's own tools/call handler for
+// read_room_messages, so they meet exactly the checks a tool call meets.
+async function handleRoomResources(
+  method: string,
+  id: JsonRpcId,
+  token: ResolvedAuth,
+  params: JsonRpcRequest["params"],
+  callerClient: string | undefined,
+  stepUp: StepUpContext | undefined,
+): Promise<Response> {
+  const read = governedReadVia((name, args) =>
+    handleToolsCall(id, token, { name, arguments: args }, callerClient, false, stepUp));
+  const outcome = await dispatchRoomResourceMethod(method, params, token, read, await defaultRoomResourceDeps());
+  if (outcome.kind === "response") return outcome.response;
+  if (outcome.kind === "error") return jsonRpcError(id, outcome.code, outcome.message, outcome.data);
+  return jsonRpcOk(id, outcome.result);
 }
 
 async function handleTasksSubmit(
@@ -709,6 +688,12 @@ export async function POST(request: Request): Promise<Response> {
     });
     if (callbackRefusal) return jsonRpcError(body.id ?? null, JSONRPC_INVALID_REQUEST,
       callbackRefusal.message, { error: callbackRefusal.error }, 403);
+    if (isRoomResourceMethod(body.method)) {
+      if (isNotification) return new Response(null, { status: 202 });
+      return await handleRoomResources(body.method, body.id ?? null, token, body.params,
+        deriveCallerClient(request.headers.get("user-agent")),
+        token.source === "oauth" ? { granted: oauthGrantedScopes, origin: resolveResourceOrigin(request) } : undefined);
+    }
     switch (body.method) {
       case "initialize":
         if (isNotification) {
@@ -788,11 +773,13 @@ export async function POST(request: Request): Promise<Response> {
 
 /**
  * Streamable HTTP server-to-client lane. A notification is only a wake-up:
- * each frame carries the complete current Task projection, while TaskRun and
- * tasks/get/list remain the durable reconciliation path after disconnects.
+ * task frames carry the complete current Task projection, room frames only the
+ * room's URI (BI-ED52AB82). TaskRun, tasks/get/list and read_room_messages
+ * remain the durable reconciliation path after disconnects; a reconnect with
+ * Last-Event-ID replays the room updates the stream missed.
  */
 export async function GET(request: Request): Promise<Response> {
   const authentication = await authenticateMcpRequest(request);
   if (!authentication.ok) return authentication.response;
-  return openMcpTaskStatusStream(request, authentication.token);
+  return openMcpTaskStatusStream(request, authentication.token, { rooms: roomUpdateFanout() });
 }
