@@ -1,3 +1,5 @@
+import { format } from "node:util";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -200,10 +202,34 @@ describe("syncPageMaterialAfterTransition", () => {
       pageId: "page-1",
       pageStatus: "archived",
       origin: "wiki-edit",
-      logger: { warn: (message: string) => warnings.push(message) },
+      logger: { warn: (...args: unknown[]) => warnings.push(format(...args)) },
     });
 
     expect(result).toBeNull();
     expect(warnings).toEqual([expect.stringContaining("page-1")]);
+  });
+
+  it("cannot be made to forge a log line by the values it reports", async () => {
+    const warnings: string[] = [];
+    const db = {
+      perspectiveMaterial: {
+        findMany: async () => [],
+        updateMany: async () => {
+          throw new Error("db down\n[wiki-edit] forged: sync ok");
+        },
+      },
+    };
+
+    await syncPageMaterialAfterTransition({
+      db,
+      pageId: "page-1\r\n[page-material] forged entry",
+      pageStatus: "archived\nforged",
+      origin: "wiki-edit",
+      logger: { warn: (...args: unknown[]) => warnings.push(format(...args)) },
+    });
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).not.toMatch(/[\r\n]/);
+    expect(warnings[0]).toContain("page-1");
   });
 });

@@ -29,6 +29,8 @@
 // today. If a second revoking reason is ever added, it must record its cause
 // so a republish here cannot undo it.
 
+import { sanitizeForLog } from "@/lib/security/safe-log";
+
 export type PageMaterialPromotion = "promoted" | "revoked";
 
 export type PageMaterialLifecycleClient = {
@@ -80,13 +82,19 @@ export async function syncPageMaterialAfterTransition(input: {
   pageId: string;
   pageStatus: string;
   origin: string;
-  logger?: Pick<Console, "warn">;
+  logger?: { warn(message: string, ...args: unknown[]): void };
 }): Promise<{ promotionState: PageMaterialPromotion; changed: number } | null> {
   try {
     return await syncPageMaterialToStatus(input);
   } catch (err) {
+    // Positional substitutions of sanitised values: a page id, status or
+    // driver message carrying CR/LF cannot forge a log line (CWE-117).
     (input.logger ?? console).warn(
-      `[${input.origin}] decision-material sync failed for page ${input.pageId} -> ${input.pageStatus} (a missed revocation is repaired on next boot): ${(err as Error).message}`,
+      "[%s] decision-material sync failed for page %s -> %s (a missed revocation is repaired on next boot): %s",
+      sanitizeForLog(input.origin),
+      sanitizeForLog(input.pageId),
+      sanitizeForLog(input.pageStatus),
+      sanitizeForLog(err instanceof Error ? err.message : String(err)),
     );
     return null;
   }
