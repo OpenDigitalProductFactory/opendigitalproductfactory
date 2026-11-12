@@ -224,11 +224,11 @@ flowchart LR
 
 `read_room_messages` returns the newest page by default and takes `sinceCursor` and `beforeCursor`. The cursor is `(createdAt, messageId)`.
 
-Each participant has a delivery cursor on its existing `WorkroomParticipant` row, recording the newest message handed to it on any channel. "Unread for me" is a read past that cursor, filtered to messages addressed to me or to the room.
+Each participant has a delivery cursor on its existing `WorkItemPresence` row for the room, recording the newest message handed to it on any channel. (Amended 2026-11-11 by `DI-87225C71AAE4`: this section first named `WorkroomParticipant`, but a room outlives its Workrooms. See the [room read cursor design](2026-11-11-room-read-cursor-design.md) §3.) "Unread for me" is a read past that cursor, filtered to messages addressed to me or to the room.
 
 A disconnected client loses nothing: every channel in §6.3 is an accelerator over this read.
 
-The per-participant cursor is the one schema change in item B2, so it is delivered separately as `BI-31E0C874`. Until it lands, a woken coworker is handed a cursor at its own last post in the room.
+The per-participant cursor is the one schema change in item B2, so it is delivered separately as `BI-31E0C874`; its canonical design is the [room read cursor design](2026-11-11-room-read-cursor-design.md). A coworker with no stored cursor starts at its own last post in the room.
 
 ### 6.6 What the first B2 slice builds (`BI-31C1FDEC`)
 
