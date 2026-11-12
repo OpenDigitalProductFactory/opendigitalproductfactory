@@ -54,4 +54,4 @@ Risk: stale classification could lower actual obligations or concurrent recovery
 
 ## Backlog coverage
 
-Pending immutable publication and normal live atomic coverage receipt. No coverage, implementation admission, passing tests or delivery is implied by this draft.
+Initial atomic receipt `cmwczkgz05p8j0emfsgi9ga9d` was recorded and checked valid before production edits. It binds BI-1173F1CC to published ordered-fix commit `b8155104b8418b7a06b949ba78151cda0afd09f7`, blob `435bf2a33007e9f52f586e74ffd6578ed1bf1b01`. The one deliverable maps to this BI with no child dependency. Final-source coverage and all delivery checks must be revalidated before publication; this historical receipt does not claim those outcomes.
