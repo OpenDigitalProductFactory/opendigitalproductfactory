@@ -16,6 +16,7 @@
  *   7. Create a PR (handled by the calling code)
  */
 
+import { withConnectRetry } from "@/lib/network/connect-retry";
 import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
@@ -202,6 +203,11 @@ export function buildTreeFileReader(deps: {
 
 // ─── GitHub API Helpers ─────────────────────────────────────────────────────
 
+/** One GitHub request; a connection that never opened is retried (BI-ACAA91E5). */
+function githubFetch(url: string, init?: RequestInit): Promise<Response> {
+  return withConnectRetry(() => fetch(url, init));
+}
+
 function getHeaders(token: string): Record<string, string> {
   return {
     Accept: "application/vnd.github+json",
@@ -212,7 +218,7 @@ function getHeaders(token: string): Record<string, string> {
 }
 
 async function githubGet<T>(url: string, token: string): Promise<T> {
-  const response = await fetch(url, { headers: getHeaders(token) });
+  const response = await githubFetch(url, { headers: getHeaders(token) });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`GitHub API GET ${url}: ${response.status} ${text.slice(0, 300)}`);
@@ -353,7 +359,7 @@ function explainBaseRefFailure(
 }
 
 async function githubPost<T>(url: string, body: unknown, token: string): Promise<T> {
-  const response = await fetch(url, {
+  const response = await githubFetch(url, {
     method: "POST",
     headers: getHeaders(token),
     body: JSON.stringify(body),
@@ -546,7 +552,7 @@ export async function publishBranchCommit(input: {
         + "Publishing would discard whatever is there, unrecoverably.",
       );
     }
-    const response = await fetch(`${headApiBase}/git/refs/heads/${branchName}`, {
+    const response = await githubFetch(`${headApiBase}/git/refs/heads/${branchName}`, {
       method: "PATCH",
       headers: getHeaders(token),
       body: JSON.stringify({ sha: commit.sha, force: ownEarlierPublication }),
