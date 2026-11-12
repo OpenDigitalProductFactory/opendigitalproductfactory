@@ -67,6 +67,31 @@ export async function syncPageMaterialToStatus(input: {
   return { promotionState: target, changed: result.count };
 }
 
+/**
+ * The entry point the status-transition paths call. The page's status change
+ * has already committed when this runs, so a failure is logged and never turns
+ * a completed save into a reported failure — the same contract as craft
+ * promotion and embedding. That is safe in both directions: a missed
+ * revocation is repaired by the boot reconcile, and a missed restoration
+ * leaves the stance revoked until the page is saved again, which fails closed.
+ */
+export async function syncPageMaterialAfterTransition(input: {
+  db: Pick<PageMaterialLifecycleClient, "perspectiveMaterial">;
+  pageId: string;
+  pageStatus: string;
+  origin: string;
+  logger?: Pick<Console, "warn">;
+}): Promise<{ promotionState: PageMaterialPromotion; changed: number } | null> {
+  try {
+    return await syncPageMaterialToStatus(input);
+  } catch (err) {
+    (input.logger ?? console).warn(
+      `[${input.origin}] decision-material sync failed for page ${input.pageId} -> ${input.pageStatus} (a missed revocation is repaired on next boot): ${(err as Error).message}`,
+    );
+    return null;
+  }
+}
+
 export type PageSourcedMaterial = { materialId: string; wikiPageId: string };
 
 /**

@@ -94,6 +94,18 @@ describe("publishWikiOverlayPages — decision material follows the page status"
     });
   });
 
+  it("never fails a completed archive when the material sync fails", async () => {
+    (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([stancePage("published")]);
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.wikiPageRevision.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "rev_x" });
+    (prisma.perspectiveMaterial.updateMany as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("db down"));
+
+    const r = await publishWikiOverlayPages({ pageIds: ["wp_ruling"], targetStatus: "archived" });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.published.map((p) => p.pageId)).toEqual(["wp_ruling"]);
+  });
+
   it("republishing an archived stance restores its material", async () => {
     (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([stancePage("archived")]);
     (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValue({});

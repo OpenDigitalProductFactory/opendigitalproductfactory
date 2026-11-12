@@ -84,4 +84,13 @@ describe("saveWikiOverlayEditForActor — decision material follows the page sta
 
     expect(prisma.perspectiveMaterial.updateMany).not.toHaveBeenCalled();
   });
+
+  it("never reports a completed save as failed when the material sync fails", async () => {
+    existingStance("published");
+    mocked(prisma.perspectiveMaterial.updateMany).mockRejectedValueOnce(new Error("db down"));
+
+    const result = await save("archived");
+
+    expect(result).toEqual({ ok: true, pageId: "wp_ruling", slug: "stances/ruling-di-x", status: "archived" });
+  });
 });

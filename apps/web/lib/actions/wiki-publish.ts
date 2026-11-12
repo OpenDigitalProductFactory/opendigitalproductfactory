@@ -25,7 +25,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/actions/shared/guards";
 import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
 import { embedPublishedOverlayPage } from "@/lib/wiki/embed-published-overlay";
-import { syncPageMaterialToStatus } from "@/lib/decision-perspective/page-material-lifecycle";
+import { syncPageMaterialAfterTransition } from "@/lib/decision-perspective/page-material-lifecycle";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -187,7 +187,7 @@ export async function publishWikiOverlayPages(
       // BI-BD9DEC45: a page's decision material is gate-live only while the page
       // is published. Without this an archived stance kept deciding — the gate
       // reads material, never the page.
-      await syncPageMaterialToStatus({ db: prisma, pageId: row.id, pageStatus: targetStatus });
+      await syncPageMaterialAfterTransition({ db: prisma, pageId: row.id, pageStatus: targetStatus, origin: "wiki-publish" });
 
       // WSID Phase 6 (BI-3B02FF9C): publishing a craft override is the owner's
       // approval, so it becomes gate-live doctrine — the profession sibling of

@@ -4,6 +4,7 @@ import {
   planPageMaterialRevocations,
   promotionForPageStatus,
   reconcilePageMaterialToStatus,
+  syncPageMaterialAfterTransition,
   syncPageMaterialToStatus,
   type PageMaterialLifecycleClient,
 } from "./page-material-lifecycle";
@@ -179,5 +180,30 @@ describe("reconcilePageMaterialToStatus", () => {
     expect(result).toEqual({ examined: 2, revoked: ["m-archived"], dryRun: true });
     expect(writes).toEqual([]);
     expect(state(rows, "m-archived")).toBe("promoted");
+  });
+});
+
+describe("syncPageMaterialAfterTransition", () => {
+  it("logs a failed sync instead of failing the status change that already committed", async () => {
+    const warnings: string[] = [];
+    const db = {
+      perspectiveMaterial: {
+        findMany: async () => [],
+        updateMany: async () => {
+          throw new Error("db down");
+        },
+      },
+    };
+
+    const result = await syncPageMaterialAfterTransition({
+      db,
+      pageId: "page-1",
+      pageStatus: "archived",
+      origin: "wiki-edit",
+      logger: { warn: (message: string) => warnings.push(message) },
+    });
+
+    expect(result).toBeNull();
+    expect(warnings).toEqual([expect.stringContaining("page-1")]);
   });
 });

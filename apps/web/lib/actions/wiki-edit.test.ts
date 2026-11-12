@@ -10,6 +10,7 @@ vi.mock("@dpf/db", () => ({
     wikiPage: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), findUnique: vi.fn(), findMany: vi.fn() },
     wikiPageRevision: { create: vi.fn(), findFirst: vi.fn() },
     wikiPageLink: { upsert: vi.fn(), findMany: vi.fn(async () => []), deleteMany: vi.fn(), createMany: vi.fn() },
+    perspectiveMaterial: { updateMany: vi.fn(async () => ({ count: 0 })) },
   },
 }));
 
