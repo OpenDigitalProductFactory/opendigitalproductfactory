@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Room read cursor: implementation plan
 
 **Design:** [2026-11-11 room read cursor](../specs/2026-11-11-room-read-cursor-design.md)
