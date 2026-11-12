@@ -29,7 +29,8 @@ import {
 
 import type { FederationIdentity } from "./demand-identity";
 import { scheduleFederationDeliveryJob, type FederationDeliveryQueueDb } from "./delivery-queue";
-import { federatedPeerExecutorRef, federatedPeerWorktreePath } from "./work-claim-ref";
+import { bindPeerInstallationIdentity } from "./channel-demand";
+import { claimHolderOf, federatedPeerExecutorRef, federatedPeerWorktreePath, isLapsedPeerClaim } from "./work-claim-ref";
 
 /** The record a claim request travels as in the outbox. */
 export const WORK_CLAIM_RECORD_TYPE = "demand-response" as const;
@@ -56,7 +57,7 @@ export type WorkClaimDecision =
   | { decision: "released" }
   | {
       decision: "refused";
-      reason: "held-elsewhere" | "not-home" | "link-not-eligible";
+      reason: "held-elsewhere" | "not-home" | "link-not-eligible" | "not-claimable" | "stale-request";
       holder: FederatedWorkClaimHolderV1 | null;
       message: string;
     };
@@ -79,13 +80,16 @@ type HomeRoom = {
   repositoryFullName: string | null;
   headBranch: string | null;
   leaseExpiresAt: Date | null;
+  workspaceState?: unknown;
 };
 
 export interface WorkClaimHomeDb {
   federationLink: {
     findUnique(args: unknown): Promise<{
       linkId: string; role: string; linkState: string; revokedAt: Date | null; quarantinedAt: Date | null;
+      peerInstallationId: string | null;
     } | null>;
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
   backlogItem: {
     findFirst(args: unknown): Promise<{ id: string; itemId: string; body: string | null } | null>;
@@ -108,18 +112,27 @@ export type ClaimForPeer = (input: {
 }) => Promise<
   | { claimed: true; capsuleId: string }
   | { claimed: false; holders: Array<Pick<HomeRoom, "capsuleId" | "executorKind" | "executorRef" | "leaseExpiresAt">> }
+  /** The ordinary claim path refused for another reason (repository, branch,
+   *  readiness). That is a decision too: the requester is told, not retried. */
+  | { claimed: false; holders?: undefined; refusedReason: string }
 >;
 
-function holderOf(
-  room: Pick<HomeRoom, "capsuleId" | "executorKind" | "executorRef" | "leaseExpiresAt">,
-  selfInstallationId: string,
-): FederatedWorkClaimHolderV1 {
-  const peer = room.executorKind === "federated-peer" ? federatedPeerExecutorRef.parse(room.executorRef) : null;
-  return {
-    installationId: peer?.installationId ?? selfInstallationId,
-    workroomId: peer?.workroomId ?? room.capsuleId,
-    leaseExpiresAt: room.leaseExpiresAt?.toISOString() ?? null,
-  };
+/** What the home keeps on the Workroom it holds for a peer: which link asked
+ *  and when the newest request it applied was made, so an older request
+ *  replayed later can never undo a newer one. */
+type PeerClaimRecord = { linkId: string; lastRequestAt: string };
+
+function readPeerClaimRecord(workspaceState: unknown): PeerClaimRecord | null {
+  if (!workspaceState || typeof workspaceState !== "object") return null;
+  const value = (workspaceState as { federatedPeerClaim?: unknown }).federatedPeerClaim;
+  if (!value || typeof value !== "object") return null;
+  const { linkId, lastRequestAt } = value as Partial<PeerClaimRecord>;
+  return typeof linkId === "string" && typeof lastRequestAt === "string" ? { linkId, lastRequestAt } : null;
+}
+
+function withPeerClaimRecord(workspaceState: unknown, record: PeerClaimRecord): Record<string, unknown> {
+  const base = workspaceState && typeof workspaceState === "object" ? (workspaceState as Record<string, unknown>) : {};
+  return { ...base, federatedPeerClaim: record };
 }
 
 function refusal(
@@ -148,6 +161,19 @@ export async function handleIncomingWorkClaimRequest(
   if (!link || link.role !== "same-org-peer" || link.linkState !== "trusted" || link.revokedAt || link.quarantinedAt) {
     return refusal("link-not-eligible", "Claims are taken only over a trusted connection between installations of the same organization.");
   }
+  // The link authenticates one installation. A request may only speak for
+  // that installation, so no peer can renew or release another's claim. The
+  // link's installation is pinned on first use, as channel demand does.
+  if (link.peerInstallationId !== request.requesterInstallationId) {
+    if (link.peerInstallationId) {
+      return refusal("link-not-eligible", "The request names a different installation than the connection it arrived on.");
+    }
+    try {
+      await bindPeerInstallationIdentity(db, linkId, request.requesterInstallationId);
+    } catch {
+      return refusal("link-not-eligible", "The request names a different installation than the connection it arrived on.");
+    }
+  }
   const item = await db.backlogItem.findFirst({
     where: { itemId: request.itemId },
     select: { id: true, itemId: true, body: true },
@@ -170,15 +196,28 @@ export async function handleIncomingWorkClaimRequest(
     },
     select: {
       id: true, capsuleId: true, backlogItemId: true, status: true, executorKind: true, executorRef: true,
-      repositoryFullName: true, headBranch: true, leaseExpiresAt: true,
+      repositoryFullName: true, headBranch: true, leaseExpiresAt: true, workspaceState: true,
     },
   });
+
+  // Requests from one Workroom are applied in the order they were made. The
+  // outbox only ever sends the newest, so an older one is a replay.
+  const applied = held ? readPeerClaimRecord(held.workspaceState) : null;
+  if (applied && Date.parse(response.createdAt) <= Date.parse(applied.lastRequestAt)) {
+    return refusal("stale-request", "A newer request from this Workroom has already been applied.");
+  }
+  const record: PeerClaimRecord = { linkId, lastRequestAt: response.createdAt };
 
   if (request.action === "release") {
     if (held) {
       await db.workroom.update({
         where: { capsuleId: held.capsuleId },
-        data: { status: request.releaseReason === "finished" ? "archived" : "abandoned", leaseExpiresAt: now, lastSyncedAt: now },
+        data: {
+          status: request.releaseReason === "finished" ? "archived" : "abandoned",
+          leaseExpiresAt: now,
+          lastSyncedAt: now,
+          workspaceState: withPeerClaimRecord(held.workspaceState, record),
+        },
       });
       await recordHomeActivity(db, held, `Released by ${request.requesterInstallationId} (${request.releaseReason ?? "abandoned"}).`, request);
     }
@@ -186,10 +225,22 @@ export async function handleIncomingWorkClaimRequest(
   }
 
   const leaseExpiresAt = new Date(now.getTime() + FEDERATED_CLAIM_LEASE_MS);
-  if (held) {
+  if (held && isLapsedPeerClaim(held, now)) {
+    // The requester stopped renewing long enough that the claim lapsed and
+    // someone may have taken the item over. Close the lapsed claim and decide
+    // this request afresh, like any other.
+    await db.workroom.update({
+      where: { capsuleId: held.capsuleId },
+      data: { status: "abandoned", lastSyncedAt: now, workspaceState: withPeerClaimRecord(held.workspaceState, record) },
+    });
+    await recordHomeActivity(db, held, `Lapsed: ${request.requesterInstallationId} stopped renewing.`, request);
+  } else if (held) {
     // A renewal, or a repeated claim from the same Workroom: the claim is
     // already this requester's. Extending the lease is the whole answer.
-    await db.workroom.update({ where: { capsuleId: held.capsuleId }, data: { leaseExpiresAt, lastSyncedAt: now } });
+    await db.workroom.update({
+      where: { capsuleId: held.capsuleId },
+      data: { leaseExpiresAt, lastSyncedAt: now, workspaceState: withPeerClaimRecord(held.workspaceState, record) },
+    });
     return { decision: request.action === "claim" ? "granted" : "renewed", homeWorkroomId: held.capsuleId, leaseExpiresAt: leaseExpiresAt.toISOString() };
   }
 
@@ -203,9 +254,12 @@ export async function handleIncomingWorkClaimRequest(
     executorRef,
     linkId,
   });
+  if (!outcome.claimed && !outcome.holders) {
+    return refusal("not-claimable", `${item.itemId} cannot be claimed here: ${outcome.refusedReason}`);
+  }
   if (!outcome.claimed) {
     const first = outcome.holders[0];
-    const holder = first ? holderOf(first, options.selfInstallationId) : null;
+    const holder = first ? claimHolderOf(first, options.selfInstallationId) : null;
     return refusal(
       "held-elsewhere",
       holder
@@ -214,7 +268,11 @@ export async function handleIncomingWorkClaimRequest(
       holder,
     );
   }
-  await db.workroom.update({ where: { capsuleId: outcome.capsuleId }, data: { leaseExpiresAt, lastSyncedAt: now } });
+  const granted = await db.workroom.findFirst({ where: { capsuleId: outcome.capsuleId }, select: { workspaceState: true } });
+  await db.workroom.update({
+    where: { capsuleId: outcome.capsuleId },
+    data: { leaseExpiresAt, lastSyncedAt: now, workspaceState: withPeerClaimRecord(granted?.workspaceState, record) },
+  });
   return { decision: "granted", homeWorkroomId: outcome.capsuleId, leaseExpiresAt: leaseExpiresAt.toISOString() };
 }
 

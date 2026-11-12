@@ -127,4 +127,16 @@ describe("buildFederatedWorkPage claim presence (BI-91FC6B9A)", () => {
       { active: false, since: null, workrooms: 0, holder: null },
     ]);
   });
+
+  it("drops a peer's claim once its lease has lapsed past the resume grace, so the item can be taken over", async () => {
+    const lapsedAt = new Date(at.getTime() - 25 * 60 * 60 * 1000);
+    const store = {
+      ...db([{ ...row("BI-B"), id: "row-b" }]),
+      workroom: { findMany: vi.fn().mockResolvedValue([
+        { backlogItemId: "BI-B", capsuleId: "WC-PEER", executorKind: "federated-peer", executorRef: "federation:inst_dev:WC-DEV", leaseExpiresAt: lapsedAt },
+      ]) },
+    };
+    const page = await buildFederatedWorkPage(store, { originInstallationId: origin, cursor: null, limit: 10, now: at });
+    expect(page.items[0]?.claim).toEqual({ active: false, since: null, workrooms: 0, holder: null });
+  });
 });

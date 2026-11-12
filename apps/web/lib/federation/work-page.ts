@@ -7,7 +7,7 @@
 // peer (those carry the federatedWork origin marker; re-serving them would
 // echo a record back to its owner or hand a third install a copy of a copy).
 
-import { federatedPeerExecutorRef } from "./work-claim-ref";
+import { claimHolderOf, isLapsedPeerClaim } from "./work-claim-ref";
 import {
   FEDERATED_WORK_LOCAL_ONLY_SENSITIVITIES,
   FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX,
@@ -129,16 +129,14 @@ function toClaim(row: WorkPageItemRow, liveWorkrooms: ItemWorkrooms): FederatedW
   };
 }
 
-/** The holder a live Workroom names: the installation that asked for it when
- *  it is a claim held for a peer (BI-30EDDB7F), otherwise this installation. */
 function holderOf(room: WorkPageWorkroomRow, selfInstallationId: string): FederatedWorkClaimHolderV1 | null {
   if (!room.capsuleId) return null;
-  const peer = room.executorKind === "federated-peer" ? federatedPeerExecutorRef.parse(room.executorRef) : null;
-  return {
-    installationId: peer?.installationId ?? selfInstallationId,
-    workroomId: peer?.workroomId ?? room.capsuleId,
-    leaseExpiresAt: room.leaseExpiresAt?.toISOString() ?? null,
-  };
+  return claimHolderOf({
+    capsuleId: room.capsuleId,
+    executorKind: room.executorKind ?? null,
+    executorRef: room.executorRef ?? null,
+    leaseExpiresAt: room.leaseExpiresAt ?? null,
+  }, selfInstallationId);
 }
 
 /** Live Workrooms per served item, and the oldest one as the claim holder. A
@@ -148,6 +146,7 @@ async function liveWorkroomsByItem(
   db: WorkPageDb,
   rows: readonly WorkPageItemRow[],
   selfInstallationId: string,
+  now: Date,
 ): Promise<Map<string, ItemWorkrooms>> {
   const byItem = new Map<string, ItemWorkrooms>();
   if (!db.workroom || rows.length === 0) return byItem;
@@ -163,6 +162,9 @@ async function liveWorkroomsByItem(
   })) {
     const itemId = room.backlogItemId ? bySemanticOrRowId.get(room.backlogItemId) : undefined;
     if (!itemId) continue;
+    // A claim held for a peer that stopped renewing no longer holds the item:
+    // publishing it would keep every installation from taking the item over.
+    if (isLapsedPeerClaim({ executorKind: room.executorKind ?? null, leaseExpiresAt: room.leaseExpiresAt ?? null }, now)) continue;
     const current = byItem.get(itemId) ?? { count: 0, holder: null };
     byItem.set(itemId, { count: current.count + 1, holder: current.holder ?? holderOf(room, selfInstallationId) });
   }
@@ -244,7 +246,7 @@ export async function buildFederatedWorkPage(
   // The cursor is the last row CONSIDERED, served or filtered, so a filtered
   // tail never makes the next page re-read or skip a row.
   const last = considered[considered.length - 1];
-  const workrooms = await liveWorkroomsByItem(db, pageRows, input.originInstallationId);
+  const workrooms = await liveWorkroomsByItem(db, pageRows, input.originInstallationId, input.now ?? new Date());
 
   const epics = input.cursor
     ? []

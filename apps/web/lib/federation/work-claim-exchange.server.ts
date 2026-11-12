@@ -22,7 +22,7 @@ import {
 
 /** The home records a peer's claim through the same path a local claim takes:
  *  the item row is locked and the ordinary live-Workroom check decides. */
-const claimForPeer: ClaimForPeer = async (input) => {
+export const claimForPeer: ClaimForPeer = async (input) => {
   try {
     const result = await prisma.$transaction((tx) => claimBacklogItemWorkspace({
       db: tx as unknown as CapsuleDb,
@@ -50,7 +50,11 @@ const claimForPeer: ClaimForPeer = async (input) => {
         })),
       };
     }
-    throw error;
+    // Any other refusal from the ordinary claim path (repository, branch,
+    // readiness) is still a decision. Answering it keeps the requester from
+    // retrying a request that can never succeed and leaving its Workroom
+    // unconfirmed indefinitely.
+    return { claimed: false, refusedReason: error instanceof Error ? error.message : String(error) };
   }
 };
 
