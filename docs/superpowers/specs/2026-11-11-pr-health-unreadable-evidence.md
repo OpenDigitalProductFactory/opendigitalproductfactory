@@ -83,10 +83,33 @@ readiness. No new service, status publisher, permission or merge authority.
 
 ## Coverage and boundaries
 
-One atomic deliverable maps to BI-5B80D52F: C-OBSERVATION, F-READ, V-RED,
-V-GREEN and V-DELIVERY. Parsing, pagination and tests form one observation
-contract and one revert boundary. This design does not itself admit code.
-Formal research and coverage receipts remain pending immutable publication.
+Two separately tracked deliverables share this verification delivery:
+
+| Key | Backlog | Contract and verification |
+| --- | --- | --- |
+| observation | BI-5B80D52F | C-OBSERVATION, F-READ, V-RED, V-GREEN, V-DELIVERY; strict readable evidence and native pagination. |
+| fixture-paths | BI-D96C01CC | Native absolute/canonical fixture paths; real caller tests retain all qualification controls. |
+
+The caller suite found two independent baseline failures, both reproduced with
+unchanged `4a2dbd9e` production source: a literal `D:/repo` fixture is not absolute
+on macOS; the actual source Vitest 5.0.5 root resolves `/var` to `/private/var`
+while the supplied absolute test filter does not. The latter reports no tests;
+the same real fixture using a canonical path executed one test successfully.
+Neither is attributed to the observation repair.
+
+Ordered fixture repair, before changing those files: preserve the baseline
+failures; use a host-native absolute synthetic root in
+`scripts/pr-readiness.test.mjs` and `realpathSync` on the created temporary
+directory in `scripts/published-correction.test.mjs`; rerun the exact failures
+and full caller suite. Preserve the path-with-space, actual runner, old-report
+negative control, report identity and cleanup assertions. No production guard
+is relaxed. Normal path claims for both files succeeded; no owner override.
+
+The fixture deliverable is independently shippable and does not depend on the
+observation parser. It is batched to restore this delivery's affected
+verification, with its own BI and evidence. Formal decomposed coverage and
+research receipts remain pending immutable source publication. This design
+does not itself admit implementation or replace the recorded outage procedure.
 
 No schema, production data, provider, credential, network, grant or branch
 protection change. The active install transition held initial path enrollment;
