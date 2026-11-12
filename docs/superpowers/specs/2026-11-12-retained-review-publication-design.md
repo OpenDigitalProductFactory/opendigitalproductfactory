@@ -11,10 +11,13 @@ until its server-resolved verdict is observed at GitHub, or an accurate technica
 hold names an owner and next action. Review outcome stays completed; publication
 is a separate phase of the same TaskRun. One atomic repair, one BI and one PR.
 
-Implementation owner: public delivery Workroom WC-BA6043DF, this chat's
-codex/native-review-publication-recovery branch. BI-2A8A8FC8 owns the implementation
-and its canonical ordered fix design. This document is not an alternate
-documentation item or a claim to private WC-D87C0262 / FB-E91802DE source.
+Design/preparation owner: public Workroom WC-BA6043DF, this chat's
+codex/native-review-publication-recovery branch. It is a proposed external
+implementer only. The subsequent normal implementation claim was refused because
+existing native WC-D87C0262 / FB-E91802DE was active; that ownership refusal
+remains binding. BI-2A8A8FC8 is the public implementation carrier for this ordered
+fix design. This document is not a separate documentation implementation item,
+an implementation admission, or a claim to private source content.
 Funding scope is unresolved; this design grants no funding or inference authority.
 
 ## Observed source and grounding
@@ -214,6 +217,23 @@ unsatisfied. It does not revoke a real status or relabel an UNKNOWN review.
 
 ## Delivery evidence
 
-Design preparation only. No implementation, canonical coverage, native review,
-protected publication, deployment or owner acceptance is asserted here.
+Design preparation only. Original signed df5d0fc93dafc87fa09426463dc7a8145eaf4763
+was pushed normally with the fresh docs-only exemption and no override. Its exact
+public immutable read succeeded. Formal plan coverage then failed provider
+provenance resolution with UND_ERR_CONNECT_TIMEOUT after two attempts; no receipt
+was recorded. The external implementation claim was refused by the active native
+owner, so no production code was edited.
+
+Unchanged-runtime baseline: four existing worker/readback/publication/job suites
+passed 131 tests. This is baseline only, not repair verification. The concrete
+existing FB-E91802DE handoff saved exact branch/commit/blob, all six criteria,
+baseline checks, actual provider failure and active-owner refusal, plus the
+PR6970/6972 missing-status cases. Stable evidence cmwctwn6p46js0emfqn9yqwpz;
+current ownership qualification cmwctxpag46zt0emfmlt5r6hn. Notes are not admission.
+
+Next action belongs to the existing native implementation owner: resolve this
+current immutable design/source binding, record actual atomic coverage, then earn
+normal implementation admission and complete the ordered fix. No implementation,
+canonical coverage, native approval, protected publication, deployment or owner
+acceptance is asserted here.
 
