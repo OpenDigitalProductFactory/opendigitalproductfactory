@@ -427,10 +427,17 @@ function gh(args, { allowFail = false } = {}) {
   } catch (e) {
     // Only documented checks outcomes can carry a useful nonzero JSON result.
     // Empty, partial and transport-error output is never a successful read.
-    if (allowFail && (e.status === 1 || e.status === 8)) {
-      const output = (e.stdout || "").toString();
-      const checks = parseChecksObservation(output);
-      if (checks.some(c => e.status === 1 ? FAILING_BUCKETS.has(c.bucket) : PENDING_BUCKETS.has(c.bucket))) return output;
+    if (allowFail) {
+      let detail = "No consistent failed or pending check result was returned.";
+      if (e.status === 1 || e.status === 8) {
+        try {
+          const output = (e.stdout || "").toString();
+          const checks = parseChecksObservation(output);
+          if (checks.some(c => e.status === 1 ? FAILING_BUCKETS.has(c.bucket) : PENDING_BUCKETS.has(c.bucket))) return output;
+        } catch (validation) { detail = validation.message; }
+      }
+      // Retain the original structured cause without echoing raw stderr or credentials.
+      throw new Error(`GitHub checks command failed (exit ${Number.isInteger(e.status) ? e.status : "unknown"}). ${detail}`, { cause: e });
     }
     throw e;
   }
@@ -482,6 +489,9 @@ function fetchPrState(prArg) {
   const meta = JSON.parse(
     gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,baseRefName,headRefName,headRefOid,body,files,commits,author"]),
   );
+  // GitHub's terminal merge fact does not need fresh readiness observations.
+  // Keep their absence explicit; this does not qualify any new publication.
+  if (meta.state === "MERGED") return { meta, checks: [], threads: [], localCi: null, readinessObserved: false };
 
   const rawChecks = gh(["pr", "checks", number, "--json", "name,state,bucket,workflow,startedAt"], { allowFail: true });
   const checks = parseChecksObservation(rawChecks);
@@ -654,10 +664,14 @@ function report(state, result) {
   console.log(verdictHeadline(result));
   console.log(`PR #${meta.number}: ${meta.title}`);
   console.log(`  state=${meta.state} mergeable=${meta.mergeable} mergeStateStatus=${meta.mergeStateStatus}`);
-  console.log(
-    `  checks: ${counts.checksTotal} total — ${counts.failing} failing, ${counts.pending} pending; ` +
-      `${counts.unresolvedThreads} unresolved review thread(s)`,
-  );
+  if (state.readinessObserved === false) {
+    console.log("  readiness checks and review threads: not read — GitHub confirms this PR is already merged.");
+  } else {
+    console.log(
+      `  checks: ${counts.checksTotal} total — ${counts.failing} failing, ${counts.pending} pending; ` +
+        `${counts.unresolvedThreads} unresolved review thread(s)`,
+    );
+  }
   for (const n of result.notes) console.log(`  note: ${n}`);
   if (result.verdict === "BLOCKED-ACTION") {
     for (const a of result.actions) console.log(`   - [${a.actor}] ${a.text}`);

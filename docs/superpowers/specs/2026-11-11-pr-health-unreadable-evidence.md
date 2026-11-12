@@ -64,6 +64,12 @@ evaluatePrHealth/report. An unavailable required observation reaches the
 existing UNREADABLE exit path. ETA history stays best-effort and does not grant
 readiness. No new service, status publisher, permission or merge authority.
 
+Authoritative GitHub metadata saying MERGED is terminal, not a READY assertion:
+return its existing exit0 without unnecessary check/thread reads and explicitly
+report those observations as not read, rather than fabricated zero counts.
+Independent client review of ffe62 found this AC-4 compatibility edge; retain its
+finding and add merged-with-unreadable checks/threads regressions before repair.
+
 ## Ordered fix and verification
 
 1. V-RED: extend the existing Node harness with real CLI/subprocess fixtures for

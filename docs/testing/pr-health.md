@@ -30,6 +30,11 @@ each page, including its completion marker. An unresolved thread beyond the
 first 100 is therefore included. This reads evidence; it adds no merge authority
 and does not publish a replacement status check.
 
+MERGED uses GitHub's current PR metadata and exits0 without rereading readiness
+checks or threads. Its report labels those observations as not read. A temporary
+failure of an unnecessary readiness read cannot turn a confirmed merge into
+unfinished work, and the terminal report does not qualify a new publication.
+
 Before BI-F197C997, pending checks exited `1` like a failure, and agents read "still running" as "failed" 154 times in 15 threads. `--wait` replaces their polling with one bounded call: it returns the first terminal verdict, or `75` with a timeout note if checks are still running when the timeout passes.
 
 ## Why it exists

@@ -63,6 +63,8 @@ const observationCases = [
   ["failed checks JSON on exit1", {checks:{exit:1,data:[{name:"Failed",bucket:"fail"}]}}, 1],
   ["pending checks JSON on exit8", {checks:{exit:8,data:[{name:"Pending",bucket:"pending"}]}}, 75],
   ["merged PR with valid observations", {meta:{state:"MERGED"}}, 0],
+  ["merged PR with unavailable checks", {meta:{state:"MERGED"},checks:{exit:1,raw:""}}, 0],
+  ["merged PR with unavailable threads", {meta:{state:"MERGED"},threads:{exit:1,raw:""}}, 0],
   ["check transport failure", {checks:{exit:1,raw:""}}, 3],
   ["malformed check JSON", {checks:{raw:"{broken"}}, 3],
   ["missing check output", {checks:{raw:""}}, 3],
@@ -95,6 +97,13 @@ for (const [name, fixture, expected] of observationCases) {
     if (expected === 3) {
       assert.doesNotMatch(run.stdout, /^READY/m);
       assert.match(run.stderr, /^UNREADABLE/m);
+      if (fixture.checks?.exit) assert.match(run.stderr, /GitHub checks command failed/);
+      if (fixture.checks?.raw === "{broken") assert.doesNotMatch(run.stderr, /command failed/);
+    }
+    if (fixture.meta?.state === "MERGED") {
+      assert.match(run.stdout, /^MERGED/m);
+      assert.match(run.stdout, /not read/);
+      assert.doesNotMatch(run.stdout, /checks: 0 total/);
     }
   });
 }
