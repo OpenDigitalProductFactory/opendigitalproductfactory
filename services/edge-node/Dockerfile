@@ -106,7 +106,15 @@ FROM node:24-alpine AS runner
 # - net-snmp-tools  C3's network-device poll. Ships snmpget/snmpwalk
 #                   with v2c + v3 support. No daemon, no listener —
 #                   the binaries are invoked per query.
-RUN apk add --no-cache nmap net-snmp-tools
+# apk retries (a stalled fetch times out after 60s, then retries): one dropped
+# connection must not fail an upgrade (BI-7FFF5CB0;
+# guard: apps/web/lib/verify/dockerfile-apk-retry.guard.test.ts).
+RUN for attempt in 1 2 3 4 5; do \
+      apk --timeout 60 add --no-cache nmap net-snmp-tools && break; \
+      if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
+      echo "apk add failed (attempt $attempt/5); retrying in $((attempt * 5))s" >&2; \
+      sleep $((attempt * 5)); \
+    done
 
 # Phase 0 runs as a non-root user. The container needs no special
 # capabilities for the Phase 0 collector set; future collectors that
