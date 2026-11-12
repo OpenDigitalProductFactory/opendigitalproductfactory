@@ -10,6 +10,7 @@ import {
   computeDemandResponseDigest,
   validateDemandEnvelopeV1,
   validateDemandResponseV1,
+  workClaimEnvelopeId,
   validateDemandDigestV1,
   type DemandDigestV1,
   type DemandEnvelopeV1,
@@ -203,6 +204,29 @@ describe("validateDemandResponseV1", () => {
       "field:not-allowed:workCapsuleId",
       "message:invalid",
     ]));
+  });
+
+  describe("a claim request at the item's home (BI-30EDDB7F)", () => {
+    const workClaim = {
+      itemId: "BI-HOME", action: "claim" as const, requesterInstallationId: "inst_dev",
+      requesterWorkroomId: "WC-DEV", repositoryFullName: "org/repo", headBranch: "feat/x",
+    };
+    const claim = (overrides: Partial<DemandResponseV1> = {}) => response({
+      envelopeId: workClaimEnvelopeId("BI-HOME"), originRecordRef: "BI-HOME", message: undefined, workClaim, ...overrides,
+    });
+
+    it("accepts a help-offer whose subject is the work-synced item", () => {
+      expect(validateDemandResponseV1(claim())).toEqual([]);
+      expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, action: "release", releaseReason: "finished" } }))).toEqual([]);
+    });
+
+    it("refuses a claim that names another subject, an interest, or an incomplete request", () => {
+      expect(validateDemandResponseV1(claim({ originRecordRef: "BI-OTHER" }))).toContain("workClaim:subject-mismatch");
+      expect(validateDemandResponseV1(claim({ responseKind: "interest" }))).toContain("workClaim:requires-help-offer");
+      expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, action: "release" } }))).toContain("workClaim.releaseReason:unsupported");
+      expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, releaseReason: "finished" } }))).toContain("workClaim.releaseReason:not-allowed");
+      expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, headBranch: "" } }))).toContain("workClaim.headBranch:invalid");
+    });
   });
 });
 

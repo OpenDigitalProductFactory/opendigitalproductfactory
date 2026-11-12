@@ -47,6 +47,13 @@ export const demandReconciliationScheduled = jobs.createFunction(
       const { runWorkSync } = await import("@/lib/federation/work-sync");
       return runWorkSync();
     });
+    // Renew each claim this installation holds at an item's home, and release
+    // the ones whose Workroom has ended (BI-30EDDB7F). Queued in the outbox,
+    // so a home that cannot be reached receives them when it returns.
+    const workClaims = await step.run("reconcile-federated-work-claims", async () => {
+      const { runFederatedWorkClaimReconciliation } = await import("@/lib/federation/work-claim-exchange.server");
+      return runFederatedWorkClaimReconciliation();
+    });
     // Keep the peer ledger and link set honest on the same cadence: one link per
     // peer, and the teardown-surviving ledger current (EP-ZERO-CONFIG-FEDERATION).
     const links = await step.run("reconcile-federation-links", async () => {
@@ -59,6 +66,6 @@ export const demandReconciliationScheduled = jobs.createFunction(
       const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
       return reconcileOrganizationMembership();
     });
-    return { guidance, posture, peerTargets, demand, work, links, membership };
+    return { guidance, posture, peerTargets, demand, work, workClaims, links, membership };
   },
 );

@@ -105,7 +105,10 @@ describe("buildFederatedWorkPage claim presence (BI-91FC6B9A)", () => {
         { ...row("BI-B"), id: "row-b" },
         { ...row("BI-C"), id: "row-c" },
       ]),
-      workroom: { findMany: vi.fn().mockResolvedValue([{ backlogItemId: "row-b" }, { backlogItemId: "BI-B" }]) },
+      workroom: { findMany: vi.fn().mockResolvedValue([
+        { backlogItemId: "row-b", capsuleId: "WC-PEER", executorKind: "federated-peer", executorRef: "federation:inst_dev:WC-DEV", leaseExpiresAt: claimedAt },
+        { backlogItemId: "BI-B", capsuleId: "WC-LOCAL", executorKind: "claude-desktop", executorRef: "s", leaseExpiresAt: null },
+      ]) },
     };
     const page = await buildFederatedWorkPage(store, { originInstallationId: origin, cursor: null, limit: 10, now: at });
     expect(store.workroom.findMany).toHaveBeenCalledWith({
@@ -113,12 +116,15 @@ describe("buildFederatedWorkPage claim presence (BI-91FC6B9A)", () => {
         backlogItemId: { in: ["BI-A", "row-a", "BI-B", "row-b", "BI-C", "row-c"] },
         status: { notIn: ["complete", "abandoned", "archived"] },
       },
-      select: { backlogItemId: true },
+      orderBy: [{ createdAt: "asc" }, { capsuleId: "asc" }],
+      select: { backlogItemId: true, capsuleId: true, executorKind: true, executorRef: true, leaseExpiresAt: true, createdAt: true },
     });
+    // The oldest live Workroom holds the claim. One held for a peer names that
+    // installation and its Workroom (BI-30EDDB7F); a local one names this install.
     expect(page.items.map((i) => i.claim)).toEqual([
-      { active: true, since: claimedAt.toISOString(), workrooms: 0 },
-      { active: true, since: null, workrooms: 2 },
-      { active: false, since: null, workrooms: 0 },
+      { active: true, since: claimedAt.toISOString(), workrooms: 0, holder: null },
+      { active: true, since: null, workrooms: 2, holder: { installationId: "inst_dev", workroomId: "WC-DEV", leaseExpiresAt: claimedAt.toISOString() } },
+      { active: false, since: null, workrooms: 0, holder: null },
     ]);
   });
 });

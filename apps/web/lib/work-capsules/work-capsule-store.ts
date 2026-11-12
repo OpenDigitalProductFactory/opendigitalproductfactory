@@ -419,7 +419,7 @@ export async function claimBacklogItemWorkspace(args: {
   });
 
   const claimed = admission.overrideConflicts.length === 0;
-  if (claimed) {
+  if (claimed && !args.input.claimAtHome) {
     await args.db.backlogItem.update({
       where: { id: item.id },
       data: {

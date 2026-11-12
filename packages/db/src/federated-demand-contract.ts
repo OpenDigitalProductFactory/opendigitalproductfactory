@@ -96,8 +96,59 @@ export interface DemandResponseV1 {
   responseKind: DemandResponseKind;
   message?: string;
   responderAttribution: DemandAttribution;
+  /** Present when the help offer asks the item's home for its claim
+   *  (BI-30EDDB7F, spec 2026-10-27 §5.2). The subject is then a work-synced
+   *  item, not a projected demand envelope: `originRecordRef` is the home's
+   *  item id and `envelopeId` is `work:<itemId>`. */
+  workClaim?: WorkClaimRequestV1;
   createdAt: string;
   payloadDigest: string;
+}
+
+/** What a claim request asks the item's home to do with its Workroom claim. */
+export const WORK_CLAIM_ACTIONS = ["claim", "renew", "release"] as const;
+export type WorkClaimAction = (typeof WORK_CLAIM_ACTIONS)[number];
+
+/** How a released claim ended, which decides how the home closes its Workroom. */
+export const WORK_CLAIM_RELEASE_REASONS = ["finished", "abandoned"] as const;
+export type WorkClaimReleaseReason = (typeof WORK_CLAIM_RELEASE_REASONS)[number];
+
+export interface WorkClaimRequestV1 {
+  /** The item's id at its home. */
+  itemId: string;
+  action: WorkClaimAction;
+  /** The installation asking, by its federation installation id (`inst_…`). */
+  requesterInstallationId: string;
+  /** The requester's own Workroom, which is the claim's fence. */
+  requesterWorkroomId: string;
+  repositoryFullName: string;
+  headBranch: string;
+  /** Required with `release`. */
+  releaseReason?: WorkClaimReleaseReason;
+}
+
+/** The envelope id a work claim response carries, since it answers no envelope. */
+export function workClaimEnvelopeId(itemId: string): string {
+  return `work:${itemId}`;
+}
+
+function validateWorkClaimRequestV1(value: unknown): string[] {
+  if (!isRecord(value)) return ["workClaim:invalid"];
+  const violations: string[] = [];
+  if (!isNonEmptyString(value.itemId, 120)) violations.push("workClaim.itemId:invalid");
+  if (!(WORK_CLAIM_ACTIONS as readonly unknown[]).includes(value.action)) violations.push("workClaim.action:unsupported");
+  if (!isNonEmptyString(value.requesterInstallationId, 160)) violations.push("workClaim.requesterInstallationId:invalid");
+  if (!isNonEmptyString(value.requesterWorkroomId, 120)) violations.push("workClaim.requesterWorkroomId:invalid");
+  if (!isNonEmptyString(value.repositoryFullName, 200)) violations.push("workClaim.repositoryFullName:invalid");
+  if (!isNonEmptyString(value.headBranch, 250)) violations.push("workClaim.headBranch:invalid");
+  if (value.action === "release") {
+    if (!(WORK_CLAIM_RELEASE_REASONS as readonly unknown[]).includes(value.releaseReason)) {
+      violations.push("workClaim.releaseReason:unsupported");
+    }
+  } else if (value.releaseReason !== undefined) {
+    violations.push("workClaim.releaseReason:not-allowed");
+  }
+  return violations;
 }
 
 export const DEMAND_DISPOSITIONS = ["accepted", "rejected", "archived"] as const;
@@ -288,6 +339,14 @@ export function validateDemandResponseV1(value: unknown): string[] {
   }
   if (!(DEMAND_ATTRIBUTIONS as readonly unknown[]).includes(value.responderAttribution)) {
     violations.push("responderAttribution:unsupported");
+  }
+  if (value.workClaim !== undefined) {
+    violations.push(...validateWorkClaimRequestV1(value.workClaim));
+    if (value.responseKind !== "help-offer") violations.push("workClaim:requires-help-offer");
+    if (isRecord(value.workClaim) && (value.originRecordRef !== value.workClaim.itemId
+      || value.envelopeId !== workClaimEnvelopeId(String(value.workClaim.itemId)))) {
+      violations.push("workClaim:subject-mismatch");
+    }
   }
   if (!isIsoTimestamp(value.createdAt)) violations.push("createdAt:invalid");
   if (typeof value.payloadDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.payloadDigest)) {
