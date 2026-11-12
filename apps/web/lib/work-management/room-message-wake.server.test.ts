@@ -273,6 +273,10 @@ describe("dispatchRoomMessage", () => {
     expect(send).not.toHaveBeenCalled();
     expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("cannot-reply");
     expect(String(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "detail"]))).toContain("work_room_write");
+    // People read the room, not the wake state: the refusal is said there too.
+    const notices = messages.filter((m) => m.messageType === "room-wake-notice");
+    expect(notices).toHaveLength(1);
+    expect(readPath(notices[0]!.structuredPayload, ["roomWakeNotice", "kind"])).toBe("cannot-reply");
   });
 
   it("counts work_capsule_write, which implies work_room_write, and honours a revocation", async () => {

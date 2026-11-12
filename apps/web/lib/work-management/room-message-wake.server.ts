@@ -267,6 +267,8 @@ async function postRoomWakeNotice(deps: RoomWakeDeps, workItemId: string, plan: 
       messageType: "room-wake-notice",
       createdAt: { gte: new Date(now.getTime() - 60 * 60_000) },
       structuredPayload: { path: ["roomWakeNotice", "kind"], equals: kind },
+      // One cannot-reply notice per hour for the same coworkers, not one per room.
+      ...(plan.kind === "refuse" ? { body: plan.detail } : {}),
     },
   });
   if (recent > 0) return;
@@ -344,7 +346,9 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
     detail: plan.detail,
     ...(woken.length ? { woken } : {}),
   });
-  if (plan.kind === "pause" || (plan.kind === "wake" && plan.reason === "hop-limit") || (plan.kind === "none" && addressing.hop > 0)) {
+  // A person who addressed a coworker reads the room, not the wake state, so a
+  // refused wake is said in the room as the stopped and paused ones are.
+  if (plan.kind === "pause" || plan.kind === "refuse" || (plan.kind === "wake" && plan.reason === "hop-limit") || (plan.kind === "none" && addressing.hop > 0)) {
     await postRoomWakeNotice(deps, message.workItemId, plan, now);
   }
   if (plan.kind !== "wake") return { messageId, plan: plan.kind, woken };
