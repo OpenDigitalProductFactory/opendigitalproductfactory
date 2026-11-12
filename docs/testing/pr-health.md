@@ -18,6 +18,18 @@ The first line is the verdict word and the exit code says the same thing (BI-F19
 | `2` | **BLOCKED-ACTION** | Someone must act — conflict, unresolved thread, draft, base not `main`, missing or rejected local-CI evidence (the PR author), or a closed PR (its owner). The line names the actor. |
 | `3` | **UNREADABLE** | Usage error, or GitHub could not be read. |
 
+READY requires successfully observed check JSON and complete review-thread
+pages. Missing or malformed output, transport failures, GraphQL errors and
+incomplete pages return UNREADABLE/3, including in wait mode. They are not empty
+successful results. A genuine observed empty result remains valid. Documented
+nonzero check responses still preserve failed and pending verdicts when their
+structured contents support that outcome.
+
+Review threads use the GitHub CLI's native `--paginate --slurp` flow and validate
+each page, including its completion marker. An unresolved thread beyond the
+first 100 is therefore included. This reads evidence; it adds no merge authority
+and does not publish a replacement status check.
+
 Before BI-F197C997, pending checks exited `1` like a failure, and agents read "still running" as "failed" 154 times in 15 threads. `--wait` replaces their polling with one bounded call: it returns the first terminal verdict, or `75` with a timeout note if checks are still running when the timeout passes.
 
 ## Why it exists
@@ -208,7 +220,14 @@ is terminated, recovery is a separately authorized, auditable operation.
 
 ## Tests & CI
 
-The pure verdict (`evaluatePrHealth()`) is unit-tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs) and runs in CI as the **PR Health Logic** job (`node --test`). The script's GitHub I/O is exercised by running it against live PRs; it is not run in CI (it would be circular).
+The pure verdict (`evaluatePrHealth()`) and controlled CLI observation failures
+are tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs),
+which runs as the **PR Health Logic** job (`node --test`). The CLI fixtures run
+the actual command with child-only synthetic GitHub responses; they make no
+network request and use no credential. They cover unreadable observations,
+pagination, real failed/pending responses, valid empty results and wait exits.
+Read-only live-PR verification remains separate; fixture passes do not prove
+GitHub connectivity or the state of a real PR.
 
 **Hosted production-build profile**
 
