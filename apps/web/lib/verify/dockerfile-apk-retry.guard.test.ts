@@ -9,7 +9,7 @@
 //
 // The required shape (busybox sh):
 //   RUN for attempt in 1 2 3 4 5; do \
-//         apk --timeout 60 add --no-cache ... && break; \
+//         apk add --no-cache --timeout 60 ... && break; \
 //         if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
 //         ...; sleep $((attempt * 5)); \
 //       done
@@ -41,10 +41,10 @@ export function dockerInstructions(dockerfile: string): string[] {
 
 export function apkAddWithoutRetry(dockerfile: string): string[] {
   return dockerInstructions(dockerfile)
-    .filter((i) => /^RUN\b/i.test(i) && /\bapk\b(?: --timeout \d+)? add\b/.test(i))
+    .filter((i) => /^RUN\b/i.test(i) && /\bapk add\b/.test(i))
     .filter((i) => !(/for attempt in 1 2 3 4 5; do/.test(i)
       // A stalled fetch must fail (and be retried) rather than hang the build.
-      && /apk --timeout \d+ add[^;]*&& break;/.test(i)
+      && /apk add[^;]*--timeout \d+[^;]*&& break;/.test(i)
       && /exit 1; fi;/.test(i)));
 }
 
@@ -61,7 +61,7 @@ describe("apk retry guard", () => {
     expect(apkAddWithoutRetry("RUN for attempt in 1 2 3 4 5; do apk add git && break; if [ \"$attempt\" = 5 ]; then exit 1; fi; done")).toHaveLength(1);
     const wrapped = [
       "RUN for attempt in 1 2 3 4 5; do \\",
-      "      apk --timeout 60 add --no-cache git && break; \\",
+      "      apk add --no-cache --timeout 60 git && break; \\",
       "      if [ \"$attempt\" = 5 ]; then echo failed >&2; exit 1; fi; \\",
       "      sleep $((attempt * 5)); \\",
       "    done",

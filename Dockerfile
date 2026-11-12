@@ -11,7 +11,7 @@ WORKDIR /workspace
 # connection must not fail an upgrade (BI-7FFF5CB0;
 # guard: apps/web/lib/verify/dockerfile-apk-retry.guard.test.ts).
 RUN for attempt in 1 2 3 4 5; do \
-      apk --timeout 60 add --no-cache git postgresql16-client && break; \
+      apk add --no-cache --timeout 60 git postgresql16-client && break; \
       if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
       echo "apk add failed (attempt $attempt/5); retrying in $((attempt * 5))s" >&2; \
       sleep $((attempt * 5)); \
@@ -419,7 +419,7 @@ WORKDIR /app
 # connection must not fail an upgrade (BI-7FFF5CB0;
 # guard: apps/web/lib/verify/dockerfile-apk-retry.guard.test.ts).
 RUN for attempt in 1 2 3 4 5; do \
-      apk --timeout 60 add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash && break; \
+      apk add --no-cache --timeout 60 docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash && break; \
       if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
       echo "apk add failed (attempt $attempt/5); retrying in $((attempt * 5))s" >&2; \
       sleep $((attempt * 5)); \
