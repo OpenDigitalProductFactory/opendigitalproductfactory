@@ -911,7 +911,7 @@ model WorkItemMessage {
 // subscribe on one portal process is heard by a stream on another, and it lapses
 // 24 h after the last subscribe or stream open. The room's messages stay the
 // record; a subscription only makes a connected client look sooner.
-/// @dpf lifecycle=ephemeral retention=2d sensitivity=internal categories=configuration owner=platform-operator steward=data-steward timeAxis=expiresAt
+/// @dpf lifecycle=ephemeral retention=7d sensitivity=internal categories=configuration owner=platform-operator steward=data-steward timeAxis=expiresAt
 model McpResourceSubscription {
   id            String   @id @default(cuid())
   subscriberKey String

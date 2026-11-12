@@ -10,7 +10,7 @@
     "personalData": false,
     "sensitivity": "internal: an opaque subscriber key (OAuth refresh-family or credential id), a room URI and case key, and the room's work item id. No message text, no names, no contact data.",
     "dataSubjectRights": "No content about a person. A subscription is keyed by a credential, not a person, and is removed by unsubscribe, by expiry or with its room.",
-    "reviewDisposition": "Ephemeral operational state; the retention sweep purges rows two days past expiresAt."
+    "reviewDisposition": "Ephemeral operational state; the retention sweep purges rows seven days past expiresAt (the platform floor for any purge window)."
   },
   "migration": {
     "name": "20261112000000_mcp_room_resource_subscriptions",
@@ -29,7 +29,7 @@
       "kind": "model",
       "assetId": "data:mcp-resource-subscription",
       "prismaModel": "McpResourceSubscription",
-      "lifecycleDisposition": "Ephemeral: lapses 24 h after the last subscribe or stream open; purged 2 days past expiresAt; cascades with its WorkItem.",
+      "lifecycleDisposition": "Ephemeral: lapses 24 h after the last subscribe or stream open; purged 7 days past expiresAt; cascades with its WorkItem.",
       "fields": [
         { "fieldId": "data:mcp-resource-subscription#subscriberKey", "resolution": "not-applicable", "reason": "Opaque auth-context key: family:<oauthFamilyKey> or token:<credential id>. Not a person identifier.", "provenance": "apps/web/lib/mcp/room-resource.ts mcpSubscriberKey", "flags": [] },
         { "fieldId": "data:mcp-resource-subscription#uri", "resolution": "not-applicable", "reason": "Room resource URI dpf://rooms/<caseKey>/messages.", "provenance": "apps/web/lib/mcp/room-resource.ts roomResourceUri", "flags": [] },
