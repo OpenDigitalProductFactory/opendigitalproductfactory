@@ -489,9 +489,18 @@ function fetchPrState(prArg) {
   const meta = JSON.parse(
     gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,baseRefName,headRefName,headRefOid,body,files,commits,author"]),
   );
+  if (!meta || !Number.isSafeInteger(meta.number) || meta.number <= 0
+    || !["OPEN", "CLOSED", "MERGED"].includes(meta.state)) {
+    throw new Error("GitHub PR metadata is unreadable: incomplete identity or state.");
+  }
   // GitHub's terminal merge fact does not need fresh readiness observations.
   // Keep their absence explicit; this does not qualify any new publication.
   if (meta.state === "MERGED") return { meta, checks: [], threads: [], localCi: null, readinessObserved: false };
+  if (typeof meta.isDraft !== "boolean" || typeof meta.baseRefName !== "string" || !meta.baseRefName.trim()
+    || typeof meta.headRefOid !== "string" || !/^[a-f0-9]{40}$/i.test(meta.headRefOid)
+    || !Array.isArray(meta.files) || meta.files.some(file => typeof file?.path !== "string" || !file.path.trim())) {
+    throw new Error("GitHub PR metadata is unreadable: incomplete source, draft or file observations.");
+  }
 
   const rawChecks = gh(["pr", "checks", number, "--json", "name,state,bucket,workflow,startedAt"], { allowFail: true });
   const checks = parseChecksObservation(rawChecks);

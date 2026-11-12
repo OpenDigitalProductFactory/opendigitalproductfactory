@@ -60,9 +60,16 @@ const threadPage = (nodes = [], hasNextPage = false, endCursor = null) =>
   ({ data: { repository: { pullRequest: { reviewThreads: { nodes, pageInfo: { hasNextPage, endCursor } } } } } });
 const observationCases = [
   ["valid empty observations", {}, 0],
+  ["missing PR state", {meta:{state:null}}, 3],
+  ["missing PR source head", {meta:{headRefOid:null}}, 3],
+  ["missing PR target identity", {meta:{number:null}}, 3],
+  ["missing PR base observation", {meta:{baseRefName:null}}, 3],
+  ["missing PR file observations", {meta:{files:null}}, 3],
+  ["invalid PR draft observation", {meta:{isDraft:"false"}}, 3],
   ["failed checks JSON on exit1", {checks:{exit:1,data:[{name:"Failed",bucket:"fail"}]}}, 1],
   ["pending checks JSON on exit8", {checks:{exit:8,data:[{name:"Pending",bucket:"pending"}]}}, 75],
   ["merged PR with valid observations", {meta:{state:"MERGED"}}, 0],
+  ["merged PR without readiness-only metadata", {meta:{state:"MERGED",headRefOid:null,files:null,isDraft:null}}, 0],
   ["merged PR with unavailable checks", {meta:{state:"MERGED"},checks:{exit:1,raw:""}}, 0],
   ["merged PR with unavailable threads", {meta:{state:"MERGED"},threads:{exit:1,raw:""}}, 0],
   ["check transport failure", {checks:{exit:1,raw:""}}, 3],

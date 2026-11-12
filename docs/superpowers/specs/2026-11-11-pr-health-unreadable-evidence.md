@@ -38,6 +38,16 @@ cancel and pending exit 8. `gh api --help` documents native GraphQL pagination
 using `$endCursor`, pageInfo and `--paginate --slurp`. Reuse that supported
 pagination instead of adding another client or silently ignoring later pages.
 
+Resumed review on `f10af47f4a6ce1eb4eebc47600d0d54b2b28fd57`
+also found incomplete PR metadata at the same observation boundary. Six new
+CLI cases failed before production edits: missing state, source head, PR number
+or base could report READY; unavailable files and a nonboolean draft value
+reported an owner action instead of UNREADABLE. Validate the required PR
+identity/state first, then the source/base, draft and file observations needed
+for readiness. Preserve the pure verdict API and the authoritative MERGED
+short-circuit; a confirmed merge does not need readiness-only fields. This is
+the same C-OBSERVATION/AC-1 repair, not a separate platform component.
+
 ## Objective and acceptance
 
 OBJ-READABLE: a contributor receives READY only from successfully observed
@@ -54,7 +64,8 @@ their documented meaning.
 
 ## Contract and flow
 
-C-OBSERVATION: a successful observation is a valid checks array with supported
+C-OBSERVATION: readiness requires valid PR identity/state, source head/base,
+boolean draft state and file observations, a valid checks array with supported
 buckets and a complete, error-free review-thread page collection with explicit
 resolution states. Nonzero checks output is usable only for its documented
 failed/pending outcome, never as a transport-error fallback.

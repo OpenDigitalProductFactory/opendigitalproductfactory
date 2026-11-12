@@ -18,8 +18,9 @@ The first line is the verdict word and the exit code says the same thing (BI-F19
 | `2` | **BLOCKED-ACTION** | Someone must act — conflict, unresolved thread, draft, base not `main`, missing or rejected local-CI evidence (the PR author), or a closed PR (its owner). The line names the actor. |
 | `3` | **UNREADABLE** | Usage error, or GitHub could not be read. |
 
-READY requires successfully observed check JSON and complete review-thread
-pages. Missing or malformed output, transport failures, GraphQL errors and
+READY requires observed PR identity/state, source head/base, draft and file
+metadata, successfully observed check JSON and complete review-thread pages.
+Missing or malformed output, transport failures, GraphQL errors and
 incomplete pages return UNREADABLE/3, including in wait mode. They are not empty
 successful results. A genuine observed empty result remains valid. Documented
 nonzero check responses still preserve failed and pending verdicts when their
