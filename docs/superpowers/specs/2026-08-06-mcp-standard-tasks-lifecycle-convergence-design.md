@@ -151,4 +151,91 @@ Primary risks are same-human cross-assistant disclosure, race-driven identity dr
 
 ## Historical Phase 0 coverage
 
-The original pre-filing note is superseded by the shipped BI-06B66FFD status above. BI-CAP-21C511CA owns only the §8 compatibility amendment; its live plan coverage and independent reviews must be recorded before implementation. Neither this amendment nor the old D1–D4 discussion authorizes an execution/protocol migration.
+The original pre-filing note is superseded by the shipped BI-06B66FFD status above. BI-CAP-21C511CA owns the §8 compatibility amendment and proposed §9 checkpoint-proof amendment; its live plan coverage and independent reviews must be recorded before implementation. Neither this amendment nor the old D1–D4 discussion authorizes an execution/protocol migration.
+
+## 9. Proposed owned-review checkpoint proof amendment — BI-CAP-21C511CA
+
+**Status: unapproved design amendment, 2026-11-11.** This document remains the
+single canonical design home. The separately published “Owned review checkpoint
+evidence” proposal is supporting research and sequencing, not a replacement
+canonical specification or approval. Design admission IRD-CE2FDBDA98F1 allows
+preparation only. The retained baseline
+`baseline-79973e7f-a937-494a-92a4-0e462f24ec90` and its original receipts remain
+historical and unchanged; only actual independent specification approval may
+establish an approved baseline for this amendment. Earlier source verification
+of the compatibility branch does not verify this proposed projection.
+
+### 9.1 Gap and relationship to the existing contract
+
+Sections 8.3–8.5 preserve authority, uncertainty and bounded result truth, but do
+not specify complete-set checkpoint proof. At inspected source
+`95d9746940171a45af9f6bed76208e2e4ab07742`, the owned-review recovery readback
+selects node output snapshots without request contracts. Its unknown projection
+cannot establish either positive canonical proof or the absence of such proof.
+BI-CAP-29F5787B remains delivered; this amendment adds proof observations to its
+existing bounded `get_workroom` recovery detail. It does not broaden the named
+reader's origin support or replace protocol results.
+
+Reuse `restoreSemanticReviewCheckpoint`, `hasFinalReviewCheckpointSet`,
+`hasProvenCapacityCheckpointSet` and `readSemanticReviewRemediation` in the
+existing change-review modules. Verify their current contracts before
+implementation. No new tool, grant, database schema, identity store or provider
+execution is proposed. A raw task-result proxy and duplicated client-side proof
+logic are rejected because they expand disclosure and split proof ownership.
+
+### 9.2 Objective, requirements and acceptance mapping
+
+**OBJ-PROOF:** An admitted owner can distinguish positive canonical checkpoint
+proof from incomplete observation without acquiring execution authority. This
+refines OBJ-RESULT-TRUTH while retaining OBJ-READ-ISOLATION and OBJ-READ-ONLY.
+
+| Acceptance | Existing objectives retained | Required verification |
+| --- | --- | --- |
+| AC-P1 | OBJ-PROOF, OBJ-RESULT-TRUTH | A six-node final-verdict fixture passes the actual final-set predicate and the bounded projection reports that result. |
+| AC-P2 | OBJ-PROOF, OBJ-RESULT-TRUTH | A complete six-node mixture of preserved PASS and typed predispatch capacity deferrals passes the canonical capacity predicate with every expected branch covered. |
+| AC-P3 | OBJ-PROOF, OBJ-READ-ISOLATION | Missing, failed, running, unknown, duplicate, foreign, wrong-digest, wrong-agent, wrong-generation and wrong-attempt cases never yield positive complete-set proof. |
+| AC-P4 | OBJ-READ-ISOLATION | Truncation, unavailable immutable request and denied or unavailable current authority suppress positive proof; foreign callers cause zero protected detail reads. |
+| AC-P5 | OBJ-RESULT-TRUTH, OBJ-READ-ONLY | Serialized output obeys a closed allowlist; projection alone never makes health, budget, retry or historical outcomes affirmative. |
+| AC-P6 | OBJ-LIVE-OBSERVATION, OBJ-READ-ONLY | An authorized served read agrees with canonical verification of its exact admitted source records, or explicitly reports unavailable; fixtures never stand in for historical settlement. |
+
+Six nodes is a fixture size, not a production roster. Derive expected specialists,
+request digest, generation and recovery attempt from the verified original
+request/state, never caller reconstruction. Empty unresolved-node lists,
+completed status, a parsed verdict or a partial PASS subset cannot replace
+complete-set validation. Superseded generations follow the canonical predicate.
+
+### 9.3 Admission, disclosure and effect boundaries
+
+Retain original-owner, immutable-request and current Workroom authority checks.
+Read request contracts only server-side within that admitted exact task scope.
+Return fixed facts for coverage, canonical final-verdict proof, canonical
+capacity-deferral proof and an explicit unknown/unavailable reason. Never return
+raw request contracts, prompts, credentials, provider output or arbitrary
+node diagnostics. Authority or source drift during collection invalidates
+positive proof under the existing final-fence contract; node/byte limits fail
+closed rather than certify a truncated set.
+
+Checkpoint proof is separate from runtime-health remediation, external-child
+settlement, budget and retry admission. `retryAuthorized` remains false. Original
+review 70069 and runner review TR-GATE-8E869B6EDE7394BB1470F4CE retain their
+original UNKNOWN histories until their own authorized proof establishes an
+outcome. This design never authorizes replay, a substitute request, broader
+thread-read access or a private transport around a refusal.
+
+### 9.4 Delivery, rollback and stop conditions
+
+Map AC-P1–AC-P6 to this existing BI as one atomic outcome; intermediate phases
+are not independently shippable. Update the implementation plan and obtain
+normal coverage, canonical design/specification/architecture approval and
+objective mapping before implementation admission. Resolve actual review
+funding and remaining allowance before any paid review. Then use failing tests
+against the actual canonical predicates, implement the bounded projection,
+verify affected readback/capacity/remediation tests and package typechecks, and
+follow normal publication, canonical deployment and AC-P6 served acceptance.
+No implementation or AC-P1–AC-P6 test result is claimed by this amendment.
+
+Rollback removes only the added projection, retaining original checkpoints,
+receipts, health records and review histories. Stop on denied scope, unavailable
+baseline, unresolved funding/allowance, missing positive proof or missing
+implementation admission. Existing §8 acceptance remains required and is not
+replaced by checkpoint fixtures or source publication.
