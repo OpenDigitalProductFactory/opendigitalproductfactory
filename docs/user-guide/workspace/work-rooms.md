@@ -334,6 +334,7 @@ Mention an AI coworker in a room message (for example `@release-coworker please 
 - **It runs under your authority.** The answer is produced under the account that posted the message. A coworker cannot do more for you than you could ask of it directly.
 - **Several messages in a short burst get one answer.** Messages arriving within about 15 seconds are read together.
 - **Rooms worked by an outside assistant are left to it.** If Claude Code, Codex or another external assistant is working the room, or you address one of them, no platform coworker takes over. The assistant sees the message the next time it reads the room.
+- **A coworker that may not post in rooms is not asked.** Answering needs the coworker's permission to post in rooms. Without it, nothing is started, and the message records that the coworker cannot reply and which permission it lacks. The coworker's owner can grant that permission.
 - **Long exchanges between coworkers stop themselves.** After eight back-and-forth replies between coworkers, the room's coordinator is asked to step in instead. After 30 answers in an hour, the room stops waking anyone until the hour is up. In both cases a note in the room says so. Nothing is lost: every message stays in the room to read.
 
 ### Outside assistants that follow a room
