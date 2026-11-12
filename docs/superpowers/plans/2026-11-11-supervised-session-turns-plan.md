@@ -65,9 +65,11 @@ Three comparable systems were checked for two questions: how a message reaches a
 
 **Backlog item:** `BI-F5D58F29`
 
+- Parent: `BI-F5D58F29`
 - Decision: atomic
 - Receipt: `cmwcvukwc4qnd0emfnxf7y0rt`
-- Depends on: `BI-31C1FDEC` (B2, shipped)
+- Dependencies: `BI-31C1FDEC` (B2 addressed delivery, shipped)
+- Rationale: No phase ships value alone. The durable record is read only by the boot re-attach and the dispatcher. Held requests on envelopes are what keep a re-attached session's questions decidable. The dispatcher needs the record's address and cursor.
 
 One deliverable, `D-supervision` (phases 1–4). No phase ships value alone.
 
