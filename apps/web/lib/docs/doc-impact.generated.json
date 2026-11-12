@@ -457,6 +457,9 @@
     "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
+    "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/performance/BusinessPerformanceDashboard.tsx": [
       "docs/user-guide/workspace/performance.md"
     ],
@@ -4676,6 +4679,7 @@
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
       "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx",
       "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
+      "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx",
       "apps/web/components/workspace-home/MainStreamHero.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
