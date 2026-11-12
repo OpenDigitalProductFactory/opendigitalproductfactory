@@ -275,11 +275,11 @@ Standards: MCP 2025-11-25 `server/resources` (subscriptions, `-32002`, "access c
   - It then re-checks, for each subscriber with a stream on that process: the token is not revoked or expired, the coworker still holds `read_room_messages`, and the coworker has `content` admission to the message's room. A failed check sends nothing.
   - Each subscriber gets one `notifications/resources/updated { uri }`, on one of its streams. The notice carries no message content, so the client reads through `resources/read` or `read_room_messages` with its cursor.
   - If the listener connection drops, the process reconnects and re-scans from its last notice.
-- **Resumable stream.** Every frame on the GET stream carries an id `<streamId>.<epochMs>`, and the stream opens with a priming id. On a reconnect with `Last-Event-ID`, the stream keeps its `streamId` and replays one `updated` per subscribed room that gained a message after `epochMs` (minus a 5-second overlap), with admission re-checked. The stream sends `retry` before the 15-minute close.
+- **Resumable stream.** Every frame on the GET stream carries an id `<streamId>.<epochMs>`, and the stream opens with a priming id. On a reconnect with `Last-Event-ID`, the stream keeps its `streamId` and replays one `updated` per subscribed room that gained a message after `epochMs` (minus a 30-second overlap), with admission re-checked. The stream sends `retry` before the 15-minute close.
 - **Task status** stays on its process-local bus. `BI-2014236E` owns its semantics, and its design assigns the cross-process task fan-out to `BI-05D7A0DC`. That item can reuse the shared listener.
 - **Accepted residual risk.**
   - A client holding two concurrent GET streams on two processes can receive the same `updated` twice. The notice is an idempotent "re-read" wake-up and carries no state.
-  - A replay with the 5-second overlap may also repeat an `updated`. Pull stays authoritative.
+  - A replay with the 30-second overlap may also repeat an `updated`. Pull stays authoritative.
 
 ### 6.2 The event
 
