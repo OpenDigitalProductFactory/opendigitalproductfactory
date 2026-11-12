@@ -25,7 +25,7 @@ Use a job-local durable row cursor and immutable Workroom row IDs instead of gen
 1. Self-register only this job's ScheduledJob row with its real cron and read its current cursor. Preserve existing job metadata.
 2. Query at most 200 bound-PR nonterminal rooms after the cursor, ordered by row ID. When this query is empty, wrap once to the start. A deleted cursor row remains a valid keyset boundary.
 3. Walk the page in order. Skip already-stopped delivery states using the existing parser. Consume at most 25 eligible rooms. The next cursor is the last row actually consumed, including skipped prefix rows, never the unconsumed end of a full page.
-4. Advance the cursor by compare-and-swap against its exact previously read value before contacting GitHub. Losing that claim performs no room effects. Advance even when later observations fail, are head-mismatched or denied; those rooms return on the next complete sweep rather than monopolizing a prefix.
+4. Advance the cursor by compare-and-swap against its exact previously read value and row version before contacting GitHub. Losing that claim performs no room effects. Advance even when later observations fail, are head-mismatched or denied; those rooms return on the next complete sweep rather than monopolizing a prefix.
 5. Keep the existing head guard, source-bound native verdict, posture, publication, queue mutation, recovery budget and Workroom compare-and-swap behavior. Do not write a foreign GitHub head into a re-adopted room to make scheduling progress.
 
 Persisting the cursor before effects gives eventual sweep progress after a process interruption; it is not an exactly-once publication receipt. A crash can defer a selected room until the next sweep. Existing independent publication settlement controls remain responsible for lost responses. No source or authentication repair is smuggled into this fix.
@@ -64,6 +64,12 @@ Rollback through a normal signed revert PR restores old selection. The job-local
 - Contract reference: PR-FOLLOWTHROUGH-POLL-SAFETY-NET.
 - Flow reference: BOUNDED-CURSOR-SWEEP.
 - Verification reference: REPEATED-DRIVE-FAIRNESS-REGRESSION.
-- The four named references bind the objective, existing canonical polling contract, chosen scan flow and real repeated-cycle regression. Immutable live coverage must be recorded and checked before product implementation; this document does not claim that receipt yet.
+- The four named references bind the objective, existing canonical polling contract, chosen scan flow and real repeated-cycle regression. Initial immutable coverage for signed plan 6008abebd3b4fd7286ae0124d6ebe74e1eefd2ec was recorded as cmwe7bkg510yq0ekqphk7aogb and checked valid after the canonical runtime advanced. Prior transport refusals remain inconclusive. Final coverage must bind the final committed plan through the normal native writer; the earlier receipt does not approve later edits.
 
 Related deliveries remain distinct: BI-72679FE0 suppresses inactive-room dispatch but retains quiet snapshot writes; BI-ECA50241 owns correct native PR-head binding; BI-3A8F935B owns terminal delivery projection; BI-ED7CD0DD owns remaining webhook/repair slices; BI-2A8A8FC8 owns retained verdict publication. None is reopened or treated as delivered by this fix.
+
+## Executed source checkpoint
+
+The real reconciler regression first failed with 75 observed rooms instead of 100 (eight existing tests passed). The first correction passed the same regression plus cursor controls: 19 tests passed and the web TypeScript 7 check passed. These are source-local results, not served acceptance. Normal implementation admission IRD-36A2683EE820 followed the server-prescribed heartbeat remedy for an expired native-worker lease; no force claim or other room was used. Initial source work during connector unavailability followed the recorded MCP-unavailable route under the operator’s renewed delivery authorization.
+
+Main advanced to 1a9a5e43d23810a84257fc35aec5a529437ace7f during this phase. Its unrelated subscription changes were merged normally with DCO before the final gate; fresh affected tests and both web typechecks remain required. Cursor compare-and-swap also checks row version, rejects disabled jobs, preserves existing control fields, and returns no effectful batch on a lost claim. No paid assessment, canonical gate, deployment or original business acceptance is claimed by this checkpoint.
