@@ -55,8 +55,19 @@ Three comparable systems were checked for two questions: how a message reaches a
   - Post a message addressed to its `addressedAs`, and see a turn in the room log within 10 s.
   - Post one addressed to an unsupervised `#session=`, and see `held-for-executor`.
 
-## Backlog coverage
+## Acceptance (quoted from `BI-F5D58F29`)
 
-| Deliverable | Item |
+- (AC-ADB-12) A message addressed to a supervised session's GAID qualifier arrives as its next turn.
+- (AC-ADB-13) After a portal restart the session is re-attached, or marked `supervision-lost` on the room with its messages on the cursor and the coordinator woken.
+- A held permission request survives the restart and is still decidable.
+
+## Backlog coverage and traceability
+
+One deliverable, `D-supervision` (phases 1–4), covered by `BI-F5D58F29`.
+
+| Kind | References |
 | --- | --- |
-| Phases 1–4 | `BI-F5D58F29` |
+| Requirements | `AC-ADB-12`, `AC-ADB-13`, `BI-F5D58F29 AC-3` |
+| Contract | `docs/superpowers/specs/2026-10-27-agent-dialog-broker-design.md#71-what-item-d-builds-bi-f5d58f29` |
+| Flows | `room/message.posted -> room/message-dispatch -> supervisor.deliver`; `instrumentation boot -> reattachSupervised` |
+| Verification | `apps/web/lib/workroom-runtime/supervised-session.test.ts`, `apps/web/lib/workroom-runtime/supervisor.durable.test.ts`, `apps/web/lib/workroom-runtime/supervised-turn-delivery.test.ts` |
