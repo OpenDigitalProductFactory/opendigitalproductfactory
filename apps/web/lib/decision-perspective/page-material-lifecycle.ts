@@ -30,6 +30,7 @@
 // so a republish here cannot undo it.
 
 import { sanitizeForLog } from "@/lib/security/safe-log";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type PageMaterialPromotion = "promoted" | "revoked";
 
@@ -94,7 +95,7 @@ export async function syncPageMaterialAfterTransition(input: {
       sanitizeForLog(input.origin),
       sanitizeForLog(input.pageId),
       sanitizeForLog(input.pageStatus),
-      sanitizeForLog(err instanceof Error ? err.message : String(err)),
+      sanitizeForLog(getErrorMessage(err)),
     );
     return null;
   }
