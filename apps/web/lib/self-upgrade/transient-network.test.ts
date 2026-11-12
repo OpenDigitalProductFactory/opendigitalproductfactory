@@ -4,6 +4,7 @@ import {
   isTransientNetworkFailure,
   retryOnTransientNetwork,
   summarizeBuildOutput,
+  transientNetworkLine,
 } from "./transient-network";
 
 // Real failure text from live runs (BI-7FFF5CB0): SUR-256EAF95 (git fetch) and
@@ -35,6 +36,17 @@ describe("isTransientNetworkFailure", () => {
     "",
   ])("does not treat a real defect as transient: %s", (text) => {
     expect(isTransientNetworkFailure(text)).toBe(false);
+  });
+});
+
+describe("transientNetworkLine", () => {
+  it("returns the line that names the network cause, for the retry log", () => {
+    const log = ["#5 [2/7] RUN apk add --no-cache bash", APK_NETWORK, "exit code: 9"].join("\n");
+    expect(transientNetworkLine(log)).toBe(APK_NETWORK);
+  });
+
+  it("returns null when no line names a network cause", () => {
+    expect(transientNetworkLine("ERROR: unable to select packages:\n  foo (no such package)")).toBeNull();
   });
 });
 
