@@ -1,3 +1,9 @@
+---
+status: draft
+date: 2026-11-12
+backlog: BI-1173F1CC
+---
+
 # Review-stage missing-shape recovery
 
 Status: Draft ordered fix. No implementation or runtime acceptance is claimed.
