@@ -253,6 +253,34 @@ The per-participant cursor is the one schema change in item B2, so it is deliver
 
 The single-room drive event `workroom/drive.room-requested` named in §6.3 is not built. The runner's reply task reaches the addressed coworker directly, which is what an addressed message asks for. The drive's stage work is unchanged.
 
+### 6.7 What item C builds (`BI-ED52AB82`)
+
+Standards: MCP 2025-11-25 `server/resources` (subscriptions, `-32002`, "access controls SHOULD be implemented") and `basic/transports` (GET stream; "MUST NOT broadcast the same message across multiple streams"; event ids, `Last-Event-ID` and replay on the disconnected stream only). Local copies: `docs/Reference/mcp/spec/server/resources.mdx` and `docs/Reference/mcp/spec/basic/transports.mdx`.
+
+- **Resource.** `dpf://rooms/<caseKey>/messages`, with `<caseKey>` percent-encoded. It is also published as the template `dpf://rooms/{caseKey}/messages`.
+- **Methods.**
+  - `resources/read` runs `read_room_messages` through the same governed path as `tools/call`. Token scope, coworker grants, user capability, room admission and audit therefore all apply unchanged.
+  - `resources/list` lists the rooms the acting coworker is an active participant in and currently admitted to, newest first, at most 20.
+  - `resources/subscribe` first performs that governed read with `limit: 1`. A refusal is returned as the JSON-RPC error and nothing is stored. An unknown room returns `-32002`.
+  - `resources/unsubscribe` deletes the subscription.
+  - `initialize` advertises `resources: { subscribe: true }`.
+- **Subscriber.** The server has no MCP session, so a subscription belongs to the auth context, as task status does.
+  - The key is the OAuth refresh family (`oauthFamilyKey`), so a token rotation keeps the subscription. Otherwise it is the token id.
+  - Subscriptions are stored in `McpResourceSubscription`, so a subscribe on one process is heard on another. They lapse 24 hours after the last subscribe or stream open.
+- **Trigger.** The live trigger is a database trigger on `WorkItemMessage` insert that calls `pg_notify('dpf_room_message', {workItemId, messageId, createdAt})`. The notice is delivered only on commit, and it covers every writer, so people, coworkers, system notices and any process are all heard.
+  - Two parts of §6.4 are not used as written. `room/message.posted` fires only for addressed messages whose wake is pending, so a subscription built on it would miss ordinary posts. The jobs bus also runs each event once, in one function, so it cannot reach every process that holds a stream.
+  - `LISTEN/NOTIFY` is the broadcast primitive the job engine and Workroom activity streams already use.
+- **Fan-out.** Each portal process holds one shared `LISTEN` connection, opened when its first MCP stream opens, for all of its streams.
+  - On a notice, the process finds subscriptions for the message's room and its parent room. A child room's messages appear in the parent's read.
+  - It then re-checks, for each subscriber with a stream on that process: the token is not revoked or expired, the coworker still holds `read_room_messages`, and the coworker has `content` admission to the message's room. A failed check sends nothing.
+  - Each subscriber gets one `notifications/resources/updated { uri }`, on one of its streams. The notice carries no message content, so the client reads through `resources/read` or `read_room_messages` with its cursor.
+  - If the listener connection drops, the process reconnects and re-scans from its last notice.
+- **Resumable stream.** Every frame on the GET stream carries an id `<streamId>.<epochMs>.<seq>` (the sequence keeps ids unique within a millisecond), and the stream opens with a priming id. On a reconnect with `Last-Event-ID`, the stream keeps its `streamId` and replays one `updated` per subscribed room that gained a message after `epochMs` (minus a 30-second overlap), with admission re-checked. The stream sends `retry` before the 15-minute close.
+- **Task status** stays on its process-local bus. `BI-2014236E` owns its semantics, and its design assigns the cross-process task fan-out to `BI-05D7A0DC`. That item can reuse the shared listener.
+- **Accepted residual risk.**
+  - A client holding two concurrent GET streams on two processes can receive the same `updated` twice. The notice is an idempotent "re-read" wake-up and carries no state.
+  - A replay with the 30-second overlap may also repeat an `updated`. Pull stays authoritative.
+
 ### 6.2 The event
 
 On commit, the write path sends `room/message.posted` through `@/lib/jobs` with the message id and the addressed refs. The event is idempotent on the message id. Inngest and the Postgres engine both carry it, and it survives a restart.
