@@ -39,7 +39,7 @@ import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-man
 import { roomMessageAddressingView } from "@/lib/work-management/room-message-addressing";
 import { prepareRoomAddressing, publishRoomMessagePosted } from "@/lib/work-management/room-message-wake.server";
 
-type PackContext = { agentId?: string };
+type PackContext = { agentId?: string; apiTokenId?: string };
 
 function str(params: Record<string, unknown>, key: string): string | null {
   const value = params[key];
@@ -106,6 +106,8 @@ async function postRoomMessageHandler(
     sender: { type: "agent", id: agentId },
     actingUserId: userId,
     addressedTo: params.addressedTo,
+    // BI-FDE1B10C: a room's supervised session is recognised by the token it posts with.
+    apiTokenId: context?.apiTokenId ?? null,
   });
   if (prepared.refused) return { success: false, error: "invalid_input", message: prepared.message };
 
