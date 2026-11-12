@@ -51,6 +51,15 @@ export function intentStyle(intent: Intent): IntentStyle {
  * (e.g. complaints) so each gets its own namespace.
  */
 export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
+  // A standing room's day in the Work Atlas rhythm strip (BI-D8A6F0F2). Missed
+  // is also drawn as an outlined cross, so it differs from late without colour.
+  standingRhythm: {
+    "on-time": "success", late: "warning", missed: "danger", running: "accent", due: "neutral", "no-record": "neutral",
+  },
+  providerAccountReadiness: {
+    "verified-success": "success", enabled: "success", "temporary-wait": "warning", paused: "warning",
+    "action-required": "danger", unverified: "neutral",
+  },
   // Discovered external MCP tool review state (BI-8B7B2FE9). Waiting for
   // review is a warning, never neutral: the tool is unavailable until a person acts.
   mcpToolPolicy: {

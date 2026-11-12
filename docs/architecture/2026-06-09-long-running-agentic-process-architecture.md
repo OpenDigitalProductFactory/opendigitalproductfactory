@@ -1,5 +1,22 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Retained foreground requests:** interactive turns use the existing TaskRun and
+queue with an immutable message binding and bounded pre-inference capacity wait.
+The existing dispatcher repairs lost wakes. Unknown effects and expired interrupted
+executors are held for reconciliation, not replayed. Approval proposals remain
+pending; a response is not business-result acceptance. See the
+[implementation record](../superpowers/specs/2026-10-29-foreground-recovery-implementation.md)
+for source and unrun served-verification boundaries.
+
+**Repository intake:** the commissioned controller reads issues, Dependabot
+alerts and peer demand through the existing backlog origin reconciler. It
+records source snapshots without inflating unchanged demand or overwriting
+curated work. The four-hour schedule and Scheduled Work **Run now** action
+share one account concurrency lane and durable intake/heartbeat steps. Both
+check quiescence; the recurring trigger also honors the schedule enable switch.
+Denied security reads and ambiguous origins remain incomplete coverage. See the
+[repository intake repair plan](../superpowers/specs/2026-11-02-repository-security-intake-repair.md).
+
 **Operator provider pauses:** optional expiry runs through the existing jobs
 facade, with `ScheduledJob` holding the operation identity and resume time.
 A five-minute reconciliation job repairs overdue timers after restart or event
@@ -138,7 +155,7 @@ The good news, and the reframe: **DPF already implements most of §2.4.** It is 
 | Durable execution engine (journal + retry + cron) | **Inngest** — `step.run` journaling, per-function `retries`, `concurrency` limits, and the cron + event function registries in `queue/functions/index.ts` (59 scheduled and 35 event functions as of 2026-08-16). Counts drift with every new job, so treat `lib/operate/scheduled-jobs/catalog.ts` as the authority — a parity test fails the build if a scheduled function is missing from it. Since 2026-09-26 every function and send site goes through the `@/lib/jobs` facade, which admits only the job features in use; the Inngest client is its adapter, and a CI guard (`scripts/check-no-direct-job-engine-import.mjs`) refuses engine imports anywhere else ([job engine spec](../superpowers/specs/2026-09-25-postgres-durable-job-engine-design.md) §6) | [`apps/web/lib/jobs/index.ts`](../../apps/web/lib/jobs/index.ts), [`apps/web/lib/jobs/inngest-adapter.ts`](../../apps/web/lib/jobs/inngest-adapter.ts), [`apps/web/lib/queue/functions/index.ts`](../../apps/web/lib/queue/functions/index.ts) |
 | Durable unit of work / session | **`TaskRun`** — universal task tracker with status enum (`submitted·working·input-required·auth-required·completed·failed·canceled·rejected·archived`), `source`, heartbeat | `schema.prisma` `TaskRun`; [`apps/web/lib/tak/autonomous-work-run.ts`](../../apps/web/lib/tak/autonomous-work-run.ts) |
 | Explicit multi-state state machine + checkpoints | **`QuiescenceRun`** — `pending → preparing → draining → ready-to-swap → swapping → completed`, `enteredStateAt` JSON timestamps, snapshots, heartbeat | [`apps/web/lib/queue/functions/quiescence-run.ts`](../../apps/web/lib/queue/functions/quiescence-run.ts) |
-| Liveness / staleness contract | **`StallEvent`** + `TaskRun.lastHeartbeatAt` + `taskrun-watchdog` cron (retry/abandon/escalate) | [`apps/web/lib/queue/functions/taskrun-watchdog.ts`](../../apps/web/lib/queue/functions/taskrun-watchdog.ts) |
+| Liveness / staleness contract | **`StallEvent`** + `TaskRun.lastHeartbeatAt` + `taskrun-watchdog` cron (retry/abandon/escalate); silence is measured in process running time, so host sleep is not a stall (`lib/shared/host-suspension.ts`, BI-4FDE4050) | [`apps/web/lib/queue/functions/taskrun-watchdog.ts`](../../apps/web/lib/queue/functions/taskrun-watchdog.ts) |
 | HITL suspend/resume + approval gate | **WWMD decision gate** (`principle_decide`) wired into phase advancement; approval state recorded on the row. The plan→build and ship gates additionally run **advisory acumen consults** — each acumen impacted by the phase's planned file paths is asked through its WSID profession gate, and the results are attached to the gate result and recorded as DI-ledger rows. Advisory by contract: an acumen outcome never changes the gate's `allowed` verdict. Paths are resolved from the build's Workroom change-impact contract (falling back to the plan document; the realized diff wins at ship) and resolution is fail-open — if it yields nothing, the gate behaves exactly as it did before consults existed | [`apps/web/lib/decision-perspective/build-studio-gate.ts`](../../apps/web/lib/decision-perspective/build-studio-gate.ts), [`planned-file-paths.ts`](../../apps/web/lib/decision-perspective/planned-file-paths.ts) |
 | Scheduled outbound action dispatcher (saga-ish) | **`ScheduledOutboundAction`** (`pending → fired/failed`) + marketing `tickScheduler()` | [`apps/web/lib/marketing/scheduler.ts`](../../apps/web/lib/marketing/scheduler.ts) |
 | Multi-branch parallel agent work + resume | **`DeliberationRun` / `TaskNode` DAG** (skips completed branches on re-run) | [`apps/web/lib/queue/functions/deliberation-run.ts`](../../apps/web/lib/queue/functions/deliberation-run.ts) |

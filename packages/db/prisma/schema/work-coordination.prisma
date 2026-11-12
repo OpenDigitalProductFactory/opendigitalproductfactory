@@ -389,6 +389,7 @@ enum WorkroomParticipantAssignmentSource {
 /// physical move, the `capsuleId` semantic key and the workCapsuleId/capsule
 /// FIELD vocabulary are separate phases — this phase renames model identity only.
 model Workroom {
+  responseFeedbackMessages AgentMessage[]           @relation("ResponseFeedbackWorkroom")
   id                      String                   @id @default(cuid())
   capsuleId               String                   @unique
   title                   String
@@ -508,12 +509,12 @@ model WorkroomActivity {
   sequence          Int?
   capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
+  @@unique([commandScopeKey, commandKey]) // BI-763D6E01 command receipts; NULLs never collide
+  @@unique([workCapsuleId, sequence]) // BI-62514632 the room's log order; NULLs never collide
   @@index([workCapsuleId, recordedAt(sort: Desc)])
   @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
-  @@unique([commandScopeKey, commandKey]) // BI-763D6E01 command receipts; NULLs never collide
-  @@unique([workCapsuleId, sequence]) // BI-62514632 the room's log order; NULLs never collide
   @@map("WorkCapsuleActivity")
 }
 
@@ -854,6 +855,7 @@ model WorkItem {
   childItems                    WorkItem[]             @relation("WorkItemHierarchy")
   a2aTaskId                     String?
   messages                      WorkItemMessage[]
+  mcpResourceSubscriptions      McpResourceSubscription[]
   presence                      WorkItemPresence[]
   capsules                      Workroom[]             @relation("WorkCapsuleWorkItem")
   mailroomItems                 InboundChannelMessage[] @relation("MailroomRoutedWorkItem")
@@ -900,6 +902,29 @@ model WorkItemMessage {
 
   @@index([workItemId, createdAt])
   @@index([senderUserId])
+}
+
+// BI-ED52AB82 (agent dialog broker item C, spec 2026-10-27 §6.7): a connected
+// MCP client's subscription to one room resource, dpf://rooms/<caseKey>/messages.
+// The MCP endpoint keeps no session, so a subscription belongs to the auth
+// context: the OAuth refresh family, else the credential. It is stored so a
+// subscribe on one portal process is heard by a stream on another, and it lapses
+// 24 h after the last subscribe or stream open. The room's messages stay the
+// record; a subscription only makes a connected client look sooner.
+/// @dpf lifecycle=ephemeral retention=7d sensitivity=internal categories=configuration owner=platform-operator steward=data-steward timeAxis=expiresAt
+model McpResourceSubscription {
+  id            String   @id @default(cuid())
+  subscriberKey String
+  uri           String
+  caseKey       String
+  workItemId    String
+  workItem      WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+
+  @@unique([subscriberKey, uri])
+  // Fan-out: "who is subscribed to the room this message landed in, still live".
+  @@index([workItemId, expiresAt])
 }
 
 // BI-B416B12A (EP-WORK-CONVERGENCE): lightweight presence on a work item — who

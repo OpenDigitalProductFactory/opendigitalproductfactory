@@ -82,7 +82,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Run release contract tests
         run: node tests/release/installer-release-contract.test.mjs
@@ -96,7 +96,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Verify third-party release compose image manifests
         run: node scripts/release/verify-compose-image-manifests.mjs --mode release --platform linux --only third-party
@@ -190,7 +190,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.33.2 --activate
@@ -240,7 +240,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.33.2 --activate

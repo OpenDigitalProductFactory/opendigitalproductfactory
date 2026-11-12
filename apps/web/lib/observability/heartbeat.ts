@@ -19,6 +19,7 @@
  */
 import { prisma, type Prisma } from "@dpf/db";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
+import { observeHostClock } from "@/lib/shared/host-suspension";
 import { resolveThresholdForTaskRun } from "./threshold-lookup";
 
 export async function heartbeat(taskRunId: string): Promise<boolean> {
@@ -30,6 +31,9 @@ export async function heartbeat(taskRunId: string): Promise<boolean> {
   // Filter accepts both "working" (canonical A2A) and "active" (legacy
   // value still written by deliberation-run.ts and a couple of paths that
   // haven't been migrated). The watchdog uses the same dual-state filter.
+  // BI-4FDE4050: a beat is the instant the stale checks measure from, so
+  // record the clock relationship here to place any later suspension exactly.
+  observeHostClock();
   try {
     const result = await prisma.taskRun.updateMany({
       where: { taskRunId, status: { in: [...TASK_LIVE_STATES] } },
@@ -82,14 +86,24 @@ export async function markTaskRunWorking(taskRunId: string): Promise<boolean> {
  * Reserve one exact TaskRun generation for work. The compare-and-set
  * and first heartbeat share one write so the watchdog can never observe a new
  * working state without liveness evidence.
+ *
+ * The write also restarts startedAt, so the watchdog's wall-clock cap
+ * (totalPhaseTimeoutSeconds) bounds this generation rather than the life of
+ * the TaskRun. A generation resumed after a capacity wait, an operator retry or
+ * a restart otherwise inherits the original submission time. It is then
+ * "stalled" for total_timeout on the next watchdog tick, heartbeat() stops
+ * matching it, and its still-running worker loses its fence (BI-79141B50).
+ * Operator retry already gives its successor run startedAt = now
+ * (taskrun-recovery.ts); this gives an in-place generation the same window.
  */
 export async function reserveTaskRunGenerationWorking(input: {
   taskRunId: string;
   expectedStatus: string;
   updatedAt: Date;
   progressPayload: Prisma.InputJsonValue;
-}): Promise<boolean> {
-  const result = await prisma.taskRun.updateMany({
+}, db: Pick<Prisma.TransactionClient, "taskRun"> = prisma): Promise<boolean> {
+  const now = new Date();
+  const result = await db.taskRun.updateMany({
     where: {
       taskRunId: input.taskRunId,
       status: input.expectedStatus,
@@ -97,7 +111,8 @@ export async function reserveTaskRunGenerationWorking(input: {
     },
     data: {
       status: "working",
-      lastHeartbeatAt: new Date(),
+      startedAt: now,
+      lastHeartbeatAt: now,
       completedAt: null,
       progressPayload: input.progressPayload,
     },

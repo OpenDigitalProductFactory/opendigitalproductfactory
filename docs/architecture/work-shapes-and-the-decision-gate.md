@@ -79,6 +79,21 @@ A standing room declares its activity shape by passing `workShape` to `create_wo
 `standing-operations-shapes.ts`. Like the collaboration shape, it persists as a `scopeClaims`
 entry with no migration, and is read back by `readWorkShapeClaim` / `resolveWorkShapeClaim`.
 
+Registry order is part of this read contract, not formatting. Existing definitions retain their
+family order because list, migration-proof and signature consumers observe `listWorkShapes()` in
+that order. A newly ratified standing shape may be declared with its family, but it is appended
+after the pre-existing registry unless a separately governed migration intentionally changes the
+order. `backlog-steward-watch@1.0.0` follows that rule: `work-shapes.ts` separates it from the
+pre-existing standing set and appends that same definition after the existing source-inquiry
+shapes. This makes the addition observable without silently reordering established definitions.
+
+That backlog-steward shape is deliberately advisory. Its `observe` and `reconcile` stages attach
+only backlog, epic and duplicate-analysis reads; they record coverage and proposed dispositions,
+but hold no backlog writer. The accountable `role:backlog-owner` decides proposals under the
+existing `backlog-admission` decision scope. Accepted corrections then use the existing governed
+backlog action lane. A cadence grant therefore cannot turn similarity, placement or peer-system
+evidence into an unattended mutation.
+
 The same registry carries the five **delivery shapes** (`delivery-shapes.ts`, BI-B90F7CBB,
 design `2026-09-02-work-shape-taxonomy-and-proportional-gates-design.md` §3.0):
 `delivery-break-fix@1.0.0`, `delivery-small@1.0.0`, `delivery-medium@1.0.0`,
@@ -808,6 +823,16 @@ work, which is what 337 runs did.
 stage title, definition of done, stop conditions, the evidence to record, and an
 explicit statement that claiming completion advances nothing.
 
+Native dispatch and external continuation now share that assignment projection.
+It retains the room objective, definition of done, evidence and stop obligations,
+declared tools, accountable principal, shape budgets and recorded budget usage.
+The exact task, run, cycle, iteration and source identify the assignment. Only the
+optional shape description may be deferred; if mandatory facts exceed the
+brief's budget, dispatch is refused without advancing the stage or recording a
+successful execution. Unaffected parallel branches may still proceed. The brief
+does not grant authority or turn an unknown outcome into completion. See
+[bounded assignment and continuation briefs](workroom-cycle-continuity.md#bounded-assignment-and-continuation-briefs).
+
 **And a stage advances on recorded evidence, never on a claim.** A completed
 `TaskRun` is the executor's claim about ITSELF — provenance, not evidence. PR
 #5168 proposed earning the completing receipt from `TaskRun.status` and was
@@ -843,6 +868,12 @@ set in `work-shape-evidence-kinds.ts`, and `WorkShapeStage.evidence` is typed
 against that set: a shape cannot declare evidence it has no way to record. A
 generic `note` still does not advance a stage that declared `assurance-run`;
 the requirement is unchanged, only made satisfiable.
+
+One more room-level kind sits beside the six media kinds:
+`docs-impact-disposition` (BI-9B17E889). No stage declares it, so it never
+completes a stage. It settles the published docs the room's change-impact
+contract lists as affected, and `update_workroom_status` reads it before a
+room may hand off for review (`apps/web/lib/work-capsules/docs-impact-disposition.ts`).
 
 **A recorded blocker is not the work.** The brief asks a coworker that cannot
 do a stage to record why, through the same write. So stage evidence carries an
@@ -1110,6 +1141,52 @@ missing. Three rules now hold, in `scheduled-task-runs.ts` and the scheduler:
 - **The verdict says when the writer was offered.** The failure reads
   "executed zero times; it was attached to the run and not called". That is
   not an availability fault, and the record should not be read as one.
+
+### Required means required; forced at the last step; busy is a requeue (BI-A8679D84)
+
+The dispatch gate closed one door, and the verdict left another one open. On
+DEV, 804 build-specialist stage runs between 2026-10-15 and 10-22 were recorded
+`completed` with `executedToolCount=0`, which is the regression of BI-4A394B21.
+Every brief named the writer. The writer was not authorized for those runs, so
+the verdict, which reads "required" off the authorized set, required nothing.
+From 2026-10-23 the same population shows up as "not authorized … not
+dispatched". A stage run whose brief does not name the writer still passed with
+zero calls. Over the 21 days to 2026-10-28, 545 runs failed with "executed zero
+times". 129 of those were the loop's own provider-busy reply, filed as a writer
+the model would not call.
+
+- **The verdict requires a stage's mandatory writer.**
+  `classifyScheduledRequiredTools` judges the authorized writers the prompt
+  names plus `scheduledMandatoryToolNames`. A stage run therefore cannot pass on
+  zero calls, whatever its grants or brief say.
+- **Every non-completed scheduled run is typed.** The TaskRun's
+  `progressPayload.terminalOutcome` is one of three values:
+  - `no-governed-work`: the model ran and the writer did not;
+  - `provider-busy-requeue`;
+  - `not-dispatched`: refused before inference, so no short-cadence retry.
+
+  Each outcome also records the owner who acts next and the exact next action
+  (`SCHEDULED_RUN_NEXT_ACTION`). None of them is a person:
+  - the drive re-dispatches a run with no governed work;
+  - the scheduler requeues a provider-busy run;
+  - a grant gap goes to the platform-engineer coworker.
+- **The correction turn forces the writer.** It runs with `forcedToolName`
+  (`forced-tool-choice.ts`). The writer is the only tool on the surface, under
+  `tool_choice: "required"`, the contract the reviewer's writer-only phase
+  already uses. Once the writer has been attempted the run's surface comes back.
+  An adapter that cannot enforce the forced choice ends the turn with
+  `required-terminal-writer-not-enforceable`, and the scheduler then reruns the
+  correction unforced.
+- **Provider-busy is a requeue.** The loop's typed `busy` and `capacity` dead
+  ends are read first (`AgenticResult.failure`). Transient reply text is the
+  fallback. Such a run gets no correction turn and spends no retry attempt. It
+  records `lastStatus: "retrying"` and runs again after 30 minutes. A Workroom's
+  queue hold reads the kind from `no governed work (<kind>)`.
+- **An acceptance owner must be able to write the stage's evidence.** The
+  execution-evidence lane names an owner only if that owner also holds a grant
+  for `record_workroom_evidence`. AGT-102 holds only `backlog_write`. It was
+  bound to 16 acceptance rooms, and all 93 of its stage runs were refused
+  before dispatch.
 
 ## A stage names the tools it needs
 

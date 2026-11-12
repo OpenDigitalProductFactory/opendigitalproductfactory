@@ -27,6 +27,16 @@ export const agentTaskDispatch = jobs.createFunction(
     const gate = await gateAtEntry(step, "agent/task-dispatch");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
+    await step.run("reconcile-retained-foreground-work", async () => {
+      try {
+        const { reconcileForegroundWork } = await import("@/lib/agent/foreground-work-worker");
+        return await reconcileForegroundWork();
+      } catch (error) {
+        console.warn("[agent-task-dispatch] foreground wake reconciliation unavailable", error);
+        return { outcome: "unavailable" };
+      }
+    });
+
     await step.run("reconcile-acceptance-upgrade-wakeup", async () => {
       try {
         const { reconcileAcceptanceUpgradeWakeupFromStore } = await import(
@@ -35,6 +45,19 @@ export const agentTaskDispatch = jobs.createFunction(
         return await reconcileAcceptanceUpgradeWakeupFromStore();
       } catch (error) {
         console.warn("[agent-task-dispatch] acceptance wakeup reconciliation unavailable", error);
+        return { outcome: "unavailable" };
+      }
+    });
+
+    // BI-31C1FDEC: re-send room wakes an outage left undecided (the outbox half
+    // of the addressed-message wake). Idempotent per message; the room store
+    // stays the record either way.
+    await step.run("republish-pending-room-wakes", async () => {
+      try {
+        const { sweepPendingRoomWakes } = await import("@/lib/work-management/room-message-wake.server");
+        return await sweepPendingRoomWakes();
+      } catch (error) {
+        console.warn("[agent-task-dispatch] room wake sweep unavailable", error);
         return { outcome: "unavailable" };
       }
     });
@@ -120,6 +143,32 @@ export const agentTaskDispatch = jobs.createFunction(
       providerSlots: plan.providerSlots,
       ...(quiesced ? { quiesced: quiesced.level, notStarted: planned - dispatched - failed } : {}),
     };
+  },
+);
+
+/**
+ * BI-31C1FDEC: run one due task now instead of at the next five-minute tick. A room
+ * wake schedules a coworker's reply task and asks for it here, so the reply
+ * starts within seconds through the same quiescence check and executor as the
+ * batch. A drain leaves the task due for the cron.
+ */
+export const agentTaskRunNow = jobs.createFunction(
+  {
+    id: "agent/task-run-now",
+    retries: 0,
+    concurrency: [{ limit: 1, key: "event.data.taskId" }],
+    triggers: [{ event: "agent/task.run-now" }],
+  },
+  async ({ event, step }) => {
+    const taskId = String(event.data.taskId ?? "");
+    if (!taskId) return { status: "skipped", reason: "no task id" };
+    return step.run(`dispatch-${taskId}`, async () => {
+      const run: TaskRunner = {
+        ...(await import("@/lib/self-upgrade/quiescence")),
+        ...(await import("@/lib/actions/agent-task-scheduler")),
+      };
+      return dispatchOne(run, taskId);
+    });
   },
 );
 

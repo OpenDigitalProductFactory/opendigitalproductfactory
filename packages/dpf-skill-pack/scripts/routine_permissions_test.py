@@ -1,6 +1,7 @@
 """Routine permission convergence uses fixture homes only; no real client or model calls."""
 from __future__ import annotations
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -34,6 +35,97 @@ class RoutinePermissionsTest(unittest.TestCase):
         (self.root / 'packages/dpf-skill-pack').mkdir(parents=True)
     def plan(self):
         return permissions.plan_permissions(self.root, self.home, PACK)
+
+    @NEEDS_ANY_TOML
+    def test_cross_client_plan_preserves_foreign_plugin_schema_and_is_idempotent(self):
+        path = self.home / '.grok/config.toml'
+        path.parent.mkdir(parents=True)
+        original = 'plugins = ["dpf-platform"]\n[custom]\n"space key" = "preserve"\n'
+        path.write_text(original, encoding='utf-8')
+        plan = self.plan()
+        permissions.apply_permissions(plan, dry_run=True)
+        self.assertEqual(path.read_text(encoding='utf-8'), original)
+        permissions.apply_permissions(plan, dry_run=False)
+        parsed = permissions.read_toml(path)
+        self.assertEqual(parsed['plugins'], ['dpf-platform'])
+        self.assertEqual(parsed['custom'], {'space key': 'preserve'})
+        self.assertFalse(any(file.changed for file in self.plan().files))
+
+    @NEEDS_ANY_TOML
+    def test_serializer_keeps_notify_bare_and_special_keys_quoted(self):
+        data = {'notify': ['custom-callback', '--arg', '[brackets]'],
+                'key.with.dot': {'space key': 'preserve'}, '0123': True}
+        text = permissions.dump_toml(data)
+        self.assertIn('notify = ', text)
+        self.assertNotIn('"notify" = ', text)
+        self.assertIn('"key.with.dot"', text)
+        self.assertIn('"space key"', text)
+        self.assertEqual(permissions.tomllib.loads(text), data)
+
+    @NEEDS_ANY_TOML
+    def test_quoted_notify_converges_when_permission_values_are_unchanged(self):
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        path = self.home / '.codex/config.toml'
+        for quote in ('"', "'"):
+            with self.subTest(quote=quote):
+                data = permissions.read_toml(path)
+                data['notify'] = ['my-callback', '--previous-notify', '["keep","arguments"]']
+                text = permissions.dump_toml(data)
+                text = re.sub(r'(?m)^(?:"notify"|notify)\s*=', lambda _: quote+'notify'+quote+' =', text)
+                path.write_text(text, encoding='utf-8')
+                before = path.read_bytes()
+                plan = self.plan()
+                self.assertTrue(next(file for file in plan.files if file.path == path).changed)
+                permissions.apply_permissions(plan, dry_run=True)
+                self.assertEqual(path.read_bytes(), before)
+                rows = permissions.apply_permissions(plan, dry_run=False)
+                self.assertEqual(permissions.read_toml(path), data)
+                self.assertIn('notify = ', path.read_text(encoding='utf-8'))
+                backups = next(row for row in rows if row['client'] == 'codex')['backups']
+                self.assertTrue(any(Path(backup).read_bytes() == before for backup in backups))
+                self.assertFalse(any(file.changed for file in self.plan().files))
+
+    @NEEDS_ANY_TOML
+    def test_multiline_notify_and_custom_arguments_are_preserved(self):
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        path = self.home / '.codex/config.toml'
+        before = path.read_text(encoding='utf-8')
+        callback = ['callback with spaces', 'arg with "quotes"', '[brackets]', 'line\nbreak']
+        array = ',\n'.join(json.dumps(value) for value in callback)
+        path.write_text('"notify" = [\n'+array+'\n]\n'+before, encoding='utf-8')
+        expected = permissions.read_toml(path)
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        self.assertEqual(permissions.read_toml(path), expected)
+        self.assertTrue(path.read_text(encoding='utf-8').startswith('notify = '))
+        self.assertFalse(any(file.changed for file in self.plan().files))
+
+    @NEEDS_ANY_TOML
+    def test_permission_writes_compose_with_repeated_desktop_runtime_replacements(self):
+        path = self.home / '.codex/config.toml'
+        path.parent.mkdir(parents=True)
+        path.write_text('notify = ["C:/old-runtime/codex-computer-use.exe", "turn-ended"]\n', encoding='utf-8')
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        # The installed Codex desktop removes only a bare root notify before
+        # appending the new runtime callback. Quoted output reproduces the bug.
+        for index in range(3):
+            data = permissions.read_toml(path)
+            callback = ['C:/runtime-'+str(index)+'/codex-computer-use.exe', 'turn-ended']
+            text = re.sub(r'(?m)^notify\s*=.*\n?', '', path.read_text(encoding='utf-8'))
+            boundary = re.search(r'(?m)^\[', text)
+            at = boundary.start() if boundary else len(text)
+            text = text[:at]+'notify = '+json.dumps(callback)+'\n'+text[at:]
+            self.assertEqual(permissions.tomllib.loads(text), dict(data, notify=callback))
+            path.write_text(text, encoding='utf-8')
+            if index == 0:
+                other = self.home / 'second-source'
+                (other / '.git').mkdir(parents=True)
+                (other / 'packages/dpf-skill-pack').mkdir(parents=True)
+                (other / 'AGENTS.md').write_text('# DPF source\n', encoding='utf-8')
+                plan = permissions.plan_permissions(other, self.home, PACK, clients=('codex',))
+            else:
+                plan = self.plan()
+            permissions.apply_permissions(plan, dry_run=False)
+            self.assertEqual(permissions.read_toml(path)['notify'], callback)
     @NEEDS_ANY_TOML
     def test_dry_run_changes_nothing_and_has_three_client_scopes(self):
         plan = self.plan()
@@ -67,7 +159,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         permissions.apply_permissions(self.plan(), dry_run=False)
         new=json.loads((self.root / '.claude/settings.local.json').read_text(encoding='utf-8'))
         self.assertEqual(claude['permissions']['deny'],new['permissions']['deny'])
-        self.assertEqual(claude['permissions']['ask'],new['permissions']['ask'])
+        self.assertEqual(claude['permissions']['ask'],new['permissions']['ask'][:1])
         self.assertEqual('plan',new['permissions']['defaultMode'])
         self.assertEqual('chosen',new['model'])
         self.assertEqual(claude['hooks'],new['hooks'])
@@ -312,5 +404,55 @@ class RoutinePermissionsTest(unittest.TestCase):
         permissions.apply_permissions(self.plan(), dry_run=False)
         updater.ensure_codex_config(self.home, None, False)
         self.assertEqual(first, path.read_bytes())
+
+    # BI-1B0D1416: Codex loads project rules only for the trusted project that is
+    # the session's own; sessions in the install folder or a sibling worktree
+    # never saw them, so every escalation reached the guardian reviewer.
+    @NEEDS_ANY_TOML
+    def test_codex_user_layer_rules_come_from_the_shared_baseline(self):
+        policy=json.loads((PACK/'contracts/client-permission-baseline.json').read_text(encoding='utf-8'))
+        default=self.home/'.codex/rules/default.rules'
+        default.parent.mkdir(parents=True)
+        default.write_text('prefix_rule(pattern=["Get-Location"], decision="allow")\n',encoding='utf-8')
+        rows=permissions.apply_permissions(self.plan(),dry_run=False)
+        path=self.home/'.codex/rules/dpf-routine.rules'
+        text=path.read_text(encoding='utf-8')
+        self.assertTrue(text.startswith(permissions.MARKER))
+        for prefix in policy['commandPrefixes']:
+            if prefix!=['node','scripts/']:
+                self.assertIn('prefix_rule(pattern='+json.dumps(prefix)+', decision="allow")',text)
+        self.assertNotIn('"scripts/"',text)
+        self.assertEqual('prefix_rule(pattern=["Get-Location"], decision="allow")\n',default.read_text(encoding='utf-8'))
+        self.assertIn(str(path),next(r for r in rows if r['client']=='codex')['paths'])
+        self.assertFalse(any(x.changed for x in self.plan().files))
+
+    def test_reviewed_prefixes_narrow_an_allowed_prefix_and_are_never_allowed(self):
+        policy=json.loads((PACK/'contracts/client-permission-baseline.json').read_text(encoding='utf-8'))
+        allowed=policy['commandPrefixes']
+        reviewed=policy['reviewedPrefixes']
+        self.assertIn(['git','push','--force'],reviewed)
+        self.assertIn(['git','worktree','remove'],reviewed)
+        for prefix in reviewed:
+            self.assertNotIn(prefix,allowed)
+            self.assertTrue(any(prefix[:len(a)]==a and len(prefix)>len(a) for a in allowed),prefix)
+
+    @NEEDS_ANY_TOML
+    def test_destructive_and_outbound_forms_stay_reviewed_in_codex_and_claude(self):
+        policy=json.loads((PACK/'contracts/client-permission-baseline.json').read_text(encoding='utf-8'))
+        permissions.apply_permissions(self.plan(),dry_run=False)
+        for path in (self.home/'.codex/rules/dpf-routine.rules',self.root/'.codex/rules/dpf-routine.rules'):
+            text=path.read_text(encoding='utf-8')
+            for prefix in policy['reviewedPrefixes']:
+                self.assertIn('prefix_rule(pattern='+json.dumps(prefix)+', decision="prompt")',text)
+        ask=json.loads((self.root/'.claude/settings.local.json').read_text(encoding='utf-8'))['permissions']['ask']
+        self.assertIn('Bash(git push --force *)',ask)
+
+    @NEEDS_ANY_TOML
+    def test_unowned_user_layer_rule_file_is_refused_before_any_write(self):
+        path=self.home/'.codex/rules/dpf-routine.rules'
+        path.parent.mkdir(parents=True)
+        path.write_text('prefix_rule(pattern=["git"],decision="forbidden")\n',encoding='utf-8')
+        with self.assertRaises(permissions.PermissionPlanError): self.plan()
+        self.assertFalse((self.root/'.codex').exists())
 
 if __name__=='__main__': unittest.main()

@@ -23,8 +23,8 @@ import {
   type Column,
   type RowsChangeData,
   type SortColumn,
-  type RenderSummaryCellProps,
-  type RenderGroupCellProps,
+  type RenderSummaryCellContentProps as RenderSummaryCellProps,
+  type RenderGroupCellContentProps as RenderGroupCellProps,
   type CellCopyArgs,
   type CellPasteArgs,
   type CellMouseArgs,
@@ -969,8 +969,8 @@ export function WorkbookGrid({
   // does not support summary rows, so it always receives undefined.
   const bottomSummaryRows = showFooter && !grouping ? [footerRow] : undefined;
 
-  const rowGrouper = useCallback(
-    (rows: readonly GridRowData[], columnKey: string) => groupRowsByColumn(rows, columnKey),
+  const getRowGroupKey = useCallback(
+    (row: GridRowData, columnKey: string) => Object.keys(groupRowsByColumn([row], columnKey))[0],
     [],
   );
 
@@ -1748,7 +1748,7 @@ export function WorkbookGrid({
               onSelectedRowsChange={setSelectedRows}
               onColumnsReorder={onColumnsReorder}
               groupBy={effectiveGroupBy}
-              rowGrouper={rowGrouper}
+              getRowGroupKey={getRowGroupKey}
               expandedGroupIds={expandedGroupIds}
               onExpandedGroupIdsChange={onExpandedGroupIdsChange}
               rowClass={(row) => {

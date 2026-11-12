@@ -11,19 +11,23 @@ There are no real principals, private doctrine, business records or external eff
 The verification entry is `node examples/workroom-policies/run.mjs`. It requires
 Node **24.16.0** and the managed external TypeScript **6.0.3** compiler.
 `WORKROOM_POLICIES_NODE24` can select another installed executable of that exact
-Node version. The runner downloads and installs nothing.
+Node version. Bundled npm installs only the pinned local Workroom artifact
+offline, with strict engine checks and scripts disabled.
 
 The runner copies only `closure.json`'s producer files, this fixture, its compiler
 configuration, license and notice into a new temporary directory outside the
-checkout. It creates a standalone ESM package manifest and empty dependency lock,
+checkout. It creates a standalone ESM consumer and installs the artifact through
+a separate temporary package,
 clears `NODE_PATH` and `NODE_OPTIONS`, rejects symlinked source files, and checks
-actual TypeScript import/export syntax for relative `.js` addresses. It verifies
-that the public policy entry and Workroom entry have a complete copied closure.
+actual TypeScript import/export syntax for relative source addresses or the
+installed artifact's explicit exports. The copied policy/bridge closure and
+verified emitted Workroom distribution form the complete receiving closure.
 It compiles strict NodeNext with `lib: ["ES2022"]`, `types: []`, declarations and
 no skipped declaration checks, then runs the emitted JavaScript. The temporary
 directory is removed after success or failure.
 
-The closure has **zero third-party runtime dependencies**. The compiler is an
+The closure has one first-party Workroom artifact and **zero third-party runtime
+dependencies**. The compiler is an
 external build tool; no compiler or producer dependency links are copied. The
 output records SHA-256 hashes of every copied producer and fixture source file.
 `sourceBaseline` identifies the pre-extraction base; hashes identify the actual
@@ -84,6 +88,6 @@ actual DPF scheduler, attention and funding adapter tests. The repository's
 Apache-2.0 `LICENSE` and `NOTICE` travel with the copied internal source. No
 third-party runtime source is redistributed here; this is not a complete rights
 or supply-chain audit. Roll back moved implementations and their caller migrations
-together. Native gates, live/runtime acceptance, browser behavior, production
-authorization, financial reservations and uncertain-effect settlement remain
-unqualified and unrun under the recorded local refactor exception.
+together. This fixture does not supply native runtime acceptance, actual browser
+behavior, production authorization, financial reservations or uncertain-effect
+settlement qualification.

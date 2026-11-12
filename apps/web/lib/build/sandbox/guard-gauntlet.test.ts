@@ -283,6 +283,26 @@ describe("grader worktree commands", () => {
     expect(setup).toContain(`ln -sfn "$W/$rel" "$G/$rel"`);
   });
 
+  // BI-4F89896B: the preflight's compile-ready gate refused every grader as
+  // source-only — no Prisma client, and a freshly checked-out lockfile newer
+  // than the linked install — so no build ever reached a guard verdict.
+  it("links the build's generated Prisma client into the grader", () => {
+    const setup = buildGraderSetupCommand({ workdir, graderDir: graderDirFor(workdir), baseSha: BASE });
+    expect(setup).toContain(`ln -sfn "$W/packages/db/generated" "$G/packages/db/generated"`);
+  });
+
+  it("gives the grader's lockfile the build tree's mtime only when the two are identical", () => {
+    const setup = buildGraderSetupCommand({ workdir, graderDir: graderDirFor(workdir), baseSha: BASE });
+    expect(setup).toContain(`cmp -s "$W/pnpm-lock.yaml" "$G/pnpm-lock.yaml" && touch -r "$W/pnpm-lock.yaml" "$G/pnpm-lock.yaml"`);
+  });
+
+  it("unlinks the generated client before removing the grader", () => {
+    const teardown = buildGraderTeardownCommand(workdir, graderDirFor(workdir));
+    const unlink = teardown.indexOf(`[ ! -L "$G/packages/db/generated" ] || rm -f "$G/packages/db/generated"`);
+    expect(unlink).toBeGreaterThanOrEqual(0);
+    expect(unlink).toBeLessThan(teardown.indexOf("worktree remove"));
+  });
+
   it("unlinks node_modules before removing the grader, so removal never reaches the build's dependencies", () => {
     const teardown = buildGraderTeardownCommand(workdir, graderDirFor(workdir));
     const unlink = teardown.indexOf("-type l -name node_modules -exec rm -f");
@@ -310,5 +330,15 @@ describe("guardPlanDigest", () => {
   it("is a 64-hex digest the gate identity will accept", async () => {
     const { guardPlanDigest } = await import("./guard-gauntlet");
     expect(guardPlanDigest("scripts/pregate-preflight.mjs")).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("lastGauntletLine (BI-4F89896B follow-up)", () => {
+  it("carries the preflight's last line into a could-not-run reason", async () => {
+    const { lastGauntletLine } = await import("./guard-gauntlet");
+    expect(lastGauntletLine("first\n\n[pregate-preflight] worktree is SOURCE-ONLY for a code change\n\n"))
+      .toBe(" Last output: [pregate-preflight] worktree is SOURCE-ONLY for a code change");
+    expect(lastGauntletLine("")).toBe("");
+    expect(lastGauntletLine("x".repeat(900)).length).toBeLessThan(430);
   });
 });

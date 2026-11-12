@@ -116,6 +116,18 @@ The third one is the interesting case, and the one most platforms never offer: t
 telling you that you are **over-buying**. A control that only ever suggests spending more is a
 sales funnel, not a calibration loop.
 
+## Answer feedback
+
+An eligible saved answer offers **Kept**, **Needs revision** and **Clear feedback**.
+[Routing management](model-routing-lifecycle.md#investigate-routing-and-record-feedback)
+lets you inspect the same saved answer and producing attempt before judging it.
+A coworker judgment is labeled separately; a human can adopt or correct it.
+
+The priority receipt uses only attributable human feedback as an acceptance
+signal. Coworker and older unattributed values stay separate, and clearing a
+judgment removes its current acceptance value. Preference does not establish
+correctness or supply an evaluated quality score. Missing evidence remains unknown.
+
 ## Honest Limits
 
 - **Outcomes are reconstructed against your *current* priority.** Recent runs are compared with

@@ -1,28 +1,28 @@
 {
   "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each registry package that two or more workspaces declare other than through one shared `catalog:` specifier (pnpm-workspace.yaml `catalog`) to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
-    "resolvedComponents": 888,
-    "uniqueNames": 827,
-    "duplicatedNames": 59,
-    "excessInstances": 61,
-    "multiMajorNames": 29,
+    "resolvedComponents": 866,
+    "uniqueNames": 819,
+    "duplicatedNames": 46,
+    "excessInstances": 47,
+    "multiMajorNames": 22,
     "firstPartyDivergentNames": 0,
-    "directButTransitiveNames": 3,
-    "dedupeCandidateNames": 30,
-    "directProdNames": 54,
+    "directButTransitiveNames": 4,
+    "dedupeCandidateNames": 24,
+    "directProdNames": 55,
     "directDevNames": 29,
     "workspaces": 16
   },
   "budgets": {
-    "resolvedComponents": 888,
-    "duplicatedNames": 59,
-    "excessInstances": 61,
-    "multiMajorNames": 29
+    "resolvedComponents": 866,
+    "duplicatedNames": 46,
+    "excessInstances": 47,
+    "multiMajorNames": 22
   },
   "lastBudgetRaise": {
-    "reason": "thread-stream 4.2.0 floated by this lockfile refresh depends on real-require 1.0.0 while pino 10.3.1 still depends on real-require 0.2.0; those majors cannot be deduped. Same-major caniuse-lite and baseline-browser-mapping copies were deduped.",
+    "reason": "BI-7F3E4389: retain merged PR6785 platform dependency reductions and its compatibility pins; mobile +1 undici component restores the integration-shared closure required by validators, with no new mobile duplication. Platform budgets remain 884/59/61/29 and mobile component budget is 950.",
     "budgets": {
-      "resolvedComponents": 889,
+      "resolvedComponents": 884,
       "duplicatedNames": 59,
       "excessInstances": 61,
       "multiMajorNames": 29
@@ -36,11 +36,11 @@
     "mobile": {
       "lockfile": "apps/mobile/pnpm-lock.yaml",
       "totals": {
-        "resolvedComponents": 949,
-        "uniqueNames": 847,
-        "duplicatedNames": 86,
-        "excessInstances": 102,
-        "multiMajorNames": 46,
+        "resolvedComponents": 938,
+        "uniqueNames": 843,
+        "duplicatedNames": 80,
+        "excessInstances": 95,
+        "multiMajorNames": 40,
         "firstPartyDivergentNames": 0,
         "directButTransitiveNames": 0,
         "dedupeCandidateNames": 40,
@@ -49,10 +49,10 @@
         "workspaces": 1
       },
       "budgets": {
-        "resolvedComponents": 949,
-        "duplicatedNames": 86,
-        "excessInstances": 102,
-        "multiMajorNames": 46
+        "resolvedComponents": 938,
+        "duplicatedNames": 80,
+        "excessInstances": 95,
+        "multiMajorNames": 40
       }
     }
   }

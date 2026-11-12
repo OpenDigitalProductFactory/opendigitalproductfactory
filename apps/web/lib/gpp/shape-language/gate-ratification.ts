@@ -80,6 +80,19 @@ const DELIVERY_RECEIPT_NOTE = "The stage completes on its delivery receipt, not 
  * `listWorkShapes()` and `WORK_SHAPE_PRIOR_VERSIONS` (two-way test).
  */
 export const GATE_RATIFICATION: Readonly<Record<string, GateRatificationEntry>> = Object.freeze({
+  "build-studio-plan-advancement": Object.freeze({
+    status: "ratified",
+    proposed: Object.freeze({
+      authority: "wwmd", gateKey: "build-studio", mode: "enforced", blocking: true,
+      resolution: "doctrine-then-human",
+      resolver: { module: "lib/decision-perspective/build-studio-gate", exportName: "evaluateBuildStudioPlanAdvancementGate" },
+      advisory: [{ authority: "wsid", blocking: false }],
+      escalation: { role: "role:build-owner", whileWaiting: "hold" },
+    } satisfies GppGate),
+    basis: "Founder ratified Option B on 2026-10-22: declare/test the existing Build Studio workflow and WWMD plan gate, preserving current execution and approval rules. Offline declared flow only.",
+    decisionId: "DI-119FB3749D46",
+    ratifiedAt: "2026-10-22",
+  }),
   // ── Proposed WWMD: platform direction (how the platform itself is built, changed, released and extended) ──
   "architecture-alignment": proposed(
     "wwmd",

@@ -38,7 +38,7 @@ describe("provider capacity store", () => {
   it("projects current account recovery facts without credential or raw provider material", async () => {
     vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{
       providerId: null, scopeKey: accountCapacityScope("openai", identity.accountId),
-      state: "reauth_required", retryAt: null, lastObservedAt: NOW,
+      state: "reauth_required", retryAt: null, lastObservedAt: NOW, lastSuccessAt: NOW,
       safeSummary: "Reconnect this account.", action: "reconnect", isHumanActionRequired: true,
       rawSnippet: "must-never-reach-the-overview",
       observedCredentialRevision: identity.credentialRevision,
@@ -47,7 +47,7 @@ describe("provider capacity store", () => {
     }] as never);
     const snapshots = await loadProviderCapacitySnapshots();
     expect(snapshots.get(accountRuntimeKey("openai", identity.connectionId))).toEqual({
-      state: "reauth_required", retryAtMs: null, observedAtMs: NOW.getTime(),
+      state: "reauth_required", retryAtMs: null, observedAtMs: NOW.getTime(), lastSuccessAtMs: NOW.getTime(),
       safeSummary: "Reconnect this account.", action: "reconnect", isHumanActionRequired: true,
     });
     expect(snapshots.has("openai")).toBe(false);
@@ -74,6 +74,12 @@ describe("provider capacity store", () => {
     expect(mockUpsert.mock.calls[0]![0].where).toEqual(mockUpsert.mock.calls[1]![0].where);
     expect(mockUpsert.mock.calls[1]![0].update.observedCredentialRevision).not.toBe(mockUpsert.mock.calls[0]![0].update.observedCredentialRevision);
     expect(vi.mocked(prisma.$queryRaw).mock.invocationCallOrder[0]).toBeLessThan(mockUpsert.mock.invocationCallOrder[0]!);
+    expect(mockUpsert.mock.calls[0]![0].update.executionProof).toBeUndefined();
+  });
+  it("an ordinary failure invalidates earlier exact proof without extending it", async () => {
+    await recordProviderCapacityStatus({ providerId: "openai", source: "api", account: identity,
+      classification: { state: "reauth_required", action: "reconnect", safeSummary: "Sign in again", confidence: "exact", isHumanActionRequired: true } });
+    expect(mockUpsert.mock.calls[0]![0].update.executionProof).toEqual({});
   });
   it("ignores obsolete credential health on the current account projection", async () => {
     vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{ providerId: null, scopeKey: "account:obsolete", state: "reauth_required", retryAt: null, lastObservedAt: NOW,

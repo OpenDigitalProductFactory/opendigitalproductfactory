@@ -43,6 +43,14 @@ export function loadEvidencePolicy(path = DEFAULT_POLICY_PATH) {
       + `expected ${CI_EVIDENCE_PLAN_SCHEMA_VERSION}.`,
     );
   }
+  if (!Array.isArray(policy.runtimeScenarios) || policy.runtimeScenarios.length === 0
+    || policy.runtimeScenarios.some(scenario => typeof scenario.id !== "string"
+      || !Array.isArray(scenario.requiredCaseIds) || scenario.requiredCaseIds.length === 0
+      || new Set(scenario.requiredCaseIds).size !== scenario.requiredCaseIds.length
+      || scenario.requiredCaseIds.some(id => typeof id !== "string" || !/^[a-z][a-z0-9-]+$/.test(id))
+      || !Array.isArray(scenario.patterns) || scenario.patterns.length === 0)) {
+    throw new Error("Invalid runtime scenario inventory in CI evidence policy");
+  }
   return policy;
 }
 
@@ -128,12 +136,22 @@ function testStem(path) {
   return path.replace(/\.([cm]?[jt]sx?|py)$/, "");
 }
 
+// A few CI-owned guards keep their conformance test beside the executable
+// entrypoint rather than under lib/. Keep that relationship declarative so a
+// published correction can derive it without an operator-supplied map.
+export const RELATED_TESTS_BY_SOURCE = Object.freeze({
+  "config/ci-evidence-policy.json": ["scripts/lib/ci-evidence-plan.test.mjs"],
+  "scripts/lib/ci-policy-guards.mjs": ["scripts/ci-policy-guards.test.mjs"],
+  "packages/dpf-skill-pack/hooks/lib/published-correction.mjs": ["scripts/published-correction.test.mjs"],
+});
+
 function colocatedTests(path, knownTests) {
   const stem = testStem(path);
   const basename = stem.split("/").at(-1);
   const directory = stem.includes("/") ? stem.slice(0, stem.lastIndexOf("/")) : "";
   return knownTests.filter((testPath) => (
-    testPath.startsWith(`${stem}.test.`)
+    RELATED_TESTS_BY_SOURCE[path]?.includes(testPath)
+    || testPath.startsWith(`${stem}.test.`)
     || testPath.startsWith(`${stem}.spec.`)
     // Python colocates as `<stem>_test.py` rather than `<stem>.test.py`, so the
     // JS-shaped prefixes above never match it. Without this a Python source file
@@ -321,7 +339,7 @@ export function createEvidencePlan(input) {
         tests,
         routes,
       });
-    } else if (kind === "production" && tests.length > 0) {
+    } else if (tests.length > 0) {
       fileDispositions.push({
         path,
         kind,
@@ -415,6 +433,9 @@ export function createEvidencePlan(input) {
       ...expandAffectedPackages(affectedPackages, input.packageDependencies),
     ]),
     affectedTests: selectedTests,
+    runtimeScenarios: (policy.runtimeScenarios ?? []).filter(scenario => escalations.length > 0
+      || changedFiles.some(path => matchesAny(path, compilePatterns(scenario.patterns))))
+      .map(({ id, requiredCaseIds }) => ({ id, requiredCaseIds })),
     affectedRoutes: routes,
     routeFamilies: sortedUnique(routes.map(routeFamily)),
     globalGuards: sortedUnique(policy.globalGuards),

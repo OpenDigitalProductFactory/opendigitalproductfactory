@@ -215,3 +215,75 @@ describe("evaluateOrgBusinessDecisionGate (BI-230C9EF7)", () => {
     expect(result.evaluation.escalation?.route).toBe("independent-review");
   });
 });
+
+describe("instance direction in WWWD (BI-8AB6B4F7)", () => {
+  it("adds the owner's mission, vision and outcomes to the WWWD corpus with versioned refs", async () => {
+    const corpora = await loadOrgAlignmentCorpora({
+      wikiPage: { findMany: vi.fn().mockResolvedValue([]) },
+      product: { findMany: vi.fn().mockResolvedValue([]) },
+      businessContext: { findUnique: vi.fn().mockResolvedValue({ mission: "Serve MSPs", vision: "Every MSP runs on DPF" }) },
+      instanceOutcome: { findMany: vi.fn().mockResolvedValue([{ id: "o1", statement: "Ten MSP partners", measure: "signed contracts" }]) },
+      instanceDirectionRevision: { findFirst: vi.fn().mockResolvedValue({ version: 2 }) },
+    }, "org-123");
+    expect(corpora?.wwwd.map((e) => e.ref)).toEqual([
+      "direction:mission@v2",
+      "direction:vision@v2",
+      "direction:outcome:o1@v2",
+    ]);
+    expect(corpora?.wwwd[2]?.text).toContain("Ten MSP partners");
+  });
+
+  it("records on the ledger which direction refs the decision read", async () => {
+    const db = makeDb();
+    await evaluateOrgBusinessDecisionGate({
+      ...base,
+      db: db as never,
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval(),
+      alignmentCorpora: {
+        wwwd: [
+          { ref: "direction:mission@v2", text: "Mission: Serve MSPs" },
+          { ref: "wiki:stance", text: "We serve MSPs." },
+        ],
+        portfolio: [],
+        gtm: [],
+      },
+    });
+    const payload = db.decisionInteraction.create.mock.calls[0]![0].data.outcomePayload as Record<string, unknown>;
+    expect(payload.instanceDirection).toEqual({ recorded: true, refs: ["direction:mission@v2"] });
+  });
+
+  it("says no direction was recorded rather than inventing one", async () => {
+    const db = makeDb();
+    await evaluateOrgBusinessDecisionGate({
+      ...base,
+      db: db as never,
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval(),
+      alignmentCorpora: { wwwd: [], portfolio: [], gtm: [] },
+    });
+    const payload = db.decisionInteraction.create.mock.calls[0]![0].data.outcomePayload as Record<string, unknown>;
+    expect(payload.instanceDirection).toEqual({ recorded: false, refs: [] });
+  });
+});
+
+describe("evaluateOrgBusinessDecisionGate on a development companion (BI-1B165D02)", () => {
+  it("AC-PAC-01: with no guidance snapshot, records a guidance gap and says there is no organization guidance", async () => {
+    const { resolveOrganizationDecisionMaterial, NO_ORGANIZATION_GUIDANCE_PROFILE_ID } = await import("./organization-guidance");
+    const resolver = (args: Parameters<typeof resolveOrganizationDecisionMaterial>[0]) =>
+      resolveOrganizationDecisionMaterial({
+        ...args,
+        loadGuidance: async () => ({ role: "companion", snapshot: null, now: new Date("2026-11-12T00:00:00.000Z") }),
+      });
+    const result = await evaluateOrgBusinessDecisionGate({
+      ...base, db: makeDb() as never, resolver: resolver as never, alignmentCorpora: { gtm: [], portfolio: [], wwwd: [] }, recentOverrideCount: 0,
+    });
+    // A gap routes like any organization without a stance: never a recommendation.
+    expect(result.evaluation.outcomeType).not.toBe("recommend");
+    expect(result.evaluation.coverageGap).toBe(true);
+    expect(result.orgProfileSelected).toBe(false);
+    expect(result.evaluation.selectedProfileId).toBe(NO_ORGANIZATION_GUIDANCE_PROFILE_ID);
+    expect(result.evaluation.resolvedProfileChain).not.toContain(MARK_DPF_PLATFORM_PROFILE.profileId);
+    expect(result.operatorMessage).toMatch(/^No organization guidance/);
+  });
+});

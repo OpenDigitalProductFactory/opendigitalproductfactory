@@ -5,6 +5,7 @@ const db = vi.hoisted(() => ({
   platformDevConfigFindUnique: vi.fn(),
   featureBuildCount: vi.fn(),
   backlogItemFindUnique: vi.fn(),
+  backlogItemFindMany: vi.fn(),
   backlogItemUpdate: vi.fn(),
   backlogItemUpdateMany: vi.fn(),
   activityCreate: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock("@dpf/db", () => ({
     },
     backlogItem: {
       findUnique: (...a: unknown[]) => db.backlogItemFindUnique(...a),
+      findMany: (...a: unknown[]) => db.backlogItemFindMany(...a),
       update: (...a: unknown[]) => db.backlogItemUpdate(...a),
       updateMany: (...a: unknown[]) => db.backlogItemUpdateMany(...a),
     },
@@ -52,6 +54,57 @@ beforeEach(() => {
   vi.clearAllMocks();
   db.platformDevConfigUpsert.mockResolvedValue({});
   db.featureBuildCount.mockResolvedValue(0);
+  db.backlogItemFindMany.mockResolvedValue([]);
+});
+
+describe("backlog duplicate review coverage", () => {
+  it("reviews the complete eligible population instead of silently stopping at 500", async () => {
+    const rows = Array.from({ length: 501 }, (_, index) => ({
+      itemId: `BI-${String(index).padStart(8, "0")}`,
+      title: index < 2 ? "The same backlog outcome" : `Distinct outcome ${index}`,
+      body: null,
+    }));
+    db.backlogItemFindMany.mockResolvedValue(rows);
+
+    const sweep = demandScoringPack.handlers["sweep_duplicate_demand"]!;
+    const result = await sweep({ threshold: 0.8, limit: 10 }, "user-1", undefined);
+
+    expect(db.backlogItemFindMany).toHaveBeenCalledWith({
+      where: { status: { notIn: ["done", "deferred", "retired"] } },
+      select: { itemId: true, title: true, body: true },
+      orderBy: { itemId: "asc" },
+    });
+    expect(result.data).toMatchObject({
+      scanned: 501,
+      coverage: { eligible: 501, scanned: 501, complete: true },
+    });
+    expect((result.data as { pairs: Array<{ a: string; b: string }> }).pairs).toContainEqual(
+      expect.objectContaining({ a: "BI-00000000", b: "BI-00000001" }),
+    );
+  });
+
+  it("uses the complete portfolio population for one item's candidate review", async () => {
+    db.backlogItemFindUnique.mockResolvedValue({
+      itemId: "BI-TARGET",
+      title: "One durable outcome",
+      body: null,
+      portfolioId: "portfolio-1",
+    });
+    db.backlogItemFindMany.mockResolvedValue([
+      { itemId: "BI-OTHER", title: "One durable outcome", body: null },
+    ]);
+
+    const find = demandScoringPack.handlers["find_duplicate_candidates"]!;
+    const result = await find({ itemId: "BI-TARGET", threshold: 0.9 }, "user-1", undefined);
+
+    expect(db.backlogItemFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      orderBy: { itemId: "asc" },
+    }));
+    expect(db.backlogItemFindMany.mock.calls[0]?.[0]).not.toHaveProperty("take");
+    expect(result.data).toMatchObject({
+      coverage: { eligible: 1, scanned: 1, complete: true },
+    });
+  });
 });
 
 describe("set_backlog_delivery_budget", () => {
@@ -355,6 +408,112 @@ describe("merge_backlog_items is idempotent (BI-8EC69BE0)", () => {
       where: { id: { in: ["env-stale"] }, status: "proposed", resolvedAt: null },
       data: { status: "cancelled", resolvedAt: expect.any(Date) },
     });
+  });
+
+  it("declares reconcileOnly as an optional boolean defaulting to false", () => {
+    const tool = demandScoringPack.definitions.find((entry) => entry.name === "merge_backlog_items")!;
+    expect(tool.inputSchema).toMatchObject({ properties: { reconcileOnly: { type: "boolean", default: false } } });
+    expect((tool.inputSchema as { required?: string[] }).required).not.toContain("reconcileOnly");
+  });
+
+  it("explicit reconcileOnly false retains the normal merge behavior", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "open", duplicateOfId: null }));
+    db.backlogItemUpdateMany.mockResolvedValue({ count: 1 });
+    db.backlogItemUpdate.mockResolvedValue({});
+    db.activityCreate.mockResolvedValue({});
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly: false }, "user-1", {});
+    expect(result).toMatchObject({ success: true, data: { mergedOccurrenceCount: 5 } });
+    expect(db.backlogItemUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { itemId: "BI-C" }, data: expect.objectContaining({ occurrenceCount: 5 }),
+    }));
+  });
+
+  it("reconcileOnly refuses an open duplicate without folding it", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "open", duplicateOfId: null }));
+    db.backlogItemUpdateMany.mockResolvedValue({ count: 1 });
+    db.backlogItemUpdate.mockResolvedValue({});
+    db.activityCreate.mockResolvedValue({});
+    const result = await merge({
+      canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly: true,
+    }, "user-1", {});
+    expect(result).toMatchObject({ success: false, error: "not_already_merged" });
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdateMany).not.toHaveBeenCalled();
+    expect(db.activityCreate).not.toHaveBeenCalled();
+    expect(db.envelopeUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("reconcileOnly reconciles the completed result and its stale requests without a demand write", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "retired", duplicateOfId: "row-c" }));
+    const result = await merge({
+      canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly: true,
+    }, "user-1", {});
+    expect(result).toMatchObject({ success: true, data: { alreadyMerged: true, reconcileOnly: true, requestCleanup: { available: true, cancelled: 1 } } });
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdateMany).not.toHaveBeenCalled();
+    expect(db.activityCreate).not.toHaveBeenCalled();
+    expect(db.envelopeUpdateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["env-stale"] }, status: "proposed", resolvedAt: null },
+      data: { status: "cancelled", resolvedAt: expect.any(Date) },
+    });
+  });
+
+  it("reconcileOnly reports an available zero when no superseded request is found", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "retired", duplicateOfId: "row-c" }));
+    db.toolExecutionFindMany.mockResolvedValue([]);
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly: true }, "user-1", {});
+    expect(result).toMatchObject({ success: true, data: {
+      alreadyMerged: true, reconcileOnly: true, requestCleanup: { available: true, cancelled: 0 },
+    } });
+    expect(db.envelopeUpdateMany).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["read", "write"])("reconcileOnly reports unavailable cleanup after a %s failure", async (phase) => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "retired", duplicateOfId: "row-c" }));
+    if (phase === "read") db.toolExecutionFindMany.mockRejectedValue(new Error("unavailable"));
+    else db.envelopeUpdateMany.mockRejectedValue(new Error("write outcome unavailable"));
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly: true }, "user-1", {});
+    expect(result).toMatchObject({ success: false, error: "merge_request_reconciliation_unavailable", data: {
+      alreadyMerged: true, reconcileOnly: true, requestCleanup: { available: false, cancelled: null },
+    } });
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdateMany).not.toHaveBeenCalled();
+    expect(db.activityCreate).not.toHaveBeenCalled();
+  });
+
+  it("ordinary merging still succeeds when best-effort stale-request cleanup fails", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "open", duplicateOfId: null }));
+    db.backlogItemUpdateMany.mockResolvedValue({ count: 1 });
+    db.backlogItemUpdate.mockResolvedValue({});
+    db.activityCreate.mockResolvedValue({});
+    db.toolExecutionFindMany.mockRejectedValue(new Error("cleanup unavailable"));
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D" }, "user-1", {});
+    expect(result).toMatchObject({ success: true, data: { mergedOccurrenceCount: 5 } });
+  });
+
+  it("reconcileOnly does not withdraw requests for a different completed merge", async () => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "retired", duplicateOfId: "row-other" }));
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly: true }, "user-1", {});
+    expect(result).toMatchObject({ success: false, error: "already_closed" });
+    expect(db.toolExecutionFindMany).not.toHaveBeenCalled();
+    expect(db.envelopeUpdateMany).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["true", 1, null, {}])("rejects invalid reconcileOnly %j before reading or writing demand", async (reconcileOnly) => {
+    db.backlogItemFindUnique.mockImplementation(rows({ status: "open", duplicateOfId: null }));
+    db.backlogItemUpdateMany.mockResolvedValue({ count: 1 });
+    db.backlogItemUpdate.mockResolvedValue({});
+    db.activityCreate.mockResolvedValue({});
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D", reconcileOnly }, "user-1", {});
+    expect(result).toMatchObject({ success: false, error: "invalid_reconcile_only" });
+    expect(db.backlogItemFindUnique).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdate).not.toHaveBeenCalled();
+    expect(db.backlogItemUpdateMany).not.toHaveBeenCalled();
+    expect(db.envelopeUpdateMany).not.toHaveBeenCalled();
   });
 
   it("refuses a duplicate that is closed some other way, and a closed canonical", async () => {

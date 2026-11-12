@@ -586,6 +586,9 @@ describe("AgentDetailPage", () => {
 
     expect(html).toContain("GAID:");
     expect(html).toContain("gaid:priv:dpf.internal:hr-specialist");
+    // BI-825D3487 (AC-CRG-6): the corpus grants as the resolver sees them.
+    expect(html).toContain("Knowledge corpus");
+    expect(html).toContain("wiki_kernel_read");
   });
 
   it("shows the coworker's Needs & Playbooks record with living playbook candidates", async () => {

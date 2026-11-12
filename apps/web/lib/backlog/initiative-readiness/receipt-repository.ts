@@ -66,6 +66,8 @@ export async function recordInitiativeGateReceipt(args: {
   selectedProfile?: ReadinessProfile;
   /** Exact dispatched tool inputs, supplied by the governed pack, not a policy claim. */
   authorizationParams?: Record<string, unknown>;
+  /** Locator only; the writer re-resolves actor, subject and source admission. */
+  sourceWorkroomId?: unknown;
 }): Promise<RecordInitiativeGateReceiptResult> {
   if (args.gate === "spec-approval" && args.decision === "pass") {
     return {
@@ -174,6 +176,20 @@ export async function recordInitiativeGateReceipt(args: {
     }
     mergedRepairProof = { workroomId: ref.workroomId, commitSha: source.mergedCommitSha };
   }
+  const inquirySource = args.sourceWorkroomId !== undefined && args.gate === "research"
+    && args.requiresIndependentReviewer === false && args.artifactRef.kind === "repo-blob-at-commit"
+    ? await (await import("@/lib/mcp/workroom-repository-source")).prepareSourceInquiryResearch({
+      workroomId: args.sourceWorkroomId, itemId: item.itemId, userId: args.reviewerUserId,
+      agentId: args.reviewerAgentId, artifactRef: args.artifactRef }) : null;
+  const selectedSource = inquirySource || args.sourceWorkroomId === undefined ? null
+    : args.gate === "research" && args.requiresIndependentReviewer === false && args.artifactRef.kind === "repo-blob-at-commit"
+      ? await (await import("@/lib/mcp/workroom-repository-source")).prepareWorkroomRepositorySource({
+        workroomId: args.sourceWorkroomId, itemId: item.itemId, userId: args.reviewerUserId, agentId: args.reviewerAgentId,
+        target: { repositoryFullName: args.artifactRef.repositoryFullName, commitSha: args.artifactRef.commitSha },
+      }) : null;
+  if (args.sourceWorkroomId !== undefined && !selectedSource && !inquirySource) {
+    return { ok: false, code: "AUTHORIZATION_DENIED", error: "The exact research Workroom source or actor admission could not be verified." };
+  }
   const artifact = await resolveInitiativeArtifact({
     locator: args.artifactRef,
     workroomRef: args.workroomRef,
@@ -182,6 +198,8 @@ export async function recordInitiativeGateReceipt(args: {
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
     allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
+    sourceAdmission: selectedSource?.sourceAdmission,
+    inquiryAdmission: inquirySource?.inquiryAdmission,
     // BI-6F2872FC: a Build Studio plan review binds the build's plan revision.
     acceptBuildPlan: args.gate === "plan-review",
   });
@@ -223,6 +241,9 @@ export async function recordInitiativeGateReceipt(args: {
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
     if ((lockedItem.organizationId ?? null) !== (item.organizationId ?? null)) {
       return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
+    }
+    if ((selectedSource && !await selectedSource.admissionGuard(tx)) || (inquirySource && !await inquirySource.admissionGuard(tx))) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "The research source or actor admission changed before receipt publication." };
     }
     if (canonicalPlanProof) {
       // Coverage/baseline writers serialize on their scope owner's item row.
@@ -382,7 +403,7 @@ export async function recordInitiativeGateReceipt(args: {
         kind: "initiative_gate_receipt",
         gateKey,
         summary: `${args.gate}: ${args.decision}`,
-        payload: validated.receipt,
+        payload: { ...validated.receipt, ...(inquirySource ? { sourceInquiryWorkroomId: inquirySource.inquiryAdmission.workroomId } : {}) },
         recordedById: args.reviewerUserId,
         recordedByAgentId: args.reviewerAgentId,
       },

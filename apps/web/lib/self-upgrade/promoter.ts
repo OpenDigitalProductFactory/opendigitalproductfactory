@@ -5,6 +5,7 @@ import type { SelfUpgradeHostIdentity } from "./config";
 import type { InstallStateMigrationHandoff } from "./preflight";
 import {
   buildCandidatePromoterArtifactImage,
+  buildCompatiblePromoterCommand,
   resolveCandidatePromoterArtifact,
   type ResolvedPromoterArtifact,
 } from "./promoter-artifact";
@@ -85,7 +86,7 @@ export async function resolvePromoterArtifact(
 export async function runPromoterReadiness(
   params: PromoterParams & { artifact: ResolvedPromoterArtifact },
 ): Promise<PromoterResult> {
-  const { command, args } = buildPromoterReadinessCommand(params);
+  const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterReadinessCommand, createPromoterDockerRunner(params));
   return runProcessWithBudget(command, args, {
     timeoutMs: Math.min(resolvePromoterTimeoutMs(params), 5 * 60_000),
     containerName: params.containerName,
@@ -759,6 +760,7 @@ import {
 } from "@/lib/shared/run-process-with-budget";
 
 export async function runPromoter(params: PromoterParams): Promise<PromoterResult> {
+  const { command, args } = await buildCompatiblePromoterCommand(params, buildPromoterCommand, createPromoterDockerRunner(params));
   // Idempotency guard (SUR-E2BF265E). The container name is deterministic
   // (`dpf-promoter-<runId>`), so a concurrent or retried dispatch of the SAME
   // run reaching here would issue a second `docker run --name <name>` and hit
@@ -781,7 +783,6 @@ export async function runPromoter(params: PromoterParams): Promise<PromoterResul
       await forceRemovePromoterContainer(name);
     }
   }
-  const { command, args } = buildPromoterCommand(params);
   // Hard wall-clock bound. Without it a stalled `docker build` (SUR-756751D1: an
   // `apk add` fetch that crawled for 52 min) never closes, so `await runPromoter`
   // blocks the orchestrator until the 30-min DB watchdog — and the orphaned

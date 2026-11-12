@@ -37,6 +37,27 @@ describe("verification-only subscription effects", () => {
     expect(mocks.prisma.aiProviderConnection.updateMany).not.toHaveBeenCalled();
     expect(mocks.prisma.credentialEntry.update).not.toHaveBeenCalled();
   });
+  it("binds a recovery observation to the requested model and dispatch fence", async () => {
+    mocks.prisma.modelProfile.findFirst.mockResolvedValue({ modelId: "gpt-6.1-sol" });
+    const beforeDispatch = vi.fn(async () => undefined), completed = vi.fn(async () => undefined);
+    expect(await testProviderAuthInternal("codex", false, account.connectionId, {
+      verificationOnly: true, observation: { modelId: "gpt-6.1-sol", beforeDispatch, completed },
+    })).toMatchObject({ ok: true });
+    expect(JSON.parse(vi.mocked(fetch).mock.calls[0]![1]!.body as string).model).toBe("gpt-6.1-sol");
+    expect(mocks.prisma.modelProfile.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ modelId: "gpt-6.1-sol" }) }));
+    expect(beforeDispatch).toHaveBeenCalledTimes(1);
+    expect(completed).toHaveBeenCalledTimes(1);
+  });
+  it("does not redeem a second inference request on expiry during a quota observation", async () => {
+    mocks.prisma.modelProfile.findFirst.mockResolvedValue({ modelId: "gpt-6.1-sol" });
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "token_expired" } }), { status: 401 }));
+    const completed = vi.fn(async () => undefined);
+    expect(await testProviderAuthInternal("codex", false, account.connectionId, {
+      verificationOnly: true, observation: { modelId: "gpt-6.1-sol", beforeDispatch: async () => undefined, completed },
+    })).toMatchObject({ ok: false });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(completed).not.toHaveBeenCalled();
+  });
   it.each(["inactive", "disabled", "disconnected"])("cannot enable a %s account", async status => {
     mocks.prisma.aiProviderConnection.findUnique.mockResolvedValue({ ...account, status });
     expect(await verify()).toMatchObject({ ok: false });

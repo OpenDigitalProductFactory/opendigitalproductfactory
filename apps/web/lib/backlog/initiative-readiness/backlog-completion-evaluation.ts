@@ -7,12 +7,13 @@
 // while the read projection get_backlog_item returns (and the acceptance sweep
 // reads) passed none of those facts and so reported every merged direct-merge
 // item as input-required. Both now call evaluateBacklogItemCompletion; the read
-// path differs only in that it never mutates and supplies no completion
-// manifest (a read has none — the caller of the transition brings one).
+// path never mutates. For the retained-body acceptance lane it can recover
+// authorized inputs from the latest bound attempt, then evaluate them afresh.
 
 import { prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
 import { sameBodyCriteriaVersion } from "./body-baseline-version";
+import { completionInputBinding, readCompletionInput, retainCompletionInput, type CompletionInputContext } from "./completion-input-context";
 
 import type { CurrentEvidenceFailure } from "@/lib/backlog/completion-evidence-policy";
 import {
@@ -120,6 +121,8 @@ export type BacklogCompletionDependencies = {
 };
 
 export type BacklogCompletionEvaluation = {
+  /** Server-only submitted inputs; persisted by the authorized terminal writer. */
+  completionInputContext?: CompletionInputContext | null;
   governed: boolean;
   decision: InitiativeReadinessDecision;
   independentAcceptanceDecision: InitiativeReadinessDecision;
@@ -312,8 +315,10 @@ export async function evaluateBacklogItemCompletion(args: {
   currentDesign?: CurrentDesignEvidence;
   db: BacklogCompletionDb;
   item: BacklogCompletionItem;
-  /** The caller's completion manifest. A read passes `undefined`: it has none. */
+  /** Explicit caller input; reads may resolve the latest bound input when absent. */
   rawManifest: unknown;
+  /** Only read projections may reuse recorded inputs; a new submission stands alone. */
+  reuseRecordedInput?: boolean;
   transitionObject: InitiativeTransitionObject;
   evaluatedAt: string;
   dependencies?: BacklogCompletionDependencies;
@@ -328,10 +333,6 @@ export async function evaluateBacklogItemCompletion(args: {
     take: 500,
     select: { id: true, backlogItemId: true, kind: true, gateKey: true, recordedAt: true, payload: true },
   });
-  const completion = await (deps.resolveCompletionEvidence ?? resolveCompletionEvidence)(
-    db as unknown as CompletionEvidenceRuntimeDb,
-    { itemId: item.itemId, rawManifest: args.rawManifest, now: new Date(evaluatedAt) },
-  );
   // BI-2515F779: a decomposed child with no baseline of its own reconciles
   // its mapping against the baseline it inherits from its mapping parent —
   // the same scope the projection, the router, the admission and the writer
@@ -361,17 +362,32 @@ export async function evaluateBacklogItemCompletion(args: {
       || !sameBodyCriteriaVersion({ criteriaDigest: reconciledBaseline.criteriaDigest }, item.body))) {
     reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };
   }
+  let bodyAuthorRoom: Awaited<ReturnType<typeof import("./body-baseline-author-room").resolveBodyBaselineAuthorRoom>> = null;
   if (isRecord(reconciledBaseline) && reconciledBaseline.origin === "item-body") {
     const source = isRecord(reconciledBaseline.sourceIdentity) ? reconciledBaseline.sourceIdentity : null;
     const authority = isRecord(reconciledBaseline.authoritySnapshot) ? reconciledBaseline.authoritySnapshot : null;
     const { resolveBodyBaselineAuthorRoom } = await import("./body-baseline-author-room");
     const currentRoom = await resolveBodyBaselineAuthorRoom(
       db as unknown as import("@dpf/db").Prisma.TransactionClient, item);
+    bodyAuthorRoom = currentRoom;
     if (!currentRoom || source?.headSha !== currentRoom.headSha || source?.repositoryFullName !== currentRoom.repositoryFullName
       || authority?.organizationId !== (item.organizationId ?? "platform")) {
       reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };
     }
   }
+  const editPaths = await readBoundEditPaths(db as unknown as BoundWorkShapeDb, item.itemId).catch(() => null);
+  const binding = editPaths && completionInputBinding({ item, shape: boundWorkShape, baseline: reconciledBaseline,
+    room: bodyAuthorRoom, editPaths });
+  // An explicit invalid submission must never borrow a previous valid input.
+  // Reads and admission use the same current evaluator, not an old verdict.
+  const rawManifest = args.reuseRecordedInput === true && args.rawManifest === undefined
+    ? await readCompletionInput(db, item, binding) : args.rawManifest;
+  const completion = await (deps.resolveCompletionEvidence ?? resolveCompletionEvidence)(
+    db as unknown as CompletionEvidenceRuntimeDb,
+    { itemId: item.itemId, rawManifest, now: new Date(evaluatedAt) },
+  );
+  const completionInputContext = completion.kind === "evaluated" && completion.verdict.allowed
+    ? retainCompletionInput(binding, completion.verdict.normalizedManifest) : null;
   const acceptanceState = reconciliation.state;
   // An initiative's own PR cannot prove its children or hypothesis outcomes.
   // BI-B1B44777: every other non-contractual item closes on its merge.
@@ -463,7 +479,7 @@ export async function evaluateBacklogItemCompletion(args: {
       // BI-243BC956: completion re-reads the room's declared edit scope.
       deliverySensitivity: assessDeliverySensitivity({
         ...item,
-        declaredPaths: await readBoundEditPaths(db as unknown as BoundWorkShapeDb, item.itemId).catch(() => []),
+        declaredPaths: editPaths ?? [],
       }),
     },
     activities: activities as InitiativeReadinessActivity[],
@@ -538,6 +554,7 @@ export async function evaluateBacklogItemCompletion(args: {
       ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
   } });
   return {
+    completionInputContext,
     governed: projected.governed,
     decision: deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision,
     independentAcceptanceDecision: independent.decision,
@@ -562,7 +579,7 @@ export type BacklogCompletionReadDb = BacklogCompletionDb & {
 
 /**
  * The read projection's completion decision (get_backlog_item, the acceptance
- * sweep): the gate's own evaluation, with no manifest and no mutation.
+ * sweep): the gate's own evaluation, with bound input recovery and no mutation.
  *
  * Bounded: only an item awaiting acceptance pays for it — the merge signal may
  * run git against a source checkout — and `null` means "not evaluated here",
@@ -589,6 +606,7 @@ export async function readBacklogItemCompletion(args: {
       db,
       item,
       rawManifest: undefined,
+      reuseRecordedInput: true,
       transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read-projection", targetState: "completion" },
       evaluatedAt: args.evaluatedAt,
       ...(args.dependencies ? { dependencies: args.dependencies } : {}),

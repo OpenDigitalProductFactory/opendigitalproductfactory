@@ -203,7 +203,7 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
       ...(target.portfolioId ? { portfolioId: target.portfolioId } : {}),
     },
     select: { itemId: true, title: true, body: true },
-    take: 500,
+    orderBy: { itemId: "asc" },
   });
   const { findDuplicateCandidates } = await import("@/lib/demand/dedup");
   const candidates = findDuplicateCandidates(target, pool, threshold).slice(0, limit);
@@ -214,7 +214,10 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
       candidates.length > 0
         ? `${candidates.length} possible duplicate(s) of ${itemId}.`
         : `No open items above similarity ${threshold} for ${itemId}.`,
-    data: { candidates },
+    data: {
+      candidates,
+      coverage: { eligible: pool.length, scanned: pool.length, complete: true },
+    },
   };
 }
 
@@ -228,21 +231,21 @@ const CLOSED_ITEM_STATUSES: ReadonlySet<string> = new Set(["retired", "done"]);
  * it carried. Best effort: a merge never fails because a card could not be
  * withdrawn (BI-8EC69BE0).
  */
-async function cancelSupersededMergeCards(duplicateItemId: string): Promise<number> {
+async function cancelSupersededMergeCards(duplicateItemId: string): Promise<{ available: true; cancelled: number } | { available: false; cancelled: null }> {
   try {
     const rows = await prisma.toolExecution.findMany({
       where: { toolName: "merge_backlog_items", envelopeId: { not: null }, parameters: { path: ["duplicateItemId"], equals: duplicateItemId } },
       select: { envelopeId: true },
     });
     const ids = rows.map((row) => row.envelopeId).filter((id): id is string => typeof id === "string");
-    if (ids.length === 0) return 0;
+    if (ids.length === 0) return { available: true, cancelled: 0 };
     const cancelled = await prisma.coworkerActionEnvelope.updateMany({
       where: { id: { in: ids }, status: "proposed", resolvedAt: null },
       data: { status: "cancelled", resolvedAt: new Date() },
     });
-    return cancelled.count;
+    return { available: true, cancelled: cancelled.count };
   } catch {
-    return 0;
+    return { available: false, cancelled: null };
   }
 }
 
@@ -251,6 +254,10 @@ export async function mergeBacklogItemsHandler(
   userId?: string,
   context?: { agentId?: string },
 ): Promise<ToolResult> {
+  const reconcileOnly = params["reconcileOnly"];
+  if (reconcileOnly !== undefined && typeof reconcileOnly !== "boolean") {
+    return { success: false, error: "invalid_reconcile_only", message: "reconcileOnly must be a boolean." };
+  }
   const canonicalItemId = String(params["canonicalItemId"] ?? "");
   const duplicateItemId = String(params["duplicateItemId"] ?? "");
   if (canonicalItemId === duplicateItemId) {
@@ -268,7 +275,26 @@ export async function mergeBacklogItemsHandler(
   // Idempotent (BI-8EC69BE0): a duplicate already folded is never folded again,
   // so a replayed approval or a stale card cannot add its reach twice.
   if (duplicate.duplicateOfId || CLOSED_ITEM_STATUSES.has(duplicate.status)) {
-    await cancelSupersededMergeCards(duplicateItemId);
+    if (reconcileOnly === true && duplicate.duplicateOfId !== canonical.id) {
+      return { success: false, error: "already_closed", message: `${duplicateItemId} is already ${duplicate.status}; nothing changed.` };
+    }
+    const cleanup = await cancelSupersededMergeCards(duplicateItemId);
+    if (reconcileOnly === true) {
+      const data = { canonicalItemId, duplicateItemId, alreadyMerged: true, reconcileOnly: true, requestCleanup: cleanup };
+      return cleanup.available
+        ? {
+            success: true,
+            entityId: canonicalItemId,
+            message: `${duplicateItemId} is already merged into ${canonicalItemId}; demand is unchanged. Superseded proposed requests withdrawn: ${cleanup.cancelled}.`,
+            data,
+          }
+        : {
+            success: false,
+            error: "merge_request_reconciliation_unavailable",
+            message: "The merge is already completed and demand is unchanged, but request cleanup could not be verified. Retry the reconcile-only call.",
+            data,
+          };
+    }
     return duplicate.duplicateOfId === canonical.id
       ? {
           success: true,
@@ -277,6 +303,15 @@ export async function mergeBacklogItemsHandler(
           data: { canonicalItemId, duplicateItemId, alreadyMerged: true },
         }
       : { success: false, error: "already_closed", message: `${duplicateItemId} is already ${duplicate.status}; nothing changed.` };
+  }
+  // Enforce the nonmutating mode here even if item state changed after the
+  // per-call consequence was resolved. It must never fall through to a fold.
+  if (reconcileOnly === true) {
+    return {
+      success: false,
+      error: "not_already_merged",
+      message: `${duplicateItemId} has not already been merged into ${canonicalItemId}; reconcileOnly cannot merge it.`,
+    };
   }
   if (CLOSED_ITEM_STATUSES.has(canonical.status)) {
     return { success: false, error: "canonical_closed", message: `Canonical ${canonicalItemId} is ${canonical.status}; merge into an open item.` };
@@ -345,17 +380,21 @@ export async function sweepDuplicateDemandHandler(params: Record<string, unknown
       ...(portfolioId ? { portfolioId } : {}),
     },
     select: { itemId: true, title: true, body: true },
-    take: 500,
+    orderBy: { itemId: "asc" },
   });
   const { findDuplicatePairs } = await import("@/lib/demand/dedup");
-  const pairs = findDuplicatePairs(items, threshold).slice(0, limit);
+  const pairs = findDuplicatePairs(items, threshold, limit);
   return {
     success: true,
     message:
       pairs.length > 0
         ? `${pairs.length} likely-duplicate pair(s) across ${items.length} open item(s).`
         : `No pairs above similarity ${threshold} across ${items.length} open item(s).`,
-    data: { pairs, scanned: items.length },
+    data: {
+      pairs,
+      scanned: items.length,
+      coverage: { eligible: items.length, scanned: items.length, complete: true },
+    },
   };
 }
 

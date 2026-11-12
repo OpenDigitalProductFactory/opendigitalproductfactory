@@ -5,6 +5,8 @@ import {
   failOptimisticMessage,
   reconcileOptimisticMessage,
   retryOptimisticMessage,
+  acknowledgeRetainedMessage,
+  pendingCoworkerLabel,
 } from "./agent-message-state";
 
 function makeUserMessage(id: string, content: string): AgentMessageRow {
@@ -19,6 +21,22 @@ function makeUserMessage(id: string, content: string): AgentMessageRow {
 }
 
 describe("agent-message-state", () => {
+  const pending = { agentName: "Finance Specialist", clearing: false, status: null, tool: null, elapsedSeconds: 0, acknowledged: true };
+  it.each([0, 5, 30, 180])("does not infer execution from an acknowledgement or %ss of waiting", elapsedSeconds => {
+    const label = pendingCoworkerLabel({ ...pending, elapsedSeconds });
+    expect(label).not.toMatch(/thinking|working/i);
+    expect(label).toContain("saved");
+  });
+  it("does not claim a request was saved before server acknowledgement", () => {
+    expect(pendingCoworkerLabel({ ...pending, acknowledged: false, elapsedSeconds: 180 })).not.toMatch(/saved|thinking|working/i);
+  });
+  it("preserves actual server status and tool progress", () => {
+    expect(pendingCoworkerLabel({ ...pending, status: "Checking the saved receipt", tool: "read_receipt" })).toBe("Checking the saved receipt");
+    expect(pendingCoworkerLabel({ ...pending, tool: "read_receipt" })).toContain("using read receipt");
+  });
+  it("keeps conversation clearing distinct from execution progress", () => {
+    expect(pendingCoworkerLabel({ ...pending, clearing: true, status: "A stale update" })).toBe("Clearing conversation");
+  });
   it("creates an optimistic user message in sending state", () => {
     const optimistic = createOptimisticUserMessage("Please update the epic", "/ops");
 
@@ -53,5 +71,14 @@ describe("agent-message-state", () => {
 
     expect(retried.deliveryState).toBe("sending");
     expect(retried.content).toBe("Please update the epic");
+  });
+  it("settles message delivery and retains the stored receipt only once", () => {
+    const optimistic = createOptimisticUserMessage("Prepare the checklist", "/workspace");
+    const receipt = { id: "foreground-receipt-TR-one", role: "system", content: "Your request is saved.", createdAt: "2026-10-29T00:00:00Z" };
+    const once = acknowledgeRetainedMessage([optimistic], optimistic.id, receipt);
+    expect(once[0].deliveryState).toBe("sent");
+    expect(once[1].content).toBe("Your request is saved.");
+    expect(acknowledgeRetainedMessage(once, optimistic.id, receipt)).toHaveLength(2);
+    expect(acknowledgeRetainedMessage([optimistic], optimistic.id, { ...receipt, role: "assistant" })).toHaveLength(1);
   });
 });

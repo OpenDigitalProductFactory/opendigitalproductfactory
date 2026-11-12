@@ -25,6 +25,8 @@ Every UI component uses CSS custom properties for all color roles. These propert
 | `--dpf-font-body` | Body font family | `font-family: var(--dpf-font-body)` |
 | `--dpf-font-heading` | Heading font family | `font-family: var(--dpf-font-heading)` |
 
+Status colours come from one registry. A surface maps its states to an intent namespace in `apps/web/lib/ui-model/statusColors.ts` and resolves colour with `resolveIntent` and `intentStyle`, rather than declaring its own colour map. A state that must be told apart from a neighbour also carries a non-colour cue. For example, the `standingRhythm` namespace draws a missed day as an outlined cross, so it never depends on red against amber.
+
 ## Design Token Scales (L0)
 
 Color is only one axis. Spacing, type, elevation, radius and motion are tokens too, and they
@@ -514,6 +516,17 @@ Every coworker that writes customer-facing copy (marketing-specialist and peers)
 - use short sentences, active voice, and familiar words; avoid jargon in business copy;
 - keep architecture and standards copy precise even when it reads higher;
 - check the Flesch–Kincaid grade before publishing.
+
+### Provider account readiness
+
+Provider lists show current readiness prominently using the shared
+`providerAccountReadiness` status domain. Working requires recent successful
+inference from that account; Enabled describes configuration without that proof.
+Temporary waits and operator pauses use warning, connection or billing failures
+use danger, and unavailable observations remain neutral. Keep the reason visible
+beside the badge and show account-owned check times and the next action. Allowed
+work describes data permission separately and cannot imply that capacity is ready.
+See [routing with provider accounts](user-guide/ai-workforce/provider-account-routing.md).
 
 ### Name the role, not the species (BI-F2EC4699)
 

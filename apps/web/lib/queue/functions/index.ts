@@ -8,19 +8,22 @@ import { providerPauseExpiry, providerPauseReconcile } from "./provider-operator
 import { mcpCatalogSync } from "./mcp-catalog-sync";
 import { codeGraphReconcileEvent, codeGraphReconcileScheduled } from "./code-graph-reconcile";
 import { routeWorkItem } from "./route-work-item";
-import { ecosystemInboundTriage } from "./ecosystem-inbound-triage";
+import { ecosystemInboundTriage, ecosystemInboundTriageRequested } from "./ecosystem-inbound-triage";
 import { ecosystemSubmissionSweep } from "./ecosystem-submission-sweep";
 import { ecosystemWatchdog } from "./ecosystem-watchdog";
 import { issueReportTriage } from "./issue-report-triage";
 import { issueReportProjectOnCreate } from "./issue-report-project";
+import { roomMessageDispatch, roomWakeRun } from "./room-message-wake";
 import { documentRenditionBackfill, documentRenditionGenerate } from "./document-renditions";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
-import { agentTaskDispatch } from "./agent-task-dispatch";
+import { agentTaskDispatch, agentTaskRunNow } from "./agent-task-dispatch";
+import { foregroundWorkRun } from "./foreground-work";
 import { taskrunWatchdog } from "./taskrun-watchdog";
 import { evalBackground, probeBackground } from "./eval-background";
 import { brandExtract } from "./brand-extract";
 import { geocodeOnSave } from "./geocode-on-save";
+import { mapPackInstall } from "./map-pack-install";
 import { materialFreshnessDecay } from "./material-freshness-decay";
 import { prSubmitAwaitingAcceptanceReconcile } from "./pr-submit-awaiting-acceptance-reconcile";
 import { budgetReservationSettle } from "./budget-reservation-settle";
@@ -266,6 +269,7 @@ export const scheduledFunctions = [
 ];
 
 export const eventFunctions = [
+  ecosystemInboundTriageRequested,
   pullRequestMergedBinding, // BI-A6E4D205: event-triggered on build/pr-merged.received — NOT a cron
   pullRequestMergedReap, // BI-848360EF: reap the merged branch's worktree, via the janitor's own rules
   decisionConciergeSweepRequested, // EP-0AF96937: the same pass, on demand
@@ -282,6 +286,7 @@ export const eventFunctions = [
   probeBackground,
   brandExtract,
   geocodeOnSave,
+  mapPackInstall,
   researchExecute,
   buildReviewVerification,
   buildExecute,
@@ -294,6 +299,9 @@ export const eventFunctions = [
   deliberationRun,
   governedBacklogTeeUpRequested,
   issueReportProjectOnCreate,
+  roomMessageDispatch, // BI-31C1FDEC: an addressed room message wakes its recipient
+  roomWakeRun, // BI-31C1FDEC: one coalesced reply run per coworker per room
+  agentTaskRunNow, // BI-31C1FDEC: run one due task now (a room wake's reply)
   documentRenditionGenerate, // BI-9D43CBEF: office file saved -> PDF + text renditions, indexed
   documentRenditionBackfill, // BI-9D43CBEF/BI-153EC72C: bounded, draining sweep at portal start, on a pin change, and when the converter becomes available
   contributorInventorySyncOnDemand,
@@ -323,6 +331,7 @@ export const eventFunctions = [
   nonprodCapacityAvailable,
   mcpTaskRunExecute,
   asyncInferenceOperationRun,
+  foregroundWorkRun,
   asyncInferenceOperationTaskRunTransition,
   asyncOperationTaskHub,
 ];

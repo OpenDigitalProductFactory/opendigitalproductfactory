@@ -83,9 +83,11 @@ export async function withEngagementPresentRequest<T>(input: { engagementId: str
     context, rawParams: input.rawParams, closed: false, admitted: false,
     assertNativeAuthority: async () => {
       if (scope.closed || Date.now() >= Date.parse(policy.expiresAt)) return refuse("live-authority-expired");
-      const [{ currentUserContext }, { can }, { resolveCoworkerToolAuthorityInput }, { evaluateCoworkerAuthority }, { coworkerServiceCatalogPack }] = await Promise.all([
+      if (typeof context.governedAuthorityTool !== "function" || typeof context.governedRoomAuthority !== "function")
+        return refuse("current-native-context-unavailable");
+      const [{ currentUserContext }, { can }, { resolveCoworkerToolAuthorityInput }, { evaluateCoworkerAuthority }] = await Promise.all([
         import("../govern/current-user-context"), import("../permissions"), import("../govern/authority/resolve-coworker-tool-authority"),
-        import("../govern/authority/coworker-authority-decision"), import("../mcp/packs/coworker-service-catalog-pack")]);
+        import("../govern/authority/coworker-authority-decision")]);
       const human = await currentUserContext(input.userId);
       if (!human || !can(human, "view_platform")) return refuse("current-human-refused");
       const decision = await prisma.authorizationDecisionLog.findUnique({ where: { decisionId: context.authorityDecisionId! } });
@@ -93,7 +95,8 @@ export async function withEngagementPresentRequest<T>(input: { engagementId: str
         || decision.agentContextRef !== context.agentId || !["allow", "require-approval"].includes(decision.decision)) return refuse("native-decision-refused");
       const credential = await prisma.mcpApiToken.findUnique({ where: { id: input.token.tokenId }, select: { authorityBindingId: true } });
       if (!credential || (input.token.source === "oauth" && !credential.authorityBindingId) || credential.authorityBindingId !== decision.authorityBindingId) return refuse("native-binding-changed");
-      const tool = coworkerServiceCatalogPack.definitions.find(t => t.name === "request_coworker_engagement")!;
+      const tool = context.governedAuthorityTool();
+      if (tool?.name !== "request_coworker_engagement") return refuse("current-native-tool-unavailable");
       const { coworkerAuthorityAgentId } = await import("../coworker-identity");
       const { expandGrants, persistedAgentToolGrants, isToolAllowedByGrants } = await import("../tak/agent-grants");
       const actor = await prisma.agent.findUnique({ where: { agentId: coworkerAuthorityAgentId(context.agentId!) },
@@ -102,9 +105,10 @@ export async function withEngagementPresentRequest<T>(input: { engagementId: str
       const agentGrantAllowed = isToolAllowedByGrants(tool.name, expandGrants(persistedAgentToolGrants(actor)));
       const authority = await resolveCoworkerToolAuthorityInput({ tool, agentGrantAllowed, execution: {
         toolName: tool.name, rawParams: input.rawParams, userId: input.userId, userContext: human,
-        source: "external-jsonrpc", context } });
+        source: "external-jsonrpc", context: { ...context, roomAuthority: context.governedRoomAuthority() ?? undefined } } });
       const currentDecision = evaluateCoworkerAuthority(authority);
-      if (currentDecision.outcome !== "allow") return refuse("current-native-authority-refused");
+      if (currentDecision.outcome !== "allow") return refuse(
+        `current-native-authority-refused:${currentDecision.outcome}:${currentDecision.reasonCode}; ${currentDecision.explanation} Next: ${currentDecision.nextAction}`);
       if (context.approvedAuthorityEnvelopeId) {
         const current = await prisma.coworkerActionEnvelope.findUnique({ where: { id: context.approvedAuthorityEnvelopeId } });
         if (!reservedAt || !current || current.status !== "approved" || current.resolvedAt?.toISOString() !== reservedAt
@@ -137,12 +141,16 @@ export async function readEngagementPresentConfiguration(agentId: string, db?: P
   const matches = models.filter(m => canonicalLocalModelKey(m.modelId) === canonicalLocalModelKey(ENGAGEMENT_NATIVE_COMPOSITION.logicalModelRef));
   const model = matches.length === 1 ? matches[0] : null;
   const imageCapability = record(model?.capabilities).imageInput, overrides = record(model?.capabilityOverrides);
+  if (account?.providerId === "local" && account.status === "paused")
+    return refuse("local-account-paused: Resume the existing provider-default-local account using supported account controls");
+  if (provider?.status === "inactive")
+    return refuse("local-provider-inactive: Enable the existing local provider using supported account controls");
   if (!config || !["basic", "adequate", "strong"].includes(config.minimumTier) || config.pinnedProviderId && config.pinnedProviderId !== "local"
     || config.pinnedModelId && canonicalLocalModelKey(config.pinnedModelId) !== canonicalLocalModelKey(model?.modelId ?? "")
     || config.residencyPolicy && !["local_only", "any_enabled", "approved_cloud"].includes(config.residencyPolicy)
     || !provider || !["active", "degraded"].includes(provider.status) || provider.retiredAt || !provider.supportsToolUse
     || !account || account.status !== "active" || account.providerId !== "local" || account.executionChannel !== "local-runtime"
-    || account.authMethod !== "none" || account.credentialEntryId != null || !model || !["strong", "frontier"].includes(model.qualityTier ?? "")
+    || account.authMethod !== "local" || account.credentialEntryId != null || !model || !["strong", "frontier"].includes(model.qualityTier ?? "")
     || imageCapability === false || record(imageCapability).support === false || overrides.imageInput === false || record(overrides.imageInput).support === false
     || !model.supportsToolUse || budget.configuredPerTaskLimit <= 2048) return refuse("native-configuration-unavailable");
   const endpoint = provider.baseUrl ?? provider.endpoint;

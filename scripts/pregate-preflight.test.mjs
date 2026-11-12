@@ -15,6 +15,9 @@ import { dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { createHash } from "node:crypto";
+import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
+import { isolatedGateFixtureEnvironment } from "./fixtures/gate-worktree.mjs";
 
 import {
   ENVIRONMENT_FAILURE_RE,
@@ -30,11 +33,75 @@ import {
 import { POLICY_GUARD_PROFILES, isPolicyGuardConformanceCommand } from "./lib/ci-policy-guards.mjs";
 import { RUNNER_FAILURE_EXIT_CODE } from "./check-guards.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
-import { shouldRunPreflight } from "./pregate.mjs";
+import { shouldCheckHostDisk, shouldRunPreflight } from "./pregate.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const preflightCli = join(repoRoot, "scripts", "pregate-preflight.mjs");
 const pregateCli = join(repoRoot, "scripts", "pregate.mjs");
+
+test("actual CLI records an explicit omission without touching retained execution evidence", { timeout: 30000 }, async (t) => {
+  for (const retained of ["unknown", "live", "unreadable"]) await t.test(retained, () => {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-preflight-omission-"));
+    try {
+      const env = isolatedGateFixtureEnvironment(dir, { DPF_GUARD_OUTCOME_SUBMIT: "0",
+        GH_CONFIG_DIR: join(dir, "empty-gh-config"), GH_TOKEN: "" });
+      const git = (...args) => {
+        const result = spawnSync("git", args, { cwd: dir, env, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+        return result.stdout.trim();
+      };
+      git("init", "-q");
+      git("config", "user.name", "DPF Test");
+      git("config", "user.email", "dpf-test@example.invalid");
+      fsSync.writeFileSync(join(dir, "README.md"), "isolated source fixture\n");
+      git("add", "README.md");
+      git("-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture");
+      git("update-ref", "refs/remotes/origin/main", "HEAD");
+      git("checkout", "-qb", "fixture-omission"); // No remote or GitHub credentials.
+      const receiptDir = join(dir, ".git", "dpf-host-guard-receipts");
+      const key = createHash("sha256").update(JSON.stringify("pregate-preflight")).digest("hex");
+      const receiptPath = join(receiptDir, `${key}.json`);
+      const lockPath = join(receiptDir, `${key}.lock`);
+      fsSync.mkdirSync(lockPath, { recursive: true });
+      const owner = { schema: "dpf-local-convergence-lock/v1", token: "fixture-original",
+        pid: process.pid, processIdentity: readProcessIdentity(process.pid), acquiredAt: new Date().toISOString() };
+      assert.ok(owner.processIdentity, "fixture must have a strong live owner identity");
+      const original = retained === "unreadable" ? "{unreadable" : JSON.stringify({
+        schemaVersion: 1, stage: "pregate-preflight", status: retained === "live" ? "running" : "inconclusive",
+        identity: { head: "original-fixture" }, owner, hostPid: owner.pid,
+        ...(retained === "unknown" ? { recovery: { reason: "controller-absent-child-outcome-unknown" } } : {}),
+      });
+      const ownerBytes = JSON.stringify(owner);
+      fsSync.writeFileSync(receiptPath, original);
+      fsSync.writeFileSync(join(lockPath, "owner.json"), ownerBytes);
+      const run = (reason) => spawnSync(process.execPath, [preflightCli], { cwd: dir,
+        env: { ...env, DPF_SKIP_PREGATE_PREFLIGHT_REASON: reason }, encoding: "utf8", timeout: 10000 });
+      const skipped = run("operator-emergency: isolated approved no-execution fixture");
+      assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
+      assert.match(skipped.stdout, /SKIPPED/);
+      assert.match(skipped.stdout, /DPF_HOST_PREFLIGHT_RESULT=\{"status":"inconclusive","entries":\[\]\}/);
+      assert.doesNotMatch(skipped.stdout, /REUSED|guards verified|running \(pid/);
+      assert.equal(fsSync.readFileSync(receiptPath, "utf8"), original);
+      assert.equal(fsSync.readFileSync(join(lockPath, "owner.json"), "utf8"), ownerBytes);
+      assert.deepEqual(fsSync.readdirSync(receiptDir).sort(), [`${key}.json`, `${key}.lock`].sort());
+      const spool = join(dir, ".git", "dpf-guard-outcomes");
+      const records = fsSync.readdirSync(spool).filter(name => name.endsWith(".json"))
+        .map(name => JSON.parse(fsSync.readFileSync(join(spool, name), "utf8")));
+      assert.equal(records.length, 1);
+      assert.deepEqual(records[0].guards, []);
+      assert.equal(records[0].override.kind, "skip-env");
+      assert.match(records[0].override.reason, /isolated approved no-execution/);
+      for (const reason of ["", undefined]) {
+        const refused = run(reason);
+        assert.equal(refused.status, 88, refused.stdout + refused.stderr);
+        assert.match(refused.stderr, /execution inconclusive/);
+        assert.doesNotMatch(refused.stdout, /SKIPPED|REUSED|running \(pid/);
+        assert.equal(fsSync.readFileSync(receiptPath, "utf8"), original);
+        assert.equal(fsSync.readFileSync(join(lockPath, "owner.json"), "utf8"), ownerBytes);
+      }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
 
 // ── plan construction ───────────────────────────────────────────────────────
 
@@ -562,6 +629,27 @@ test("pregate.mjs --dry-run skips the preflight and still reaches gate routing",
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /pregate-preflight/);
   assert.match(result.stdout, /gate-worktree dry-run/);
+});
+
+// BI-D0C3F242: a dry run builds nothing, so the host-disk build floor must not
+// decide it — CI runners routinely carry less free disk than the floor.
+test("pregate.mjs --dry-run reaches gate routing on a host below the disk floor", () => {
+  const result = spawnSync(
+    process.execPath,
+    [pregateCli, "--dry-run", "--branch", "feat/x", "--worktree", repoRoot],
+    { encoding: "utf8", env: { ...process.env, DPF_PREGATE_FORCE_NODE: "1", DPF_MIN_DISK_GB: "1000000000" } },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /Build blocked: host disk/);
+  assert.match(result.stdout, /gate-worktree dry-run/);
+});
+
+test("only invocations that build are held to the host-disk floor", () => {
+  assert.equal(shouldCheckHostDisk([]), true);
+  assert.equal(shouldCheckHostDisk(["--force-rerun"]), true);
+  for (const flag of ["--dry-run", "--help", "-h", "--finalize-evidence"]) {
+    assert.equal(shouldCheckHostDisk([flag]), false, flag);
+  }
 });
 
 // BI-8CDA7F95: the preflight honours the change scope the cloud trusts. A guard

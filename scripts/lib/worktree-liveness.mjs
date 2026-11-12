@@ -26,6 +26,7 @@
 
 import { mcpPost, extractToolResult } from "./mcp-client.mjs";
 import { resolveMcpCredential } from "./mcp-credential.mjs";
+import { resolveHostMcpTrust } from "./mcp-host-trust.mjs";
 
 /** Statuses that mean a room still owns its worktree. Anything terminal is not here. */
 export const ACTIVE_WORKROOM_STATUSES = Object.freeze([
@@ -234,17 +235,28 @@ export async function loadActiveWorkroomPaths(options = {}) {
   const env = options.env ?? process.env;
   const url = env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
   try {
-    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env });
+    // Resolve the install's saved connection once for the whole observation.
+    // Otherwise each HTTPS page starts a host shell to rediscover the same CA.
+    // The transport still rereads and validates that bundle on every request;
+    // no certificate, credential or authority decision is cached here.
     const deadline = Date.now() + (Number.isFinite(options.readBudgetMs) && options.readBudgetMs > 0 ? options.readBudgetMs : READ_BUDGET_MS);
+    const trust = new URL(url).protocol === "https:"
+      ? (options.resolveTrust ?? resolveHostMcpTrust)({ mcpUrl: url, env }) : null;
+    const transportEnv = trust?.env ?? env;
+    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env: transportEnv, connection: trust?.connection });
     const callTool = async (name, args) => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error("workroom observation read budget exceeded");
       const reply = await mcpPost("tools/call", { name, arguments: args }, {
         mcpUrl: url,
+        env: transportEnv,
         bearerToken: credential.bearer,
         timeoutMs: Math.min(20_000, remaining),
         accept: "application/json, text/event-stream",
         fetchImpl: options.fetchImpl,
+        requestImpl: options.requestImpl,
+        resolveTrust: options.resolveTrust,
+        connection: trust?.connection,
         // DPF_MCP_URL is operator intent; `env` may be an injected copy, so the
         // client's own process.env check cannot see it.
         allowNonLoopbackEndpoint: Boolean(env.DPF_MCP_URL),

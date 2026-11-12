@@ -63,18 +63,32 @@ export function loadGraph(root = ROOT) {
 
 // production-`dependencies` root snapshot keys for a set of workspaces,
 // following first-party (@dpf/*) workspace links into their own prod deps.
-export function collectProdRoots(importers, wsList) {
-  const roots = new Set(), seen = new Set();
+function walkWorkspaceGraph(importers, wsList, { includeDev = false, strict = false } = {}) {
+  const roots = new Set(), workspaces = new Set();
   function walk(ws) {
-    if (seen.has(ws) || !importers[ws]) return;
-    seen.add(ws);
-    for (const dep of importers[ws].prod) {
+    if (workspaces.has(ws)) return;
+    if (!importers[ws]) {
+      if (strict) throw new Error(`Missing workspace importer: ${ws}`);
+      return;
+    }
+    workspaces.add(ws);
+    for (const dep of [...importers[ws].prod, ...(includeDev ? importers[ws].dev : [])]) {
       if (dep.value.startsWith("link:")) walk(posixJoin(ws, dep.value.slice(5)));
       else if (!dep.value.startsWith("workspace:")) roots.add(`${dep.name}@${dep.value}`);
+      else if (strict) throw new Error(`Unresolved workspace dependency: ${ws} -> ${dep.name}`);
     }
   }
   for (const ws of wsList) walk(ws);
-  return roots;
+  return { roots, workspaces };
+}
+
+export function collectProdRoots(importers, wsList) {
+  return walkWorkspaceGraph(importers, wsList).roots;
+}
+
+/** First-party build inputs, including development links; missing importers fail closed. */
+export function collectWorkspaceClosure(importers, wsList) {
+  return walkWorkspaceGraph(importers, wsList, { includeDev: true, strict: true }).workspaces;
 }
 
 // BFS over the snapshots graph from a set of root keys → all reachable full keys.

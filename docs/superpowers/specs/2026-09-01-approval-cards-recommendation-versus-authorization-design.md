@@ -290,3 +290,59 @@ blocks regressions, and scenario screenshots/results must pass before merge.
 After protected release, use normal self-upgrade and CAN-TEST preflight, then
 verify the canonical live Inbox and coworker happy path. Full-copy performance,
 CI fixture presentation and live acceptance are separate claims.
+
+## Readable requested actions — BI-038AA4BC, 2026-10-31
+
+**OBJ-ACTION:** A person can identify the proposed operation before opening
+technical evidence. **OBJ-INTEGRITY:** Naming the operation does not establish
+its effects, disclose protected work, or change authorization.
+
+Current owner Inbox evidence `cmvx5ar060w6d01pok72d87rg` found that an app-update
+request and a duplicate-work merge both displayed “Review this coworker
+request?” and an unavailable work name. Their actual operations appeared only
+inside Technical evidence. Later lease-cleanup cards had the same problem.
+The existing pure `envelopePrimaryDecision` recognizes reports, research and
+handovers, then discards the readable operation for other exact proposals.
+This is a presentation gap in the delivered projection, not evidence that
+PR #6751 or its earlier live verification never shipped.
+
+### Bounded presentation extension
+
+- **RQ-ACTION:** Extend the existing localized primary copy with specific
+  questions for registered operations, including requesting an app update,
+  combining duplicate work requests and releasing a shared test reservation.
+  Reuse the existing projection and renderer; add no action engine or endpoint.
+- **RQ-UNCERTAINTY:** Operation identity and verified effect are separate facts.
+  A readable question may name an exact operation while its effect stays
+  unresolved and its recommendation stays on hold. Unknown/malformed proposals
+  retain the existing generic fallback. Do not promote a tool name or an
+  assistant's audit reason into proof of scope, completion or reversibility.
+- **RQ-SCOPE:** Keep existing actual-viewer name admission. A missing or denied
+  work name stays explicitly unavailable; never substitute an internal ID or a
+  guessed title. A standard self-update request can name this app as its scope,
+  but cannot claim a particular version is installed or promise immediate work.
+  The handler may defer or decline admission under its normal release policy.
+- **RQ-FACTS:** Keep every existing material fact outside optional disclosure,
+  including nested, empty and false-valued payment/access/destination fields.
+  Naming an operation must not turn off the unknown-effect fact traversal.
+- **RQ-STATE:** Keep exact bindings, controls, endpoints, on-behalf decisions,
+  pending/unknown handling and completion states unchanged. No permission,
+  privacy, provider, scheduler or replay rule changes belong to this extension.
+- **RQ-FIT:** Reuse existing theme-aware components and localization. Verify
+  known named operations, unknown effects, report/research/handover regression
+  cases, narrow viewports, keyboard access and both themes against served bytes.
+
+The existing selective-disclosure decision and research above remain the design
+baseline. This extension preserves the primary/technical boundary rather than
+shortening raw IDs or collapsing the action controls. Model-written summaries
+are rejected as a source of exact effects. A fully verified action registry or
+new permission mechanism is outside this repair.
+
+The inert [copy prototype](2026-10-31-approval-readable-actions-prototype.html)
+and [ordered plan](../plans/2026-10-31-approval-readable-actions.md) distinguish
+named operations from unresolved effects. The prototype is proposed copy, not a
+live implementation or a passing UI result. After the initial design-only commit
+was published, current native medium-work readiness admitted implementation
+(`IRD-9803B3A7DD28`) and atomic plan coverage was recorded. Its current obligations
+are delivery evidence and independent live acceptance; no spec/architecture/plan
+review receipt is synthesized or required by that medium-work admission.

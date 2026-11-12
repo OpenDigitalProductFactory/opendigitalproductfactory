@@ -15,7 +15,7 @@ import type {
 } from "@/lib/feature-build-types";
 import { safeRenderValue } from "@/lib/safe-render";
 import { normalizeTaskResults, type NormalizedTaskResults } from "@/lib/build/task-results";
-import { normalizeVerificationOutput, type NormalizedVerificationOutput } from "@/lib/build/verification-output";
+import { normalizeVerificationOutput, projectVerificationEvidence, type NormalizedVerificationOutput } from "@/lib/build/verification-output";
 import { DecompositionCoordinator } from "@/components/build/DecompositionCoordinator";
 import { Notice } from "@/components/ui/report-kit";
 import { semanticReviewDecisionPresentation } from "@/lib/change-review/review-decision-presentation";
@@ -133,7 +133,7 @@ function EvidenceBar({ build }: { build: FeatureBuildRow }) {
     { label: "Design", ok: !!build.designDoc && build.designReview?.decision === "pass" && !isReviewExecutionIncomplete(build.designReview) },
     { label: "Plan", ok: !!build.buildPlan && build.planReview?.decision === "pass" && !isReviewExecutionIncomplete(build.planReview) },
     { label: "Build", ok: taskResults.totalTasks > 0 },
-    { label: "Verify", ok: verification.typecheckPassed === true },
+    { label: "Verify", ok: projectVerificationEvidence(verification).qualified },
     {
       label: "AC",
       ok: build.acceptanceMet
@@ -487,18 +487,16 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
     return null;
   }
 
-  const testsFailed = verification.testsFailed ?? 0;
-  const testsPassed = verification.testsPassed ?? 0;
-  const allPassed = verification.typecheckPassed === true && testsFailed === 0;
-  const badge = allPassed ? "Passed" : "Failed";
-  const badgeColor = allPassed ? "var(--dpf-success)" : "var(--dpf-error)";
+  const display = projectVerificationEvidence(verification);
+  const allPassed = display.qualified;
+  const badge = display.label;
+  const badgeColor = display.failed ? "var(--dpf-error)" : allPassed && !display.exempt ? "var(--dpf-success)" : undefined;
 
   const errors = parseVerificationErrors(verification.outputExcerpt);
-  const totalTests = testsPassed + testsFailed;
-  const typecheckCardClassName = verification.typecheckPassed
+  const typecheckCardClassName = verification.typecheckPassed !== false
     ? "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
     : "border-[var(--dpf-error)] bg-[var(--dpf-surface-2)]";
-  const testsCardClassName = testsFailed === 0
+  const testsCardClassName = !display.failed
     ? "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
     : "border-[var(--dpf-error)] bg-[var(--dpf-surface-2)]";
 
@@ -510,19 +508,18 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
           <div className={`rounded border p-2 ${typecheckCardClassName}`}>
             <div className="text-[10px] text-[var(--dpf-muted)]">TypeCheck</div>
             <div className="text-xs font-medium text-[var(--dpf-text)]">
-              {verification.typecheckPassed ? "No errors" : `${errors.length} error${errors.length === 1 ? "" : "s"}`}
+              {display.typecheckLabel}
             </div>
           </div>
           <div className={`rounded border p-2 ${testsCardClassName}`}>
             <div className="text-[10px] text-[var(--dpf-muted)]">Tests</div>
             <div className="text-xs font-medium text-[var(--dpf-text)]">
-              {totalTests > 0
-                ? `${testsPassed} passed${testsFailed > 0 ? `, ${testsFailed} failed` : ""}`
-                : "No tests run"}
+              {display.testsLabel}
             </div>
           </div>
         </div>
 
+        {display.conflictNotice && <p className="text-xs text-[var(--dpf-muted)]">{display.conflictNotice}</p>}
         {/* Parsed error list */}
         {errors.length > 0 && (
           <div className="space-y-1">
@@ -538,7 +535,7 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
         )}
 
         {/* Raw output toggle */}
-        {verification.outputExcerpt && (
+        {display.rawOutput && (
           <>
             <button
               type="button"
@@ -549,7 +546,7 @@ function VerificationSection({ verification }: { verification: NormalizedVerific
             </button>
             {showRaw && (
               <pre className="p-2 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[10px] text-[var(--dpf-muted)] whitespace-pre-wrap leading-relaxed max-h-48 overflow-auto">
-                {verification.outputExcerpt}
+                {display.rawOutput}
               </pre>
             )}
           </>

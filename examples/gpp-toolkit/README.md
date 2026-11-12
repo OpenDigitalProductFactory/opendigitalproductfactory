@@ -13,6 +13,15 @@ the sources listed in `closure.json` and the fixture, builds with NodeNext, runs
 the emitted JavaScript, and removes the temporary directory afterward. There are
 no application aliases or links to producer dependencies in that consumer.
 
+The Workroom source paths now contain compatibility exports of the independently
+maintained artifact named by `closure.json`. Bundled npm installs that exact local
+archive offline, with strict engine checks and scripts disabled, in a separate
+temporary package. Its regular emitted files and declarations join the consumer;
+only its declared exports are admitted. The helper verifies SHA-256, version and
+complete dependency-free emitted closure. No registry download or application
+boot is required. Workroom remains first-party; Zod remains the only third-party
+runtime dependency.
+
 ## Declared closures
 
 - `gpp/browser.ts` exports schemas, parser, resolver, checks, lowering, decompile,
@@ -128,8 +137,9 @@ translation code actually replaced after paired compatibility checks.
 
 ## Maintenance and rollback
 
-The portable production source remains in `packages/validators/src/gpp` and
-`workroom`; the canonical JSON leaf retains its existing owner. Update the explicit
+DPF's GPP implementation remains in `packages/validators/src/gpp`; its Workroom
+paths bridge to the pinned independent artifact. The current DPF canonical JSON
+leaf is unchanged. This pilot does not adopt the independent GPP package. Update the explicit
 manifest when those imports change, then rerun both closure builds, the behavioral
 smoke and generated-output compilation. The real DPF generator remains
 `apps/web/scripts/build-gpp-shapes.ts`; its byte-parity check is separate evidence.
@@ -138,5 +148,5 @@ The example and copied internal source carry the repository's Apache-2.0
 `LICENSE` and `NOTICE`. Copied third-party distributions retain their own notices.
 No package is published by this runner. Roll back the extracted source and its
 application import migration together; remove this example with that rollback.
-Native gates, production acceptance and browser qualification are unrun under
-the recorded local refactor exception.
+This fixture does not supply native runtime acceptance, production acceptance or
+actual browser qualification.

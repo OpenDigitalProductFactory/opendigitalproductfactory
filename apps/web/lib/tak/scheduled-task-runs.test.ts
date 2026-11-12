@@ -452,6 +452,31 @@ describe("a tool name is a token, not a substring (BI-4F64C5D3 follow-on)", () =
 // BI-43C3E914 — a Workroom stage's declared tools are pinned alongside the
 // writers the prompt names. Pinning only prompt-named tools was a GPP C-6
 // "Reach reconciliation" gap in the reverse direction.
+// BI-3F641F91 — a coworker cadence's declared writes (mandatedTools) granted
+// authority but were never pinned, so draft_marketing_asset competed on
+// relevance for 15 of 174 slots and a scheduled marketing run never drafted.
+describe("scheduledToolsNeedingPin with a cadence's declared writes", () => {
+  const SUMMARY_PROMPT = "Review the plan (get_marketing_summary), then record it with save_marketing_review.";
+  const REVIEW = { name: "save_marketing_review", sideEffect: true };
+  const DRAFT = { name: "draft_marketing_asset", sideEffect: true };
+
+  it("pins a declared write that was left deferred", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: SUMMARY_PROMPT, attached: [REVIEW], deferred: [DRAFT],
+      cadenceTools: ["save_marketing_review", "draft_marketing_asset"],
+    })).toEqual(["save_marketing_review", "draft_marketing_asset"]);
+  });
+
+  it("a Workroom stage keeps its own declared tools", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: SUMMARY_PROMPT, attached: [REVIEW], deferred: [DRAFT],
+      declaredStageTools: ["save_marketing_review"], cadenceTools: ["draft_marketing_asset"],
+    })).toEqual([]);
+  });
+});
+
 describe("scheduledToolsNeedingPin with a stage's declared tools", () => {
   const PROMPT = "Record what you did by calling record_workroom_evidence.";
   const WRITER = { name: "record_workroom_evidence", sideEffect: true };

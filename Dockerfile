@@ -53,6 +53,8 @@ COPY packages/integration-shared/package.json ./packages/integration-shared/
 COPY packages/storefront-templates/package.json ./packages/storefront-templates/
 COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
+# The integrity-pinned first-party artifact is an install input, not source to rebuild.
+COPY packages/validators/vendor/ ./packages/validators/vendor/
 # pnpm-workspace.yaml `patchedDependencies` names patch files by repo-relative
 # path. pnpm resolves them against the workspace root, so every stage that runs
 # `pnpm install` needs them in the build context — without this COPY the install
@@ -193,6 +195,9 @@ COPY scripts/check-data-impact.mjs ./scripts/
 # names the same surfaces CI will gate.
 COPY scripts/check-convergence-impact.mjs ./scripts/
 COPY scripts/convergence-surfaces.json ./scripts/
+# gate-context lists the docs a planned change affects (BI-9B17E889) through the
+# Docs Impact Gate's own computeImpact, so a Workroom sees them at claim time.
+COPY scripts/check-docs-impact.mjs ./scripts/
 COPY scripts/lib/gate-context.mjs ./scripts/lib/
 COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
 COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
@@ -371,6 +376,8 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
 # its devDependencies (prisma CLI, tsx) are runtime executables here, so the
 # install is deliberately NOT --prod. --offline: the pnpm store in this stage
 # already holds every package from the full install above.
+# The root importer also supplies the pinned shared Workroom package to
+# maintenance scripts under /app/apps/web-src that reach shape conformance.
 RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules services/*/node_modules && \
     pnpm install --frozen-lockfile --offline --filter "@dpf/db..." --config.confirmModulesPurge=false && \
     pnpm --filter @dpf/db exec prisma generate && \
@@ -431,6 +438,8 @@ COPY --from=init /app/.github ./.github
 COPY --from=init /app/config/ci-evidence-policy.json ./config/
 COPY --from=init /app/config/seed-content-paths.json ./config/
 COPY --from=init /app/apps/web/lib/ux-budget/route-budget-baseline.json ./apps/web/lib/ux-budget/
+COPY --from=init /app/apps/web/lib/docs/doc-impact.generated.json ./apps/web/lib/docs/
+COPY --from=init /app/apps/web/lib/docs-route-map.ts ./apps/web/lib/
 COPY --from=init /dpf-release-assets /dpf-release-assets
 # Managed operational scripts (backup/restore/trial-restore) are invoked at
 # runtime by the backup runners. They are committed from a Windows checkout,
@@ -455,6 +464,8 @@ RUN chmod +x /docker-entrypoint.sh
 # path so it is invoked directly, not shadowed by the Node base image's
 # /usr/local/bin/docker-entrypoint.sh passthrough.
 COPY scripts/portal-migrate-boot.sh /usr/local/bin/portal-migrate-boot.sh
+COPY scripts/runtime-secret-bootstrap.mjs /usr/local/bin/runtime-secret-bootstrap.mjs
+COPY scripts/lib/script-argv.mjs /usr/local/bin/lib/script-argv.mjs
 RUN chmod +x /usr/local/bin/portal-migrate-boot.sh
 
 # Source for Build Studio — copied to -src paths to avoid collision with standalone output
@@ -577,4 +588,4 @@ EXPOSE 3000
 # restart) can never leave the DB drifted. It is fail-closed: if migrations
 # can't apply, the portal does not start. portal-init is unaffected — it
 # overrides CMD with /docker-entrypoint.sh.
-CMD ["/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
+CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]

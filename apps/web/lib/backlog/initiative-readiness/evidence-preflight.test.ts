@@ -1,9 +1,10 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ item: vi.fn(), reviewer: vi.fn(), artifact: vi.fn() }));
+const mocks = vi.hoisted(() => ({ item: vi.fn(), reviewer: vi.fn(), artifact: vi.fn(), source: vi.fn(), inquiry: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { backlogItem: { findUnique: mocks.item } } }));
 vi.mock("./reviewer-identity", () => ({ resolveReviewerIdentity: mocks.reviewer }));
 vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: mocks.artifact }));
+vi.mock("@/lib/mcp/workroom-repository-source", () => ({ prepareWorkroomRepositorySource: mocks.source, prepareSourceInquiryResearch: mocks.inquiry }));
 import { preflightEvidenceArtifact } from "./evidence-preflight";
 
 const params = { itemId: "BI-OWN", gate: "research", decision: "pass", reason: "Verified the defect.",
@@ -11,9 +12,27 @@ const params = { itemId: "BI-OWN", gate: "research", decision: "pass", reason: "
 const context = { agentId: "AGT-OWN", tokenScope: "write" as const };
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.inquiry.mockResolvedValue(null);
   mocks.item.mockResolvedValue({ itemId: "BI-OWN", organizationId: "org-1" });
   mocks.reviewer.mockResolvedValue({ principalId: "PRN-OWN", kind: "coworker" });
   mocks.artifact.mockResolvedValue({ ok: true, artifact: { digest: "verified" } });
+});
+it.each([true, false])("admits selected research only through the authenticated Workroom source: %s", async admitted => {
+  const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/component",
+    commitSha: "a".repeat(40), path: "package.json", providerBlobId: "b".repeat(40) };
+  const sourceAdmission = { itemId: "BI-OWN", workroomId: "WC-OWN" };
+  mocks.source.mockResolvedValue(admitted ? { sourceAdmission } : null);
+  const result = await preflightEvidenceArtifact({ params: { ...params, artifactRef, workroomId: "WC-OWN" },
+    userId: "user-1", context });
+  expect(mocks.source).toHaveBeenCalledWith({ workroomId: "WC-OWN", userId: "user-1", agentId: "AGT-OWN",
+    itemId: "BI-OWN", target: { repositoryFullName: artifactRef.repositoryFullName, commitSha: artifactRef.commitSha } });
+  if (admitted) {
+    expect(result).toBeNull();
+    expect(mocks.artifact).toHaveBeenCalledWith(expect.objectContaining({ sourceAdmission }));
+  } else {
+    expect(result).toMatchObject({ success: false, error: "AUTHORIZATION_DENIED" });
+    expect(mocks.artifact).not.toHaveBeenCalled();
+  }
 });
 it.each(["ARTIFACT_AUTHOR_REQUIRED", "CANONICAL_DESIGN_REQUIRED", "CANONICAL_DESIGN_AMBIGUOUS"])(
   "never discloses canonical %s details before authority admits the caller", async code => {
@@ -75,4 +94,15 @@ it("rechecks the artifact on a later call instead of caching an earlier success"
   expect(await preflightEvidenceArtifact({ params, userId: "user-1", context }))
     .toMatchObject({ success: false, error: "ARTIFACT_AUTHOR_REQUIRED" });
   expect(mocks.artifact).toHaveBeenCalledTimes(2);
+});
+
+it("preflights author inquiry using the same binding as the final writer", async () => {
+  const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+    path: "package.json", providerBlobId: "b".repeat(40) };
+  const inquiryAdmission = { itemId: "BI-OWN", workroomId: "WC-INQUIRY", artifactRef };
+  mocks.inquiry.mockResolvedValue({ inquiryAdmission });
+  expect(await preflightEvidenceArtifact({ params: { ...params, artifactRef, workroomId: "WC-INQUIRY" },
+    userId: "user-1", context })).toBeNull();
+  expect(mocks.artifact).toHaveBeenCalledWith(expect.objectContaining({ inquiryAdmission }));
+  expect(mocks.source).not.toHaveBeenCalled();
 });

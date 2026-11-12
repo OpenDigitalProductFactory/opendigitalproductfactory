@@ -215,8 +215,10 @@ working on a DPF 2, and also to extract out some of the core components here
 into their own projects so we can better allow re-use of them in different
 scenarios. A more robust design is needed. But, we don't need it yet."
 
-This section records the delta so the work starts from a design. Nothing in it
-is built until the trigger in §9.4 is met.
+This section records the delta so the work starts from a design. The trigger
+was met by the extracted component repositories on 2026-10-31. §9.5 bounds the
+first source-admission slice; the full registry and commissioning work remains
+under `BI-A77BCB15`.
 
 ### 9.1 What is single-repository today
 
@@ -298,3 +300,43 @@ Two parts are already multi-repository safe and need no change:
 Start `BI-A77BCB15` when a second repository is ready to be managed: the first
 extracted component's own repository, or the DPF 2 repository. Until then, the
 single-repository design above stands.
+
+### 9.5 First slice: immutable public component source (`BI-32620FB2`)
+
+The component qualification item `BI-A574E138` exposed two singleton checks in
+`repository-artifact.ts`: immutable source reading and research artifact
+resolution rejected a Workroom's component repository because it differed from
+`PlatformDevConfig.upstreamRemoteUrl`. Kernel decision `DI-65F408A19FE6` selects
+a bounded public-source path before the full registry. This does not commission
+another repository or change credentials, intake routing, or product ownership.
+
+- The default canonical repository remains unchanged. A foreign read must select
+  an existing Workroom through its public identifier. The server resolves its
+  persisted item, repository, branch and full current commit, and requires the
+  authenticated actor's existing action admission. Caller-supplied source fields
+  cannot replace that binding.
+- `prepareWorkroomRepositorySource` reuses `resolveWorkroomReadSource` and the
+  current-artifact observation locks. Reads require an exact provider blob;
+  research recording also retains accountable-author/DCO, grant, classification,
+  receipt and subject validation. Source and actor admission are checked again
+  before returning bytes and under publication locks before a receipt is stored;
+  the persisted accountable owner is part of this binding too.
+- Existing readiness observation may recheck a valid latest research receipt's
+  exact current Workroom file anonymously. It returns only a digest through the
+  existing locked projection. The entire receipt/source binding must remain
+  current; this internal observation grants no actor access or write authority.
+- GitHub must independently report the exact repository as public. Every foreign
+  visibility, content and commit-provenance request is anonymous, refuses
+  redirects, and uses the existing bounded provider transport. Private, unknown,
+  changed, unbound or mismatched sources refuse. No credential resolver or local
+  Git fallback runs for foreign source, even if local objects share its commit.
+- This slice covers exact immutable file reading/search and non-independent
+  research. Foreign commit ranges, independent review and build-artifact paths
+  gain no new authority. The full per-product registry, commissioning, credentials
+  and issue routing in §9.2 remain separate work.
+
+Verification must pair the admitted public component case with wrong actor,
+subject, repository, head and blob cases, private/unknown visibility, changed or
+revoked source, and provider failures. A source-local test pass does not prove
+that the canonical install has adopted this repair or that component
+implementation is admitted there.

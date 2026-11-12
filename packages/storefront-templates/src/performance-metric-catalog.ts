@@ -16,6 +16,9 @@ const calculation = (
 const CALCULATIONS: Readonly<Record<string, PerformanceMetricCalculation>> = {
   sales: calculation("sum", "recognized-sales"),
   revenue: calculation("sum", "recognized-revenue"),
+  "posted-ledger-income": calculation("sum", "revenue-account-credits-minus-debits"),
+  "posted-ledger-expenses": calculation("sum", "expense-account-debits-minus-credits"),
+  "posted-ledger-net-result": calculation("sum", "signed-income-contributions", "negative-expense-contributions"),
   "gross-margin": calculation("ratio", "gross-profit", "revenue"),
   "cash-position": calculation("closing-balance", "available-cash"),
   demand: calculation("count", "accepted-demand"),
@@ -122,6 +125,9 @@ const metric = (
 const definitions = [
   metric("sales", "Sales", "currency", "orders", "day", "sum recognized sales", "prior-period", "financial", "/storefront/orders"),
   metric("revenue", "Revenue", "currency", "finance", "month", "sum recognized revenue", "prior-period", "financial"),
+  metric("posted-ledger-income", "Posted income", "currency", "finance-ledger", "month", "Income-account credits less debits, including effective reversals; recorded entries only.", "prior-period", "financial"),
+  metric("posted-ledger-expenses", "Posted expenses", "currency", "finance-ledger", "month", "Expense-account debits less credits, including effective reversals; recorded entries only.", "prior-period", "financial"),
+  metric("posted-ledger-net-result", "Recorded net result", "currency", "finance-ledger", "month", "Posted income less posted expenses; not a cash balance or proof of complete books.", "prior-period", "financial"),
   metric("gross-margin", "Gross margin", "percent", "finance", "month", "(revenue - direct cost) / revenue", "target", "financial"),
   metric("cash-position", "Cash position", "currency", "finance", "day", "closing available cash", "prior-period", "financial"),
   metric("demand", "Demand", "count", "work-intake", "day", "count accepted demand", "prior-period", "business"),
@@ -182,6 +188,10 @@ export const GENERIC_PERFORMANCE_PACK = pack(
   ["cash-position"],
   [],
   [],
+);
+
+const SOFTWARE_LEDGER_PERFORMANCE_PACK = pack(
+  ["posted-ledger-income", "posted-ledger-expenses", "posted-ledger-net-result"], [], [], [], [],
 );
 
 export const PRIORITY_PHYSICAL_VIEW_PACKS: Readonly<Record<string, PriorityPhysicalViewPack>> = {
@@ -274,5 +284,6 @@ export function getPerformanceMetricDefinition(
 export function resolvePerformanceMetricPack(
   archetypeId: string,
 ): PerformanceMetricPack {
-  return PRIORITY_PHYSICAL_VIEW_PACKS[archetypeId]?.performance ?? GENERIC_PERFORMANCE_PACK;
+  return archetypeId === "software-platform" ? SOFTWARE_LEDGER_PERFORMANCE_PACK
+    : PRIORITY_PHYSICAL_VIEW_PACKS[archetypeId]?.performance ?? GENERIC_PERFORMANCE_PACK;
 }

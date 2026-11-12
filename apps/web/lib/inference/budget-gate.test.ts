@@ -5,12 +5,16 @@ vi.mock("@dpf/db", () => ({
     tokenUsage: { aggregate: vi.fn() },
     agentBudgetEvent: { create: vi.fn() },
     modelProfile: { findUnique: vi.fn() },
-    modelProvider: { findUnique: vi.fn() },
+    modelProvider: { findUnique: vi.fn(), findMany: vi.fn(async () => []) },
     aiProviderFinanceProfile: { findUnique: vi.fn() },
+    platformDevConfig: { findUnique: vi.fn(async () => null) },
   },
 }));
 
-import { checkAgentBudget, writeBudgetEvent } from "./budget-gate";
+import {
+  AgentAllowanceExhaustedError, checkAgentBudget, checkAgentBudgetFromRegistry,
+  classifyProviderSpend, isZeroMarginalPricing, nextAllowanceReset, providerSpendClass, writeBudgetEvent,
+} from "./budget-gate";
 import { prisma } from "@dpf/db";
 
 function mockTokenUsage(input: number, output: number) {
@@ -51,6 +55,13 @@ describe("checkAgentBudget", () => {
     expect(result.actualTokens).toBe(105_000);
   });
 
+  it("enforces the real registered Critic daily limit instead of silently treating a missing runtime module as unlimited", async () => {
+    mockTokenUsage(200001, 0);
+    expect(await checkAgentBudgetFromRegistry("ux-design-critic")).toMatchObject({
+      status: "rejected", actualTokens: 200001, limitTokens: 200000,
+    });
+    expect(prisma.tokenUsage.aggregate).toHaveBeenCalledOnce();
+  });
   it("returns ok immediately when dailyLimit is 0 (unlimited)", async () => {
     const result = await checkAgentBudget("build-architect", 0);
     expect(result.status).toBe("ok");
@@ -64,6 +75,92 @@ describe("checkAgentBudget", () => {
     const result = await checkAgentBudget("build-architect", 100_000);
     expect(result.status).toBe("ok");
     expect(result.actualTokens).toBe(0);
+  });
+});
+
+// BI-F3B6713F: on 2026-11-03 change-reviewer hit its 200k cap on 178k local
+// tokens ($0.02) plus 28k subscription tokens ($0.00), and every PR stalled.
+describe("only real spend counts", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("treats compute-priced (local) and zero-token-priced (subscription) providers as free, and an unpriced one as paid", () => {
+    expect(isZeroMarginalPricing({ costModel: "compute", inputPricePerMToken: null, outputPricePerMToken: null })).toBe(true);
+    expect(isZeroMarginalPricing({ costModel: "token", inputPricePerMToken: 0, outputPricePerMToken: 0 })).toBe(true);
+    expect(isZeroMarginalPricing({ costModel: "token", inputPricePerMToken: 3, outputPricePerMToken: 15 })).toBe(false);
+    expect(isZeroMarginalPricing({ costModel: "token", inputPricePerMToken: null, outputPricePerMToken: null })).toBe(false);
+    expect(isZeroMarginalPricing(null)).toBe(false);
+  });
+
+  it("decides by the recorded price, never by the provider's name", async () => {
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce({ costModel: "token", inputPricePerMToken: 0, outputPricePerMToken: 0 } as never);
+    expect(await classifyProviderSpend("anthropic-sub")).toBe("free");
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce({ costModel: "token", inputPricePerMToken: 3, outputPricePerMToken: 15 } as never);
+    expect(await classifyProviderSpend("anthropic")).toBe("priced");
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce({ costModel: "token", inputPricePerMToken: null, outputPricePerMToken: null } as never);
+    expect(await classifyProviderSpend("openrouter")).toBe("unpriced");
+    vi.mocked(prisma.modelProvider.findUnique).mockResolvedValueOnce(null);
+    expect(await classifyProviderSpend("unregistered")).toBe("unpriced");
+    expect(providerSpendClass({ costModel: "compute", inputPricePerMToken: null, outputPricePerMToken: null })).toBe("free");
+  });
+
+  it("excludes free providers' usage from the agent's daily cap", async () => {
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValueOnce([{ providerId: "local" }, { providerId: "anthropic-sub" }] as never);
+    mockTokenUsage(0, 0);
+    const result = await checkAgentBudgetFromRegistry("change-reviewer");
+    expect(result).toMatchObject({ status: "ok", governedBy: "agent-cap", limitTokens: 200_000 });
+    expect(prisma.tokenUsage.aggregate).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ agentId: "change-reviewer", providerId: { notIn: ["local", "anthropic-sub"] } }),
+    }));
+  });
+});
+
+describe("the owner-set paid AI allowance governs instead of per-agent caps", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function mockSpend(costUsd: number) {
+    vi.mocked(prisma.tokenUsage.aggregate).mockResolvedValue({
+      _sum: { inputTokens: 900_000, outputTokens: 100_000, costUsd },
+    } as Awaited<ReturnType<typeof prisma.tokenUsage.aggregate>>);
+  }
+
+  it("ignores the agent's token cap once the owner records an allowance", async () => {
+    vi.mocked(prisma.platformDevConfig.findUnique).mockResolvedValueOnce({ paidInferenceDailyUsdAllowance: 25 } as never);
+    mockSpend(5);
+    // 1M paid tokens would be 5x the registry cap; the owner's $25 decides.
+    expect(await checkAgentBudgetFromRegistry("change-reviewer")).toMatchObject({
+      status: "ok", governedBy: "owner-allowance", spentUsd: 5, allowanceUsd: 25, ratioPercent: 20,
+    });
+    const where = vi.mocked(prisma.tokenUsage.aggregate).mock.calls[0]![0]!.where as Record<string, unknown>;
+    expect(where.agentId).toBeUndefined();
+  });
+
+  it("refuses once the installation's paid spend reaches the allowance", async () => {
+    vi.mocked(prisma.platformDevConfig.findUnique).mockResolvedValueOnce({ paidInferenceDailyUsdAllowance: 25 } as never);
+    mockSpend(25.01);
+    expect((await checkAgentBudgetFromRegistry("change-reviewer")).status).toBe("rejected");
+  });
+
+  it("an allowance of zero permits no paid calls", async () => {
+    vi.mocked(prisma.platformDevConfig.findUnique).mockResolvedValueOnce({ paidInferenceDailyUsdAllowance: 0 } as never);
+    mockSpend(0);
+    expect((await checkAgentBudgetFromRegistry("change-reviewer")).status).toBe("rejected");
+  });
+
+  it("falls back to the agent cap when the allowance cannot be read", async () => {
+    vi.mocked(prisma.platformDevConfig.findUnique).mockRejectedValueOnce(new Error("db down"));
+    mockTokenUsage(200_001, 0);
+    expect(await checkAgentBudgetFromRegistry("change-reviewer")).toMatchObject({ status: "rejected", governedBy: "agent-cap" });
+  });
+
+  it("names the reset time and how to raise it when refusing", () => {
+    const now = new Date("2026-11-03T18:40:00.000Z");
+    expect(nextAllowanceReset(now).toISOString()).toBe("2026-11-04T00:00:00.000Z");
+    const error = new AgentAllowanceExhaustedError({ agentId: "change-reviewer", now,
+      budget: { status: "rejected", actualTokens: 0, limitTokens: 0, ratioPercent: 100, governedBy: "owner-allowance", spentUsd: 25.5, allowanceUsd: 25 } });
+    expect(error.name).toBe("AgentAllowanceExhaustedError");
+    expect(error.resetAt).toBe("2026-11-04T00:00:00.000Z");
+    expect(error.message).toMatch(/^Daily allowance used: \$25\.50 of the \$25\.00 installation allowance/);
+    expect(error.message).toMatch(/Admin > Platform Development > Paid AI allowance/);
   });
 });
 

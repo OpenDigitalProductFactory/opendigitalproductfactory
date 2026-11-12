@@ -3,6 +3,7 @@ import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { rollbackSelfUpgrade, repairPromoterImage } from "@/lib/actions/promotions";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { MissedWindowNotice, type MissedWindow } from "@/components/ops/MissedWindowNotice";
 import { CoworkerActivityInspectionLink } from "./CoworkerActivityInspectionLink";
 import UpgradeImpactPanel from "@/components/ops/UpgradeImpactPanel";
 import type { SummaryResult, RunImpactDigest } from "@/lib/self-upgrade/impact/types";
@@ -47,6 +48,8 @@ type Props = {
   windowTimezone?: string;
   nextWindowStart?: string | null;
   nextScheduledCheckAt?: string | null;
+  /** BI-EF1AC111: last window that went without an upgrade check, and why. */
+  missedWindow?: MissedWindow | null;
   deployedSha: string | null;
   deployedShaSource?: ImageVersionSource;
   targetSha: string | null;
@@ -218,6 +221,7 @@ export default function SelfUpgradeClient({
   windowTimezone,
   nextWindowStart,
   nextScheduledCheckAt,
+  missedWindow,
   deployedSha,
   deployedShaSource,
   targetSha,
@@ -756,6 +760,7 @@ export default function SelfUpgradeClient({
               Maintenance window configured.
             </span>
           )}
+          <MissedWindowNotice missedWindow={missedWindow} />
           {windowSource === "auto-overnight" && autoWindowSummary && (
             <div className="mt-1 text-[var(--dpf-muted)]" data-window-source="auto-overnight">
               Your business runs 24/7, so upgrades run overnight (around{" "}

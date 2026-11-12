@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
     modelProfile: { updateMany: vi.fn(), findMany: vi.fn() },
+    modelProvider: { findUnique: vi.fn() },
+    aiProviderConnection: { findUnique: vi.fn() },
     platformConfig: { findUnique: vi.fn() },
   },
 }));
@@ -86,7 +88,11 @@ describe("resolveServedContextTarget — resource-aware (BI-3E614946)", () => {
 // Default: no operator override set → target is the build floor. Individual tests
 // override per case. Set in beforeEach because clearAllMocks() clears calls but
 // not implementations, so a prior test's mockResolvedValue would otherwise leak.
-beforeEach(() => mockPrisma.platformConfig.findUnique.mockResolvedValue(null));
+beforeEach(() => {
+  mockPrisma.platformConfig.findUnique.mockResolvedValue(null);
+  mockPrisma.modelProvider.findUnique.mockReset().mockResolvedValue({ providerId: "local", status: "active" });
+  mockPrisma.aiProviderConnection.findUnique.mockReset().mockResolvedValue({ status: "active" });
+});
 afterEach(() => vi.clearAllMocks());
 
 const GEN = "docker.io/ai/qwen3-coder:latest";
@@ -267,18 +273,20 @@ describe("reconcileLocalModelContext", () => {
   describe("n-gram speculation (BI-0D208EBB)", () => {
     const QUALIFIED = "Running: llama.cpp b9879-cuda (sha256:57130b8a) 72874f5";
     const SPEC = ["--spec-type", "ngram-mod"];
+    // A GPU engine also gets --no-mmap (BI-37A470F0), ahead of the speculation pair.
+    const GPU_SPEC = ["--no-mmap", ...SPEC];
 
     it("adds the speculation flags with context and residency on the qualified engine", async () => {
       mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
       const f = makeFetch({ configured: 40_960, engine: QUALIFIED });
       const r = await reconcileLocalModelContext(f.fetchImpl);
       expect(r.status).toBe("pinned");
-      expect(f.calls.postBodies).toEqual([{ "runtime-flags": SPEC, model: GEN, "context-size": 40_960, keep_alive: "-1" }]);
+      expect(f.calls.postBodies).toEqual([{ "runtime-flags": GPU_SPEC, model: GEN, "context-size": 40_960, keep_alive: "-1" }]);
     });
 
     it("is write-free once the qualified engine already carries them", async () => {
       mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
-      const f = makeFetch({ configured: 40_960, engine: QUALIFIED, extra: { "runtime-flags": SPEC } });
+      const f = makeFetch({ configured: 40_960, engine: QUALIFIED, extra: { "runtime-flags": GPU_SPEC } });
       expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("ok");
       expect(f.calls.post).toBe(0);
     });
@@ -287,7 +295,7 @@ describe("reconcileLocalModelContext", () => {
       mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 1 });
       const f = makeFetch({ configured: 4096, engine: QUALIFIED });
       await reconcileLocalModelContext(f.fetchImpl);
-      expect(f.calls.postBodies[0]?.["runtime-flags"]).toEqual(SPEC);
+      expect(f.calls.postBodies[0]?.["runtime-flags"]).toEqual(GPU_SPEC);
     });
 
     it("never adds them on an engine that was not qualified", async () => {
@@ -300,15 +308,46 @@ describe("reconcileLocalModelContext", () => {
     it("removes them when the operator turns speculation off", async () => {
       mockPrisma.platformConfig.findUnique.mockImplementation(configByKey({ "local.speculativeDecoding": "off" }));
       mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
-      const f = makeFetch({ configured: 40_960, engine: QUALIFIED, extra: { "runtime-flags": SPEC } });
+      const f = makeFetch({ configured: 40_960, engine: QUALIFIED, extra: { "runtime-flags": GPU_SPEC } });
       expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("pinned");
-      expect(f.calls.postBodies).toEqual([{ model: GEN, "context-size": 40_960, keep_alive: "-1" }]);
+      expect(f.calls.postBodies).toEqual([{ "runtime-flags": ["--no-mmap"], model: GEN, "context-size": 40_960, keep_alive: "-1" }]);
     });
 
     it("leaves operator-chosen runtime flags alone", async () => {
       mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
       const own = ["--spec-type", "ngram-simple"];
       const f = makeFetch({ configured: 40_960, engine: QUALIFIED, extra: { "runtime-flags": own } });
+      expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("ok");
+      expect(f.calls.post).toBe(0);
+    });
+  });
+
+  describe("host-wide runner ownership and memory (BI-37A470F0)", () => {
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("never writes the shared runner from the Build Studio sandbox", async () => {
+      // Live 2026-11-03: the sandbox reconciled the same DMR from its own
+      // database (no speculation-off row) and fought the portal: 24 reloads in a day.
+      vi.stubEnv("DPF_ENVIRONMENT", "sandbox");
+      const f = makeFetch({ configured: 4096, keepAlive: null, engine: "Running: llama.cpp b9879-cuda (sha256:x) y" });
+      const r = await reconcileLocalModelContext(f.fetchImpl);
+      expect(r.status).toBe("skipped");
+      expect(f.calls.post).toBe(0);
+      expect(f.calls.getConfigure).toBe(0);
+    });
+
+    it("keeps a GPU-served model out of host RAM with --no-mmap", async () => {
+      // Docker adds --no-mmap only on macOS; on Windows the 17.66 GB GGUF stayed
+      // mapped (18.9 GB working set) although every layer runs in VRAM.
+      mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+      const f = makeFetch({ configured: 40_960, engine: "Running: llama.cpp b8000-cuda (sha256:x) y" });
+      expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("pinned");
+      expect(f.calls.postBodies).toEqual([{ "runtime-flags": ["--no-mmap"], model: GEN, "context-size": 40_960, keep_alive: "-1" }]);
+    });
+
+    it("leaves a CPU-only engine memory-mapped", async () => {
+      mockPrisma.modelProfile.updateMany.mockResolvedValue({ count: 0 });
+      const f = makeFetch({ configured: 40_960 });
       expect((await reconcileLocalModelContext(f.fetchImpl)).status).toBe("ok");
       expect(f.calls.post).toBe(0);
     });
@@ -362,6 +401,17 @@ describe("reconcileLocalEmbedderPlacement (BI-B60AFE7B)", () => {
     const r = embedRuntime([{ id: GEN }]);
     expect((await reconcileLocalEmbedderPlacement(r.fetchImpl)).status).toBe("no-model");
     expect(r.posts).toEqual([]);
+  });
+
+  it("never writes the shared runner from the Build Studio sandbox (BI-37A470F0)", async () => {
+    vi.stubEnv("DPF_ENVIRONMENT", "sandbox");
+    try {
+      const r = embedRuntime([{ id: GEN }, { id: EMBED }]);
+      expect((await reconcileLocalEmbedderPlacement(r.fetchImpl)).status).toBe("skipped");
+      expect(r.posts).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
@@ -497,5 +547,29 @@ describe("resolveLocalServingPosture (BI-A8BFEFCE)", () => {
       servedContextTokens: null,
       presence: "unknown",
     });
+  });
+});
+
+describe("operator pause during local configuration reconciliation", () => {
+  it.each([
+    { configured: null },
+    { configured: 40960, keepAlive: "5m" },
+  ])("defers context/residency repair without reporting a change: %j", async opts => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
+    const r = makeFetch(opts);
+    expect(await reconcileLocalModelContext(r.fetchImpl)).toMatchObject({
+      status: "deferred", after: null, reason: expect.stringMatching(/paused by an operator/),
+    });
+    expect(r.calls.post).toBe(0);
+    expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("defers embedder placement without preloading it", async () => {
+    mockPrisma.aiProviderConnection.findUnique.mockResolvedValue({ status: "paused" });
+    const r = makeFetch({ models: [{ id: EMBED }] });
+    expect(await reconcileLocalEmbedderPlacement(r.fetchImpl)).toMatchObject({
+      status: "deferred", reason: expect.stringMatching(/paused by an operator/),
+    });
+    expect(r.calls.post).toBe(0);
   });
 });
