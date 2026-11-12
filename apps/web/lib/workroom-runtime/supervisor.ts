@@ -8,10 +8,13 @@
 // past the sandbox to a room decision), and revokes the credential when the
 // session ends.
 //
-// A live session is process-bound (§4.6): it lives in this process. The room
-// stores the provider thread, so after a restart the next start records the
-// lost session as cancelled_after_process_loss, revokes its credential, and
-// resumes the same provider thread.
+// A live session is process-bound (§4.6): its process is this portal's. What
+// outlives the process is durable (BI-F5D58F29, agent dialog broker §7.1): the
+// supervision record on the room (thread, status, the person who started it,
+// the address a room message names it by, its heartbeat and delivery cursor)
+// and every held question, on a CoworkerActionEnvelope. On boot the portal
+// re-attaches each supervised session to its stored thread, or marks it
+// supervision-lost on the room.
 
 import { createHash, randomUUID } from "node:crypto";
 
@@ -21,20 +24,22 @@ import type { CapsuleDb, WorkCapsuleActor } from "@/lib/work-capsules/work-capsu
 import type { WorkCapsuleActivityKind } from "@/lib/work-capsules";
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 
+import { createEnvelopeHeldRequestStore, type HeldRequestStore, type HeldRuntimeRequest } from "./held-request-store";
 import { decideClaudeToolCall, decideCodexRequest } from "./runtime-request-policy";
-import type { ExecutorAdapter, RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest, RuntimeSession } from "./types";
+import {
+  DEFAULT_RUNTIME_CWD,
+  providerClientAgentId,
+  readStoredRuntimeSession,
+  sessionQualifier,
+  type StoredRuntimeSession,
+  type SupervisionActor,
+} from "./supervised-session";
+import type { ExecutorAdapter, RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeSession } from "./types";
 
-export const DEFAULT_RUNTIME_CWD = "/workspace";
+export { DEFAULT_RUNTIME_CWD, readStoredRuntimeSession, type StoredRuntimeSession };
 
-export type StoredRuntimeSession = {
-  provider: RuntimeProvider;
-  threadId: string | null;
-  tokenId: string;
-  status: "open" | "closed";
-  openedAt: string;
-  closedAt?: string;
-  cwd: string;
-};
+/** A session not heard from for this long is not re-attached on boot: it is marked lost, quietly. */
+export const REATTACH_HORIZON_MS = 24 * 60 * 60_000;
 
 type LiveSession = {
   capsuleId: string;
@@ -44,14 +49,21 @@ type LiveSession = {
   tokenId: string;
   cwd: string;
   actor: WorkCapsuleActor;
-  /** Questions held for a room decision, by request id. */
-  held: Map<string, RuntimeRequest & { claudeKey?: string }>;
-  /** Claude tool calls a room decision accepted; asked again, they pass. */
-  approvedClaudeCalls: Set<string>;
+  /** Codex requests waiting on their provider answer in this process, by request id. */
+  providerPending: Set<string>;
   /** Input that arrived while a turn ran and could not steer it. */
   queued: string[];
   /** Log writes, in event order. */
   writes: Promise<unknown>;
+};
+
+export type SupervisionLost = {
+  capsuleId: string;
+  reason: string;
+  actingUserId: string | null;
+  addressedAs: string | null;
+  /** False for a session long silent: the room is told, nobody is woken for it. */
+  wakeCoordinator: boolean;
 };
 
 export type RuntimeSupervisorDeps = {
@@ -59,6 +71,14 @@ export type RuntimeSupervisorDeps = {
   mcpUrl: string;
   issueToken(input: { userId: string; agentId: string | null; capsuleId: string; runRef: string | null }): Promise<{ tokenId: string; plaintext: string }>;
   revokeTokens(input: { capsuleId: string; reason: string; tokenId?: string }): Promise<number>;
+  /** Held questions; defaults to CoworkerActionEnvelope rows. */
+  held?: HeldRequestStore;
+  /** The provider client's GAID, from which a session's address hangs. */
+  clientGaid?(provider: RuntimeProvider): Promise<string | null>;
+  /** Rooms whose stored session is still supervised, for the boot re-attach. */
+  listSupervisedRooms?(): Promise<Array<{ capsuleId: string; workspaceState: unknown }>>;
+  /** Tell the room supervision was lost, and wake its coordinator. */
+  onSupervisionLost?(input: SupervisionLost): Promise<void>;
   now?: () => Date;
 };
 
@@ -66,29 +86,37 @@ export type RuntimeResult = { success: boolean; error?: string; message: string;
 
 const refuse = (error: string, message: string): RuntimeResult => ({ success: false, error, message });
 
-export function readStoredRuntimeSession(workspaceState: unknown): StoredRuntimeSession | null {
-  if (!workspaceState || typeof workspaceState !== "object" || Array.isArray(workspaceState)) return null;
-  const stored = (workspaceState as Record<string, unknown>)["runtimeSession"];
-  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return null;
-  const record = stored as Record<string, unknown>;
-  if ((record["provider"] !== "codex" && record["provider"] !== "claude") || typeof record["tokenId"] !== "string") return null;
-  return {
-    provider: record["provider"],
-    threadId: typeof record["threadId"] === "string" ? record["threadId"] : null,
-    tokenId: record["tokenId"],
-    status: record["status"] === "open" ? "open" : "closed",
-    openedAt: typeof record["openedAt"] === "string" ? record["openedAt"] : "",
-    cwd: typeof record["cwd"] === "string" ? record["cwd"] : DEFAULT_RUNTIME_CWD,
-  };
-}
-
 function claudeCallKey(toolName: string, input: Record<string, unknown>): string {
   return createHash("sha256").update(`${toolName}\n${JSON.stringify(input)}`).digest("hex").slice(0, 32);
 }
 
+function requestCallKey(kind: string, summary: string): string {
+  return createHash("sha256").update(`${kind}\n${summary}`).digest("hex").slice(0, 32);
+}
+
+async function defaultClientGaid(provider: RuntimeProvider): Promise<string | null> {
+  const { getAgentGaidMap } = await import("@/lib/identity/principal-linking");
+  const agentId = providerClientAgentId(provider);
+  return (await getAgentGaidMap([agentId], prisma as never)).get(agentId) ?? null;
+}
+
+async function defaultListSupervisedRooms() {
+  return prisma.workroom.findMany({
+    where: {
+      archivedAt: null,
+      OR: ["supervised", "open"].map((status) => ({ workspaceState: { path: ["runtimeSession", "status"], equals: status } })),
+    },
+    select: { capsuleId: true, workspaceState: true },
+  });
+}
+
+const supervisionActor = (actor: WorkCapsuleActor): SupervisionActor => ({ userId: actor.userId, agentId: actor.agentId, principalId: actor.principalId });
+
 export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
   const live = new Map<string, LiveSession>();
   const clock = deps.now ?? (() => new Date());
+  const held = deps.held ?? createEnvelopeHeldRequestStore(prisma, clock);
+  const clientGaid = deps.clientGaid ?? defaultClientGaid;
 
   async function loadRoom(capsuleId: string) {
     return prisma.workroom.findUnique({
@@ -97,12 +125,16 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     });
   }
 
-  async function storeSession(roomId: string, session: StoredRuntimeSession | null) {
+  async function writeSession(roomId: string, update: (current: StoredRuntimeSession | null) => StoredRuntimeSession | null) {
     const room = await prisma.workroom.findUnique({ where: { id: roomId }, select: { workspaceState: true } });
     const state = room?.workspaceState && typeof room.workspaceState === "object" && !Array.isArray(room.workspaceState)
       ? room.workspaceState as Record<string, unknown> : {};
-    await prisma.workroom.update({ where: { id: roomId }, data: { workspaceState: { ...state, runtimeSession: session } as never } });
+    const next = update(readStoredRuntimeSession(state));
+    await prisma.workroom.update({ where: { id: roomId }, data: { workspaceState: { ...state, runtimeSession: next } as never } });
   }
+
+  const patchSession = (roomId: string, patch: Partial<StoredRuntimeSession>) =>
+    writeSession(roomId, (current) => (current ? { ...current, ...patch } : null));
 
   /** The runtime records as the person who opened it, attributed to the runtime agent. */
   const runtimeActor = (actor: WorkCapsuleActor): WorkCapsuleActor => ({ ...actor, agentId: "workroom-runtime" });
@@ -126,10 +158,18 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     if (live.get(entry.capsuleId) !== entry) return;
     live.delete(entry.capsuleId);
     await deps.revokeTokens({ capsuleId: entry.capsuleId, reason, tokenId: entry.tokenId });
-    await storeSession(entry.roomId, {
+    await writeSession(entry.roomId, (current) => ({
+      ...(current ?? { provider: entry.provider, tokenId: entry.tokenId, openedAt: "", cwd: entry.cwd }),
       provider: entry.provider, threadId: entry.session.threadId(), tokenId: entry.tokenId, status: "closed",
-      openedAt: "", closedAt: clock().toISOString(), cwd: entry.cwd,
-    });
+      closedAt: clock().toISOString(), cwd: entry.cwd,
+    }));
+  }
+
+  async function holdRequest(entry: LiveSession, request: HeldRuntimeRequest, reason: string) {
+    if (request.answeredBy === "provider") entry.providerPending.add(request.requestId);
+    await held.hold({ capsuleId: entry.capsuleId, provider: entry.provider, providerThreadId: entry.session.threadId(), actor: supervisionActor(entry.actor), request, reason });
+    await log(entry.roomId, "question", `Held for a room decision: ${request.summary} (${reason}).`,
+      { requestId: request.requestId, kind: request.kind, reason, decideWith: "drive_workroom_runtime action=decide" }, runtimeActor(entry.actor));
   }
 
   function onEvent(entry: LiveSession, event: RuntimeEvent) {
@@ -137,6 +177,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     switch (event.type) {
       case "turn-started":
         enqueue(entry, () => log(roomId, "action", `${entry.provider} started a turn`, { turnId: event.turnId, provider: entry.provider }, runtimeActor(entry.actor)));
+        enqueue(entry, () => patchSession(roomId, { lastHeartbeatAt: clock().toISOString() }));
         return;
       case "message":
         enqueue(entry, () => log(roomId, "response", event.text, { turnId: event.turnId, provider: entry.provider }, runtimeActor(entry.actor)));
@@ -145,6 +186,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
         enqueue(entry, () => log(roomId, event.status === "failed" ? "error" : "response",
           event.status === "failed" ? `Turn failed: ${event.error ?? "no detail"}` : `Turn ${event.status}.`,
           { turnId: event.turnId, status: event.status, provider: entry.provider }, runtimeActor(entry.actor)));
+        enqueue(entry, () => patchSession(roomId, { lastHeartbeatAt: clock().toISOString() }));
         void startNext(entry).catch(() => {});
         return;
       case "runtime-request": {
@@ -155,9 +197,15 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
           enqueue(entry, () => log(roomId, "action", `Accepted: ${request.summary}`, { requestId: request.requestId, kind: request.kind, reason: verdict.reason }, runtimeActor(entry.actor)));
           return;
         }
-        entry.held.set(request.requestId, request);
-        enqueue(entry, () => log(roomId, "question", `Held for a room decision: ${request.summary} (${verdict.reason}).`,
-          { requestId: request.requestId, kind: request.kind, reason: verdict.reason, decideWith: "drive_workroom_runtime action=decide" }, runtimeActor(entry.actor)));
+        const callKey = requestCallKey(request.kind, request.summary);
+        enqueue(entry, async () => {
+          if (await held.isApproved(entry.capsuleId, callKey)) {
+            await entry.session.respondToRuntimeRequest(request.requestId, "accept");
+            await log(roomId, "action", `Accepted by an earlier room decision: ${request.summary}`, { requestId: request.requestId, kind: request.kind }, runtimeActor(entry.actor));
+            return;
+          }
+          await holdRequest(entry, { ...request, callKey, answeredBy: "provider" }, verdict.reason);
+        });
         return;
       }
       case "session-exited":
@@ -167,7 +215,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     }
   }
 
-  async function start(input: { capsuleId: string; provider: RuntimeProvider; actor: WorkCapsuleActor; prompt?: string; model?: string | null; cwd?: string }): Promise<RuntimeResult> {
+  async function start(input: { capsuleId: string; provider: RuntimeProvider; actor: WorkCapsuleActor; prompt?: string; model?: string | null; cwd?: string; reattach?: boolean }): Promise<RuntimeResult> {
     const adapter = deps.adapters[input.provider];
     if (!adapter) return refuse("provider_unavailable", `No ${input.provider} runtime is configured on this install.`);
     if (live.has(input.capsuleId)) return refuse("already_running", `${input.capsuleId} already has a live runtime session; stop it first.`);
@@ -177,10 +225,12 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
       return refuse("room_terminal", `Workroom ${input.capsuleId} is ${room.status}; it cannot open a runtime.`);
     }
     const stored = readStoredRuntimeSession(room.workspaceState);
-    if (stored?.status === "open") {
+    if (stored?.status === "supervised") {
       // Process-bound (§4.6): the session died with its process. Say so, retire its credential, resume its thread.
       await deps.revokeTokens({ capsuleId: input.capsuleId, reason: "cancelled_after_process_loss", tokenId: stored.tokenId });
-      await log(room.id, "error", `cancelled_after_process_loss: the ${stored.provider} session ended with its process; resuming its thread.`, { stored }, runtimeActor(input.actor));
+      if (!input.reattach) {
+        await log(room.id, "error", `cancelled_after_process_loss: the ${stored.provider} session ended with its process; resuming its thread.`, { stored }, runtimeActor(input.actor));
+      }
     }
     const cwd = input.cwd ?? stored?.cwd ?? DEFAULT_RUNTIME_CWD;
     const token = await deps.issueToken({ userId: input.actor.userId, agentId: input.actor.agentId, capsuleId: input.capsuleId, runRef: room.taskRunId ?? null });
@@ -198,17 +248,28 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     }
     const entry: LiveSession = {
       capsuleId: input.capsuleId, roomId: room.id, provider: input.provider, session, tokenId: token.tokenId, cwd,
-      actor: input.actor, held: new Map(), approvedClaudeCalls: new Set(), queued: [], writes: Promise.resolve(),
+      actor: input.actor, providerPending: new Set(), queued: [], writes: Promise.resolve(),
     };
     live.set(input.capsuleId, entry);
     entryRef.current = entry;
     for (const event of pendingEvents) onEvent(entry, event);
     try {
       const threadId = await session.ensureThread();
-      await storeSession(room.id, { provider: input.provider, threadId, tokenId: token.tokenId, status: "open", openedAt: clock().toISOString(), cwd });
-      await log(room.id, "executor-changed", `Opened a supervised ${input.provider} runtime.`, { provider: input.provider, threadId, tokenId: token.tokenId }, input.actor);
+      const addressedAs = sessionQualifier(await clientGaid(input.provider).catch(() => null), threadId);
+      const at = clock().toISOString();
+      await writeSession(room.id, () => ({
+        provider: input.provider, threadId, tokenId: token.tokenId, status: "supervised", openedAt: at, cwd,
+        actor: supervisionActor(input.actor), addressedAs, lastHeartbeatAt: at,
+        // The session keeps its place in the room across a resume.
+        deliveredCursor: stored?.provider === input.provider ? stored.deliveredCursor ?? null : null,
+      }));
+      const address = addressedAs ? ` Address it in the room as ${addressedAs}.` : "";
+      await log(room.id, "executor-changed", input.reattach
+        ? `Re-attached the supervised ${input.provider} runtime to its thread after a portal restart.${address}`
+        : `Opened a supervised ${input.provider} runtime.${address}`,
+      { provider: input.provider, threadId, tokenId: token.tokenId, addressedAs }, input.reattach ? runtimeActor(input.actor) : input.actor);
       if (input.prompt?.trim()) await session.startTurn(input.prompt.trim());
-      return { success: true, message: `${input.provider} runtime open on ${input.capsuleId}.`, data: { capsuleId: input.capsuleId, provider: input.provider, threadId } };
+      return { success: true, message: `${input.provider} runtime open on ${input.capsuleId}.`, data: { capsuleId: input.capsuleId, provider: input.provider, threadId, addressedAs } };
     } catch (error) {
       await session.close().catch(() => {});
       await finish(entry, "session failed to start");
@@ -216,33 +277,60 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     }
   }
 
-  function liveOr(capsuleId: string): LiveSession | RuntimeResult {
-    return live.get(capsuleId)
-      ?? refuse("no_session", `${capsuleId} has no live runtime session in this process; start one (it resumes the room's thread).`);
+  async function turn(input: { capsuleId: string; prompt: string; steer?: boolean }): Promise<RuntimeResult> {
+    const entry = live.get(input.capsuleId);
+    if (!entry) return refuse("no_session", `${input.capsuleId} has no live runtime session in this process; start one (it resumes the room's thread).`);
+    if (entry.session.activeTurnId()) {
+      if (input.steer && await entry.session.steerTurn(input.prompt)) {
+        await log(entry.roomId, "action", "Steered the turn in progress.", { turnId: entry.session.activeTurnId() }, runtimeActor(entry.actor));
+        return { success: true, message: "Steered the turn in progress.", data: { outcome: "steered" } };
+      }
+      entry.queued.push(input.prompt);
+      return { success: true, message: "A turn is running; the input runs as the next turn.", data: { outcome: "queued", queued: entry.queued.length } };
+    }
+    const { turnId } = await entry.session.startTurn(input.prompt);
+    return { success: true, message: "Turn started.", data: { outcome: "started", turnId } };
   }
-  const isLive = (value: LiveSession | RuntimeResult): value is LiveSession => "session" in value;
+
+  async function markLost(capsuleId: string, stored: StoredRuntimeSession, reason: string, wakeCoordinator: boolean) {
+    const room = await loadRoom(capsuleId);
+    if (!room) return;
+    await deps.revokeTokens({ capsuleId, reason: `supervision-lost: ${reason}`, tokenId: stored.tokenId });
+    await patchSession(room.id, { status: "supervision-lost", lostReason: reason, closedAt: clock().toISOString() });
+    // The room log is written as the person who started supervision; a record
+    // from before item D names nobody, and the room notice alone says so.
+    if (stored.actor) {
+      await log(room.id, "error", `supervision-lost: the ${stored.provider} session${stored.addressedAs ? ` ${stored.addressedAs}` : ""} could not be re-attached after a portal restart (${reason}). Messages addressed to it wait on the room cursor until the runtime is started again.`,
+        { stored, reason }, runtimeActor({ ...stored.actor }));
+    }
+    await deps.onSupervisionLost?.({ capsuleId, reason, actingUserId: stored.actor?.userId ?? null, addressedAs: stored.addressedAs ?? null, wakeCoordinator });
+  }
 
   return {
     start,
+    turn,
 
-    async turn(input: { capsuleId: string; prompt: string; steer?: boolean }): Promise<RuntimeResult> {
-      const entry = liveOr(input.capsuleId);
-      if (!isLive(entry)) return entry;
-      if (entry.session.activeTurnId()) {
-        if (input.steer && await entry.session.steerTurn(input.prompt)) {
-          await log(entry.roomId, "action", "Steered the turn in progress.", { turnId: entry.session.activeTurnId() }, runtimeActor(entry.actor));
-          return { success: true, message: "Steered the turn in progress.", data: { outcome: "steered" } };
-        }
-        entry.queued.push(input.prompt);
-        return { success: true, message: "A turn is running; the input runs as the next turn.", data: { outcome: "queued", queued: entry.queued.length } };
+    /** True when this process holds the room's session: only then can a message become its turn. */
+    isLive(capsuleId: string): boolean {
+      return live.has(capsuleId);
+    },
+
+    /** A room message addressed to the session, as its next turn; the cursor moves past what it was handed. */
+    async deliver(input: { capsuleId: string; prompt: string; deliveredCursor: string }): Promise<RuntimeResult> {
+      const entry = live.get(input.capsuleId);
+      if (!entry) return refuse("no_session", `${input.capsuleId} has no live runtime session in this process.`);
+      const result = await turn({ capsuleId: input.capsuleId, prompt: input.prompt });
+      if (result.success) {
+        await patchSession(entry.roomId, { deliveredCursor: input.deliveredCursor, lastHeartbeatAt: clock().toISOString() });
+        enqueue(entry, () => log(entry.roomId, "action", "A room message addressed to this session was delivered as a turn.",
+          { outcome: result.data?.["outcome"] ?? null }, runtimeActor(entry.actor)));
       }
-      const { turnId } = await entry.session.startTurn(input.prompt);
-      return { success: true, message: "Turn started.", data: { outcome: "started", turnId } };
+      return result;
     },
 
     async interrupt(capsuleId: string): Promise<RuntimeResult> {
-      const entry = liveOr(capsuleId);
-      if (!isLive(entry)) return entry;
+      const entry = live.get(capsuleId);
+      if (!entry) return refuse("no_session", `${capsuleId} has no live runtime session in this process; start one (it resumes the room's thread).`);
       entry.queued.length = 0;
       await entry.session.interruptTurn();
       return { success: true, message: "Interrupt sent; the turn reports interrupted when it stops." };
@@ -260,19 +348,24 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
       return { success: true, message: `Stopped the ${entry.provider} runtime; its credential is revoked.` };
     },
 
+    /** Settle a held question. It is durable, so it is decidable whether or not the session is live here. */
     async decide(input: { capsuleId: string; requestId: string; decision: RuntimeDecision; reason: string; actor: WorkCapsuleActor }): Promise<RuntimeResult> {
-      const entry = liveOr(input.capsuleId);
-      if (!isLive(entry)) return entry;
-      const held = entry.held.get(input.requestId);
-      if (!held) return refuse("not_found", `No held request ${input.requestId} on ${input.capsuleId}.`);
-      entry.held.delete(input.requestId);
-      if (held.claudeKey) {
-        if (input.decision === "accept") entry.approvedClaudeCalls.add(held.claudeKey);
-      } else {
+      const found = await held.find(input.capsuleId, input.requestId);
+      if (!found) return refuse("not_found", `No held request ${input.requestId} on ${input.capsuleId}.`);
+      const settled = await held.settle({ capsuleId: input.capsuleId, requestId: input.requestId, decision: input.decision, decidedBy: input.actor.userId, reason: input.reason });
+      if (settled !== "settled") return refuse("already_decided", `${input.requestId} was already decided or has expired (${found.status}).`);
+      const entry = live.get(input.capsuleId);
+      let applied = "The decision applies when the session asks again.";
+      if (entry?.providerPending.has(input.requestId)) {
+        entry.providerPending.delete(input.requestId);
         await entry.session.respondToRuntimeRequest(input.requestId, input.decision);
+        applied = "The waiting session was answered.";
       }
-      await log(entry.roomId, "response", `Decided ${input.decision}: ${held.summary} (${input.reason})`, { requestId: input.requestId, decision: input.decision }, input.actor);
-      return { success: true, message: `Recorded ${input.decision} for ${input.requestId}.` };
+      const roomId = entry?.roomId ?? (await loadRoom(input.capsuleId))?.id;
+      if (roomId) {
+        await log(roomId, "response", `Decided ${input.decision}: ${found.request.summary} (${input.reason})`, { requestId: input.requestId, decision: input.decision }, input.actor);
+      }
+      return { success: true, message: `Recorded ${input.decision} for ${input.requestId}. ${applied}` };
     },
 
     /** Claude's --permission-prompt-tool, answered for the room the calling credential is bound to. */
@@ -280,25 +373,73 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
       Promise<{ behavior: "allow"; updatedInput: Record<string, unknown> } | { behavior: "deny"; message: string }> {
       const entry = live.get(input.capsuleId);
       if (!entry) return { behavior: "deny", message: "This room has no live runtime session." };
-      const key = claudeCallKey(input.toolName, input.toolInput);
-      const verdict = entry.approvedClaudeCalls.has(key)
-        ? { verdict: "accept" as const, reason: "the room decided to allow it" }
-        : decideClaudeToolCall({ toolName: input.toolName, input: input.toolInput, cwd: entry.cwd });
+      const verdict = decideClaudeToolCall({ toolName: input.toolName, input: input.toolInput, cwd: entry.cwd });
       if (verdict.verdict === "accept") return { behavior: "allow", updatedInput: input.toolInput };
+      const callKey = claudeCallKey(input.toolName, input.toolInput);
+      if (await held.isApproved(input.capsuleId, callKey)) return { behavior: "allow", updatedInput: input.toolInput };
       const requestId = `req-${randomUUID().slice(0, 8)}`;
       const summary = `${input.toolName} ${JSON.stringify(input.toolInput).slice(0, 300)}`;
-      entry.held.set(requestId, { requestId, kind: "tool", turnId: entry.session.activeTurnId(), summary, detail: input.toolInput, claudeKey: key });
-      enqueue(entry, () => log(entry.roomId, "question", `Held for a room decision: ${summary} (${verdict.reason}).`,
-        { requestId, kind: "tool", reason: verdict.reason, decideWith: "drive_workroom_runtime action=decide" }, runtimeActor(entry.actor)));
+      await holdRequest(entry, { requestId, kind: "tool", turnId: entry.session.activeTurnId(), summary, detail: input.toolInput, callKey, answeredBy: "re-ask" }, verdict.reason);
       return { behavior: "deny", message: `Held for a room decision (request ${requestId}): ${verdict.reason}. Continue with other work, or ask again once it is decided.` };
     },
 
-    status(capsuleId: string) {
+    async status(capsuleId: string) {
       const entry = live.get(capsuleId);
-      return entry
-        ? { live: true, provider: entry.provider, threadId: entry.session.threadId(), activeTurnId: entry.session.activeTurnId(),
-          held: [...entry.held.values()].map(({ requestId, kind, summary }) => ({ requestId, kind, summary })), queued: entry.queued.length }
-        : { live: false };
+      const heldRequests = await held.listOpen(capsuleId);
+      if (entry) {
+        return { live: true, provider: entry.provider, threadId: entry.session.threadId(), activeTurnId: entry.session.activeTurnId(),
+          held: heldRequests, queued: entry.queued.length };
+      }
+      const stored = readStoredRuntimeSession((await loadRoom(capsuleId))?.workspaceState);
+      return {
+        live: false,
+        ...(stored ? { supervision: stored.status, addressedAs: stored.addressedAs ?? null, ...(stored.lostReason ? { lostReason: stored.lostReason } : {}) } : {}),
+        ...(heldRequests.length > 0 ? { held: heldRequests } : {}),
+      };
+    },
+
+    /**
+     * Boot: re-attach every supervised session to its stored thread, as the
+     * person who started it. No turn is started, so nothing is spent. A session
+     * that cannot resume is marked supervision-lost on the room.
+     */
+    async reattachSupervised(): Promise<{ reattached: string[]; lost: string[]; closed: string[] }> {
+      const outcome = { reattached: [] as string[], lost: [] as string[], closed: [] as string[] };
+      const rooms = await (deps.listSupervisedRooms ?? defaultListSupervisedRooms)();
+      const now = clock().getTime();
+      for (const room of rooms) {
+        const stored = readStoredRuntimeSession(room.workspaceState);
+        if (!stored || stored.status !== "supervised" || live.has(room.capsuleId)) continue;
+        const heard = Date.parse(stored.lastHeartbeatAt ?? stored.openedAt);
+        try {
+          if (!Number.isFinite(heard) || now - heard > REATTACH_HORIZON_MS) {
+            await markLost(room.capsuleId, stored, "not heard from in the 24 hours before the restart", false);
+            outcome.lost.push(room.capsuleId);
+            continue;
+          }
+          if (!stored.actor) {
+            await markLost(room.capsuleId, stored, "no record of who started it, so it cannot be resumed as them", true);
+            outcome.lost.push(room.capsuleId);
+            continue;
+          }
+          const result = await start({ capsuleId: room.capsuleId, provider: stored.provider, actor: { ...stored.actor }, cwd: stored.cwd, reattach: true });
+          if (result.success) {
+            outcome.reattached.push(room.capsuleId);
+          } else if (result.error === "room_terminal" || result.error === "not_found") {
+            // The room ended while the portal was down: nothing is waiting on this session.
+            const current = await loadRoom(room.capsuleId);
+            if (current) await patchSession(current.id, { status: "closed", closedAt: clock().toISOString() });
+            await deps.revokeTokens({ capsuleId: room.capsuleId, reason: "room ended", tokenId: stored.tokenId });
+            outcome.closed.push(room.capsuleId);
+          } else {
+            await markLost(room.capsuleId, stored, result.message, true);
+            outcome.lost.push(room.capsuleId);
+          }
+        } catch (error) {
+          console.error("[workroom-runtime] re-attach failed for %s: %s", JSON.stringify(room.capsuleId), error instanceof Error ? error.message : "unknown");
+        }
+      }
+      return outcome;
     },
   };
 }

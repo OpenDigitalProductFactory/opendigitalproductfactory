@@ -61,9 +61,17 @@ Three comparable systems were checked for two questions: how a message reaches a
 - (AC-ADB-13) After a portal restart the session is re-attached, or marked `supervision-lost` on the room with its messages on the cursor and the coordinator woken.
 - A held permission request survives the restart and is still decidable.
 
-## Backlog coverage and traceability
+## Backlog coverage
 
-One deliverable, `D-supervision` (phases 1–4), covered by `BI-F5D58F29`.
+**Backlog item:** `BI-F5D58F29`
+
+- Decision: atomic
+- Receipt: `cmwcvukwc4qnd0emfnxf7y0rt`
+- Depends on: `BI-31C1FDEC` (B2, shipped)
+
+One deliverable, `D-supervision` (phases 1–4). No phase ships value alone.
+
+## Traceability
 
 | Kind | References |
 | --- | --- |
