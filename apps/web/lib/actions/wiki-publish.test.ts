@@ -11,7 +11,7 @@ vi.mock("@dpf/db", () => ({
     },
     wikiPageRevision: { create: vi.fn(), findFirst: vi.fn() },
     decisionPerspectiveProfile: { findUnique: vi.fn() },
-    perspectiveMaterial: { findUnique: vi.fn(), upsert: vi.fn() },
+    perspectiveMaterial: { findUnique: vi.fn(), upsert: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
@@ -41,6 +41,7 @@ beforeEach(() => {
   (prisma.decisionPerspectiveProfile.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
   (prisma.perspectiveMaterial.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
   (prisma.perspectiveMaterial.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({});
+  (prisma.perspectiveMaterial.updateMany as ReturnType<typeof vi.fn>).mockResolvedValue({ count: 0 });
 });
 
 // ─── Auth + validation ──────────────────────────────────────────────────────
@@ -61,6 +62,50 @@ describe("publishWikiOverlayPages — auth + validation", () => {
   it("rejects empty pageIds", async () => {
     const r = await publishWikiOverlayPages({ pageIds: [] });
     expect(r).toEqual({ ok: false, error: expect.stringMatching(/non-empty/i) });
+  });
+});
+
+// ─── Stance authority follows the page (BI-BD9DEC45) ────────────────────────
+
+describe("publishWikiOverlayPages — decision material follows the page status", () => {
+  const stancePage = (status: string) => ({
+    id: "wp_ruling",
+    slug: "stances/ruling-di-x",
+    title: "Ruling",
+    body: "## Stance\n\nRuled.",
+    status,
+    isKernel: false,
+    organizationId: "org_test",
+    pageKind: "stance",
+    abstract: null,
+  });
+
+  it("archiving a published stance revokes the material that made it gate-live", async () => {
+    (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([stancePage("published")]);
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.wikiPageRevision.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "rev_x" });
+
+    const r = await publishWikiOverlayPages({ pageIds: ["wp_ruling"], targetStatus: "archived" });
+
+    expect(r.ok).toBe(true);
+    expect(prisma.perspectiveMaterial.updateMany).toHaveBeenCalledWith({
+      where: { sourceRef: { path: ["wikiPageId"], equals: "wp_ruling" }, promotionState: "promoted" },
+      data: { promotionState: "revoked" },
+    });
+  });
+
+  it("republishing an archived stance restores its material", async () => {
+    (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([stancePage("archived")]);
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.wikiPageRevision.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "rev_x" });
+
+    const r = await publishWikiOverlayPages({ pageIds: ["wp_ruling"] });
+
+    expect(r.ok).toBe(true);
+    expect(prisma.perspectiveMaterial.updateMany).toHaveBeenCalledWith({
+      where: { sourceRef: { path: ["wikiPageId"], equals: "wp_ruling" }, promotionState: "revoked" },
+      data: { promotionState: "promoted" },
+    });
   });
 });
 
