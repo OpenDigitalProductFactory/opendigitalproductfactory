@@ -100,6 +100,13 @@ Proposed contract, subject to independent review:
   adapter derives the names from the final provider surface after terminal
   narrowing. A restricted session requires both admitted authority and this
   constraint; malformed or unknown versions fail verification.
+- Mint restricted tokens with the single scalar audience
+  `dpf-mcp-server-restricted-v1`, never the ordinary `dpf-mcp-server` audience
+  and never an audience array. The restricted audience requires a coherent
+  version-1 surface and the existing task/fence contract. The new verifier must
+  explicitly reject arrays, a missing surface on the restricted audience, and
+  a surface on the ordinary audience. Signature verification accepting either
+  audience is not sufficient without these payload checks.
 - Filter `handleToolsList` by the signed surface after existing user, token and
   coworker checks. Apply the same constraint in `handleToolsCall` before domain
   dispatch and before the special `load_tools` branch. Restricted sessions do
@@ -123,6 +130,33 @@ This placement follows inspected `session-token.ts`, `transport-auth.ts`,
 `route.ts` and `mcp-governed-execute.ts`; code graph lookup corroborated the
 existing `McpSessionPayload` home. It is design only. Product-path claims and
 implementation admission are still required before changing these files.
+
+### Mixed versions and rollback
+
+A source-only synthetic probe of the real legacy `session-token.ts` verifier
+confirmed a downgrade hazard in the first draft. With the old audience, it
+accepted admitted reader/writer scopes and silently discarded `toolSurface`.
+It rejected a distinct new-only audience. An array containing both audiences
+was accepted and also lost the surface. The examined source SHA256 was
+`d5efe21093c1f706a8495129d4f413c369b97cd3a45826030caaff86909f70c7`.
+The coordinator executed that probe with synthetic signing material, real
+verification, no network calls and no task/fence exercise. It is a concrete
+compatibility counterexample, not runtime acceptance or an independent verdict.
+
+The incompatible restricted audience makes an old receiver reject these tokens
+before using their scopes. On a mixed-version deployment or rollback, refusal
+must terminate that restricted native turn; the adapter must not remint with the
+old audience, use dual audiences, remove the surface, or fall back to an
+unconstrained native/text execution. Ordinary tokens without this contract keep
+their old audience and existing behavior. This protocol boundary does not change
+the issuer, signing authority, lifetime limits or task/source/fence checks.
+
+The regression must execute the real verifier from the named pre-change source
+against synthetic restricted tokens, rather than mock an old receiver's refusal.
+It must demonstrate old-verifier rejection of the chosen audience and preserve
+the old/dual-audience acceptance counterexamples as negative controls. Test the
+new verifier's audience/surface coherence, array rejection, unsupported version,
+missing surface and unsafe-fallback refusal as well as ordinary legacy success.
 
 The MCP tools specification treats listing as a request-authorized surface;
 this supports keeping authenticated session presentation explicit rather than
@@ -148,7 +182,8 @@ These references inform the boundary; this repair does not add OAuth token excha
    and negative validation with no broad grant additions or policy bypasses.
 4. Make the isolated regression pass. Cover missing, empty and revoked authority;
    altered task/fence/source; forbidden direct reader calls; listing/deferred-load
-   widening; malformed claims; and unchanged ordinary/read-only session behavior.
+   widening; malformed claims; mixed-version and rollback audience downgrade;
+   and unchanged ordinary/read-only session behavior.
    Run affected token, adapter, route, nested-dispatch and review-binding suites
    plus package typechecks under managed dependency readiness.
 5. Run the required exact-tree governed verification and independent committed
