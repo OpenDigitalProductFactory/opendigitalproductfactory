@@ -51,6 +51,14 @@ describe("stream event ids", () => {
     expect(decodeStreamEventId(id)).toEqual({ streamId, ms: 1_731_370_000_123 });
   });
 
+  it("stays unique for two frames in the same millisecond (MCP: ids MUST be globally unique)", () => {
+    const streamId = newStreamId();
+    const a = encodeStreamEventId(streamId, 1_731_370_000_123, 1);
+    const b = encodeStreamEventId(streamId, 1_731_370_000_123, 2);
+    expect(a).not.toBe(b);
+    expect(decodeStreamEventId(b)).toEqual({ streamId, ms: 1_731_370_000_123 });
+  });
+
   it("refuses a Last-Event-ID this server did not issue", () => {
     for (const bad of [null, "", "abc", "short.1", "x".repeat(20), `${"a".repeat(20)}.-5`, `${"a".repeat(20)}.1e3`, `${"a".repeat(20)}.${Number.MAX_SAFE_INTEGER}9`]) {
       expect(decodeStreamEventId(bad)).toBeNull();

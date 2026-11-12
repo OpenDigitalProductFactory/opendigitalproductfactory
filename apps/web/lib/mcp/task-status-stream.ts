@@ -72,7 +72,10 @@ export async function openMcpTaskStatusStream(
 
   const resumed = decodeStreamEventId(request.headers.get("last-event-id"));
   const streamId = resumed?.streamId ?? newStreamId();
-  const eventId = (ms: number) => encodeStreamEventId(streamId, ms);
+  // A resumed stream keeps its id, so its counter starts past anything the
+  // earlier connection could have sent, keeping every id unique.
+  let sequence = resumed ? now().getTime() % 1_000_000_000 : 0;
+  const eventId = (ms: number) => encodeStreamEventId(streamId, ms, (sequence += 1));
 
   const rooms = options.rooms && owner.agentId ? options.rooms : null;
   const roomAuth: RoomResourceAuth | null = rooms && owner.agentId

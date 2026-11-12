@@ -85,8 +85,8 @@ describe("openMcpTaskStatusStream", () => {
     db.findMany.mockResolvedValue([task]);
     const response = await openMcpTaskStatusStream(new Request("http://localhost:3000/api/mcp/v1"), owner);
     const frames = await readFrames(response.body!.getReader(), 3);
-    expect(frames).toMatch(/id: [A-Za-z0-9]{16,64}\.\d+\nretry: \d+\ndata: \n\n/);
-    expect(frames).toMatch(/id: [A-Za-z0-9]{16,64}\.\d+\ndata: \{"jsonrpc":"2.0","method":"notifications\/tasks\/status"/);
+    expect(frames).toMatch(/id: [A-Za-z0-9]{16,64}\.\d+\.1\nretry: \d+\ndata: \n\n/);
+    expect(frames).toMatch(/id: [A-Za-z0-9]{16,64}\.\d+\.2\ndata: \{"jsonrpc":"2.0","method":"notifications\/tasks\/status"/);
   });
 });
 
@@ -128,7 +128,7 @@ describe("room lane (BI-ED52AB82)", () => {
     });
     expect(f.handles[0]!.deliver("dpf://rooms/backlog-item%3ABI-1/messages", new Date("2026-11-12T00:00:59.000Z"))).toBe(true);
     const frame = await readFrames(reader, 1);
-    expect(frame).toMatch(/^id: [A-Za-z0-9]+\.1794441659000\n/);
+    expect(frame).toMatch(/^id: [A-Za-z0-9]+\.1794441659000\.2\n/);
     expect(frame).toContain('"method":"notifications/resources/updated","params":{"uri":"dpf://rooms/backlog-item%3ABI-1/messages"}');
     expect(frame).not.toContain("body");
     expect(f.fanout.replay).not.toHaveBeenCalled();
@@ -146,6 +146,8 @@ describe("room lane (BI-ED52AB82)", () => {
     );
     const frames = await readFrames(response.body!.getReader(), 2);
     expect(frames).toContain(`id: ${streamId}.`);
+    // The counter resumes past the earlier connection's ids (now % 1e9 = 441660000, then +1).
+    expect(frames).toContain(`id: ${streamId}.1794441660000.441660001`);
     expect(f.fanout.replay).toHaveBeenCalledWith(f.handles[0], new Date(1_794_441_600_000 - 30_000));
   });
 

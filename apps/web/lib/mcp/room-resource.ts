@@ -38,25 +38,28 @@ export function parseRoomResourceUri(uri: unknown): string | null {
   }
 }
 
-const STREAM_ID_RE = /^[A-Za-z0-9]{16,64}$/;
-
 export function newStreamId(): string {
   return randomUUID().replaceAll("-", "");
 }
 
-export function encodeStreamEventId(streamId: string, ms: number): string {
-  return `${streamId}.${Math.max(0, Math.floor(ms))}`;
+/**
+ * `<streamId>.<epochMs>[.<seq>]`. The time is the replay watermark; the
+ * per-stream sequence keeps two frames sent in one millisecond distinct, since
+ * MCP requires an event id to be unique across all of a client's streams.
+ */
+export function encodeStreamEventId(streamId: string, ms: number, seq?: number): string {
+  const base = `${streamId}.${Math.max(0, Math.floor(ms))}`;
+  return seq === undefined ? base : `${base}.${Math.max(0, Math.floor(seq))}`;
 }
+
+const EVENT_ID_RE = /^([A-Za-z0-9]{16,64})\.(\d{1,16})(?:\.\d{1,12})?$/;
 
 export function decodeStreamEventId(value: unknown): { streamId: string; ms: number } | null {
   if (typeof value !== "string") return null;
-  const dot = value.lastIndexOf(".");
-  if (dot <= 0) return null;
-  const streamId = value.slice(0, dot);
-  const msText = value.slice(dot + 1);
-  if (!STREAM_ID_RE.test(streamId) || !/^\d{1,16}$/.test(msText)) return null;
-  const ms = Number(msText);
-  return Number.isSafeInteger(ms) ? { streamId, ms } : null;
+  const match = EVENT_ID_RE.exec(value);
+  if (!match?.[1] || !match[2]) return null;
+  const ms = Number(match[2]);
+  return Number.isSafeInteger(ms) ? { streamId: match[1], ms } : null;
 }
 
 /**
