@@ -266,6 +266,7 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
   // still be ready for implementation.
   const readiness = await enforceBuildInitiativeReadiness({
     buildId, target: "implementation", targetPhase: "build", expectedPhase: "review",
+    expectedWorkroom: shape.room,
   });
   if (!readiness.allowed) {
     await log(`Guards failed on this build's change (${failure.failedGuards.join(", ")}), but it was not handed back: ${readiness.message}`);

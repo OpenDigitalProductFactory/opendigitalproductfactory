@@ -16,6 +16,7 @@ vi.mock("./escalate-build-to-human", () => ({ escalateBuildToHuman: mocks.escala
 import { routeGauntletFailureToRepair } from "./gauntlet-repair";
 
 const failure = { treeSha: "retained-tree", recordId: "existing-guard-evidence", failedGuards: ["Docs Impact"] };
+const nativeRoom = { id: "room-row", capsuleId: "WC-FIXTURE" };
 const build = {
   id: "build-row", buildId: "FB-FIXTURE", phase: "review", title: "Labelled recovery fixture",
   originatingBacklogItemId: "item-row", verificationOut: { retainedEvidence: "must survive" },
@@ -28,7 +29,7 @@ describe("review repair metadata recovery (BI-1173F1CC)", () => {
     mocks.findBuild.mockResolvedValue(structuredClone(build));
     mocks.move.mockResolvedValue({ count: 1 });
     mocks.log.mockResolvedValue({});
-    mocks.reconcile.mockResolvedValue({ kind: "ready", healed: false, detail: "already shaped" });
+    mocks.reconcile.mockResolvedValue({ kind: "ready", healed: false, room: nativeRoom, detail: "already shaped" });
     mocks.readiness.mockResolvedValue({ allowed: true });
   });
 
@@ -37,7 +38,7 @@ describe("review repair metadata recovery (BI-1173F1CC)", () => {
     mocks.findBuild.mockResolvedValue({ ...build, verificationOut: { ...build.verificationOut, gauntletRepair: { ...failure, attempts: 1 } } });
     mocks.reconcile.mockImplementation(async () => {
       bound = true;
-      return { kind: "ready", healed: true, detail: "bound from owning item" };
+      return { kind: "ready", healed: true, room: nativeRoom, detail: "bound from owning item" };
     });
     mocks.readiness.mockImplementation(async () => ({ allowed: bound, message: "PLAN_REQUIRED" }));
     expect(await routeGauntletFailureToRepair(build.buildId, failure)).toBe("repair-queued");
@@ -58,11 +59,11 @@ describe("review repair metadata recovery (BI-1173F1CC)", () => {
   });
 
   it("keeps a real plan denial after metadata repair with no phase or budget mutation", async () => {
-    mocks.reconcile.mockResolvedValue({ kind: "ready", healed: true, detail: "shape bound" });
+    mocks.reconcile.mockResolvedValue({ kind: "ready", healed: true, room: nativeRoom, detail: "shape bound" });
     mocks.readiness.mockResolvedValue({ allowed: false, message: "PLAN_REQUIRED: current access-sensitive plan still owes independent review" });
     expect(await routeGauntletFailureToRepair(build.buildId, failure)).toBe("not-ready");
     expect(mocks.reconcile).toHaveBeenCalledOnce();
-    expect(mocks.readiness).toHaveBeenCalledWith({ buildId: build.buildId, target: "implementation", targetPhase: "build", expectedPhase: "review" });
+    expect(mocks.readiness).toHaveBeenCalledWith({ buildId: build.buildId, target: "implementation", targetPhase: "build", expectedPhase: "review", expectedWorkroom: nativeRoom });
     expect(mocks.move).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
     expect(mocks.send).not.toHaveBeenCalled();
