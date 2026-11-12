@@ -73,6 +73,15 @@ async function proposeLeaveDecisionHandler(
     taskRunId: context?.taskRunId,
   });
 
+  if (recommendation.status === "refused") {
+    return {
+      success: false,
+      error: "decision_record_missing",
+      message: recommendation.reason,
+      data: { recommendationId: recommendation.recommendationId, status: recommendation.status, recommendation: decision.action, guardReasons: decision.guardReasons },
+    };
+  }
+
   return {
     success: true,
     entityId: recommendation.recommendationId,

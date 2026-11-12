@@ -71,6 +71,13 @@ function run(f: ReturnType<typeof fixtures>) {
 }
 
 describe("runApprovedPlatformRequest", () => {
+  it("retains the original captured fence through delayed platform approval", async () => {
+    const taskExecutionFence = { schemaVersion: 1, reservation: "original", dispatchClaim: null, authorityDigest: null, requestDigest: "a".repeat(64) };
+    const f = fixtures({ park: { parameters: { ...PARAMS, _approvalResume: MARKER, _taskExecutionFence: taskExecutionFence } } });
+    await run(f);
+    expect(f.execute).toHaveBeenCalledWith(expect.objectContaining({ rawParams: PARAMS,
+      context: expect.objectContaining({ taskExecutionFence }) }));
+  });
   it("proves unchanged raw arguments against the separately sealed author fact and still enters the governor", async () => {
     const authorResearchBinding = { itemId: "BI-AUTHOR", buildId: "FB-AUTHOR", revisionId: "revision-1",
       valueDigest: "sha256:value", contentDigest: "sha256:bytes", authorUserId: "user-1", authorPrincipalId: "principal-author",
@@ -91,7 +98,7 @@ describe("runApprovedPlatformRequest", () => {
       userContext: { userId: "user-1", platformRole: "HR-000", isSuperuser: true },
       context: {
         agentId: "AGT-OPS", threadId: "thread-1", taskRunId: "TR-SCHED-1", routeContext: "/platform/ops",
-        proposeBoundary: true, approvalCompletion: "platform",
+        proposeBoundary: true, approvalCompletion: "platform", callerClient: "approval-completion",
         coworkerAuthorizedSurfaceBaseline: true,
         authorizedSurfaceContext: { mode: "background", route: "/platform/ops" },
         externalAccessEnabled: true,

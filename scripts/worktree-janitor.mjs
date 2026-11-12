@@ -11,6 +11,8 @@
 // FLAGS
 //   --dry-run       (default) Classify only; never remove.
 //   --live          Remove eligible worktrees via junction-safe helper + branch -D.
+//                   A Tier B branch with commits on no remote is first saved at
+//                   refs/janitor-backup/<YYYY-MM-DD>/<branch>; if that fails it is kept.
 //   --tier-a-only   Live reaps ONLY Tier A (merged+clean). Tier B is always observe.
 //                   The Inngest schedule uses this for auto-reap.
 //   --grace-days N  Stale threshold for Tier B (default 14).
@@ -37,6 +39,7 @@ import {
   isWorktreeSessionLive,
   heartbeatTtlMs,
 } from "./lib/worktree-session-heartbeat.mjs";
+import { sanitizeForLog } from "./lib/safe-log.mjs";
 import {
   loadActiveWorkroomPaths,
   pathHasActiveClaim,
@@ -257,6 +260,26 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims) {
   };
 }
 
+/**
+ * BI-EBBBDF40 — a Tier B branch is unmerged, and `branch -D` leaves commits that
+ * are on no remote reachable only from the reflog. Pin such a tip at
+ * refs/janitor-backup/<date>/<branch> first. `ok: false` means the branch has
+ * (or may have) unpushed commits and no backup was written: keep the worktree.
+ */
+export function backupUnpushedBranch(root, branch, date = new Date().toISOString().slice(0, 10), git = runGit) {
+  const count = git(["rev-list", "--count", `refs/heads/${branch}`, "--not", "--remotes"], root);
+  const unpushed = Number(count.stdout);
+  if (!count.ok || !Number.isInteger(unpushed)) {
+    return { ok: false, ref: null, unpushed: null, reason: "cannot count unpushed commits" };
+  }
+  if (unpushed === 0) return { ok: true, ref: null, unpushed: 0 };
+  const ref = `refs/janitor-backup/${date}/${branch}`;
+  const tip = git(["rev-parse", `refs/heads/${branch}`], root);
+  const write = tip.ok && tip.stdout ? git(["update-ref", ref, tip.stdout], root) : tip;
+  if (!write.ok) return { ok: false, ref, unpushed, reason: `could not write ${ref}` };
+  return { ok: true, ref, unpushed };
+}
+
 function removeWorktree(root, wtPath, branch) {
   const helper = path.join(here, "lib", "junction-safe-worktree-remove.mjs");
   const rem = spawnSync(process.execPath, [helper, root, wtPath, "--force"], {
@@ -306,7 +329,7 @@ async function main(argv = process.argv.slice(2)) {
   const claims = await loadActiveWorkroomPaths();
   if (!claims.available) {
     console.error(
-      `[worktree-janitor] Workroom claims UNREADABLE (${claims.reason}) — every worktree will be ` +
+      `[worktree-janitor] Workroom claims UNREADABLE (${sanitizeForLog(claims.reason)}) — every worktree will be ` +
         "kept. A reaper that cannot ask who is working must not decide that nobody is.",
     );
   }
@@ -353,8 +376,21 @@ async function main(argv = process.argv.slice(2)) {
     decisions.push(row);
 
     if (!args.dryRun && isLiveReapEligible(policy, verdict)) {
+      const backup = verdict === "PRUNE_TIER_B" && facts.branch ? backupUnpushedBranch(root, facts.branch) : null;
+      if (backup && !backup.ok) {
+        console.error(
+          `[worktree-janitor] KEEP ${sanitizeForLog(facts.path)}: ${sanitizeForLog(backup.reason)} for ${sanitizeForLog(facts.branch)}`,
+        );
+        removals.push({ path: facts.path, branch: facts.branch, worktreeRemoved: false, branchDeleted: false, backup });
+        continue;
+      }
+      if (backup?.ref) {
+        console.error(
+          `[worktree-janitor] backed up ${backup.unpushed} unpushed commit(s) of ${sanitizeForLog(facts.branch)} at ${backup.ref}`,
+        );
+      }
       const result = removeWorktree(root, facts.path, facts.branch);
-      removals.push({ path: facts.path, branch: facts.branch, ...result });
+      removals.push({ path: facts.path, branch: facts.branch, ...result, ...(backup ? { backup } : {}) });
     }
   }
 
@@ -365,6 +401,8 @@ async function main(argv = process.argv.slice(2)) {
     root,
     graceDays: args.graceDays,
     policy,
+    // Why every claim-dependent tree was kept, or how ownership was proven (BI-83345811).
+    claims: { available: claims.available, reason: claims.reason },
     decisions,
     summary,
     removals: args.dryRun ? [] : removals,
@@ -379,7 +417,7 @@ async function main(argv = process.argv.slice(2)) {
     `\nWorktree janitor — ${report.mode} (grace=${args.graceDays}d, policy=${policy})\n`,
   );
   for (const d of decisions) {
-    console.log(`  ${d.verdict.padEnd(12)} ${d.path}  (${d.reason})`);
+    console.log(`  ${d.verdict.padEnd(12)} ${sanitizeForLog(d.path)}  (${sanitizeForLog(d.reason)})`);
   }
   for (const p of summary.flaggedPaths ?? []) {
     console.log(`  [flag]  abandoned mid-merge (MERGE_HEAD, no live session): ${p} — quarantined, never auto-reaped`);

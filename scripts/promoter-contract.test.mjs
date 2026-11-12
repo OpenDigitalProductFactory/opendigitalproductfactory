@@ -90,3 +90,12 @@ test("every staged promoter input is mechanically closed by portal baking and JI
 });
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+test("portal packages its reassessment probe before calculating baked source identity", async () => {
+  const dockerfile = await readFile(resolve(root, "Dockerfile"), "utf8");
+  const probeCopy = dockerfile.indexOf("COPY scripts/reassessment-capability-probe.mjs ./scripts/");
+  assert.ok(probeCopy >= 0, "the immutable portal must carry its compatibility probe");
+  assert.ok(probeCopy < dockerfile.indexOf("COPY --from=init /app/scripts ./scripts"));
+  assert.ok(dockerfile.includes("COPY --from=init /app/apps/web/ ./apps/web-src/"), "the actual owner sources must accompany the probe");
+  assert.ok(dockerfile.indexOf("COPY --from=init /app/scripts ./scripts") < dockerfile.indexOf("> /app/.dpf-source-content-hash"));
+});

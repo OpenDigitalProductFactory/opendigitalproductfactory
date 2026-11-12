@@ -1,24 +1,29 @@
-// BI-42FA7DD8 — Worktree Tier-A FLEET BACKSTOP (optional schedule).
+// BI-42FA7DD8 / BI-99395B29 — PRIMARY, platform-owned worktree reaper.
 //
-// PRIMARY path is transactional, not this cron:
-//   packages/dpf-skill-pack/hooks/worktree-session-hygiene.mjs on SessionStart
-//   (observe) + SessionEnd/Stop (reap THIS session's worktree when Tier-A).
-// That fires on every client that loaded dpf-platform (Claude plugin / Grok
-// global hooks / Codex hooks) — no per-client cron to configure, no "schedule
-// went dark" failure mode for the common case.
+// This portal Inngest job OWNS worktree reaping on every install. It runs
+// server-side whether or not any AI client is installed, connected or ending its
+// session cleanly — `platform-function-never-depends-on-a-client`. Many clients
+// and threads share one install; none of them owns its upkeep.
 //
-// THIS module is an optional fleet sweeper for leftovers (abandoned worktrees
-// after crashes, clients without hooks). It is server-side Inngest (portal),
-// NOT a CLI client cron. It still may not see host worktrees when the portal
-// container lacks a host git view — then it no-ops.
+// ACCELERATORS (never owners; the guarantee holds with all of them absent):
+//   * pull-request-merged-reap.ts — server-side, reaps the one merged branch
+//     on the merge event instead of waiting for the daily sweep.
+//   * packages/dpf-skill-pack/hooks/worktree-session-hygiene.mjs — client
+//     SessionEnd hook; may reap THIS session's Tier-A tree sooner. A client
+//     that lacks the hook, crashes or never ends loses nothing.
 //
 // Spec: docs/superpowers/specs/2026-07-26-multi-client-governance-parity-design.md § D4
-// Kernel: worktree-selection-and-reaping, destructive-actions-require-explicit-go
+// Kernel: platform-function-never-depends-on-a-client, worktree-selection-and-reaping,
+//         destructive-actions-require-explicit-go
 //
-// SAFETY DOCTRINE (backstop)
+// SAFETY DOCTRINE
 //   * Default OFF (DPF_WORKTREE_JANITOR_ENABLED not set) — no scan.
-//   * When ENABLED without AUTO_REAP: dry-run observe only.
-//   * When AUTO_REAP=1: live **Tier A only**. Tier B never auto-deleted here.
+//   * ENABLED without AUTO_REAP: observe, plus the bounded Tier-A reap above
+//     DPF_WORKTREE_JANITOR_MAX.
+//   * AUTO_REAP=1: live **Tier A only**. Tier B is never auto-deleted here.
+//   * FAIL CLOSED: every live run is preceded by an observation. A blind
+//     observation reports UNHEALTHY; an observation that kept anything because
+//     liveness was unreadable stays an observation. No flag reaps on a guess.
 //   * Removals use junction-safe-worktree-remove.mjs via the CLI.
 
 import { cron } from "@/lib/jobs/triggers";
@@ -297,18 +302,24 @@ export async function runWorktreeJanitor(options: RunOptions = {}): Promise<RunR
 
   const runScan = options.runScan ?? defaultRunScan;
 
-  // An explicit auto-reap request keeps its existing contract exactly: go
-  // straight to live, one scan, no bound evaluation.
+  // Observe first, always. AUTO_REAP is the owner's standing go for Tier A,
+  // not a go to act on evidence this run could not gather, so it fails closed
+  // through the same observation the bound uses.
+  const observed = await runScan("dry-run");
+  if (!observed.available) return unhealthy(observed.reason);
+
   if (explicitAutoReap) {
+    if (scanKeptForUnknownLiveness(observed.scan)) {
+      console.error(
+        "[worktree-janitor] AUTO_REAP on, but Workroom claims were unreadable this run — " +
+          "staying in observe mode. The reaper must not reap on absent evidence.",
+      );
+      return summarize(observed.scan, "dry-run");
+    }
     const live = await runScan("live");
     if (!live.available) return unhealthy(live.reason);
     return summarize(live.scan, "live");
   }
-
-  // Otherwise observe first. The bound is a property of what is actually there,
-  // so it cannot be evaluated before looking — and looking is never destructive.
-  const observed = await runScan("dry-run");
-  if (!observed.available) return unhealthy(observed.reason);
 
   const retained = countRetained(observed.scan);
   const max = resolveMaxWorktrees(env);

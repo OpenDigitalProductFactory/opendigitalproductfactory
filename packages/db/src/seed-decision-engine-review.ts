@@ -21,9 +21,9 @@ import {
   DECISION_ENGINE_REVIEW_TASK_KIND,
   DECISION_ENGINE_REVIEW_TASK_TITLE,
 } from "./decision-engine-review-config";
-import { findInstallWorkOwnerUserId } from "./install-work-owner";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -47,7 +47,7 @@ export async function ensureDecisionEngineReviewScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const ownerId = await findInstallWorkOwnerUserId(prisma);
+  const ownerId = await findTaskOwnerUserId(prisma);
   if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed decision-engine review scheduled task");
   }

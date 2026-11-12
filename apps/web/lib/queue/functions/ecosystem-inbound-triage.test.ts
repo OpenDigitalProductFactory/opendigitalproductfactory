@@ -16,6 +16,14 @@ const invoke = () => (ecosystemInboundTriage as unknown as (context: unknown) =>
 });
 
 describe("ecosystem intake job reporting", () => {
+  it("advances the issue cursor from scan start without losing the commission metadata", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: false, issueReadComplete: true, scannedAt: "2026-11-02T12:00:00Z",
+      ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [{ source: "dependabot", error: "HTTP 403" }] });
+    await invoke();
+    expect(mocks.upsert.mock.calls[0][0].update).toMatchObject({ runCursor: "2026-11-02T12:00:00Z", lastStatus: "failed" });
+    expect(mocks.upsert.mock.calls[0][0].update).not.toHaveProperty("metadata");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.gate.mockResolvedValue({ proceed: true });
@@ -45,6 +53,17 @@ describe("ecosystem intake job reporting", () => {
     const heartbeat = mocks.upsert.mock.calls[0][0].update;
     expect(deriveHealth({ kind: "recurring", enabled: true, schedule: "17 6 * * 1",
       reportsRunData: true, ...heartbeat }, new Date()).health).toBe("error");
+  });
+
+  it("refreshes a stale stored schedule to the code trigger's cadence (BI-78C6646C)", async () => {
+    mocks.run.mockResolvedValue({ ran: false, reason: "not commissioned: test" });
+    const before = Date.now();
+    await invoke();
+    const { update, create } = mocks.upsert.mock.calls[0][0];
+    expect(update.schedule).toBe("17 */4 * * *");
+    expect(create.schedule).toBe("17 */4 * * *");
+    // Projected from the four-hourly trigger, not the old weekly value.
+    expect(update.nextRunAt.getTime() - before).toBeLessThanOrEqual(4 * 60 * 60 * 1000);
   });
 
   it("clears an old error after a complete scan", async () => {
@@ -87,7 +106,7 @@ describe("ecosystem intake job reporting", () => {
   it("allows only one scan of the inbound queue at a time", () => {
     // Local single-run protection (spec §6.1): an overlapping cron and retry must
     // not ingest the same sources concurrently.
-    expect(mocks.config).toMatchObject({ concurrency: { limit: 1, scope: "fn" } });
+    expect(mocks.config).toMatchObject({ concurrency: { limit: 1, scope: "account", key: "'ecosystem-inbound-intake'" } });
   });
 
   it("does not report an uncommissioned installation as a successful scan", async () => {

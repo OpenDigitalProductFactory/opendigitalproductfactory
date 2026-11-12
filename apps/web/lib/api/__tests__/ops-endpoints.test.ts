@@ -49,6 +49,8 @@ vi.mock("@dpf/validators", () => {
     createBacklogItemSchema: z.object({
       title: z.string().min(1).max(200),
       body: z.string().max(10000).optional(),
+      outcome: z.string().max(2000).optional(),
+      howWeKnow: z.string().max(2000).optional(),
       type: z.enum(["product", "portfolio"]),
       epicId: z.string().optional(),
       priority: z.number().int().min(0).max(999).optional(),
@@ -423,6 +425,24 @@ describe("POST /api/v1/ops/backlog", () => {
 
     expect(res.status).toBe(201);
     expect(body.title).toBe("New Item");
+  });
+
+  it("stores the outcome at the top of the body (BI-B1B44777)", async () => {
+    (authenticateRequest as ReturnType<typeof vi.fn>).mockResolvedValue(MOCK_AUTH);
+    const create = prisma.backlogItem.create as ReturnType<typeof vi.fn>;
+    create.mockResolvedValue({ id: "bi-new", itemId: "BI-ABCD1234", title: "New Item", type: "product", status: "open" });
+
+    const res = await backlogCreateHandler(
+      postRequest("/api/v1/ops/backlog", {
+        title: "New Item",
+        type: "product",
+        body: "Context.",
+        outcome: "Field techs see today's jobs offline.",
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(create.mock.calls.at(-1)![0].data.body).toBe("## Outcome\nField techs see today's jobs offline.\n\nContext.");
   });
 
   it("returns 422 for invalid input", async () => {

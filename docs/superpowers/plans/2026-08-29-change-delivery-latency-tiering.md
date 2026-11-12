@@ -221,6 +221,17 @@ full run and records the reason.
 The cloud tier stays exhaustive and sharded. That is what makes local selection
 safe rather than a gamble.
 
+S4 evidence repair (BI-6DE5A3B6) keeps the generic policy plan and digest intact.
+Final local metadata labels those fields as planned policy and separately
+projects `execution.vitestCoverage` from a completed receipt matching the
+expected tree, stage, command and duration. Missing, conflicting or incomplete
+receipts cannot establish completed coverage. Selection mode and reason persist
+in new stage receipts; unmeasured test counts remain null, including when a log
+reports no affected files. The existing execution fingerprint includes a
+normalized exhaustive override before admission, so affected evidence cannot
+satisfy that wider request. Stage reuse still requires its exact identity.
+
+
 **Not done:** raising `--maxWorkers` from 4 on a 12-CPU VM. Likely worth it, but
 the memory and throughput trade against two admitted slots is unmeasured, and an
 unmeasured change here is what produced the problem being fixed.

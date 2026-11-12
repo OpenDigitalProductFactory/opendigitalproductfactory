@@ -19,8 +19,10 @@ export async function loadPirEvidenceContext(db: EvidenceDb, binding: Initiative
     const item = await db.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true, claimedAt: true } });
     if (!item) return missing;
     const room = await db.workroom.findFirst({
+      // BI-46E344FE: a merged repair's anchor room that never recorded its head
+      // is bound to the merged head; the capsule id still names exactly one room.
       where: { capsuleId: ref.workroomId, repositoryFullName: ref.repositoryFullName, headBranch: ref.branchName,
-        headSha: ref.headSha, backlogItemId: { in: [binding.itemId, item.id] } },
+        OR: [{ headSha: ref.headSha }, { headSha: null }], backlogItemId: { in: [binding.itemId, item.id] } },
       select: { id: true, runtimeVerifications: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 10,
         select: { verificationId: true, kind: true, status: true, createdAt: true, completedAt: true, result: true, url: true, evidenceUrl: true },

@@ -21,13 +21,15 @@ import "server-only";
 //   • an OAuth credential's consent must still name the same coworker.
 import { prisma } from "@dpf/db";
 
-import { originalToolParameters } from "@/lib/attention/coworker-envelope-decision";
+import { originalToolParameters, TASK_EXECUTION_FENCE_AUDIT_KEY } from "@/lib/attention/coworker-envelope-decision";
+import { parseTaskExecutionFence } from "@/lib/shared/task-execution-fence";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import {
   fingerprintCoworkerInput,
   type CoworkerApprovalBinding,
 } from "@/lib/govern/authority/coworker-authority-decision";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import { APPROVAL_COMPLETION } from "@/lib/mcp-governed-execute-preflight";
 import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute-types";
 
 import {
@@ -222,6 +224,7 @@ async function platformExecutionContext(input: {
     ...(binding.chainId ? { delegationChainId: binding.chainId } : {}),
     ...(marker.proposeBoundary ? { proposeBoundary: true } : {}),
     approvalCompletion: "platform",
+    callerClient: APPROVAL_COMPLETION,
     ...(marker.coworkerReadBaseline ? { coworkerReadBaseline: true } : {}),
     ...(marker.coworkerAuthorizedSurfaceBaseline ? {
       coworkerAuthorizedSurfaceBaseline: true,
@@ -284,6 +287,8 @@ export async function runApprovedPlatformRequest(
     resolveRoom: deps.resolveRoom ?? resolveRoomLive,
     resolveStandingAccess: deps.resolveStandingAccess ?? resolveStandingAccessLive,
   });
+  const executionFence = parseTaskExecutionFence(resultRecord(park.parameters)[TASK_EXECUTION_FENCE_AUDIT_KEY]);
+  if (executionFence && context.taskRunId) context.taskExecutionFence = executionFence;
   const result = await execute({
     toolName: envelope.manifestActionId,
     rawParams: params,

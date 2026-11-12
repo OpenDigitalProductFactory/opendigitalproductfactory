@@ -201,6 +201,12 @@ export type CreateProductObjectiveInput = {
   targetNarrative: string | null;
   reviewCadence: ProductObjectiveReviewCadence | null;
   reviewAt: Date | null;
+  /**
+   * Where the platform derived this objective from (BI-42399593), e.g.
+   * { sourceKind: "epic", sourceRef: "EP-..." }. Omitted for objectives a
+   * person defines. Unique per organization, so a derivation runs once.
+   */
+  origin?: { sourceKind: string; sourceRef: string } | null;
 };
 
 export async function createProductObjective(
@@ -258,6 +264,12 @@ export async function createProductObjective(
             ),
       reviewAt: input.reviewAt,
       status: "draft",
+      ...(input.origin
+        ? {
+            sourceKind: cleanRequired(input.origin.sourceKind, "Origin kind"),
+            sourceRef: cleanRequired(input.origin.sourceRef, "Origin reference"),
+          }
+        : {}),
     },
   });
 }
@@ -265,7 +277,7 @@ export async function createProductObjective(
 export type UpdateProductObjectiveInput = Partial<
   Omit<
     CreateProductObjectiveInput,
-    "organizationId" | "productId" | "ownerPrincipalId"
+    "organizationId" | "productId" | "ownerPrincipalId" | "origin"
   >
 > & {
   organizationId: string;
@@ -520,6 +532,8 @@ export type RecordProductOutcomeObservationInput = {
   provenance: Record<string, unknown> | null;
   recordedByPrincipalId: string | null;
   supersedesObservationId: string | null;
+  /** The backlog item whose own outcome this observes (BI-8DE5429B); platform writers only. */
+  backlogItemId?: string | null;
 };
 
 function numberOf(
@@ -636,6 +650,7 @@ export async function recordProductOutcomeObservation(
         provenance: input.provenance ?? undefined,
         recordedByPrincipalId,
         supersedesObservationId,
+        ...(input.backlogItemId ? { backlogItemId: input.backlogItemId } : {}),
       },
     });
   });

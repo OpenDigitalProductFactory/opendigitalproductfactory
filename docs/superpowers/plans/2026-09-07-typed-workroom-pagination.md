@@ -102,3 +102,30 @@ an older observation. If multi-worker behavior invalidates the chosen storage
 design, return to that one architectural decision with measured evidence rather
 than adding persistence ad hoc. Changes to authority, lifecycle or unrelated
 listing tools are outside this slice.
+
+## October 19 recovered continuation
+
+Reuse BI-3CE72645 / WC-15C18FED and the original PR5337 source. The prescribed
+room handoff is executed; current plan IRD-B4BBA6A74EEA and implementation
+IRD-F0BB7F2C7061 returned ALLOWED. These are admission observations, not test or
+acceptance passes. Preserve original source512b as a parent when reconciling
+protected main52fb5e; do not restart the earlier delivered listing work.
+
+1. Reproduce the actual handler's oversized raw page returning no rows, and the
+   shared transport's malformed successful prefix / lost typed refusal.
+2. Extend the existing reader with explicit bounded metadata and exact selected
+   activity-value reads. Keep current room content authority before/after, finite
+   SQL transfer and timeout, and original unadvanced raw-page behavior. Record
+   explicit debt for nullable legacy enumeration and oversized scalar streaming.
+3. Refactor the common result-budget handling for typed activity envelopes.
+   Cover 251 rows, escaping/Unicode, fixed upper bound, exact IDs, missing sequence,
+   JSON null versus missing path, foreign room/row, revoked admission, parameter
+   binding, numeric fidelity (large integers, decimals, overflow and underflow),
+   and too-small envelopes. Run real SQL checks only in the governed
+   disposable test database; source-local skips are not passes.
+4. Freeze and verify the actual diff, finish graph-linked tests, both web
+   typechecks, applicable guards and the full governed gate. Obtain independent
+   assessment, normal protected PR/queue and canonical delivery. Then read the
+   existing blocked Workroom history through served MCP and coordinate the
+   retained BI7906 original-reader owner. No old task replay, forged lineage or
+   whole-case closure follows from source tests or metadata-only traversal.

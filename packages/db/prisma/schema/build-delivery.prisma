@@ -460,6 +460,10 @@ model NonProductionEnvironmentLease {
   releasedAt           DateTime?
   queuedAt             DateTime?
   admittedAt           DateTime?
+  // Database-owned forward-only facts. Legacy NULL version means unknown
+  // history; admittedAt is last-state data and can be reset during gate revival.
+  admissionHistoryVersion Int?
+  firstAdmittedAt      DateTime?
   cancelledAt          DateTime?
   heartbeatAt          DateTime?
   phase                String?

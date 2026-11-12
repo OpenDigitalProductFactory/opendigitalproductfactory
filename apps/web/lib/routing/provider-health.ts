@@ -1,7 +1,7 @@
 /**
  * Provider health projection (routing-resilience spec §4.3, Slice C).
  *
- * Derives a provider's LIVE REACHABILITY from recent routing telemetry +
+ * Derives a provider's observed health from recent routing telemetry +
  * credential lifecycle + the runtime circuit, instead of presenting the static
  * `ModelProvider.status` ("active") as if it meant the provider works right now.
  * This is the data foundation for the provider-detail health badge and the AI
@@ -25,7 +25,7 @@ import { capacityRoutingExclusionReason } from "./capacity-routing-exclude";
 
 /** Low-cardinality, operator-facing reachability label. */
 export type ProviderHealthStatus =
-  | "healthy" // recent successful calls; reachable now
+  | "healthy" // recent successful calls; not a fresh connectivity probe
   | "rate_limited" // throttled; will self-clear
   | "needs_reauth" // credential expired — requires operator action
   | "billing" // account/billing lapse — requires operator action
@@ -127,9 +127,9 @@ export function providerDetailHref(providerId: string): string {
  * runtime circuit. Pure; deterministic for a given `now`.
  *
  * Precedence (most actionable first):
- *   1. unconfigured/inactive lifecycle      → unconfigured
+ *   1. unconfigured lifecycle               → unconfigured
  *   2. runtime circuit open (auth/billing)  → needs_reauth / billing
- *   3. disabled lifecycle                   → needs_reauth / billing / degraded
+ *   3. disabled lifecycle with error evidence→ needs_reauth / billing / degraded
  *   4. runtime circuit open (rate/overload) → rate_limited / cooling_down
  *   5. recent error-dominated outcomes      → mapped class
  *   6. recent successes                     → healthy
@@ -141,11 +141,8 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
     (o) => input.now - o.createdAt.getTime() <= windowMs,
   );
 
-  // 1. Lifecycle not set up.
-  if (
-    input.lifecycleStatus === "unconfigured" ||
-    input.lifecycleStatus === "inactive"
-  ) {
+  // Only unconfigured means missing setup. Inactive can be an operator pause.
+  if (input.lifecycleStatus === "unconfigured") {
     return {
       status: "unconfigured",
       remediationKind: "provider_settings",
@@ -191,9 +188,11 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
     if (lastClass === "billing") {
       return billingHealth(input.providerId);
     }
-    // Default a disabled provider to a re-auth ask — that is the dominant cause
-    // (an expired OAuth credential) and the action the operator must take.
-    return reauthHealth(input.providerId, input.authMethod, lastClass ?? "auth");
+    if (lastClass === "auth") return reauthHealth(input.providerId, input.authMethod, lastClass);
+    if (lastClass) return mapReasonToHealth(lastClass, input.providerId, recent);
+    // A lifecycle hold alone does not establish a credential or network failure.
+    return { status: "unknown", remediationKind: "none",
+      safeSummary: "Routing is disabled. Connection health has not been verified." };
   }
 
   // 5. Recent telemetry is error-dominated.
@@ -208,7 +207,7 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
       return {
         status: "healthy",
         remediationKind: "none",
-        safeSummary: "Reachable — recent requests are completing.",
+        safeSummary: "Recent inference requests succeeded.",
       };
     }
   }
@@ -217,7 +216,7 @@ export function deriveProviderHealth(input: ProviderHealthInput): ProviderHealth
   return {
     status: "unknown",
     remediationKind: "none",
-    safeSummary: "No recent activity. Health will update after the next request.",
+    safeSummary: "No recent inference result. Connection health has not been verified.",
   };
 }
 

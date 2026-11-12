@@ -36,6 +36,11 @@ export type CreateOrTouchImprovementSignalInput = {
   toolName?: string | null;
   suspectedRootCause?: string | null;
   objectiveImpactHypothesis?: string | null;
+  /**
+   * The source id names one observation, so a repeat delivery only touches it:
+   * no recurrence, never filed. platform_issue_report is always immutable.
+   */
+  immutable?: boolean;
 };
 
 export type CreateOrTouchImprovementSignalResult = {
@@ -65,6 +70,8 @@ const filePersistentSignal: FileSignalBacklogItemFn = async (signal) => {
   try {
     const result = await ingestBacklogItem({
       title: signal.title,
+      // BI-458CCA8D: a persistent signal is done when it stops recurring.
+      outcome: `"${signal.title.trim()}" stops recurring: no new ${signal.sourceType} observation of it after the fix ships.`,
       body: [
         signal.description,
         signal.suspectedRootCause ? `Suspected root cause: ${signal.suspectedRootCause}` : null,
@@ -98,7 +105,7 @@ export async function createOrTouchImprovementSignal(
   deps?: ImprovementSignalDeps,
 ): Promise<CreateOrTouchImprovementSignalResult> {
   const signalId = `IS-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const immutableSource = input.sourceType === "platform_issue_report";
+  const immutableSource = input.immutable === true || input.sourceType === "platform_issue_report";
   const where = { sourceType_sourceId: { sourceType: input.sourceType, sourceId: input.sourceId } };
   const update = {
     lastSeenAt: new Date(),

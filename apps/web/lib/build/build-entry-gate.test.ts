@@ -235,3 +235,30 @@ describe("enforceBuildInitiativeReadiness", () => {
     expect(call.inheritedScope).toBeTruthy();
   });
 });
+
+describe("plan digest at plan -> build (BI-6F2872FC)", () => {
+  async function projectedArgs(expectedPhase: string) {
+    const db = database();
+    db.featureBuild.findUnique.mockResolvedValueOnce({
+      ...(await db.featureBuild.findUnique()),
+      buildPlan: { tasks: [{ title: "t", satisfies: ["AC-1"] }] },
+    });
+    const projectReadiness = vi.fn().mockReturnValue({
+      governed: true,
+      decision: { decisionId: "unpersisted", verdict: "allowed", blockers: [], unmet: [], satisfied: [] },
+    });
+    await enforceBuildInitiativeReadiness({
+      db, buildId: "FB-ENTRY", target: "implementation", targetPhase: expectedPhase === "plan" ? "build" : "ship",
+      expectedPhase, evaluatedAt: "2026-10-21T00:00:00.000Z", dependencies: { projectReadiness },
+    });
+    return projectReadiness.mock.calls[0]![0] as Record<string, unknown>;
+  }
+
+  it("judges the coverage against the plan the build holds now", async () => {
+    expect((await projectedArgs("plan")).buildPlanDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  it("does not re-judge the covered plan after the build started", async () => {
+    expect(await projectedArgs("review")).not.toHaveProperty("buildPlanDigest");
+  });
+});

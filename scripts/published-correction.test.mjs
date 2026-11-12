@@ -8,11 +8,13 @@ import { createHash } from "node:crypto";
 import { evaluateReadiness, buildGatePlan } from "./pr-readiness/core.mjs";
 import { evaluatePrHealth } from "./pr-health.mjs";
 import { evaluateGateRecord, evaluateGateVerdict, decide } from "../packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs";
-import { correctionPlanDigest, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
-import { verifyPublishedCorrection, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext, execute, readFreshTestReport } from "./published-correction.mjs";
+import { correctionPlanDigest, classifyInitialPublication, classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
+import { verifyPublishedCorrection, reducedTierClassification, chooseInitialAnchor, buildCorrectionCommands, qualifyCorrectionExecution, correctionReceiptPath, inspectCorrectionRecord, readPublishedContext, execute, readFreshTestReport } from "./published-correction.mjs";
 import { guardShellEnv } from "./lib/guard-bash.mjs";
 import { guardGitEnv } from "./lib/git-hook-env.mjs";
+import { guardResultEnvironment } from "./lib/pregate-preflight-receipt.mjs";
 import { readPublicationGateRecords } from "./pr-readiness.mjs";
+import { createEvidencePlan, loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 
 const now = Date.parse("2026-10-16T05:30:00Z");
 const sha = "a".repeat(40);
@@ -201,8 +203,141 @@ test("an open PR without qualified initial evidence cannot bootstrap correction 
   assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest, treeAt: () => "d".repeat(40), now }), /initial-publication anchor/);
 });
 
+test("an exact synthesized integration tree reconciles a rebased canonical publication anchor", () => {
+  const pullRequest = record().publicationCorrection.pullRequest;
+  const recordedSha = "f".repeat(40);
+  const integratedTree = "d".repeat(40);
+  const state = {
+    branch, sha: recordedSha, gatePassed: true, skipped: false, status: "passed",
+    evidenceRecordId: "canonical-evidence", leaseId: "canonical-lease",
+    // The anchor is evaluated at the original gate capture, not at this
+    // later correction. Its fresh correction proof has a separate TTL.
+    recordedAt: new Date(now - 120_000).toISOString(), expiresAt: new Date(now - 60_000).toISOString(),
+  };
+  const metadata = {
+    candidateSha: recordedSha, runLeaseId: "canonical-lease", synthesizedTreeSha: integratedTree,
+    execution: { status: "passed" },
+  };
+  const anchor = chooseInitialAnchor({ records: [{ state, metadata }], previous: null, pullRequest,
+    treeAt: value => { assert.equal(value, original); return integratedTree; }, now });
+  assert.equal(anchor.sha, original);
+  assert.equal(anchor.state, state, "the original canonical gate record remains intact");
+  assert.deepEqual(anchor.equivalentCandidate, { sha: recordedSha, synthesizedTreeSha: integratedTree });
+  assert.equal(classifyInitialPublication(anchor, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, true);
+  for (const metadataCandidate of ["e".repeat(40), undefined]) {
+    const candidate = { ...anchor, metadata: { ...metadata } };
+    if (metadataCandidate === undefined) delete candidate.metadata.candidateSha;
+    else candidate.metadata.candidateSha = metadataCandidate;
+    assert.equal(classifyInitialPublication(candidate, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, false,
+      "canonical evidence must remain bound to its recorded candidate SHA");
+  }
+  const direct = { ...anchor, sha: recordedSha, equivalentCandidate: undefined };
+  for (const metadataCandidate of ["e".repeat(40), undefined]) {
+    const candidate = { ...direct, metadata: { ...metadata } };
+    if (metadataCandidate === undefined) delete candidate.metadata.candidateSha;
+    else candidate.metadata.candidateSha = metadataCandidate;
+    assert.equal(classifyInitialPublication(candidate, { repositoryFullName, branch, pullRequestNumber: 7 }).ok, false,
+      "same-SHA canonical evidence also requires the recorded candidate metadata");
+  }
+});
+
+function historicalCanonicalCorrection() {
+  const previous = record();
+  const anchor = previous.publicationCorrection.anchor;
+  anchor.state = { branch, sha: original, gatePassed: true, status: "passed",
+    skipped: false, evidenceRecordId: "fixture-evidence", leaseId: "fixture-lease",
+    recordedAt: new Date(now - 120_000).toISOString(),
+    expiresAt: new Date(now + 120_000).toISOString() };
+  anchor.metadata = { candidateSha: original, runLeaseId: "fixture-lease",
+    execution: { status: "passed" } };
+  return previous;
+}
+
+test("an interrupted push recovers only its historical anchor after both proofs expire", () => {
+  const previous = historicalCanonicalCorrection();
+  const snapshot = JSON.stringify(previous);
+  const later = now + 2 * 3600_000;
+  const pullRequest = previous.publicationCorrection.pullRequest;
+  assert.equal(classifyPublishedCorrection(previous, { now: later }).ok, false);
+  const anchor = chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: later });
+  assert.equal(anchor, previous.publicationCorrection.anchor);
+  assert.equal(JSON.stringify(previous), snapshot, "retained evidence is never rewritten");
+  assert.equal(classifyPublishedCorrection(previous, { now: later }).ok, false,
+    "anchor recovery does not renew affected-check proof");
+  const published = { ...pullRequest, headRefOid: previous.sha };
+  assert.equal(chooseInitialAnchor({ records: [], previous, pullRequest: published,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: later }), anchor);
+});
+
+test("a verified correction keeps its recorded published predecessor while the next push is pending", () => {
+  const previous = historicalCanonicalCorrection();
+  const predecessor = "e".repeat(40);
+  previous.publicationCorrection.pullRequest.headRefOid = predecessor;
+  const pullRequest = { ...previous.publicationCorrection.pullRequest };
+  const anchor = chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000 });
+  assert.equal(anchor, previous.publicationCorrection.anchor);
+  assert.equal(classifyPublishedCorrection(previous, { now: now + 2 * 3600_000 }).ok, false);
+});
+
+test("historical anchor recovery refuses foreign or unqualified retained evidence", () => {
+  const mutations = [
+    value => { value.publicationCorrection.anchor.state.expiresAt = value.publicationCorrection.anchor.capturedAt; },
+    value => { value.publicationCorrection.results[0].exitCode = 1; },
+    value => { value.publicationCorrection.results[0].skipped = true; },
+    value => { value.publicationCorrection.pullRequest.number = 8; },
+    value => { value.publicationCorrection.anchor.repositoryFullName = "foreign/repository"; },
+    value => { value.publicationCorrection.completedAt = new Date(now + 4 * 3600_000).toISOString(); },
+  ];
+  const pullRequest = record().publicationCorrection.pullRequest;
+  for (const mutate of mutations) {
+    const previous = historicalCanonicalCorrection(); mutate(previous);
+    assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest,
+      treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000 }), /initial-publication anchor/);
+  }
+  const previous = historicalCanonicalCorrection();
+  for (const options of [
+    { pullRequest: { ...pullRequest, number: 9 } },
+    { pullRequest: { ...pullRequest, headRefOid: "f".repeat(40) } },
+    { pullRequest: { ...pullRequest, repositoryFullName: "foreign/repository" } },
+    { treeAt: () => "f".repeat(40) },
+  ]) assert.throws(() => chooseInitialAnchor({ records: [], previous, pullRequest,
+    treeAt: value => (value === sha ? "c" : "d").repeat(40), now: now + 2 * 3600_000, ...options }), /initial-publication anchor/);
+});
+
 test("an unmapped change cannot silently run zero affected checks", () => {
   assert.throws(() => buildCorrectionCommands({ affectedTests: [], fileDispositions: [{ path: "scripts/unknown.mjs", kind: "other", tests: [] }], affectedPackages: [], scope: {} }), /mapping unresolved/);
+});
+
+test("storefront template corrections use the package's existing verification runners", () => {
+  const testPath = "packages/storefront-templates/src/standing-roster.test.ts";
+  const commands = buildCorrectionCommands({
+    affectedTests: [testPath],
+    fileDispositions: [{ path: testPath, kind: "test", tests: [] }],
+    affectedPackages: ["@dpf/storefront-templates"],
+    scope: {},
+  }, { packageScripts: { "@dpf/storefront-templates": { typecheck: "tsc --noEmit" } } });
+
+  assert.deepEqual(commands, [
+    { command: "pnpm", args: ["--filter", "@dpf/storefront-templates", "exec", "vitest", "run", "src/standing-roster.test.ts", "--maxWorkers=1", "--reporter=json"] },
+    { command: "pnpm", args: ["--filter", "@dpf/storefront-templates", "run", "typecheck"] },
+  ]);
+});
+
+test("an explicitly mapped Dockerfile runs its affected test while an unmapped Dockerfile is refused", () => {
+  const source = "services/edge-node/Dockerfile";
+  const target = "scripts/check-docker-workspace-context.test.mjs";
+  const plan = createEvidencePlan({
+    eventName: "pull_request", baseSha: "base", headSha: "head", baseTreeSha: "base-tree", headTreeSha: "head-tree",
+    changedFiles: [source], knownTests: [target], relatedTestsBySource: { [source]: [target] },
+    codeGraphAdvice: null, routeAdviceBySource: {}, packageDependencies: {}, totalTestCount: 100, policy: loadEvidencePolicy(),
+  });
+  assert.ok(buildCorrectionCommands(plan).some(command => command.args.includes(target)));
+  for (const relatedTestsBySource of [{}, { [source]: ["scripts/unknown.test.mjs"] }]) {
+    const unmapped = createEvidencePlan({ ...plan, changedFiles: [source], knownTests: [target], relatedTestsBySource, policy: loadEvidencePolicy() });
+    assert.throws(() => buildCorrectionCommands(unmapped), /mapping unresolved/);
+  }
 });
 
 test("published readiness refreshes metadata guards while delegating broad source checks", () => {
@@ -559,5 +694,260 @@ test("the real Git hook executes correction verification once, reuses proof and 
     assert.throws(invoke);
     assert.equal(existsSync(join(fixture.cwd, ".git", "correction-proof")), false);
     assert.equal(readFileSync(oldSlot, "utf8"), oldBytes);
+  } finally { fixture.remove(); }
+});
+
+
+function mappedCorrectionFixture() {
+  const fixture = gitFixture();
+  const source = "scripts/registry.mjs", target = "scripts/contract.test.mjs";
+  writeFileSync(join(fixture.cwd, source), "export const value = 2;\n");
+  writeFileSync(join(fixture.cwd, target), `import assert from 'node:assert/strict';
+    import {value} from './registry.mjs';
+    assert.equal(value, 2); assert.notEqual(process.env.DPF_CORRECTION_TEST_CONTEXT, 'fail');
+`);
+  fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "mapped source correction");
+  return { ...fixture, source, target, mapping: { [source]: [target] } };
+}
+
+test("a correction proof survives a distinct publish-hook process but not a relevant guard input change", async () => {
+  const fixture = mappedCorrectionFixture();
+  let environment = { ...process.env, CODEX_SESSION_ID: "direct-shell", DPF_GATE_OWNER_SESSION_ID: "direct-owner" };
+  const initialGuardEnvironment = guardResultEnvironment(environment);
+  let executions = 0;
+  const identify = () => ({ ...fixture.identify(), environment: createHash("sha256").update(JSON.stringify(guardResultEnvironment(environment))).digest("hex") });
+  const run = () => {
+    executions++;
+    return { exitCode: 0, stdout: "# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# cancelled 0\n# todo 0\n" };
+  };
+  const options = { ...fixture.options, persist: true, identify, run };
+  try {
+    const first = await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
+    assert.equal(executions, 1);
+    const pathDelimiter = process.platform === "win32" ? ";" : ":";
+    const hookPrefix = process.platform === "win32" ? "C:/Program Files/Git/mingw64/libexec/git-core" : "/usr/lib/git-core";
+    environment = { ...environment, CODEX_SESSION_ID: "publish-hook", DPF_GATE_OWNER_SESSION_ID: "hook-owner", CLAUDE_CODE_REMOTE: "1",
+      PATH: `${hookPrefix}${pathDelimiter}${environment.PATH ?? environment.Path ?? ""}` };
+    assert.deepEqual(guardResultEnvironment(environment), initialGuardEnvironment,
+      "the hook wrapper must preserve the executable search identity");
+    const inspection = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
+    assert.equal(inspection.ok, true, inspection.reason);
+    const reused = await verifyPublishedCorrection(options);
+    assert.equal(executions, 1, "a status read from the hook process must reuse the proof");
+    assert.equal(reused.sha, first.sha);
+    environment = { ...environment, CI: "changed-guard-input" };
+    assert.equal(inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader }).ok, false,
+      "a guard-relevant environment input must still invalidate the proof");
+  } finally { fixture.remove(); }
+});
+
+test("guard-result identity retains the selected PowerShell test executable", () => {
+  const legacy = guardResultEnvironment({ CI: "true", DPF_TEST_POWERSHELL: "powershell" });
+  const pwsh = guardResultEnvironment({ CI: "true", DPF_TEST_POWERSHELL: "C:/Program Files/PowerShell/7/pwsh.exe" });
+  assert.notDeepEqual(pwsh, legacy);
+});
+
+test("guard-result identity retains Windows Bash fallback roots", () => {
+  const baseline = { CI: "true", ProgramFiles: "C:/Program Files", "ProgramFiles(x86)": "C:/Program Files (x86)", LOCALAPPDATA: "C:/Users/test/AppData/Local" };
+  const options = { platform: "win32" };
+  for (const key of ["ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"]) {
+    assert.notDeepEqual(guardResultEnvironment({ ...baseline, [key]: `${baseline[key]}/alternate` }, options), guardResultEnvironment(baseline, options),
+      `${key} can select the Git for Windows Bash fallback executable`);
+  }
+});
+
+test("guard-result identity retains semantic base and guard-runner selectors", () => {
+  const baseline = guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" });
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "b".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "BASE_SHA selects the diff scanned by registered guards");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/release", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "BASE_REF is a fallback diff selector");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/topic", DPF_GUARD_SPAWN_RETRIES: "2" }), baseline,
+    "DPF_PREPUSH_BASE_REF is a hook diff selector");
+  assert.notDeepEqual(guardResultEnvironment({ CI: "true", BASE_SHA: "a".repeat(40), BASE_REF: "origin/main", DPF_PREPUSH_BASE_REF: "origin/main", DPF_GUARD_SPAWN_RETRIES: "0" }), baseline,
+    "runner retry policy changes which executed guard outcome can be reused");
+});
+
+test("guard-result identity ignores only the Git hook PATH prefix", () => {
+  for (const [platform, delimiter, prefix] of [["win32", ";", "C:/Program Files/Git/mingw64/libexec/git-core"], ["linux", ":", "/usr/lib/git-core"]]) {
+    const base = { CI: "true", PATH: `/toolchain/openssl-a${delimiter}/toolchain/bash-a` };
+    const hook = { ...base, PATH: `${prefix}${delimiter}${base.PATH}` };
+    const changedTool = { ...base, PATH: `/toolchain/openssl-b${delimiter}/toolchain/bash-a` };
+    const options = { platform };
+    assert.deepEqual(guardResultEnvironment(hook, options), guardResultEnvironment(base, options),
+      `${platform}: the known hook wrapper does not change executable resolution`);
+    assert.notDeepEqual(guardResultEnvironment(changedTool, options), guardResultEnvironment(base, options),
+      `${platform}: a different OpenSSL/Bash search path must not inherit an affected-check proof`);
+  }
+  assert.notDeepEqual(guardResultEnvironment({ PATH: "/bin", Path: "/alternate" }, { platform: "linux" }), guardResultEnvironment({ PATH: "/bin" }, { platform: "linux" }),
+    "POSIX keeps distinct case-sensitive environment names");
+});
+
+test("a second unpushed correction retains the published head's receipt as its anchor", async () => {
+  const fixture = mappedCorrectionFixture();
+  let publishedHead = fixture.originalSha;
+  const contextReader = () => {
+    const context = fixture.contextReader();
+    context.pullRequest.headRefOid = publishedHead;
+    return context;
+  };
+  const run = () => ({ exitCode: 0, stdout: "# tests 1\n# pass 1\n# fail 0\n# skipped 0\n# cancelled 0\n# todo 0\n" });
+  const options = { ...fixture.options, persist: true, contextReader, relatedTestsBySource: fixture.mapping, run };
+  try {
+    const first = await verifyPublishedCorrection(options);
+    publishedHead = first.sha;
+    fixture.write(3); fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "second local correction");
+    const second = await verifyPublishedCorrection(options);
+    assert.notEqual(correctionReceiptPath(fixture.cwd, first.sha), correctionReceiptPath(fixture.cwd, second.sha));
+    assert.equal(reducedTierClassification(fixture.cwd, { contextReader, recordsReader: () => [] }), "authored-correction",
+      "the pre-push eligibility read must find the published head's retained correction proof");
+  } finally { fixture.remove(); }
+});
+
+test("explicit current mapping takes precedence over retained retry input", async () => {
+  const fixture = mappedCorrectionFixture();
+  let environment = "direct";
+  const identify = () => ({ ...fixture.identify(), environment });
+  const options = { ...fixture.options, persist: true, identify };
+  try {
+    await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
+    const priorBytes = readFileSync(correctionReceiptPath(fixture.cwd), "utf8");
+    await assert.rejects(verifyPublishedCorrection({ ...options, relatedTestsBySource: { [fixture.source]: [] } }), /Affected mapping unresolved/);
+    assert.equal(readFileSync(correctionReceiptPath(fixture.cwd), "utf8"), priorBytes);
+    const replacement = { [fixture.source]: [fixture.target, "scripts/example.test.mjs"] };
+    const result = await verifyPublishedCorrection({ ...options, relatedTestsBySource: replacement });
+    assert.deepEqual(result.publicationCorrection.relatedTestsBySource, replacement);
+    assert.ok(result.publicationCorrection.commands[0].args.includes("scripts/example.test.mjs"));
+  } finally { fixture.remove(); }
+});
+
+test("stale source, modified plan and changed protection cannot supply retry mapping", async t => {
+  for (const mutation of ["source", "plan", "foreign", "protection"]) await t.test(mutation, async () => {
+    const fixture = mappedCorrectionFixture();
+    let environment = "direct";
+    const identify = () => ({ ...fixture.identify(), environment });
+    let contextReader = fixture.contextReader;
+    try {
+      await verifyPublishedCorrection({ ...fixture.options, persist: true, identify, relatedTestsBySource: fixture.mapping });
+      environment = "git-hook";
+      if (mutation === "source") {
+        writeFileSync(join(fixture.cwd, fixture.source), "export const value = 3;\n");
+        fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "different source");
+      } else if (mutation === "plan" || mutation === "foreign") {
+        const path = correctionReceiptPath(fixture.cwd), receipt = JSON.parse(readFileSync(path, "utf8"));
+        if (mutation === "plan") receipt.result.publicationCorrection.relatedTestsBySource[fixture.source] = [];
+        else receipt.result.publicationCorrection.repositoryFullName = "foreign/repository";
+        writeFileSync(path, JSON.stringify(receipt));
+      } else contextReader = () => { const value = fixture.contextReader(); value.protection.requiredChecks = ["Changed required CI"]; return value; };
+      const inspected = inspectCorrectionRecord(fixture.cwd, { identify, contextReader });
+      assert.equal(inspected.ok, false); assert.equal(inspected.reverificationInputs, undefined);
+      await assert.rejects(verifyPublishedCorrection({ ...fixture.options, persist: true, identify, contextReader,
+        run: () => assert.fail("an unvalidated retained map must never launch checks") }), /Affected mapping unresolved/);
+    } finally { fixture.remove(); }
+  });
+});
+
+
+test("completion and expiry share one clock instant without widening the proof lifetime", async () => {
+  const fixture = gitFixture();
+  let tick = Date.now() + 1000;
+  try {
+    fixture.write(2); fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "clock boundary correction");
+    const contextReader = () => { const context = fixture.contextReader(); context.protection.observedAt = new Date(tick).toISOString(); return context; };
+    const result = await verifyPublishedCorrection({ ...fixture.options, contextReader, now: () => tick++ });
+    const proof = result.publicationCorrection;
+    assert.equal(Date.parse(proof.expiresAt) - Date.parse(proof.completedAt), 60 * 60_000);
+    assert.equal(classifyPublishedCorrection(result, { now: tick }).ok, true);
+    assert.equal(classifyPublishedCorrection(result, { now: Date.parse(proof.expiresAt) }).ok, false);
+  } finally { fixture.remove(); }
+});
+
+// BI-25CB699C / BI-1A06A1AF: a merge of origin/main onto a published head that
+// only regenerates registry-generated files is still a main refresh. The
+// reduced tier runs those artifacts' freshness checks plus the existing
+// affected plan; it never falls back to "mapping unresolved" and a full gate.
+const ROUTES_ARTIFACT = {
+  id: "fixture-routes",
+  sourceGlobs: ["routes/**"],
+  artifactPaths: ["routes.generated.json"],
+  generate: ["node", "tools/routes.mjs"],
+  check: ["node", "tools/routes.mjs", "--check"],
+};
+const ROUTES_GENERATOR = `import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+const expected = JSON.stringify(readdirSync("routes").sort()) + String.fromCharCode(10);
+if (process.argv.includes("--check")) process.exit(readFileSync("routes.generated.json", "utf8") === expected ? 0 : 1);
+writeFileSync("routes.generated.json", expected);
+`;
+
+function refreshFixture() {
+  const fixture = gitFixture();
+  const { cwd, git } = fixture;
+  const generate = () => execFileSync(process.execPath, ["tools/routes.mjs"], { cwd });
+  git("switch", "--quiet", "main");
+  mkdirSync(join(cwd, "tools")); mkdirSync(join(cwd, "routes"));
+  writeFileSync(join(cwd, "tools", "routes.mjs"), ROUTES_GENERATOR);
+  writeFileSync(join(cwd, "routes", "a"), "a\n"); generate();
+  git("add", "."); git("commit", "--quiet", "-m", "routes on main");
+  git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD"));
+  git("switch", "--quiet", branch); git("merge", "--quiet", "--no-edit", "main");
+  writeFileSync(join(cwd, "routes", "b"), "b\n"); generate();
+  git("add", "."); git("commit", "--quiet", "-m", "branch route");
+  const anchorSha = git("rev-parse", "HEAD");
+  const contextReader = () => { const value = fixture.contextReader(); value.pullRequest.headRefOid = anchorSha; return value; };
+  const initial = { branch, sha: anchorSha, gatePassed: false, skipped: true,
+    skipReason: "operator-emergency: existing explicit initial fixture publication", recordedAt: new Date(Date.now() - 1000).toISOString() };
+  // main moves the same artifact; the merge conflicts on the generated file only.
+  git("switch", "--quiet", "main");
+  writeFileSync(join(cwd, "routes", "c"), "c\n"); generate();
+  git("add", "."); git("commit", "--quiet", "-m", "main route");
+  git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD"));
+  git("switch", "--quiet", branch);
+  try { git("merge", "--quiet", "--no-edit", "main"); } catch { /* generated-file conflict, resolved by regeneration */ }
+  generate(); git("add", "."); git("commit", "--quiet", "--no-edit");
+  return { ...fixture, anchorSha, options: { ...fixture.options, contextReader, registry: [ROUTES_ARTIFACT],
+    recordsReader: () => [{ state: initial, metadata: null }] } };
+}
+
+test("a main refresh that only regenerates registry outputs stays a reduced main-refresh with freshness checks", async () => {
+  const fixture = refreshFixture();
+  try {
+    const result = await verifyPublishedCorrection(fixture.options);
+    const proof = result.publicationCorrection;
+    assert.equal(proof.classification, "main-refresh");
+    assert.equal(proof.anchor.sha, fixture.anchorSha, "the prior PASS is the reused anchor");
+    assert.ok(proof.commands.some(command => command.command === "node" && command.args.join(" ") === "tools/routes.mjs --check"),
+      JSON.stringify(proof.commands));
+    assert.ok(proof.results.every(item => item.exitCode === 0));
+    assert.deepEqual(proof.delegated, ["full-local-integration", "protected-github-checks", "merge-queue"]);
+    assert.equal(result.gatePassed, false, "reuse is recorded, never relabelled a full local PASS");
+  } finally { fixture.remove(); }
+});
+
+test("a stale regenerated output fails the reduced tier instead of passing", async () => {
+  const fixture = refreshFixture();
+  try {
+    writeFileSync(join(fixture.cwd, "routes.generated.json"), "[\"a\",\"b\"]\n");
+    fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "forgot to regenerate");
+    await assert.rejects(verifyPublishedCorrection(fixture.options), /Affected check failed.*tools\/routes\.mjs --check/s);
+  } finally { fixture.remove(); }
+});
+
+test("a refresh that also rewrites branch-authored source is not a main refresh", async () => {
+  const fixture = refreshFixture();
+  try {
+    fixture.write(5); fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "authored change");
+    const result = await verifyPublishedCorrection(fixture.options);
+    assert.equal(result.publicationCorrection.classification, "authored-correction");
+  } finally { fixture.remove(); }
+});
+
+test("pregate's reduced-tier probe names a regenerated main refresh and nothing else", () => {
+  const fixture = refreshFixture();
+  try {
+    const { contextReader, recordsReader, registry } = fixture.options;
+    assert.equal(reducedTierClassification(fixture.cwd, { contextReader, recordsReader, registry }), "main-refresh");
+    // Unregistered, the regenerated file is unmapped authored drift: no reduced tier.
+    assert.equal(reducedTierClassification(fixture.cwd, { contextReader, recordsReader, registry: [] }), null);
+    assert.equal(reducedTierClassification(fixture.cwd, { contextReader: () => { throw new Error("gh unavailable"); }, recordsReader, registry }), null);
   } finally { fixture.remove(); }
 });

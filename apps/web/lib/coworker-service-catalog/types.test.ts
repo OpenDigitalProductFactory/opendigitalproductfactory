@@ -44,6 +44,9 @@ describe("coworker service catalog type guards", () => {
       "in-progress",
       "completed",
       "cancelled",
+      "failed",
+      "unavailable",
+      "unknown",
     ]);
     expect(COWORKER_AVAILABILITY_SCOPES).toEqual(["internal", "external", "partner"]);
     expect(isCoworkerEngagementStatus("needs-approval")).toBe(true);

@@ -22,15 +22,15 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { decompile } from "@/lib/gpp/shape-language/decompile";
-import { runDesignRules } from "@/lib/gpp/shape-language/drc";
-import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "@/lib/gpp/shape-language/executable-constructs";
-import { resolveShapeDocument, type GppResolveSources } from "@/lib/gpp/shape-language/resolve";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { runDesignRules } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "@dpf/validators/gpp/executable-constructs";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources } from "@/lib/gpp/shape-language/resolve-sources";
-import { checkSoundness } from "@/lib/gpp/shape-language/soundness";
+import { checkSoundness } from "@dpf/validators/gpp/soundness";
 
 import { DEADLINE_FIXTURE, PARALLEL_FIXTURE, SUB_SHAPE_FIXTURE } from "./__fixtures__/graph-shape-fixtures";
-import { usesGraphConstructs } from "./drive-marking";
+import { usesGraphConstructs } from "@dpf/validators/workroom/marking";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "./work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "./work-shapes";
 

@@ -10,6 +10,7 @@
 
 import { buildMentionNotifications } from "./mention-notify";
 import type { MentionRoster } from "./mentions";
+import type { RoomMessageAddressing } from "./room-message-addressing";
 import {
   buildCanonicalWorkroomMetadata,
   type CanonicalWorkroomRef,
@@ -28,6 +29,8 @@ export interface PostWorkItemCommentResult {
   messageId: string;
   notifiedUserIds: string[];
   mentionedAgentIds: string[];
+  /** Set when the message was addressed; the caller publishes its wake after commit. */
+  addressed: boolean;
 }
 
 export async function postWorkItemComment(args: {
@@ -38,6 +41,12 @@ export async function postWorkItemComment(args: {
   body: string;
   sender: { type: "user" | "agent"; id: string; label: string };
   roster: MentionRoster;
+  /**
+   * BI-31C1FDEC: who the message is addressed to beyond its @mentions. Given
+   * the coworkers the body mentions, returns what to store at
+   * structuredPayload.addressing, or null when nothing is addressed.
+   */
+  addressing?: (mentionedAgentIds: string[]) => RoomMessageAddressing | null;
 }): Promise<PostWorkItemCommentResult> {
   const fanout = buildMentionNotifications({
     body: args.body,
@@ -48,6 +57,7 @@ export async function postWorkItemComment(args: {
     actorLabel: args.sender.label,
   });
 
+  const addressing = args.addressing?.(fanout.mentionedAgentIds) ?? null;
   const message = await args.db.workItemMessage.create({
     data: {
       workItemId: args.workItemId,
@@ -58,13 +68,14 @@ export async function postWorkItemComment(args: {
       messageType: "comment",
       body: args.body,
       channel: "in-app",
-      ...(fanout.mentionedAgentIds.length > 0 || args.roomRef
+      ...(fanout.mentionedAgentIds.length > 0 || args.roomRef || addressing
         ? {
             structuredPayload: {
               ...(fanout.mentionedAgentIds.length > 0
                 ? { mentionedAgentIds: fanout.mentionedAgentIds }
                 : {}),
               ...(args.roomRef ? buildCanonicalWorkroomMetadata(args.roomRef) : {}),
+              ...(addressing ? { addressing } : {}),
             },
           }
         : {}),
@@ -87,5 +98,10 @@ export async function postWorkItemComment(args: {
     notifiedUserIds.push(spec.userId);
   }
 
-  return { messageId: message.messageId, notifiedUserIds, mentionedAgentIds: fanout.mentionedAgentIds };
+  return {
+    messageId: message.messageId,
+    notifiedUserIds,
+    mentionedAgentIds: fanout.mentionedAgentIds,
+    addressed: addressing !== null,
+  };
 }

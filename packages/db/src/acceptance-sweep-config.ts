@@ -61,4 +61,7 @@ export const ACCEPTANCE_SWEEP_PROMPT =
   + "pre-authorisation (BI-45D3BBF4), close items whose completion gate already allows done, through "
   + "the governed completion transition, a bounded number per run. Route aged items that cannot be "
   + "closed and have a resolved in-platform coworker to one acceptance steward room each, oldest first, "
-  + "a bounded number of new rooms per run (BI-C1781121). Deterministic: no model judgement.";
+  + "a bounded number of new rooms per run (BI-C1781121). For a done item whose delivery closure left a "
+  + "bounded obligation, take its one step: ask a customer submitter once whether it is fixed, file a "
+  + "corrective item on a \"no\", record silence after 14 days, or record the obligation retired "
+  + "(BI-C899BB40). Deterministic: no model judgement.";

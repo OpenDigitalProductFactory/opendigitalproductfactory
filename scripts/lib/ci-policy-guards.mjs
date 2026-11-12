@@ -86,19 +86,24 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-no-bare-working-write.test.mjs"),
       // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
-      node("--test", "scripts/host-resource-runner.test.mjs"),
+      node("--test", "scripts/host-resource-runner.test.mjs", "scripts/lib/host-reservation-observation.test.mjs"),
       node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs", "scripts/semantic-review-cli-role.test.mjs"),
       // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
       // and a signal-killed native compiler still exits 88 (BI-27D3DCCD).
       node("--test", "scripts/lib/tsc-compiler.test.mjs"),
       // BI-D2FE6931: the weekly TS7 pin currency audit classifies correctly.
       node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
+      // BI-2FAE2E5C: CI Node is the exact, qualified .node-version.
+      node("--test", "scripts/check-ci-node-qualified.test.mjs"),
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
       // BI-22A2CA0D: every compose service declares dpf.recreate-class, so the
       // self-upgrade knows which services it may converge (BI-C54E691E).
       node("--test", "scripts/check-no-unclassified-compose-services.test.mjs"),
+      // BI-E7553A1C: the root-secret resolver is the pre-migration production
+      // boundary. Exercise its refusal/redaction matrix and image/compose wiring.
+      conformanceTest("scripts/runtime-secret-bootstrap.test.mjs"),
       // BI-334CB7DE: doc-diagram fence extraction must stay line-ending
       // invariant. A CRLF working copy re-hashed every fence in a page and
       // demanded a re-render no diagram needed — invisible in `git diff`
@@ -131,6 +136,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/gate-worktree-process-identity.test.mjs"),
       node("--test", "scripts/gate-stdin-regression.test.mjs"),
       node("--test", "scripts/lib/gate-execution-checkpoint.test.mjs"),
+      // BI-BFDB98B6: exercise real pnpm.cmd console cancellation on Windows.
+      conformanceTest("scripts/gate-worktree-windows-cancellation.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
@@ -144,6 +151,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/durable-wait-resumer.test.mjs"),
       // A resumed gate stays on its source and a cancelled wait stays cancelled.
       node("--test", "scripts/lib/gate-resume-pin.test.mjs"),
+      // BI-EB864226: every queued replacement advances the parent's current pin.
+      node("--test", "scripts/lib/gate-reservation-handoff.test.mjs"),
       node("--test", "scripts/gate-worktree-resume.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
@@ -218,6 +227,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // were stale (they now read compose-chain.ps1).
       conformanceTest("scripts/installer/mcp-loopback-tls-contract.test.mjs"),
       conformanceTest("scripts/installer/pki-contract.test.mjs"),
+      conformanceTest("scripts/installer/edge-client-certificate.test.mjs"),
       // BI-6DC1CD5B: canonical https origin resolver, machine trust, installer wiring.
       conformanceTest("scripts/installer/canonical-origin.test.mjs"),
       // BI-2D545A0C: installer + bootstrap persist DPF_MCP_URL (from PUBLIC_URL) and
@@ -229,6 +239,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-7371D444: .wslconfig keys land in the section WSL reads them from
       // (autoMemoryReclaim under [experimental]). Skips where no PowerShell exists.
       conformanceTest("scripts/installer/wslconfig-sections.test.mjs"),
+      // BI-084F85E5: the start script and host convergence ship as release assets;
+      // an existing install converges the native agent at its next logon.
+      conformanceTest("scripts/installer/host-convergence.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -298,6 +311,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-31F11C37: the installers' monitoring question.
         "scripts/installer/monitoring-choice.test.mjs",
       ),
+      // BI-0FC727BB: scans the live installer tree for a bare host-wide sync.
+      conformanceTest("scripts/installer/no-bare-host-sync.test.mjs"),
       conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
       // BI-31F11C37: both installers ask, accept the flag and record the
       // choice before profiles resolve; reads the live installer sources.
@@ -314,10 +329,17 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-F1C680C7: the Build Studio sandbox, where agent CLIs run unprompted,
       // never receives the portal's AUTH_SECRET / NEXTAUTH_SECRET.
       conformanceTest("scripts/installer/sandbox-auth-secret-isolation-contract.test.mjs"),
+      // BI-4F89896B: the sandbox image carries every binary a guard command
+      // execs, because the Build Studio gauntlet runs the guards there.
+      conformanceTest("scripts/installer/sandbox-guard-toolchain-contract.test.mjs"),
       // BI-231A4BC7: the self-upgrade target-binding and delivery task cursor
       // keys never reach the sandbox either.
       conformanceTest("scripts/installer/self-upgrade-binding-and-cursor-keys-contract.test.mjs"),
-    ]),
+      // BI-5E4BB7CA: code-only. Every command reads installers, compose, env
+      // examples and promote.sh, never docs. Undeclared, a docs-only push ran
+      // the four promote.sh dry-run contracts above (~110 s per dry-run on a
+      // loaded Windows host, ~17 dry-runs) and sat past 30 minutes.
+    ], { inputs: ["code"] }),
     guard("fresh-install-reliability", "Fresh Install Reliability", [
       conformanceTest("scripts/installer/powershell-compose-chain.test.mjs"),
       node(
@@ -341,6 +363,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-30E3E229: reads repo files by repo-relative literal path, so it
       // asserts live repository state rather than this guard's logic.
       conformanceTest("scripts/publish-image-release-identity.test.mjs"),
+      conformanceTest("scripts/promote-source-identity.test.mjs"),
+      // BI-578131A3: real-daemon release image addressing; skips without a
+      // daemon. self-upgrade-acceptance.yml runs it on both image stores.
+      conformanceTest("scripts/release-image-reference.docker.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -358,7 +384,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/lib/derived-artifacts-registry.test.mjs",
         "scripts/derived-artifacts-gate.test.mjs",
+        "scripts/build-judgment-guard-runtime.test.mjs",
+        "scripts/derived-artifacts-merged-base.test.mjs",
       ),
+      // BI-78176241: reads scripts/pregate.mjs and the live evidence policy, so
+      // the preflight must keep it.
+      conformanceTest("scripts/docs-only-single-source.test.mjs"),
       node("scripts/derived-artifacts-gate.mjs", "check-all"),
     ]),
     guard("pr-health-test", "PR Health Logic", [
@@ -408,6 +439,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/bootstrap-worktree-deps.test.mjs",
         "scripts/pregate-preflight.test.mjs",
         "scripts/pregate-preflight-effective-environment.test.mjs",
+        // BI-FEDD8F45: guard outcome records (client record, spool, flush, hook CLI).
+        "scripts/lib/guard-outcome-record.test.mjs",
+        "scripts/lib/guard-outcome-submit.test.mjs",
+        "scripts/record-guard-outcome.test.mjs",
         "scripts/lib/pull-request-body.test.mjs",
         "scripts/pregate.test.mjs",
         "scripts/lib/pregate-preflight-receipt.test.mjs",
@@ -466,7 +501,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // build (SUR-8AB3353C, regression from #4321).
       // The same guard refuses an unfrozen `pnpm install` in any Dockerfile.
       node("scripts/check-docker-patch-context.mjs"),
-      node("--test", "scripts/check-docker-patch-context.test.mjs"),
+      node("--test", "scripts/check-docker-patch-context.test.mjs", "scripts/check-docker-workspace-context.test.mjs"),
       // The service images (adp, edge-node, integration-test-harness) run
       // this after `pnpm deploy`: the legacy deploy skips the lockfile under
       // node-linker=hoisted, so each image asserts its deploy tree against
@@ -881,6 +916,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-99395B29 follow-up: liveness comes from the Workroom claim, and an
         // unreadable claim record must fail safe rather than reap on a guess.
         "scripts/lib/worktree-liveness.test.mjs",
+        "scripts/lib/branch-reaper-core.test.mjs",
+        // CodeQL js/log-injection: one CR/LF strip for the janitor, the preview
+        // runtime, and the auth-only bootstrap.
+        "scripts/lib/safe-log.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/worktree-janitor-sh.test.mjs",
@@ -899,6 +938,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/promoter-compose-mounts.test.mjs",
         "scripts/lib/maintenance-epoch-receipt.test.mjs",
         "scripts/promoter-epoch-evidence.test.mjs",
+        "scripts/promote-reassessment-compatibility.test.mjs",
+        "scripts/reassessment-capability-probe.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
@@ -929,6 +970,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // created, and the branches that predate that are reconciled. Binding
         // coverage was stuck at 65% for as long as the rule relied on memory.
         "scripts/lib/workroom-bind.test.mjs",
+        "scripts/lib/worktree-provision.test.mjs",
         "scripts/reconcile-workroom-bindings.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
@@ -1058,9 +1100,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
       // BI-F87BD9BF: raw tsc / root-level vitest / npx are refused with the
       // checked-in routine named, instead of costing an OOM and a retry.
-      node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
+      // BI-F17F2188: where the package resolves, Claude gets the rewritten command instead.
+      node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs", "packages/dpf-skill-pack/hooks/raw-tool-guard-rewrite.test.mjs"),
+      // BI-5DD46FDA: every hooks.json hook, per client, emits output that client honours.
+      node("--test", "packages/dpf-skill-pack/hooks/hook-output-contract.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
-      node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
+      conformanceTest("packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-77BE1389: install-folder sessions get the source contract at start.
       node("--test", "packages/dpf-skill-pack/hooks/install-folder-contract.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
@@ -1117,6 +1162,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node(
         "--test",
         "scripts/lib/dev-portal-lease-claim-key.test.mjs",
+        "scripts/lib/dev-preview-port-binding.test.mjs",
       ),
       node(
         "--test",

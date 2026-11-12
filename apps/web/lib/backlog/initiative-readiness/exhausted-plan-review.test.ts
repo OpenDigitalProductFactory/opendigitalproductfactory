@@ -106,3 +106,67 @@ describe("exact owned exhausted plan review", () => {
     expect(findFirst).not.toHaveBeenCalled();
   });
 });
+
+describe("legacy review keys after an OAuth family change", () => {
+  const legacy = { ...packet, initiativeReviewBinding: { ...binding, gate: "spec-approval" as const } };
+  const scoped = { ...legacy, requestKey: `${packet.requestKey}:reviewer:${"c".repeat(64)}` };
+  function original(family = "oauth-family:original") {
+    return { ...fixture(), status: "input-required",
+      taskRunId: deterministicExternalTaskRunId(family, packet.requestKey),
+      a2aMetadata: { ...fixture().a2aMetadata, taskAuthorityKey: family, tokenSource: "oauth",
+        initiativeReviewBinding: legacy.initiativeReviewBinding,
+        requestDigest: remoteTaskRequestDigest({ ...submitted, initiativeReviewBinding: legacy.initiativeReviewBinding }) },
+      progressPayload: { terminalWriterWait: { ...fixture().progressPayload.terminalWriterWait, attempt: 1 } },
+    };
+  }
+  it("keeps the original key for the existing cross-family recovery guard without treating it as exhaustion", async () => {
+    const row = original(), before = structuredClone(row);
+    const findMany = vi.fn().mockResolvedValue([row]);
+    const history = createExhaustedPlanReviewPredicate(authority, { taskRun: {
+      findFirst: vi.fn().mockResolvedValue(null), findMany,
+    } });
+    expect(await history.resolvePacket(scoped)).toEqual(legacy);
+    expect(await history(legacy)).toBe(false);
+    expect(row).toEqual(before);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ userId: authority.userId }), take: 2,
+    }));
+  });
+  it("keeps an ambiguous original key for the existing original-review-ambiguous refusal", async () => {
+    const history = createExhaustedPlanReviewPredicate(authority, { taskRun: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([original(), original("oauth-family:second")]),
+    } });
+    expect(await history.resolvePacket(scoped)).toEqual(legacy);
+  });
+  it("does not let a new roster target create a sibling of the same pending immutable review", async () => {
+    const changedTarget = { ...scoped, targetAgent: "another-reviewer" };
+    const history = createExhaustedPlanReviewPredicate(authority, { taskRun: {
+      findFirst: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([original()]),
+    } });
+    // This is only a candidate key. The existing recovery guard must still
+    // reject the changed target/digest; it must not miss the original task.
+    expect(await history.resolvePacket(changedTarget)).toEqual({ ...changedTarget, requestKey: legacy.requestKey });
+  });
+  it("never reads older families behind an exact current task", async () => {
+    const row = { ...fixture(), taskRunId: deterministicExternalTaskRunId(authority.taskAuthorityKey, scoped.requestKey) };
+    const findMany = vi.fn();
+    const history = createExhaustedPlanReviewPredicate(authority, { taskRun: {
+      findFirst: vi.fn().mockResolvedValue(row), findMany,
+    } });
+    expect(await history.resolvePacket(scoped)).toEqual(scoped);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+  it.each(["user", "binding", "identity", "source", "terminal"])("does not alias %s history", async kind => {
+    const row = original();
+    if (kind === "user") row.userId = "another-human";
+    if (kind === "binding") row.a2aMetadata.initiativeReviewBinding = { ...legacy.initiativeReviewBinding, expectedCurrentBaselineId: "different" };
+    if (kind === "identity") row.taskRunId = "invented";
+    if (kind === "source") row.a2aMetadata.tokenSource = "api-token";
+    if (kind === "terminal") row.status = "completed";
+    const history = createExhaustedPlanReviewPredicate(authority, { taskRun: {
+      findFirst: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([row]),
+    } });
+    expect(await history.resolvePacket(scoped)).toEqual(scoped);
+  });
+});

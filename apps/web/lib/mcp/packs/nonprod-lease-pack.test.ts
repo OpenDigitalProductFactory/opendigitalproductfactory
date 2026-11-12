@@ -106,6 +106,9 @@ describe("nonprod-lease pack — registration", () => {
     const renew = nonprodLeasePack.definitions.find((d) => d.name === "renew_nonprod_environment_lease");
     expect(claim?.inputSchema.properties).toHaveProperty("slotManifestVersion");
     expect(claim?.inputSchema.properties).toHaveProperty("hostPressure");
+    expect(claim?.inputSchema.properties).toHaveProperty(
+      "hostPressure.properties.totalMemoryBytes",
+    );
     expect(claim?.inputSchema.properties).toHaveProperty("resourceClass");
     expect(claim?.inputSchema.properties).toHaveProperty("hostResource");
     expect(claim?.inputSchema.properties).toHaveProperty("ownerProcessIdentity");
@@ -212,7 +215,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
         url: "http://localhost:3010",
         ports: [3010],
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        gateClientRevision: 2,
+        gateClientRevision: 3,
         worktreePath: "D:\\DPF-source-root-worktrees\\lease-terminal-retry-stop",
       },
       "u1",
@@ -285,26 +288,30 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
 
   // BI-69178E02: a gate client runs from the branch, so the server is the only
   // place a client defect fixed on main can be retired from un-rebased branches.
-  it.each(["D:/DPF-worktrees/stale", "/home/dev/dpf-worktrees/stale"])("refuses a stale gate client at %s before touching any lease", async (worktreePath) => {
+  it.each([
+    ["D:/DPF-worktrees/stale", undefined], ["/home/dev/dpf-worktrees/stale", undefined],
+    ["D:/DPF-worktrees/stale", 2], ["/home/dev/dpf-worktrees/stale", 2],
+  ])("refuses a stale gate client at %s (revision %s) before touching any lease", async (worktreePath, gateClientRevision) => {
     const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
       environmentKey: "local-integration-ci", ownerProvider: "claude", ownerSessionId: "s1",
       claimKey: "local-ci:s1:abc", purpose: "Pre-PR local-CI gate for fix/x @ abc",
       url: "http://localhost:3010", ports: [3010],
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       worktreePath,
+      gateClientRevision,
     }, "u1");
 
     expect(res).toMatchObject({
       success: false,
       error: "gate_client_upgrade_required",
-      data: { admission: { status: "refused" }, minimumRevision: 2, clientRevision: 0 },
+      data: { admission: { status: "refused" }, minimumRevision: 3, clientRevision: gateClientRevision ?? 0 },
     });
     expect(res.message).toMatch(/Rebase the branch onto main/);
     expect(res.message).toMatch(/not a verdict on the diff/);
     expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
   });
 
-  it("admits revision 2 Windows and POSIX gate clients", async () => {
+  it("admits revision 3 Windows and POSIX gate clients", async () => {
     lease.claimNonprodEnvironmentLease.mockResolvedValue({
       status: "admitted", lease: { leaseId: "NPEL-A1" }, slotKey: "slot-0", waitAgeMs: 0, poolPolicy: {},
     });
@@ -315,10 +322,10 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
     const current = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
-      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 2,
+      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 3,
     }, "u1");
     const posix = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
-      ...base, worktreePath: "/home/dev/dpf-worktrees/any", gateClientRevision: 2,
+      ...base, worktreePath: "/home/dev/dpf-worktrees/any", gateClientRevision: 3,
     }, "u1");
     expect(current.error).not.toBe("gate_client_upgrade_required");
     expect(posix.error).not.toBe("gate_client_upgrade_required");
@@ -612,6 +619,54 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     const res = await nonprodLeasePack.handlers.release_nonprod_environment_lease({ leaseId: "L1" }, "u1");
     expect(res.success).toBe(true);
     expect(() => JSON.stringify(res)).not.toThrow();
-    expect(lease.releaseNonprodEnvironmentLease).toHaveBeenCalledWith({ leaseId: "L1" });
+    expect(lease.releaseNonprodEnvironmentLease).toHaveBeenCalledWith(expect.objectContaining({ leaseId: "L1", authenticatedUserId: "u1" }));
+  });
+});
+
+
+describe("exact persisted reservation readback", () => {
+  beforeEach(() => {
+    lease.listActiveNonprodEnvironmentLeases.mockResolvedValue([]);
+    lease.listQueuedNonprodEnvironmentLeases.mockResolvedValue([]);
+    cleanup.readLease.mockReset();
+  });
+  it("reads a realistically expired row safely without listing or mutation", async () => {
+    cleanup.readLease.mockResolvedValueOnce({ leaseId: "NPEL-EXPIRED", status: "expired", activeKey: null,
+      ownerPid: null, ownerProcessIdentity: null, expectedMemoryBytes: 8192n });
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId: "NPEL-EXPIRED" }, "u1");
+    expect(result).toMatchObject({ success: true, entityId: "NPEL-EXPIRED", data: { lease: {
+      leaseId: "NPEL-EXPIRED", status: "expired", activeKey: null, ownerPid: null, expectedMemoryBytes: 8192,
+    } } });
+    expect(result.data?.lease).not.toHaveProperty("ownerProcessIdentity");
+    expect(cleanup.readLease).toHaveBeenCalledWith({ where: { leaseId: "NPEL-EXPIRED" } });
+    expect(lease.listActiveNonprodEnvironmentLeases).not.toHaveBeenCalled();
+    expect(lease.listQueuedNonprodEnvironmentLeases).not.toHaveBeenCalled();
+    expect(lease.releaseNonprodEnvironmentLease).not.toHaveBeenCalled();
+  });
+  it.each([null, "", "   ", 3, "NPEL-invalid\nvalue"])("does not turn invalid exact ID %j into a list", async leaseId => {
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId }, "u1");
+    expect(result).toMatchObject({ success: false, error: "invalid_lease_id" });
+    expect(cleanup.readLease).not.toHaveBeenCalled();
+    expect(lease.listActiveNonprodEnvironmentLeases).not.toHaveBeenCalled();
+  });
+  it("reports a missing exact row without inferring expiry", async () => {
+    cleanup.readLease.mockResolvedValueOnce(null);
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId: "NPEL-MISSING" }, "u1");
+    expect(result).toMatchObject({ success: false, error: "not_found" });
+    expect(result.data ?? {}).not.toHaveProperty("lease");
+    expect(lease.listActiveNonprodEnvironmentLeases).not.toHaveBeenCalled();
+  });
+  it("does not expose an unrelated returned row", async () => {
+    cleanup.readLease.mockResolvedValueOnce({ leaseId: "NPEL-FOREIGN", ownerProcessIdentity: "private" });
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId: "NPEL-OWN" }, "u1");
+    expect(result).toMatchObject({ success: false, error: "lease_readback_mismatch" });
+    expect(result.data ?? {}).not.toHaveProperty("lease");
+  });
+  it("redacts an unavailable reader and does not infer terminal state", async () => {
+    cleanup.readLease.mockRejectedValueOnce(new Error("private reader details"));
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId: "NPEL-OWN" }, "u1");
+    expect(result).toMatchObject({ success: false, error: "lease_readback_unavailable" });
+    expect(JSON.stringify(result)).not.toContain("private reader details");
+    expect(result.data ?? {}).not.toHaveProperty("lease");
   });
 });

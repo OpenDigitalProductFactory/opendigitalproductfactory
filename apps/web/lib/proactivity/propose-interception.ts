@@ -18,9 +18,8 @@
 //
 // Curated artifacts (knowledge articles, campaign briefs) carry
 // `coworkerArtifact` — idempotent, groundable, non-fact-mutating writes that are
-// the whole point of a registered self-task — so they still run directly. Only
-// side-effecting, non-artifact tools (the ones that create business-fact rows or
-// reach customers) are diverted.
+// the whole point of a registered self-task — so ordinary proposal posture does
+// not divert them. Current scheduled-stage withholding still fences every effect.
 import { prisma } from "@dpf/db";
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
@@ -37,7 +36,7 @@ export type ProposeMessagePersistence = {
 };
 
 /** The server-set context a diverted call is executed under. Never from a transport (AC-TRANSPORT). */
-export type ProposeBoundaryContext = { proposeBoundary: true; approvalCompletion: "platform" };
+export type ProposeBoundaryContext = { proposeBoundary: true; approvalCompletion: "platform"; allowApprovalRequest?: false };
 
 /** Runs the diverted call through the governed executor; the agentic loop supplies the rest of its context. */
 export type ProposeBoundaryExecute = (boundary: ProposeBoundaryContext) => Promise<ToolResult>;
@@ -119,9 +118,10 @@ function pendingEnvelope(result: ToolResult): { envelopeId: string; expiresAt: s
 }
 
 /**
- * The agentic loop's single entry point. Returns `null` when the tool should
- * execute normally (not a propose boundary, a read-only or artifact tool, or
- * a write the run's room mandate declares). Otherwise the call goes through
+ * The agentic loop's single entry point. Scheduled effects first revalidate
+ * current stage authority, including turns attached in act mode. Without a
+ * current withholding, reads, artifacts and calls outside proposal mode still
+ * run normally, as do writes the room mandate declares. Otherwise the call goes through
  * the monitor under the boundary, and the result depends on the gate:
  *   - approval required: the request is raised; the synthetic success with
  *     its envelope id and expiry, and the "Proposed `X`" thread message;
@@ -143,19 +143,25 @@ export async function interceptToolCallAsProposal(input: {
 }, deps: {
   persistence?: ProposeMessagePersistence;
   /** Test seam; production reads room-stage-mandate.ts. */
-  resolveMandatedTools?: (input: { taskRunId: string | null; agentId: string }) => Promise<readonly string[]>;
+  resolveMandatedTools?: (input: { taskRunId: string | null; agentId: string; toolName: string; params: Record<string, unknown> }) => Promise<readonly string[]>;
 } = {}): Promise<ToolResult | null> {
-  if (!shouldProposeToolCall(input.toolDef, input.proposeSideEffects)) return null;
+  const propose = shouldProposeToolCall(input.toolDef, input.proposeSideEffects);
+  // Standing stages may attach in act mode before their source changes. Recheck
+  // their effects live; attachment-time posture cannot preserve stale authority.
+  const scheduledEffect = input.toolDef?.sideEffect === true && input.taskRunId?.startsWith("TR-SCHED-");
+  if (!propose && !scheduledEffect) return null;
   // BI-C1781121: a write the run's Workroom stage declares is a recorded
   // decision (the same one the escalation gate steers as `scheduled-mandate`),
   // so it runs. The propose boundary stays in force for every other write, and
   // an unreadable mandate diverts as before.
-  if (await runMandatesTool(input, deps.resolveMandatedTools)) return null;
+  const mandate = await runMandatesTool(input, deps.resolveMandatedTools);
+  if (!propose && !mandate.withheld) return null;
+  if (mandate.mandated) return null;
   if (input.toolDef && toolTakesSecretInput(input.toolDef)) return secretRefusal(input.toolName);
 
   let result: ToolResult;
   try {
-    result = await input.execute({ proposeBoundary: true, approvalCompletion: "platform" });
+    result = await input.execute({ proposeBoundary: true, approvalCompletion: "platform", ...(mandate.withheld ? { allowApprovalRequest: false as const } : {}) });
   } catch (err) {
     console.warn(`[agentic-tool] propose-divert failed tool=${input.toolName}:`, err);
     // Fail closed: report failure so the model summarizes rather than acting.
@@ -186,15 +192,20 @@ export async function interceptToolCallAsProposal(input: {
 }
 
 async function runMandatesTool(
-  input: { toolName: string; agentId: string; taskRunId: string | null },
-  resolve?: (input: { taskRunId: string | null; agentId: string }) => Promise<readonly string[]>,
-): Promise<boolean> {
+  input: { toolName: string; agentId: string; taskRunId: string | null; args: Record<string, unknown> },
+  resolve?: (input: { taskRunId: string | null; agentId: string; toolName: string; params: Record<string, unknown> }) => Promise<readonly string[]>,
+): Promise<{ mandated: boolean; withheld?: boolean }> {
   try {
-    const load = resolve
-      ?? (await import("@/lib/work-management/room-stage-mandate")).loadScheduledRoomMandateLive;
-    return (await load({ taskRunId: input.taskRunId, agentId: input.agentId })).includes(input.toolName);
+    if (resolve) return { mandated: (await resolve({ taskRunId: input.taskRunId, agentId: input.agentId, toolName: input.toolName, params: input.args })).includes(input.toolName) };
+    const { loadScheduledRoomAuthorityLive } = await import("@/lib/work-management/room-stage-mandate");
+    const authority = await loadScheduledRoomAuthorityLive({
+      taskRunId: input.taskRunId, agentId: input.agentId, toolName: input.toolName, params: input.args,
+    });
+    // The monitor can reuse an exact approval/outcome; it may not ask again.
+    if (authority.withheldBecause) return { mandated: false, withheld: true };
+    return { mandated: authority.mandatedTools.includes(input.toolName) };
   } catch {
-    return false;
+    return { mandated: false };
   }
 }
 

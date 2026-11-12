@@ -27,8 +27,8 @@ vi.mock("@/lib/mcp-tools", () => {
 
 import type { ConsequentialToolClassification } from "@/lib/tak/consequential-tool-policy";
 
-import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema";
-import { resolveShapeDocument, type GppResolveSources } from "./resolve";
+import { gppShapeDocumentSchema, type GppShapeDocument } from "@dpf/validators/gpp/gpp-shape-schema";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 
 const WORKED_EXAMPLE = gppShapeDocumentSchema.parse(
   JSON.parse(readFileSync(join(__dirname, "__fixtures__", "inquiry-response-watch.worked-example.gpp.json"), "utf8")),

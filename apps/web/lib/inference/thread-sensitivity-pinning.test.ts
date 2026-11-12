@@ -17,13 +17,11 @@
 import { describe, expect, it } from "vitest";
 import { screenInferencePayload } from "./data-screening/screen-inference-payload";
 
-/**
- * The live escalating shape (finance-controller, /workspace): two distinct
- * inferred reasons in turn content corroborate each other into `restricted`.
- * Neither half names a person or a value — this is ordinary planning prose.
- */
-const EARLY_TRIGGER =
+/** Historical false-positive specimen: domain prose with no protected value. */
+const DOMAIN_ONLY_HISTORY =
   "Our SaaS categories are CRM, payroll, analytics, and helpdesk; the invoice total was charged to the card on file.";
+/** A real value-shaped invoice remains protected even when it is in history. */
+const EARLY_TRIGGER = "Invoice INV-1042 total: $125.00.";
 /** Utterly unrelated to the trigger, and to any governed data class. */
 const CURRENT_TURN = "What is on the agenda for the leadership offsite?";
 
@@ -36,7 +34,7 @@ function screenThread(messages: { role: "user" | "assistant"; content: string }[
 }
 
 describe("BI-706530B2 — a thread is pinned by its history", () => {
-  it("restricts an unrelated later turn because of one early word", () => {
+  it("restricts an unrelated later turn when protected invoice data is still in history", () => {
     const fresh = screenThread([{ role: "user", content: CURRENT_TURN }]);
     expect(fresh.receipt.measuredSensitivity).not.toBe("restricted");
     expect(fresh.receipt.routeEffect).not.toBe("local-only");
@@ -47,10 +45,21 @@ describe("BI-706530B2 — a thread is pinned by its history", () => {
       { role: "user", content: CURRENT_TURN },
     ]);
 
-    // Same question, same coworker, opposite routing — decided entirely by a
-    // word the operator typed turns ago and has no reason to remember.
+    // The protected record is still sent, so the later unrelated question
+    // must not erase its privacy boundary.
     expect(pinned.receipt.measuredSensitivity).toBe("restricted");
     expect(pinned.receipt.routeEffect).toBe("local-only");
+  });
+
+  it("does not pin later turns on the original invoice-domain prose (BI-12CD3010)", () => {
+    const result = screenThread([
+      { role: "user", content: DOMAIN_ONLY_HISTORY },
+      { role: "assistant", content: "Noted - four categories." },
+      { role: "user", content: CURRENT_TURN },
+    ]);
+    expect(result.receipt.measuredSensitivity).not.toBe("restricted");
+    expect(result.receipt.routeEffect).toBe("allow");
+    expect(result.classification.dataEvidencedClasses).not.toContain("payments-finance");
   });
 
   it("the receipt knows WHICH message pinned it — the owner has no way to", () => {

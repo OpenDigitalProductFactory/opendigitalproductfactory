@@ -248,6 +248,18 @@ export async function sendDeploymentDeclarationToPeer(
   });
 }
 
+/** Deliver the production authority's guidance snapshot (BI-1B165D02) to its
+ *  attested development companion. Same inbox and transport as a declaration;
+ *  a companion that predates the type answers 422 and the outbox retries. */
+export async function sendGuidanceSnapshotToPeer(
+  target: PeerLinkTarget,
+  activity: string,
+  record: unknown,
+  options: { eventId?: string; now?: Date } = {},
+): Promise<PeerPostResult> {
+  return sendDeploymentDeclarationToPeer(target, activity, record, options);
+}
+
 /** Compare bounded demand inventories so a lost send or acknowledgment self-heals. */
 export async function sendDemandDigestToPeer(
   target: PeerLinkTarget,

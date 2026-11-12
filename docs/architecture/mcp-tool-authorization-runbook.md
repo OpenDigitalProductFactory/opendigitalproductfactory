@@ -1,3 +1,14 @@
+---
+# Doc-impact edges (BI-9B17E889): the per-client dpf connector descriptors this
+# runbook describes. Changing one flags this page in the Docs Impact Gate and in
+# a Workroom's change-impact contract.
+relatedCode:
+  - packages/dpf-skill-pack/claude.mcp.json
+  - packages/dpf-skill-pack/codex.mcp.json
+  - packages/dpf-skill-pack/grok.mcp.json
+  - packages/dpf-skill-pack/antigravity.mcp.json
+---
+
 # MCP tool authorization runbook
 
 Source host tooling applies existing authorized CA trust to native MCP and OAuth
@@ -58,6 +69,30 @@ for semantic reviews after checking the authenticated task owner. This includes
 at most 100 task node IDs, recorded status, digest binding and current scoped
 remediation verification identity. It excludes raw provider output and diagnostic
 text. A truncated node list cannot establish complete execution settlement.
+
+`recovery.details.authority` reports the original request's current authority
+through fixed categories for human access, saved credential scope, OAuth
+continuity/consent, coworker grants and task assignment. Query or immutable
+request failures remain `unavailable`, not a diagnosed denial. This observation
+contains no credential values, actor identifiers or raw errors. A current allowed
+result is neither a historical cause nor permission to retry. Use the returned
+supported remedy for the failed stage; never replace the saved credential by hand.
+
+For `oauth-authority-invalid`, optional `detail` identifies the first current
+failure in the shared execution predicate: token kind/revocation, missing or
+revoked client, ineligible human, missing continuity binding or evidence, or
+missing/invalid consent. The fixed `nextAction` distinguishes account-owner
+review from a binding that the recovery owner must reconcile. Missing continuity
+evidence does not prove expiry caused the original failure, and reconnecting a
+different client does not restore the original binding. Storage failures remain
+unavailable. The diagnostic does not change execution eligibility, settle an old
+execution, or authorize a retry.
+
+The original signed-in human can read the same bounded recovery observation on
+the existing `/api/internal/tasks/<taskId>` task-detail endpoint. Its original
+task admission runs first; another owner's task receives no added authority
+detail even when the signed-in user is an administrator. This existing owner
+surface remains available when the client does not expose protocol Tasks methods.
 
 Failed or inactive tasks do not prove their provider executions have settled.
 `executionSettled` requires a fresh recorded health verification bound to this
@@ -120,7 +155,17 @@ and receives every approval its assistant asks for. The POST binds only if
 the ticked account is still the session's account. `Use a different
 account` signs in again and returns to the same request. If a connection
 was made under the wrong account, revoke it and reconnect; approvals never
-follow the connection to another person. An administrator ends one person's
+follow the connection to another person. The platform automation persona
+(`automation@dpf.local`) is never offered there (BI-F586F8A5): a browser
+still holding its session gets a page naming that account with a link to
+sign in as yourself, and the POST issues no code. The governed acceptance
+flow keeps its path: mint `issue_ux_verification_sign_in` with `nextPath`
+set to the exact `/api/oauth/authorize?...` request (its `client_id` and
+`code_challenge`); that session may consent to that one request only.
+Fixture verification users are ordinary accounts and are unaffected. A
+connection refused `workroom_access_denied` is told which account it acts
+as (`data.connectedAs`) and to reconnect while signed in as the room's
+owner; the owner is not named to a caller who is not admitted. An administrator ends one person's
 grants under a shared client registration with People > Revoke this person's
 access on Admin > Platform Development (BI-0A724798); the whole-client revoke
 stays the larger control. The default flow is one Connect action;
@@ -190,7 +235,7 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 **Acceptance boundary.** Generator and temporary-home rerun tests verify source behavior. Fresh server install, browser consent, restart, refresh and governed reads/writes must still be exercised during the operator's planned reinstall. Configuration written is not that acceptance evidence.
 
-**Gate scripts authenticate headlessly with a `client_credentials` client (BI-78B653D5).** `pnpm run pregate` (`scripts/gate-worktree.mjs`, `scripts/pregate.mjs`) has no browser, so it cannot ride the client's OAuth session; it speaks the same authorization server through the headless grant instead. Resolution order in `scripts/lib/mcp-credential.mjs`: (1) a `client_credentials` client — `DPF_MCP_CLIENT_ID` + `DPF_MCP_CLIENT_SECRET`, or `{"clientId","clientSecret"}` in `~/.dpf/mcp-client-credentials.json` (path override `DPF_MCP_CLIENT_CREDENTIALS_FILE`; it lives outside every checkout so it can never be committed) — minted by an operator in Admin > Platform Development > MCP; the gate re-mints its short-lived access token itself, so a long run never strands on a stale copy; (2) the legacy `DPF_MCP_BEARER_TOKEN` PAT until its retirement horizon; (3) neither: the gate refuses before any lease work with a message naming both paths. An expired PAT therefore no longer forces an `operator-emergency` push override — issue a credentials client once and the gate runs.
+**Gate scripts authenticate headlessly with a `client_credentials` client (BI-78B653D5).** `pnpm run pregate` (`scripts/gate-worktree.mjs`, `scripts/pregate.mjs`) has no browser, so it cannot ride the client's OAuth session; it speaks the same authorization server through the headless grant instead. Resolution order in `scripts/lib/mcp-credential.mjs`: (1) a `client_credentials` client — `DPF_MCP_CLIENT_ID` + `DPF_MCP_CLIENT_SECRET`, or `{"clientId","clientSecret"}` in `~/.dpf/mcp-client-credentials.json` (path override `DPF_MCP_CLIENT_CREDENTIALS_FILE`; it lives outside every checkout so it can never be committed) — issued through the assistant-bound native route below, or manually in Admin > Platform Development > MCP; the gate re-mints its short-lived access token itself, so a long run never strands on a stale copy; (2) the legacy `DPF_MCP_BEARER_TOKEN` PAT until its retirement horizon; (3) neither: the gate refuses before any lease work with a message naming both paths. An expired PAT therefore no longer forces an `operator-emergency` push override — issue a credentials client once and the gate runs.
 
 **The assistant provisions its own source client (BI-10AC904B).** From the working
 native connection, call `issue_source_credentials_client`. The server derives the
@@ -205,7 +250,12 @@ rewrites another assistant's binding or revives a revoked row.
 
 Keep `data.credentialsClient` out of transcripts and tracked files. Write it only
 to `~/.dpf/mcp-client-credentials.json`, or the explicit canonical file override,
-through a private local transfer. Workroom binding and gate scripts share
+through a private local transfer. On a shared host, use a private file for each
+actual assistant binding and select it with `DPF_MCP_CLIENT_CREDENTIALS_FILE`.
+Conversations acting as that same verified assistant may reuse its matching file;
+do not create a duplicate for every conversation or borrow another assistant's
+credential. A different client type retains its actual assistant binding and its
+client-specific credential flows. Workroom binding and gate scripts share
 `scripts/lib/mcp-credential.mjs`: headless credentials take precedence over the
 legacy PAT, and malformed configuration refuses without PAT fallback. Preserve
 the configured endpoint and trusted CA. Verify the shell's actual
@@ -300,6 +350,7 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 2. HTTP `401` means the bearer credential is absent, invalid or expired. **For an OAuth client this is self-healing and not a defect** — the challenge carries `resource_metadata`, so the client rediscovers, refreshes or re-authorizes on its own; if it does not, the client is not performing RFC 9728 discovery. For a legacy `dpfmcp_` PAT there is no refresh grant: rotate or reseed the local client configuration, and prefer migrating that client to OAuth. Never print the token.
 2b. HTTP `403` with `error="insufficient_scope"` is **not** an auth failure — it is a step-up prompt. See the scope-escalation rule above.
 3. Structured `insufficient_token_scope` / `insufficient_tool_grant` means the server is connected but authorization refused the operation. Stop; do not work around the grant intersection.
+3b. **Every refusal says whether to call again (BI-E458A9CB).** A governed refusal's `data` carries `retry` and `nextAction`: `retry: "never"` with `wakeBy` naming what changes the answer (an approval decision on `envelopeId`, an authority change, or a person), `retry: "after-input"` once the named input exists, or `retry: "after"` with `retryAfterMs` for a check that could not run. An approval wait also names the exact readback call, `get_my_approval_status` with its `envelopeId`. An identical repeat (same principal, tool, arguments and authority facts) inside the window is **parked**: it returns the recorded answer with `governance.parked`, writes no new authority row and raises no new approval card, and the first parked repeat records a `refusal_breaker` ImprovementSignal. A grant, room or argument change is a different call and is evaluated at once; a decided or expired approval releases its park. Code: `apps/web/lib/govern/authority/refusal-breaker.ts`.
 4. Structured `unknown_tool` means the called name is not in the server grant map. Follow its `recovery` payload: try exact-name `load_tools` when spelling is known, otherwise intent query or `search_tool_marketplace`, then re-list or use the host's programmatic catalog fallback.
 5. MCP resources and MCP tools are different discovery surfaces. Listing resources cannot prove that a DPF tool is absent, and installing another plugin is not recovery for an already-connected DPF server.
 6. A fresh Codex task with a healthy connector but only the core catalog usually means its configured URL lacks `?tier=full`; this is bootstrap drift, not missing authority. Re-run bootstrap and reconnect. Preserve `?tier=core` for generic-client diagnosis rather than widening every client.
@@ -740,6 +791,20 @@ execution-uncertain or exhausted predecessor requires reconciliation; readback
 returns a refusal rather than a replacement request. Dropping a recovery locator
 from a bounded native request does not authorize a new task.
 
+Before issuing recovery, the original-review guard inventories the unsuffixed
+key and every reviewer-scoped alias, including histories from earlier OAuth
+families. Coexisting unresolved tasks refuse as ambiguous even when one matches
+the current key. A completed alias cannot hide an unresolved original. Malformed
+identities, changed request bytes and incomplete inventory refuse safely.
+
+Ordinary creation repeats the predecessor check under the subject lock before
+allocating a task. Its only exhausted-reviewer exception reuses the existing
+terminal-writer exhaustion proof for a different canonical reviewer in the same
+current OAuth family. Both keys, the saved digest, artifact, binding, tool scope,
+human and requesting coworker must match their recorded authority. Renaming the
+same reviewer, changing family, uncertain execution or a present reassessment
+cannot supply another budget.
+
 The locator grants no authority. Submission rechecks the current interactive
 OAuth connection, authenticated human, canonical acting coworker, live grants,
 exact Workroom action admission and current server-issued review packet. The
@@ -789,6 +854,16 @@ are unaffected.
 
 ## Canonical review writer execution identity
 
+The captured identity also fences every task-bound review callback, whether or
+not it used connection recovery. Governed preflight, immediate tool dispatch and
+task settlement recheck the same request, reservation, dispatch claim and
+authority digest. An approval return keeps its original audited identity and
+cannot adopt a newer generation or revive a held execution. Malformed non-null
+review bindings fail closed; ordinary tasks with the historical null sentinel
+keep their normal behavior. The original owner can still read exact
+`tasks/get` and `tasks/result` evidence under current read permissions. These
+reads neither resume execution nor clear uncertainty.
+
 For a task-bound initiative review, the admitted executor captures its request
 digest, reservation, dispatch claim and recorded execution-authority digest before
 starting provider work. Internal tool execution carries that captured identity;
@@ -809,3 +884,78 @@ reset attempts or qualify historical recovery. Deploy compatible writers before
 admitting these sessions. Roll back by disabling admission while retaining the
 compatible fence and readers; a pre-fence binary requires separately proven
 capability retirement and reconciled effects.
+
+## Explicitly authorized present reassessments
+
+An approved retained policy can authorize a bounded present assessment of an
+unchanged review requirement. This is separate from original-task recovery.
+`get_backlog_item` accepts `reassessmentAuthorizationItemId` with the exact
+`itemId` and `recoveryGate`; its server-issued packet retains the original
+source and the approved policy, baseline and predecessor relation. The locator
+confers no permission. Submit the complete packet unchanged through the normal
+governed `request_coworker` path.
+
+Admission rechecks current human, connection, coworker grants, Workroom access,
+independent approval, normal routing and recorded budgets. It locks the complete
+accepted lineage before the subject and authorization items. Every accepted
+assessment counts, including pending, failed, canceled and uncertain work.
+Repeated requests read the existing allocation; they cannot open another window
+or reset a counter. Historical unknown consumption remains unknown.
+The shared task creator also refuses a new ordinary bound task for the same
+held, uncertain, quarantined or already reassessed requirement. Explicit review
+writer scopes require a binding, and external independent writers require the
+validated persisted binding at publication. Direct `tasks/submit` cannot publish
+a replacement verdict by omitting that binding or changing its key.
+
+The initial TaskRun, immutable qualification root and first input commit together.
+Only declared captured configuration reads run during qualification. Promotion
+adds an immutable execution seal on that same task and original window; reader,
+writer, count and generation effects require the actual promoted scope. Current
+authority and the retained seal are checked again at each effect and inside the
+canonical writer transaction. A genuine existing receipt takes precedence over
+new execution. Predecessor quarantine retains its original status, uncertainty,
+attempts and limits alongside a separate execution hold.
+
+The finite native path captures complete count and generation bodies, reserves
+the exact prompt count plus the full output ceiling, and retains outstanding
+reservations. Normal model selection, quality floors, daily observed-usage checks
+and resource admission still apply. Missing host GPU telemetry is recorded as
+unknown under the ordinary capacity policy; it is never an idle measurement.
+An unsupported normal winner refuses before allocation.
+
+Compatible transport, approval, worker and writer owners are required on the
+actual served image. Upgrade preflight and the final swap check their packaged
+capability proof, including fallback targets. Canonical self-upgrade PostgreSQL
+rollback is currently refused before any backup or restore effect because
+whole-restore retention and effect exclusion have not been proven. This
+deliberately reduces rollback availability; the refusal is not positive
+retention evidence. Other privileged database, file and host administration
+remains the approved trusted-admin boundary. Source
+tests alone do not establish deployment, a live assessment or parent admission.
+
+## Bounded Workroom activity reads
+
+When `get_workroom` cannot deliver a raw activity page within its budget, preserve
+the unadvanced cursor. Use the same tool with `activityMode: "bounded"` and the
+same `afterSequence` to read activity metadata without loading raw payloads.
+Preserve the returned `throughSequence` while continuing with
+`nextAfterSequence`. `activityLimit` is an upper bound (1..20); fewer whole rows
+may fit. Metadata explicitly defers payload evidence and is not a full receipt.
+
+Each row supplies an exact same-room detail call. Add `activityId` in bounded
+mode to read its payload, or `activityField: "summary"` for summary text.
+`payloadPath` selects object keys or array indexes when a structured value is too
+large. A successful detail response delivers only that selected value. Missing
+paths and JSON null are distinct. Oversized scalars remain retained and
+undelivered; there is no scalar streaming fallback. Do not repeat an unchanged
+impossible read or infer full evidence from metadata.
+A value whose numbers cannot survive JSON decoding exactly is also refused;
+no rounded value is presented as complete evidence. Select a different field
+when useful. The retained original is never rewritten.
+
+Every read requires current tool authority and canonical room content admission,
+checked before and after selection. Numeric bounds and row IDs grant nothing.
+A sequence gap leaves the range unadvanced. `legacyRowsPresent` marks rows with
+no sequence; sequenced traversal cannot establish complete legacy history.
+The default room reader and legacy alias retain their existing behavior. These
+reads never settle, resume or replace a historical execution.

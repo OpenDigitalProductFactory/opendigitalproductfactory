@@ -245,7 +245,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "scripts", "lib"), { recursive: true });
   mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
-  for (const name of ["mcp-host-trust.mjs", "resolve-compose-install-context.mjs"]) {
+  for (const name of ["mcp-host-trust.mjs", "foreground-gate-process.mjs", "resolve-compose-install-context.mjs"]) {
     cpSync(join(repoRoot, "scripts", "lib", name), join(temp, "scripts", "lib", name));
   }
   // BI-A254A94C: sandbox admission is a static import. The temp tree has to
@@ -266,6 +266,8 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "documentation-evidence-lane.mjs"), join(temp, "scripts", "lib", "documentation-evidence-lane.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "semantic-review-gate.mjs"), join(temp, "scripts", "lib", "semantic-review-gate.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-ci.mjs"), join(temp, "scripts", "lib", "local-integration-ci.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-vitest-selection.mjs"), join(temp, "scripts", "lib", "local-ci-vitest-selection.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-stage-receipt.mjs"), join(temp, "scripts", "lib", "local-ci-stage-receipt.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "host-command-invocation.mjs"), join(temp, "scripts", "lib", "host-command-invocation.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-failure-summary.mjs"), join(temp, "scripts", "lib", "local-ci-failure-summary.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "sandbox-freshness.mjs"), join(temp, "scripts", "lib", "sandbox-freshness.mjs"));
@@ -281,6 +283,8 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "process-identity.mjs"), join(temp, "scripts", "lib", "process-identity.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "gate-execution-checkpoint.mjs"), join(temp, "scripts", "lib", "gate-execution-checkpoint.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "ci-evidence-plan.mjs"), join(temp, "scripts", "lib", "ci-evidence-plan.mjs"));
+  // The docs-only classifier reads the evidence policy (BI-78176241).
+  cpSync(join(repoRoot, "config", "ci-evidence-policy.json"), join(temp, "config", "ci-evidence-policy.json"));
   cpSync(join(repoRoot, "scripts", "lib", "derived-artifacts-registry.mjs"), join(temp, "scripts", "lib", "derived-artifacts-registry.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));

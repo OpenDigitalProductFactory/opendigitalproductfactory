@@ -70,6 +70,22 @@ describe("body criteria capture in the authorized subject transaction", () => {
     await ensureItemBodyBaseline(tx as never, { ...args, ...change });
     expect(tx.documentVersion.create).not.toHaveBeenCalled();
   });
+  // BI-729D9B27: the build-originated item's completion may record the same scope.
+  const buildAuthority = { ...args.authority, actionKey: "complete_feature_build",
+    authoritySnapshot: { ...args.authority.authoritySnapshot, effectiveHumanCapability: "view_platform",
+      effectiveAgentGrant: "build_lifecycle", actionKey: "complete_feature_build" } };
+  it("mints under the build completion authority", async () => {
+    await ensureItemBodyBaseline(tx as never, { ...args, authority: buildAuthority });
+    expect(tx.documentVersion.create).toHaveBeenCalledOnce();
+  });
+  it.each([
+    { ...buildAuthority, actionKey: "advance_build_phase" },
+    { ...buildAuthority, authoritySnapshot: { ...buildAuthority.authoritySnapshot, effectiveAgentGrant: "backlog_write" } },
+    { ...buildAuthority, authoritySnapshot: { ...buildAuthority.authoritySnapshot, effectiveHumanCapability: "manage_backlog" } },
+  ])("refuses any other build_lifecycle pairing", async (authority) => {
+    await ensureItemBodyBaseline(tx as never, { ...args, authority });
+    expect(tx.documentVersion.create).not.toHaveBeenCalled();
+  });
   it.each(["inherited", "approved"])("preserves %s scope", async (origin) => {
     mocks.source.mockResolvedValue({ origin: origin === "inherited" ? "inherited" : "own",
       baselineRows: origin === "approved" ? [{ payload: { baselineId: "approved", supersedesBaselineId: null, approvalReceiptId: "receipt" } }] : [] });

@@ -28,7 +28,7 @@ export type ClaimBacklogWorkspaceInput = {
   overrideReason?: string | null;
 };
 
-export type CapsuleDb = {
+export type CapsuleDb = Omit<import("./delivery-agreement-capture").DeliveryAgreementCaptureDb, "backlogItem"> & {
   workroom: {
     create(args: unknown): Promise<any>;
     findFirst(args: unknown): Promise<any>;
@@ -39,6 +39,7 @@ export type CapsuleDb = {
   workroomActivity: {
     create(args: unknown): Promise<any>;
     findFirst?(args: unknown): Promise<any>;
+    findMany?(args: unknown): Promise<any[]>;
   };
   backlogItem?: {
     findFirst(args: unknown): Promise<any>;

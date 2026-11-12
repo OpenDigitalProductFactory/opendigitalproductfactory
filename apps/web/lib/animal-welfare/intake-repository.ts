@@ -16,6 +16,8 @@
 
 import { randomUUID } from "node:crypto";
 
+import type { CareIntakeSourceMode } from "@dpf/db/healthcare-care-intake";
+
 import {
   placeResourceOccupantWithin,
   type OccupancyResult,
@@ -33,6 +35,15 @@ import {
 } from "./intake-policy";
 import type { AnimalCustodyStage, AnimalIntakeType } from "./lifecycle";
 import { evaluatePlacementReadiness, type PlacementReadiness } from "./placement-readiness";
+
+/**
+ * How rescue staff record an admission in the shared intake tables. Staff
+ * enter it on the animal's behalf, which is the vocabulary's `staff-assisted`.
+ * Typed against the vocabulary the CHECK constraints enforce: the free string
+ * "operator" type-checked here and was refused by every real insert
+ * (BI-6A41ADCD).
+ */
+export const ANIMAL_INTAKE_SOURCE_MODE: CareIntakeSourceMode = "staff-assisted";
 
 // ─── Client surface ─────────────────────────────────────────────────────────
 
@@ -361,7 +372,7 @@ export async function recordAnimalIntake(input: {
         subjectKindSlug: ANIMAL_SUBJECT_KIND,
         subjectRef: subjectRef(animalProfileId),
         status: "in-progress",
-        sourceMode: "operator",
+        sourceMode: ANIMAL_INTAKE_SOURCE_MODE,
         purposeOfUse: "animal-intake",
         requirementSnapshot: buildAnimalIntakeRequirementSnapshot() as unknown as Row,
         startedAt: now,
@@ -381,7 +392,7 @@ export async function recordAnimalIntake(input: {
         fromStatus: null,
         toStatus: "in-progress",
         reason: "Animal admitted",
-        sourceMode: "operator",
+        sourceMode: ANIMAL_INTAKE_SOURCE_MODE,
         actorPrincipalId: context.actorPrincipalId,
         occurredAt: now,
       },

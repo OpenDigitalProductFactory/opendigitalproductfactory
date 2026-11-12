@@ -6,6 +6,9 @@ vi.mock("@/lib/inference/routed-inference", () => ({
 vi.mock("@/lib/routing/local-provider-capacity", () => ({
   inspectLocalProviderCapacity: vi.fn(),
 }));
+vi.mock("./semantic-review-source-sensitivity", () => ({
+  resolveSemanticReviewRoomSensitivity: vi.fn(async () => "internal"),
+}));
 
 import { routeAndCall } from "@/lib/inference/routed-inference";
 import { buildEffectiveRequestContract, buildInitialRouteContext } from "@/lib/inference/route-contract-builder";
@@ -19,7 +22,30 @@ beforeEach(() => {
 });
 
 describe("routed semantic review", () => {
-  it.each(["external", "build-studio"] as const)("protects ordinary source without authoritative classification on %s", async (surface) => {
+  it("retains the canonical capacity reason when both required branches defer", async () => {
+    const result = await dispatchRoutedSemanticReview("immutable diff", {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external",
+    }, async () => ({ decision: "inconclusive", issues: [], summary: "No provider work began.",
+      inconclusiveReason: "review-capacity-deferred" }));
+    expect(result).toMatchObject({ decision: "inconclusive", inconclusiveReason: "review-capacity-deferred" });
+    expect(result.summary).toContain("2 required semantic review branches");
+    expect(routeAndCall).not.toHaveBeenCalled();
+  });
+
+  it.each(["unparseable-review-response", "review-branch-incomplete", "review-endpoint-ineligible"])(
+    "preserves a mixed %s reason rather than qualifying it as capacity-only", async reason => {
+      const result = await dispatchRoutedSemanticReview("immutable diff", {
+        strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external",
+      }, async agent => ({ decision: "inconclusive", issues: [], summary: "Required branch remains unresolved.",
+        inconclusiveReason: agent === "change-reviewer" ? "review-capacity-deferred" : reason }));
+      expect(result.decision).toBe("inconclusive");
+      expect(result.inconclusiveReason).not.toBe("review-capacity-deferred");
+      expect(result.inconclusiveReason).toContain(reason);
+      expect(routeAndCall).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["external", "build-studio"] as const)("keeps the internal floor when the reviewed room is unknown on %s", async (surface) => {
     vi.mocked(routeAndCall).mockResolvedValue({
       content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
     } as never);
@@ -37,6 +63,53 @@ describe("routed semantic review", () => {
       expect(sensitivity).toBe("internal");
       expect(screened.routeContext.sensitivity).toBe("confidential");
       expect(screened.receipt.measuredSensitivity).toBe("confidential");
+    }
+  });
+
+  const platformRoom = vi.fn(async (_capsuleId: string | undefined) => "development" as const);
+  const review = (artifact: string, room: (capsuleId: string | undefined) => Promise<"development" | "internal" | "confidential" | "restricted">) =>
+    dispatchRoutedSemanticReview(artifact, {
+      strategyProfile: "high-assurance", reviewerId: "change-reviewer", specialistIds: ["AGT-181"], surface: "external", capsuleId: "WC-PLATFORM",
+    }, undefined, undefined, room);
+
+  it("routes a platform room's source diff as development, so every cleared provider is eligible (BI-9F620FE1)", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
+    } as never);
+    await review("export function normalizePaths(paths: string[]) { return paths.filter(Boolean); }", platformRoom);
+    expect(platformRoom).toHaveBeenCalledWith("WC-PLATFORM");
+    expect(routeAndCall).toHaveBeenCalledTimes(2);
+    for (const [messages, systemPrompt, sensitivity] of vi.mocked(routeAndCall).mock.calls) {
+      expect(sensitivity).toBe("development");
+      const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
+      expect(screened.receipt.measuredSensitivity).toBe("public");
+      expect(screened.routeContext.residencyPolicy).not.toBe("local_only");
+    }
+  });
+
+  it.each([
+    'const apiKey = "sk-ant-api03-REDACTEDLOOKINGSECRETVALUE";',
+    'export const employeeRecord = { salary: 92000, ssn: "123-45-6789" };',
+    'export const taxPayment = { routingNumber: "021000021", accountNumber: "5512338891" };',
+  ])("still keeps protected data in a platform room's diff local-only: %s", async (artifact) => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Screening fixture." }),
+    } as never);
+    await review(artifact, platformRoom);
+    const [messages, systemPrompt, sensitivity] = vi.mocked(routeAndCall).mock.calls[0]!;
+    const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
+    expect(screened.routeContext.residencyPolicy).toBe("local_only");
+  });
+
+  it("keeps a confidential room's review confidential", async () => {
+    vi.mocked(routeAndCall).mockResolvedValue({
+      content: JSON.stringify({ decision: "pass", issues: [], summary: "Completed review." }),
+    } as never);
+    await review("export function normalizePaths(paths: string[]) { return paths.filter(Boolean); }", async () => "confidential");
+    for (const [messages, systemPrompt, sensitivity] of vi.mocked(routeAndCall).mock.calls) {
+      expect(sensitivity).toBe("confidential");
+      const screened = screenInferencePayload({ messages, systemPrompt, taskType: "build-review", routeContext: { sensitivity } });
+      expect(screened.routeContext.sensitivity).toBe("confidential");
     }
   });
 

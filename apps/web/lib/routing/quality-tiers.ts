@@ -8,7 +8,8 @@
 
 // ── Quality Tier type ──────────────────────────────────────────────────────
 
-export type QualityTier = "frontier" | "strong" | "adequate" | "basic";
+import type { QualityTier } from "@dpf/validators/policy-types";
+export type { QualityTier } from "@dpf/validators/policy-types";
 
 export const QUALITY_TIERS: QualityTier[] = ["frontier", "strong", "adequate", "basic"];
 

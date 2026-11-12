@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { contributeFindingToHive, type FindingContributionDb } from "./finding-contribution-store";
-import type { EscalationOutcome } from "./finding-contribution";
+import type { EscalationOutcome } from "@dpf/validators/commons/finding-contribution";
 
 const ROW = {
   proposalId: "IP-A1B2C",

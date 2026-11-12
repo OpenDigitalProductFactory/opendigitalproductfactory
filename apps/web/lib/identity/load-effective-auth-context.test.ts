@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   loadEffectiveAuthContext,
+  EffectiveAuthContextError,
   resolveManagerScope,
 } from "./load-effective-auth-context";
 
@@ -43,6 +44,16 @@ describe("resolveManagerScope", () => {
 });
 
 describe("loadEffectiveAuthContext", () => {
+  it("preserves infrastructure errors instead of classifying them as authority refusal", async () => {
+    const outage = new Error("Identity database unavailable");
+    const db = { principalAlias: { findFirst: vi.fn().mockRejectedValue(outage) }, employeeProfile: { findMany: vi.fn(async () => []) },
+      teamMembership: { findMany: vi.fn(async () => []) }, delegationGrant: { findMany: vi.fn(async () => []) } };
+    const request = loadEffectiveAuthContext({ user: { id: "u", email: "test@example.test", type: "admin", platformRole: null,
+      isSuperuser: false, accountId: null, accountName: null, contactId: null }, grantedCapabilities: [], authentication: { source: "session" } }, db);
+    await expect(request).rejects.toBe(outage);
+    expect(outage).not.toBeInstanceOf(EffectiveAuthContextError);
+  });
+
   it("fails closed when a Principal-rooted session no longer resolves", async () => {
     const db = {
       principal: { findUnique: vi.fn().mockResolvedValue(null) },
@@ -60,7 +71,7 @@ describe("loadEffectiveAuthContext", () => {
       },
       grantedCapabilities: [],
       authentication: { source: "session" },
-    }, db)).rejects.toThrow("PRN-missing could not be resolved");
+    }, db)).rejects.toMatchObject({ name: "EffectiveAuthContextError", message: "Principal PRN-missing could not be resolved" });
     expect(db.principalAlias.findFirst).not.toHaveBeenCalled();
   });
 
@@ -222,7 +233,7 @@ describe("loadEffectiveAuthContext", () => {
       },
       grantedCapabilities: [],
       authentication: { source: "session" },
-    }, db)).rejects.toThrow("no longer active or canonical");
+    }, db)).rejects.toMatchObject({ name: "EffectiveAuthContextError", message: "Customer session scope is no longer active or canonical" });
   });
 
   it("rejects an inactive canonical principal", async () => {
@@ -261,6 +272,6 @@ describe("loadEffectiveAuthContext", () => {
         },
         db,
       ),
-    ).rejects.toThrow("Principal PRN-INACTIVE is not active");
+    ).rejects.toMatchObject({ name: "EffectiveAuthContextError", message: "Principal PRN-INACTIVE is not active" });
   });
 });

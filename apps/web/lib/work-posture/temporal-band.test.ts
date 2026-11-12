@@ -6,7 +6,7 @@ import {
   isDampingExempt,
   resolveTemporalBand,
   TEMPORAL_BANDS,
-} from "./temporal-band";
+} from "@dpf/validators/workroom-policy/temporal-band";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 
 const NINE_TO_FIVE: WeeklySchedule = {

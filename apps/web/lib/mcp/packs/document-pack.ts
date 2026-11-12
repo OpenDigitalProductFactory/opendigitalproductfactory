@@ -13,11 +13,17 @@
 // the document generation facility and stores it here as a managed document.
 // The report, letter, sheet and drawing tools (BI-012487AA) are composed in
 // from document-family-tools.ts.
+//
+// Access (BI-957915CB): every handler resolves the document viewer from the
+// ACTING USER, never from the coworker's own principal, and passes it to the
+// store, so a coworker reads exactly what the person it acts for may read. A
+// restricted document another person cannot read is "not found" here.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { PresentationOutline } from "@/lib/documents/generation/create-presentation";
+import type { ManagedDocument } from "@/lib/documents/document-store";
 import { DOCUMENT_FAMILY_TOOL_DEFINITIONS, DOCUMENT_FAMILY_TOOL_GRANTS, documentFamilyToolHandlers } from "./document-family-tools";
 
 // Local coercion helpers — copies of the mcp-tools.ts module helpers so the pack
@@ -30,6 +36,13 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+// Keep the selected body once at the tool boundary. The shared store retains
+// history for the human UI; coworkers can list metadata and load a pinned version.
+function documentToolProjection(document: ManagedDocument): Omit<ManagedDocument, "versions"> {
+  const { versions: _versions, ...selected } = document;
+  return selected;
+}
+
 // Resolve the principal id the document write should be attributed to: the
 // calling agent's principal when present, else the acting user's principal.
 async function resolveDocumentActorPrincipalId(userId: string, agentId?: string): Promise<string | null> {
@@ -40,6 +53,12 @@ async function resolveDocumentActorPrincipalId(userId: string, agentId?: string)
   }
   const userPrincipal = await syncUserPrincipal(userId).catch(() => null);
   return userPrincipal?.id ?? null;
+}
+
+/** The person a document tool acts for (BI-957915CB). */
+async function documentViewerFor(userId: string) {
+  const { resolveDocumentViewer } = await import("@/lib/documents/document-access");
+  return resolveDocumentViewer(userId);
 }
 
 /** Largest exported file doc_load returns inline as contentBase64 (BI-4865EB4D). */
@@ -153,7 +172,7 @@ const definitions: ToolDefinition[] = [
   ...DOCUMENT_FAMILY_TOOL_DEFINITIONS,
   {
     name: "doc_load",
-    description: "Load a managed document by stable document id, optionally pinned to a version. Pass exportFormat to also export that version as a Word (docx), OpenDocument (odt) or PDF file through the document engine; the export is kept as a rendition, so asking again is cheap.",
+    description: "Load a managed document by stable document id, optionally pinned to a version. Returns the selected body once; use doc_version_list for history metadata and doc_load with a version number for another body. Pass exportFormat to also export that version as a Word (docx), OpenDocument (odt) or PDF file through the document engine; the export is kept as a rendition, so asking again is cheap.",
     inputSchema: {
       type: "object",
       properties: {
@@ -213,7 +232,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "doc_version_list",
-    description: "List version metadata for a managed document.",
+    description: "List version metadata without bodies for a managed document. Use doc_load with a version number to read that version's body.",
     inputSchema: {
       type: "object",
       properties: {
@@ -284,6 +303,8 @@ async function docSave(
     contentSha256 = blob.sha256;
   }
   const actorPrincipalId = await resolveDocumentActorPrincipalId(userId, context?.agentId);
+  const viewer = await documentViewerFor(userId);
+  const accessScope = optionalString(params["accessScope"]);
   const references = Array.isArray(params["references"])
     ? params["references"].flatMap((entry) => {
         if (!entry || typeof entry !== "object") return [];
@@ -310,11 +331,15 @@ async function docSave(
     summary: optionalString(params["summary"]),
     tags: stringArray(params["tags"]),
     references,
-    accessScope: optionalString(params["accessScope"]),
+    accessScope,
     sourceKind: optionalString(params["sourceKind"]),
-    ownerPrincipalId: optionalString(params["ownerPrincipalId"]) ?? actorPrincipalId,
+    ownerPrincipalId: optionalString(params["ownerPrincipalId"]),
+    // A restricted document a coworker makes for a person is owned by that
+    // person, so they can open it; otherwise the saver owns a new document.
+    defaultOwnerPrincipalId: accessScope === "restricted" && viewer.principalId ? viewer.principalId : actorPrincipalId,
     createdByPrincipalId: actorPrincipalId,
     actorPrincipalId,
+    viewer,
   });
   const version = (document as { version?: number }).version ?? document.currentVersion?.version ?? 1;
   return {
@@ -322,7 +347,7 @@ async function docSave(
     entityId: document.documentId,
     message: `Saved document ${document.documentId} v${version}: /workspace/documents/${encodeURIComponent(document.documentId)}.`,
     data: {
-      document: document as unknown as Record<string, unknown>,
+      document: documentToolProjection(document),
       route: `/workspace/documents/${encodeURIComponent(document.documentId)}`,
     },
   };
@@ -334,6 +359,8 @@ async function createPresentationTool(
   context?: { agentId?: string },
 ): Promise<ToolResult> {
   const { createPresentation } = await import("@/lib/documents/generation/create-presentation");
+  const refused = await refuseUnreadableOutlineReference(params, userId);
+  if (refused) return refused;
   const actorPrincipalId = await resolveDocumentActorPrincipalId(userId, context?.agentId);
   const result = await createPresentation({
     outline: params as unknown as PresentationOutline,
@@ -355,16 +382,63 @@ async function createPresentationTool(
   };
 }
 
-async function docLoad(params: Record<string, unknown>): Promise<ToolResult> {
+/**
+ * The first document a presentation outline names (the deck it revises, or a
+ * stored slide image) that the acting person may not read, or null.
+ */
+/** Every `documentId` an outline names, at any depth: the deck or document it revises and each stored image. */
+function outlineDocumentIds(value: unknown, found: string[] = [], depth = 0): string[] {
+  if (depth > 8 || value === null || typeof value !== "object") return found;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (key === "documentId") {
+      const id = optionalString(child);
+      if (id) found.push(id);
+    } else {
+      outlineDocumentIds(child, found, depth + 1);
+    }
+  }
+  return found;
+}
+
+/**
+ * The refusal for an outline that names a document the acting person may not
+ * read (revising it, or embedding its image), or null. Answers like a missing
+ * document, so a refusal never confirms one exists.
+ */
+async function refuseUnreadableOutlineReference(params: Record<string, unknown>, userId: string): Promise<ToolResult | null> {
+  const named = outlineDocumentIds(params);
+  if (named.length === 0) return null;
+  const { readableDocumentIds } = await import("@/lib/documents/document-store");
+  const readable = await readableDocumentIds(named, await documentViewerFor(userId));
+  const refused = named.find((id) => !readable.has(id));
+  if (!refused) return null;
+  const error = `Document not found: ${refused}.`;
+  return { success: false, message: error, error };
+}
+
+type DocumentToolHandler = (params: Record<string, unknown>, userId: string, context?: { agentId?: string }) => Promise<ToolResult>;
+
+/** The render-family tools revise and embed documents too, so they pass the same check first. */
+function withOutlineReferenceCheck<T extends Record<string, DocumentToolHandler>>(handlers: T): T {
+  return Object.fromEntries(
+    Object.entries(handlers).map(([name, handler]) => [
+      name,
+      (async (params, userId, context) => (await refuseUnreadableOutlineReference(params, userId)) ?? handler(params, userId, context)) as DocumentToolHandler,
+    ]),
+  ) as T;
+}
+
+async function docLoad(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { loadManagedDocument } = await import("@/lib/documents/document-store");
   const documentId = String(params["documentId"] ?? "");
   const pinnedVersion = typeof params["version"] === "number" ? params["version"] : null;
-  const document = await loadManagedDocument({ documentId, version: pinnedVersion });
+  const viewer = await documentViewerFor(userId);
+  const document = await loadManagedDocument({ documentId, version: pinnedVersion, viewer });
   if (!document) return { success: false, message: "Document not found.", error: "Document not found." };
   // Renditions of the loaded version (BI-9D43CBEF): a PDF and a plain-text
   // projection of an office file, once the rendition job has run.
   const data: Record<string, unknown> = {
-    document: document as unknown as Record<string, unknown>,
+    document: documentToolProjection(document),
     renditions: document.currentVersion?.renditions ?? [],
   };
 
@@ -378,7 +452,7 @@ async function docLoad(params: Record<string, unknown>): Promise<ToolResult> {
     return { success: false, message: "exportFormat must be docx, odt or pdf.", error: "exportFormat must be docx, odt or pdf." };
   }
   const version = document.currentVersion?.version ?? null;
-  const exported = await exportDocumentVersion({ documentId: document.documentId, version, format: exportFormat });
+  const exported = await exportDocumentVersion({ documentId: document.documentId, version, format: exportFormat, viewer });
   if (!exported.ok) {
     const message = documentExportFailureMessage(exported.reason);
     data["export"] = { format: exportFormat, status: "failed", reason: exported.reason, message };
@@ -404,9 +478,10 @@ async function docLoad(params: Record<string, unknown>): Promise<ToolResult> {
   };
 }
 
-async function docSearch(params: Record<string, unknown>): Promise<ToolResult> {
+async function docSearch(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { searchManagedDocuments } = await import("@/lib/documents/document-store");
   const documents = await searchManagedDocuments({
+    viewer: await documentViewerFor(userId),
     query: optionalString(params["query"]),
     mode: typeof params["mode"] === "string" ? params["mode"] as "metadata" | "full-text" | "semantic" | "hybrid" : "hybrid",
     currentState: optionalString(params["state"]),
@@ -422,7 +497,7 @@ async function docSearch(params: Record<string, unknown>): Promise<ToolResult> {
   return {
     success: true,
     message: summary,
-    data: { results: documents as unknown as Record<string, unknown>[] },
+    data: { results: documents.map(documentToolProjection) },
   };
 }
 
@@ -440,6 +515,7 @@ async function docLink(
     refType: String(params["refType"] ?? ""),
     anchor: optionalString(params["anchor"]),
     actorPrincipalId,
+    viewer: await documentViewerFor(userId),
   });
   return {
     success: true,
@@ -449,13 +525,13 @@ async function docLink(
   };
 }
 
-async function docVersionList(params: Record<string, unknown>): Promise<ToolResult> {
+async function docVersionList(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { listManagedDocumentVersions } = await import("@/lib/documents/document-store");
-  const versions = await listManagedDocumentVersions(String(params["documentId"] ?? ""));
+  const versions = await listManagedDocumentVersions(String(params["documentId"] ?? ""), await documentViewerFor(userId));
   return {
     success: true,
     message: versions.length === 0 ? "No versions found." : `Found ${versions.length} document version${versions.length === 1 ? "" : "s"}.`,
-    data: { versions: versions as unknown as Record<string, unknown>[] },
+    data: { versions: versions.map(({ contentText: _contentText, ...metadata }) => metadata) },
   };
 }
 
@@ -472,18 +548,19 @@ async function docStateChange(
     reason: optionalString(params["reason"]),
     toolExecutionId: optionalString(params["toolExecutionId"]),
     actorPrincipalId,
+    viewer: await documentViewerFor(userId),
   });
   return {
     success: true,
     entityId: document.documentId,
     message: `Document ${document.documentId} moved to ${document.currentState}.`,
-    data: { document: document as unknown as Record<string, unknown> },
+    data: { document: documentToolProjection(document) },
   };
 }
 
-async function docListReferences(params: Record<string, unknown>): Promise<ToolResult> {
+async function docListReferences(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const { listManagedDocumentReferences } = await import("@/lib/documents/document-store");
-  const references = await listManagedDocumentReferences(String(params["documentId"] ?? ""));
+  const references = await listManagedDocumentReferences(String(params["documentId"] ?? ""), await documentViewerFor(userId));
   return {
     success: true,
     message: `Document references loaded for ${String(params["documentId"] ?? "")}.`,
@@ -496,14 +573,14 @@ export const documentPack: ToolPack = {
   definitions,
   handlers: {
     doc_save: (params, userId, context) => docSave(params, userId, context),
-    doc_load: (params) => docLoad(params),
-    doc_search: (params) => docSearch(params),
+    doc_load: (params, userId) => docLoad(params, userId),
+    doc_search: (params, userId) => docSearch(params, userId),
     doc_link: (params, userId, context) => docLink(params, userId, context),
-    doc_version_list: (params) => docVersionList(params),
+    doc_version_list: (params, userId) => docVersionList(params, userId),
     doc_state_change: (params, userId, context) => docStateChange(params, userId, context),
-    doc_list_references: (params) => docListReferences(params),
+    doc_list_references: (params, userId) => docListReferences(params, userId),
     create_presentation: (params, userId, context) => createPresentationTool(params, userId, context),
-    ...documentFamilyToolHandlers(resolveDocumentActorPrincipalId),
+    ...withOutlineReferenceCheck(documentFamilyToolHandlers(resolveDocumentActorPrincipalId)),
   },
   grants: {
     create_presentation: ["document_write"],

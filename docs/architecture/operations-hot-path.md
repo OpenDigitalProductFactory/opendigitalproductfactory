@@ -10,7 +10,7 @@ report, and historical aggregation latency.
 `VersionedOperationsSnapshot` (`operations.v1`) is the current-state boundary.
 It contains:
 
-- one deterministic optimistic-concurrency `version`;
+- one deterministic read-model `version`;
 - `asOf`, per-source watermarks, freshness, and explicit degraded sources;
 - bounded summary, scene, queue/conflict, and activity slices; and
 - measured load duration, actual data-client query count, and payload bytes.
@@ -23,10 +23,36 @@ fail soft only when the snapshot records that degradation. The aggregate source
 watermark is the oldest participating watermark, so one lagging source cannot
 be hidden by a fresher source.
 
-`loadVersionedOperationsSnapshot` is the primary loader. The older
-`loadLivingBusinessSnapshot` remains a compatibility facade while callers
-migrate. The load runtime wraps the data client to count actual Prisma-style
-calls and records source outcomes without coupling the projection to Prisma.
+`@dpf/storefront-templates/operations` owns the portable snapshot engine,
+selectors and render-neutral contracts. `loadVersionedOperationsSnapshot` is
+the host loader used by the workspace, API and admin preview. The legacy
+`loadLivingBusinessSnapshot` facade has been removed. Component type bridges
+re-export the same canonical contracts. The load runtime counts actual
+Prisma-style calls and records source outcomes without coupling the portable
+projection to Prisma.
+
+The read-model token preserves the existing FNV algorithm. It is neither an
+authorization credential nor a cryptographic digest, source transaction version
+or guarantee of an atomic multi-source read. Domain commands retain their own
+current authority and atomic version/constraint checks. Read watermarks describe
+observation time; they do not assert that underlying business records were
+recently updated.
+
+TENANTS snapshots now read canonical customer accounts, subscription renewals
+and service work. Current `view_customer` authority is required before customer
+reads; service tickets additionally require the existing `manage_platform`
+capability. Missing authority or an over-limit source is unavailable, never a
+reassuring zero. No contact, description, screening or monetary detail is added.
+Stored account status is projected without a second health algorithm.
+
+Rescue population and legal holds use one shared `AnimalProfile` /
+`AnimalCustodyEpisode` adapter with the rescue cockpit and require current
+`view_animal_welfare` authority at the twin boundary. Historical completed
+adoption episodes are labeled adoption outcomes because one animal may return
+and be adopted again. Public listings no longer establish custody. Paid invoices
+establish payment; without a canonical delivery source, delivered work is
+unavailable. Live rescue snapshots cannot inherit a demo boarding-room overlay.
+See [the portable boundary and qualification limits](business-operations-portability.md).
 
 ## Command contract
 

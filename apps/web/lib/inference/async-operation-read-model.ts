@@ -119,7 +119,7 @@ async function resolveReadScope(input: {
   target: AsyncOperationAuthorityTarget;
   actor: AsyncOperationAuthorityActor;
   requestKey: string;
-}, dependencies: AsyncOperationReadDependencies): Promise<{
+}, dependencies: AsyncOperationReadDependencies, requested: "content" | "action" = "content"): Promise<{
   authorityScopeKey: string;
   requestKey: string;
 }> {
@@ -127,6 +127,7 @@ async function resolveReadScope(input: {
     target: input.target,
     actor: input.actor,
     db: dependencies.db,
+    requested,
   });
   return {
     authorityScopeKey: authorityScopeKey(authority),
@@ -148,6 +149,7 @@ export async function listAuthorizedAsyncOperations(input: {
     target: input.target,
     actor: input.actor,
     db: dependencies.db,
+    requested: "content",
   });
   const limit = Math.min(
     MAX_RECONCILIATION_TRANSITIONS,
@@ -207,7 +209,7 @@ export async function requestAuthorizedAsyncOperationCancellation(input: {
   requestKey: string;
   now: Date;
 }, dependencies: AsyncOperationReadDependencies): Promise<AuthorizedAsyncOperationResult> {
-  const scope = await resolveReadScope(input, dependencies);
+  const scope = await resolveReadScope(input, dependencies, "action");
   const operation = await dependencies.store.requestAuthorizedCancellation({
     ...scope,
     now: input.now,

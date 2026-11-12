@@ -3,6 +3,7 @@
 
 import type { ObservationFinding, Severity } from "./process-observer";
 import { lookupApprovedTool } from "@/lib/tool-evaluation-data";
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -91,14 +92,18 @@ export function buildBacklogItemData(
   return {
     itemId: `BI-OBS-${suffix}`,
     title: finding.title,
-    body: [
-      finding.description,
-      finding.rootCause ? `Root cause: ${finding.rootCause}` : null,
-      finding.suggestedAction ? `Suggested: ${finding.suggestedAction}` : null,
-      `Source messages: ${finding.sourceMessageIds.join(", ")}`,
-    ]
-      .filter(Boolean)
-      .join("\n"),
+    // BI-458CCA8D: the observed problem stops happening in conversations.
+    body: composeIntakeBody({
+      outcome: `"${finding.title}" stops happening in agent conversations.`,
+      body: [
+        finding.description,
+        finding.rootCause ? `Root cause: ${finding.rootCause}` : null,
+        finding.suggestedAction ? `Suggested: ${finding.suggestedAction}` : null,
+        `Source messages: ${finding.sourceMessageIds.join(", ")}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    }),
     status: "open",
     type: digitalProductId ? "product" : "portfolio",
     priority: severityToPriority(finding.severity),

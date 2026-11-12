@@ -36,6 +36,8 @@ export type InvestmentAttemptSnapshot = {
  * placeholder noise.
  */
 export type AdapterTelemetryInput = {
+  /** Preallocated by the server dispatch; absent callers retain the DB default. */
+  id?: string;
   // Required
   adapterKind: string;
   adapterVersion: string;
@@ -130,6 +132,7 @@ export async function writeAdapterTelemetry(
       startedAt: input.startedAt,
       status: input.status,
     };
+    if (input.id !== undefined) data.id = input.id;
     if (input.traceId !== undefined) data.traceId = input.traceId;
     if (input.threadId !== undefined) data.threadId = input.threadId;
     if (input.agentMessageId !== undefined) data.agentMessageId = input.agentMessageId;

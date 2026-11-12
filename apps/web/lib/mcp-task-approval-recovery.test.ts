@@ -6,6 +6,7 @@ import {
 } from "@/lib/govern/authority/coworker-authority-decision";
 import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
 import type { RecoverableTaskRun } from "./mcp-task-approval-recovery-contract";
+import { captureTaskExecutionFence } from "./shared/task-execution-fence";
 
 const NOW = new Date("2026-08-28T13:45:30.000Z");
 // BI-0012E6CA: the replacement's lifetime follows the stored call's current
@@ -14,6 +15,11 @@ const NOW = new Date("2026-08-28T13:45:30.000Z");
 const classifyStub = vi.fn(async () => null);
 const TASK_RUN_ID = "TR-MCP-BI47-96433C11CA61";
 const REQUEST_DIGEST = "10ae1afed510cded84185015a76806dc09702a693100e3b7dfe6e8281d831df5";
+const reviewBinding = {
+  itemId: "BI-47ACE2C7", gate: "research", writerToolName: "record_initiative_evidence",
+  artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+    commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) },
+};
 
 const binding: CoworkerApprovalBinding = {
   actingHumanUserId: "user-1",
@@ -87,6 +93,7 @@ function proposal() {
       decision: "pass",
       backlogItemId: "BI-47ACE2C7",
       _takAlignment: { verdict: "aligned" },
+      _taskExecutionFence: captureTaskExecutionFence(null, REQUEST_DIGEST),
     },
     result: {
       success: false,
@@ -155,8 +162,12 @@ function failedReviewFixture(workroomHead = "a36f5d40b7fbf9de4848b18875009622e04
     a2aMetadata: {
       requestDigest: REQUEST_DIGEST,
       initiativeReviewBinding: {
+        ...reviewBinding,
         itemId: "BI-F48D7059",
+        gate: "spec-approval",
+        writerToolName: failedBinding.toolName,
         artifactRef: {
+          ...reviewBinding.artifactRef,
           repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
           commitSha,
         },
@@ -179,7 +190,8 @@ function failedReviewFixture(workroomHead = "a36f5d40b7fbf9de4848b18875009622e04
     id: "cmtdnvzar00pm01nj2a9svwna",
     agentId: failedBinding.actingAgentId,
     toolName: failedBinding.toolName,
-    parameters: { decision: "pass", profile: "fix", artifactRole: "design-spec", findings: [] },
+    parameters: { decision: "pass", profile: "fix", artifactRole: "design-spec", findings: [],
+      _taskExecutionFence: captureTaskExecutionFence(run.progressPayload, REQUEST_DIGEST) },
     result: { success: false, data: { envelopeId: envelope.id }, error: "approval_required" },
     taskRunId,
   };
@@ -204,6 +216,22 @@ function recover(db: ReturnType<typeof fakeDb>["db"]) {
 }
 
 describe("same-TaskRun approval recovery", () => {
+  it.each(["uncertain", "unversioned", "displaced", "malformed", "unknown-version"])("does not renew an old bound approval when %s", async mode => {
+    const run = staleRun("input-required");
+    run.a2aMetadata = { requestDigest: REQUEST_DIGEST, initiativeReviewBinding: mode === "malformed" ? {}
+      : mode === "unknown-version" ? { ...reviewBinding, schemaVersion: 2 } : reviewBinding };
+    run.progressPayload = mode === "uncertain" ? { executionUncertainty: {} }
+      : mode === "displaced" ? { resumeReservedAt: "later" } : {};
+    const { db, tx } = fakeDb(run);
+    tx.toolExecution.findFirst.mockReset().mockResolvedValueOnce(null).mockResolvedValueOnce({ ...proposal(), parameters: {
+      decision: "pass", ...(mode === "unversioned" ? {} : { _taskExecutionFence: captureTaskExecutionFence({}, REQUEST_DIGEST) }),
+    } });
+    expect(await recover(db)).toBeNull();
+    expect(tx.coworkerActionEnvelope.create).not.toHaveBeenCalled();
+    expect(tx.coworkerActionEnvelope.updateMany).not.toHaveBeenCalled();
+    expect(tx.toolExecution.create).not.toHaveBeenCalled();
+    expect(tx.taskRun.updateMany).not.toHaveBeenCalled();
+  });
   it("supersedes an expired approval and recreates its exact proposal on the stalled TaskRun", async () => {
     const { db, tx } = fakeDb();
 

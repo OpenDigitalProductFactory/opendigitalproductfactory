@@ -30,6 +30,8 @@ Use the arrow beside a portfolio to expand it. Expanding lists the Workrooms in 
 
 Counts describe the Workrooms the page read, not everything in the portfolio. When the page reads its limit, each count reads "N rooms read" and a note below the tree says so. To see beyond that, narrow the inventory below or open the portfolio itself.
 
+**Day-to-day operations** lists every standing room with its last 14 days. A missed day shows as an outlined cross, so it stands out as clearly as a stuck project. See [Day-to-day operations](../workspace/work-rooms.md#day-to-day-operations) for what each mark means.
+
 ## Key Concepts
 
 - **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, awaiting acceptance, done, deferred, or retired.
@@ -84,9 +86,15 @@ sharing or refreshing.
 - **Triaging** — Waiting for an intake decision.
 - **Open** — Accepted work that has not started.
 - **In progress** — Work is actively underway.
-- **Awaiting acceptance** — Delivered (for example merged) but not yet proven to
-  meet its acceptance criteria. It is not done, and it is not counted in epic
-  progress.
+- **Awaiting acceptance** — Delivered (for example merged) but not yet closed.
+  It is not done, and it is not counted in epic progress. Most items do not wait
+  here: once its change merges, an item closes on its own and the acceptance
+  sweep finishes the move. Only items tagged `contractual` wait for a separate
+  acceptance, because a customer was promised one. If something is still wrong
+  after a change ships, report it as a new item.
+
+When you file an item, say what will be true, and for whom, once it is done (the
+**Outcome** field). Add how you will know only when that is not obvious.
 - **Done** — Completed work; this is the only status counted as done in epic progress.
 - **Deferred** — Parked but still wanted. A deferral records why it is parked,
   what event should resume it, who owns that decision, and when it must be
@@ -100,6 +108,32 @@ sharing or refreshing.
 A retired duplicate is labeled **retired duplicate**; the other backlog item is
 the canonical record, so the duplicate is retained for history without being
 counted as completed. Retired items no longer keep an epic open.
+
+### Clearing copies of a paired installation's demand
+
+Before a fix in November 2026, inbound issue triage filed a second, local copy
+of every demand record a same-organization installation sent. It also filed
+copies from revoked links and from demand the other installation had withdrawn.
+Work sync already shows that installation's backlog here, so these copies are
+duplicates. Your coworker clears them in one governed step:
+
+1. **Dry run.** It reports how many copies would be retired, split by source:
+   revoked link, withdrawn demand, or live same-organization demand. It also
+   shows how many will be marked duplicate of the work-sync item with the same
+   title, a few samples from each group, and the copies it will keep. Nothing
+   changes.
+2. **One approval.** You get one approval card for the whole set. The card is
+   tied to the exact selection from the dry run. If anything changes before it
+   runs, such as someone claiming one of the copies, it is refused and your
+   coworker runs a new dry run.
+3. **Retire.** Each copy is retired the same way a single item is. It gets a
+   status-history entry and a resolution that explains why. A copy can be put
+   back with a status change to triaging or open. Running it again retires
+   nothing twice.
+
+Some copies are kept for you to review one at a time. These are copies that are
+claimed, being built, in a Work Room, have evidence, or have been worked on
+since they were filed.
 
 ## Shared Demand
 
@@ -151,7 +185,7 @@ stops when the allowance is nearly spent or a provider reports a rate limit,
 and it only acts while the governed backlog lane is on.
 
 To turn it on or off, open **Admin > Platform Development**, find **Let Build
-Studio pick up work on its own**, open **Daily limit and the autopilot
+Studio pick up work on its own**, open **Daily limits and the autopilot
 switches**, tick or clear **Use spare weekly AI allowance**, and select
 **Save**. Changing it needs the platform management permission. An agent can
 make the same change with the `set_backlog_delivery_budget` tool
@@ -335,3 +369,5 @@ that stops describing this installation. Nothing is saved until you confirm it.
 The operator name is different: it is a label rather than a change to what your
 coworkers may do, so it saves directly without an impact preview. The preview
 step is reserved for changes that actually move a brake.
+
+Work in progress keeps recorded executor and invocation details inside each row’s Technical evidence disclosure. These identify the recorded execution path independently of the accountable person. Missing historical evidence is identified explicitly; a schedule alone does not establish agent-to-agent delegation.

@@ -1,6 +1,7 @@
 "use client";
 
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
+import { normalizeVerificationOutput, projectVerificationEvidence } from "@/lib/build/verification-output";
 import { safeRenderValue } from "@/lib/safe-render";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { semanticReviewDecisionPresentation } from "@/lib/change-review/review-decision-presentation";
@@ -25,6 +26,7 @@ export function EvidenceSummary({ build, loading }: Props) {
     );
   }
 
+  const verification = projectVerificationEvidence(normalizeVerificationOutput(build.verificationOut));
   const items = [
     {
       label: "Design Document",
@@ -48,12 +50,8 @@ export function EvidenceSummary({ build, loading }: Props) {
     },
     {
       label: "Verification",
-      status: build.verificationOut
-        ? (build.verificationOut.typecheckPassed ? "pass" : "fail")
-        : "missing",
-      detail: build.verificationOut
-        ? `Typecheck: ${build.verificationOut.typecheckPassed ? "pass" : "fail"}${build.verificationOut.testsFailed ? ` (${build.verificationOut.testsFailed} test warning${build.verificationOut.testsFailed > 1 ? "s" : ""})` : ""}`
-        : "Not run",
+      status: verification.failed ? "fail" : verification.qualified ? "pass" : "missing",
+      detail: build.verificationOut ? verification.summary : "Not run",
     },
     {
       label: "Acceptance Criteria",

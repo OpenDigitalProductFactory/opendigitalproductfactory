@@ -53,6 +53,8 @@ COPY packages/integration-shared/package.json ./packages/integration-shared/
 COPY packages/storefront-templates/package.json ./packages/storefront-templates/
 COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
+# The integrity-pinned first-party artifact is an install input, not source to rebuild.
+COPY packages/validators/vendor/ ./packages/validators/vendor/
 # pnpm-workspace.yaml `patchedDependencies` names patch files by repo-relative
 # path. pnpm resolves them against the workspace root, so every stage that runs
 # `pnpm install` needs them in the build context — without this COPY the install
@@ -142,8 +144,17 @@ COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
 COPY scripts/installer/monitoring-choice.mjs ./scripts/installer/
 COPY scripts/check-compose-resource-budgets.mjs ./scripts/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
-COPY scripts/bootstrap-organization-pki.ps1 scripts/rotate-runtime-transition-secret.mjs ./scripts/
+# BI-084F85E5: the consumer start script and the host convergence it runs ship
+# as release assets, so each self-upgrade replaces them in the install dir.
+COPY scripts/installer/dpf-start.consumer.ps1 ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.ps1 ./scripts/installer/lib/
+# ...and their macOS/Linux twins, plus the self-upgrade step that bridges launch
+# scripts written before them (promote.sh runs it from the install root).
+COPY scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.sh ./scripts/installer/lib/
+COPY scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/rotate-runtime-transition-secret.mjs ./scripts/
 COPY scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs ./scripts/installer/
+COPY scripts/installer/edge-client-certificate.mjs ./scripts/installer/
 COPY scripts/publish-host-gpu.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/compose-chain.ps1 ./scripts/installer/lib/
@@ -169,6 +180,7 @@ COPY scripts/postgres-trial-restore.sh ./scripts/
 # host bootstrap against older images (see the script header).
 COPY scripts/link-web-src-workspace.sh ./scripts/
 COPY scripts/salvage-sweep.mjs ./scripts/
+COPY scripts/reassessment-capability-probe.mjs ./scripts/
 # Work Capsule change-impact planning executes the canonical gate-context CLI
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
@@ -183,6 +195,9 @@ COPY scripts/check-data-impact.mjs ./scripts/
 # names the same surfaces CI will gate.
 COPY scripts/check-convergence-impact.mjs ./scripts/
 COPY scripts/convergence-surfaces.json ./scripts/
+# gate-context lists the docs a planned change affects (BI-9B17E889) through the
+# Docs Impact Gate's own computeImpact, so a Workroom sees them at claim time.
+COPY scripts/check-docs-impact.mjs ./scripts/
 COPY scripts/lib/gate-context.mjs ./scripts/lib/
 COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
 COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
@@ -196,12 +211,16 @@ COPY scripts/lib/seed-fit-mechanism.mjs ./scripts/lib/
 COPY scripts/worktree-janitor.mjs ./scripts/
 COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
 COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
+# The janitor logs path and reason text through sanitizeForLog. That module
+# has to be in the image or the daily queue dies with ERR_MODULE_NOT_FOUND.
+COPY scripts/lib/safe-log.mjs ./scripts/lib/
 COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
 # worktree-janitor.mjs and worktree-liveness.mjs query leases and Workroom
 # claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
 COPY scripts/lib/mcp-client.mjs ./scripts/lib/
 COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
 COPY scripts/lib/mcp-host-trust.mjs ./scripts/lib/
+COPY scripts/lib/foreground-gate-process.mjs ./scripts/lib/
 COPY scripts/lib/resolve-compose-install-context.mjs ./scripts/lib/
 COPY scripts/installer/lib/mcp-client-env.sh ./scripts/installer/lib/
 # mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
@@ -302,10 +321,11 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
-    cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 scripts/rotate-runtime-transition-secret.mjs /dpf-release-assets/scripts/ && \
+    cp scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/publish-host-gpu.ps1 scripts/rotate-runtime-transition-secret.mjs /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/script-argv.mjs scripts/lib/git.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/edge-client-certificate.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/runtime-apply-lock.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/recovery-filesystem.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/lib/canonical-json.mjs /dpf-release-assets/scripts/lib/ && \
@@ -319,10 +339,12 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/dpf-start.consumer.ps1 /dpf-release-assets/dpf-start.ps1 && \
+    cp scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/monitoring-choice.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/check-compose-resource-budgets.mjs /dpf-release-assets/scripts/ && \
     cp config/install-resource-budgets.json /dpf-release-assets/config/ && \
-    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 scripts/installer/lib/host-convergence.ps1 scripts/installer/lib/host-convergence.sh /dpf-release-assets/scripts/installer/lib/ && \
     cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \
     cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
@@ -354,6 +376,8 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
 # its devDependencies (prisma CLI, tsx) are runtime executables here, so the
 # install is deliberately NOT --prod. --offline: the pnpm store in this stage
 # already holds every package from the full install above.
+# The root importer also supplies the pinned shared Workroom package to
+# maintenance scripts under /app/apps/web-src that reach shape conformance.
 RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules services/*/node_modules && \
     pnpm install --frozen-lockfile --offline --filter "@dpf/db..." --config.confirmModulesPurge=false && \
     pnpm --filter @dpf/db exec prisma generate && \
@@ -414,6 +438,8 @@ COPY --from=init /app/.github ./.github
 COPY --from=init /app/config/ci-evidence-policy.json ./config/
 COPY --from=init /app/config/seed-content-paths.json ./config/
 COPY --from=init /app/apps/web/lib/ux-budget/route-budget-baseline.json ./apps/web/lib/ux-budget/
+COPY --from=init /app/apps/web/lib/docs/doc-impact.generated.json ./apps/web/lib/docs/
+COPY --from=init /app/apps/web/lib/docs-route-map.ts ./apps/web/lib/
 COPY --from=init /dpf-release-assets /dpf-release-assets
 # Managed operational scripts (backup/restore/trial-restore) are invoked at
 # runtime by the backup runners. They are committed from a Windows checkout,
@@ -438,6 +464,8 @@ RUN chmod +x /docker-entrypoint.sh
 # path so it is invoked directly, not shadowed by the Node base image's
 # /usr/local/bin/docker-entrypoint.sh passthrough.
 COPY scripts/portal-migrate-boot.sh /usr/local/bin/portal-migrate-boot.sh
+COPY scripts/runtime-secret-bootstrap.mjs /usr/local/bin/runtime-secret-bootstrap.mjs
+COPY scripts/lib/script-argv.mjs /usr/local/bin/lib/script-argv.mjs
 RUN chmod +x /usr/local/bin/portal-migrate-boot.sh
 
 # Source for Build Studio — copied to -src paths to avoid collision with standalone output
@@ -560,4 +588,4 @@ EXPOSE 3000
 # restart) can never leave the DB drifted. It is fail-closed: if migrations
 # can't apply, the portal does not start. portal-init is unaffected — it
 # overrides CMD with /docker-entrypoint.sh.
-CMD ["/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
+CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]

@@ -8,18 +8,25 @@
 
 import { prisma } from "@dpf/db";
 
-import { nominateAcumenCorpusGap } from "@/lib/decision-perspective/acumen-gap-nomination";
+import { findOpenAcumenCorpusGap, nominateAcumenCorpusGap } from "@/lib/decision-perspective/acumen-gap-nomination";
 import { listHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
 import { findProfessionFamilyByKey } from "@/lib/decision-perspective/resolve-profession-profile";
 import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/weight-proposal-store";
 
-import { loadReviewWindow } from "./load-review-window";
-import { computeReviewLines, type ReviewLine } from "./measures";
+import { withCurrentScheduledTask } from "@/lib/actions/agent-task-claim";
+import { executeDurableReview } from "./durable-review-store";
+import { assessmentDbForClient, submitCoworkerSelfAssessment, listCoworkerCapabilityNeeds, fileCapabilityNeedToBacklog, resolveAiWorkforceBacklogLinks } from "@/lib/coworker-self-assessment/assessment-service";
+import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
+import { storePlatformKnowledge } from "@/lib/semantic-memory";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isRecord } from "@/lib/shared/coerce";
+import { getAcumenRoomShape } from "@/lib/work-management/acumen-room-shapes";
+import { loadReviewWindow, REVIEW_WINDOW_ROW_CAP } from "./load-review-window";
+import { computeReviewLines, type ReviewLine, RECOMMENDATION_MATURITY_DAYS } from "./measures";
 import {
-  describeRouting,
-  emptyRoutingSummary,
   routeReviewFindings,
-  type RoutingFacts,
+  planFinding, ownerProfileIdForLine, reviewDomainClass, emptyRoutingSummary,
+  type RoutingFacts, type FindingPlan,
   type RoutingSummary,
 } from "./route-review-findings";
 
@@ -29,6 +36,9 @@ export interface DecisionEngineReviewTask {
   schedule: string;
   ownerUserId: string;
   agentId: string;
+  taskRunId?: string | null;
+  nextRunAt?: Date | null;
+  isActive?: boolean;
 }
 
 /** ISO-week key, so two ticks inside one week are the same review. */
@@ -52,10 +62,6 @@ export type ReviewRunSummary = {
   routing: RoutingSummary;
 };
 
-function isActionable(line: ReviewLine): boolean {
-  return line.proposedAction !== "no-action";
-}
-
 /**
  * Compute the week's review. Pure given the window, so the same ledger always
  * produces the same lines — the property the fixture test relies on.
@@ -63,14 +69,22 @@ function isActionable(line: ReviewLine): boolean {
 export async function computeWeeklyReview(input: {
   db: Parameters<typeof loadReviewWindow>[0];
   now: Date;
-}): Promise<{ periodKey: string; lines: ReviewLine[] }> {
+}): Promise<{ periodKey: string; lines: ReviewLine[]; coverage: Record<string, unknown> }> {
   const window = await loadReviewWindow(input.db, { now: input.now });
   const lines = computeReviewLines({
     rows: window.rows,
+    overdueRows: window.overdueRows,
+    overdueCoverage: window.overdueCoverage,
     materialCountByProfile: window.materialCountByProfile,
     now: input.now,
   });
-  return { periodKey: reviewPeriodKey(input.now), lines };
+  return { periodKey: reviewPeriodKey(input.now), lines, coverage: {
+    queryVersion: "review-populations.v1", since: window.since.toISOString(), until: window.until.toISOString(),
+    recent: { rows: window.rows.length, rowLimit: REVIEW_WINDOW_ROW_CAP, complete: window.rows.length < REVIEW_WINDOW_ROW_CAP },
+    mature: { rows: window.overdueRows.length, until: new Date(input.now.getTime() - RECOMMENDATION_MATURITY_DAYS * 86_400_000).toISOString(), ...window.overdueCoverage },
+    materialCountByProfile: window.materialCountByProfile,
+    effectQualityCoverage: "unknown", humanChoiceIsEffectQuality: false,
+  } };
 }
 
 /**
@@ -126,63 +140,110 @@ export async function executeDecisionEngineReviewTask(
   deps: { now?: Date } = {},
 ): Promise<void> {
   const startedAt = deps.now ?? new Date();
+  // Carry the admitted dispatcher snapshot; never borrow a newer commission.
+  const commission = { ...task };
+  if (commission.isActive !== true || !Object.hasOwn(commission, "nextRunAt")) return;
   try {
-    const { periodKey, lines } = await computeWeeklyReview({ db: prisma, now: startedAt });
-    const actionable = lines.filter(isActionable);
-
-    // Phase 3: each finding reaches the scope that owns it. Routing never
-    // fails the run — a review that measured correctly but could not draft a
-    // proposal is still worth recording, and the summary says what happened.
-    const facts = await loadRoutingFacts().catch(() => undefined);
-    const routing = await routeReviewFindings({
-      db: prisma,
-      lines: actionable,
-      periodKey,
-      facts,
-    }).catch(() => emptyRoutingSummary());
-
-    // Idempotent per ISO week: the unique key is the period, so a retry updates
-    // the same row rather than filing a second review for one week.
-    const existing = await prisma.backlogItemActivity
-      .findFirst({
-        where: { kind: "decision_engine_review", summary: { contains: periodKey } },
-        select: { id: true },
-      })
-      .catch(() => null);
-
-    console.info(
-      "[decision-engine-review] %s — %d line(s), %d actionable%s; routed: %s",
-      periodKey,
-      lines.length,
-      actionable.length,
-      existing ? " (idempotent: already recorded for this week)" : "",
-      describeRouting(routing),
-    );
-
-    const nextRunAt = computeNextRun(task.schedule, startedAt);
-    await prisma.scheduledAgentTask.update({
-      where: { taskId: task.taskId },
-      data: { lastRunAt: startedAt, lastStatus: "ok", lastError: null, nextRunAt },
+    let facts: RoutingFacts | undefined;
+    const indexQueue: Array<{ entityId: string; title: string; content: string }> = [];
+    const completed = await executeDurableReview({
+      task, commission, periodKey: reviewPeriodKey(startedAt), now: startedAt,
+      measure: async (cutoff) => computeWeeklyReview({ db: prisma, now: cutoff }),
+      prepare: async (line) => {
+        facts ??= await loadRoutingFacts();
+        const profileId = ownerProfileIdForLine(line);
+        const plan = profileId ? planFinding(line, profileId, facts) : { kind: "report", reason: "unroutable" };
+        let agentId: string | null = null;
+        if (plan.kind === "nominate" && "professionKey" in plan) {
+          agentId = getAcumenRoomShape(String(plan.professionKey))?.coworkerAgentId ?? null;
+          if (!agentId) {
+            const roles = findProfessionFamilyByKey(String(plan.professionKey))?.roles ?? [];
+            agentId = roles.length ? (await prisma.agent.findFirst({ where: { agentId: { in: [...roles] }, status: "active", archived: false }, select: { agentId: true } }))?.agentId ?? null : null;
+          }
+        }
+        return { profileId, domainClass: reviewDomainClass(line), plan, agentId };
+      },
+      reconcile: async (line, intent) => {
+        if (!isRecord(intent) || !isRecord(intent.destination)) return undefined;
+        const destination = intent.destination;
+        if (!isRecord(destination.plan)) return undefined;
+        const plan = destination.plan;
+        const summary = emptyRoutingSummary();
+        if (plan.kind === "proposal" && typeof destination.profileId === "string" && typeof destination.domainClass === "string") {
+          const proposal = await prisma.decisionResolutionProposal.findUnique({ where: { proposalId: `DRP-g-${destination.profileId}-${destination.domainClass}` } });
+          if (!proposal) return undefined; // Absence cannot prove non-execution.
+          const outcome = proposal.status === "proposed" ? "already-open" : "already-ruled";
+          if (outcome === "already-open") summary.alreadyOpen = 1; else summary.alreadyRuled = 1;
+          summary.routed.push({ lineKey: line.lineKey, profileId: proposal.profileId, domainClass: proposal.domainClass ?? "", actionKind: proposal.actionKind, proposalId: proposal.proposalId, outcome });
+          return summary;
+        }
+        if (plan.kind === "nominate" && typeof destination.agentId === "string" && typeof plan.professionKey === "string" && typeof plan.domainClass === "string") {
+          const need = await findOpenAcumenCorpusGap(destination.agentId, plan.professionKey, plan.domainClass);
+          if (!need) return undefined;
+          summary.nominated = 1;
+          summary.routed.push({ lineKey: line.lineKey, profileId: String(destination.profileId ?? ""), domainClass: String(destination.domainClass ?? ""), actionKind: "no_change", proposalId: null, outcome: `nominated:${need.needId}` });
+          return summary;
+        }
+        if (plan.kind === "report" || line.proposedAction === "no-action" || line.proposedAction === "file-defect") {
+          summary.reported = 1;
+          summary.routed.push({ lineKey: line.lineKey, profileId: String(destination.profileId ?? ""), domainClass: String(destination.domainClass ?? ""), actionKind: "no_change", proposalId: null, outcome: `reported:${String(plan.reason ?? "no external effect")}` });
+          return summary;
+        }
+        return undefined;
+      },
+      route: async (line, periodKey, tx, destination) => {
+        if (line.proposedAction === "no-action") return emptyRoutingSummary();
+        if (!isRecord(destination) || !isRecord(destination.plan)) throw new Error("Prepared review destination unavailable");
+        const plan = destination.plan as FindingPlan;
+        const assessmentDb = assessmentDbForClient(tx);
+        const routedFacts: RoutingFacts = { ...(facts ?? { heldMaterialProfileIds: new Set(), openWeightProposalByDomainClass: new Map() }),
+          nominateCorpusGap: async ({ professionKey, domainClass, headline }) => {
+            if (typeof destination.agentId !== "string") return { nominated: false, reason: "unknown-acumen" };
+            const target = await tx.agent.findFirst({ where: { agentId: destination.agentId, status: "active", archived: false }, select: { agentId: true } });
+            if (!target) throw new Error("Prepared craft owner no longer active");
+            return nominateAcumenCorpusGap({ professionKey, domainClass, question: headline, interactionId: null,
+              outcomeType: "defer", confidenceScore: 0, professionProfileSelected: false, coverageGap: true, routeContext: "decision-engine-review",
+            }, { targetAgentId: target.agentId,
+              listNeeds: filters => listCoworkerCapabilityNeeds(filters, { db: assessmentDb }),
+              submitAssessment: value => submitCoworkerSelfAssessment(value, { db: assessmentDb,
+                fileBacklogItem: need => fileCapabilityNeedToBacklog(need, {
+                  resolveWorkforceLinks: () => resolveAiWorkforceBacklogLinks({ db: tx as never }),
+                  ingest: async entry => {
+                    const result = await ingestBacklogItem(entry, { store: tx as never,
+                      indexKnowledge: entry => { indexQueue.push(entry); },
+                      listRepoFiles: async () => [],
+                      searchSimilarItems: async () => ({ status: "unavailable", reason: "deferred outside fenced review mutation", results: [] }),
+                    });
+                    if (result.created) await tx.backlogItemActivity.create({ data: {
+                      backlogItemId: result.id, kind: "intake_origin", summary: "Review intake advisory scans deferred",
+                      payload: { createdBy: "decision-engine-review", advisory: true, implementationScan: "unavailable", semanticDuplicateScan: "unavailable", reason: "fenced transaction performs database work only" },
+                    } });
+                    return result;
+                  },
+                }),
+              }),
+            });
+          },
+        };
+        return routeReviewFindings({ db: tx, lines: [line], periodKey, facts: routedFacts,
+          preparedFinding: { lineKey: line.lineKey, profileId: typeof destination.profileId === "string" ? destination.profileId : null, plan },
+        });
+      },
+      afterRoutingCommit: () => { for (const entry of indexQueue.splice(0)) void storePlatformKnowledge({ ...entry, entityType: "backlog" }).catch(() => console.warn("Review backlog knowledge projection deferred")); },
     });
-    await prisma.scheduledJob
-      .update({
-        where: { jobId: task.taskId },
-        data: { lastRunAt: startedAt, lastStatus: "ok", lastError: null, nextRunAt },
-      })
-      .catch(() => {});
+    if (!completed) return; // Another tick owns this run; do not advance its schedule.
+
+    await settle("ok", null);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
+    await settle("error", getErrorMessage(err));
+  }
+  async function settle(status: string, error: string | null) {
     const nextRunAt = computeNextRun(task.schedule, startedAt);
-    await prisma.scheduledAgentTask.update({
-      where: { taskId: task.taskId },
-      data: { lastRunAt: startedAt, lastStatus: "error", lastError: message, nextRunAt },
+    await withCurrentScheduledTask(prisma, commission!, commission!.taskRunId ?? null, async tx => {
+      const data = { lastRunAt: startedAt, lastStatus: status, lastError: error, nextRunAt };
+      await tx.scheduledAgentTask.update({ where: { taskId: task.taskId }, data });
+      await tx.scheduledJob.updateMany({ where: { jobId: task.taskId }, data });
     });
-    await prisma.scheduledJob
-      .update({
-        where: { jobId: task.taskId },
-        data: { lastRunAt: startedAt, lastStatus: "error", lastError: message, nextRunAt },
-      })
-      .catch(() => {});
   }
 }
 

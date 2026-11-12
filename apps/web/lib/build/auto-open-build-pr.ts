@@ -73,6 +73,12 @@ export async function retryPrForShipBuild(buildId: string, logger: Pick<Console,
   } catch (error) {
     const { getErrorMessage } = await import("@/lib/shared/get-error-message");
     logger.error("[auto-complete] PR retry failed for %s: %s", buildId, getErrorMessage(error));
+    // BI-93CB58D6: a retry that throws was only in the server log, so the build
+    // looked idle for ten hours while every hourly retry failed. Put it on the
+    // trail; the row also spaces the next retry by SHIP_PR_RETRY_MS.
+    const { prisma } = await import("@dpf/db");
+    await prisma.buildActivity.create({ data: { buildId, tool: "auto_open_pr",
+      summary: `Pull request not opened; the attempt failed: ${getErrorMessage(error).slice(0, 400)}` } }).catch(() => {});
   }
 }
 

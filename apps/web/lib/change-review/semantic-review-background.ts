@@ -8,7 +8,8 @@ import { sendMcpTaskRunExecutionEvent } from "@/lib/queue/mcp-task-run-events";
 import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-store";
 import { publishRecordedWorkCapsuleActivity } from "@/lib/work-capsules/activity-events";
 import { revalidatePortalContext } from "@/lib/portal-context/invalidation";
-import { createSemanticReviewRequest, parseSemanticReviewRequest, type SemanticReviewRequest } from "./semantic-review-request";
+import { createSemanticReviewRequest, type SemanticReviewRequest } from "./semantic-review-request";
+import { readPersistedSemanticReviewRequest as requestFor } from "./semantic-review-request-store";
 import { createPrismaSemanticReviewSingleFlightStore, deterministicTaskRunId } from "./semantic-review-single-flight";
 import { verifySemanticReviewAuthority } from "./semantic-review-authority";
 import { dispatchRoutedSemanticReview } from "./routed-semantic-review";
@@ -20,13 +21,17 @@ import { withInferenceOrigin } from "@/lib/inference/inference-admission";
 import { withGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 
 import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS as STALE_MS } from "./semantic-review-request";
-import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait, readCapacityRecoveryWait, readSemanticReviewBudget, semanticReviewNodeEligibility } from "./semantic-review-recovery-policy";
+import { isStale } from "@/lib/shared/staleness";
+import { livenessNow } from "@/lib/shared/host-suspension";
+import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRecoveryBudget, isSemanticReviewRecoveryWait, readCapacityRecoveryWait, readSemanticReviewBudget, semanticReviewNodeEligibility,
+  semanticReviewCapacityWaitMs, semanticReviewEffectiveDeadline } from "./semantic-review-recovery-policy";
 import { readSemanticReviewRemediation } from "./semantic-review-remediation";
 import { capacityDeferralProof, capacityRecoveryMarker, hasProvenCapacityCheckpointSet, hasFinalReviewCheckpointSet } from "./semantic-review-capacity-recovery";
 import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
 import { inspectLocalGpuAdmission } from "@/lib/inference/host-gpu-admission";
 import { NoEligibleEndpointsError } from "../routing/inference-error";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
+import { endpointIneligibleSummary } from "./semantic-review-evidence-budget";
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -38,6 +43,10 @@ function native(row: Run): boolean { return object(row.a2aMetadata).gateKind ===
 function state(row: Run) { return object(object(row.progressPayload).semanticReview); }
 function progress(row: Run, patch: Record<string, unknown>) {
   return json({ ...object(row.progressPayload), semanticReview: { ...state(row), ...patch } });
+}
+/** The packet's window plus credited capacity wait (BI-73D878A5); the packet itself never changes. */
+function reviewDeadline(row: Run, packet: SemanticReviewRequest, now = Date.now()): string {
+  return semanticReviewEffectiveDeadline(packet.deadlineAt, state(row), now) ?? packet.deadlineAt;
 }
 function fence(taskRunId: string, generation: string): Prisma.TaskRunWhereInput {
   return { taskRunId, status: { equals: "working" }, progressPayload: { path: ["semanticReview", "generation"], equals: generation } };
@@ -80,30 +89,30 @@ export async function enqueueSemanticReview(taskRunId: string): Promise<boolean>
   catch { return false; } // Persisted intent remains eligible for bounded reconciliation.
 }
 
-async function requestFor(row: Run): Promise<SemanticReviewRequest | null> {
-  const artifact = await prisma.taskArtifact.findUnique({
-    where: { artifactId: `semantic-review-request:${row.taskRunId}` }, select: { taskRunId: true, parts: true },
-  });
-  if (!artifact || artifact.taskRunId !== row.id || !Array.isArray(artifact.parts)) return null;
-  const packet = parseSemanticReviewRequest(object(artifact.parts[0]).data);
-  const metadata = object(row.a2aMetadata);
-  return packet && packet.actor.userId === row.userId && packet.gateKey === metadata.gateKey
-    && packet.input.identity.capsuleId === metadata.capsuleId && packet.digest === state(row).requestDigest ? packet : null;
-}
-
 type BranchPhase = "checkpoint-read" | "provider-call" | "checkpoint-write";
 function safeBranchFailure(error: unknown, agentId: string, phase: BranchPhase) {
   const record = object(error);
   const name = error instanceof Error ? error.name : null;
-  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError", "NativeCliExecutionUncertainError", "NoEligibleEndpointsError"];
+  const knownKinds = ["Error", "TypeError", "RangeError", "PrismaClientKnownRequestError", "PrismaClientUnknownRequestError", "PrismaClientValidationError", "GovernedInferenceDeadlineError", "NativeCliExecutionUncertainError", "NoEligibleEndpointsError", "AgentAllowanceExhaustedError"];
   const knownCodes = ["P2002", "P2024", "P2028", "P2034", "ETIMEDOUT", "ECONNRESET", "INFERENCE_PARENT_STOPPED"];
   return { agentId, phase, errorKind: name && knownKinds.includes(name) ? name : "unclassified",
     errorCode: typeof record.code === "string" && knownCodes.includes(record.code) ? record.code : null,
     ...(error instanceof NoEligibleEndpointsError && readRoutingEligibility(error.eligibility)
       ? { routingEligibility: readRoutingEligibility(error.eligibility)! } : {}),
     ...(classifyDispatchFailure(error).code === "execution-uncertain"
-      ? { executionUncertainty: executionUncertaintyFromError(error) } : {}) };
+      ? { executionUncertainty: executionUncertaintyFromError(error) } : {}),
+    // BI-F3B6713F: refused by the platform's own allowance before dispatch.
+    ...(name === "AgentAllowanceExhaustedError" && typeof record.resetAt === "string"
+      ? { allowanceResetAt: record.resetAt } : {}) };
 }
+
+/** A branch the paid allowance refused before any provider was asked: no outcome is uncertain. */
+function allowanceRefusal(failure: ReturnType<typeof safeBranchFailure> | undefined) {
+  return failure?.errorKind === "AgentAllowanceExhaustedError" && typeof failure.allowanceResetAt === "string"
+    ? { resetAt: failure.allowanceResetAt } : null;
+}
+
+export const DAILY_ALLOWANCE_USED_ACTION = "Today's allowance for paid AI is used. Submit a fresh review after it resets, or after an owner raises it in Admin > Platform Development > Paid AI allowance.";
 
 async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generation: string,
   agentId: string, execute: () => Promise<SemanticReviewResult>,
@@ -114,7 +123,8 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   }
   const nodeId = (attempt: number) => `semantic-review:${row.taskRunId}:${agentId}${attempt ? `:recovery-${attempt}` : ""}`;
   const taskNodeId = nodeId(recoveryAttempt);
-  const prior = await checkpointTransaction(packet.deadlineAt, async (tx) => {
+  const deadlineAt = reviewDeadline(row, packet);
+  const prior = await checkpointTransaction(deadlineAt, async (tx) => {
     await assertFence(tx, row.taskRunId, generation);
     const superseded: Array<{ taskNodeId: string; output: Record<string, unknown>; providerOutcome: "unknown" | "inconclusive" }> = [];
     for (let attempt = recoveryAttempt; attempt >= 0; attempt -= 1) {
@@ -155,7 +165,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
         return restored;
       }
     }
-    if (Date.now() >= Date.parse(packet.deadlineAt)) throw new Error("semantic-review-deadline-exhausted");
+    if (Date.now() >= Date.parse(deadlineAt)) throw new Error("semantic-review-deadline-exhausted");
     const created = await tx.taskNode.create({ data: { taskNodeId, taskRunId: row.id, nodeType: "review", workerRole: "reviewer",
       title: `Semantic review: ${agentId}`, objective: packet.input.title, status: "running", startedAt: new Date(),
       requestContract: { requestDigest: packet.digest, generation, agentId },
@@ -174,7 +184,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
   let capacityDeferral: ReturnType<typeof capacityDeferralProof> = null;
   try {
     result = await withGovernedInferenceDeadline({
-      deadlineAt: packet.deadlineAt,
+      deadlineAt,
       verifyAuthority: async () => {
         const current = await prisma.taskRun.findUnique({ where: { taskRunId: row.taskRunId }, select });
         return current?.status === "working" && state(current).generation === generation
@@ -189,7 +199,7 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
     const eligibility = error instanceof NoEligibleEndpointsError && error.providerDispatch === "not-started"
       ? readRoutingEligibility(error.eligibility) : null;
     if (eligibility) {
-      result = { decision: "inconclusive", issues: [], summary: "No endpoint meets the review's routing requirements. No provider dispatch began for this branch.",
+      result = { decision: "inconclusive", issues: [], summary: endpointIneligibleSummary([eligibility]),
         inconclusiveReason: "review-endpoint-ineligible", routingEligibility: [eligibility] };
     } else if (capacityDeferral) {
       result = { decision: "inconclusive", issues: [], summary: "Review deferred before provider dispatch because capacity was unavailable.",
@@ -197,15 +207,17 @@ async function checkpointBranch(row: Run, packet: SemanticReviewRequest, generat
     } else {
       await prisma.$transaction(async (tx) => {
         await assertFence(tx, row.taskRunId, generation);
+        // The allowance error reaches here only when every endpoint refused before dispatch.
+        const failure = safeBranchFailure(error, agentId, "provider-call");
         await tx.taskNode.update({ where: { taskNodeId }, data: { status: "failed", completedAt: new Date(),
-          outputSnapshot: json({ requestDigest: packet.digest, providerOutcome: "unknown",
-            failure: safeBranchFailure(error, agentId, "provider-call") }) } });
+          outputSnapshot: json({ requestDigest: packet.digest, providerOutcome: allowanceRefusal(failure) ? "not-dispatched" : "unknown",
+            failure }) } });
       });
       throw error;
     }
   }
   onPhase("checkpoint-write");
-  await checkpointTransaction(packet.deadlineAt, async (tx) => {
+  await checkpointTransaction(deadlineAt, async (tx) => {
     await assertFence(tx, row.taskRunId, generation);
     await tx.taskNode.update({ where: { taskNodeId }, data: { status: "completed", completedAt: new Date(),
       outputSnapshot: json({ requestDigest: packet.digest, result,
@@ -247,10 +259,14 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   }
   const expiredBeforeDispatch = row.status === "failed" && state(row).reason === "review-deadline-exhausted";
   if (!isSemanticReviewRecoveryWait(row.status) && !(successor && expiredBeforeDispatch)) throw new Error("semantic-review-not-awaiting-recovery");
+  // BI-F3B6713F: a retry while the allowance is still used is certain to be
+  // refused again, so it must not spend a recovery attempt.
+  const stillUsed = await reviewerAllowanceStillUsed(row);
+  if (stillUsed) throw new Error(`semantic-review-daily-allowance-used: ${DAILY_ALLOWANCE_USED_ACTION} It resets at ${stillUsed.resetAt}.`);
   const packet = await requestFor(row);
   if (!packet) throw new Error("semantic-review-request-unavailable");
   const previousAttempt = state(row).recoveryAttempt ?? 0;
-  const budget = semanticReviewRecoveryBudget(packet.deadlineAt, previousAttempt);
+  const budget = semanticReviewRecoveryBudget(reviewDeadline(row, packet), previousAttempt);
   const recordedNodes = await prisma.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
   if (recordedNodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
   const eligibilityBlocked = readSemanticReviewBudget(row.progressPayload).eligibilityBlocked === true
@@ -293,6 +309,16 @@ export async function retryPersistedSemanticReview(taskRunId: string, operatorUs
   await enqueueSemanticReview(taskRunId);
   revalidatePortalContext();
   return { newTaskRunId: taskRunId, strategy: "resume-review-checkpoints" };
+}
+
+/** Live recheck: the owner may have raised the allowance since the refusal. An unreadable check never blocks recovery. */
+async function reviewerAllowanceStillUsed(row: Run): Promise<{ resetAt: string } | null> {
+  const recorded = state(row);
+  const agentId = object(recorded.branchFailure).agentId;
+  if (recorded.reason !== "reviewer-daily-allowance-used" || typeof agentId !== "string") return null;
+  const { checkAgentBudgetFromRegistry, nextAllowanceReset } = await import("@/lib/inference/budget-gate");
+  const budget = await checkAgentBudgetFromRegistry(agentId).catch(() => null);
+  return budget?.status === "rejected" ? { resetAt: nextAllowanceReset().toISOString() } : null;
 }
 
 /** One successor per lineage, admitted by fresh scoped runtime evidence, never by a replay. */
@@ -376,7 +402,7 @@ export async function executePersistedSemanticReview(taskRunId: string) {
   if (row.status !== "submitted") return { taskRunId, status: row.status, duplicate: true };
   const packet = await requestFor(row);
   if (!packet) return settle(row, "input-required", "immutable-review-request-unavailable");
-  if (Date.now() >= Date.parse(packet.deadlineAt)) {
+  if (Date.now() >= Date.parse(reviewDeadline(row, packet))) {
     return settle(row, "failed", "review-deadline-exhausted");
   }
   if (!(await verifySemanticReviewAuthority(packet, taskRunId))) {
@@ -437,6 +463,7 @@ export async function executePersistedSemanticReview(taskRunId: string) {
         // would revoke siblings' write fences and lose already-paid-for results.
         if (branchFailure) {
           const authorityValid = await verifySemanticReviewAuthority(packet, taskRunId).catch(() => null);
+          const allowance = allowanceRefusal(branchFailure);
           await prisma.$transaction(async tx => {
             const nodes = await tx.taskNode.findMany({ where: { taskRunId: row.id }, take: 101 });
             if (nodes.length > 100) throw new Error("semantic-review-checkpoint-limit-exceeded");
@@ -446,10 +473,13 @@ export async function executePersistedSemanticReview(taskRunId: string) {
               data: { status: authorityValid === false ? "auth-required" : "input-required",
                 progressPayload: progress(row, { state: authorityValid === false ? "auth-required" : "input-required", generation,
                 reason: authorityValid === null ? "review-authority-unavailable"
-                  : authorityValid ? "provider-outcome-uncertain" : "submitting-authority-no-longer-valid", branchFailure,
+                  : !authorityValid ? "submitting-authority-no-longer-valid"
+                  : allowance ? "reviewer-daily-allowance-used" : "provider-outcome-uncertain", branchFailure,
                 ...(routingEligibility.length ? { routingEligibility } : {}),
-                action: authorityValid !== false ? "Reconcile recorded execution and authority availability before recovery."
-                  : "Restore the submitting authority and reconcile recorded execution before recovery." }) } });
+                ...(allowance && authorityValid ? { allowanceResetAt: allowance.resetAt } : {}),
+                action: authorityValid === false ? "Restore the submitting authority and reconcile recorded execution before recovery."
+                  : allowance && authorityValid ? `${DAILY_ALLOWANCE_USED_ACTION} It resets at ${allowance.resetAt}.`
+                  : "Reconcile recorded execution and authority availability before recovery." }) } });
             if (changed.count !== 1) return;
             for (const node of nodes.filter(node => node.status === "running")) await tx.taskNode.update({ where: { taskNodeId: node.taskNodeId }, data: {
               status: "failed", completedAt: new Date(), outputSnapshot: json({ ...object(node.outputSnapshot),
@@ -471,7 +501,7 @@ export async function executePersistedSemanticReview(taskRunId: string) {
       return { taskRunId, status: current?.status ?? "unknown", finalized: false };
     }
     const persisted = await prisma.$transaction(async (tx) => {
-      if (Date.now() >= Date.parse(packet.deadlineAt)) {
+      if (Date.now() >= Date.parse(reviewDeadline(row, packet))) {
         await tx.taskRun.updateMany({ where: fence(taskRunId, generation), data: {
           status: "input-required", progressPayload: progress(row, { state: "input-required", generation,
             reason: "review-result-arrived-after-deadline" }),
@@ -571,7 +601,8 @@ async function resumeCapacityWait(row: Run, now: Date): Promise<boolean> {
   };
   const wait = async (reason: string, action: string) => {
     await settle(row, "input-required", "review-capacity-deferred", {
-      capacityRecovery: capacityRecoveryMarker(marker.requestDigest, now.getTime(), marker.checks + 1),
+      capacityRecovery: capacityRecoveryMarker(marker.requestDigest, now.getTime(), marker.checks + 1,
+        marker.waitStartedAt ?? now.toISOString()),
       capacityWaitReason: reason, action,
     });
     return false;
@@ -580,7 +611,7 @@ async function resumeCapacityWait(row: Run, now: Date): Promise<boolean> {
   if (!packet || packet.deadlineAt !== state(row).deadlineAt) return hold("immutable-review-request-unavailable", "Inspect the original immutable request before recovery.");
   const attempt = state(row).recoveryAttempt ?? 0;
   const dispatch = state(row).dispatchAttempt;
-  const budget = semanticReviewRecoveryBudget(packet.deadlineAt, attempt, now.getTime());
+  const budget = semanticReviewRecoveryBudget(reviewDeadline(row, packet, now.getTime()), attempt, now.getTime());
   if (budget !== "available"
     || typeof attempt !== "number" || typeof dispatch !== "number" || !Number.isSafeInteger(dispatch)
     || dispatch < 0 || dispatch >= MAX_DISPATCH_ATTEMPTS) return hold(budget === "expired" ? "review-deadline-exhausted"
@@ -623,11 +654,14 @@ async function resumeCapacityWait(row: Run, now: Date): Promise<boolean> {
     return hold("failure-analysis-evidence-changed", "Submit a refreshed immutable review request with current failure evidence.");
   }
   return prisma.$transaction(async tx => {
-    if (semanticReviewRecoveryBudget(packet.deadlineAt, attempt, Math.max(now.getTime(), Date.now())) !== "available") return false;
+    const admittedAt = Math.max(now.getTime(), Date.now());
+    if (semanticReviewRecoveryBudget(reviewDeadline(row, packet, admittedAt), attempt, admittedAt) !== "available") return false;
     if (!await checkpointSet(tx)) return false;
     const changed = await tx.taskRun.updateMany({ where: { taskRunId: row.taskRunId, status: row.status, updatedAt: row.updatedAt },
       data: { status: "submitted", progressPayload: progress(row, { state: "pending", generation: null,
         recoveryReason: "capacity-restored", recoveryAttempt: attempt + 1, capacityRecovery: null,
+        // Close the open wait into a fixed credit; the resumed run's deadline stops moving.
+        capacityWaitCreditMs: semanticReviewCapacityWaitMs(state(row), admittedAt),
         action: "Capacity recovered; observe this task's next recorded result without submitting duplicate inference." }) } });
     return changed.count === 1;
   });
@@ -654,7 +688,7 @@ export async function reconcileSemanticReviews(now = new Date()) {
       else waiting += 1;
       continue;
     }
-    const deadline = Date.parse(String(state(row).deadlineAt));
+    const deadline = Date.parse(semanticReviewEffectiveDeadline(state(row).deadlineAt, state(row), now.getTime()) ?? "");
     if (!Number.isFinite(deadline)) {
       if ((await settle(row, "input-required", "review-deadline-invalid")).changed) waiting += 1;
       continue;
@@ -664,8 +698,16 @@ export async function reconcileSemanticReviews(now = new Date()) {
         : parkLostReview(row, "review-deadline-exhausted"))).changed) waiting += 1;
       continue;
     }
+    // Selected only because the packet's own window passed while credited wait keeps it open.
+    // A fresh queued run is left alone: re-enqueueing it would spend a dispatch attempt.
+    if (row.status === "submitted" && now.getTime() >= Date.parse(String(state(row).deadlineAt))
+      && row.updatedAt.getTime() >= now.getTime() - STALE_MS) continue;
     if (row.status !== "submitted") {
-      if (row.lastHeartbeatAt && now.getTime() - row.lastHeartbeatAt.getTime() < STALE_MS) continue;
+      // BI-4FDE4050: measure silence in this process's running time. After the
+      // host wakes, this wall-clock cron can fire before the executor's ticker
+      // (monotonic) beats again; host sleep is not executor loss.
+      const heartbeatAt = row.lastHeartbeatAt;
+      if (heartbeatAt && !isStale(livenessNow(now, heartbeatAt), heartbeatAt, STALE_MS)) continue;
       const unfinished = await prisma.taskNode.findFirst({ where: { taskRunId: row.id, status: { notIn: ["completed", "superseded"] } }, select: { id: true } });
       if (unfinished) {
         if ((await parkLostReview(row, "provider-outcome-uncertain-after-restart")).changed) waiting += 1;

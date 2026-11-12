@@ -14,6 +14,7 @@
 import { randomUUID } from "crypto";
 
 import { prisma as defaultPrisma } from "@dpf/db";
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
 
 import {
   BACKLOG_SOURCE_VALUES,
@@ -39,6 +40,8 @@ import {
   type ImplementationCandidate,
 } from "@/lib/operate/implementation-scan";
 import { listRepoSourceFiles } from "@/lib/operate/repo-file-inventory";
+import { routingAnswerProblem, type RoutingAnswer } from "@/lib/improvement-flywheel/routing-answer";
+import { composeHowWeKnowBody, resolveItemOutcome } from "@/lib/backlog/intake-outcome";
 import {
   backlogOriginMarker,
   reconcileOrigin,
@@ -62,6 +65,15 @@ const defaultListRepoFiles = listRepoSourceFiles;
 export interface BacklogIngestInput {
   title: string;
   body?: string | null;
+  /**
+   * What will be true, and for whom, once this is done (BI-B1B44777). Stored
+   * in BacklogItem.outcome as `stated` (BI-8DE5429B). Optional: with none, an
+   * Outcome section in the body is lifted, else a draft is derived and stored
+   * as `derived`; the filing is never refused.
+   */
+  outcome?: string | null;
+  /** How we will know — given only when the outcome is not obvious from the change. */
+  howWeKnow?: string | null;
   /** The WHAT (closed enum) — required on every item per the workType spec. */
   workType: BacklogWorkType;
   /** The ORIGIN (closed enum) — how the work arrived. */
@@ -103,6 +115,12 @@ export interface BacklogIngestInput {
    * semantics (non-terminal dedupe + occurrence bump) are unchanged.
    */
   reconcile?: OriginReconciliation;
+  /**
+   * For a recurring miss: which kind of control fixes it and what it binds to
+   * (BI-B146AB6B rule). Recorded on the intake_origin activity, so the item
+   * carries its answer from the moment it is filed.
+   */
+  routing?: RoutingAnswer;
 }
 
 export interface BacklogIngestResult {
@@ -148,6 +166,14 @@ export interface BacklogIngestResult {
    * "nothing similar exists" (BI-3722E9A1).
    */
   duplicateSemanticUnavailable?: string | null;
+
+  /**
+   * Whether the filer stated the outcome (BI-B1B44777). Advisory: false never
+   * refuses the filing; the item then carries `derivedOutcome`.
+   */
+  outcomeStated?: boolean;
+  /** The draft outcome derived because nobody stated one (BI-8DE5429B). */
+  derivedOutcome?: string | null;
 }
 
 /**
@@ -395,6 +421,8 @@ export async function ingestBacklogItem(
   if (validationError) {
     throw new Error(`[backlog-ingest] ${validationError}`);
   }
+  const routingProblem = input.routing ? routingAnswerProblem(input.routing) : null;
+  if (routingProblem) throw new Error(`[backlog-ingest] ${routingProblem}`);
 
   const marker = input.origin ? backlogOriginMarker(input.origin.kind, input.origin.id) : null;
 
@@ -413,6 +441,7 @@ export async function ingestBacklogItem(
           created,
           createdBy: "backlog-ingest",
           ...(input.reconcile ? { source: sourceSnapshot(input.reconcile) } : {}),
+          ...(input.routing ? { routing: input.routing } : {}),
         },
         ...(input.submittedById ? { recordedById: input.submittedById } : {}),
         ...(input.agentId ? { recordedByAgentId: input.agentId } : {}),
@@ -430,10 +459,17 @@ export async function ingestBacklogItem(
     if (reconciled) return reconciled;
   }
 
-  // Dedup by origin marker against non-terminal items.
+  // Dedup by origin marker against non-terminal items this install owns. A
+  // work-sync mirror carries the peer's markers but is the peer's record: a
+  // bump here is overwritten on the next pull, so a local observation of a
+  // defect the peer tracks files a local twin instead (BI-91FC6B9A).
   if (marker && !input.reconcile) {
     const existing = await store.backlogItem.findFirst({
-      where: { body: { contains: marker }, status: { notIn: ["done", "deferred", "retired"] } },
+      where: {
+        body: { contains: marker },
+        AND: [ownedRowBodyWhere()],
+        status: { notIn: ["done", "deferred", "retired"] },
+      },
       select: { id: true, itemId: true },
       orderBy: { createdAt: "desc" },
     });
@@ -467,7 +503,13 @@ export async function ingestBacklogItem(
   }
 
   const itemId = input.itemId?.trim() || generateBacklogItemId(input.itemIdPrefix);
-  const body = composeIngestBody(input.body, marker);
+  // BI-8DE5429B: the outcome is a field, written once here; the body keeps
+  // only "How we'll know" when the filer gave it.
+  const itemOutcome = resolveItemOutcome({
+    outcome: input.outcome, body: input.body, title: input.title || "Untitled", workType: input.workType,
+  });
+  const intakeBody = composeHowWeKnowBody({ body: input.body, howWeKnow: input.howWeKnow });
+  const body = composeIngestBody(intakeBody, marker);
   const demandStage = initialDemandStageForInput(input);
 
   const item = await store.backlogItem.create({
@@ -479,6 +521,8 @@ export async function ingestBacklogItem(
       workType: input.workType,
       source: input.source,
       lastSeenAt: new Date(),
+      outcome: itemOutcome.outcome,
+      outcomeSource: itemOutcome.outcomeSource,
       ...(body !== null ? { body } : {}),
       ...(triageOutcome ? { triageOutcome } : {}),
       ...(input.proposedOutcome ? { proposedOutcome: input.proposedOutcome } : {}),
@@ -518,7 +562,7 @@ export async function ingestBacklogItem(
       },
     });
   }
-  indexKnowledge({ entityId: item.itemId, title: input.title, content: input.body ?? "" });
+  indexKnowledge({ entityId: item.itemId, title: input.title, content: [itemOutcome.outcome, intakeBody ?? ""].filter(Boolean).join("\n\n") });
 
   // ─── Implementation scan (BI-1A1EC5EC) ──────────────────────────────────────
   // Runs AFTER the create, deliberately. It is advisory, and a filing surface
@@ -639,5 +683,7 @@ export async function ingestBacklogItem(
     implementationCandidates,
     duplicateCandidates,
     duplicateSemanticUnavailable,
+    outcomeStated: itemOutcome.outcomeSource === "stated",
+    derivedOutcome: itemOutcome.outcomeSource === "derived" ? itemOutcome.outcome : null,
   };
 }

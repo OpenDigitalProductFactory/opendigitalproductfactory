@@ -1,3 +1,5 @@
+import { DEFAULT_LOCALE, namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -129,4 +131,17 @@ describe("RoomWorkforcePanel", () => {
     for (const value of Object.values(props)) expect(typeof value).not.toBe("function");
     expect(() => JSON.stringify(props)).not.toThrow();
   });
+});
+
+it("keeps blocker inspection available when the coordination chain has no readable projection", () => {
+  const html = renderToStaticMarkup(<MessagesProvider locale={DEFAULT_LOCALE}
+    messages={{ workrooms: namespaceMessages(DEFAULT_LOCALE, "workrooms") }}>
+    <RoomWorkforcePanel accountability={{ state: "resolved", principalId: "p1", source: "explicit-room", inheritedFrom: [] }}
+      accountableDisplayName="Dana Reyes" groups={[]} matched={0} partial={false} coordination={null}
+      recordedBlocker={{ reason: "workroom-blocked", explanationState: "unavailable", explanation: null, expiresAt: null,
+        source: { kind: "workroom-status-override", capsuleId: "WC-ONE" }, coordinationOnly: true }} />
+  </MessagesProvider>);
+  expect(html).toContain("Delegation and recovery");
+  expect(html).toContain("Dana Reyes");
+  expect(html).not.toContain("Recorded route.");
 });

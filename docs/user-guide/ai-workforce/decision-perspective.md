@@ -15,8 +15,7 @@ The naming: **WWMD** is "What Would Mark Do" — the platform profile, seeded fo
 
 There is a third scope in the same family. **WSID** is "What Should I Do" — the *profession* profile. Where WWMD encodes founder/platform doctrine and WWWD encodes organization doctrine, WSID encodes what a competent professional in a given role should do. Each coworker role family gets its own profile (`WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING`, …) backed by a source-traced professional corpus, reusing the same profile + corpus + retrieval + gate architecture. See [The Profession Scope (WSID)](#the-profession-scope-wsid) below.
 
-> **Want to see it work, not just read what it is?** [Decision Perspective in
-> Practice](decision-perspective-in-practice.md) walks a real question end-to-end through the gate for
+> **Want to see it work, not just read what it is?** [Decision Perspective in Practice](decision-perspective-in-practice.md) walks a real question end-to-end through the gate for
 > each scope (WWMD / WWWD / WSID) — the options framed, the decision vectors scored, the outcome
 > returned, and the ledger row written — plus how oversight and the immutable ledger wrap every one.
 
@@ -186,6 +185,21 @@ Existing installs converge without operator action: the boot backfill counts the
 holds against the current vector set, so an install seeded before a vector was added re-runs the
 idempotent seeding chain once on its next boot and picks it up. Owner-confirmed and owner-ruled
 material is never downgraded by that re-run.
+
+### Retracting a stance
+
+A stance decides through its `PerspectiveMaterial`, not through its wiki page — the gate reads the
+material and never looks at the page. So a stance's authority follows its page's status: while the
+page is **published** its material is promoted and the gate obeys it; when the page leaves published
+— archived in the editor, or moved with `publish_wiki_overlay_pages` (`targetStatus: "archived"`) —
+its material is revoked and stops deciding. The row is kept, so the audit trail survives, and
+republishing the page restores exactly the authority it had.
+
+To retract a stance that should never have been recorded — a ruling filed against the wrong
+business, a stance that no longer holds — archive its page and say why in the change summary. A
+boot reconcile also revokes material behind any page that was archived before this rule existed. It
+only ever revokes: background work may remove a stance's authority, but only a person republishing
+the page can give it back.
 
 ## The Profession Scope (WSID)
 

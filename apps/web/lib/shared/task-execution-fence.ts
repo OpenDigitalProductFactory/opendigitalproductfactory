@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { isRecord } from "./coerce";
+import { hasExecutionUncertainty } from "./execution-uncertainty";
 
 /** Captured by the admitted executor, never reconstructed for a callback. */
 export type TaskExecutionFence = {
@@ -52,4 +53,26 @@ export function captureTaskExecutionFence(progress: unknown, requestDigest: unkn
 export function sameTaskExecutionFence(left: unknown, right: unknown): boolean {
   const a = parseTaskExecutionFence(left), b = parseTaskExecutionFence(right);
   return Boolean(a && b && a.reservation === b.reservation && a.dispatchClaim === b.dispatchClaim && a.authorityDigest === b.authorityDigest && a.requestDigest === b.requestDigest);
+}
+
+/** submitRemoteCoworkerTask persists null for ordinary nonreview tasks. Only
+ * that historical absence sentinel and a missing property are unbound;
+ * malformed present values must still enter the fail-closed review guard. */
+export function isBoundReviewTask(metadata: unknown): boolean {
+  return isRecord(metadata) && Object.prototype.hasOwnProperty.call(metadata, "initiativeReviewBinding")
+    && metadata.initiativeReviewBinding !== null;
+}
+
+/** A parked approval retains its original executor identity; it never borrows
+ * the current generation. The caller separately proves the exact approval. */
+export function taskExecutionEligible(input: {
+  status: string; progressPayload: unknown; requestDigest: unknown; executionFence: unknown;
+  phase?: "working" | "approval-resume" | "approval-renewal";
+}): boolean {
+  const states = input.phase === "approval-renewal" ? ["working", "input-required", "stalled", "failed"]
+    : input.phase === "approval-resume" ? ["working", "input-required"] : ["working"];
+  return states.includes(input.status) && typeof input.requestDigest === "string"
+    && !(isRecord(input.progressPayload) && Object.hasOwn(input.progressPayload, "reassessmentQuarantine"))
+    && /^[a-f0-9]{64}$/.test(input.requestDigest) && !hasExecutionUncertainty(input.progressPayload)
+    && sameTaskExecutionFence(input.executionFence, captureTaskExecutionFence(input.progressPayload, input.requestDigest));
 }

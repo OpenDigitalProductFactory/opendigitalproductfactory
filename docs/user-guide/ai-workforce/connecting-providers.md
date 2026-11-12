@@ -49,19 +49,45 @@ must qualify for the request. An unavailable policy read does not confirm that
 hosted AI is permitted. The global Local-only policy remains visible above the
 account table.
 
+### Managed engine on a qualified Mac
+
+The Local provider page shows **Local inference engine** to platform managers.
+**Use tested engine** appears only when the host installation, tested package
+and reserved processing window are ready. Review the concrete change before
+confirming. It keeps the configured models and settings and pauses new local
+work while the host verifies the switch. **Restore Docker** uses the recorded
+previous settings. An operator pause or disabled local account blocks a switch.
+
+**Change queued** means the request was accepted; the engine has not necessarily
+switched. If the response is lost, reload the page and choose **Check original
+request**. The page retains that request until its outcome is confirmed. A status
+check never starts a second switch. An uncertain result must be reconciled before
+another change. Performance verification is reported separately from selection.
+
 ### Routing status and temporary pauses
 
 Z.ai GLM Coding is also listed separately so you can manage its coding endpoint and traffic. It inherits the main Z.ai key unless you configure an override.
 
 Each provider's **Routing right now** panel shows its operator pause alongside current usage limits, retry times, account or health restrictions, the platform's local-only policy, and local capacity reserved for platform verification. Times display in your browser's timezone. Open **More routing details** for recent health and subscription allocation observations. Workload and model requirements are checked separately for each request.
 
-Choose **Pause now** to stop new model requests immediately. The pause lasts until you resume it. Choose **Set resume time** to add a duration in hours or days. A scheduled pause persists across refreshes and restarts. You can change the time, keep it paused indefinitely, or choose **Resume now** early. Work already running may finish.
+Choose **Pause now**, enter a **Reason for pausing**, then choose **Until I resume it** or **Pause for this long** with a duration in hours or days. New model requests stop immediately. The reason, your browser, address and session are recorded with the pause and with every resume, so anyone reviewing the provider later can see who paused it and why. Choose **Set resume time** to add a duration to an existing pause. A scheduled pause persists across refreshes and restarts. You can change the time, keep it paused indefinitely, or choose **Resume now** early. Work already running may finish.
+
+If someone resumed the provider in the last 15 minutes, a new pause is refused at first. The message names who resumed it and when. Tick **Pause anyway, overriding that resume** to pause it regardless; the override is recorded too. This stops two people, or a person and an automated browser, from silently undoing each other.
 
 Resuming removes the operator pause. It does not reset a provider's usage limit or override an authentication, billing, health, account, or local-only restriction. The panel keeps those restrictions visible. Read-only viewers can inspect the status; provider managers can change it.
 
 **ChatGPT and Codex can share an OpenAI subscription.** Both appear in Providers & Routing. Each account keeps its own sign-in recovery unless the platform has verified a shared sign-in owner. Use the selected account's sign-in control; when the page identifies a shared owner, manage that sign-in there. Pausing one provider leaves the other's operator control unchanged. Subscription limits may affect both.
 
 Authentication proves only that a connection works. Before using company or customer data, also identify whether the connected account is personal/individual, business/team, enterprise, or unknown, and review its contract, retention, training, and processing-region terms. DPF keeps unreviewed hosted connections limited to public or synthetic work.
+
+### When the platform loses AI capacity
+
+Every five minutes the platform checks how much of its recent AI work actually succeeded, for each provider and in total, over the last 30 minutes. You get one item in **Needs you** (and a bell notification) when:
+
+- **A provider fails every request.** At least 5 requests went to it and none succeeded. The item names the provider and the cause in plain words: its sign-in needs renewing, its plan's usage limit is reached (with the reset time when the provider gives one), its spending or credit limit is reached, it has no working sign-in or key, or the local engine is overloaded. The button opens that provider's page.
+- **Too little AI work succeeds overall.** At least 10 requests ran and fewer than half succeeded. The item lists the providers that are down and links to **AI providers**.
+
+These items are not backlog work. They clear themselves the first time the provider (or the platform) serves requests again. If a provider stops receiving requests, its item stays open until it is turned off or serves again, because no traffic is not proof that it recovered. When the reconnect item for a provider's sign-in is already showing, you see that one item, not two.
 
 ## Authentication Methods
 

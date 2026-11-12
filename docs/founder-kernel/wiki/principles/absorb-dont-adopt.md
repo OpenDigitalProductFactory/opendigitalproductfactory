@@ -29,6 +29,10 @@ The refactor budget follows from this. **Founder-funded shared platform work all
 
 This is a cumulative planning target, not a per-task quota. Funding owner and work purpose govern it, not the install, executor or administrator's token. Organization/archetype work retains its owning scope's policy (default 20% refactoring / 80% new capability). Unknown funding scope remains unresolved; do not assign the founder's budget by guessing. Current explicit owner direction supersedes older guidance in that scope; identify overlapping plans and record their reconciliation before executing conflicting work.
 
+## One queue
+
+All work enters and lives in one backlog. A second list of what is being worked on, by whom, or what comes next — kept in another tool, repository, table, channel or install — is hidden work (Reinertsen): it cannot be prioritized against the rest, it escapes the limit on work in progress, and nobody sees it wait. Other tools may show views of the queue; they never hold work of their own. A design that adds a second place work can be recorded must say which one it retires.
+
 ## Why
 
 Founder direction, 2026-08-23: *"I would like to absorb, not use as delivered. This is the entire point of this platform, to absorb."* And on the budget: *"all the parts of the platform are here, but [need to be] well integrated / refactored to form the hybridized result I envision."*

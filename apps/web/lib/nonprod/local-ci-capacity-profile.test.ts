@@ -162,15 +162,15 @@ describe("resolveLocalCiPoolPolicy with a derived installation profile", () => {
       installation: installation as never,
     });
 
-  it("limits the measured development host to the one build its Docker memory supports", () => {
+  it("refuses the measured host before the gate can consume its continuation reserve", () => {
     const policy = resolve({
       environmentClass: "development",
       primaryPurpose: "evolve-dpf",
     });
-    expect(policy.effectiveCapacity).toBe(1);
+    expect(policy.effectiveCapacity).toBe(0);
     expect(policy.source).toBe("installation-profile");
-    expect(policy.rollbackReason).toBe("host-build-capacity-one");
-    expect(policy.slotKeys).toEqual(["slot-0"]);
+    expect(policy.rollbackReason).toBe("host-remaining-growth-headroom-low");
+    expect(policy.slotKeys).toEqual([]);
   });
 
   it("keeps a consumer installation at one slot and says why", () => {
@@ -192,17 +192,17 @@ describe("resolveLocalCiPoolPolicy with a derived installation profile", () => {
     expect(policy.rollbackReason).toBe("config-absent");
   });
 
-  it("lets an explicit operator row beat the derived default", () => {
+  it("does not let an explicit operator row waive the host continuation reserve", () => {
     const policy = resolve(
       { environmentClass: "development", primaryPurpose: "evolve-dpf" },
       operatorRow,
     );
-    expect(policy.effectiveCapacity).toBe(1);
+    expect(policy.effectiveCapacity).toBe(0);
     expect(policy.source).toBe("platform-config");
-    expect(policy.rollbackReason).toBe("requested-singleton");
+    expect(policy.rollbackReason).toBe("host-remaining-growth-headroom-low");
   });
 
-  it("clamps a derived capacity down to one when the host carries only one stage", () => {
+  it("refuses a host that cannot carry the observed remaining growth", () => {
     // floor((12 - 4) / 6) === 1
     const policy = resolveLocalCiPoolPolicy({
       configValue: null,
@@ -214,8 +214,8 @@ describe("resolveLocalCiPoolPolicy with a derived installation profile", () => {
         primaryPurpose: "evolve-dpf",
       },
     });
-    expect(policy.effectiveCapacity).toBe(1);
-    expect(policy.rollbackReason).toBe("host-stage-capacity-one");
+    expect(policy.effectiveCapacity).toBe(0);
+    expect(policy.rollbackReason).toBe("host-remaining-growth-headroom-low");
   });
 
   it("closes admission entirely when the host carries no stage at all", () => {
@@ -232,7 +232,7 @@ describe("resolveLocalCiPoolPolicy with a derived installation profile", () => {
       },
     });
     expect(policy.effectiveCapacity).toBe(0);
-    expect(policy.rollbackReason).toBe("host-stage-headroom-low");
+    expect(policy.rollbackReason).toBe("host-remaining-growth-headroom-low");
   });
 
   it("still refuses to admit on an unsafe host", () => {
@@ -249,6 +249,34 @@ describe("resolveLocalCiPoolPolicy with a derived installation profile", () => {
     expect(policy.effectiveCapacity).toBe(0);
     expect(policy.rollbackReason).toBe("docker-unhealthy");
   });
+
+  it.each([
+    [11_556_442_112, 3_568_033_792],
+    [12_245_229_568, 3_001_556_992],
+    [15_654_436_864, 1_686_036_480],
+  ])(
+    "refuses the delegated gate before its observed host drawdown can exhaust the continuation fence (%s -> %s)",
+    (admissionAvailableMemoryBytes) => {
+      const policy = resolveLocalCiPoolPolicy({
+        configValue: null,
+        host: {
+          ...measuredHost,
+          availableMemoryBytes: admissionAvailableMemoryBytes,
+          dockerAvailableMemoryBytes: 40 * GiB,
+        },
+        manifestSlotCount: 2,
+        reserveAdmissionHeadroom: true,
+        reserveBuilderHeadroom: false,
+        installation: {
+          environmentClass: "development",
+          primaryPurpose: "evolve-dpf",
+        },
+      });
+      expect(policy.effectiveCapacity).toBe(0);
+      expect(policy.rollbackReason).toBe("host-remaining-growth-headroom-low");
+      expect(policy.headroom?.reserveBytes).toBe(15_042_142_208);
+    },
+  );
 });
 
 describe("readLocalCiInstallationProfile", () => {

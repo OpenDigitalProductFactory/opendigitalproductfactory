@@ -4,6 +4,7 @@ import { requireCapability } from "@/lib/actions/shared/guards";
 import { createSetupProgress, getSetupProgress, isFirstRun } from "./setup-progress";
 import type { StepStatus } from "./setup-constants";
 import { projectSetupStepCompletion } from "@/lib/onboarding/setup-progress-projection";
+import { loadMonitoringCapabilityDecision } from "@/lib/platform-runtime/monitoring-switch-loader";
 import { finalizeSetupCompletion } from "@/lib/onboarding/setup-progress-service.server";
 import { err, ok } from "@/lib/shared/action-result";
 
@@ -23,7 +24,11 @@ export async function completeProviderAccountSetup() {
   }
   const steps = progress.steps as Record<string, StepStatus>;
   if (["completed", "skipped"].includes(steps["ai-providers"])) return ok();
-  const projection = projectSetupStepCompletion({ completedStep: "ai-providers", steps });
+  const projection = projectSetupStepCompletion({
+    completedStep: "ai-providers",
+    steps,
+    monitoringDecision: await loadMonitoringCapabilityDecision(),
+  });
   const updated = await prisma.platformSetupProgress.updateMany({
     where: { id: progress.id, updatedAt: progress.updatedAt, completedAt: null },
     data: { currentStep: projection.currentStep, steps: projection.steps, ...(projection.isComplete ? { completedAt: new Date() } : {}) },

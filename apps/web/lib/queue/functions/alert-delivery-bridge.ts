@@ -227,6 +227,43 @@ export const alertDeliveryBridge = jobs.createFunction(
     const gate = await gateAtEntry(step, "ops/alert-delivery-bridge");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return await step.run("deliver-alerts", async () => runAlertDeliveryScan());
+    const delivery = await step.run("deliver-alerts", async () => runAlertDeliveryScan());
+    // BI-24092DC9: its own step, so it runs even when both alert evaluators are
+    // unreachable (the delivery scan returns early then) and a failure in one
+    // does not hide the other.
+    const aiCapacity = await step.run("watch-ai-capacity", async () => runAiCapacityWatchCycle());
+    return { ...delivery, aiCapacity };
   },
 );
+
+/**
+ * Providers the provider-credential lane already shows an item for (expired,
+ * disabled-after-failure, or renewal refused — BI-A53C594E). Read through the
+ * lane's own loader so the two never disagree. Best-effort.
+ */
+async function providersShownByCredentialLane(db: unknown): Promise<Set<string>> {
+  try {
+    const { loadProviderCredentialItems } = await import("@/lib/attention/sources/provider-credential");
+    const items = await loadProviderCredentialItems(db as Parameters<typeof loadProviderCredentialItems>[0]);
+    const prefix = "provider-credential:";
+    return new Set(items.filter((i) => i.id.startsWith(prefix)).map((i) => i.id.slice(prefix.length)));
+  } catch {
+    return new Set();
+  }
+}
+
+/** One AI-capacity watch cycle over the live db, pushing new rows to the operator's bell. */
+export async function runAiCapacityWatchCycle() {
+  const { prisma } = await import("@dpf/db");
+  const { runAiCapacityWatch } = await import("@/lib/routing/ai-capacity-watch");
+  const { notifyAttentionLive, resolveOperatorRecipient } = await import("@/lib/attention/notify-live");
+  return runAiCapacityWatch(prisma as never, {
+    coveredByCredentialLane: await providersShownByCredentialLane(prisma),
+    notify: async (item) => {
+      const recipient = await resolveOperatorRecipient();
+      // No resolvable owner: notification is best-effort; the row still projects.
+      if (!recipient) return;
+      await notifyAttentionLive({ source: "platform-health", userId: recipient, ...item });
+    },
+  });
+}

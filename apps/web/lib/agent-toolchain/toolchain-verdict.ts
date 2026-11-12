@@ -24,7 +24,34 @@ export type ToolchainDeclaration = {
   /** First 16 hex characters of the delivered digest. */
   digest: string;
   client: string;
+  /** How the host's convergence agent last fared (BI-3E66F76F); absent when the connector does not say. */
+  converge?: ConvergeReport;
 };
+
+/** The host agent's status vocabulary (packages/dpf-skill-pack/scripts/toolchain_agent.py). */
+export const CONVERGE_STATUSES = ["ok", "failed", "needs-operator", "opted-out", "offline", "ahead-of-portal", "busy"] as const;
+export type ConvergeStatus = (typeof CONVERGE_STATUSES)[number];
+
+export type ConvergeReport = {
+  status: ConvergeStatus;
+  /** Machine code such as `exit-1` or `identity_changed`; never free text. */
+  code: string | null;
+  /** When the host first failed, from the agent's own record; null while healthy. */
+  since: Date | null;
+};
+
+const CONVERGE_RE = /^([a-z-]+)(?::([a-z0-9_.-]{1,48}))?(?:@(\d{9,11}))?$/;
+
+/** Parse `status[:code][@epochSeconds]`. Anything outside the closed vocabulary is no report. */
+export function parseConvergeToken(value: string | null | undefined): ConvergeReport | null {
+  const match = value ? CONVERGE_RE.exec(value.trim()) : null;
+  if (!match || !(CONVERGE_STATUSES as readonly string[]).includes(match[1]!)) return null;
+  return {
+    status: match[1] as ConvergeStatus,
+    code: match[2] ?? null,
+    since: match[3] ? new Date(Number(match[3]) * 1000) : null,
+  };
+}
 
 export type ToolchainVerdict = "current" | "stale" | "below-floor" | "undeclared";
 
@@ -81,12 +108,12 @@ const SEMVER_RE = /^(\d+)\.(\d+)\.(\d+)$/;
 const DIGEST_PREFIX_RE = /^[0-9a-f]{16}$/;
 export const TOOLCHAIN_HEADER = "x-dpf-toolchain";
 
-function readHeaderDeclaration(value: string | null): Partial<ToolchainDeclaration> {
+function readHeaderDeclaration(value: string | null): Partial<ToolchainDeclaration> & { convergeToken?: string } {
   if (!value) return {};
   const parts = Object.fromEntries(
     value.split(";").map((part) => part.trim().split("=", 2).map((s) => s.trim())).filter((kv) => kv.length === 2),
   ) as Record<string, string>;
-  return { pack: parts.pack, digest: parts.digest, client: parts.client };
+  return { pack: parts.pack, digest: parts.digest, client: parts.client, convergeToken: parts.converge };
 }
 
 /**
@@ -108,7 +135,8 @@ export function parseToolchainDeclaration(url: string, headers: Pick<Headers, "g
   if (!pack || !SEMVER_RE.test(pack)) return null;
   if (!digest || !DIGEST_PREFIX_RE.test(digest)) return null;
   if (!client || !Object.hasOwn(DECLARING_CLIENT_KINDS, client)) return null;
-  return { pack, digest, client };
+  const converge = parseConvergeToken(params.get("dpf_converge") ?? fromHeader.convergeToken);
+  return converge ? { pack, digest, client, converge } : { pack, digest, client };
 }
 
 function compareSemver(left: string, right: string): number {
@@ -200,8 +228,11 @@ export function formatToolchainNotice(input: {
       : " Its skills, hooks or connector settings may be out of date.";
   return (
     `TOOLCHAIN: out of date — ${what}.${consequence} ` +
-    `Repair: ask the user once, in plain words, for approval to update the DPF tools; then run the DPF toolchain update from this portal (${manifestUrl})` +
+    `Repair: inspect the signed updater's dry-run from this portal (${manifestUrl})` +
     (installationId ? `, expecting installation ${installationId}. ` : ". ") +
-    "Never show the user a command. When it finishes, ask them to restart this client."
+    "If the dry-run finds no toolchain or configuration repairs, ask once to restart this client and continue other authorized work. " +
+    "For required file, connector, credential-wiring or plugin-pin repairs, apply only within existing scoped authorization; ask only for missing authority or expanded scope. " +
+    "Honor host and tool refusals; never route a refused apply through another path. " +
+    "Never show the user a command. After an applied update, ask once to restart this client."
   );
 }

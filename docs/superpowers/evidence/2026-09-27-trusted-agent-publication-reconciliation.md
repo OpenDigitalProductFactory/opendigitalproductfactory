@@ -7,7 +7,65 @@ This records the initial public narrative update, not completion of the programm
 publication milestone. Live backlog records own delivery status. No runtime,
 qualification, interoperability or certification result is asserted here.
 
-## Current reconciliation — 2026-10-16
+## Current baseline dispositions — 2026-10-16, 20:36–20:45 UTC
+
+**Resumption note — October 17.** The exact eight-file ordinary handoff was
+subsequently executed, confirmed through the governed approval-status reader.
+The four JSI/GPP reference occurrences described as held at the October 16 audit
+are now follow-on proposals awaiting this worker's fresh exact claims and
+scope-bound plan coverage. The current thirteen-reference packet does not edit
+them. Its native e2 PLAN execution remains historical and uncertain; neither the
+handoff nor the new publication packet settles that execution. The source-layout
+and GPP editorial prerequisites still require their own delivery before final
+Word generation.
+
+BI-928E1B0F manual-check evidence `cmvbfsagg5rot01ptnjn5t1gj` records a bounded
+publication audit: 34 selected source files, 40 actual HTTP responses and 16
+targeted link probes. The source pin is
+`bf39a9fd58536171e7dd6b136d13e5192f86904d`; all 34 selected blobs were
+unchanged at `250447587496308226abc10aca79ee006ecd10f6`. Exact source
+coordinates, response identities and limits are retained with that evidence.
+These are sampled content/link and download observations, not all-site,
+runtime, accessibility, qualification or conformance acceptance.
+
+| Baseline surface | Reviewed disposition | Accountable existing work and remaining acceptance |
+| --- | --- | --- |
+| Homepage standards, trust and maturity sections | Current copy labels drafts, partial/shadow controls and unfinished assessments. Five existing Word URLs return genuine packages. No further narrative change identified in these sections. | BI-928E1B0F retains the four-edition warning until final publication; unrelated hardware/catalog claims were not reviewed here. |
+| TAK, GAID, JSI and GPP canonical sources | Current draft sources are delivered; link failures and old Word editions remain distinct defects. JSI/GPP reference corrections are proposals while their source claims remain held. | BI-A484D58F retains normative acceptance and the GPP section 13 editorial erratum; BI-928E1B0F owns publication links/parity, not ratification. |
+| Standards-family and external-alignment maps | Draft ownership, composition and permission boundaries are explicit. This packet corrects their excluded composition-design locators. | BI-928E1B0F verifies the released replacement links; BI-A484D58F owns normative/profile acceptance. |
+| Contribution roadmap | R0/informative and no-endorsement limits are explicit; the authored November 9–11 TBM packet link resolves. No text change proposed. | BI-1C39CCF8 delivered the prepared packet; submissions, contribution/IP terms and endorsement are separate decisions. |
+| DPF conformance summary and TAK/GAID/JSI rubrics | Summary is an accumulated source-declared first pass, not a dated executed assessment. This packet qualifies that limit and corrects five stale source locators. Rubric existence is not an executed verdict. | BI-2AB781FA / BI-F3C2EC7A owe applicable clauses, exact versions/subject/runtime, executed tests, evidence and dates. No status or qualification is promoted here. |
+| Work-shapes architecture explanation and portable reference-contract page | This packet repairs eight excluded-source/reference occurrences across these two pages. The pure reference explicitly uses simulated effects and `conformanceClaim: none`. Live BI-F9582C48 records actual approved-design/baseline provenance; it is not inferred from a draft header. | BI-928E1B0F verifies links. BI-F9582C48 owns the delivered pure contract; package, host and runtime integration remain separate owners. |
+| `how-governed-work-runs.md` | Reviewed: recommendation/permission, three owning decision scopes, posture/shape and shadow gates remain distinct, with known limits. No text change proposed. Existing behavior statements were not independently exercised on the runtime by this audit. | BI-928E1B0F owns this bounded guide disposition; feature owners retain live acceptance. |
+| Decision-perspective and related workroom/workforce/authority guides | This packet repairs the wrapped practice-guide link. Related practice, proactivity, workforce-index, workroom and identity/access passages/routes were sampled; no concrete contradiction found in examined passages. | BI-928E1B0F retains full remaining guide reconciliation. Unexamined feature claims and broader guide/assets remain unassessed, not accepted no-change. |
+| White-paper source and Word download | Discussion draft 2.2 is merged and actually public; exact returned Word bytes are recorded below. | BI-6CC40F77 is separately typed done. No new runtime, legal/rights or external-adoption result follows. |
+| Book proposal and two sample chapters | Four actual public HTML pages and their draft/informative, synthetic-policy and evidence limits checked. No delivery/link correction proposed. The author audit is not a new independent editorial verdict. | BI-6AC40460 is separately typed done; full manuscript, publisher outreach and contract remain follow-ons. |
+| LF/TBM preparation packet | Six public pages and three pinned PDF/PPTX downloads resolve. November 9–11, 2026, synthetic/static fallback and no-endorsement limits remain visible. No text/download correction proposed. | BI-1C39CCF8 is separately typed done for preparation, not conference acceptance, outreach or a live demonstration. |
+| Four normative Word editions and their diagrams | Existing downloads are complete ZIP packages, but retained October 1–2 editions remain old. Layout/source defects have actual private proofs; no final-edition parity/QA claim is made. TAK/GAID full-resolution PNG companions actually resolve. | BI-928E1B0F owes final source pins, four regenerated editions, all-page independent QA, paragraph/media/parity checks and deployed bytes. BI-7939AE2A and BI-1B66A62E separately own admitted renderer/layout/config source defects. |
+| Public publication channel | Existing Pages builds, merged source and individual returned HTTP bytes are separate observations. No workflow/LFS policy change is proposed. | BI-928E1B0F must record the changed pages and exact targets after the actual release; no universal cache-freshness inference. |
+
+The audit found 12 unique actual HTTP 404 targets across 17 authored source
+occurrences. This packet corrects 13 occurrences outside held sources; four in
+JSI/GPP remain open proposals until actual ordinary release. Excluded
+`docs/superpowers/` and `docs/Reference/` sources stay excluded and are linked
+through immutable public repository locators. The existing PAAW page and
+practice guide remain the authoritative public targets. Thirty-nine sampled
+fragment targets were present.
+
+BI-1139F962 is open and owns broader PAAW public harmonization; BI-4E32C6A2 is
+done but retains historical filename/redirect follow-ons in its body. Neither
+had an active room at the read. This packet fixes only the malformed link to
+the existing PAAW page; it does not rename standards, migrate guards or absorb
+their remaining ownership. BI-A2A71149 separately owns end-to-end document
+lifecycle infrastructure acceptance. Public HTML/download delivery does not
+settle that lifecycle or the uncertain native PLAN execution.
+
+The publication milestone remains open: held references, complete relevant-guide
+dispositions, refreshed normative editions and their actual post-release proof
+are still required. Runtime/conformance, DPF demonstration, portable hosts and
+external financial-archetype reproduction remain their own existing BIs.
+
+## Storage repair record — 2026-10-16
 
 The September deployment failure below is historical. PRs #5834 and #5836 were
 subsequently merged, and the public narrative was directly observed on October 1
@@ -72,9 +130,9 @@ canonical delivery evidence is `cmvbdroq64rbk01ptfwyrqxd4`, with the complete
 observation recorded in WC-B0709AFB activity 45. This closes that broken-download
 repair, without establishing current normative source parity or conformance.
 
-### White-paper edition 2.2 candidate — BI-6CC40F77
+### White-paper edition 2.2 delivered — BI-6CC40F77
 
-The next white-paper edition replaces unsupported market, prior-art, cohort,
+The revised white-paper edition replaces unsupported market, prior-art, cohort,
 adoption and runtime-assurance claims with sourced, bounded statements. An
 immutable source register and source-declared/runtime-unverified ledger distinguish
 repository declarations, actual observations and remaining assessment work. The
@@ -84,7 +142,7 @@ is separately identified and does not establish runtime enforcement.
 The author inspected all 24 rendered pages. The reproducible export preserves
 the canonical conversion and applies a narrowly scoped inline-image extent fix:
 image pixels and every ZIP member except word/document.xml remain unchanged.
-The candidate DOCX is 1,319,790 bytes, SHA-256
+The reviewed DOCX is 1,319,790 bytes, SHA-256
 `3b3226ac0b4677b4ef4ba15120413da75372734b31a8362fcdc1df79cc59f62f`.
 Root's separately attributed CLIENT technical/editorial assessment of source
 `84c7070f8dac68409521adf238a58aecad4d1160` was PASS WITH LIMITS, recorded in
@@ -94,19 +152,22 @@ three figure pages. It did not independently inspect all 24 pages or grant nativ
 review, legal/rights approval, runtime conformance or publication permission.
 
 The exact reviewed bytes are retained as a plain Git blob using the merged
-storage exception; this candidate does not change global LFS or Pages policy.
+storage exception; this edition does not change global LFS or Pages policy.
 The homepage snapshot note identifies white-paper 2.2 separately and preserves
 the dated-edition warning for the other Word files. Current GPP Markdown is 0.19;
 its retained Word edition is still 0.8. The historical table above describes the
-storage repair's retained snapshots, not the candidate replacement's currency.
+storage repair's retained snapshots, not the replacement edition's currency.
 
-Final exact-tree documentation evidence, native review disposition, source merge,
-actual Pages deployment and returned 2.2 bytes remain separate delivery events.
-Record their actual results before closing this white-paper publication slice.
-The wider programme remains incomplete while implementation and assessment gaps
-remain.
+PR [#6466](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6466)
+merged at 20:14:35 UTC as `bf39a9fd58536171e7dd6b136d13e5192f86904d`.
+The actual public GET in the 20:36 UTC audit returned those same 1,319,790 bytes,
+with matching SHA-256, valid ZIP CRC and word/document.xml. The current public
+homepage notice identifies discussion draft 2.2 separately. BI-6CC40F77 is
+typed done in the live backlog; its independently attributed source/review
+receipts remain separate from this delivery observation. No native verdict,
+runtime proof or full-programme acceptance is synthesized here.
 
-## Surface dispositions
+## Initial surface dispositions — historical baseline
 
 | Surface | Disposition and evidence | Remaining owner |
 |---|---|---|
@@ -129,7 +190,7 @@ remain.
 - No standards body, regulator, publisher or external implementer is represented
   as endorsing this work. External submissions remain separately authorized.
 
-## Verification scope
+## Initial verification — 2026-09-27, historical
 
 The link fragments match the source headings `MBSE Composition Mapping` and
 `7.13 Principle-Directed Decision Contract`. The documentation index is fresh
@@ -142,7 +203,7 @@ GitHub Pages run [36361616492](https://github.com/OpenDigitalProductFactory/open
 failed after the baseline merge: Liquid interprets the existing MessageFormat
 example in `docs/architecture/localization-runbook.md` as a template expression.
 The failure is recorded as `cmuki7c1zfr2c01p7q0f2goic` against this backlog item.
-Public deployment and the new deep links therefore remain unverified. That
+At that checkpoint, public deployment and the new deep links remained unverified. That
 architecture path is covered by an earlier active read claim; scope-release
 approval remains outstanding. No control was bypassed to edit it.
 

@@ -129,3 +129,33 @@ export async function activeUserIdForHumanPrincipal(db: PrincipalUserDb, princip
   const user = await db.user.findUnique({ where: { id: userId }, select: { isActive: true } });
   return user?.isActive ? userId : null;
 }
+
+/**
+ * The live owner effects, composed once so the drive (which writes a task's
+ * owner) and the scheduled-room mandate (which re-checks it, BI-17238133)
+ * cannot disagree about who a room's task runs for. Accountability uses the
+ * same lineage walk the room workforce read uses.
+ */
+export function liveDriveTaskOwnerEffects(loadDb: () => Promise<unknown>): Required<DriveTaskOwnerEffects> {
+  return {
+    async resolveAccountability(roomId) {
+      const { resolveRoomAccountabilityFromDb } = await import("@/lib/work-management/room-workforce.server");
+      return resolveRoomAccountabilityFromDb(
+        (await loadDb()) as Parameters<typeof resolveRoomAccountabilityFromDb>[0],
+        { workroomId: roomId },
+      );
+    },
+    async resolvePrincipalUserId(principalId) {
+      return activeUserIdForHumanPrincipal((await loadDb()) as PrincipalUserDb, principalId);
+    },
+  };
+}
+
+/** The user a room's drive task runs for: its recorded owner, else its accountable person; null when none. */
+export async function resolveRoomDriveTaskOwnerUserId(
+  room: { id: string; recordedOwnerUserId: string | null },
+  effects: DriveTaskOwnerEffects,
+): Promise<string | null> {
+  const { owner } = await resolveDriveTaskOwner(room.id, room.recordedOwnerUserId, effects);
+  return owner.state === "missing" ? null : owner.userId;
+}

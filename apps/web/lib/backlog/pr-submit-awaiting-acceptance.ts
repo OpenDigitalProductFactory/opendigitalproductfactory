@@ -1,5 +1,7 @@
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
+import { ownedRowBodyWhere, intakeOriginMarkers, isFederatedMirror } from "@/lib/federation/federated-twins";
 import { isBacklogStatus, isLegalTransition, type BacklogStatus } from "@/lib/backlog/transitions";
 
 export const CODING_POOL_STATUSES = ["triaging", "open", "in-progress"] as const;
@@ -19,6 +21,7 @@ export type GitHubPullRequestEvent = {
   pullRequestUrl: string;
   draft: boolean;
   merged: boolean;
+  mergedAt?: string | null;
   state: string;
   title: string;
   body: string;
@@ -104,6 +107,7 @@ export function parseGitHubPullRequestEvent(payload: unknown): GitHubPullRequest
     pullRequestUrl: url,
     draft: pullRequest.draft === true,
     merged: pullRequest.merged === true,
+    mergedAt: typeof pullRequest.merged_at === "string" ? pullRequest.merged_at : null,
     state: typeof pullRequest.state === "string" ? pullRequest.state : "",
     title: typeof pullRequest.title === "string" ? pullRequest.title : "",
     body: typeof pullRequest.body === "string" ? pullRequest.body : "",
@@ -132,13 +136,16 @@ export function shouldReopenFromWithdrawnPr(event: GitHubPullRequestEvent): bool
   return event.action === "closed" && !event.merged;
 }
 
-async function loadLinkedItems(event: GitHubPullRequestEvent): Promise<{
+type LinkedItem = {
   id: string;
   itemId: string;
   status: string;
   claimStatus: string | null;
   workType: string | null;
-}[]> {
+  body?: string | null;
+};
+
+async function loadLinkedItems(event: GitHubPullRequestEvent): Promise<LinkedItem[]> {
   const rooms = await prisma.workroom.findMany({
     where: {
       repositoryFullName: event.repositoryFullName,
@@ -158,8 +165,35 @@ async function loadLinkedItems(event: GitHubPullRequestEvent): Promise<{
 
   return prisma.backlogItem.findMany({
     where: { itemId: { in: itemIds } },
-    select: { id: true, itemId: true, status: true, claimStatus: true, workType: true },
+    select: { id: true, itemId: true, status: true, claimStatus: true, workType: true, body: true },
   });
+}
+
+/**
+ * This install's own coding-pool items that share an intake origin marker with
+ * a delivered item, mirror or local (BI-91FC6B9A §3.6). Mirrors are never
+ * returned: the paired installation's merge signal moves its own copy.
+ */
+async function loadOwnedTwins(delivered: readonly LinkedItem[]): Promise<Array<LinkedItem & { twinOf: string }>> {
+  const markerOwner = new Map<string, string>();
+  for (const item of delivered) {
+    for (const marker of intakeOriginMarkers(item.body ?? null)) if (!markerOwner.has(marker)) markerOwner.set(marker, item.itemId);
+  }
+  if (markerOwner.size === 0) return [];
+  const deliveredIds = new Set(delivered.map((item) => item.itemId));
+  const rows: LinkedItem[] = await prisma.backlogItem.findMany({
+    where: {
+      status: { in: [...CODING_POOL_STATUSES] },
+      AND: [ownedRowBodyWhere(), { OR: [...markerOwner.keys()].map((marker) => ({ body: { contains: marker } })) }],
+    },
+    select: { id: true, itemId: true, status: true, claimStatus: true, workType: true, body: true },
+  });
+  return rows
+    .filter((row) => !deliveredIds.has(row.itemId) && !isFederatedMirror(row.body ?? null))
+    .flatMap((row) => {
+      const marker = intakeOriginMarkers(row.body ?? null).find((m) => markerOwner.has(m));
+      return marker ? [{ ...row, twinOf: markerOwner.get(marker)! }] : [];
+    });
 }
 
 async function transitionItem(args: {
@@ -170,13 +204,56 @@ async function transitionItem(args: {
   reason: string;
   pullRequestNumber: number;
   pullRequestUrl: string;
+  delivery?: { kind: "merged"; mergedAt: string | null } | { kind: "workroom" };
 }): Promise<boolean> {
   if (args.from === args.to) return false;
   if (!isBacklogStatus(args.from) || !isLegalTransition(args.from, args.to)) return false;
 
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
+    // Serialize with explicit lifecycle changes before judging their history.
+    await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${args.id} FOR UPDATE`;
+    const current = await tx.backlogItem.findUnique({ where: { id: args.id }, select: { status: true } });
+    if (!current || current.status !== args.from) return false;
+    if (args.to === AWAITING_ACCEPTANCE_STATUS) {
+      const history = await tx.backlogItemActivity.findMany({
+        where: { backlogItemId: args.id, kind: "status_change" },
+        select: { id: true, recordedAt: true, payload: true },
+        orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+      });
+      let priorAdvanceAt: number | null = null;
+      let explicitResumeAt: number | null = null;
+      let explicitReopenAt: number | null = null;
+      for (const row of history) {
+        const payload = row.payload;
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
+        const at = row.recordedAt.getTime();
+        if (payload.actuator === PR_SUBMIT_ACTUATOR) {
+          if (payload.to === AWAITING_ACCEPTANCE_STATUS
+            && payload.pullRequestNumber === args.pullRequestNumber
+            && (payload.pullRequestUrl == null || payload.pullRequestUrl === args.pullRequestUrl)) {
+            priorAdvanceAt = Math.min(priorAdvanceAt ?? at, at);
+          }
+        } else if (typeof payload.to === "string" && isCodingPoolStatus(payload.to)) {
+          explicitResumeAt = Math.max(explicitResumeAt ?? at, at);
+          if (payload.from === "awaiting-acceptance" || payload.from === "done") {
+            explicitReopenAt = Math.max(explicitReopenAt ?? at, at);
+          }
+        }
+      }
+      // Equal timestamps cannot establish that the PR superseded the reopen.
+      // Preserve the explicit decision, including when old events were replayed.
+      if (priorAdvanceAt !== null && explicitResumeAt !== null && explicitResumeAt >= priorAdvanceAt) return false;
+      // A merged PR can predate a reopen without ever having advanced this
+      // item locally. Use the provider's merge time, not observation time.
+      // A sparse Workroom association supplies no newer delivery evidence.
+      if (explicitReopenAt !== null && args.delivery) {
+        if (args.delivery.kind === "workroom") return false;
+        const mergedAt = args.delivery.mergedAt === null ? NaN : Date.parse(args.delivery.mergedAt);
+        if (!Number.isFinite(mergedAt) || mergedAt <= explicitReopenAt) return false;
+      }
+    }
     await tx.backlogItem.update({
-      where: { id: args.id },
+      where: { id: args.id, status: args.from },
       data: {
         status: args.to,
         ...(args.to === AWAITING_ACCEPTANCE_STATUS
@@ -200,8 +277,8 @@ async function transitionItem(args: {
         },
       },
     });
+    return true;
   });
-  return true;
 }
 
 export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise<PrSubmitActuatorResult> {
@@ -222,6 +299,11 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
   let skipped = 0;
   for (const item of items) {
     const to: BacklogStatus = mark ? AWAITING_ACCEPTANCE_STATUS : "open";
+    // A mirror is the paired installation's record; only its owner moves it.
+    if (isFederatedMirror(item.body ?? null)) {
+      skipped += 1;
+      continue;
+    }
     const eligible = mark
       ? isCodingPoolStatus(item.status) && (!docPullRequest || item.workType === "doc")
       : item.status === AWAITING_ACCEPTANCE_STATUS;
@@ -239,9 +321,28 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
         : `PR #${event.pullRequestNumber} withdrawn without merge`,
       pullRequestNumber: event.pullRequestNumber,
       pullRequestUrl: event.pullRequestUrl,
+      ...(event.merged ? { delivery: { kind: "merged" as const, mergedAt: event.mergedAt ?? null } } : {}),
     });
     if (did) moved.push(item.itemId);
     else skipped += 1;
+  }
+  // A merged delivery also closes this install's same-origin copies, so no
+  // twin stays open to be diagnosed and fixed again (BI-91FC6B9A).
+  if (mark && event.merged && !docPullRequest) {
+    for (const twin of await loadOwnedTwins(items)) {
+      const did = await transitionItem({
+        id: twin.id,
+        itemId: twin.itemId,
+        from: twin.status,
+        to: AWAITING_ACCEPTANCE_STATUS,
+        reason: `Same defect as ${twin.twinOf}, delivered by merged PR #${event.pullRequestNumber}`,
+        pullRequestNumber: event.pullRequestNumber,
+        pullRequestUrl: event.pullRequestUrl,
+        delivery: { kind: "merged", mergedAt: event.mergedAt ?? null },
+      });
+      if (did) moved.push(twin.itemId);
+      else skipped += 1;
+    }
   }
   return { moved, skipped, reason: null };
 }
@@ -253,7 +354,7 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       pullRequestNumber: { not: null },
       backlogItemId: { not: null },
     },
-    select: { backlogItemId: true, pullRequestNumber: true, pullRequestUrl: true },
+    select: { backlogItemId: true, pullRequestNumber: true, pullRequestUrl: true, repositoryFullName: true },
     take,
     orderBy: { updatedAt: "desc" },
   });
@@ -273,7 +374,10 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
   for (const item of items) {
     const room = byItem.get(item.itemId);
     const prNumber = room?.pullRequestNumber;
-    if (typeof prNumber !== "number") {
+    const repository = room?.repositoryFullName;
+    const prUrl = room?.pullRequestUrl ?? (repository && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)
+      ? `https://github.com/${repository}/pull/${prNumber}` : null);
+    if (typeof prNumber !== "number" || !prUrl) {
       skipped += 1;
       continue;
     }
@@ -284,7 +388,8 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       to: AWAITING_ACCEPTANCE_STATUS,
       reason: `Reconcile existing PR #${prNumber}`,
       pullRequestNumber: prNumber,
-      pullRequestUrl: room?.pullRequestUrl ?? `https://github.com/pull/${prNumber}`,
+      pullRequestUrl: prUrl,
+      delivery: { kind: "workroom" },
     });
     if (did) moved.push(item.itemId);
     else skipped += 1;
@@ -301,6 +406,7 @@ export async function applyObservedPullRequestsToBacklog(
     headBranch: string;
     state: "open" | "merged" | "closed";
     isDraft: boolean;
+    mergedAt?: string | null;
   }[],
 ): Promise<PrSubmitActuatorResult> {
   const moved: string[] = [];
@@ -314,6 +420,7 @@ export async function applyObservedPullRequestsToBacklog(
         html_url: observation.url,
         draft: observation.isDraft,
         merged: observation.state === "merged",
+        merged_at: observation.mergedAt ?? null,
         state: observation.state === "open" ? "open" : "closed",
         title: observation.title ?? "",
         body: "",
@@ -357,7 +464,11 @@ export async function fileAcceptanceMiss(args: {
     data: {
       itemId: `BI-ACC-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`,
       title: args.title,
-      body: `${args.body}\n\n${marker}\nservedSha: ${args.servedSha}\nsupersedes: ${original.itemId}\n`,
+      // BI-458CCA8D: the miss is done when what the original promised works on the served build.
+      body: composeIntakeBody({
+        outcome: `What ${original.itemId} delivers works on the served build, and this acceptance miss does not come back.`,
+        body: `${args.body}\n\n${marker}\nservedSha: ${args.servedSha}\nsupersedes: ${original.itemId}\n`,
+      }),
       status: "open",
       type: "portfolio",
       workType: "bug",

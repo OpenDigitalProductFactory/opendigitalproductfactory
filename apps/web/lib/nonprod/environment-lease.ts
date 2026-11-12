@@ -1,6 +1,7 @@
+import { isTerminalLeaseStatus, lockNonprodEnvironment, type NonprodEnvironmentKey } from "./environment-lease-lock";
+export { NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "./environment-lease-lock";
 import type { ClaimNonprodEnvironmentLeaseResult, LeaseRow, ResolvedNonprodPoolPolicy } from "./environment-lease-result";
 export type { ClaimNonprodEnvironmentLeaseResult } from "./environment-lease-result";
-import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 import {
   ABANDONED_QUEUE_ROW_AFTER_MS,
@@ -9,12 +10,9 @@ import {
 } from "./environment-lease-admission";
 import type { LocalCiHostPressure } from "./local-ci-pool-policy";
 import type { LocalCiCapacityBroker } from "./local-ci-capacity-broker";
-import {
-  resolveHostResourcePoolPolicy,
-  resolveNonprodPoolPolicy,
-  type HostResourceLeaseEvidence,
-} from "./environment-lease-pool-policy";
-import { isHeavyResourceClass, type HeavyResourceClass } from "./host-resource-policy";
+import { resolveNonprodPoolPolicy, type HostResourceLeaseEvidence } from "./environment-lease-pool-policy";
+import type { HeavyResourceClass } from "./host-resource-policy";
+import { lockHostBackedClaimAdmission, resolveHostBackedClaimPolicy } from "./environment-lease-host-backed-reservation";
 import localCiSlotResources from "./local-ci-slot-resources.json";
 import { assertRenewalSlotBinding, type NonprodSlotBinding } from "./environment-lease-slot-binding";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
@@ -25,8 +23,8 @@ import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
 import { previewMustYieldSlot } from "./environment-lease-preview-yield";
-import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
-import { bindFreshImmediateLeaseProvenance } from "./environment-lease-provenance";
+import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits, settleNonprodLeaseWait } from "./durable-wait";
+import { bindFreshLeaseProvenance, checkpointQueuedLeaseProvenance, assertOwnedLeaseRelease, freshLeaseBirthFields, type LeaseReleaseContext } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -42,27 +40,16 @@ export {
   listQueuedNonprodEnvironmentLeases,
 } from "./environment-lease-registry";
 
-export type NonprodEnvironmentKey = "active-candidate" | "local-integration-ci" | "host-heavy-resource";
 type NonprodSlotKey = keyof typeof localCiSlotResources.slots;
 export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.slots) as NonprodSlotKey[]);
 
 type LeaseTx = Pick<
   typeof prisma,
-  "$executeRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
+  "$executeRaw" | "$queryRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
 > & Partial<Pick<typeof prisma, "taskRun">>;
 type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
   typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom" | "taskRun"
 >>;
-
-function createLeaseId() {
-  return `NPEL-${randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase()}`;
-}
-
-function isTerminalLeaseStatus(
-  status: string,
-): status is "released" | "expired" | "cancelled" {
-  return status === "released" || status === "expired" || status === "cancelled";
-}
 
 async function inLeaseTransaction<T>(
   db: LeaseDb,
@@ -141,10 +128,7 @@ async function lockEnvironment(
   environmentKey: string,
 ): Promise<void> {
   if (typeof tx.$executeRaw !== "function") return;
-  const lockKey = `dpf:nonprod-environment:${environmentKey}`;
-  await tx.$executeRaw`
-    SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
-  `;
+  await lockNonprodEnvironment(tx, environmentKey);
 }
 
 async function reconcileEnvironmentInTransaction(input: {
@@ -226,6 +210,10 @@ async function reconcileEnvironmentInTransaction(input: {
         expiresAt: new Date(input.now.getTime() + ttlMs),
       },
     });
+    if (input.environmentKey === "active-candidate" && row?.taskRunId && input.tx.taskRun) {
+      await settleNonprodLeaseWait({ db: input.tx as never, taskRunId: row.taskRunId,
+        leaseId: row.leaseId, state: "admitted", now: input.now });
+    }
   }
 
   return {
@@ -255,6 +243,7 @@ export async function claimNonprodEnvironmentLease(input: {
   taskRunId?: string;
   /** Authenticated MCP actor; never read from claim parameters. */
   authenticatedUserId?: string;
+  authenticatedAgentId?: string;
   cleanupCommand?: string;
   slotManifestVersion?: 1;
   productionBuild?: "local" | "delegated"; // BI-3A14308C: "delegated" waives only the builder reserve
@@ -306,7 +295,10 @@ export async function claimNonprodEnvironmentLease(input: {
     created = false;
     admittedNow = false;
     queueDepth = 0;
-    await lockEnvironment(tx, input.environmentKey);
+    await lockHostBackedClaimAdmission({
+      environmentKey: input.environmentKey,
+      lock: (environmentKey) => lockEnvironment(tx, environmentKey),
+    });
 
     // The environment lock may outlive the approved proposal. Refuse before
     // resume reconciliation, terminal-row revival or any capacity mutation.
@@ -319,27 +311,26 @@ export async function claimNonprodEnvironmentLease(input: {
       })
       : null;
 
-    const poolPolicy: ResolvedNonprodPoolPolicy = sharedPoolPolicy
-      ?? resolveHostResourcePoolPolicy({
-        resourceClass: input.resourceClass!,
-        expectedMemoryBytes: input.expectedMemoryBytes!,
-        hostResource: input.hostResource!,
-        activeReservations: (await tx.nonProductionEnvironmentLease.findMany({
-          where: {
-            environmentKey: "host-heavy-resource",
-            status: "active",
-            expiresAt: { gt: now },
-            ...(lease ? { id: { not: lease.id } } : {}),
-          },
-          select: { resourceClass: true, expectedMemoryBytes: true },
-        })).flatMap((row) => {
-          const resourceClass = String(row.resourceClass ?? "");
-          const expectedMemoryBytes = Number(row.expectedMemoryBytes ?? 0);
-          return isHeavyResourceClass(resourceClass) && expectedMemoryBytes > 0
-            ? [{ resourceClass, expectedMemoryBytes }]
-            : [];
-        }),
-      });
+    const { candidateReservation, poolPolicy } = await resolveHostBackedClaimPolicy({
+      environmentKey: input.environmentKey,
+      slotManifestVersion: input.slotManifestVersion,
+      sharedPoolPolicy,
+      explicitReservation: input.environmentKey === "host-heavy-resource"
+        ? { resourceClass: input.resourceClass!, expectedMemoryBytes: input.expectedMemoryBytes! }
+        : undefined,
+      explicitHostResource: input.hostResource,
+      currentLeaseStatus: lease?.status,
+      readActiveReservations: () => tx.nonProductionEnvironmentLease.findMany({
+        where: {
+          environmentKey: { in: ["host-heavy-resource", "local-integration-ci"] },
+          status: "active",
+          expiresAt: { gt: now },
+          expectedMemoryBytes: { not: null },
+          ...(lease ? { id: { not: lease.id } } : {}),
+        },
+        select: { resourceClass: true, expectedMemoryBytes: true },
+      }),
+    });
 
     const resume = await resolveResumeClaim({ tx, resumeLeaseId: input.resumeLeaseId, claimLease: lease,
       environmentKey: input.environmentKey, ownerSessionId: input.ownerSessionId, ownerProvider: input.ownerProvider, now });
@@ -406,13 +397,19 @@ export async function claimNonprodEnvironmentLease(input: {
               && input.slotManifestVersion === 1
               ? { slotManifestVersion: 1 }
               : {}),
+            ...(candidateReservation
+              ? {
+                resourceClass: candidateReservation.resourceClass,
+                expectedMemoryBytes: candidateReservation.expectedMemoryBytes,
+              }
+              : {}),
           },
         });
       }
     } else {
       lease = await tx.nonProductionEnvironmentLease.create({
         data: {
-          leaseId: createLeaseId(),
+          ...await freshLeaseBirthFields(tx),
           claimKey: input.claimKey,
           environmentKey: input.environmentKey,
           activeKey: null,
@@ -433,8 +430,8 @@ export async function claimNonprodEnvironmentLease(input: {
           buildId: input.buildId,
           taskRunId: input.taskRunId,
           cleanupCommand: input.cleanupCommand,
-          resourceClass: input.resourceClass,
-          expectedMemoryBytes: input.expectedMemoryBytes,
+          resourceClass: candidateReservation?.resourceClass,
+          expectedMemoryBytes: candidateReservation?.expectedMemoryBytes,
           ownerPid: input.ownerProcessId,
           ownerProcessIdentity: input.ownerProcessIdentity,
           slotManifestVersion: input.environmentKey === "local-integration-ci"
@@ -470,15 +467,14 @@ export async function claimNonprodEnvironmentLease(input: {
       where: { id: lease.id },
     });
     if (!current) throw new Error("nonprod_claim_disappeared");
-    const waitAgeMs = Math.max(
-      0,
-      now.getTime() - (current.queuedAt ?? current.createdAt).getTime(),
-    );
+    const waitAgeMs = Math.max(0,
+      now.getTime() - (current.queuedAt ?? current.createdAt).getTime());
     if (current.status === "active" && current.slotKey) {
       return {
         status: "admitted",
-        lease: await bindFreshImmediateLeaseProvenance({ db: tx, lease: current, created,
-          authenticatedUserId: input.authenticatedUserId, waitDeadlineAt: queueExpiresAt, now }),
+        lease: await bindFreshLeaseProvenance({ db: tx, lease: current, created,
+          authenticatedUserId: input.authenticatedUserId, authenticatedAgentId: input.authenticatedAgentId,
+          waitDeadlineAt: queueExpiresAt, now }),
         slotKey: current.slotKey,
         waitAgeMs,
         poolPolicy,
@@ -500,7 +496,9 @@ export async function claimNonprodEnvironmentLease(input: {
     });
     return {
       status: "queued",
-      lease: current,
+      ...await checkpointQueuedLeaseProvenance({ db: tx, lease: current, created,
+        authenticatedUserId: input.authenticatedUserId, authenticatedAgentId: input.authenticatedAgentId,
+        queuePosition: queue.findIndex((row) => row.id === current.id) + 1, waitDeadlineAt: queueExpiresAt, now }),
       queuePosition: queue.findIndex((row) => row.id === current.id) + 1,
       waitAgeMs,
       poolPolicy,
@@ -541,7 +539,7 @@ export async function releaseNonprodEnvironmentLease(input: {
   leaseId: string;
   ownerSessionId?: string;
   now?: Date;
-}) {
+} & LeaseReleaseContext) {
   const db = input.db ?? prisma;
   const now = input.now ?? new Date();
   const result = await inLeaseTransaction(db, async (tx) => {
@@ -554,6 +552,8 @@ export async function releaseNonprodEnvironmentLease(input: {
       where: { leaseId: input.leaseId },
     });
     if (!current) throw new Error("nonprod_lease_not_found");
+    if (current.environmentKey !== beforeLock.environmentKey) throw new Error("nonprod_preview_ownership_changed");
+    await assertOwnedLeaseRelease({ ...input, db: tx as never, lease: current, now });
     if (
       isImmutableGateClaimKey(current.claimKey)
       && current.ownerSessionId !== input.ownerSessionId

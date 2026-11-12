@@ -4,6 +4,7 @@ import {
   CommandIdConflictError,
   ReplayedCommandRejection,
   commandAuthorityScopeKey,
+  commandPayloadBinding,
   runReceiptedCommand,
   type ReceiptDb,
 } from "./command-receipts";
@@ -149,5 +150,118 @@ describe("runReceiptedCommand", () => {
     await runReceiptedCommand({ db: db as unknown as ReceiptDb, authorityScopeKey: other, commandId: "same", commandType: "heartbeat", target, run });
     expect(run).toHaveBeenCalledTimes(2);
     expect(other).toBe("user:user-2|agent:none");
+  });
+});
+
+
+// These are orchestration checks; the PostgreSQL suite proves lock serialization.
+describe("bound command receipts", () => {
+  const binding = { version: 1 as const, digest: "a".repeat(64) };
+  const changed = { version: 1 as const, digest: "b".repeat(64) };
+  const input = () => ({ db: db as unknown as ReceiptDb, authorityScopeKey: scope,
+    commandId: "bound", commandType: "reassign", target, payloadBinding: binding });
+
+  it.each(["accepted", "rejected"])("compares the payload before replaying a %s receipt", async (kind) => {
+    const run = vi.fn(async () => {
+      if (kind === "rejected") throw new LeaseHeld("held");
+      return "winner";
+    });
+    await runReceiptedCommand({ ...input(), run, rejectionOf }).catch(() => undefined);
+    await expect(runReceiptedCommand({ ...input(), payloadBinding: changed, run, rejectionOf }))
+      .rejects.toBeInstanceOf(CommandIdConflictError);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(db.workroomActivity.create).toHaveBeenCalledTimes(1);
+    expect(db.rows.get(`${scope}#bound`)?.payload).toMatchObject({ payloadBinding: binding });
+  });
+
+  it("does not accept a legacy unbound receipt for a new bound request", async () => {
+    await runReceiptedCommand({ ...input(), payloadBinding: undefined, run: async () => "legacy" });
+    const run = vi.fn(async () => "new");
+    await expect(runReceiptedCommand({ ...input(), run })).rejects.toBeInstanceOf(CommandIdConflictError);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("refuses omission of the binding when the command was already bound", async () => {
+    await runReceiptedCommand({ ...input(), run: async () => "bounded request" });
+    const run = vi.fn(async () => "legacy reassignment");
+    await expect(runReceiptedCommand({ ...input(), payloadBinding: undefined, run })).rejects.toBeInstanceOf(CommandIdConflictError);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("replays equal binding and retains the original rejection", async () => {
+    const run = vi.fn(async () => { throw new LeaseHeld("held"); });
+    await expect(runReceiptedCommand({ ...input(), run, rejectionOf })).rejects.toBeInstanceOf(LeaseHeld);
+    await expect(runReceiptedCommand({ ...input(), run, rejectionOf })).rejects.toBeInstanceOf(ReplayedCommandRejection);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["transaction", "room-lock", "command-lock"])("refuses bound effects without %s support", async (missing) => {
+    const incomplete = { ...db };
+    if (missing === "transaction") Object.assign(incomplete, { $transaction: undefined });
+    else incomplete.$transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({ ...db,
+      [missing === "room-lock" ? "$queryRaw" : "$executeRaw"]: undefined }));
+    const run = vi.fn(async () => "effect");
+    await expect(runReceiptedCommand({ ...input(), db: incomplete as unknown as ReceiptDb, run }))
+      .rejects.toMatchObject({ code: "command_receipt_unavailable" });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("requires an existing locked room for bound effects", async () => {
+    db.$queryRaw.mockResolvedValue([]);
+    const run = vi.fn(async () => "effect");
+    await expect(runReceiptedCommand({ ...input(), run })).rejects.toMatchObject({ code: "command_receipt_unavailable" });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("uses the identical command/environment/room prefix after rollback", async () => {
+    const events: string[] = [];
+    db.$executeRaw.mockImplementation(async (...args) => {
+      if ((args[0] as TemplateStringsArray).join("").includes("pg_advisory_xact_lock")) events.push("command");
+      return 1;
+    });
+    db.$queryRaw.mockImplementation(async () => { events.push("room"); return [{ id: "row-1" }]; });
+    const beforeRoomLock = vi.fn(async () => { events.push("environments"); });
+    const refusal = new LeaseHeld("held");
+    await expect(runReceiptedCommand({ ...input(), beforeRoomLock, run: async () => { throw refusal; }, rejectionOf }))
+      .rejects.toBe(refusal);
+    expect(events).toEqual(["command", "environments", "room", "command", "environments", "room"]);
+    expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ isolationLevel: "ReadCommitted" }));
+  });
+
+  it.each(["equal", "different", "rejected"])("returns the %s durable winner published after rollback", async (winner) => {
+    let transactions = 0;
+    db.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      if (++transactions === 2) db.rows.set(`${scope}#bound`, { kind: winner === "rejected" ? "command-rejected" : "command-accepted",
+        payload: { commandType: "reassign", target, payloadBinding: winner === "different" ? changed : binding,
+          result: "concurrent success", rejection: { code: "winner-refusal", message: "original winner" } } });
+      return fn({ ...db, $transaction: undefined });
+    });
+    const result = runReceiptedCommand({ ...input(), run: async () => { throw new LeaseHeld("losing refusal"); }, rejectionOf });
+    if (winner === "equal") await expect(result).resolves.toBe("concurrent success");
+    else if (winner === "different") await expect(result).rejects.toBeInstanceOf(CommandIdConflictError);
+    else await expect(result).rejects.toMatchObject({ code: "winner-refusal" });
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it("does not publish a rejection when the transaction outcome is unknown", async () => {
+    const unknown = new Error("connection lost while rolling back");
+    db.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+      try { await fn({ ...db, $transaction: undefined }); } catch { throw unknown; }
+    });
+    await expect(runReceiptedCommand({ ...input(), run: async () => { throw new LeaseHeld("held"); }, rejectionOf }))
+      .rejects.toBe(unknown);
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(db.workroomActivity.create).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("canonical normalized payload binding", () => {
+  it("ignores object key order but binds arrays and all optional accepted fields", () => {
+    const original = { phase: "request", manifest: { paths: ["a", "b"] }, reason: "because" };
+    expect(commandPayloadBinding(original)).toEqual(commandPayloadBinding({ reason: "because", manifest: { paths: ["a", "b"] }, phase: "request" }));
+    expect(commandPayloadBinding(original)).not.toEqual(commandPayloadBinding({ ...original, reason: "different" }));
+    expect(commandPayloadBinding(original)).not.toEqual(commandPayloadBinding({ ...original, manifest: { paths: ["b", "a"] } }));
+    expect(commandPayloadBinding(original)).toMatchObject({ version: 1, digest: expect.stringMatching(/^[a-f0-9]{64}$/) });
   });
 });

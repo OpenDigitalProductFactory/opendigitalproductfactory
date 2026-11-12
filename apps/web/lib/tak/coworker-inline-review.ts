@@ -1,3 +1,4 @@
+import { currentReadEvidencePolicy } from "./read-evidence-policy";
 // EP-GOLDEN-TRIANGLE — the executor for the inline coworker deliberation pass.
 //
 // Runs ONE extra model call over a coworker's draft reply when the posture calls
@@ -30,6 +31,8 @@ export interface InlineReviewInput {
 
 export async function reviewCoworkerDraft(input: InlineReviewInput): Promise<ReviewVerdict> {
   const draft = input.draft;
+  // The specialist workflow owns its typed completion and held failure boundary.
+  if (currentReadEvidencePolicy()) return { content: draft, revised: false };
   if (!draft || !draft.trim()) return { content: draft, revised: false };
   const pattern = input.pattern ?? "review";
   try {

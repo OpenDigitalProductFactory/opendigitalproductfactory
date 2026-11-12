@@ -11,6 +11,9 @@ import {
   runPolicyProfile,
 } from "./lib/ci-policy-guards.mjs";
 
+import { buildPreflightPlan } from "./lib/pregate-preflight.mjs";
+import { buildGatePlan } from "./pr-readiness/core.mjs";
+
 const EXPECTED_LEGACY_JOBS = [
   "actuator-inputs-writable",
   "application-boundary-guard",
@@ -287,4 +290,13 @@ describe("CI policy guard registry", () => {
       );
     }
   });
+});
+
+// This copied-package acceptance suite executes source bytes, not guard logic.
+it("keeps copied-package worktree acceptance in both normal host plans", () => {
+  const fixture = "packages/dpf-skill-pack/hooks/worktree-create.test.mjs";
+  assert.ok(buildPreflightPlan().some(entry => entry.commands.some(command => command[1].includes(fixture))),
+    "host preflight must exercise the cold copied package");
+  assert.ok(buildGatePlan().some(entry => entry.command[1].includes(fixture)),
+    "PR readiness must exercise the same copied-package acceptance");
 });

@@ -12,4 +12,6 @@
 //     every re-claim on Windows.
 // 2 - process-incarnation cleanup, Windows owned jobs, durable checkpoints and
 //     exact pending-result replay (BI-BFDB98B6).
-export const GATE_CLIENT_REVISION = 2;
+// 3 - carry the latest canonical reservation across repeated queued retries
+//     rather than replaying an obsolete lease pin (BI-EB864226).
+export const GATE_CLIENT_REVISION = 3;

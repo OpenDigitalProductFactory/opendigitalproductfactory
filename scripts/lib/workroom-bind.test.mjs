@@ -488,3 +488,43 @@ test("with only one identity available, exactly one call is made", async () => {
   });
   assert.deepEqual(sent, ["worktree:/wt/a"]);
 });
+
+// BI-D1FB8C4D: provisioning binds before the worktree exists, so the binder
+// hands back the marker for the caller to cache later, and keeps the refusal
+// code so an authorization answer is never mistaken for an outage.
+test("binding with no gitDir yet returns the marker for the caller to cache", async () => {
+  const r = await bindWorktreeToWorkroom({
+    branch: "fix/a", worktreePath: "/wt/a", gitDir: null, repositoryFullName: REPO,
+    env: { DPF_MCP_BEARER_TOKEN: "t" },
+    call: async () => capsule(),
+  });
+  assert.equal(r.status, "bound");
+  assert.equal(r.marker.capsuleId, "WC-ABC123");
+  assert.equal(r.marker.branch, "fix/a");
+});
+
+test("a refusal carries the server's error code", async () => {
+  const r = await bindWorktreeToWorkroom({
+    branch: "fix/a", worktreePath: "/wt/a", gitDir: null, repositoryFullName: REPO,
+    env: { DPF_MCP_BEARER_TOKEN: "t" },
+    call: async () => ({ success: false, error: "worktree_provision_not_admitted", message: "Workroom WC-9 runs on source-inquiry@1.0.0" }),
+  });
+  assert.equal(r.status, "refused");
+  assert.equal(r.code, "worktree_provision_not_admitted");
+});
+
+for (const code of ["mcp_authentication_failed", "mcp_authorization_failed"]) {
+  test(`typed ${code} is refused rather than eligible for break-glass`, async () => {
+    let calls = 0, writes = 0;
+    const result = await bindWorktreeToWorkroom({
+      branch: "fix/denied", worktreePath: "/wt/denied", gitDir: "/git", repositoryFullName: REPO,
+      env: { DPF_MCP_BEARER_TOKEN: "fixture", DPF_WORKTREE_BREAK_GLASS: "fixture recovery" },
+      call: async () => { calls++; throw Object.assign(new Error("HTTP refusal"), { code }); },
+      writeMarker: () => { writes++; },
+    });
+    assert.equal(result.status, "refused");
+    assert.equal(result.code, code);
+    assert.equal(calls, 1);
+    assert.equal(writes, 0);
+  });
+}

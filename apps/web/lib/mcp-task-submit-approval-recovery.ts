@@ -1,7 +1,7 @@
 import { prisma, type Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
-import { markTaskRunWorking } from "@/lib/observability/heartbeat";
+import { reserveTaskRunGenerationWorking } from "@/lib/observability/heartbeat";
 import { executeAutonomousWorkTool } from "@/lib/tak/autonomous-work-run";
 
 import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
@@ -17,7 +17,9 @@ import { isStaleApprovalRecoveryRun } from "./mcp-task-approval-recovery-contrac
 import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { GOVERNED_AUDIT_PARAMETER_KEYS, TASK_EXECUTION_FENCE_AUDIT_KEY } from "./attention/coworker-envelope-decision";
-import { parseTaskExecutionFence } from "./shared/task-execution-fence";
+import { dispatchIdentity, isBoundReviewTask, parseTaskExecutionFence, reservationIdentity, taskExecutionEligible } from "./shared/task-execution-fence";
+import { isRecord } from "./shared/coerce";
+import { settleRemoteTask } from "./mcp-task-attempt-state";
 
 /**
  * Resuming an approved writer and recovering an expired one are the same
@@ -93,6 +95,7 @@ export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<Rem
     where: {
       taskRunId: input.existing.taskRunId,
       delegatingUserId: input.userId,
+      coworkerAgentId: resolveCanonicalAgentId(input.agentId),
       status: "approved",
       expiresAt: { gt: new Date() },
     },
@@ -109,6 +112,8 @@ export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<Rem
     where: {
       taskRunId: input.existing.taskRunId,
       toolName: envelope.manifestActionId,
+      userId: input.userId,
+      agentId: resolveCanonicalAgentId(input.agentId),
       success: false,
       result: { path: ["data", "envelopeId"], equals: envelope.id },
     },
@@ -118,26 +123,34 @@ export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<Rem
   const args = originalToolParameters(proposedExecution?.parameters);
   if (!args) return null;
   const executionFence = parseTaskExecutionFence((proposedExecution?.parameters as Record<string, unknown> | null)?.[TASK_EXECUTION_FENCE_AUDIT_KEY]);
+  const boundReview = isBoundReviewTask(input.existing.a2aMetadata);
+  const metadata = isRecord(input.existing.a2aMetadata) ? input.existing.a2aMetadata : {};
+  const binding = isRecord(metadata.initiativeReviewBinding) ? metadata.initiativeReviewBinding : {};
+  if (boundReview && (input.existing.userId !== input.userId
+    || typeof metadata.requestedAgentId !== "string"
+    || resolveCanonicalAgentId(metadata.requestedAgentId) !== resolveCanonicalAgentId(input.agentId)
+    || binding.writerToolName !== envelope.manifestActionId || input.reviewWriterToolName !== envelope.manifestActionId
+    || !taskExecutionEligible({ status: input.existing.status, progressPayload: input.existing.progressPayload,
+      requestDigest: metadata.requestDigest, executionFence, phase: "approval-resume" }))) return null;
+  if (boundReview) {
+    const { reviewRecoveryToolRefusal } = await import("./mcp-task-review-recovery");
+    if (await reviewRecoveryToolRefusal({ taskRunId: input.existing.taskRunId, userId: input.userId,
+      apiTokenId: input.tokenId, actingAgentId: input.agentId, executionFence, phase: "approval-resume" })) return null;
+  }
 
-  const reservation = await prisma.taskRun.updateMany({
-    where: {
-      taskRunId: input.existing.taskRunId,
-      status: input.existing.status,
-      updatedAt: input.existing.updatedAt,
-    },
-    data: {
-      ...(recoveringCompletedProjection ? { completedAt: null } : {}),
-      progressPayload: {
-        ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
-          && !Array.isArray(input.existing.progressPayload)
-          ? input.existing.progressPayload as Record<string, unknown>
-          : {}),
-        approvalResumeReserved: true,
-      },
+  const reservation = await reserveTaskRunGenerationWorking({
+    taskRunId: input.existing.taskRunId,
+    expectedStatus: input.existing.status,
+    updatedAt: input.existing.updatedAt,
+    progressPayload: {
+      ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+        && !Array.isArray(input.existing.progressPayload)
+        ? input.existing.progressPayload as Record<string, unknown>
+        : {}),
+      approvalResumeReserved: true,
     },
   });
-  if (reservation.count !== 1) return null;
-  await markTaskRunWorking(input.existing.taskRunId);
+  if (!reservation) return null;
 
   const result = await executeAutonomousWorkTool({
     toolName: envelope.manifestActionId,
@@ -176,14 +189,16 @@ export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<Rem
     delete progressPayload.terminalWriterEscalation;
     delete progressPayload.terminalWriterContextFailure;
   }
-  await prisma.taskRun.update({
+  const displaced = await settleRemoteTask({
     where: { taskRunId: input.existing.taskRunId },
     data: {
       status,
       ...(status === "input-required" ? {} : { completedAt: new Date() }),
       progressPayload,
     },
-  });
+  }, reservationIdentity(input.existing.progressPayload), dispatchIdentity(input.existing.progressPayload),
+  boundReview && executionFence ? { executionFence, userId: input.userId, agentId: input.agentId } : undefined);
+  if (displaced) return displaced;
 
   return {
     kind: "result",

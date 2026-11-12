@@ -6,10 +6,14 @@ import { can } from "@/lib/permissions";
 import {
   getWorkbook,
   getTableGridData,
+  listViews,
   WorkbookError,
   type ServiceUser,
 } from "@/lib/workbooks/workbook-service";
 import { WorkbookGrid } from "@/components/workbooks/Grid";
+import { KanbanBoard } from "@/components/workbooks/KanbanBoard";
+import { WorkbookViewTabs } from "@/components/workbooks/WorkbookViewTabs";
+import { resolveBoardView } from "@/lib/workbooks/view-authoring";
 import { CreateTableButton } from "@/components/workbooks/CreateTableButton";
 import { AddColumnButton } from "@/components/workbooks/AddColumnButton";
 import { ImportSheetButton } from "@/components/workbooks/ImportSheetButton";
@@ -19,7 +23,7 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ workbookId: string }>;
-  searchParams: Promise<{ table?: string }>;
+  searchParams: Promise<{ table?: string; view?: string }>;
 };
 
 export default async function WorkbookDetailPage({ params, searchParams }: Props) {
@@ -31,7 +35,7 @@ export default async function WorkbookDetailPage({ params, searchParams }: Props
   }
 
   const { workbookId } = await params;
-  const { table: tableParam } = await searchParams;
+  const { table: tableParam, view: viewParam } = await searchParams;
   const svcUser: ServiceUser = { id: user.id, isSuperuser: user.isSuperuser };
 
   let workbook;
@@ -53,6 +57,12 @@ export default async function WorkbookDetailPage({ params, searchParams }: Props
   );
 
   const grid = activeTableId ? await getTableGridData(svcUser, activeTableId) : null;
+  // Saved kanban boards (custom tables): `?view=<viewId>` opens one, a default
+  // board opens by itself, `?view=grid` returns to the grid.
+  const views =
+    grid && activeTableId && grid.schema.dataSource === "custom" ? await listViews(svcUser, activeTableId) : [];
+  const boards = views.filter((v) => v.viewType === "kanban");
+  const board = grid ? resolveBoardView(views, viewParam, grid.schema.columns) : null;
 
   return (
     <div className="mx-auto flex h-full w-full max-w-6xl flex-col p-6">
@@ -102,7 +112,13 @@ export default async function WorkbookDetailPage({ params, searchParams }: Props
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          {canManage && activeTableId && (
+          <WorkbookViewTabs
+            workbookId={workbookId}
+            tableId={activeTableId!}
+            boards={boards.map((b) => ({ viewId: b.viewId, name: b.name }))}
+            activeViewId={board?.view.viewId ?? null}
+          />
+          {canManage && activeTableId && !board && (
             <div className="flex flex-wrap items-center gap-2">
               <AddColumnButton
                 workbookId={workbookId}
@@ -115,12 +131,24 @@ export default async function WorkbookDetailPage({ params, searchParams }: Props
             </div>
           )}
           <div className="min-h-0 flex-1">
-            <WorkbookGrid
-              tableId={activeTableId!}
-              columns={grid.schema.columns}
-              rows={grid.rows}
-              capabilities={grid.schema.capabilities}
-            />
+            {board ? (
+              <KanbanBoard
+                source="custom"
+                tableId={activeTableId!}
+                columns={grid.schema.columns}
+                rows={grid.rows}
+                capabilities={grid.schema.capabilities}
+                groupByColumnId={board.groupByColumnId}
+                cardFields={board.cardFields}
+              />
+            ) : (
+              <WorkbookGrid
+                tableId={activeTableId!}
+                columns={grid.schema.columns}
+                rows={grid.rows}
+                capabilities={grid.schema.capabilities}
+              />
+            )}
           </div>
         </div>
       )}

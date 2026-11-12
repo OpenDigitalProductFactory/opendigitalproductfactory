@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { runEcosystemInboundTriage } from "./inbound-triage-runner";
+import { readIntakePeerDemand, runEcosystemInboundTriage, type IntakePeerDemandDb } from "./inbound-triage-runner";
 
 // Envelope validation has its own suite; these cases exercise transport isolation.
 vi.mock("@/lib/federation/demand-exchange", () => ({
   decodeDemandMirrorPayload: (payload: unknown) => payload,
 }));
+vi.mock("./dependabot-reader", () => ({ readDependabotAlerts: async () => ({ ok: true, alerts: [] }) }));
 
 const commissioned = async () => ({
   commissioned: true as const,
@@ -22,6 +23,16 @@ const issue = {
 };
 
 describe("runEcosystemInboundTriage", () => {
+  it("keeps issue intake but reports unavailable security coverage", async () => {
+    const result = await runEcosystemInboundTriage({
+      loadCommission: commissioned, readIssues: async () => ({ ok: true, issues: [issue] }),
+      readPeerDemand: async () => [], readAlerts: async () => ({ ok: false, error: "Dependabot HTTP 403" }),
+      ingest: vi.fn().mockResolvedValue({ itemId: "BI-ISSUE", created: false, outcome: "unchanged" }),
+    });
+    expect(result).toMatchObject({ ran: true, complete: false, unchanged: 1,
+      sourceErrors: [{ source: "dependabot", error: "Dependabot HTTP 403" }] });
+  });
+
   it("marks a successful empty scan as complete", async () => {
     expect(await runEcosystemInboundTriage({
       loadCommission: commissioned,
@@ -134,7 +145,7 @@ describe("runEcosystemInboundTriage", () => {
       readPeerDemand: async () => [],
       ingest,
     });
-    expect(result).toMatchObject({ ran: true, ingested: 0, needsReview: 1,
+    expect(result).toMatchObject({ ran: true, complete: false, ingested: 0, needsReview: 1,
       reviews: [{ origin: "ecosystem-upstream-issue:opendigitalproductfactory/opendigitalproductfactory#412", candidates: ["BI-A", "BI-B"] }] });
   });
 
@@ -156,5 +167,70 @@ describe("runEcosystemInboundTriage", () => {
     expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
       origin: { kind: "ecosystem-peer-demand", id: "peer-demand-example" },
     }));
+  });
+});
+
+// BI-F4866228: the first commissioned production run filed ~4,000 copies of the
+// paired installation's backlog, because same-organization links send their
+// whole backlog as demand envelopes and work sync already mirrors it here. The
+// fake applies the same where clause the reader sends, so these cases pin which
+// links the reader asks for, not Prisma's filtering.
+describe("readIntakePeerDemand", () => {
+  type Link = { linkId: string; role: string; linkState: string; revokedAt: Date | null; quarantinedAt: Date | null };
+  type Mirror = { mirrorId: string; federationLinkId: string; recordType: string; canonicalSide: string; payload: unknown };
+
+  function fakeDb(links: Link[], mirrors: Mirror[]): IntakePeerDemandDb {
+    return {
+      federationLink: {
+        findMany: async (args: unknown) => {
+          const where = (args as { where: { linkState: string; role: { not: string } } }).where;
+          return links
+            .filter((link) => link.linkState === where.linkState && link.role !== where.role.not
+              && link.revokedAt === null && link.quarantinedAt === null)
+            .map(({ linkId }) => ({ linkId }));
+        },
+      },
+      federatedRecordMirror: {
+        findMany: async (args: unknown) => {
+          const where = (args as { where: { recordType: string; canonicalSide: string; federationLinkId: { in: string[] } } }).where;
+          return mirrors
+            .filter((mirror) => mirror.recordType === where.recordType && mirror.canonicalSide === where.canonicalSide
+              && where.federationLinkId.in.includes(mirror.federationLinkId))
+            .map(({ mirrorId, payload }) => ({ mirrorId, payload }));
+        },
+      },
+    };
+  }
+
+  const live = { linkState: "trusted", revokedAt: null, quarantinedAt: null };
+  const envelope = (mirrorId: string, federationLinkId: string): Mirror => ({
+    mirrorId, federationLinkId, recordType: "demand-envelope", canonicalSide: "peer", payload: { mirrorId },
+  });
+
+  it("files only demand from live links to other organizations", async () => {
+    const db = fakeDb(
+      [
+        { linkId: "link_paired", role: "same-org-peer", ...live },
+        { linkId: "link_old_pairing", role: "same-org-peer", linkState: "revoked", revokedAt: new Date(), quarantinedAt: null },
+        { linkId: "link_community", role: "community-peer", ...live },
+        { linkId: "link_revoked_community", role: "community-peer", linkState: "revoked", revokedAt: new Date(), quarantinedAt: null },
+      ],
+      [
+        envelope("fdm_paired", "link_paired"),
+        envelope("fdm_old_pairing", "link_old_pairing"),
+        envelope("fdm_community", "link_community"),
+        envelope("fdm_revoked_community", "link_revoked_community"),
+        { ...envelope("fdm_local", "link_community"), canonicalSide: "local" },
+      ],
+    );
+    expect((await readIntakePeerDemand(db)).map((row) => row.mirrorId)).toEqual(["fdm_community"]);
+  });
+
+  it("reads no envelopes at all when the only peers are the organization's own installations", async () => {
+    const db = fakeDb(
+      [{ linkId: "link_paired", role: "same-org-peer", ...live }],
+      Array.from({ length: 4000 }, (_, i) => envelope(`fdm_${i}`, "link_paired")),
+    );
+    expect(await readIntakePeerDemand(db)).toEqual([]);
   });
 });

@@ -37,6 +37,25 @@ function decide(over: Partial<Parameters<typeof decideWritebackLatch>[0]> = {}) 
 }
 
 describe("decideWritebackLatch (BI-7C0B2BD6)", () => {
+  it("does not treat an unanswered proposal as a failed run, even in the next cycle", () => {
+    const proposed = run({ lastRunAt: "2026-10-14T01:10:00.000Z", lastStatus: "proposed" });
+    expect(decide({ run: proposed, now: at("2026-10-15T12:00:00.000Z"), currentCycleKey: NEXT_CYCLE }))
+      .toMatchObject({ hold: true, why: "approval", retry: null });
+  });
+
+  it.each(["waiting", "expired", "declined", "failed", "cancelled", "not-run", "unknown"] as const)("never blindly retries a recorded approval outcome of %s", (approvalOutcome) => {
+    const decision = decide({ run: run({ lastRunAt: "2026-10-14T01:10:00.000Z", lastStatus: "proposed", approvalOutcome }),
+      now: at("2026-10-15T12:00:00.000Z"), currentCycleKey: NEXT_CYCLE });
+    expect(decision).toMatchObject({ hold: true, why: "approval", outcome: approvalOutcome });
+    expect(decision.retry).toBeNull();
+  });
+
+  it("can recover a request that actually executed without pretending the stage completed", () => {
+    const decision = decide({ run: run({ lastRunAt: "2026-10-14T01:10:00.000Z", lastStatus: "proposed", approvalOutcome: "executed" }),
+      now: at("2026-10-14T02:00:00.000Z") });
+    expect(decision).toMatchObject({ hold: false, retry: { failures: 1 } });
+  });
+
   it("releases when no task exists for the stage", () => {
     // The old dispatch_agent/missing_task_owner rooms: nothing was ever queued.
     expect(decide({ run: null, prior: dispatchedPrior, blocked: false })).toMatchObject({ hold: false });

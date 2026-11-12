@@ -24,7 +24,7 @@ import { clientCapabilityRow, type ClientCapabilityRow } from "@dpf/integration-
 import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 import { buildPackArchive } from "./pack-archive";
-import { deliveredDigest, listPackFiles } from "./pack-digest";
+import { deliveredDigest, deliveredVersion, listPackFiles } from "./pack-digest";
 import { DECLARING_CLIENT_KINDS } from "./toolchain-verdict";
 
 export const TOOLCHAIN_MANIFEST_SCHEMA_VERSION = 1;
@@ -49,6 +49,12 @@ export type UnsignedToolchainManifest = {
   schemaVersion: number;
   packVersion: string;
   packDigest: string;
+  /**
+   * The version a delivery stamps into client manifests (BI-4F9E3221):
+   * `<packVersion>+c.<packDigest[0:12]>`. Version-keyed client caches refresh
+   * on it, so content never needs a manual packVersion bump to ship.
+   */
+  deliveredVersion: string;
   archiveSha256: string;
   releaseId: string | null;
   mcpEndpoint: string;
@@ -149,12 +155,14 @@ export function buildToolchainRelease(input: {
 }): { manifest: UnsignedToolchainManifest; archive: Buffer } {
   const { packVersion, floor } = readVersionSource(input.packRoot);
   const archive = buildPackArchive(input.packRoot, listPackFiles(input.packRoot));
+  const packDigest = deliveredDigest(input.packRoot);
   return {
     archive,
     manifest: {
       schemaVersion: TOOLCHAIN_MANIFEST_SCHEMA_VERSION,
       packVersion,
-      packDigest: deliveredDigest(input.packRoot),
+      packDigest,
+      deliveredVersion: deliveredVersion(packVersion, packDigest),
       archiveSha256: createHash("sha256").update(archive).digest("hex"),
       releaseId: input.releaseId,
       mcpEndpoint: input.mcpEndpoint,

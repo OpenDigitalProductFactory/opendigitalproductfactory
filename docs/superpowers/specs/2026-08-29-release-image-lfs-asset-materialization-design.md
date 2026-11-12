@@ -183,3 +183,45 @@ published-image shape lands on the git-source shape too, because both build this
 Dockerfile. "Fail the publish, never the install" only holds if the install path
 can satisfy the assertion. Ask which shapes execute a guard before assuming the
 one you are fixing is the only one.
+
+## Follow-on: every source identity reader needs the LFS filters
+
+**Backlog item:** BI-F223F4F6
+
+Canonical run `SUR-CE206CD6` failed before the swap on 2026-10-21 (Pacific
+time): the promoter called the prepared target `1bee0ae6fc-dirty`. Its source
+was the isolated upgrade workspace, not the operator's root checkout. The
+portal and host saw that workspace as clean; the promoter saw ten materialized
+LFS documents as modified. The portal installed Git LFS and system filters,
+while `Dockerfile.promoter` installed only Git.
+
+The Git index can initially hide that disagreement through its cached stat
+information. When Git rehashes a materialized asset without its clean filter,
+it compares the document bytes with the committed LFS pointer and reports a
+change. For the IT4IT workbook, normalization with LFS produced the indexed
+pointer blob `494ab6f57e52a8dbfa906918b25abe4569859501`; without the filter,
+the unchanged file produced `c369611d7ed3416d117ca798b8793c32d624d2b9`.
+
+The repair stays in the candidate-owned immutable promoter: install Git LFS
+and register its system filters while building that image. No install-local
+configuration repair, path exemption or weakened dirty check is needed.
+Git-status errors now stop the build explicitly instead of being swallowed
+and interpreted as a clean tree.
+
+The source mount stays read-only. Git LFS writes a temporary file even when
+normalizing an unchanged document, so the identity check uses a private
+temporary `lfs.storage` outside the source mount, disables repository hooks,
+and removes the scratch data after success or failure. The source checkout,
+index, LFS objects and install configuration remain untouched. See the upstream
+[clean-filter implementation](https://github.com/git-lfs/git-lfs/blob/v3.7.1/lfs/gitfilter_clean.go)
+and [LFS storage setting](https://github.com/git-lfs/git-lfs/blob/v3.7.1/docs/man/git-lfs-config.adoc).
+
+Verification executes the production identity guard against a real temporary
+LFS repository with isolated Git configuration and invalidated stat data.
+Unchanged materialized bytes must pass; an edited asset and a failing required
+filter must refuse before build. The self-upgrade compatibility workflow runs
+these regressions, checks the image's LFS package/configuration contract and
+executes the guard inside the built image with the fixture mounted read-only.
+Delivery is one atomic fix: image support, identity enforcement, regression
+coverage and this explanation. Recovery remains the governed upgrade path;
+source checks alone do not establish live recovery.

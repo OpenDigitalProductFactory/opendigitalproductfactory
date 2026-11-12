@@ -25,6 +25,18 @@
       },
       "evidence": [
         "decision-record"
+      ]
+    },
+    {
+      "key": "bound",
+      "title": "Bound stage",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Bound work complete."
+      },
+      "evidence": [
+        "manual-check"
       ],
       "binding": {
         "id": "drc-environment-binding",

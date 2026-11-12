@@ -1,19 +1,26 @@
 "use client";
 
-import { SETUP_STEPS, type SetupStep, type StepStatus } from "@/lib/actions/setup-constants";
+import {
+  visibleSetupSteps,
+  type MonitoringCapabilityDecision,
+  type SetupStep,
+  type StepStatus,
+} from "@/lib/actions/setup-constants";
 import { useT } from "@/lib/i18n/use-t";
 
 type Props = {
   currentStep: string;
   steps: Record<string, StepStatus>;
+  monitoringCapabilityDecision?: MonitoringCapabilityDecision | null;
   onStepClick?: (step: SetupStep) => void;
 };
 
-export function SetupProgressBar({ currentStep, steps, onStepClick }: Props) {
+export function SetupProgressBar({ currentStep, steps, monitoringCapabilityDecision = null, onStepClick }: Props) {
   const t = useT("setup");
+  const offered = visibleSetupSteps(monitoringCapabilityDecision);
   return (
     <nav aria-label={t("progress.label")} className="flex max-w-full items-center gap-1 overflow-x-auto border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-3 sm:px-6">
-      {SETUP_STEPS.map((step, idx) => {
+      {offered.map((step, idx) => {
         const status = steps[step] ?? "pending";
         const isCurrent = step === currentStep;
         const statusLabel = t(`progress.status.${status}`);
@@ -24,7 +31,7 @@ export function SetupProgressBar({ currentStep, steps, onStepClick }: Props) {
             key={step}
             type="button"
             onClick={() => onStepClick?.(step)}
-            aria-label={t("progress.stepAria", { index: idx + 1, total: SETUP_STEPS.length, label, state: accessibleState })}
+            aria-label={t("progress.stepAria", { index: idx + 1, total: offered.length, label, state: accessibleState })}
             aria-current={isCurrent ? "step" : undefined}
             className={`
               flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]

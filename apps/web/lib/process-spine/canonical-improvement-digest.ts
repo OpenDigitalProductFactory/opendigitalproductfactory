@@ -58,6 +58,8 @@ export async function runCanonicalImprovementDigest(prisma: PrismaClient, opts?:
   const body = buildDigestBody(candidates);
   const ingest = await ingestBacklogItem({
     title: `Canonical source digest — ${candidates.length} reference-doc proposal(s)`,
+    // BI-458CCA8D: done when every digested proposal is applied or declined.
+    outcome: `Each of the ${candidates.length} reference-doc proposal(s) in this digest is applied to its canonical source or declined with a reason.`,
     body,
     workType: "doc",
     source: "automated-detection",

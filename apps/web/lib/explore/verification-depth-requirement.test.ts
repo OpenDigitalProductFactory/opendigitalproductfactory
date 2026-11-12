@@ -13,7 +13,43 @@ import { evaluateVerificationDepthShadow } from "./verification-depth-shadow";
 // scoping the requirement to post-build transitions (option A), so a later
 // phase can add earlier-transition evidence without re-scoping.
 
-const green = { typecheckPassed: true, testsFailed: 0 };
+const green = { typecheckPassed: true, testsPassed: 1, testsFailed: 0,
+  testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true, testsQualified: true };
+
+describe("BI-57AF5162: required test qualification", () => {
+  it("does not treat unknown, unrun tests as satisfying shallow verification", () => {
+    expect(checkVerificationDepthSatisfied({
+      verificationDepth: "shallow", transition: "build->review",
+      verificationOut: { typecheckPassed: true, testsPassed: 0, testsFailed: 0,
+        scope: "none", testsExecuted: false, testsApplicable: null, testsQualified: false },
+    })).toMatchObject({ allowed: false, evaluable: true });
+  });
+
+  it("does not clear a retained QA conflict merely because the deterministic counters are zero", () => {
+    expect(checkVerificationDepthSatisfied({
+      verificationDepth: "shallow", transition: "build->review",
+      verificationOut: { typecheckPassed: true, testsPassed: 0, testsFailed: 0,
+        testsExecuted: false, testsApplicable: false, testsQualified: false,
+        testEvidenceConflict: true, reportedQa: { testsFailed: 3 } },
+    })).toMatchObject({ allowed: false, evaluable: true });
+  });
+
+  it("keeps a positively established no-test exemption distinct from unknown scope", () => {
+    expect(checkVerificationDepthSatisfied({
+      verificationDepth: "shallow", transition: "build->review",
+      verificationOut: { typecheckPassed: true, testsPassed: 0, testsFailed: 0,
+        scope: "none", testsExecuted: false, testsApplicable: false, testsQualified: true },
+    })).toEqual({ allowed: true, evaluable: true });
+  });
+
+  it("preserves the policy cells that do not require test depth", () => {
+    expect(checkVerificationDepthSatisfied({
+      verificationDepth: "none", transition: "build->review",
+      verificationOut: { typecheckPassed: true, testsPassed: 0, testsFailed: 0,
+        testsQualified: false, testEvidenceConflict: true },
+    })).toMatchObject({ allowed: true });
+  });
+});
 
 describe("verification depth is phase-aware", () => {
   describe("transitions where verificationOut cannot exist yet", () => {

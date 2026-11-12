@@ -73,6 +73,57 @@ describe("runBuildStudioFinalize", () => {
     expect(d.saved).toHaveLength(0);
   });
 
+  // BI-33B54E4B — live 2026-10-27: FB-6FE2E7CE, FB-0FE02946 and FB-3F40A125
+  // recorded 192, 500 and 89 failing scoped-test runs on one tree each, every
+  // run ending a bare "tests-failed" that named nothing and went nowhere.
+  it("names the failing tests and binds the stop to the tested tree and its record", async () => {
+    const failing = { passed: false, typeCheckPassed: true, typeCheckOutput: "", scope: "scoped",
+      testOutput: " FAIL  lib/finance/ledger.test.ts > LEDGER_REPORT_SECTIONS > pins the figures\n Test Files  1 failed (1)" };
+    const d = deps({
+      runScopedTests: vi.fn().mockResolvedValue(failing),
+      recordTests: vi.fn().mockResolvedValueOnce("t1").mockResolvedValueOnce("t2"),
+    });
+    const out = await runBuildStudioFinalize("FB-0FE02946", d);
+    expect(out).toEqual({
+      status: "tests-failed", failure: "tests", recordId: "t2", treeSha: binding.headTreeHash,
+      failingTests: ["lib/finance/ledger.test.ts > LEDGER_REPORT_SECTIONS > pins the figures"],
+    });
+    // One re-run on the same tree separates a flake; both runs are recorded.
+    expect(d.runScopedTests).toHaveBeenCalledTimes(2);
+    expect(d.recordTests).toHaveBeenCalledTimes(2);
+    expect(d.log).toHaveBeenCalledWith(expect.stringContaining("lib/finance/ledger.test.ts > LEDGER_REPORT_SECTIONS > pins the figures"));
+  });
+
+  it("continues when the re-run of a failing test passes, citing the passing run", async () => {
+    const d = deps({
+      runScopedTests: vi.fn()
+        .mockResolvedValueOnce({ passed: false, typeCheckPassed: true, typeCheckOutput: "", scope: "scoped", testOutput: " FAIL  lib/a.test.ts > flaky\n" })
+        .mockResolvedValueOnce({ passed: true, typeCheckPassed: true, typeCheckOutput: "", scope: "scoped", testOutput: "1 passed" }),
+      recordTests: vi.fn().mockResolvedValueOnce("t1").mockResolvedValueOnce("t2"),
+    });
+    const out = await runBuildStudioFinalize("FB-X", d);
+    expect(out).toMatchObject({ status: "ready", evidenceIds: ["g2", "t2"] });
+  });
+
+  it("does not re-run a typecheck failure, and says it is the typecheck", async () => {
+    const d = deps({ runScopedTests: vi.fn().mockResolvedValue({ passed: false, typeCheckPassed: false, typeCheckOutput: "lib/x.ts(3,1): error TS2304", scope: "scoped", testOutput: "1 passed" }) });
+    const out = await runBuildStudioFinalize("FB-X", d);
+    expect(out).toMatchObject({ status: "tests-failed", failure: "typecheck", failingTests: [], recordId: "t1" });
+    expect(d.runScopedTests).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a test run that reached no verdict as not run, never as the change's failure", async () => {
+    const d = deps({ runScopedTests: vi.fn().mockResolvedValue({ passed: false, typeCheckPassed: true, typeCheckOutput: "", scope: "scoped", testOutput: "Error: Cannot find module 'vitest/config'" }) });
+    const out = await runBuildStudioFinalize("FB-X", d);
+    expect(out).toMatchObject({ status: "tests-not-run" });
+    expect(d.runScopedTests).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports passing tests whose evidence could not be recorded as not run", async () => {
+    const d = deps({ recordTests: vi.fn().mockResolvedValue(null) });
+    expect(await runBuildStudioFinalize("FB-X", d)).toMatchObject({ status: "tests-not-run" });
+  });
+
   it("gives up after bounded rounds when the gauntlet keeps failing on decisions", async () => {
     const d = deps({ runGauntlet: vi.fn().mockResolvedValue({ ran: true, passed: false, failedGuards: ["Docs Impact Gate"], output: "x", recordId: "g", binding }) });
     expect(await runBuildStudioFinalize("FB-X", d)).toMatchObject({ status: "decisions-exhausted" });
@@ -100,6 +151,17 @@ describe("finalize does not repeat a verdict it already has", () => {
     expect(out).toMatchObject({ status: "gauntlet-failed", failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"], reused: true });
     expect(d.runGauntlet).not.toHaveBeenCalled();
     expect(d.capture).not.toHaveBeenCalled();
+  });
+
+  it("reuses a recorded scoped-test failure for the same tree instead of re-running the gauntlet and tests", async () => {
+    const prior = { failure: "tests" as const, failingTests: ["lib/a.test.ts > b"], recordId: "t9", treeSha: binding.headTreeHash };
+    const d = deps({ priorTestsFailure: vi.fn().mockResolvedValue(prior) });
+    const out = await runBuildStudioFinalize("FB-6FE2E7CE", d);
+    expect(out).toEqual({ status: "tests-failed", ...prior, reused: true });
+    expect(d.capture).not.toHaveBeenCalled();
+    expect(d.runGauntlet).not.toHaveBeenCalled();
+    expect(d.runScopedTests).not.toHaveBeenCalled();
+    expect(d.log).not.toHaveBeenCalled();
   });
 
   it("runs the gauntlet when no failure is recorded for this identity", async () => {
@@ -149,7 +211,8 @@ describe("finalizeAllowsSemanticReview", () => {
       { status: "gauntlet-not-run", reason: "r" },
       { status: "decisions-exhausted", failedGuards: ["x"] },
       { status: "unbound" },
-      { status: "tests-failed" },
+      { status: "tests-failed", failure: "tests", failingTests: ["a"], recordId: "t", treeSha: "t" },
+      { status: "tests-not-run", reason: "r" },
       { status: "risk-blocked", risks: [], treeSha: "t" },
     ];
     for (const outcome of unfinished) {

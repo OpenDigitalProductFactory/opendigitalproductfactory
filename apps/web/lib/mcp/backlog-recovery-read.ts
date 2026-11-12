@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { INITIATIVE_GATE_KEYS } from "@/lib/backlog/initiative-readiness/receipt-schema";
-import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness/types";
+import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "@/lib/backlog/initiative-readiness/types";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 
 export const RECOVERY_READ_GATES = [...INITIATIVE_GATE_KEYS, "objective-mapping"] as const;
@@ -12,7 +12,8 @@ export function isRecoveryReadGate(value: unknown): value is typeof RECOVERY_REA
 }
 
 /** Select the same owed decision as dispatch; projection never confers eligibility. */
-export async function recoveryReadDecision(gate: string, decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>) {
+export async function recoveryReadDecision(gate: string, decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>,
+  planBaselinePrerequisite?: ReadinessRequirementResult | null) {
   if (gate === "research") {
     const research = [decisions.plan, decisions.implementation, decisions.completion].find(decision =>
       decision && [...decision.blockers, ...decision.unmet].some(entry => entry.code === "RESEARCH_REQUIRED"));
@@ -22,7 +23,7 @@ export async function recoveryReadDecision(gate: string, decisions: Partial<Reco
   const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
   const writer = Object.entries(INITIATIVE_READINESS_LANES).find(([, lane]) =>
     (lane.gates as readonly string[]).includes(gate))?.[0];
-  return (writer ? decisionForIndependentReview(writer, decisions) : null)
+  return (writer ? decisionForIndependentReview(writer, decisions, planBaselinePrerequisite) : null)
     ?? decisions.completion ?? decisions.implementation ?? decisions.plan ?? null;
 }
 

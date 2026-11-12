@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { restoreInstallState, updateInstallState } from "./install-state-transaction.mjs";
 
 const VERSION = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/;
 const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9])?$/;
 
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+const MAX_ENV_BYTES = 1024 * 1024;
+const ENV_READ_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
 function safeRelativePath(root, manifestPath) {
   const normalized = manifestPath.replace(/^\.?[\\/]/, "").replaceAll("\\", "/");
@@ -65,10 +68,60 @@ async function maybeRead(path) {
   try { return await readFile(path); } catch (error) { if (error?.code === "ENOENT") return null; throw error; }
 }
 
-async function atomicWrite(path, bytes) {
+const sameEnvIdentity = (left, right) => left !== null && right !== null && left.dev === right.dev && left.ino === right.ino;
+const sameEnvVersion = (left, right) => sameEnvIdentity(left, right)
+  && ["size", "mtimeNs", "ctimeNs", "mtimeMs", "ctimeMs"].every(key => left[key] === right[key]);
+
+async function readEnvDescriptor(handle) {
+  const before = await handle.stat({ bigint: true });
+  if (!before.isFile() || before.size > BigInt(MAX_ENV_BYTES)) throw new Error("remote_action_dispatch_input_invalid");
+  const bytes = Buffer.alloc(Number(before.size));
+  let count = 0;
+  while (count < bytes.length) {
+    // Position is explicit: the caller may already have consumed this handle.
+    const { bytesRead } = await handle.read(bytes, count, bytes.length - count, count);
+    if (!bytesRead) break;
+    count += bytesRead;
+  }
+  if (count !== bytes.length || !sameEnvVersion(before, await handle.stat({ bigint: true }))) {
+    throw new Error("remote_action_dispatch_input_changed");
+  }
+  return { bytes, identity: before };
+}
+
+async function readEnvSnapshot(path) {
+  let handle;
+  try { handle = await open(path, ENV_READ_FLAGS); }
+  catch (error) { if (error?.code === "ENOENT") return { bytes: null, identity: null }; throw error; }
+  try {
+    const snapshot = await readEnvDescriptor(handle);
+    // Observe only pathname metadata after the descriptor-owned read: do not
+    // reopen a separately checked path. Hard-link aliases remain supported.
+    const current = await lstat(path, { bigint: true });
+    if (!current.isFile() || current.isSymbolicLink() || !sameEnvVersion(snapshot.identity, current)) {
+      throw new Error("remote_action_dispatch_input_changed");
+    }
+    return snapshot;
+  } finally { await handle.close(); }
+}
+
+async function sameFileSnapshot(path, expected) {
+  const current = await readEnvSnapshot(path);
+  return (current.bytes === null ? expected.bytes === null : expected.bytes !== null && current.bytes.equals(expected.bytes))
+    && (current.identity === null ? expected.identity === null : sameEnvIdentity(current.identity, expected.identity));
+}
+
+async function atomicWrite(path, bytes, expected) {
   await mkdir(dirname(path), { recursive: true });
   const temporary = join(dirname(path), `.${path.split(/[\\/]/).at(-1)}.${randomUUID()}.tmp`);
-  try { await writeFile(temporary, bytes); await rename(temporary, path); }
+  try {
+    await writeFile(temporary, bytes);
+    const identity = await lstat(temporary, { bigint: true });
+    // Optimistic conflict check immediately before replacement, not filesystem CAS.
+    if (expected && !await sameFileSnapshot(path, expected)) throw new Error("release_env_input_changed");
+    await rename(temporary, path);
+    return identity;
+  }
   finally { await rm(temporary, { force: true }); }
 }
 
@@ -180,7 +233,90 @@ export function ensureInngestKeys(text, newline, exported = process.env) {
   return text;
 }
 
-export function updateEnv(bytes, releaseTag, ghcrOwner) {
+// BI-084F85E5: the PKI bootstrap turns the remote-action channel on when it
+// writes the trust bundle (BI-28EFE18A), but only on a fresh bootstrap. An
+// install whose trust bundle predates that has the channel configured and off,
+// so the host-upkeep agent can never be dispatched to. Converge it here, on
+// every upgrade; an operator's explicit value, including 0, is kept.
+export const REMOTE_ACTION_DISPATCH_KEY = "DPF_REMOTE_ACTION_DISPATCH_ENABLED";
+export const EDGE_ACTION_DISPATCH_CONFIGURED_KEY = "DPF_EDGE_ACTION_DISPATCH_CONFIGURED";
+
+function dispatchEnvEntry(text, key) {
+  const lines = text.split(/\r?\n/).filter(line => new RegExp(`^[ \\t]*(?:export[ \\t]+)?${key}(?:[ \\t=]|$)`).test(line));
+  if (lines.length > 1) throw new Error("remote_action_dispatch_input_ambiguous");
+  if (!lines.length) return { present: false, value: "" };
+  const match = new RegExp(`^[ \\t]*(?:export[ \\t]+)?${key}[ \\t]*=(.*)$`).exec(lines[0]);
+  if (!match) throw new Error("remote_action_dispatch_input_invalid");
+  const raw = match[1].trim();
+  const quoted = /^(?:"([^"]*)"|'([^']*)')(?:\s*#.*)?$/.exec(raw);
+  return { present: true, value: quoted ? quoted[1] ?? quoted[2] : raw.replace(/\s+#.*$/, "").trim() };
+}
+
+export function resolveRemoteActionDispatch(text, environment = {}) {
+  const configured = dispatchEnvEntry(text, EDGE_ACTION_DISPATCH_CONFIGURED_KEY);
+  const dispatch = dispatchEnvEntry(text, REMOTE_ACTION_DISPATCH_KEY);
+  const intentSha256 = sha256(JSON.stringify({ configured, dispatch }));
+  let resolution = "preserve";
+  if (!Object.hasOwn(environment, REMOTE_ACTION_DISPATCH_KEY) && !dispatch.present) {
+    const override = Object.hasOwn(environment, EDGE_ACTION_DISPATCH_CONFIGURED_KEY);
+    if ((override ? environment[EDGE_ACTION_DISPATCH_CONFIGURED_KEY] : configured.value) === "1") {
+      resolution = override ? "derive-once" : "derive-persist";
+    }
+  }
+  return { resolution, intentSha256 };
+}
+
+export function ensureRemoteActionDispatch(text, newline, context = {}) {
+  // A derived override belongs to this procedure; a real invocation override
+  // never becomes durable intent. Only the promoter passes a bound resolution.
+  const decision = resolveRemoteActionDispatch(text, context.resolution === "derive-persist" ? {} : context.environment);
+  if (context.resolution !== undefined) {
+    if (!["preserve", "derive-once", "derive-persist"].includes(context.resolution)
+      || !/^[a-f0-9]{64}$/.test(context.intentSha256 ?? "")
+      || decision.intentSha256 !== context.intentSha256) throw new Error("remote_action_dispatch_intent_changed");
+    if (context.resolution !== "derive-persist") return text;
+    if (decision.resolution !== "derive-persist") throw new Error("remote_action_dispatch_intent_changed");
+  }
+  if (decision.resolution !== "derive-persist") return text;
+  return `${text}${text && !text.endsWith("\n") ? newline : ""}${REMOTE_ACTION_DISPATCH_KEY}=1${newline}`;
+}
+
+export async function persistRemoteActionDispatch({ envPath, recoveryDir, resolution, intentSha256, failAfter, onCheckpoint }) {
+  if (resolution !== "derive-persist") return { status: "unchanged" };
+  const handle = await open(envPath, constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let checkpoint;
+  let checkpointOwned = false;
+  try {
+    const { bytes, identity: before } = await readEnvDescriptor(handle);
+    await mkdir(recoveryDir, { recursive: true, mode: 0o700 });
+    checkpoint = join(recoveryDir, "dispatch-env.json");
+    await writeFile(join(recoveryDir, "env.before"), bytes, { flag: "wx", mode: 0o600 });
+    await writeFile(checkpoint, JSON.stringify({ state: "prepared", intentSha256 }) + "\n", { flag: "wx", mode: 0o600 });
+    checkpointOwned = true;
+    const text = bytes.toString("utf8");
+    const next = ensureRemoteActionDispatch(text, text.includes("\r\n") ? "\r\n" : "\n", { resolution, intentSha256 });
+    const current = await readEnvSnapshot(envPath);
+    if (!sameEnvIdentity(current.identity, before) || !current.bytes?.equals(bytes)) throw new Error("remote_action_dispatch_input_changed");
+    const suffix = Buffer.from(next.slice(text.length));
+    if (failAfter === "checkpoint") throw new Error("injected_failure:checkpoint");
+    const written = await handle.write(suffix, 0, suffix.length, bytes.length);
+    if (written.bytesWritten !== suffix.length) throw new Error("remote_action_dispatch_partial_write");
+    await handle.sync();
+    if (failAfter === "append") throw new Error("injected_failure:append");
+    await onCheckpoint?.("after-append");
+    const after = await readEnvSnapshot(envPath);
+    if (!sameEnvIdentity(after.identity, before) || !after.bytes?.equals(Buffer.from(next))) throw new Error("remote_action_dispatch_readback_unproven");
+    await writeFile(checkpoint, JSON.stringify({ state: "persisted", intentSha256 }) + "\n", { mode: 0o600 });
+    return { status: "persisted" };
+  } catch (cause) {
+    if (checkpointOwned) await writeFile(checkpoint, JSON.stringify({ state: "unproven", intentSha256 }) + "\n", { mode: 0o600 }).catch(() => {});
+    // The portal was already swapped. Neither a file snapshot nor unwinding
+    // this process proves its running configuration was restored.
+    throw new Error("remote_action_dispatch_persistence_unproven", { cause });
+  } finally { await handle.close(); }
+}
+
+export function updateEnv(bytes, releaseTag, ghcrOwner, dispatchContext = {}) {
   let text = bytes?.toString("utf8") ?? "";
   const preExisting = text.trim().length > 0;
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
@@ -200,6 +336,7 @@ export function updateEnv(bytes, releaseTag, ghcrOwner) {
   text = ensureGppPermitSecret(text, newline);
   text = ensureDedicatedSigningKeys(text, newline);
   text = ensureInngestKeys(text, newline);
+  text = ensureRemoteActionDispatch(text, newline, dispatchContext);
   return Buffer.from(text);
 }
 
@@ -216,22 +353,37 @@ export async function installReleaseAssets(options) {
   for (const name of managedNames) snapshots.set(name, await maybeRead(safeRelativePath(installDir, name).absolute));
   const envPath = join(installDir, ".env");
   const versionPath = join(installDir, ".verified-release-assets-version");
-  const envBytes = await maybeRead(envPath);
   const versionBytes = await maybeRead(versionPath);
   const stateBytes = await readFile(statePath);
   await mkdir(recoveryDir, { recursive: true });
   const stateRecovery = join(recoveryDir, "install-state.json");
   await writeFile(stateRecovery, stateBytes);
+  let envBeforeWrite;
+  let envWritten;
+  let envWriteIdentity;
 
   try {
     for (const [name, entry] of verified.entries) await atomicWrite(safeRelativePath(installDir, name).absolute, await readFile(entry.absolute));
     for (const name of oldEntries.keys()) {
       if (!verified.entries.has(name)) await rm(safeRelativePath(installDir, name).absolute, { force: true });
     }
+    // Local fixture boundary only; this callback is never exposed by the CLI.
+    await options.onCheckpoint?.("assets-installed");
     if (options.failAfter === "files") throw new Error("injected_failure:files");
     await atomicWrite(oldManifestPath, verified.manifestBytes);
     await atomicWrite(versionPath, Buffer.from(releaseTag));
-    await atomicWrite(envPath, updateEnv(envBytes, releaseTag, ghcrOwner));
+    envBeforeWrite = await readEnvSnapshot(envPath);
+    const nextEnv = updateEnv(envBeforeWrite.bytes, releaseTag, ghcrOwner, {
+      environment: process.env, resolution: options.remoteActionResolution, intentSha256: options.remoteActionIntentSha256,
+    });
+    envWriteIdentity = await atomicWrite(envPath, nextEnv, envBeforeWrite);
+    envWritten = nextEnv;
+    await options.onCheckpoint?.("env-written");
+    let observedEnv;
+    try { observedEnv = await readEnvSnapshot(envPath); }
+    catch (cause) { throw new Error("release_env_readback_unproven", { cause }); }
+    if (!sameEnvIdentity(observedEnv.identity, envWriteIdentity) || !observedEnv.bytes?.equals(nextEnv)) throw new Error("release_env_readback_unproven");
+    await options.onCheckpoint?.("env-committed");
     if (options.failAfter === "identity") throw new Error("injected_failure:identity");
     await updateInstallState(statePath, current => ({
       ...current,
@@ -252,8 +404,19 @@ export async function installReleaseAssets(options) {
     }
     if (oldManifestBytes === null) await rm(oldManifestPath, { force: true }); else await atomicWrite(oldManifestPath, oldManifestBytes);
     if (versionBytes === null) await rm(versionPath, { force: true }); else await atomicWrite(versionPath, versionBytes);
-    if (envBytes === null) await rm(envPath, { force: true }); else await atomicWrite(envPath, envBytes);
+    let envRollbackUnproven = false;
+    if (envWriteIdentity) {
+      const expected = { bytes: envWritten, identity: envWriteIdentity };
+      try {
+        if (!await sameFileSnapshot(envPath, expected)) envRollbackUnproven = true;
+        else {
+          if (envBeforeWrite.bytes === null) await rm(envPath, { force: true });
+          else await atomicWrite(envPath, envBeforeWrite.bytes, expected);
+        }
+      } catch { envRollbackUnproven = true; }
+    }
     if ((await readFile(statePath)).compare(stateBytes) !== 0) await restoreInstallState(statePath, stateRecovery);
+    if (envRollbackUnproven) throw new Error("release_env_rollback_unproven", { cause: error });
     throw error;
   }
 }
@@ -264,19 +427,35 @@ function parseArgs(argv) {
     args: argv,
     strict: false,
     allowPositionals: true,
-    options: Object.fromEntries(["source", "install", "state", "tag", "owner", "recovery"].map((name) => [name, { type: "string" }])),
+    options: Object.fromEntries(["source", "install", "state", "tag", "owner", "recovery", "remote-action", "install-env", "remote-action-resolution", "remote-action-intent-sha256"].map((name) => [name, { type: "string" }])),
   });
   return Object.fromEntries(Object.entries(values).map(([name, value]) => [name, typeof value === "string" ? value : undefined]));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
-  installReleaseAssets({
-    sourceDir: args.source,
-    installDir: args.install,
-    statePath: args.state,
-    releaseTag: args.tag,
-    ghcrOwner: args.owner,
-    recoveryDir: args.recovery,
-  }).catch(error => { console.error(error.message); process.exitCode = 1; });
+  const run = async () => {
+    if (args["remote-action"] === "resolve") {
+      const input = await readEnvSnapshot(args["install-env"]);
+      const decision = resolveRemoteActionDispatch(input.bytes?.toString("utf8") ?? "", process.env);
+      console.log(`${decision.resolution}:${decision.intentSha256}`);
+      return;
+    }
+    if (args["remote-action"] === "persist") {
+      await persistRemoteActionDispatch({ envPath: args["install-env"], recoveryDir: args.recovery,
+        resolution: args["remote-action-resolution"], intentSha256: args["remote-action-intent-sha256"] });
+      return;
+    }
+    if (args["remote-action"] !== undefined) throw new Error("remote_action_dispatch_operation_invalid");
+    await installReleaseAssets({
+      sourceDir: args.source,
+      installDir: args.install,
+      statePath: args.state,
+      releaseTag: args.tag,
+      ghcrOwner: args.owner,
+      recoveryDir: args.recovery,
+      remoteActionResolution: args["remote-action-resolution"], remoteActionIntentSha256: args["remote-action-intent-sha256"],
+    });
+  };
+  run().catch(error => { console.error(error.message); process.exitCode = 1; });
 }

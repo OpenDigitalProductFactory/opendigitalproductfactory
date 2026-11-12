@@ -14,7 +14,7 @@ import { LocalChangesLedger } from "@/components/ops/LocalChangesLedger";
 import { ConnectedAgentClients } from "@/components/ops/ConnectedAgentClients";
 import { loadConnectedAgentClients } from "@/lib/agent-toolchain/connected-clients";
 import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
-import { hasGovernedRecoveryPoint } from "@/lib/self-upgrade/rollback";
+import { getSelfUpgradeRecoveryState } from "@/lib/self-upgrade/recovery-eligibility";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 import { SelfUpgradeLiveProvider } from "@/components/ops/SelfUpgradeLiveProvider";
 import { namespaceMessages } from "@dpf/i18n";
@@ -81,6 +81,7 @@ export default async function SelfUpgradePage() {
     windowTimezone: "UTC",
     nextWindowStart: null,
     nextScheduledCheckAt: null,
+    missedWindow: null,
     deployedSha: null,
     deployedShaSource: "unknown",
     targetSha: null,
@@ -169,12 +170,13 @@ export default async function SelfUpgradePage() {
         version: effectiveStatus.platformVersion.version,
         gitSha: effectiveStatus.platformVersion.gitSha,
       },
-      rollbackAvailable: hasGovernedRecoveryPoint(effectiveStatus.latestRun?.completionEvidence ?? null),
+      recovery: getSelfUpgradeRecoveryState(effectiveStatus.latestRun),
       latestRun: effectiveStatus.latestRun
         ? {
             status: effectiveStatus.latestRun.status,
             reason: effectiveStatus.latestRun.reason,
             targetSha: effectiveStatus.latestRun.targetSha,
+            deployedSha: effectiveStatus.latestRun.deployedSha,
           }
         : null,
       latestRunImpact: effectiveStatus.latestRunImpact,

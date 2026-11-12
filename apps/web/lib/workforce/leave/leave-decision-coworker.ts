@@ -8,9 +8,11 @@
 //
 // Order of authority: the hard guards are a PRE-FILTER. If any fires (coverage
 // breach / overdrawn balance / consecutive-limit / blackout), the coworker
-// escalates to the human approver immediately and never consults the org gate —
-// a hard operational constraint already dictates human review. Only when the
-// guards pass does it ask the org's WWWD stance, then combines the two.
+// escalates to the human approver and the org stance cannot change that: a hard
+// operational constraint already dictates human review. The gate is still called
+// once, declaring the rail as a crossed threshold, only so the decision reaching
+// the manager carries a kernel record routed human by the BI-74B2A8CD rule table
+// (BI-5CA6AB34). Only when the guards pass does the gate's stance decide.
 //
 // The org gate is injected (`deps.gate`) so this is unit-testable with no DB and
 // no MCP: at runtime the caller passes `evaluateOrgBusinessDecisionGate`.
@@ -40,6 +42,7 @@ export type OrgBusinessGateFn = (input: {
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   routeContext: string;
+  declarations?: { thresholdExceeded?: boolean };
 }) => Promise<{
   allowed: boolean;
   interactionId: string;
@@ -108,28 +111,34 @@ export async function decideLeaveRequest(
 ): Promise<LeaveDecisionResult> {
   const guards = evaluateLeaveGuards(inputs);
 
-  // Hard guards are a pre-filter: a fired rail forces human review without ever
-  // asking the org stance.
-  if (guards.forceEscalate) {
-    return {
-      action: "escalate",
-      interactionId: null,
-      orgProfileSelected: false,
-      operatorMessage: `Escalated to a human approver: ${guards.reasons.join(" ")}`,
-      guardReasons: guards.reasons,
-    };
-  }
-
-  const gate = await deps.gate({
+  const gateInput = {
     db: deps.db,
     organizationId: inputs.organizationId,
     question: `Should leave request ${inputs.requestId} (${inputs.requestedDays} day(s) of ${inputs.leaveType}) be approved or denied?`,
     options: ["approve", "deny"],
     scoredOptions: buildLeaveScoredOptions(inputs),
-    domainClass: "risk-assessment",
-    riskTier: "low",
+    domainClass: "risk-assessment" as const,
+    riskTier: "low" as const,
     routeContext: "/coworker/leave-decision",
-  });
+  };
+
+  // Hard guards are a pre-filter: a fired rail forces human review whatever the
+  // org stance says. The gate call only records that route (BI-5CA6AB34); if the
+  // record cannot be made, the escalation still stands, without a record.
+  if (guards.forceEscalate) {
+    const recorded = await deps
+      .gate({ ...gateInput, declarations: { thresholdExceeded: true } })
+      .catch(() => null);
+    return {
+      action: "escalate",
+      interactionId: recorded?.interactionId ?? null,
+      orgProfileSelected: recorded?.orgProfileSelected ?? false,
+      operatorMessage: `Escalated to a human approver: ${guards.reasons.join(" ")}`,
+      guardReasons: guards.reasons,
+    };
+  }
+
+  const gate = await deps.gate(gateInput);
 
   const outcome = mapOrgDecisionToLeaveOutcome({
     outcomeType: gate.evaluation.outcomeType,

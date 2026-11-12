@@ -6,8 +6,8 @@ description: "One pass end to end: the room a coworker works in, the shape that 
 relatedCode:
   - apps/web/lib/work-management/room-shapes.ts
   - apps/web/lib/work-management/room-posture.ts
-  - apps/web/lib/work-posture/derive.ts
-  - apps/web/lib/work-posture/temporal-band.ts
+  - packages/validators/src/workroom-policy/derive.ts
+  - packages/validators/src/workroom-policy/temporal-band.ts
   - apps/web/lib/tak/consequential-tool-policy.ts
   - apps/web/lib/mcp-governed-execute.ts
   - apps/web/lib/work-management/room-participant-invitation-preflight.server.ts
@@ -59,6 +59,20 @@ from governed decisions, artifacts, actions, receipts, evidence, and — importa
 work left unresolved, each item with an explicit disposition.
 
 → [My Work and Workrooms](../workspace/work-rooms.md) is the full operator guide.
+
+A coworker releasing its own current file claims can use its existing authority
+when its lease and ownership still qualify. The release names the original
+acquisition: an old request cannot release a newer claim on the same file.
+Changed or unknown claims stop before another approval is created. Permissions
+and any required human decision still apply.
+
+DPF can also withdraw an unused release request when its records prove that
+the original claim ended or was replaced and that the request never started.
+It records the withdrawal without approving the request or performing a release.
+Requests that were approved, started, or lack reliable history stay untouched.
+An explicit policy requiring human approval still applies. The routine review
+works through bounded batches, so older uncertain records cannot hold up later
+requests that have complete evidence.
 
 ## 2. The shape bounds what may happen
 
@@ -233,6 +247,11 @@ you to approve its attempt to invite itself. The call stops without creating an 
 request and names the recovery control instead: the room's current human owner opens the
 room and uses **Participants** to add the approved assistant. Retrying the unchanged call
 returns the same guidance rather than filling the inbox with approvals that can only fail.
+Similarly, an invited coworker whose data access is below the room's level is stopped
+before any approval. The refusal names both levels. The inviting coworker can then ask
+again for the one approval that admits the invitee and raises its data access to the
+room's level. A restricted room is the exception: its access is granted under
+**Coworker data access** first.
 An owner change takes effect immediately; a historical creator or lease holder does not
 override a current accountable owner or coordinator.
 
@@ -287,6 +306,17 @@ gets no answer within 30 seconds, the card looks up what the platform recorded. 
 was saved, it says so and offers the buttons again. If something was saved, it shows the
 result. If it cannot tell, it says not to approve again and links to the request's result.
 It never sends your decision a second time on its own.
+
+A fresh routine update request can receive the existing “batch below threshold”
+answer before a new approval is raised. DPF first checks current access,
+including access to the release queue. This answer does not start or schedule
+an update. Existing pending or approved requests and recent completed outcomes
+keep their original handling. When an update could proceed, or the check is
+uncertain, the normal approval rules remain.
+
+### A "no" is answered once
+
+When the gate refuses a call, the answer says what happens next. Sometimes there is an exact call to make instead, such as checking an approval's status. Sometimes the answer is "do not retry", together with what would change it: your decision on a request, a change to the coworker's access, or a missing input. A coworker or connected assistant that sends the identical call again gets the same answer back. That repeat is not checked again, and it never puts a second card in front of you. Changing the coworker's access or the call's details makes it a new call, which is checked at once. Once you approve or decline a request, the approved call can run. Repeated identical refusals are recorded as an improvement signal, so a coworker that keeps hitting the same wall shows up as one item of work rather than thousands of attempts.
 
 ### The floors nothing crosses
 
@@ -403,3 +433,8 @@ prior execution is uncertain, cancelled or exhausted, DPF holds the request for
 reconciliation. Dispatch is not completion: the governed review receipt records
 the actual result. The agent obtains the supported request through the
 [initiative readiness recovery procedure](../../architecture/initiative-readiness-runbook.md#original-review-recovery-across-connection-changes).
+
+A late response from an old review cannot restart tools or change the review's
+status after DPF has held or replaced that execution. This also applies to an
+approval returned for the old execution. You can still inspect the review's
+recorded status and result; inspecting that evidence does not restart it.

@@ -33,6 +33,11 @@ export interface GateClientFloor {
 
 export const GATE_CLIENT_FLOORS: readonly GateClientFloor[] = Object.freeze([
   {
+    minimumRevision: 3,
+    platforms: ["win32", "posix"],
+    reason: "gate clients before revision 3 replay obsolete reservation pins and leave duplicate queued waits after repeated integration changes",
+  },
+  {
     minimumRevision: 2,
     platforms: ["win32", "posix"],
     reason: "gate clients before revision 2 lack process identity checks and durable execution/publication recovery",

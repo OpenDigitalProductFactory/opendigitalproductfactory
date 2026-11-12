@@ -1,0 +1,25 @@
+{
+  "backlinks": {
+    "heading": "Linked from",
+    "empty": "No pages link here yet.",
+    "unlinkedMentions": "Unlinked mentions ({$count})",
+    "linkIt": "Link it",
+    "linksPlatformPage": "Links the platform page",
+    "groups": {
+      "professionOwn": "Your profession",
+      "organization": "Your organization",
+      "platform": "Platform",
+      "profession": "Professions"
+    },
+    "scopes": {
+      "profession": "Profession",
+      "organization": "Organization",
+      "platform": "Platform"
+    }
+  },
+  "linkMention": {
+    "added": "A link to \"{$title}\" has been added to the first mention below. Review it, then save. Nothing has changed yet.",
+    "notFound": "No plain mention of \"{$title}\" is left on this page to link.",
+    "changeSummary": "Link the mention of {$title}"
+  }
+}

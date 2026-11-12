@@ -1,3 +1,5 @@
+import { SOURCE_CATALOG, DEFAULT_LOCALE, formatSource } from "@dpf/i18n";
+
 // Decision-first owner copy for a proposed CoworkerActionEnvelope (BI-F95B0795).
 //
 // The envelope row stores the approval binding, not the proposed call. The
@@ -38,10 +40,14 @@ export type EnvelopeDecisionSummary = {
    * unknown - the proposed content could not be loaded; the effect is
    *           UNRESOLVED and the card says so rather than inviting a click.
    * handover - a room handed to a new assistant, in plain words (BI-F4EB23C1).
+   * admission - a coworker admitted to a room with its data access raised to
+   *           the room's level, in plain words (BI-6AE64074).
    */
-  kind: "known" | "exact" | "unknown" | "handover";
+  kind: "known" | "exact" | "unknown" | "handover" | "admission";
   /** What a handover changes and keeps; present only for kind "handover". */
   handover?: { changes: string[]; keeps: string[]; nextStep?: string };
+  /** What an admission with a raise changes and keeps; present only for kind "admission". */
+  admission?: { changes: string[]; keeps: string[] };
   headline: string;
   recommendation: string;
   authorization: string;
@@ -61,6 +67,8 @@ export type EnvelopeDecisionSummary = {
   action: string;
   /** Where it lands: the record or surface the change is written to. */
   target: string;
+  /** A readable target name resolved under the viewing person's access policy. */
+  targetLabel?: string;
   /** A bounded preview of the proposed content. Empty when unresolved. */
   proposed: EnvelopeProposedField[];
   /** Complete original input for review; absent on older projections, null when unresolved. */
@@ -238,9 +246,12 @@ const SCOPE_TEXT =
 
 type SummaryContext = {
   toolName: string;
+  /** Empty recorded content remains inspectable without becoming a classified action. */
+  hasEmptyOriginal?: boolean;
   params: Record<string, unknown> | null;
   consequence?: string | null;
   rationale?: string | null;
+  targetLabel?: string;
 };
 
 function sharedFacts(input: SummaryContext) {
@@ -248,12 +259,13 @@ function sharedFacts(input: SummaryContext) {
     action: actionLabel(input.toolName),
     target: input.params
       ? envelopeTarget(input.toolName, input.params)
-      : "Unknown: the proposal could not be loaded",
+      : input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.notProvided : "Unknown: the proposal could not be loaded",
     proposed: input.params ? proposedFields(input.params) : [],
-    completeProposedContent: input.params ? JSON.stringify(input.params, null, 2) : null,
+    completeProposedContent: input.params ? JSON.stringify(input.params, null, 2) : input.hasEmptyOriginal ? "{}" : null,
     consequence: consequenceText(input.consequence),
     whyAPerson: input.rationale?.trim() || "No reason was recorded for asking a person.",
     scope: SCOPE_TEXT,
+    ...(input.targetLabel ? { targetLabel: input.targetLabel } : {}),
   };
 }
 
@@ -278,11 +290,12 @@ function unknownSummary(input: SummaryContext): EnvelopeDecisionSummary {
   }
   return {
     kind: "unknown",
-    headline: "Effect unresolved: this request cannot be shown",
-    recommendation: "the proposed content could not be loaded",
+    headline: input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.unresolvedTitle : "Effect unresolved: this request cannot be shown",
+    recommendation: input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.unresolvedRecommendation : "the proposed content could not be loaded",
     authorization: "decline unless you already know what this request writes",
     recordedIfAuthorized:
-      "The proposed content could not be loaded, so this card cannot show what would be recorded.",
+      input.hasEmptyOriginal ? SOURCE_CATALOG.approvals.card.primary.unresolvedDescription
+        : "The proposed content could not be loaded, so this card cannot show what would be recorded.",
     authorizeDoes: "Lets your coworker run a change this card cannot show.",
     declineDoes: "Nothing is changed. Your coworker stops.",
     ifYouDoNothing: "the window closes and nothing is changed.",
@@ -347,6 +360,44 @@ function handoverSummary(
   };
 }
 
+/**
+ * invite_room_participant with raiseClearanceTo admits a coworker to one room
+ * AND raises its data access to that room's level (BI-6AE64074). Say both, and
+ * that the raise reaches every room it is admitted to, not only this one.
+ */
+function admissionSummary(input: SummaryContext, params: Record<string, unknown>): EnvelopeDecisionSummary | null {
+  const coworker = stringParam(params, "agentId");
+  const level = stringParam(params, "raiseClearanceTo");
+  if (!coworker || !level || stringParam(params, "userId")) return null;
+  const room = input.targetLabel?.trim() || stringParam(params, "caseKey") || "this room";
+  return {
+    kind: "admission",
+    headline: `Let ${coworker} into ${room} and let it read ${level} information?`,
+    recommendation: `Your coworker asks to bring ${coworker} into ${room}`,
+    authorization: `let ${coworker} join ${room} and read ${level} information`,
+    recordedIfAuthorized: `${coworker} joins ${room}, and its data access becomes ${level}.`,
+    authorizeDoes: `${coworker} joins this room and can read ${level} information.`,
+    declineDoes: `Nothing changes. ${coworker} does not join and its data access stays as it is.`,
+    ifYouDoNothing: "the window closes and nothing changes.",
+    findings: [],
+    recommenderLabel: "Your coworker",
+    authorizerLabel: "You",
+    toolName: input.toolName,
+    admission: {
+      changes: [
+        `${coworker} joins ${room} as a contributor and can read and post there.`,
+        `${coworker}'s data access rises to ${level}: it can read ${level} information in any room it is admitted to.`,
+      ],
+      keeps: [
+        `${coworker} gets no access to rooms it has not been invited to.`,
+        "Its tools and permissions stay the same.",
+        "You can lower it again under Coworker data access.",
+      ],
+    },
+    ...sharedFacts(input),
+  };
+}
+
 export function summarizeCoworkerEnvelopeDecision(input: {
   toolName: string;
   proposedParameters: unknown;
@@ -358,16 +409,24 @@ export function summarizeCoworkerEnvelopeDecision(input: {
   consequence?: string | null;
   /** The governing reason stored on the envelope. */
   rationale?: string | null;
+  targetLabel?: string;
 }): EnvelopeDecisionSummary {
   const fromExecution = originalToolParameters(input.proposedParameters);
   const fromEnvelope = originalToolParameters(input.argsJson);
+  // An explicitly empty request is still original content. Prefer available
+  // substantive content first; audit-only execution metadata is not a proposal.
+  const rawEnvelope = objectRecord(input.argsJson);
+  const rawExecution = objectRecord(input.proposedParameters);
+  const emptyOriginal = [rawEnvelope, rawExecution].find(record => record && Object.keys(record).length === 0);
   const resolvedParams = fromExecution ?? fromEnvelope;
   const params = resolvedParams ?? {};
   const context: SummaryContext = {
     toolName: input.toolName.trim(),
     params: resolvedParams,
+    hasEmptyOriginal: !!emptyOriginal,
     consequence: input.consequence ?? null,
     rationale: input.rationale ?? null,
+    targetLabel: input.targetLabel,
   };
   const toolName = input.toolName.trim();
   const gate =
@@ -390,6 +449,10 @@ export function summarizeCoworkerEnvelopeDecision(input: {
   if (toolName === "reassign_workroom_executor" && resolvedParams) {
     const handover = handoverSummary(context, resolvedParams, input.recommenderAgentId);
     if (handover) return handover;
+  }
+  if (toolName === "invite_room_participant" && resolvedParams) {
+    const admission = admissionSummary(context, resolvedParams);
+    if (admission) return admission;
   }
   if (toolName !== "record_initiative_evidence" || !decision || !gate) {
     return unknownSummary(context);
@@ -423,5 +486,99 @@ export function summarizeCoworkerEnvelopeDecision(input: {
     authorizerLabel: "You",
     toolName,
     ...sharedFacts(context),
+  };
+}
+
+/** Human presentation only. The original proposal remains the execution binding. */
+export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary, locale: string = DEFAULT_LOCALE) {
+  let params: Record<string, unknown> = {};
+  let hasOriginal = false;
+  try {
+    const original = objectRecord(JSON.parse(decision.completeProposedContent ?? "null"));
+    hasOriginal = original !== null;
+    params = original ?? {};
+  } catch { /* Older unresolved projection. */ }
+  const copy = SOURCE_CATALOG.approvals.card.primary;
+  const recordsResult = decision.kind !== "unknown"
+    && ["record_workroom_evidence", "record_execution_evidence"].includes(decision.toolName)
+    && !!stringParam(params, "summary");
+  const handover = decision.kind === "handover" ? ASSISTANT_NAMES[stringParam(params, "toExecutorKind") ?? ""] : undefined;
+  const research = decision.kind === "known" && decision.gate === "research";
+  const admission = decision.kind === "admission";
+  const unresolved = !recordsResult && !handover && !research && !admission;
+  // A registered operation can be named without establishing its effects.
+  // Only a standard self-update request establishes the app as its target.
+  const exact = (decision.kind === "exact" || decision.kind === "unknown") && hasOriginal;
+  const appUpdate = exact && decision.toolName === "request_self_upgrade"
+    && Object.keys(params).every(key => key === "reason")
+    && (params.reason === undefined || typeof params.reason === "string");
+  const mergeWork = exact && decision.toolName === "merge_backlog_items"
+    && !!stringParam(params, "canonicalItemId") && !!stringParam(params, "duplicateItemId");
+  const releaseReservation = exact && decision.toolName === "release_nonprod_environment_lease"
+    && !!stringParam(params, "leaseId");
+  let title = copy.unresolvedTitle;
+  let description = copy.unresolvedDescription;
+  let consequence = decision.consequence.startsWith("None declared.") ? copy.effectUnknown : decision.consequence;
+  let recommendation = copy.unresolvedRecommendation;
+  if (handover) {
+    const args = { assistant: handover.name };
+    title = formatSource(locale, copy.handoverTitle, args);
+    description = formatSource(locale, copy.handoverDescription, args);
+    consequence = copy.handoverConsequence;
+    recommendation = formatSource(locale, copy.handoverRecommendation, args);
+  } else if (admission) {
+    const args = { coworker: stringParam(params, "agentId") ?? "", level: stringParam(params, "raiseClearanceTo") ?? "" };
+    title = formatSource(locale, copy.admissionTitle, args);
+    description = formatSource(locale, copy.admissionDescription, args);
+    consequence = copy.admissionConsequence;
+    recommendation = formatSource(locale, copy.admissionRecommendation, args);
+  } else if (recordsResult) {
+    title = copy.recordTitle;
+    description = params.outcome === "blocked" ? copy.blockedDescription : copy.recordDescription;
+    consequence = params.stageKey && params.outcome === "completed" ? copy.stageConsequence : copy.recordConsequence;
+    recommendation = copy.recordRecommendation;
+  } else if (research) {
+    title = copy.reviewTitle;
+    description = `${decision.authorization.charAt(0).toUpperCase()}${decision.authorization.slice(1)}.`;
+    consequence = copy.reviewConsequence;
+    recommendation = decision.recommendation;
+  } else if (appUpdate) {
+    title = copy.appUpdateTitle;
+    description = copy.appUpdateDescription;
+  } else if (mergeWork) {
+    title = copy.mergeWorkTitle;
+  } else if (releaseReservation) {
+    title = copy.releaseReservationTitle;
+  }
+  if (!unresolved && !decision.consequence.startsWith("None declared.")) {
+    consequence = `${consequence} ${decision.consequence}`;
+  }
+  const facts: EnvelopeProposedField[] = [];
+  // Unknown effects stay unresolved. These recorded facts must not disappear
+  // with technical detail, even when they are long, nested, false or missing.
+  const materialKey = /amount|currency|recipient|destination|payee|beneficiary|payment|recurr|frequency|permission|grant|canAct|role|access|delet|destroy|irrevers|deadline|expir|scope|sensitivity|endpoint|^url$|^(?:to|cc|bcc)$/i;
+  const intentKey = /^(?:coworker|agent(?:Id)?|user(?:Id)?|target(?:Id)?|subject(?:Id)?|account(?:Id)?|resource(?:Id)?|room(?:Id)?|action|operation|path|file(?:Path)?|name)$/i;
+  function visit(value: unknown, path: string[], material: boolean) {
+    const empty = Array.isArray(value) ? value.length === 0 : objectRecord(value) ? Object.keys(value as object).length === 0 : false;
+    if (empty && material) {
+      facts.push({ label: path.map(humanizeKey).join(" · "), value: copy.notProvided });
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => visit(entry, [...path, String(index + 1)], material));
+    } else if (objectRecord(value)) {
+      const entries = Object.entries(value as Record<string, unknown>);
+      const consequential = material || entries.some(([key]) => materialKey.test(key))
+        || (path.length === 0 && !decision.consequence.startsWith("None declared."));
+      for (const [key, child] of entries) {
+        visit(child, [...path, key], material || materialKey.test(key) || (consequential && intentKey.test(key)));
+      }
+    } else if (material) {
+      facts.push({ label: path.map(humanizeKey).join(" · "), value: value === null || value === "" ? copy.notProvided : String(value) });
+    }
+  }
+  if (unresolved) visit(params, [], false);
+  return { title, description, consequence, facts, unresolved,
+    target: appUpdate ? copy.appScope : decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? copy.targetUnavailable, recommendation,
   };
 }

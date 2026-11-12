@@ -5,10 +5,11 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 
 vi.mock("@/lib/i18n/t.server", () => ({ getT: async () => (key: string) => key }));
 const fixture = vi.hoisted(() => ({
-  load: vi.fn(), owners: vi.fn(),
+  load: vi.fn(), owners: vi.fn(), coo: vi.fn(),
 }));
 vi.mock("@/lib/work-capsules/liveness-inventory", () => ({ loadCapsuleLivenessInventory: fixture.load }));
 vi.mock("@/lib/work-management/room-workforce.server", () => ({ loadRoomAccountabilityBatch: fixture.owners }));
+vi.mock("@/lib/operate/coo-surface.server", () => ({ loadCooSupervision: fixture.coo }));
 import { WorkroomActivitySection, workroomInventoryWhere } from "./WorkroomActivitySection";
 import { WorkroomInventory } from "./WorkroomInventory";
 
@@ -30,13 +31,26 @@ describe("workroomInventoryWhere", () => {
       headBranch: null, pullRequestUrl: null, updatedAt: new Date(), liveness: "live", isLive: true,
       isReapable: false, livenessReason: "Recent progress", trueLivenessAt: null,
       outcomeAnchor: { narrative: "large-outcome-packet".repeat(400) },
-      scopeClaims: [{ privateData: "scope-private".repeat(400) }], recovery: { packet: "source-path".repeat(400) },
+      scopeClaims: [{ privateData: "scope-private".repeat(400) }], recovery: {
+        prerequisite: { accountableRole: "artifact-resolver", repair: { packet: "source-path".repeat(400) } },
+      },
     }));
     fixture.load.mockResolvedValue({ capsulesAll: rooms, livenessSummary: { live: 200, history: 0,
       heavyLane: { executing: 0, nextReady: 0, dormant: 0 }, progressSlo: { oldestWaitMs: null } } });
     fixture.owners.mockResolvedValue(new Map(rooms.map(room => [room.id, {
       accountableDisplayName: "Recorded person", accountability: { state: "resolved", principalId: "P-1", source: "organization-owner", inheritedFrom: [] },
     }])));
+    fixture.coo.mockResolvedValue({
+      rooms: rooms.map(room => ({
+        roomId: room.capsuleId, title: room.title, ownerPrincipalId: "P-1", ownerDisplayName: "Recorded person",
+        ownerIsSuggestion: true, stallRecipientPrincipalId: "P-1", lastCycleKey: null, lastAction: null,
+        lastReason: null, ticksSinceAdvance: null, nextWakeAt: null, spanOfControl: 200, overSpan: true,
+        unowned: false, paused: false, escalationLabel: "Recorded person", missingAckCount: 0,
+        actionHref: `/workspace/cases/work-capsule%3A${room.capsuleId}`,
+      })),
+      unowned: [], paused: [], overSpanOwners: [{ principalId: "P-1", displayName: "Recorded person", roomCount: 200 }],
+      missingAcks: [],
+    });
     const element = await WorkroomActivitySection({});
     let payload: unknown;
     const walk = (node: ReactNode) => Children.forEach(node, child => {
@@ -48,10 +62,17 @@ describe("workroomInventoryWhere", () => {
     expect(fixture.owners).toHaveBeenCalledTimes(1);
     expect(fixture.owners.mock.calls[0]![1]).toHaveLength(200);
     const serialized = JSON.stringify(payload);
+    console.info(`Workroom fixture payload: ${JSON.stringify(rooms).length} → ${serialized.length} characters`);
     expect(serialized).not.toMatch(/large-outcome-packet|scope-private|source-path/);
     expect(serialized).toContain("Recorded person");
+    expect((payload as Array<{ attribution: unknown }>)[0]?.attribution).toEqual(rooms[0]!.attribution);
+    expect(serialized).toContain("inventory.actor.delivery");
+    expect(serialized).toContain("inventory.action.source");
+    expect(serialized).toContain("/workspace/cases/work-capsule%3AWC-0");
     expect(serialized.length).toBeLessThan(JSON.stringify(rooms).length / 10);
+    // Executing the original0209 mapper on this same fixture measured180471.
+    // Keep diagnostics out of the list even after adding useful action fields.
+    expect(serialized.length).toBeLessThan(170000);
     expect(fixture.load).toHaveBeenCalledWith({}, expect.objectContaining({ take: 200, portalSummary: true }));
-    console.info(`Workroom fixture payload: ${JSON.stringify(rooms).length} → ${serialized.length} characters`);
   });
 });

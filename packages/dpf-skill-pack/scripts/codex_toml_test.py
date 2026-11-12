@@ -1,0 +1,213 @@
+"""BI-90C9478D (S5 of BI-63672FBE): TOML on stock Python 3.9 through Codex's own parser.
+
+Stock macOS ships Python 3.9, which has no tomllib, so since #6623 the updater
+refused every Codex settings write there. Codex's app server reads and writes
+its own configuration (config/read), so its parser stands in for the missing
+library: no dependency, and exactly the parser Codex itself uses (spec
+2026-10-27-self-converging-agent-toolchain, M4 and M5; DI-7591BDF26023).
+
+Protocol cases run against a fake app server, so they pass on any runner. One
+case runs against the real Codex CLI when this host has one.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import stat
+import sys
+import tempfile
+import textwrap
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import codex_toml  # noqa: E402
+import update_agent_toolchain as updater  # noqa: E402
+
+FAKE_SERVER = textwrap.dedent('''\
+    #!{python}
+    import json, os, sys
+    mode = os.environ.get("FAKE_MODE", "ok")
+    for line in sys.stdin:
+        message = json.loads(line)
+        if message.get("method") == "initialize":
+            print(json.dumps({{"id": message["id"], "result": {{"codexHome": os.environ["CODEX_HOME"]}}}}), flush=True)
+        elif message.get("method") == "config/read":
+            if mode == "hang":
+                continue
+            if mode == "invalid":
+                print(json.dumps({{"method": "configWarning", "params": {{"summary": "Invalid configuration; using defaults.", "details": "config.toml:2:8: unclosed table"}}}}), flush=True)
+            if mode == "unknown-key":
+                print(json.dumps({{"method": "configWarning", "params": {{"summary": "Codex is ignoring 1 unrecognized configuration setting."}}}}), flush=True)
+            text = open(os.path.join(os.environ["CODEX_HOME"], "config.toml")).read()
+            layer = {{"name": {{"type": "user"}}, "config": json.loads(os.environ["FAKE_PARSED"])}}
+            print(json.dumps({{"id": message["id"], "result": {{"config": {{}}, "origins": {{}}, "layers": [layer, {{"name": {{"type": "system"}}, "config": {{}}}}]}}}}), flush=True)
+''')
+
+
+class FakeServerTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.binary = Path(self.tmp.name) / "codex"
+        self.binary.write_text(FAKE_SERVER.format(python=sys.executable))
+        self.binary.chmod(self.binary.stat().st_mode | stat.S_IEXEC)
+
+    def _env(self, mode: str, parsed: object) -> dict[str, str]:
+        return {"FAKE_MODE": mode, "FAKE_PARSED": json.dumps(parsed)}
+
+    def test_returns_the_user_layer_exactly_as_codex_parsed_it(self) -> None:
+        parsed = {"model": "o3", "a": {"b": {"c": [1, 2.5, True]}}}
+        with patch.dict(os.environ, self._env("ok", parsed)):
+            self.assertEqual(codex_toml.loads('model = "o3"\n', binary=str(self.binary)), parsed)
+
+    def test_an_unrecognized_setting_is_not_a_parse_error(self) -> None:
+        with patch.dict(os.environ, self._env("unknown-key", {"x": 1})):
+            self.assertEqual(codex_toml.loads("x = 1\n", binary=str(self.binary)), {"x": 1})
+
+    def test_invalid_toml_is_refused_with_codex_s_diagnosis(self) -> None:
+        with patch.dict(os.environ, self._env("invalid", {})):
+            with self.assertRaises(ValueError) as caught:
+                codex_toml.loads("[broken\n", binary=str(self.binary))
+        self.assertIn("unclosed table", str(caught.exception))
+
+    def test_a_silent_server_times_out_instead_of_hanging(self) -> None:
+        with patch.dict(os.environ, self._env("hang", {})):
+            with self.assertRaises(codex_toml.CodexTomlUnavailable):
+                codex_toml.loads("x = 1\n", binary=str(self.binary), timeout=2.0)
+
+    def test_a_toml_date_time_is_refused_because_json_would_turn_it_into_a_string(self) -> None:
+        with patch.dict(os.environ, self._env("ok", {"when": "1979-05-27"})):
+            with self.assertRaises(codex_toml.UnsupportedToml):
+                codex_toml.loads("when = 1979-05-27\n", binary=str(self.binary))
+            # A date inside a string is only text and is fine.
+            self.assertEqual(codex_toml.loads('when = "1979-05-27"\n', binary=str(self.binary)), {"when": "1979-05-27"})
+
+    def test_the_probe_runs_in_a_private_codex_home_never_the_real_one(self) -> None:
+        with patch.dict(os.environ, {**self._env("ok", {}), "CODEX_HOME": "/should/not/be/used"}):
+            seen: dict[str, str] = {}
+            real_popen = codex_toml.subprocess.Popen
+
+            def spy(*args, **kwargs):
+                seen["home"] = kwargs["env"]["CODEX_HOME"]
+                return real_popen(*args, **kwargs)
+
+            with patch.object(codex_toml.subprocess, "Popen", side_effect=spy):
+                codex_toml.loads("x = 1\n", binary=str(self.binary))
+        self.assertNotEqual(seen["home"], "/should/not/be/used")
+        self.assertFalse(Path(seen["home"]).exists())
+
+
+class LoadsAnyTest(unittest.TestCase):
+    def test_no_parser_at_all_reports_the_missing_runtime(self) -> None:
+        with patch.object(codex_toml, "_stdlib_parser", return_value=None), patch.object(codex_toml, "_codex_binary", return_value=None):
+            self.assertFalse(codex_toml.available())
+            with self.assertRaises(codex_toml.CodexTomlUnavailable):
+                codex_toml.loads_any("x = 1\n")
+
+    def test_the_stdlib_parser_is_preferred_when_present(self) -> None:
+        class Parser:
+            @staticmethod
+            def loads(text: str) -> dict:
+                return {"parsed": "stdlib"}
+
+        with patch.object(codex_toml, "_stdlib_parser", return_value=Parser), patch.object(codex_toml, "loads") as via_codex:
+            self.assertEqual(codex_toml.loads_any("x = 1\n"), {"parsed": "stdlib"})
+            via_codex.assert_not_called()
+
+
+class GenericTransportGuardTest(unittest.TestCase):
+    def test_lossy_values_are_refused_before_cli_dispatch_even_without_a_parser(self):
+        documents = ('dates = [1979-05-27]', '"when" = 07:32:00', 'n = { key = [nan] }')
+        with patch.object(codex_toml, "_stdlib_parser", return_value=None), patch.object(codex_toml, "loads") as cli:
+            for document in documents:
+                with self.assertRaises(codex_toml.UnsupportedToml):
+                    codex_toml.loads_any(document)
+            cli.assert_not_called()
+
+
+@unittest.skipUnless(updater.resolve_codex_binary(), "no Codex CLI on this host")
+class GenericFallbackTest(unittest.TestCase):
+    def parse(self, text):
+        with patch.object(codex_toml, "_stdlib_parser", return_value=None):
+            return codex_toml.loads_any(text)
+
+    def test_foreign_plugins_and_reserved_keys_are_syntax_not_codex_settings(self):
+        text = 'plugins = ["dpf-platform"]\nmodel = 123\nsandbox_mode = "grok-native"\n[feature]\nenabled = true\n'
+        self.assertEqual(self.parse(text), {"plugins": ["dpf-platform"], "model": 123,
+            "sandbox_mode": "grok-native", "feature": {"enabled": True}})
+        with self.assertRaises(ValueError):
+            codex_toml.loads(text)
+
+    def test_tables_arrays_and_quoted_keys_preserve_values(self):
+        text = '\n'.join(['# [comment] stays inert', '"key.with.dot" = { value = [1, true, "# [literal]"] }',
+            '["table.with.dot".child]', 'name = "child"', '[[items]]', 'id = 1', '[[items]]', 'id = 2'])
+        self.assertEqual(self.parse(text), {"key.with.dot": {"value": [1, True, "# [literal]"]},
+            "table.with.dot": {"child": {"name": "child"}}, "items": [{"id": 1}, {"id": 2}]})
+
+    def test_multiline_string_headers_are_not_rewritten(self):
+        for delimiter in ('"""', "'" * 3):
+            text = 'notes = ' + delimiter + '\n[not_a_table]\n[[not_an_array_table]]\n# text\n' + delimiter + '\n[real]\nx = 1\n'
+            self.assertEqual(self.parse(text), {"notes": '[not_a_table]\n[[not_an_array_table]]\n# text\n', "real": {"x": 1}})
+
+    def test_escaped_and_extra_closing_quotes_do_not_hide_real_headers(self):
+        text = 'notes = """escaped \\" and extra closing quote""""\n[real]\nx = 1\n'
+        self.assertEqual(self.parse(text), {"notes": 'escaped " and extra closing quote"', "real": {"x": 1}})
+
+    def test_multiline_nested_arrays_are_values_not_headers(self):
+        text = 'matrix = [\n  [1, 2], # [comment]\n  [3, 4],\n]\n[real]\nx = 1\n'
+        self.assertEqual(self.parse(text), {"matrix": [[1, 2], [3, 4]], "real": {"x": 1}})
+
+    def test_empty_document_and_namespace_named_by_user_are_preserved(self):
+        self.assertEqual(self.parse(''), {})
+        self.assertEqual(self.parse('[dpf_generic_toml]\nx = 1\n'), {"dpf_generic_toml": {"x": 1}})
+
+    def test_json_lossy_values_are_refused_at_every_nesting_level(self):
+        for value in ('1979-05-27', '07:32:00', '1979-05-27T07:32:00Z', 'nan', '+nan', '-inf', 'inf'):
+            for assignment in ('"when" = ' + value, 'values = [' + value + ']',
+                    'values = [\n [' + value + ']\n]', 'values = { nested = ' + value + ' }', 'values = { x = 1, nested = ' + value + ' }'):
+                with self.subTest(assignment=assignment):
+                    with self.assertRaises(codex_toml.UnsupportedToml):
+                        self.parse('plugins = ["dpf-platform"]\n' + assignment + '\n')
+
+    def test_date_and_nonfinite_looking_keys_and_strings_are_preserved(self):
+        text = 'nan = "nan"\n1979-05-27 = "1979-05-27"\nvalues = { nan = 1, inf = 2, 1979-05-27 = "date" }\n[1979-05-27]\nx = "07:32:00"\n'
+        # Use separate documents: a scalar and a table cannot own the same key.
+        text = text.replace('[1979-05-27]', '[07-32-00]')
+        self.assertEqual(self.parse('[1979-05-27]\nx = "nan"\n'), {'1979-05-27': {'x': 'nan'}})
+        self.assertEqual(self.parse(text), {'nan': 'nan', '1979-05-27': '1979-05-27',
+            'values': {'nan': 1, 'inf': 2, '1979-05-27': 'date'}, '07-32-00': {'x': '07:32:00'}})
+
+    def test_malformed_and_date_values_remain_refused(self):
+        with self.assertRaises(ValueError): self.parse('[broken\n')
+        with self.assertRaises(codex_toml.UnsupportedToml): self.parse('when = 1979-05-27T07:32:00Z\n')
+
+
+class DiscoveryTest(unittest.TestCase):
+    def test_the_codex_cli_bundled_in_the_chatgpt_app_is_found(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundled = Path(tmp) / "ChatGPT.app" / "Contents" / "Resources" / "codex-cli" / "bin" / "codex"
+            bundled.parent.mkdir(parents=True)
+            bundled.write_text("#!/bin/sh\n")
+            bundled.chmod(0o755)
+            with patch.object(Path, "exists", lambda path: str(path) == str(bundled)), \
+                    patch.object(updater, "MACOS_APP_DIRS", (Path(tmp),)), patch.object(updater.platform, "system", return_value="Darwin"), \
+                    patch.object(updater.shutil, "which", return_value=None), patch.dict(os.environ, {"CODEX_CLI_PATH": ""}):
+                self.assertEqual(updater.resolve_codex_binary(), str(bundled))
+
+
+@unittest.skipUnless(updater.resolve_codex_binary(), "no Codex CLI on this host")
+class RealCodexTest(unittest.TestCase):
+    def test_codex_parses_a_real_config(self) -> None:
+        parsed = codex_toml.loads('model = "o3"\n\n[mcp_servers.dpf]\nurl = "https://localhost/api/mcp/v1"\n')
+        self.assertEqual(parsed, {"model": "o3", "mcp_servers": {"dpf": {"url": "https://localhost/api/mcp/v1"}}})
+
+    def test_codex_refuses_broken_toml(self) -> None:
+        with self.assertRaises(ValueError):
+            codex_toml.loads('model = "o3"\n[broken\n')
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -29,6 +29,7 @@ export const AREA_UPKEEP_AND_SETUP_ROUTES: readonly PortalNavRecord[] = [
     ["platform-updates-patches", "Patches", "/ops/patches"],
     ["platform-updates-installation", "Installation", "/ops/installation"],
     ["platform-updates-dev-loop", "Dev loop", "/ops/dev-loop"],
+    ["platform-updates-gate-efficacy", "Gate efficacy", "/ops/gate-efficacy"],
     ["platform-updates-teardown", "Teardown", "/ops/teardown"],
     ["platform-updates-security", "Security", "/ops/security"],
     ["platform-updates-change-lanes", "Change lanes", "/platform/development/change-lanes"],

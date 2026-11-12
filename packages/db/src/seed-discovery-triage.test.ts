@@ -10,6 +10,13 @@ import {
 } from "./discovery-triage-config";
 import { ensureDiscoveryTriageScheduledTask } from "./seed-discovery-triage";
 
+// No accountable owner recorded: the seed falls back to the superuser guess (BI-F0E946D2).
+const noAccountableOwner = {
+  portfolio: { findUnique: async () => null },
+  organization: { findFirst: async () => null },
+  principalAlias: { findFirst: async () => null },
+};
+
 describe("discovery triage seed helper", () => {
   const user = {
     findFirst: vi.fn(),
@@ -47,7 +54,7 @@ describe("discovery triage seed helper", () => {
     scheduledAgentTask.findUnique.mockResolvedValue(null);
 
     const result = await ensureDiscoveryTriageScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       new Date("2026-04-25T12:00:00Z"),
     );
 
@@ -80,7 +87,7 @@ describe("discovery triage seed helper", () => {
     });
 
     const result = await ensureDiscoveryTriageScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       new Date("2026-04-25T12:00:00Z"),
     );
 
@@ -101,7 +108,7 @@ describe("discovery triage seed helper", () => {
 
     await expect(
       ensureDiscoveryTriageScheduledTask(
-        { user, scheduledAgentTask, scheduledJob } as never,
+        { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
         new Date("2026-04-25T12:00:00Z"),
       ),
     ).rejects.toThrow("seed: no superuser found");

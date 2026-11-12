@@ -119,6 +119,30 @@ function readDecision(file: InstallStateFile | null): MonitoringDecisionRecord |
   };
 }
 
+async function readDefaultInstallState(): Promise<InstallStateFile> {
+  return JSON.parse(await readFile("/dpf-state/install-state.json", "utf8")) as InstallStateFile;
+}
+
+/** The monitoring capability decision, or null when the record is missing or not one of the three values. */
+export function monitoringCapabilityDecisionFromInstallState(
+  file: { runtimeCapabilityDecisions?: Record<string, unknown> } | null | undefined,
+): "enabled" | "disabled" | "undecided" | null {
+  const record = readDecision((file ?? null) as InstallStateFile | null);
+  if (record?.decision === "enabled" || record?.decision === "disabled" || record?.decision === "undecided") {
+    return record.decision;
+  }
+  return null;
+}
+
+/** Same install-state read as the monitoring settings loader. Unreadable state is a missing decision. */
+export async function loadMonitoringCapabilityDecision(): Promise<"enabled" | "disabled" | "undecided" | null> {
+  try {
+    return monitoringCapabilityDecisionFromInstallState(await readDefaultInstallState());
+  } catch {
+    return null;
+  }
+}
+
 function togglesMonitoring(row: TransitionRow): "enabling" | "disabling" | null {
   const before = row.previousKeys.includes(MONITORING_CAPABILITY);
   const after = row.desiredKeys.includes(MONITORING_CAPABILITY);
@@ -143,8 +167,7 @@ async function soft<T>(read: () => Promise<T>, fallback: T, source: string): Pro
 }
 
 export async function loadMonitoringSwitchView(deps: MonitoringLoaderDeps = {}): Promise<MonitoringSwitchView> {
-  const readInstallState = deps.readInstallState ?? (async () =>
-    JSON.parse(await readFile("/dpf-state/install-state.json", "utf8")) as InstallStateFile);
+  const readInstallState = deps.readInstallState ?? readDefaultInstallState;
   const readCapabilityStates = deps.readCapabilityStates ?? (async () => {
     const rows = await prisma.platformCapability.findMany({
       where: { capabilityId: { startsWith: "runtime:" } },

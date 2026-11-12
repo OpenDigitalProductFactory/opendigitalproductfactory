@@ -1,3 +1,4 @@
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import { readReviewHistory, assembleReviewPanel, finishReviewIteration } from "@/lib/build/review-history";
 // Design-review gate handler — Simplify & Strengthen W9 (BI-0E7B0953).
 //
@@ -538,7 +539,11 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
                   type: "product",
                   status: "in-progress",
                   submittedById: userId,
-                  ...(body ? { body } : {}),
+                  // BI-458CCA8D: the build's constrained goal is the outcome that defines done.
+                  body: composeIntakeBody({
+                    outcome: happyPathState.intake.constrainedGoal?.trim() || `"${title}" is delivered as this build describes.`,
+                    body: body || null,
+                  }),
                   ...(epicCuid ? { epicId: epicCuid } : {}),
                 },
               });

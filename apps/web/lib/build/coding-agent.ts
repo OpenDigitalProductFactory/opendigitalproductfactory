@@ -319,6 +319,13 @@ export type SandboxTestResult = {
   scope?: "scoped" | "full" | "none";
   /** Number of feature test files run when scope === "scoped". */
   scopedTestsRun?: number;
+  testsExecuted?: boolean;
+  testsApplicable?: boolean | null;
+  testsPassed?: number;
+  testsFailed?: number;
+  testCommandPassed?: boolean | null;
+  testSummariesComplete?: boolean;
+  testCommands?: string[];
 };
 
 /**
@@ -428,7 +435,9 @@ export function scopedTestRunnerCommand(packageJson: string, fileArgs: string): 
   } catch {
     usesJest = false;
   }
-  return usesJest ? `pnpm exec jest --ci ${fileArgs}` : `pnpm exec vitest run ${fileArgs}`;
+  // BI-33B54E4B: the sandbox exports NODE_ENV=development and Vitest keeps an
+  // existing NODE_ENV, so tests that rely on the test environment failed here only.
+  return usesJest ? `NODE_ENV=test pnpm exec jest --ci ${fileArgs}` : `NODE_ENV=test pnpm exec vitest run ${fileArgs}`;
 }
 
 function splitExitMarker(raw: string): { output: string; exitCode: number | null } {
@@ -444,9 +453,23 @@ export function outputIndicatesTestFailure(output: string): boolean {
   return /\b[1-9]\d*\s+failed/i.test(clean) || /^\s*FAIL\b/m.test(clean);
 }
 
+/** Counts only the case-summary line emitted by the native Jest/Vitest process. */
+function runnerTestCounts(output: string): { passed: number; failed: number } | null {
+  // eslint-disable-next-line no-control-regex -- native runner ANSI colours
+  const clean = output.replace(/\x1b\[[0-9;]*m/g, "");
+  const summary = clean.split(/\r?\n/).reverse().find((line) => /^\s*Tests\s*:?(?:\s|$)/.test(line));
+  if (!summary) return null;
+  const counts = [...summary.matchAll(/\b(\d+)\s+(passed|failed|skipped|pending|todo)\b/g)];
+  if (counts.length === 0) return null;
+  return {
+    passed: Number(counts.find((m) => m[2] === "passed")?.[1] ?? 0),
+    failed: Number(counts.find((m) => m[2] === "failed")?.[1] ?? 0),
+  };
+}
+
 export async function runSandboxTests(
   containerId: string,
-  opts?: { changedFiles?: string[]; workdir?: string },
+  opts?: { changedFiles?: string[]; workdir?: string; changedFilesKnown?: boolean },
 ): Promise<SandboxTestResult> {
   // Per-build working dir: the build's worktree when isolation is on, else
   // /workspace (default — byte-identical to prior behaviour). BI-98B723C0 Phase 2c.
@@ -488,6 +511,14 @@ export async function runSandboxTests(
   let testPassed = true;
   let scope: "scoped" | "full" | "none" = "none";
   let scopedTestsRun = 0;
+  let testsPassed = 0;
+  let testsFailed = 0;
+  let testsExecuted = false;
+  let testsApplicable: boolean | null = opts?.changedFilesKnown === true || (opts?.changedFiles?.length ?? 0) > 0 ? false : null;
+  let testCommandPassed: boolean | null = null;
+  const testCommands: string[] = [];
+  let existenceUnknown = false;
+  let summariesObserved = true;
 
   const candidates = deriveScopedTestFiles(opts?.changedFiles ?? []);
   let scopedTestFiles: string[] = [];
@@ -496,8 +527,11 @@ export async function runSandboxTests(
       candidates.map(async (p) => {
         try {
           const out = await execInSandbox(containerId, `test -f "${workdir}/${p}" && echo __yes__ || echo __no__`);
-          return out.includes("__yes__") ? p : null;
+          if (out.includes("__yes__")) return p;
+          if (!out.includes("__no__")) existenceUnknown = true;
+          return null;
         } catch {
+          existenceUnknown = true;
           return null;
         }
       }),
@@ -507,6 +541,8 @@ export async function runSandboxTests(
 
   if (scopedTestFiles.length > 0) {
     scope = "scoped";
+    testsApplicable = existenceUnknown ? null : true;
+    testCommandPassed = true;
     scopedTestsRun = scopedTestFiles.length;
     const sections: string[] = [];
     let anyFailed = false;
@@ -517,21 +553,37 @@ export async function runSandboxTests(
       // under vitest its `@/` alias never resolved, so every mobile build failed.
       const packageJson = await execInSandbox(containerId, `cat "${workdir}/${pkg}/package.json" 2>/dev/null || true`).catch(() => "");
       const runner = scopedTestRunnerCommand(packageJson, fileArgs);
-      const raw = await execInSandbox(containerId, `cd ${workdir}/${pkg} && { ${runner} 2>&1; echo "${EXIT_MARKER}$?"; }`);
+      const command = `cd ${workdir}/${pkg} && { ${runner} 2>&1; echo "${EXIT_MARKER}$?"; }`;
+      testCommands.push(command);
+      let raw: string;
+      try { raw = await execInSandbox(containerId, command); }
+      catch (error) {
+        sections.push(`# ${pkg}\n${getErrorMessage(error)}`);
+        testCommandPassed = false; anyFailed = true; summariesObserved = false;
+        continue;
+      }
       const { output: out, exitCode } = splitExitMarker(raw);
       sections.push(`# ${pkg}\n${out}`);
+      const counts = runnerTestCounts(out);
+      if (counts) { testsPassed += counts.passed; testsFailed += counts.failed; }
+      else summariesObserved = false;
+      if (exitCode !== 0) testCommandPassed = false;
       // vitest omits the "failed" segment entirely when zero, so any "N failed"
       // with N>=1 (or a FAIL marker) means the feature's own tests are red.
       // outputIndicatesTestFailure strips ANSI first — a colored digit otherwise
       // defeats the count regex. A non-zero exit also fails: a runner crash
       // (config, resolution) prints neither marker.
-      if (outputIndicatesTestFailure(out) || (exitCode !== null && exitCode !== 0)) {
+      if (outputIndicatesTestFailure(out) || exitCode !== 0) {
         anyFailed = true;
       }
     }
-    testOutput = sections.join("\n\n");
+    testOutput = sections.join("\n\n") + (existenceUnknown ? "\nCovering test discovery was incomplete; observed cases do not qualify the full changed scope." : "");
     testPassed = !anyFailed;
-  } else if (opts?.changedFiles && opts.changedFiles.length > 0) {
+    testsExecuted = testsPassed + testsFailed > 0;
+  } else if (existenceUnknown) {
+    testsApplicable = null;
+    testOutput = "Covering test files could not be established; no tests ran.";
+  } else if (testsApplicable === false) {
     // BI-CEE688D6: no test file covers the changed files. The whole-suite
     // fallback cannot run in the sandbox (scripts/host-resource-runner.mjs needs
     // DPF MCP admission it does not have, and the suite exhausts the heap), and
@@ -549,12 +601,15 @@ export async function runSandboxTests(
   return {
     // Gate on typecheck AND — when feature tests were scoped and run — those
     // tests. When none ran, typecheck alone gates, and the record says so.
-    passed: typeCheckPassed && (scope === "scoped" ? testPassed : true),
+    passed: typeCheckPassed && (testsApplicable === false
+      || (testsApplicable === true && testPassed && testsExecuted && summariesObserved && testCommandPassed === true)),
     typeCheckPassed,
     testOutput,
     typeCheckOutput,
     scope,
     scopedTestsRun,
+    testsExecuted, testsApplicable, testsPassed, testsFailed, testCommandPassed, testCommands,
+    testSummariesComplete: summariesObserved && !existenceUnknown,
   };
 }
 

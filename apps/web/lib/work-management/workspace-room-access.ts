@@ -1,3 +1,4 @@
+import { parseRoomCharter, type RoomCharter } from "./room-charter";
 import { authorizeWorkroomAccess, type WorkroomAccessDecision } from "./room-participation";
 import { WORKROOM_PARTICIPANT_ROLES, type WorkroomParticipantRole } from "./room-types";
 
@@ -7,6 +8,8 @@ export type WorkspaceRoomPolicyMetadata = {
   actionPrincipalRefs: string[];
   sensitivityCeiling: string;
   participants: WorkspaceRoomPolicyParticipant[];
+  /** BI-C649809F: who joins without a person being asked (room-charter.ts). */
+  charter: RoomCharter;
 };
 
 export type WorkspaceRoomPolicyParticipant = {
@@ -63,6 +66,7 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
         ? record.sensitivityCeiling
         : undefined,
       participants,
+      charter: parseRoomCharter(record.charter) ?? undefined,
     };
   }
   return {};

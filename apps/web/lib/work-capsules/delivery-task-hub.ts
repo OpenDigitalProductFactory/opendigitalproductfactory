@@ -1,3 +1,5 @@
+import { classifyAtlasHealth, type AtlasHealth } from "@/lib/work-management/atlas-health";
+
 export type DeliveryTaskGroup = "ready" | "working" | "waiting" | "needs-attention" | "complete";
 export type DeliveryTaskFreshness = "fresh" | "stale" | "partial";
 
@@ -76,6 +78,8 @@ export type DeliveryTaskHubRow = {
   capsuleId: string;
   title: string;
   objective: string;
+  /** Shared Work Atlas health; `group` is derived from it, never computed separately. */
+  health: AtlasHealth;
   group: DeliveryTaskGroup;
   status: string;
   statusIntent: "neutral" | "info" | "success" | "warning" | "danger";
@@ -216,17 +220,30 @@ function isSourceConflict(source: DeliveryTaskHubSource): boolean {
   return Boolean(taskStatus && COMPLETE_TASK.has(taskStatus) && source.status !== "complete" && source.status !== "archived");
 }
 
-function resolveGroup(source: DeliveryTaskHubSource, now: Date): DeliveryTaskGroup {
+/** This hub's facts, read into the shared Work Atlas health. A closeout waits on a person, as on the Work in progress page. */
+function resolveHealth(source: DeliveryTaskHubSource, now: Date): AtlasHealth {
   const taskStatus = source.taskRun?.status ?? null;
   const leaseExpired = ACTIVE_WORKROOM.has(source.status)
     && source.leaseExpiresAt != null
     && source.leaseExpiresAt.getTime() <= now.getTime();
-  if (source.status === "blocked" || FAILURE_TASK.has(taskStatus ?? "") || hasPendingApproval(source, now)
-    || hasExpiredApproval(source, now) || leaseExpired || isSourceConflict(source)) return "needs-attention";
-  if (taskStatus === "input-required" || WAITING_TASK.has(taskStatus ?? "") || WAITING_WORKROOM.has(source.status)) return "waiting";
-  if (WORKING_TASK.has(taskStatus ?? "") || ACTIVE_WORKROOM.has(source.status)) return "working";
-  if (["complete", "archived"].includes(source.status) && (!taskStatus || COMPLETE_TASK.has(taskStatus))) return "complete";
-  return "ready";
+  return classifyAtlasHealth({
+    needsPerson: hasPendingApproval(source, now) || source.status === "ready-for-promotion",
+    held: source.status === "blocked" || FAILURE_TASK.has(taskStatus ?? "") || hasExpiredApproval(source, now)
+      || leaseExpired || isSourceConflict(source),
+    finished: ["complete", "archived"].includes(source.status) && (!taskStatus || COMPLETE_TASK.has(taskStatus)),
+    noSignal: false,
+    waiting: taskStatus === "input-required" || WAITING_TASK.has(taskStatus ?? "") || WAITING_WORKROOM.has(source.status),
+    working: WORKING_TASK.has(taskStatus ?? "") || ACTIVE_WORKROOM.has(source.status),
+  });
+}
+
+/** Hub labels over the shared health; "ready" is a waiting room with nothing started yet. */
+function groupFor(health: AtlasHealth, source: DeliveryTaskHubSource): DeliveryTaskGroup {
+  if (health === "needs-person" || health === "stuck" || health === "no-signal") return "needs-attention";
+  if (health === "finished") return "complete";
+  if (health === "working") return "working";
+  const started = source.taskRun != null || WAITING_WORKROOM.has(source.status);
+  return started ? "waiting" : "ready";
 }
 
 function statusIntent(group: DeliveryTaskGroup): DeliveryTaskHubRow["statusIntent"] {
@@ -263,7 +280,8 @@ function primaryActionFor(source: DeliveryTaskHubSource, group: DeliveryTaskGrou
 }
 
 export function projectDeliveryTaskHubRow(source: DeliveryTaskHubSource, now: Date = new Date()): DeliveryTaskHubRow {
-  const group = resolveGroup(source, now);
+  const health = resolveHealth(source, now);
+  const group = groupFor(health, source);
   const observedAt = newestSourceTime(source);
   const conflict = isSourceConflict(source);
   const progressPartial = progressPayloadIsPartial(source.taskRun?.progressPayload);
@@ -286,6 +304,7 @@ export function projectDeliveryTaskHubRow(source: DeliveryTaskHubSource, now: Da
     capsuleId: source.capsuleId,
     title: source.title,
     objective: source.objective,
+    health,
     group,
     status: source.taskRun?.status ?? source.status,
     statusIntent: statusIntent(group),

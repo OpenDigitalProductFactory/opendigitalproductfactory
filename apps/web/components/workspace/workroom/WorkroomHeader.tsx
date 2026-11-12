@@ -11,6 +11,8 @@ import type { WorkroomShapeRebindView } from "@/lib/work-management/workroom-sha
 import { AccountabilityStatement } from "./RoomWorkforcePanel";
 import { WorkroomStageDecision } from "./WorkroomStageDecision";
 import { WorkroomShapeRebind } from "./WorkroomShapeRebind";
+import { WorkroomBlockerInspectionLink } from "./NestedRoomCoordinationPanel";
+import { WorkroomDeliveryAgreement } from "./WorkroomDeliveryAgreement";
 
 import {
   roomLabel,
@@ -64,7 +66,7 @@ export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeR
 
       <header
         aria-labelledby="work-room-title"
-        className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 sm:p-5"
+        className="min-w-0 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 [overflow-wrap:anywhere] sm:p-5"
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -126,13 +128,14 @@ export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeR
             ) : null}
           </div>
           <p className="mt-2 text-base font-semibold leading-6 text-[var(--dpf-text)]">
-            {room.outcome.statement ?? "Outcome not defined"}
+            {room.delivery?.originalObjective ?? room.outcome.statement ?? "Outcome not defined"}
           </p>
+          {room.delivery ? <WorkroomDeliveryAgreement view={room.delivery} /> : null}
         </section>
 
         <WorkroomStructurePanel structure={room.structure} />
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <section aria-label="Attention" className={`rounded-lg border border-[var(--dpf-border)] p-3${stageDecision || shapeRebind ? " md:col-span-2" : ""}`}>
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
               {room.work.attentionRequired || stageDecision || shapeRebind ? <AlertTriangle className="size-4 text-[var(--dpf-warning)]" aria-hidden="true" /> : null}
@@ -151,6 +154,7 @@ export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeR
           <section aria-label="Next action" className="rounded-lg border border-[var(--dpf-accent)] p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">Next action</p>
             <p className="mt-2 text-sm font-semibold text-[var(--dpf-text)]">{room.work.nextAction}</p>
+            {room.work.recordedBlocker ? <WorkroomBlockerInspectionLink /> : null}
           </section>
           <section aria-label="Accountability" className="rounded-lg border border-[var(--dpf-border)] p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">Accountable</p>

@@ -86,8 +86,6 @@ export const ALLOWLIST = new Map([
     "code-unit sort, but throws on undefined anywhere (the home drops or nulls it); persisted data-control operation envelopeHash"],
   ["apps/web/lib/governance/reconcile-keyed-findings.ts",
     "localeCompare, rebuilt; compares a stored finding JSON blob with a freshly derived one"],
-  ["apps/web/lib/hive/result-intake.ts",
-    "code-unit sort; undefined in objects written as the text undefined, in arrays as an empty slot, top-level returns undefined; persisted Hive payloadHash"],
   ["apps/web/lib/inference/data-screening/classify-payload.ts",
     "localeCompare, rebuilt; screening receipt inputHash (screenId, classificationVersion) compared by the inference dispatch guard"],
   ["apps/web/lib/inference/data-screening/evaluate-inference-policy.ts",
@@ -115,6 +113,8 @@ export const ALLOWLIST = new Map([
   ["apps/web/lib/wiki/enrich-org-corpus.ts",
     "code-unit sort; undefined written as the text undefined or an empty array slot; wiki enrichment sourceKey, the idempotency key of the RawSource upsert"],
   // ---- packages -----------------------------------------------------------
+  ["packages/validators/src/commons/result-intake.ts",
+    "Relocated from apps/web/lib/hive/result-intake.ts (BI-0D316824), not a new serializer: same code-unit sorted bytes for persisted Hive payloadHash. Intake now rejects non-JSON before hashing; legacy serializer formerly wrote undefined as text/empty slots and returned undefined at top level."],
   ["packages/db/scripts/reconcile-catalog-capabilities.ts",
     "code-unit sort but rebuilt (integer-like keys numeric-first); persisted catalogHash, plus a jsonb-vs-source field comparison"],
   ["packages/db/src/edge-action-envelope.ts",

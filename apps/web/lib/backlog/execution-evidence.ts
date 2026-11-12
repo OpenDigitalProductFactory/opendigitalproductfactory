@@ -12,6 +12,7 @@ export const EXECUTION_EVIDENCE_KINDS = [
   "source_verified",
   "spec_review",
   "manual_check",
+  "manual_fail",
   "external_link",
 ] as const;
 
@@ -47,6 +48,7 @@ const EVIDENCE_KIND_METADATA: Record<ExecutionEvidenceKind, EvidenceKindMetadata
   source_verified: { dimension: "source", polarity: "pass", gateEligible: true },
   spec_review: { dimension: "documentation", polarity: "pass", gateEligible: true },
   manual_check: { dimension: "manual", polarity: "pass", gateEligible: true },
+  manual_fail: { dimension: "manual", polarity: "fail", gateEligible: false },
   external_link: { dimension: "supporting-context", polarity: "neutral", gateEligible: false },
 };
 

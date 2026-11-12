@@ -50,13 +50,22 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "register_tech_debt",
-    description: "Log a technical shortcut as a refactoring backlog item.",
+    description:
+      "Log a technical shortcut as a refactoring backlog item. State the outcome paying it off delivers in `outcome`; without one the item records that the shortcut is replaced by the intended design.",
     inputSchema: {
       type: "object",
       properties: {
         title: { type: "string" },
         description: { type: "string" },
         severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+        outcome: {
+          type: "string",
+          description: "What will be true once this debt is paid. Stored as the body's \"## Outcome\" section.",
+        },
+        howWeKnow: {
+          type: "string",
+          description: "How we will know, only when the outcome is not obvious from the change. Stored as \"## How we'll know\".",
+        },
       },
       required: ["title", "description"],
     },
@@ -113,10 +122,14 @@ async function registerTechDebt(
 ): Promise<ToolResult> {
   const { createTechDebtItem } = await import("@/lib/decomposition");
   const { prisma } = await import("@dpf/db");
+  // BI-458CCA8D: tech debt states the outcome that defines done, like every other intake.
+  const statedOutcome = typeof params["outcome"] === "string" ? params["outcome"].trim() : "";
   const item = createTechDebtItem({
     title: String(params["title"] ?? ""),
     description: String(params["description"] ?? ""),
     severity: String(params["severity"] ?? "medium"),
+    outcome: statedOutcome || null,
+    howWeKnow: typeof params["howWeKnow"] === "string" ? params["howWeKnow"] : null,
   });
   const refactorEpic = await prisma.epic.findUnique({ where: { epicId: "EP-REFACTOR-001" } });
   await prisma.backlogItem.create({
@@ -134,7 +147,13 @@ async function registerTechDebt(
       ...(refactorEpic ? { epicId: refactorEpic.id } : {}),
     },
   });
-  return { success: true, entityId: item.itemId, message: `Tech debt logged: ${item.itemId}` };
+  return {
+    success: true,
+    entityId: item.itemId,
+    message: statedOutcome
+      ? `Tech debt logged: ${item.itemId}`
+      : `Tech debt logged: ${item.itemId}. No outcome was stated, so it records that the shortcut is replaced by the intended design; pass \`outcome\` next time when paying it off delivers something more specific.`,
+  };
 }
 
 export const feedbackPack: ToolPack = {

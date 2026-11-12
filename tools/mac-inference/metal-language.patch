@@ -1,0 +1,37 @@
+--- a/ggml/src/ggml-metal/ggml-metal-device.m
++++ b/ggml/src/ggml-metal/ggml-metal-device.m
+@@ -102,6 +102,16 @@
+ 
+     NSLock * lock;
+ };
++
++// Explicit tensor language avoids an old linked SDK selecting Metal 3.2.
++// 0x40000 is MTLLanguageVersion4_0's ABI value; older SDK headers lack its name.
++static MTLCompileOptions * ggml_metal_compile_options(ggml_metal_device_t dev) {
++    MTLCompileOptions * options = [MTLCompileOptions new];
++    if (ggml_metal_device_get_props(dev)->has_tensor) {
++        options.languageVersion = (MTLLanguageVersion) 0x40000;
++    }
++    return options;
++}
+ 
+ ggml_metal_library_t ggml_metal_library_init(ggml_metal_device_t dev) {
+     id<MTLLibrary> library = nil;
+@@ -225,7 +235,7 @@
+                 [prep setObject:@"1" forKey:@"GGML_METAL_EMBED_LIBRARY"];
+ #endif
+ 
+-                MTLCompileOptions * options = [MTLCompileOptions new];
++                MTLCompileOptions * options = ggml_metal_compile_options(dev);
+                 options.preprocessorMacros = prep;
+ 
+                 //[options setFastMathEnabled:false];
+@@ -282,7 +292,7 @@
+     @autoreleasepool {
+         NSMutableDictionary * prep = [NSMutableDictionary dictionary];
+ 
+-        MTLCompileOptions * options = [MTLCompileOptions new];
++        MTLCompileOptions * options = ggml_metal_compile_options(dev);
+         options.preprocessorMacros = prep;
+ 
+         library = [device newLibraryWithSource:src options:options error:&error];

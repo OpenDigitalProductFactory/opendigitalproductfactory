@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { EventEmitter } from "node:events";
 import { createServer } from "node:https";
+import { createServer as createHttpServer } from "node:http";
+import { gitText } from "../../scripts/lib/git.mjs";
 import { getCACertificates } from "node:tls";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,18 +13,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { readHostClientEnv, readTrustBundle, resolveHostMcpTrust, probeMcpTransport, describeMcpTransportError, runWithHostMcpTrust } from "../../scripts/lib/mcp-host-trust.mjs";
 import { mcpCall } from "../../scripts/lib/mcp-client.mjs";
 import { readEarlyQuiescenceStatus } from "../../scripts/lib/gate-quiescence.mjs";
-import { runHostPreflight } from "../../scripts/pregate.mjs";
+import { runForegroundGate, runGateWithQueuedRevival, runHostPreflight } from "../../scripts/pregate.mjs";
 import { classifyGateExit } from "../../scripts/lib/gate-exit-classification.mjs";
+import { createGateFixtureTls } from "../../scripts/fixtures/gate-worktree.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const openssl = process.platform === "win32" && existsSync(join(process.env.ProgramFiles || "C:/Program Files", "Git/usr/bin/openssl.exe"))
-  ? join(process.env.ProgramFiles || "C:/Program Files", "Git/usr/bin/openssl.exe") : "openssl";
 const fixture = mkdtempSync(join(tmpdir(), "dpf-tls-"));
-const key = join(fixture, "server.key"), cert = join(fixture, "server.crt");
-const mint = spawnSync(openssl, ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2",
-  "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost", "-addext", "basicConstraints=critical,CA:TRUE",
-  "-keyout", key, "-out", cert], { encoding: "utf8", windowsHide: true });
-assert.equal(mint.status, 0, `TLS fixtures require OpenSSL: ${mint.stderr || mint.error}`);
+const { key, cert } = createGateFixtureTls(fixture);
 test.after(() => rmSync(fixture, { recursive: true, force: true }));
 
 function child(script, env = {}) {
@@ -89,6 +87,74 @@ test("only pre-main trust failures are marked as unrun host prerequisites", asyn
     args: [], env: {}, resolveImpl: () => { throw unreadable; },
   }), error => error === unreadable && error.hostTrustPrerequisite === true);
   assert.equal(calls, 1, "host prerequisite failure prevents main");
+});
+
+test("trusted Windows re-exec retains repeated cancellation until its child closes", { skip: process.platform !== "win32" }, async () => {
+  const signals = new EventEmitter(), proc = new EventEmitter();
+  proc.exitCode = null; proc.signalCode = null;
+  proc.kill = () => assert.fail("console Ctrl-C must not be forwarded as a Windows hard kill");
+  let launches = 0;
+  const status = await runWithHostMcpTrust(() => assert.fail("main must only execute in the re-exec child"), {
+    args: [], env: {}, signalSource: signals,
+    resolveImpl: () => ({ certificates: [readFileSync(cert, "utf8")], env: { NODE_EXTRA_CA_CERTS: cert } }),
+    spawnImpl: (_command, _args, options) => {
+      launches++;
+      assert.equal(options.env.NODE_EXTRA_CA_CERTS, cert);
+      assert.ok(options.env.DPF_HOST_TRUST_REEXEC);
+      setImmediate(() => {
+        signals.emit("SIGINT"); signals.emit("SIGINT");
+        assert.equal(signals.listenerCount("SIGINT"), 1);
+        proc.exitCode = 87; proc.emit("close", 87, null);
+      });
+      return proc;
+    },
+  });
+  assert.equal(status, 87); assert.equal(launches, 1);
+  assert.equal(signals.listenerCount("SIGINT"), 0); assert.equal(signals.listenerCount("SIGTERM"), 0);
+});
+
+test("a re-exec execution error stays uncertain instead of becoming an unrun trust prerequisite", async () => {
+  const uncertain = Object.assign(Error("owned child outcome unavailable"), { code: "EIO" });
+  const proc = new EventEmitter(), signals = new EventEmitter();
+  let launches = 0;
+  await assert.rejects(runWithHostMcpTrust(() => assert.fail("never replay main"), {
+    args: [], env: {}, signalSource: signals,
+    resolveImpl: () => ({ certificates: [readFileSync(cert, "utf8")], env: { NODE_EXTRA_CA_CERTS: cert } }),
+    spawnImpl: () => {
+      launches++; setImmediate(() => { proc.emit("error", uncertain); proc.emit("close", 1, null); }); return proc;
+    },
+  }), error => error === uncertain && !error.hostTrustPrerequisite);
+  assert.equal(launches, 1); assert.equal(signals.listenerCount("SIGINT"), 0);
+});
+
+test("trust parent outlives the gate close grace and existing recovery", { skip: process.platform !== "win32" }, async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const signals = new EventEmitter(), owner = new EventEmitter(), gate = new EventEmitter();
+  for (const child of [owner, gate]) { child.exitCode = null; child.signalCode = null; }
+  let ownerKills = 0, gateKills = 0, recovering = false;
+  owner.kill = () => { ownerKills++; return true; };
+  gate.kill = () => { gateKills++; return true; };
+  const pending = runWithHostMcpTrust(() => assert.fail("main executes only in the child"), {
+    args: [], env: {}, signalSource: signals,
+    resolveImpl: () => ({ certificates: [readFileSync(cert, "utf8")], env: { NODE_EXTRA_CA_CERTS: cert } }),
+    spawnImpl: () => {
+      void runGateWithQueuedRevival({ signalSource: signals,
+        runGateImpl: (command, args, options) => runForegroundGate(command, args, { ...options, spawnImpl: () => gate }),
+        recoverInterruptedGateImpl: async () => { recovering = true; await new Promise(resolve => setTimeout(resolve, 10000)); },
+        stderr: { write() {} },
+      }).then(({ result }) => { owner.exitCode = result.status; owner.emit("close", result.status, null); });
+      return owner;
+    },
+  });
+  signals.emit("SIGINT");
+  t.mock.timers.tick(30000);
+  assert.equal(gateKills, 1); assert.equal(ownerKills, 0, "outer owner preempted its child's cancellation grace");
+  t.mock.timers.tick(9000); gate.exitCode = 87; gate.emit("close", 87, null);
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(recovering, true);
+  t.mock.timers.tick(10000);
+  assert.equal(await pending, 87); assert.equal(ownerKills, 0);
+  assert.equal(signals.listenerCount("SIGINT"), 0);
 });
 
 test("OS adapters consume existing saved-state resolvers without credential output", () => {
@@ -241,4 +307,100 @@ test("Windows resolver preserves an explicit missing CA instead of silently trus
     assert.equal(result.status, 0, result.stderr);
     assert.equal(JSON.parse(result.stdout).CaBundle, join(home, "missing.pem"));
   } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
+// BI-95B102AA: real preflight entry-point regressions share the registered CI suite.
+const featureSha = gitText(["rev-parse", "HEAD"], { cwd: root });
+const priorSha = gitText(["rev-parse", "HEAD^"], { cwd: root });
+async function portal(t, { secure = true, status = 200, version = featureSha } = {}) {
+  const requests = [];
+  const handler = (request, response) => {
+    requests.push(`${request.method} ${request.url}`);
+    assert.equal(request.headers.authorization, undefined, "verification does not send credentials");
+    response.writeHead(status, { "content-type": "application/json" });
+    response.end(JSON.stringify({ present: true, version, source: "git-sha" }));
+  };
+  const server = secure ? createServer({ key: readFileSync(key), cert: readFileSync(cert) }, handler) : createHttpServer(handler);
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => resolve()); }));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  return { origin: `${secure ? "https://localhost" : "http://127.0.0.1"}:${address.port}`, requests };
+}
+
+async function cli(origin, bundle = cert) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !/^(DPF_|PUBLIC_URL$|NODE_EXTRA_CA_CERTS$|NODE_OPTIONS$)/i.test(key)));
+  Object.assign(env, {
+    NODE_EXTRA_CA_CERTS: "", DPF_MCP_CA_FILE: bundle,
+    // A requested portal must not accidentally probe this unrelated MCP address.
+    DPF_MCP_URL: "https://unrelated.invalid/api/mcp/v1",
+  });
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--import", "tsx", "scripts/dpf-verify-preflight.ts",
+      "--portal-url", origin, "--feature-sha", featureSha, "--json"], {
+      cwd: root, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "", stderr = "";
+    const deadline = setTimeout(() => child.kill(), 45_000);
+    child.stdout.on("data", chunk => { stdout += chunk; });
+    child.stderr.on("data", chunk => { stderr += chunk; });
+    child.once("error", error => { clearTimeout(deadline); reject(error); });
+    child.once("close", status => { clearTimeout(deadline); resolve({ status, stdout, stderr }); });
+  });
+}
+
+test("normal launcher loads existing managed trust before its read-only image request", async t => {
+  const endpoint = await portal(t);
+  const result = await cli(endpoint.origin);
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).verdict, "CAN-TEST");
+  assert.match(result.stderr, /\[preflight\] CAN-TEST - /, "human summary uses readable separators");
+  assert.deepEqual(endpoint.requests, ["GET /api/platform/image-version"]);
+});
+
+for (const kind of ["missing", "malformed"]) {
+  test(`selected ${kind} trust remains BLOCKED with its actual diagnostic`, async t => {
+    const endpoint = await portal(t);
+    const bundle = join(fixture, `${kind}.pem`);
+    if (kind === "malformed") writeFileSync(bundle, "not a certificate");
+    const result = await cli(endpoint.origin, bundle);
+    assert.equal(result.status, 20, result.stderr + result.stdout);
+    const verdict = JSON.parse(result.stdout);
+    assert.equal(verdict.verdict, "BLOCKED");
+    assert.match(verdict.reason, kind === "missing" ? /mcp_ca_unreadable/ : /mcp_ca_invalid/);
+    assert.deepEqual(endpoint.requests, []);
+  });
+}
+
+test("trusted issuer never waives certificate hostname verification", async t => {
+  const endpoint = await portal(t);
+  const result = await cli(endpoint.origin.replace("localhost", "127.0.0.1"));
+  assert.equal(result.status, 20, result.stderr + result.stdout);
+  assert.match(JSON.parse(result.stdout).reason, /ERR_TLS_CERT_ALTNAME_INVALID/);
+  assert.deepEqual(endpoint.requests, []);
+});
+
+test("explicit HTTP remains HTTP and ignores unrelated HTTPS trust and MCP destinations", async t => {
+  const endpoint = await portal(t, { secure: false });
+  const result = await cli(endpoint.origin, join(fixture, "absent-for-http.pem"));
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).verdict, "CAN-TEST");
+  assert.deepEqual(endpoint.requests, ["GET /api/platform/image-version"]);
+});
+
+test("source containment still requests the governed advance when runtime is behind", async t => {
+  const endpoint = await portal(t, { secure: false, version: priorSha });
+  const result = await cli(endpoint.origin);
+  assert.equal(result.status, 10, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).verdict, "MUST-ADVANCE");
+  assert.equal(JSON.parse(result.stdout).nextAction.kind, "trigger-self-upgrade");
+});
+
+test("an HTTP error is not a testable image even when transport is healthy", async t => {
+  const endpoint = await portal(t, { secure: false, status: 503 });
+  const result = await cli(endpoint.origin);
+  assert.equal(result.status, 20, result.stderr + result.stdout);
+  assert.equal(JSON.parse(result.stdout).verdict, "BLOCKED");
+  assert.deepEqual(endpoint.requests, ["GET /api/platform/image-version"]);
 });

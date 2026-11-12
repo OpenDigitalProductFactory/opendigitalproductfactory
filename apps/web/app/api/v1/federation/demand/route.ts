@@ -30,6 +30,11 @@ import {
   RECEIVING_LINK_ROLES,
   type DeploymentDeclarationExchangeDb,
 } from "@/lib/federation/deployment-declaration-exchange";
+import { GUIDANCE_SNAPSHOT_ACTIVITIES } from "@dpf/db/guidance-snapshot-contract";
+import {
+  handleIncomingGuidanceSnapshot,
+  type GuidanceSnapshotExchangeDb,
+} from "@/lib/federation/guidance-snapshot-exchange";
 import {
   handleIncomingOperationalPosture,
   type OperationalPostureExchangeDb,
@@ -55,6 +60,7 @@ const RESPONSE_ACTIVITIES = new Set([
 const DISPOSITION_ACTIVITIES = new Set(["dpf.demand.dispositioned", "dpf.release.applicability-published"]);
 const POSTURE_ACTIVITIES = new Set<string>(OPERATIONAL_POSTURE_ACTIVITIES);
 const DECLARATION_ACTIVITIES = new Set<string>(DEPLOYMENT_DECLARATION_ACTIVITIES);
+const GUIDANCE_ACTIVITIES = new Set<string>(GUIDANCE_SNAPSHOT_ACTIVITIES);
 
 /** An accepted exchange outcome: 200 for an idempotent replay, 202 once persisted. */
 function accepted(outcome: { action: string }): NextResponse {
@@ -140,6 +146,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: false, ...declaration }, { status: 409 });
     }
     return accepted(declaration);
+  }
+
+  if (typeof event.type === "string" && GUIDANCE_ACTIVITIES.has(event.type)) {
+    // BI-1B165D02: only this installation's attested production authority, over
+    // a trusted same-organization link, may give it organization guidance.
+    if (authz.role !== "same-org-peer") {
+      return NextResponse.json({ ok: false, error: "link_not_same_organization" }, { status: 403 });
+    }
+    const identity = await resolveFederationIdentity(prisma as unknown as FederationIdentityDb);
+    if (!identity.deviceId) {
+      return NextResponse.json({ ok: false, error: "installation_identity_unavailable" }, { status: 503 });
+    }
+    const receipt = await handleIncomingGuidanceSnapshot(
+      prisma as unknown as GuidanceSnapshotExchangeDb,
+      authz.linkId,
+      event.data,
+      { selfInstallationDid: identity.deviceId, now: new Date() },
+    );
+    if (receipt.action === "refused") {
+      return NextResponse.json({ ok: false, error: receipt.reason }, { status: 403 });
+    }
+    if (receipt.action === "rejected") {
+      return NextResponse.json({ ok: false, error: "invalid_guidance_snapshot", ...receipt }, { status: 422 });
+    }
+    if (receipt.action === "conflict") {
+      return NextResponse.json({ ok: false, ...receipt }, { status: 409 });
+    }
+    return accepted(receipt);
   }
 
   if (typeof event.type === "string" && POSTURE_ACTIVITIES.has(event.type)) {

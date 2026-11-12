@@ -185,6 +185,44 @@ describe("callProvider", () => {
     });
   });
 
+  it("binds each successful reply to its own telemetry primary id", async () => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization", baseUrl: "https://api.openai.com/v1" });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const write = vi.fn().mockResolvedValue(undefined);
+    _setAdapterTelemetryWriteOverrideForTests(write);
+    try {
+      const first = await callProvider("openai", "actual-model", [], "Help");
+      const second = await callProvider("openai", "actual-model", [], "Help");
+      expect(first.responseProducer).toMatchObject({ attemptId: expect.any(String), providerId: "openai", modelId: "actual-model", contentDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+      expect(write.mock.calls[0][0].id).toBe(first.responseProducer?.attemptId);
+      expect(write.mock.calls[1][0].id).toBe(second.responseProducer?.attemptId);
+      expect(second.responseProducer?.attemptId).not.toBe(first.responseProducer?.attemptId);
+    } finally { _setAdapterTelemetryWriteOverrideForTests(null); }
+  });
+
+  it.each(["pending", "rejected"] as const)("delivers the reply without awaiting %s telemetry or retrying inference", async mode => {
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({ providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization", baseUrl: "https://api.openai.com/v1" });
+    mockGetDecryptedCredential.mockResolvedValue({ secretRef: "test-key" });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    _setAdapterTelemetryWriteOverrideForTests(() => mode === "pending" ? new Promise(() => {}) : Promise.reject(new Error("telemetry unavailable")));
+    try {
+      const result = await callProvider("openai", "actual-model", [], "Help");
+      expect(result).toMatchObject({ content: "ok", responseProducer: { attemptId: expect.any(String), providerId: "openai", modelId: "actual-model" } });
+      expect(mockAdapterExecute).toHaveBeenCalledOnce();
+    } finally { _setAdapterTelemetryWriteOverrideForTests(null); warn.mockRestore(); }
+  });
+
+  it("preserves the native session callback through actual provider-to-adapter dispatch",async()=>{
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({providerId:"openai",status:"active",authMethod:"api_key",authHeader:"Authorization",baseUrl:"https://api.openai.com/v1",endpoint:null});
+    mockGetDecryptedCredential.mockResolvedValue({secretRef:"test-key"});
+    const mintReadOnlySession=vi.fn(async()=>"test-session");
+    const mcpSession={userId:"human",mintReadOnlySession};
+    await callProvider("openai","model",[{role:"user",content:"Review prototype"}],"Help",undefined,undefined,undefined,mcpSession);
+    expect(mockAdapterExecute.mock.calls[0]?.[0].mcpSession).toBe(mcpSession);
+    expect(mockAdapterExecute.mock.calls[0]?.[0].mcpSession.mintReadOnlySession).toBe(mintReadOnlySession);
+    expect(mintReadOnlySession).not.toHaveBeenCalled();
+  });
+
   it("waits for admission before inspecting the GPU and releases on deferral", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization",
@@ -388,6 +426,7 @@ describe("callProvider", () => {
       status: "accepted",
       providerOperationId: "operations/provider-op-1",
     });
+    expect(result.responseProducer).toBeUndefined();
   });
 
   it("forwards attribution.agentMessageId into AdapterRunTelemetry on the success path", async () => {
@@ -679,4 +718,28 @@ it("blocks every paid fallback before adapter dispatch when parent authority is 
   });
   expect(mockAdapterExecute).not.toHaveBeenCalled();
   expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
+});
+
+it("refuses an unsupported Claude CLI image channel before provider accounting or dispatch",async()=>{
+ vi.clearAllMocks();
+ await expect(callProvider("anthropic","claude",[{role:"user",content:[{type:"image_url",image_url:{url:"data:image/png;base64,pixels"}}]}],"Critic",undefined,{
+ providerId:"anthropic",modelId:"claude",recipeId:null,contractFamily:"conversation",executionAdapter:"claude-cli",maxTokens:1024,providerSettings:{},toolPolicy:{},responsePolicy:{}
+ })).rejects.toThrow("image_input_transport_unavailable");
+ expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
+ expect(mockAdapterExecute).not.toHaveBeenCalled();
+ expect(mockAcquireSlot).not.toHaveBeenCalled();
+ expect(mockStartTimer).not.toHaveBeenCalled();
+});
+
+it("records image delivery only after actual adapter success and never retries a failed receipt",async()=>{
+ vi.clearAllMocks();
+ const recordImageInputDelivery=vi.fn(async()=>{throw new Error("receipt write failed");});
+ const plan={providerId:"codex",modelId:"actual",recipeId:null,contractFamily:"conversation",executionAdapter:"codex-cli",maxTokens:1024,providerSettings:{},toolPolicy:{},responsePolicy:{}};
+ const image={type:"image_url" as const,image_url:{url:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHNcAAAAASUVORK5CYII="}};
+ const result=await callProvider("codex","actual",[{role:"user",content:[image]}],"Critic",undefined,plan,undefined,{userId:"human",recordImageInputDelivery});
+ expect(result.content).toBe("ok");expect(mockAdapterExecute).toHaveBeenCalledOnce();
+ expect(recordImageInputDelivery).toHaveBeenCalledExactlyOnceWith({sha256:[expect.stringMatching(/^[a-f0-9]{64}$/)],providerId:"codex",modelId:"actual",adapterKind:"codex-cli"});
+ recordImageInputDelivery.mockClear();mockAdapterExecute.mockRejectedValueOnce(new Error("dispatch failed"));
+ await expect(callProvider("codex","actual",[{role:"user",content:[image]}],"Critic",undefined,plan,undefined,{userId:"human",recordImageInputDelivery})).rejects.toThrow("dispatch failed");
+ expect(recordImageInputDelivery).not.toHaveBeenCalled();
 });

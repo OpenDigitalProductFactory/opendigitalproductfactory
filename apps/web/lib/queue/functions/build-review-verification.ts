@@ -197,6 +197,20 @@ export const buildReviewVerification = jobs.createFunction(
         });
         return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
       }
+      // BI-33B54E4B: a confirmed scoped-test or typecheck failure goes back to
+      // the coding agent with the failing tests named, through the same bound,
+      // then to the owner. Before this it ended here and the sweep re-ran the
+      // same failing tests on the same tree every 30 minutes.
+      if (finalize.status === "tests-failed") {
+        const routed = await step.run("route-test-failure-to-repair", async () => {
+          const { repairFailureForFinalize } = await import("@/lib/build/finalize-repair-routing");
+          const failure = repairFailureForFinalize(finalize);
+          if (!failure) return "not-routable" as const;
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, failure);
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
       // BI-AF072BE5: nothing was committed, so there is nothing to repair or
       // review. Tell the owner once; escalation ends the build's sweep.
       if (finalize.status === "no-change") {
@@ -221,6 +235,16 @@ export const buildReviewVerification = jobs.createFunction(
           return "escalated";
         });
         return { status: "finalize-incomplete", finalize: finalize.status, escalation: escalated };
+      }
+      // BI-4F89896B: the grader runs the base commit's guard scripts, so a base
+      // that predates a guard fix keeps the gauntlet from running. Refresh onto
+      // upstream (DI-A9D0CC59F049) and review again; bounded to once an hour.
+      if (finalize.status === "gauntlet-not-run") {
+        const refreshed = await step.run("refresh-base-after-gauntlet-not-run", async () => {
+          const { refreshReviewBuildAfterGauntletNotRun } = await import("@/lib/build/review-source-refresh");
+          return refreshReviewBuildAfterGauntletNotRun(buildId, finalize.reason);
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, refresh: refreshed };
       }
       return { status: "finalize-incomplete", finalize: finalize.status };
     }

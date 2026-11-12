@@ -14,6 +14,7 @@
 // class (remove it here). Classifying a tool is a governed judgement about its
 // reach, not a mechanical edit: do it in the tool definition, then shrink.
 export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
+  "acknowledge_workroom_broadcast",
   "adopt_worktree",
   "analyze_a2a_collaboration_health",
   "analyze_mcp_call_efficiency",
@@ -22,6 +23,7 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "approve_demand_for_funding",
   "attach_to_campaign",
   "attribute_entity_to_product",
+  "broadcast_workroom_ask",
   "capture_ux_critique",
   "claim_backlog_item_for_work",
   "claim_nonprod_environment_lease",
@@ -131,6 +133,8 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "record_marketing_kpi_checkpoint",
   "record_plan_backlog_coverage",
   "record_product_outcome_observation",
+  // BI-A009189A: reviewed reversible internal disposition with correction/clear and retained audit; no external, spend, authority or routing-policy effect.
+  "record_response_feedback",
   "record_runtime_verification",
   "record_semantic_review_outcome",
   "record_surface_readiness",
@@ -205,6 +209,13 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "update_security_case",
   "update_workroom_status",
   "wiki_ingest",
+  // Internal writes (BI-FE8DF004): creating a workbook, table, column or view
+  // stays inside the install, is owned by the acting person and is undone by
+  // deleting it in the Workbooks UI. Nothing outward, nothing destroyed.
+  "workbook_add_column",
+  "workbook_create",
   "workbook_create_row",
+  "workbook_create_table",
+  "workbook_create_view",
   "workbook_update_cells",
 ];

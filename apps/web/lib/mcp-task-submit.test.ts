@@ -63,9 +63,9 @@ const immutableParams = {
   authorityScope: ["initiative_design_review"],
   collaborationKind: "summon",
 };
-function submit(tokenId: string, params: Record<string, unknown> = immutableParams) {
+function submit(tokenId: string, params: Record<string, unknown> = immutableParams, source: "pat" | "oauth" = "pat") {
   return submitRemoteCoworkerTask({
-    token: { tokenId, userId: "user-1", capability: "write", source: "pat" },
+    token: { tokenId, userId: "user-1", capability: "write", source },
     userContext,
     params,
   });
@@ -171,6 +171,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
   });
 
   it("keeps a review input-required when successful reads end without its required writer", async () => {
+    autonomous.create.mockImplementationOnce(async (input: Record<string, unknown>) => {
+      db.findUnique.mockResolvedValue({
+        status: "working", updatedAt: new Date(), userId: input["userId"],
+        currentAgentId: input["agentId"], a2aMetadata: input["metadata"],
+      });
+      return { id: "task-internal", taskRunId: input["taskRunId"], contextId: "thread-external" };
+    });
     autonomous.execute.mockResolvedValue({
       content: "The independent review stopped without recording a governed assessment. No receipt was created.",
       // BI-C35576A9: the provider that ran was a CLI subscription, so the wait
@@ -395,54 +402,34 @@ describe("submitRemoteCoworkerTask idempotency", () => {
   });
 
   it("server-binds immutable initiative identity and exposes only the exact reviewer tools", async () => {
+    const tools = [
+      { name: "load_tools", inputSchema: { type: "object", properties: {} } },
+      { name: "read_source_at_version", inputSchema: { type: "object", properties: {} } },
+      { name: "search_source_at_version", inputSchema: { type: "object", properties: {} } },
+      {
+        name: "record_initiative_evidence",
+        inputSchema: {
+          type: "object",
+          properties: {
+            itemId: { type: "string" },
+            gate: { type: "string" },
+            decision: { type: "string" },
+            artifactRef: { type: "object" },
+            reason: { type: "string" },
+            findings: { type: "array" },
+            resolvedFindingRefs: { type: "array" },
+          },
+          required: ["itemId", "reason"],
+        },
+      },
+      { name: "search_tool_marketplace", inputSchema: { type: "object", properties: {} } },
+    ];
     autonomous.resolveTools.mockResolvedValue({
-      tools: [
-        { name: "load_tools", inputSchema: { type: "object", properties: {} } },
-        { name: "read_source_at_version", inputSchema: { type: "object", properties: {} } },
-        { name: "search_source_at_version", inputSchema: { type: "object", properties: {} } },
-        {
-          name: "record_initiative_evidence",
-          inputSchema: {
-            type: "object",
-            properties: {
-              itemId: { type: "string" },
-              gate: { type: "string" },
-              decision: { type: "string" },
-              artifactRef: { type: "object" },
-              reason: { type: "string" },
-              findings: { type: "array" },
-              resolvedFindingRefs: { type: "array" },
-            },
-            required: ["itemId", "reason"],
-          },
-        },
-        { name: "search_tool_marketplace", inputSchema: { type: "object", properties: {} } },
-      ],
-      toolsForProvider: [
-        { type: "function", function: { name: "load_tools", parameters: { type: "object", properties: {} } } },
-        { type: "function", function: { name: "read_source_at_version", parameters: { type: "object", properties: {} } } },
-        { type: "function", function: { name: "search_source_at_version", parameters: { type: "object", properties: {} } } },
-        {
-          type: "function",
-          function: {
-            name: "record_initiative_evidence",
-            parameters: {
-              type: "object",
-              properties: {
-                itemId: { type: "string" },
-                gate: { type: "string" },
-                decision: { type: "string" },
-                artifactRef: { type: "object" },
-                reason: { type: "string" },
-                findings: { type: "array" },
-                resolvedFindingRefs: { type: "array" },
-              },
-              required: ["itemId", "reason"],
-            },
-          },
-        },
-        { type: "function", function: { name: "search_tool_marketplace", parameters: { type: "object", properties: {} } } },
-      ],
+      tools,
+      toolsForProvider: tools.map((tool) => ({
+        type: "function",
+        function: { name: tool.name, parameters: tool.inputSchema },
+      })),
       deferredTools: [{ name: "list_backlog_items", inputSchema: { type: "object", properties: {} } }],
     });
 
@@ -696,7 +683,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(autonomous.resolveAgent).not.toHaveBeenCalled();
   });
 
-  it("pins the immutable reader beside the spec-approval writer and server-binds the baseline precondition", async () => {
+  it.each(["pat", "oauth"] as const)("pins the spec-approval reader and baseline while forwarding only server-owned OAuth creation authority (%s)", async source => {
     const reader = {
       name: "read_source_at_version",
       inputSchema: { type: "object", properties: {} },
@@ -735,6 +722,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
     };
 
+    const authority = vi.spyOn(taskAuthority, "resolveMcpTaskAuthorityKey").mockResolvedValue("oauth-family:fixture");
+    try {
     await submit("PAT-SPEC", {
       agentId: "AGT-WS-REVIEW",
       routeContext: "/build/work/WC-7FF8A505",
@@ -748,7 +737,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         `tool:${writer.name}`,
       ],
       initiativeReviewBinding,
-    });
+    }, source);
+    } finally { authority.mockRestore(); }
 
     const execution = autonomous.execute.mock.calls[0]?.[0] as {
       tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown> } }>;
@@ -780,6 +770,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(autonomous.create).toHaveBeenCalledWith(expect.objectContaining({
       metadata: expect.objectContaining({ initiativeReviewBinding }),
     }));
+    const input = autonomous.create.mock.calls[0]?.[0] as Record<string, unknown>;
+    if (source === "oauth") expect(input.reviewCreationAuthority).toMatchObject({
+      taskAuthorityKey: "oauth-family:fixture", tokenId: "PAT-SPEC",
+      parsed: { idempotencyKey: "spec-review-bound-baseline", initiativeReviewBinding },
+    });
+    else expect(input).not.toHaveProperty("reviewCreationAuthority");
+    expect(input.metadata).not.toHaveProperty("reviewCreationAuthority");
   });
 
   it("does not expand ordinary external work to the research-review budget", async () => {

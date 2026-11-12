@@ -7,9 +7,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { runDesignRules } from "./drc";
-import { parseShapeDocument } from "./parse";
-import type { GppResolution } from "./resolve";
+import { runDesignRules } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { parseShapeDocument } from "@dpf/validators/gpp/parse";
+import type { GppResolution } from "@dpf/validators/gpp/resolve";
 
 const ALL_ON = { trigger: true, stage: true, "capability-set": true, gate: true, "advisory-consult": true, "status-transition": true, "human-checkpoint": true, evidence: true, stop: true, "escalation-boundary": true, "review-point": true, "stage-deadline": true, "parallel-split-join": true, "rework-edge": true, "sub-shape": true, "environment-boundary": true } as const;
 

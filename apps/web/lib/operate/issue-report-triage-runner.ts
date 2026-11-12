@@ -16,7 +16,7 @@ import {
   MAX_NEW_PROMOTIONS_PER_WINDOW,
 } from "@/lib/quality/issue-report-promotion";
 
-import { triageIssueReports } from "./issue-report-triage";
+import { signatureMarker, triageIssueReports } from "./issue-report-triage";
 import { escalatePriorityForOccurrences } from "./process-observer-triage";
 
 /**
@@ -67,6 +67,8 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
           source: true,
           errorDigest: true,
           selfFixClass: true,
+          // BI-24092DC9: the producer signature the mint-time dedup keys on.
+          dedupeKey: true,
           // BI-51F6A428: accrual fields the reach gate evaluates.
           occurrenceCount: true,
           firstSeenAt: true,
@@ -178,6 +180,51 @@ export async function runIssueReportTriage(opts: { reportId?: string } = {}) {
         select: { title: true },
       });
       return existing?.title ?? null;
+    },
+
+    // BI-24092DC9: a live bug item already minted from this report, or from any
+    // report sharing its signature. Items minted before the Signature marker
+    // existed are found through their "Source report:" line, via the earlier
+    // reports that carried the same dedupeKey.
+    findOpenItemTitleBySignature: async ({ reportId, dedupeKey }) => {
+      const reportIds = new Set([reportId]);
+      if (dedupeKey) {
+        const siblings = await prisma.platformIssueReport.findMany({
+          where: { dedupeKey },
+          select: { reportId: true },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        });
+        for (const sibling of siblings) reportIds.add(sibling.reportId);
+      }
+      const existing = await prisma.backlogItem.findFirst({
+        where: {
+          workType: "bug",
+          status: { notIn: ["done", "retired"] },
+          OR: [
+            ...[...reportIds].map((id) => ({ body: { contains: `Source report: ${id} (` } })),
+            ...(dedupeKey ? [{ body: { contains: signatureMarker(dedupeKey) } }] : []),
+          ],
+        },
+        orderBy: { createdAt: "asc" },
+        select: { title: true },
+      });
+      return existing?.title ?? null;
+    },
+
+    claimReport: async (id) => {
+      const { count } = await prisma.platformIssueReport.updateMany({
+        where: { id, status: ISSUE_REPORT_STATUS.OPEN },
+        data: { status: ISSUE_REPORT_STATUS.TRIAGED_LOCAL, stagedUntilPromoted: false },
+      });
+      return count === 1;
+    },
+
+    releaseReport: async (id) => {
+      await prisma.platformIssueReport.update({
+        where: { id },
+        data: { status: ISSUE_REPORT_STATUS.OPEN },
+      });
     },
 
     resolveTaxonomyNodeByPath: async (path) => {

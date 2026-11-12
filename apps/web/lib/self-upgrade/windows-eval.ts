@@ -60,3 +60,36 @@ export function nextWindowStartForWindows(
   }
   return null;
 }
+
+/**
+ * BI-EF1AC111. The instant the opening that contains `now` began, found by a
+ * minute-resolution backward scan of `isOpen`. Null when `isOpen(now)` is
+ * false, or when it stays open across the whole 8-day horizon (an always-open
+ * window has no opening to anchor a schedule to).
+ */
+export function openingStartedAt(isOpen: (at: Date) => boolean, now: Date): Date | null {
+  if (!isOpen(now)) return null;
+  const aligned = Math.floor(now.getTime() / WINDOW_SCAN_STEP_MS) * WINDOW_SCAN_STEP_MS;
+  const limit = now.getTime() - WINDOW_SCAN_HORIZON_MS;
+  for (let t = aligned; t >= limit; t -= WINDOW_SCAN_STEP_MS) {
+    if (!isOpen(new Date(t))) return new Date(t + WINDOW_SCAN_STEP_MS);
+  }
+  return null;
+}
+
+/**
+ * BI-EF1AC111. Start of the next opening that begins after `now`: when `now`
+ * is inside an opening, the one after it closes. Null when none starts within
+ * the 8-day horizon.
+ */
+export function nextOpeningAfter(isOpen: (at: Date) => boolean, now: Date): Date | null {
+  const start = Math.ceil(now.getTime() / WINDOW_SCAN_STEP_MS) * WINDOW_SCAN_STEP_MS;
+  const limit = now.getTime() + WINDOW_SCAN_HORIZON_MS;
+  let seenClosed = !isOpen(now);
+  for (let t = start; t <= limit; t += WINDOW_SCAN_STEP_MS) {
+    const open = isOpen(new Date(t));
+    if (!open) seenClosed = true;
+    else if (seenClosed) return new Date(t);
+  }
+  return null;
+}

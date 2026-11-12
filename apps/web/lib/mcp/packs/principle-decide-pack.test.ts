@@ -29,6 +29,9 @@ vi.mock("@dpf/db", () => ({
     wikiPage: {
       findMany: (...a: unknown[]) => db.wikiPageFindMany(...a),
     },
+    // BI-825D3487: the corpus-grant check reads the caller's authority row; no
+    // row means the code baseline, which holds wiki_kernel_read.
+    agent: { findFirst: async () => null },
   },
   listPrinciplesByTier: (...a: unknown[]) => db.listPrinciplesByTier(...a),
   PRINCIPLE_DECIDE_DEFAULTS: {
@@ -58,7 +61,8 @@ vi.mock("@dpf/db/wiki-taxonomy", async (importActual) => ({
 vi.mock("@/lib/wiki/embeddings", () => ({
   searchWikiPages: (...a: unknown[]) => wiki.searchWikiPages(...a),
 }));
-vi.mock("@/lib/wiki/principle-decide", () => ({
+vi.mock("@dpf/validators/judgment/option-scoring", async (importOriginal) => ({
+  ...await importOriginal<object>(),
   decide: (...a: unknown[]) => wiki.decide(...a),
 }));
 vi.mock("@/lib/wiki/calling-ring-map", () => ({

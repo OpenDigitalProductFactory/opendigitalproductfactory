@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { findInstallWorkOwnerUserId, INSTALL_WORK_OWNER_WHERE } from "./install-work-owner";
+import { findInstallWorkOwnerUserId, findTaskOwnerUserId, INSTALL_WORK_OWNER_WHERE } from "./install-work-owner";
 
 // BI-858FDE5A: a new scheduled task seeded after an account handover was born
 // under the handed-over account (acceptance-sweep-daily and
@@ -64,6 +64,37 @@ describe("findInstallWorkOwnerUserId", () => {
   });
 });
 
+// BI-F0E946D2: a new seeded task went to the next-oldest superuser
+// (client-capability-reverify-weekly, 2026-10-16) while every other platform
+// task went to the accountable person. Seeds use the portfolio owner walk.
+describe("findTaskOwnerUserId", () => {
+  function install(opts: { foundational?: string | null; org?: string | null; people?: Record<string, string>; guess?: string | null }) {
+    const people = opts.people ?? {};
+    return {
+      portfolio: { findUnique: async ({ where }: { where: { slug?: string } }) =>
+        where.slug === "foundational" ? { id: "pf", slug: "foundational", accountablePrincipalId: opts.foundational ?? null } : null },
+      organization: { findFirst: async () => ({ topAccountablePrincipalId: opts.org ?? null }) },
+      principalAlias: { findFirst: async ({ where }: { where: { principalId: string } }) =>
+        people[where.principalId] ? { aliasValue: people[where.principalId] } : null },
+      user: { findFirst: async ({ where }: { where: { id?: string } }) =>
+        where.id ? (Object.values(people).includes(where.id) ? { id: where.id } : null) : (opts.guess ? { id: opts.guess } : null) },
+    } as never;
+  }
+
+  it("names the Foundational portfolio's accountable person", async () => {
+    expect(await findTaskOwnerUserId(install({ foundational: "p-mark", people: { "p-mark": "u-mark" }, guess: "u-laura" }))).toBe("u-mark");
+  });
+
+  it("then the organization's accountable person", async () => {
+    expect(await findTaskOwnerUserId(install({ org: "p-mark", people: { "p-mark": "u-mark" }, guess: "u-laura" }))).toBe("u-mark");
+  });
+
+  it("guesses only when nobody is recorded", async () => {
+    expect(await findTaskOwnerUserId(install({ guess: "u-laura" }))).toBe("u-laura");
+    expect(await findTaskOwnerUserId(install({}))).toBeNull();
+  });
+});
+
 // Guard: every task seed names its owner through the shared rule. A local
 // "oldest superuser" lookup is how the handed-over account got new work.
 describe("install work owner guard", () => {
@@ -72,6 +103,14 @@ describe("install work owner guard", () => {
     const offenders = readdirSync(dir)
       .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== "install-work-owner.ts")
       .filter((f) => /user\.findFirst\(\{\s*where:\s*\{\s*isSuperuser:\s*true/.test(readFileSync(join(dir, f), "utf8")));
+    expect(offenders).toEqual([]);
+  });
+
+  it("every task seed names a new task's owner through the accountable-owner walk", () => {
+    const dir = __dirname;
+    const offenders = readdirSync(dir)
+      .filter((f) => f.startsWith("seed-") && f.endsWith(".ts") && !f.endsWith(".test.ts"))
+      .filter((f) => readFileSync(join(dir, f), "utf8").includes("findInstallWorkOwnerUserId"));
     expect(offenders).toEqual([]);
   });
 });

@@ -12,7 +12,7 @@ export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
   rule("capability-catalog", "capabilities", /^(?:packages\/db\/data\/capability-service-catalog\.json|scripts\/(?:resolve|apply|compile)-.*capabilit)/),
   rule("promoter-contract", "contract", /^(?:(?:promoter-contract|scripts\/promoter-contract)(?:\.schema)?\.json|apps\/web\/lib\/self-upgrade\/promoter-contract|scripts\/promoter-contract(?:\.|\/)|Dockerfile\.promoter)/),
   rule("acceptance-workflow", "workflow", /^\.github\/workflows\/self-upgrade-acceptance\.yml$/),
-  rule("n-minus-one-harness", "harness", /^scripts\/(?:self-upgrade-sensitive-paths|test-n-minus-one-upgrade)(?:\.test)?\.mjs$/),
+  rule("n-minus-one-harness", "harness", /^scripts\/(?:self-upgrade-sensitive-paths|test-n-minus-one-upgrade|release-image-reference\.docker)(?:\.test)?\.mjs$/),
   // Everything Dockerfile.promoter bakes into the promoter image decides whether
   // an install can upgrade, so changing any of it must run the acceptance gate.
   // The rules above missed most of this closure - including the generated

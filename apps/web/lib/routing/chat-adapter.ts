@@ -43,6 +43,8 @@ import {
 import { isRecord } from "@/lib/shared/coerce";
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline,
   currentInferenceSignal } from "./governed-inference-deadline";
+import { assertReassessmentPlan, isReassessmentExecutionError, refuseReassessmentExecution,
+  validateReassessmentToolCalls } from "./reassessment-execution-scope";
 
 // Compatibility export for existing callers; callProvider now owns local
 // admission, so this adapter never acquires the lane itself.
@@ -193,6 +195,10 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
     const { providerId, modelId, plan, provider, messages, systemPrompt, tools } = request;
+    const reassessment = assertReassessmentPlan({ providerId, modelId, plan, tools });
+    if (reassessment && (plan.providerSettings.thinking_budget_tokens !== undefined || plan.localThinkingBudgetEvidence !== undefined)) {
+      return refuseReassessmentExecution("reassessment-runtime-probe-not-permitted");
+    }
     const { baseUrl, headers } = provider;
     let requestHeaders = headers;
     const total = plan.completionAllowance;
@@ -227,10 +233,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
           .map((m) => formatMessageForAnthropic(m)),
       };
 
-      // EP-INF-013: Map effort → extended thinking for Anthropic.
-      // effort="low" (or absent) → no thinking parameter (default, fast).
-      // effort="medium/high/max" → enable thinking with a token budget.
-      // Explicit providerSettings.thinking takes precedence over effort.
+      // Capability-aware explicit thinking takes precedence over generic caller effort.
+      // Legacy effort-only plans retain their manual budget behavior.
       const effortBudgets: Record<string, number> = { medium: 8_000, high: 32_000, max: 64_000 };
       const effort = plan.providerSettings?.effort as string | undefined;
       if (plan.providerSettings?.thinking) {
@@ -251,6 +255,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
         body.max_tokens = total ?? Math.max(plan.maxTokens, budget + 2_048);
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
+      }
+      if ((body.thinking as { type?: string } | undefined)?.type === "adaptive" && plan.providerSettings?.output_config) {
+        body.output_config = plan.providerSettings.output_config;
       }
 
       // Apply temperature (only when thinking is NOT enabled — handled above)
@@ -369,6 +376,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       if (plan.temperature !== undefined) {
         (body as Record<string, unknown>).temperature = plan.temperature;
       }
+      if (plan.responsePolicy?.strictSchema) body.text = { format: { type: "json_object" } }; // BI-B76DC66C: Responses twin of BI-5C48438C
       // Convert OpenAI Chat Completions format tools to Responses API format
       // Responses API expects: tools: [{ type: "function", name, description, parameters }]
       if (tools && tools.length > 0) {
@@ -496,7 +504,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
         )) throw new Error("Local thinking runtime evidence changed or unavailable");
         await assertGovernedInferenceAuthority(currentInferenceSignal());
       }
-      const continuation = await prepareLocalNativeChatReplay(request, chatUrl);
+      const continuation = reassessment ? null : await prepareLocalNativeChatReplay(request, chatUrl);
       if (continuation) {
         continuationBinding = continuation.binding;
         nativeReplay = continuation.replayed;
@@ -517,6 +525,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       });
     } catch (e) {
       currentInferenceSignal()?.throwIfAborted();
+      if (isReassessmentExecutionError(e)) throw e;
       // A busy GPU is a capacity deferral. Wrapping it as "network" makes the
       // fallback chain treat the local model as broken instead of waiting.
       if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;
@@ -730,20 +739,15 @@ export const chatAdapter: ExecutionAdapterHandler = {
           );
           throw error;
         }
-      } else if (text && (text.includes("<tool_call>") || text.includes("<|tool_call>"))) {
+      } else if (!reassessment && text && (text.includes("<tool_call>") || text.includes("<|tool_call>"))) {
         // Fallback: model runner didn't translate native tool-call markers to structured format.
         // Handles Gemma/Llama template variants that leak <tool_call> or <|tool_call> as text.
         const extracted = extractTextualToolCalls(text);
         toolCalls = extracted.toolCalls;
         text = extracted.cleanText;
-      } else if (text && text.includes('"tool_use"')) {
-        // Fallback 2: local/Docker Model Runner (Gemma, Llama) emits the
-        // canonical Anthropic-style {"type":"tool_use",...} JSON as plain
-        // content rather than a structured tool_calls field. Without this
-        // every tool-requiring turn that fallback-routes to local is a
-        // silent dead-end: the agentic loop sees toolCalls=0 and gives up.
-        // Share the CLI adapters' extractor so the behaviour is identical
-        // regardless of provider.
+      } else if (!reassessment && text && text.includes('"tool_use"')) {
+        // Ordinary local traffic may emit Anthropic tool_use JSON as text.
+        // Restricted reviews require structured provider calls instead.
         const textualUse = extractTextualToolUse(text);
         if (textualUse.length > 0) {
           toolCalls = textualUse;
@@ -765,6 +769,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       outputTokens = readUsage("output_tokens", "completion_tokens");
     }
 
+    validateReassessmentToolCalls(toolCalls);
     // Keep provider-supplied identity, never the requested model or response body.
     const returnedModel = typeof data.model === "string" && data.model.trim() ? data.model : undefined;
     const result: AdapterResult = {

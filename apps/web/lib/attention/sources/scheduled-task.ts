@@ -2,8 +2,8 @@
 // brought forward when its proactivity policy is not quiet.
 
 import type { prisma } from "@dpf/db";
-import { resolveProactivityPlanForLevel } from "@/lib/proactivity/proactivity-resolver";
-import type { ProactivityPlan, ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { resolveProactivityPlanForLevel } from "@dpf/validators/workroom-policy/proactivity-resolver";
+import type { ProactivityPlan, ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { AttentionItem } from "../types";
 
 type Db = typeof prisma;

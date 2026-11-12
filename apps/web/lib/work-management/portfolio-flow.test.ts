@@ -104,6 +104,25 @@ describe("shapeItemType", () => {
     ["cross-cutting-portfolio-standup", null],
   ])("%s → %s", (key, type) => expect(shapeItemType(key)).toBe(type));
 
+  // BI-C9F1DE01: a room parked with no demand (its item inactive, a quiet
+  // posture) keeps its run open with an idle hold. Live load does not count it,
+  // so neither does a week's end.
+  it("leaves a run parked in an idle hold out of flow load from the week it was parked", () => {
+    const W = 7 * 24;
+    const flows = computePortfolioFlow({
+      rooms: [room("WC-3", "foundational"), room("WC-4", "foundational")],
+      rows: [
+        row("WC-3", "reproduce", "enqueued", 5 * W),
+        row("WC-3", "reproduce", "held", 5 * W),
+        row("WC-4", "reproduce", "enqueued", 5 * W),
+        row("WC-4", "reproduce", "started", 5 * W),
+        { ...row("WC-4", "reproduce", "held", 2 * W + 24), laneKey: "work_item_inactive" },
+      ],
+      now,
+    });
+    expect(flows.find((flow) => flow.key === "foundational")!.weeklyFlowLoad).toEqual([0, 0, 0, 2, 2, 1, 1, 1]);
+  });
+
   it("draws a weekly trend for every measure, oldest week first", () => {
     const W = 7 * 24;
     const flows = computePortfolioFlow({

@@ -52,7 +52,9 @@ export function prepareLeaveDecisionProposal(
 }
 
 /** The recommendation's audit key (stable per request and interaction) and its state. */
-type RecommendationResult = { recommendationId: string; status: "proposed" };
+type RecommendationResult =
+  | { recommendationId: string; status: "proposed" }
+  | { recommendationId: string; status: "refused"; reason: string };
 
 /**
  * BI-7BCC87BB (approval convergence PR-B, spec D2 S5): a time-off decision is
@@ -89,9 +91,20 @@ export async function proposeLeaveDecision(input: {
   taskRunId?: string | null;
   persistence?: LeaveDecisionRecommendationPersistence;
 }): Promise<RecommendationResult & { existing?: true }> {
+  // BI-5CA6AB34: a decision reaches the manager only with its kernel record. A
+  // fired rail now carries one too (leave-decision-coworker.ts), so a missing
+  // record means it could not be made; the request stays in the approver's
+  // leave queue, and no human authority is lost by not writing advice.
+  const decisionInteractionId = input.decision.interactionId;
+  if (!decisionInteractionId) {
+    return {
+      recommendationId: `leave-decision:${input.decision.request.requestId}:unrecorded`,
+      status: "refused",
+      reason: "No kernel decision record backs this recommendation, so it was not written. The request is still pending with its approver.",
+    };
+  }
   const draft = prepareLeaveDecisionProposal(input.decision);
-  const auditKey = input.decision.interactionId ?? `guard-${input.decision.action}`;
-  const recommendationId = `leave-decision:${input.decision.request.requestId}:${auditKey}`;
+  const recommendationId = `leave-decision:${input.decision.request.requestId}:${decisionInteractionId}`;
   const persistence = input.persistence ?? prismaLeaveDecisionRecommendationPersistence();
   // The message names its request, so idempotency is per request: two requests
   // with the same recommendation prose each get their own message and link.
@@ -100,10 +113,7 @@ export async function proposeLeaveDecision(input: {
   const thread = await persistence.ensureThread({ userId: input.userId, threadId: input.threadId });
   const existing = await persistence.findExistingMessage({ threadId: thread.id, content: messageContent });
   if (existing) {
-    const decisionInteractionId = input.decision.interactionId;
-    if (decisionInteractionId) {
-      await persistence.linkDecisionInteraction({ requestId: input.decision.request.requestId, decisionInteractionId });
-    }
+    await persistence.linkDecisionInteraction({ requestId: input.decision.request.requestId, decisionInteractionId });
     return { recommendationId, status: "proposed", existing: true };
   }
 
@@ -114,7 +124,7 @@ export async function proposeLeaveDecision(input: {
     messageContent,
     leaveRequestUpdate: {
       requestId: input.decision.request.requestId,
-      decisionInteractionId: input.decision.interactionId,
+      decisionInteractionId,
     },
   });
   return { recommendationId, status: "proposed" };

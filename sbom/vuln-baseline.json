@@ -40,6 +40,14 @@
       "severity": "high",
       "reason": "Not reachable from a shipped runtime. braces 3.0.3 is only in apps/mobile/pnpm-lock.yaml. tailwindcss 3.4.19 (a mobile devDependency) pulls it through chokidar and micromatch, and Metro's Node bundler pulls it through metro-file-map and micromatch. The mobile app source does not import braces, micromatch, or chokidar. The flaw is a stack overflow when a caller supplies a deeply nested brace pattern. Those callers expand this repo's own Tailwind and Metro globs, not request input. No patched npm release exists (3.0.3 is the latest; micromatch/braces#72 is unreleased). Re-evaluate when braces publishes a depth guard, or when Expo or Tailwind stop depending on 3.0.3. Checked 2026-10-03.",
       "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-mrhx-c7xc-m3w5",
+      "aliases": ["CVE-2023-54404"],
+      "package": "zod@3.25.76",
+      "severity": "high",
+      "reason": "Expo CLI still depends on zod ^3.25.76. That release is the dual package: a v3 default export plus a v4 core without the abort-early fix. The advisory's patched line is 4.6.6, and zod 4 changes the default export, so forcing @expo/cli onto 4.x breaks the CLI. @dpf/validators is already floored to zod 4.6.7. zod 3.25.76 remains only through @expo/cli in apps/mobile/pnpm-lock.yaml. Re-evaluate when Expo depends on zod >=4.6.6 or a patched 3.x exists.",
+      "expires": "2027-01-31"
     }
   ]
 }

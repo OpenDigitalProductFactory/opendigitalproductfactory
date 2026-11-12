@@ -231,3 +231,75 @@ to the objectives; they do not assert that those cases have passed.
 Delivery requires immutable design review, plan coverage, protected checks,
 canonical image publication, normal upgrade and actual served acceptance.
 No acceptance is satisfied by this document alone.
+
+## Existing activity-detail continuation, October 19
+
+Original PR5337 delivered the listing implementation. BI-3CE72645 remains open
+for acceptance and the existing detail-path gap: a raw `get_workroom` activity
+page can exceed its budget and correctly return no rows without advancement.
+The continuation extends the existing reader; it does not replace that refusal
+with a truncated receipt or change an old review's identity.
+
+An explicit `activityMode: bounded` selects a history-only response before the
+ordinary handler loads full room state or recent raw activities. Its metadata
+query selects at most 21 rows, bounds display summary text in PostgreSQL, and
+does not select payloads. It uses the existing room-scoped sequence index and
+returns adaptive whole-row pages within the native 4,000-character budget.
+`afterSequence`, `nextAfterSequence` and `throughSequence` describe only the
+sequenced metadata range. Preserve the first upper bound on continuation; later
+appends are outside it. This is not a stored snapshot of historical payloads.
+
+Each metadata row has its exact activity ID and a `get_workroom` detail call.
+The response states `payloadsDelivered: false`. Shortened or deferred summary
+text is marked and has a summary detail call. Exact identity never becomes a
+display prefix. A missing sequence returns an incomplete, unadvanced range;
+nullable legacy rows are reported explicitly and are outside sequence coverage.
+An empty sequenced range does not prove there are no legacy rows.
+
+An exact `activityId` selects a row only in the requested room. `activityField`
+selects payload (default) or summary; bounded `payloadPath` elements select an
+object field or array element using parameterized PostgreSQL JSON extraction.
+The database returns a selected value only below 2,048 serialized UTF-8 bytes,
+then the complete envelope must also fit. JSON null differs from an absent path.
+This delivers the selected value, never a claim of a complete activity receipt.
+The selected structure remains ordinary JSON through the existing classifier,
+context-mask and hidden-Unicode boundary. No base64 or raw string-fragment
+encoding can hide it from that boundary.
+
+Before claiming completeness, compare the decoded value's serialized JSON with
+the original selected JSONB using PostgreSQL semantic equality. The original
+text is bounded by the same 2,048-byte limit, remains internal, and never replaces
+the typed outward value. Numeric rounding, overflow or underflow causes an
+explicit refusal with no delivered value or cursor advance. Recheck current
+content admission after this comparison. This also applies to nested numbers.
+
+Current canonical content admission is checked before and after each activity
+read, using the existing human/assistant resolver. Normal tool grants remain
+required. No cursor, ID, archived ownership field or source SHA grants access.
+Each reader runs its queries in one read-only, five-second transaction, with a four-second
+statement timeout. Metadata has bounded row count and field transfer; selected
+detail has a bounded application transfer. PostgreSQL may detoast/materialize a
+large JSON value while evaluating its size: these limits do **not** establish a
+small fixed database-memory bound for arbitrary historical payloads.
+
+The shared result-budget boundary preserves typed refusals and rejects oversized
+activity envelopes instead of emitting a successful-looking JSON prefix. This
+refactors the common native/external seam rather than adding client-specific
+truncation. Global caps are unchanged. No database model, copied evidence,
+artifact lifecycle, tool name or grant is introduced.
+
+Research follows PostgreSQL's documented [JSON extraction and null semantics](https://www.postgresql.org/docs/current/functions-json.html)
+and [statement timeouts](https://www.postgresql.org/docs/current/runtime-config-client.html).
+The existing [MCP pagination](https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/pagination)
+reference governs protocol lists; this custom history reader keeps its existing
+numeric sequence contract and explicitly names the narrower coverage. Earlier
+list observations and their signed cursors retain their existing implementation.
+Kernel consultation DI-F5BBBE894112 had insufficient signal and zero scoring
+contributions; it is not architectural approval. The existing admitted case and
+baseline own this bounded repair; no new substrate decision is inferred.
+
+This slice does not enumerate nullable legacy rows or stream oversized scalar
+values. Such values remain intact and explicitly undelivered; an oversized scalar
+refusal must not direct repeated impossible narrower reads. Complete legacy and
+arbitrary-scalar delivery, real PostgreSQL checks, protected publication,
+containing deployment and actual supported-client acceptance remain owed.

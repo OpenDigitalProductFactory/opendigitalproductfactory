@@ -168,8 +168,14 @@ dpf_state_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi
 }
 
+# fsync this file only. A bare sync flushes every filesystem and wedges a
+# FUSE-mounted Docker Desktop worktree. Node is already required.
 dpf_state_flush_file() {
-  if command -v python3 >/dev/null 2>&1; then python3 -c 'import os,sys; f=open(sys.argv[1],"r+b"); os.fsync(f.fileno()); f.close()' "$1"; else sync; fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import os,sys; f=open(sys.argv[1],"r+b"); os.fsync(f.fileno()); f.close()' "$1"
+  else
+    node -e 'const fs=require("node:fs");const fd=fs.openSync(process.argv[1],"r+");try{fs.fsyncSync(fd)}finally{fs.closeSync(fd)}' -- "$1"
+  fi
 }
 
 dpf_state_commit_candidate() {

@@ -20,7 +20,7 @@ import type { QueueTelemetryRow } from "@/lib/queue/queue-metrics-rollup";
 import { computePortfolioFlow, FLOW_WINDOW_DAYS, type PortfolioFlow } from "./portfolio-flow";
 import { loadRoomAiUse } from "./room-ai-spend.server";
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
-import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
+import { getWorkShape, getWorkShapeVersion, listWorkShapes, type WorkShapeDefinition } from "./work-shapes";
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
 import { computeFlowReviewHistory, liveStageHolds, type FlowReviewHistory } from "./flow-review-receipt";
 import { computeShapeStepMeasures, typicalStepWaitMs, type ShapeStepMeasures, type StepSnapshot } from "./shape-step-measures";
@@ -211,4 +211,33 @@ export async function loadShapeFlowView(input: {
   });
 
   return { model, versions, roomsAtStep, stepMeasures, reviews, reviewEveryDays: definition.reviewPoint.everyDays };
+}
+
+/**
+ * The flow reviews of every current shape version with stage data, newest
+ * first: what the daily flow review records and escalates (BI-3EC4722F). The
+ * latest review's cause reads every live room on the version, as in the
+ * drill-in.
+ */
+export async function loadCurrentFlowReviews(now: Date = new Date()): Promise<{ definition: WorkShapeDefinition; shapeRef: string; history: NonNullable<FlowReviewHistory> }[]> {
+  const rooms = await loadRooms();
+  const out: { definition: WorkShapeDefinition; shapeRef: string; history: NonNullable<FlowReviewHistory> }[] = [];
+  for (const definition of listWorkShapes()) {
+    const shapeRef = `${definition.key}@${definition.version}`;
+    const snapshots = await prisma.queueMetricSnapshot.findMany({
+      where: { queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` } },
+      select: { queueKey: true, period: true, depth: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
+    });
+    if (snapshots.length === 0) continue;
+    const history = computeFlowReviewHistory({
+      shapeRef,
+      stages: definition.stages.map((stage) => ({ key: stage.key, title: stage.title })),
+      snapshots,
+      everyDays: definition.reviewPoint.everyDays,
+      liveHolds: liveStageHolds(rooms.filter((room) => room.shapeRef === shapeRef)),
+      now,
+    });
+    if (history) out.push({ definition, shapeRef, history });
+  }
+  return out;
 }

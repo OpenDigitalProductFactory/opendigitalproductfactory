@@ -46,15 +46,24 @@ function mutatesGitState([command, args]) {
   return command === "git" && MUTATING_GIT_COMMANDS.has(args[0]);
 }
 
+function fetchesReadinessBase([command, args]) {
+  // This exact CI setup is already performed before readiness resolves main.
+  // Other fetches may obtain independent evidence and must remain in the plan.
+  return command === "git" && args.join("\0") === ["fetch", "--no-tags", "--quiet", "origin", "main"].join("\0");
+}
+
 export function buildGatePlan({
   prBody = "",
   prLabelsJson = "[]",
   profiles = POLICY_GUARD_PROFILES,
   changeScope = null,
   publishedCorrection = false,
+  baseSha = "origin/main",
+  headSha = "HEAD",
 } = {}) {
   const env = {
-    BASE_SHA: "origin/main",
+    BASE_SHA: baseSha,
+    HEAD_SHA: headSha,
     PR_BODY: prBody,
     PR_LABELS_JSON: prLabelsJson,
     GITHUB_EVENT_NAME: "pull_request",
@@ -69,10 +78,13 @@ export function buildGatePlan({
       // and by the exact-tree local-CI gate.
       if (entry.commands.some(mutatesGitState)) return [];
 
-      const commands = entry.commands.filter((command) => !isPolicyGuardSelfTest(command));
+      // Fetch once before resolving the run's source; a profile's CI setup must
+      // not move a shared ref midway through this already-pinned host plan.
+      const commands = entry.commands.filter((command) => !isPolicyGuardSelfTest(command)
+        && !fetchesReadinessBase(command));
       return commands.map((command, index) => ({
         name: commands.length === 1 ? entry.name : `${entry.name} (${index + 1}/${commands.length})`,
-        command,
+        command: [command[0], command[1].map((arg, index) => arg === "origin/main" && command[1][index - 1] === "--merge-with" ? baseSha : arg), ...command.slice(2)],
         env,
       }));
     }),
@@ -269,7 +281,7 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
     passed,
     changedFiles,
     branch: repo?.publishedRef && repo?.publishedRefMatchesHead ? repo.publishedRef : (repo?.branch ?? "(unknown)"),
-    base: "origin/main",
+    base: repo?.baseSha ?? "origin/main",
     mergeBase: repo?.mergeBases?.[0] ?? null,
     gateContext,
   };

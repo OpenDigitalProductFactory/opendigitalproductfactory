@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/components/attention/CoworkerEnvelopeApproval.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "held",
+    "measured": {
+      "/workspace/inbox": {
+        "defaultVisibleWords": 413,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  }
+}

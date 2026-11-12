@@ -106,3 +106,13 @@ describe("bounded original approval action evidence", () => {
     expect(await f.read()).toMatchObject({ state: "unsupported" });
   });
 });
+
+it("preserves unsupported-operation classification even when its result is malformed", async () => {
+  const f = fixture();
+  f.run.parameters.operation = "activate";
+  const changed = fingerprintCoworkerInput(f.run.parameters);
+  f.envelope.inputFingerprint = changed;
+  f.envelope.argsJson.approvalBinding.inputFingerprint = changed;
+  f.run.result.success = false;
+  expect(await f.read()).toEqual({ state: "unsupported", reason: "operation-unsupported" });
+});

@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { captureMaintenanceEpoch, finishMaintenanceEpoch, persistMaintenanceEpoch } from './promoter-epoch-evidence.mjs';
+import { captureMaintenanceEpoch, finishMaintenanceEpoch, persistMaintenanceEpoch,
+  resolveEpochDockerInvocation, runEpochDocker } from './promoter-epoch-evidence.mjs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -33,6 +34,20 @@ function harness() {
 const captureAt = new Date('2026-10-16T01:00:00.000Z');
 const finishAt = new Date('2026-10-16T01:02:00.000Z');
 describe('canonical promoter retirement observation', () => {
+  it('routes Docker through the existing host command adapter without a shell', async () => {
+    const env = { DPF_DOCKER_BIN: process.execPath, DPF_DOCKER_PREFIX_ARGS: JSON.stringify(['fixture.mjs']) };
+    assert.deepEqual(resolveEpochDockerInvocation(['image', 'inspect'], env),
+      { command: process.execPath, args: ['fixture.mjs', 'image', 'inspect'] });
+    let observed;
+    assert.equal(await runEpochDocker(['info'], { env, execute: async (command, args, options) => {
+      observed = { command, args, options }; return { stdout: 'adapter-output' };
+    } }), 'adapter-output');
+    assert.equal(observed.command, process.execPath);
+    assert.deepEqual(observed.args, ['fixture.mjs', 'info']);
+    assert.equal(observed.options.encoding, 'utf8');
+    assert.throws(() => resolveEpochDockerInvocation([], { DPF_DOCKER_PREFIX_ARGS: '{bad' }),
+      /maintenance_epoch_observation_unavailable/);
+  });
   it('places observations around the actual canonical replacement and skips incomplete refresh', async () => {
     const script = await readFile(new URL('./promote.sh', import.meta.url), 'utf8');
     assert(script.indexOf('--phase capture') < script.indexOf('emit_step docker-up'));
@@ -78,4 +93,76 @@ describe('canonical promoter retirement observation', () => {
       await assert.rejects(finishMaintenanceEpoch({ baseline, secret, expected: identity, runDocker: h.runDocker, now: finishAt }));
     });
   }
+});
+
+
+describe('scope writer actuator observations', () => {
+  it('keeps unknown or malformed probe failures distinct from positive legacy absence', async () => {
+    const { classifyInitialScopeEpochFallback } = await import('./promoter-epoch-evidence.mjs');
+    const image = 'sha256:' + 'a'.repeat(64);
+    const runner = absent => async args => {
+      if (args[0] === 'image') return image;
+      if (args.includes('--eval')) { if (!absent) throw new Error('contract present or unavailable'); return 'legacy-scope-epoch-absent'; }
+      if (args[0] === 'rm') return '';
+      return '{}';
+    };
+    await assert.rejects(classifyInitialScopeEpochFallback({ image, runDocker: runner(false) }), /scope_writer_fallback_unproven/);
+    assert.deepEqual(await classifyInitialScopeEpochFallback({ image, runDocker: runner(true) }), { kind: 'initial-legacy', image });
+  });
+});
+
+
+import { inspectScopeEpochWriters } from "../apps/web/lib/work-capsules/scope-epoch-writer-probe.mjs";
+import * as scopeWriterContract from "../apps/web/lib/work-capsules/scope-epoch-contract.ts";
+const scopeProbeFixture = () => ({ root: "/packaged", loadContract: async () => scopeWriterContract,
+  readFile: async path => Buffer.from(path.endsWith(".dpf-image-version") ? "a".repeat(40)
+    : path.endsWith(".dpf-source-content-hash") ? "b".repeat(64) : `packaged source ${path}`) });
+it("reports every declared writer's bytes independently of reassessment owners", async () => {
+  const proof = await inspectScopeEpochWriters(scopeProbeFixture());
+  assert.equal(proof.version, 1); assert.equal(proof.sourceSha, "a".repeat(40));
+  assert.deepEqual(Object.keys(proof.writers), [...scopeWriterContract.SCOPE_EPOCH_WRITER_PATHS]);
+  assert.ok(Object.values(proof.writers).every(hash => /^[a-f0-9]{64}$/.test(hash)));
+  assert.equal(proof.owners, undefined);
+});
+it("a missing packaged writer is unknown, never a partial compatible report", async () => {
+  const f = scopeProbeFixture(), read = f.readFile;
+  f.readFile = async path => { if (path.endsWith("scope-release-preflight.ts")) throw new Error("missing"); return read(path); };
+  await assert.rejects(inspectScopeEpochWriters(f), /scope_writer_probe_evidence_unavailable/);
+});
+it("rejects malformed source identity", async () => {
+  const f = scopeProbeFixture(), read = f.readFile;
+  f.readFile = async path => path.endsWith(".dpf-image-version") ? Buffer.from("unknown") : read(path);
+  await assert.rejects(inspectScopeEpochWriters(f), /scope_writer_probe_identity_invalid/);
+});
+
+it("canonical shell candidate check refuses incompatible portal bytes independently", async () => {
+  const { readFile } = await import("node:fs/promises"), { spawnSync } = await import("node:child_process");
+  const source = await readFile(new URL("./promote.sh", import.meta.url), "utf8");
+  const start = source.indexOf("# scope-writer-compatibility-begin"), end = source.indexOf("# scope-writer-compatibility-end");
+  assert.ok(start >= 0 && end > start, "the actual promoter must contain its separate scope writer check");
+  const block = source.slice(start, end);
+  const proof = await inspectScopeEpochWriters(scopeProbeFixture());
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises"), { tmpdir } = await import("node:os"), { join } = await import("node:path");
+  const { existsSync } = await import("node:fs");
+  const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
+  const bash = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
+  const dir = await mkdtemp(join(tmpdir(), "dpf-scope-shell-"));
+  const dockerFixture = join(dir, "docker.mjs");
+  await writeFile(dockerFixture, `const command = process.argv[2];
+if (command === "image") process.stdout.write("sha256:${"c".repeat(64)}\\n");
+else if (command === "run") process.stdout.write(process.env.SCOPE_REPORT ?? "");
+else if (command !== "rm") process.exitCode = 77;
+`);
+  const { fileURLToPath } = await import("node:url");
+  const scripts = fileURLToPath(new URL(".", import.meta.url));
+  const shell = `_promoter_dir='${scripts.replaceAll("'", "'\\''")}'\n${block}\n_assert_scope_writer_image 'sha256:${"c".repeat(64)}' '${proof.sourceSha}'`;
+  try {
+  for (const [label, report, expected] of [["compatible", proof, 0], ["old", { ...proof, version: 0 }, 78],
+    ["wrong source", { ...proof, sourceSha: "d".repeat(40) }, 78]]) {
+    const result = spawnSync(bash, ["-c", shell], { encoding: "utf8", timeout: 5000,
+      env: { ...process.env, DPF_DOCKER_BIN: process.execPath,
+        DPF_DOCKER_PREFIX_ARGS: JSON.stringify([dockerFixture]), SCOPE_REPORT: JSON.stringify(report) } });
+    assert.equal(result.status, expected, `${label}: ${result.stderr}`);
+  }
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

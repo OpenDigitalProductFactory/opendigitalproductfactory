@@ -663,11 +663,10 @@ describe("naming a domain is not evidence of a record in it (BI-67CAF494)", () =
     expect(ask("His SSN is required for the filing.").overallSensitivity).toBe("restricted");
   });
 
-  it("escalates when two DISTINCT domain words corroborate each other", () => {
-    // One domain word is a subject; two independent ones start to look like a
-    // payload. The corroboration bar is unchanged.
+  it("does not treat payroll plus a bare invoice topic as a payment record", () => {
     const result = ask("Reconcile the payroll against the invoice.");
-    expect(result.overallSensitivity).toBe("restricted");
+    expect(result.overallSensitivity).toBe("confidential");
+    expect(result.dataEvidencedClasses).not.toContain("payments-finance");
   });
 
   it("does not let one word corroborate itself across two rules", () => {
@@ -685,5 +684,98 @@ describe("naming a domain is not evidence of a record in it (BI-67CAF494)", () =
     // Suppressed for routing, never hidden from audit.
     const result = ask("Please review the payroll tax acquisition design.");
     expect(result.dataClasses).toContain("employee-records");
+  });
+});
+
+describe("invoice vocabulary is not a payment record (BI-12CD3010)", () => {
+  const classify = (content: string) => classifyInferencePayload({
+    messages: [{ role: "user", content }], systemPrompt: "", taskType: "build-review",
+  });
+
+  it.each([
+    "A build coworker adding an Invoice table chooses DECIMAL(12,2) or integer cents.",
+    "Invoice: table schema; Invoice = document type; Invoice - example table.",
+    "Compensation requires its own authority after rollback. Review the Invoice schema design.",
+    "Invoice table uses integer cents.\n\nRelease date: 2026-11-01. Budget $125.00.",
+    "Invoice schema version 125 SDK describes a document type.",
+    "Release date: 2026-11-01. Budget $125.00.\n\nInvoice table uses integer cents.",
+    "Discuss credential permissions, governance, invoice matching and sensitive domains.",
+    "The field names password, apiKey, invoice and payment describe the schema.",
+  ])("does not infer a payment record from documentation: %s", (content) => {
+    const result = classify(content);
+    expect(result.dataClasses).not.toContain("payments-finance");
+    expect(result.overallSensitivity).not.toBe("restricted");
+  });
+
+  it.each([
+    "Invoice: INV-1042\nAmount: $125.00.",
+    "Invoice=INV-1042",
+    "Invoice INV_1042",
+    "Invoice $125.00",
+    "Invoice: EUR 125.00",
+    "Invoice number INV_1042",
+    "Invoice # INV-1042",
+    "Invoice$125.00",
+    "Invoice - INV_1042",
+    "Invoice due date: 2026-11-01",
+    "Invoice for 125.00 USD",
+    "Invoice total: -125.00 USD",
+    "Invoice from Acme for $125.00",
+    "Invoice total: -125.00",
+    "Invoice \"INV-1042\" is overdue.",
+    "Invoice: (INV_1042)",
+    "Invoice for (125.00 EUR)",
+    "Invoice\nDue date: 2026-11-01\nAmount: 125.00 USD",
+    "Invoice dated October 25, 2026",
+    "Invoice for 125.00 CAD",
+    "Invoice for ₹125.00",
+    "Invoice for 125.00 €",
+    "Invoice from Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor for $125.00",
+    "Please pay $125.00 for this invoice.",
+    "Amount: $125.00\nInvoice",
+    "Due date: 2026-11-01\nInvoice",
+    "Invoice INV-1042 is overdue.",
+    "Invoice INV1042 is overdue.",
+    "Invoice A-1042 is overdue.",
+    "Invoice no. 1042 is payable.",
+    "Invoice dated 2026-10-25.",
+    "Invoice due on 2026-11-01.",
+    "Invoice for USD 125.00.",
+    "Invoice total EUR 125.00.",
+    "Invoice #1042 is payable.",
+    "Invoice amount: $125.00.",
+    "Invoice for $125.00 from the vendor.",
+    "Invoice total is 125.00.",
+    "Invoice number: private-reference",
+  ])("keeps actual invoice details restricted: %s", (content) => {
+    const result = classify(content);
+    expect(result.dataEvidencedClasses).toContain("payments-finance");
+    expect(result.overallSensitivity).toBe("restricted");
+    expect(JSON.stringify(result)).not.toContain(content);
+  });
+
+  it("does not exempt protected content embedded beside an illustrative schema", () => {
+    const secretCanary = ["sk", "fixture", "1234567890abcdef"].join("-");
+    for (const privateValue of [
+      "Employee salary is 125000.",
+      "Invoice INV-1042 amount: $125.00.",
+      "Customer: pat@example.com.",
+      secretCanary,
+    ]) {
+      const result = classify("Public repository schema example: Invoice table. " + privateValue);
+      expect(result.dataEvidencedClasses.length).toBeGreaterThan(0);
+      expect(result.overallSensitivity).not.toBe("internal");
+      expect(JSON.stringify(result)).not.toContain(privateValue);
+    }
+  });
+
+  it("retains authoritative classification even when no value detector matches", () => {
+    const result = classifyInferencePayload({
+      messages: [{role: "user", content: "Invoice schema."}], systemPrompt: "",
+      governedData: [{classificationKnown: true, sensitivity: "restricted",
+        dataClasses: ["payments-finance"]}],
+    });
+    expect(result.overallSensitivity).toBe("restricted");
+    expect(result.dataEvidencedClasses).toContain("payments-finance");
   });
 });

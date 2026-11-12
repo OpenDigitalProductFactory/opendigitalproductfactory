@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ guard: vi.fn(), progress: vi.fn(), firstRun: vi.fn(), create: vi.fn(), update: vi.fn(), finalize: vi.fn() }));
+const mocks = vi.hoisted(() => ({ guard: vi.fn(), progress: vi.fn(), firstRun: vi.fn(), create: vi.fn(), update: vi.fn(), finalize: vi.fn(), monitoringDecision: vi.fn(async () => null) }));
 vi.mock("@dpf/db", () => ({ prisma: { platformSetupProgress: { updateMany: mocks.update } } }));
+vi.mock("@/lib/platform-runtime/monitoring-switch-loader", () => ({ loadMonitoringCapabilityDecision: mocks.monitoringDecision }));
 vi.mock("@/lib/actions/shared/guards", () => ({ requireCapability: mocks.guard }));
 vi.mock("./setup-progress", () => ({ getSetupProgress: mocks.progress, isFirstRun: mocks.firstRun, createSetupProgress: mocks.create }));
 vi.mock("@/lib/onboarding/setup-progress-service.server", () => ({ finalizeSetupCompletion: mocks.finalize }));
@@ -12,7 +13,7 @@ describe("provider selection setup", () => {
     expect(await getProviderAccountSetupState()).toEqual({ showCatalog: true });
     expect(await completeProviderAccountSetup()).toEqual({ ok: true });
     expect(mocks.update).toHaveBeenCalledWith({ where: { id: "setup-one", updatedAt: progress.updatedAt, completedAt: null },
-      data: { currentStep: "business-context", steps: { "account-bootstrap": "completed", "business-context": "pending", "ai-providers": "completed" } } });
+      data: { currentStep: "business-context", steps: { "account-bootstrap": "completed", "business-context": "pending", "ai-providers": "completed", monitoring: "skipped" } } });
     expect(mocks.finalize).not.toHaveBeenCalled();
     mocks.progress.mockResolvedValue({ ...progress, steps: { ...progress.steps, "ai-providers": "completed" } });
     expect(await getProviderAccountSetupState()).toEqual({ showCatalog: false });

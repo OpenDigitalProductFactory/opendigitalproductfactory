@@ -87,6 +87,8 @@ export function RoomWorkforcePanel({
   matched,
   partial,
   coordination,
+  recordedBlocker,
+  failedHandoffRecovery,
 }: {
   accountability: EffectiveHumanAccountability;
   accountableDisplayName: string | null;
@@ -94,6 +96,8 @@ export function RoomWorkforcePanel({
   matched: number;
   partial: boolean;
   coordination?: NestedRoomCoordination | null;
+  recordedBlocker?: Parameters<typeof NestedRoomCoordinationPanel>[0]["recordedBlocker"];
+  failedHandoffRecovery?: Parameters<typeof NestedRoomCoordinationPanel>[0]["failedHandoffRecovery"];
 }) {
   const shown = groups.reduce(
     (total, group) => total + group.members.length + (group.parent ? 1 : 0),
@@ -147,7 +151,7 @@ export function RoomWorkforcePanel({
           ) : null}
         </>
       )}
-      {coordination ? <NestedRoomCoordinationPanel coordination={coordination} /> : null}
+      {coordination || recordedBlocker || failedHandoffRecovery ? <NestedRoomCoordinationPanel coordination={coordination ?? null} recordedBlocker={recordedBlocker} failedHandoffRecovery={failedHandoffRecovery} /> : null}
     </Surface>
   );
 }

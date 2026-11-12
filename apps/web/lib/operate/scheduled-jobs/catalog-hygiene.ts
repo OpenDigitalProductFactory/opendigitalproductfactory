@@ -41,6 +41,19 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     runNowEvent: null,
   },
   {
+    jobId: "subscription-oauth-renewal",
+    inngestId: "ops/subscription-oauth-renewal",
+    honorsEnabledGate: true,
+    name: "Subscription sign-in renewal",
+    purpose:
+      "Renews subscription AI sign-ins (Claude, ChatGPT/Codex) before they expire and retries a failed renewal with backoff (BI-A53C594E). If it stops, a subscription goes dark after its token lapses until someone opens the provider page.",
+    cron: "*/10 * * * *",
+    cadence: "Every 10 min",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "legacy-proposal-expiry-sweep",
     inngestId: "ops/legacy-proposal-expiry-sweep",
     honorsEnabledGate: true,
@@ -49,6 +62,19 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
       "Expires legacy coworker action proposals left undecided past the approval lifetime (BI-753D69A9). Status change only; nothing runs and no row is deleted.",
     cron: "17 4 * * *",
     cadence: "Daily at 04:17",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "backlog-outcome-reconcile",
+    inngestId: "ops/backlog-outcome-reconcile",
+    honorsEnabledGate: true,
+    name: "Backlog outcome reconcile",
+    purpose:
+      "Gives every open backlog item an outcome (lifted from its body, or a derived draft marked derived), at most 250 per run, and records reopens and failing evidence as regressed or not achieved against the item's own outcome (BI-8DE5429B). Fills empty fields only; never overwrites an outcome.",
+    cron: "41 * * * *",
+    cadence: "Hourly at :41",
     category: "core",
     tracksRunData: false,
     runNowEvent: null,
@@ -98,9 +124,9 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     inngestId: "ops/worktree-janitor",
     ungatedReason:
       "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
-    name: "Worktree janitor fleet backstop (Tier-A)",
+    name: "Worktree janitor (Tier-A)",
     purpose:
-      "OPTIONAL fleet sweeper for leftover worktrees. Primary reaping is session-lifecycle (worktree-session-hygiene on SessionEnd). This portal Inngest job dry-runs when DPF_WORKTREE_JANITOR_ENABLED=1; live Tier-A only with DPF_WORKTREE_JANITOR_AUTO_REAP=1. Not a per-client CLI cron.",
+      "The platform-owned worktree reaper. It runs here on the portal, with no AI client required; client session hooks only accelerate it. Observes when DPF_WORKTREE_JANITOR_ENABLED=1 and reaps Tier-A only above DPF_WORKTREE_JANITOR_MAX or with DPF_WORKTREE_JANITOR_AUTO_REAP=1. Every live run follows an observation and stays an observation when liveness is unreadable.",
     cron: "40 5 * * *",
     cadence: "Daily at 05:40",
     category: "core",

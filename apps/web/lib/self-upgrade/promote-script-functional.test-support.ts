@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { copyFileSync, existsSync, mkdtempSync, writeFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { SCOPE_EPOCH_WRITER_PATHS } from "../work-capsules/scope-epoch-contract";
 
 // Shared harness for the promote.sh functional suites: a real Git repo, a fake
 // `docker` + `curl` on PATH, and the signed install-state envelope the script
@@ -22,6 +23,18 @@ export const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).stat
 // real repo and a fake docker, which costs 11-25 s on Windows and over 30 s
 // when vitest runs two of these files side by side. A hung promote still fails.
 export const PROMOTE_TEST_TIMEOUT_MS = 120_000;
+
+export function reassessmentCapabilityFixture(sourceSha: string): string {
+  return JSON.stringify({ schemaVersion: 1, sourceSha, sourceContentHash: "a".repeat(64), contractSha256: "b".repeat(64),
+    owners: Object.fromEntries(["transport", "approval", "worker", "writer"].map(owner => [owner, { version: 2, sourceSha256: "e".repeat(64) }])) });
+}
+
+/** Explicit compatible observation for fake Docker; not a real image proof. */
+export function scopeWriterCapabilityFixture(sourceSha: string): string {
+  return JSON.stringify({ schemaVersion: 1, version: 1, sourceSha,
+    sourceContentHash: "a".repeat(64), contractSha256: "b".repeat(64),
+    writers: Object.fromEntries(SCOPE_EPOCH_WRITER_PATHS.map(path => [path, "e".repeat(64)])) });
+}
 
 let bashDrivePrefix: string | undefined;
 
@@ -43,6 +56,32 @@ export function toBashPath(value: string): string {
 
 export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+const NODE_DOCKER_ADAPTER = "docker-node-adapter.mjs";
+
+/** Windows Git Bash rewrites brace-bearing argv (for example `{{.Id}}`).
+ * Keep production on execFile, but let fixtures reconstruct one fully quoted
+ * Bash command after native Node has received the original Docker argv. */
+export function writeNodeDockerAdapter(fakeBin: string, bashCommand = BASH_COMMAND, bashDockerPath = toBashPath(join(fakeBin, "docker"))): void {
+  if (process.platform !== "win32") return;
+  writeFileSync(join(fakeBin, NODE_DOCKER_ADAPTER), `import { spawnSync } from "node:child_process";
+const bash = ${JSON.stringify(bashCommand)};
+const script = ${JSON.stringify(bashDockerPath)};
+const quote = (value) => "'" + value.replaceAll("'", "'\\\\''") + "'";
+const command = "exec " + [script, ...process.argv.slice(2)].map(quote).join(" ");
+const result = spawnSync(bash, ["-lc", command], { stdio: "inherit" });
+process.exit(result.status ?? 1);
+`);
+}
+
+export function nodeDockerAdapterExports(fakeBin: string): string[] {
+  if (process.platform !== "win32") return [];
+  const adapterPath = join(fakeBin, NODE_DOCKER_ADAPTER).replaceAll("\\", "/");
+  return [
+    "export DPF_DOCKER_BIN=node",
+    `export DPF_DOCKER_PREFIX_ARGS=${shellQuote(JSON.stringify([adapterPath]))}`,
+  ];
 }
 
 /** Park a `docker images` fixture on disk so the shim can `cat` it. */
@@ -98,6 +137,15 @@ done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 # Operation and format are argv fields, never substrings of a temporary path.
 case "\${1-}" in
+  run)
+    probe_path=
+    for probe_path in "$@"; do :; done
+    if [ "$probe_path" = /app/apps/web-src/lib/work-capsules/scope-epoch-writer-probe.mjs ]; then
+      [ -n "\${DPF_TEST_SCOPE_WRITER_REPORT:-}" ] || exit 78
+      printf '%s' "$DPF_TEST_SCOPE_WRITER_REPORT"
+      exit 0
+    fi
+    ;;
   create) printf "candidate-container"; exit 0 ;;
   rm) printf 'reconcile-remove %s\\n' "$*" >> "$DOCKER_LOG"; exit 0 ;;
   cp)
@@ -125,7 +173,7 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
         [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = uninspectable ] && exit 1
         if [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = build-compatibility ] && [ "$inspect_target" = bi547-source-check-sandbox ]; then exit 1; fi
         printf 'sha256:sandbox-target'
-      else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}"; fi
+      else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-\${DPF_TEST_RELEASE_CONFIG_DIGEST:-sha256:${"c".repeat(64)}}}"; fi
       exit 0 ;;
     "{{range .RepoDigests}}{{println .}}{{end}}")
       printf "%s@%s\\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}"; exit 0 ;;
@@ -136,6 +184,10 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
   esac
 fi
 case "$*" in
+  *"/app/scripts/reassessment-capability-probe.mjs"*)
+    [ -n "\${DPF_TEST_REASSESSMENT_REPORT:-}" ] || exit 78
+    printf '%s' "$DPF_TEST_REASSESSMENT_REPORT"
+    ;;
   *"ps -q sandbox"*) printf 'sandbox-container' ;;
   *"config --images sandbox"*)
     case "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" in
@@ -217,13 +269,16 @@ case "$*" in
       printf "not-needed"
     fi
     ;;
-  *"up -d --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
+  *"up -d --no-build --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
     case "$*" in *"force-recreate sandbox"*) [ "\${DPF_TEST_SANDBOX_RECREATE_FAILS:-0}" = "1" ] && exit 1 ;; esac
     service=
     for service in "$@"; do :; done
     effective_state_dir="$(sed -n 's/^DPF_STATE_DIR=//p' "$env_file" | tail -n 1)"
     printf 'recreate service=%s DPF_STATE_DIR=%s DPF_PROMOTER_STATE_DIR=%s DPF_STATE_DIR_HOST=%s mount_source=%s\\n' \
       "$service" "\${DPF_STATE_DIR-<unset>}" "\${DPF_PROMOTER_STATE_DIR-<unset>}" "$effective_state_dir" "$effective_state_dir" >> "$DOCKER_LOG"
+    dispatch="\${DPF_REMOTE_ACTION_DISPATCH_ENABLED-}"
+    if [ "\${DPF_REMOTE_ACTION_DISPATCH_ENABLED+x}" != x ]; then dispatch="$(sed -n 's/^DPF_REMOTE_ACTION_DISPATCH_ENABLED=//p' "$env_file" | tail -n 1 | tr -d \"\\\"'\\r\")"; fi
+    printf 'dispatch service=%s value=%s process_present=%s\\n' "$service" "\${dispatch:-0}" "\${DPF_REMOTE_ACTION_DISPATCH_ENABLED+x}" >> "$DOCKER_LOG"
     ;;
   *"ps -a --services"*)
     # Services this fake install has ever created (any state). Empty by default.
@@ -255,6 +310,10 @@ exit 0
   );
   chmodSync(join(bin, "docker"), 0o755);
   chmodSync(join(bin, "curl"), 0o755);
+  // Bind timed commands to this companion shim even if the caller changes PATH.
+  writeFileSync(join(bin, "timeout"), '#!/bin/sh\n[ "$1" = "-k" ] || exit 64\nshift 3\n[ "$1" = "docker" ] || exit 64\nshift\nexec "$(dirname "$0")/docker" "$@"\n');
+  chmodSync(join(bin, "timeout"), 0o755);
+  writeNodeDockerAdapter(bin);
   return bin;
 }
 
@@ -264,7 +323,12 @@ export function runPromote(opts: {
   backup: string;
   targetSha: string;
   fakeBin: string;
+  /** Explicit fake observation; empty or malformed input exercises refusal. */
+  scopeWriterReport?: string;
   composeEnvFile?: string;
+  dispatchOverride?: string;
+  configuredOverride?: string;
+  dryRun?: boolean;
   dockerLog?: string;
   recoveryDecision?: "recover" | "not-needed" | "blocked";
   activityRecoveryDecision?: "recover" | "not-needed" | "blocked";
@@ -331,13 +395,18 @@ export function runPromote(opts: {
   if (opts.existingServices) writeFileSync(inventoryPath, opts.existingServices.join("\n"));
   const exports = [
     "unset DPF_STATE_DIR",
+    opts.dispatchOverride === undefined ? "unset DPF_REMOTE_ACTION_DISPATCH_ENABLED" : `export DPF_REMOTE_ACTION_DISPATCH_ENABLED=${shellQuote(opts.dispatchOverride)}`,
+    opts.configuredOverride === undefined ? "unset DPF_EDGE_ACTION_DISPATCH_CONFIGURED" : `export DPF_EDGE_ACTION_DISPATCH_CONFIGURED=${shellQuote(opts.configuredOverride)}`,
     // promote.sh writes `git config --global`; confine it to a scratch file so
     // a test run never rewrites the developer's real ~/.gitconfig (BI-249EEA02).
     `export GIT_CONFIG_GLOBAL=${shellQuote(toBashPath(join(opts.backup, "gitconfig")))}`,
     `export PATH=${shellQuote(toBashPath(opts.fakeBin))}:"$PATH"`,
+    ...nodeDockerAdapterExports(opts.fakeBin),
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
     ...(opts.installRoot ? [`export PROMOTE_INSTALL_ROOT=${shellQuote(toBashPath(opts.installRoot))}`] : []),
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
+    `export DPF_TEST_REASSESSMENT_REPORT=${shellQuote(reassessmentCapabilityFixture(opts.targetSha))}`,
+    `export DPF_TEST_SCOPE_WRITER_REPORT=${shellQuote(opts.scopeWriterReport ?? scopeWriterCapabilityFixture(opts.targetSha))}`,
     `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
     `export DPF_PROMOTER_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
     `export DPF_RUNTIME_TRANSITION_SECRET_FILE=${shellQuote(toBashPath(secretPath))}`,
@@ -376,10 +445,8 @@ export function runPromote(opts: {
       ? [`export PROMOTE_COMPOSE_ENV_FILE=${shellQuote(toBashPath(opts.composeEnvFile))}`]
       : []),
     ...(opts.dockerLog ? [`export DOCKER_LOG=${shellQuote(toBashPath(opts.dockerLog))}`] : []),
-    // Through a file, not the environment: a backlog-sized list is thousands of
-    // characters and the `bash -lc` payload truncates mid-quote well before the
-    // sweep runs (BI-A5FFE7A7). A file also matches how the real `docker images`
-    // output reaches the loop — a stream of lines.
+    // Keep a backlog-sized list out of the generated runner and environment.
+    // A file also matches how real `docker images` output reaches the loop.
     ...(opts.portalVersionTags ? [`export DPF_TEST_PORTAL_VERSION_TAGS_FILE=${shellQuote(toBashPath(writeTagFixture(opts.backup, opts.portalVersionTags)))}`] : []),
     ...(opts.imagesInUse ? [`export DPF_TEST_IMAGES_IN_USE=${shellQuote(opts.imagesInUse.join("\n"))}`] : []),
     ...(opts.imageKeep !== undefined ? [`export PROMOTE_IMAGE_KEEP=${opts.imageKeep}`] : []),
@@ -407,7 +474,12 @@ export function runPromote(opts: {
       "export PROMOTE_COMPOSE_FILES='docker-compose.yml docker-compose.release.yml'",
     ] : []),
   ];
-  const r = spawnSync(BASH_COMMAND, ["-lc", `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade`], {
+  // Windows truncates a long `bash -lc <payload>` command before Bash sees it,
+  // often in the middle of a quoted release variable. Put the exact script on
+  // disk and pass only its path across the native process boundary.
+  const runner = join(opts.backup, "promote-functional-runner.sh");
+  writeFileSync(runner, `${exports.join("\n")}\nexec bash ${shellQuote(toBashPath(SCRIPT))} --self-upgrade${opts.dryRun ? " --dry-run" : ""}\n`);
+  const r = spawnSync(BASH_COMMAND, [toBashPath(runner)], {
     encoding: "utf8",
   });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };

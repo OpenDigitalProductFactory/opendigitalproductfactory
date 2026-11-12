@@ -11,8 +11,10 @@ export interface CommunicationDispatcher {
 
 export function createCommunicationDispatcher(
   adapters: readonly CommunicationAdapter[],
+  options: { recordDelivery?: typeof recordDeliveryAttempt } = {},
 ): CommunicationDispatcher {
   const byChannel = new Map(adapters.map((adapter) => [adapter.channel, adapter]));
+  const record = options.recordDelivery ?? recordDeliveryAttempt;
 
   return {
     async send(input) {
@@ -23,18 +25,18 @@ export function createCommunicationDispatcher(
           status: "failed",
           errorCode: "adapter_not_registered",
           errorMessage: `No communication adapter is registered for ${input.channel}.`,
-        });
+        }, record);
       }
 
       try {
-        return recordDispatchResult(input, await adapter.send(input));
+        return recordDispatchResult(input, await adapter.send(input), record);
       } catch (error) {
         return recordDispatchResult(input, {
           channel: input.channel,
           status: "failed",
           errorCode: "adapter_error",
           errorMessage: error instanceof Error ? error.message : "Unknown adapter error.",
-        });
+        }, record);
       }
     },
   };
@@ -43,8 +45,9 @@ export function createCommunicationDispatcher(
 async function recordDispatchResult(
   input: SendCommunicationInput,
   result: CommunicationDeliveryResult,
+  record: typeof recordDeliveryAttempt,
 ): Promise<CommunicationDeliveryResult> {
-  await recordDeliveryAttempt({
+  await record({
     channel: input.channel,
     target: input.target,
     urgency: input.urgency,

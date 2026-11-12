@@ -5,10 +5,18 @@
 // as report-kit StatCards plus compact role-type / family mix chips. Theme tokens
 // only — StatCard already flows through the intent → --dpf-* model.
 
+import type { ReactNode } from "react";
+
 import { StatCard } from "@/components/ui/report-kit";
 import type { WorkforceSummary } from "@/lib/coworker-record/workforce-summary";
 
-export function WorkforceSummaryPanel({ summary }: { summary: WorkforceSummary }) {
+export function WorkforceSummaryPanel({
+  summary,
+  extraCards,
+}: {
+  summary: WorkforceSummary;
+  extraCards?: ReactNode;
+}) {
   if (summary.total === 0) return null;
 
   const { health, naming } = summary;
@@ -78,6 +86,7 @@ export function WorkforceSummaryPanel({ summary }: { summary: WorkforceSummary }
           }
           intent={namingClean ? "success" : "warning"}
         />
+        {extraCards}
       </div>
 
       {/* Role-type & family mix — compact chip rows (the at-a-glance distribution). */}

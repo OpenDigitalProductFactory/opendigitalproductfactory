@@ -99,6 +99,8 @@ Its mode is the source of truth for receipt enforcement; a skill must not presen
 a shadow observation as an enforced refusal. This procedure applies to external
 Claude, Codex and Grok delivery. Build Studio keeps its own transition contract.
 
+**Name the range instead of pasting the diff (BI-FC2AF393).** `review_semantic_change` accepts `artifactSource: { baseSha, headSha }` in place of `artifact`. Use the merge base with `origin/main` as `baseSha` and the pushed head as `headSha`, and compute `diffDigest` as the sha256 of `git diff --binary <baseSha> <headSha>`. The server reads the same diff from its source checkout (the roots in `mergeSignalRoots`, normally `/host-dpf`). It reviews that diff only when both trees and the digest match and `headSha` is the Workroom's recorded head. Otherwise it refuses before reserving any review work, and a digest mismatch returns the server's digest. A diff over about 1.8 MB is refused with a pointer to BI-8FFEA2AA, which owns larger artifacts. Prefer this for any diff too large to paste reliably, and for republishing someone else's review.
+
 New requests use the role-bound v2 request contract and produce v3 receipts.
 Historical v1 requests and v2 receipts remain readable, but cannot satisfy a new
 role-bound review. Publication expects `code-change` by default. Document callers
@@ -116,6 +118,17 @@ not from the receipt. A receipt for one role cannot authorize another role.
    that room and exact change before resubmitting. Existing completed gate
    records are retained; a refusal does not authorize changing their identity.
    Execution revalidates evidence again because it can change after admission.
+
+   The gate links its evidence record to the room whose `executorRef` is the
+   gating thread, so claim and adopt rooms with `sessionRef` set to the client's
+   own thread id: `CLAUDE_CODE_SESSION_ID` for Claude, `CODEX_THREAD_ID` for
+   Codex. The gate also accepts that id behind its executor-kind prefix
+   (`claude-desktop-<id>`), and nothing else (BI-82D15653). Cite the gate's
+   `evidenceRecordId` from `dpf-local-ci-gate.json`. For the `headTreeHash` and
+   `diffDigest`, use `git rev-parse HEAD^{tree}` and the SHA-256 of
+   `git diff --binary $(git merge-base HEAD origin/main) HEAD`. The PR's
+   **Failure Readiness** check passes once the platform publishes the
+   `dpf/failure-readiness` status for the reviewed head.
 2. Repair blocking code findings. Re-review a changed tree; stop after two failed
    repair rounds. A changed diff, policy, reviewer or specialist set invalidates
    a receipt. An infrastructure refusal or uncertain execution is not a finding.
@@ -173,6 +186,8 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **Local-CI pre-push gate (default-on).** `pnpm run pregate` authenticates to MCP with a `client_credentials` client or, until retirement, the `DPF_MCP_BEARER_TOKEN` PAT (credential resolution: [MCP tool authorization runbook](mcp-tool-authorization-runbook.md)), leases the shared local-CI sandbox, runs the CI-equivalent runner, and records a SHA-bound evidence record with an expiry; the pre-push hook then REFUSES a push of runtime code without an unexpired passing record for the current branch+SHA. Docs-only diffs (base `DPF_PREPUSH_BASE_REF`, default `origin/main`), delete/tag pushes, and `main` pass without a record. A supported bypass is recorded, never silent: after the operator explicitly authorizes the exact run, use `DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="operator-emergency: <gate, reason, and scope>" git push`. The receipt remains `skipped: true` / `gatePassed: false`; it never converts an unrun or broken gate into a pass. DCO and the cheap deterministic preflight still refuse unsafe changes, and a PR lacking a passing record for its head SHA needs the matching `Local-CI-Override:` attestation in the PR body (`pnpm pr:health` surfaces it). If the failing gate exposes no checked-in audited override, AGENTS.md's refusal rule still requires a stop. **Pre-PR verification is the sandbox lease — "test on :3000" is only valid AFTER PR/merge/self-upgrade** (§13). Full mechanics, the `Unit Tests` job, and test-runner pins (mobile jest `^29.x`, web/db vitest): [`docs/testing/pre-pr-gate.md`](../testing/pre-pr-gate.md).
 
+**A docs-only change ships with no override (BI-78176241).** On a claimed Workroom branch, run `pnpm gate:wait` (or `pnpm run pregate`) as for code. A docs-only diff takes the gate's documentation lane: it runs the doc-index, doc-link and guard checks without a sandbox lease, publishes the result, and writes a SHA-bound PASS that `pnpm run pregate:status` reports as "documentation gate passed for this HEAD". The publish guard accepts that record, so `git push` and `gh pr create` need no `DPF_ALLOW_UNGATED_PUSH`, no `DPF_SKIP_PREPUSH_GATE` and no owner approval. "Docs-only" is decided by one classifier, `classifyDocsOnlyDiff` in `scripts/lib/ci-evidence-plan.mjs`, using the patterns in `config/ci-evidence-policy.json`. The gate, the pre-push exemption, the documentation lane and CI all call it. A regenerated derived artifact such as `doc-index.generated.json` counts as docs when the sources it was generated from are all docs. One code file, or a change to an executable standard listed under `workspaceRequiredDocs`, sends the diff to the full sandbox gate.
+
 **A running gate keeps its lease, and its verdict, through a transient refusal (2026-09-24).** The lease supervisor used to treat every refusal of a renewal as final, so a portal drain (`portal_quiescing`) or a tool that threw fenced a healthy run mid-build and its verdict was lost. Now only a refusal that proves the lease is gone is final; a quiescing portal, a thrown tool, a `retryable` refusal or an unreadable reply is retried like an unreachable service, inside the same expiry budget. Renewal is allowed during quiescence (release already was). A release that fails at the end is logged as `release-failed` and no longer takes the verdict with it. The process-tree tracker records each descendant's command line and will not kill a PID that Windows has since handed to another process (`descendant-pid-reused`). The server capacity broker reads each host probe on its own: one failed probe keeps the pool closed but names itself (`host-probe-unreadable:<probe>`) instead of blanking every number as `host-cpu-unmeasurable`, and a failed sample is read once more, 750 ms later, before a claim is refused on it.
 
 **A resumed gate runs the commit it queued, and a cancelled wait stays cancelled (BI-D35B85BF).** The detached resumer pins the branch, commit, worktree, owner and lease it resumes, and runs every attempt from that worktree. If the worktree has moved on (new commit, moved branch, uncommitted change), the resumed gate stops with exit 82 and claims nothing; it never falls back to the legacy claim key. If the wait it resumes was cancelled, it stops with exit 81 and makes no replacement claim. Neither is a verdict: both are recorded as unrun, and `gate:wait` does not retry them. When main moves and the same candidate re-claims under a new integration identity, the server retires the same owner's obsolete queued wait (`phase: superseded`) before queuing the new one. It never cancels a running lease or another owner's wait; those claims are refused with `nonprod_resume_lease_active` or `nonprod_resume_not_owner`.
@@ -181,7 +196,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **How to invoke `pregate`, and how to read a red one (BI-E6EF0B2C session, 2026-08-27/28).** The gate's policy is above; this is its *invocation contract*, which existed only in the tool's own stderr and cost one session six wasted runs on a fourteen-line change.
 
-1. **Run it foreground, unpiped, as the SOLE command.** A captured or wrapped `pnpm run pregate` — stdout is not a terminal, and `DPF_PREGATE_ALLOW_CAPTURE` is unset — stops immediately with exit 11 and says it is not the sole foreground command. It does not occupy the pool (BI-4BCD269B). `pnpm gate:wait` sets `DPF_PREGATE_ALLOW_CAPTURE=1` and is the sanctioned wrapper; `CI=true` and `GITHUB_ACTIONS=true` are too. `--help` and `--dry-run` still run when their output is captured. On Windows, `gate:wait` launches `pnpm.cmd` rather than `pnpm`, because the bare name does not spawn and used to be reported as `gate failed (exit null)` (BI-2FFDBE62). Chaining (`git rebase && pnpm run pregate`) still lets a harness kill the run at timeout instead of backgrounding it.
+1. **Run it foreground, unpiped, as the SOLE command.** A captured or wrapped `pnpm run pregate` — stdout is not a terminal, and `DPF_PREGATE_ALLOW_CAPTURE` is unset — stops immediately with exit 11 and says it is not the sole foreground command. It does not occupy the pool (BI-4BCD269B). `pnpm gate:wait` sets `DPF_PREGATE_ALLOW_CAPTURE=1` and is the sanctioned wrapper; `CI=true` and `GITHUB_ACTIONS=true` are too. `--help` and `--dry-run` still run when their output is captured. On Windows, `gate:wait` uses the shared host-command resolver to launch the installed pnpm/Corepack JavaScript entrypoint through Node without a shell. Direct `pnpm.cmd` execution fails with `EINVAL`; an unresolved or failed launch retains its diagnostic and exits 7 as unrun, without retrying or reporting a product failure (BI-2FFDBE62). Chaining (`git rebase && pnpm run pregate`) still lets a harness kill the run at timeout instead of backgrounding it.
 2. **Never interrupt it.** A killed run writes a canonical FAIL evidence record with **no recorded reason**, and every subsequent run *replays that cached fail* — the same tree can never pass again. `pregate:status` says so explicitly ("gate record status failed with NO recorded reason for THIS run … this is not evidence that the diff is bad"). When the gate log did name a failing test or check, status quotes that line from `failureSummary` instead of saying no reason was recorded (BI-C1121FFB). The only escape from a genuine cached FAIL is a **fresh SHA**, and a plain rebase is not always enough: the gate key is content-derived, so a rebase that preserves the tree replays the same evidence. A real content change is required. `prisma migrate deploy` failing with P1001 is not that cache: it is recorded as control-plane starvation, without product evidence (BI-B62A6686).
 3. **`pregate:status` is the verdict, not the console text.** The command's own tail says this; believe it.
 4. **Exit 5 / `blocked_control_plane_starvation` is infrastructure, not your diff.** The gate labels it that way itself. It fires when the portal, MCP, Docker or Postgres degrades mid-build — most often because the install self-upgraded underneath the run, which drains the control plane. Re-run once the stack is settled; do not "fix" the diff.
@@ -240,6 +255,22 @@ its existing gate. See [PR health](../testing/pr-health.md#corrections-after-pub
 for commands, proof identity and freshness requirements. Scoped operator
 recovery remains a separate audited route when its conditions apply.
 
+A merge of origin/main onto a passed published head stays a **main refresh**
+even when it regenerates registry-generated files (route manifest, doc index):
+drift in registered derived-artifact outputs is not authored change. Its
+reduced tier runs those artifacts' freshness checks, the affected tests and the
+package typecheck, and reuses the prior PASS for everything else.
+`pnpm run pregate` takes this tier automatically on such a head instead of the
+full gate (`--force-rerun` forces the full gate).
+
+Pregate preflight also judges derived artifacts against the merged base before
+any guard or lease (BI-1A06A1AF). CI checks freshness on the merge of main and
+the branch. When the branch is behind origin/main and both sides changed the
+inputs of the same registered artifact, preflight fails with CI's
+`[derived-artifacts] <id>: STALE` lines and `run:` remedies: merge origin/main,
+regenerate, commit. When the merge base cannot be computed, the result is
+reported as UNRUN, not STALE.
+
 `pregate:preflight` and `pr:ready` reuse wholly successful local guard results
 for at most one hour when the clean worktree, HEAD/tree, main, command plan,
 toolchain and environment still match. Readiness also binds PR body and labels.
@@ -259,7 +290,17 @@ reconciliation, while live/unmeasurable owners are not displaced.
 
 **A build's own guard failures go back to its coding agent** (BI-B2EEA6DE). When finalize ends `gauntlet-failed`, the review job hands the build back from review to build. It records `verificationOut.gauntletRepair` (tree, evidence record, failing guards, attempt) and queues `build/gauntlet.repair`. That job dispatches one repair task through the orchestrator's specialist dispatch: the brief names each failing guard, carries the guard output clipped to its tail, and forbids weakening, skipping or editing any guard or its baseline. The build then returns to review, and finalize re-evaluates the new tree. A build gets at most two hand-backs; after that it escalates to the operator once (`escalateBuildToHuman`), and nothing more is dispatched (`apps/web/lib/build/gauntlet-repair.ts`). A semantic change review whose next action is "repair" takes the same path (BI-50E8802C): its blocking findings (critical and important, with location and suggestion) become the brief, and guard and review hand-backs share the two-attempt bound. An inconclusive review is retried, not repaired.
 
+**A build's own failing scoped tests take the same path** (BI-33B54E4B). Before this, finalize ended a scoped-test failure as a bare `tests-failed`, and the review job left the build in review, so the resume sweep re-ran the same failing tests on the same tree every 30 minutes (three builds recorded 89 to 500 identical failing runs each). Now finalize re-runs a failing test once on the same tree to separate a flake. A confirmed failure names its failing tests (or the typecheck), its tree and its scoped-test record. The review job hands it back through the shared two-attempt bound, with the failing tests and the recorded output in the brief, then escalates to the owner with the still-failing tests named. An unchanged tree reuses its recorded failure when the same runner recorded it (`SCOPED_TEST_RUNNER_IDENTITY`). A run that reached no verdict ends `tests-not-run`, and it is never handed back or reused. Scoped tests run with `NODE_ENV=test`, because the sandbox exports `NODE_ENV=development` and Vitest keeps an existing value (`apps/web/lib/build/scoped-test-failure.ts`, `apps/web/lib/build/finalize-repair-routing.ts`).
+
 **Two failures only CI used to see now have local guards (BI-25EF1456).** A `"use client"` component that reaches `@dpf/db`, `server-only` or a Node built-in through a lib import passes vitest and tsc and fails only `next build` ("Module not found: fs"); `scripts/check-no-server-imports-in-client.mjs` (in the guard loop, `pnpm check:guards`) walks value imports from every affected client module and prints the exact chain in under a second — the fix is the `*-vocabulary.ts` split. And a route over its field budget is measured only by the CI sweep; `pnpm ux:sweep-touched -- --run --base-url <served portal>` maps the changed files to the page routes that render them (route manifest plus the same import walk, ancestor layouts included) and runs the existing `ux:sweep` ratchet on exactly those routes. The default feedback run covers static routes with a 40-route cap. Shared-layout acceptance uses the complete touched inventory: `--exhaustive --fixture-map <admitted-preview-map>` includes dynamic routes and requires concrete fixtures, source/lease binding and complete accounting. Desktop/mobile and normal/Simple contexts are selected explicitly; missing fixtures never lower the denominator.
+
+**Host preflight recovery is separate from the integration verdict.**
+`pnpm run pregate:status` reports the original host attempt, accountable owner,
+last progress and missing proof without changing it. Its explicit
+`--reconcile-host-receipt` option can retain an abandoned controller's outcome as
+inconclusive when strong receipt and lock ownership match. It preserves the
+original child uncertainty and execution lock, and grants no new admission.
+See [host receipt recovery](../testing/pre-pr-gate.md#reading-the-result--ask-the-record-not-the-run).
 
 ## Auto-merge armed is not auto-merge happening (BI-53BE1C77)
 
@@ -274,6 +315,7 @@ The alarm is GitHub-side only. The in-portal Needs-you inbox does not yet carry 
 Getting a PR merged is the Workroom's duty, not the client's: the same thing happens whether Claude Code, Codex, Grok, Antigravity or Build Studio opened it. Design: `docs/superpowers/specs/2026-10-01-pr-follow-through-workroom-duty-design.md`. The five-minute reconciler (`apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts`) now covers every non-terminal room with a bound PR, not only Build Studio rooms, and keeps one record per room at `workspaceState.prDelivery` (`prDelivery.followThrough` holds the CI classification, the hold and the reused `post-push-ci-failure` budget). On each pass it:
 
 - **arms auto-merge through the merge queue** when the PR is green, and updates a branch that is `BEHIND`. It never merges by hand, force-pushes, dismisses a check or touches required-check configuration;
+- **keeps Failure Readiness fresh** (BI-4D0B2AAB, `apps/web/lib/build/failure-readiness-delivery-refresh.ts`). That status is valid for one hour, and the merge queue checks it again. So before queueing, the reconciler republishes it from the server's verdict for the room's current head, or withholds the PR when no publishable review exists. When the only red check is an expired Failure Readiness status, it republishes, re-runs that check run and observes the PR again, instead of staging a repair;
 - **classifies a red check once per head SHA** (`apps/web/lib/build/pr-follow-through.ts`). `CANCELLED` / `TIMED_OUT` / `STARTUP_FAILURE` / `STALE` / `ERROR` are infrastructure: it re-runs that workflow run's failed jobs once and then raises the platform operator. `FAILURE` is a defect: at a `preauthorized` boundary the room may dispatch a bounded repair (2 per PR); below that, or while no repair worker is wired, it stages the repair packet for a person. Anything else (`ACTION_REQUIRED`) goes to a person unclassified;
 - **records each step on the room** as a `workroom-pr-follow-through` activity, and sends a hold that needs a person to the escalation inbox once per head;
 - **makes liveness read CI**: a room whose PR is red and waiting on a person reads `stalled` (held, never reaped), not `live`.
@@ -350,3 +392,31 @@ regenerates it. `pnpm land` consumes the same data.
 
 The rule behind it: an obligation an agent has to remember does not survive
 context compaction. Put it in the gate's output, or in code, and it survives.
+
+
+## Host reservation settlement
+
+The host-resource runner stops renewing its reservation when supervision ends.
+It performs one read-only `list_nonprod_environment_leases({leaseId})` lookup
+against the exact admitted binding and reports reservation state on stderr,
+separately from the wrapped command's output and exit code. Without `leaseId`,
+the tool retains its existing admitted/queued listing behavior.
+
+An active or queued row is pending. A missing, malformed, mismatched or
+unavailable result is unknown. Only a matching persisted terminal row proves
+reservation settlement. Time elapsed or omission from the active list does not.
+The existing janitor is hourly; the lease's TTL is not a promise of terminal
+readback by that time. Do not poll in a tight loop or promise later monitoring
+unless it has actually been arranged.
+
+Reservation expiry does not prove command success or that all workload processes
+exited. The report deliberately retains `processCleanupVerified: false`. Preserve
+the command's actual success, nonzero exit, cancellation, identity drift or unrun
+result independently. Cleared terminal process fields are expected, not exit
+proof. Existing process supervision and admission fences remain in force.
+
+Immediate release of process-owned host reservations retains its existing
+authority gate. Normal completion does not create a new request for that action.
+Keep any older pending or failed request unchanged; do not substitute another
+identity, raw database write or process termination to execute it. Safe readback
+adds no release authority and does not change local-CI cleanup or grants.

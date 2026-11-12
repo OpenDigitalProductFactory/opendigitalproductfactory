@@ -3,7 +3,7 @@ import {
   type ProactivityActivityFamily,
   type ProactivityLevel,
   isProactivityLevel,
-} from "./proactivity-types";
+} from "@dpf/validators/workroom-policy/proactivity-types";
 
 export const PROACTIVITY_CHANGE_ACTION = "propose_proactivity_change" as const;
 

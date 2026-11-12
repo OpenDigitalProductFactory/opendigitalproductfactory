@@ -1,0 +1,57 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-3E66F76F. Migration 20261027210000_agent_toolchain_converge_status adds the AgentToolchainConvergeStatus enum and three nullable AgentToolchainObservation columns recording how the host toolchain agent last fared, as each connection declares it in its converge token. Additive; no new model.",
+  "affectedCopies": [
+    "AgentToolchainObservation.convergeStatus / convergeCode / convergeSince, written by recordToolchainObservation (apps/web/lib/agent-toolchain/connection-observation.ts) from the parsed converge token",
+    "Read by the fleet rollup (apps/web/lib/agent-toolchain/fleet-readiness.ts), the Connected Agent Clients card (apps/web/lib/agent-toolchain/connected-clients.ts) and the agent-toolchain attention source (apps/web/lib/attention/sources/agent-toolchain.ts)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: a closed status label, a machine reason code from a closed vocabulary, and a timestamp. Free text is dropped by the parser.",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "The columns follow the observation row (operational drift telemetry, one row per credential)."
+  },
+  "migration": {
+    "name": "20261027210000_agent_toolchain_converge_status",
+    "backfill": "None. Existing rows keep NULL, which every reader treats as no host-agent report (the agent predates the token or is not installed).",
+    "rollback": "Forward-only and additive. Older code never reads the columns."
+  },
+  "tests": [
+    "apps/web/lib/agent-toolchain/converge-status.test.ts",
+    "apps/web/lib/agent-toolchain/connection-observation.test.ts",
+    "apps/web/lib/agent-toolchain/fleet-readiness.test.ts",
+    "apps/web/lib/agent-toolchain/connected-clients.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:agent-toolchain-observation",
+      "prismaModel": "AgentToolchainObservation",
+      "lifecycleDisposition": "Existing model; the columns follow the row.",
+      "fields": [
+        {
+          "fieldId": "data:agent-toolchain-observation#convergeStatus",
+          "resolution": "not-applicable",
+          "reason": "Closed operational label (ok | failed | needs_operator | opted_out | offline | ahead_of_portal | busy) for the host agent's last completed run. Not a data-subject attribute.",
+          "provenance": "Parsed from the connection's converge token by parseConvergeToken; BI-3E66F76F.",
+          "flags": []
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#convergeCode",
+          "resolution": "not-applicable",
+          "reason": "Machine reason code for a failed or needs-operator run; anything that is not a short machine code is dropped.",
+          "provenance": "Parsed from the connection's converge token by parseConvergeToken; BI-3E66F76F.",
+          "flags": []
+        },
+        {
+          "fieldId": "data:agent-toolchain-observation#convergeSince",
+          "resolution": "not-applicable",
+          "reason": "When the host agent entered its current status; drives the 24-hour attention threshold.",
+          "provenance": "Parsed from the connection's converge token by parseConvergeToken; BI-3E66F76F.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

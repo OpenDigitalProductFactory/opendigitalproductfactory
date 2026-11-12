@@ -11,6 +11,8 @@
 // colours cannot be `var(--dpf-*)` because `ctx.fillStyle` does not resolve CSS
 // custom properties, so they get the guard-approved chart-colour home.
 
+import { getRelationType } from "@dpf/db/relation-vocabulary";
+
 import {
   ARCHIMATE_DEFAULT_COLOR,
   NODE_CATEGORY_COLORS,
@@ -290,29 +292,12 @@ export function describeNodeLabels(labels: readonly string[]): LabelDescriptor {
 
 // ── Relationships ─────────────────────────────────────────────────────────────
 
-const REL_TYPE_LABELS: Record<string, string> = {
-  IMPORTS: "Imports",
-  DEFINES: "Defines",
-  HAS_FIELD: "Has field",
-  TESTED_BY: "Tested by",
-  ASSOCIATED_WITH: "Associated with",
-  RELATES_TO: "Relates to",
-  IMPLEMENTS_ROUTE: "Implements route",
-  EXPOSES_TOOL: "Exposes tool",
-  BELONGS_TO: "Belongs to",
-  CLASSIFIED_AS: "Classified as",
-  PARENT_OF: "Parent of",
-  DEPENDS_ON: "Depends on",
-  MEMBER_OF: "Member of",
-  MONITORS: "Monitors",
-  HOSTS: "Hosts",
-  RUNS_ON: "Runs on",
-  ROUTES_THROUGH: "Routes through",
-  LISTENS_ON: "Listens on",
-  CARRIED_BY: "Carried by",
-  CONNECTS_TO: "Connects to",
-  PEER_OF: "Peer of",
-};
+/** Operator-facing relationship labels come from the relation vocabulary, the one
+ *  registry of graph_edge.rel_type (BI-85389A35); a type it lacks gets none. */
+function relTypeLabel(raw: string): string | undefined {
+  const label = getRelationType(raw)?.label;
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : undefined;
+}
 
 export type RelTypeDescriptor = {
   key: string;
@@ -323,7 +308,7 @@ export type RelTypeDescriptor = {
 export function describeRelType(raw: string): RelTypeDescriptor {
   return {
     key: raw,
-    label: REL_TYPE_LABELS[raw] ?? humanizeLabel(raw.toLowerCase().replace(/_/g, " ")),
+    label: relTypeLabel(raw) ?? humanizeLabel(raw.toLowerCase().replace(/_/g, " ")),
     color: REL_TYPE_COLORS[raw] ?? UNKNOWN_CATEGORY_COLOR,
   };
 }

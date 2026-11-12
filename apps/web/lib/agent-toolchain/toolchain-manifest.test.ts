@@ -55,6 +55,37 @@ describe("delivered digest", () => {
   });
 });
 
+// BI-4F9E3221: the updater stamps `<packVersion>+c.<digest12>` into client
+// manifests, so their version value is hashed blank and every other byte counts.
+// The same constant is asserted by packages/dpf-skill-pack/scripts/delivered_version_test.py.
+const STAMPED_FIXTURE = join(__dirname, "__fixtures__", "pack-digest-stamped");
+const STAMPED_FIXTURE_DIGEST = "6075905951582b21a22696782683fe5d9b4829f53f913a8612b083bab57237a3";
+
+describe("stamped client manifests", () => {
+  function tree(version: string, description = "x"): string {
+    const root = mkdtempSync(join(tmpdir(), "dpf-stamped-"));
+    mkdirSync(join(root, ".claude-plugin"));
+    writeFileSync(join(root, ".claude-plugin", "plugin.json"), `{\n  "name": "dpf-platform",\n  "version": "${version}",\n  "description": "${description}"\n}\n`);
+    writeFileSync(join(root, "toolchain-version.json"), JSON.stringify({ packVersion: "0.2.18", floor: { minPackVersion: null, graceStartsAt: null } }));
+    return root;
+  }
+
+  it("matches the Python delivered_digest for the stamped fixture", () => {
+    expect(deliveredDigest(STAMPED_FIXTURE)).toBe(STAMPED_FIXTURE_DIGEST);
+  });
+
+  it("ignores the stamped version value but not the rest of the manifest", () => {
+    expect(deliveredDigest(tree("0.2.18"))).toBe(deliveredDigest(tree("0.2.18+c.abcdefabcdef")));
+    expect(deliveredDigest(tree("0.2.18"))).not.toBe(deliveredDigest(tree("0.2.18", "y")));
+  });
+
+  it("publishes the delivered version a delivery stamps", () => {
+    const root = tree("0.2.18");
+    const { manifest } = buildToolchainRelease({ packRoot: root, releaseId: null, mcpEndpoint: "https://dpf.example/api/mcp/v1" });
+    expect(manifest.deliveredVersion).toBe(`0.2.18+c.${deliveredDigest(root).slice(0, 12)}`);
+  });
+});
+
 describe("pack archive", () => {
   it("is byte-identical across builds and carries every pack file", () => {
     const files = listPackFiles(FIXTURE);

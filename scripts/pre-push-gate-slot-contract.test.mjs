@@ -108,7 +108,7 @@ test("the hook's inline readers refuse a test-stub record", () => {
 // pregate. The hook records their push under external-contribution-no-install
 // through the same override writer, only after a genuine PASS was ruled out.
 test("the cloud-session path runs after the PASS verdict and records through the override writer", () => {
-  const verdict = hook.indexOf("if node scripts/pregate-status.mjs; then");
+  const verdict = hook.indexOf('if [ "$status_rc" -eq 0 ]; then');
   const cloud = hook.indexOf('if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then');
   const refusal = hook.indexOf('echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2', cloud);
   assert.notEqual(verdict, -1, "the PASS verdict must still be consulted");
@@ -119,6 +119,18 @@ test("the cloud-session path runs after the PASS verdict and records through the
   assert.match(hook, /recorded_override\(\) \{/, "the override writer must be a shared function");
 });
 
+// BI-F039AA83: exit 75 is a gate still working for this HEAD. The hook refuses
+// the push before any override or correction route can race the coming verdict.
+test("a still-running gate (pregate:status exit 75) refuses the push before every override route", () => {
+  const capture = hook.indexOf("node scripts/pregate-status.mjs || status_rc=$?");
+  const running = hook.indexOf('if [ "$status_rc" -eq 75 ]; then');
+  const correction = hook.indexOf("node scripts/published-correction.mjs --status");
+  const cloud = hook.indexOf('if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then');
+  assert.notEqual(capture, -1, "the hook must capture pregate:status's exit code under set -e");
+  assert.ok(capture < running && running < correction && running < cloud);
+  assert.match(hook.slice(running, correction), /still running[\s\S]*?exit 1/);
+});
+
 test("the hook's cloud-session reason matches the shared constant", async () => {
   const { CLOUD_AGENT_SESSION_OVERRIDE_REASON } = await import(
     "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs"
@@ -127,4 +139,26 @@ test("the hook's cloud-session reason matches the shared constant", async () => 
     hook.includes(`DPF_SKIP_PREPUSH_GATE_REASON="${CLOUD_AGENT_SESSION_OVERRIDE_REASON}"`),
     "the inline reason in .githooks/pre-push-gate must equal CLOUD_AGENT_SESSION_OVERRIDE_REASON",
   );
+});
+
+// BI-FEDD8F45: every gate decision is recorded as a guard outcome run, and the
+// recorder can never change whether a push is allowed.
+test("the hook records its decision on exit, armed only after the exempt early exits", () => {
+  const trap = hook.indexOf("trap 'record_guard_outcome $?' EXIT");
+  const mainSkip = hook.indexOf('if [ "$branch" = "main" ]');
+  const firstGateDecision = hook.indexOf("pre-push-dco-check.mjs");
+  assert.notEqual(trap, -1, "the hook must record its decision through an EXIT trap");
+  assert.ok(trap > mainSkip, "detached/main/delete-only exits are not gate decisions and must not be recorded");
+  assert.ok(trap < firstGateDecision, "the trap must be armed before the first refusal path (DCO)");
+});
+
+test("the recorder runs in the background with output discarded and cannot fail the hook", () => {
+  assert.match(
+    hook,
+    /\( node scripts\/record-guard-outcome\.mjs --runner pre-push-gate [^)]*>\/dev\/null 2>&1 & \) \|\| true/,
+    "the recorder must be backgrounded, silent and status-neutral",
+  );
+  assert.match(hook, /\[ -f "scripts\/record-guard-outcome\.mjs" \] \|\| return 0/, "fixtures without the recorder skip it");
+  assert.match(hook, /guard_outcome_verdict="skipped"/, "a docs-only exemption is recorded as skipped, not passed");
+  assert.match(hook, /DPF_GUARD_OUTCOME_RUNNER=pre-push-gate node scripts\/pregate-preflight\.mjs/, "the override-path preflight records under the hook's runner");
 });

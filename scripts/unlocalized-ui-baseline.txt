@@ -1548,9 +1548,9 @@ apps/web/lib/work-capsules.ts	physical-direction	2
 apps/web/lib/work-capture/recurrence-expander.ts	locale-literal	3
 apps/web/lib/work-management/delivery-shapes.ts	physical-direction	4
 apps/web/lib/work-management/portfolio-activity-projection.ts	locale-literal	3
-apps/web/lib/work-management/work-shape-evidence-kinds.ts	physical-direction	1
 apps/web/lib/work-management/worker-rollup.ts	locale-literal	5
-apps/web/lib/work-posture/temporal-band.ts	locale-literal	2
 packages/db/src/federation-health.ts	locale-literal	1
 packages/db/src/portfolio-sources/absorption-posture-resolver.ts	locale-literal	1
 packages/storefront-templates/src/business-analysis-plan.ts	locale-literal	1
+packages/validators/src/gpp/work-vocabulary.ts	physical-direction	1
+packages/validators/src/workroom-policy/temporal-band.ts	locale-literal	2

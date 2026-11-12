@@ -422,6 +422,30 @@ own failure ("peer does not serve work sync yet"); a push that never arrives
 reports nothing. The demand lane is unchanged and still carries deliberate,
 per-item sharing across organization boundaries.
 
+Mirror ownership in local writers (amendment, 2026-10-28, BI-C5794F1D): a mirror
+is also left alone by everything on the receiving side that would change its
+status, not only by the triage drain. The acceptance sweep leaves mirrors out of
+its pool, page and close budget, using the same marker predicate as the triage
+drain, and reports them as "skipped: owned by peer installation". Its close path
+refuses a mirror even if one reaches it. Local status writers refuse a mirror and
+name its owner ("owned by installation <id>; change it there — local edits are
+overwritten by work sync"). These are the MCP status, retire, triage and field
+tools, the portal editor and grid, and the ops PATCH route. Work sync writes rows
+directly, so the origin's changes still land. When a pull changes a mirror's
+status, including a retirement, the cycle records one `status_change` activity.
+The activity gives from and to, the origin installation, the link and the
+link's federated-peer Principal as actor, so the change shows in the item's
+history. No activity is written when the status did not change.
+
+Twin identity (amendment, 2026-10-28, BI-91FC6B9A): a mirror and this
+installation's own item that share an intake origin marker are the same
+defect. Each item now carries the origin's claim and live-Workroom presence
+(the optional `claim` field). The receiver records each twin on the local
+item, a claim refuses to start work the peer is already doing, and a merged
+PR moves the local twins it closes. Invariant 6 is unchanged: no mirror row is
+written. See
+[federated twin identity](2026-10-28-federated-twin-identity-design.md).
+
 ## 6. Lifecycle at scale
 
 The unattended cycle this enables:

@@ -426,3 +426,48 @@ initial-publication path and its actual attestation/metadata requirements;
 malformed state remains unproven. Test those transitions and fresh OPEN-context
 rechecks. The documented metadata-only recovery remains truthful zero-execution
 metadata work, not a passing integration record or a protection waiver.
+
+The October 26 continuation in WC-9E68CC14 implements the already-recorded
+CT-VALIDATION-IDENTITY / FLOW-REUSE / VC-REUSE main-reference drift repair.
+Two normal runs each executed 160 passing commands but returned aggregate
+INCONCLUSIVE after concurrent shared origin/main movement. Preserve those
+historical outcomes. Resolve the base and candidate once before classification,
+bind the existing guard plan and receipt to that pair, and retain fresh
+candidate/tree/metadata/environment checks. Context Economy, Tool Surface and
+N-1 caller-honesty consume the same comparison base; an explicit N-1 baseline
+keeps precedence. Decision Baseline keeps its check against the resolved base,
+without repeating fetch inside the plan. Newer main is separately observable
+and a new run selecting it cannot reuse the old base's checks. Existing
+metadata-only recovery and protected integration controls remain unchanged.
+
+This is internal sequencing of the same atomic BI-25CB699C contract, with no
+new independent deliverable or dependency. Native implementation admission
+IRD-C5669BA87B18 allowed the claim. The subsequent coverage check refused old
+receipt cmvathql00vt501t33il58jnz because the newly declared file scope differs.
+Refresh coverage against this immutable continuation before further source work;
+the earlier admission does not substitute for that receipt. Refactoring
+is confined to the existing repository reader and guard-plan input propagation.
+Functional regressions use isolated repositories to move the shared ref during
+execution, prove baseline and scope consistency, reject real candidate and
+environment changes, and prevent crediting old-base checks to a newly selected
+base. The Workroom impact contract is resolved with no inferred test or guard
+entries; affected Node suites and documentation-index verification remain owed.
+Rollback is a signed revert; the receipt policy version prevents older host
+receipts from being misread under the new input contract.
+
+Independent review additionally requires the existing collectWorktreeDiff in
+`scripts/gate-context.mjs` to accept the captured candidate endpoint for
+readiness while retaining its ordinary working-tree default. Cover candidate
+ref movement in `scripts/gate-context.test.mjs` and readiness scope fixtures.
+Reestablish an eligible same-source receipt before changing only environment
+in the reuse regression, so a base change cannot explain that cache miss.
+These paths are included in the current 16-path Workroom impact contract;
+there are no additional inferred tests, guards, or dependency edges.
+
+Current atomic coverage is `cmvpcyepm6kqy01mtx0vm7pcl`, binding the published
+plan commit `d2df31b5c34d9f3f756d1db914a2fbcb10433208` and blob
+`4dd14443295f9047d170fa5d28d401732b17c905` to the declared 16-path scope.
+The native check returned valid, and implementation admission
+`IRD-7C4C0BCDD8C5` allowed continuation. The only filtered fetch in the current
+readiness inventory is Decision Baseline's already-performed origin/main
+setup; unrelated evidence fetches remain in the plan. No dependency edges.

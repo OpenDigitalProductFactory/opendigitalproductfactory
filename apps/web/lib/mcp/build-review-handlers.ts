@@ -29,6 +29,16 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
 
+function isVerificationRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** "not_run", "not-run", and "not run" are the same mark. Not free-text parsing. */
+function typecheckMarkedNotRun(status: unknown): boolean {
+  if (typeof status !== "string") return false;
+  return status.trim().toLowerCase().replace(/[\s-]+/g, "_") === "not_run";
+}
+
 /** Mirror of executeTool's catch arm, applied per handler so a thrown error
  *  still becomes a failure ToolResult instead of a transport-level rejection. */
 export function toFailureResult(toolName: string, err: unknown): ToolResult {
@@ -256,14 +266,12 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
         }
       }
 
-      // When the AI saves verificationOut, ensure typecheckPassed is explicitly set.
-      // The AI often omits it, causing the gate to treat null as false.
+      // BI-E4E70B9A: do not invent a typecheck pass. An omitted or null
+      // typecheckPassed stays omitted. typecheck "not_run" is not a pass,
+      // even when the boolean says true (FB-041879CD).
       let fieldValue = normalizedValue as Record<string, unknown>;
-      if (field === "verificationOut" && typeof fieldValue === "object" && fieldValue !== null) {
-        if (fieldValue.typecheckPassed === undefined || fieldValue.typecheckPassed === null) {
-          fieldValue = { ...fieldValue, typecheckPassed: true };
-          console.log("[saveBuildEvidence] Auto-set typecheckPassed=true (AI omitted it)");
-        }
+      if (field === "verificationOut" && isVerificationRecord(fieldValue) && typecheckMarkedNotRun(fieldValue.typecheck)) {
+        fieldValue = { ...fieldValue, typecheckPassed: false };
       }
       const updateData: Record<string, unknown> = { [field]: fieldValue as import("@dpf/db").Prisma.InputJsonValue };
 

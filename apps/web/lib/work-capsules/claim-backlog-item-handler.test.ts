@@ -16,6 +16,8 @@ vi.mock("@/lib/build/investment-admission", async (importOriginal) => ({
   recordAdmissionOutcome: mocks.recordAdmissionOutcome,
 }));
 
+const twinGate = vi.hoisted(() => ({ evaluate: vi.fn(async () => ({ kind: "clear" as const })) }));
+vi.mock("./twin-claim-gate", () => ({ evaluateTwinClaimGate: twinGate.evaluate }));
 vi.mock("./governed-work-claim", () => ({
   claimGovernedBacklogWorkspace: mocks.claimGovernedBacklogWorkspace,
 }));
@@ -70,6 +72,40 @@ describe("claimBacklogItemForWork MCP boundary", () => {
       expect(mocks.evaluateItemAdmission).not.toHaveBeenCalled();
       expect(mocks.claimGovernedBacklogWorkspace).not.toHaveBeenCalled();
     }
+  });
+
+  it("BI-DF34D948 expands unambiguous short SHAs and claims with the full identity", async () => {
+    mocks.claimGovernedBacklogWorkspace.mockResolvedValue(okClaim());
+    const base = "1".repeat(40);
+    const head = "7fb295cf3a01e502439c29b858fdcdbe28f4758e";
+    const lookupProviderCommit = vi.fn(async (prefix: string) => ({ kind: "found" as const, sha: prefix.startsWith("7") ? head : base }));
+    const result = await claimBacklogItemForWork({
+      params: { itemId: "BI-ONE", worktreePath: "/two", branchName: "fix/two", provider: "codex", sessionRef: "session-two",
+        workShape: "delivery-small@1.0.0", baseSha: "1111111", headSha: "7fb295c" },
+      userId: "user-1", context: undefined, db: {} as CapsuleDb,
+      resolveActor: vi.fn().mockResolvedValue({ userId: "user-1", principalId: "PRN-1" }),
+      resolveCommitDeps: async () => ({ lookupProviderCommit, recordedCandidates: async () => [] }),
+    });
+    expect(result.success).toBe(true);
+    expect(mocks.claimGovernedBacklogWorkspace).toHaveBeenCalledWith(expect.objectContaining({
+      input: expect.objectContaining({ baseSha: base, headSha: head }),
+    }));
+  });
+
+  it("BI-DF34D948 refuses an ambiguous short SHA by naming the candidates and the corrected call", async () => {
+    const one = "7fb295cf3a01e502439c29b858fdcdbe28f4758e";
+    const two = "7fb295cf3a0ffffffffffffffffffffffffffff0";
+    const result = await claimBacklogItemForWork({
+      params: { itemId: "BI-ONE", worktreePath: "/two", branchName: "fix/two", provider: "codex", sessionRef: "session-two",
+        workShape: "delivery-small@1.0.0", headSha: "7fb295cf3a0" },
+      userId: "user-1", context: undefined, db: {} as CapsuleDb,
+      resolveActor: vi.fn(),
+      resolveCommitDeps: async () => ({ lookupProviderCommit: async () => ({ kind: "not-found" as const }), recordedCandidates: async () => [one, two] }),
+    });
+    expect(result).toMatchObject({ success: false, error: "invalid_input", data: { reason: "ambiguous", candidates: [one, two] } });
+    expect(result.message).toContain(`claim_backlog_item_for_work({"itemId":"BI-ONE"`);
+    expect(result.message).toContain(`"headSha":"${one}"`);
+    expect(mocks.claimGovernedBacklogWorkspace).not.toHaveBeenCalled();
   });
 
   it("threads a deliberate co-claim and its audit reason", async () => {
@@ -302,5 +338,25 @@ describe("an implementation claim is a start, admitted by points in flight (BI-3
     const db = shapeDb({ effortSize: "medium", workType: "feature", title: "t", body: "" });
     await claimBacklogItemForWork({ params: { ...params, provider: "claude", workIntent: "plan" }, userId: "user-1", context: {}, db, resolveActor: actor });
     expect(mocks.evaluateItemAdmission).not.toHaveBeenCalled();
+  });
+});
+
+describe("the claim sees the paired installation's work (BI-91FC6B9A)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
+  });
+
+  it("returns the twin refusal and claims nothing", async () => {
+    const refusal = { success: false, error: "federated_twin_in_progress", message: "Not claimed", data: { twins: [] } };
+    twinGate.evaluate.mockResolvedValueOnce({ kind: "refused", result: refusal } as never);
+    const result = await claimBacklogItemForWork({
+      params: { itemId: "BI-ONE", worktreePath: "/two", branchName: "fix/two", provider: "claude", sessionRef: "s", workShape: "delivery-small@1.0.0" },
+      userId: "user-1", context: undefined, db: shapeDb({ effortSize: "small", workType: "bug" }),
+      resolveActor: vi.fn().mockResolvedValue({ userId: "user-1", principalId: "PRN-1" }),
+    });
+    expect(result).toEqual(refusal);
+    expect(twinGate.evaluate).toHaveBeenCalledWith(expect.anything(), { itemId: "BI-ONE", headBranch: "fix/two", force: false, overrideReason: null });
+    expect(mocks.claimGovernedBacklogWorkspace).not.toHaveBeenCalled();
   });
 });

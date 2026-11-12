@@ -26,6 +26,27 @@ Process pauses appear in the room's attention summary. Observed execution
 separates activity events from receipts, and the header shows the same recorded
 or inherited human accountability as the workforce panel.
 
+## Before you decide
+
+A coworker request shows what would change, the affected work and its consequence.
+Amounts, recipients, permission changes and deadlines stay visible when they
+matter. An unresolved effect is labelled so you can hold the request until it is
+clear. A reported result is the coworker's claim, not proof that the work passed.
+
+Choose **Authorize** or **Decline** on the card. Open **Why am I being asked?**
+for context or **Technical evidence** for the full proposal and supporting
+records. Opening a request's link keeps those details collapsed. Authorizing
+one request covers that exact change once.
+
+## Connecting business mail
+
+Mailroom tests the mailbox connection before saving it, then attempts a first
+read. A successful connection test alone does not finish setup. If the first
+read fails, setup stays incomplete; the saved connection remains available for
+recovery. Use **Check now** after the provider recovers. A successful read then
+completes setup, including when the selected folder is empty. An empty folder
+does not prove a real business message has been processed or a reply delivered.
+
 ## Checking an approval result
 
 After you approve or decline a coworker's request, the Inbox keeps its result.
@@ -33,12 +54,18 @@ The request's link opens that result directly, including after a refresh. Open
 **Recent approval results** to review recent decisions separately from work that
 still needs you. Completed decisions do not increase the attention count.
 
-The Inbox displays a bounded list. Its approval summary shows how many requests
-are waiting in total and how many are shown. Use **Older requests** to continue
+The Inbox starts with three decisions. Choose **Show more** to reveal the rest,
+or **Show fewer** to shorten the list again. A request's direct link reveals its
+card automatically. Its approval summary shows how many requests
+are waiting in total and how many are available in this view. Use **Older requests** to continue
 through the queue and **Latest requests** to return to the newest requests.
 After a decision, another request may fill the cleared place; the pending total
 shows your progress. The displayed-item count also includes other notices and
 is not the full approval total. If the queue cannot be read, it says unavailable.
+
+A coworker's approval-status check sees requests from that coworker only. An
+empty result does not mean your whole Inbox is empty; other coworkers may still
+need your decision. Use the Inbox's pending total for the requests you can access.
 
 An approval and a completed action are separate facts. The result says whether
 the action completed, failed, could not run, or expired, and explains the next
@@ -46,6 +73,12 @@ step. Older decisions without a recorded result say the outcome is unknown.
 Do not approve again just because the original card disappeared; your assistant
 can check the result and the affected work first. You can only read your own
 approval results.
+
+For a failed handoff, a verified saved refusal explains why transfer stopped.
+**Inspect original Workroom** opens the original room only when you still have
+access. Missing or conflicting execution evidence stays explicit; a result or
+inspection link does not authorize another attempt. Private handler text stays
+out of the result.
 
 Your assistant can also check the stored action evidence for an approved
 provider-account test without running the test again. It reports the saved test
@@ -328,6 +361,7 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Click a tile to jump directly into the relevant area
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
+- See your calendar in Google Calendar, Outlook or Apple Calendar: on the business calendar, under **Subscribe from another calendar app**, select **Create link** and copy the private link into your calendar app. The link is shown once. It carries only what your role can see, and **Replace link** or **Turn off** stops the old link at once. Links from before this change, which used your account id, no longer work; create a new one.
 - Open [Managed Documents](documents.md) to review document state, versions, and references
 - Check [which file formats](supported-file-formats.md) coworker attachments, onboarding uploads, and Workbook imports can read
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.

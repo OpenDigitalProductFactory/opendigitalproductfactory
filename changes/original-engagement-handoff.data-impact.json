@@ -1,0 +1,40 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-operator",
+  "summary": "BI-BCBCA8D1. Preserve original scope, bounded real read provenance, advisory result and continuation history; attach the exact native Codex readers and hold incomplete contributions without unattested replay. No model, migration, retention-policy, persistent credential or grant change. Reuse immutable owned DocumentVersion/DocumentBlob captures; persist bounded server-only input-delivery hashes and version refs, never pixels in TaskRun metadata or prompt archives.",
+  "changes": [
+    {
+      "kind": "projection",
+      "derivedContractId": "original-engagement-read-provenance-v1",
+      "sourceAssets": [
+        "TaskRun",
+        "ToolExecution",
+        "DocumentVersion",
+        "DocumentBlob"
+      ],
+      "derivedAssets": [
+        "TaskRun.a2aMetadata.engagementReadEvidence",
+        "CoworkerEngagement.metadata.result",
+        "WorkroomActivity.payload",
+        "TaskRun.progressPayload.engagementPreAdmissionContinuation",
+        "CoworkerEngagement.metadata.fulfillment.resourceWait",
+        "TaskRun.progressPayload.engagementEvidenceWait",
+        "TaskRun.a2aMetadata.engagementVisualDelivery"
+      ],
+      "retention": "Inherit canonical TaskRun, engagement and Workroom retention; keep compact digests/ranges only, never raw source or credentials. Provided captures retain existing managed DocumentVersion/blob lifetime; later missing, restricted or corrupt content fails closed. No new retention ledger or policy.",
+      "cleanupTest": "apps/web/lib/coworker-service-catalog/engagement-read-provenance.test.ts: bounds retained evidence and excludes raw source",
+      "reconciliationTest": "apps/web/lib/coworker-service-catalog/engagement-capacity-recovery.test.ts: exact original authority and due safe wait only; apps/web/lib/mcp-task-attempt-state.test.ts: server-owned audit survives all settlements; engagement-read-completion.test.ts and agentic-loop.read-evidence.test.ts: actual full source/corpus reads and once-only native accounting; engagement-fulfillment.test.ts: unavailable native outcome refuses redispatch; engagement-visual-evidence.test.ts: exact manifest/source/owner/org/MIME/hash/budget and attempt-fenced delivery; codex-image-input.test.ts/codex-cli-adapter.test.ts: actual private image argv and archive exclusion"
+    },
+    {
+      "kind": "policy",
+      "testVectors": {
+        "allow": "engagement-fulfillment.test.ts: current canonical grant intersection and complete actual evidence",
+        "deny": "engagement-fulfillment.test.ts: foreign actor, revoked grant, unadmitted room, changed original revision",
+        "obligation": "engagement-read-provenance.test.ts: complete page traversal and bounded metadata",
+        "unknownContext": "engagement-fulfillment.test.ts: original unknown remains unknown",
+        "precedence": "engagement-fulfillment.test.ts: canonical revocation beats permissive runtime alias",
+        "exceptionExpiry": "No new exception or expiry path; existing OAuth current authority and offer expiry remain mandatory"
+      }
+    }
+  ]
+}

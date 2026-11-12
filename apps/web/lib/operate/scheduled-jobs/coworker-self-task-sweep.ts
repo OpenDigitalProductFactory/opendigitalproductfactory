@@ -10,8 +10,8 @@
 // "reconcile-coworker-self-tasks-hourly".
 
 import { prisma } from "@dpf/db";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
-import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
+import { isProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import {
   PROACTIVITY_FACT_CATEGORY,
   PROACTIVITY_OVERRIDE_FACT_PREFIX,
@@ -136,24 +136,39 @@ async function applySelfTaskLevel(
     return taskId;
   }
 
-  // An active task is not re-upserted (that would churn nextRunAt), but its
-  // words must follow the registry: otherwise a fixed prompt never reaches an
-  // install that already runs the task (BI-4B643D89 — #6109's marketing prompt
-  // stayed old on the reference install). Only the text fields are written.
-  const entry = COWORKER_SELF_TASKS[agentId];
-  if (
-    entry &&
-    (existing.title !== entry.title ||
-      existing.prompt !== entry.prompt ||
-      existing.routeContext !== entry.routeContext)
-  ) {
-    await prisma.scheduledAgentTask.updateMany({
-      where: { taskId },
-      data: { title: entry.title, prompt: entry.prompt, routeContext: entry.routeContext },
-    });
-    result.refreshed++;
-  }
+  await refreshSelfTaskText(taskId, agentId, existing, result);
   return taskId;
+}
+
+/**
+ * An active task is not re-upserted (that would churn nextRunAt), but its words
+ * must follow the registry: otherwise a fixed prompt never reaches an install
+ * that already runs the task (BI-4B643D89 — #6109's marketing prompt stayed old
+ * on the reference install for a month). Only the text fields are written;
+ * schedule, nextRunAt and isActive are never touched. Used by every pass that
+ * keeps a task running, including the observed-orphan pass.
+ */
+async function refreshSelfTaskText(
+  taskId: string,
+  rawAgentId: string,
+  stored: { title: string; prompt: string; routeContext: string | null },
+  result: ReconcileAllSelfTasksResult,
+): Promise<void> {
+  const agentId = selfTaskRegistryKey(rawAgentId) ?? rawAgentId;
+  const entry = COWORKER_SELF_TASKS[agentId];
+  if (!entry) return;
+  if (
+    stored.title === entry.title &&
+    stored.prompt === entry.prompt &&
+    stored.routeContext === entry.routeContext
+  ) {
+    return;
+  }
+  await prisma.scheduledAgentTask.updateMany({
+    where: { taskId },
+    data: { title: entry.title, prompt: entry.prompt, routeContext: entry.routeContext },
+  });
+  result.refreshed++;
 }
 
 export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfTasksResult> {
@@ -263,11 +278,16 @@ export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfT
   // the growth without changing who runs.
   const liveSelfTasks = await prisma.scheduledAgentTask.findMany({
     where: { isActive: true, taskId: { startsWith: "self-" } },
-    select: { taskId: true, agentId: true, ownerUserId: true, schedule: true },
+    select: {
+      taskId: true, agentId: true, ownerUserId: true, schedule: true,
+      title: true, prompt: true, routeContext: true,
+    },
   });
   for (const task of liveSelfTasks) {
     if (desiredActive.has(task.taskId)) continue;
     result.orphansObserved++;
+    // Left running, so its words still follow the registry (BI-4B643D89).
+    await refreshSelfTaskText(task.taskId, task.agentId, task, result);
     console.info(
       "[coworker-self-tasks] self-task running with no backing proactivity fact — "
         + "observed, not repaired (BI-4CE4F52F; cadence is room-owned per DI-81E47BDA59F1)",

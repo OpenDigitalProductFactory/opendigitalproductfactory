@@ -1719,8 +1719,8 @@ async function main() {
     if (disposition.action === "source-drift") stopOnSourceDrift(disposition.reasons);
   }
 
-  // BI-A254A94C: a docs-only diff the pre-push gate would exempt must not take
-  // the single sandbox slot. A resumed claim already holds a place in line.
+  // BI-A254A94C: name the files that cost a diff the docs-only lane. A
+  // resumed claim already holds a place in line.
   if (!options.finalizeEvidence && !options.resumeLeaseId) {
     const sandbox = sandboxDecisionForHead({
       cwd: worktreePath,
@@ -1729,11 +1729,13 @@ async function main() {
         return result.status === 0 ? result.stdout.trim() : null;
       },
     });
-    if (sandbox) {
+    if (sandbox && sandbox.claim) {
       process.stdout.write(`gate-worktree: ${sandbox.message}\n`);
-      if (!sandbox.claim) {
-        process.exit(0); // exit-0: docs-only diff; no lease claimed
-      }
+    } else if (sandbox) {
+      // BI-78176241: the documentation lane above records every docs-only
+      // diff it can verify. Reaching here means it declined this one, and an
+      // exit 0 with no record is a pass nobody can read — so gate it fully.
+      process.stdout.write("gate-worktree: docs-only diff, but the documentation evidence lane did not record it — running the full gate so this HEAD gets a verdict.\n");
     }
   }
 
@@ -2676,6 +2678,8 @@ async function main() {
   } : classifyGateOutcome({
     freshnessVerdict: freshnessReport ? freshnessReport.verdict : "",
     gateExitCode: runResult.status,
+    // Only this owner's signal handlers establish an observed interruption.
+    receivedSignal,
     // BI-FCC1DCB2: the conflicting paths, quoted only from THIS run's metadata.
     mergeConflict: metadataMergeConflictForRun(contentMetadata, { leaseId, sha }),
     // BI-B62A6686: P1001 on prisma migrate deploy is read from this run's log.
@@ -3001,7 +3005,6 @@ async function main() {
   }
   if (outcome.status === "blocked_child_signal_death") {
     process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
-    process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
     process.exit(EXIT_CHILD_SIGNAL_DEATH);
   }
   die("gate failed");

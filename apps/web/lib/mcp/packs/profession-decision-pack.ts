@@ -159,8 +159,22 @@ async function evaluateProfessionDecision(
       })
     : null;
 
+  // The instance's direction is the prime context a craft decision serves
+  // (BI-8AB6B4F7): record which version it read, or that none is recorded.
+  const { directionLedgerFields, loadOrganizationDirection } = await import(
+    "@/lib/organization-direction/direction"
+  );
+  const directionOrg = await prisma.organization.findFirst({ select: { id: true } }).catch(() => null);
+  const direction = directionOrg
+    ? await loadOrganizationDirection(
+        prisma as unknown as Parameters<typeof loadOrganizationDirection>[0],
+        directionOrg.id,
+      ).catch(() => null)
+    : null;
+
   const decision = await evaluateProfessionDecisionGate({
     db: prisma,
+    outcomePayloadExtra: directionLedgerFields(direction),
     agentIdentity: {
       agentId: agent?.agentId ?? context?.agentId ?? null,
       agentName: agent?.name ?? null,
@@ -213,8 +227,12 @@ export const professionDecisionPack: ToolPack = {
   packId: "profession-decision",
   definitions,
   handlers: {
-    evaluate_profession_decision: (params, userId, context) =>
-      evaluateProfessionDecision(params, userId, context),
+    // BI-825D3487: a coworker reasons from its own family, so a revoked
+    // profession read refuses, naming the family. A declared borrow (no
+    // coworker identity) is a person's read and is not family-limited.
+    evaluate_profession_decision: async (params, userId, context) =>
+      (await (await import("@/lib/tak/corpus-read-scope")).refuseWithoutCorpus(context?.agentId, "own-family", "evaluate_profession_decision"))
+      ?? evaluateProfessionDecision(params, userId, context),
   },
   // Mirrors agent-grants.ts TOOL_TO_GRANTS, which stays the gating source;
   // tool-registry.test.ts asserts the two never drift. Advertising

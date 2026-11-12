@@ -1,22 +1,30 @@
 import "server-only";
+import { assertReassessmentOwnerSupport } from "@/lib/shared/reassessment-owner-versions";
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
 
 import type {
   GovernedExecuteArgs,
   GovernedExecuteRejection,
 } from "@/lib/mcp-governed-execute-types";
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { ScopeReleasePreflightResult } from "@/lib/work-capsules/scope-release-preflight";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 import {
   buildCoworkerApprovalBinding,
   evaluateCoworkerAuthority,
+  fingerprintCoworkerInput,
   type CoworkerAuthorityDecision,
   type CoworkerAuthorityInput,
 } from "./coworker-authority-decision";
 import { escalationReasonSentence } from "./escalation-gate";
 import type { ApprovalClassification } from "@/lib/coworker/approval-lifetime";
+import { isBoundReviewTask } from "@/lib/shared/task-execution-fence";
+import { reserveTaskRunGenerationWorking } from "@/lib/observability/heartbeat";
+import { deriveToolAuditClass, retainedGovernedToolParameters } from "@/lib/governed-tool-audit-parameters";
+import { originalToolParameters } from "@/lib/attention/coworker-envelope-decision";
+import { toolTakesSecretInput } from "@/lib/proactivity/propose-interception";
 
 export type CoworkerAuthorityInputResolver = (args: {
   execution: GovernedExecuteArgs;
@@ -96,6 +104,8 @@ export type AuthorityExecutedOutcome = (
 ) => Promise<{ envelopeId: string; status: "executed" | "failed"; result: unknown } | null>;
 
 export type CoworkerToolAuthorityGateResult =
+  | Exclude<ScopeReleasePreflightResult, { outcome: "reject" }>
+  | { outcome: "not-admitted"; result: ToolResult }
   | {
       /** The identical call already ran once on a person's approval. */
       outcome: "settled";
@@ -114,9 +124,13 @@ export type CoworkerToolAuthorityGateResult =
       outcome: "reject";
       rejection: Extract<
         GovernedExecuteRejection,
+        | "precondition_denied"
         | "authority_denied"
         | "approval_required"
         | "authority_evidence_unavailable"
+        | "authority_subject_not_found"
+        | "authority_binding_mismatch"
+        | "authority_scope_missing"
       >;
       message: string;
       authorityReason?: CoworkerAuthorityDecision["reasonCode"];
@@ -129,6 +143,53 @@ export type CoworkerToolAuthorityGateResult =
         expiresAt: string | null;
       };
     };
+
+export type DeterministicAuthorityRefusal = Extract<
+  GovernedExecuteRejection,
+  | "authority_subject_not_found"
+  | "authority_binding_mismatch"
+  | "authority_scope_missing"
+>;
+
+/**
+ * Resolution errors that are an answer, not a missed check (BI-5FDE148A).
+ * Anything else, including database, timeout, and connection failures, stays
+ * inconclusive. Match the stable sentences the resolver throws; a generic
+ * "does not exist" (a missing relation) is infrastructure and must not match.
+ */
+export function classifyDeterministicAuthorityRefusal(
+  error: unknown,
+): DeterministicAuthorityRefusal | null {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : "";
+  if (message.includes("The governed backlog item does not exist.")) {
+    return "authority_subject_not_found";
+  }
+  if (
+    message.includes("writer tool does not match")
+    || message.includes("invalid immutable initiative review binding")
+    || message.includes("requires an external MCP TaskRun")
+    || message.includes("does not match the authenticated organization")
+  ) {
+    return "authority_binding_mismatch";
+  }
+  if (
+    message.includes("missing exact authority scope")
+    || message.includes("requires an authenticated organization context")
+  ) {
+    return "authority_scope_missing";
+  }
+  return null;
+}
+
+function resolutionErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === "string" && error.trim()) return error.trim();
+  return "verified authority context is unavailable";
+}
 
 let overrides: AuthorityGateOverrides = {};
 
@@ -273,6 +334,9 @@ async function writeAuthorizationDecision(
             escalationReason: decision.escalation.reasonCode,
             escalationSteering: decision.escalation.steering,
             damaging: decision.escalation.damaging,
+            ...(decision.escalation.reasonCode === "steered-by-standing-ruling" && input.standingRulingEnvelopeId
+              ? { standingRulingEnvelopeId: input.standingRulingEnvelopeId }
+              : {}),
           }
         : {}),
     },
@@ -305,14 +369,19 @@ async function writeAuthorizationDecision(
   }
 }
 
-/** The envelope's stored reason: the rule, then the branch that decided it. */
+/**
+ * The envelope's stored reason. When the call says in plain words what will
+ * happen (BI-88D51B8F), that leads; then the rule and the branch that decided it.
+ */
 export function approvalExplanation(
   decision: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>,
+  approverSummary?: string,
 ): string {
   const why = decision.escalation
     ? escalationReasonSentence(decision.escalation.reasonCode)
     : null;
-  return why ? `${decision.explanation} ${why}` : decision.explanation;
+  const rule = why ? `${decision.explanation} ${why}` : decision.explanation;
+  return approverSummary?.trim() ? `${approverSummary.trim()} ${rule}` : rule;
 }
 
 async function ensureApproval(
@@ -327,9 +396,29 @@ async function ensureApproval(
   return ensureAuthorityApprovalEnvelope(input);
 }
 
-async function resumeApprovedTask(taskRunId: string): Promise<void> {
+class ReviewResumeRefusal extends Error {
+  constructor(message: string, readonly settled: boolean) { super(message); }
+}
+
+async function resumeApprovedTask(taskRunId: string, execution: GovernedExecuteArgs): Promise<void> {
+  assertReassessmentOwnerSupport("approval", 2);
   if (overrides.authorityApprovalTaskResume) {
     await overrides.authorityApprovalTaskResume(taskRunId);
+    return;
+  }
+  const task = await prisma.taskRun.findUnique({ where: { taskRunId }, select: {
+    status: true, updatedAt: true, progressPayload: true, a2aMetadata: true,
+  } });
+  if (task && isBoundReviewTask(task.a2aMetadata)) {
+    const { reviewRecoveryToolRefusal } = await import("@/lib/mcp-task-review-recovery");
+    const refusal = await reviewRecoveryToolRefusal({ taskRunId, userId: execution.userId,
+      apiTokenId: execution.context?.apiTokenId, actingAgentId: execution.context?.agentId,
+      executionFence: execution.context?.taskExecutionFence, phase: "approval-resume" });
+    if (refusal) throw new ReviewResumeRefusal(refusal.message, refusal.error !== "review_execution_authority_unavailable");
+    if (!await reserveTaskRunGenerationWorking({ taskRunId, expectedStatus: task.status,
+      updatedAt: task.updatedAt, progressPayload: (task.progressPayload ?? {}) as Prisma.InputJsonValue })) {
+      throw new ReviewResumeRefusal("The approved review generation changed before resuming.", true);
+    }
     return;
   }
   const { resumeAuthorityApprovalTask } = await import(
@@ -379,22 +468,40 @@ export async function enforceCoworkerToolAuthority(
   try {
     input = await resolveAuthorityInput(execution, tool, agentGrantAllowed);
   } catch (error) {
+    const message = resolutionErrorMessage(error);
+    const refusal = classifyDeterministicAuthorityRefusal(error);
     console.error(
-      "[governed-execute] authority context unavailable tool=%s source=%s: %s",
+      "[governed-execute] authority context %s tool=%s source=%s: %s",
+      refusal ? "refused" : "unavailable",
       JSON.stringify(execution.toolName),
       JSON.stringify(execution.source),
-      error instanceof Error
-        ? JSON.stringify(error.message)
-        : JSON.stringify(String(error)),
+      JSON.stringify(message),
     );
+    if (refusal) {
+      return { outcome: "reject", rejection: refusal, message };
+    }
     return {
       outcome: "reject",
       rejection: "authority_evidence_unavailable",
-      message: "verified authority context is unavailable",
+      message,
     };
   }
 
   let decision = evaluateCoworkerAuthority(input);
+  if (decision.outcome === "require-approval" && !input.approval
+    && execution.context?.approvalCompletion !== "platform"
+    && execution.context?.allowApprovalRequest !== false
+    && execution.toolName === "request_self_upgrade") {
+    const { preflightUnadmittedUpgrade } = await import("@/lib/self-upgrade/request-approval-preflight");
+    const result = await preflightUnadmittedUpgrade(execution, decision.approvalBinding);
+    if (result) return { outcome: "not-admitted", result };
+  }
+  if (decision.outcome !== "deny" && ["release_workroom_scope", "release_capsule_scope"].includes(execution.toolName)) {
+    const { preflightOriginalScopeRelease } = await import("@/lib/work-capsules/scope-release-preflight");
+    const precondition = await preflightOriginalScopeRelease(execution,
+      () => executedOutcome(buildCoworkerApprovalBinding(input)));
+    if (precondition) return precondition;
+  }
   let projectedDecisionId: string | null = null;
   if (decision.outcome === "require-approval") {
     const projected = await attemptPolicyAuthorityProjection({
@@ -435,6 +542,20 @@ export async function enforceCoworkerToolAuthority(
       };
     }
   }
+  if (decision.outcome === "require-approval") {
+    // An already settled exact call remains its recorded outcome. A new
+    // platform request must survive the same audit round trip as its runner.
+    const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
+    if (settled) return { outcome: "settled", ...settled };
+    if (execution.context?.approvalCompletion === "platform") {
+      const retained = retainedGovernedToolParameters({ tool, rawParams: execution.rawParams }, deriveToolAuditClass(tool));
+      if (toolTakesSecretInput(tool) || retained === null
+        || fingerprintCoworkerInput(originalToolParameters(retained) ?? {}, input.authorResearchBinding) !== decision.approvalBinding.inputFingerprint) {
+        decision = { outcome: "deny", reasonCode: "approval-binding-mismatch", nextAction: "request-authority",
+          explanation: "This call cannot preserve its exact arguments for delayed approval. No approval request was created; the owner must use an authorized direct action." };
+      }
+    }
+  }
   const decisionId = projectedDecisionId ?? await writeAuthorizationDecision(
     input,
     decision,
@@ -458,15 +579,16 @@ export async function enforceCoworkerToolAuthority(
   }
 
   if (decision.outcome === "require-approval") {
-    // A lookup failure only loses the shortcut; it falls back to asking.
-    const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
-    if (settled) return { outcome: "settled", ...settled };
+    if (execution.context?.allowApprovalRequest === false) return {
+      outcome: "reject", rejection: "authority_denied",
+      message: "Scheduled stage authority was withheld. No new approval request was created; reconcile the dispatch or use its existing exact authorization.",
+    };
     try {
       const envelope = await ensureApproval({
         binding: decision.approvalBinding,
         authorityDecisionId: decisionId,
         threadId: execution.context?.threadId ?? null,
-        explanation: approvalExplanation(decision),
+        explanation: approvalExplanation(decision, input.action.consequenceRefinement?.approverSummary),
         // The call's resolved consequence sizes how long the person has to
         // answer: outward stays short, everything else waits for them.
         ...(input.action.consequence !== undefined ? { consequence: input.action.consequence } : {}),
@@ -502,6 +624,11 @@ export async function enforceCoworkerToolAuthority(
     }
   }
 
+  if (input.steering === "scheduled-mandate" && execution.toolName === "record_workroom_evidence") {
+    const settled = await executedOutcome(buildCoworkerApprovalBinding(input)).catch(() => undefined);
+    if (settled === undefined) return { outcome: "reject", rejection: "authority_evidence_unavailable", message: "The existing evidence approval outcome could not be read." };
+    if (settled) return { outcome: "settled", ...settled };
+  }
   const approvedEnvelopeId = input.approval?.envelopeId ?? null;
   const reservedAt = approvedEnvelopeId ? new Date() : null;
   if (approvedEnvelopeId && reservedAt && !await reserveApprovedEnvelope(approvedEnvelopeId, reservedAt)) {
@@ -522,8 +649,12 @@ export async function enforceCoworkerToolAuthority(
   // to resume, and resuming would flip a finished run back to working.
   if (approvedEnvelopeId && reservedAt && input.task?.taskRunId && input.approval?.proposeBoundary !== true) {
     try {
-      await resumeApprovedTask(input.task.taskRunId);
+      await resumeApprovedTask(input.task.taskRunId, execution);
     } catch (error) {
+      if (error instanceof ReviewResumeRefusal && error.settled) {
+        await finalizeCoworkerAuthorityApproval(approvedEnvelopeId, false);
+        return { outcome: "reject", rejection: "authority_denied", message: error.message };
+      }
       // Nothing ran and nothing was decided: give the approval back (BI-5B34D277).
       await releaseCoworkerAuthorityReservation(approvedEnvelopeId, reservedAt).catch((releaseError) => {
         console.error(

@@ -1,5 +1,5 @@
 // BI-3045CC18: the knowledge corpus reaches the graph mirror through syncWikiPage
-// / syncWikiPageLink. Mock the client seam and assert on the SQL that lands.
+// / projectWikiLinksToGraph. Mock the client seam and assert on the SQL that lands.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,7 @@ vi.mock("../src/client", () => ({
   },
 }));
 
-import { syncWikiPage, syncWikiPageLink, wikiPageLabel } from "../src/graph-sync";
+import { projectWikiLinksToGraph, syncWikiPage, wikiPageLabel } from "../src/graph-sync";
 
 beforeEach(() => {
   execMock.mockReset();
@@ -122,11 +122,12 @@ describe("syncWikiPage", () => {
   });
 });
 
-describe("syncWikiPageLink", () => {
-  it("writes a directed LINKS_TO edge", async () => {
-    await syncWikiPageLink({ fromPageId: "wp_a", toPageId: "wp_b" });
+describe("projectWikiLinksToGraph (BI-23900D0A)", () => {
+  it("writes a directed LINKS_TO edge for each out-link, after clearing the ones the body dropped", async () => {
+    await projectWikiLinksToGraph("wp_a", ["wp_b"]);
     expect(findEdgeUpserts()).toEqual([
       { srcKey: "wp_a", dstKey: "wp_b", relType: "LINKS_TO" },
     ]);
+    expect(execMock.mock.calls[0]?.[0]).toContain("DELETE FROM graph_edge");
   });
 });

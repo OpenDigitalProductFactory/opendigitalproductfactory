@@ -7,6 +7,22 @@ import { expect, it } from "vitest";
 export function registerPrebuildTests(input: { mocks: any; runSelfUpgrade: (params: any) => Promise<any> }) {
   const { mocks, runSelfUpgrade } = input;
 
+  it("qualifies the built portal before quiescence and qualifies it again before swap", async () => {
+    await runSelfUpgrade({ triggeredBy: "ops", force: true });
+    expect(mocks.runReassessmentCandidatePreflight.mock.calls.map(([input]: [{ stage: string }]) => input.stage)).toEqual(["preflight", "swap"]);
+    expect(mocks.runPrebuild.mock.invocationCallOrder[0]).toBeLessThan(mocks.runReassessmentCandidatePreflight.mock.invocationCallOrder[0]!);
+    expect(mocks.runReassessmentCandidatePreflight.mock.invocationCallOrder[0]).toBeLessThan(mocks.startQuiescence.mock.invocationCallOrder[0]!);
+    expect(mocks.runReassessmentCandidatePreflight.mock.invocationCallOrder[1]).toBeLessThan(mocks.runPromoter.mock.invocationCallOrder[0]!);
+  });
+
+  it("a forced upgrade cannot drain or swap an unqualified candidate", async () => {
+    mocks.runReassessmentCandidatePreflight.mockResolvedValueOnce({ ok: false, reason: "reassessment-compatibility-unproven" });
+    const result = await runSelfUpgrade({ triggeredBy: "ops", force: true });
+    expect(result).toMatchObject({ ok: false, reason: "reassessment-compatibility-unproven" });
+    expect(mocks.runPrebuild).toHaveBeenCalledOnce();
+    expect(mocks.startQuiescence).not.toHaveBeenCalled(); expect(mocks.runPromoter).not.toHaveBeenCalled();
+  });
+
   it("builds the image before the drain starts, with the swap's inputs", async () => {
     const order: string[] = [];
     mocks.runPrebuild.mockImplementationOnce(async () => { order.push("prebuild"); return { exitCode: 0, stdout: "", stderr: "" }; });

@@ -116,6 +116,18 @@ The third one is the interesting case, and the one most platforms never offer: t
 telling you that you are **over-buying**. A control that only ever suggests spending more is a
 sales funnel, not a calibration loop.
 
+## Answer feedback
+
+An eligible saved answer offers **Kept**, **Needs revision** and **Clear feedback**.
+[Routing management](model-routing-lifecycle.md#investigate-routing-and-record-feedback)
+lets you inspect the same saved answer and producing attempt before judging it.
+A coworker judgment is labeled separately; a human can adopt or correct it.
+
+The priority receipt uses only attributable human feedback as an acceptance
+signal. Coworker and older unattributed values stay separate, and clearing a
+judgment removes its current acceptance value. Preference does not establish
+correctness or supply an evaluated quality score. Missing evidence remains unknown.
+
 ## Honest Limits
 
 - **Outcomes are reconstructed against your *current* priority.** Recent runs are compared with
@@ -144,6 +156,10 @@ overrides it, and so does the work itself — an escalation pushes harder, and w
 leaves the business is verified first, whatever the default says. That ordering is
 deliberate: a blanket preference about rooms should not overrule the shape of the job in
 front of you.
+
+Build Studio rooms follow your default directly. Their changes are already checked by the
+build gates before they land, so your choice of pace and whether they may act alone applies
+there at any hour. See [Work Rooms](../workspace/work-rooms.md).
 
 Setting a looser authority default never promotes a coworker. If a coworker may only
 propose, rooms will still propose. The default can restrain; it cannot grant.

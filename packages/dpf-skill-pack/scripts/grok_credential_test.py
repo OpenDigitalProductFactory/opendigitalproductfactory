@@ -15,6 +15,11 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
 
+try:
+    import tomllib
+except ImportError:  # Python < 3.11
+    tomllib = None
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import grok_credential as gc  # noqa: E402
 
@@ -139,6 +144,43 @@ class GrokCredentialTest(unittest.TestCase):
         self.assertIn("[mcp_servers.dpf]", text)
         self.assertIn("url = ", text)
 
+    @staticmethod
+    def _dpf_tables(text: str) -> int:
+        return text.count('["mcp_servers"."dpf"]') + text.count("[mcp_servers.dpf]")
+
+    def test_finds_the_table_grok_itself_wrote_with_quoted_keys(self) -> None:
+        # BI-E7806C0F: Grok rewrites its config as ["mcp_servers"."dpf"]. The
+        # header regex missed that spelling and appended a second table, and
+        # Grok then refused to start ("duplicate key").
+        self.config.write_text(
+            '["mcp_servers"]\n\n["mcp_servers"."dpf"]\n"url" = "https://old.example/api/mcp/v1"\n'
+            '"bearer_token_file" = "old"\n\n["ui"]\n"yolo" = false\n',
+            encoding="utf-8",
+        )
+        self.converge(CLIENT, FakeRunner())
+        text = self.config.read_text(encoding="utf-8")
+        self.assertEqual(self._dpf_tables(text), 1, text)
+        # The quoted "url" key is the managed url: replaced, never left beside a second one.
+        self.assertEqual(text.count("url"), 1, text)
+        self.assertIn('["ui"]', text)
+
+    def test_heals_a_config_that_already_holds_two_dpf_tables(self) -> None:
+        # What a 10-26 converge left on the dev host: Grok's quoted table plus
+        # an appended one. One run collapses them; other keys survive.
+        self.config.write_text(
+            '["mcp_servers"."dpf"]\n"url" = "https://old.example/api/mcp/v1"\n"startup_timeout_sec" = 30\n\n'
+            '["sandbox"]\n"profile" = "off"\n\n'
+            '[mcp_servers.dpf]\nurl = "https://newer.example/api/mcp/v1"\nbearer_token_file = "x"\n',
+            encoding="utf-8",
+        )
+        self.converge(CLIENT, FakeRunner())
+        text = self.config.read_text(encoding="utf-8")
+        self.assertEqual(self._dpf_tables(text), 1, text)
+        self.assertIn('"startup_timeout_sec" = 30', text)
+        self.assertIn('["sandbox"]', text)
+        self.assertEqual(text.count("url"), 1, text)
+        if tomllib is not None:
+            self.assertIn("dpf", tomllib.loads(text)["mcp_servers"])
 
     def test_the_refresher_ships_in_this_skill_pack(self) -> None:
         pack = Path(__file__).resolve().parent.parent

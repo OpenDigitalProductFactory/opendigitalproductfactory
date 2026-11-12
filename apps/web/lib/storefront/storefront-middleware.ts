@@ -1,7 +1,7 @@
 export enum RouteClass {
   Storefront = "storefront",         // /s/** — always public
   Portal = "portal",                 // /portal/** — requires customer session
-  PublicApi = "public_api",          // /api/storefront/** + /api/auth/** + health/calendar/docs
+  PublicApi = "public_api",          // /api/storefront/** + /api/auth/** + health/calendar feed/docs
   ProtectedApi = "protected_api",    // /api/** — auth enforced at route level, middleware passes through
   LegacyCustomerAuth = "legacy_customer_auth", // /customer-login, /customer-signup — 301 to canonical
   EmployeeAuth = "employee_auth",    // /login — always public
@@ -42,7 +42,11 @@ export function classifyRoute(pathname: string): RouteClass {
   // BI-52934B3E: the signed agent-toolchain manifest and pack. A client whose
   // credential is the stale part must still be able to repair, so no session.
   if (pathname.startsWith("/api/agent-toolchain/")) return RouteClass.PublicApi;
-  if (pathname.startsWith("/api/calendar/")) return RouteClass.PublicApi;
+  // BI-051A74CE: only the .ics subscription feed is public — a calendar app has
+  // no session. Reachability is not authority: the route serves nothing without
+  // the owner's private feed token and answers 404 otherwise. The rest of
+  // /api/calendar/ (events, sync) is ProtectedApi and authenticates itself.
+  if (pathname.startsWith("/api/calendar/feed/")) return RouteClass.PublicApi;
   if (pathname.startsWith("/api/docs")) return RouteClass.PublicApi;
   if (pathname.startsWith("/api/")) return RouteClass.ProtectedApi;
   if (LEGACY_REDIRECT_PATHS.includes(pathname)) return RouteClass.LegacyCustomerAuth;

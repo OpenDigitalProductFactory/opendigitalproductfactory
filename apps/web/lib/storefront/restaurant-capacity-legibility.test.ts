@@ -1,3 +1,4 @@
+import { toLivingBusinessSnapshot } from "@dpf/storefront-templates/operations";
 // Smoke tests for BI-7C95A586: Restaurant routes must NOT call tables
 // "providers", must NOT show rental copy, and MUST reconcile the same
 // table/capacity state across the owner Tables page, the Workspace, and public
@@ -15,7 +16,7 @@ import {
 } from "./restaurant-capacity";
 import { loadRestaurantCapacitySnapshot, type CapacityLoaderClient } from "./restaurant-capacity-loader";
 import { STOREFRONT_ROUTES } from "@/lib/navigation/storefront-nav";
-import { loadLivingBusinessSnapshot } from "@/lib/twin/living-business-snapshot";
+import { loadVersionedOperationsSnapshot } from "@/lib/twin/operations-loader";
 import type { LivingBusinessClient } from "@/lib/twin/living-business-snapshot";
 
 const NOW = new Date("2026-07-22T19:00:00.000Z"); // dinner service, venue open
@@ -141,7 +142,7 @@ describe("capacity state reconciles across owner Tables page and Workspace", () 
   });
 
   it("the Workspace headlines capacity in restaurant terms, not generic Workforce/AI chips", async () => {
-    const snap = await loadLivingBusinessSnapshot({ db: livingBusinessDb(), now: NOW });
+    const snap = await loadTwinFromVersionedFixture({ db: livingBusinessDb(), now: NOW });
     expect(snap).not.toBeNull();
     // Capacity chips speak tables/seats/waitlist, not the generic Workforce/AI counters.
     expect(snap!.capacityChips.some((c) => c.key === "tables-open")).toBe(true);
@@ -152,7 +153,7 @@ describe("capacity state reconciles across owner Tables page and Workspace", () 
   it("owner Tables page and Workspace agree on the upcoming-reservation count (shared model)", async () => {
     const [loaded, snap] = await Promise.all([
       loadRestaurantCapacitySnapshot({ db: capacityLoaderDb(), now: NOW }),
-      loadLivingBusinessSnapshot({ db: livingBusinessDb(), now: NOW }),
+      loadTwinFromVersionedFixture({ db: livingBusinessDb(), now: NOW }),
     ]);
     const ownerUpcoming = loaded!.snapshot.upcomingReservations;
     // Both surfaces derive from deriveRestaurantCapacity on the same fixture, so
@@ -187,3 +188,8 @@ describe("capacity projection is Restaurant-gated", () => {
     expect(snap.totalTables).toBe(1);
   });
 });
+
+async function loadTwinFromVersionedFixture(opts?: Parameters<typeof loadVersionedOperationsSnapshot>[0]) {
+  const snapshot = await loadVersionedOperationsSnapshot(opts);
+  return snapshot ? toLivingBusinessSnapshot(snapshot) : null;
+}

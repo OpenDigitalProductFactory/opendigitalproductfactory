@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { WorkroomShape } from "./WorkroomShape";
 import type { ShapeGraph } from "@/lib/work-management/shape-projection";
 
@@ -26,12 +26,34 @@ const graph: ShapeGraph = {
 };
 
 describe("Workroom process inspection", () => {
+  it("retains the full long checkpoint label and source identity in step, event and receipt disclosures", () => {
+    const checkpoint = "## Current checkpoint — 2026-10-18 20:16 UTC\n\nFull outcome remains incomplete: all four objectives and twelve FULL acceptance cases are open";
+    const sourceId = "WorkroomActivity:" + "source-identity-with-no-spaces".repeat(8);
+    const current = structuredClone(graph);
+    const record = { key: "long-record", label: checkpoint, state: "observed" as const, detail: null,
+      receiptRef: { table: "WorkroomActivity", id: sourceId }, actor: "Recorded author", summary: "Full outcome remains incomplete." };
+    current.stages[0].rows = [record]; current.process!.events = [{ ...record, key: "long-event" }];
+    current.process!.receipts = [{ ...record, key: "long-receipt" }];
+    render(<WorkroomShape graph={current} />);
+    fireEvent.click(screen.getByRole("button", { name: /1\.\s*Prepare.*Not verified/ }));
+    const observed = screen.getByText(/^Observed execution/).closest("details")!;
+    fireEvent.click(within(observed).getByText(/^Observed execution/)); expect(observed.open).toBe(true);
+    const disclosures = Array.from(document.querySelectorAll("summary")).filter(summary => summary.textContent?.includes(checkpoint));
+    expect(disclosures).toHaveLength(3);
+    for (const summary of disclosures) {
+      expect(summary.tagName).toBe("SUMMARY"); expect(summary.textContent).toContain(checkpoint);
+      summary.focus(); fireEvent.click(summary); expect(summary.closest("details")?.open).toBe(true);
+      expect(summary).toHaveFocus();
+      expect(within(summary.closest("details")!).getByText(`WorkroomActivity:${sourceId}`, { exact: true })).toBeInTheDocument();
+    }
+  });
+
   it("ages the displayed snapshot and clears stale only after a newer server read", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));
     const current = structuredClone(graph);
     current.process!.readAt = "2026-09-21T12:00:00Z";
-    const { rerender } = render(<WorkroomShape graph={current} />);
+    const { rerender } = render(<WorkroomShape graph={current} refresh={{ onRefresh: refresh }} />);
     expect(screen.queryByText(/Snapshot stale/)).not.toBeInTheDocument();
     act(() => vi.advanceTimersByTime(60_000));
     expect(screen.getByText(/Snapshot stale/)).toBeInTheDocument();
@@ -41,7 +63,7 @@ describe("Workroom process inspection", () => {
     expect(screen.getByText(/Snapshot stale/)).toBeInTheDocument();
     const newer = structuredClone(current);
     newer.process!.readAt = "2026-09-21T12:01:00Z";
-    rerender(<WorkroomShape graph={newer} />);
+    rerender(<WorkroomShape graph={newer} refresh={{ onRefresh: refresh }} />);
     expect(screen.queryByText(/Snapshot stale/)).not.toBeInTheDocument();
   });
 
