@@ -1,0 +1,188 @@
+# Preserve admitted native nested authority
+
+Status: design proposal; no implementation approval or passing regression claimed.
+
+Implementation item: BI-5163AF47. Workroom: WC-1D5431B1.
+Related item: BI-907D6878, whose original three acceptance criteria remain independent.
+Source examined: `95d9746940171a45af9f6bed76208e2e4ab07742`.
+
+## Objective and authority boundary
+
+Governed native terminal writers must retain only their originally admitted nested
+reader authority while visible tools and current authorization checks remain
+constrained. A restricted tool presentation must not accidentally erase an
+admitted right needed inside the writer. It must not create that right either.
+
+The coordinator separated this corrective deliverable under the operator's
+standing repair authorization and decision DI-B33573A0E133. This is owner scope
+input, not independent design approval, a scope baseline, or implementation
+permission. Normal design admission is IRD-8B6B517FFDDC. Funding ownership remains
+unresolved; no paid review is authorized by this document.
+
+## Observed current source
+
+The loop constructs `mcpSession` in `apps/web/lib/tak/agentic-loop.ts:1058`
+without the admitted token grants. Later it narrows provider tools to the terminal
+writer. `apps/web/lib/routing/cli-adapter.ts:366` derives JWT scopes from those
+visible tool mappings, then adds `backlog_read`. The session token already carries
+task identity and an execution fence, but not a separate nested authority or
+presentation constraint.
+
+`apps/web/app/api/mcp/v1/route.ts:538` expands the JWT scopes and passes them as
+`tokenGrantScopes` to governed execution. The nested guard in
+`apps/web/lib/mcp-governed-execute.ts` requires the reader's mapped grant. The
+controlled current-source counterexample is recorded as
+`cmwcvdjgp4khb0emf3ypv4pnr`: writer-only scope derivation loses admitted
+`file_read`; grant expansion does not recover it. This diagnostic is not a full
+producer-to-dispatch regression or evidence of the fix passing.
+
+The existing task binding transport from BI-B949993E is present and must remain.
+PR6117 / BI-2E479619 provides native call-record and receipt-healing source reuse;
+that does not establish acceptance of this authority repair. Native reader
+records marked `metrics_only` or `nativeResultWithheld` remain insufficient reader
+evidence.
+
+Historical error-time images, session grants and the original 45-call cause
+remain unknown. No historical task is replayed or foreign origin authority used.
+
+## Delivery separation and overlap
+
+BI-907D6878 retains native-call recording, terminal receipt recognition and bound
+reader/writer schema listing. Its WC-7BF60EDC agreement remains the original
+three-criterion digest. Schema binding can ship without correcting nested grant
+loss. BI-5163AF47 therefore owns this separate authority repair; delivering it
+cannot close BI-907D6878.
+
+Live narrowed epic listings and knowledge search found related work, including
+retired peer intake BI-D5F77757 and completed BI-B949993E, without an exact active
+local authority carrier in the inspected results. Broad listings were truncated,
+and the normal open-PR query timed out. These limits do not establish global
+absence. No retired/foreign item was reopened or claimed. Recheck active overlap
+before publication.
+
+## Acceptance contract
+
+The following are the exact captured body criteria, digest
+`sha256:e901af10b882df7adb41c08d916749a06ca00f9d45425b5114f6cce6965f9ccd`:
+
+1. With file_read originally admitted, a native terminal-writer-only session preserves the authority required for the governed writer's bound nested read_source_at_version.
+2. Without an originally admitted reader right, or after applicable user/coworker revocation, the same nested operation remains denied.
+3. Model-visible terminal tools remain narrowed; carrying admitted nested authority does not expose extra tools or weaken exact task, source, or execution-fence checks.
+4. An isolated regression exercises the real native producer, session token verification, visible tools/list and governed nested dispatch, including positive and negative authority controls, and fails before the fix then passes after it.
+
+## Options and proposed approach
+
+Adding `file_read` to every native JWT is rejected: it invents authority for callers
+that never admitted it. Deriving all authority from the visible writer is the
+current failure. Adding admitted scopes to the ordinary JWT `scopes` alone is
+also insufficient: the native tools/list handler selects tools using those
+scopes, so additional reader grants can expand presentation.
+
+Use the existing signed JWT `scopes` for authority and add a signed presentation
+constraint. A second nested-grant claim is unnecessary: the route already feeds
+verified scopes to the governed nested dispatcher, which checks every nested
+operation separately. Reuse that mechanism rather than adding a parallel one.
+Do not introduce a table, grant, role, external service or transport.
+
+Proposed contract, subject to independent review:
+
+- Add optional `admittedTokenGrantScopes` to `AdapterMcpSession`, populated only
+  from `params.tokenGrantScopes` on the authenticated task-bound loop path. It
+  is server context, never model arguments. Absence retains the ordinary legacy
+  path; presence with an empty array refuses restricted native issuance rather
+  than falling back to visible-tool grants.
+- For that task-bound path, mint `scopes` from the original admitted grant set,
+  without the existing unconditional `backlog_read` addition. Preserve the
+  writer-derived read/write capability and all original task/fence fields;
+  carrying grants must not upgrade capability or turn read-only work into writes.
+- Add optional signed `toolSurface: { version: 1, toolNames: string[] }` to
+  `McpSessionPayload`, and forward it through `ResolvedMcpTransportAuth`. The
+  adapter derives the names from the final provider surface after terminal
+  narrowing. A restricted session requires both admitted authority and this
+  constraint; malformed or unknown versions fail verification.
+- Filter `handleToolsList` by the signed surface after existing user, token and
+  coworker checks. Apply the same constraint in `handleToolsCall` before domain
+  dispatch and before the special `load_tools` branch. Restricted sessions do
+  not advertise the unrestricted loading meta-tool or accept its widening calls.
+  This is specific to the signed restricted session; ordinary discovery remains.
+- Keep nested `governedDispatch` unchanged: it receives the original expanded
+  token scopes through the existing context, and still checks user/coworker
+  authority, nested tool grants, capability, task/fence and exact source binding.
+  A nested reader does not become a permitted direct model call merely because
+  its grant is present. No direct-call allowlist is passed as nested authority.
+- Validate surface size against the existing finite tool registry, canonical
+  names, uniqueness, string types and supported version in one shared parser
+  used by minting and verification. Treat an explicitly empty surface as empty,
+  never as unrestricted. Preserve old tokens with no new claim. Do not enable
+  the contract for the separate Codex read-only-session lane in this repair.
+- If issuance of this restricted contract fails, refuse the native turn rather
+  than use the existing text-tool fallback with lost constraints. Legacy turns
+  retain their existing fallback behavior. Add a specific regression for this.
+
+This placement follows inspected `session-token.ts`, `transport-auth.ts`,
+`route.ts` and `mcp-governed-execute.ts`; code graph lookup corroborated the
+existing `McpSessionPayload` home. It is design only. Product-path claims and
+implementation admission are still required before changing these files.
+
+The MCP tools specification treats listing as a request-authorized surface;
+this supports keeping authenticated session presentation explicit rather than
+depending on connection history. See the [official MCP tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools).
+Scope semantics and the target service remain explicit in
+[RFC 8693, section 2.1.1](https://www.rfc-editor.org/rfc/rfc8693.html#section-2.1.1).
+These references inform the boundary; this repair does not add OAuth token exchange.
+
+## Ordered implementation and verification plan
+
+1. Record current-source reproduction and candidate-cause controls in the normal
+   research lane. Establish canonical coverage for BI-5163AF47 against all four
+   criteria. Finish exact session-claim design and independent review as required
+   by current readiness. Claim affected source/test paths and consume their
+   impact contract before edits. Obtain normal implementation admission.
+2. Add an isolated failing regression using the real native adapter token
+   producer, real token verifier, real tools/list handler and real governed nested
+   dispatch. Stub provider/network, persistence and immutable-source IO only.
+   Use synthetic signing material, never installation credentials. Capture the
+   failing scope loss on the named base without interpreting it as a repair pass.
+3. Extend the existing adapter/session contract and narrowly transport admitted
+   nested authority plus presentation constraints. Implement route consumption
+   and negative validation with no broad grant additions or policy bypasses.
+4. Make the isolated regression pass. Cover missing, empty and revoked authority;
+   altered task/fence/source; forbidden direct reader calls; listing/deferred-load
+   widening; malformed claims; and unchanged ordinary/read-only session behavior.
+   Run affected token, adapter, route, nested-dispatch and review-binding suites
+   plus package typechecks under managed dependency readiness.
+5. Run the required exact-tree governed verification and independent committed
+   review, then signed protected PR and merge queue. Reuse valid evidence without
+   duplicating uncertain tasks. Canonical deployment belongs to the existing
+   sole upgrade owner; this chat does not advance the install independently.
+6. Verify the admitted positive path and denial controls on the served canonical
+   target with new authorized fixtures. Record acceptance for this item alone.
+   Original integration, offline recovery and document lifecycle acceptance are
+   still separately owed.
+
+## Compatibility, risks and rollback
+
+No database migration is proposed. Tokens are short-lived; legacy token behavior
+must have explicit tests. New restricted contracts must fail closed if malformed
+or unsupported, rather than silently dropping constraints. Ordinary sessions
+must not acquire nested rights from this change.
+
+The principal risks are authority expansion, presentation widening, stale task
+binding, and confusing evidence metadata with a successful immutable read. Each
+has a denial/control case above. Rollback uses the normal protected source and
+canonical release process; do not edit live tokens, fabricate receipts or replay
+uncertain reviewer tasks.
+
+## Current verification status and stop condition
+
+Design-only source inspection and normal design admission are complete. The
+existing token, transport-auth and adapter grant/capability suites passed: 47
+tests across three suites on the unchanged base. They are baseline controls,
+not a failing-then-passing proof of this repair. Document index, links and
+whitespace checks passed. Managed dependency bootstrap reports compile-ready.
+
+The isolated regression, product changes, typechecks, runtime verification,
+reviews, PR and deployment are unrun. The draft is linked to the live item,
+which was normally triaged build/medium. Stop a denied admission or scope
+operation; report its exact remedy. Never repair a frozen agreement by editing
+stored JSON. Paid review remains held pending recorded funding ownership.
