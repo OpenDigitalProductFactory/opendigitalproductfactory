@@ -28,7 +28,8 @@ export interface HeldRequestStore {
   find(capsuleId: string, requestId: string): Promise<HeldRequestRecord | null>;
   listOpen(capsuleId: string): Promise<Array<Pick<RuntimeRequest, "requestId" | "kind" | "summary">>>;
   settle(input: { capsuleId: string; requestId: string; decision: RuntimeDecision; decidedBy: string; reason: string }): Promise<SettleOutcome>;
-  isApproved(capsuleId: string, callKey: string): Promise<boolean>;
+  /** Approvals bind to the person they were asked of: a later session started by someone else does not inherit them. */
+  isApproved(capsuleId: string, callKey: string, delegatingUserId: string): Promise<boolean>;
 }
 
 /** Envelopes are keyed to the room: the provider thread changes when a session resumes. */
@@ -62,12 +63,12 @@ type Db = any;
 
 export function createEnvelopeHeldRequestStore(db: Db = prisma, now: () => Date = () => new Date()): HeldRequestStore {
   const live = () => ({ OR: [{ expiresAt: null }, { expiresAt: { gt: now() } }] });
+  // A provider can reuse a request id across sessions of one room: the open one wins, then the newest.
   async function row(capsuleId: string, requestId: string) {
-    return db.coworkerActionEnvelope.findFirst({
-      where: { threadId: runtimeEnvelopeThreadId(capsuleId), argsJson: { path: ["workroomRuntime", "requestId"], equals: requestId } },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, status: true, argsJson: true },
-    });
+    const where = { threadId: runtimeEnvelopeThreadId(capsuleId), argsJson: { path: ["workroomRuntime", "requestId"], equals: requestId } };
+    const select = { id: true, status: true, argsJson: true };
+    return await db.coworkerActionEnvelope.findFirst({ where: { ...where, status: "proposed" }, orderBy: { createdAt: "asc" }, select })
+      ?? db.coworkerActionEnvelope.findFirst({ where, orderBy: { createdAt: "desc" }, select });
   }
   return {
     async hold({ capsuleId, provider, providerThreadId, actor, request, reason }) {
@@ -113,10 +114,11 @@ export function createEnvelopeHeldRequestStore(db: Db = prisma, now: () => Date 
       });
       return claimed.count === 1 ? "settled" : "already-decided";
     },
-    async isApproved(capsuleId, callKey) {
+    async isApproved(capsuleId, callKey, delegatingUserId) {
       const found = await db.coworkerActionEnvelope.findFirst({
         where: {
           threadId: runtimeEnvelopeThreadId(capsuleId),
+          delegatingUserId,
           status: "approved",
           argsJson: { path: ["workroomRuntime", "callKey"], equals: callKey },
           ...live(),

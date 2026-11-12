@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // the room, its log and the credential store are mocked.
 
 const { db, recordActivity } = vi.hoisted(() => ({
-  db: { workroom: { findUnique: vi.fn(), update: vi.fn() } },
+  db: { workroom: { findUnique: vi.fn(), update: vi.fn() }, $executeRaw: vi.fn() },
   recordActivity: vi.fn(async (..._args: unknown[]) => ({ id: "act" })),
 }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
@@ -52,6 +52,8 @@ beforeEach(() => {
   room = { id: "row-1", status: "working", archivedAt: null, workspaceState: {}, taskRunId: "TR-1" };
   db.workroom.findUnique.mockImplementation(async () => room);
   db.workroom.update.mockImplementation(async ({ data }: { data: { workspaceState: Record<string, unknown> } }) => { room.workspaceState = data.workspaceState; return room; });
+  // writeSession sets only the runtimeSession key: jsonb_set(..., ${json}::jsonb) WHERE id = ${roomId}.
+  db.$executeRaw.mockImplementation(async (_sql: TemplateStringsArray, json: string) => { room.workspaceState = { ...room.workspaceState, runtimeSession: JSON.parse(json) }; return 1; });
 });
 
 describe("start", () => {

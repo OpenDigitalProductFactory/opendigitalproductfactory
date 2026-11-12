@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // store stands in for the portal after a restart.
 
 const { db, recordActivity } = vi.hoisted(() => ({
-  db: { workroom: { findUnique: vi.fn(), update: vi.fn() } },
+  db: { workroom: { findUnique: vi.fn(), update: vi.fn() }, $executeRaw: vi.fn() },
   recordActivity: vi.fn(async (..._args: unknown[]) => ({ id: "act" })),
 }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
@@ -63,6 +63,8 @@ beforeEach(() => {
   room = { id: "row-1", capsuleId: "WC-1", status: "working", archivedAt: null, workspaceState: {}, taskRunId: "TR-1" };
   db.workroom.findUnique.mockImplementation(async () => room);
   db.workroom.update.mockImplementation(async ({ data }: { data: { workspaceState: Record<string, unknown> } }) => { room.workspaceState = data.workspaceState; return room; });
+  // writeSession sets only the runtimeSession key: jsonb_set(..., ${json}::jsonb) WHERE id = ${roomId}.
+  db.$executeRaw.mockImplementation(async (_sql: TemplateStringsArray, json: string) => { room.workspaceState = { ...room.workspaceState, runtimeSession: JSON.parse(json) }; return 1; });
 });
 
 describe("the supervision record", () => {
@@ -163,6 +165,36 @@ describe("a held request survives the restart and is still decidable (AC-3)", ()
     after.emit({ type: "runtime-request", request: { requestId: "r-push-2", kind: "command", turnId: "t2", summary: "git push origin feat", detail: {} } });
     await flush();
     expect(after.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-push-2", "accept");
+  });
+
+  it("an approval covers that request only, and only for the person it was asked of", async () => {
+    const before = portal();
+    await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
+    const fileChange = (requestId: string, path: string) => ({ type: "runtime-request" as const, request: { requestId, kind: "permission" as const, turnId: "t", summary: "widen its access", detail: { path } } });
+    before.emit(fileChange("r-a", "/etc/hosts"));
+    await flush();
+    await before.runtime.decide({ capsuleId: "WC-1", requestId: "r-a", decision: "accept", reason: "ok", actor });
+    before.emit(fileChange("r-b", "/root/.ssh"));
+    await flush();
+    expect(before.session.respondToRuntimeRequest).not.toHaveBeenCalledWith("r-b", "accept");
+
+    await before.runtime.stop({ capsuleId: "WC-1", reason: "handover", actor });
+    const other = portal(before.held);
+    await other.runtime.start({ capsuleId: "WC-1", provider: "codex", actor: { ...actor, userId: "user-2" } });
+    other.emit(fileChange("r-c", "/etc/hosts"));
+    await flush();
+    expect(other.session.respondToRuntimeRequest).not.toHaveBeenCalledWith("r-c", "accept");
+  });
+
+  it("a Codex request decided from the inbox is passed on to the waiting session", async () => {
+    const h = portal();
+    await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
+    h.emit({ type: "runtime-request", request: { requestId: "r-in", kind: "command", turnId: "t", summary: "git push origin x", detail: {} } });
+    await flush();
+    h.held.rows.find((r) => r.request.requestId === "r-in")!.status = "declined"; // the inbox route's decision
+    await expect(h.runtime.decide({ capsuleId: "WC-1", requestId: "r-in", decision: "accept", reason: "late", actor }))
+      .resolves.toMatchObject({ success: true, message: expect.stringContaining("already decided decline") });
+    expect(h.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-in", "decline");
   });
 
   it("a live Codex request is answered at once when decided", async () => {

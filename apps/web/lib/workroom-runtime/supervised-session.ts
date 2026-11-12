@@ -119,7 +119,9 @@ export function decideSupervisedTurn(args: {
   budgetPerHour: number;
 }): SupervisedTurnDecision {
   const { stored } = args;
-  if (!stored || !messageNamesSession(args.addressing, stored)) {
+  // A room that never had a supervised session is planned by B2 alone, exactly as before item D.
+  if (!stored) return { kind: "not-named" };
+  if (!messageNamesSession(args.addressing, stored)) {
     if (args.addressing.sessions.length > 0) {
       return { kind: "held", detail: `No supervised session in this room answers to ${args.addressing.sessions.join(", ")}; the message waits on the cursor.` };
     }

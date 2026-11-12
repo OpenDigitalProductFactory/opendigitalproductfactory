@@ -51,9 +51,13 @@ describe("decideSupervisedTurn", () => {
       .toEqual({ kind: "deliver", addressedAs: stored.addressedAs });
   });
 
-  it("holds a qualifier no supervised session answers to", () => {
-    const decision = decideSupervisedTurn({ ...base, addressing: addr({ sessions: [`${GAID}#session=thr-x`] }), stored: null });
+  it("holds a qualifier the room's supervised session does not answer to", () => {
+    const decision = decideSupervisedTurn({ ...base, addressing: addr({ sessions: [`${GAID}#session=thr-x`] }), stored });
     expect(decision).toMatchObject({ kind: "held", detail: expect.stringContaining("waits on the cursor") });
+  });
+
+  it("leaves a room that never had a supervised session to B2, qualifier or not", () => {
+    expect(decideSupervisedTurn({ ...base, addressing: addr({ sessions: [`${GAID}#session=thr-x`] }), stored: null })).toEqual({ kind: "not-named" });
   });
 
   it("holds when supervision was lost, or the session is not live in this portal (AC-ADB-13)", () => {

@@ -61,9 +61,11 @@ function harness(opts: {
   deliver?: SupervisedSessionPort["deliver"];
   participants?: Array<{ principalId: string; roles: string[] }>;
   aliases?: Array<{ principalId: string; aliasValue: string }>;
+  /** Another dispatch run decided the message between this run's read and its claim. */
+  claimLost?: boolean;
 }) {
   const messages = opts.messages;
-  const room = { id: "room-1", capsuleId: "WC-1", executorKind: opts.executorKind ?? "claude-desktop", executorRef: "sess-desk", workItemId: "wi-1", workspaceState: opts.workspaceState ?? stored() };
+  const room = { id: "room-1", capsuleId: "WC-1", executorKind: opts.executorKind === undefined ? "claude-desktop" : opts.executorKind, executorRef: "sess-desk", workItemId: "wi-1", workspaceState: opts.workspaceState ?? stored() };
   const db = {
     workItemMessage: {
       findUnique: vi.fn(async ({ where }: { where: { messageId: string } }) => messages.find((m) => m.messageId === where.messageId) ?? null),
@@ -84,6 +86,12 @@ function harness(opts: {
         const found = messages.find((m) => m.id === where.id)!;
         found.structuredPayload = data.structuredPayload;
         return found;
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: { id: string; structuredPayload: { path: string[]; equals: unknown } }; data: { structuredPayload: Record<string, unknown> } }) => {
+        const found = messages.find((m) => m.id === where.id && readPath(m.structuredPayload, where.structuredPayload.path) === where.structuredPayload.equals);
+        if (!found || opts.claimLost) return { count: 0 };
+        found.structuredPayload = data.structuredPayload;
+        return { count: 1 };
       }),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         const created = { id: `n${messages.length}`, messageId: `N-${messages.length}`, senderAgentId: null, createdAt: NOW, ...data } as Row;
@@ -131,6 +139,12 @@ describe("a message addressed to a supervised session (AC-ADB-12)", () => {
     const prompt = h.deliver.mock.calls[0]![0].prompt;
     expect(prompt).toContain("fyi the build is red");
     expect(prompt).not.toContain("already handed over");
+  });
+
+  it("is not delivered by a run that loses the claim to a concurrent one", async () => {
+    const h = harness({ messages: [row({}, {})], claimLost: true });
+    await expect(dispatchRoomMessage("MSG-1", h.deps)).resolves.toMatchObject({ plan: "skipped" });
+    expect(h.deliver).not.toHaveBeenCalled();
   });
 
   it("is delivered once: a retried dispatch decides nothing twice", async () => {
@@ -190,7 +204,7 @@ it("never dispatches a platform coworker onto a room an external executor holds,
 
 describe("announceSupervisionLost (AC-ADB-13)", () => {
   it("says so in the room and wakes the room's coworker coordinator", async () => {
-    const h = harness({ messages: [], participants: [{ principalId: "PRN-C", roles: ["coordinator"] }], aliases: [{ principalId: "PRN-C", aliasValue: "AGT-COORD" }] });
+    const h = harness({ messages: [], executorKind: null, participants: [{ principalId: "PRN-C", roles: ["coordinator"] }], aliases: [{ principalId: "PRN-C", aliasValue: "AGT-COORD" }] });
     await announceSupervisionLost({ capsuleId: "WC-1", reason: "no codex runtime", actingUserId: "user-1", addressedAs: ADDRESS, wakeCoordinator: true }, h.deps);
     const notice = h.messages.find((m) => m.messageType === "room-wake-notice")!;
     expect(notice.body).toContain("no codex runtime");
@@ -201,8 +215,15 @@ describe("announceSupervisionLost (AC-ADB-13)", () => {
     }));
   });
 
+  it("gives no platform coworker a task in a room an external executor holds (BI-A659C3BD)", async () => {
+    const h = harness({ messages: [], executorKind: "claude-desktop", participants: [{ principalId: "PRN-C", roles: ["coordinator"] }], aliases: [{ principalId: "PRN-C", aliasValue: "AGT-COORD" }] });
+    await announceSupervisionLost({ capsuleId: "WC-1", reason: "open failed", actingUserId: "user-1", addressedAs: ADDRESS, wakeCoordinator: true }, h.deps);
+    expect(h.messages.filter((m) => m.messageType === "room-wake-notice")).toHaveLength(1);
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
   it("only tells the room about a session long silent", async () => {
-    const h = harness({ messages: [], participants: [{ principalId: "PRN-C", roles: ["coordinator"] }], aliases: [{ principalId: "PRN-C", aliasValue: "AGT-COORD" }] });
+    const h = harness({ messages: [], executorKind: null, participants: [{ principalId: "PRN-C", roles: ["coordinator"] }], aliases: [{ principalId: "PRN-C", aliasValue: "AGT-COORD" }] });
     await announceSupervisionLost({ capsuleId: "WC-1", reason: "silent", actingUserId: "user-1", addressedAs: ADDRESS, wakeCoordinator: false }, h.deps);
     expect(h.messages).toHaveLength(1);
     expect(h.send).not.toHaveBeenCalled();

@@ -100,6 +100,21 @@ async function writeWakeState(
   });
 }
 
+/** writeWakeState, but only if the message's wake is still pending; false when another run decided it first. */
+async function claimPendingWake(
+  deps: RoomWakeDeps,
+  message: { id: string; structuredPayload: unknown },
+  addressing: RoomMessageAddressing,
+  wake: RoomMessageAddressing["wake"],
+): Promise<boolean> {
+  const payload = payloadRecord(message.structuredPayload);
+  const claimed = await deps.db.workItemMessage.updateMany({
+    where: { id: message.id, structuredPayload: { path: ["addressing", "wake", "state"], equals: "pending" } },
+    data: { structuredPayload: { ...payload, addressing: { ...addressing, wake } } as Prisma.InputJsonValue },
+  });
+  return claimed.count === 1;
+}
+
 export type PreparedRoomAddressing =
   | { refused: false; build: (mentionedAgentIds: string[]) => RoomMessageAddressing | null }
   | { refused: true; message: string };
@@ -326,9 +341,16 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
   let outcome: SupervisedTurnOutcome = session.kind === "deliver"
     ? { kind: "delivered", addressedAs: session.addressedAs }
     : session.kind === "not-named" ? session : { kind: session.kind, detail: session.detail };
-  // Claim the wake before the turn, so a retried dispatch never hands the session the message twice.
   let combined = combineSupervisedWake(plan, outcome);
-  await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
+  if (session.kind === "deliver") {
+    // Claim the wake before the turn, and only while it is still pending: a retry or a sweep
+    // re-publish racing this run must never hand the session the same message twice.
+    if (!await claimPendingWake(deps, message, addressing, { ...combined.wake, at: now.toISOString() })) {
+      return { messageId, plan: "skipped", woken: [] };
+    }
+  } else {
+    await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
+  }
   const payload = payloadRecord(message.structuredPayload);
   const workroom = payloadRecord(payload.workroom);
   if (session.kind === "deliver" && room && supervision) {
@@ -447,15 +469,16 @@ export async function sweepPendingRoomWakes(depsIn?: RoomWakeDeps): Promise<{ re
  * BI-F5D58F29 (§7.1): a supervised session the portal could not re-attach after
  * a restart. The room says so, so its executor state is never silently wrong;
  * the session's addressed messages wait on the cursor; and the room's coworker
- * coordinators are woken to decide what happens next. Waking a coordinator to
- * read the room is not dispatching it onto the executor's stage (BI-A659C3BD).
+ * coordinators are woken to decide what happens next. A room an external
+ * executor holds gets the notice only: its executor reads it, and no platform
+ * coworker is given a task there (BI-A659C3BD).
  */
 export async function announceSupervisionLost(
   input: { capsuleId: string; reason: string; actingUserId: string | null; addressedAs: string | null; wakeCoordinator: boolean },
   depsIn?: RoomWakeDeps,
 ): Promise<{ noticeMessageId: string | null; woken: string[] }> {
   const deps = depsIn ?? await defaultDeps();
-  const room = await deps.db.workroom.findUnique({ where: { capsuleId: input.capsuleId }, select: { id: true, workItemId: true } });
+  const room = await deps.db.workroom.findUnique({ where: { capsuleId: input.capsuleId }, select: { id: true, workItemId: true, executorKind: true } });
   if (!room?.workItemId) return { noticeMessageId: null, woken: [] };
   const now = clock(deps);
   const who = input.addressedAs ?? "The supervised runtime session";
@@ -469,7 +492,9 @@ export async function announceSupervisionLost(
       structuredPayload: { roomWakeNotice: { kind: "supervision-lost", at: now.toISOString(), capsuleId: input.capsuleId, addressedAs: input.addressedAs } },
     },
   });
-  if (!input.wakeCoordinator || !input.actingUserId) return { noticeMessageId: notice.messageId, woken: [] };
+  if (!input.wakeCoordinator || !input.actingUserId || isExternalRoomExecutor(room.executorKind)) {
+    return { noticeMessageId: notice.messageId, woken: [] };
+  }
   const coordinators = (await loadRoleAgents(deps, room.id)).coordinator ?? [];
   const item = await deps.db.workItem.findUnique({ where: { id: room.workItemId }, select: { title: true } });
   const { closesAt } = roomWakeWindow(now);

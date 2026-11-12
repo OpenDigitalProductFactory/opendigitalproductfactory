@@ -90,8 +90,9 @@ function claudeCallKey(toolName: string, input: Record<string, unknown>): string
   return createHash("sha256").update(`${toolName}\n${JSON.stringify(input)}`).digest("hex").slice(0, 32);
 }
 
-function requestCallKey(kind: string, summary: string): string {
-  return createHash("sha256").update(`${kind}\n${summary}`).digest("hex").slice(0, 32);
+/** The whole request, not its summary: a generic summary ("change files in the workspace") must not approve every later one. */
+function requestCallKey(kind: string, summary: string, detail: Record<string, unknown>): string {
+  return createHash("sha256").update(`${kind}\n${summary}\n${JSON.stringify(detail)}`).digest("hex").slice(0, 32);
 }
 
 async function defaultClientGaid(provider: RuntimeProvider): Promise<string | null> {
@@ -110,7 +111,9 @@ async function defaultListSupervisedRooms() {
   });
 }
 
-const supervisionActor = (actor: WorkCapsuleActor): SupervisionActor => ({ userId: actor.userId, agentId: actor.agentId, principalId: actor.principalId });
+const DECISION_FOR_STATUS: Partial<Record<string, RuntimeDecision>> = { approved: "accept", declined: "decline", cancelled: "cancel" };
+
+const supervisionActor =(actor: WorkCapsuleActor): SupervisionActor => ({ userId: actor.userId, agentId: actor.agentId, principalId: actor.principalId });
 
 export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
   const live = new Map<string, LiveSession>();
@@ -125,12 +128,20 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     });
   }
 
-  async function writeSession(roomId: string, update: (current: StoredRuntimeSession | null) => StoredRuntimeSession | null) {
-    const room = await prisma.workroom.findUnique({ where: { id: roomId }, select: { workspaceState: true } });
-    const state = room?.workspaceState && typeof room.workspaceState === "object" && !Array.isArray(room.workspaceState)
-      ? room.workspaceState as Record<string, unknown> : {};
-    const next = update(readStoredRuntimeSession(state));
-    await prisma.workroom.update({ where: { id: roomId }, data: { workspaceState: { ...state, runtimeSession: next } as never } });
+  // One read-modify-write of a room's record at a time in this process (heartbeats,
+  // the cursor and finish() race otherwise), and only the runtimeSession key is
+  // written, so the drive's and other writers' workspaceState keys are never lost.
+  const sessionWrites = new Map<string, Promise<unknown>>();
+  function writeSession(roomId: string, update: (current: StoredRuntimeSession | null) => StoredRuntimeSession | null): Promise<void> {
+    const run = async () => {
+      const room = await prisma.workroom.findUnique({ where: { id: roomId }, select: { workspaceState: true } });
+      const next = update(readStoredRuntimeSession(room?.workspaceState));
+      await prisma.$executeRaw`UPDATE "WorkCapsule" SET "workspaceState" = jsonb_set(COALESCE("workspaceState", '{}'::jsonb), '{runtimeSession}', ${JSON.stringify(next)}::jsonb, true) WHERE "id" = ${roomId}`;
+    };
+    const queued = (sessionWrites.get(roomId) ?? Promise.resolve()).catch(() => {}).then(run);
+    sessionWrites.set(roomId, queued);
+    void queued.finally(() => { if (sessionWrites.get(roomId) === queued) sessionWrites.delete(roomId); }).catch(() => {});
+    return queued;
   }
 
   const patchSession = (roomId: string, patch: Partial<StoredRuntimeSession>) =>
@@ -197,9 +208,9 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
           enqueue(entry, () => log(roomId, "action", `Accepted: ${request.summary}`, { requestId: request.requestId, kind: request.kind, reason: verdict.reason }, runtimeActor(entry.actor)));
           return;
         }
-        const callKey = requestCallKey(request.kind, request.summary);
+        const callKey = requestCallKey(request.kind, request.summary, request.detail);
         enqueue(entry, async () => {
-          if (await held.isApproved(entry.capsuleId, callKey)) {
+          if (await held.isApproved(entry.capsuleId, callKey, entry.actor.userId)) {
             await entry.session.respondToRuntimeRequest(request.requestId, "accept");
             await log(roomId, "action", `Accepted by an earlier room decision: ${request.summary}`, { requestId: request.requestId, kind: request.kind }, runtimeActor(entry.actor));
             return;
@@ -352,9 +363,18 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     async decide(input: { capsuleId: string; requestId: string; decision: RuntimeDecision; reason: string; actor: WorkCapsuleActor }): Promise<RuntimeResult> {
       const found = await held.find(input.capsuleId, input.requestId);
       if (!found) return refuse("not_found", `No held request ${input.requestId} on ${input.capsuleId}.`);
-      const settled = await held.settle({ capsuleId: input.capsuleId, requestId: input.requestId, decision: input.decision, decidedBy: input.actor.userId, reason: input.reason });
-      if (settled !== "settled") return refuse("already_decided", `${input.requestId} was already decided or has expired (${found.status}).`);
       const entry = live.get(input.capsuleId);
+      const settled = await held.settle({ capsuleId: input.capsuleId, requestId: input.requestId, decision: input.decision, decidedBy: input.actor.userId, reason: input.reason });
+      if (settled !== "settled") {
+        // Decided elsewhere (the inbox) while the Codex session still waits on it: pass that decision on.
+        const recorded = DECISION_FOR_STATUS[found.status];
+        if (recorded && entry?.providerPending.has(input.requestId)) {
+          entry.providerPending.delete(input.requestId);
+          await entry.session.respondToRuntimeRequest(input.requestId, recorded);
+          return { success: true, message: `${input.requestId} was already decided ${recorded}; the waiting session was answered with that decision.` };
+        }
+        return refuse("already_decided", `${input.requestId} was already decided or has expired (${found.status}).`);
+      }
       let applied = "The decision applies when the session asks again.";
       if (entry?.providerPending.has(input.requestId)) {
         entry.providerPending.delete(input.requestId);
@@ -376,7 +396,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
       const verdict = decideClaudeToolCall({ toolName: input.toolName, input: input.toolInput, cwd: entry.cwd });
       if (verdict.verdict === "accept") return { behavior: "allow", updatedInput: input.toolInput };
       const callKey = claudeCallKey(input.toolName, input.toolInput);
-      if (await held.isApproved(input.capsuleId, callKey)) return { behavior: "allow", updatedInput: input.toolInput };
+      if (await held.isApproved(input.capsuleId, callKey, entry.actor.userId)) return { behavior: "allow", updatedInput: input.toolInput };
       const requestId = `req-${randomUUID().slice(0, 8)}`;
       const summary = `${input.toolName} ${JSON.stringify(input.toolInput).slice(0, 300)}`;
       await holdRequest(entry, { requestId, kind: "tool", turnId: entry.session.activeTurnId(), summary, detail: input.toolInput, callKey, answeredBy: "re-ask" }, verdict.reason);
