@@ -12,6 +12,12 @@
 import type { Prisma } from "@dpf/db";
 
 import { APPROVED_EXTERNAL_ROLES } from "@/lib/auth/oauth-identity-binding";
+import {
+  COWORKER_READ_BASELINE_GRANTS,
+  grantsSatisfyRequirement,
+  persistedAgentToolGrants,
+  TOOL_TO_GRANTS,
+} from "@/lib/tak/agent-grants";
 
 import {
   buildRoomReplyPrompt,
@@ -21,6 +27,7 @@ import {
   parseAddressedTo,
   planRoomWake,
   readRoomMessageAddressing,
+  ROOM_POST_GRANT,
   roomReplyTaskId,
   roomWakeEventId,
   roomWakeWindow,
@@ -275,7 +282,29 @@ async function postRoomWakeNotice(deps: RoomWakeDeps, workItemId: string, plan: 
   });
 }
 
-export type RoomMessageDispatchResult = { messageId: string; plan: RoomWakePlan["kind"] | "skipped"; woken: string[] };
+/**
+ * The candidates that cannot post in a room: their stored grants (less
+ * revocations) plus the coworker read baseline do not satisfy post_room_message.
+ * The same rule the tool surface applies, so a coworker woken here can answer.
+ * An agent with no record cannot post either.
+ */
+async function agentsWithoutRoomPost(deps: RoomWakeDeps, candidates: string[]): Promise<Set<string>> {
+  if (candidates.length === 0) return new Set();
+  const required = TOOL_TO_GRANTS.post_room_message ?? [ROOM_POST_GRANT];
+  const rows: Array<{ agentId: string; toolGrants: Array<{ grantKey: string }>; toolGrantRevocations: Array<{ grantKey: string }> }> =
+    await deps.db.agent.findMany({
+      where: { agentId: { in: candidates } },
+      select: { agentId: true, toolGrants: { select: { grantKey: true } }, toolGrantRevocations: { select: { grantKey: true } } },
+    });
+  const able = new Set(
+    rows
+      .filter((row) => grantsSatisfyRequirement(required, [...persistedAgentToolGrants(row), ...COWORKER_READ_BASELINE_GRANTS]))
+      .map((row) => row.agentId),
+  );
+  return new Set(candidates.filter((id) => !able.has(id)));
+}
+
+export type RoomMessageDispatchResult ={ messageId: string; plan: RoomWakePlan["kind"] | "skipped"; woken: string[] };
 
 /** Decide and send the wakes for one posted message. Re-delivery is a no-op once decided. */
 export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDeps): Promise<RoomMessageDispatchResult> {
@@ -291,6 +320,12 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
   const now = clock(deps);
   const room = await loadRoomForWorkItem(deps, message.workItemId);
   const roleAgents = await loadRoleAgents(deps, room?.id ?? null);
+  const externalAgentIds = new Set<string>(APPROVED_EXTERNAL_ROLES);
+  const candidates = [
+    ...addressing.agents,
+    ...addressing.roles.flatMap((role) => roleAgents[role] ?? []),
+    ...(roleAgents.coordinator ?? []),
+  ].filter((id, i, all) => !externalAgentIds.has(id) && all.indexOf(id) === i);
   const plan = planRoomWake({
     addressing,
     senderAgentId: message.senderAgentId ?? null,
@@ -298,7 +333,8 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
     coordinatorAgentIds: roleAgents.coordinator ?? [],
     executor: room ? { kind: room.executorKind ?? null, ref: room.executorRef ?? null } : null,
     wakesLastHour: await countWakesLastHour(deps, message.workItemId, now),
-    externalAgentIds: new Set<string>(APPROVED_EXTERNAL_ROLES),
+    externalAgentIds,
+    cannotPost: await agentsWithoutRoomPost(deps, candidates),
   });
 
   const woken = plan.kind === "wake" ? plan.agents : [];

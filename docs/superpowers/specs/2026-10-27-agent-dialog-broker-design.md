@@ -244,6 +244,7 @@ The per-participant cursor is the one schema change in item B2, so it is deliver
 - **Dispatcher** (`room/message-dispatch`).
   - An external executor's room, or an external client agent (`AGT-EXT-*`), is held for that executor: no platform task is created.
   - At the hop limit, the room's coworker coordinator is woken instead, and a notice in the room says why.
+  - A recipient without the grant to post (`work_room_write`, after revocations and the read baseline) is not woken, because its reply turn could not answer (`BI-8747A73D`). If no recipient can post, the wake state is `cannot-reply`; otherwise the woken state's detail names who cannot. The detail names the missing grant, which the coworker's owner grants. Whether every coworker should hold it by default is owner decision `BI-022026AB`. A reply turn pins both `read_room_messages` and `post_room_message` within its tool budget.
   - Past the hourly budget, delivery is pull-only, with one "paused" notice per hour.
   - Otherwise it sends `room/wake.requested` with id `room-wake:<workItem>:<agent>:<15 s window>`. Bursts coalesce without a debounce primitive, which the jobs facade lacks.
 - **Runner** (`room/wake-run`, one lane per coworker per room).
