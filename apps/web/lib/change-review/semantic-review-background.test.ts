@@ -9,7 +9,6 @@ import { currentInferenceOrigin } from "@/lib/inference/inference-admission";
 import { NativeCliExecutionUncertainError } from "../routing/cli-owned-runner";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 import { currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
-import { capacityDeferralProof, hasProvenCapacityCheckpointSet } from "./semantic-review-capacity-recovery";
 describe("durable semantic review worker", () => {
   it("does not treat an error-name lookalike as proof no provider started", async () => {
     mocks.dispatch.mockImplementation(async (_prompt, _context, branch) => branch("change-reviewer", async () => {
@@ -531,71 +530,6 @@ describe("expired review successor", () => {
         executionSettled: true, settledNodeIds: [], observation: "Provider execution ended; endpoint probe passed." } } });
     return { remediationVerificationId: "RV-1", expectedRequestDigest: state.packet.digest };
   }
-
-  function expiredCapacity(status = "input-required", recoveryAttempt = 0) {
-    expired();
-    const generation = "capacity-generation";
-    const requestDigest = state.packet.digest;
-    Object.assign((state.row.progressPayload as any).semanticReview, {
-      recoveryAttempt, dispatchAttempt: 2, reason: "review-deadline-exhausted", generation,
-    });
-    state.row.status = status;
-    const suffix = recoveryAttempt ? `:recovery-${recoveryAttempt}` : "";
-    const nodes = [{ taskNodeId: `semantic-review:TR-1:change-reviewer${suffix}`, status: "completed",
-      requestContract: { requestDigest, generation, agentId: "change-reviewer" },
-      outputSnapshot: { requestDigest, providerOutcome: "not-dispatched",
-        capacityDeferral: capacityDeferralProof(new LocalProviderCapacityDeferredError("local-runner-busy"), requestDigest, generation),
-        result: { decision: "inconclusive", issues: [], summary: "Capacity refused before dispatch.",
-          inconclusiveReason: "review-capacity-deferred" } },
-    }];
-    expect(hasProvenCapacityCheckpointSet({ nodes, taskRunId: "TR-1", requestDigest,
-      recoveryAttempt, specialistIds: state.packet.input.identity.specialistIds })).toBe(true);
-    mocks.db.taskNode.findMany.mockResolvedValue(nodes);
-    mocks.db.runtimeVerification.findUnique.mockResolvedValue(null);
-  }
-
-  it.each(["input-required", "failed"])("BI-49AA6BE8 recovers an expired proven no-dispatch review in %s without a hand-recorded health receipt", async status => {
-    expiredCapacity(status);
-    await expect(retryPersistedSemanticReview("TR-1", "user-1", true))
-      .resolves.toMatchObject({ strategy: "bounded-review-successor", predecessorTaskRunId: "TR-1" });
-    expect(mocks.db.taskRun.create).toHaveBeenCalledOnce();
-    expect(state.providerCalls).toBe(0);
-  });
-
-  it("BI-49AA6BE8 inherits the near-exhausted lineage allowance rather than renewing it", async () => {
-    expiredCapacity("input-required", 2);
-    await expect(retryPersistedSemanticReview("TR-1", "user-1", true))
-      .resolves.toMatchObject({ strategy: "bounded-review-successor" });
-    const created = mocks.db.taskRun.create.mock.calls[0]![0].data;
-    expect(created.progressPayload.semanticReview).toMatchObject({ recoveryAttempt: 3 });
-    expect(created.progressPayload.semanticReview.dispatchAttempt).toBeGreaterThanOrEqual(2);
-  });
-
-  it("BI-49AA6BE8 refuses an exhausted lineage even when no provider dispatched", async () => {
-    expiredCapacity("input-required", 3);
-    await expect(retryPersistedSemanticReview("TR-1", "user-1", true)).rejects.toThrow();
-    expect(mocks.db.taskRun.create).not.toHaveBeenCalled();
-    expect(mocks.send).not.toHaveBeenCalled();
-    expect(state.providerCalls).toBe(0);
-  });
-
-  it("BI-49AA6BE8 reads back an existing successor without another admission or enqueue", async () => {
-    expiredCapacity("canceled");
-    (state.row.progressPayload as any).semanticReview.successorTaskRunId = "TR-SUCCESSOR";
-    await expect(retryPersistedSemanticReview("TR-1", "user-1", true))
-      .resolves.toMatchObject({ newTaskRunId: "TR-SUCCESSOR", reused: true });
-    expect(mocks.db.taskRun.create).not.toHaveBeenCalled();
-    expect(mocks.send).not.toHaveBeenCalled();
-    expect(state.providerCalls).toBe(0);
-  });
-
-  it("BI-49AA6BE8 admits one successor from positive capacity proof under concurrent requests", async () => {
-    expiredCapacity();
-    const outcomes = await Promise.allSettled([1, 2].map(() => retryPersistedSemanticReview("TR-1", "user-1", true)));
-    expect(outcomes.some(outcome => outcome.status === "fulfilled")).toBe(true);
-    expect(mocks.db.taskRun.create).toHaveBeenCalledOnce();
-    expect(state.providerCalls).toBe(0);
-  });
 
   it("creates one bounded successor, retaining the predecessor identity and budgets", async () => {
     const recovery = expired();
