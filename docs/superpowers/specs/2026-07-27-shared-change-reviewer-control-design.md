@@ -742,6 +742,94 @@ would spend a dispatch attempt.
 Reviews that expired before this change keep their recorded outcome; they are
 not revived. Recovering an already-expired review is BI-49AA6BE8.
 
+### Expired immutable-review recovery — BI-49AA6BE8 (proposed)
+
+Design Workroom WC-760FDBBB; kernel decision DI-9D81650D163D selects
+server-proven, bounded recovery. This amendment is a design candidate, not an
+independent approval or permission to retry a historical task. The existing
+large delivery shape, review separation and production controls remain.
+
+At source `dafad434778ca9e8a81ace77d61ab4b27f1b58db`, a complete positive
+capacity checkpoint set can establish that no provider dispatched, but
+`retryPersistedSemanticReview` still throws `semantic-review-deadline-exhausted`
+before admitting recovery without a manually recorded health verification.
+The new BI-49AA6BE8 regression independently checks that the existing
+`hasProvenCapacityCheckpointSet` accepts its exact request/generation-bound
+fixture, then fails on that deadline refusal. The unchanged three-suite
+baseline passes 127 tests. These are source-local observations, not live
+recovery acceptance or a passing implementation.
+
+#### Design grounding
+
+Reuse the immutable request store, complete-set capacity proof, generation
+fence, single-flight store, scoped remediation predicate, existing
+RuntimeVerification health evidence and single-successor lineage in
+`semantic-review-background.ts`, `semantic-review-capacity-recovery.ts`,
+`semantic-review-remediation.ts` and `semantic-review-recovery-readback.ts`.
+No new table, task family, MCP tool, provider, grant or manual success status
+is proposed. Current source, failure-analysis evidence, authority, quiescence,
+allowance and aggregate attempt limits are rechecked before any effect.
+
+Two evidence classes remain separate:
+
+1. A complete native positive no-dispatch checkpoint set may supply the
+   server-owned settlement input to the existing bounded successor path.
+   Every required branch and generation must be accounted for; a passing
+   sibling may be retained. Missing nodes, digest or generation mismatches,
+   lookalike/wrapped capacity errors, unknown outcomes and actual failed
+   verdicts refuse this path. No person must invent a health receipt merely
+   to restate this already recorded native proof.
+2. A dispatched or uncertain call requires actual server reconciliation of
+   its exact request, branch, provider execution, descendants and late-effect
+   fence before a fresh scoped health result can authorize a successor.
+   Reuse existing execution/trace bindings where they are authoritative;
+   establish a missing binding in the owning execution path before relying
+   on it. Absence of sufficient historical evidence stays input-required.
+
+The original AC-2 wording about an automatic successor after a settle window
+does not authorize time-based settlement. The proposed interpretation is:
+the server reconciles automatically, then admits at most the existing one
+bounded successor only after positive settlement and current admission.
+That interpretation needs the ordinary independent scope approval. Expiry,
+inactivity, completed node labels, empty unresolved-node lists and a nearby
+token-usage timestamp are never settlement evidence. In particular this
+design does not authorize replay of TR-GATE-23337AE3B34E50777F586982 or of
+unknown original consent reviews.
+
+#### Ordered delivery and verification
+
+1. Retain the real RED test and the 127-test unchanged baseline. Add negative
+   controls for incomplete/forged capacity proof, a dispatched truncated
+   branch, mixed outcomes, stale source/evidence, revoked authority, allowance
+   exhaustion, concurrent admission, successor exhaustion and late writes.
+2. Obtain independent review of this immutable amendment and record plan
+   coverage on BI-49AA6BE8 before changing production recovery code. Resolve
+   the Workroom's recorded funding scope before any paid reviewer dispatch;
+   installation or executor identity does not supply it.
+3. Refactor the existing successor admission to accept server-derived
+   positive capacity proof without removing the explicit health-evidence
+   path for uncertain execution. Preserve the original task/outcome, exact
+   artifact and passing siblings; one transaction fences old writers and
+   reserves the single lineage successor before enqueue.
+4. Implement the exact server-owned execution reconciliation needed for
+   dispatched calls using the existing execution substrate. Unknown legacy
+   calls remain blocked when authoritative dispatch/child/effect evidence
+   cannot be recovered. Do not reinterpret a truncated response as a pass or
+   increase output, thinking, provider or retry budgets as a substitute.
+5. Project expired infrastructure evidence and its actual recovery path in
+   Failure Readiness. A source-head pass, queue-group infrastructure error
+   and actual independent review verdict remain separate observations.
+6. Run the affected unit and concurrency controls, both web typechecks and
+   exact canonical gate. Obtain independent committed-change review; deliver
+   through a signed PR and protected queue. No stub, exemption or manual
+   green status substitutes for these checks.
+7. Advance only through request_self_upgrade, verify served lineage, then
+   observe one legitimately admitted same-tree no-dispatch recovery and its
+   single successor. Verify no duplicate inference, preserved passing branch,
+   current authority/evidence and actual Failure Readiness publication.
+   Dispatched-call recovery needs its own exact settlement observation.
+   Historical unknown reviews are not probes. Close only the outcomes proved.
+
 ## Non-goals
 
 - Replacing GitHub review.
