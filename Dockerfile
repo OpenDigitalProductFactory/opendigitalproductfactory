@@ -87,6 +87,9 @@ COPY scripts/lib/canonical-json.mjs ./scripts/lib/
 # The local-CI status set is shared by the gate scripts and the MCP evidence
 # handler, so the build stage needs it too (BI-C59AC8AF).
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
+# Build Studio carries a build's recorded gate decisions into its PR using the
+# same trailer names the readiness gates read (BI-BA6EDCDD).
+COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY apps/web/ ./apps/web/
