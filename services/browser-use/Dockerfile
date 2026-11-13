@@ -35,7 +35,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY server.py url_policy.py .
+# The capture worker has no service profile, API-key environment or root uid.
+# Existing browser sessions retain their current identity; only the new worker
+# uses this dedicated account and a fresh per-request directory.
+RUN groupadd --system --gid 10001 dpf-capture \
+    && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin dpf-capture \
+    && install -d -m 0700 /profiles
+
+COPY server.py url_policy.py agent_outcome.py prototype_capture.py prototype_capture_worker.py .
 
 EXPOSE 8500
 
