@@ -8,12 +8,16 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  buildSandboxBuildCloneAlignCommand,
   buildSandboxBuildCloneCommand,
   buildSandboxBuildCloneRebaseCommand,
+  buildSandboxPublishedHeadFetchCommand,
   buildSandboxBuildCloneRemoveCommand,
   buildSandboxBuildCloneSyncCommand,
   buildWorkspaceMode,
+  parseBuildCloneAlignOutput,
   parseBuildCloneRebaseOutput,
+  publishedHeadRef,
 } from "./build-clone";
 
 // These are POSIX commands for the Linux sandbox. On a Windows host, hand `sh`
@@ -204,6 +208,93 @@ describe("build clone rebase onto a moved client branch", { timeout: GIT_FIXTURE
   it("reads an unrecognised output as unknown rather than success", () => {
     expect(parseBuildCloneRebaseOutput("rebase=ok\nhead=\n").status).toBe("unknown");
     expect(parseBuildCloneRebaseOutput("").status).toBe("unknown");
+  });
+});
+
+// BI-C49EC080: the PR head is a commit the GitHub API minted (the build's files
+// over main), not the clone's own commit. The clone is put on that exact commit
+// so review binds the commit Failure Readiness checks.
+describe("build clone alignment to the published PR commit", { timeout: GIT_FIXTURE_TIMEOUT_MS }, () => {
+  const ref = publishedHeadRef("FB-TEST1");
+
+  /** Publish like publishBranchCommit: one commit on upstream main carrying the build's file. */
+  function publishOnUpstream(parentRef: string): string {
+    const pub = join(root, "publisher");
+    git(root, "clone", "-q", join(root, "upstream.git"), pub);
+    git(pub, "config", "user.name", "dpf-agent-test");
+    git(pub, "config", "user.email", "agent@example.test");
+    git(pub, "checkout", "-q", "--detach", parentRef);
+    writeFileSync(join(pub, "feature.txt"), "published\n");
+    git(pub, "add", "-A");
+    git(pub, "commit", "-qm", "feat: published");
+    const sha = git(pub, "rev-parse", "HEAD");
+    git(pub, "push", "-q", "origin", "HEAD:refs/heads/dpf/abc/feature");
+    return sha;
+  }
+
+  function fetchPublished(sha: string) {
+    sh(buildSandboxPublishedHeadFetchCommand(posix(shared), sha, ref));
+  }
+
+  it("puts the build branch on the published commit, whose parent is the diff base", () => {
+    sh(cloneCommand());
+    writeFileSync(join(path, "feature.txt"), "sandbox\n");
+    git(path, "add", "-A");
+    git(path, "commit", "-qm", "build feature");
+    const sha = publishOnUpstream("origin/main");
+    fetchPublished(sha);
+
+    const out = parseBuildCloneAlignOutput(sh(buildSandboxBuildCloneAlignCommand(posix(path), ref, sha, "client/abc")));
+    expect(out).toEqual({ status: "aligned", headSha: sha });
+    expect(git(path, "rev-parse", "--abbrev-ref", "HEAD")).toBe(branch);
+    expect(git(path, "rev-parse", "HEAD")).toBe(sha);
+    expect(git(path, "merge-base", "HEAD", "client/abc")).toBe(git(path, "rev-parse", `${sha}^`));
+    expect(git(path, "show", "HEAD:feature.txt")).toBe("published");
+  });
+
+  it("refuses a published commit whose parent the client branch does not contain", () => {
+    const pub = join(root, "mover");
+    git(root, "clone", "-q", join(root, "upstream.git"), pub);
+    git(pub, "config", "user.name", "dpf-agent-test");
+    git(pub, "config", "user.email", "agent@example.test");
+    writeFileSync(join(pub, "upstream.txt"), "main moved\n");
+    git(pub, "add", "-A");
+    git(pub, "commit", "-qm", "main moved");
+    git(pub, "push", "-q", "origin", "main");
+    sh(cloneCommand());
+    const before = git(path, "rev-parse", "HEAD");
+    const sha = publishOnUpstream("origin/main");
+    fetchPublished(sha);
+
+    const out = parseBuildCloneAlignOutput(sh(buildSandboxBuildCloneAlignCommand(posix(path), ref, sha, "client/abc")));
+    expect(out.status).toBe("base-not-on-target");
+    expect(git(path, "rev-parse", "HEAD")).toBe(before);
+  });
+
+  it("refuses to discard uncommitted tracked work", () => {
+    sh(cloneCommand());
+    const sha = publishOnUpstream("origin/main");
+    fetchPublished(sha);
+    writeFileSync(join(path, "a.txt"), "uncommitted\n");
+    const before = git(path, "rev-parse", "HEAD");
+
+    expect(parseBuildCloneAlignOutput(sh(buildSandboxBuildCloneAlignCommand(posix(path), ref, sha, "client/abc"))).status).toBe("dirty");
+    expect(git(path, "rev-parse", "HEAD")).toBe(before);
+  });
+
+  it("refuses when the shared ref does not hold the published commit", () => {
+    sh(cloneCommand());
+    const sha = publishOnUpstream("origin/main");
+    expect(parseBuildCloneAlignOutput(sh(buildSandboxBuildCloneAlignCommand(posix(path), ref, sha, "client/abc"))).status).toBe("unfetched");
+    git(shared, "update-ref", ref, git(shared, "rev-parse", "main"));
+    expect(parseBuildCloneAlignOutput(sh(buildSandboxBuildCloneAlignCommand(posix(path), ref, sha, "client/abc"))).status).toBe("mismatch");
+  });
+
+  it("reads an unrecognised output as unknown, and refuses a malformed sha", () => {
+    expect(parseBuildCloneAlignOutput("align=ok\nhead=\n").status).toBe("unknown");
+    expect(parseBuildCloneAlignOutput("").status).toBe("unknown");
+    expect(() => buildSandboxBuildCloneAlignCommand("/w", ref, "abc; rm -rf /", "client/abc")).toThrow();
+    expect(() => buildSandboxPublishedHeadFetchCommand("/w", "HEAD", ref)).toThrow();
   });
 });
 

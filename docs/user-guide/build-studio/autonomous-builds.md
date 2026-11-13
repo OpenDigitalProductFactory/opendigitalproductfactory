@@ -55,6 +55,17 @@ When Build Studio opens the pull request, it copies them into the pull request's
 decisions** section, so the checks read the same decisions the build's review accepted. It copies
 only decisions the build recorded and never writes one itself.
 
+The pull request's commit is not the commit the build was first reviewed on. Build Studio
+publishes the change on top of the current main branch, so the published commit is new, and a
+republished or repaired pull request gets another new commit. The required Failure Readiness
+check only accepts evidence and a review for the exact commit it checks. When a pull request's
+commit has no review of its own, Build Studio moves the build onto that exact commit and sends it
+back to review. Its checks, tests and semantic review then run on the commit that ships, and
+the build returns to the pull request with nothing republished. Each pull request commit gets
+at most three attempts, spaced six hours apart; the build's activity trail records each one.
+After the pull request is open, Build Studio does not rebase the build onto a newer main. The
+merge queue keeps it current.
+
 Autonomy can be disabled without deleting build history, evidence, or the active Living Playbook.
 See the [operator runbook](../../operations/autonomous-build-completion.md) for rollout and
 kill-switch details.
