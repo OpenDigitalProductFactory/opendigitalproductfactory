@@ -10,7 +10,7 @@ const HEAD = "c".repeat(40);
 const codex: WorkCapsuleActor = { userId: "owner", principalId: "human", agentId: "AGT-EXT-CODEX", agentPrincipalId: "codex" };
 function fixture() {
   const room = { id: "row-1", capsuleId: "WC-1920C35F", headSha: HEAD, pullRequestNumber: 7011 as number | null, repositoryFullName: "o/r",
-    executorKind: "codex-desktop", leaseHolderPrincipalId: "human", createdByPrincipalId: "human", requestedByPrincipalId: "human",
+    executorKind: "codex-desktop", leaseHolderPrincipalId: "human", leaseExpiresAt: null as Date | null, createdByPrincipalId: "human", requestedByPrincipalId: "human",
     archivedAt: null as Date | null, status: "ready" };
   const pr = { nodeId: "PR_node", state: "OPEN", merged: false, headSha: HEAD, autoMergeEnabled: false, mergeQueueEntry: false };
   const activities: unknown[] = [];
@@ -21,6 +21,8 @@ function fixture() {
       externalEvidenceRecord: { findMany: vi.fn(async () => [{ id: "gate-1" }]) },
     },
     actor: codex,
+    assistantMayAct: vi.fn(async () => true),
+    now: new Date("2026-11-13T20:00:00Z"),
     resolveGateEvidence: vi.fn(async (ids: string[]) => ids.map((id) => ({ id }))),
     observePr: vi.fn(async () => ({ ...pr })),
     enableAutoMerge: vi.fn(async () => undefined),
@@ -51,6 +53,8 @@ describe("queue_workroom_pull_request (BI-53BED66C)", () => {
     ["the PR is closed", (x: ReturnType<typeof fixture>) => x.deps.observePr.mockResolvedValue({ ...x.pr, state: "CLOSED" }), "pull_request_not_open"],
     ["the room has no PR", (x: ReturnType<typeof fixture>) => x.deps.db.workroom.findUnique.mockResolvedValue({ ...x.room, pullRequestNumber: null }), "no_pull_request"],
     ["the caller is another surface", (x: ReturnType<typeof fixture>) => { x.deps.actor = { ...codex, agentId: "AGT-EXT-CLAUDE" }; }, "not_rooms_executor"],
+    ["the assistant was removed or narrowed in the room", (x: ReturnType<typeof fixture>) => x.deps.assistantMayAct.mockResolvedValue(false), "assistant_not_admitted"],
+    ["another person holds a live lease", (x: ReturnType<typeof fixture>) => x.deps.db.workroom.findUnique.mockResolvedValue({ ...x.room, leaseHolderPrincipalId: "someone", leaseExpiresAt: new Date("2026-11-13T20:20:00Z") }), "lease_held_by_other"],
     ["the caller acts for another person", (x: ReturnType<typeof fixture>) => { x.deps.actor = { ...codex, principalId: "someone" }; }, "not_rooms_executor"],
   ] as const)("refuses, queueing nothing, when %s", async (_, alter, error) => {
     alter(f);

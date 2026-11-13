@@ -15,12 +15,15 @@ import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
 type Room = {
   id: string; capsuleId: string; headSha: string | null; pullRequestNumber: number | null; repositoryFullName: string | null;
-  executorKind: string | null; leaseHolderPrincipalId: string | null; createdByPrincipalId: string | null;
+  executorKind: string | null; leaseHolderPrincipalId: string | null; leaseExpiresAt: Date | null; createdByPrincipalId: string | null;
   requestedByPrincipalId: string | null; archivedAt: Date | null; status: string;
 };
 export type QueuePrDeps = {
   db: CapsuleDb & { externalEvidenceRecord: { findMany(args: unknown): Promise<Array<{ id: string }>> } };
   actor: WorkCapsuleActor;
+  /** The assistant's current admission to act in this room (not removed or narrowed). */
+  assistantMayAct(roomId: string): Promise<boolean>;
+  now?: Date;
   /** Passing gate results bound to this room at its head, after the review resolver's checks. */
   resolveGateEvidence(ids: string[], roomId: string): Promise<Array<{ id: string }>>;
   observePr(input: { prNumber: number }): Promise<{ nodeId: string; state: string; merged: boolean; headSha: string; autoMergeEnabled: boolean; mergeQueueEntry: boolean }>;
@@ -30,6 +33,11 @@ const EXTERNAL_SURFACES: Readonly<Record<string, string>> = {
   "AGT-EXT-CLAUDE": "claude-desktop", "AGT-EXT-CODEX": "codex-desktop", "AGT-EXT-GROK": "grok-desktop",
 };
 const refuse = (error: string, message: string): ToolResult => ({ success: false, error, message });
+
+function liveLeaseOfAnother(room: Pick<Room, "leaseHolderPrincipalId" | "leaseExpiresAt">, actor: WorkCapsuleActor, now: Date): boolean {
+  return Boolean(room.leaseHolderPrincipalId && room.leaseHolderPrincipalId !== actor.principalId
+    && room.leaseExpiresAt && new Date(room.leaseExpiresAt).getTime() > now.getTime());
+}
 
 /** The caller is the room's own executor surface acting for the person who owns the room. */
 export function isRoomsOwnExecutor(room: Pick<Room, "executorKind" | "leaseHolderPrincipalId" | "createdByPrincipalId" | "requestedByPrincipalId">, actor: WorkCapsuleActor): boolean {
@@ -45,6 +53,12 @@ export async function queueWorkroomPullRequest(params: Record<string, unknown>, 
   if (!room || room.archivedAt) return refuse("workroom_not_found", "The Workroom could not be found.");
   if (!isRoomsOwnExecutor(room, deps.actor)) {
     return refuse("not_rooms_executor", "Only the room's own executor, acting for the room's owner, can queue its PR. Take the room over first (reassign_workroom_executor), or ask the owner.");
+  }
+  if (liveLeaseOfAnother(room, deps.actor, deps.now ?? new Date())) {
+    return refuse("lease_held_by_other", "Someone else holds this room's live lease and may still be working. Wait for it to lapse or hand the room over first.");
+  }
+  if (!(await deps.assistantMayAct(room.id))) {
+    return refuse("assistant_not_admitted", "This assistant may not act in this room (it was removed or narrowed). Ask the room's owner.");
   }
   if (!room.pullRequestNumber) return refuse("no_pull_request", "This room has no recorded PR. Open it with pnpm land, then queue it.");
   if (!room.headSha || !/^[a-f0-9]{40}$/.test(room.headSha)) return refuse("room_head_unknown", "The room has no recorded head commit. Re-sync it with adopt_worktree(headSha) first.");
@@ -67,7 +81,7 @@ export async function queueWorkroomPullRequest(params: Record<string, unknown>, 
   await recordWorkCapsuleActivity(deps.db, {
     workCapsuleId: room.id, kind: "action", actor: deps.actor,
     summary: `PR #${room.pullRequestNumber} queued for merge at ${room.headSha.slice(0, 12)}; the merge queue runs the required checks.`,
-    payload: { kind: "pr-queued", prNumber: room.pullRequestNumber, headSha: room.headSha, gateEvidenceId: passing[0].id },
+    payload: { kind: "pull-request-queued", prNumber: room.pullRequestNumber, headSha: room.headSha, gateEvidenceId: passing[0].id },
   });
   return { success: true, entityId: room.capsuleId, message: `PR #${room.pullRequestNumber} queued for merge; the merge queue runs the required checks.`,
     data: { prNumber: room.pullRequestNumber, headSha: room.headSha, gateEvidenceId: passing[0].id, alreadyQueued: false } };
@@ -85,5 +99,8 @@ export async function queueWorkroomPrConsequenceForCall(call: ToolCallConsequenc
   const [{ prisma }, { workCapsuleActor }] = await Promise.all([import("@dpf/db"), import("./handler-actor")]);
   const actor = await workCapsuleActor(call.userId, call.context as never);
   const room = await prisma.workroom.findUnique({ where: { capsuleId: call.params.capsuleId } }) as Room | null;
-  return room && !room.archivedAt && isRoomsOwnExecutor(room, actor) ? { consequence: null, reason: "own-room-gated-pr" } : keep;
+  if (!room || room.archivedAt || !isRoomsOwnExecutor(room, actor) || liveLeaseOfAnother(room, actor, new Date())) return keep;
+  const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
+  const access = await resolveAgentWorkroomAccess({ userId: call.userId, agentId: call.context.agentId, workroomId: room.id, requested: "action" });
+  return access.decision.level === "action" ? { consequence: null, reason: "own-room-gated-pr" } : keep;
 }

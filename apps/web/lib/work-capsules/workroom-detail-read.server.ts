@@ -86,7 +86,7 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
   const capacity = await import("./executor-capacity");
   const wait = capacity.capacityWaitFor({ executorKind: capsule.executorKind ?? null, leaseExpiresAt: capsule.leaseExpiresAt ?? null,
     now: new Date(), providerRows: await capacity.loadProviderCapacityRows(prisma as never), checkpoint: capacity.checkpointOf(capsule.workspaceState) });
-  const capacityWait = wait ? { reason: capacity.describeCapacityWait(wait), executorKind: wait.executorKind, provider: wait.provider,
+  const capacityWait = wait ? { reason: capacity.describeCapacityWait(wait, new Date()), executorKind: wait.executorKind, provider: wait.provider,
     resetAt: wait.resetAt.toISOString(), source: wait.source, alternatives: wait.alternatives } : null;
   const message = `Loaded ${capsule.capsuleId}.`;
   const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, delivery: projectDeliveryAgreement({ workspaceState: capsule.workspaceState, currentObjective: capsule.objective, terminal: ["complete", "archived", "abandoned"].includes(capsule.status) }), recovery: projectWorkroomRecovery(capsule, reviews,

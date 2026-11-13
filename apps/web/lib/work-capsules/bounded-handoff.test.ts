@@ -200,7 +200,8 @@ describe("same-owner handover of a room a platform coworker last held", () => {
     const requested = await execute(env, toCodex);
     expect(requested).toMatchObject({ success: true, data: { handoff: { state: "pending-acknowledgement" } } });
     const id = (requested.data as any).handoff.requestId as string;
-    expect(await execute(env, ack(id), receiver)).toMatchObject({ success: true, data: { handoff: { state: "completed", receivingAgentId: "AGT-EXT-CODEX" } } });
+    // The completed record names the room's owner, never the coworker whose lease lapsed.
+    expect(await execute(env, ack(id), receiver)).toMatchObject({ success: true, data: { handoff: { state: "completed", receivingAgentId: "AGT-EXT-CODEX", ownerPrincipalId: "human" } } });
     expect(env.room).toMatchObject({ executorKind: "codex-desktop", executorRef: "receiver-chat", leaseHolderPrincipalId: "human" });
   });
 

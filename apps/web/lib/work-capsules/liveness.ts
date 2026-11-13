@@ -25,7 +25,7 @@
 //   it is exhaustively unit-testable.
 
 import { describeCapacityWait } from "./executor-capacity";
-import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
+import { WORK_CAPSULE_IDLE_STALE_MS, WORK_CAPSULE_PAUSE_GRACE_MS } from "@/lib/work-capsules";
 import type { PrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 
 /** Capsule statuses that mean the work is already closed out. */
@@ -119,7 +119,7 @@ const REAPABLE_LIVENESS = new Set<WorkCapsuleLiveness>([
  *  client (Claude/Codex/Grok) may be down for a usage-window duration and will
  *  return. Conservative — err toward NOT reaping a session that may resume. A
  *  DELIVERED (merged) room bypasses the grace: it need not resume. */
-export const WORK_CAPSULE_PAUSE_GRACE_MS = 24 * 60 * 60 * 1000;
+export { WORK_CAPSULE_PAUSE_GRACE_MS } from "@/lib/work-capsules";
 
 /** Provider "open" is a renewable liveness fact, not a permanent property. */
 export const WORK_CAPSULE_OPEN_PR_FRESHNESS_MS = 20 * 60 * 1000;
@@ -374,7 +374,7 @@ export function classifyWorkCapsuleLiveness(
       const age = humanAge(elapsed);
       const wait = input.capacityWait;
       if (wait && wait.resetAt.getTime() + pauseGraceMs > now.getTime()) {
-        return verdict("paused", `Lease expired ${age} ago. ${describeCapacityWait(wait)}`, input.leaseExpiresAt);
+        return verdict("paused", `Lease expired ${age} ago. ${describeCapacityWait(wait, now)}`, input.leaseExpiresAt);
       }
       if (elapsed <= pauseGraceMs) {
         return verdict(

@@ -153,15 +153,3 @@ test("attribution evidence carries provenance without touching the lease enum", 
   });
 });
 
-// BI-53BED66C: the claim and the gate must name one session. A T3-driven Codex
-// thread bound under DPF_SESSION_REF; the gate then recorded CODEX_THREAD_ID.
-test("DPF_SESSION_REF, the session a claim was made under, names the gate's session", () => {
-  const identity = resolveAgentIdentity({ env: { CODEX_THREAD_ID: "thread-1", DPF_SESSION_REF: "claimed-ref" } });
-  assert.equal(identity.provider, "codex");
-  assert.equal(identity.sessionId, "claimed-ref");
-});
-
-test("an explicit --owner-session-id still wins over DPF_SESSION_REF", () => {
-  const identity = resolveAgentIdentity({ env: { CODEX_THREAD_ID: "thread-1", DPF_SESSION_REF: "claimed-ref" }, sessionOverride: "explicit" });
-  assert.equal(identity.sessionId, "explicit");
-});

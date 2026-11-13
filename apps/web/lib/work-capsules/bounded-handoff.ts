@@ -49,7 +49,7 @@ async function readCompletionReceipt(db: CapsuleDb, capsule: HandoffRoom, reques
   if (!receipt || receipt.state !== "completed" || receipt.requestId !== requestId || receipt.requestDigest !== handoffDigest(request) || handoffDigest(receipt) !== handoffDigest(outcome)) return fail("handoff-completion-unproven", "This activity has no matching completed handoff receipt. The executor was not transferred by this acknowledgement.");
   const fields = { fromExecutorKind: request.command.expectedExecutorKind, fromExecutorRef: request.command.expectedExecutorRef,
     toExecutorKind: request.command.toExecutorKind, toExecutorRef: request.command.toExecutorRef,
-    ownerPrincipalId: request.snapshot.leaseHolderPrincipalId, receivingAgentId: request.command.targetAgentId };
+    ownerPrincipalId: request.ownerPrincipalId, receivingAgentId: request.command.targetAgentId };
   if (Object.entries(fields).some(([key, value]) => receipt[key] !== value)) return fail("handoff-completion-unproven", "The completed receipt does not match its original request and receiving assistant.");
   const handoff = { ...receipt, ...fields, state: "completed" as const, requestId, requestDigest: handoffDigest(request) };
   return { handoff, activityId: typeof terminal.id === "string" ? terminal.id : null,
@@ -156,7 +156,7 @@ export async function executeBoundedHandoff(input: Input): Promise<ToolResult> {
     handoffManifest: { ...proposed.handoffManifest, boundedHandoff: { requestId: command.requestId, requestDigest: handoffDigest(request), receivingAgentId: actor.agentId, receivingAgentPrincipalId: actor.agentPrincipalId } }, now, deferPublication: true });
   const handoff = { kind: "bounded-handoff", state: "completed", commandId: command.commandId, requestId: command.requestId, requestDigest: handoffDigest(request),
     fromExecutorKind: proposed.expectedExecutorKind, fromExecutorRef: proposed.expectedExecutorRef, toExecutorKind: proposed.toExecutorKind, toExecutorRef: proposed.toExecutorRef,
-    ownerPrincipalId: snapshot.leaseHolderPrincipalId, receivingAgentId: actor.agentId, receivingAgentPrincipalId: actor.agentPrincipalId,
+    ownerPrincipalId: request.ownerPrincipalId, receivingAgentId: actor.agentId, receivingAgentPrincipalId: actor.agentPrincipalId,
     identityAssurance: "The receiving assistant endorses the destination; no external chat is authenticated." };
   await db.workroomActivity.create({ data: { workCapsuleId: capsule.id, kind: "action", summary: "Receiving assistant acknowledged; handoff completed", payload: handoff, recordedById: actor.userId, recordedByAgentId: actor.agentId } });
   return { success: true, entityId: capsule.capsuleId, message: "Receiving assistant acknowledged; handoff completed.", data: { capsule: updated, handoff, assistantAdmitted: false } };

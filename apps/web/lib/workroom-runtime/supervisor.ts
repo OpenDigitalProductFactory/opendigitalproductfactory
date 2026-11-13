@@ -165,9 +165,11 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     const limit = runtimePlanLimit(entry.provider, error, clock(), parseAbsoluteResetAt);
     if (!limit) return;
     if (limit.resetAt) {
-      const { heartbeatWorkCapsule } = await import("@/lib/work-capsules/workroom-lease");
-      await heartbeatWorkCapsule({ db: prisma as unknown as CapsuleDb, capsuleId: entry.capsuleId, actor: entry.actor, onHeldByOther: "keep",
-        checkpoint: { capacity: { provider: limit.provider, resetAt: limit.resetAt.toISOString() } } });
+      const { recordExecutorCapacityNote } = await import("@/lib/work-capsules/workroom-lease");
+      await recordExecutorCapacityNote({ db: prisma as unknown as CapsuleDb, capsuleId: entry.capsuleId,
+        capacity: { provider: limit.provider, resetAt: limit.resetAt.toISOString() } }).catch((error: unknown) => {
+        console.error("[workroom-runtime] plan-limit note failed for %s: %s", JSON.stringify(entry.capsuleId), error instanceof Error ? error.message : "unknown");
+      });
     }
     await log(entry.roomId, "error", limit.resetAt
       ? `Plan limit reached on ${entry.provider}; expected back by ${formatCentral(limit.resetAt)} (may return sooner).`

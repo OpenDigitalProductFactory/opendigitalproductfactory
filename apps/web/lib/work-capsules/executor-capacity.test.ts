@@ -23,9 +23,10 @@ describe("a plan-limited executor's room waits visibly (BI-53BED66C)", () => {
   });
 
   it("says when, in Central, and that it may return sooner", () => {
-    expect(formatCentral(RESET)).toBe("Mon 16 Nov, 9:54 PM Central");
-    expect(describeCapacityWait(capacityWaitFor(room)!)).toBe(
-      "Codex plan limit reached; expected back by Mon 16 Nov, 9:54 PM Central (may return sooner; rechecked hourly). Claude or Grok can take it over now.");
+    // Central time, with the zone named so it is never ambiguous.
+    expect(formatCentral(RESET)).toMatch(/16.*9:54\sPM.*CST/);
+    expect(describeCapacityWait(capacityWaitFor(room)!, NOW)).toBe(
+      `Codex plan limit reached; expected back by ${formatCentral(RESET)} (may return sooner; rechecked hourly). Claude or Grok can take it over now.`);
   });
 
   it("keeps out alternatives whose own plans are limited or need sign-in", () => {
@@ -33,7 +34,7 @@ describe("a plan-limited executor's room waits visibly (BI-53BED66C)", () => {
       { providerId: "anthropic-sub", state: "quota_resets_at", retryAt: new Date("2026-11-14T00:00:00Z"), lastObservedAt: NOW, lastSuccessAt: null },
       { providerId: "xai", state: "reauth_required", retryAt: null, lastObservedAt: NOW, lastSuccessAt: null }];
     expect(capacityWaitFor({ ...room, providerRows: rows })?.alternatives).toEqual([]);
-    expect(describeCapacityWait(capacityWaitFor({ ...room, providerRows: rows })!)).toContain("No other executor is available now.");
+    expect(describeCapacityWait(capacityWaitFor({ ...room, providerRows: rows })!, NOW)).toContain("No other executor is available now.");
   });
 
   it("orders alternatives by estimated cost when the estimator has one", () => {
@@ -45,7 +46,8 @@ describe("a plan-limited executor's room waits visibly (BI-53BED66C)", () => {
   it("treats an early reset as over: a success after the limit, or a live lease, clears the wait", () => {
     expect(capacityWaitFor({ ...room, providerRows: [{ ...codexLimited, lastSuccessAt: new Date("2026-11-13T18:00:00Z") }] })).toBeNull();
     expect(capacityWaitFor({ ...room, leaseExpiresAt: new Date("2026-11-13T19:50:00Z") })).toBeNull();
-    expect(capacityWaitFor({ ...room, providerRows: [{ ...codexLimited, retryAt: new Date("2026-11-13T19:00:00Z") }] })).toBeNull();
+    // A reset more than the pause grace ago no longer holds the room.
+    expect(capacityWaitFor({ ...room, providerRows: [{ ...codexLimited, retryAt: new Date("2026-11-12T19:00:00Z") }] })).toBeNull();
   });
 
   it("uses the executor's own note, superseded by any later lease renewal", () => {
@@ -61,6 +63,26 @@ describe("a plan-limited executor's room waits visibly (BI-53BED66C)", () => {
   });
 });
 
+// Review finding: the wait must hold through the reset plus the pause grace,
+// or a room whose lease lapsed days before the reset reads dead the moment the plan resets.
+describe("after the stated reset", () => {
+  const justAfter = new Date("2026-11-17T04:30:00Z");
+  it("keeps the room waiting for its session through the grace, saying the plan has reset", () => {
+    const wait = capacityWaitFor({ ...room, now: justAfter })!;
+    expect(wait).toMatchObject({ resetAt: RESET });
+    expect(describeCapacityWait(wait, justAfter)).toBe(`Codex plan reset at ${formatCentral(RESET)}; waiting for the session to resume. Claude or Grok can take it over now.`);
+    const base = { status: "ready", executorKind: "codex-desktop", leaseExpiresAt: lapsed, lastSyncedAt: null, updatedAt: lapsed, pullRequestUrl: null };
+    expect(classifyWorkCapsuleLiveness({ ...base, capacityWait: wait }, justAfter)).toMatchObject({ liveness: "paused", isReapable: false });
+  });
+  it("lets the room go once the grace after the reset has passed", () => {
+    expect(capacityWaitFor({ ...room, now: new Date("2026-11-18T04:00:00Z") })).toBeNull();
+  });
+  it("uses the capacity note's own time, so a note merged into an older checkpoint is not superseded", () => {
+    const checkpoint = { capacity: { provider: "codex", resetAt: RESET.toISOString(), recordedAt: "2026-11-13T07:00:00Z" }, recordedAt: "2026-11-13T05:00:00Z" };
+    expect(capacityWaitFor({ ...room, providerRows: [], checkpoint, leaseExpiresAt: new Date("2026-11-13T06:10:35Z") })).toMatchObject({ source: "executor-checkpoint" });
+  });
+});
+
 describe("liveness of a plan-limited room", () => {
   const base = { status: "ready", executorKind: "codex-desktop", leaseExpiresAt: lapsed, lastSyncedAt: null, updatedAt: lapsed, pullRequestUrl: null };
   it("reads paused with the reason, and is not reapable after the generic grace while the reset is ahead", () => {
@@ -68,7 +90,7 @@ describe("liveness of a plan-limited room", () => {
     const capacityWait = capacityWaitFor({ ...room, now: later })!;
     const verdict = classifyWorkCapsuleLiveness({ ...base, capacityWait }, later);
     expect(verdict).toMatchObject({ liveness: "paused", isReapable: false, isLive: true });
-    expect(verdict.reason).toContain("Codex plan limit reached; expected back by Mon 16 Nov, 9:54 PM Central");
+    expect(verdict.reason).toContain(`Codex plan limit reached; expected back by ${formatCentral(RESET)}`);
     expect(classifyWorkCapsuleLiveness(base, later)).toMatchObject({ liveness: "lease-expired", isReapable: true });
   });
 });

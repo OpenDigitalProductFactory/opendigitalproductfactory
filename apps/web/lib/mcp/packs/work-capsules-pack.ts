@@ -624,7 +624,8 @@ export const workCapsulesPack: ToolPack = {
     correct_workroom_sensitivity: (params, userId, context) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.correctWorkroomSensitivityTool(params, userId, context)),
     list_workrooms: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
     get_workroom: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
-    queue_workroom_pull_request: (params, userId, context) => HANDLERS().then((m) => m.queueWorkroomPullRequestTool(params, userId, context)),
+    queue_workroom_pull_request: (params, userId, context) =>
+      import("@/lib/work-capsules/queue-workroom-pr.server").then((m) => m.queueWorkroomPullRequestTool(params, userId, context)),
     create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),

@@ -15,7 +15,9 @@
  *
  * Pure: callers load the rows. Nothing here grants authority or moves a room.
  */
-import { LEASE_TTL_MS } from "@/lib/work-capsules";
+import { LEASE_TTL_MS, WORK_CAPSULE_PAUSE_GRACE_MS } from "@/lib/work-capsules";
+import { formatInstant } from "@/lib/datetime";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 /** The provider that serves each external executor surface's subscription plan. */
 export const EXECUTOR_PLAN_PROVIDER: Readonly<Record<string, string>> = {
@@ -42,7 +44,7 @@ export type ProviderCapacityRow = {
 };
 
 /** What an executor (or the harness running it) recorded on its heartbeat. */
-export type CheckpointCapacity = { provider: string; resetAt: string; note?: string };
+export type CheckpointCapacity = { provider: string; resetAt: string; note?: string; recordedAt?: string };
 
 export type CapacityAlternative = { executorKind: string; label: string; step: string };
 export type CapacityWait = {
@@ -54,9 +56,13 @@ export type CapacityWait = {
   alternatives: CapacityAlternative[];
 };
 
-/** A provider row still says the plan is limited: a later success means an early reset. */
-function limitedRow(row: ProviderCapacityRow | undefined, now: Date): row is ProviderCapacityRow & { retryAt: Date } {
-  if (!row || !LIMIT_STATES.has(row.state) || !row.retryAt || row.retryAt.getTime() <= now.getTime()) return false;
+/**
+ * A provider row still says the plan is limited: a later success means an
+ * early reset. `holdMs` keeps a room's wait past the reset so its session has
+ * the normal grace to come back before the room reads as gone.
+ */
+function limitedRow(row: ProviderCapacityRow | undefined, now: Date, holdMs = 0): row is ProviderCapacityRow & { retryAt: Date } {
+  if (!row || !LIMIT_STATES.has(row.state) || !row.retryAt || row.retryAt.getTime() + holdMs <= now.getTime()) return false;
   return !(row.lastSuccessAt && row.lastObservedAt && row.lastSuccessAt.getTime() > row.lastObservedAt.getTime());
 }
 
@@ -66,13 +72,14 @@ function unavailable(row: ProviderCapacityRow | undefined, now: Date): boolean {
   return true;
 }
 
-export function parseCheckpointCapacity(input: unknown): { ok: true; data: CheckpointCapacity } | { ok: false; error: string } {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "capacity must be an object." };
+export function parseCheckpointCapacity(input: unknown): ActionResult<CheckpointCapacity> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return err("capacity must be an object.");
   const raw = input as Record<string, unknown>;
-  if (typeof raw.provider !== "string" || !raw.provider.trim() || raw.provider.length > 64) return { ok: false, error: "capacity.provider must name the provider." };
-  if (typeof raw.resetAt !== "string" || !Number.isFinite(Date.parse(raw.resetAt))) return { ok: false, error: "capacity.resetAt must be an ISO time." };
-  if (raw.note !== undefined && (typeof raw.note !== "string" || raw.note.length > 300)) return { ok: false, error: "capacity.note must be short text." };
-  return { ok: true, data: { provider: raw.provider.trim(), resetAt: new Date(raw.resetAt).toISOString(), ...(raw.note ? { note: raw.note as string } : {}) } };
+  if (typeof raw.provider !== "string" || !raw.provider.trim() || raw.provider.length > 64) return err("capacity.provider must name the provider.");
+  if (typeof raw.resetAt !== "string" || !Number.isFinite(Date.parse(raw.resetAt))) return err("capacity.resetAt must be an ISO time.");
+  if (raw.note !== undefined && (typeof raw.note !== "string" || raw.note.length > 300)) return err("capacity.note must be short text.");
+  const recordedAt = typeof raw.recordedAt === "string" && Number.isFinite(Date.parse(raw.recordedAt)) ? new Date(raw.recordedAt).toISOString() : undefined;
+  return ok({ provider: raw.provider.trim(), resetAt: new Date(raw.resetAt).toISOString(), ...(raw.note ? { note: raw.note as string } : {}), ...(recordedAt ? { recordedAt } : {}) });
 }
 
 /**
@@ -87,8 +94,11 @@ export function capacityWaitFor(input: {
   checkpoint?: { capacity?: CheckpointCapacity; recordedAt?: string } | null;
   /** Lower first: estimated cost per unit by executor kind, when the estimator has one. */
   costRank?: Readonly<Record<string, number>>;
+  /** How long past the reset the room keeps waiting for its session (the liveness pause grace). */
+  graceMs?: number;
 }): CapacityWait | null {
   const { executorKind, leaseExpiresAt, now } = input;
+  const graceMs = input.graceMs ?? WORK_CAPSULE_PAUSE_GRACE_MS;
   if (!executorKind || !EXECUTOR_PLAN_PROVIDER[executorKind]) return null;
   if (leaseExpiresAt && leaseExpiresAt.getTime() > now.getTime()) return null;
   const byProvider = new Map(input.providerRows.filter((row) => row.providerId).map((row) => [row.providerId as string, row]));
@@ -96,14 +106,15 @@ export function capacityWaitFor(input: {
 
   let wait: Pick<CapacityWait, "provider" | "resetAt" | "source"> | null = null;
   const noted = input.checkpoint?.capacity;
-  const notedAt = input.checkpoint?.recordedAt ? Date.parse(input.checkpoint.recordedAt) : NaN;
+  const notedAtText = noted?.recordedAt ?? input.checkpoint?.recordedAt;
+  const notedAt = notedAtText ? Date.parse(notedAtText) : NaN;
   const lastRenewal = leaseExpiresAt ? leaseExpiresAt.getTime() - LEASE_TTL_MS : NaN;
-  if (noted && Number.isFinite(notedAt) && Date.parse(noted.resetAt) > now.getTime()
+  if (noted && Number.isFinite(notedAt) && Date.parse(noted.resetAt) + graceMs > now.getTime()
     && !(Number.isFinite(lastRenewal) && lastRenewal > notedAt + CHECKPOINT_SUPERSEDED_AFTER_MS)) {
     wait = { provider: noted.provider, resetAt: new Date(noted.resetAt), source: "executor-checkpoint" };
   }
   const row = byProvider.get(provider);
-  if (!wait && limitedRow(row, now)) wait = { provider, resetAt: row.retryAt, source: "provider-capacity" };
+  if (!wait && limitedRow(row, now, graceMs)) wait = { provider, resetAt: row.retryAt, source: "provider-capacity" };
   if (!wait) return null;
 
   const alternatives = Object.keys(EXECUTOR_PLAN_PROVIDER)
@@ -117,19 +128,22 @@ export function capacityWaitFor(input: {
   return { executorKind, label: EXECUTOR_LABEL[executorKind], ...wait, alternatives };
 }
 
-/** "Mon 16 Nov, 9:54 PM Central": the owner reads times in US Central. */
+/**
+ * The owner reads times in US Central (owner direction). The shared formatter
+ * keeps the viewer's locale and appends the zone label, e.g. "CST".
+ */
 export function formatCentral(at: Date): string {
-  const text = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
-  }).formatToParts(at);
-  const part = (type: string) => text.find((entry) => entry.type === type)?.value ?? "";
-  return `${part("weekday")} ${part("day")} ${part("month")}, ${part("hour")}:${part("minute")} ${part("dayPeriod")} Central`;
+  return formatInstant(at, { timeZone: "America/Chicago", withZone: true,
+    options: { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" } });
 }
 
-export function describeCapacityWait(wait: Pick<CapacityWait, "label" | "resetAt" | "alternatives">): string {
+export function describeCapacityWait(wait: Pick<CapacityWait, "label" | "resetAt" | "alternatives">, now: Date = new Date()): string {
   const alternatives = wait.alternatives.length
     ? ` ${wait.alternatives.map((entry) => entry.label).join(" or ")} can take it over now.`
     : " No other executor is available now.";
+  if (wait.resetAt.getTime() <= now.getTime()) {
+    return `${wait.label} plan reset at ${formatCentral(wait.resetAt)}; waiting for the session to resume.${alternatives}`;
+  }
   return `${wait.label} plan limit reached; expected back by ${formatCentral(wait.resetAt)} (may return sooner; rechecked hourly).${alternatives}`;
 }
 
