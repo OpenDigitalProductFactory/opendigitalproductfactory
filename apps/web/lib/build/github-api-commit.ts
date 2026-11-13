@@ -19,6 +19,7 @@
 import { withConnectRetry } from "@/lib/network/connect-retry";
 import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { PR_FOLLOW_UP_UNCHANGED } from "./pr-ci-repair-markers";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -123,7 +124,7 @@ export function extractNewFileContent(diff: string, filePath: string): string | 
   // Find the diff segment for this file
   const escapedPath = filePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const segmentRegex = new RegExp(
-    `^diff --git a/.+ b/${escapedPath}\\n.*?\\n--- /dev/null\\n\\+\\+\\+ b/.+\\n(@@[\\s\\S]*?)(?=^diff --git|$)`,
+    `^diff --git a/.+ b/${escapedPath}\\n(?:(?!diff --git ).*\\n)*?--- /dev/null\\n\\+\\+\\+ b/.+\\n(@@[\\s\\S]*?)(?=^diff --git |(?![\\s\\S]))`,
     "m",
   );
   const match = segmentRegex.exec(diff);
@@ -176,28 +177,39 @@ export async function readSandboxFile(filePath: string): Promise<string | null> 
  * the sandbox (`git show HEAD:<path>` in its workdir). That is exactly the
  * tree the gates verified, whatever is on disk or on the shared mount. Null
  * when the path is not in that commit (the caller then falls back to the diff
- * for an added file, or skips).
+ * for an added file, or refuses to publish).
+ *
+ * BI-F31DB5F8: a build's worktree can be gone when it ships (a sandbox restart
+ * removes it) while its branch still holds every commit. `branchFallback`
+ * names that branch in the shared repository, read when the worktree cannot
+ * answer, so a missing worktree does not cost the build its files.
  */
 export function buildTreeFileReader(deps: {
   containerId: string;
   workdir: string;
   exec: (containerId: string, command: string) => Promise<string>;
+  branchFallback?: { repoDir: string; branch: string } | undefined;
 }): (path: string) => Promise<string | null> {
   const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-  return async (path: string) => {
-    if (!path || path.startsWith("/") || path.split("/").includes("..")) return null;
+  const readAt = async (dir: string, rev: string, path: string): Promise<string | null> => {
     try {
       // cat-file -e fails (and exec throws) when the path is not in the commit,
       // so an empty file still publishes as empty rather than being skipped.
-      const object = quote(`HEAD:${path}`);
+      const object = quote(`${rev}:${path}`);
       const encoded = await deps.exec(
         deps.containerId,
-        `git -C ${quote(deps.workdir)} cat-file -e ${object} && git -C ${quote(deps.workdir)} show ${object} | base64 | tr -d '\\n'`,
+        `git -C ${quote(dir)} cat-file -e ${object} && git -C ${quote(dir)} show ${object} | base64 | tr -d '\\n'`,
       );
       return Buffer.from(encoded.trim(), "base64").toString("utf-8");
     } catch {
       return null;
     }
+  };
+  return async (path: string) => {
+    if (!path || path.startsWith("/") || path.split("/").includes("..")) return null;
+    const fromWorktree = await readAt(deps.workdir, "HEAD", path);
+    if (fromWorktree !== null || !deps.branchFallback) return fromWorktree;
+    return readAt(deps.branchFallback.repoDir, `refs/heads/${deps.branchFallback.branch}`, path);
   };
 }
 
@@ -413,6 +425,8 @@ export async function publishBranchCommit(input: {
    * so a modified file would carry the client-branch content, not the build's.
    */
   readFile?: (path: string) => Promise<string | null>;
+  /** BI-085A37EC: one follow-up commit on an open PR's head (restoring dropped paths); a fast-forward, never forced. */
+  followUpOf?: { commitSha: string; treeSha: string; restore: Array<{ path: string; sha: string | null }> } | null;
 }): Promise<PublishedBranchCommit> {
   assertDcoSignedCommitMessage(input.commitMessage);
   const dcoIdentity = parseDcoSignedCommitIdentity(input.commitMessage);
@@ -479,8 +493,12 @@ export async function publishBranchCommit(input: {
     }
 
     if (content === null) {
-      console.warn(`[github-api-commit] Could not read content for ${op.path}, skipping`);
-      continue;
+      // BI-F31DB5F8: never publish a partial change. A commit missing one of
+      // the build's files is not the change that was verified; refuse, and
+      // let the caller retry once the content can be read.
+      throw new Error(
+        `Nothing was published: the content of ${op.path} could not be read, and a change is published whole or not at all.`,
+      );
     }
 
     // Create a blob for this file
@@ -500,9 +518,10 @@ export async function publishBranchCommit(input: {
   // 4. Create a new tree based on the base commit's tree (on HEAD repo).
   const tree = await githubPost<GitHubTree>(
     `${headApiBase}/git/trees`,
-    { base_tree: baseSha, tree: treeEntries },
+    { base_tree: input.followUpOf?.treeSha ?? baseSha, tree: [...treeEntries, ...(input.followUpOf?.restore ?? []).map((r) => ({ ...r, mode: "100644", type: "blob" }))] },
     token,
   );
+  if (input.followUpOf && tree.sha === input.followUpOf.treeSha) throw new Error(PR_FOLLOW_UP_UNCHANGED);
 
   // 5. Create a commit on the HEAD repo.
   const commit = await githubPost<GitHubCommit>(
@@ -510,7 +529,7 @@ export async function publishBranchCommit(input: {
     {
       message: commitMessage,
       tree: tree.sha,
-      parents: [baseSha],
+      parents: [input.followUpOf?.commitSha ?? baseSha],
       author: dcoIdentity,
       committer: dcoIdentity,
     },
@@ -541,7 +560,7 @@ export async function publishBranchCommit(input: {
       : false;
     // BI-93CB58D6: the platform's own earlier publication of this same build
     // is replaced, not refused; see isEarlierPublicationOfSameBuild.
-    const ownEarlierPublication = !fastForward && existingSha
+    const ownEarlierPublication = !fastForward && existingSha && !input.followUpOf
       ? await isEarlierPublicationOfSameBuild(headApiBase, existingSha,
         { commitMessage, authorEmail: dcoIdentity.email, baseSha }, token)
       : false;

@@ -1,6 +1,6 @@
 // The placeholder blast-radius strings live with the type: routing reads the
 // same set to decide whether an item is the owner's at all (BI-79E207B9).
-import { GENERIC_BLAST_RADIUS } from "./types";
+import { GENERIC_BLAST_RADIUS, isAiCapacityItem, isOperatorContinuityItem } from "./types";
 import type { AttentionItem, AttentionSource } from "./types";
 
 const HEADLINE: Record<AttentionSource, string> = {
@@ -116,6 +116,12 @@ export function headlineFor(item: AttentionItem): string {
   }
   if (item.source === "coworker-envelope" && item.envelope?.decision) {
     return item.envelope.decision.headline;
+  }
+  // The AI-capacity watch writes a plain title naming the provider and, for a
+  // usage limit, its reset; the generic outage headline hid both (BI-ACE041FE).
+  // The continuity and work-sync watches name the window or the peer the same way.
+  if ((isAiCapacityItem(item) || isOperatorContinuityItem(item)) && item.title) {
+    return item.title;
   }
   return HEADLINE[item.source];
 }

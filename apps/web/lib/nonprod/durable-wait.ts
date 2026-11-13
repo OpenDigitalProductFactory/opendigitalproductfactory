@@ -1,3 +1,4 @@
+import { buildServiceHistory, isAiTurnClaimKey, orderWaiters, SERVICE_LOOKBACK_MS, type OverseerLease } from "./environment-lease-overseer";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 
@@ -97,7 +98,7 @@ export const WAITER_LIVENESS_WINDOW_MS = 5 * 60_000;
 /** How far down the queue to look for a live waiter before giving up and
  *  falling back to the literal head. Bounded so a long queue of abandoned rows
  *  cannot turn one reconcile tick into an unbounded scan. */
-const HEAD_SCAN_LIMIT = 10;
+const HEAD_SCAN_LIMIT = 25;
 
 function waiterHasProcessBehindIt(lease: WaitLease, now: number): boolean {
   const lastBeat = lease.heartbeatAt ?? lease.queuedAt ?? null;
@@ -335,8 +336,21 @@ export async function publishNonprodCapacityForHead(input: {
       (row): row is WaitLease => Boolean(row),
     );
   const now = (input.now ?? new Date()).getTime();
-  const head = candidates.find((lease) => waiterHasProcessBehindIt(lease, now))
-    ?? candidates[0]
+  // BI-218A4555: wake the overseer's policy head, not merely the oldest row.
+  // An AI turn has no task to wake, so it is passed over here; while it leads,
+  // a woken gate re-claims and simply stays queued behind it.
+  const recent = input.db.nonProductionEnvironmentLease.findMany
+    ? await input.db.nonProductionEnvironmentLease.findMany({
+      where: { environmentKey: input.environmentKey,
+        admittedAt: { gte: new Date(now - SERVICE_LOOKBACK_MS) } },
+      take: 200,
+    }) ?? []
+    : [];
+  const history = buildServiceHistory([...recent, ...candidates] as OverseerLease[], new Date(now));
+  const ordered = orderWaiters(candidates as Array<WaitLease & OverseerLease>, history, input.environmentKey)
+    .filter((lease) => !isAiTurnClaimKey(lease.claimKey));
+  const head = ordered.find((lease) => waiterHasProcessBehindIt(lease, now))
+    ?? ordered[0]
     ?? null;
   if (!head) return { notified: 0, headLeaseId: null };
   if (!input.db.taskRun) return { notified: 0, headLeaseId: head.leaseId };

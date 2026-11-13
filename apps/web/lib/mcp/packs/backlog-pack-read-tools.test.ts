@@ -67,7 +67,7 @@ vi.mock("@/lib/mcp-task-review-reassessment", () => ({ issuePresentReassessmentR
 vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.taskAuthority }));
 vi.mock("@/lib/build/build-entry-gate", () => ({ loadBuildReadinessFacts: mocks.loadBuildFacts }));
 
-import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
+import { getBacklogItem, listBacklogItems, queryBacklog } from "./backlog-pack-read-tools";
 import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
 import { createExhaustedPlanReviewPredicate } from "@/lib/backlog/initiative-readiness/exhausted-plan-review";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
@@ -582,6 +582,25 @@ describe("backlog deferral read projection", () => {
       reviewDue: false,
     });
     expect(mocks.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  // BI-17C5F43A: peer-owned work-sync mirrors are named apart from local acceptance.
+  it("says how many awaiting-acceptance items are owned by a peer installation", async () => {
+    mocks.findMany.mockResolvedValue([]);
+    mocks.findEpics.mockResolvedValue([]);
+    mocks.countEpics.mockResolvedValue(0);
+    mocks.count.mockImplementation(async (args: { where: { status?: string; body?: { contains: string } } }) =>
+      args.where.status === "awaiting-acceptance" ? (args.where.body ? 341 : 404) : 0);
+
+    const result = await queryBacklog({});
+
+    expect(mocks.count).toHaveBeenCalledWith({
+      where: { status: "awaiting-acceptance", body: { contains: "[origin:federatedWork:inst_" } },
+    });
+    expect(result.message).toContain("404 awaiting-acceptance (341 of them owned by a peer installation, accepted there)");
+    expect((result.data as { summary: Record<string, number> }).summary).toMatchObject({
+      awaitingAcceptance: 404, awaitingAcceptancePeerOwned: 341,
+    });
   });
 
   it("rejects an invalid review horizon before querying the backlog", async () => {

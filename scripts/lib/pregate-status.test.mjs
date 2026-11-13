@@ -1181,6 +1181,16 @@ test("live verdicts are the four non-terminal words and print pid, stage and the
   assert.doesNotMatch(text, /FAIL|NO-RECORD/);
 });
 
+// BI-218A4555: the overseer's estimate and reason are shown with the position.
+test("live: a queued status prints the overseer's estimated wait and why", () => {
+  const queued = recordFor("queued", { leaseEvents: [{ type: "queued", queuePosition: 2,
+    estimatedWaitMs: 7 * 60_000, queueReason: "1 ahead: 1 AI review turn (gates and AI review turns take turns)." }] });
+  const r = applyLiveGate(queued, { live: liveMarker({ stage: "gate" }), ...head });
+  const text = formatStatusReport(r, { ...head, now: NOW }).join("\n");
+  assert.match(text, /queue\s+position 2, about 7 min/);
+  assert.match(text, /why\s+1 ahead: 1 AI review turn/);
+});
+
 test("live marker: written, staged and read back while its process is alive; removed only by its owner", () => {
   const dir = mkdtempSync(join(tmpdir(), "dpf-pregate-live-"));
   try {

@@ -294,7 +294,15 @@ async function recordMirrorStatusChange(
 
 function sameClaim(a: FederatedWorkClaim | null, b: FederatedWorkClaim | null): boolean {
   if (!a || !b) return a === b;
-  return a.active === b.active && a.since === b.since && a.workrooms === b.workrooms;
+  return a.active === b.active && a.since === b.since && a.workrooms === b.workrooms
+    && sameHolder(a.holder ?? null, b.holder ?? null);
+}
+
+/** The holder and its lease travel with the claim, so a renewal at the home
+ *  reaches the mirror (BI-30EDDB7F). */
+function sameHolder(a: FederatedWorkClaim["holder"], b: FederatedWorkClaim["holder"]): boolean {
+  if (!a || !b) return !a && !b;
+  return a.installationId === b.installationId && a.workroomId === b.workroomId && a.leaseExpiresAt === b.leaseExpiresAt;
 }
 
 async function upsertItem(
