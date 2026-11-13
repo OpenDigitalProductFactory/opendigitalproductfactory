@@ -201,3 +201,157 @@ scope; it does not select or implement the disputed policy. Current medium-item
 architecture/security recovery reads expose no initiative-review packet. Use
 only a normally admitted independent source-review issuer; do not borrow another
 case's packet or proxy a reviewer. The current runtime hold remains intact.
+
+## Current diagnostic disposition — November 13, not an approval
+
+This section supersedes earlier unrun Linux/TMPDIR statements above. Published
+source `10d985276b082d8d7aa25bf3b398d1f7c787718d` passed canonical gate
+`cmwfmon0u0c800eqcmbpb355z`; lease `NPEL-1023758256` released normally.
+The [actual image qualification](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/43529921030)
+ran ten tests per architecture: eight containment/startup/cleanup checks passed,
+one availability diagnostic completed, and actual browser capture failed.
+An availability diagnostic completing is not a successful namespace creation.
+The prior run `43527236463` physically verified owned TMPDIR artifact cleanup
+on both architectures. Python source tests separately passed 25 cases; those
+are not the gate's 29 TypeScript tests or a real browser pass.
+
+| Observed boundary | AMD64 job 132244781331 | ARM job 132244781593 |
+| --- | --- | --- |
+| Engine / kernel | 29.4.2 / 7.0.0-1019-azure | 28.0.4 / 7.0.0-1017-azure |
+| Image SHA-256 | `58ffeb4a6daab0e6ffd3c02d49ed354d0d80791da54ab5a90bf55863c4997a52` | `7d775516c5af79730bf4870e8f116e691a1ec2ad0ef101e6afc1c301cde3921b` |
+| Chromium / Playwright / libseccomp | 156.0.8078.79 / 1.64.0 / 2.6.0 | 156.0.8078.79 / 1.64.0 / 2.6.0 |
+| Existing policies | builtin seccomp; docker-default AppArmor | builtin seccomp; docker-default AppArmor |
+| Both probe identities | UID/GID 10001, groups empty, NNP 1, CapEff 0 | UID/GID 10001, groups empty, NNP 1, CapEff 0 |
+| Before / after transport guard | seccomp filter count 1 / 2 | seccomp filter count 1 / 2 |
+| `unshare(0)` and `unshare(CLONE_NEWUSER)` | EPERM in both probes; namespace unchanged | EPERM in both probes; namespace unchanged |
+
+Both probes confirmed an actual syscall path with `getpid`, enforced NNP's
+irreversibility with EINVAL, ran sequentially with finite deadlines, and left
+no capture-UID process. Both images lack `chromium-sandbox`. A positive host
+user-namespace sysctl does not remove a container denial. These results establish
+that the added worker filter is not the sole source of the observed denial.
+They do not distinguish every AppArmor contribution, trace the browser's exact
+failing syscall, or prove that changing seccomp alone will make capture work.
+
+Primary source for the tested Chromium version explains the failure path:
+[sandbox selection](https://chromium.googlesource.com/chromium/src/+/refs/tags/156.0.8078.79/content/browser/zygote_host/zygote_host_impl_linux.cc)
+uses a successful user-namespace probe or an available setuid helper;
+[the probe](https://chromium.googlesource.com/chromium/src/+/refs/tags/156.0.8078.79/sandbox/linux/services/credentials.cc)
+requires a CLONE_NEWUSER fork and an unprivileged CLONE_NEWUSER unshare. The
+[namespace launcher](https://chromium.googlesource.com/chromium/src/+/refs/tags/156.0.8078.79/sandbox/linux/services/namespace_sandbox.cc)
+also requests PID/network namespaces. These upstream sources support a
+namespace-boundary hypothesis, not an attestation of Debian's entire patched
+binary or successful capture. Installing a setuid helper is not a demonstrated
+solution under the required no-new-privileges boundary.
+
+### Alternative 1: bounded eligibility and adaptation cost
+
+A candidate is eligible only with all of: an existing accountable owner;
+authorized environment class and current execution scope for this operation;
+immutable image/browser/dependency identities for the relevant architecture;
+an already-authorized sandbox policy; credential/profile isolation from the
+capture UID; actual transport/descriptor denial; finite cgroup resources;
+verified timeout, cancellation and whole-family cleanup; owned evidence
+publication; and legitimate original/current engagement authority. A healthy
+URL, a renderer screenshot or an ordinary portal verification is insufficient.
+
+Fresh authorized runtime-map searches covered running, verified, verifying and
+assigned records, plus the browser service catalog query. Running returned the
+portal peer and Build Studio sandbox, neither with browser qualification;
+verified returned the ordinary root portal; verifying/assigned and the browser
+catalog query were empty. The unrestricted map request was truncated and is not
+a complete inventory. Broader contributor-inventory and browser-task grants
+were unavailable and were not bypassed. No observed candidate satisfies the
+predicate; global absence has not been proved.
+
+If an existing owner supplies a candidate satisfying that predicate, reuse avoids
+changing the ordinary browser service's kernel surface. Dependency installation,
+a sidecar, new mounts or a new transport are adaptations requiring their own
+normal design/admission and qualification; they are not already-authorized
+reuse. The inspected Node/Alpine Build Studio image would require browser and
+dependency installation plus new containment proof. No such adaptation, owner,
+schedule or cost has been approved. This path is bounded by candidate evidence,
+not an indefinite search or an invented claim that a new runtime is cheaper.
+
+### Alternative 2: exact baseline and candidate delta for critique only
+
+The AMD64 Engine reported Git commit `d329809`, resolved from the public Moby
+repository to `d3298094ac5111e5d67517a252d291d27543e408`. Its
+[vendored baseline](https://github.com/moby/moby/blob/d3298094ac5111e5d67517a252d291d27543e408/vendor/github.com/moby/profiles/seccomp/default.json)
+has SHA-256 `1a4d017730647621403920d9558aa0152adef04dd89ed7720e4abafa24551999`.
+The ARM Engine's commit is `6430e49a55babd9b8f4d08e70ecb2b68900770fe`;
+its [baseline](https://github.com/moby/moby/blob/6430e49a55babd9b8f4d08e70ecb2b68900770fe/profiles/seccomp/default.json)
+hash is `9c1025c88ccaa517b648da571961838744ea2137f176bfe6a48b21294cae9c76`.
+These are source-matched upstream baselines, not dumps of the loaded filters.
+Their clone rules exclude namespace flags without CAP_SYS_ADMIN and unshare is
+only conditionally allowed with that capability. The measured effective
+capabilities are zero. Preserve all baseline rules and their conditions in any
+future reviewed candidate; do not replace a modern baseline wholesale with the
+older Playwright example.
+
+In particular, the [Playwright-linked profile](https://github.com/microsoft/playwright/blob/ae935a43d9e376e4759548f6b3c6905c7b282333/utils/docker/seccomp_profile.json)
+hash `cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849`
+allows unrestricted clone/setns/unshare and differs elsewhere, including
+io_uring rules. It is guidance, not a minimal drop-in delta or runtime consent.
+
+A narrower **unapproved candidate for review** would retain each exact tested
+Engine baseline and add only these two argument-qualified allow rules:
+
+```json
+[
+  {
+    "names": ["clone"], "action": "SCMP_ACT_ALLOW",
+    "args": [{"index": 0, "value": 235012096, "valueTwo": 0, "op": "SCMP_CMP_MASKED_EQ"}]
+  },
+  {
+    "names": ["unshare"], "action": "SCMP_ACT_ALLOW",
+    "args": [{"index": 0, "value": 268435456, "op": "SCMP_CMP_EQ"}]
+  }
+]
+```
+
+On the two supported architectures clone flags are argument zero. The first
+mask retains denial of NEWNS/NEWUTS/NEWIPC/NEWCGROUP while allowing USER/PID/NET
+namespace combinations, including PID/NET without USER; ordinary clone rules
+remain unchanged. That breadth requires explicit review, not an assumption that
+every new namespace must be paired with USER. The second permits
+only CLONE_NEWUSER unshare. Setns and clone3 behavior stay at baseline; no
+io_uring, ptrace, descriptor-transfer or other syscall permission is added.
+This is a proposed qualification hypothesis, not proven sufficient, selected,
+installed, or declared minimal. No profile file or security_opt change exists.
+
+The whole service, including ordinary root browser sessions, would acquire the
+outer profile's new syscall surface. Its kernel exposure and compatibility must
+be reviewed explicitly; capture's additional filter does not protect ordinary
+sessions. The worker guard is installed before browser/library loading and
+denies sockets, broker connections, io_uring_setup, ptrace, process_vm and
+pidfd_getfd. It has no clone/unshare rule. Linux documents
+[filter inheritance and precedence](https://docs.kernel.org/userspace-api/seccomp_filter.html):
+layering cannot relax an outer denial. Do not move the guard after browser
+startup to work around this boundary. NNP, cgroup limits, private directories,
+no-network execution and sandbox-enabled startup remain mandatory.
+
+The canonical host is a distinct Docker Desktop 4.98.0 / Engine 29.9.2,
+Git commit `0367cbe`, ARM/kernel 7.0.14-linuxkit. A read-only public Moby commit
+lookup returned HTTP 422 for that commit; its exact maintained baseline is not
+attested by either CI source above. No canonical namespace experiment ran.
+Neither CI profile may be silently treated as its production baseline.
+Source-provenance confirmation for that Engine is a concrete release-owner
+dependency before proposing a production profile.
+
+The existing owner must obtain normal independent security/architecture review
+of the concrete candidate, a genuine governed decision and admission **before**
+any changed-policy CI qualification. If admitted, test exact image/Engine/profile
+identities, normal browser pixels, original negative controls, rejected forbidden
+namespace flags and other syscalls, resources and full cleanup. A refusal or
+remaining denial is a failed hypothesis; do not silently widen permissions.
+Only actual passing qualification, compatibility and normal protected delivery
+can precede producer enablement. Production policy and live advance stay with
+the sole release coordinator. DI-94DF1EA45BD5 remains unresolved.
+
+Native af9 architecture-decision review `TR-GATE-DE9942C16A1085002F3ABC45`
+passed the earlier alternatives/hold with zero critical blockers and eight
+important/minor issues. The current diagnosis, bounded predicate, baseline
+comparison and layering account address its evidence requests for a new review;
+that historical receipt is not approval of these new candidate rules. Original
+Critic findings and the operator's email/MSP acceptance remain unrun.
