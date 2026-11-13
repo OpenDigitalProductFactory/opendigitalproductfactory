@@ -9,6 +9,7 @@ import {
 } from "@/lib/workspace-home/command-center";
 
 import { loadAcceptanceBacklogShare, withAcceptanceBacklogTile } from "./acceptance-backlog-tile";
+import { loadWorkSyncStaleSince } from "@/lib/federation/work-sync-health.server";
 
 import type { WorkspaceHomeStorefrontConfigRef } from "./types";
 
@@ -41,13 +42,14 @@ export async function loadPlatformWorkspaceHomeData({
 
   // The Backlog tile shows awaiting acceptance and its aged share beside Done
   // (BI-CEC60185); command-center.ts is at its module-size ceiling.
-  const [commandCenter, acceptanceShare] = await Promise.all([
+  const [commandCenter, acceptanceShare, peerStaleSince] = await Promise.all([
     loadWorkspaceCommandCenter(prismaClient),
     loadAcceptanceBacklogShare(prismaClient, now),
+    loadWorkSyncStaleSince(prismaClient),
   ]);
   const workspaceCommandCenter: WorkspaceCommandCenterSummary = {
     ...commandCenter,
-    tileStatus: withAcceptanceBacklogTile(commandCenter.tileStatus, acceptanceShare),
+    tileStatus: withAcceptanceBacklogTile(commandCenter.tileStatus, { ...acceptanceShare, peerStaleSince }),
   };
 
   const calRangeStart = new Date(now.getFullYear(), now.getMonth(), -7);

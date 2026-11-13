@@ -1,6 +1,17 @@
 import { create } from "zustand";
 import type { ApiError, NearbyBusiness, PublicMenu } from "@dpf/types";
 import { api } from "@/src/lib/apiClient";
+import {
+  EMPTY_CART,
+  addMenuItem,
+  cartItemCount,
+  cartTotalMinor,
+  decrementLine,
+  incrementLine,
+  resetCart,
+  type CartState,
+  type Result,
+} from "./cart";
 
 /**
  * Anonymous "visitor" store — the walk-up consumer surface (first cut).
@@ -35,11 +46,24 @@ interface VisitorState {
   isLoadingMenu: boolean;
   menuError: string | null;
 
+  /** Client-only cart; never persisted or sent to the API. */
+  cart: CartState;
+  checkout: CheckoutState;
+
   fetchNearby: (input: { latitude: number; longitude: number }) => Promise<void>;
   fetchMenu: (slug: string) => Promise<void>;
   clearMenu: () => void;
+  addItem: (itemId: string) => Result<CartState>;
+  increaseItem: (itemId: string) => Result<CartState>;
+  decreaseItem: (itemId: string) => Result<CartState>;
+  clearCart: () => void;
+  cartItemCount: () => number;
+  cartTotalMinor: () => number;
   reset: () => void;
 }
+
+/** Checkout is idle until a later phase wires up ordering. */
+export type CheckoutState = { status: "idle" };
 
 const EMPTY = {
   businesses: [] as NearbyBusiness[],
@@ -48,9 +72,11 @@ const EMPTY = {
   menu: null as PublicMenu | null,
   isLoadingMenu: false,
   menuError: null as string | null,
+  cart: EMPTY_CART as CartState,
+  checkout: { status: "idle" } as CheckoutState,
 };
 
-export const useVisitorStore = create<VisitorState>((set) => ({
+export const useVisitorStore = create<VisitorState>((set, get) => ({
   ...EMPTY,
 
   fetchNearby: async ({ latitude, longitude }) => {
@@ -67,7 +93,14 @@ export const useVisitorStore = create<VisitorState>((set) => ({
   fetchMenu: async (slug) => {
     // Clear the prior menu so the screen never shows a stale business's menu
     // while the new one loads.
-    set({ isLoadingMenu: true, menuError: null, menu: null });
+    // A cart belongs to one business, so switching businesses drops it.
+    const { cart } = get();
+    set({
+      isLoadingMenu: true,
+      menuError: null,
+      menu: null,
+      ...(cart.businessSlug !== null && cart.businessSlug !== slug ? { cart: resetCart() } : {}),
+    });
     try {
       const menu = await api.storefront.menu(slug);
       set({ menu, isLoadingMenu: false });
@@ -81,8 +114,28 @@ export const useVisitorStore = create<VisitorState>((set) => ({
   },
 
   clearMenu: () => set({ menu: null, menuError: null, isLoadingMenu: false }),
+
+  addItem: (itemId) => applyCart(set, get, (cart, menu) => addMenuItem(cart, menu, itemId)),
+  increaseItem: (itemId) => applyCart(set, get, (cart, menu) => incrementLine(cart, menu, itemId)),
+  decreaseItem: (itemId) => applyCart(set, get, (cart) => decrementLine(cart, itemId)),
+  clearCart: () => set({ cart: resetCart() }),
+  cartItemCount: () => cartItemCount(get().cart),
+  cartTotalMinor: () => cartTotalMinor(get().cart),
+
   reset: () => set({ ...EMPTY }),
 }));
+
+/** Run a cart.ts mutation against current state; only a successful result is written. */
+function applyCart(
+  set: (partial: Partial<VisitorState>) => void,
+  get: () => VisitorState,
+  mutate: (cart: CartState, menu: PublicMenu | null) => Result<CartState>,
+): Result<CartState> {
+  const { cart, menu } = get();
+  const res = mutate(cart, menu);
+  if (res.ok) set({ cart: res.value });
+  return res;
+}
 
 /**
  * Pure projection: businesses that actually have something to browse

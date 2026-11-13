@@ -206,6 +206,24 @@ Off-host signal (WWMD DI-452922A2126A): a paired installation's work-sync watch
 (BI-85DE8EBD) notices when this installation stops answering. A separate cloud
 heartbeat is not built.
 
+## Work-sync watch (BI-85DE8EBD)
+
+`federation/demand-reconciliation` runs `watch-federated-work`
+(`apps/web/lib/federation/work-sync-watch.ts`) after each work-sync pull. The
+health record `federation.work-sync.health.v1` now carries `lastSuccessAt`,
+`failingSince` and `errorClass` per link across cycles
+(`apps/web/lib/federation/work-sync-health.ts`); before, a failed cycle wrote
+`lastPullAt: null` and the last success was lost. A trusted same-organization link
+that has not pulled successfully for over 6 hours (measured from the last success,
+or the newest mirror `lastSyncedAt` when the record has none) gets one
+`work_sync_failure` monitor row `work-sync:link:<linkId>`. The row names the peer,
+the last success and the error class: `revoked` (no token, or the peer answered
+401/403), `tls`, `network` (including undici's "fetch failed"), `peer-outdated`
+(404) or `protocol`, each with its own next steps. A newly opened row rings the
+bell. The next successful pull, or the link leaving the trusted set, resolves it.
+While a link fails, the workspace Backlog tile shows its mirrored items as
+"Awaiting at peer installation (stale since ...)".
+
 The issue-report intake no longer files a repeat signature as a new `BI-PIR-*`
 item. Minted items carry `Signature: <dedupeKey>` and `Source report: <id>`. A
 report whose signature or report id already has a live bug item increments that

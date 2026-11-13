@@ -75,7 +75,12 @@ colour and awaiting acceptance as a separate segment after it. The workspace
 can accept. Items copied in from a connected installation by work sync are
 accepted by the installation they came from, so the tile shows them separately
 as **Awaiting at peer installation** and leaves them out of the other two
-counts.
+counts. While work sync with that installation is failing, the row reads
+**stale since** the last successful sync, because the copies no longer change.
+If sync has not worked for six hours, **Needs you** names the installation, the
+last success, what kind of failure it is (the connection was revoked or
+refused, the network, or a secure-connection problem) and what to check. The
+item clears once sync works again.
 
 **Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
