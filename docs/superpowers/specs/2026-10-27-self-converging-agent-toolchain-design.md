@@ -212,7 +212,7 @@ A dry run reports `result: "preview"` and words like "would write". It never rep
 
 ### M9 — Escalate only what automation cannot fix
 
-- The connector declaration already sent on every MCP call (`X-DPF-Toolchain: pack=;digest=;client=`) gains `converge=<status>[:<code>]`, read from the state file. The status is `ok`, `failed`, `needs-operator`, `opted-out`, `offline` or `unproven`.
+- The connector declaration already sent on every MCP call (`X-DPF-Toolchain: pack=;digest=;client=`) gains `converge=<status>[:<code>]`, read from the state file. (For Claude Code the value now travels through the descriptor's `headersHelper`, not the descriptor itself, so a status change no longer signs the owner out: BI-BDC94789.) The status is `ok`, `failed`, `needs-operator`, `opted-out`, `offline` or `unproven`.
 - The portal stores it on `AgentToolchainObservation`, which exists, and shows it on the existing Connected Agent Clients card. The card keeps each verdict's reason instead of discarding it, and separates the endpoint and authentication, the loaded, installed and published identities, and the restart owed (BI-81AB897A E2).
 - A host that has stayed `failed` or `needs-operator` for more than 24 hours raises one attention item through the existing escalation path. The item carries the exact cause and the single operator action, for example Codex hook trust: "open Codex, run /hooks, choose Trust all".
 - No credentials move from host to portal.

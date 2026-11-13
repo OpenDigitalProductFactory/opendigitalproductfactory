@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 const feedback = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock("@/lib/routing/response-feedback", () => ({ getResponseFeedback: feedback.read }));
+const human = vi.hoisted(() => ({ current: vi.fn() }));
+vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: human.current }));
 
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
@@ -64,5 +66,41 @@ describe("response feedback registered resource parity", () => {
       actionId: "feedback.revise", args: { messageId: "forged", expectedRevision: 999, value: true, source: "human" } });
     expect(result.ok).toBe(true);
     expect(dispatch).toHaveBeenCalledWith("record_response_feedback", { messageId: "m1", expectedRevision: 4, value: false }, expect.objectContaining({ actionId: "feedback.revise" }));
+  });
+});
+
+describe("Finance native expense guidance", () => {
+  const raw = { delegatingUserId: "u1", actingAgentId: "finance-agent", mode: "browser" as const,
+    locale: "en-US", timezone: "America/Chicago", route: "/finance" };
+  const context = () => createServerSurfaceContext(raw, { authorizedToolNames: new Set() });
+  it("grounds the native workflow from the existing form catalog, without live financial data or actions", async () => {
+    human.current.mockResolvedValue({ userId: "u1", isSuperuser: false, platformRole: "HR-000", platformRoles: ["HR-000"] });
+    const opened = await authorizedSurfaceRuntime.open({ context: context(), selector: { route: "/finance" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    const snapshot = await authorizedSurfaceRuntime.snapshot({ sessionId: opened.session.sessionId, caller: raw });
+    expect(snapshot.ok && "graph" in snapshot).toBe(true); if (!snapshot.ok || !("graph" in snapshot)) return;
+    const text = JSON.stringify(snapshot.graph);
+    expect(text).toContain("/finance/my-expenses/new");
+    expect(text).toContain("Save as Draft");
+    expect(text).toContain("Submit for Approval");
+    expect(text).toContain("positive amount");
+    expect(text).not.toContain("currentBalance");
+    expect(snapshot.graph.actions).toEqual([]);
+    await authorizedSurfaceRuntime.close(opened.session.sessionId, raw);
+  });
+  it.each([null, { userId: "u1", isSuperuser: false, platformRole: "HR-300", platformRoles: ["HR-300"] }])(
+    "refuses missing or denied current human authority", async current => {
+      human.current.mockResolvedValue(current);
+      const opened = await authorizedSurfaceRuntime.open({ context: context(), selector: { surfaceId: "finance.expense-guidance" } });
+      expect(opened).toMatchObject({ ok: false, code: "surface_not_authorized" });
+    },
+  );
+  it("rechecks authority when rehydrating a previously authorized surface", async () => {
+    human.current.mockResolvedValue({ userId: "u1", isSuperuser: false, platformRole: "HR-000", platformRoles: ["HR-000"] });
+    const opened = await authorizedSurfaceRuntime.open({ context: context(), selector: { route: "/finance" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    human.current.mockResolvedValue(null);
+    expect(await authorizedSurfaceRuntime.snapshot({ sessionId: opened.session.sessionId, caller: raw })).toMatchObject({ ok: false });
+    await authorizedSurfaceRuntime.close(opened.session.sessionId, raw);
   });
 });

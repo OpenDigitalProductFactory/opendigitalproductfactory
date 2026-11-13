@@ -5,7 +5,7 @@ permissions:
   contents: read
 
 # Per the installer-parity roadmap Phase 9b (CI release gates). Four
-# fast gates plus one paid macos-14 gate, all path-filtered so they
+# fast gates plus one paid macos-15 gate, all path-filtered so they
 # only run when installer-touching files change. Full image-manifest
 # verification still lives in publish-image.yml (Phase 1) and runs on
 # tag push; this workflow checks third-party compose images (tag- or
@@ -24,9 +24,9 @@ permissions:
 #                      on ubuntu-22.04 to validate preflight, state
 #                      init, and compose chain on the lowest supported
 #                      Linux LTS.
-#   - apple-silicon    Same dry-run on a macos-14 runner so the bash
+#   - apple-silicon    Same dry-run on a macos-15 runner so the bash
 #                      installer's path on arm64 + BSD userland stays
-#                      green. macos-14 minutes are ~10x ubuntu-latest,
+#                      green. Standard macOS runner usage is bounded,
 #                      so this is path-filtered.
 
 on:
@@ -227,10 +227,10 @@ jobs:
           echo "All lifecycle scripts pass --help / --dry-run smoke."
 
   apple-silicon-dry-run:
-    name: Apple Silicon Dry-Run (macos-14)
-    runs-on: macos-14
+    name: Apple Silicon Dry-Run (macos-15)
+    runs-on: macos-15
     timeout-minutes: 10
-    # macos-14 minutes are paid at ~10x ubuntu-latest. The workflow-level
+    # Retain the existing standard macOS runner class. The workflow-level
     # path filter already restricts triggering to installer-touching
     # changes, so this only runs when there's a genuine reason to
     # verify the bash installer on arm64 + BSD userland.
@@ -245,18 +245,27 @@ jobs:
       - name: Install pnpm
         run: corepack enable && corepack prepare pnpm@10.33.2 --activate
 
+      - name: Verify Apple Silicon and stock shell
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          test "${BASH_VERSINFO[0]}.${BASH_VERSINFO[1]}" = 3.2
+          sw_vers
+          /bin/bash --version
+
       - name: Run install-dpf.sh --dry-run --headless --dev
         # Catches BSD-vs-GNU userland regressions (sed -i, mktemp,
-        # date formats, bash 3.2 syntax). The macos-14 runner has
+        # date formats, bash 3.2 syntax). The macos-15 runner has
         # /bin/bash at 3.2.57, matching what end users get on a stock
         # macOS host.
-        run: bash install-dpf.sh --dry-run --headless --dev
+        run: /bin/bash install-dpf.sh --dry-run --headless --dev
 
       - name: Run install-dpf.sh --dry-run --headless --release
-        run: bash install-dpf.sh --dry-run --headless --release
+        run: /bin/bash install-dpf.sh --dry-run --headless --release
 
       # Compose-render coverage for docker-compose.macos.yml lives in the
-      # `compose-render (* / macos)` matrix on ubuntu-latest. macos-14
+      # `compose-render (* / macos)` matrix on ubuntu-latest. macos-15
       # runners don't ship Docker, so asserting render here would
       # either require a paid `brew install` step or fail at exit 127.
       # `docker compose config` is platform-agnostic YAML parsing — it

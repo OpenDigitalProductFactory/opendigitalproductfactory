@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   refreshReviewBuildAfterGauntletNotRun,
   REVIEW_SOURCE_REFRESH_RETRY_MS,
+  REVIEW_SOURCE_REFRESH_MAX_PER_DAY,
   type ReviewSourceRefreshDeps,
 } from "./review-source-refresh";
 
@@ -14,6 +15,7 @@ function deps(overrides: Partial<ReviewSourceRefreshDeps> = {}) {
   const base: ReviewSourceRefreshDeps = {
     loadPhase: vi.fn(async () => "review"),
     lastAttemptAt: vi.fn(async () => null),
+    attemptsSince: vi.fn(async () => 0),
     refresh: vi.fn(async () => ({ status: "refreshed" as const, headSha: "a".repeat(40), clientSha: "b".repeat(40) })),
     queueReview: vi.fn(async () => {}),
     record: vi.fn(async () => {}),
@@ -44,6 +46,15 @@ describe("refreshReviewBuildAfterGauntletNotRun", () => {
     await expect(refreshReviewBuildAfterGauntletNotRun("FB-1", REASON, d)).resolves.toBe("recently-attempted");
     expect(d.refresh).not.toHaveBeenCalled();
     expect(d.record).not.toHaveBeenCalled();
+  });
+
+  // BI-E3C5C7E4: 33 builds re-ran the crashing gauntlet hourly for a week.
+  it("stops re-queuing review once a day's refresh budget is spent, and says why", async () => {
+    const d = deps({ attemptsSince: vi.fn(async () => REVIEW_SOURCE_REFRESH_MAX_PER_DAY) });
+    await expect(refreshReviewBuildAfterGauntletNotRun("FB-202D4508", REASON, d)).resolves.toBe("refresh-exhausted");
+    expect(d.refresh).not.toHaveBeenCalled();
+    expect(d.queueReview).not.toHaveBeenCalled();
+    expect(vi.mocked(d.record).mock.calls[0]?.[1]).toMatch(/not base drift, so review is not re-queued/);
   });
 
   // BI-2CCD5C0E: live on 2026-11-11, ten review builds re-crashed the gauntlet
