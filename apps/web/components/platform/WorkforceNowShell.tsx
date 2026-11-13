@@ -322,7 +322,14 @@ function CoworkerRow({
           {c.now ? (
             <div className="mt-1 text-dpf-body text-[var(--dpf-muted)]">
               <span className="text-[var(--dpf-muted)]">Now → </span>
-              {c.now.title}
+              {c.now.workroomId ? (
+                <a
+                  href={`/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: c.now.workroomId })}`}
+                  className="font-medium text-[var(--dpf-accent)] underline decoration-[var(--dpf-border)] underline-offset-2 hover:decoration-[var(--dpf-accent)]"
+                >
+                  {c.now.title}
+                </a>
+              ) : c.now.title}
               <span className="ml-2 rounded border border-[var(--dpf-border)] px-1.5 py-0.5 font-mono text-dpf-caption uppercase text-[var(--dpf-muted)]">
                 {c.now.status}
               </span>

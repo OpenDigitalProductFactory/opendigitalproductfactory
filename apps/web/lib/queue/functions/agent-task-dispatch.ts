@@ -49,6 +49,19 @@ export const agentTaskDispatch = jobs.createFunction(
       }
     });
 
+    // BI-31C1FDEC: re-send room wakes an outage left undecided (the outbox half
+    // of the addressed-message wake). Idempotent per message; the room store
+    // stays the record either way.
+    await step.run("republish-pending-room-wakes", async () => {
+      try {
+        const { sweepPendingRoomWakes } = await import("@/lib/work-management/room-message-wake.server");
+        return await sweepPendingRoomWakes();
+      } catch (error) {
+        console.warn("[agent-task-dispatch] room wake sweep unavailable", error);
+        return { outcome: "unavailable" };
+      }
+    });
+
     // Once an hour (on the top-of-hour :00 tick of this */5 poll), converge every
     // coworker self-task with its owner's Proactivity toggle so the two can't
     // silently desync — create tasks for coworkers turned up before they were
@@ -130,6 +143,32 @@ export const agentTaskDispatch = jobs.createFunction(
       providerSlots: plan.providerSlots,
       ...(quiesced ? { quiesced: quiesced.level, notStarted: planned - dispatched - failed } : {}),
     };
+  },
+);
+
+/**
+ * BI-31C1FDEC: run one due task now instead of at the next five-minute tick. A room
+ * wake schedules a coworker's reply task and asks for it here, so the reply
+ * starts within seconds through the same quiescence check and executor as the
+ * batch. A drain leaves the task due for the cron.
+ */
+export const agentTaskRunNow = jobs.createFunction(
+  {
+    id: "agent/task-run-now",
+    retries: 0,
+    concurrency: [{ limit: 1, key: "event.data.taskId" }],
+    triggers: [{ event: "agent/task.run-now" }],
+  },
+  async ({ event, step }) => {
+    const taskId = String(event.data.taskId ?? "");
+    if (!taskId) return { status: "skipped", reason: "no task id" };
+    return step.run(`dispatch-${taskId}`, async () => {
+      const run: TaskRunner = {
+        ...(await import("@/lib/self-upgrade/quiescence")),
+        ...(await import("@/lib/actions/agent-task-scheduler")),
+      };
+      return dispatchOne(run, taskId);
+    });
   },
 );
 

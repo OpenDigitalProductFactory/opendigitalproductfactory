@@ -90,10 +90,27 @@ const DATA: WorkforceActivity = {
   },
 };
 
+const STEWARD_DATA: WorkforceActivity = {
+  ...DATA,
+  working: [coworker({
+    agentId: "portfolio-advisor",
+    name: "Backlog Steward",
+    role: "evaluate",
+    now: {
+      title: "Review the shared backlog",
+      status: "working",
+      taskRunId: "TR-STEWARDSHIP",
+      workroomId: "WC-BACKLOG",
+    },
+    humanSupervisorId: "HR-100",
+  })],
+  pulse: { ...DATA.pulse, workingCount: 1, totalCount: 38 },
+};
+
 afterEach(() => cleanup());
 
 function shellHtml(): string {
-  const { container } = render(withMessages(<WorkforceNowShell initialData={DATA} />));
+  const { container } = render(withMessages(<WorkforceNowShell initialData={STEWARD_DATA} />));
   return container.innerHTML;
 }
 
@@ -116,7 +133,7 @@ describe("WorkforceNowShell UX budget", () => {
   });
 
   it("has no axe violations the harness can detect", async () => {
-    const { container } = render(withMessages(<WorkforceNowShell initialData={DATA} />));
+    const { container } = render(withMessages(<WorkforceNowShell initialData={STEWARD_DATA} />));
     const results = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
     });

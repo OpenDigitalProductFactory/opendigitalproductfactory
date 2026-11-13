@@ -148,6 +148,32 @@ describe("loadWorkforceActivity", () => {
     expect(wf.pulse.quietOverThresholdCount).toBe(1); // compliance last acted 8d ago > 5d
   });
 
+  it("projects the current Workroom so a human can inspect the coworker's evidence", async () => {
+    const prisma = fakePrisma({
+      agents: [agent({ agentId: "portfolio-rationalization-agent", displayName: "Backlog Steward" })],
+      liveRuns: [
+        {
+          taskRunId: "steward-run",
+          status: "working",
+          title: "Review the shared backlog",
+          currentAgentId: "portfolio-rationalization-agent",
+          startedAt: new Date(NOW),
+          lastHeartbeatAt: new Date(NOW),
+          workrooms: [{ capsuleId: "WC-BACKLOG" }],
+        },
+      ],
+    });
+
+    const wf = await loadWorkforceActivity({ prisma, now: () => NOW });
+
+    expect(wf.working[0]?.now).toEqual({
+      title: "Review the shared backlog",
+      status: "working",
+      taskRunId: "steward-run",
+      workroomId: "WC-BACKLOG",
+    });
+  });
+
   it("flags sensitive-data activity as an aggregate signal (no detail leak)", async () => {
     const prisma = fakePrisma({
       agents: [agent({ agentId: "hr-specialist", displayName: "People Partner", valueStream: "operate" })],

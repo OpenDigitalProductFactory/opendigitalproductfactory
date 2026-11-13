@@ -33,7 +33,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "set_change_disposition",
-    description: "Record the human's Keep/Share call on the current change at ship time. A change must be 'shareable' before contribute_to_hive or a public-hive PR will share it; the default 'private' is fail-closed — inaction never shares.",
+    description: "Record the human's Keep/Share call on the current change at ship time. 'private' always keeps the change on this system. With no call recorded, a public-hive PR shares the change only when its outgoing diff carries no business-specific content; contribute_to_hive still requires 'shareable'.",
     inputSchema: {
       type: "object",
       properties: {

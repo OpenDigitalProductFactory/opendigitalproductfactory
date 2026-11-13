@@ -60,6 +60,7 @@ const REGISTERED_AFTER_MIGRATION: readonly string[] = [
   "platform-design-review",
   "platform-architecture-review",
   "source-inquiry",
+  "backlog-steward-watch",
 ];
 
 function migrated(): WorkShapeDefinition {

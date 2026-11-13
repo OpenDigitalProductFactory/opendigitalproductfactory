@@ -17,6 +17,7 @@ function deps(overrides: Partial<ReviewSourceRefreshDeps> = {}) {
     refresh: vi.fn(async () => ({ status: "refreshed" as const, headSha: "a".repeat(40), clientSha: "b".repeat(40) })),
     queueReview: vi.fn(async () => {}),
     record: vi.fn(async () => {}),
+    routeConflictToRepair: vi.fn(async () => "repair-queued" as const),
     now: () => NOW,
   };
   return { ...base, ...overrides };
@@ -45,11 +46,30 @@ describe("refreshReviewBuildAfterGauntletNotRun", () => {
     expect(d.record).not.toHaveBeenCalled();
   });
 
-  it("never resolves a conflict: it records the files and leaves review to its normal sweep", async () => {
-    const d = deps({ refresh: vi.fn(async () => ({ status: "conflict" as const, files: ["apps/web/x.ts"] })) });
-    await expect(refreshReviewBuildAfterGauntletNotRun("FB-1", REASON, d)).resolves.toBe("conflict");
+  // BI-2CCD5C0E: live on 2026-11-11, ten review builds re-crashed the gauntlet
+  // every few minutes because their refresh conflicted and they "stayed in
+  // review" with the old base's guard scripts forever.
+  it("hands a conflicted refresh back to the coding agent with the files named, instead of leaving it in review", async () => {
+    const file = "apps/web/lib/coworker-self-assessment/assessment-service.ts";
+    const d = deps({ refresh: vi.fn(async () => ({ status: "conflict" as const, files: [file], ontoRef: "client/abc" })) });
+    await expect(refreshReviewBuildAfterGauntletNotRun("FB-F11D52E8", REASON, d)).resolves.toBe("conflict-repair-queued");
     expect(d.queueReview).not.toHaveBeenCalled();
-    expect(vi.mocked(d.record).mock.calls[0]?.[1]).toMatch(/conflicts in apps\/web\/x\.ts/);
+    expect(d.routeConflictToRepair).toHaveBeenCalledWith("FB-F11D52E8", expect.objectContaining({
+      source: "conflict",
+      ontoRef: "client/abc",
+      findings: [expect.objectContaining({ description: expect.stringContaining(file) })],
+    }));
+    const summary = vi.mocked(d.record).mock.calls[0]?.[1] ?? "";
+    expect(summary).toMatch(/conflicts in apps\/web\/lib\/coworker-self-assessment/);
+    expect(summary).not.toMatch(/stays in review/);
+  });
+
+  it("names the escalation when the conflict hand-backs are spent, so the loop ends with an owner decision", async () => {
+    const d = deps({
+      refresh: vi.fn(async () => ({ status: "conflict" as const, files: ["a.ts"] })),
+      routeConflictToRepair: vi.fn(async () => "escalated" as const),
+    });
+    await expect(refreshReviewBuildAfterGauntletNotRun("FB-1", REASON, d)).resolves.toBe("conflict-escalated");
   });
 
   it("records a refresh that could not run, and a throw, without re-queuing", async () => {

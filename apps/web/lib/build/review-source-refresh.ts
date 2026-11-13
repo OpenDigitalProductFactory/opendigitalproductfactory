@@ -12,8 +12,12 @@
 // re-verify. When the gauntlet could not run, the build is rebased onto
 // upstream main in its own clone and review is queued again, so the next
 // gauntlet runs current guard scripts on the tree that will be published. A
-// conflict is never resolved here; it is recorded and review keeps its sweep.
+// conflict is never resolved here. BI-2CCD5C0E: leaving a conflicted build in
+// review re-crashed its gauntlet every sweep forever, so the conflict goes back
+// to the build's coding agent through the shared bounded hand-back
+// (gauntlet-repair.ts, BI-FBA2FDBE), and to the owner once the bound is spent.
 
+import type { GauntletFailure, RouteOutcome } from "./gauntlet-repair";
 import type { BuildBranchRefreshOutcome } from "./sandbox/build-branch";
 
 export const REVIEW_SOURCE_REFRESH_TOOL = "review_source_refresh";
@@ -24,6 +28,8 @@ export type ReviewSourceRefreshResult =
   | "not-review"
   | "recently-attempted"
   | "refreshed"
+  | "conflict-repair-queued"
+  | "conflict-escalated"
   | "conflict"
   | "not-refreshed";
 
@@ -33,8 +39,21 @@ export type ReviewSourceRefreshDeps = {
   refresh(buildId: string): Promise<BuildBranchRefreshOutcome>;
   queueReview(buildId: string): Promise<void>;
   record(buildId: string, summary: string): Promise<void>;
+  routeConflictToRepair(buildId: string, failure: GauntletFailure): Promise<RouteOutcome>;
   now(): Date;
 };
+
+export function conflictRepairFailure(files: string[], ontoRef?: string): GauntletFailure {
+  const named = files.length > 0 ? files : ["(git did not name the conflicted files)"];
+  return {
+    treeSha: null,
+    recordId: null,
+    failedGuards: ["Refresh onto upstream main"],
+    source: "conflict",
+    findings: named.map((file) => ({ severity: "important", description: `Conflicts with upstream main in ${file}` })),
+    ...(ontoRef ? { ontoRef } : {}),
+  };
+}
 
 export async function refreshReviewBuildAfterGauntletNotRun(
   buildId: string,
@@ -52,11 +71,21 @@ export async function refreshReviewBuildAfterGauntletNotRun(
   const because = `The guard gauntlet could not run (${reason.slice(0, 200)})`;
 
   if (outcome.status === "conflict") {
+    const routed = await deps
+      .routeConflictToRepair(buildId, conflictRepairFailure(outcome.files, outcome.ontoRef))
+      .catch((): RouteOutcome | "route-failed" => "route-failed");
+    const next = routed === "repair-queued"
+      ? "it is handed back to the coding agent to rebase and resolve them."
+      : routed === "escalated" || routed === "already-escalated"
+        ? "the repair attempts are spent, so the owner has been asked to resolve or retire it."
+        : `it could not be handed back (${routed}).`;
     await deps.record(
       buildId,
       `${because}; refreshing onto upstream main conflicts in ${outcome.files.join(", ") || "unnamed files"}. ` +
-        "The rebase was aborted and the build stays in review.",
+        `The rebase was aborted and ${next}`,
     );
+    if (routed === "repair-queued") return "conflict-repair-queued";
+    if (routed === "escalated" || routed === "already-escalated") return "conflict-escalated";
     return "conflict";
   }
   if (outcome.status !== "refreshed") {
@@ -98,6 +127,10 @@ function defaultDeps(): ReviewSourceRefreshDeps {
     async record(buildId, summary) {
       const { prisma } = await import("@dpf/db");
       await prisma.buildActivity.create({ data: { buildId, tool: REVIEW_SOURCE_REFRESH_TOOL, summary } }).catch(() => {});
+    },
+    async routeConflictToRepair(buildId, failure) {
+      const { routeGauntletFailureToRepair } = await import("./gauntlet-repair");
+      return routeGauntletFailureToRepair(buildId, failure);
     },
     now: () => new Date(),
   };

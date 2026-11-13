@@ -4495,14 +4495,6 @@
     "longSentences": 0,
     "textMass": 6
   },
-  "apps/web/components/build/BuildPhaseCostCard.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 34
-  },
   "apps/web/components/build/BuildProgressOperationalPanel.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
@@ -4806,6 +4798,14 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 343
+  },
+  "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 9
   },
   "apps/web/components/build/work-control/AdoptableWorktreeTable.tsx": {
     "vocabulary": 0,

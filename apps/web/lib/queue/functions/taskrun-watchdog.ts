@@ -30,6 +30,7 @@ import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
 import { reconcileTerminalBuildPhaseRuns } from "@/lib/self-upgrade/quiescence";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { newestSignal, isStale } from "@/lib/shared/staleness";
+import { hostSuspendedMsSince } from "@/lib/shared/host-suspension";
 import { reap } from "@/lib/operate/reap";
 import { Prisma } from "@dpf/db";
 
@@ -423,6 +424,7 @@ export const taskrunWatchdog = jobs.createFunction(
           totalPhaseTimeoutSeconds: t.totalPhaseTimeoutSeconds,
         },
         now,
+        hostSuspendedMsSince,
       );
       if (decision) decisions.push(decision);
     }

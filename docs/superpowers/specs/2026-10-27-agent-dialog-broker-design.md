@@ -228,6 +228,59 @@ Each participant has a delivery cursor on its existing `WorkroomParticipant` row
 
 A disconnected client loses nothing: every channel in §6.3 is an accelerator over this read.
 
+The per-participant cursor is the one schema change in item B2, so it is delivered separately as `BI-31E0C874`. Until it lands, a woken coworker is handed a cursor at its own last post in the room.
+
+### 6.6 What the first B2 slice builds (`BI-31C1FDEC`)
+
+- **Addressing on the message.**
+  - `post_room_message` takes `addressedTo`, a list of agent ids, GAIDs (optionally with `#session=`), `coordinator` and `accountable`. @mentions, from agents and from people, add to it.
+  - The resolved set, the hop and the sender GAID are stored at `structuredPayload.addressing` with a wake state.
+  - A GAID that no coworker on this installation holds is refused, because a remote GAID is provenance only (§5.2).
+- **Read results.** `read_room_messages` returns `senderGaid` for every coworker message (people have none), plus `addressedTo`, `hop` and the wake state when a message was addressed.
+- **Event, outbox and sweep.**
+  - The message is written with its wake `pending`, and `room/message.posted` is sent after commit.
+  - The wake stays pending until the dispatcher decides it.
+  - `agent/task-dispatch` re-sends wakes still pending after 30 seconds, using a fresh event id. The engine ignores a repeat of an id it already holds, and the dispatcher acts only on a pending wake.
+- **Dispatcher** (`room/message-dispatch`).
+  - An external executor's room, or an external client agent (`AGT-EXT-*`), is held for that executor: no platform task is created.
+  - At the hop limit, the room's coworker coordinator is woken instead, and a notice in the room says why.
+  - Past the hourly budget, delivery is pull-only, with one "paused" notice per hour.
+  - Otherwise it sends `room/wake.requested` with id `room-wake:<workItem>:<agent>:<15 s window>`. Bursts coalesce without a debounce primitive, which the jobs facade lacks.
+- **Runner** (`room/wake-run`, one lane per coworker per room).
+  - After the window closes, it upserts a one-shot task `room-reply-<workItem>-<agent>`. The task is owned by the user whose authority the message was posted under.
+  - It asks `agent/task-run-now`, which sits beside the five-minute dispatch, to run that task at once. That runs it through `executeScheduledAgentTask`, the drive's own executor, so the drive's grants, funding and quiescence gates apply.
+  - During a drain, the task stays due for the dispatch cron.
+
+The single-room drive event `workroom/drive.room-requested` named in §6.3 is not built. The runner's reply task reaches the addressed coworker directly, which is what an addressed message asks for. The drive's stage work is unchanged.
+
+### 6.7 What item C builds (`BI-ED52AB82`)
+
+Standards: MCP 2025-11-25 `server/resources` (subscriptions, `-32002`, "access controls SHOULD be implemented") and `basic/transports` (GET stream; "MUST NOT broadcast the same message across multiple streams"; event ids, `Last-Event-ID` and replay on the disconnected stream only). Local copies: `docs/Reference/mcp/spec/server/resources.mdx` and `docs/Reference/mcp/spec/basic/transports.mdx`.
+
+- **Resource.** `dpf://rooms/<caseKey>/messages`, with `<caseKey>` percent-encoded. It is also published as the template `dpf://rooms/{caseKey}/messages`.
+- **Methods.**
+  - `resources/read` runs `read_room_messages` through the same governed path as `tools/call`. Token scope, coworker grants, user capability, room admission and audit therefore all apply unchanged.
+  - `resources/list` lists the rooms the acting coworker is an active participant in and currently admitted to, newest first, at most 20.
+  - `resources/subscribe` first performs that governed read with `limit: 1`. A refusal is returned as the JSON-RPC error and nothing is stored. An unknown room returns `-32002`.
+  - `resources/unsubscribe` deletes the subscription.
+  - `initialize` advertises `resources: { subscribe: true }`.
+- **Subscriber.** The server has no MCP session, so a subscription belongs to the auth context, as task status does.
+  - The key is the OAuth refresh family (`oauthFamilyKey`), so a token rotation keeps the subscription. Otherwise it is the token id.
+  - Subscriptions are stored in `McpResourceSubscription`, so a subscribe on one process is heard on another. They lapse 24 hours after the last subscribe or stream open.
+- **Trigger.** The live trigger is a database trigger on `WorkItemMessage` insert that calls `pg_notify('dpf_room_message', {workItemId, messageId, createdAt})`. The notice is delivered only on commit, and it covers every writer, so people, coworkers, system notices and any process are all heard.
+  - Two parts of §6.4 are not used as written. `room/message.posted` fires only for addressed messages whose wake is pending, so a subscription built on it would miss ordinary posts. The jobs bus also runs each event once, in one function, so it cannot reach every process that holds a stream.
+  - `LISTEN/NOTIFY` is the broadcast primitive the job engine and Workroom activity streams already use.
+- **Fan-out.** Each portal process holds one shared `LISTEN` connection, opened when its first MCP stream opens, for all of its streams.
+  - On a notice, the process finds subscriptions for the message's room and its parent room. A child room's messages appear in the parent's read.
+  - It then re-checks, for each subscriber with a stream on that process: the token is not revoked or expired, the coworker still holds `read_room_messages`, and the coworker has `content` admission to the message's room. A failed check sends nothing.
+  - Each subscriber gets one `notifications/resources/updated { uri }`, on one of its streams. The notice carries no message content, so the client reads through `resources/read` or `read_room_messages` with its cursor.
+  - If the listener connection drops, the process reconnects and re-scans from its last notice.
+- **Resumable stream.** Every frame on the GET stream carries an id `<streamId>.<epochMs>.<seq>` (the sequence keeps ids unique within a millisecond), and the stream opens with a priming id. On a reconnect with `Last-Event-ID`, the stream keeps its `streamId` and replays one `updated` per subscribed room that gained a message after `epochMs` (minus a 30-second overlap), with admission re-checked. The stream sends `retry` before the 15-minute close.
+- **Task status** stays on its process-local bus. `BI-2014236E` owns its semantics, and its design assigns the cross-process task fan-out to `BI-05D7A0DC`. That item can reuse the shared listener.
+- **Accepted residual risk.**
+  - A client holding two concurrent GET streams on two processes can receive the same `updated` twice. The notice is an idempotent "re-read" wake-up and carries no state.
+  - A replay with the 30-second overlap may also repeat an `updated`. Pull stays authoritative.
+
 ### 6.2 The event
 
 On commit, the write path sends `room/message.posted` through `@/lib/jobs` with the message id and the addressed refs. The event is idempotent on the message id. Inngest and the Postgres engine both carry it, and it survives a restart.
@@ -269,6 +322,23 @@ Agent-to-agent dialog can loop. Four controls bound it:
 1. **Supervision becomes a durable record.** It sits with `workspaceState.runtimeSession` and holds the provider, thread id, token, status, addressed GAID qualifier and last heartbeat. Held permission requests move from memory onto the existing `CoworkerActionEnvelope`.
 2. **On boot, the portal re-attaches every `supervised` session.** A session that cannot be resumed is marked `supervision-lost` and stays visible on the room. Its addressed messages fall back to the cursor, and the room coordinator is woken.
 3. **Addressed messages become turns.** The dispatcher calls the existing `turn` action. Room-wide messages are batched into the context of the session's next turn, not sent as separate turns.
+
+### 7.1 What item D builds (`BI-F5D58F29`)
+
+"Supervised" means a session the portal's own runtime supervisor drives (`drive_workroom_runtime`, BI-05715F4C). A Claude or Codex client running on someone's desktop is not supervised; the platform cannot put a turn into it, so its messages stay `held-for-executor` and it reads them from the cursor (or, after item C, a resource push).
+
+- **The record.** `workspaceState.runtimeSession` gains `status: supervised | supervision-lost | closed` (a stored `open` reads as `supervised`), the starting actor, `addressedAs` (`<provider client GAID>#session=<threadId>`), `lastHeartbeatAt` and `deliveredCursor`. The provider client is `AGT-EXT-CLAUDE` or `AGT-EXT-CODEX`; a session is operating state of that subject (§5.1), so it gets no identity of its own. `start` returns `addressedAs`, and the room log names it, so other agents can address the session.
+- **Held requests.** Each question the runtime holds for a room decision is written as a `CoworkerActionEnvelope` (`manifestActionId` `workroom-runtime.<kind>`, `threadId` `workroom-runtime:<capsuleId>`, because the provider thread changes when a session resumes; the request, its provider thread and its call fingerprint in `argsJson`; the starter as `delegatingUserId`, the durable approval lifetime). `decide` settles the envelope whether or not the session is live in this process. A live Codex request still waiting on its answer is answered at once. A call asked again with the fingerprint of an approved envelope passes, so a decision made after a restart, or from the inbox, still takes effect. The fingerprint covers the whole request (kind, summary and detail), and an approval binds to the person it was asked of: a session started later by someone else inherits nothing. A Codex request decided from the inbox while the session still waits on it is answered with that decision the next time `decide` is called for it. No schema change.
+- **Which messages become turns.** A pending addressed message becomes a turn when the room's stored session is `supervised`, live in this process, and the message names it: its `addressedAs` qualifier, or its provider client's agent id with no other session qualifier. Other recipients are planned exactly as in B2, so a room an external executor holds still dispatches no platform coworker (`BI-A659C3BD`). A turn counts as a wake: it is refused past the hop limit and the hourly budget, like any other wake.
+- **The turn.** The prompt is the addressed message, its sender GAID and the room's case key, followed by the room-wide messages since the session's `deliveredCursor` (at most 20, each trimmed). After that, the cursor advances to the addressed message. While a turn is running, the input queues as the next turn (the existing `turn` behaviour).
+- **Wake state.** A delivered turn writes `woken` with `woken: [addressedAs]`. A session that is named but not live, or is `supervision-lost`, stays `held-for-executor`, and the detail says why.
+- **Boot.** Sixty seconds after start, once the sandbox and the portal's own MCP endpoint are up, instrumentation re-attaches every `supervised` session. It resumes the stored thread with a fresh room token, revokes the old token and starts no turn. A session that cannot resume is marked `supervision-lost`. This happens when the provider is unavailable, no starting actor is stored (every session recorded before item D), or the open fails. A room notice says so, and the room's coworker coordinators are woken through `room/wake.requested`. The message waits on the cursor until someone starts the runtime again. These cases get the notice only, or less:
+  - A room an external executor holds. Its executor reads the notice, and no platform coworker is given a task there (`BI-A659C3BD`).
+  - A record from before item D, which names nobody whose authority a reply task could run under.
+  - A session not heard from in the 24 hours before the restart is marked lost with the notice only. Nobody is woken for it, so an upgrade does not wake every room that ever ran a runtime.
+  - A session whose room ended while the portal was down is closed quietly.
+
+**Authority.** A turn runs on the session's own room-scoped token, which was issued to the person who started supervision. A message only adds input. Every tool call is still gated by the token's scope, that person's grants and capabilities, and the runtime request policy, which holds anything past the sandbox for a decision. Posting is gated by room admission, unchanged.
 
 ## 8. Between installations
 
@@ -318,6 +388,7 @@ Each line is one independently shippable item. **A** ships first, on its own.
 | A | `BI-3C837677` (break-fix) | `read_room_messages` newest-first with cursors; mention roster for agent posts | — |
 | B1 | `BI-C649809F` | Room charter and per-call admission consequence; batched admission card; archetype posture seed | A |
 | B2 | `BI-31C1FDEC` | Addressed messages; the `room/message.posted` event; single-room wake; loop and cost controls; GAID on messages | A; respects `BI-A659C3BD` |
+| B2b | `BI-31E0C874` | Per-participant delivery cursor and the "unread for me" read (the one schema change in B2) | B2 |
 | C | `BI-ED52AB82` | MCP resources and subscriptions on a resumable, cross-process GET stream | B2; shares the stream with `BI-2014236E` |
 | D | `BI-F5D58F29` | Durable supervision; addressed messages become supervised turns | B2 |
 | E0 | `BI-32AA3A7C`, `BI-7E73D523`, `BI-0716C8A8`, `BI-FD00E416`, `BI-D00C5FD4` | Existing prerequisites | — |

@@ -21,6 +21,15 @@ vi.mock("./build-studio-workflow-actions", () => ({
 }));
 
 describe("WorkflowStageInspector", () => {
+  it("does not call an unrun saved result a passed merged-code gate", () => {
+    const build = makeBuild();
+    build.verificationOut = { ...build.verificationOut!, typecheckPassed: true,
+      testsPassed: 1, testsFailed: 0, testsExecuted: false, testsApplicable: null } as never;
+    render(<WorkflowStageInspector build={build} phase="build" status="running" workflowLabel={null}
+      governedBacklogEnabled onClose={vi.fn()} />);
+    expect(screen.queryByText("Merged-code gate passed.")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Unverified/).length).toBeGreaterThan(0);
+  });
   it("adds environment and evidence summaries without exposing internal trace labels", () => {
     render(
       <WorkflowStageInspector
@@ -105,6 +114,7 @@ function makeBuild(): FeatureBuildRow {
     taskResults: null,
     verificationOut: {
       testsPassed: 4,
+      testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true,
       testsFailed: 0,
       typecheckPassed: true,
       fullOutput: "ToolExecutionReceipt recorded the check.",
