@@ -36,7 +36,7 @@ export function summarizeSecurity(result: RanOutcome): string {
   if (!security) return "";
   const surfaces = SECURITY_SURFACE_LABELS.map(([kind, label]) => {
     const counts = security.surfaces[kind];
-    return counts ? `${label} ${counts.alerts} alert(s) in ${counts.groups} item(s)` : `${label} UNREADABLE`;
+    return counts ? `${label} ${counts.alerts} open, ${counts.groups} items` : `${label} UNREADABLE`;
   }).join("; ");
   const life = security.lifecycle;
   const moves = life

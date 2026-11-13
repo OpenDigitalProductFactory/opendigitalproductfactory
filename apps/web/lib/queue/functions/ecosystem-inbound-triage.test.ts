@@ -48,8 +48,8 @@ describe("ecosystem intake job reporting", () => {
         lifecycle: { resolved: ["BI-H"], heldByBuild: [], reopened: [], regressions: [], reprioritized: ["BI-U"] } } });
     await invoke();
     const summary = mocks.upsert.mock.calls[0][0].update.lastRunSummary as string;
-    expect(summary).toContain("Dependabot 33 alert(s) in 2 item(s)");
-    expect(summary).toContain("code scanning 4 alert(s) in 3 item(s)");
+    expect(summary).toContain("Dependabot 33 open, 2 items");
+    expect(summary).toContain("code scanning 4 open, 3 items");
     expect(summary).toContain("secret scanning UNREADABLE");
     expect(summary).toContain("Resolved 1");
     expect(mocks.upsert.mock.calls[0][0].update.lastStatus).toBe("failed");
