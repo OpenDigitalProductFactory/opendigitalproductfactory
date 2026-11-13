@@ -53,6 +53,8 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   if (session.user.type === "customer") redirect("/portal");
 
   const user = session.user;
+  const { loadAuthenticatedAccount } = await import("@/lib/identity/authenticated-account");
+  const authenticatedAccount = await loadAuthenticatedAccount(user.id);
   const { language } = await getLocaleContext();
   // Approvals route to one person; this is how an operator can tell whether
   // that person is still around (BI-61DE8177). Throttled and best effort.
@@ -266,6 +268,11 @@ export default async function ShellLayout({ children }: { children: React.ReactN
             organization?.name ?? "Open Digital Product Factory",
           )}
           userId={user.id}
+          accountName={authenticatedAccount?.displayName ?? user.email}
+          accountEmail={authenticatedAccount?.email ?? user.email}
+          accountRoleName={authenticatedAccount?.roleName}
+          isSuperuser={authenticatedAccount?.isSuperuser ?? user.isSuperuser}
+          organizationName={organization?.name ?? null}
           navMode={navMode}
           installationBadge={await loadInstallationBadge({
             readConfig: async (key) =>

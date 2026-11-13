@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "decidedOption": "consolidated-named-account",
+  "decisionInteractionId": "DI-D79779F7D223",
+  "scope": {
+    "files": [
+      "apps/web/components/shell/Header.tsx",
+      "apps/web/components/shell/ShellAccount.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-D79779F7D223",
+    "consideredOptions": [
+      "consolidated-named-account",
+      "separate-account-and-help"
+    ]
+  },
+  "notes": {
+    "decision": "Consolidate the persistent account identity and existing header actions in one disclosure. WWMD recorded a high-confidence proceed recommendation; the agent recorded the selected option through record_decision_outcome. No schema or authorization change.",
+    "source": "476a7ac597c80ca80099674b604a2f558c654ca5",
+    "sourceTruth": "Authenticated server user ID -> User and canonical PrincipalAlias/Principal; Organization for the organization label. Acting coworker, connection scope and effective grants remain separate.",
+    "states": "Email fallback; explicit missing role/organization; Full and Simple modes; 44px target; Escape/outside dismissal. Nested feedback owns Escape before the parent closes.",
+    "verification": "69 focused tests plus production/test typechecks passed. Governed preview served exact source and the desktop disclosure displayed the automation account, role and organization. Mobile, Simple-mode, sign-out and full shared-layout route coverage remain pending. The documents-page sweep failed against its frozen baseline (118 -> 911 words, choices 1 -> 6) and was not treated as passing evidence.",
+    "aiBoundary": "No control sends an AI prompt. Existing profile tool reads authenticated identity from server context and ignores caller identity selectors."
+  }
+}
