@@ -21,6 +21,12 @@ const { listWorkCapsulesTool } = await import("./mcp-handlers");
 describe("list_workrooms view atlas", () => {
   beforeEach(() => loadAtlasPicture.mockClear());
 
+  it.each([{ decisionScope: "wwmd" }, { status: "working" }])("refuses unsupported instance filter %j", async (filter) => {
+    const result = await listWorkCapsulesTool({ view: "atlas", ...filter }, "user-1");
+    expect(result).toMatchObject({ success: false, error: "invalid_atlas_filters" });
+    expect(loadAtlasPicture).not.toHaveBeenCalled();
+  });
+
   it("returns the portal's counts and rows unchanged", async () => {
     const result = await listWorkCapsulesTool({ view: "atlas", limit: 400 }, "user-1");
     expect(result.success).toBe(true);

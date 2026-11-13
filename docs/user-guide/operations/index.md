@@ -75,7 +75,12 @@ colour and awaiting acceptance as a separate segment after it. The workspace
 can accept. Items copied in from a connected installation by work sync are
 accepted by the installation they came from, so the tile shows them separately
 as **Awaiting at peer installation** and leaves them out of the other two
-counts.
+counts. While work sync with that installation is failing, the row reads
+**stale since** the last successful sync, because the copies no longer change.
+If sync has not worked for six hours, **Needs you** names the installation, the
+last success, what kind of failure it is (the connection was revoked or
+refused, the network, or a secure-connection problem) and what to check. The
+item clears once sync works again.
 
 **Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
@@ -330,6 +335,26 @@ grants, and approved links.
 
 You reach it from the installation badge beside the logo, which appears on every
 installation that is not production.
+
+### How this computer is set up to keep the platform running
+
+The platform stops serving whenever the computer it runs on sleeps, restarts and
+waits at the sign-in screen, or starts without Docker. This section shows three
+checks, read from the computer each time the platform starts after someone signs
+in:
+
+- **Plugged in to power.** On battery a Mac goes to sleep when idle.
+- **Never sleeps on power.** In System Settings, open **Battery**, then
+  **Options**, and turn on **Prevent automatic sleeping on power adapter when the
+  display is off**. On a Mac without a battery this is under **Energy**.
+- **Docker starts at sign-in.** In Docker Desktop, open **Settings**, then
+  **General**, and turn on **Start Docker Desktop when you sign in to your
+  computer**.
+
+These are suggestions. The platform reads the settings but never changes them.
+After a restart, for example for a macOS update, the platform starts again only
+once someone signs in to the computer. If the platform was down for more than half
+an hour, the next time it runs **Needs you** shows how long and the likely cause.
 
 ### Who runs this installation
 

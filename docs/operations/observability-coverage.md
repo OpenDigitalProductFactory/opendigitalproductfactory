@@ -173,6 +173,57 @@ routes to Needs-you except a single provider's usage limit, which stays in the
 digital-team-handling lane and is listed there by its title, which carries the
 reset time. Cards use the watch's title rather than the generic outage headline.
 
+## Platform-continuity watch (BI-3E2F87FA)
+
+The `ops/alert-delivery-bridge` cron's first step, `watch-platform-continuity`
+(`apps/web/lib/observability/platform-continuity-watch.ts`), writes a heartbeat to
+`PlatformConfig` key `platform.continuity.heartbeat.v1` every cycle. It runs before
+the quiescence gate, so an upgrade drain or the job's kill switch never reads as a
+gap. A gap longer than 30 minutes between heartbeats is downtime: the window runs
+from the last beat before the gap to the first after it. The cause comes from what
+the containers can see. A `SelfUpgradeRun` or `QuiescenceRun` covering the window
+(with 20 minutes' slack each side) is a planned upgrade and is not raised. The
+Docker VM booting inside the window (`/proc/uptime`) means Docker or the computer
+restarted. Postgres starting inside it (`pg_postmaster_start_time()`) means the
+containers restarted. AI calls recorded inside it mean only the scheduled checks
+stopped. If none of these, the computer was most likely asleep. Unplanned downtime
+opens one `platform_downtime` monitor row naming the window and cause, with the
+host-posture fix steps, and pushes a bell notification. The row routes to
+Needs-you and closes itself after 72 hours; the resolved row stays as the record.
+
+Host posture (WWMD DI-1984B00059B3): the shipped sign-in start script
+(`scripts/installer/dpf-start.consumer.sh`) runs `scripts/installer/host-posture.mjs`,
+which reads `pmset` and Docker Desktop's `AutoStart` setting read-only and writes
+`data/host/posture.json` in the install directory. The portal reads it through the
+`/host-dpf` mount and shows three checks with fix steps on `/ops/installation`
+(on power, never sleeps on power, Docker starts at sign-in). Nothing changes an OS
+setting. The same script now adds the Homebrew, `/usr/local` and Docker Desktop CLI
+directories to launchd's minimal PATH and starts Docker Desktop, waiting up to five
+minutes, before `compose up`. On 2026-11-09 every sign-in start had failed with
+`node: command not found`.
+
+Off-host signal (WWMD DI-452922A2126A): a paired installation's work-sync watch
+(BI-85DE8EBD) notices when this installation stops answering. A separate cloud
+heartbeat is not built.
+
+## Work-sync watch (BI-85DE8EBD)
+
+`federation/demand-reconciliation` runs `watch-federated-work`
+(`apps/web/lib/federation/work-sync-watch.ts`) after each work-sync pull. The
+health record `federation.work-sync.health.v1` now carries `lastSuccessAt`,
+`failingSince` and `errorClass` per link across cycles
+(`apps/web/lib/federation/work-sync-health.ts`); before, a failed cycle wrote
+`lastPullAt: null` and the last success was lost. A trusted same-organization link
+that has not pulled successfully for over 6 hours (measured from the last success,
+or the newest mirror `lastSyncedAt` when the record has none) gets one
+`work_sync_failure` monitor row `work-sync:link:<linkId>`. The row names the peer,
+the last success and the error class: `revoked` (no token, or the peer answered
+401/403), `tls`, `network` (including undici's "fetch failed"), `peer-outdated`
+(404) or `protocol`, each with its own next steps. A newly opened row rings the
+bell. The next successful pull, or the link leaving the trusted set, resolves it.
+While a link fails, the workspace Backlog tile shows its mirrored items as
+"Awaiting at peer installation (stale since ...)".
+
 The issue-report intake no longer files a repeat signature as a new `BI-PIR-*`
 item. Minted items carry `Signature: <dedupeKey>` and `Source report: <id>`. A
 report whose signature or report id already has a live bug item increments that

@@ -121,4 +121,18 @@ describe("bounded PR delivery cursor selection", () => {
     expect(f.job.runCursor).toBeNull();
     expect(f.findMany).toHaveBeenCalledTimes(2);
   });
+
+  // BI-0EDCF2EC: a stop whose cause GitHub can clear is looked at again on a
+  // slow cadence; a backed-off room waits for its next observation time.
+  it("re-observes an escalated room whose stop is re-evaluable, and honours a backoff", async () => {
+    const now = new Date("2026-11-13T18:00:00Z");
+    const f = fixture(5);
+    f.rows[0]!.workspaceState = { prDelivery: { ...state("escalated"), lastError: "observation-budget-exhausted:merge-state-unknown", lastObservedAt: "2026-11-13T08:02:06.317Z" } };
+    f.rows[1]!.workspaceState = { prDelivery: { ...state("escalated"), lastError: "true-merge-conflict", lastObservedAt: "2026-11-13T17:55:00.000Z" } };
+    f.rows[2]!.workspaceState = { prDelivery: { ...state("escalated"), lastError: "local-evidence-not-cleared", lastObservedAt: "2026-11-13T08:00:00.000Z" } };
+    f.rows[3]!.workspaceState = { prDelivery: { ...state("checking"), nextObservationAt: "2026-11-13T18:30:00.000Z" } };
+    f.rows[4]!.workspaceState = { prDelivery: { ...state("checking"), nextObservationAt: "2026-11-13T17:30:00.000Z" } };
+    expect((await selectPrDeliveryRooms(f.db, now)).map(row => row.id)).toEqual(["row-0000", "row-0004"]);
+    expect(f.job.runCursor).toBe("row-0004");
+  });
 });

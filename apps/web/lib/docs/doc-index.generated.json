@@ -4401,6 +4401,7 @@
         "expertise-compounds-in-profession-coworkers",
         "rule",
         "why",
+        "the-ladder",
         "observed-gap-production-week-to-2026-11-04",
         "how-to-apply",
         "related-principles"
@@ -6544,6 +6545,8 @@
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
         "alert-delivery",
         "ai-capacity-watch-bi-24092dc9",
+        "platform-continuity-watch-bi-3e2f87fa",
+        "work-sync-watch-bi-85de8ebd",
         "log-capture-runs-by-default-bi-f8024a9d",
         "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
@@ -13072,6 +13075,7 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
+        "identify-your-account",
         "two-tier-role-architecture",
         "tier-1-platform-governance-roles",
         "tier-2-business-model-roles",
@@ -13222,6 +13226,7 @@
         "promoter-timeout",
         "platform-software-composition-and-currency",
         "what-this-installation-is",
+        "how-this-computer-is-set-up-to-keep-the-platform-running",
         "who-runs-this-installation",
         "what-your-ai-coworkers-may-do-here",
         "operational-posture-across-your-installations",

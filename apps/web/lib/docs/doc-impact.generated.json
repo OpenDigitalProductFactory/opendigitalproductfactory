@@ -638,6 +638,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/escalation-parked-return.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
@@ -700,6 +703,9 @@
     ],
     "apps/web/lib/build/build-plan-paths.ts": [
       "docs/architecture/build-studio-namespace.md"
+    ],
+    "apps/web/lib/build/build-pr-delivery-recheck.ts": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/build-studio-config.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -946,6 +952,12 @@
     ],
     "apps/web/lib/federation/demand-response.ts": [
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
+    ],
+    "apps/web/lib/federation/work-sync-health.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/federation/work-sync-watch.ts": [
+      "docs/operations/observability-coverage.md"
     ],
     "apps/web/lib/finance/finance-validation.ts": [
       "docs/testing/handoff-invoice-gaps.md"
@@ -1242,6 +1254,9 @@
       "docs/operations/local-ci-sandbox-slots.md"
     ],
     "apps/web/lib/observability/monitor-source-reachability.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/observability/platform-continuity-watch.ts": [
       "docs/operations/observability-coverage.md"
     ],
     "apps/web/lib/onboarding/setup-completion-seeds.ts": [
@@ -1809,6 +1824,9 @@
     ],
     "apps/web/scripts/offload-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/scripts/reevaluate-escalation-parked-items.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
     ],
     "apps/web/tsconfig.json": [
       "docs/architecture/dependency-reduction-routine.md"
@@ -2716,10 +2734,14 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/installer/dpf-start.consumer.sh": [
+      "docs/operations/observability-coverage.md",
       "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/gpp-permit-secret-contract.test.mjs": [
       "docs/architecture/gated-permissions-process.md"
+    ],
+    "scripts/installer/host-posture.mjs": [
+      "docs/operations/observability-coverage.md"
     ],
     "scripts/installer/install-release-assets.mjs": [
       "docs/architecture/build-gate-runbook.md",
@@ -3478,9 +3500,11 @@
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/backlog/deferral-contract.ts",
+      "apps/web/lib/backlog/escalation-parked-return.ts",
       "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts",
       "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/govern/data/field-classification.ts",
+      "apps/web/scripts/reevaluate-escalation-parked-items.ts",
       "packages/db/src/table-classification.ts",
       "scripts/check-no-unattributable-deferral.mjs"
     ],
@@ -3503,6 +3527,7 @@
     "docs/architecture/build-gate-runbook.md": [
       ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
+      "apps/web/lib/build/build-pr-delivery-recheck.ts",
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/failure-readiness-delivery-refresh.ts",
       "apps/web/lib/build/finalize-repair-routing.ts",
@@ -4279,13 +4304,18 @@
     ],
     "docs/operations/observability-coverage.md": [
       "apps/web/lib/coworker/approval-lifetime.ts",
+      "apps/web/lib/federation/work-sync-health.ts",
+      "apps/web/lib/federation/work-sync-watch.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
+      "apps/web/lib/observability/platform-continuity-watch.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/routing/ai-capacity-watch.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
       "monitoring/prometheus/prometheus.yml",
-      "packages/db/src/quality-issue-registry.ts"
+      "packages/db/src/quality-issue-registry.ts",
+      "scripts/installer/dpf-start.consumer.sh",
+      "scripts/installer/host-posture.mjs"
     ],
     "docs/operations/oss-repo-identity-hygiene.md": [
       "scripts/check-no-private-identity.mjs"
