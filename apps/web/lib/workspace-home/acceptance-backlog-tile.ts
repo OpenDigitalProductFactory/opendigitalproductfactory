@@ -14,6 +14,7 @@ import type { Prisma } from "@dpf/db";
 import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
 import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
 import type { TileMetric, TileStatus } from "@/lib/workspace-home/types";
+import { formatDate } from "@/lib/datetime";
 import {
   ACCEPTANCE_AGED_DAYS,
   agedAcceptanceShare,
@@ -25,7 +26,11 @@ import { loadAgedAcceptanceItems } from "@/lib/backlog/acceptance-sweep/aged-acc
 export type AcceptanceBacklogDb = Pick<Prisma.TransactionClient, "backlogItem" | "backlogItemActivity">;
 
 /** The local share, plus awaiting items whose acceptance belongs to a peer installation. */
-export type AcceptanceBacklogShare = AgedAcceptanceShare & { peerOwned?: number };
+export type AcceptanceBacklogShare = AgedAcceptanceShare & {
+  peerOwned?: number;
+  /** When work sync with the peer stopped succeeding; set only while it is failing (BI-85DE8EBD). */
+  peerStaleSince?: Date | null;
+};
 
 /** Bounded reads: the locally owned awaiting pool, its entry activities, and the peer-owned count. */
 export async function loadAcceptanceBacklogShare(
@@ -64,7 +69,11 @@ export function withAcceptanceBacklogTile(
     });
   }
   if ((share.peerOwned ?? 0) > 0) {
-    acceptanceRows.push({ label: "Awaiting at peer installation", value: share.peerOwned!, color: "var(--dpf-muted)" });
+    // Mirrors of a peer that cannot be reached are a frozen copy, not live work.
+    const label = share.peerStaleSince
+      ? `Awaiting at peer installation (stale since ${formatDate(share.peerStaleSince)})`
+      : "Awaiting at peer installation";
+    acceptanceRows.push({ label, value: share.peerOwned!, color: share.peerStaleSince ? "var(--dpf-warning)" : "var(--dpf-muted)" });
   }
 
   const doneIndex = backlog.metrics.findIndex((metric) => metric.label === "Done");

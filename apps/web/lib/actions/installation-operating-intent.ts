@@ -52,6 +52,8 @@ import {
 } from "@/lib/installation-journey/identity-presentation";
 import { loadInstanceStance, prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import { INSTALLATION_OPERATING_INTENT_KEY } from "@/lib/installation-journey/operating-intent";
+import type { PairingLink } from "@dpf/db/installation-peer-pairing";
+import { loadEstateNameResolution } from "@/lib/install/estate-identity";
 
 /** The raw shape a client form submits. Validated before anything else runs. */
 export interface InstallationIdentityInput {
@@ -168,6 +170,8 @@ interface IdentityContext {
   environmentNow: EnvironmentClassResolution;
   sourceCapable: boolean;
   holdsIrreplaceableWork: boolean;
+  pairingLinks: readonly PairingLink[];
+  estateName: string | null;
 }
 
 /**
@@ -179,13 +183,15 @@ interface IdentityContext {
  */
 async function readIdentityContext(): Promise<IdentityContext> {
   const store = prismaInstanceStanceStore(prisma);
-  const [row, environmentNow, stance] = await Promise.all([
+  const pairingLinks = await store.listFederationLinks?.().catch(() => []) ?? [];
+  const [row, environmentNow, stance, estate] = await Promise.all([
     prisma.platformConfig.findUnique({
       where: { key: INSTALLATION_OPERATING_INTENT_KEY },
       select: { value: true },
     }),
     loadEnvironmentClassResolution(store),
-    loadInstanceStance(store),
+    loadInstanceStance({ ...store, listFederationLinks: async () => pairingLinks }),
+    loadEstateNameResolution(store).catch(() => null),
   ]);
 
   const parsed = parseInstallationOperatingIntent(row?.value);
@@ -202,6 +208,8 @@ async function readIdentityContext(): Promise<IdentityContext> {
     environmentNow,
     sourceCapable: stance.sourceAuthority === "governed-worktree",
     holdsIrreplaceableWork: stance.holdsIrreplaceableWork,
+    pairingLinks,
+    estateName: estate?.estateName ?? null,
   };
 }
 
@@ -215,6 +223,8 @@ function impactFor(
     next,
     host: { sourceCapable: context.sourceCapable },
     holdsIrreplaceableWork: context.holdsIrreplaceableWork,
+    pairingLinks: context.pairingLinks,
+    estateName: context.estateName,
   });
 }
 
