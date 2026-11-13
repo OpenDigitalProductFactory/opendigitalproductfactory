@@ -33,11 +33,23 @@ export async function runGuardGauntletIdentity(input: {
   repository: string;
   exec?: SandboxExec;
   resolveWorkdir?: (buildId: string) => string;
+  /**
+   * BI-34A05E78: the build branch. A published-tree readiness run that is
+   * killed leaves the clone detached on the published commit, so HEAD^{tree}
+   * would name a tree nobody verified. When set, a clean detached clone is put
+   * back on this branch before the tree is read.
+   */
+  restoreBranch?: string | null;
 }): Promise<GauntletIdentity> {
   const exec = input.exec ?? (await import("@/lib/sandbox")).execInSandbox;
   const resolveWorkdir = input.resolveWorkdir
     ?? (await import("@/lib/build/sandbox/build-branch")).resolveBuildWorkdir;
   const workdir = resolveWorkdir(input.buildId);
+
+  if (input.restoreBranch) {
+    const { restoreLeakedReadinessCheckout } = await import("@/lib/build/sandbox/leaked-readiness-checkout");
+    await restoreLeakedReadinessCheckout({ exec, containerId: input.containerId, workdir, buildBranch: input.restoreBranch });
+  }
 
   const treeSha = await readWorktreeTreeSha(exec, input.containerId, workdir);
 
