@@ -140,7 +140,8 @@ export function scopeVerificationOutputForGate(args: {
   return {
     // Out-of-scope noise ⇒ the build's own surface is clean. Map the nulled
     // scoped verdict to an explicit pass so the gate advances.
-    typecheckPassed: outOfScopeNoise ? true : scoped.buildScoped.typecheckPassed,
+    typecheckPassed: args.verification.typecheckPassed === null || args.verification.verificationSource?.unchanged === false
+      ? null : outOfScopeNoise ? true : scoped.buildScoped.typecheckPassed,
     testsPassed: outOfScopeNoise ? args.verification.testsPassed : scoped.buildScoped.testsPassed,
     testsFailed: outOfScopeNoise ? 0 : scoped.buildScoped.testsFailed,
     failureAxis: scoped.buildScoped.failureAxis,

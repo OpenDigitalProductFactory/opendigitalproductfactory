@@ -311,6 +311,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-31F11C37: the installers' monitoring question.
         "scripts/installer/monitoring-choice.test.mjs",
       ),
+      // BI-7EE97802: executes the actual native authority selection before effects.
+      conformanceTest("scripts/installer/native-edge-authority.test.mjs"),
       // BI-0FC727BB: scans the live installer tree for a bare host-wide sync.
       conformanceTest("scripts/installer/no-bare-host-sync.test.mjs"),
       conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
@@ -942,6 +944,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/reassessment-capability-probe.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        "scripts/lib/git-fetch-serialization.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
         // allowlisted OUT of CI, so nothing enforced its behaviour while it
         // destroyed run after run. The allowlist is shrink-only and its own

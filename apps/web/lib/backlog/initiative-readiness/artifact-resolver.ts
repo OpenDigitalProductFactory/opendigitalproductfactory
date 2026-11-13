@@ -6,7 +6,7 @@ import { renderBuildDesignText } from "./render-build-design-text";
 import { renderBuildPlanText } from "./render-build-plan-text";
 
 import { readDocumentBlob } from "@/lib/documents/blob-storage";
-import { resolveRepositoryArtifact, type MergedRepairProof, type RepositorySourceAdmission } from "./repository-artifact";
+import { resolveRepositoryArtifact, type MergedRepairProof, type RepositorySourceAdmission, type SourceInquiryAdmission } from "./repository-artifact";
 import type { InitiativeArtifactRef, ResolvedInitiativeArtifact } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
@@ -122,6 +122,7 @@ export async function resolveInitiativeArtifact(args: {
   subject: InitiativeSubject;
   workroomRef?: InitiativeReviewBinding["workroomRef"];
   sourceAdmission?: RepositorySourceAdmission;
+  inquiryAdmission?: SourceInquiryAdmission;
   canonicalPlanProof?: CanonicalPlanSourceProof;
   /** BI-CE661173: server-resolved proof that the locator is the item's merged repair commit. */
   mergedRepairProof?: MergedRepairProof;
@@ -287,7 +288,7 @@ export async function resolveInitiativeArtifact(args: {
     } else {
       const resolved = await resolveRepositoryArtifact({ locator: args.locator, subject: args.subject,
         workroomRef: args.workroomRef, canonicalPlanProof: args.canonicalPlanProof,
-        sourceAdmission: args.sourceAdmission,
+        sourceAdmission: args.sourceAdmission, inquiryAdmission: args.inquiryAdmission,
         ...(args.mergedRepairProof ? { mergedRepairProof: args.mergedRepairProof } : {}), db: db as never });
       if (!resolved.ok) return resolved;
       providerBlob = resolved.artifact;

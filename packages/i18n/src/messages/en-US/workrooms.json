@@ -391,6 +391,26 @@
       "legendAggregate": "Counts are rooms at each step now; typical is the shape version's last four weeks."
     }
   },
+  "rhythm": {
+    "heading": "Day-to-day operations",
+    "intro": "Each standing room runs once a day. Its last 14 days show whether each day's run finished that day, finished late, or did not run.",
+    "cycles": "Last 14 days for {$room}",
+    "cell": "{$date}: {$state}",
+    "state": {
+      "on-time": "Finished on time",
+      "late": "Finished late",
+      "missed": "Did not run",
+      "running": "Running now",
+      "due": "Not started yet today",
+      "no-record": "No record yet"
+    },
+    "runningSince": "Running since {$date}",
+    "missedCount": "{$count} days did not run",
+    "dueToday": "Not started today",
+    "partialHistory": "Some days unrecorded",
+    "steady": "Every recorded day ran",
+    "explain": "What the marks mean"
+  },
   "outcomes": {
     "title": "Delivery outcomes",
     "workrooms": "Workrooms",
@@ -551,5 +571,17 @@
       "review": "Review",
       "ship": "Ship"
     }
+  },
+  "savedProof": {
+    "heading": "Saved builds",
+    "column": "Saved build",
+    "loadFailed": "Saved history unavailable.",
+    "retry": "Try again",
+    "availabilityUnknown": "Runner availability could not be checked. Saved results remain available.",
+    "buildingUnavailable": "Saved results are available. Building is unavailable.",
+    "requestedUnavailable": "Saved build unavailable.",
+    "review": "Review proof",
+    "empty": "No saved builds.",
+    "setup": "Runner setup"
   }
 }

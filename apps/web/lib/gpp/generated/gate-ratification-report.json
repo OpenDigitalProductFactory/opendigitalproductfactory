@@ -26,6 +26,12 @@
       "status": "proposed"
     },
     {
+      "shape": "backlog-steward-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "backlog-admission",
+      "status": "proposed"
+    },
+    {
       "shape": "bookkeeping-period-cycle@1.0.0",
       "stage": "owner-close",
       "decisionScope": "bookkeeping-period-close",
@@ -379,6 +385,12 @@
       "shape": "architecture-alignment-review@1.0.0",
       "stage": "ratify",
       "decisionScope": "architecture-alignment",
+      "status": "proposed"
+    },
+    {
+      "shape": "backlog-steward-watch@1.0.0",
+      "stage": "decide",
+      "decisionScope": "backlog-admission",
       "status": "proposed"
     },
     {

@@ -23,7 +23,7 @@
       "direction": "non-increasing",
       "expiry": "2027-03-31",
       "owner": "portfolio-management",
-      "value": 647
+      "value": 648
     },
     "prismaSchemaLines": {
       "direction": "informational",

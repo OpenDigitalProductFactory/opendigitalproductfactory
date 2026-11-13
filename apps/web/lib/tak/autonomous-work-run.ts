@@ -399,6 +399,8 @@ export async function executeAutonomousAgenticLoop(input: {
   /** What each entry of `chatHistory` is — labels only (BI-40EF7C44). */
   messageOrigins?: readonly MessageOrigin[];
   chatHistory: ChatMessage[];
+  /** Original native assignment; accepted only when the marked history matches exactly. */
+  activeAssignment?: { messageId: string; content: string };
   sensitivity: RouteSensitivity;
   tools: ToolDefinition[];
   toolsForProvider?: Array<Record<string, unknown>>;
@@ -556,8 +558,16 @@ export async function executeAutonomousAgenticLoop(input: {
   const { isAuthorizedSurfaceGuidanceRequest } = await import(
     "@/lib/coworker/authorized-surface-prompt-grounding"
   );
+  const markedRequest = lastUserRequest(input.chatHistory);
+  const assignment = input.activeAssignment;
+  // The caller's provenance marker remains in the model history. Qualify only
+  // the original request when its identity AND full content match that history;
+  // never strip marker-looking user text or discard trailing operational work.
+  const guidanceRequest = assignment
+    && markedRequest === `${assignment.content}\n\nActive assignment [${assignment.messageId}]`
+    ? assignment.content : markedRequest;
   const surfaceGuidanceOnly = surfaceGrounding.grounded
-    && isAuthorizedSurfaceGuidanceRequest(lastUserRequest(input.chatHistory));
+    && isAuthorizedSurfaceGuidanceRequest(guidanceRequest, "surfaceId" in surfaceGrounding ? surfaceGrounding.surfaceId : undefined);
   const authorizedGuidanceHighlights = "guidanceHighlights" in surfaceGrounding
     ? surfaceGrounding.guidanceHighlights ?? []
     : [];

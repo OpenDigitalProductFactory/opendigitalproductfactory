@@ -101,6 +101,7 @@
     "packages/api-client": "@dpf/api-client",
     "packages/bootstrap": "@dpf/bootstrap",
     "packages/db": "@dpf/db",
+    "packages/storefront-templates": "@dpf/storefront-templates",
     "packages/types": "@dpf/types",
     "packages/validators": "@dpf/validators"
   },

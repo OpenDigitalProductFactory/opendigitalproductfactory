@@ -1,7 +1,9 @@
 import { cron } from "@/lib/jobs/triggers";
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
+import { selectPrDeliveryRooms } from "./build-pr-delivery-selection";
 import type { BuildPrDeliveryStateV1 } from "@/lib/build/build-pr-delivery-state";
+import type { PrRepairPacket } from "@/lib/build/pr-follow-through";
 
 export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
 
@@ -11,9 +13,6 @@ export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,
  * Studio rooms keep their autonomy-eligibility check; every other room acts
  * within its own posture (resolvePrFollowThroughPosture).
  */
-const ROOM_SCAN_WINDOW = 200;
-const ROOMS_PER_RUN = 25;
-
 /**
  * Whether an observed PR head belongs to the room's current source (#6148): a
  * PR still showing the head a room held before it was re-adopted elsewhere is
@@ -77,37 +76,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
 
   const platformDefaultActionBoundary = (await getWorkroomPostureDefault())?.actionBoundary ?? null;
 
-  const scanWindow = await prisma.workroom.findMany({
-    where: {
-      pullRequestNumber: { not: null },
-      pullRequestUrl: { not: null },
-      status: { notIn: ["complete", "abandoned", "archived"] },
-    },
-    select: {
-      id: true,
-      capsuleId: true,
-      featureBuildId: true,
-      repositoryFullName: true,
-      headSha: true,
-      pullRequestNumber: true,
-      pullRequestUrl: true,
-      scopeClaims: true,
-      executorKind: true,
-      workspaceState: true,
-      updatedAt: true,
-    },
-    take: ROOM_SCAN_WINDOW,
-    orderBy: { updatedAt: "asc" },
-  });
-  // A room the reconciler has stopped on is skipped without a write, so its
-  // updatedAt never advances. Filtering before the per-run cap keeps a pile of
-  // stopped rooms from starving every live one behind them.
-  const capsules = scanWindow
-    .filter((capsule) => {
-      const status = readBuildPrDeliveryState(capsule.workspaceState)?.status;
-      return status !== "escalated" && status !== "closed" && status !== "deployed";
-    })
-    .slice(0, ROOMS_PER_RUN);
+  const capsules = await selectPrDeliveryRooms(prisma);
 
   let observed = 0;
   let actuated = 0;
@@ -219,10 +188,24 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         owner,
         repo,
         actuationAllowed,
-        repairAuthority: posture.authority,
-        // No dispatchRepair yet: whether the platform coding coworker can push
-        // to an existing external branch is the design's open question (§8), so
-        // a repair the room may dispatch is staged for a person instead.
+        // BI-085A37EC (WWMD DI-8172B1A35993, design §8): a Build Studio build
+        // repairs through its own bounded loop and pushes a fast-forward
+        // follow-up commit, so its room dispatches unless it is quiet or
+        // advise-only. Other rooms keep their posture and have no dispatcher.
+        repairAuthority: capsule.featureBuildId && posture.authority !== "record" ? "dispatch" : posture.authority,
+        ...(capsule.featureBuildId
+          ? {
+              dispatchRepair: async (packet: PrRepairPacket) => {
+                const buildId = semanticBuildId ?? (await prisma.featureBuild.findUnique({
+                  where: { id: capsule.featureBuildId! },
+                  select: { buildId: true },
+                }))?.buildId;
+                if (!buildId) return "unavailable" as const;
+                const { dispatchBuildPrCiRepair } = await import("@/lib/build/pr-ci-repair");
+                return dispatchBuildPrCiRepair({ buildId, packet, github: { owner, repo, token } });
+              },
+            }
+          : {}),
       });
       if (outcome.actuated) actuated += 1;
 

@@ -5,7 +5,8 @@ import { isSubstantiveCoworkerOutput } from "./agent-coworker-core";
 
 export async function persistCoworkerResponseArtifact(input: {
   taskRunId: string | null;
-  responseContent: string;
+  acceptedMessage: { id: string; role: string; content: string; agentId: string | null };
+  deliveryOutcome: "responded" | "blocked" | "capacity-wait";
   routeContext: string;
   threadId: string;
   agentId: string;
@@ -16,7 +17,11 @@ export async function persistCoworkerResponseArtifact(input: {
   userId: string;
 }): Promise<void> {
   if (!input.taskRunId) return;
-  if (!isSubstantiveCoworkerOutput(input.responseContent)) return;
+  // Evidence follows the accepted publication, never the length of a failure notice.
+  if (input.deliveryOutcome !== "responded" || input.acceptedMessage?.role !== "assistant"
+    || !input.acceptedMessage.id || input.acceptedMessage.agentId !== input.agentId) return;
+  const responseContent = input.acceptedMessage.content;
+  if (!isSubstantiveCoworkerOutput(responseContent)) return;
 
   try {
     const { createTaskArtifact } = await import("@/lib/tak/task-records");
@@ -24,11 +29,11 @@ export async function persistCoworkerResponseArtifact(input: {
       taskRunId: input.taskRunId,
       artifactType: "coworker_response",
       name: "Coworker response",
-      summary: input.responseContent.slice(0, 240),
+      summary: responseContent.slice(0, 240),
       content: {
         routeContext: input.routeContext,
         threadId: input.threadId,
-        response: input.responseContent,
+        response: responseContent,
         providerId: input.providerId,
         modelId: input.modelId,
         anchors: input.portalContext?.anchors ?? [],
@@ -36,6 +41,7 @@ export async function persistCoworkerResponseArtifact(input: {
       metadata: {
         kind: "coworker-response",
         deliveryState: "responded",
+        acceptedMessageId: input.acceptedMessage.id,
         routeContext: input.routeContext,
         envelopeId: input.portalContext?.envelopeId ?? null,
       },
@@ -53,6 +59,7 @@ export async function persistCoworkerResponseArtifact(input: {
           summary: `${input.agentName} response captured for the current portal context.`,
           result: {
             taskRunId: input.taskRunId,
+            acceptedMessageId: input.acceptedMessage.id,
             threadId: input.threadId,
             agentId: input.agentId,
             routeContext: input.routeContext,
@@ -76,6 +83,7 @@ export async function persistCoworkerResponseArtifact(input: {
         summary: `${input.agentName} response captured for the current portal context.`,
         payload: {
           taskRunId: input.taskRunId,
+          acceptedMessageId: input.acceptedMessage.id,
           threadId: input.threadId,
           agentId: input.agentId,
           routeContext: input.routeContext,

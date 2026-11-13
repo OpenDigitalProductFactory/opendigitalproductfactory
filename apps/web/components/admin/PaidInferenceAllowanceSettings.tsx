@@ -119,7 +119,10 @@ export function PaidInferenceAllowanceSettings(props: PaidInferenceAllowanceSett
         <Button type="button" variant="primary" size="sm" onClick={handleSave} disabled={isPending || !dirty || !reason.trim()}>
           {isPending ? t("paidAiAllowance.saving") : t("paidAiAllowance.save")}
         </Button>
-        {saved && <span className="text-xs text-[var(--dpf-success)]">{t("paidAiAllowance.saved")}</span>}
+        {/* The live region is always mounted so assistive technology announces the confirmation when it appears. */}
+        <span role="status" aria-live="polite" className="text-xs text-[var(--dpf-success)]">
+          {saved ? t("paidAiAllowance.saved") : ""}
+        </span>
       </div>
     </div>
   );

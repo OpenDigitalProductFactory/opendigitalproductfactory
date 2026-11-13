@@ -288,13 +288,40 @@ describe("verification-typecheck-passed (BI-E4E70B9A)", () => {
 });
 
 describe("verification-depth-satisfied — shadow requirement", () => {
-  const greenVerification = {
+  const legacyGreenVerification = {
     testsPassed: 12,
     testsFailed: 0,
     typecheckPassed: true,
     fullOutput: "green",
     timestamp: "2026-08-29T00:00:00.000Z",
   };
+  const greenVerification = { ...legacyGreenVerification, testsExecuted: true,
+    testsApplicable: true, testCommandPassed: true, testSummariesComplete: true };
+
+  it.each(["shallow", "deep"] as const)("keeps legacy bare green unknown at %s depth while default tests remain advisory", (verificationDepth) => {
+    expect(checkRequirement("verification-depth-satisfied", { verificationDepth, verificationOut: legacyGreenVerification,
+      uxVerificationStatus: "complete", uxTestResults: [{ step: "Open the affected route", passed: true }],
+    }).allowed).toBe(false);
+    expect(checkRequirement("verification-typecheck-passed", { verificationOut: legacyGreenVerification }).allowed).toBe(true);
+    expect(checkRequirement("verification-depth-satisfied", { verificationDepth: "none", verificationOut: legacyGreenVerification }).allowed).toBe(true);
+  });
+
+  it.each([
+    { testsExecuted: false }, { testsApplicable: null }, { testCommandPassed: false },
+    { testSummariesComplete: false }, { testEvidenceConflict: true },
+  ])("does not qualify incomplete execution facts at the matrix caller: %j", (facts) => {
+    expect(checkRequirement("verification-depth-satisfied", { verificationDepth: "shallow",
+      verificationOut: { ...greenVerification, ...facts },
+    }).allowed).toBe(false);
+  });
+
+  it("keeps a confirmed no-covering-test exemption distinct from executed cases", () => {
+    expect(checkRequirement("verification-depth-satisfied", { verificationDepth: "shallow",
+      verificationOut: { typecheckPassed: true, testsPassed: 0, testsFailed: 0,
+        testsExecuted: false, testsApplicable: false },
+    }).allowed).toBe(true);
+  });
+
 
   it("keeps absent and none byte-identical across absent, present, and failed evidence", () => {
     const failedVerification = { ...greenVerification, testsFailed: 2, typecheckPassed: false };
@@ -312,7 +339,7 @@ describe("verification-depth-satisfied — shadow requirement", () => {
     }
   });
 
-  it("requires a green typecheck and zero failed tests at shallow depth", () => {
+  it("requires a green typecheck and complete observed test evidence at shallow depth", () => {
     expect(checkRequirement("verification-depth-satisfied", {
       verificationDepth: "shallow",
       verificationOut: greenVerification,

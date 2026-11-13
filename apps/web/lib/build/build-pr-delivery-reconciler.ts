@@ -9,6 +9,7 @@ import {
 } from "@/lib/build/github-pr-readiness";
 import {
   createBuildPrDeliveryState,
+  readBuildPrDeliveryState,
   type BuildPrDeliveryStateV1,
   type BuildPrDeliveryStatus,
 } from "./build-pr-delivery-state";
@@ -349,6 +350,12 @@ export async function initializeAndReconcileBuildPrDelivery(input: {
     prNumber: input.prNumber,
     prUrl: input.prUrl,
   });
+  // BI-085A37EC: a republish onto the same PR keeps that PR's repair budget, or the loop would never end.
+  const prior = (await input.db.workroom.findMany({
+    where: { featureBuildId: input.featureBuildId },
+    select: { id: true, workspaceState: true, updatedAt: true },
+  })).map((room) => readBuildPrDeliveryState(room.workspaceState)).find((state) => state?.prNumber === input.prNumber);
+  if (prior) initial.followThrough = { ...initial.followThrough, attempts: prior.followThrough.attempts };
   const capture = await captureBuildPrOntoCapsule({
     db: input.db,
     featureBuildId: input.featureBuildId,

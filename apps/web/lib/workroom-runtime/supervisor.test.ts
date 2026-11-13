@@ -4,13 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // the room, its log and the credential store are mocked.
 
 const { db, recordActivity } = vi.hoisted(() => ({
-  db: { workroom: { findUnique: vi.fn(), update: vi.fn() } },
+  db: { workroom: { findUnique: vi.fn(), update: vi.fn() }, $executeRaw: vi.fn() },
   recordActivity: vi.fn(async (..._args: unknown[]) => ({ id: "act" })),
 }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 vi.mock("@/lib/work-capsules/work-capsule-activity-store", () => ({ recordWorkCapsuleActivity: recordActivity }));
 
 import { decideClaudeToolCall, decideCodexRequest } from "./runtime-request-policy";
+import { createMemoryHeldRequestStore } from "./__fixtures__/memory-held-request-store";
 import { createRuntimeSupervisor } from "./supervisor";
 import { createCodexAdapter } from "./codex-app-server-adapter";
 import { autoRespond, fakeProcess } from "./__fixtures__/fake-process";
@@ -39,7 +40,7 @@ function harness() {
   };
   const issueToken = vi.fn(async () => ({ tokenId: "tok-1", plaintext: "dpfroom_x" }));
   const revokeTokens = vi.fn(async () => 1);
-  const runtime = createRuntimeSupervisor({ adapters: { codex: adapter, claude: adapter }, mcpUrl: "http://portal/api/mcp/v1", issueToken, revokeTokens });
+  const runtime = createRuntimeSupervisor({ adapters: { codex: adapter, claude: adapter }, mcpUrl: "http://portal/api/mcp/v1", issueToken, revokeTokens, held: createMemoryHeldRequestStore(), clientGaid: async () => "gaid:priv:dpf.internal:agt-ext-codex" });
   return { runtime, session, adapter, issueToken, revokeTokens, emit: (event: RuntimeEvent) => emit(event) };
 }
 
@@ -51,6 +52,8 @@ beforeEach(() => {
   room = { id: "row-1", status: "working", archivedAt: null, workspaceState: {}, taskRunId: "TR-1" };
   db.workroom.findUnique.mockImplementation(async () => room);
   db.workroom.update.mockImplementation(async ({ data }: { data: { workspaceState: Record<string, unknown> } }) => { room.workspaceState = data.workspaceState; return room; });
+  // writeSession sets only the runtimeSession key: jsonb_set(..., ${json}::jsonb) WHERE id = ${roomId}.
+  db.$executeRaw.mockImplementation(async (_sql: TemplateStringsArray, json: string) => { room.workspaceState = { ...room.workspaceState, runtimeSession: JSON.parse(json) }; return 1; });
 });
 
 describe("start", () => {
@@ -60,7 +63,7 @@ describe("start", () => {
     expect(result).toMatchObject({ success: true, data: { threadId: "thr-1" } });
     expect(h.issueToken).toHaveBeenCalledWith({ userId: "user-1", agentId: "agent-1", capsuleId: "WC-1", runRef: "TR-1" });
     expect(h.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ mcp: { url: "http://portal/api/mcp/v1", bearerToken: "dpfroom_x" }, cwd: "/workspace" }), expect.any(Function));
-    expect(room.workspaceState["runtimeSession"]).toMatchObject({ provider: "codex", threadId: "thr-1", tokenId: "tok-1", status: "open" });
+    expect(room.workspaceState["runtimeSession"]).toMatchObject({ provider: "codex", threadId: "thr-1", tokenId: "tok-1", status: "supervised" });
     expect(h.session.startTurn).toHaveBeenCalledWith("begin");
     await expect(h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor })).resolves.toMatchObject({ error: "already_running" });
   });
@@ -107,7 +110,7 @@ describe("a live session", () => {
     await flush();
     expect(h.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-local", "accept");
     expect(h.session.respondToRuntimeRequest).not.toHaveBeenCalledWith("r-push", expect.anything());
-    expect(h.runtime.status("WC-1")).toMatchObject({ held: [{ requestId: "r-push" }] });
+    await expect(h.runtime.status("WC-1")).resolves.toMatchObject({ held: [{ requestId: "r-push" }] });
     expect(kinds()).toContain("question");
     await h.runtime.decide({ capsuleId: "WC-1", requestId: "r-push", decision: "decline", reason: "not this branch", actor });
     expect(h.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-push", "decline");
@@ -120,7 +123,7 @@ describe("a live session", () => {
       .resolves.toEqual({ behavior: "allow", updatedInput: { file_path: "/workspace/a.ts" } });
     const held = await h.runtime.claudePermission({ capsuleId: "WC-1", toolName: "WebFetch", toolInput: { url: "https://x" } });
     expect(held).toMatchObject({ behavior: "deny" });
-    const [{ requestId }] = (h.runtime.status("WC-1") as { held: Array<{ requestId: string }> }).held;
+    const [{ requestId }] = ((await h.runtime.status("WC-1")) as { held: Array<{ requestId: string }> }).held;
     await h.runtime.decide({ capsuleId: "WC-1", requestId: requestId!, decision: "accept", reason: "docs fetch is fine", actor });
     await expect(h.runtime.claudePermission({ capsuleId: "WC-1", toolName: "WebFetch", toolInput: { url: "https://x" } }))
       .resolves.toMatchObject({ behavior: "allow" });
@@ -134,7 +137,7 @@ describe("a live session", () => {
     await flush();
     expect(h.revokeTokens).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-1", tokenId: "tok-1" }));
     expect(room.workspaceState["runtimeSession"]).toMatchObject({ status: "closed" });
-    expect(h.runtime.status("WC-1")).toEqual({ live: false });
+    await expect(h.runtime.status("WC-1")).resolves.toMatchObject({ live: false });
     await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     await h.runtime.stop({ capsuleId: "WC-1", reason: "done", actor });
     expect(h.session.close).toHaveBeenCalled();
@@ -178,6 +181,8 @@ it("advances queued room input only after the real adapter settles its root turn
   const runtime = createRuntimeSupervisor({
     adapters: { codex: createCodexAdapter({ launch: () => proc, login: async () => ({ type: "apiKey", apiKey: "sk" }) }) },
     mcpUrl: "http://portal/api/mcp/v1",
+    held: createMemoryHeldRequestStore(),
+    clientGaid: async () => null,
     issueToken: async () => ({ tokenId: "tok-root", plaintext: "dpfroom_test" }),
     revokeTokens: async () => 1,
   });

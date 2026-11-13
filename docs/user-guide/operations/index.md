@@ -30,6 +30,8 @@ Use the arrow beside a portfolio to expand it. Expanding lists the Workrooms in 
 
 Counts describe the Workrooms the page read, not everything in the portfolio. When the page reads its limit, each count reads "N rooms read" and a note below the tree says so. To see beyond that, narrow the inventory below or open the portfolio itself.
 
+**Day-to-day operations** lists every standing room with its last 14 days. A missed day shows as an outlined cross, so it stands out as clearly as a stuck project. See [Day-to-day operations](../workspace/work-rooms.md#day-to-day-operations) for what each mark means.
+
 ## Key Concepts
 
 - **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, awaiting acceptance, done, deferred, or retired.
@@ -69,7 +71,11 @@ their age is then counted from when they were created and the real figure may
 be lower; hover it for the explanation. The progress bar shows done in one
 colour and awaiting acceptance as a separate segment after it. The workspace
 **Backlog** tile shows the same counts as **Awaiting acceptance** and **Awaiting
-14+ days**, above **Done**.
+14+ days**, above **Done**. The tile counts only the items this installation
+can accept. Items copied in from a connected installation by work sync are
+accepted by the installation they came from, so the tile shows them separately
+as **Awaiting at peer installation** and leaves them out of the other two
+counts.
 
 **Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
@@ -106,6 +112,27 @@ When you file an item, say what will be true, and for whom, once it is done (the
 A retired duplicate is labeled **retired duplicate**; the other backlog item is
 the canonical record, so the duplicate is retained for history without being
 counted as completed. Retired items no longer keep an epic open.
+
+### Security findings from GitHub
+
+On the installation that stewards the repository, inbound issue triage reads
+three GitHub security surfaces every four hours: Dependabot, code scanning and
+secret scanning. Each one becomes backlog work:
+
+- **One item per unit of fix.** Dependabot findings are grouped by package, so
+  one upgrade closes one item. Code scanning is grouped by rule. Each leaked
+  secret is its own item.
+- **Ranked by severity.** Leaked secrets and critical findings are priority 1,
+  high is 2, medium 3 and low 4. A rise in severity raises the item; the job
+  never lowers a priority.
+- **Closed when GitHub resolves it.** When GitHub no longer reports a finding
+  open, the item records that as evidence and moves to awaiting acceptance. The
+  daily acceptance sweep then closes it. If the finding comes back first, the
+  item returns to open.
+- **Unreadable is never zero.** If the installation's GitHub connection cannot
+  read a surface, the schedule view marks that surface **UNREADABLE** and the
+  run as failed. The connection needs read access to Dependabot alerts, code
+  scanning alerts and secret scanning alerts.
 
 ### Clearing copies of a paired installation's demand
 

@@ -3,7 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { access, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs as utilParseArgs, promisify } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { pathToFileURL } from "node:url";
@@ -199,10 +199,59 @@ function resolveReal(path) {
   return process.getBuiltinModule("node:fs").realpathSync(path);
 }
 
-export async function cleanupHarness(workspace, composeDown = cleanupNMinusOneBaseline) {
+// BI-9BC79F48: the promoter and the candidate portal run as root and write into
+// the bind-mounted workspace (state/federation/*.json and friends). The runner
+// user cannot unlink root-owned files, so a plain host `rm` died with EACCES
+// after every otherwise complete promotion. Remove what containers wrote with
+// container authority first; the host rm then only meets its own files.
+export async function removeContainerOwnedFiles(root, run = execFile) {
+  await run("docker", ["run", "--rm", "-v", `${root}:/workspace`, "node:24-alpine",
+    "sh", "-c", "find /workspace -mindepth 1 -delete"]);
+}
+
+/**
+ * Read a workspace file the promoter may have rewritten as root (BI-9BC79F48).
+ * The migrated install-state.json is written owner-only by a root process —
+ * correct for a real install, unreadable to the runner user, which is what
+ * failed every completed promotion once the cleanup error stopped hiding it.
+ * Host read first; only an EACCES falls back to a read-only root container, so
+ * the bytes hashed as evidence are the file's own bytes either way.
+ */
+export async function readWorkspaceFile(path, deps = {}) {
+  const read = deps.readFile ?? readFile;
+  const run = deps.run ?? execFile;
+  try {
+    return await read(path);
+  } catch (error) {
+    if (error?.code !== "EACCES") throw error;
+    const { stdout } = await run("docker", ["run", "--rm", "-v", `${dirname(path)}:/workspace:ro`, "node:24-alpine",
+      "cat", `/workspace/${basename(path)}`], { encoding: "buffer", maxBuffer: 20 * 1024 * 1024 });
+    return Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout);
+  }
+}
+
+export async function cleanupHarness(workspace, composeDown = cleanupNMinusOneBaseline, deps = {}) {
   assertSafeHarnessConfig(workspace);
+  const removeOwned = deps.removeContainerOwnedFiles ?? removeContainerOwnedFiles;
   await composeDown(workspace);
+  // Best effort: if Docker cannot help, the host rm below still reports the truth.
+  await removeOwned(workspace.root).catch(() => {});
   await rm(workspace.root, { recursive: true, force: true });
+}
+
+/**
+ * Run the harness cleanup without letting it rewrite the gate's verdict
+ * (BI-9BC79F48). Cleanup used to run bare in `finally`, so its exception
+ * REPLACED whatever the gate produced: a pass became a failure and a real
+ * failure hid behind an unrelated permission error, with no evidence either
+ * way. A cleanup failure is now a warning; the primary result or error stands.
+ */
+export async function cleanupWithoutMaskingVerdict(cleanup, warn = (message) => process.stderr.write(`${message}\n`)) {
+  try {
+    await cleanup();
+  } catch (error) {
+    warn(`warning: N-1 harness cleanup failed and was skipped — the gate verdict above stands (BI-9BC79F48): ${error?.message ?? error}`);
+  }
 }
 
 export async function cleanupProject(project, run = execFile) {
@@ -395,7 +444,7 @@ export async function runNMinusOneUpgrade(options, deps) {
     Object.assign(evidence, completed, { result: "passed", completedAt: new Date().toISOString() });
     return await d.writeEvidence(evidence);
   } finally {
-    await d.cleanup();
+    await cleanupWithoutMaskingVerdict(() => d.cleanup(), d.warn);
   }
 }
 
@@ -471,7 +520,7 @@ function createRuntimeDependencies(options) {
       assertRecreatedPortalProvenance(container, image, { project: options.project });
       const [health, versionResponse, stateBytes, recoveryBytes] = await Promise.all([
         fetch(`${portalUrl}/api/health`), fetch(`${portalUrl}/api/health/sha`),
-        readFile(join(workspace.state, "install-state.json")), readFile(join(workspace.backups, "recovery", "install-state.json")),
+        readWorkspaceFile(join(workspace.state, "install-state.json")), readWorkspaceFile(join(workspace.backups, "recovery", "install-state.json")),
       ]);
       const migrated = JSON.parse(stateBytes.toString("utf8"));
       const sourceV1Hash = createHash("sha256").update(recoveryBytes).digest("hex");
