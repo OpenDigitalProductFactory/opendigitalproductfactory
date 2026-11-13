@@ -732,6 +732,15 @@ failed fetch records `fetch-failed` and exits before integration synthesis or
 expensive gates. This admission boundary avoids repeated rebase/rerun churn
 while queued; later movement on `main` is reconciled by the merge queue.
 
+The shared-safe helper serializes cooperating refreshes and unshallow operations
+with an ownership-token lock in the canonical Git common directory, so linked
+worktrees share the same boundary. The explicit child-plan fetch uses that
+helper too. Contention waits at most 60 seconds before reporting an unavailable
+prerequisite. It never reclaims a foreign or uncertain owner, removes Git's
+lockfiles, resets refs or substitutes an offline baseline. A retained owner
+requires ownership reconciliation; do not delete it to make a gate run. Raw Git
+commands outside the helper do not participate in this exclusion boundary.
+
 Offline operation must be explicit:
 `--offline-accepted-base` or
 `DPF_LOCAL_CI_OFFLINE_ACCEPTED_BASE=1`. In that mode,
