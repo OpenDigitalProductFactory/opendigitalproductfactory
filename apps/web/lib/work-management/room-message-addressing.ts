@@ -18,7 +18,11 @@ export type RoomWakeState =
   | "woken"
   | "held-for-executor"
   | "paused-budget"
-  | "no-recipient";
+  | "no-recipient"
+  | "cannot-reply";
+
+/** The grant post_room_message requires (TOOL_TO_GRANTS); named to the sender when it is missing. */
+export const ROOM_POST_GRANT = "work_room_write";
 
 /** Stored at structuredPayload.addressing on an addressed WorkItemMessage. */
 export interface RoomMessageAddressing {
@@ -145,6 +149,7 @@ export type RoomWakePlan =
   | { kind: "none"; state: "no-recipient"; detail: string }
   | { kind: "hold"; state: "held-for-executor"; detail: string }
   | { kind: "pause"; state: "paused-budget"; detail: string }
+  | { kind: "refuse"; state: "cannot-reply"; detail: string }
   | { kind: "wake"; state: "woken"; agents: string[]; reason: "addressed" | "hop-limit"; detail: string };
 
 /** Desktop and CLI executors work a room from outside; the platform never takes their stage. */
@@ -162,6 +167,8 @@ export function planRoomWake(args: {
   wakesLastHour: number;
   /** Agents that run outside the platform (Claude Code, Codex, Grok): reached by their own client, never a platform task. */
   externalAgentIds?: ReadonlySet<string>;
+  /** In-platform recipients without the grant to post: a reply turn could not answer, so none is spent (BI-8747A73D). */
+  cannotPost?: ReadonlySet<string>;
   hopLimit?: number;
   budgetPerHour?: number;
 }): RoomWakePlan {
@@ -194,6 +201,14 @@ export function planRoomWake(args: {
       detail: `Addressed to ${external.join(", ")}, which runs outside the platform; it sees this when it next reads the room.`,
     };
   }
+  const silent = recipients.filter((id) => args.cannotPost?.has(id));
+  recipients = recipients.filter((id) => !args.cannotPost?.has(id));
+  const silentNote = silent.length
+    ? `${silent.join(", ")} cannot reply here: ${silent.length === 1 ? "it lacks" : "they lack"} the ${ROOM_POST_GRANT} grant, which the coworker's owner grants.`
+    : "";
+  if (recipients.length === 0 && silent.length > 0) {
+    return { kind: "refuse", state: "cannot-reply", detail: `${silentNote} No reply turn was started.` };
+  }
   if (recipients.length === 0) {
     return {
       kind: "none",
@@ -215,9 +230,12 @@ export function planRoomWake(args: {
     state: "woken",
     agents: recipients,
     reason,
-    detail: reason === "hop-limit"
-      ? `Reached the hop limit (${hopLimit}); woke the coordinator instead of the addressee.`
-      : `Woke ${recipients.join(", ")}.`,
+    detail: [
+      reason === "hop-limit"
+        ? `Reached the hop limit (${hopLimit}); woke the coordinator instead of the addressee.`
+        : `Woke ${recipients.join(", ")}.`,
+      silentNote,
+    ].filter(Boolean).join(" "),
   };
 }
 

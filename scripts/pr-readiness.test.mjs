@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 
 import {
@@ -142,7 +143,9 @@ test("publication preserves truthful allowed overrides and docs exemption", () =
 
 test("publication scans existing slot records without executing the gate", () => {
   const paths = [];
-  const records = readPublicationGateRecords({ rootClone: "D:/repo", gitCommonDir: "D:/repo/.git", candidateGitDir: "D:/repo/.git/worktrees/example" }, path => {
+  const rootClone = resolve("fixture-root");
+  const gitCommonDir = join(rootClone, ".git");
+  const records = readPublicationGateRecords({ rootClone, gitCommonDir, candidateGitDir: join(gitCommonDir, "worktrees", "example") }, path => {
     paths.push(path);
     return path.includes("metadata") ? publicationProof()[0].metadata : publicationProof()[0].state;
   }, () => ({ ok: false }));
