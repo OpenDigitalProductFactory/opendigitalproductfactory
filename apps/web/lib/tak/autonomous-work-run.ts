@@ -557,7 +557,7 @@ export async function executeAutonomousAgenticLoop(input: {
     "@/lib/coworker/authorized-surface-prompt-grounding"
   );
   const surfaceGuidanceOnly = surfaceGrounding.grounded
-    && isAuthorizedSurfaceGuidanceRequest(lastUserRequest(input.chatHistory));
+    && isAuthorizedSurfaceGuidanceRequest(lastUserRequest(input.chatHistory), "surfaceId" in surfaceGrounding ? surfaceGrounding.surfaceId : undefined);
   const authorizedGuidanceHighlights = "guidanceHighlights" in surfaceGrounding
     ? surfaceGrounding.guidanceHighlights ?? []
     : [];
