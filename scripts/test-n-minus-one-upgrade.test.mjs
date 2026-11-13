@@ -13,6 +13,7 @@ import {
   assertRecreatedPortalProvenance,
   cleanupHarness,
   cleanupWithoutMaskingVerdict,
+  readWorkspaceFile,
   removeContainerOwnedFiles,
   cleanupNMinusOneBaseline,
   cleanupProject,
@@ -230,6 +231,28 @@ test("cleanup removes container-written files with container authority before th
   second.project = "dpf-n1-125";
   await cleanupHarness(second, async () => {}, { removeContainerOwnedFiles: async () => { throw new Error("docker unavailable"); } });
   await assert.rejects(realpath(second.root), /ENOENT/);
+});
+
+test("a root-owned workspace file is read with container authority, byte for byte (BI-9BC79F48)", async () => {
+  const bytes = Buffer.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d, 0x0a]);
+  // Readable on the host: no container involved.
+  const direct = await readWorkspaceFile("/tmp/dpf-n1-x/state/install-state.json", {
+    readFile: async () => bytes, run: async () => { throw new Error("must not run docker"); },
+  });
+  assert.deepEqual(direct, bytes);
+  // EACCES: a read-only root container returns the same bytes.
+  const calls = [];
+  const viaContainer = await readWorkspaceFile("/tmp/dpf-n1-x/state/install-state.json", {
+    readFile: async () => { throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" }); },
+    run: async (command, args, options) => { calls.push([command, ...args]); assert.equal(options.encoding, "buffer"); return { stdout: bytes }; },
+  });
+  assert.deepEqual(viaContainer, bytes);
+  assert.deepEqual(calls[0], ["docker", "run", "--rm", "-v", "/tmp/dpf-n1-x/state:/workspace:ro", "node:24-alpine", "cat", "/workspace/install-state.json"]);
+  // Any other error is the truth and is not papered over.
+  await assert.rejects(
+    readWorkspaceFile("/tmp/x", { readFile: async () => { throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); }, run: async () => ({ stdout: bytes }) }),
+    /ENOENT/,
+  );
 });
 
 test("a cleanup failure never replaces the gate's verdict (BI-9BC79F48)", async () => {
