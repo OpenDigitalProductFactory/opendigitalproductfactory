@@ -314,10 +314,14 @@ describe("Repo Guard Loop runs each standalone guard once (BI-8ED87FD9)", () => 
     assert.ok(![...guards].some((n) => n.endsWith(".test.mjs")));
   });
 
-  it("invokes the loop with --skip-standalone from the source profile", () => {
+  it("passes the loop every standalone guard and self-test as arguments", () => {
     const loop = POLICY_GUARD_PROFILES.source.find((g) => g.id === "repo-guard-loop");
     const call = loop.commands.find(([, args]) => args[0] === "scripts/check-guards.mjs");
-    assert.deepEqual(call[1], ["scripts/check-guards.mjs", "--skip-standalone"]);
+    const passed = (flag) => call[1].flatMap((arg, i) => (call[1][i - 1] === flag ? [arg] : []));
+    const { guards, tests } = loopGuardsRunStandalone("source");
+    assert.deepEqual(passed("--standalone-guard"), [...guards].sort());
+    assert.deepEqual(passed("--standalone-test"), [...tests].sort());
+    assert.ok(guards.size >= 17);
   });
 
   it("returns an empty set for a profile with no loop", () => {

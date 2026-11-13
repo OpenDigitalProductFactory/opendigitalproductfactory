@@ -95,9 +95,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
       // BI-2FAE2E5C: CI Node is the exact, qualified .node-version.
       node("--test", "scripts/check-ci-node-qualified.test.mjs"),
-      // BI-8ED87FD9: skip the check-no-* guards another guard in this profile
-      // already runs on its own, so each runs once per profile run.
-      node("scripts/check-guards.mjs", "--skip-standalone"),
+      // BI-8ED87FD9: the check-no-* guards another guard in this profile
+      // already runs on its own are appended below as --standalone-guard /
+      // --standalone-test, so each runs once per profile run.
+      node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
       // BI-22A2CA0D: every compose service declares dpf.recreate-class, so the
@@ -1248,6 +1249,19 @@ export function loopGuardsRunStandalone(profileName = "source") {
     }
   }
   return { guards, tests };
+}
+
+// Hand the loop its standalone set as arguments. The loop must not import this
+// registry: guards that import the loop (for discoverGuardFiles) would then pull
+// the registry, and its docs references, into their import closure.
+{
+  const loop = POLICY_GUARD_PROFILES.source.find((entry) => entry.id === "repo-guard-loop");
+  const call = loop.commands.find(([, args]) => args[0] === "scripts/check-guards.mjs");
+  const standalone = loopGuardsRunStandalone("source");
+  call[1].push(
+    ...[...standalone.guards].sort().flatMap((guard) => ["--standalone-guard", guard]),
+    ...[...standalone.tests].sort().flatMap((test) => ["--standalone-test", test]),
+  );
 }
 
 /**

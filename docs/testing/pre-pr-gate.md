@@ -375,11 +375,12 @@ to CI/the sandbox to enforce. The Repo Guard Loop runner
 (`scripts/check-guards.mjs`) applies the same distinction to its own child
 guards and exits with a dedicated runner-failure code so a killed spawn never
 prints `N/24 guard(s) FAILED` naming an innocent guard that had, in fact, run.
-In the policy registry the loop runs with `--skip-standalone` (BI-8ED87FD9): it
-skips a `check-no-*` guard that another guard in the same profile already runs
-on its own, provided that guard's self-test runs there too, and prints which it
-skipped. Each guard therefore runs once per profile run. `pnpm check:guards`
-without the flag still runs every guard.
+In the policy registry the loop is passed, as `--standalone-guard` and
+`--standalone-test` arguments, the `check-no-*` guards another guard in the
+same profile already runs on its own (BI-8ED87FD9). It skips each of those,
+provided its self-test runs there too, and prints which it skipped. Each guard
+therefore runs once per profile run. `pnpm check:guards` with no arguments
+still runs every guard.
 Run it standalone with `pnpm run pregate:preflight`
 (`--plan` prints the guard plan without running it, scoped to the diff;
 `--scope` prints the classified change scope and the guards it left out). **The preflight honours the change

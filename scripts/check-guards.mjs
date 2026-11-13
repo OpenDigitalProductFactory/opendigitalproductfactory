@@ -227,13 +227,22 @@ export function summarizeGuardRun({ guards, tests, violations, runnerFailures })
 }
 
 export async function main() {
-  const { values } = parseArgs({ args: scriptArgv(), options: { "skip-standalone": { type: "boolean" } } });
+  // BI-8ED87FD9: the policy registry passes the guards it already runs on
+  // their own. Run by hand with no arguments, the loop runs every guard.
+  const { values } = parseArgs({
+    args: scriptArgv(),
+    options: {
+      "standalone-guard": { type: "string", multiple: true },
+      "standalone-test": { type: "string", multiple: true },
+    },
+  });
   let { guards, tests } = discoverGuardFiles(readdirSync(SCRIPTS_DIR));
+  const standalone = {
+    guards: new Set(values["standalone-guard"] ?? []),
+    tests: new Set(values["standalone-test"] ?? []),
+  };
   let skipped = [];
-  if (values["skip-standalone"]) {
-    const { loopGuardsRunStandalone } = await import("./lib/ci-policy-guards.mjs");
-    ({ guards, tests, skipped } = excludeStandaloneGuards({ guards, tests }, loopGuardsRunStandalone("source")));
-  }
+  ({ guards, tests, skipped } = excludeStandaloneGuards({ guards, tests }, standalone));
 
   if (guards.length === 0) {
     console.error("No scripts/check-no-*.mjs guards found — that is itself a failure.");
