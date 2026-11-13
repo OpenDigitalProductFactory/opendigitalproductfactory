@@ -19,7 +19,7 @@ three unavailable capability reasons: the saved reader is never called despite
 an authenticated owner and a retained record. The unauthenticated control passes.
 This is a reproduced failure, not a passing implementation or live fixture test.
 
-Reuse `/build`, BuildStudio's saved selection and details drawer, ReviewPanel's
+Reuse `/build`, BuildStudio's saved selection, ReviewPanel's
 existing verification projection and raw output, and native saved-data readers.
 Keep organization-scoped reads and existing mutation-specific authority.
 The missing PlatformDevConfig setup case remains unchanged.
@@ -74,3 +74,19 @@ components. The latter was autonomy-eligible with high confidence; the agent
 recorded that choice. This decision is not a rendered UX measurement or critique.
 The new reader initializes its own measured prose ceiling; all existing copy
 ceilings and route budget limits remain unchanged.
+
+## Rendered composition correction
+
+The admitted ee2a3a02 contributor preview rendered retained proof without a
+runner, including raw output and unresolved earlier failures. At a visible
+390×844 viewport, the canvas drawer measured 156 pixels wide, making the
+saved evidence difficult to read. This is a measured failure of that composition,
+not a release acceptance pass. The nine-row cloned fleet did not establish the
+separately reported 76-row case.
+
+Keep the isolated reader choice, but compose ReviewPanel directly in the page
+through an accessible disclosure. Put the selected result before the fleet so
+its proof control does not depend on history length. Reuse Button, ReviewPanel
+and DataTable; leave shared canvas geometry and every numeric UX limit alone.
+The 76-row disclosure-order regression first failed against ee2a3a02; after the
+repair all 28 affected tests passed. Final rendered measurement remains required.
