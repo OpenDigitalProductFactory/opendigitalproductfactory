@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   ratifyStatutoryRule,
@@ -10,6 +10,18 @@ import {
 } from "./statutory-ratification";
 import { resolveStatutoryRule } from "./statutory-rules";
 import { AUTOMATION_PERSONA_EMAIL } from "@/lib/govern/automation-persona-identity";
+
+// Nothing under test reads the wall clock — ratification takes an injected `now`
+// and resolution takes an explicit `on` date. The clock is pinned anyway, so the
+// fixed fixture dates below can never start meaning something different once
+// the real date passes them.
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-12T12:00:00.000Z"));
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const person = { userId: "user-1", email: "owner@example.com" };
 const automation = { userId: "user-auto", email: AUTOMATION_PERSONA_EMAIL };
