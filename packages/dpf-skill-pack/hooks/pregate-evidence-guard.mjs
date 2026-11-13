@@ -259,7 +259,7 @@ export function evaluateGateRecord(statePath, headSha, headBranch = "") {
  * Pure-ish decision for tests. `git` helpers injectable.
  * @param {string} command
  * @param {Record<string, string|undefined>} env
- * @param {{ cwd?: string, head?: { branch: string, sha: string, statePath: string } | null }} [opts]
+ * @param {{ cwd?: string, head?: { branch: string, sha: string, statePath: string } | null, localCiNotRequired?: (topLevel: string) => boolean }} [opts]
  */
 export function decide(command, env = {}, opts = {}) {
   if (typeof command !== "string" || command.trim() === "") return { block: false };
@@ -316,6 +316,10 @@ export function decide(command, env = {}, opts = {}) {
     });
     if (result.status === 0) return { block: false };
   }
+  // EP-DELIVERY-ENGINE-V2 E3 (BI-31C988D5): a push with no runtime-bound file
+  // needs no local-CI record; the git pre-push hook applies the same
+  // derived-artifacts-gate decision, and cloud CI is the gate of record.
+  if (/^git\s+push\b/.test(execText.trim()) && head.topLevel && (opts.localCiNotRequired ?? localCiNotRequired)(head.topLevel)) return { block: false };
   // A cloud agent session cannot run pregate; the git pre-push hook records
   // the push under the same allowlisted code instead of refusing it.
   if (cloudAgentSessionOverride(env)) return { block: false };
@@ -323,6 +327,21 @@ export function decide(command, env = {}, opts = {}) {
     block: true,
     reason: `${GUIDANCE} (${gate.reason})`,
   };
+}
+
+/** True when derived-artifacts-gate says this branch needs no local-CI record. */
+function localCiNotRequired(topLevel) {
+  const gate = join(topLevel, "scripts", "derived-artifacts-gate.mjs");
+  if (!existsSync(gate)) return false;
+  const base = spawnSync("git", ["merge-base", "HEAD", "origin/main"], {
+    cwd: topLevel, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000, windowsHide: true,
+  });
+  const mergeBase = base.status === 0 ? base.stdout.trim() : "";
+  if (!/^[0-9a-f]{40}$/.test(mergeBase)) return false;
+  const result = spawnSync(process.execPath, [gate, "push-exempt", mergeBase], {
+    cwd: topLevel, encoding: "utf8", stdio: ["ignore", "ignore", "ignore"], timeout: 60_000, windowsHide: true,
+  });
+  return result.status === 0;
 }
 
 function main() {
