@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-92804832 (EP-5F6369AB). Migration 20261113140000_retire_roleless_ea_self_associations retires role-less associated_with EA relationships that join an element to itself, with their ASSOCIATED_WITH graph projection. An association needs a role naming what it means (BI-E487F6D9); a role-less self-association names nothing and has no typed reading to retype to. Associations between two different elements are left for their owners to qualify.",
+  "affectedCopies": [
+    "EaRelationship: role-less associated_with rows whose source and target element are the same are deleted",
+    "graph_edge: the ASSOCIATED_WITH edge projecting each retired row is deleted"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: enterprise-architecture model links; no content about a person.",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "Only role-less self-links with empty properties are affected; no element or other relationship changes."
+  },
+  "migration": {
+    "name": "20261113140000_retire_roleless_ea_self_associations",
+    "backfill": "In-place. Dry-run on the dev install on 2026-11-13 (v2026.11.12) in a rolled-back transaction: one hand-authored DynamicForm self-association from 2026-10-05 (properties {}) was retired with its single ASSOCIATED_WITH edge, leaving 0 associated_with rows and 0 ASSOCIATED_WITH edges.",
+    "rollback": "Forward-only. A retired self-association carried no role or properties, so recreating it adds no information; an owner who means one can add it again with a role."
+  },
+  "tests": [
+    "packages/db/src/ea-validation.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:ea-relationship",
+      "prismaModel": "EaRelationship",
+      "lifecycleDisposition": "Existing model; role-less associated_with self-loops retired.",
+      "fields": [
+        { "fieldId": "data:ea-relationship#relationshipTypeId", "resolution": "governed", "reason": "An associated_with row needs a role (BI-E487F6D9); a role-less self-association names nothing and has no typed reading, so it is retired.", "provenance": "Migration 20261113140000_retire_roleless_ea_self_associations; BI-92804832.", "flags": [] }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:graph-edge",
+      "prismaModel": "GraphEdge",
+      "lifecycleDisposition": "Derived projection; the retired rows' edges are removed.",
+      "fields": [
+        { "fieldId": "data:graph-edge#relType", "resolution": "governed", "reason": "ASSOCIATED_WITH edges projecting retired self-associations are deleted with them.", "provenance": "Migration 20261113140000_retire_roleless_ea_self_associations; BI-92804832.", "flags": [] }
+      ]
+    }
+  ]
+}
