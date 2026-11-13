@@ -132,6 +132,13 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>, user
     return { success: false, error: "invalid_view", message: "view must be instances, definitions or atlas." };
   }
   if (params.view === "atlas") {
+    if (params.decisionScope !== undefined || params.status !== undefined) {
+      return {
+        success: false,
+        error: "invalid_atlas_filters",
+        message: "Atlas pages do not accept decisionScope or status filters. Use view instances for these filters.",
+      };
+    }
     // The Work Atlas picture: the same projection the portal reads (BI-7ACC31F9).
     const atlasPortfolio = stringParam(params, "portfolioRole");
     if (atlasPortfolio && !isWorkCapsulePortfolioRole(atlasPortfolio)) {
