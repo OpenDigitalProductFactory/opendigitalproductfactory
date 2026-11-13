@@ -9,7 +9,11 @@ export type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>
 /** `supersededLeaseId`: this owner's obsolete queued wait, retired by this claim (BI-D35B85BF). */
 export type ClaimNonprodEnvironmentLeaseResult = { supersededLeaseId?: string } & (
   | { status: "admitted"; lease: LeaseRow; slotKey: string; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy }
-  | { status: "queued"; lease: LeaseRow; queuePosition: number; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy; durableWaitTaskRunId?: string }
+  | {
+    status: "queued"; lease: LeaseRow; queuePosition: number; waitAgeMs: number; poolPolicy: ResolvedNonprodPoolPolicy; durableWaitTaskRunId?: string;
+    /** BI-218A4555: overseer estimate, plain-language reason and policy version. */
+    estimatedWaitMs?: number; queueReason?: string; policyVersion?: string;
+  }
   | { status: "terminal"; lease: LeaseRow; reason: "released" | "expired" | "cancelled"; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "subscribed"; lease: LeaseRow; executionStatus: "admitted" | "queued"; poolPolicy: ResolvedNonprodPoolPolicy }
   | { status: "reused"; lease: LeaseRow; evidenceRecordId: string; resultClass: "pass" | "fail"; evidenceValidity: LocalCiEvidenceValidity | null; poolPolicy: ResolvedNonprodPoolPolicy }

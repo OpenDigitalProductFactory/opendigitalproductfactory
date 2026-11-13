@@ -436,7 +436,9 @@ preserves the default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell
 debugging and still requires a working shell.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
-already leased). A canonical waiter refreshes its idempotent claim well inside
+already leased). While it waits, it prints its policy position, an estimated wait and
+the reason for that position from the test-machine overseer (BI-218A4555; see
+`docs/architecture/build-gate-runbook.md`). A canonical waiter refreshes its idempotent claim well inside
 its liveness window, while an admitted owner receives a two-minute authority
 window and heartbeats at no more than one third of that effective TTL. This
 bounds recovery when the supervisor disappears without shortening the maximum
