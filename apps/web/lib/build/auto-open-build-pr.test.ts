@@ -3,7 +3,7 @@
 // human review still gate what lands.
 import { describe, expect, it, vi } from "vitest";
 
-import { SHIP_PR_RETRY_MS, openBuildStudioPrAfterShip, retryBuildStudioPrForShipBuild } from "./auto-open-build-pr";
+import { REPUBLISHED_PREFIX, SHIP_PR_RETRY_MS, missingPublishedPaths, openBuildStudioPrAfterShip, retryBuildStudioPrForShipBuild } from "./auto-open-build-pr";
 
 const deps = (overrides = {}) => ({
   phaseOf: vi.fn().mockResolvedValue("ship"),
@@ -78,6 +78,28 @@ describe("retryBuildStudioPrForShipBuild", () => {
       lastAttemptAt: new Date(now.getTime() - 60_000),
     });
     expect(out).toBe("skipped");
+    expect(d.createPr).not.toHaveBeenCalled();
+  });
+});
+
+describe("BI-F31DB5F8: a pull request missing files of the change is republished once", () => {
+  const existingPrUrl = () => vi.fn().mockResolvedValue("https://github.com/o/r/pull/1");
+
+  it("names the change's paths the published commit does not carry", () => {
+    expect(missingPublishedPaths(["a.ts", "src/b.ts"], ["a.ts"])).toEqual(["src/b.ts"]);
+    expect(missingPublishedPaths(["a.ts"], ["a.ts", "other.ts"])).toEqual([]);
+  });
+
+  it("publishes again when the open pull request is incomplete, and says so on the trail", async () => {
+    const d = deps({ existingPrUrl: existingPrUrl(), publishedIncomplete: vi.fn().mockResolvedValue(true) });
+    expect(await openBuildStudioPrAfterShip({ buildId: "FB-1", actorUserId: "u1", deps: d })).toBe("opened");
+    expect(d.createPr).toHaveBeenCalledWith("FB-1", "u1");
+    expect(d.log).toHaveBeenCalledWith(expect.stringContaining(REPUBLISHED_PREFIX));
+  });
+
+  it("leaves a complete pull request alone", async () => {
+    const d = deps({ existingPrUrl: existingPrUrl(), publishedIncomplete: vi.fn().mockResolvedValue(false) });
+    expect(await openBuildStudioPrAfterShip({ buildId: "FB-1", actorUserId: "u1", deps: d })).toBe("skipped");
     expect(d.createPr).not.toHaveBeenCalled();
   });
 });
