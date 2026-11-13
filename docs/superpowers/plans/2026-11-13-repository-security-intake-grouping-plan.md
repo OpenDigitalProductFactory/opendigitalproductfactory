@@ -59,3 +59,20 @@ D1 lands first on branch `feat/security-intake-grouping`. D2 gets its own branch
 | AC-2, AC-3, AC-7 | `groupSecurityFindings` | runner → ingest | groups test |
 | AC-4 | `reconcileSecurityLifecycle` | runner → acceptance sweep | lifecycle test, live run |
 | AC-6 | no per-alert origin | runner | triage test, post-live retire |
+
+## Acceptance criteria (quoted from BI-C67E5CCB)
+
+- AC-1 A run with readable surfaces files or reconciles one item per group across Dependabot, CodeQL and secret scanning; the run summary lists counts per surface.
+- AC-2 Dependabot groups by (ecosystem, package); CodeQL by rule id; secret scanning by alert. Re-running with unchanged alerts creates no item and records no change.
+- AC-3 Priority is secret=1, critical=1, high=2, medium=3, low=4 from the highest open severity in the group; written on create and on tier change only.
+- AC-4 A group absent from a complete open read records resolution evidence on its non-terminal item and moves it to awaiting-acceptance for the existing acceptance sweep to close; a reappearing group returns an awaiting-acceptance item to open, and a reappearance on a done item is reported as a regression.
+- AC-5 A denied, malformed or truncated read on any surface is a source error; nothing from that surface is moved in that run; the job reports failed with the surface named.
+- AC-6 No per-alert Dependabot origin is filed after the change; existing per-alert items are retired once as duplicates of their package group item.
+- AC-7 A secret-scanning item never contains the secret value.
+
+## Coverage references
+
+| Deliverable | Requirements | Contracts | Flows | Verification |
+| --- | --- | --- | --- | --- |
+| D1 BI-C67E5CCB | AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | readCodeScanningAlerts, readSecretScanningAlerts, groupSecurityFindings, reconcileSecurityLifecycle | runner -> ingest -> lifecycle -> acceptance sweep | reader tests, groups test, lifecycle test, runner test, live run summary |
+| D2 BI-6B28699D | BI-6B28699D scope 1, BI-6B28699D scope 2 | mapUpstreamIssues exclusion, issue-bridge reply | runner -> issue filter; done item -> drafted reply -> operator approval | triage test, operator-approved first reply |
