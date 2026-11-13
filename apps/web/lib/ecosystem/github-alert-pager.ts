@@ -6,8 +6,9 @@
  * incomplete coverage, never zero findings. */
 import { createGithubReadTransport, resolveGithubToken, type RepoIdentity } from "@/lib/contributor-change-lanes/github-rest-reader";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
-export type AlertPageRead<T> = { ok: true; alerts: T[] } | { ok: false; error: string };
+export type AlertPageRead<T> = (ActionSuccess & { alerts: T[] }) | { ok: false; error: string };
 
 export interface AlertPagerInput<T> {
   repo: RepoIdentity;
@@ -67,7 +68,7 @@ export async function readGithubAlertPages<T>(input: AlertPagerInput<T>): Promis
       url = /<([^>]+)>;\s*rel="next"/.exec(response.headers.get("link") ?? "")?.[1] ?? null;
     }
     if (url) return { ok: false, error: `${input.surface} coverage incomplete after ${maxPages} pages` };
-    return { ok: true, alerts };
+    return { ...ok(), alerts };
   } catch (error) {
     return { ok: false, error: `${input.surface} coverage failed: ${getErrorMessage(error)}` };
   } finally {

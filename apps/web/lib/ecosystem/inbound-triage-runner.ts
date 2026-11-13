@@ -159,7 +159,7 @@ export async function runEcosystemInboundTriage(
   const completeKinds: SecurityGroupKind[] = [];
   const readSurface = async <T,>(
     source: InboundSourceError["source"], kind: SecurityGroupKind,
-    read: () => Promise<{ ok: true; alerts: T[] } | { ok: false; error: string }>,
+    read: () => Promise<AlertPageRead<T>>,
     group: (alerts: T[]) => InboundEcosystemItem[],
   ) => {
     try {
