@@ -15,6 +15,7 @@
  *
  * Pure: callers load the rows. Nothing here grants authority or moves a room.
  */
+import { LEASE_TTL_MS } from "@/lib/work-capsules";
 
 /** The provider that serves each external executor surface's subscription plan. */
 export const EXECUTOR_PLAN_PROVIDER: Readonly<Record<string, string>> = {
@@ -31,7 +32,6 @@ const LIMIT_STATES = new Set(["quota_resets_at", "rate_limited"]);
 const UNAVAILABLE_STATES = new Set([...LIMIT_STATES, "reauth_required", "billing_action_required"]);
 /** A lease renewal this long after a checkpoint's capacity note supersedes it. */
 const CHECKPOINT_SUPERSEDED_AFTER_MS = 60_000;
-export const CAPACITY_LEASE_TTL_MS = 30 * 60_000;
 
 export type ProviderCapacityRow = {
   providerId: string | null;
@@ -97,7 +97,7 @@ export function capacityWaitFor(input: {
   let wait: Pick<CapacityWait, "provider" | "resetAt" | "source"> | null = null;
   const noted = input.checkpoint?.capacity;
   const notedAt = input.checkpoint?.recordedAt ? Date.parse(input.checkpoint.recordedAt) : NaN;
-  const lastRenewal = leaseExpiresAt ? leaseExpiresAt.getTime() - CAPACITY_LEASE_TTL_MS : NaN;
+  const lastRenewal = leaseExpiresAt ? leaseExpiresAt.getTime() - LEASE_TTL_MS : NaN;
   if (noted && Number.isFinite(notedAt) && Date.parse(noted.resetAt) > now.getTime()
     && !(Number.isFinite(lastRenewal) && lastRenewal > notedAt + CHECKPOINT_SUPERSEDED_AFTER_MS)) {
     wait = { provider: noted.provider, resetAt: new Date(noted.resetAt), source: "executor-checkpoint" };
