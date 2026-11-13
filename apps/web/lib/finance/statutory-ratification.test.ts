@@ -81,7 +81,7 @@ describe("ratifyStatutoryRule", () => {
 
     const result = await ratifyStatutoryRule(db, { payrollTaxRuleId: "PTR-1", actor: person, now });
 
-    expect(result).toEqual({ ok: true, payrollTaxRuleId: "PTR-1", closedWindows: [] });
+    expect(result).toEqual({ ok: true, data: { payrollTaxRuleId: "PTR-1", closedWindows: [] } });
     expect(rows[0]).toMatchObject({ status: "ratified", ratifiedByUserId: "user-1", ratifiedAt: now });
     // The point of the whole feature: a figure that was unreachable is now live.
     const live = resolveStatutoryRule(
@@ -124,7 +124,7 @@ describe("ratifyStatutoryRule", () => {
 
     const result = await ratifyStatutoryRule(db, { payrollTaxRuleId: "PTR-1", actor: person, now });
 
-    expect(result).toMatchObject({ ok: true, closedWindows: ["r-old"] });
+    expect(result).toMatchObject({ ok: true, data: { closedWindows: ["r-old"] } });
     const old = rows.find((r) => r.id === "r-old")!;
     expect(old.status).toBe("ratified");
     expect(old.effectiveTo).toEqual(new Date("2026-01-01T00:00:00.000Z"));

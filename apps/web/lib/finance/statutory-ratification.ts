@@ -20,6 +20,7 @@ import {
   type StatutoryRuleStatus,
 } from "./statutory-rules";
 import { isPlatformAutomationPersona } from "@/lib/govern/automation-persona-identity";
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 
 /**
  * Who is acting. The session email travels with the id because the platform's
@@ -63,9 +64,8 @@ export interface StatutoryRatificationDb {
   $transaction<T>(fn: (tx: StatutoryRatificationDb) => Promise<T>): Promise<T>;
 }
 
-export type StatutoryDecisionResult =
-  | { ok: true; payrollTaxRuleId: string; closedWindows: string[] }
-  | { ok: false; reason: string };
+/** The shared result primitive, so every finance surface reads one failure shape. */
+export type StatutoryDecisionResult = ActionResult<{ payrollTaxRuleId: string; closedWindows: string[] }>;
 
 function toResolvable(row: StatutoryRuleRow): ResolvableStatutoryRule {
   return {
@@ -129,13 +129,13 @@ async function ratifyRow(
   now: Date,
 ): Promise<StatutoryDecisionResult> {
   const check = checkStatutoryRatification(toResolvable(row), { kind: statutoryActorKind(actor) });
-  if (!check.valid) return { ok: false, reason: check.detail };
+  if (!check.valid) return err(check.detail);
   const closedWindows = await closeSupersededWindows(tx, row);
   await tx.payrollTaxRule.update({
     where: { id: row.id },
     data: { status: "ratified", ratifiedByUserId: actor.userId, ratifiedAt: now },
   });
-  return { ok: true, payrollTaxRuleId: row.payrollTaxRuleId, closedWindows };
+  return ok({ payrollTaxRuleId: row.payrollTaxRuleId, closedWindows });
 }
 
 /** A person confirms a proposed figure. */
@@ -147,7 +147,7 @@ export async function ratifyStatutoryRule(
     const row = await tx.payrollTaxRule.findUnique({
       where: { payrollTaxRuleId: input.payrollTaxRuleId },
     });
-    if (!row) return { ok: false, reason: "No statutory figure with that id." };
+    if (!row) return err("No statutory figure with that id.");
     return ratifyRow(tx, row, input.actor, input.now);
   });
 }
@@ -164,25 +164,25 @@ export async function rejectStatutoryRule(
   // Rejecting is a decision about a figure too. The same automation-persona
   // check applies, so an agent cannot clear a rival proposal out of its way.
   if (statutoryActorKind(input.actor) !== "human") {
-    return { ok: false, reason: "only a person can reject a statutory figure" };
+    return err("only a person can reject a statutory figure");
   }
   const reason = input.reason.trim();
   if (reason.length === 0) {
-    return { ok: false, reason: "Say why — a rejection with no reason gives the researcher nothing to correct." };
+    return err("Say why — a rejection with no reason gives the researcher nothing to correct.");
   }
   return db.$transaction(async (tx) => {
     const row = await tx.payrollTaxRule.findUnique({
       where: { payrollTaxRuleId: input.payrollTaxRuleId },
     });
-    if (!row) return { ok: false, reason: "No statutory figure with that id." };
+    if (!row) return err("No statutory figure with that id.");
     if (row.status !== "proposed") {
-      return { ok: false, reason: `only a proposed figure can be rejected; this one is "${row.status}"` };
+      return err(`only a proposed figure can be rejected; this one is "${row.status}"`);
     }
     await tx.payrollTaxRule.update({
       where: { id: row.id },
       data: { status: "rejected", rejectedReason: reason.slice(0, 2_000) },
     });
-    return { ok: true, payrollTaxRuleId: row.payrollTaxRuleId, closedWindows: [] };
+    return ok({ payrollTaxRuleId: row.payrollTaxRuleId, closedWindows: [] });
   });
 }
 
@@ -206,20 +206,17 @@ export async function recordAndRatifyStatutoryRule(
   },
 ): Promise<StatutoryDecisionResult> {
   if (statutoryActorKind(input.actor) !== "human") {
-    return { ok: false, reason: "only a person can enter a statutory figure directly" };
+    return err("only a person can enter a statutory figure directly");
   }
   const proposal = { ...input.proposal, proposedByAgentId: null };
   const check = checkStatutoryProposal(proposal);
-  if (!check.valid) return { ok: false, reason: check.detail };
+  if (!check.valid) return err(check.detail);
   if (!proposal.sourceExcerpt || proposal.sourceExcerpt.trim().length === 0) {
     // checkStatutoryProposal does not require the excerpt, because a coworker's
     // proposal is reviewed afterwards by someone who can open the source. Here
     // the reviewer and the author are the same person in the same moment, so the
     // quoted passage is the only record of what they read.
-    return {
-      ok: false,
-      reason: "Quote the passage that states the figure; without it nobody can later check what was read.",
-    };
+    return err("Quote the passage that states the figure; without it nobody can later check what was read.");
   }
   return db.$transaction(async (tx) => {
     const created = await tx.payrollTaxRule.create({

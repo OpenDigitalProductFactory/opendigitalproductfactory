@@ -38,9 +38,9 @@ export async function ratifyStatutoryRuleAction(
 ): Promise<ActionResult<{ payrollTaxRuleId: string }>> {
   const actor = await sessionActor();
   const result = await ratifyStatutoryRule(db, { payrollTaxRuleId, actor, now: new Date() });
-  if (!result.ok) return err(result.reason);
+  if (!result.ok) return err(result.error);
   revalidatePath(STATUTORY_RATES_PATH);
-  return ok({ payrollTaxRuleId: result.payrollTaxRuleId });
+  return ok({ payrollTaxRuleId: result.data.payrollTaxRuleId });
 }
 
 export async function rejectStatutoryRuleAction(
@@ -49,9 +49,9 @@ export async function rejectStatutoryRuleAction(
 ): Promise<ActionResult<{ payrollTaxRuleId: string }>> {
   const actor = await sessionActor();
   const result = await rejectStatutoryRule(db, { payrollTaxRuleId, actor, reason, now: new Date() });
-  if (!result.ok) return err(result.reason);
+  if (!result.ok) return err(result.error);
   revalidatePath(STATUTORY_RATES_PATH);
-  return ok({ payrollTaxRuleId: result.payrollTaxRuleId });
+  return ok({ payrollTaxRuleId: result.data.payrollTaxRuleId });
 }
 
 export async function recordStatutoryRuleAction(input: {
@@ -91,7 +91,7 @@ export async function recordStatutoryRuleAction(input: {
       notes: input.notes,
     },
   });
-  if (!result.ok) return err(result.reason);
+  if (!result.ok) return err(result.error);
   revalidatePath(STATUTORY_RATES_PATH);
-  return ok({ payrollTaxRuleId: result.payrollTaxRuleId });
+  return ok({ payrollTaxRuleId: result.data.payrollTaxRuleId });
 }
