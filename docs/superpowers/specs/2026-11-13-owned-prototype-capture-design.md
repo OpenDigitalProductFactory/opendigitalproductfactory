@@ -105,3 +105,12 @@ bounded resources, no credentials and no security exceptions. Those tests are
 UNRUN at this checkpoint. Compatibility, memory containment, actual sandboxing,
 native producer wiring, image/manifest storage, Critic findings and business
 acceptance remain unproven. Keep the producer unwired until qualification.
+
+Subsequent CLIENT review confirms the cancellation defect is closed in de01526.
+It identifies missing production aggregate memory/process containment. Source
+admission now requires an actual private cgroup-v2 root with positive finite
+memory/PID limits no greater than 1 GiB/256; unbounded, absent or ambiguous
+limits refuse capture before launch. Two added resource-admission tests first
+errored for missing behavior, then passed, bringing source-local tests to 21.
+This closes an unsafe admission path, not production configuration or resource
+qualification. No container limit or live host setting has been changed here.

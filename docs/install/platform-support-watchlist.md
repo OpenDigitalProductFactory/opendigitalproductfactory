@@ -11,6 +11,11 @@ Missing kernel support, incompatible sandbox/IPC or uncertain descendant cleanup
 must leave capture unavailable. Never relax the container security policy or
 retry without the browser sandbox to obtain a passing screenshot. This source
 remains unwired pending actual Linux qualification and original-engagement proof.
+Admission also verifies the actual private cgroup-v2 memory and PID limits:
+finite positive limits of at most 1 GiB and 256 processes. CI flags are not
+production configuration evidence. The checked-in service has no declared
+equivalent budget; runtime configuration and successful qualification remain
+required before enabling capture. Unbounded or ambiguous cgroups are refused.
 
 
 **Co-located host-upkeep authority (BI-7EE97802).** Native host-upkeep uses the

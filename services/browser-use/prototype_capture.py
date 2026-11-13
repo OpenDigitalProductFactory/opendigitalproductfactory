@@ -105,6 +105,25 @@ def capture_identity(profiles_dir):
     return account.pw_uid, account.pw_gid
 
 
+def qualify_resource_boundary():
+    """Require actual container-wide limits, never infer them from CI flags.
+
+    The checked-in service has no declared limits. Capture stays unavailable
+    unless its owning runtime actually applies equivalent finite limits.
+    Only a private cgroup-v2 root is supported; ambiguous mappings fail closed.
+    """
+    try:
+        if Path("/proc/self/cgroup").read_text().strip() != "0::/":
+            raise ValueError("not a private cgroup root")
+        memory = int(Path("/sys/fs/cgroup/memory.max").read_text().strip())
+        processes = int(Path("/sys/fs/cgroup/pids.max").read_text().strip())
+        if not 0 < memory <= 1_073_741_824 or not 0 < processes <= 256:
+            raise ValueError("unqualified resource budget")
+        return memory, processes
+    except (OSError, ValueError) as error:
+        raise ValueError("prototype_capture_resource_boundary_unavailable") from error
+
+
 def pin_capture_processes(uid):
     """Pin before reading identity. Never signal a numeric PID from an old scan.
 
@@ -209,6 +228,7 @@ async def _stop_child(child, uid):
 async def render_prototype(value, chrome_bin="/usr/bin/chromium", profiles_dir="/profiles"):
     source = validate_capture_request(value)
     uid, gid = capture_identity(profiles_dir)
+    qualify_resource_boundary()
     if _slots.locked():
         return {"error": "prototype_capture_busy"}
     async with _slots:

@@ -22,6 +22,15 @@ import prototype_capture as parent
 
 
 class KernelBoundaryTest(unittest.TestCase):
+    def test_unbounded_container_cannot_admit_capture(self):
+        with patch.object(parent.Path, "read_text", side_effect=["0::/\n", "max\n"]):
+            with self.assertRaisesRegex(ValueError, "resource_boundary_unavailable"):
+                parent.qualify_resource_boundary()
+
+    def test_bounded_container_reports_actual_memory_and_process_budget(self):
+        with patch.object(parent.Path, "read_text", side_effect=["0::/\n", "1073741824\n", "256\n"]):
+            self.assertEqual(parent.qualify_resource_boundary(), (1073741824, 256))
+
     def test_guard_failure_prevents_loading_playwright(self):
         loader = MagicMock()
         with patch.object(worker, "install_transport_guard", create=True,
@@ -73,6 +82,7 @@ class ParentIsolationTest(unittest.IsolatedAsyncioTestCase):
         source = request(width=320, height=240)
         child = self.child(source)
         with patch("prototype_capture.capture_identity", return_value=(10001, 10001)), \
+                patch("prototype_capture.qualify_resource_boundary"), \
                 patch("prototype_capture.os.chown"), \
                 tempfile.TemporaryFile() as lock, \
                 patch("prototype_capture.capture_lock", return_value=contextlib.nullcontext(lock.fileno())), \
@@ -111,6 +121,7 @@ class ParentIsolationTest(unittest.IsolatedAsyncioTestCase):
         home = tempfile.mkdtemp(prefix="dpf-capture-test-")
         try:
             with patch.object(parent, "capture_identity", return_value=(10001, 10001)), \
+                    patch.object(parent, "qualify_resource_boundary"), \
                     patch.object(parent.os, "chown"), patch.object(parent.os, "chmod"), \
                     tempfile.TemporaryFile() as lock, \
                     patch.object(parent, "capture_lock", return_value=contextlib.nullcontext(lock.fileno())), \
@@ -144,6 +155,7 @@ class ParentIsolationTest(unittest.IsolatedAsyncioTestCase):
             return b""
         child.stdout.read.side_effect = hang
         with patch("prototype_capture.capture_identity", return_value=(10001, 10001)), \
+                patch("prototype_capture.qualify_resource_boundary"), \
                 patch("prototype_capture.os.chown"), \
                 tempfile.TemporaryFile() as lock, \
                 patch("prototype_capture.capture_lock", return_value=contextlib.nullcontext(lock.fileno())), \
