@@ -62,6 +62,10 @@ describe("pseudo-locales (OBJ-PSEUDO)", () => {
 });
 
 describe("catalog lint", () => {
+  it("keeps the coworker byline concise without repeating the approval state", () => {
+    expect(SOURCE_CATALOG.approvals.card.coworkerByline).toBe("AI coworker");
+  });
+
   it("every source message parses within the MF2 subset", () => {
     for (const namespace of Object.keys(SOURCE_CATALOG) as (keyof typeof SOURCE_CATALOG)[]) {
       for (const [key, source] of Object.entries(namespaceMessages("en-US", namespace))) {

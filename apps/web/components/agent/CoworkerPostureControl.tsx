@@ -36,6 +36,7 @@ export function CoworkerPostureControl({
   disabled = false,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const showMode = Boolean(useUnified && onToggleCoworkerMode);
   const isAct = coworkerMode === "act";
@@ -47,6 +48,17 @@ export function CoworkerPostureControl({
     }
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
   const summaryParts: string[] = [];
@@ -73,6 +85,7 @@ export function CoworkerPostureControl({
   return (
     <div ref={rootRef} style={{ position: "relative" }} onMouseDown={(e) => e.stopPropagation()}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={(e) => {

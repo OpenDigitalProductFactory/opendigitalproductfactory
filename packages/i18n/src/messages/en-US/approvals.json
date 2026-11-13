@@ -8,6 +8,16 @@
     "unavailable": "Approvals unavailable."
   },
   "result": "Approval result",
+  "complianceEvidence": {
+    "reviewClaims": "Review cited claims",
+    "openSource": "Open cited source →",
+    "confirm": "Confirm still valid",
+    "flagChanged": "Flag as changed"
+  },
+  "weeklyReview": {
+    "openDeferred": "Open deferred items",
+    "closeDeferred": "Close deferred items"
+  },
   "recent": "Recent approval results",
   "unavailable": "This request is not available in your Inbox.",
   "details": "Request details",
@@ -55,7 +65,7 @@
     "whyDisclosure": "Why am I being asked?",
     "technicalEvidence": "Technical evidence",
     "recommendationLabel": "AI recommendation",
-    "coworkerByline": "AI coworker · needs your approval",
+    "coworkerByline": "AI coworker",
     "whyPlain": "This request needs your permission before the coworker can make the change. It covers this exact request once.",
     "standingChoice": "Don't ask me again when this coworker does this",
     "standingHint": "Covers only this coworker doing this same kind of action on your behalf. Anything that reaches outside, cannot be undone, or changes someone's access will still come to you.",
@@ -80,7 +90,7 @@
       "handoverDescription": "{$assistant} takes over this work under your account. It can read the work, record results and continue the existing changes.",
       "blockedDescription": "Records that your coworker could not complete this work.",
       "recordDescription": "Records your coworker's reported result.",
-      "unresolvedDescription": "The effect of this exact request is unresolved. Review the proposal before authorizing.",
+    "unresolvedDescription": "Unresolved; review before authorizing.",
       "handoverConsequence": "Access stays limited to this work; existing permissions still apply.",
       "stageConsequence": "This may advance the stage when its evidence meets the completion requirements.",
       "recordConsequence": "This records a report; it does not mark the work complete.",
@@ -134,7 +144,7 @@
   "expiredUnanswered": {
     "label": "Expired unanswered",
     "context": "Nobody answered this request before its window closed, so nothing was changed.",
-    "explanation": "Nobody answered this request in time, so nothing was changed. If it is still wanted, ask again and it comes back to you for a decision.",
+    "explanation": "No decision was made. Ask again if needed.",
     "askAgain": "Ask again",
     "asking": "Asking again…",
     "asked": "Asked again. The new request is waiting for your decision.",

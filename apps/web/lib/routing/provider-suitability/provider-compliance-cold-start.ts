@@ -8,6 +8,7 @@ import {
   parseProviderReviewObjective,
   type ProviderReviewPacket,
 } from "./provider-review-packet";
+import type { ProviderComplianceSourceEntry } from "@dpf/db/provider-compliance-source-registry";
 
 export const PROVIDER_COMPLIANCE_LOCAL_POLICY_VERSION =
   "provider-compliance-local-only.v1" as const;
@@ -75,6 +76,7 @@ export function buildDeterministicProviderComplianceFallback(
 export function resolveProviderComplianceColdStartReply(input: {
   specialistReply: string;
   chatHistory: ReadonlyArray<{ role: string; content: unknown }>;
+  sources?: Record<string, ProviderComplianceSourceEntry>;
 }): {
   advisory: ProviderComplianceAdvisory;
   content: string;
@@ -84,7 +86,7 @@ export function resolveProviderComplianceColdStartReply(input: {
   const parsed = parseProviderComplianceAdvisory(input.specialistReply);
   const packet = packetFromHistory(input.chatHistory);
   const grounding = parsed.success && packet
-    ? validateProviderComplianceAdvisoryGrounding(parsed.value, packet)
+    ? validateProviderComplianceAdvisoryGrounding(parsed.value, packet, new Date(), input.sources)
     : { success: false, errors: ["missing-topic:review-packet-or-advisory"] };
   const boundedLocalResult = parsed.success
     && grounding.success

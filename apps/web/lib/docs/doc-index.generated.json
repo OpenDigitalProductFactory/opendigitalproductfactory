@@ -6264,9 +6264,10 @@
         "1-identify-what-is-lapsing",
         "2-read-the-current-source",
         "3-re-attest-each-claim",
-        "4-update-the-registry",
-        "5-verify",
-        "6-ship-it",
+        "4-record-the-review",
+        "5-update-the-registry-when-a-claim-changed",
+        "6-verify",
+        "7-ship-it",
         "deliberately-not-a-ci-gate",
         "if-it-has-already-lapsed"
       ]

@@ -214,9 +214,14 @@ export async function verifyApprovalDisclosure() {
           geometry, checks: { completeOriginalInput: true, materialFactsVisible: true, technicalInitiallyClosed: true },
           domSha256: createHash("sha256").update(html).digest("hex") };
         writeFileSync(resolve(OUT, slug + ".json"), JSON.stringify({ ...result, status: "measured" }, null, 2));
-        const verdict = assertApprovalScenarioBudget({ routePath: "/workspace/inbox", shell: "detail", audience: "worker",
-          exemptChecks: ["next-action-marker", "lead-band"], metrics: result.metrics,
-          axeViolations: result.metrics.axeViolations, ariaSnapshot }, cardAxeViolations);
+        let verdict;
+        try {
+          verdict = assertApprovalScenarioBudget({ routePath: "/workspace/inbox", shell: "detail", audience: "worker",
+            exemptChecks: ["next-action-marker", "lead-band"], metrics: result.metrics,
+            axeViolations: result.metrics.axeViolations, ariaSnapshot }, cardAxeViolations);
+        } catch (error) {
+          throw new Error(`${slug}: ${error instanceof Error ? error.message : String(error)}`);
+        }
         const accepted = { ...result, status: "passed", numericBudgetVerdict: verdict };
         captures.push(accepted);
         writeFileSync(resolve(OUT, slug + ".json"), JSON.stringify(accepted, null, 2));

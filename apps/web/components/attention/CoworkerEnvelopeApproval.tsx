@@ -219,10 +219,10 @@ export function CoworkerEnvelopeApproval({
   return (
     <div className="space-y-3">
       <section className="space-y-2 break-words text-dpf-body text-dpf-text">
-        <p className="text-dpf-caption text-dpf-muted">{primary.target}</p>
+        {primary.target ? <p className="text-dpf-caption text-dpf-muted">{primary.target}</p> : null}
         <p>{primary.description}</p>
         <p>{primary.consequence}</p>
-        <p className="text-dpf-caption text-dpf-muted">{COPY.recommendationLabel}: {primary.recommendation}</p>
+        <p className="text-dpf-caption text-dpf-muted">{primary.recommendation}</p>
         {primary.facts.length > 0 ? <dl className="grid gap-2 sm:grid-cols-2">
           {primary.facts.map((fact, index) => <Fact key={`${fact.label}-${index}`} label={fact.label} value={fact.value} wide />)}
         </dl> : null}

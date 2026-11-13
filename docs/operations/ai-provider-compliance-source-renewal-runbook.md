@@ -23,8 +23,10 @@ first. The degradation was silent, product-wide, and dated. To an operator it re
 "the AI got worse", not "an evidence copy expired" — and it lands whenever they next try
 to onboard a provider, which is exactly when they can least afford to debug it.
 
-The warning now fires in the attention inbox 21 days ahead. This runbook is what to do
-when it does.
+The warning now fires in the attention inbox 21 days ahead. The card opens the exact
+published source and shows the claims DPF relies on. After reading them, choose
+**Confirm still valid** to renew the evidence date, or **Flag as changed** to keep the
+warning open while the governed claim is corrected. This runbook explains that review.
 
 ## This is a review, not a scrape
 
@@ -76,7 +78,17 @@ Outcomes:
   Removing a claim may change advice from "conditional" to "insufficient evidence" — that
   is the system working, not a regression to paper over.
 
-### 4. Update the registry
+### 4. Record the review
+
+If every cited claim and its scope still hold, choose **Confirm still valid** on the
+attention card. DPF records who reviewed it and when, renews that source's effective
+retrieval date, and clears its warning. The confirmation also feeds the provider-advice
+grounding check; it is not an inbox-only dismissal.
+
+If any claim changed, choose **Flag as changed**. That records the review without
+renewing the retrieval date, so the warning and fail-closed advice remain in place.
+
+### 5. Update the registry when a claim changed
 
 Edit the entry in `provider-compliance-source-registry.ts`:
 
@@ -88,7 +100,11 @@ Edit the entry in `provider-compliance-source-registry.ts`:
 Only bump `retrievedAt` for sources you genuinely re-read. Touching every date to silence
 the alert converts a working control into decoration, and the next person will trust it.
 
-### 5. Verify
+After the corrected claim ships, re-open the attention card, compare the corrected
+claim with the published source, and confirm it. Seed updates preserve a later
+human-confirmed review date instead of resetting it to the registry's original date.
+
+### 6. Verify
 
 ```bash
 cd apps/web && pnpm vitest run lib/routing/provider-suitability
@@ -102,10 +118,11 @@ pnpm --filter @dpf/db exec vitest run src/provider-compliance-source-registry.te
 unique claim ids, non-empty applicability axes, no `secondary` authority). The freshness
 tests assert the warning arithmetic against pinned clocks.
 
-Then confirm the attention item has cleared — it disappears once every source is outside
-the 21-day warning window.
+Then confirm the reviewed attention item has cleared. A source flagged as changed must
+stay visible; a source confirmed still valid must disappear once its renewed date is
+outside the 21-day warning window.
 
-### 6. Ship it
+### 7. Ship it
 
 A normal DCO PR. Record in the body which sources you re-read and what changed in the
 claims, so the next renewal can see whether a given vendor's terms are stable or churning.

@@ -25,7 +25,7 @@ Folding "a human must decide this now" into the backlog is a category error: the
 
 - **Only owner decisions reach the daily count.** Routine platform recovery, missing credentials, stalled builds, and service health stay with your digital team. They appear only if they create a real business choice for you.
 - **Money and public actions always come to you.** A proactivity setting can change how routine work is handled, but it cannot bypass approval when money leaves the business or something goes public.
-- **Every card explains the decision.** The top of the card gives a short question; for a blocked coworker, a plain line saying **what it was doing and why it stalled**; a concrete **impact** ("if ignored…"); the **recommendation** with the specialist it came from; and no more than three plain choices. It never invents a confidence score.
+- **Every card explains the decision.** The top of the card gives a short question; for a blocked coworker, a plain line saying **what it was doing and why it stalled**; a concrete **impact** ("if ignored…"); and no more than three plain choices. A recommendation appears only when it adds advice specific to that decision. It never invents a confidence score.
 - **Technical detail is preserved.** Open **Technical detail** to see the original title, source, work fields, linked identifiers, detection details, and builder actions. That information is moved one click down, not deleted.
 - **A projection, not another queue.** The inbox is a read-only view *over* each area's own records; it is not a second backlog or ticket tracker. Acting on an item updates the record in its home area.
 - **A card never shows a button it cannot honour.** Some items — a paused governance gate, a failed customer journey — have no action an owner can take from the inbox; their record lives on a builder or platform screen. In **Simple** view those cards show a plain sentence saying your digital team holds it, with the record one click down under **Technical detail**, rather than a button that goes nowhere. In **Full** view, where builder and platform tools are visible by choice, the real record is the card's own action.
@@ -39,7 +39,8 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Bounded coworker proposals** — a coworker recommends taking more initiative within a stated limit; you can accept it, keep the current level, or ask for a narrower limit.
 - **Coworker actions held for your approval** — a coworker was told to stop and ask before taking a specific action. The card names the coworker, the exact action, the reason given, the job it belongs to, and the time you have to answer. When the action is a review of a saved file, it also names the file, the exact saved version, and the check being answered, so you can see precisely what you are approving. Only you can answer your own; nobody else sees it.
 - **Approvals nobody is answering** *(administrators only)*. AI coworker approvals keep going to an account that is not using the portal: it is deactivated, has not been seen for three days, or has never been seen. The card names the account, how many requests went unanswered in the last week, and which actions they were for. You cannot answer them for that person. The usual cause is an AI connection set up while the wrong account was signed in. Open **Review AI connections**, revoke that connection, and reconnect under the right account.
-- **Friday review** — low-urgency research and improvement suggestions are grouped together instead of interrupting the daily inbox.
+- **Friday review** — low-urgency research and improvement suggestions are grouped into one collapsed summary instead of interrupting the daily inbox. Open that summary when you want the individual items.
+- **Compliance evidence review** — an expiring source card shows the exact published source and the claims DPF cites. After reading them, confirm they remain valid to renew the evidence date, or flag the source as changed so it stays open for correction.
 
 ## What You Can Do
 
@@ -78,7 +79,7 @@ A request that sends something outside your business, such as an email, a post, 
 
 If nobody answers in time, the request is not lost. It comes back in the Friday review as **Expired unanswered**, with no Authorize or Decline buttons, so a closed request can never be approved by accident. Choose **Ask again** and the same request returns to you for a fresh decision. Nothing is asked again unless you or your coworker choose to. A link to a request opens that request's own card, even when it is in the Friday review.
 
-Deadline-bearing items show a plain tag such as **Due in 10 minutes**, **Due in 6 hours**, or **Due in 3 days** — always in the largest unit that is still accurate, so a short window is never dressed up as a long one. A window that has closed reads **Past due**. Impact tags use words such as **Costs money**, **Goes public**, and **Reversible**.
+Deadline-bearing items show a plain tag such as **Due in 10 minutes**, **Due in 6 hours**, or **Due in 3 days** — always in the largest unit that is still accurate, so a short window is never dressed up as a long one. A window that has closed reads **Past due**. Impact tags call out exceptions that change the decision, such as **Costs money**, **Goes public**, and **Irreversible**; routine reversibility is left unstated.
 
 ---
 
