@@ -281,3 +281,9 @@ function defaultDeps(): ShipRefusalRemedyDeps {
     },
   };
 }
+
+/** BI-085A37EC: the PR CI repair hands a ship build back through the same guarded flip and re-verification. */
+export function shipBuildHandBack(): Pick<ShipRefusalRemedyDeps, "returnToReview" | "queueReview"> {
+  const { returnToReview, queueReview } = defaultDeps();
+  return { returnToReview, queueReview };
+}

@@ -7,6 +7,8 @@
 // A PR is not a merge: required checks, the merge queue and human review still
 // decide what lands.
 
+import { PR_FOLLOW_UP_PREFIX, PR_FOLLOW_UP_UNCHANGED, PR_FOLLOW_UP_UNCHANGED_PREFIX } from "./pr-ci-repair-markers";
+
 export type AutoPrDeps = {
   phaseOf: (buildId: string) => Promise<string | null>;
   existingPrUrl: (buildId: string) => Promise<string | null>;
@@ -17,6 +19,10 @@ export type AutoPrDeps = {
    * never pass.
    */
   publishedIncomplete?: (buildId: string) => Promise<boolean>;
+  /** BI-085A37EC: a CI repair of the open PR still owes it a follow-up commit. */
+  followUpPending?: (buildId: string) => Promise<boolean>;
+  /** BI-085A37EC: the repair changed nothing, so a person is told once. */
+  followUpUnchanged?: (buildId: string, detail: string) => Promise<void>;
   createPr: (buildId: string, actorUserId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
   log: (summary: string) => Promise<void>;
 };
@@ -29,14 +35,22 @@ export async function openBuildStudioPrAfterShip(input: {
   const deps = input.deps ?? (await productionDeps(input.buildId));
   if ((await deps.phaseOf(input.buildId)) !== "ship") return "skipped";
   const republish = Boolean(await deps.existingPrUrl(input.buildId));
-  if (republish && !(await deps.publishedIncomplete?.(input.buildId))) return "skipped";
+  const followUp = republish && Boolean(await deps.followUpPending?.(input.buildId));
+  if (republish && !followUp && !(await deps.publishedIncomplete?.(input.buildId))) return "skipped";
   const result = await deps.createPr(input.buildId, input.actorUserId);
   const detail = String(result.message ?? result.error ?? "").slice(0, 400);
   if (result.success) {
-    await deps.log(republish
-      ? `${REPUBLISHED_PREFIX} its pull request was missing files of the change: ${detail}`
-      : `Opened the pull request automatically after review: ${detail}`);
+    await deps.log(followUp
+      ? `${PR_FOLLOW_UP_PREFIX} ${detail}`
+      : republish
+        ? `${REPUBLISHED_PREFIX} its pull request was missing files of the change: ${detail}`
+        : `Opened the pull request automatically after review: ${detail}`);
     return "opened";
+  }
+  if (followUp && detail.includes(PR_FOLLOW_UP_UNCHANGED)) {
+    await deps.log(`${PR_FOLLOW_UP_UNCHANGED_PREFIX} ${detail}`);
+    await deps.followUpUnchanged?.(input.buildId, detail);
+    return "blocked";
   }
   await deps.log(`Pull request not opened; a publication guard refused: ${detail}`);
   return "blocked";
@@ -156,6 +170,8 @@ async function productionDeps(forBuildId: string): Promise<AutoPrDeps> {
         return false; // could not tell; leave the pull request as it is
       }
     },
+    followUpPending: async (buildId) => (await import("./pr-ci-follow-up")).hasPendingPrFollowUp(buildId),
+    followUpUnchanged: async (buildId, detail) => (await import("./pr-ci-follow-up")).escalateUnchangedPrRepair(buildId, detail),
     createPr: async (buildId, actorUserId) => {
       const { executeTool } = await import("@/lib/mcp-tools");
       // Name the build in params: context.featureBuildId is read as a row cuid, so an FB- id there sets no hint.
