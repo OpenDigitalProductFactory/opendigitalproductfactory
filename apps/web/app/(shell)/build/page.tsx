@@ -1,4 +1,7 @@
 // apps/web/app/(shell)/build/page.tsx
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { getExecutionEpicRollups, getFeatureBuildById, getFeatureBuilds } from "@/lib/feature-build-data";
@@ -231,7 +234,9 @@ export default async function BuildPage({ searchParams }: PageProps) {
     "manage_backlog",
   );
 
+  const locale = await getLocaleContext();
   return (
+    <MessagesProvider locale={locale.language} formatLocale={locale.formatLocale} messages={{workrooms:namespaceMessages(locale.language,"workrooms")}}>
     <section className="min-h-full">
       <BuildStudio
         builds={builds}
@@ -248,5 +253,6 @@ export default async function BuildPage({ searchParams }: PageProps) {
         customerStatuses={customerStatuses}
       />
     </section>
+    </MessagesProvider>
   );
 }

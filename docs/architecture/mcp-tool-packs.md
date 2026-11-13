@@ -175,6 +175,12 @@ its own lazy module (`work-capsules/workroom-shape-rebind-handler.ts`), so
 `workShape` pin to a newer version. The rule it carries is in
 [work shapes and the decision gate](work-shapes-and-the-decision-gate.md).
 
+`update_workroom_status` keeps factual infrastructure blockers lightweight, but
+a decision-shaped blocked reason must carry a pre-human routing disposition.
+Resolved-scope and legitimate-escalation dispositions also carry the existing
+`DecisionInteraction` id, so durable Workroom state cannot replace WWMD/WWWD/WSID
+with a free-text request for the operator to choose.
+
 The pack also owns bounded classification recovery. `review_workroom_sensitivity`
 requires `manage_platform` and `admin_read`, returning only classification state
 and an exact revision digest, never room contents or historical prose.
@@ -198,6 +204,14 @@ It reads no room records. Instance filters and cursors are refused, and a
 changed definition inventory requires a fresh traversal. Whole pages fit the
 existing result budget; a refusal never advances past unseen definitions.
 The full contract is in [Workroom review profiles](workroom-review-profile-contract.md).
+
+`list_workrooms(view="atlas")` returns the Work Atlas picture: health counts
+for every open Workroom and up to `limit` rows (default 10, maximum 400). Rows
+can be filtered by `health` or `portfolioRole`. It runs the same projection as
+the portal (`lib/work-management/atlas-projection.server.ts`), so the portal
+and agents report the same health for the same room. It takes no cursor or
+other instance filters. See
+[Enumerating Workrooms](../operations/workroom-pagination.md#the-work-atlas-picture).
 
 `get_workroom` also supports `continuationMode: "bounded"` under fresh room
 content admission. Use `continuationTaskId` for an exact scheduled task or

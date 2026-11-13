@@ -119,7 +119,10 @@ const REL_TYPES: RelTypeDef[] = [
   // BI-28C22BE3: a Prisma foreign key between mirrored data objects. Exchanged as a named
   // ArchiMate association (name = the FK field); stored typed so analysis can tell it apart.
   { slug: "has_foreign_key_to", name: "Has Foreign Key To", neoType: "HAS_FOREIGN_KEY_TO", description: "Rows of the source data object hold a foreign key to rows of the target" },
-  { slug: "associated_with",  name: "Associated With",  neoType: "ASSOCIATED_WITH", description: "Generic unspecified relationship" },
+  // BI-E487F6D9: ArchiMate 3.2 §5.1.2 / §5.5.1 — neither is composition or association.
+  { slug: "aggregates",       name: "Aggregates",       neoType: "AGGREGATES",      description: "Whole groups parts that can exist without it (ArchiMate aggregation)" },
+  { slug: "specializes",      name: "Specializes",      neoType: "SPECIALIZES",     description: "Source is a kind of the target (ArchiMate specialization)" },
+  { slug: "associated_with",  name: "Associated With",  neoType: "ASSOCIATED_WITH", description: "ArchiMate association; requires a role naming the specific relation (BI-E487F6D9)" },
   { slug: "influences",       name: "Influences",       neoType: "INFLUENCES",      description: "Motivation element influences another element" },
   { slug: "triggers",         name: "Triggers",         neoType: "TRIGGERS",        description: "Temporal or causal trigger between behaviours" },
   { slug: "flows_to",         name: "Flows To",         neoType: "FLOWS_TO",        description: "Information or material flow" },
@@ -218,6 +221,13 @@ const RULES: RuleDef[] = [
   ["ai_coworker", "event_evidence",        "associated_with"],
   ["business_actor", "ai_coworker",        "associated_with"],
 ];
+
+/** Aggregation mirrors every composition rule; specialization joins each element type to itself. */
+export function derivedArchimateRules(rules: readonly RuleDef[]): RuleDef[] {
+  const aggregation = rules.filter(([, , rel]) => rel === "composed_of").map(([from, to]) => [from, to, "aggregates"] as RuleDef);
+  const specialization = ELEMENT_TYPES.map((et) => [et.slug, et.slug, "specializes"] as RuleDef);
+  return [...aggregation, ...specialization];
+}
 
 // ─── DQ stage-gate rules ──────────────────────────────────────────────────────
 
@@ -580,8 +590,9 @@ export async function seedEaArchimate4(): Promise<void> {
   }
   console.log(`Seeded ${REL_TYPES.length} EaRelationshipTypes`);
 
-  // 4. Upsert relationship rules
-  for (const [fromSlug, toSlug, relSlug] of RULES) {
+  // 4. Upsert relationship rules. Aggregation is permitted wherever composition is, and
+  //    specialization between two elements of the same type (ArchiMate 3.2 §5.1.2, §5.5.1).
+  for (const [fromSlug, toSlug, relSlug] of [...RULES, ...derivedArchimateRules(RULES)]) {
     const fromId = etMap.get(fromSlug);
     const toId   = etMap.get(toSlug);
     const relId  = rtMap.get(relSlug);

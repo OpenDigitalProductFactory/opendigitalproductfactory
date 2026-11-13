@@ -19,6 +19,7 @@ describe("explicit owner approval floor", () => {
     { initiativeReviewBinding: {} as never },
     { taskRunId: "TR-SCHED-1", toolName: "record_execution_evidence", roomMandatedTools: ["record_execution_evidence"] },
     { taskRunId: "TR-SCHED-1", agentId: "AGT-WS-PLATFORM", toolName: "create_knowledge_article" },
+    { standingRulingEnvelopeId: "ENV-RULED" },
   ])("withholds automatic steering when the current policy explicitly requires approval: %j", extra => {
     const input = { initiativeReviewBinding: null, roomAuthority: null, agentId: "agent", ...extra, hitlPolicy: " Always " };
     expect(resolveSteering({ ...input, hitlPolicy: null })).not.toBe("none");
@@ -457,6 +458,14 @@ describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () 
       task: task("TR-SCHED-PIR00001"), toolName: "record_initiative_post_implementation_review", boundItemId: null, loadStewardItemId,
     })).resolves.toBe("BI-MERGED");
     expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-PIR00001", "record_initiative_post_implementation_review");
+  });
+
+  it("takes a design-spec platform review run's subject from the platform-issued packet (BI-9CCB88C4)", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-DESIGN");
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-SCHED-DSR00001"), toolName: "record_initiative_design_review", boundItemId: null, loadStewardItemId,
+    })).resolves.toBe("BI-DESIGN");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-DSR00001", "record_initiative_design_review");
   });
 
   it("asks nothing for another tool or a non-scheduled run", async () => {

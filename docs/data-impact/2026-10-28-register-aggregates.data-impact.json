@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-E487F6D9 (EP-5F6369AB). ArchiMate aggregation and specialization become their own EA relationship types (aggregates, specializes) instead of being folded into composition and association. Migration 20261105110000_register_aggregates registers the AGGREGATES graph relation type so the EA projection can write it; SPECIALIZES was already registered.",
+  "affectedCopies": [
+    "graph_relation_type: one new reference row, AGGREGATES",
+    "EaRelationshipType / EaRelationshipRule (archimate4): aggregates and specializes types and their rules, written by the archimate4 seed on every container start"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "public: a relationship vocabulary entry.",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "Reference data shipped with the platform."
+  },
+  "migration": {
+    "name": "20261105110000_register_aggregates",
+    "backfill": "None. Existing composed_of rows imported from an AggregationRelationship keep their type; a re-import writes aggregates.",
+    "rollback": "Forward-only and additive."
+  },
+  "tests": [
+    "apps/web/lib/ea/archimate-xml.test.ts",
+    "packages/db/src/ea-validation.test.ts",
+    "packages/db/src/relation-vocabulary.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:graph-relation-type",
+      "prismaModel": "GraphRelationType",
+      "lifecycleDisposition": "Reference data; one row added.",
+      "fields": [
+        { "fieldId": "data:graph-relation-type#key", "resolution": "not-applicable", "reason": "AGGREGATES: ArchiMate aggregation.", "provenance": "Migration 20261105110000_register_aggregates; BI-E487F6D9.", "flags": [] }
+      ]
+    }
+  ]
+}

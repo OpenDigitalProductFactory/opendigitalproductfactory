@@ -4,6 +4,8 @@
 // design spec 2026-08-05 Phase 2 PR 2). Behavior unchanged.
 
 import { prisma } from "@dpf/db";
+import { translate } from "@dpf/i18n";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 function containsAnyToken(value: string | null | undefined, tokens: string[]): boolean {
   if (!value) return false;
@@ -41,7 +43,14 @@ function isSoftwarePlatformBusiness(input: {
   ].some((value) => containsAnyToken(value, ["software", "saas", "platform", "subscription", "digital product"]));
 }
 export async function getFinanceContext(): Promise<string> {
-  const sections: string[] = ["\nPAGE DATA — Finance:"];
+  const { language } = await getLocaleContext();
+  const sections: string[] = [
+    "\nPAGE DATA — Finance:",
+    "Native expense workflow guidance (not live claim or employee-profile data):",
+    "Personal expense entry: [Enter an expense](/finance/my-expenses/new).",
+    translate(language, "shell", "finance.expenseEntryDetails"),
+    `If the form reports no linked employee profile: ${translate(language, "shell", "finance.expenseProfileRequired")}`,
+  ];
 
   const [taxProfile, businessContext, registrationCount, openIssueCount, recurringCount, overdueInvoices, activeCredentialCount, blockedRunCount, readyPeriodCount] = await Promise.all([
     prisma.organizationTaxProfile.findFirst({

@@ -4,6 +4,7 @@ import { RESPONSE_FEEDBACK_BINDING_SELECT, type ResponseProducer } from "../rout
 import { randomUUID } from "node:crypto";
 import { buildAttachmentContext } from "@/lib/tak/attachment-context";
 import { prisma } from "@dpf/db";
+import { formatVerificationSummary } from "@/lib/build/verification-output";
 import { validateMessageInput, type AgentMessageRow } from "@/lib/agent-coworker-types";
 import { generateCannedResponse } from "@/lib/agent-routing";
 import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
@@ -790,9 +791,12 @@ export async function sendMessage(input: {
     const wikiQuery = perspective.needsPageContext
       ? buildPerspectiveQuery(input.content, pageTopic)
       : input.content;
+    // BI-825D3487: recall skips a corpus whose grant this coworker does not hold.
+    const { resolveCorpusReadScope } = await import("@/lib/tak/corpus-read-scope");
     let wikiContext = await recallWikiContext({
       query: wikiQuery,
       organizationId: wikiOrg?.id ?? null,
+      corpusScope: await resolveCorpusReadScope(agent.agentId),
       limit: 4,
       preferredPageKinds: perspective.perspective
         ? PERSPECTIVE_PAGE_KINDS[perspective.perspective]
@@ -860,6 +864,7 @@ export async function sendMessage(input: {
     // too). Empty when neither applies, so this is a no-op for ordinary turns.
     const { buildCoworkerExtraSections } = await import("@/lib/tak/coworker-context-sections");
     const coworkerExtra = await buildCoworkerExtraSections({
+      formatVerification: formatVerificationSummary,
       buildId: resolvedBuildId,
       routeContext: input.routeContext,
       userId: user.id!,
@@ -1047,8 +1052,7 @@ export async function sendMessage(input: {
             if (tasks.toolsExecuted) progressLines.push(`Tools executed: ${(tasks.toolsExecuted as string[]).join(", ")}`);
           }
           if (buildRecord.verificationOut) {
-            const verify = buildRecord.verificationOut as Record<string, unknown>;
-            progressLines.push(`Tests: ${verify.testsPassed ? "PASS" : "FAIL"}. Typecheck: ${verify.typeCheckPassed ? "PASS" : "FAIL"}.`);
+            progressLines.push(formatVerificationSummary(buildRecord.verificationOut));
           }
           promptSections.push(progressLines.join("\n"));
         }

@@ -161,3 +161,211 @@ Roll out one entry path at a time on its existing routing/switch seam. Reconcile
 - Shared preview startup/session isolation and authenticated owner readback.
 - Funding scope is unresolved on this design Workroom; no budget allocation or paid provider expansion was inferred.
 - Independent design/architecture approval and executable plan coverage are pending. This draft and its planning decision provide no runtime pass.
+
+## 8. Finance worker persistence slice
+
+BI-7DC3B91D / WC-74FD2A42 extends P4 with
+`apps/web/lib/agent/foreground-work-finance.postgres.test.ts`. The conformance
+branch inherits the frozen foreground implementation7aa through a normal merge;
+BI-D0D2FF0D retains that implementation and its UI/publication obligations.
+This inheritance is a source dependency, not delivery or acceptance of that repair.
+
+The five new cases use the existing isolated PostgreSQL fixture, real retained
+worker, request digest, publication transaction and current membership lookup.
+They cover capacity wait followed by competing deliveries and one stored result,
+user deactivation, changed thread ownership, committed publication followed by
+acknowledgement loss, and changed request content. Explicit governed test
+database URLs or the admitted canonical local-CI slot enable them. The latter
+requires its existing NPEL admission marker and a PostgreSQL URL whose database
+name matches `dpf_local_ci_<number>`. Ordinary install DATABASE_URL values never
+enable the suite. This reuses the existing calibration qualification convention.
+Fixture teardown removes its unique schema, never public rows.
+
+The coworker turn, job wake transport and event bus remain controlled doubles.
+These cases can establish worker/database composition only. They cannot earn a
+portal-authentication, actual queue, provider, Finance-tool or full business
+acceptance pass. The exact Finance Spend served scenario remains required:
+one fresh read-only request, controlled provider busy, retained original job,
+server continuation without owner resend, no duplicated effects and genuine
+stored-result reload. Historical uncertain jobs are not replayed.
+
+At the initial source checkpoint,32 existing worker/context/adapter cases passed;
+the five new PostgreSQL cases were collected but skipped without a governed SQL
+target. They are UNRUN, not passed or first-red evidence. Actual execution and a
+mutation control must precede a database qualification claim. This slice does
+not resolve the rest of P4–P6 or the original specialist-review obligations.
+
+The subsequent admitted SQL check ran source
+`58ca8fbd9f20e08c7ea3e540f3d3ab1ba4a5b682` against the disposable PostgreSQL
+target of `NPEL-DA14C613EA` on 1 November 2026, 04:12:48–04:12:50 UTC:
+five database cases and three target-selection controls passed, none skipped.
+The preview source was `7aa31f6ea021a91ae93a9971135a8264398b77a6`;
+the worker, context, publication, digest and complete Prisma schema were verified
+byte-identical to the test source. This qualifies that composition, not the
+entire served preview or a new runtime image.
+
+A test-only authority-lookup mutation then made the revoked-user case fail
+(`responded` instead of `blocked`). Restoring the exact test file produced
+eight passes again at 04:22:09 UTC. Both fixture runs completed teardown before
+the normal preview release at 04:24:20 UTC. The separate served Finance request
+remained submitted without a coworker result: that preview had no background
+wake transport. Controlled provider-busy recovery and full business acceptance
+remain unrun. Native Workroom evidence retains the commands and source/lease
+identities; these narrow SQL results do not establish actual provider execution.
+### Served retained-work qualification
+
+The SQL fixture still replaces the coworker turn and wake transport. The next
+bounded slice uses an optional `foreground-recovery` mode of the existing
+GitHub UX runtime: its canonical production bundle, disposable PostgreSQL and
+normal authenticated browser. The normal boot starts the existing owned
+PostgreSQL engine for `agent/foreground-work-run` and `agent/task-dispatch`.
+The latter keeps its actual five-minute reconciliation schedule. A loopback
+OpenAI-compatible fixture is the only simulated execution boundary.
+
+One synthetic main-room request must be durably acknowledged, survive a
+provider-capacity wait and reload, resume without another submission, and save
+one correctly linked response. Repeating the original authenticated HTTP
+request must reuse its message and job. Record current request/job/result,
+source and production-build identity, observed queue transitions, actual
+provider requests, stored response provenance, screenshots and cleanup.
+This proves the controlled path; real model quality, Finance tools, real mail
+and customer isolation retain their separate acceptance obligations.
+
+Fixture writes require explicit scenario opt-in, the existing exact GitHub CI
+database/origin boundary and current source/run binding. Configured provider
+credentials, unrelated retained jobs and identity collisions refuse setup.
+Only synthetic provider/account/model rows are enabled; their manual scores
+are test inputs, never real calibration evidence. Preserve original state and
+clean up only owned fixtures after work settles. A measurement boot does not
+qualify background execution, so this mode uses normal boot and reports its
+own evidence instead of claiming a route sweep.
+
+This expands the existing Small test slice to Medium, admitted by
+IRD-55A6228E4398 after plan admission IRD-E74F3BA0F3A8. Funding remains
+unresolved; it introduces no paid model, allocation decision or provider
+subscription. Existing Large business-review baselines remain unchanged.
+The installed Next.js Playwright guide and
+[official testing guide](https://nextjs.org/docs/app/guides/testing/playwright)
+support exercising the served production bundle.
+
+The first independent CLIENT review raised three harness blockers. Isolation
+must include latent proactivity facts and live room cadences, not just existing
+tasks. Duplicate submission must await its actual event fanout and queue run;
+a fixed delay does not prove processing. Cleanup must establish terminal task
+and queue state before restoring provider configuration. Uncertain submissions
+or unsettled execution preserve fixture rows and fail qualification. The normal
+owner cancellation endpoint is available for a known unfinished fixture; it
+does not authorize changing task status directly.
+
+The CI launch uses the existing DEPLOYED_SHA metadata only after the exact-source
+artifact is validated or that checkout's production build completes. The test
+also checks compiled route bytes and a served static asset. This is provenance
+for the controlled CI bundle, not proof of a deployed install or an image label
+by itself. An absent or mismatched served source fails qualification.
+
+Partial Postgres routing also delivers events to the existing Inngest adapter.
+This CI mode therefore starts the repository-pinned Inngest v1.36.0 backend
+inside the same disposable runner. Discovery, polling and portal self-sync are
+disabled; no Inngest apps are registered. Only the two selected Postgres
+functions execute. This reuses the existing coexistence engine rather than
+mocking the wake boundary or adding a platform service. The owned container is
+bounded to one CPU/1 GB, loopback-only and removed by the always cleanup step.
+The test rejects a completed cron whose reconciliation output is unavailable
+or inspected no retained work. See the [vendor Docker procedure](https://www.inngest.com/docs/local-development/docker)
+and [pinned CLI flags](https://github.com/inngest/inngest/blob/v1.36.0/cmd/devserver/cmd.go).
+
+The first served run41303117580 built the production bundle but refused the
+preboot isolation check. It did not start the app or modify provider fixtures;
+the business journey is unrun. Admission now runs directly after CI seed/setup,
+before the expensive build. Failure diagnostics emit known reason codes and a
+bounded Prisma error code only; raw exceptions and connection details stay out
+of CI output. Preserve all isolation checks while diagnosing the actual setup.
+
+The independent correction review requires a second read-only isolation check
+immediately before normal boot; it refreshes the admission record after build
+and backend preparation. A workflow-order contract and a newly introduced-work
+negative protect this boundary.
+
+The standard CI seed invokes eleven scheduled-task seeds, whose active default
+conflicts with this scenario's zero-active requirement (seed.ts2571–2582 and
+ScheduledAgentTask.isActive). A bounded preparation step runs before admission:
+reuse the existing exported task definitions and owner resolver, require exact
+configuration/ownership and no execution evidence, credentials, queued work or
+latent intent, then conditionally suspend only those pristine rows in one
+serializable transaction. Unknown or modified active rows refuse setup. The
+zero-active guard is unchanged. Original activation/identities are retained in
+the run artifact. Schedules stay suspended until disposable database teardown;
+they are never restored while the worker lives. Production seeds and schedules
+are untouched. This addresses a source-proven setup conflict without claiming
+the first generic exception's precise cause or a served acceptance pass.
+
+Run41304920793 passed real seed preparation, both isolation checks, build,
+portal startup and sign-in. Its authenticated request was saved and then
+blocked before any provider request. The generic progress artifact does not
+establish why. The next run retains the exact job/thread-bound saved response,
+failed-workflow capture and disposable portal logs; no grant or routing policy
+is changed based on a guessed diagnosis. Cleanup now reports provider settlement
+and secondary resource errors separately. Close the explicit browser context
+before its browser, as the [Playwright API requires for graceful cleanup](https://playwright.dev/docs/api/class-browser#browser-close).
+The first cleanup failure's exact cause is not inferred from this correction.
+
+The scoped response and routing log from41306548335 identify a valid refusal:
+the main-room coworker requires confidential clearance, but the fictional CI
+connection declared only public/development/internal. This was a fixture
+mismatch, not a broken privacy gate. The loopback-only synthetic fixture now
+includes the main-room sensitivity; no live account, real privacy attestation,
+production policy, grant or break-glass override changes. A first-failing test
+uses the actual sensitivity predicate on the fixture's declaration, retains a
+public/internal negative and refuses an external target before another write.
+This remains synthetic test input, never evidence that a real provider may
+receive confidential business mail. Cleanup in413065 completed with verified
+provider settlement and no secondary resource errors.
+
+Run41307884215 reached the synthetic provider, retained its capacity wait through
+a duplicate delivery and reload, then saved the expected answer on the same job.
+It failed the original-metadata equality assertion before result provenance,
+recurring-run, terminal-duplicate and final isolation assertions completed.
+Four provider requests, zero rejected requests and completed fixture/resource
+cleanup are recorded; this is not an acceptance pass. Preserve the full equality
+assertion and retain both synthetic metadata observations before it on the next
+run so the changed fields can be diagnosed without guessing or relaxing scope.
+
+The runtime journey's required cases and covered paths are recorded in the
+existing `config/ci-evidence-policy.json`. The evidence planner includes selected
+runtime scenarios in its content digest and emits a fail-closed recovery flag.
+Entry, authority, dispatch, result, provider and recovery changes select the
+journey; exhaustive or uncertain scope also selects it. An unrelated trusted PR
+is the omission control. The existing reusable runtime consumes the current-run
+production build, with separate scenario concurrency and artifact names so it
+can coexist with the route sweep. A required skipped/failed journey makes the
+existing Merge Readiness aggregate fail. Accepted exact-tree receipts include
+the recovery runtime and wrapper; no new approval step or live runtime exists.
+
+The served evidence reports expected and actually executed case IDs from that
+same inventory. Each executed ID is added only after its real assertion, and
+success requires exactly all cases including settled cleanup. Missing, duplicate,
+unexpected or empty coverage fails. Source controls first failed for missing
+selection, case completeness and mandatory workflow wiring, then passed. This
+source wiring is not itself evidence that any served scenario completed.
+
+Diagnostic41309326130 failed before composing or submitting a request. Its
+failure capture shows the closed dock and visible AI Coworker launcher; zero
+provider requests and no task snapshots/metadata comparison were recorded.
+Fixture settlement and cleanup completed. The harness had probed launcher
+visibility immediately after DOMContentLoaded and could skip opening the dock
+before its client launcher appeared. It now waits for either the actual composer
+or launcher, opens the dock only if needed, then fills the composer. This uses
+the installed Playwright locator.or/first visibility contract, not a fixed sleep.
+The precise413078 metadata mismatch remains unproven; a new served run must
+exercise the corrected launcher wait and the reviewed observer boundary.
+
+The current required-case inventory also asserts that a valid platform-owned
+provider wait does not become Workspace owner review. The real served capture
+exposed the contradiction, and the product now reuses submitted for automatic
+waits while preserving legacy input-required readback and owner-facing
+approval/uncertainty/expiry. The updated journey requires submitted plus the
+capacity-wait projection and nextActor platform, retains it across reload, and
+rejects the erroneous AI work blocked strip. All12 inventory cases, including
+this assertion and settled cleanup, must actually execute before pass. Two
+additional real-PostgreSQL product controls cover attention at expiry and the
+50-row due-selection boundary; no passing count replaces those results.

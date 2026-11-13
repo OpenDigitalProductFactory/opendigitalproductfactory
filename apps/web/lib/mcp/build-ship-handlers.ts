@@ -443,7 +443,17 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
         select: { value: true },
       });
       const purpose = (intent?.value as { primaryPurpose?: unknown } | null | undefined)?.primaryPurpose;
+      // BI-ACAA91E5: an undecided change shares by default only when this
+      // scan of the outgoing diff is clean; a scan that cannot run answers null.
+      let businessSpecificHits: number | null = null;
+      if (build.disposition !== "shareable" && build.dispositionSource !== "operator") {
+        try {
+          const { runSanitizationScan } = await import("@/lib/build/contribution-review");
+          businessSpecificHits = (await runSanitizationScan(diff)).mustFixCount;
+        } catch { businessSpecificHits = null; }
+      }
       if (!mayShareToPublicHive(build.disposition, {
+        businessSpecificHits,
         dispositionSource: build.dispositionSource,
         installationPurpose: typeof purpose === "string" ? purpose : null,
       })) {

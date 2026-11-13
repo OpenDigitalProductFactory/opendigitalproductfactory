@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 const mocks = vi.hoisted(() => ({
   requireCapability: vi.fn(),
   prisma: {
-    featureBuild: { findUnique: vi.fn(), update: vi.fn() },
+    featureBuild: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     businessBuildBrief: { upsert: vi.fn() },
     organization: { findFirst: vi.fn() },
     $transaction: vi.fn(),
@@ -91,5 +91,37 @@ describe("updateFeatureBrief (BI-7175C7DB)", () => {
     expect(buildActionSource).toMatch(
       /export\s+async\s+function\s+updateFeatureBrief\s*\(/,
     );
+  });
+
+  it.each(["phase", "source version"])("preserves a concurrent %s change at the write boundary", async (changed) => {
+    // The row was valid when read; another worker changes it during the
+    // organization lookup. Only the conditional mutation can detect this race.
+    const expectedUpdatedAt = "2026-11-11T04:00:00.000Z";
+    const current = { phase: "ideate", updatedAt: new Date(expectedUpdatedAt) };
+    mocks.prisma.featureBuild.updateMany.mockImplementationOnce(async ({ where }) => ({
+      count: where.phase === current.phase && where.updatedAt.getTime() === current.updatedAt.getTime() ? 1 : 0,
+    }));
+    mocks.prisma.organization.findFirst.mockImplementationOnce(async () => {
+      if (changed === "phase") current.phase = "plan";
+      else current.updatedAt = new Date("2026-11-11T04:01:00.000Z");
+      return { id: "org-1" };
+    });
+    await expect(updateFeatureBrief("FB-123", brief, {
+      actorUserId: "session-owner", expectedUpdatedAt,
+    })).rejects.toThrow(/changed/i);
+    expect(mocks.prisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(mocks.prisma.businessBuildBrief.upsert).not.toHaveBeenCalled();
+    expect(mocks.prisma.featureBuild.updateMany).toHaveBeenCalledWith({
+      where: { buildId: "FB-123", createdById: "session-owner", phase: "ideate",
+        abandonedAt: null, updatedAt: new Date(expectedUpdatedAt) },
+      data: { brief },
+    });
+  });
+
+  it("saves a matching guarded diagnosis and its business brief together", async () => {
+    mocks.prisma.featureBuild.updateMany.mockResolvedValueOnce({ count: 1 });
+    await updateFeatureBrief("FB-123", brief, { expectedUpdatedAt: "2026-11-11T04:00:00.000Z" });
+    expect(mocks.prisma.businessBuildBrief.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.prisma.featureBuild.update).not.toHaveBeenCalled();
   });
 });

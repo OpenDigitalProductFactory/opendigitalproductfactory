@@ -4,7 +4,7 @@ pageKind: principle
 status: published
 abstract: When a request could reasonably mean more than one work type, classify the request before acting so fixes, governance, backlog, documentation, and self-improvement loops are not silently collapsed into one narrower task.
 principleTier: commandment
-principleDirection: Stop before code or runtime edits when a request is work-type ambiguous; classify it with observable context and one targeted operator question when needed, then route the selected work type through the right governance path.
+principleDirection: Stop before code or runtime edits when a request is work-type ambiguous; classify it from observable context, consult the owning governed scope, and ask only for unresolved human intent.
 principleDimensionVector: {"governance_compliance": 1.0, "long_term_maintainability": 0.9, "reusability": 0.8, "schema_grounding": 0.7, "evidence_density": 0.6, "speed_to_value": -0.2, "human_cognitive_load": -0.2}
 principleAppliesTo:
   - in_platform_coworker
@@ -32,7 +32,7 @@ When an operator request could reasonably mean more than one work type, classify
 - governance or WWMD decision
 - autonomous self-improvement loop
 
-The agent should inspect relevant governed context first - current files, specs, backlog, Workrooms, live DB state, and available MCP tools. If ambiguity remains, ask one targeted classification question with concrete choices. Do not start code edits, runtime state changes, or hidden direct fixes until the work type is clear enough to route.
+The agent should inspect relevant governed context first - current files, specs, backlog, Workrooms, live DB state, and available MCP tools - then consult the decision scope that owns any remaining platform, business, or craft choice. A high-confidence, conflict-free result resolves the classification and the agent proceeds. Ask one targeted question only for human intent, consent, or decision residue the governed scope cannot resolve. Do not start code edits, runtime state changes, or hidden direct fixes until the work type is clear enough to route.
 
 If the request mentions AI coworkers, proactivity, autonomy, backlog, WWMD, process gaps, self-improvement, or the platform improving itself, prefer the highest-governance interpretation unless the operator explicitly asks for an immediate narrow repair. That means using the relevant DPF MCP, Workroom, backlog, and decision tools before implementation.
 
@@ -52,9 +52,10 @@ It does not require asking the operator for every task. Obvious one-class reques
 
 1. **Detect work-type ambiguity.** Ask whether the request could be a fix, investigation, doc/spec change, governance decision, backlog item, or self-improvement loop.
 2. **Check governed context first.** Inspect the relevant specs, backlog, Workrooms, live state, and available tools. Do not ask the operator to answer facts the platform can inspect.
-3. **Ask one classification question if needed.** Use concrete choices, for example: "Should I treat this as an immediate product fix, a governance/process improvement, a spec/doc update, or a full self-improvement loop that includes backlog/capsule/WWMD?"
-4. **Route by selected class.** Use WWMD for platform-governance decisions, backlog or Workrooms for coordinated work, specs/docs for durable contracts, and code only after the governance path is clear.
-5. **Preserve documentation continuity.** A fix-first sequence may be appropriate for an incident or an explicit urgent repair, but it never waives the later spec, docs, backlog, decision, or evidence record. Do not claim done until that continuity exists or a concrete no-docs-needed reason is recorded.
+3. **Consult before asking.** Route a platform/build choice through WWMD, an organization business choice through WWWD, and a consequential craft choice through WSID. Act on a high-confidence, conflict-free result and record its ledger.
+4. **Ask only for unresolved residue.** One targeted question may carry a legitimate escalation, owner-consent request, or factual clarification after the owning scope has been checked. Never ask the operator to classify a choice WWMD/WWWD/WSID can resolve.
+5. **Route by selected class.** Use backlog or Workrooms for coordinated work, specs/docs for durable contracts, and code only after the governance path is clear.
+6. **Preserve documentation continuity.** A fix-first sequence may be appropriate for an incident or an explicit urgent repair, but it never waives the later spec, docs, backlog, decision, or evidence record. Do not claim done until that continuity exists or a concrete no-docs-needed reason is recorded.
 
 ## Decision Dimensions
 
