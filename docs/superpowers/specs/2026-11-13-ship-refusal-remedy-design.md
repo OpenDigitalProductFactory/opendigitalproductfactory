@@ -73,6 +73,21 @@ Ruled out:
 5. **User guide.** The Build Studio Ship section describes what happens after
    a refusal.
 
+## Acceptance (BI-34A05E78, quoted)
+
+- AC-1 Before the preflight reads the tree, a build clone left detached by a killed readiness run (clean tree, build branch present) is put back on its build branch. A dirty or unknown clone is left alone and the preflight refuses as before.
+- AC-2 A refused ship attempt is classified: stale-verification, verification-failed, behind-main, guard-finding, infrastructure, policy-hold, or unknown. Each class has one remedy: return to review so the current tree is verified again (stale or failed verification); refresh onto main (behind-main); return to review and hand the named guards to the coding agent through gauntlet repair (guard-finding); back off 1h, 2h, 4h and so on up to 24h (infrastructure or policy hold).
+- AC-3 Remedies that move the build are capped at 3 per build. Unknown refusals are capped at 2 consecutive. Infrastructure is capped at 6 consecutive backoffs. Past a cap the build is escalated once, and nothing retries it after that.
+- AC-4 Tests cover: detached checkout restored and preflight satisfied; each class -> remedy; the bound -> escalation; no retry after escalation.
+
+## Traceability
+
+| Requirement | Contract | Flow | Verification |
+|---|---|---|---|
+| AC-1 | `apps/web/lib/build/sandbox/leaked-readiness-checkout.ts` | `apps/web/lib/work-management/declared-flows/build-studio.transitions.json` | `apps/web/lib/build/sandbox/guard-gauntlet-identity.test.ts`, `apps/web/lib/build/sandbox/leaked-readiness-checkout.test.ts` |
+| AC-2, AC-3 | `apps/web/lib/build/ship-refusal-remedy.ts` | `apps/web/lib/work-management/declared-flows/build-studio.transitions.json` | `apps/web/lib/build/ship-refusal-remedy.test.ts`, `apps/web/lib/build/ship-source-refresh.test.ts` |
+| AC-4 | `apps/web/lib/build/ship-refusal-remedy.ts` | `apps/web/lib/work-management/declared-flows/build-studio.transitions.json` | `apps/web/lib/build/ship-refusal-remedy.test.ts`, `apps/web/lib/build/ship-source-refresh.test.ts` |
+
 ## Verification
 
 Tests: `leaked-readiness-checkout.test.ts`,
