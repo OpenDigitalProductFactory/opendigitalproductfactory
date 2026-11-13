@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Connected client date hydration repair
@@ -105,6 +105,16 @@ unexplained Workrooms failure repaired.
 
 ## Backlog coverage
 
-Pending immutable plan publication and native atomic coverage receipt. Source
-implementation is not admitted by this document alone. Funding attribution is
-separately pending the existing native request; no new budget is granted here.
+Native atomic coverage: `cmwfj4dik1mly0ep4h1ye61gb`, bound to immutable design
+commit `75805844459f6f4884baac436d710e2c19acdb1b`, blob
+`1e8782e35459ae2004c4e98d362f7c5ce4786641`. The single deliverable maps to
+BI-CFC239B2 with no independent dependency. Implementation admission:
+`IRD-F6A2584068C7`. The existing funding request executed and its native room
+binding resolves to the owning organization/shared-platform scope; the normal
+allocation policy and limits are unchanged.
+
+The actual component regression first failed for both failure statuses and
+reported a real React hydration recovery error. The existing `LocalTime`
+composition then passed matching initial markup, mounted Chicago dates,
+translated repeated-date order, optional dates and healthy-state checks.
+Source-local checks do not establish protected delivery or served acceptance.
