@@ -22,6 +22,7 @@ import { AREA_HOME_PURPOSE_CONTRACTS } from "./area-home";
 import { MARKET_FOOTPRINT_PURPOSE_CONTRACTS } from "./market-footprint";
 import { MONITORING_SETTINGS_PURPOSE_CONTRACTS } from "./monitoring-settings";
 import { GATE_EFFICACY_PURPOSE_CONTRACTS } from "./gate-efficacy";
+import { UPSTREAM_FEEDBACK_PURPOSE_CONTRACTS } from "./upstream-feedback";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
@@ -42,6 +43,7 @@ const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   MARKET_FOOTPRINT_PURPOSE_CONTRACTS,
   MONITORING_SETTINGS_PURPOSE_CONTRACTS,
   GATE_EFFICACY_PURPOSE_CONTRACTS,
+  UPSTREAM_FEEDBACK_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(
