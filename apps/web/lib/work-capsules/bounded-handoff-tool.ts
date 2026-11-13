@@ -56,6 +56,13 @@ export async function boundedHandoffConsequenceForCall(call: ToolCallConsequence
     await assessBoundedHandoff({ db: prisma as unknown as CapsuleDb, actor, command });
     return { consequence: null, reason: "verified-same-mandate-handoff" };
   } catch (error) {
+    // BI-53BED66C: an approval cannot make a refused two-step call succeed —
+    // the approved re-run repeats this same predicate and refuses again
+    // (envelopes cmweiy4zf00op0eqlz0xpctw0, cmwfdcrs400580ep4k6we4wux). So a
+    // phase call the handler will refuse is classified ordinary: the caller
+    // gets the refusal and its next step, and no unusable envelope reaches the
+    // owner. Out-of-scope handovers keep their approval on the one-call path.
+    if (command && error instanceof BoundedHandoffRefusal) return { consequence: null, reason: `handoff-refused:${error.code}` };
     // Record which boundary refused, so "why did this reach the owner?" is
     // answerable from the decision log instead of re-derived (BI-F1FC0B62).
     return error instanceof BoundedHandoffRefusal ? { ...authority, reason: `${authority.reason}:${error.code}` } : authority;

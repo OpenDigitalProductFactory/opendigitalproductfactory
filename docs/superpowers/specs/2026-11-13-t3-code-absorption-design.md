@@ -4,7 +4,7 @@ status: draft
 
 # Absorbing T3 Code: the platform's own coding capability (rung 0)
 
-**Backlog:** BI-FCEB5C22 (epic EP-INPLATFORM-CODING; delivery-xlarge, decomposed below and never implemented directly). This design record is its doc slice BI-4A269553. **Related:** BI-9816A49D records the owner's rung-0 ruling in WWMD.
+**Backlog:** BI-FCEB5C22 (epic EP-INPLATFORM-CODING; delivery-xlarge, decomposed below and never implemented directly). This design record is its doc slice BI-4A269553. **Related:** BI-9816A49D records the owner's rung-0 ruling in WWMD. [Agent dialog broker](2026-10-27-agent-dialog-broker-design.md) (BI-C9C4F5ED): rooms are how agents talk to each other, and every slice below keeps them working ([§ Rooms and agent dialog](#rooms-and-agent-dialog-what-every-slice-carries-forward), BI-FD5D9302).
 **First slice already built:** BI-53BED66C, [T3 as a first-class executor](2026-11-13-t3-code-first-class-executor-design.md).
 **Evidence:**
 - [T3 runtime trial](../research/2026-11-12-t3-code-runtime-trial.md) (BI-4DE79C8D);
@@ -73,6 +73,7 @@ Each row compares T3's design with DPF's current one and gives the verdict:
 | **Checkpoints and revert** | Hidden git refs per turn. A revert is refused before files change if the provider cannot rewind its conversation. | Advisory checkpoint notes only. | **Adopt later** (slice S7), with refs inside the worktree's namespace. T3's refs have accumulated in the owner's main clones (25 in `~/dpf`, 92 in `~/DPF2`). |
 | **PR linking and settlement** | Multiple PR links per thread, settlement reactors after merge/close commands. | PR follow-through and the review-tail loop (covered by the 09-04 review). Slice 1 adds a governed queue step. | **Keep,** with the 09-04 amendments. |
 | **Orchestrator MCP for its own agents** | Delegate to a subagent on any instance, create and steer threads, wait and cancel. | MCP is the coordination plane. Agents claim, record and hand over through tools. | **Keep** MCP as the plane. **Adopt** `delegate_task` semantics through workroom delegation, not a second queue. |
+| **Agent-to-agent dialog** | Threads talk only to their own user. A subagent reports back to the thread that spawned it. No shared room, addressing or cross-installation dialog. | Work Rooms: GAID-addressed messages with a per-participant cursor; wake for in-platform coworkers (bounded by a hop limit and an hourly budget); push to connected MCP clients; supervised sessions receive addressed messages as turns; A2A binding between installations. | **Keep.** DPF is ahead here. Every slice that rebuilds a path rooms run on carries rooms forward (see [§ Rooms and agent dialog](#rooms-and-agent-dialog-what-every-slice-carries-forward)). |
 
 **What DPF learns from T3:** to make intent durable before acting; to give server-originated work deterministic ids; to model executors as drivers and instances with explicit capabilities; to treat plan windows as first-class, live data; to keep execution where the files are; and to grant agents a ceiling, not a list.
 
@@ -81,7 +82,8 @@ Each row compares T3's design with DPF's current one and gives the verdict:
 - owner-scoped propose-then-acknowledge;
 - GPP consequence gates and profession review;
 - portfolio budgets;
-- a sandboxed default posture.
+- a sandboxed default posture;
+- Work Rooms as the one place agents and people talk, addressed by GAID.
 
 ## Adopt the code or reproduce it, per capability
 
@@ -113,6 +115,35 @@ What no capability brings into the product:
 - **No T3 identity.** Absorbed capabilities appear as Open Digital Product Factory capabilities.
 - **No new app or screen.** The six rows land in surfaces that already exist.
 - **Attribution stays out of the UX.** It lives in source headers and `THIRD-PARTY-NOTICES` / NOTICE, as the licences require.
+
+## Rooms and agent dialog: what every slice carries forward
+
+The [agent dialog broker](2026-10-27-agent-dialog-broker-design.md) is built and live:
+- **A**: read newest-first with a cursor;
+- **B**: addressed delivery and wake (BI-31C1FDEC; a coworker that cannot post is not woken, BI-8747A73D);
+- **C**: push to connected MCP clients (BI-ED52AB82);
+- **D**: a supervised session receives an addressed message as its next turn (BI-F5D58F29), and its replies count against the room's hop limit (BI-FDE1B10C);
+- **E**: the A2A dialog binding between installations (BI-ADB5CC1C, in progress).
+
+Several slices rebuild the paths these run on, so each carries these requirements. They come from the broker design and add nothing new.
+
+| Slice | Must keep | How it lands |
+|---|---|---|
+| S2 runtime core | A message's wake is decided exactly once; a supervised turn is delivered at most once; restart re-attach and `supervision-lost` | Room delivery becomes `WorkroomEffect` outbox rows written in the same transaction as the decision. That replaces the wake state written on the message and the claim-before-turn guard (`claimPendingWake`) with the outbox's own exactly-once. Effects tied to a lost session are retired; the message stays readable from the cursor. |
+| S3 one driver per client | The supervised-session port (`SupervisedSessionPort`: `isLive`, `deliver`, in `supervised-turn-delivery.ts`), the `addressedAs` qualifier, `deliveredCursor`, and the turn prompt (addressed message, sender GAID, case key, up to 20 room-wide messages since the cursor) | Each driver implements the port. Room delivery calls the driver; it does not know which client sits behind it. |
+| Executor instances (S3, C3) | One identity per subject (GAID §6.9) | An instance is operating state of its client's GAID, never an identity: `gaid:…:agt-ext-codex#instance=<id>`, with `#session=<thread>` as today. Routing, delegation to a specific executor (C3) and room addressing all use that form. Instance ids appear on no message as a sender identity. |
+| S5 workroom-bound toolset | A session in a room can read and post there, and subscribe to its messages | The room ceiling always includes `read_room_messages`, `post_room_message` and the room's message resource. The per-session token also identifies the session, so a session's posts carry `senderSession` from the token rather than from the starter's room token. This simplifies BI-FDE1B10C's matching. |
+| S6 execution hosts | An addressed message reaches the session wherever it runs | A supervised session on a device host is reached through that host's route. The host reports liveness and re-attaches after its own restart. Broker §7.2 states the delivery rules. A desktop session that a host now supervises becomes deliverable instead of `held-for-executor`. |
+| S7 context handoff | Nothing a room participant said is lost at handover | The handoff record's budgeted messages are drawn from the room's messages since the receiver's cursor, plus the outgoing session's own turns. |
+| C2 thread detail | One message stream per room | Turn items project onto the Workroom log. Room messages stay `WorkItemMessage` rows, and the feed shows both without copying either into the other. |
+| C3 delegation (A2A) | One binding for agent-to-agent work across installations | Delegation to a specific executor goes through the A2A dialog binding (BI-ADB5CC1C) and `TaskRun`, not a second channel. |
+| S9 rung-0 loop | Self-work stays inside the room's bounds | Autonomous self-dispatch runs through rooms: the hop limit and hourly wake budget apply. Coworkers it relies on need `work_room_write`; whether every coworker gets it by default is the owner's open decision BI-022026AB (8 of 132 coworkers could post on 2026-11-12). |
+
+**Convergence with DPF2's OS layer.** DPF2 records the same direction in its own plan (owner decisions of 2026-11-13: T3 absorbed as DPF2's working core; OS-layer placement). There, the protected launcher starts each agent process with its identity (GAID and principal), its access (the permit, enforced as containment) and its corpus. Two slices here land on that model:
+- S5's per-session ceiling and token are the DPF form of that launcher property;
+- S6's execution hosts are where such a launcher runs.
+
+The `#instance=` and `#session=` qualifiers above match it: a process carries its subject's GAID, and the qualifier names its operating state. DPF2's open questions (where WWMD and WWWD sit relative to the OS-layer corpus; one transport for peer links and linked environments) belong to DPF2's plan and are not answered here.
 
 ## Target architecture
 
@@ -203,6 +234,8 @@ Each slice is its own backlog item, sized delivery-medium or smaller, in this or
 
 Rung-0 build order: S2 → S3 → C2 → S4 → S5 → C3 → C4 → S6 → C5 → S7 → S8 → C6 → S9.
 
+Each slice's acceptance includes the room requirements in [§ Rooms and agent dialog](#rooms-and-agent-dialog-what-every-slice-carries-forward). The broker's existing tests for wake, push and supervised turns must pass after S2, S3 and S6.
+
 ## Objectives and acceptance
 
 - **AC-1.** Every T3 capability the owner uses has a DPF home, delivered by a slice above: driving plan sessions, plan windows and resets, multi-device use, handover, recovery and agent tools.
@@ -210,6 +243,7 @@ Rung-0 build order: S2 → S3 → C2 → S4 → S5 → C3 → C4 → S6 → C5 �
 - **AC-3.** Ported code carries T3's MIT notice and a pinned provenance line. No proprietary or copyleft component is taken.
 - **AC-4.** The paired Dev install and each of the owner's devices keep working through the move: no forced stop, and history stays readable.
 - **AC-5.** T3 is retired on each device only after two weeks at parity.
+- **AC-5b.** After S2, S3, S5 and S6, the room features A–D still work: an addressed coworker is woken or refused with a reason, a connected client hears a new message, and a supervised session, on the portal or on a device host, receives an addressed message as its next turn exactly once.
 - **AC-6.** The platform delivers at least one fix to its own source, from a self-filed gap to merge, through the absorbed capability with no routine owner approvals and no widening of its own authority.
 
 ## Risks seen on the owner's devices
