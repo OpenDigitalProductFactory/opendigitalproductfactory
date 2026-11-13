@@ -103,4 +103,13 @@ describe("owner decision headlines", () => {
       } as AttentionItem),
     ).toBe("OpenAI Codex has hit its usage limit until 2026-11-17 03:54 UTC");
   });
+  it("uses the continuity watch's own title for downtime and paired-installation items (BI-3E2F87FA)", () => {
+    expect(
+      headlineFor({
+        source: "platform-health",
+        id: "platform-health:platform-downtime:2026-11-08T14:48:00.000Z",
+        title: "The platform was down for 11 h 14 min",
+      } as AttentionItem),
+    ).toBe("The platform was down for 11 h 14 min");
+  });
 });

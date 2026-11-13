@@ -286,3 +286,15 @@ export function namesNoConcreteConsequence(blastRadius: string | null | undefine
 export function isAiCapacityItem(item: Pick<AttentionItem, "source" | "id">): boolean {
   return item.source === "platform-health" && (item.id ?? "").startsWith("platform-health:ai-capacity:");
 }
+
+/**
+ * Rows the platform-continuity and work-sync watches maintain (BI-3E2F87FA,
+ * BI-85DE8EBD): the platform stopped serving, or lost its paired installation.
+ * Only the operator can fix the cause, so these go to Needs-you.
+ */
+const OPERATOR_CONTINUITY_PREFIXES = ["platform-health:platform-downtime:", "platform-health:work-sync:"];
+
+export function isOperatorContinuityItem(item: Pick<AttentionItem, "source" | "id">): boolean {
+  const id = item.id ?? "";
+  return item.source === "platform-health" && OPERATOR_CONTINUITY_PREFIXES.some((prefix) => id.startsWith(prefix));
+}

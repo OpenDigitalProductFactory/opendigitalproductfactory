@@ -49,6 +49,13 @@ governed self-upgrade path.
 If recovery is exhausted, you receive one decision request rather than repeated alerts. If a
 human closes the pull request, Build Studio honors that closure.
 
+GitHub sometimes has not yet worked out whether a pull request can merge, usually because main
+has just moved. Build Studio treats that as a wait, not a failure. It keeps checking, and after six
+undecided checks in a row it checks less often, down to once an hour, and tells you once. It
+carries on by itself as soon as GitHub decides. A pull request that was stopped for a conflict or
+for falling behind main is looked at again every half hour, and Build Studio resumes it once
+GitHub no longer reports that problem. The room's activity trail records the resume.
+
 Some repository checks need a stated decision, such as how a change reaches existing installs or
 whether it changed the user guide. The coding agent records those decisions on its own commits.
 When Build Studio opens the pull request, it copies them into the pull request's **Readiness
