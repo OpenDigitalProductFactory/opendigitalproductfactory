@@ -177,7 +177,7 @@ describe("fileOwnerAttentionRoute", () => {
     dedupeKey: "build-escalation:FB-1",
   };
   const deps = () => ({
-    createReport: vi.fn(async () => ({ reportId: "PIR-1" })),
+    createReport: vi.fn(async (_input: Record<string, unknown>) => ({ reportId: "PIR-1" })),
     resolveOwner: vi.fn(async () => "user-1"),
     notify: vi.fn(async () => undefined),
   });
@@ -187,7 +187,7 @@ describe("fileOwnerAttentionRoute", () => {
     const d = deps();
     const filed = await fileOwnerAttentionRoute(decision, report, { deepLink: "/admin/issue-reports" }, d);
     expect(filed).toEqual({ reportId: "PIR-1", ownerUserId: "user-1", error: null });
-    const written = d.createReport.mock.calls[0][0] as Record<string, unknown>;
+    const written = d.createReport.mock.calls[0][0];
     expect(written).toMatchObject({ type: "build-stall-escalation", selfFixClass: "needs-human", dedupeKey: report.dedupeKey });
     expect(written.description).toContain("Why: This decision requires a person because it carries critical risk.");
     expect(d.notify).toHaveBeenCalledWith(expect.objectContaining({ source: "escalation", itemKey: "PIR-1", deepLink: "/admin/issue-reports" }));
@@ -198,7 +198,7 @@ describe("fileOwnerAttentionRoute", () => {
     const d = deps();
     const filed = await fileOwnerAttentionRoute(decision, report, { deepLink: "/admin/issue-reports" }, d);
     expect(filed.ownerUserId).toBeNull();
-    const written = d.createReport.mock.calls[0][0] as Record<string, unknown>;
+    const written = d.createReport.mock.calls[0][0];
     expect(written.type).toBe(ROUTED_REPAIR_REPORT_TYPE);
     expect(written.selfFixClass).toBeUndefined();
     expect(written.dedupeKey).toBe("build-escalation:FB-1:routed");
@@ -210,7 +210,7 @@ describe("fileOwnerAttentionRoute", () => {
 
   it("returns a write failure instead of throwing", async () => {
     const decision = await decideOwnerAttentionRoute({ ...PIR_QGQUH, declarations: { riskTier: "critical" } });
-    const d = { ...deps(), createReport: vi.fn(async () => { throw new Error("duplicate"); }) };
+    const d = { ...deps(), createReport: vi.fn(async (_input: Record<string, unknown>): Promise<{ reportId: string }> => { throw new Error("duplicate"); }) };
     const filed = await fileOwnerAttentionRoute(decision, report, undefined, d);
     expect(filed).toEqual({ reportId: null, ownerUserId: null, error: "duplicate" });
   });
@@ -219,7 +219,7 @@ describe("fileOwnerAttentionRoute", () => {
 describe("routeToHuman", () => {
   it("decides and writes in one call", async () => {
     const write = {
-      createReport: vi.fn(async () => ({ reportId: "PIR-2" })),
+      createReport: vi.fn(async (_input: Record<string, unknown>) => ({ reportId: "PIR-2" })),
       resolveOwner: vi.fn(async () => "user-1"),
       notify: vi.fn(async () => undefined),
     };
