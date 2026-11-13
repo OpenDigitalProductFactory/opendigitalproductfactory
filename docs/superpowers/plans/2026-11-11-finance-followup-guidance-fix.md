@@ -90,3 +90,20 @@ first normal claim after successful SUR-DD81F176 preceded retirement evidence
 publication and failed. After actual publication, the same ordinary plan-path
 claim succeeded. This is current admission, not restart-continuity acceptance.
 The separate falsely responded system-output artifact belongs to BI-D0D2FF0D.
+
+
+## Basic entry wording correction — 13 November 2026
+
+An independent release executor reproduced a current-source gap after the
+initial native review: both “Where do I enter an expense?” and “How do I enter
+an expense?” were rejected. The entry matcher allowed `enter` and `entry`,
+but the positive vocabulary omitted both. The ordinary-tool fallback has not
+been shown useful for these questions, so it is not an acceptance substitute.
+
+Three direct question regressions fail against the reviewed source; two new
+imperative/mixed-action controls remain on the tool path. Add only the two
+missing vocabulary words, keeping every clause matcher and authority check.
+The affected grounding, registry and wrapper suites pass42 tests after this
+correction (initial RED3failed/21passed). The previous canonical/native receipts
+qualify the older source only. New exact-tree verification, independent review,
+publication and served acceptance remain required.

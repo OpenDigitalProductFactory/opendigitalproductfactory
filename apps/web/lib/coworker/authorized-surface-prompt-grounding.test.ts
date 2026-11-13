@@ -78,6 +78,9 @@ describe("groundPromptWithAuthorizedSurface", () => {
   });
 
   it.each([
+    "Where do I enter an expense?",
+    "How do I enter an expense?",
+    "Where is expense entry?",
     "Where exactly do I start my own expense claim, which fields are required, and how do draft and submission differ?",
     "Which fields are required for my expense claim?",
     "For the current operator setup, where exactly do I go to start my own expense claim, which fields are required on the native form, and what is the difference between saving a draft and submitting for approval? Please answer here once using the current Finance context. Guidance only: do not create or submit a claim, post a journal, move money, change settings or contact anyone.",
@@ -96,6 +99,8 @@ describe("groundPromptWithAuthorizedSurface", () => {
       "Where do I enter an expense, and explain our revenue forecast?",
       "Where do I enter an expense and show the receipts for my last claim?",
       "What is my expense claim submission date?",
+      "Enter an expense for me.",
+      "Where do I enter an expense? And submit my claim.",
     ])("keeps live, mixed and action Finance requests on the tool path: %s", request => {
     expect(isAuthorizedSurfaceGuidanceRequest(request, "finance.expense-guidance")).toBe(false);
   });

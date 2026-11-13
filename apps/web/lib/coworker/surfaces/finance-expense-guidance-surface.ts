@@ -8,7 +8,7 @@ export const FINANCE_EXPENSE_GUIDANCE_ROUTES = ["/finance", "/finance/spend", "/
 
 /** Workflow instructions are not evidence of anyone's actual claims or money.
  * Ambiguous, mixed and operational questions keep the normal tool-backed path. */
-const workflowWords = new Set(("where exactly do i go to start my own personal an a the expense expenses claim claims which what fields field information are is required optional on native form for and how draft saving save as submission submitting submit approval differ difference between versus vs does mean need must with at least one title date category description positive amount receipt url notes keeps it later requests review without moving money explain please can you help me understand").split(" "));
+const workflowWords = new Set(("where exactly do i go to start enter entry my own personal an a the expense expenses claim claims which what fields field information are is required optional on native form for and how draft saving save as submission submitting submit approval differ difference between versus vs does mean need must with at least one title date category description positive amount receipt url notes keeps it later requests review without moving money explain please can you help me understand").split(" "));
 const restrictionWords = new Set("guidance only do not create or submit a claim post journal move money change settings contact anyone".split(" "));
 const metaWords = new Set("please answer here once using the current finance context".split(" "));
 const wordsIn = (text: string, vocabulary: ReadonlySet<string>) =>
