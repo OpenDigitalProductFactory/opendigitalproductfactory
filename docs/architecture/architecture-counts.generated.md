@@ -11,5 +11,5 @@ this file; never retype them into prose, where they drift (Simplify & Strengthen
 | Prisma models | 648 | `packages/db/prisma/schema/` |
 | Prisma enums | 128 | `packages/db/prisma/schema/` |
 | Migrations | 651 | `packages/db/prisma/migrations/` |
-| Kernel principles | 113 | `docs/founder-kernel/wiki/principles/` |
-| App routes | 686 | `apps/web/lib/ea/route-manifest.json` |
+| Kernel principles | 114 | `docs/founder-kernel/wiki/principles/` |
+| App routes | 687 | `apps/web/lib/ea/route-manifest.json` |

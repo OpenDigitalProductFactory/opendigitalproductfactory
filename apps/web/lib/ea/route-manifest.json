@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 686,
+  "routeCount": 687,
   "routes": [
     {
       "routePath": "/",
@@ -5744,6 +5744,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/finance/settings/setup/page.tsx"
+    },
+    {
+      "routePath": "/finance/settings/statutory-rates",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings",
+        "statutory-rates"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/statutory-rates/page.tsx"
     },
     {
       "routePath": "/finance/settings/tax",

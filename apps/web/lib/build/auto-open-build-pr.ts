@@ -68,9 +68,12 @@ export async function retryBuildStudioPrForShipBuild(input: {
   lastAttemptAt: Date | null;
   now?: Date;
   deps?: AutoPrDeps;
+  /** BI-34A05E78: the ship refusal remedy backs this off while nothing changes. */
+  retryIntervalMs?: number;
 }): Promise<"opened" | "blocked" | "skipped"> {
   const now = input.now ?? new Date();
-  if (input.lastAttemptAt && now.getTime() - input.lastAttemptAt.getTime() < SHIP_PR_RETRY_MS) return "skipped";
+  const interval = input.retryIntervalMs ?? SHIP_PR_RETRY_MS;
+  if (input.lastAttemptAt && now.getTime() - input.lastAttemptAt.getTime() < interval) return "skipped";
   return openBuildStudioPrAfterShip({ buildId: input.buildId, actorUserId: input.actorUserId, deps: input.deps });
 }
 
@@ -78,17 +81,23 @@ export async function retryBuildStudioPrForShipBuild(input: {
  * The ship reconciler's hook: reads the build's owner and its last PR attempt,
  * then retries. Never throws; a failure is logged and the next tick tries again.
  */
-export async function retryPrForShipBuild(buildId: string, logger: Pick<Console, "error">): Promise<void> {
+export async function retryPrForShipBuild(
+  buildId: string,
+  logger: Pick<Console, "error">,
+  retryIntervalMs?: number,
+): Promise<"opened" | "blocked" | "skipped"> {
   try {
     const { prisma } = await import("@dpf/db");
     const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { createdById: true } });
-    if (!build?.createdById) return;
+    if (!build?.createdById) return "skipped";
     const lastAttempt = await prisma.buildActivity.findFirst({
       where: { buildId, tool: "auto_open_pr" },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     });
-    await retryBuildStudioPrForShipBuild({ buildId, actorUserId: build.createdById, lastAttemptAt: lastAttempt?.createdAt ?? null });
+    return await retryBuildStudioPrForShipBuild({
+      buildId, actorUserId: build.createdById, lastAttemptAt: lastAttempt?.createdAt ?? null, retryIntervalMs,
+    });
   } catch (error) {
     const { getErrorMessage } = await import("@/lib/shared/get-error-message");
     logger.error("[auto-complete] PR retry failed for %s: %s", buildId, getErrorMessage(error));
@@ -98,6 +107,7 @@ export async function retryPrForShipBuild(buildId: string, logger: Pick<Console,
     const { prisma } = await import("@dpf/db");
     await prisma.buildActivity.create({ data: { buildId, tool: "auto_open_pr",
       summary: `Pull request not opened; the attempt failed: ${getErrorMessage(error).slice(0, 400)}` } }).catch(() => {});
+    return "blocked";
   }
 }
 

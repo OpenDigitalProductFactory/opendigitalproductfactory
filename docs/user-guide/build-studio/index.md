@@ -152,6 +152,16 @@ If the repository's automated checks, the independent code review, or the build'
 
 The AI Coworker prepares the promotion record and evidence. Where promotion is enabled, the platform backs up the database, builds a new version with the feature, swaps it into production, and verifies health. Where the surface is still hardening, keep the promotion record honest and finish through the supported source workflow. See [Feature Deployment](deployment.md) for the full process.
 
+Build Studio opens the build's pull request by itself. When a publication check refuses it, the build's activity trail names the reason and what Build Studio did next:
+
+- **The change was not verified as it stands now.** The build goes back to Review, where its checks run again on the current code. If an earlier check was interrupted and left the build's workspace on the wrong version, that is put right first.
+- **Main has moved on.** The build is refreshed onto the latest main and reviewed again.
+- **A repository check needs a fix in the change**, for example a missing user-guide update. The findings go back to the AI Coworker to fix, then the build is reviewed again.
+- **Something outside the change failed**, such as the workspace running out of memory or GitHub limiting requests. Build Studio waits and tries again: after 1 hour, then 2 hours, then 4, and so on up to once a day.
+- **The change is set to stay on your system.** Build Studio checks again less and less often, down to once a day, and opens the pull request after you mark the change shareable.
+
+Build Studio tries at most three fixes that move the build. If the pull request still cannot open after that, or the same unexplained refusal comes back, the build is escalated to you once with the last reason, and Build Studio stops retrying it.
+
 ## Related
 
 - [Feature Deployment](deployment.md) — How the deployment pipeline works, safety guarantees, and rollback
