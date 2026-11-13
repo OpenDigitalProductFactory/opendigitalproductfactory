@@ -73,6 +73,16 @@ def pixel_output(source):
 
 
 class ParentIsolationTest(unittest.IsolatedAsyncioTestCase):
+    async def test_resource_refusal_precedes_worker_or_control_directory_creation(self):
+        with patch.object(parent, "capture_identity", return_value=(10001, 10001)), \
+                patch.object(parent, "qualify_resource_boundary", side_effect=ValueError("prototype_capture_resource_boundary_unavailable")), \
+                patch.object(parent, "capture_lock", side_effect=AssertionError("resource refusal must precede admission")) as lock, \
+                patch.object(parent.asyncio, "create_subprocess_exec", AsyncMock()) as spawn:
+            with self.assertRaisesRegex(ValueError, "resource_boundary_unavailable"):
+                await render_prototype(request())
+        lock.assert_not_called()
+        spawn.assert_not_awaited()
+
     def child(self, source):
         return SimpleNamespace(pid=987654321, returncode=0, wait=AsyncMock(return_value=0),
             stdin=SimpleNamespace(write=MagicMock(), drain=AsyncMock(), close=MagicMock()),
