@@ -61,6 +61,150 @@ test('preview diagnostics retain the failed exit code without child output or ar
   });
 });
 
+test('a failed initializer retains only its safe substep evidence before container removal', async () => {
+  const secret = 'sensitive-child-content-must-stay-private';
+  const event = { version: 1, step: 'migrate', state: 'failed', category: 'exit', exitCode: 23 };
+  const program = ['console.log(' + JSON.stringify(secret) + ')',
+    'console.error(' + JSON.stringify(secret) + ')',
+    'console.log(' + JSON.stringify('DPF_PREVIEW_INIT ' + JSON.stringify(event)) + ')',
+    'process.exit(23)'].join(';');
+  const events = [];
+  await assert.rejects(commandRunner().run(['-e', program], { bin: process.execPath, capture: false,
+    onInitEvent: value => events.push(value) }), error => {
+    assert.equal(error.message, 'preview_initialization_failed:migrate:exit-23');
+    assert.ok(!error.message.includes(secret));
+    return true;
+  });
+  assert.deepEqual(events, [event]);
+  assert.ok(!JSON.stringify(events).includes(secret));
+});
+
+test('an initializer exit zero without complete validated progress cannot establish successful initialization', async () => {
+  await assert.rejects(commandRunner().run(['-e', 'process.exit(0)'], { bin: process.execPath,
+    onInitEvent: () => assert.fail('no progress emitted') }), /preview_init_completion_unverified/);
+});
+
+test('initializer diagnostics bound lines and records and reject private or malformed fields', async () => {
+  const { createPreviewInitEventReader, formatPreviewInitEvent } = await import('./dev-preview-init-diagnostics.mjs');
+  const event = { version: 1, step: 'sanitize', state: 'failed', category: 'exit', exitCode: 23 };
+  const events = [];
+  const reader = createPreviewInitEventReader(value => events.push(value));
+  reader.write(Buffer.alloc(1024 * 1024, 120));
+  assert.ok(reader.bufferedBytes <= 1024);
+  reader.write('\n');
+  for (const value of [null, { ...event, privateOutput: 'must-not-escape' }, { ...event, step: 'private-step' },
+    { ...event, category: 'private-error' }, { ...event, exitCode: 0 }, { ...event, exitCode: 999 }]) {
+    reader.write('DPF_PREVIEW_INIT ' + JSON.stringify(value) + '\n');
+  }
+  reader.write('DPF_PREVIEW_INIT {invalid}\n');
+  assert.deepEqual(events, []);
+  const line = Buffer.from(formatPreviewInitEvent(event) + '\r\n');
+  for (const byte of line) reader.write(Buffer.from([byte]));
+  assert.deepEqual(events, [event]);
+  for (let index = 0; index < 20; index++) reader.write(line);
+  reader.finish();
+  assert.equal(events.length, 8);
+  assert.equal(reader.bufferedBytes, 0);
+  assert.throws(() => formatPreviewInitEvent({ ...event, privateOutput: 'must-not-escape' }));
+});
+
+test('initializer completion requires the exact ordered four-step sequence', async () => {
+  const { createPreviewInitEventReader, formatPreviewInitEvent } = await import('./dev-preview-init-diagnostics.mjs');
+  const records = ['install', 'generate', 'migrate', 'sanitize'].flatMap(step => [
+    { version: 1, step, state: 'started', category: 'running', exitCode: null },
+    { version: 1, step, state: 'passed', category: 'success', exitCode: 0 },
+  ]);
+  for (const [events, expected] of [[records, true], [records.slice(0, -1), false],
+    [[records[2], records[3], records[0], records[1], ...records.slice(4)], false],
+    [[...records.slice(0, -1), records[0]], false], [[...records, records[0]], false]]) {
+    const reader = createPreviewInitEventReader(() => {});
+    for (const event of events) reader.write(formatPreviewInitEvent(event) + '\n');
+    reader.finish();
+    assert.equal(reader.completed, expected);
+  }
+});
+
+for (const failedStep of ['install', 'generate', 'migrate', 'sanitize', null]) {
+  test('actual initializer subprocesses retain safe ordering and failure attribution: ' + (failedStep ?? 'success'), async t => {
+    const directory = mkdtempSync(join(tmpdir(), 'dpf-preview-init-steps-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const marker = join(directory, 'executed.txt');
+    const names = ['install', 'generate', 'migrate', 'sanitize'];
+    const secret = 'private-child-output-must-not-escape';
+    const steps = names.map(step => ({ step, cwd: directory, command: process.execPath,
+      args: ['-e', [
+        'require("fs").appendFileSync(' + JSON.stringify(marker) + ',' + JSON.stringify(step + '\n') + ')',
+        'process.stdout.write(' + JSON.stringify(secret) + '.repeat(10000))',
+        'process.stderr.write(' + JSON.stringify(secret) + '.repeat(10000))',
+        'process.exit(' + (step === failedStep ? 23 : 0) + ')',
+      ].join(';')] }));
+    const moduleUrl = new URL('./dev-preview-init-runner.mjs', import.meta.url).href;
+    const program = 'import {runPreviewInitialization} from ' + JSON.stringify(moduleUrl)
+      + ';process.exitCode=await runPreviewInitialization({steps:' + JSON.stringify(steps) + '});';
+    const events = [];
+    const result = commandRunner().run(['--input-type=module', '-e', program], { bin: process.execPath,
+      onInitEvent: event => events.push(event) });
+    if (failedStep) {
+      await assert.rejects(result, error => {
+        assert.equal(error.message, 'preview_initialization_failed:' + failedStep + ':exit-23');
+        assert.ok(!error.message.includes(secret));
+        return true;
+      });
+    } else assert.equal(await result, '', 'initializer capture contains only normalized events');
+    const executed = names.slice(0, failedStep ? names.indexOf(failedStep) + 1 : names.length);
+    assert.deepEqual(readFileSync(marker, 'utf8').trim().split('\n'), executed);
+    assert.deepEqual(events.filter(event => event.state === 'started').map(event => event.step), executed);
+    assert.equal(events.at(-1).state, failedStep ? 'failed' : 'passed');
+    assert.ok(!JSON.stringify(events).includes(secret));
+  });
+}
+
+test('initializer reports unavailable executables without exposing command or error details', async () => {
+  const { runPreviewInitialization, PREVIEW_INIT_STEPS } = await import('./dev-preview-init-runner.mjs');
+  const lines = [];
+  const code = await runPreviewInitialization({ steps: PREVIEW_INIT_STEPS.map(spec => ({ ...spec,
+    cwd: tmpdir(), command: 'missing-preview-executable-must-not-escape' })), emit: line => lines.push(line) });
+  assert.equal(code, 1);
+  assert.equal(lines.length, 2);
+  assert.match(lines.at(-1), /"step":"install","state":"failed","category":"unavailable","exitCode":null/);
+  assert.ok(!lines.join('').includes('missing-preview-executable-must-not-escape'));
+});
+
+test('a canonical image missing initialization diagnostics is refused using only file-presence reads', async () => {
+  const { assertPreviewInitializerImage } = await import('./dev-preview-runtime.mjs');
+  for (const missing of ['dev-preview-init-runner.mjs', 'dev-preview-init-diagnostics.mjs']) {
+    const reads = [];
+    await assert.rejects(assertPreviewInitializerImage({ run: async args => {
+      reads.push(args);
+      if (args.at(-1).endsWith(missing)) throw new Error('private-daemon-output');
+    } }, 'canonical-fixture'), error => {
+      assert.equal(error.message, 'preview_initializer_diagnostics_unavailable');
+      return true;
+    });
+    assert.ok(reads.every(args => args[0] === 'exec' && args[1] === 'canonical-fixture'
+      && args[2] === 'test' && args[3] === '-f'));
+  }
+});
+
+test('failed initialization keeps safe evidence while stopping owned writers and never starting a portal', async () => {
+  const events = [], operations = [];
+  await assert.rejects(runPreviewLifecycle({ active: { initName: 'owned-fixture' },
+    verifySource: async () => {}, inspect: async () => assert.fail('no portal inspection'),
+    ready: async () => assert.fail('no ready portal'), wait: async () => assert.fail('no serving wait'),
+    onInitEvent: event => events.push(event), stopOwned: async () => operations.push('owned-cleanup'),
+    compose: async (args, options) => {
+      operations.push(args.at(-1));
+      if (args[0] === 'run') {
+        assert.ok(args.includes('--rm'));
+        options.onInitEvent({ version: 1, step: 'sanitize', state: 'failed', category: 'exit', exitCode: 23 });
+        throw new Error('preview_initialization_failed:sanitize:exit-23');
+      }
+    },
+  }), /preview_initialization_failed:sanitize:exit-23/);
+  assert.equal(events[0].step, 'sanitize');
+  assert.deepEqual(operations, ['dev-portal', 'dev-postgres', 'dev-init', 'owned-cleanup']);
+});
+
 test('preview renewal receives a delayed transport response inside the existing lease lifetime', async t => {
   const { callPreviewMcp } = await import('./dev-preview-runtime.mjs');
   const server = createServer((request, response) => {
@@ -305,12 +449,21 @@ test('protected identity still detects a real compose service recreated alongsid
   assert.deepEqual(protectedServiceIdentity([liveService, devService]), before);
 });
 
-test('preserved feature initialization takes the bounded clone from the canonical image', () => {
+test('preserved feature initialization takes the bounded clone and diagnostic runner from the canonical image', async () => {
   const cloneImage = `sha256:${'b'.repeat(64)}`;
   const override = previewOverride({ ...identity, cloneImage });
   assert.equal(override.services['dev-init'].image, cloneImage);
   assert.deepEqual(override.services['dev-init'].entrypoint, ['/bin/sh', '-c']);
-  assert.match(override.services['dev-init'].command[0], /cd \/workspace.*migrate-deploy.*cd \/app.*sanitized-clone/);
+  assert.equal(override.services['dev-init'].command[0], 'node /app/scripts/lib/dev-preview-init-runner.mjs');
+  const { PREVIEW_INIT_STEPS } = await import('./dev-preview-init-runner.mjs');
+  assert.deepEqual(PREVIEW_INIT_STEPS.map(({ step, cwd }) => ({ step, cwd })), [
+    { step: 'install', cwd: '/workspace' }, { step: 'generate', cwd: '/workspace' },
+    { step: 'migrate', cwd: '/workspace' }, { step: 'sanitize', cwd: '/app' },
+  ]);
+  assert.deepEqual(PREVIEW_INIT_STEPS[0].args, ['install', '--frozen-lockfile']);
+  assert.deepEqual(PREVIEW_INIT_STEPS[1].args, ['--filter', '@dpf/db', 'exec', 'prisma', 'generate']);
+  assert.deepEqual(PREVIEW_INIT_STEPS[2].args, ['--filter', '@dpf/db', 'exec', 'node', './scripts/dev-preview-migrate-deploy.mjs']);
+  assert.deepEqual(PREVIEW_INIT_STEPS[3].args, ['--filter', '@dpf/db', 'exec', 'tsx', 'src/sanitized-clone.ts']);
   assert.equal(override.services['dev-init'].volumes[0].source, identity.worktree);
   assert.equal(override.services['dev-portal'].volumes[0].source, identity.worktree);
 });
