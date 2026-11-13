@@ -16,8 +16,10 @@ admitted right needed inside the writer. It must not create that right either.
 The coordinator separated this corrective deliverable under the operator's
 standing repair authorization and decision DI-B33573A0E133. This is owner scope
 input, not independent design approval, a scope baseline, or implementation
-permission. Normal design admission is IRD-8B6B517FFDDC. Funding ownership remains
-unresolved; no paid review is authorized by this document.
+permission. Normal design admission is IRD-8B6B517FFDDC. The item-specific
+operator organization shared-platform refactor funding binding executed on November 12;
+normal provider, allowance and review-admission controls still apply. This
+document does not authorize a paid dispatch.
 
 ## Observed current source
 
@@ -210,14 +212,43 @@ uncertain reviewer tasks.
 
 ## Current verification status and stop condition
 
-Design-only source inspection and normal design admission are complete. The
+Design source inspection and normal design admission are complete. The
 existing token, transport-auth and adapter grant/capability suites passed: 47
 tests across three suites on the unchanged base. They are baseline controls,
 not a failing-then-passing proof of this repair. Document index, links and
 whitespace checks passed. Managed dependency bootstrap reports compile-ready.
 
-The isolated regression, product changes, typechecks, runtime verification,
-reviews, PR and deployment are unrun. The draft is linked to the live item,
-which was normally triaged build/medium. Stop a denied admission or scope
-operation; report its exact remedy. Never repair a frozen agreement by editing
-stored JSON. Paid review remains held pending recorded funding ownership.
+### Executed source reproduction (November 12)
+
+The normally admitted test path is
+`apps/web/lib/routing/native-session-authority.test.ts`. On design head
+`d3c6d2bff8b93fa2c027ac3e222eaddd90bcb86d`, whose product source remains
+`95d9746940171a45af9f6bed76208e2e4ab07742`, the isolated regression executed:
+**one failed, two passed**. Its real writer-only CLI adapter stages the signed
+MCP token; the real verifier, authentication boundary and tools/list accept the
+writer. Calling that writer reaches the real governed nested dispatcher, which
+refuses its immutable reader because the producer omitted originally admitted
+`file_read`. This is the assertion failure, not an import or provider failure.
+
+Two causal controls pass: supplying the originally admitted reader grant in an
+ordinary token lets the same nested dispatcher reach synthetic immutable-source
+IO, while a native session without admitted reader authority remains denied.
+The passing control isolates the grant-loss cause; it is not a repaired producer
+or a product GREEN. The fixture uses synthetic signing material and identities;
+process/provider, persistence, source IO and governance preflight/authority-input
+seams are isolated. It does not prove full live task/source/revocation behavior.
+
+The actual command was `node scripts/host-resource-runner.mjs --class vitest --
+pnpm --filter web exec vitest run lib/routing/native-session-authority.test.ts
+--maxWorkers=1`. Existing resumer execution under `NPEL-F2FF00407E` /
+`TR-NONPROD-80492191B978A20EC06A845E` finished at 04:56:37 UTC on November 13.
+Earlier harness import and synthetic CLI-envelope failures are retained as
+harness failures, not counted as product RED. The preceding queued run settled
+before this changed-source run was requested; no duplicate runner was started.
+
+Product changes, product GREEN, current typechecks, full negative controls,
+runtime verification, independent reviews, PR and deployment remain unrun. The
+draft is linked to the live build/medium item. Record author research and obtain
+normal implementation admission and product-path claims before production
+edits. Stop a denied admission or scope operation and follow its exact remedy.
+Never repair a frozen agreement by editing stored JSON.
