@@ -5,6 +5,7 @@ import {
   PROMOTER_DOCKERFILE,
   stageMinimalPromoterBuildContext,
 } from "./promoter-build-context";
+import { retryOnTransientNetwork, summarizeBuildOutput } from "./transient-network";
 
 export const SELF_UPGRADE_CALLER_PROTOCOL_VERSION = 2;
 export const PROMOTER_CONTRACT_SCHEMA_VERSION = 1;
@@ -45,8 +46,11 @@ function requireDockerSuccess(result: ArtifactDockerResult, operation: string): 
   return result.stdout;
 }
 
+const CANDIDATE_BUILD_NETWORK_ATTEMPTS = 3;
+const CANDIDATE_BUILD_NETWORK_RETRY_DELAY_MS = 15_000;
+
 export async function buildCandidatePromoterArtifactImage(
-  params: { sourcePath: string; targetSha: string; promoterImage?: string },
+  params: { sourcePath: string; targetSha: string; promoterImage?: string; networkRetryDelayMs?: number },
   runDocker: ArtifactDockerRunner,
 ): Promise<string> {
   if ((params.promoterImage?.trim() || DEFAULT_PROMOTER_IMAGE) !== DEFAULT_PROMOTER_IMAGE) {
@@ -65,13 +69,28 @@ export async function buildCandidatePromoterArtifactImage(
   // instead of the portal's baked-in /promoter/ layout.
   const contextDir = await stageMinimalPromoterBuildContext(params.sourcePath);
   try {
-    requireDockerSuccess(await runDocker([
+    // A network blip during the base-image pull or `apk add` must not fail the
+    // upgrade (BI-7FFF5CB0); only network-caused failures are retried.
+    const result = await retryOnTransientNetwork(() => runDocker([
       "buildx", "build", "--load",
       "-f", join(contextDir, PROMOTER_DOCKERFILE), "-t", targetImage,
       "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${params.targetSha}`,
       "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=${contractDigest}`,
       contextDir,
-    ]), "promoter_candidate_build");
+    ]), {
+      failed: (r) => r.exitCode !== 0,
+      output: (r) => `${r.stderr}\n${r.stdout}`,
+      attempts: CANDIDATE_BUILD_NETWORK_ATTEMPTS,
+      baseDelayMs: params.networkRetryDelayMs ?? CANDIDATE_BUILD_NETWORK_RETRY_DELAY_MS,
+      onRetry: (attempt, cause) => console.warn(
+        `[self-upgrade] candidate promoter build hit a network failure (attempt ${attempt}/${CANDIDATE_BUILD_NETWORK_ATTEMPTS}); retrying: ${cause}`,
+      ),
+    });
+    if (result.exitCode !== 0) {
+      // Keep the cause lines, not a blind tail: a 500-char tail reduced
+      // SUR-FF879116's apk network error to "ty.".
+      throw new Error(`promoter_candidate_build_failed: ${summarizeBuildOutput(`${result.stderr}\n${result.stdout}`)}`);
+    }
   } finally {
     await rm(contextDir, { recursive: true, force: true });
   }
