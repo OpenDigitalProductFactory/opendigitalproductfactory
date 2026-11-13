@@ -13075,6 +13075,7 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
+        "identify-your-account",
         "two-tier-role-architecture",
         "tier-1-platform-governance-roles",
         "tier-2-business-model-roles",
