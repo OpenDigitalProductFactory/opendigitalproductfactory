@@ -11,6 +11,7 @@
 import {
   FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX,
   hasFederatedWorkOriginMarker,
+  type FederatedWorkClaimHolderV1,
 } from "@dpf/db/federated-work-contract";
 
 const ORIGIN_MARKER = /\[origin:([^:\]\r\n]+):([^\]\r\n]+)\]/g;
@@ -25,7 +26,13 @@ export const TWIN_TERMINAL_STATUSES = ["done", "retired", "deferred"] as const;
 /** The activity kind recording a twin on this install's own item. */
 export const FEDERATED_TWIN_ACTIVITY_KIND = "federated_twin";
 
-export type FederatedWorkClaim = { active: boolean; since: string | null; workrooms: number };
+export type FederatedWorkClaim = {
+  active: boolean;
+  since: string | null;
+  workrooms: number;
+  /** Who holds the claim at the item's home, when the home publishes it (BI-30EDDB7F). */
+  holder?: FederatedWorkClaimHolderV1 | null;
+};
 
 export type TwinCandidate = {
   id: string;
@@ -103,13 +110,21 @@ export function claimFromMirrorPayload(payload: unknown): FederatedWorkClaim | n
   if (!payload || typeof payload !== "object") return null;
   const claim = (payload as { claim?: unknown }).claim;
   if (!claim || typeof claim !== "object") return null;
-  const { active, since, workrooms } = claim as Record<string, unknown>;
+  const { active, since, workrooms, holder } = claim as Record<string, unknown>;
   if (typeof active !== "boolean") return null;
   return {
     active,
     since: typeof since === "string" ? since : null,
     workrooms: typeof workrooms === "number" && Number.isInteger(workrooms) && workrooms >= 0 ? workrooms : 0,
+    holder: holderFromPayload(holder),
   };
+}
+
+function holderFromPayload(value: unknown): FederatedWorkClaimHolderV1 | null {
+  if (!value || typeof value !== "object") return null;
+  const { installationId, workroomId, leaseExpiresAt } = value as Record<string, unknown>;
+  if (typeof installationId !== "string" || typeof workroomId !== "string") return null;
+  return { installationId, workroomId, leaseExpiresAt: typeof leaseExpiresAt === "string" ? leaseExpiresAt : null };
 }
 
 // ─── Loaders ────────────────────────────────────────────────────────────────

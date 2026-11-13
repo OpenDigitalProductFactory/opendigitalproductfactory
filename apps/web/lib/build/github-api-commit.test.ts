@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildTreeFileReader,
+  extractNewFileContent,
   createBranchAndPR,
   openPullRequest,
   publishBranchCommit,
@@ -389,5 +390,54 @@ describe("buildTreeFileReader", () => {
     expect(await read("../etc/passwd")).toBeNull();
     expect(await read("/etc/passwd")).toBeNull();
     expect(exec).not.toHaveBeenCalled();
+  });
+});
+
+describe("BI-F31DB5F8: a change is published whole or not at all", () => {
+  const REAL_DIFF = `diff --git a/src/new.ts b/src/new.ts
+new file mode 100644
+index 000000000..e5281b077
+--- /dev/null
++++ b/src/new.ts
+@@ -0,0 +1,2 @@
++export const a = 1;
++export const b = 2;
+diff --git a/src/old.ts b/src/old.ts
+index 1111111..2222222 100644
+--- a/src/old.ts
++++ b/src/old.ts
+@@ -1 +1 @@
+-export const x = 1;
++export const x = 2;
+`;
+
+  it("reads an added file out of a real git diff, index line and all", () => {
+    expect(extractNewFileContent(REAL_DIFF, "src/new.ts")).toBe("export const a = 1;\nexport const b = 2;\n");
+    expect(extractNewFileContent(REAL_DIFF, "src/old.ts")).toBeNull();
+  });
+
+  it("publishes nothing when one changed file cannot be read", async () => {
+    const { calls } = setupFetchMock();
+    await expect(
+      publishBranchCommit({
+        headOwner: "o", headRepo: "r", branchName: "dpf/x", commitMessage: SIGNED_COMMIT_MESSAGE,
+        diff: REAL_DIFF, token: "t",
+        readFile: async () => null,
+      }),
+    ).rejects.toThrow(/src\/old\.ts could not be read/);
+    expect(calls.some((c) => c.url.endsWith("/git/trees") || c.url.endsWith("/git/commits") || c.url.endsWith("/git/refs"))).toBe(false);
+  });
+
+  it("reads from the build branch when the worktree cannot answer", async () => {
+    const exec = vi.fn(async (_containerId: string, command: string) => {
+      if (command.includes("'/workspace/.builds/FB-1'")) throw new Error("not a git repository");
+      return Buffer.from("from branch\n", "utf-8").toString("base64");
+    });
+    const read = buildTreeFileReader({
+      containerId: "c", workdir: "/workspace/.builds/FB-1", exec,
+      branchFallback: { repoDir: "/workspace", branch: "build/FB-1" },
+    });
+    expect(await read("src/a.ts")).toBe("from branch\n");
+    expect(exec.mock.calls[1]![1]).toContain("git -C '/workspace' cat-file -e 'refs/heads/build/FB-1:src/a.ts'");
   });
 });

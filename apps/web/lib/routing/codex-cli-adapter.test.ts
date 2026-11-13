@@ -652,3 +652,60 @@ describe("governed read-only Codex MCP transport", () => {
     expect(mockExecAsync.mock.calls.some(([cmd])=>cmd.includes("test-session-secret"))).toBe(false);
   });
 });
+
+// BI-F7D06E2D — a production install, 2026-11-12 14:10 CST, TR-SCHED-AB4EF624. The
+// marketing run on codex/gpt-5.6-luna emitted get_marketing_summary as text
+// JSON in 37 s. The next turn ran 120 s inside `codex exec`, which still had
+// its own shell, apps, plugins, browser and computer-use tools, and ended:
+// "the campaign action controls were unavailable". The platform tools exist
+// only as described JSON, so every native agent tool is a place to look for
+// them and not find them. Text-tool mode now runs codex as inference only,
+// the way the bound read transport already does.
+describe("codex text-tool mode runs codex as inference only", () => {
+  async function runTextToolTurn() {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "test-provider-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{ path: string; content: string }> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({ path: args.at(-1)!, content: Buffer.from(data, "base64").toString("utf8") }); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else process.nextTick(() => { proc.stdout.emit("data", Buffer.from("done")); proc.emit("close", 0); });
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await codexCliAdapter.execute(makeRequest({
+      messages: [
+        { role: "user", content: "Advance the current campaign." },
+        { role: "assistant", content: '{"type":"tool_use","id":"s1","name":"get_marketing_summary","input":{}}', toolCalls: [{ id: "s1", name: "get_marketing_summary", arguments: {} }] },
+        { role: "tool", content: '{"draftable":[{"assetTaskId":"t1"}]}', toolCallId: "s1" },
+      ],
+      tools: ["get_marketing_summary", "draft_marketing_asset"].map((name) => ({ type: "function", function: { name, parameters: { type: "object", properties: {} } } })),
+    }));
+    return {
+      runner: writes.find((w) => w.content.includes("const config ="))!.content,
+      prompt: writes.find((w) => w.path.endsWith("-prompt.txt"))!.content,
+    };
+  }
+
+  it("switches off codex's own agent tools, so the described tools are the only way to act", async () => {
+    const { runner } = await runTextToolTurn();
+    for (const feature of ["shell_tool", "unified_exec", "apps", "plugins", "browser_use", "computer_use", "multi_agent", "goals", "hooks", "image_generation"]) {
+      expect(runner).toContain(`features.${feature}=false`);
+    }
+    expect(runner).toContain('web_search=\\"disabled\\"');
+    expect(runner).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(runner).toContain("read-only");
+  });
+
+  it("ends the prompt by asking for the next turn: one tool_use object or the final answer", async () => {
+    const { prompt } = await runTextToolTurn();
+    expect(prompt.trimEnd()).toMatch(/Your turn: output the next tool_use JSON object, or your final answer\.$/);
+    expect(prompt).toMatch(/run by the platform when you output that JSON/);
+  });
+});
