@@ -225,3 +225,13 @@ describe("readPrFollowThrough", () => {
     expect(readPrFollowThrough({ hold: "bogus", failing: "x", attempts: 3 })).toEqual(createPrFollowThrough());
   });
 });
+
+describe("decidePrFollowThrough ignores non-required checks (BI-D081EDD0)", () => {
+  it("does not repair or re-run a red check branch protection does not require", () => {
+    const decision = decide({
+      checks: [{ ...failing("Unit Tests", "FAILURE", 7), required: true }, { ...failing("Analyze (go)", "FAILURE", 8), required: false }],
+      authority: "record",
+    });
+    expect(decision.followThrough.failing.map((check) => check.name)).toEqual(["Unit Tests"]);
+  });
+});
