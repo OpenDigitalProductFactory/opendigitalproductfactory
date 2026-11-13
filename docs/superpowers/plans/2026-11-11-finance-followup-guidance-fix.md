@@ -58,3 +58,35 @@ Production/test typechecks, application boundaries, style and whitespace checks
 pass. The existing documentation index is fresh without a generated-file change.
 Independent review, canonical integration, protected publication, deployment and
 served useful-answer acceptance remain pending.
+
+## Served follow-up: authorized workflow evidence
+
+PR6955 supplied the shared catalog text, but the served 6d1 guidance-only turn
+TR-CHAT-e0a0901901bab3aab6d5e867896d785c still failed. Its exact diagnostic
+artifact retained two withheld native-workflow drafts; no assistant answer was
+published. The shared authorized-surface seam was not grounded for Finance:
+the registry covered Discovery Operations and Response Feedback only.
+
+Reuse that surface contract for static personal expense workflow guidance on
+the Finance overview and personal entry routes. Share the form's existing
+translation catalog; authorize the current human's Finance capability before
+opening or rehydrating the contract. Do not query or assert employee linkage,
+claim status, balances or totals. No actions are added to this guidance surface.
+
+1. Add failing registry/grounding regressions for the actual guidance question,
+   revoked or inactive human access, unavailable context, live-value and mixed
+   requests, and imperative submission. Existing surfaces retain their behavior.
+2. Register the Finance workflow surface and narrowly qualify expense workflow
+   questions at the existing shared seam. Static guidance must not make a request
+   for live financial values tool-free. Preserve generic evidence enforcement,
+   principal filtering, and the action tool path.
+3. Run affected tests and both web typechecks, independent review, canonical
+   verification and normal protected publication. Coordinate deployment with
+   the release owner, then verify a newly authorized guidance turn and reload.
+   Never replay either original failed turn or use withheld drafts as answers.
+
+This continuation uses WC-589473AF / codex/finance-authorized-guidance. The
+first normal claim after successful SUR-DD81F176 preceded retirement evidence
+publication and failed. After actual publication, the same ordinary plan-path
+claim succeeded. This is current admission, not restart-continuity acceptance.
+The separate falsely responded system-output artifact belongs to BI-D0D2FF0D.
