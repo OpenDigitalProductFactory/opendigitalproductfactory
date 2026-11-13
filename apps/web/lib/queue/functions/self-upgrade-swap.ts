@@ -21,7 +21,7 @@ import {
 } from "@/lib/self-upgrade/preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
-import { completeRun, failRun, getRun, recordPromoterReadiness, recordRunRecoveryPoint, recordReassessmentCompatibility, type SelfUpgradeRunRow } from "@/lib/self-upgrade/run-store";
+import { completeRun, failRun, getRun, recordMigrationHandoffLaunchStamp, recordPromoterReadiness, recordRunRecoveryPoint, recordReassessmentCompatibility, type SelfUpgradeRunRow } from "@/lib/self-upgrade/run-store";
 import { resumedSwapAlreadyLanded } from "@/lib/self-upgrade/landed-swap-identity";
 import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
@@ -188,8 +188,19 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     return finishFailure(refreshed.reason, { reason: "installer-state-repair-required", excerpt: refreshed.reason });
   }
   if (refreshed.data.refreshed) console.warn(`[self-upgrade] ${runId}: install-state handoff re-bound after the drain (${refreshed.data.code})`);
-  if (refreshed.data.restamped) console.log(`[self-upgrade] ${runId}: install-state handoff re-stamped at launch; valid until ${refreshed.data.expiresAt}`);
   const migrationHandoff = refreshed.data.migrationHandoff;
+  if (refreshed.data.restamped && migrationHandoff) {
+    console.log(`[self-upgrade] ${runId}: install-state handoff re-stamped at launch; valid until ${refreshed.data.expiresAt}`);
+    // The promoter verifies THIS handoff; the readiness evidence still holds the
+    // one signed before the drain. Record the launch stamp so a run's evidence
+    // shows the window the promoter saw (SUR-4DC82F3C was read from that field).
+    const readiness = refreshed.data.refreshed ? undefined : ctx.migrationHandoff?.envelope;
+    await recordMigrationHandoffLaunchStamp(runId, {
+      migrationHandoff,
+      ...(readiness ? { readinessWindow: { issuedAt: readiness.issuedAt, expiresAt: readiness.expiresAt } } : {}),
+      ...(refreshed.data.code ? { reboundFor: refreshed.data.code } : {}),
+    });
+  }
   const resolvedPromoterDigest = refreshed.data.resolvedPromoterDigest;
 
   let result: { exitCode: number; stdout: string; stderr: string };

@@ -45,6 +45,7 @@ import {
   startRun,
   completeRun,
   recordPromoterReadiness,
+  recordMigrationHandoffLaunchStamp,
   recordReassessmentCompatibility,
   recordRunRecoveryPoint,
   sanitizePromoterReadinessReport,
@@ -83,6 +84,17 @@ describe("self-upgrade evidence merging", () => {
     await recordPromoterReadiness("SUR-1", report);
     const evidence = mocks.update.mock.calls[0][0].data.completionEvidence;
     expect(evidence).toMatchObject({ recoveryPoint: { status: "ok" }, rollback: { status: "ok" }, future: 42, readiness: { stage: "preflight", result: "failed", attempts: [{ result: "ready", completedAt: "earlier", failureCodes: [] }] } });
+  });
+
+  it("records the launch-stamped handoff beside readiness and leaves every other key alone (BI-2074D622)", async () => {
+    const signed = { envelope: { runId: "SUR-1", issuedAt: "2026-11-05T04:41:35Z", expiresAt: "2026-11-05T04:51:35Z", sourceHash: "a".repeat(64) }, signature: "readiness-sig" };
+    const launched = { envelope: { ...signed.envelope, issuedAt: "2026-11-05T04:51:31Z", expiresAt: "2026-11-05T05:01:31Z" }, signature: "launch-sig" };
+    mocks.findUnique.mockResolvedValue({ completionEvidence: { readiness: { result: "ready", migrationHandoff: signed, attempts: [] }, recoveryPoint: { status: "ok" }, future: 42 } });
+    await recordMigrationHandoffLaunchStamp("SUR-1", { migrationHandoff: launched, readinessWindow: { issuedAt: signed.envelope.issuedAt, expiresAt: signed.envelope.expiresAt } });
+    expect(mocks.update.mock.calls[0][0].data.completionEvidence).toEqual({
+      recoveryPoint: { status: "ok" }, future: 42,
+      readiness: { result: "ready", attempts: [], migrationHandoff: launched, launchStamp: { restampedAt: "2026-11-05T04:51:31Z", expiresAt: "2026-11-05T05:01:31Z", readinessWindow: { issuedAt: "2026-11-05T04:41:35Z", expiresAt: "2026-11-05T04:51:35Z" } } },
+    });
   });
 
   it("preserves readiness when the recovery point is recorded", async () => {
