@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render as rtlRender, screen } from "@testing-library/react";
+import { namespaceMessages } from "@dpf/i18n";
+import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // BI-6ED89EC6: the one standing place to turn upstream feedback on. It saves
@@ -8,7 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { mockSet } = vi.hoisted(() => ({ mockSet: vi.fn() }));
 vi.mock("@/lib/actions/feedback-escalation", () => ({ setUpstreamFeedbackOptIn: mockSet }));
 
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { UpstreamFeedbackSettings, UPSTREAM_FEEDBACK_ANCHOR } from "@/components/admin/UpstreamFeedbackSettings";
+
+const render = (ui: ReactElement) => rtlRender(
+  <MessagesProvider locale="en-US" messages={{ admin: namespaceMessages("en-US", "admin") }}>{ui}</MessagesProvider>,
+);
 
 afterEach(() => cleanup());
 
@@ -25,7 +32,7 @@ describe("UpstreamFeedbackSettings", () => {
 
   it("says plainly that nothing leaves while it is off, and what is sent when it is on", () => {
     render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} />);
-    expect(screen.getByText(/Off — nothing leaves this installation/)).toBeTruthy();
+    expect(screen.getByText(/Off\. Nothing leaves this installation/)).toBeTruthy();
     expect(screen.getByText(/redacted and sent under this installation's pseudonym/)).toBeTruthy();
   });
 

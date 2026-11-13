@@ -376,5 +376,21 @@
     "save": "Save allowance",
     "saving": "Saving...",
     "saved": "Saved"
+  },
+  "upstreamFeedback": {
+    "pageTitle": "Admin",
+    "pageSubtitle": "Upstream feedback",
+    "heading": "Send problems found here to the project team",
+    "explanation": "On: once a day, problems this installation has already triaged are sent to the project team so they can be fixed and voted on by other installations. Each report is redacted and sent under this installation's pseudonym, never a person's name. Nothing is sent while this is off.",
+    "switchLabel": "Upstream feedback",
+    "stateOn": "On. Triaged problems are sent daily.",
+    "stateOff": "Off. Nothing leaves this installation.",
+    "reasonPrivate": "This installation keeps everything on its own system, so nothing can be sent.",
+    "reasonPaused": "Contributions are paused for this installation, which overrides this switch.",
+    "reasonNoAuthority": "Only someone who manages the platform can change this.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveFailed": "Could not save. Try again."
   }
 }
