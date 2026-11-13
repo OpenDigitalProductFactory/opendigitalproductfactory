@@ -35,7 +35,7 @@ import { isSideEffectingGrant } from "./grant-capability";
 import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./cli-usage";
 import { providerSetupLocation } from "@/lib/ai-provider-routes";
 import { randomUUID } from "node:crypto";
-import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
+import { canonicalWorkroomToolName } from "@/lib/shared/workroom-tool-aliases";
 import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
 import { observeCliProcess } from "./cli-process-observation";
 import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
