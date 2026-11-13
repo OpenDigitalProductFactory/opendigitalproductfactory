@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Saved Build Studio proof without an execution provider
 
 BI-9F057CA8 · WC-9E4DD327 · Small, one atomic revert.
@@ -61,3 +65,12 @@ fixtures and the separately tracked reload cause are outside this repair.
 
 No migration or data rewrite is required. Revert this atomic presentation change
 through protected delivery if acceptance fails; preserve existing saved records.
+
+## Design choice
+
+DI-A96411492A3F compared propagating an unavailable-execution flag through the
+full studio with an isolated reader composed from native reporting and proof
+components. The latter was autonomy-eligible with high confidence; the agent
+recorded that choice. This decision is not a rendered UX measurement or critique.
+The new reader initializes its own measured prose ceiling; all existing copy
+ceilings and route budget limits remain unchanged.

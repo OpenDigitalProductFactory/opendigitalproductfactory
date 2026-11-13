@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "decidedOption": "isolated-native-saved-reader",
+  "decisionInteractionId": "DI-A96411492A3F",
+  "scope": {
+    "files": [
+      "apps/web/components/build/SavedBuildReader.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["guard-existing-studio", "isolated-native-saved-reader"]
+  },
+  "rationale": "The recorded autonomy-eligible, high-confidence platform decision selected the isolated native reader over propagating readOnly through the full execution shell. Both options retain existing data and authority. The selected composition reuses DataTable, DetailsDrawer and ReviewPanel while keeping mutation/inference effects unmounted and setup progressively disclosed. Scores are ordinal engineering estimates, not measured UX results.",
+  "verification": "26 affected tests across five suites and both web typechecks pass on local committed source d5ebc489. Normal shared preview is queued with its original durable consumer. Rendered measurements, advisory UX engagement CE-8C8F5950, independent source review, protected delivery and served acceptance remain pending. No baseline or numeric limit is changed."
+}
