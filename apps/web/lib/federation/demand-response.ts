@@ -61,12 +61,23 @@ function responseId(
     .digest("hex")}`;
 }
 
+/** The weight a stored response carries; absent means 1. */
+export function responseWeight(payload: unknown): number | null {
+  if (!payload || typeof payload !== "object") return null;
+  const envelope = (payload as { envelope?: { weight?: unknown }; response?: { weight?: unknown } }).envelope
+    ?? (payload as { response?: { weight?: unknown } }).response;
+  if (!envelope) return null;
+  return typeof envelope.weight === "number" ? envelope.weight : 1;
+}
+
 export async function queueDemandResponse(
   db: DemandResponseDb,
   input: {
     mirrorId: string;
     kind: DemandResponseKind;
     message?: string;
+    /** Interest weight, 1..DEMAND_RESPONSE_MAX_WEIGHT (BI-626A4ECA). 1 is written as absent. */
+    weight?: number;
     identity: FederationIdentity;
     now?: Date;
   },
@@ -92,7 +103,13 @@ export async function queueDemandResponse(
       },
     },
   });
-  if (existing?.syncStatus === "synced") return { action: "noop", responseId: id };
+  // BI-626A4ECA: a re-weight REPLACES the earlier vote, so an already-sent
+  // response is a no-op only when its weight has not changed. Before weights
+  // existed, any sent response was a no-op — which would have silently swallowed
+  // every correction a voter made.
+  const weight = input.kind === "interest" && input.weight && input.weight > 1 ? input.weight : undefined;
+  const sentWeight = responseWeight(existing?.payload);
+  if (existing?.syncStatus === "synced" && sentWeight === (weight ?? 1)) return { action: "noop", responseId: id };
   const createdAt = (input.now ?? new Date()).toISOString();
   const response: DemandResponseV1 = {
     specVersion: "dpf.demand-response/1",
@@ -102,6 +119,7 @@ export async function queueDemandResponse(
     originRecordRef: demand.envelope.originRecordRef,
     responseKind: input.kind,
     ...(input.message?.trim() ? { message: input.message.trim().slice(0, 1_000) } : {}),
+    ...(weight ? { weight } : {}),
     responderAttribution: "organization",
     createdAt,
     payloadDigest: "sha256:pending",
@@ -113,7 +131,14 @@ export async function queueDemandResponse(
   const data = {
     syncStatus: "pending",
     version: (input.now ?? new Date()).getTime(),
-    payload: { envelope: response, activity, eventId: id, queuedAt: createdAt },
+    // A distinct send gets a distinct CloudEvents id; the first send keeps the
+    // legacy id so nothing already delivered changes identity.
+    payload: {
+      envelope: response,
+      activity,
+      eventId: existing ? `${id}:${response.payloadDigest.slice(7, 23)}` : id,
+      queuedAt: createdAt,
+    },
     deadLetteredAt: null,
   };
   const mirrorId = existing?.mirrorId ?? `fdr_${id.slice(4, 28)}`;
@@ -139,7 +164,13 @@ export async function handleIncomingDemandResponse(
   linkId: string,
   response: DemandResponseV1,
   now = new Date(),
-): Promise<{ action: "created" | "noop" | "rejected"; responseId?: string; violations?: string[] }> {
+): Promise<{
+  action: "created" | "updated" | "noop" | "rejected";
+  responseId?: string;
+  /** The local item the response is about — what a vote tally recomputes. */
+  localRecordRef?: string | null;
+  violations?: string[];
+}> {
   const violations = validateDemandResponseV1(response);
   if (violations.length > 0) return { action: "rejected", violations };
   // Correlate the incoming response to the exact demand WE projected. Page the
@@ -168,7 +199,21 @@ export async function handleIncomingDemandResponse(
     },
   };
   const existing = await db.federatedRecordMirror.findUnique({ where });
-  if (existing) return { action: "noop", responseId: response.responseId };
+  if (existing) {
+    // BI-626A4ECA: the same responder re-weighting its vote arrives under the
+    // same response id. An identical payload is a replay; a different one is the
+    // voter's correction and replaces what was held. Ignoring it, as before,
+    // would freeze every vote at its first weight.
+    const held = (existing.payload as { response?: { payloadDigest?: string } } | null)?.response;
+    if (held?.payloadDigest === response.payloadDigest) {
+      return { action: "noop", responseId: response.responseId, localRecordRef: matchedEnvelope.localRecordRef };
+    }
+    await db.federatedRecordMirror.update({
+      where: { mirrorId: existing.mirrorId },
+      data: { payload: { response, receivedAt: now.toISOString() }, version: Number(existing.version ?? 1) + 1, lastSyncedAt: now },
+    });
+    return { action: "updated", responseId: response.responseId, localRecordRef: matchedEnvelope.localRecordRef };
+  }
   await db.federatedRecordMirror.create({ data: {
     mirrorId: `fdri_${response.responseId.slice(4, 28)}`,
     federationLinkId: linkId,
@@ -184,5 +229,5 @@ export async function handleIncomingDemandResponse(
     payload: { response, receivedAt: now.toISOString() },
     lastSyncedAt: now,
   } });
-  return { action: "created", responseId: response.responseId };
+  return { action: "created", responseId: response.responseId, localRecordRef: matchedEnvelope.localRecordRef };
 }

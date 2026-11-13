@@ -113,6 +113,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (response.action === "rejected") {
       return NextResponse.json({ ok: false, error: "invalid_demand_response", violations: response.violations }, { status: 422 });
     }
+    // BI-626A4ECA: a vote counts. The response is already stored durably, so a
+    // tally failure is logged and recomputed on the next vote — it never turns
+    // an accepted delivery into a refused one.
+    if ((response.action === "created" || response.action === "updated") && response.localRecordRef) {
+      try {
+        const { recordEcosystemVoteTally } = await import("@/lib/ecosystem/vote-tally");
+        await recordEcosystemVoteTally(prisma as never, response.localRecordRef);
+      } catch (err) {
+        console.warn(`[federation-demand] vote tally for ${response.localRecordRef} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     return accepted(response);
   }
 

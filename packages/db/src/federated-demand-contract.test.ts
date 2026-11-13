@@ -10,6 +10,7 @@ import {
   computeDemandResponseDigest,
   validateDemandEnvelopeV1,
   validateDemandResponseV1,
+  DEMAND_RESPONSE_MAX_WEIGHT,
   validateDemandDigestV1,
   type DemandDigestV1,
   type DemandEnvelopeV1,
@@ -203,6 +204,40 @@ describe("validateDemandResponseV1", () => {
       "field:not-allowed:workCapsuleId",
       "message:invalid",
     ]));
+  });
+
+  describe("weight (BI-626A4ECA)", () => {
+    const interest = (overrides: Partial<DemandResponseV1> = {}) =>
+      response({ responseKind: "interest", message: undefined, ...overrides });
+
+    it("accepts an interest with no weight — absent means 1", () => {
+      expect(validateDemandResponseV1(interest())).toEqual([]);
+    });
+
+    it("accepts a weighted interest up to the maximum", () => {
+      for (let weight = 2; weight <= DEMAND_RESPONSE_MAX_WEIGHT; weight++) {
+        expect(validateDemandResponseV1(interest({ weight }))).toEqual([]);
+      }
+    });
+
+    it("refuses an explicit 1, so the canonical form never changes an unchanged response's digest", () => {
+      expect(validateDemandResponseV1(interest({ weight: 1 }))).toContain("weight:invalid");
+    });
+
+    it("refuses an out-of-range or fractional weight", () => {
+      for (const weight of [0, DEMAND_RESPONSE_MAX_WEIGHT + 1, 2.5]) {
+        expect(validateDemandResponseV1(interest({ weight }))).toContain("weight:invalid");
+      }
+    });
+
+    it("refuses a weight on anything but an interest", () => {
+      expect(validateDemandResponseV1(response({ weight: 3 }))).toContain("weight:not-applicable");
+    });
+
+    it("binds the weight into the digest, so a re-weight is a different response", () => {
+      expect(computeDemandResponseDigest(interest({ weight: 3 })))
+        .not.toBe(computeDemandResponseDigest(interest({ weight: 2 })));
+    });
   });
 });
 

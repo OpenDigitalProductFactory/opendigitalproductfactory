@@ -148,20 +148,39 @@ export async function forwardFederatedDemandAction(input: {
 export async function respondToFederatedDemandAction(input: {
   mirrorId: string;
   kind: "interest" | "help-offer";
+  /** How much it matters, 1..4 (BI-626A4ECA). Omitted means 1. */
+  weight?: number;
 }): Promise<FederatedDemandShareResult> {
   await requireCapability("manage_backlog");
   try {
     const identity = await resolveFederationIdentity(prisma as unknown as FederationIdentityDb);
+    const mirrorId = input.mirrorId.trim();
+    const now = new Date();
+    // BI-626A4ECA: every interest spends this installation's weekly quadratic
+    // budget. An unaffordable vote is refused with its cost, never clamped or
+    // dropped — a voter who believes they voted, and did not, is worse off.
+    if (input.kind === "interest") {
+      const { castVote, ledgerFromOutboundVotes } = await import("@/lib/ecosystem/vote-budget");
+      const { outboundVotesFromResponses } = await import("@/lib/ecosystem/vote-tally");
+      const sent = await prisma.federatedRecordMirror.findMany({
+        where: { recordType: "demand-response", canonicalSide: "local" },
+        select: { localRecordRef: true, payload: true },
+      });
+      const ledger = ledgerFromOutboundVotes(identity.installationId, outboundVotesFromResponses(sent), now);
+      const decision = castVote(ledger, { ref: `response:${mirrorId}:interest`, weight: input.weight ?? 1 });
+      if (!decision.accepted) return { ok: false, error: decision.message };
+    }
     const result = await queueDemandResponse(
       prisma as unknown as DemandResponseDb,
       {
-        mirrorId: input.mirrorId.trim(),
+        mirrorId,
         kind: input.kind,
+        ...(input.kind === "interest" && input.weight ? { weight: input.weight } : {}),
         identity,
         ...(input.kind === "help-offer"
           ? { message: "Our organization can help investigate, reproduce, or validate this demand." }
           : {}),
-        now: new Date(),
+        now,
       },
     );
     revalidatePath(DEMAND_PATH);

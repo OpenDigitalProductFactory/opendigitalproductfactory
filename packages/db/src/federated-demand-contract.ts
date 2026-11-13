@@ -87,6 +87,13 @@ export interface DemandDigestV1 {
 export const DEMAND_RESPONSE_KINDS = ["interest", "help-offer"] as const;
 export type DemandResponseKind = (typeof DEMAND_RESPONSE_KINDS)[number];
 
+/**
+ * The heaviest an interest response may weigh (BI-626A4ECA). Each installation
+ * spends a quadratic per-week credit budget, so weight N costs N^2 credits; the
+ * budget itself is enforced by the voter, never by the wire.
+ */
+export const DEMAND_RESPONSE_MAX_WEIGHT = 4;
+
 export interface DemandResponseV1 {
   specVersion: "dpf.demand-response/1";
   responseId: string;
@@ -95,6 +102,13 @@ export interface DemandResponseV1 {
   originRecordRef: string;
   responseKind: DemandResponseKind;
   message?: string;
+  /**
+   * How much this interest matters to the responder, 1..DEMAND_RESPONSE_MAX_WEIGHT
+   * (BI-626A4ECA). ABSENT MEANS 1: weight 1 is never written, so every response
+   * sent before this field existed keeps its digest and nothing re-sends. Only an
+   * interest response carries a weight.
+   */
+  weight?: number;
   responderAttribution: DemandAttribution;
   createdAt: string;
   payloadDigest: string;
@@ -285,6 +299,17 @@ export function validateDemandResponseV1(value: unknown): string[] {
   }
   if (value.message !== undefined && (typeof value.message !== "string" || value.message.length > 1_000)) {
     violations.push("message:invalid");
+  }
+  if (value.weight !== undefined) {
+    if (value.responseKind !== "interest") violations.push("weight:not-applicable");
+    else if (
+      typeof value.weight !== "number"
+      || !Number.isInteger(value.weight)
+      // 1 is the absent canonical form; writing it would change the digest of an
+      // otherwise identical response.
+      || value.weight < 2
+      || value.weight > DEMAND_RESPONSE_MAX_WEIGHT
+    ) violations.push("weight:invalid");
   }
   if (!(DEMAND_ATTRIBUTIONS as readonly unknown[]).includes(value.responderAttribution)) {
     violations.push("responderAttribution:unsupported");
