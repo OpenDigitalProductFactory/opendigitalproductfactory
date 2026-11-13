@@ -22,6 +22,7 @@ import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { parseFrontmatter } from "../packages/db/src/seed-wiki-kernel";
 import { kernelWikiPageSlug } from "../packages/db/src/wiki-frontmatter";
+import { wikiEmbeddingDigest, wikiEmbeddingInput } from "../packages/db/src/wiki-embedding-digest";
 import type { WikiPageFrontmatter } from "../packages/db/src/seed-wiki-kernel";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -41,6 +42,7 @@ type EmbeddingRecord = {
   slug: string;
   vector: number[];
   model: string;
+  contentDigest: string;
 };
 
 function walkMarkdownFiles(dir: string): string[] {
@@ -91,11 +93,15 @@ async function main(): Promise<void> {
     const raw = readFileSync(file, "utf8");
     const { frontmatter, body } = parseFrontmatter<WikiPageFrontmatter>(raw);
     const slug = kernelWikiPageSlug(frontmatter, file, WIKI_DIR);
-    const text = `${frontmatter.title}\n\n${frontmatter.abstract ?? ""}\n\n${body}`;
+    // BI-F039D17A: embed exactly the text the runtime embeds, and record its
+    // digest, so the seed can tell whether a sidecar vector matches the page's
+    // current prose and the runtime reconcile treats it as current.
+    const page = { abstract: frontmatter.abstract ?? null, body };
+    const text = wikiEmbeddingInput(page);
 
     process.stdout.write(`  ${slug} … `);
     const vector = await generateEmbedding(text);
-    records.push({ slug, vector, model: EMBEDDING_MODEL });
+    records.push({ slug, vector, model: EMBEDDING_MODEL, contentDigest: wikiEmbeddingDigest(page) });
     process.stdout.write(`ok (${vector.length} dims)\n`);
   }
 

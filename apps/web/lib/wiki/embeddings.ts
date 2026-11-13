@@ -11,6 +11,11 @@
 // surfaces.
 
 import { VECTOR_COLLECTIONS, upsertVectors, searchSimilar, deleteVectors, prisma } from "@dpf/db";
+import {
+  WIKI_EMBEDDING_DIGEST_KEY,
+  wikiEmbeddingDigest,
+  wikiEmbeddingInput,
+} from "@dpf/db/wiki-embedding-digest";
 import { generateEmbedding } from "@/lib/inference/embedding";
 import type { CorpusReadScope } from "@/lib/tak/corpus-read-scope";
 
@@ -273,7 +278,9 @@ export async function searchWikiPagesLexically(
  * the silent-degradation pattern used by `recallRelevantContext`.
  */
 export async function storeWikiPage(input: StoreWikiPageInput): Promise<boolean> {
-  const embeddingInput = [input.abstract ?? "", input.body].filter(Boolean).join("\n\n");
+  // One definition of the embedded text, shared with the content digest that
+  // lets the reconcile detect a page whose prose changed (BI-F039D17A).
+  const embeddingInput = wikiEmbeddingInput(input);
   const truncated = embeddingInput.slice(0, MAX_EMBED_LENGTH);
   // Docker Model Runner may evict an idle embedding model. The first request is
   // the load-on-demand signal; retry exactly once so eviction self-heals while
@@ -306,6 +313,10 @@ export async function storeWikiPage(input: StoreWikiPageInput): Promise<boolean>
     organizationId: input.organizationId,
     kernelVersion: input.kernelVersion,
     kernelPageId: input.kernelPageId,
+    // BI-F039D17A: the digest of the text this vector was computed from. The
+    // reconcile re-embeds a page when its current digest differs, so a release
+    // that edits a page's prose cannot leave retrieval matching the old wording.
+    [WIKI_EMBEDDING_DIGEST_KEY]: wikiEmbeddingDigest(input),
     timestamp: new Date().toISOString(),
   };
 

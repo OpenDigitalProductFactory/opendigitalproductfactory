@@ -169,6 +169,8 @@ describe("assessAiCapacity", () => {
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]).toMatchObject({ cause: "usage-limit", retryAtIso: "2026-10-27T15:30:00.000Z" });
     expect(result.findings[0].explanation).toContain("2026-10-27 15:30 UTC");
+    // The title is what Needs-you and the handling strip show (BI-ACE041FE).
+    expect(result.findings[0].title).toBe("Codex has hit its usage limit until 2026-10-27 15:30 UTC");
   });
 
   it("raises one platform-level item when total usable capacity collapses", () => {
@@ -276,6 +278,13 @@ describe("assessAiCapacity from recorded capacity", () => {
     expect(subs?.explanation).toContain("Codex");
     expect(subs?.explanation).toContain("Claude subscription");
     expect(subs?.explanation).toContain("2026-10-28 18:00 UTC");
+  });
+
+  it("does not call subscriptions exhausted when they are only briefly rate limited", () => {
+    const soft = exhausted.map((p) => (p.subscription ? { ...p, capacity: { state: "rate_limited", retryAt: new Date(NOW.getTime() + 60_000) } } : p));
+    const result = assessAiCapacity({ rows: [], providers: soft, now: NOW, previouslyOpen: new Set() });
+    expect(result.findings.some((f) => f.issueKey === AI_CAPACITY_SUBSCRIPTIONS_KEY)).toBe(false);
+    expect(result.findings.some((f) => f.issueKey === aiCapacityProviderKey("codex"))).toBe(false);
   });
 
   it("does not raise the subscription item while one subscription still has capacity", () => {

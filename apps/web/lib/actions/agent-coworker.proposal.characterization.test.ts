@@ -368,6 +368,43 @@ describe("retained foreground production response publication", () => {
     expect(result).toMatchObject({ error: expect.stringContaining("Build Studio") });
   });
 
+  it("retains an empty local-model result as blocked work rather than a completed delegation", async () => {
+    const run = retainedTurn();
+    vi.mocked(getAvailableTools).mockResolvedValue([{ name: "read_fixture", description: "Read a synthetic fixture",
+      inputSchema: {}, requiredCapability: "view_platform", executionMode: "immediate", sideEffect: false }] as never);
+    vi.mocked(routeAndCall).mockResolvedValue({ content: "", providerId: "local", modelId: "fixture",
+      inputTokens: 1, outputTokens: 1, downgraded: false, downgradeMessage: null, routeDecision: {}, toolCalls: [] } as never);
+    const result = await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content: "Share it", routeContext: "/admin", acceptedUserMessageId: "user-msg-1" }));
+    expect(run.status).toBe("input-required");
+    expect(run.progressPayload).toMatchObject({ foregroundOutcome: "blocked", foregroundPublication: { kind: "blocked" } });
+    expect("agentMessage" in result && result.agentMessage.role).toBe("system");
+    const { createTaskArtifact } = await import("@/lib/tak/task-records");
+    expect(createTaskArtifact).not.toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ kind: "coworker-response" }),
+    }));
+    expect(governedExecuteTool).not.toHaveBeenCalled();
+  });
+
+  it("publishes preserved conversational advice as a response without claiming a stored business effect", async () => {
+    const run = retainedTurn("/customer/marketing");
+    const content = "Suggest an audience for this campaign. Do not save or publish anything.";
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content, taskRunId: "run-123", createdAt: new Date() });
+    vi.mocked(getAvailableTools).mockResolvedValue([{ name: "save_marketing_review", description: "Save advice",
+      inputSchema: {}, requiredCapability: "view_platform", executionMode: "immediate", sideEffect: true, coworkerArtifact: true }] as never);
+    vi.mocked(routeAndCall).mockResolvedValue({ content: "Here's your owner-operator segment profile: trades owners on Facebook groups. Let me create the campaign brief for you now.",
+      providerId: "openai", modelId: "fixture", inputTokens: 1, outputTokens: 1, downgraded: false, downgradeMessage: null, routeDecision: {}, toolCalls: [] } as never);
+    const result = await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content, routeContext: "/customer/marketing", acceptedUserMessageId: "user-msg-1" }));
+    expect(run.status).toBe("completed");
+    expect(run.progressPayload).toMatchObject({ foregroundOutcome: "responded", foregroundPublication: { kind: "responded" } });
+    expect("agentMessage" in result && result.agentMessage.role).toBe("assistant");
+    const { createTaskArtifact } = await import("@/lib/tak/task-records");
+    expect(createTaskArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ kind: "coworker-response", deliveryState: "responded",
+        acceptedMessageId: "agentMessage" in result ? result.agentMessage.id : "missing" }),
+    }));
+    expect(governedExecuteTool).not.toHaveBeenCalled();
+  });
+
   it.each([[true, false], [false, false], [true, true], [false, true]])("pins the accepted assignment once and marks older unanswered requests as context (window contains current: %s, unified: %s)", async (includesCurrent, unified) => {
     retainedTurn();
     vi.mocked(isUnifiedCoworkerEnabled).mockResolvedValue(unified);

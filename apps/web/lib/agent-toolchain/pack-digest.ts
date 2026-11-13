@@ -30,6 +30,8 @@ function isPerInstall(segments: readonly string[]): boolean {
   if (segments.length === 2 && segments[0] === ".codex-plugin" && segments[1] === "plugin.json") return true;
   // Where this copy was delivered from (BI-4F9E3221, spec row X15).
   if (segments.length === 1 && segments[0] === ".dpf-delivery.json") return true;
+  // The Claude declaration the updater writes per copy (BI-BDC94789).
+  if (segments.length === 1 && segments[0] === "toolchain-declaration.json") return true;
   // Root connector descriptors carry per-install endpoints and the declaration.
   return segments.length === 1 && segments[0]!.endsWith(".mcp.json");
 }

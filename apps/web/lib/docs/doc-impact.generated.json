@@ -1638,6 +1638,9 @@
     "apps/web/lib/voice-synthesis/tts-health-contract.test.ts": [
       "docs/operations/observability-coverage.md"
     ],
+    "apps/web/lib/wiki/embedding-reconciliation.ts": [
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
+    ],
     "apps/web/lib/wiki/enrich-org-corpus.ts": [
       "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
@@ -2124,6 +2127,10 @@
     "packages/db/src/table-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "packages/db/src/wiki-embedding-digest.ts": [
+      "docs/founder-kernel/AUTHORING.md",
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
     ],
     "packages/db/src/wiki-frontmatter.ts": [
       "docs/founder-kernel/AUTHORING.md"
@@ -2874,7 +2881,8 @@
     ],
     "scripts/portal-migrate-boot.sh": [
       "docs/architecture/data-model-stewardship-runbook.md",
-      "docs/architecture/enforced-ci-gates.md"
+      "docs/architecture/enforced-ci-gates.md",
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
     ],
     "scripts/pr-health.mjs": [
       "docs/testing/pr-health.md",
@@ -4042,6 +4050,7 @@
       "apps/web/lib/decision/golden-decisions.test.ts",
       "apps/web/lib/kernel/governing-principles.ts",
       "packages/db/src/seed-wiki-kernel.ts",
+      "packages/db/src/wiki-embedding-digest.ts",
       "packages/db/src/wiki-frontmatter.ts",
       "packages/db/src/wiki-taxonomy.ts",
       "scripts/build-kernel-embeddings.ts",
@@ -4057,6 +4066,11 @@
     ],
     "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md": [
       "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs"
+    ],
+    "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md": [
+      "apps/web/lib/wiki/embedding-reconciliation.ts",
+      "packages/db/src/wiki-embedding-digest.ts",
+      "scripts/portal-migrate-boot.sh"
     ],
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
