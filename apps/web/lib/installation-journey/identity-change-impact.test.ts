@@ -79,6 +79,31 @@ describe("normalizeIdentityDeclaration", () => {
 });
 
 describe("buildInstallationIdentityImpact", () => {
+  it("resolves each proposed peer's attested class instead of reusing the current peer", () => {
+    const current = { ...DEV_NOW, environmentClass: "production" as const, pairedProductionInstallationRef: "did-production" };
+    const result = buildInstallationIdentityImpact({
+      intent: DEV_INTENT, current, next: { ...current, pairedProductionInstallationRef: "did-development" },
+      host: { sourceCapable: true }, holdsIrreplaceableWork: true, estateName: "Our estate",
+      pairingLinks: [
+        { linkId: "a", linkState: "trusted", relationshipPreset: "same-organization", peerDeviceId: "did-production", peerLabel: "Our estate", peerEnvironmentClass: "production" },
+        { linkId: "b", linkState: "trusted", relationshipPreset: "same-organization", peerDeviceId: "did-development", peerLabel: "Our estate", peerEnvironmentClass: "development" },
+      ],
+    });
+    expect(result.stanceDeltas.find(d => d.stance === "peerWrite")).toMatchObject({ from: "Governed writes", to: "Read only", direction: "tightens" });
+    expect(result.stanceDeltas.find(d => d.stance === "relationship")).toMatchObject({ from: "None", to: "Authority" });
+    expect(result.stanceDeltas.find(d => d.stance === "workSync")).toMatchObject({ from: "Mirrored to the organization", to: "Mirrored to the organization" });
+  });
+
+  it("does not invent a mirror or peer authority without an eligible live link", () => {
+    const result = buildInstallationIdentityImpact({
+      intent: DEV_INTENT, current: DEV_NOW, next: { ...DEV_NOW, pairedProductionInstallationRef: "did-missing" },
+      host: { sourceCapable: true }, holdsIrreplaceableWork: true,
+      pairingLinks: [{ linkId: "revoked", linkState: "revoked", relationshipPreset: "same-organization", peerEnvironmentClass: "production" }],
+    });
+    expect(result.stanceDeltas.find(d => d.stance === "workSync")).toMatchObject({ from: "Nowhere to mirror", to: "Nowhere to mirror" });
+    expect(result.stanceDeltas.find(d => d.stance === "relationship")).toMatchObject({ from: "None", to: "None" });
+  });
+
   it("reports no material change when the identity is unchanged", () => {
     const result = impact({});
     expect(result.material).toBe(false);
