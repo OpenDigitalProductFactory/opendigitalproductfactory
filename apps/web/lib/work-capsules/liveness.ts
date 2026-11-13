@@ -24,6 +24,7 @@
 //   It is intentionally PURE (no DB, no clock of its own — `now` is injected) so
 //   it is exhaustively unit-testable.
 
+import { describeCapacityWait } from "./executor-capacity";
 import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
 import type { PrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 
@@ -147,6 +148,12 @@ export type CapsuleLivenessInput = {
   /** Independent durable execution state; provider/session flags cannot override it. */
   taskRun?: { status: string | null; updatedAt: Date | null } | null;
   durableWait?: { state: "queued" | "active"; signaledAt: Date | null } | null;
+  /**
+   * The executor's plan is limited and says when it may return (BI-53BED66C),
+   * from `executor-capacity.ts`. A lapsed lease then reads `paused` with that
+   * reason and is not reaped before the reset plus the normal grace.
+   */
+  capacityWait?: Pick<import("./executor-capacity").CapacityWait, "label" | "resetAt" | "alternatives"> | null;
   /**
    * Whether this capsule's work is DELIVERED, computed by the caller from a
    * verified provider observation or positive local git reachability — never an
@@ -365,6 +372,10 @@ export function classifyWorkCapsuleLiveness(
     const expired = elapsed >= 0;
     if (expired) {
       const age = humanAge(elapsed);
+      const wait = input.capacityWait;
+      if (wait && wait.resetAt.getTime() + pauseGraceMs > now.getTime()) {
+        return verdict("paused", `Lease expired ${age} ago. ${describeCapacityWait(wait)}`, input.leaseExpiresAt);
+      }
       if (elapsed <= pauseGraceMs) {
         return verdict(
           "paused",

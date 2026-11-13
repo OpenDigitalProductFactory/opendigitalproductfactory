@@ -82,10 +82,16 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
   // BI-62514632: the room's log from a position the caller already holds.
   const log = afterSequence === undefined ? null
     : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
+  // BI-53BED66C: a plan-limited executor's room says when it may return and who can take it now.
+  const capacity = await import("./executor-capacity");
+  const wait = capacity.capacityWaitFor({ executorKind: capsule.executorKind ?? null, leaseExpiresAt: capsule.leaseExpiresAt ?? null,
+    now: new Date(), providerRows: await capacity.loadProviderCapacityRows(prisma as never), checkpoint: capacity.checkpointOf(capsule.workspaceState) });
+  const capacityWait = wait ? { reason: capacity.describeCapacityWait(wait), executorKind: wait.executorKind, provider: wait.provider,
+    resetAt: wait.resetAt.toISOString(), source: wait.source, alternatives: wait.alternatives } : null;
   const message = `Loaded ${capsule.capsuleId}.`;
   const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, delivery: projectDeliveryAgreement({ workspaceState: capsule.workspaceState, currentObjective: capsule.objective, terminal: ["complete", "archived", "abandoned"].includes(capsule.status) }), recovery: projectWorkroomRecovery(capsule, reviews,
     recoveryItems.get(capsule.backlogItemId ?? "") ?? null, new Date(), failedHandoffRecovery), nestedCoordination, investment,
-    ...(ownedReviewRecovery ? { ownedReviewRecovery } : {}) },
+    ...(ownedReviewRecovery ? { ownedReviewRecovery } : {}), ...(capacityWait ? { capacityWait } : {}) },
     ...(log ? { log } : {}) }, value => !clampToolResultForModel({ success: true, message, data: value },
       { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP, toolName: "get_workroom" }).truncated);
   if (!data) return { success: false, error: "workroom_recovery_budget_exceeded",

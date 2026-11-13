@@ -154,6 +154,27 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
     return recordWorkCapsuleActivity(prisma as unknown as CapsuleDb, { workCapsuleId: roomId, kind, summary: summary.slice(0, 2000), payload, actor });
   }
 
+  /**
+   * BI-53BED66C: a turn that failed on the plan's usage limit says so on the
+   * room, with the provider's stated reset, so the room waits visibly and is
+   * offered to an unblocked executor instead of going quiet.
+   */
+  async function recordPlanLimit(entry: LiveSession, error: string | null) {
+    const [{ runtimePlanLimit, formatCentral }, { parseAbsoluteResetAt }] = await Promise.all([
+      import("@/lib/work-capsules/executor-capacity"), import("@/lib/routing/cli-limit-reset")]);
+    const limit = runtimePlanLimit(entry.provider, error, clock(), parseAbsoluteResetAt);
+    if (!limit) return;
+    if (limit.resetAt) {
+      const { heartbeatWorkCapsule } = await import("@/lib/work-capsules/workroom-lease");
+      await heartbeatWorkCapsule({ db: prisma as unknown as CapsuleDb, capsuleId: entry.capsuleId, actor: entry.actor, onHeldByOther: "keep",
+        checkpoint: { capacity: { provider: limit.provider, resetAt: limit.resetAt.toISOString() } } });
+    }
+    await log(entry.roomId, "error", limit.resetAt
+      ? `Plan limit reached on ${entry.provider}; expected back by ${formatCentral(limit.resetAt)} (may return sooner).`
+      : `Plan limit reached on ${entry.provider}; the provider gave no reset time.`,
+    { kind: "executor-plan-limit", provider: limit.provider, resetAt: limit.resetAt?.toISOString() ?? null }, runtimeActor(entry.actor));
+  }
+
   function enqueue(entry: LiveSession, write: () => Promise<unknown>) {
     entry.writes = entry.writes.then(write).catch((error: unknown) => {
       console.error("[workroom-runtime] log write failed for %s: %s", JSON.stringify(entry.capsuleId), error instanceof Error ? error.message : "unknown");
@@ -198,6 +219,7 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
           event.status === "failed" ? `Turn failed: ${event.error ?? "no detail"}` : `Turn ${event.status}.`,
           { turnId: event.turnId, status: event.status, provider: entry.provider }, runtimeActor(entry.actor)));
         enqueue(entry, () => patchSession(roomId, { lastHeartbeatAt: clock().toISOString() }));
+        if (event.status === "failed") enqueue(entry, () => recordPlanLimit(entry, event.error ?? null));
         void startNext(entry).catch(() => {});
         return;
       case "runtime-request": {

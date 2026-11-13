@@ -295,6 +295,12 @@ const definitions: ToolDefinition[] = [
             headSha: { type: "string", pattern: "^[0-9a-f]{40}$" },
             pushed: { type: "boolean" },
             openRisks: { type: "array", items: { type: "string" }, maxItems: 20 },
+            capacity: {
+              type: "object",
+              description: "Your plan's usage limit is reached or about to be: the provider and when it says access returns. The room then waits visibly and offers the work to an unblocked executor. Any later heartbeat supersedes it.",
+              properties: { provider: { type: "string" }, resetAt: { type: "string", format: "date-time" }, note: { type: "string" } },
+              required: ["provider", "resetAt"],
+            },
           },
         },
       },
