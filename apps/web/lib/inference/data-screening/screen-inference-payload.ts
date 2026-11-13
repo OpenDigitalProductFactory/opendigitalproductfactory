@@ -21,6 +21,7 @@ import type {
   SourceCodeProvenance,
 } from "./types";
 import { hasVerticalPolicyPacks } from "./vertical-policy-packs";
+import { isPublicSourceProvenance } from "./source-code-provenance";
 import { SENSITIVITY_RANK } from "./sensitivity-rank";
 
 const DEFAULT_ORGANIZATION_ID = "org:local-install";
@@ -165,8 +166,10 @@ export function screenInferencePayload(
   // 2026-08-12). A repository the caller has resolved outranks that label: code
   // from a repository that is private, or whose visibility could not be proven,
   // is never public, whatever the route calls the work (BI-FC94F754).
+  // The same predicate as the classifier, so a record that is not proven
+  // public (blank repository, any non-public visibility) never lowers code.
   const provenanceDeniesPublic = input.sourceCodeProvenance !== undefined &&
-    input.sourceCodeProvenance.visibility !== "public";
+    !isPublicSourceProvenance(input.sourceCodeProvenance);
   const routedPayloadSensitivity = prior
     ? "internal"
     : originalSensitivity === "development" &&

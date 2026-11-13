@@ -86,7 +86,7 @@ describe("source code is classified by its repository (BI-FC94F754)", () => {
   it("keeps private-repository code confidential even when the route calls it development work", () => {
     // Before BI-FC94F754 the `development` label alone lowered any code-only
     // payload to public, whichever repository the code came from.
-    for (const provenance of [PRIVATE_REPO, UNPROVEN_REPO]) {
+    for (const provenance of [PRIVATE_REPO, UNPROVEN_REPO, { repository: "  ", visibility: "public" as const }]) {
       const result = screen(PUBLIC_DIFF, {
         sourceCodeProvenance: provenance,
         routeContext: { sensitivity: "development" },
