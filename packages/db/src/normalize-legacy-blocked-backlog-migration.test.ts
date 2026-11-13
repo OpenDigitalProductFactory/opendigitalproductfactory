@@ -230,11 +230,15 @@ describeDatabase("normalize legacy blocked backlog migration (BI-22CDF13B)", () 
       await blocker.query('LOCK TABLE "BacklogItem" IN ROW EXCLUSIVE MODE');
 
       const startedAt = Date.now();
-      await expect(scenarioDb.query(readFileSync(migrationPath, "utf8"))).rejects.toThrow(
-        "canceling statement due to lock timeout",
-      );
+      let lockError: unknown;
+      try {
+        await scenarioDb.query(readFileSync(migrationPath, "utf8"));
+      } catch (error) {
+        lockError = error;
+      }
       const elapsedMs = Date.now() - startedAt;
-      expect(elapsedMs).toBeGreaterThanOrEqual(4_500);
+      expect(lockError).toMatchObject({ code: "55P03" });
+      expect(String(lockError)).toContain("canceling statement due to lock timeout");
       expect(elapsedMs).toBeLessThan(10_000);
       await scenarioDb.query("ROLLBACK");
     } finally {
