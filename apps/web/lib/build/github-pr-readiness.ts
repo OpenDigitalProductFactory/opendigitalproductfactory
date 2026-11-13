@@ -18,7 +18,20 @@ export type GithubCheckObservation = {
   detailsUrl?: string | null;
   /** The Actions workflow run behind a check run, so its failed jobs can be re-run. */
   workflowRunId?: number | null;
+  /**
+   * Whether branch protection requires this check for the PR (GitHub's isRequired).
+   * Absent when GitHub did not say; an unknown check is treated as required.
+   */
+  required?: boolean;
 };
+
+/**
+ * Only required checks decide whether a PR can merge, as in GitHub's merge
+ * queue (BI-D081EDD0). A check whose required-ness is unknown still counts.
+ */
+export function checkBlocksMerge(check: GithubCheckObservation): boolean {
+  return check.required !== false;
+}
 
 export type GithubPrObservation = {
   nodeId: string;
@@ -62,11 +75,14 @@ export function projectGithubPrReadiness(observation: GithubPrObservation): Gith
   if (!observation.checksComplete) {
     return { kind: "checking", headSha, reason: "checks-incomplete" };
   }
-  if (observation.checks.some((check) => check.status.toUpperCase() !== "COMPLETED")) {
+  // Non-required checks (for example GitHub's Code Quality scans) neither hold
+  // nor block a PR; GitHub's merge queue does not wait on them either.
+  const blocking = observation.checks.filter(checkBlocksMerge);
+  if (blocking.some((check) => check.status.toUpperCase() !== "COMPLETED")) {
     return { kind: "checking", headSha, reason: "checks-pending" };
   }
   if (
-    observation.checks.some(
+    blocking.some(
       (check) => !check.conclusion || !PASSING_CHECK_CONCLUSIONS.has(check.conclusion.toUpperCase()),
     )
   ) {
@@ -121,8 +137,8 @@ query DpfPullRequestReadiness($owner:String!,$name:String!,$number:Int!){
             statusCheckRollup {
               contexts(first:100) {
                 nodes {
-                  ... on CheckRun { name status conclusion detailsUrl checkSuite { workflowRun { databaseId } } }
-                  ... on StatusContext { context state targetUrl }
+                  ... on CheckRun { name status conclusion detailsUrl isRequired(pullRequestNumber:$number) checkSuite { workflowRun { databaseId } } }
+                  ... on StatusContext { context state targetUrl isRequired(pullRequestNumber:$number) }
                 }
                 pageInfo { hasNextPage }
               }
@@ -164,6 +180,7 @@ type ObservationQueryData = {
                   detailsUrl?: string | null;
                   targetUrl?: string | null;
                   checkSuite?: { workflowRun?: { databaseId?: number | null } | null } | null;
+                  isRequired?: boolean | null;
                 } | null>;
                 pageInfo?: { hasNextPage?: boolean };
               };
@@ -196,6 +213,7 @@ export async function observeGithubPullRequest(input: {
   const contexts = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts;
   const checks: GithubCheckObservation[] = (contexts?.nodes ?? []).flatMap((node) => {
     if (!node) return [];
+    const required = typeof node.isRequired === "boolean" ? { required: node.isRequired } : {};
     if (node.context) {
       const state = node.state ?? "UNKNOWN";
       return [{
@@ -204,6 +222,7 @@ export async function observeGithubPullRequest(input: {
         conclusion: state === "SUCCESS" ? "SUCCESS" : state,
         detailsUrl: node.targetUrl ?? null,
         workflowRunId: null,
+        ...required,
       }];
     }
     return [{
@@ -212,6 +231,7 @@ export async function observeGithubPullRequest(input: {
       conclusion: node.conclusion ?? null,
       detailsUrl: node.detailsUrl ?? null,
       workflowRunId: node.checkSuite?.workflowRun?.databaseId ?? null,
+      ...required,
     }];
   });
 
