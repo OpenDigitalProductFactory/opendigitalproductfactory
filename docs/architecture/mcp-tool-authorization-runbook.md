@@ -850,6 +850,12 @@ listing and calls before discovery loading. Narrowing a writer's presentation
 therefore neither drops its admitted nested-reader authority nor exposes that
 reader as a direct model tool. Current human, coworker, task, source and fence
 checks still apply. Missing original reader authority remains denied.
+Restricted sessions accept handshake, ping and constrained tool methods; the
+general Tasks submission and lifecycle endpoints cannot bypass that surface.
+After authentication, restricted GET requests return `405` with `Allow: POST`
+before opening the general task-status stream. The [Streamable HTTP transport
+specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#listening-for-messages-from-the-server)
+allows a server to decline the optional SSE stream with `405`.
 
 These restricted sessions use only `dpf-mcp-server-restricted-v1` as their scalar
 audience. A matching surface and captured task fence are mandatory; ordinary
