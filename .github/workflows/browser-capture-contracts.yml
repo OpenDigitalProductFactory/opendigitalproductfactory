@@ -28,6 +28,11 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build the production browser service for qualification
         run: docker build --tag dpf-browser-capture-qualification services/browser-use
+      - name: Record the unchanged qualification boundary
+        run: |
+          docker version --format '{{json .Server}}'
+          docker info --format '{{json .SecurityOptions}}'
+          docker image inspect dpf-browser-capture-qualification --format 'image={{.Id}} os={{.Os}} architecture={{.Architecture}}'
       - name: Exercise kernel denial, browser sandbox and complete cleanup
         # No credentials, profile mounts, Docker socket, privilege additions or
         # security-policy exceptions. This image never advances a live install.
@@ -35,4 +40,5 @@ jobs:
           docker run --rm --network none --cpus 1 --memory 1g --pids-limit 256 \
             --mount type=bind,src="${GITHUB_WORKSPACE}/services/browser-use/prototype_capture_linux_test.py",dst=/qualification/test_capture.py,readonly \
             --env PYTHONPATH=/app \
+            --env DPF_CAPTURE_QUALIFICATION=1 \
             dpf-browser-capture-qualification python /qualification/test_capture.py

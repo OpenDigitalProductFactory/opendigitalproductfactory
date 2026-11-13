@@ -97,6 +97,79 @@ else: raise AssertionError("inherited socket was accepted")
             left.close()
             right.close()
 
+    def test_namespace_readiness_under_unchanged_qualification_policy(self):
+        # This explicit harness marker is not an authority grant. The caller
+        # must already hold normal CI/nonprod admission. Never run this transient
+        # namespace experiment manually in the production browser container.
+        if os.environ.get("DPF_CAPTURE_QUALIFICATION") != "1":
+            raise RuntimeError("namespace probe requires the admitted qualification harness")
+        capture.qualify_resource_boundary()
+        from importlib.metadata import version
+        packages = subprocess.run(["dpkg-query", "--show", "--showformat=${binary:Package}=${Version}\n",
+            "chromium", "chromium-common", "chromium-sandbox", "libseccomp2"],
+            capture_output=True, text=True, timeout=3)
+        print("DPF_CAPTURE_PACKAGE_DIAGNOSTIC=" + json.dumps({
+            "python": sys.version.split()[0], "playwright": version("playwright"),
+            "packages": packages.stdout.splitlines(), "query_exit": packages.returncode,
+            "missing_packages": packages.stderr[:1000]}, sort_keys=True))
+        for guarded in (False, True):
+            code = "GUARDED = " + repr(guarded) + r'''
+import ctypes, errno, json, os, platform
+from pathlib import Path
+libc = ctypes.CDLL(None, use_errno=True)
+libc.prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+libc.prctl.restype = ctypes.c_int
+libc.unshare.argtypes = [ctypes.c_int]
+libc.unshare.restype = ctypes.c_int
+assert libc.getpid() == os.getpid()  # positive syscall/control-path check
+if GUARDED:
+    from prototype_capture_worker import install_transport_guard
+    install_transport_guard()
+else:
+    assert libc.prctl(38, 1, 0, 0, 0) == 0  # PR_SET_NO_NEW_PRIVS
+status = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines() if ":" in line)
+assert status["NoNewPrivs"].strip() == "1"
+assert status["Seccomp"].strip() == "2"  # require the existing filtered boundary
+assert int(status["CapEff"].strip(), 16) == 0
+ctypes.set_errno(0)
+unset = libc.prctl(38, 0, 0, 0, 0)
+unset_errno = ctypes.get_errno()
+assert unset == -1 and unset_errno == errno.EINVAL  # negative control: NNP cannot be removed
+assert libc.prctl(39, 0, 0, 0, 0) == 1
+def read(path):
+    try: return Path(path).read_text().strip()
+    except OSError as error: return {"unavailable_errno": error.errno}
+uid, gid, groups = os.geteuid(), os.getegid(), os.getgroups()
+assert uid == 10001 and gid == 10001 and groups == []
+before = os.readlink("/proc/self/ns/user")
+ctypes.set_errno(0)
+zero_result = libc.unshare(0)  # no namespace requested; never changes identity
+zero_errno = ctypes.get_errno()
+assert os.readlink("/proc/self/ns/user") == before
+ctypes.set_errno(0)
+result = libc.unshare(0x10000000)  # Linux UAPI CLONE_NEWUSER; no map/mount/network writes
+result_errno = ctypes.get_errno()
+after = os.readlink("/proc/self/ns/user")
+assert result in (0, -1)
+assert (after != before) if result == 0 else (after == before)
+print(json.dumps({"guarded": GUARDED, "uid_before": uid, "gid_before": gid, "groups": groups,
+    "uid_after": os.geteuid(), "no_new_privs": libc.prctl(39, 0, 0, 0, 0),
+    "seccomp": status["Seccomp"].strip(), "seccomp_filters": status.get("Seccomp_filters", "unavailable").strip(),
+    "effective_capabilities_before": status["CapEff"].strip(),
+    "nnp_unset_errno": unset_errno, "unshare_zero": {"result": zero_result, "errno": zero_errno},
+    "unshare_user": {"result": result, "errno": result_errno, "namespace_changed": after != before},
+    "kernel": platform.release(), "machine": platform.machine(),
+    "unprivileged_userns_clone": read("/proc/sys/kernel/unprivileged_userns_clone"),
+    "max_user_namespaces": read("/proc/sys/user/max_user_namespaces"),
+    "lsm_label": read("/proc/self/attr/current"),
+    "sandbox_helper_exists": Path("/usr/lib/chromium/chrome-sandbox").exists()}))
+'''
+            result = json.loads(self.run_worker_probe(code))
+            print("DPF_CAPTURE_NAMESPACE_DIAGNOSTIC=" + json.dumps(result, sort_keys=True))
+        # One child at a time, reaped by subprocess.run; this is availability
+        # evidence for this image/host only, never permission to change policy.
+        self.assertEqual(capture.pin_capture_processes(UID), [])
+
     def test_actual_service_startup_hardens_its_owned_mount_roots(self):
         import server
         with tempfile.TemporaryDirectory() as base:
