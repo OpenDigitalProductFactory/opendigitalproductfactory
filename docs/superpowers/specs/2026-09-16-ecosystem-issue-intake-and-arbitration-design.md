@@ -474,7 +474,14 @@ score input. Now:
   distinct installations become `reach`, mean weight maps onto the impact
   ladder, written with `demandInputSource = "ai"` through the guarded update,
   so a human or agreed score is never overwritten. A changed weight updates
-  the held response instead of being dropped as a duplicate.
+  the held response instead of being dropped as a duplicate, but only when it
+  is strictly newer (`createdAt`), so a late retry cannot revert a correction.
+- The budget is also enforced at the receiver: a peer whose weighted votes
+  received this ISO week cost more than 16 credits has its votes counted at
+  weight 1, and the item's scoring activity records how many were over budget.
+  The sender's check is a courtesy across a trust boundary; this is the bound.
+- A tally that loses the optimistic-concurrency race is retried once; a vote
+  still not counted is logged with its reason (`tallyAfterInboundVote`).
 
 ## 6. Verification
 

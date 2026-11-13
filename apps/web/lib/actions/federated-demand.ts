@@ -15,7 +15,7 @@ import {
   unselectLocalDemandForLink,
   type ChannelDemandDb,
 } from "@/lib/federation/channel-demand";
-import { queueDemandResponse, type DemandResponseDb } from "@/lib/federation/demand-response";
+import { outboundResponseRef, queueDemandResponse, type DemandResponseDb } from "@/lib/federation/demand-response";
 import { resolveFederationIdentity, type FederationIdentityDb } from "@/lib/federation/demand-identity";
 import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
 import { requireCapability } from "@/lib/actions/shared/guards";
@@ -171,7 +171,7 @@ export async function respondToFederatedDemandAction(input: {
         select: { localRecordRef: true, payload: true },
       });
       const ledger = ledgerFromOutboundVotes(identity.installationId, outboundVotesFromResponses(sent), now);
-      const decision = castVote(ledger, { ref: `response:${mirrorId}:interest`, weight: input.weight ?? 1 });
+      const decision = castVote(ledger, { ref: outboundResponseRef(mirrorId, "interest"), weight: input.weight ?? 1 });
       if (!decision.accepted) return { ok: false, error: decision.message };
     }
     const result = await queueDemandResponse(

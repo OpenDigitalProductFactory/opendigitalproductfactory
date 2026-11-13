@@ -11,10 +11,17 @@
  * Voter identity is the federation link the response arrived over — one link
  * per peer installation — so a second response from the same installation
  * re-weights its vote and never adds a voter.
+ *
+ * The weekly budget is also enforced HERE, at the receiver. The voter's own
+ * installation enforces it before sending, but that is a client-side promise
+ * across a trust boundary: a peer on a buggy or modified build could send
+ * weight 4 on everything. So a peer whose weighted votes received this week
+ * cost more than the cycle budget has every vote counted at weight 1 (plain
+ * interest, never dropped), and the item's record says so.
  */
 
 import { computeDemandScore } from "@/lib/demand/scoring";
-import { tallyVotes, voteScoreUpdate } from "./vote-budget";
+import { DEFAULT_CYCLE_CREDITS, creditCost, isoWeekStart, tallyVotes, voteScoreUpdate } from "./vote-budget";
 
 export const VOTE_TALLY_ACTOR = "ecosystem-votes";
 
@@ -43,8 +50,20 @@ export type VoteTallyDb = {
 };
 
 export type VoteTallyOutcome =
-  | { written: true; voters: number; reach: number; impact: number; score: number | null }
+  | { written: true; voters: number; reach: number; impact: number; score: number | null; overBudgetVoters: number }
   | { written: false; reason: "no-item" | "no-votes" | "owner-set" | "changed-concurrently" };
+
+/** Peers whose weighted interest received this ISO week costs more than the cycle budget. */
+export function overBudgetLinks(rows: ResponseMirrorRow[], budget: number = DEFAULT_CYCLE_CREDITS): Set<string> {
+  const spent = new Map<string, number>();
+  for (const row of rows) {
+    const response = (row.payload as { response?: { responseKind?: unknown; weight?: unknown } } | null)?.response;
+    if (!response || response.responseKind !== "interest") continue;
+    const weight = typeof response.weight === "number" ? response.weight : 1;
+    spent.set(row.federationLinkId, (spent.get(row.federationLinkId) ?? 0) + creditCost(weight));
+  }
+  return new Set([...spent].filter(([, credits]) => credits > budget).map(([link]) => link));
+}
 
 /** The interest votes held for one item, one per responding installation. */
 export function votesFromResponses(itemId: string, rows: ResponseMirrorRow[]) {
@@ -91,7 +110,20 @@ export async function recordEcosystemVoteTally(
     where: { recordType: "demand-response", canonicalSide: "peer", localRecordRef: itemId },
     select: { federationLinkId: true, payload: true },
   });
-  const [tally] = tallyVotes(votesFromResponses(itemId, rows));
+  const votes = votesFromResponses(itemId, rows);
+  // Receiver-side budget: read this week's responses only for peers that cast a
+  // weighted vote here — bounded by link and by week.
+  const weightedLinks = [...new Set(votes.filter((vote) => vote.weight > 1).map((vote) => vote.installationId))];
+  const overBudget = weightedLinks.length === 0 ? new Set<string>() : overBudgetLinks(
+    await db.federatedRecordMirror.findMany({
+      where: {
+        recordType: "demand-response", canonicalSide: "peer",
+        federationLinkId: { in: weightedLinks }, updatedAt: { gte: isoWeekStart(now) },
+      },
+      select: { federationLinkId: true, payload: true },
+    }),
+  );
+  const [tally] = tallyVotes(votes.map((vote) => (overBudget.has(vote.installationId) ? { ...vote, weight: 1 } : vote)));
   if (!tally) return { written: false, reason: "no-votes" };
 
   const update = voteScoreUpdate(item, tally);
@@ -132,12 +164,16 @@ export async function recordEcosystemVoteTally(
         kind: "demand_scored",
         summary:
           `Ecosystem votes: ${tally.distinctInstallations} installation${tally.distinctInstallations === 1 ? "" : "s"} `
-          + `weighed in, so reach ${update.reach} and impact ${update.impact} (an owner can override)`,
+          + `weighed in, so reach ${update.reach} and impact ${update.impact} (an owner can override)`
+          + (overBudget.size > 0
+            ? `; ${overBudget.size} over this week's vote budget, counted as plain interest`
+            : ""),
         payload: {
           framework: "rice",
           source: VOTE_TALLY_ACTOR,
           voters: tally.distinctInstallations,
           totalWeight: tally.totalWeight,
+          overBudgetVoters: overBudget.size,
           inputs,
           score: result.score,
           missing: result.missing,
@@ -150,6 +186,32 @@ export async function recordEcosystemVoteTally(
       reach: update.reach,
       impact: update.impact,
       score: result.score,
+      overBudgetVoters: overBudget.size,
     };
   });
+}
+
+/**
+ * Tally after an inbound vote, and say what happened. A lost optimistic race is
+ * the ordinary case (two peers voting at once, or any other write to the item),
+ * so it is retried once against a fresh read; anything still unwritten is
+ * logged with its reason rather than vanishing.
+ */
+export async function tallyAfterInboundVote(
+  db: VoteTallyDb,
+  itemId: string,
+  deps: { now?: Date; warn?: (message: string) => void } = {},
+): Promise<VoteTallyOutcome> {
+  const warn = deps.warn ?? ((message: string) => console.warn(message));
+  let outcome = await recordEcosystemVoteTally(db, itemId, deps.now);
+  if (!outcome.written && outcome.reason === "changed-concurrently") {
+    outcome = await recordEcosystemVoteTally(db, itemId, deps.now);
+  }
+  if (!outcome.written && (outcome.reason === "changed-concurrently" || outcome.reason === "no-item")) {
+    warn(`[ecosystem-votes] vote for ${itemId} not counted: ${outcome.reason}; the next vote on it recomputes the tally`);
+  }
+  if (outcome.written && outcome.overBudgetVoters > 0) {
+    warn(`[ecosystem-votes] ${outcome.overBudgetVoters} peer(s) over this week's vote budget on ${itemId}; counted at weight 1`);
+  }
+  return outcome;
 }

@@ -197,7 +197,9 @@ describe("handleIncomingDemandResponse", () => {
       envelope: demand, activity: "dpf.demand.proposed", eventId: "evt", queuedAt: demand.createdAt,
     } }];
     const original = response();
-    const reweighted: DemandResponseV1 = { ...original, responseKind: "interest", message: undefined, weight: 3, payloadDigest: "sha256:pending" };
+    // A later correction: strictly newer than what is held.
+    const reweighted: DemandResponseV1 = { ...original, responseKind: "interest", message: undefined, weight: 3,
+      createdAt: new Date(Date.parse(original.createdAt) + 60_000).toISOString(), payloadDigest: "sha256:pending" };
     delete (reweighted as { message?: string }).message;
     reweighted.payloadDigest = computeDemandResponseDigest(reweighted);
     const held = db({ shared, existingResponse: {
@@ -207,6 +209,26 @@ describe("handleIncomingDemandResponse", () => {
       .resolves.toMatchObject({ action: "updated", localRecordRef: "BI-LOCAL-1" });
     const update = (held.value.federatedRecordMirror.update as unknown as { mock: { calls: Array<Array<{ data: { payload: { response: DemandResponseV1 } } }>> } }).mock.calls[0][0];
     expect(update.data.payload.response.weight).toBe(3);
+  });
+
+  it("never lets a late, older delivery revert a voter's newer weight", async () => {
+    const demand = envelope();
+    const shared = [{ localRecordRef: "BI-LOCAL-1", payload: {
+      envelope: demand, activity: "dpf.demand.proposed", eventId: "evt", queuedAt: demand.createdAt,
+    } }];
+    const original = response();
+    const newer: DemandResponseV1 = { ...original, responseKind: "interest", weight: 4,
+      createdAt: new Date(Date.parse(original.createdAt) + 60_000).toISOString(), payloadDigest: "sha256:pending" };
+    delete (newer as { message?: string }).message;
+    newer.payloadDigest = computeDemandResponseDigest(newer);
+    const stale: DemandResponseV1 = { ...newer, weight: 2, createdAt: original.createdAt, payloadDigest: "sha256:pending" };
+    stale.payloadDigest = computeDemandResponseDigest(stale);
+    const held = db({ shared, existingResponse: {
+      mirrorId: "fdri_existing", version: 2, payload: { response: newer, receivedAt: "2026-07-20T06:12:00.000Z" },
+    } });
+    await expect(handleIncomingDemandResponse(held.value, "link_1", stale))
+      .resolves.toMatchObject({ action: "noop" });
+    expect(held.value.federatedRecordMirror.update).not.toHaveBeenCalled();
   });
 
   it("returns the local item a new response is about, so its tally can be recomputed", async () => {

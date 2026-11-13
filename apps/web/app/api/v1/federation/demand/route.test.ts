@@ -15,7 +15,7 @@ const { mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandRespo
 vi.mock("@/lib/auth/federation-link-token", () => ({ resolveFederationLinkAuth: mockResolveAuth }));
 vi.mock("@/lib/federation/demand-exchange", () => ({ handleIncomingDemand: mockHandleIncomingDemand }));
 vi.mock("@/lib/federation/demand-response", () => ({ handleIncomingDemandResponse: mockHandleIncomingDemandResponse }));
-vi.mock("@/lib/ecosystem/vote-tally", () => ({ recordEcosystemVoteTally: mockRecordVoteTally }));
+vi.mock("@/lib/ecosystem/vote-tally", () => ({ tallyAfterInboundVote: mockRecordVoteTally }));
 vi.mock("@/lib/federation/demand-identity", () => ({ resolveFederationIdentity: mockResolveIdentity }));
 vi.mock("@/lib/federation/demand-disposition", () => ({ handleIncomingDemandDisposition: mockHandleIncomingDisposition }));
 vi.mock("@/lib/federation/operational-posture-exchange", () => ({ handleIncomingOperationalPosture: mockHandleIncomingPosture }));

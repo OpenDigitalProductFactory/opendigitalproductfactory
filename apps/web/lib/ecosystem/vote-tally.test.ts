@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { outboundVotesFromResponses, recordEcosystemVoteTally, votesFromResponses, VOTE_TALLY_ACTOR } from "./vote-tally";
+import { castVote, ledgerFromOutboundVotes } from "./vote-budget";
+import {
+  outboundVotesFromResponses,
+  overBudgetLinks,
+  recordEcosystemVoteTally,
+  tallyAfterInboundVote,
+  votesFromResponses,
+  VOTE_TALLY_ACTOR,
+} from "./vote-tally";
+import { outboundResponseRef, queueDemandResponse } from "@/lib/federation/demand-response";
 
 const interest = (link: string, weight?: number) => ({
   federationLinkId: link,
@@ -91,3 +100,87 @@ describe("recordEcosystemVoteTally", () => {
     expect(await recordEcosystemVoteTally(tallyDb(item(), []).db, "BI-1", now)).toEqual({ written: false, reason: "no-votes" });
   });
 });
+
+describe("receiver-side weekly budget", () => {
+  const now = new Date("2026-11-16T09:00:00Z");
+
+  it("names a peer whose weighted votes this week cost more than the budget", () => {
+    // 4² + 4² = 32 credits > 16.
+    expect([...overBudgetLinks([interest("link_greedy", 4), interest("link_greedy", 4), interest("link_fair", 3)])])
+      .toEqual(["link_greedy"]);
+  });
+
+  it("counts an over-budget peer's vote as plain interest and says so on the item", async () => {
+    const itemRows = [interest("link_greedy", 4), interest("link_fair", 1)];
+    const weekRows = [interest("link_greedy", 4), interest("link_greedy", 4), interest("link_greedy", 4)];
+    const { db, activity } = tallyDb(item(), itemRows);
+    db.federatedRecordMirror.findMany.mockReset()
+      .mockResolvedValueOnce(itemRows)
+      .mockResolvedValueOnce(weekRows);
+    const outcome = await recordEcosystemVoteTally(db, "BI-1", now);
+    expect(outcome).toMatchObject({ written: true, voters: 2, overBudgetVoters: 1, impact: 1 });
+    expect(db.federatedRecordMirror.findMany.mock.calls[1][0].where).toMatchObject({
+      federationLinkId: { in: ["link_greedy"] }, updatedAt: { gte: expect.any(Date) },
+    });
+    expect(activity.mock.calls[0][0].data.summary).toContain("over this week's vote budget");
+  });
+});
+
+describe("tallyAfterInboundVote", () => {
+  it("retries once when it loses a concurrent write, then counts the vote", async () => {
+    const { db, updateMany } = tallyDb(item(), [interest("link_a")]);
+    updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    const warn = vi.fn();
+    expect(await tallyAfterInboundVote(db, "BI-1", { warn })).toMatchObject({ written: true });
+    expect(updateMany).toHaveBeenCalledTimes(2);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("says so, with the reason, when the vote still is not counted", async () => {
+    const warn = vi.fn();
+    await tallyAfterInboundVote(tallyDb(item(), [interest("link_a")], 0).db, "BI-1", { warn });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("not counted: changed-concurrently"));
+    await tallyAfterInboundVote(tallyDb(null, []).db, "BI-x", { warn });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("not counted: no-item"));
+  });
+
+  it("stays quiet when a person set the item's inputs — that is not a lost vote", async () => {
+    const warn = vi.fn();
+    await tallyAfterInboundVote(tallyDb(item({ demandInputSource: "human" }), [interest("link_a")]).db, "BI-1", { warn });
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("the budget ledger reads what the sender writes", () => {
+  it("recognises a re-weight of the same item, so it refunds instead of double-charging", async () => {
+    // Write through the real sender, then read back through the real ledger.
+    const created: Array<{ data: { localRecordRef: string; payload: unknown } }> = [];
+    const db = {
+      federatedRecordMirror: {
+        findUnique: vi.fn(async (args: { where: { mirrorId?: string } }) => (args.where.mirrorId
+          ? { mirrorId: "fdm_peer", canonicalSide: "peer", federationLinkId: "link_1", syncStatus: "synced",
+            payload: { envelope: { envelopeId: "env-1", originInstallationId: "did_o", originRecordRef: "BI-O" } } }
+          : null)),
+        create: vi.fn(async (args: { data: { localRecordRef: string; payload: unknown } }) => { created.push(args); }),
+        update: vi.fn(),
+      },
+      federationLink: { findUnique: vi.fn().mockResolvedValue({ linkId: "link_1", linkState: "trusted", revokedAt: null, quarantinedAt: null }) },
+      job: { create: vi.fn(), upsert: vi.fn(), findFirst: vi.fn() },
+    };
+    const now = new Date("2026-11-17T10:00:00Z");
+    try {
+      await queueDemandResponse(db as never, { mirrorId: "fdm_peer", kind: "interest", weight: 3,
+        identity: { projectionSecret: "test-secret" }, now } as never);
+    } catch {
+      // Scheduling delivery is outside this contract; the mirror row is what matters.
+    }
+    expect(created).toHaveLength(1);
+    const row = created[0].data;
+    expect(row.localRecordRef).toBe(outboundResponseRef("fdm_peer", "interest"));
+
+    const ledger = ledgerFromOutboundVotes("did_self", outboundVotesFromResponses([row]), now);
+    // Re-weighting the same item to 4 refunds the 9 already spent: 16 - 0 + 16 = fits exactly.
+    expect(castVote(ledger, { ref: outboundResponseRef("fdm_peer", "interest"), weight: 4 }).accepted).toBe(true);
+  });
+});
+

@@ -10,7 +10,10 @@ vi.mock("@/lib/actions/shared/guards", () => ({ requireCapability: vi.fn().mockR
 vi.mock("@/lib/federation/demand-identity", () => ({
   resolveFederationIdentity: vi.fn().mockResolvedValue({ installationId: "inst_me", projectionSecret: "s" }),
 }));
-vi.mock("@/lib/federation/demand-response", () => ({ queueDemandResponse: mockQueue }));
+vi.mock("@/lib/federation/demand-response", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/federation/demand-response")>()),
+  queueDemandResponse: mockQueue,
+}));
 vi.mock("@/lib/operate/backlog-ingest", () => ({ ingestBacklogItem: vi.fn() }));
 
 import { respondToFederatedDemandAction } from "./federated-demand";

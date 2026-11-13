@@ -93,7 +93,7 @@ export async function queueDemandResponse(
     throw new Error("The source connection is not trusted and active.");
   }
   const id = responseId(input.identity, link.linkId, demand.envelope.originRecordRef, input.kind);
-  const localRecordRef = `response:${input.mirrorId}:${input.kind}`;
+  const localRecordRef = outboundResponseRef(input.mirrorId, input.kind);
   const existing = await db.federatedRecordMirror.findUnique({
     where: {
       federationLinkId_recordType_localRecordRef: {
@@ -159,6 +159,15 @@ export async function queueDemandResponse(
   return { action: "queued", responseId: id };
 }
 
+/**
+ * The localRecordRef an outbound response mirror is stored under. One home for
+ * the convention: the sender writes it, and the weekly budget ledger keys on it
+ * to recognise a re-weight of the same item.
+ */
+export function outboundResponseRef(mirrorId: string, kind: string): string {
+  return `response:${mirrorId}:${kind}`;
+}
+
 export async function handleIncomingDemandResponse(
   db: DemandResponseDb,
   linkId: string,
@@ -204,8 +213,15 @@ export async function handleIncomingDemandResponse(
     // same response id. An identical payload is a replay; a different one is the
     // voter's correction and replaces what was held. Ignoring it, as before,
     // would freeze every vote at its first weight.
-    const held = (existing.payload as { response?: { payloadDigest?: string } } | null)?.response;
+    const held = (existing.payload as { response?: { payloadDigest?: string; createdAt?: string } } | null)?.response;
     if (held?.payloadDigest === response.payloadDigest) {
+      return { action: "noop", responseId: response.responseId, localRecordRef: matchedEnvelope.localRecordRef };
+    }
+    // Delivery is at-least-once and may reorder: only a strictly newer response
+    // replaces what is held, so a late retry of an earlier weight never reverts
+    // the voter's correction.
+    const heldAt = held?.createdAt ? Date.parse(held.createdAt) : Number.NaN;
+    if (Number.isFinite(heldAt) && !(Date.parse(response.createdAt) > heldAt)) {
       return { action: "noop", responseId: response.responseId, localRecordRef: matchedEnvelope.localRecordRef };
     }
     await db.federatedRecordMirror.update({
