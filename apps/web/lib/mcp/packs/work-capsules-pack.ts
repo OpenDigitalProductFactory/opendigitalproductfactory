@@ -206,6 +206,7 @@ const definitions: ToolDefinition[] = [
         baseSha: { type: "string", description: "SHA of the base commit: full, or a prefix of 7+ hex characters the server expands against the repository (an ambiguous prefix is refused with its candidates). With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
         headSha: { type: "string", description: "SHA of the branch head: full, or a 7+ character prefix of a pushed commit. An unpushed head must be the full git rev-parse HEAD output." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
+        harness: { type: "string", enum: ["t3-code"], description: "The orchestrating harness when one runs the client, e.g. t3-code when T3 Code drives Codex or Claude. provider stays the model client; sessionRef is the client thread id (CODEX_THREAD_ID / CLAUDE_CODE_SESSION_ID)." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workShape: {
           type: "string",
