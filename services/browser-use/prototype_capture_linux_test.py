@@ -174,6 +174,35 @@ else: raise AssertionError("inherited socket was accepted")
 
 
 class DetachedFamilyQualification(unittest.IsolatedAsyncioTestCase):
+    async def test_timeout_removes_temporary_profile_artifacts_with_owned_home(self):
+        original_spawn = asyncio.create_subprocess_exec
+        home = tempfile.mkdtemp(prefix="dpf-profile-cleanup-")
+        artifacts = []
+        async def spawn(*_args, **kwargs):
+            child = await original_spawn(sys.executable, "-c",
+                "import tempfile,time; from pathlib import Path; "
+                "p=tempfile.mkdtemp(prefix='fixture-profile-'); "
+                "Path('profile-locator').write_text(p); time.sleep(30)", **kwargs)
+            marker = Path(home) / "profile-locator"
+            for _ in range(200):
+                if marker.exists():
+                    artifacts.append(Path(marker.read_text()))
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                raise AssertionError("fixture profile was not created")
+            return child
+        with patch.object(capture.asyncio, "create_subprocess_exec", side_effect=spawn), \
+                patch.object(capture.tempfile, "mkdtemp", return_value=home), \
+                patch.object(capture, "CAPTURE_SECONDS", 0.1):
+            result = await capture.render_prototype(source())
+        self.assertEqual(result, {"error": "prototype_capture_timeout"})
+        self.assertEqual(len(artifacts), 1)
+        self.assertTrue(artifacts[0].is_relative_to(home), artifacts[0])
+        self.assertFalse(Path(home).exists())
+        self.assertFalse(artifacts[0].exists())
+        self.assertEqual(capture.pin_capture_processes(UID), [])
+
     async def test_timeout_reaps_setsid_grandchild_without_signalling_foreign_uid(self):
         if sys.platform != "linux" or os.geteuid() != 0:
             raise RuntimeError("Linux/root required")

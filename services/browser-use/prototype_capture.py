@@ -82,7 +82,7 @@ def validate_capture_result(value, source):
 
 def child_environment(home, chrome_bin):
     """Do not inherit provider tokens, service profiles or browser debugging state."""
-    return {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": home,
+    return {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": home, "TMPDIR": home,
             "XDG_CACHE_HOME": home, "CHROME_BIN": chrome_bin,
             "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"}
 

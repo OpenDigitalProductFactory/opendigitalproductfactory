@@ -67,7 +67,7 @@ The [Playwright BrowserContext contract](https://playwright.dev/python/docs/api/
 4. Test cross-actor/org/source substitution, duplicate identity, revocation/fencing, all network channels, popups/downloads, oversized output, timeout and cleanup. Run affected package checks and canonical shared-runtime gate; no hand-built installation image.
 5. Publish through signed protected PR and canonical update. Verify containing bytes, then drive one currently permitted original engagement end to end. Capture actual Critic findings and room return. Preserve CE83's existing permissions and original settlement boundaries; do not substitute a new engagement merely to obtain a pass.
 
-## Current execution state
+## Execution history and evidence limits
 
 Normal DESIGN claim IRD-E221F1E15860, research receipt initiative-298af8bc-7bcc-4af7-b485-31012038badb, PLAN claim IRD-5EFD36EAEE68 and implementation projection IRD-C42D0694BC96 were admitted. Admission is not approval of the unqualified renderer design. Managed dependency bootstrap now reports compile-ready; no unit/type/runtime gate is claimed. Exact source scopes and test-impact requirements are recorded. Funding attribution for this Workroom item requires owner approval; no spend or allocation is inferred. Production capture remains unavailable, and no previously refused capture was attempted through another transport.
 
@@ -140,3 +140,64 @@ including actual service-startup wiring, remain UNRUN. The earlier shared gate
 queued at source9959325 and was normally cancelled before admission to fix this
 newly identified boundary; status is INCONCLUSIVE/cancelled, not a code failure
 or pass. A new source-bound gate and cloud qualification are required.
+
+## Proposed sandbox design amendment — not approved or actuated
+
+Actual default-policy cloud image tests on both AMD64 and native ARM at
+5c7f231619cedd47d269b0f4b476d051f370fc0e each executed eight checks: seven
+passed, and real Chromium launch failed with `No usable sandbox!`. The bounded
+fixture diagnostic identifies the sandbox-launch failure class, not the decisive
+package or syscall. Source compilation, the seven containment results and an
+architecture score cannot qualify this browser. The producer remains disabled.
+
+The current prohibition on relaxing host/container policy remains in force.
+This section proposes a reviewable amendment; it grants no runtime action.
+The existing source owner and sole release coordinator retain their roles.
+
+1. **Reuse a proven, already-authorized sandbox-capable runtime.** Require actual
+   browser, filesystem, network, resource, cleanup and original/current authority
+   evidence from its existing owner, with no new provider, spend, grant or client
+   dependency. The inspected running-target records describe a portal peer and
+   Build Studio sandbox, not a qualified browser service. The build sandbox's
+   checked-in image is Node/Alpine without Chromium/Playwright. Empty service
+   catalog searches are not proof that no eligible runtime exists. A healthy
+   peer record is not environment-class or execution authority.
+2. **Prepare a maintained namespace-profile amendment for the existing service.**
+   The [official Playwright Docker guidance](https://playwright.dev/python/docs/docker)
+   requires a nonroot browser and a Docker seccomp profile permitting its user
+   namespace creation. Compare an exact maintained baseline with the proposed
+   delta; do not substitute an old broad profile or disable seccomp. Independent
+   security and architecture review must assess the whole service's changed
+   kernel surface, version/architecture support and compatibility. Review and
+   subsequent governed admission must precede any test or production actuation
+   of changed policy. No `--no-sandbox`, unconfined mode, added host capability,
+   host IPC, global sysctl change or new runtime/provider is an allowed shortcut.
+3. **Retain the unsupported hold.** Preserve all evidence and ownership while
+   the runtime boundary is unresolved. This is safe containment, not delivery
+   of the producer or either original acceptance criterion.
+
+The canonical reviewer roster names AGT-WS-EA for architecture and AGT-190 for
+security. Read-only live queries resolve their principals; those identity reads
+do not prove current reviewer eligibility. The actual issuer packet must select
+an eligible independent holder after the amendment is published. No author may
+proxy an approval. WWMD consultation and review requests were deferred during
+the release coordinator's observed DRAINING window, without claiming they ran.
+
+The actual diagnostic also shows Playwright's temporary profile under `/tmp`
+outside the request HOME. The source-only cleanup correction binds TMPDIR to
+the owned request home. Its environment regression failed before the fix and
+the 25 source tests now pass. A new physical timeout/artifact-cleanup test is
+authored but unrun. This correction neither enables sandboxing nor authorizes a
+replay of an original engagement. The next qualified runtime must prove both
+normal and failed/cancelled cleanup before producer integration.
+
+WWMD DI-94DF1EA45BD5 compared these three source/design paths after the
+coordinator verified NORMAL. It recommends review of the namespace-design
+amendment with low confidence/margin 0.198227: usable, but autonomyEligible is
+false (`confidence_not_high`). Its canonical outcome is unresolved with no
+chosen option. No scores were tuned or review outcome inferred. Independent
+critique of both alternatives is evidence gathering under the existing repair
+scope; it does not select or implement the disputed policy. Current medium-item
+architecture/security recovery reads expose no initiative-review packet. Use
+only a normally admitted independent source-review issuer; do not borrow another
+case's packet or proxy a reviewer. The current runtime hold remains intact.

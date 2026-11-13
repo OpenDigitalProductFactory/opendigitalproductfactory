@@ -273,6 +273,7 @@ class CaptureContractTest(unittest.TestCase):
         self.assertNotIn("OPENAI_API_KEY", env)
         self.assertNotIn("ANTHROPIC_API_KEY", env)
         self.assertEqual(env["HOME"], "/tmp/isolated")
+        self.assertEqual(env.get("TMPDIR"), "/tmp/isolated")
         self.assertEqual(env["CHROME_BIN"], "/usr/bin/chromium")
 
     def test_unsupported_host_refuses_instead_of_using_unsafe_browser(self):
