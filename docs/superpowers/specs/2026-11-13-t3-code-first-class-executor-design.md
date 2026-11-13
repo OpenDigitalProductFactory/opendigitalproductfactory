@@ -82,11 +82,11 @@ New MCP tool `queue_workroom_pull_request({ capsuleId, commandId })`, a receipte
 - **Consequence:** `ordinary` for the room's own executor or owner. Any other caller is `authority`.
 - **Record:** the room records `pr-queued`.
 
-`pnpm land` (`scripts/land-branch.mjs`) calls this tool when `gh pr merge --auto` is refused, so the documented landing path works for an unattended client.
+When `gh pr merge --auto` is refused, `pnpm land` (`scripts/land-branch.mjs`) names this tool as the next step. It does not call the tool itself: the script's credential is a personal access token, and such callers keep the owner's approval (#7022). The agent calls the tool through its own signed-in connector, as the room's executor.
 
 ### D5. T3 is named, not disguised (G5)
 
-`claim_backlog_item_for_work` and `adopt_worktree` accept an optional `harness` (closed set: `t3-code`). The room records it as `workspaceState.executorHarness`, and readback and `get_workroom` show it. The executor kind stays the authenticated client surface (`codex-desktop` when T3 drives Codex). That is what OAuth admission and the handoff surface map check, and changing it would break both. A provider string that names only a harness ("t3", "t3-code") is refused with `provider_harness_only`, which says to pass the model client as `provider` and the harness as `harness`, instead of silently becoming `human`.
+`claim_backlog_item_for_work` accepts an optional `harness` (closed set: `t3-code`). The room records it as `workspaceState.executorHarness`, and readback and `get_workroom` show it. The executor kind stays the authenticated client surface (`codex-desktop` when T3 drives Codex). That is what OAuth admission and the handoff surface map check, and changing it would break both. A provider string that names only a harness ("t3", "t3-code") is refused with `provider_harness_only`, which says to pass the model client as `provider` and the harness as `harness`, instead of silently becoming `human`.
 
 The T3 brief in the delivery-surfaces runbook says:
 - claim first with `provider: codex|claude`, `harness: t3-code` and `sessionRef` set to the client thread id;

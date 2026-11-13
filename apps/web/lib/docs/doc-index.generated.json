@@ -1536,6 +1536,7 @@
         "delivery-surfaces-runbook",
         "task-specific-operating-rules",
         "taking-over-another-executors-work",
+        "running-in-t3-code",
         "contributor-preview-binding-and-cleanup"
       ]
     },
