@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
-  prisma: { agent: { findFirst: vi.fn() } },
+  prisma: { agent: { findFirst: vi.fn() }, user: { findUnique: vi.fn() }, principalAlias: { findFirst: vi.fn() } },
 }));
 vi.mock("@dpf/db", () => db);
 
@@ -56,6 +56,8 @@ const AGENT_ROW = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.prisma.user.findUnique.mockResolvedValue({ email: "alex@example.com", isSuperuser: false, groups: [] });
+  db.prisma.principalAlias.findFirst.mockResolvedValue({ principal: { principalId: "PRN-ALEX", displayName: "Alex Morgan", kind: "human" } });
   installation.host.mockResolvedValue({ kind: "consumer", installMode: "consumer", sourceCapable: false,
     releaseImage: true, reason: "consumer-release-install" });
   installation.stance.mockResolvedValue({ schemaVersion: 1, environmentClass: "development", primaryPurpose: "evolve-dpf",
@@ -100,6 +102,23 @@ describe("coworker-capability pack — registration", () => {
 });
 
 describe("coworker-capability pack — handler behavior", () => {
+  it("identifies the authenticated human separately and ignores spoofed identity parameters", async () => {
+    db.prisma.agent.findFirst.mockResolvedValue(AGENT_ROW);
+    const res = await coworkerCapabilityPack.handlers.get_my_coworker_profile({ userId: "someone-else", authSource: "spoofed", tokenScope: "admin" }, "u1", {
+      agentId: "agent-1", authSource: "oauth", tokenScope: "read", apiTokenId: "secret-token-id",
+    });
+    expect(res.data).toMatchObject({ authenticatedAccount: { userId: "u1", displayName: "Alex Morgan", email: "alex@example.com" }, connection: { authenticationSource: "oauth", tokenScope: "read" }, profile: { name: "Marketing Coworker" } });
+    expect(res.data).toMatchObject({ installationContext: { stance: { environmentClass: "development", peerWrite: "read-only" } } });
+    expect(db.prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "u1" } }));
+    expect(JSON.stringify(res.data)).not.toContain("secret-token-id");
+  });
+
+  it("still identifies the account when no acting coworker is bound", async () => {
+    const res = await coworkerCapabilityPack.handlers.get_my_coworker_profile({}, "u1", {});
+    expect(res.data).toMatchObject({ agentBound: false, authenticatedAccount: { userId: "u1" }, connection: { authenticationSource: null, tokenScope: null } });
+    expect(res.data).toMatchObject({ installationContext: { stance: { environmentClass: "development" } } });
+    expect(db.prisma.agent.findFirst).not.toHaveBeenCalled();
+  });
   it("get_my_coworker_profile loads the current coworker's profile", async () => {
     db.prisma.agent.findFirst.mockResolvedValue(AGENT_ROW);
     const res = await coworkerCapabilityPack.handlers.get_my_coworker_profile({}, "u1", {

@@ -170,12 +170,19 @@ export function verifiedBindingSource({ mainRoot, worktreePath, branch, headSha 
     ? real(left).toLowerCase() === real(right).toLowerCase() : real(left) === real(right);
   const read = (root, args) => git(root, args, { timeout: 3000 });
   const root = real(worktreePath);
+  // A main root whose repository git will not read cannot be shown to share
+  // the created checkout's repository, so it is that conflict (fail closed).
+  // Without this the refusal's reason depended on the caller's git config:
+  // under safe.bareRepository=explicit (Claude desktop Terminal, Git 2.54 on
+  // macOS) a bare main root threw a raw git error instead (BI-4704915D).
+  const mainCommonDir = git(mainRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    { allowFail: true, timeout: 3000 });
   if (!/^[a-f0-9]{40}$/i.test(headSha ?? "")
     || !same(root, read(root, ["rev-parse", "--show-toplevel"]))
     || read(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]) !== branch
     || read(root, ["rev-parse", "--verify", "HEAD^{commit}"]) !== headSha
-    || !same(read(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
-      read(mainRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"]))) {
+    || !mainCommonDir
+    || !same(read(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]), mainCommonDir)) {
     throw new Error("source checkout, branch or shared repository conflicts with worktree creation");
   }
   if (!existsSync(join(root, "AGENTS.md")) || !existsSync(join(root, "packages/dpf-skill-pack/toolchain-version.json"))) {

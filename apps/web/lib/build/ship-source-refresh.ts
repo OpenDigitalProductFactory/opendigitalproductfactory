@@ -44,6 +44,12 @@ export type ShipSourceRefreshDeps = {
   queueReview(buildId: string): Promise<void>;
   record(buildId: string, summary: string): Promise<void>;
   now(): Date;
+  /**
+   * BI-C49EC080: true once the build's pull request is published. Its commit is
+   * then what ships and what is reviewed, and the merge queue owns currency
+   * with main; rebasing the clone would move it off the PR commit it was put on.
+   */
+  hasPublishedPr?(buildId: string): Promise<boolean>;
 };
 
 function storedSourceCurrency(state: unknown): SandboxSourceCurrencySnapshot | null {
@@ -77,6 +83,7 @@ export async function refreshDivergedShipBuild(
   if (!build || build.phase !== "ship") return "not-ship";
   const snapshot = storedSourceCurrency(build.buildExecState);
   if (!opts.force && !isRefreshableDivergence(snapshot)) return "not-diverged";
+  if (!opts.force && (await deps.hasPublishedPr?.(buildId))) return "not-diverged";
 
   const last = await deps.lastAttemptAt(buildId);
   if (last && deps.now().getTime() - last.getTime() < SHIP_SOURCE_REFRESH_RETRY_MS) return "recently-attempted";
@@ -126,6 +133,8 @@ export async function refreshDivergedShipBuild(
  * ship or was escalated), so the caller skips it.
  */
 export type ShipPrStepDeps = {
+  /** BI-C49EC080: a published PR head with no review of its own goes back to review first. */
+  reviewPublishedHead?: (buildId: string) => Promise<import("./published-head-review").PublishedHeadReviewResult>;
   refresh?: (buildId: string) => Promise<ShipSourceRefreshResult>;
   retry?: (buildId: string, logger: Pick<Console, "error">, retryIntervalMs: number) => Promise<"opened" | "blocked" | "skipped">;
   remedy?: Pick<typeof import("./ship-refusal-remedy"), "loadShipRefusalHistory" | "remedyRefusedShipBuild" | "shipPrRetryIntervalMs">;
@@ -136,6 +145,12 @@ export async function refreshOrRetryShipBuildPr(
   logger: Pick<Console, "log" | "error">,
   deps: ShipPrStepDeps = {},
 ): Promise<boolean> {
+  const reviewPublishedHead = deps.reviewPublishedHead
+    ?? (await import("./published-head-review")).reviewPublishedHeadForShipBuild;
+  if ((await reviewPublishedHead(buildId)) === "returned-to-review") {
+    logger.log(`[auto-complete] ${buildId} put on its published PR commit and returned to review`);
+    return true;
+  }
   if ((await (deps.refresh ?? refreshDivergedShipBuild)(buildId)) === "returned-to-review") {
     logger.log(`[auto-complete] ${buildId} refreshed onto upstream main and returned to review`);
     return true;
@@ -170,20 +185,7 @@ function defaultDeps(): ShipSourceRefreshDeps {
       const { refreshBuildBranchOntoUpstream } = await import("./sandbox/build-branch");
       return refreshBuildBranchOntoUpstream(buildId);
     },
-    async returnToReview(buildId, buildExecState) {
-      const { prisma, Prisma } = await import("@dpf/db");
-      const flipped = await prisma.featureBuild.updateMany({
-        where: { buildId, phase: "ship" },
-        data: {
-          phase: "review",
-          acceptanceMet: Prisma.DbNull,
-          verificationOut: Prisma.DbNull,
-          uxVerificationStatus: null,
-          buildExecState: buildExecState as import("@dpf/db").Prisma.InputJsonValue,
-        },
-      });
-      return flipped.count > 0;
-    },
+    returnToReview: returnShipBuildToReview,
     async queueReview(buildId) {
       const { queueBuildReviewVerification } = await import("@/lib/build-review-verification-trigger");
       await queueBuildReviewVerification(buildId);
@@ -193,5 +195,34 @@ function defaultDeps(): ShipSourceRefreshDeps {
       await prisma.buildActivity.create({ data: { buildId, tool: SHIP_SOURCE_REFRESH_TOOL, summary } }).catch(() => {});
     },
     now: () => new Date(),
+    async hasPublishedPr(buildId) {
+      const { prisma } = await import("@dpf/db");
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { id: true } });
+      if (!build) return false;
+      const room = await prisma.workroom.findFirst({
+        where: { featureBuildId: build.id, archivedAt: null, pullRequestUrl: { not: null } },
+        select: { id: true },
+      });
+      return Boolean(room);
+    },
   };
+}
+
+/**
+ * Guarded ship→review flip that drops every record judged on the old tree
+ * (acceptance, verification, UX status). False when the build had left ship.
+ */
+export async function returnShipBuildToReview(buildId: string, buildExecState: Record<string, unknown>): Promise<boolean> {
+  const { prisma, Prisma } = await import("@dpf/db");
+  const flipped = await prisma.featureBuild.updateMany({
+    where: { buildId, phase: "ship" },
+    data: {
+      phase: "review",
+      acceptanceMet: Prisma.DbNull,
+      verificationOut: Prisma.DbNull,
+      uxVerificationStatus: null,
+      buildExecState: buildExecState as import("@dpf/db").Prisma.InputJsonValue,
+    },
+  });
+  return flipped.count > 0;
 }

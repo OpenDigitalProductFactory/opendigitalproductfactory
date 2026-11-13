@@ -27,6 +27,8 @@ vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined })
 vi.mock("@/lib/actions/setup-progress", () => ({ isFirstRun: async () => false }));
 vi.mock("@/lib/i18n/locale-context.server", () => ({ getLocaleContext: async () => ({ language: "en-US" }) }));
 vi.mock("@/lib/identity/last-seen", () => ({ recordUserSeen: async () => {} }));
+// Account loading is covered separately; this suite exercises message providers.
+vi.mock("@/lib/identity/authenticated-account", () => ({ loadAuthenticatedAccount: async () => null }));
 vi.mock("@/lib/branding", () => ({ resolveBrandingLogoUrl: () => null, buildBrandingStyleTag: () => "" }));
 vi.mock("@/lib/install/estate-identity", () => ({ loadInstallationBadge: async () => null }));
 vi.mock("@/lib/feature-flags", () => ({ isUnifiedCoworkerEnabled: async () => true }));

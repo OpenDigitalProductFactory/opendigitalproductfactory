@@ -4,6 +4,19 @@ area: getting-started
 order: 5
 ---
 
+## Identify your account
+
+Your account name appears at the right of the internal portal header in both
+Full and Simple mode. Select it to see your email, platform role, organization,
+and **Sign out**. If no name is recorded, the header shows your full email.
+
+For Claude, Codex, and other connected AI clients, ask **Who am I connected
+as?** The existing `get_my_coworker_profile` tool returns the authenticated
+account separately from the acting AI coworker, along with the connection's
+authentication method and scope when known. The coworker's effective grants
+remain in the same response. The account display describes identity; the
+platform still checks each action's authority.
+
 ## Two-Tier Role Architecture
 
 The platform uses a **two-tier role model** to separate platform-wide governance from product-specific operating structures.
