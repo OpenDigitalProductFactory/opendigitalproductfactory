@@ -1053,9 +1053,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
     // short-lived JWT for `--mcp-config`, exposing platform tools as native
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
-    // adapters ignore the field. The agentic loop is the only place with
-    // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence, ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
+    // Other adapters ignore this server-owned context.
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence,
+      ...(taskRunId && params.tokenGrantScopes !== undefined && !readEvidencePolicy ? { admittedTokenGrantScopes: [...params.tokenGrantScopes] } : {}), ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two

@@ -459,6 +459,10 @@ async function handleToolsList(
     token.source === "session-jwt" ? [] : await getLoadedToolNames(token.tokenId),
   );
   const listed = selectToolsForListing(authorized, tier, loadedNames).map(annotateTool);
+  if (token.toolSurface) {
+    const names = new Set(token.toolSurface.toolNames);
+    return jsonRpcOk(id, { tools: listed.filter(tool => names.has(tool.name)) });
+  }
   return jsonRpcOk(id, { tools: [...listed, LOAD_TOOLS_LISTED] });
 }
 
@@ -475,6 +479,9 @@ async function handleToolsCall(
   }
   const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+  if (token.toolSurface && !token.toolSurface.toolNames.includes(toolName)) {
+    return jsonRpcOk(id, buildUnknownToolResult(toolName));
+  }
   const permitHandle = presentedPermitHandle(params["_meta"]);
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:

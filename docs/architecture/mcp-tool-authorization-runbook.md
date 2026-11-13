@@ -843,6 +843,23 @@ native MCP carries it in the signed session. Tool arguments and JSON-RPC metadat
 cannot supply it. Approval replay uses the original server-owned audit identity,
 never the task's latest generation.
 
+Task-bound native terminal sessions keep their originally admitted token grants
+separate from the tools shown to the model. The signed `scopes` still authorize
+each nested governed operation; a versioned `toolSurface` constrains direct
+listing and calls before discovery loading. Narrowing a writer's presentation
+therefore neither drops its admitted nested-reader authority nor exposes that
+reader as a direct model tool. Current human, coworker, task, source and fence
+checks still apply. Missing original reader authority remains denied.
+
+These restricted sessions use only `dpf-mcp-server-restricted-v1` as their scalar
+audience. A matching surface and captured task fence are mandatory; ordinary
+audience tokens cannot carry the new surface, and audience arrays are refused.
+An old receiver rejects the restricted audience instead of accepting scopes and
+discarding the constraint. Issuance failure ends that restricted turn; it cannot
+fall back to text tools or remint an ordinary token. Ordinary sessions and the
+separate native read-only lane retain their existing contracts. This protocol
+does not settle or authorize replay of an uncertain historical review.
+
 Both canonical review writers lock the original task before the subject. A new
 receipt, baseline or retention pin requires a working task, no execution
 uncertainty and the same captured identity under that transaction lock. A held,

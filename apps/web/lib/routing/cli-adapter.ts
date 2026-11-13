@@ -27,7 +27,7 @@ import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { writeSandboxFile } from "@/lib/build/sandbox/agent-cli-runtime";
 import { extractToolCalls as extractToolCallsFromText } from "./extract-tool-calls";
-import { createMcpSessionToken } from "@/lib/mcp/session-token";
+import { createMcpSessionToken, type McpToolSurface } from "@/lib/mcp/session-token";
 import { getToolGrantMapping } from "@/lib/tak/agent-grants";
 import { recordCliRateLimit, clearCliRateLimit } from "./cli-pool-status";
 import { withCliSlot } from "./cli-concurrency";
@@ -35,6 +35,7 @@ import { isSideEffectingGrant } from "./grant-capability";
 import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./cli-usage";
 import { providerSetupLocation } from "@/lib/ai-provider-routes";
 import { randomUUID } from "node:crypto";
+import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
 import { observeCliProcess } from "./cli-process-observation";
 import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
@@ -357,6 +358,10 @@ export const cliAdapter: ExecutionAdapterHandler = {
     //      Used by callers that don't have a (userId, agentId) attribution,
     //      and as a safety net if MCP token issuance fails.
     const useNativeMcp = Boolean(mcpSession && tools && tools.length > 0);
+    const restricted = mcpSession?.admittedTokenGrantScopes !== undefined;
+    if (restricted && (!useNativeMcp || !mcpSession?.taskRunId || !mcpSession.taskExecutionFence)) {
+      throw new InferenceError("Restricted MCP session requires its task, fence and tools.", "auth", providerId);
+    }
 
     let toolContext = "";
     let mcpJwt: string | null = null;
@@ -385,8 +390,12 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // Always include backlog_read so the model can situate itself even when
       // its primary task only needs writes; this matches the breadth most
       // existing dpfmcp_* PATs in the install carry.
-      requestedScopes.add("backlog_read");
-      scopesForJwt = Array.from(requestedScopes).sort();
+      if (!restricted) requestedScopes.add("backlog_read");
+      scopesForJwt = [...new Set(restricted ? mcpSession!.admittedTokenGrantScopes : requestedScopes)].sort();
+      const toolSurface: McpToolSurface | undefined = restricted ? { version: 1, toolNames: tools!.map(t => {
+        const name = (t as { function?: { name?: string } }).function?.name;
+        return typeof name === "string" ? canonicalWorkroomToolName(name) : "";
+      }) } : undefined;
 
       try {
         mcpJwt = await createMcpSessionToken({
@@ -398,8 +407,10 @@ export const cliAdapter: ExecutionAdapterHandler = {
           taskExecutionFence: mcpSession!.taskExecutionFence,
           scopes: scopesForJwt,
           capability: capabilityForJwt,
+          ...(toolSurface ? { toolSurface } : {}),
         });
       } catch (err) {
+        if (restricted) throw new InferenceError("Restricted MCP session could not be issued.", "auth", providerId);
         // If JWT minting fails (e.g. AUTH_SECRET missing in this env), fall
         // back to legacy mode rather than failing the whole inference call —
         // the build-specialist's existing degraded-mode behavior is at least
