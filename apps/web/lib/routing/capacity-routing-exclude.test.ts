@@ -188,3 +188,18 @@ describe("applyCapacitySoftExclusion", () => {
     expect(r.excluded).toHaveLength(0);
   });
 });
+
+// BI-F98BBE4F: a limited subscription is re-enabled the moment its limit
+// clears, with no job or operator action in between.
+describe("a limited subscription returns as soon as its limit clears", () => {
+  const T = Date.parse("2026-11-12T16:00:00Z");
+  const endpoints = [{ providerId: "anthropic-sub" }, { providerId: "local" }];
+  it.each(["quota_resets_at", "rate_limited"])("%s: excluded until retryAt, routable again at retryAt", (state) => {
+    const capacityByProvider = new Map([["anthropic-sub", { state, retryAtMs: T }]]);
+    const before = applyCapacitySoftExclusion({ endpoints, capacityByProvider, nowMs: T - 1 });
+    expect(before.eligible.map((e) => e.providerId)).toEqual(["local"]);
+    const at = applyCapacitySoftExclusion({ endpoints, capacityByProvider, nowMs: T });
+    expect(at.eligible.map((e) => e.providerId)).toEqual(["anthropic-sub", "local"]);
+    expect(at.excluded).toEqual([]);
+  });
+});
