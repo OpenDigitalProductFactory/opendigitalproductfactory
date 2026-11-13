@@ -72,3 +72,14 @@ It joins the `check-no-*` repo guard loop. Outside the seam, the report writer a
 - `check-no-unrouted-owner-escalation.test.mjs`: the guard catches each pattern and passes on the repo.
 - The affected unit tests and the `apps/web` typecheck.
 - Live: the PIR-QGQUH feature vector, scored by `principle_decide` (DI-007A5617C3EE), recommends `route-to-agent` with high confidence.
+
+## Traceability
+
+| Deliverable | Objectives | Acceptance | Contract | Flows | Verification |
+|---|---|---|---|---|---|
+| route-to-human-seam | OBJ-1, OBJ-2, OBJ-3 | AC-1, AC-2, AC-3, AC-4 | `apps/web/lib/govern/authority/route-to-human.ts`, `apps/web/lib/govern/authority/escalation-gate.ts` | escalateBuildToHuman, build-pr-delivery-reconcile, pr-follow-through-announce, remediation-merge-live, index-integrity-sweep | `apps/web/lib/govern/authority/route-to-human.test.ts`, `apps/web/lib/build/escalate-build-to-human.test.ts`, `scripts/check-no-unrouted-owner-escalation.test.mjs` |
+
+- AC-1 (OBJ-1, OBJ-3): the guard test, including its whole-repository scan.
+- AC-2 (OBJ-1): the seam tests on PIR-QGQUH, merge conflict, stale base and empty change; the build-escalation test of the agent route.
+- AC-3 (OBJ-1): the seam tests on every damaging declaration; the existing build-escalation tests of the human route, unchanged.
+- AC-4 (OBJ-2): the seam tests that every owner report carries its reason.
