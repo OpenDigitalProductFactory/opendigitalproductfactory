@@ -59,8 +59,12 @@ function matches(row: Row, where: Record<string, unknown>): boolean {
 function fakeDb(opts: {
   messages: Row[];
   room?: { id: string; capsuleId: string; executorKind: string | null; executorRef: string | null } | null;
+  rooms?: Array<{ id: string; capsuleId: string; workItemId: string; status: string; updatedAt: Date; executorKind: string | null; executorRef: string | null }>;
   participants?: Array<{ principalId: string; roles: string[] }>;
   agentAliases?: Array<{ principalId: string; aliasValue: string }>;
+  /** Stored tool grants per agent; an agent not listed holds work_room_write. */
+  grants?: Record<string, string[]>;
+  revocations?: Record<string, string[]>;
 }) {
   const messages = opts.messages;
   const tasks = new Map<string, Record<string, unknown>>();
@@ -81,14 +85,26 @@ function fakeDb(opts: {
         return row;
       }),
     },
-    workroom: { findFirst: vi.fn(async () => opts.room ?? null) },
+    workroom: {
+      findMany: vi.fn(async (args: { where: { workItemId: string; status?: { notIn: string[] } } }) => {
+        if (!opts.rooms) return opts.room ? [opts.room] : [];
+        const closed = args.where.status?.notIn ?? [];
+        return opts.rooms
+          .filter((r) => r.workItemId === args.where.workItemId && !closed.includes(r.status))
+          .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      }),
+    },
     workItem: { findUnique: vi.fn(async () => ({ title: "Room title", parentItemId: null })) },
     workroomParticipant: { findMany: vi.fn(async () => opts.participants ?? []) },
     principalAlias: { findMany: vi.fn(async () => opts.agentAliases ?? []) },
     agent: {
       findUnique: vi.fn(async ({ where }: { where: { agentId: string } }) => ({ agentId: where.agentId, status: "active" })),
       findMany: vi.fn(async ({ where }: { where: { agentId: { in: string[] } } }) =>
-        where.agentId.in.filter((id) => id.startsWith("AGT-")).map((agentId) => ({ agentId }))),
+        where.agentId.in.filter((id) => id.startsWith("AGT-")).map((agentId) => ({
+          agentId,
+          toolGrants: (opts.grants?.[agentId] ?? ["work_room_write"]).map((grantKey) => ({ grantKey })),
+          toolGrantRevocations: (opts.revocations?.[agentId] ?? []).map((grantKey) => ({ grantKey })),
+        }))),
     },
     user: { findUnique: vi.fn(async () => ({ id: "user-1" })) },
     scheduledAgentTask: {
@@ -189,6 +205,39 @@ describe("dispatchRoomMessage", () => {
     expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("held-for-executor");
   });
 
+  it("decides against the item's live room, not a closed room left without archivedAt", async () => {
+    const { db, messages } = fakeDb({
+      messages: [message()],
+      rooms: [
+        { id: "old", capsuleId: "WC-OLD", workItemId: "wi-1", status: "archived", updatedAt: new Date(NOW.getTime() + 1_000), executorKind: "claude-desktop", executorRef: "sess-old" },
+        { id: "live", capsuleId: "WC-LIVE", workItemId: "wi-1", status: "ready", updatedAt: NOW, executorKind: null, executorRef: null },
+      ],
+    });
+    const send = vi.fn(async (_event: unknown) => ({}));
+    const result = await dispatchRoomMessage("MSG-1", { db, send, now: () => NOW });
+    expect(result.plan).toBe("wake");
+    expect(db.workroom.findMany.mock.calls[0]![0]).toMatchObject({
+      where: { workItemId: "wi-1", archivedAt: null, status: { notIn: ["abandoned", "archived"] } },
+      orderBy: { updatedAt: "desc" },
+    });
+    expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("woken");
+  });
+
+  it("holds while any live room on the item is worked by an external executor, even an older one", async () => {
+    const { db, messages } = fakeDb({
+      messages: [message()],
+      rooms: [
+        { id: "new", capsuleId: "WC-NEW", workItemId: "wi-1", status: "ready", updatedAt: new Date(NOW.getTime() + 1_000), executorKind: null, executorRef: null },
+        { id: "ext", capsuleId: "WC-EXT", workItemId: "wi-1", status: "working", updatedAt: NOW, executorKind: "codex-desktop", executorRef: "sess-x" },
+      ],
+    });
+    const send = vi.fn(async (_event: unknown) => ({}));
+    const result = await dispatchRoomMessage("MSG-1", { db, send, now: () => NOW });
+    expect(result.plan).toBe("hold");
+    expect(send).not.toHaveBeenCalled();
+    expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("held-for-executor");
+  });
+
   it("wakes the coordinator at the hop limit and says why in the room (AC-4)", async () => {
     const { db, messages } = fakeDb({
       messages: [message({}, { hop: 8 })],
@@ -214,6 +263,29 @@ describe("dispatchRoomMessage", () => {
     expect((await dispatchRoomMessage("MSG-2", { db, send, now: () => NOW })).plan).toBe("pause");
     expect(send).not.toHaveBeenCalled();
     expect(messages.filter((m) => m.messageType === "room-wake-notice")).toHaveLength(1);
+  });
+
+  it("spends no reply turn on a coworker that cannot post, and says why on the message (BI-8747A73D)", async () => {
+    const { db, messages } = fakeDb({ messages: [message()], grants: { "AGT-B": ["backlog_read"] } });
+    const send = vi.fn(async (_event: unknown) => ({}));
+    const result = await dispatchRoomMessage("MSG-1", { db, send, now: () => NOW });
+    expect(result).toEqual({ messageId: "MSG-1", plan: "refuse", woken: [] });
+    expect(send).not.toHaveBeenCalled();
+    expect(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "state"])).toBe("cannot-reply");
+    expect(String(readPath(messages[0]!.structuredPayload, ["addressing", "wake", "detail"]))).toContain("work_room_write");
+    // People read the room, not the wake state: the refusal is said there too.
+    const notices = messages.filter((m) => m.messageType === "room-wake-notice");
+    expect(notices).toHaveLength(1);
+    expect(readPath(notices[0]!.structuredPayload, ["roomWakeNotice", "kind"])).toBe("cannot-reply");
+  });
+
+  it("counts work_capsule_write, which implies work_room_write, and honours a revocation", async () => {
+    const implied = fakeDb({ messages: [message()], grants: { "AGT-B": ["work_capsule_write"] } });
+    const send = vi.fn(async (_event: unknown) => ({}));
+    expect((await dispatchRoomMessage("MSG-1", { db: implied.db, send, now: () => NOW })).plan).toBe("wake");
+
+    const revoked = fakeDb({ messages: [message()], revocations: { "AGT-B": ["work_room_write"] } });
+    expect((await dispatchRoomMessage("MSG-1", { db: revoked.db, send, now: () => NOW })).plan).toBe("refuse");
   });
 
   it("never schedules a platform task for an external client agent", async () => {

@@ -28,6 +28,16 @@ That distinction matters: a trusted node may be offline, and a quarantined node 
 
 The first fleet member is **This DPF installation**. Installer-issued auto-approval is its identity evidence. On Windows and macOS, every governed install/repair stages the verified native artifact, converges Task Scheduler/launchd supervision, restores the prior binary if restart fails, and reuses the existing machine enrollment. Remote MSP/customer nodes remain separately scoped by customer and site; each fleet row names its first failed readiness check and next action.
 
+For the co-located `host-upkeep` role, the installer selects its API endpoint from
+the setup's resolved canonical origin, the configured `PUBLIC_URL`, or the
+existing local loopback fallback. It does not save a detected self-LAN address
+that stops working when the host changes networks. An explicit authority still
+wins, and full Edge discovery keeps its existing LAN authority behavior.
+Enrollment, certificate checks, signed actions and trust state are unchanged.
+Verify recovery through the same canonical node's fresh heartbeat. The standalone
+remote-node preflight assumes a separate portal and currently rejects loopback;
+it is not passing evidence for a co-located service.
+
 ## Rollout (adding nodes at scale)
 
 Add nodes through the portal flow, not by hand-cloning the repo (see

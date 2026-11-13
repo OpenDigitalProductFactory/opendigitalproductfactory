@@ -186,6 +186,21 @@ holds against the current vector set, so an install seeded before a vector was a
 idempotent seeding chain once on its next boot and picks it up. Owner-confirmed and owner-ruled
 material is never downgraded by that re-run.
 
+### Retracting a stance
+
+A stance decides through its `PerspectiveMaterial`, not through its wiki page — the gate reads the
+material and never looks at the page. So a stance's authority follows its page's status: while the
+page is **published** its material is promoted and the gate obeys it; when the page leaves published
+— archived in the editor, or moved with `publish_wiki_overlay_pages` (`targetStatus: "archived"`) —
+its material is revoked and stops deciding. The row is kept, so the audit trail survives, and
+republishing the page restores exactly the authority it had.
+
+To retract a stance that should never have been recorded — a ruling filed against the wrong
+business, a stance that no longer holds — archive its page and say why in the change summary. A
+boot reconcile also revokes material behind any page that was archived before this rule existed. It
+only ever revokes: background work may remove a stance's authority, but only a person republishing
+the page can give it back.
+
 ## The Profession Scope (WSID)
 
 WWMD answers "what would the founder/platform do?" and WWWD answers "what would this organization do?" — but a coworker doing a specialist's job has no governed source for **what a competent professional in that role should do**. The data-architect coworker has no DAMA-DMBOK grounding; the finance coworker has no GAAP doctrine; the marketing specialist has no marketing body of knowledge. Without WSID, that professional judgment is whatever the underlying LLM happens to produce — ungoverned, unauditable, and inconsistent across model routings.

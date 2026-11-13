@@ -6,6 +6,7 @@ exports[`shapeSignature > gives every current and frozen prior shape a signature
   "acceptance-verification@1.1.0": "⬆ escalation · Person verify → ● success | ⊗ failure | ⧖ budget",
   "adopter-health-watch@1.0.0": "⏱ cadence · AI read → AI report → ◇ Person act [role:customer-owner] → ● success | ⊗ failure | ⧖ budget",
   "architecture-alignment-review@1.0.0": "⏱ cadence 🛡 authority-change · AI compare → ◇ Person ratify [role:architecture-owner] → ● success | ⊗ failure | ⧖ budget",
+  "backlog-steward-watch@1.0.0": "⏱ cadence 〰 estate-drift · AI observe → AI reconcile → ◇ Person decide [role:backlog-owner] → ● success | ⊗ failure | ⧖ budget",
   "bookkeeping-period-cycle@1.0.0": "⏱ cadence ✋ claim · AI gather → AI import → AI categorize → AI reconcile → ◇ Person owner-close [role:finance-owner] → ● success | ⊗ failure | ⧖ budget",
   "catalog-scout-sweep@1.0.0": "⏱ cadence 〰 estate-drift · AI scan → ◇ Person adopt [role:platform-owner] → ● success | ⊗ failure | ⧖ budget",
   "consume-stream-orchestration@1.0.0": "⏱ cadence ⬆ escalation · AI survey → AI delegate → ◇ Person direct [role:consume-stream-owner] → ● success | ⊗ failure | ⧖ budget",

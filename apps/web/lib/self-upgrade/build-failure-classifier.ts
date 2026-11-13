@@ -12,6 +12,8 @@
 // MUST-ADVANCE → self-upgrade-failed → BLOCKED chain hands the agent the
 // diagnosis, not a raw log.
 
+import { TRANSIENT_NETWORK_LINE } from "./transient-network";
+
 export type BuildFailureClass =
   // Host build passes, Docker build fails: a transitive dep the wider CI/host
   // workspace hoists to top-level but the narrower Docker deps stage does not,
@@ -126,6 +128,14 @@ export type BuildFailureClass =
   // DEFERS on a host-memory-headroom guard and retries after reclaim; a run that
   // still reaches here should be retried once the host frees memory.
   | "host-out-of-memory"
+  // NETWORK: an outbound fetch the upgrade needs (upstream git fetch, base
+  // image pull, `apk add` in a candidate build) failed with a connectivity
+  // error. SUR-B0A4610D / SUR-FF879116 (apk) and SUR-256EAF95 (git fetch),
+  // 2026-11-11: the host dropped connections intermittently and the same
+  // commands succeeded on rerun. Each network step now retries on its own; a
+  // run that still lands here means the host stayed offline for minutes.
+  // Environment, not a main defect (BI-7FFF5CB0).
+  | "host-network-unavailable"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -282,6 +292,19 @@ export function classifyBuildFailure(
         "The build failed because the host / Docker VM ran out of memory (`cannot allocate memory` / OOMKilled) — buildkit's context sender could not allocate a buffer to read the build context. Transient host pressure, NOT a main defect: the candidate build runs before any portal swap, so nothing was deployed and the running portal is untouched. Free host memory (WSL2 autoMemoryReclaim, or shed heavy consumers) and retry — the self-upgrade's host-memory-headroom guard now DEFERS instead of failing when MemAvailable is below the build floor, so a healthy retry happens automatically on the next cron tick.",
       playbookLink: SPEC,
       failingTrace: traceAround(log, HOST_OUT_OF_MEMORY),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
+  // Host network loss next, for the same reason as OOM: the readiness /
+  // prep-error wrapper is noise around a decisive environmental cause.
+  if (TRANSIENT_NETWORK_LINE.test(log)) {
+    return {
+      class: "host-network-unavailable",
+      summary:
+        "The upgrade could not reach the internet for a step it needs (fetching the upstream source, a base image, or an Alpine package): the connection timed out or dropped. This is the host's network, NOT a main defect — each network step already retried with backoff, so the host was offline for minutes. Nothing was deployed and the running portal is untouched. Restore the host's outbound connectivity (VPN, Wi-Fi, DNS) and retry the upgrade.",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, TRANSIENT_NETWORK_LINE),
       isMainDefectVsEnvironment: "environment",
     };
   }

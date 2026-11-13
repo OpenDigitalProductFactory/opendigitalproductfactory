@@ -45,6 +45,8 @@ import {
 } from "./build-clone";
 
 const WORKSPACE = "/workspace";
+/** The shared repository every build branch lives in, inside the sandbox. */
+export const SANDBOX_WORKSPACE = WORKSPACE;
 /**
  * A git lock older than this is left over, never live: no sandbox git
  * operation holds one for 15 minutes (an unshallow of the full history takes
@@ -868,7 +870,8 @@ export async function ensureBuildWorktree(buildId: string): Promise<{ materializ
 
 export type BuildBranchRefreshOutcome =
   | { status: "refreshed"; headSha: string; clientSha: string | null }
-  | { status: "conflict"; files: string[] }
+  /** `ontoRef`: the ref the build tree was rebased onto, so a repair can repeat it (BI-2CCD5C0E). */
+  | { status: "conflict"; files: string[]; ontoRef?: string }
   | { status: "unsupported" | "client-not-refreshable" | "unknown"; reason: string };
 
 /**
@@ -919,7 +922,7 @@ export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<B
   const rebase = parseBuildCloneRebaseOutput(
     await execSandboxGit(buildSandboxBuildCloneRebaseCommand(workdir, identity.clientBranch)),
   );
-  if (rebase.status === "conflict") return rebase;
+  if (rebase.status === "conflict") return { ...rebase, ontoRef: identity.clientBranch };
   if (rebase.status === "unknown") return { status: "unknown", reason: rebase.output };
   await execSandboxGit(buildSandboxBuildCloneSyncCommand(workdir, branchName));
   return { status: "refreshed", headSha: rebase.headSha, clientSha: client.headSha };

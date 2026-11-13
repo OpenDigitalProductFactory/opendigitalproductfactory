@@ -116,6 +116,15 @@ async function recordTwinOverride(
   });
 }
 
+/** Ask the item's home for the claim; the answer arrives with delivery. */
+async function requestHomeClaim(capsuleId: string): Promise<string> {
+  const { requestWorkClaimAtHome } = await import("@/lib/federation/work-claim-exchange.server");
+  const queued = await requestWorkClaimAtHome(capsuleId, "claim");
+  return queued.queued
+    ? "UNCONFIRMED: this item lives on the paired installation, which decides its claim. The request is queued and is sent as soon as that installation can be reached; until it answers, this Workroom is unconfirmed. If it refuses, stop before opening a pull request."
+    : `UNCONFIRMED: the claim could not be requested from the item's home (${queued.reason}).`;
+}
+
 export async function claimBacklogItemForWork(args: {
   params: Record<string, unknown>;
   userId: string;
@@ -183,6 +192,9 @@ export async function claimBacklogItemForWork(args: {
     overrideReason: stringParam(params, "overrideReason"),
   });
   if (twinGate.kind === "refused") return twinGate.result;
+  // The item lives on the paired installation (BI-30EDDB7F): the local
+  // Workroom is created unconfirmed and the claim is asked for at its home.
+  const claimAtHome = twinGate.kind === "home-claim" || (twinGate.kind === "overridden" && twinGate.homeClaim);
   try {
     const governed = await claimGovernedBacklogWorkspace({
       db: args.db,
@@ -199,6 +211,7 @@ export async function claimBacklogItemForWork(args: {
         force: params["force"] === true,
         overrideReason: stringParam(params, "overrideReason"),
         workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived") ? shape.resolution.ref : null,
+        claimAtHome,
       },
       actor: await args.resolveActor(args.userId, args.context),
       workIntent: requestedIntent as WorkIntent | null,
@@ -219,6 +232,7 @@ export async function claimBacklogItemForWork(args: {
     const result = governed.data.claim;
     if (twinGate.kind === "overridden") await recordTwinOverride(twinDb as never, result.capsuleId, twinGate, await args.resolveActor(args.userId, args.context));
     await persistClaimShape(args.db, result.capsuleId, shape.resolution);
+    const homeClaim = claimAtHome ? await requestHomeClaim(result.capsuleId) : null;
     await ensureCapsuleWorkItemAnchorWithPrisma({
       capsuleId: result.capsuleId,
       backlogItemId: result.backlogItemId,
@@ -241,10 +255,12 @@ export async function claimBacklogItemForWork(args: {
       entityId: result.capsuleId,
       message: (conflicts.length
         ? `${base} ADVISORY: ${conflicts.join("; ")}. Coordinate before pushing.`
-        : `${base} Claim-at-start recorded for this session.`) + (admissionWarning ? ` Warning: ${admissionWarning}` : ""),
+        : `${base} Claim-at-start recorded for this session.`) + (admissionWarning ? ` Warning: ${admissionWarning}` : "")
+        + (homeClaim ? ` ${homeClaim}` : ""),
       data: {
         ...result,
         admissionWarning,
+        ...(claimAtHome ? { homeClaim: { state: "requested", message: homeClaim } } : {}),
         investment,
         workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived")
           ? { ref: shape.resolution.ref, source: shape.resolution.kind, ...(shape.resolution.kind === "derived" ? { reasonCode: shape.resolution.reasonCode, signals: shape.resolution.signals } : {}) }
