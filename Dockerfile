@@ -7,7 +7,15 @@ WORKDIR /app
 # ─── Dev stage (parallel branch — not part of production chain) ──────────────
 FROM base AS dev
 WORKDIR /workspace
-RUN apk add --no-cache git postgresql16-client
+# apk retries (a stalled fetch times out after 60s, then retries): one dropped
+# connection must not fail an upgrade (BI-7FFF5CB0;
+# guard: apps/web/lib/verify/dockerfile-apk-retry.guard.test.ts).
+RUN for attempt in 1 2 3 4 5; do \
+      apk add --no-cache --timeout 60 git postgresql16-client && break; \
+      if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
+      echo "apk add failed (attempt $attempt/5); retrying in $((attempt * 5))s" >&2; \
+      sleep $((attempt * 5)); \
+    done
 # BI-0DF1F354: bake preflight + entrypoint into the IMAGE. The primary failure
 # mode is a deleted/empty bind mount — the worktree copy of this script is not
 # available then, so it must not live only under /workspace.
@@ -407,7 +415,15 @@ WORKDIR /app
 # is the same guarantee for the path that has no GitHub Actions runner.
 # Dockerfile.sandbox installs it for the same class of reason.
 # Shared HTTPS tooling consumes the installer-owned Bash environment resolver.
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash
+# apk retries (a stalled fetch times out after 60s, then retries): one dropped
+# connection must not fail an upgrade (BI-7FFF5CB0;
+# guard: apps/web/lib/verify/dockerfile-apk-retry.guard.test.ts).
+RUN for attempt in 1 2 3 4 5; do \
+      apk add --no-cache --timeout 60 docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash && break; \
+      if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
+      echo "apk add failed (attempt $attempt/5); retrying in $((attempt * 5))s" >&2; \
+      sleep $((attempt * 5)); \
+    done
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
