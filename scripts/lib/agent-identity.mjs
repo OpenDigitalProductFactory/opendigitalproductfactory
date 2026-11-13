@@ -163,8 +163,15 @@ export function resolveAgentIdentity(input = {}) {
 
   let sessionId = null;
   let sessionSource = "unresolved";
+  // BI-53BED66C: DPF_SESSION_REF is the session id a claim was made under
+  // (scripts/lib/workroom-bind.mjs reads it first too). Honouring it here
+  // keeps the gate's evidence on the same session as the claim.
+  const declaredSessionRef = firstSet(env, ["DPF_SESSION_REF"]);
   if (sessionOverride) {
     sessionId = sessionOverride;
+    sessionSource = "explicit";
+  } else if (declaredSessionRef) {
+    sessionId = declaredSessionRef;
     sessionSource = "explicit";
   } else if (provider) {
     const detected = firstSet(env, SESSION_VARS[provider] ?? []);
