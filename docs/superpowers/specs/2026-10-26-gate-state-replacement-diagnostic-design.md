@@ -80,6 +80,12 @@ BI-2664971A and protected merge `75d723d34416e18c9bf1e0aede8fea6d1dace25d` provi
 
 Source inspection and the historical failure remain inputs, not a passing qualification result or experimental exclusion of the original causes. After Verify, the design author must record a normal research receipt that resolves `IF-91E987DA433B0C82` only when the paired native observations actually support it. Do not exploit a permissive receipt schema, reclassify the work, borrow another item's baseline, splice attempts, or infer the original holder from the controlled result.
 
+## Qualification-only clarification (2026-11-12)
+
+This is a qualification-only protocol: Prepare may produce only the named test candidate, and Verify may run only the separately reviewed candidate through its native signed admission. The existing acceptance criteria, production writer identity, test scope and cleanup requirements above remain the complete experimental scope.
+
+This clarification amends the protocol previously retained at commit `b9eeea196e9ae6312948dc0329d42f0dcc0c3a34`, blob `40d2bdbad8e211c19b0f1bd534066164db716c04`. That immutable source and its failed or unknown review history remain preserved. This wording neither settles those executions nor authorizes replay, a successor, a new review allowance, ordinary implementation or experiment execution. Obtain the supported current independent review disposition and a server-issued Prepare binding before test-source changes; a separate reviewed candidate and Verify binding remain required before execution. No research PASS is asserted.
+
 ## Independent failure-analysis challenge
 
 The review must challenge at least these failure modes before Prepare: a fabricated or setup-layer EPERM mistaken for the replacement boundary; helper acquisition not proved before the held attempt; helper release caused by watchdog or early exit rather than the explicit release signal; production writer bytes or unclaimed paths changed during preparation; partial or cross-attempt evidence treated as a complete pair; and a controlled result overstated as the cause of the historical incident. Any of these makes the qualification inconclusive or refused. The only positive outcome is a complete, same-attempt pair from the real writer: preserved ADMITTED bytes while the proven handle is held, followed after acknowledged closure by complete RUNNING bytes, with bounded cleanup and no false gate PASS.
