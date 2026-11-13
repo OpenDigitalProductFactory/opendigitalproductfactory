@@ -15,7 +15,7 @@ status: draft
 - `orderWaiters` / `compareByPolicy`: effective tier (30-minute aging), class turn in tier 0, virtual start time (10-minute session and 2-minute executor fair share), then `queuedAt` and id. `active-candidate` keeps first-come.
 - `decideHoldBound`, `boundedRenewalExpiry`: contended means a live waiter from another session.
 - `explainQueue`: position, `estimatedWaitMs`, `queueReason`, `policyVersion`.
-- Tests: `environment-lease-overseer.test.ts` covers AC-OVS-1 to AC-OVS-7.
+- Tests: `environment-lease-overseer.test.ts` covers AC-OVS-1, AC-OVS-2, AC-OVS-3, AC-OVS-4, AC-OVS-5, AC-OVS-6 and AC-OVS-7.
 
 ## Phase 2 — Admission and renewal
 
@@ -50,7 +50,7 @@ status: draft
 
 | Deliverable | Requirement | Acceptance | Test |
 | --- | --- | --- | --- |
-| Policy order | OBJ-OVS-1, OBJ-OVS-2 | AC-OVS-1 to AC-OVS-4 | `environment-lease-overseer.test.ts` (starvation, fair share) |
+| Policy order | OBJ-OVS-1, OBJ-OVS-2 | AC-OVS-1, AC-OVS-2, AC-OVS-3, AC-OVS-4 | `environment-lease-overseer.test.ts` (starvation, fair share) |
 | Hold bounds | OBJ-OVS-3 | AC-OVS-5, AC-OVS-6 | `environment-lease-overseer.test.ts` (bounds), `environment-lease-hold-bound.test.ts` |
 | AI turns | OBJ-OVS-1 | AC-OVS-1 | `environment-lease-overseer.test.ts` (alternation, slot hold), `local-ai-turn.test.ts`, `local-provider-capacity.ai-turn.test.ts` |
 | Visibility | OBJ-OVS-4 | AC-OVS-7 | `environment-lease-overseer.test.ts` (visible queue), `nonprod-lease-pack.test.ts`, `gate-worktree-pool-closed.test.mjs`, `pregate-status.test.mjs` |
