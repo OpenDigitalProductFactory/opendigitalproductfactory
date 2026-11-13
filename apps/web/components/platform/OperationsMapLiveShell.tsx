@@ -16,13 +16,15 @@
 // ignored for a short beat, and only materially different windows re-fetch.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock3, RefreshCw } from "lucide-react";
 import { AiOperationsMap } from "./AiOperationsMap";
 import { OperationsMapRefreshProvider } from "./operations-map-refresh-context";
 import type { OperationsMapData } from "@/lib/ai-operations-map/load-map-data";
 import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
 import { useSearchParams } from "next/navigation";
 import { readRoutingScope, routingWindow } from "@/lib/ai-operations-map/routing-management-scope";
+import { Surface } from "@/components/ui/Surface";
+import { useT } from "@/lib/i18n/use-t";
 
 const REFRESH_INTERVAL_MS = 45_000;
 const SCRUB_SETTLE_MS = 600;
@@ -34,6 +36,15 @@ const LIVE_EDGE_SLACK_MS = 10 * 60_000;
 const LIVE_EDGE_FORECAST_PAD_MS = 60 * 60_000;
 
 export type EvidenceWindowMs = { start: number; end: number };
+
+export function windowForHistoryPreset(durationMs: number, nowMs = Date.now()): EvidenceWindowMs {
+  return { start: nowMs - durationMs, end: nowMs };
+}
+
+export function shiftEvidenceWindow(window: EvidenceWindowMs, direction: -1 | 1): EvidenceWindowMs {
+  const span = Math.max(1, window.end - window.start);
+  return { start: window.start + direction * span, end: window.end + direction * span };
+}
 
 /**
  * Whether a requested evidence window differs enough from the one the current
@@ -77,11 +88,15 @@ export function OperationsMapLiveShell({
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const initialWindow = initialData.queriedWindow
+    ? { start: Date.parse(initialData.queriedWindow.start), end: Date.parse(initialData.queriedWindow.end) }
+    : null;
+  const [activeWindow, setActiveWindow] = useState<EvidenceWindowMs | null>(initialWindow);
 
   const params = useSearchParams();
   const scope = readRoutingScope(params);
   const scopedMinutesRef = useRef(scope.minutes);
-  const fetchedWindowRef = useRef<EvidenceWindowMs | null>(initialData.queriedWindow ? { start: Date.parse(initialData.queriedWindow.start), end: Date.parse(initialData.queriedWindow.end) } : null);
+  const fetchedWindowRef = useRef<EvidenceWindowMs | null>(initialWindow);
   const abortRef = useRef<AbortController | null>(null);
   const swapAtRef = useRef(0);
   const scrubAtRef = useRef(0);
@@ -104,6 +119,7 @@ export function OperationsMapLiveShell({
       if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
       const next = (await response.json()) as OperationsMapData;
       fetchedWindowRef.current = window;
+      setActiveWindow(window);
       swapAtRef.current = Date.now();
       lastUpdatedRef.current = Date.now();
       setData(next);
@@ -194,6 +210,11 @@ export function OperationsMapLiveShell({
         error={refreshError}
         onRefresh={refreshNow}
       />
+      <HistoryWindowControls
+        window={activeWindow}
+        refreshing={refreshing}
+        onSelect={(next) => void fetchSnapshot(next)}
+      />
       <OperationsMapRefreshProvider value={refreshNow}>
       <AiOperationsMap
         routingManagement={data.routingManagement}
@@ -211,6 +232,53 @@ export function OperationsMapLiveShell({
       />
       </OperationsMapRefreshProvider>
     </div>
+  );
+}
+
+const HISTORY_PRESETS = [
+  { key: "aiCoworkers.historyOneHour" as const, duration: 60 * 60_000 },
+  { key: "aiCoworkers.historySixHours" as const, duration: 6 * 60 * 60_000 },
+  { key: "aiCoworkers.historyTwentyFourHours" as const, duration: 24 * 60 * 60_000 },
+  { key: "aiCoworkers.historySevenDays" as const, duration: 7 * 24 * 60 * 60_000 },
+];
+
+function HistoryWindowControls({
+  window,
+  refreshing,
+  onSelect,
+}: {
+  window: EvidenceWindowMs | null;
+  refreshing: boolean;
+  onSelect: (window: EvidenceWindowMs) => void;
+}) {
+  const t = useT("shell");
+  const base = window ?? windowForHistoryPreset(24 * 60 * 60_000);
+  const atLiveEdge = base.end >= Date.now() - LIVE_EDGE_SLACK_MS;
+  const buttonClass = "inline-flex min-h-10 items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] disabled:opacity-40";
+
+  return (
+    <Surface className="flex flex-wrap items-center gap-2 px-3 py-2" aria-label={t("aiCoworkers.historyAriaLabel")}>
+      <span className="me-1 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--dpf-muted)]">
+        <Clock3 aria-hidden className="h-4 w-4" /> {t("aiCoworkers.historyLabel")}
+      </span>
+      {HISTORY_PRESETS.map((preset) => (
+        <button key={preset.key} type="button" disabled={refreshing} className={buttonClass} onClick={() => onSelect(windowForHistoryPreset(preset.duration))}>
+          {t(preset.key)}
+        </button>
+      ))}
+      <span className="mx-1 h-6 w-px bg-[var(--dpf-border)]" aria-hidden />
+      <button type="button" disabled={refreshing} className={buttonClass} onClick={() => onSelect(shiftEvidenceWindow(base, -1))}>
+        <ChevronLeft aria-hidden className="h-4 w-4" /> {t("aiCoworkers.historyPrevious")}
+      </button>
+      <button type="button" disabled={refreshing || atLiveEdge} className={buttonClass} onClick={() => onSelect(shiftEvidenceWindow(base, 1))}>
+        {t("aiCoworkers.historyNext")} <ChevronRight aria-hidden className="h-4 w-4" />
+      </button>
+      {!atLiveEdge ? (
+        <button type="button" disabled={refreshing} className={buttonClass} onClick={() => onSelect(windowForHistoryPreset(base.end - base.start))}>
+          {t("aiCoworkers.historyLive")}
+        </button>
+      ) : null}
+    </Surface>
   );
 }
 
