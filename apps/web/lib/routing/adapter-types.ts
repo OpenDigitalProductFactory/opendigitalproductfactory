@@ -21,6 +21,8 @@ export interface ResolvedProvider {
  */
 export type ImageInputDelivery = {sha256:string[];providerId:string;modelId:string;adapterKind:string};
 export interface AdapterMcpSession {
+  /** Original authenticated task grants, independent of model-visible tools. Empty refuses issuance. */
+  admittedTokenGrantScopes?: readonly string[];
   recordImageInputDelivery?: (delivery:ImageInputDelivery)=>Promise<void>;
   /** Server-owned exact native read lane; original task authority still gates every call. */
   readOnlyToolNames?: readonly string[];
