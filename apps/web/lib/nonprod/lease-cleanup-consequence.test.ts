@@ -168,3 +168,23 @@ describe("routine lease release on any installation", () => {
     }).verdict).toBe("automated");
   });
 });
+
+// BI-1986D3C1: production, 2026-11-10..13. Five of seven owner approvals were a
+// Codex session freeing its own contributor preview: a local-CI reservation
+// claimed without a slot manifest, which the ownership proof never recognised.
+describe("own contributor-preview reservation without a slot manifest", () => {
+  it("is the caller's own and frees without a person when its durable wait proves the owner", async () => {
+    const f = fixture("active"); (f.lease as { slotManifestVersion: number | null }).slotManifestVersion = null;
+    expect(await leaseCleanupConsequenceForCall(f.call, f.deps)).toEqual({ consequence: null, reason: "owned-development-lease-cleanup" });
+  });
+  it("still reaches a person when the reservation belongs to another session", async () => {
+    const f = fixture("active"); (f.lease as { slotManifestVersion: number | null }).slotManifestVersion = null;
+    f.call.userId = "other-user"; f.call.params.ownerSessionId = "other-session";
+    expect((await leaseCleanupConsequenceForCall(f.call, f.deps)).consequence).toBe("authority");
+  });
+  it("still reaches a person when no owner was ever recorded", async () => {
+    const f = fixture("active"); (f.lease as { slotManifestVersion: number | null }).slotManifestVersion = null;
+    (f.lease as { taskRunId: string }).taskRunId = "";
+    expect((await leaseCleanupConsequenceForCall(f.call, f.deps)).consequence).toBe("authority");
+  });
+});

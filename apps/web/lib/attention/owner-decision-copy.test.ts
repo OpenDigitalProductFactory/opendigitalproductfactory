@@ -93,4 +93,14 @@ describe("owner decision headlines", () => {
       ).toBeLessThanOrEqual(60);
     }
   });
+
+  it("uses the AI-capacity watch's own title, which names the provider and reset (BI-ACE041FE)", () => {
+    expect(
+      headlineFor({
+        source: "platform-health",
+        id: "platform-health:ai-capacity:provider:codex",
+        title: "OpenAI Codex has hit its usage limit until 2026-11-17 03:54 UTC",
+      } as AttentionItem),
+    ).toBe("OpenAI Codex has hit its usage limit until 2026-11-17 03:54 UTC");
+  });
 });

@@ -4153,6 +4153,19 @@
         "related"
       ]
     },
+    "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md": {
+      "publicHref": "/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "corpus-and-vectors-converge-on-every-platform-update",
+        "rule",
+        "why",
+        "how-to-apply",
+        "related-principles"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/count-the-operations-to-outcome.md": {
       "publicHref": "/founder-kernel/wiki/principles/count-the-operations-to-outcome/",
       "portalHref": null,
@@ -10559,7 +10572,8 @@
         "2-what-the-next-archetype-costs",
         "3-which-archetype-next",
         "4-the-gap-to-close-before-the-next-run",
-        "5-where-scenario-data-lives"
+        "5-where-scenario-data-lives",
+        "6-jurisdiction-is-a-test-axis-learned-by-pattern"
       ]
     },
     "docs/testing/archetype-job-validation.md": {
@@ -12407,6 +12421,7 @@
         "what-counts-as-sensitive-detail-and-what-does-not",
         "possible-outcomes",
         "initial-boundaries",
+        "source-code-from-a-public-repository",
         "masking-and-correctness",
         "retention-prompts",
         "standards-and-qualified-review"
@@ -12926,6 +12941,7 @@
         "how-the-finance-bridge-starts",
         "activate-a-contract",
         "record-a-subscription-payment",
+        "what-subscriptions-really-cost",
         "allowance-evaluation",
         "recovery-and-evidence",
         "related-routes",

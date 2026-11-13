@@ -85,9 +85,29 @@ cannot add a provider that the data policy removed.
 | Public-sector records | human review | authorized agency purpose and region |
 | Security logs | protect, then approved cloud | security-purpose and provider-control evidence |
 | Regulated decisions | human review | a named human decision owner and decision evidence |
-| Source code | protect, then approved cloud | repository authority, no-training, and retention evidence |
+| Source code from a private or unproven repository | protect, then approved cloud | repository authority, no-training, and retention evidence |
 | Credentials or secrets | do not send externally | omit and rotate the credential |
 | Unknown governed data | do not send externally | classify the data first |
+
+### Source code from a public repository
+
+Code is judged by the repository it comes from, not by the fact that a request
+contains code. When DPF knows which repository the work belongs to and has
+confirmed it is public on GitHub, as it does for change reviews of DPF's own
+open-source platform code, that code is already published. Sending it to a
+provider discloses nothing new, so DPF treats it as public data and every
+provider approved for public data can take the work.
+
+This applies only to the code itself. If a public diff also contains a key,
+password or token, a customer's email address or phone number, or any other
+sensitive detail in the table above, that detail is still caught and handled
+exactly as it would be anywhere else. A key or token keeps the request on this
+installation.
+
+Code from a private repository keeps the source-code boundary in the table.
+So does code whose repository is unknown or could not be checked: DPF never
+assumes a repository is public. A licence is kept as a record only. It governs
+how code may be reused, not who may read it.
 
 “Approved cloud” does not mean compliant or certified. It means the technical
 data boundary allows provider review to continue. The final decision still
