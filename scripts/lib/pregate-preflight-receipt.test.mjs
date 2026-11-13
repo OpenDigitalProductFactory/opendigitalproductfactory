@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, symlinkSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, symlinkSync, existsSync, readdirSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { identifyGuardExecution, readGuardInputStamp, runWithGuardReceipt } from "./pregate-preflight-receipt.mjs";
 import { runPreflight } from "./pregate-preflight.mjs";
 import { resolveGuardBash } from "./guard-bash.mjs";
@@ -61,7 +61,8 @@ function abandonedFixture(t) {
   const owner = { schema: "dpf-local-convergence-lock/v1", token: "original-attempt", pid: 765432,
     processIdentity: "fixture:birth", acquiredAt: new Date(1000).toISOString() };
   const receipt = { schemaVersion: 1, stage: "preflight", identity: { head: "original" }, owner,
-    status: "running", hostPid: owner.pid, startedAt: owner.acquiredAt, lastHeartbeatAt: owner.acquiredAt,
+    // A recent heartbeat keeps the real clock inside the settled-release budget.
+    status: "running", hostPid: owner.pid, startedAt: owner.acquiredAt, lastHeartbeatAt: new Date().toISOString(),
     completedAt: null, observations: [{ guardId: "guard", childPid: 765433 }] };
   mkdirSync(lock);
   const writeOwner = value => writeFileSync(join(lock, "owner.json"), JSON.stringify(value));
@@ -80,10 +81,12 @@ for (const status of ["live", "unknown"]) test(`reconciliation preserves ${statu
   assert.equal(result.newAttemptAllowed, false);
 });
 
-for (const change of ["legacy", "foreign-token", "foreign-birth", "probe-throws", "mutation-lock"])
+for (const change of ["legacy-without-lock-owner", "legacy-foreign-lock-pid", "foreign-token", "foreign-birth", "probe-throws", "mutation-lock"])
   test(`reconciliation cannot mutate ${change} ownership`, t => {
     const f = abandonedFixture(t);
-    if (change === "legacy") f.writeReceipt({ ...f.receipt, owner: undefined });
+    if (change.startsWith("legacy")) f.writeReceipt({ ...f.receipt, owner: undefined });
+    if (change === "legacy-without-lock-owner") rmSync(join(f.lock, "owner.json"));
+    if (change === "legacy-foreign-lock-pid") f.writeOwner({ ...f.owner, pid: f.owner.pid + 1 });
     if (change === "foreign-token") f.writeOwner({ ...f.owner, token: "replacement" });
     if (change === "foreign-birth") f.writeOwner({ ...f.owner, processIdentity: "replacement" });
     if (change === "probe-throws") f.input.probe = () => { throw new Error("unreadable"); };
@@ -115,8 +118,80 @@ for (const replacement of ["terminal", "receipt", "owner", "mutation-owner"])
     assert.equal(after.status, replacement === "terminal" ? "passed" : "running");
   });
 
+// BI-93EECD80: a receipt written before the receipt format carried `owner`
+// cannot prove ownership by token, but its lock still names the original
+// controller's pid and birth identity. When that controller is provably gone,
+// the records are quarantined with their bytes intact and the slot reopens.
+function legacyFixture(t) {
+  const f = abandonedFixture(t);
+  const { owner: _owner, ...legacy } = f.receipt;
+  f.writeReceipt(legacy);
+  t.after(() => rmSync(`${f.options.directory}-quarantine`, { recursive: true, force: true }));
+  return { ...f, receipt: legacy, receiptBytes: readFileSync(f.path, "utf8"), ownerBytes: readFileSync(join(f.lock, "owner.json"), "utf8") };
+}
+
+function quarantined(f) {
+  const root = `${f.options.directory}-quarantine`;
+  const entries = readdirSync(root);
+  assert.equal(entries.length, 1);
+  return join(root, entries[0]);
+}
+
+for (const probe of [{ status: "absent", reason: "process-not-found" }, { status: "unknown", reason: "pid-reused" }])
+  test(`a legacy receipt whose lock owner is ${probe.reason} is quarantined with its bytes preserved`, t => {
+    const f = legacyFixture(t);
+    const observed = guardReceipts.observeGuardReceipt({ ...f.input, probe: () => probe });
+    assert.equal(observed.status, "abandoned-legacy");
+    assert.equal(observed.newAttemptAllowed, false);
+    assert.equal(readFileSync(f.path, "utf8"), f.receiptBytes, "observation is read-only");
+    const result = guardReceipts.reconcileGuardReceipt({ ...f.input, probe: () => probe });
+    assert.equal(result.status, "quarantined");
+    assert.equal(result.newAttemptAllowed, true);
+    assert.equal(existsSync(f.path), false);
+    assert.equal(existsSync(f.lock), false);
+    const kept = quarantined(f);
+    assert.equal(result.quarantinePath, kept);
+    assert.equal(readFileSync(join(kept, basename(f.path)), "utf8"), f.receiptBytes);
+    assert.equal(readFileSync(join(kept, basename(f.lock), "owner.json"), "utf8"), f.ownerBytes);
+    const record = JSON.parse(readFileSync(join(kept, "quarantine.json"), "utf8"));
+    assert.equal(record.reason, "legacy-receipt-controller-gone");
+    assert.equal(record.controller.reason, probe.reason);
+    assert.equal(record.lockOwner.pid, f.owner.pid);
+    assert.equal(guardReceipts.observeGuardReceipt(f.input).status, "absent");
+  });
+
+test("a legacy receipt with a live lock owner stays refused and unchanged", async t => {
+  const f = legacyFixture(t);
+  const live = () => ({ status: "live", reason: "same-process" });
+  const result = guardReceipts.reconcileGuardReceipt({ ...f.input, probe: live });
+  assert.equal(result.status, "unknown");
+  assert.equal(result.newAttemptAllowed, false);
+  assert.equal(readFileSync(f.path, "utf8"), f.receiptBytes);
+  assert.equal(readFileSync(join(f.lock, "owner.json"), "utf8"), f.ownerBytes);
+  await assert.rejects(runWithGuardReceipt({ ...f.options, probe: live }),
+    error => error.code === "HOST_RECEIPT_RETAINED" && error.receiptPath === f.path);
+  assert.equal(f.calls(), 0);
+  assert.equal(existsSync(`${f.options.directory}-quarantine`), false);
+});
+
+test("preflight admission quarantines a dead legacy receipt and then executes", async t => {
+  const f = legacyFixture(t);
+  const run = await runWithGuardReceipt({ ...f.options, probe: () => ({ status: "absent", reason: "process-not-found" }) });
+  assert.equal(run.reused, false);
+  assert.equal(f.calls(), 1);
+  assert.equal(readdirSync(quarantined(f)).includes("quarantine.json"), true);
+});
+
+test("a retained receipt names itself as the cause when admission refuses", async t => {
+  const f = abandonedFixture(t);
+  await assert.rejects(runWithGuardReceipt({ ...f.options, probe: () => ({ status: "live" }) }),
+    error => error.code === "HOST_RECEIPT_RETAINED" && error.receiptPath === f.path && /executor/.test(error.nextAction));
+});
+
 test("an unchanged abandoned attempt settles once while preserving its foreign execution lock", t => {
   const f = abandonedFixture(t);
+  // Within the parent + command budgets: settling never quarantines by itself.
+  f.input.now = () => new Date(Date.parse(f.receipt.lastHeartbeatAt) + 1000);
   const result = guardReceipts.reconcileGuardReceipt(f.input);
   assert.equal(result.status, "inconclusive");
   const bytes = readFileSync(f.path, "utf8");
@@ -125,6 +200,72 @@ test("an unchanged abandoned attempt settles once while preserving its foreign e
   assert.equal(guardReceipts.reconcileGuardReceipt(f.input).status, "inconclusive");
   assert.equal(readFileSync(f.path, "utf8"), bytes);
   assert.match(result.nextAction, /child outcome.*descendant ownership/);
+});
+
+// BI-93EECD80: an owned receipt settled inconclusive (its controller killed from
+// outside, e.g. the terminal closed) used to fence the worktree forever: nothing
+// could prove "descendant ownership". Once the controller is still gone, a
+// successful process scan finds no surviving descendant, and the parent and
+// command budgets (60 + 30 minutes) have elapsed since its last heartbeat, the
+// records are quarantined with their bytes intact and the slot reopens.
+const SETTLE_MS = 90 * 60 * 1000;
+function settledFixture(t) {
+  const f = abandonedFixture(t);
+  guardReceipts.reconcileGuardReceipt(f.input);
+  t.after(() => rmSync(`${f.options.directory}-quarantine`, { recursive: true, force: true }));
+  const after = Date.parse(f.receipt.lastHeartbeatAt) + SETTLE_MS + 1;
+  return { ...f, after, receiptBytes: readFileSync(f.path, "utf8"), ownerBytes: readFileSync(join(f.lock, "owner.json"), "utf8"),
+    settled: { ...f.input, now: () => new Date(after), descendants: () => [] } };
+}
+
+test("a settled inconclusive receipt with no surviving descendants is quarantined with its bytes preserved", t => {
+  const f = settledFixture(t);
+  let scanned = null;
+  const input = { ...f.settled, descendants: pid => { scanned = pid; return []; } };
+  const observed = guardReceipts.observeGuardReceipt(input);
+  assert.equal(observed.status, "abandoned-settled");
+  assert.equal(scanned, f.owner.pid);
+  assert.equal(readFileSync(f.path, "utf8"), f.receiptBytes, "observation is read-only");
+  const result = guardReceipts.reconcileGuardReceipt(input);
+  assert.equal(result.status, "quarantined");
+  assert.equal(result.newAttemptAllowed, true);
+  assert.equal(existsSync(f.path), false);
+  assert.equal(existsSync(f.lock), false);
+  const kept = quarantined(f);
+  assert.equal(readFileSync(join(kept, basename(f.path)), "utf8"), f.receiptBytes);
+  assert.equal(readFileSync(join(kept, basename(f.lock), "owner.json"), "utf8"), f.ownerBytes);
+  const record = JSON.parse(readFileSync(join(kept, "quarantine.json"), "utf8"));
+  assert.equal(record.reason, "settled-receipt-controller-and-descendants-gone");
+  assert.deepEqual(record.descendants, []);
+  assert.equal(guardReceipts.observeGuardReceipt(f.input).status, "absent");
+});
+
+for (const blocker of ["live-descendant", "scan-failed", "within-budget", "controller-live", "foreign-lock-owner"])
+  test(`a settled inconclusive receipt stays retained when ${blocker}`, async t => {
+    const f = settledFixture(t);
+    const input = { ...f.settled };
+    let at = f.after;
+    if (blocker === "live-descendant") input.descendants = () => [{ pid: 765433, parentPid: f.owner.pid, name: "node.exe" }];
+    if (blocker === "scan-failed") input.descendants = () => null;
+    if (blocker === "within-budget") { at = f.after - 2; input.now = () => new Date(at); }
+    if (blocker === "controller-live") input.probe = () => ({ status: "live" });
+    if (blocker === "foreign-lock-owner") f.writeOwner({ ...f.owner, token: "replacement" });
+    const result = guardReceipts.reconcileGuardReceipt(input);
+    assert.equal(result.status, "inconclusive");
+    assert.equal(result.newAttemptAllowed, false);
+    assert.equal(readFileSync(f.path, "utf8"), f.receiptBytes);
+    assert.equal(existsSync(`${f.options.directory}-quarantine`), false);
+    await assert.rejects(runWithGuardReceipt({ ...f.options, probe: input.probe, descendants: input.descendants, now: () => at }),
+      error => error.code === "HOST_RECEIPT_RETAINED");
+    assert.equal(f.calls(), 0);
+  });
+
+test("preflight admission quarantines a settled receipt whose descendants are gone and then executes", async t => {
+  const f = settledFixture(t);
+  const run = await runWithGuardReceipt({ ...f.options, probe: f.settled.probe, descendants: () => [], now: () => f.after });
+  assert.equal(run.reused, false);
+  assert.equal(f.calls(), 1);
+  assert.equal(readdirSync(quarantined(f)).includes("quarantine.json"), true);
 });
 
 for (const replacement of ["receipt", "owner"]) test(`late completion cannot overwrite changed ${replacement}`, async t => {

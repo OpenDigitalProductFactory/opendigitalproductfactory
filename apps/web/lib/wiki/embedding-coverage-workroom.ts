@@ -31,12 +31,16 @@ export type CorpusHealthClient = {
 };
 
 export type CoverageReport = {
-  /** Published pages carrying a vector. */
+  /** Published pages whose vector matches their current text. */
   covered: number;
   /** Published pages scanned. */
   scanned: number;
-  /** Pages re-embedded on this run. */
+  /** Pages re-embedded on this run (missing or changed since last embedded). */
   repaired: number;
+  /** Pages whose text had changed since their vector was computed (BI-F039D17A). */
+  stale: number;
+  /** Pages left for the next run because the time budget ran out. */
+  deferred: number;
   /** True when nothing could be attempted because the provider was down. */
   providerUnavailable: boolean;
   /** Operator-facing one-liner — no jargon, states what happens next. */
@@ -48,45 +52,54 @@ export type CoverageReport = {
  *
  * Deliberately says what it MEANS, not what ran: a partially embedded corpus
  * presents to the operator as coworkers re-asking settled questions, and that
- * connection is invisible unless this text makes it.
+ * connection is invisible unless this text makes it. A stale vector presents as
+ * coworkers steering by an older version of a page (BI-F039D17A).
  */
 export function describeCoverage(result: WikiEmbeddingReconciliationResult): CoverageReport {
-  const covered = result.scanned - result.failed.length;
-  const base = `${covered} of ${result.scanned} reference pages are searchable by your coworkers`;
+  // Same arithmetic as embedding-reconciliation's currentCount, kept inline so
+  // this module stays free of the reconcile's runtime imports.
+  const covered = result.scanned - result.failed.length - result.deferred;
+  const base = `${covered} of ${result.scanned} reference pages are searchable by your coworkers in their current wording`;
+  const common = {
+    covered,
+    scanned: result.scanned,
+    stale: result.stale,
+    deferred: result.deferred,
+  };
 
   if (result.providerUnavailable) {
     return {
-      covered,
-      scanned: result.scanned,
+      ...common,
       repaired: 0,
       providerUnavailable: true,
       summary:
-        `${base}. ${result.missing} could not be processed because the local AI model was busy — `
+        `${base}. ${result.missing + result.stale} could not be processed because the local AI model was busy — `
         + "nothing was lost and this retries automatically within a couple of hours. "
-        + "Until then your coworkers may ask about things you have already decided.",
+        + "Until then your coworkers may ask about things you have already decided, or steer by an older version of a page.",
     };
   }
 
   if (result.failed.length > 0) {
     return {
-      covered,
-      scanned: result.scanned,
+      ...common,
       repaired: result.embedded,
       providerUnavailable: false,
       summary:
-        `${base}. Repaired ${result.embedded}; ${result.failed.length} still failing and will be retried. `
-        + "Pages that are not searchable can cause a coworker to re-ask something you have already settled.",
+        `${base}. Refreshed ${result.embedded}; ${result.failed.length} still failing and will be retried. `
+        + "Pages that are not current can cause a coworker to re-ask something you have already settled.",
     };
   }
 
+  const deferredNote = result.deferred > 0
+    ? ` ${result.deferred} more will be refreshed on the next run.`
+    : "";
   return {
-    covered,
-    scanned: result.scanned,
+    ...common,
     repaired: result.embedded,
     providerUnavailable: false,
     summary: result.embedded > 0
-      ? `${base} — repaired ${result.embedded} that had been missed.`
-      : `${base}. Nothing needed repair.`,
+      ? `${base} — refreshed ${result.embedded} that were missing or had changed.${deferredNote}`
+      : `${base}.${deferredNote || " Nothing needed repair."}`,
   };
 }
 
@@ -126,7 +139,10 @@ export async function recordCoverageRun(input: {
           covered: report.covered,
           scanned: report.scanned,
           repaired: report.repaired,
+          stale: report.stale,
+          deferred: report.deferred,
           providerUnavailable: report.providerUnavailable,
+          refreshed: input.result.refreshed.slice(0, 50),
           stillFailing: input.result.failed.slice(0, 20),
         },
       },

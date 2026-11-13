@@ -436,7 +436,9 @@ preserves the default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell
 debugging and still requires a working shell.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
-already leased). A canonical waiter refreshes its idempotent claim well inside
+already leased). While it waits, it prints its policy position, an estimated wait and
+the reason for that position from the test-machine overseer (BI-218A4555; see
+`docs/architecture/build-gate-runbook.md`). A canonical waiter refreshes its idempotent claim well inside
 its liveness window, while an admitted owner receives a two-minute authority
 window and heartbeats at no more than one third of that effective TTL. This
 bounds recovery when the supervisor disappears without shortening the maximum
@@ -630,9 +632,34 @@ For an abandoned controller with matching strong receipt/lock ownership, use
 output). This records an inconclusive disposition and preserves the original
 heartbeat and observations. It does not invent a child result or remove the
 original execution lock. Resolve child outcome and descendant ownership through
-the accountable executor before seeking new admission. Live, legacy, reused-PID,
+the accountable executor before seeking new admission. Live, reused-PID,
 unreadable or changed ownership stays unknown and untouched; a foreign mutation
 lock is also retained. Normal status reads never reconcile automatically.
+
+A receipt written before receipts carried an `owner` field cannot match its lock
+by token (BI-93EECD80). When its lock names the receipt's own host pid and that
+process is provably gone (not found, or the pid now belongs to another process),
+status reports `abandoned-legacy`. Reconciling it moves the receipt and its lock,
+unchanged, into a timestamped folder under `dpf-host-guard-receipts-quarantine`
+beside the receipts, with a `quarantine.json` that records the lock owner and the
+process probe. The next preflight does the same before it runs, so a dead
+pre-owner receipt no longer fences the worktree. A legacy receipt whose owner is
+alive, unmeasurable or does not match stays unknown and untouched.
+
+An owned receipt settled inconclusive (its controller was killed from outside,
+for example by closing the terminal) is released the same way once nothing it
+started can still be running. Status reports `abandoned-settled`, and
+reconciliation or the next preflight quarantines it, only when all of these
+hold: the lock still names the receipt's own owner, that controller is still
+provably absent, a process scan that succeeded finds no surviving descendant of
+it, and 90 minutes (the 60-minute parent budget plus the 30-minute command
+budget) have passed since its last heartbeat. `quarantine.json` records the
+empty descendant scan. A failed scan, a surviving descendant, a live or changed
+owner, or a heartbeat inside that window keeps the receipt retained.
+
+When a retained receipt does block a run, preflight still exits 88, but it names
+the receipt (`HOST_RECEIPT_RETAINED` and its path) and `pregate` says it is not
+host pressure.
 
 **A gate that is still working says so (BI-F039AA83).** pregate writes
 `dpf-pregate-live.json` into the worktree's own git dir when it starts, moves its
@@ -729,6 +756,15 @@ base SHA, and passes that SHA to the child plan without fetching again. A
 failed fetch records `fetch-failed` and exits before integration synthesis or
 expensive gates. This admission boundary avoids repeated rebase/rerun churn
 while queued; later movement on `main` is reconciled by the merge queue.
+
+The shared-safe helper serializes cooperating refreshes and unshallow operations
+with an ownership-token lock in the canonical Git common directory, so linked
+worktrees share the same boundary. The explicit child-plan fetch uses that
+helper too. Contention waits at most 60 seconds before reporting an unavailable
+prerequisite. It never reclaims a foreign or uncertain owner, removes Git's
+lockfiles, resets refs or substitutes an offline baseline. A retained owner
+requires ownership reconciliation; do not delete it to make a gate run. Raw Git
+commands outside the helper do not participate in this exclusion boundary.
 
 Offline operation must be explicit:
 `--offline-accepted-base` or

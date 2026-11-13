@@ -115,6 +115,8 @@ ${args.toolchainNotice}`;
     protocolVersion: negotiated,
     capabilities: {
       tools: { listChanged: true },
+      // BI-ED52AB82: Work Rooms are subscribable resources (spec 2026-10-27 §6.7).
+      resources: { subscribe: true },
       ...(shouldAdvertiseTasksCapability(negotiated)
         ? { tasks: { list: {}, cancel: {} } }
         : {}),

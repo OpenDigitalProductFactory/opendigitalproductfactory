@@ -230,7 +230,12 @@ test("source validation refuses conflicting branch, nested path, non-Git and for
   assert.throws(() => verifiedBindingSource({ ...binding, headSha: "0".repeat(40) }), /conflicts/);
   assert.throws(() => verifiedBindingSource({ ...binding, worktreePath: join(f.root, "packages") }), /conflicts/);
   assert.throws(() => verifiedBindingSource({ ...binding, worktreePath: f.pack }), /git .*failed|Command failed/);
-  assert.throws(() => verifiedBindingSource({ ...binding, mainRoot: f.remote }), /conflicts/);
+  // A host that runs git with safe.bareRepository=explicit (the Claude desktop
+  // terminal sets it through GIT_CONFIG_PARAMETERS) refuses the bare remote
+  // inside git, before the source check names the conflict. Both are refusals
+  // before import, which is what this asserts.
+  assert.throws(() => verifiedBindingSource({ ...binding, mainRoot: f.remote }),
+    /conflicts|cannot use bare repository/);
   assert.equal(f.calls.length, 0);
 });
 

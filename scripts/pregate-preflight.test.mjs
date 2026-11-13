@@ -94,7 +94,8 @@ test("actual CLI records an explicit omission without touching retained executio
       for (const reason of ["", undefined]) {
         const refused = run(reason);
         assert.equal(refused.status, 88, refused.stdout + refused.stderr);
-        assert.match(refused.stderr, /execution inconclusive/);
+        assert.match(refused.stderr, /retained host guard receipt \(HOST_RECEIPT_RETAINED\)/);
+        assert.doesNotMatch(refused.stderr, /host under pressure/);
         assert.doesNotMatch(refused.stdout, /SKIPPED|REUSED|running \(pid/);
         assert.equal(fsSync.readFileSync(receiptPath, "utf8"), original);
         assert.equal(fsSync.readFileSync(join(lockPath, "owner.json"), "utf8"), ownerBytes);
@@ -808,6 +809,19 @@ test("a zero-exit guard with failed progress recording cannot supply PASS", asyn
   const result = await execute(process.execPath,["-e","process.exit(0)"]);
   assert.equal(result.outcome,"runner_failed");
   assert.notEqual(result.exitCode,0);
+});
+
+test("a retained host receipt is named as the cause, not host pressure", async () => {
+  const {runPreflightEntrypoint} = await import("./pregate-preflight.mjs");
+  let output="";
+  const status=await runPreflightEntrypoint(async () => {throw Object.assign(new Error("fixture-secret"),{code:"HOST_RECEIPT_RETAINED",
+    receiptPath:"/wt/.git/dpf-host-guard-receipts/key.json",nextAction:"Ask the accountable executor."});},text=>{output+=text;});
+  assert.equal(status,88);
+  assert.match(output,/HOST_RECEIPT_RETAINED/);
+  assert.match(output,/retained host guard receipt/);
+  assert.ok(output.includes("/wt/.git/dpf-host-guard-receipts/key.json"));
+  assert.ok(output.includes("pregate:status -- --reconcile-host-receipt"));
+  assert.doesNotMatch(output,/fixture-secret/);
 });
 
 test("preflight receipt exceptions report unrun without leaking exception contents", async () => {

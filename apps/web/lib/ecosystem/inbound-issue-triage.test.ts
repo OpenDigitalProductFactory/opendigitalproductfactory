@@ -8,11 +8,11 @@ import {
   composeInboundBody,
   mapPeerDemandMirrors,
   mapUpstreamIssues,
-  mapDependabotAlerts,
   runInboundIssueTriage,
   toBacklogIngestInput,
   type InboundEcosystemItem,
 } from "./inbound-issue-triage";
+import { groupDependabotAlerts } from "./security-finding-groups";
 
 const item = (overrides: Partial<InboundEcosystemItem> = {}): InboundEcosystemItem => ({
   sourceKind: "upstream-issue",
@@ -26,15 +26,15 @@ const item = (overrides: Partial<InboundEcosystemItem> = {}): InboundEcosystemIt
 });
 
 describe("toBacklogIngestInput", () => {
-  it("files a provider alert as automated detection with a distinct stable repository origin", () => {
-    const [alert] = mapDependabotAlerts([{ number: 257, state: "open", packageName: "minimatch", manifest: "pnpm-lock.yaml",
+  it("files a provider alert group as automated detection with a distinct stable per-package origin", () => {
+    const [group] = groupDependabotAlerts([{ number: 257, state: "open", packageName: "minimatch", ecosystem: "npm", manifest: "pnpm-lock.yaml",
       severity: "medium", advisory: "GHSA-g3hv-75wg-m249", summary: "Resource exhaustion", vulnerable: "<11.0.1",
       patched: "11.0.1", url: "https://github.com/acme/widgets/security/dependabot/257" }], { owner: "acme", name: "widgets" });
-    const input = toBacklogIngestInput(alert);
-    expect(input).toMatchObject({ source: "automated-detection", workType: "bug",
-      origin: { kind: "ecosystem-dependabot-alert", id: "acme/widgets#257" } });
+    const input = toBacklogIngestInput(group);
+    expect(input).toMatchObject({ source: "automated-detection", workType: "bug", priority: 3,
+      origin: { kind: "ecosystem-dependabot-package", id: "acme/widgets#npm/minimatch" } });
     expect(input.body).toContain("GHSA-g3hv-75wg-m249");
-    expect(input.body).toContain("Patched release: 11.0.1");
+    expect(input.body).toContain("patched 11.0.1");
     expect(input.reconcile).not.toHaveProperty("legacyId");
   });
 

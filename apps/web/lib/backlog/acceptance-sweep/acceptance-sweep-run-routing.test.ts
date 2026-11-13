@@ -191,3 +191,37 @@ describe("runAcceptanceSweep — withdrawn and outdated packets (BI-099A0BA3)", 
     expect(summary.routing.objectiveMapping).toMatchObject({ withdrawn: 1, shapeOutdated: 1, issued: 0 });
   });
 });
+
+// BI-1D5FCEBE (WWMD DI-29DB4468BA05): an item whose newest same-kind evidence is
+// a recorded failure owes a fresh check that only a coworker can record, so
+// waiting 14 days adds nothing. It routes from its second day in acceptance,
+// once the nightly deploy has had a chance to ship the fix.
+describe("runAcceptanceSweep — failure-held items route after one day (BI-1D5FCEBE)", () => {
+  const failed = (owner: string | null): SweepEvaluation => ({
+    owed: [{ code: "DELIVERY_EVIDENCE_REQUIRED", state: "fail", accountableRole: "delivery-coordinator", nextAction: "The newest manual evidence on this item is a failure." }],
+    owner: owner ? { agentId: owner, displayName: owner, codes: ["DELIVERY_EVIDENCE_REQUIRED"] } : null,
+    unroutable: [],
+    closable: false,
+  });
+
+  function sweep(evaluations: Record<string, SweepEvaluation>, ages: Record<string, number>) {
+    return ports({
+      loadPoolAges: async () => new Map(Object.entries(ages).map(([id, days]) => [id, age(id, days)])),
+      selectPage: async () => ({ items: Object.keys(evaluations).map(item), unsnapshotted: Object.keys(evaluations).length, nextCursor: null }),
+      evaluate: async (entry) => evaluations[entry.id] ?? null,
+    });
+  }
+
+  it("routes a failure-held item with an owner from one day in acceptance", async () => {
+    const p = sweep({ held: failed("AGT-903"), fresh: failed("AGT-903"), plain: owed }, { held: 2, fresh: 0, plain: 2 });
+    await runAcceptanceSweep(p, { ...CONFIG, routeLimit: 5 });
+    const [candidates] = vi.mocked(p.route).mock.calls[0]!;
+    expect(candidates.map((candidate) => candidate.item.itemId)).toEqual(["BI-HELD"]);
+  });
+
+  it("waits the aged threshold when no coworker owns the failed check", async () => {
+    const p = sweep({ held: failed(null) }, { held: 5 });
+    await runAcceptanceSweep(p, CONFIG);
+    expect(p.route).not.toHaveBeenCalled();
+  });
+});
