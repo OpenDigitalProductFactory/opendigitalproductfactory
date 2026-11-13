@@ -638,6 +638,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/escalation-parked-return.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
@@ -949,6 +952,12 @@
     ],
     "apps/web/lib/federation/demand-response.ts": [
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
+    ],
+    "apps/web/lib/federation/work-sync-health.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/federation/work-sync-watch.ts": [
+      "docs/operations/observability-coverage.md"
     ],
     "apps/web/lib/finance/finance-validation.ts": [
       "docs/testing/handoff-invoice-gaps.md"
@@ -1815,6 +1824,9 @@
     ],
     "apps/web/scripts/offload-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/scripts/reevaluate-escalation-parked-items.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
     ],
     "apps/web/tsconfig.json": [
       "docs/architecture/dependency-reduction-routine.md"
@@ -3488,9 +3500,11 @@
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/backlog/deferral-contract.ts",
+      "apps/web/lib/backlog/escalation-parked-return.ts",
       "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts",
       "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/govern/data/field-classification.ts",
+      "apps/web/scripts/reevaluate-escalation-parked-items.ts",
       "packages/db/src/table-classification.ts",
       "scripts/check-no-unattributable-deferral.mjs"
     ],
@@ -4290,6 +4304,8 @@
     ],
     "docs/operations/observability-coverage.md": [
       "apps/web/lib/coworker/approval-lifetime.ts",
+      "apps/web/lib/federation/work-sync-health.ts",
+      "apps/web/lib/federation/work-sync-watch.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/observability/platform-continuity-watch.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",

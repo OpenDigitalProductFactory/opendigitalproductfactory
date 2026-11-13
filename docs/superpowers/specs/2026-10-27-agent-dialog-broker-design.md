@@ -342,6 +342,23 @@ Agent-to-agent dialog can loop. Four controls bound it:
 
 **Authority.** A turn runs on the session's own room-scoped token, which was issued to the person who started supervision. A message only adds input. Every tool call is still gated by the token's scope, that person's grants and capabilities, and the runtime request policy, which holds anything past the sandbox for a decision. Posting is gated by room admission, unchanged.
 
+### 7.2 Sessions on execution hosts (T3 absorption, BI-FD5D9302)
+
+The [T3 Code absorption](2026-11-13-t3-code-absorption-design.md) moves session supervision off the portal process:
+- **S3:** one driver per client;
+- **S6 (BI-5A866218):** the owner's devices become execution hosts of their installation.
+
+This section says how §7.1 holds once that happens. It changes no rule above; it changes where "live" and "deliver" are answered.
+
+- **"Supervised" widens.** A session is supervised when the portal or a registered execution host of the same installation drives it. A desktop session that a host now drives becomes deliverable, so its addressed messages become turns instead of staying `held-for-executor`. A client the platform still cannot drive keeps the cursor and push channels.
+- **The record says where.** `workspaceState.runtimeSession` gains the host id. `addressedAs` stays the client GAID with `#session=<threadId>`. An executor instance appears as an `#instance=<id>` qualifier, never as a separate identity (§5.1, GAID §6.9).
+- **Delivery goes through the host.** The `SupervisedSessionPort` answers `isLive` and `deliver` for the host that owns the session, over that host's route (loopback, tailnet, authenticated HTTPS). Delivery is a `WorkroomEffect` outbox row after S2. The wake is decided once on the portal; the host only runs the turn.
+- **An unreachable host is not a lost session.** While the host is unreachable, the turn stays queued in the outbox and the wake state says the host is unreachable. The session becomes `supervision-lost` only when the host reports it cannot resume it, or under the same 24-hour rule as a portal restart. The room coordinator is woken as in §7.
+- **Re-attach is the host's job.** After its own restart a host re-attaches its sessions, issues fresh room tokens and revokes the old ones, as the portal does at boot today.
+- **Authority does not widen.** A turn still runs on the session's room-scoped token. After the T3 absorption's S5 slice, that token is per session and bound to the room's tool ceiling. The ceiling always includes `read_room_messages`, `post_room_message` and the room's message resource. Host links only narrow authority. The paired Dev installation is a federated peer (§8), never an execution host of production.
+
+This mirrors the direction recorded in DPF2's plan (2026-11-13), where a protected launcher starts each agent process with its GAID, permit and corpus.
+
 ## 8. Between installations
 
 This section composes existing designs and adds only the dialog binding.
