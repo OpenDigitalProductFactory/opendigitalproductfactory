@@ -20,7 +20,9 @@ using (BI-88D51B8F, owner direction 2026-11-04):
 - **Owned reservation.** The caller's own process-free local-CI or preview
   reservation, proven by the exact original session and a server-recorded
   durable wait that belongs to the authenticated user. The classifier checks
-  the complete lease/wait identity and version-one slot binding.
+  the complete lease/wait identity and slot binding. A contributor preview
+  claims local-CI without a slot manifest; since BI-1986D3C1 its admission
+  records the same durable owner, so its owner frees it the same way.
 
 The approval decision and the locked release run the same check on the current
 row (`routineLeaseRelease`). A lease that changes between the two is checked
