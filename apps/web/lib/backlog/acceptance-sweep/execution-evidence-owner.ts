@@ -39,14 +39,18 @@ const LANE_ROLE = "delivery-coordinator";
 /** The delivery-coordinator requirement the sweep routes to the execution-evidence lane. */
 export function isExecutionEvidenceLane(
   decision: Pick<InitiativeReadinessDecision, "shapeDecision">,
-  entry: Pick<ReadinessRequirementResult, "code" | "accountableRole">,
+  entry: Pick<ReadinessRequirementResult, "code" | "accountableRole"> & { state?: ReadinessRequirementResult["state"] },
 ): boolean {
   if (entry.accountableRole !== LANE_ROLE) return false;
   // Only the small shape assigns acceptance to the delivery-coordinator; this
   // is the predicate terminal-recovery.ts answers with the small-shape escalation.
   if (entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED") return true;
+  if (entry.code !== "DELIVERY_EVIDENCE_REQUIRED") return false;
+  // BI-1D5FCEBE: a recorded failure is superseded only by a passing
+  // record_execution_evidence of the same kind, on any shape; a merge does not.
+  if (entry.state === "fail") return true;
   const shape = decision.shapeDecision?.effective;
-  return entry.code === "DELIVERY_EVIDENCE_REQUIRED" && (shape === "small" || shape === "break-fix");
+  return shape === "small" || shape === "break-fix";
 }
 
 /**
