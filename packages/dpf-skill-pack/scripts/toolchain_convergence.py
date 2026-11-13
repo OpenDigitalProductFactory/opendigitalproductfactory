@@ -12,6 +12,12 @@ convergence policy of its own beyond what is named here.
   apps/web/lib/agent-toolchain/toolchain-manifest.ts. The header carrier
   leaves the connector URL, and so the OAuth resource and the desktop app's
   URL check, unchanged. The query carrier is used only on a literal URL.
+  Claude Code uses the helper carrier (BI-BDC94789): it files a server's
+  stored sign-in under sha256 of its type, url and headers, so a header that
+  changed with every pack, digest or convergence status signed the owner out
+  on each update. Its descriptor instead names a constant `headersHelper`
+  (CLAUDE_HEADERS_HELPER) that relays the header from DECLARATION_SIDECAR in
+  the same copy; the descriptor's bytes, and the sign-in, stay put.
 - **Report.** `--report-json` records, per client and scope, the version,
   digest and auth mode before and after, the action taken, any backup, and
   whether a restart is needed, plus each client CLI's own `--version`.
@@ -40,7 +46,14 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 DECLARATION_HEADER = "X-DPF-Toolchain"
 DECLARATION_QUERY_KEYS = ("dpf_pack", "dpf_digest", "dpf_client", "dpf_converge")
-DEFAULT_CARRIERS = {"claude-code": "header", "codex": "header", "grok": "query", "antigravity": "header"}
+DEFAULT_CARRIERS = {"claude-code": "helper", "codex": "header", "grok": "query", "antigravity": "header"}
+CARRIERS = ("query", "header", "helper")
+#: Per-copy file the Claude headersHelper relays; outside the delivered digest.
+DECLARATION_SIDECAR = "toolchain-declaration.json"
+#: Constant in every Claude descriptor. Not part of Claude Code's credential key
+#: (cf(name, config) hashes type, url and headers only); a helper that fails or
+#: is not run (an untrusted folder) leaves the connection up, just undeclared.
+CLAUDE_HEADERS_HELPER = 'node "${CLAUDE_PLUGIN_ROOT}/scripts/toolchain-declaration-header.mjs"'
 CANONICAL_MCP_URL = "https://localhost/api/mcp/v1?tier=full"
 # Current copies template DPF_CLAUDE_MCP_URL, legacy ones DPF_MCP_URL (BI-D6A6462A).
 _TEMPLATE = re.compile(r"^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$")
@@ -115,7 +128,9 @@ class Declarations:
     def carrier(self, client: str) -> str:
         shape = (self.manifest.get("clients") or {}).get(client) if isinstance(self.manifest, Mapping) else None
         chosen = shape.get("declarationCarrier") if isinstance(shape, Mapping) else None
-        return chosen if chosen in ("query", "header") else DEFAULT_CARRIERS.get(client, "header")
+        if chosen == "helper" and client != "claude-code":
+            chosen = None  # Only Claude Code runs a descriptor's headersHelper.
+        return chosen if chosen in CARRIERS else DEFAULT_CARRIERS.get(client, "header")
 
     #: `status[:code][@epochSeconds]` from the host agent's state (BI-3E66F76F), or None.
     converge: Optional[str] = None
@@ -132,11 +147,28 @@ class Declarations:
             query.append(("dpf_converge", self.converge))
         return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
+    def sidecar(self, client: str) -> Optional[dict[str, Any]]:
+        """What DECLARATION_SIDECAR holds for a helper-carried client, or None."""
+        if self.carrier(client) != "helper":
+            return None
+        return {"client": client, "headers": {DECLARATION_HEADER: self.header_value(client)}}
+
     def declare_server(self, server: dict[str, Any], client: str) -> dict[str, Any]:
         """A JSON connector entry carrying this declaration (a new dict)."""
         declared = dict(server)
         url = declared.get("url")
-        if self.carrier(client) == "query" and isinstance(url, str) and not _TEMPLATE.match(url):
+        carrier = self.carrier(client)
+        if carrier == "helper":
+            # The value travels in DECLARATION_SIDECAR (sidecar()); the
+            # descriptor keeps only the constant helper and no declaration.
+            headers = {k: v for k, v in (declared.get("headers") or {}).items() if k.lower() != DECLARATION_HEADER.lower()}
+            if headers:
+                declared["headers"] = headers
+            else:
+                declared.pop("headers", None)
+            declared["headersHelper"] = CLAUDE_HEADERS_HELPER
+            return declared
+        if carrier == "query" and isinstance(url, str) and not _TEMPLATE.match(url):
             declared["url"] = self.query_url(url, client)
             return declared
         # A templated URL cannot take a query outside the expansion: an
