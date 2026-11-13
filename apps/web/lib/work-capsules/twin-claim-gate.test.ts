@@ -37,12 +37,22 @@ describe("evaluateTwinClaimGate (AC-4)", () => {
     expect(await evaluateTwinClaimGate(db, input)).toEqual({ kind: "clear" });
   });
 
-  it("refuses claiming the peer's own mirror unless forced with a reason", async () => {
-    const db = gateDb(peerMirror, [peerMirror]);
+  it("asks the item's home for a mirror nobody holds there, instead of refusing it (BI-30EDDB7F)", async () => {
+    const db = gateDb(peerMirror, [peerMirror], { "BI-PEER": { active: false, since: null, workrooms: 0 } });
+    expect(await evaluateTwinClaimGate(db, { ...input, itemId: "BI-PEER" })).toEqual({ kind: "home-claim" });
+    // An older home that publishes no claim at all is asked the same way.
+    expect(await evaluateTwinClaimGate(gateDb(peerMirror, [peerMirror]), { ...input, itemId: "BI-PEER" })).toEqual({ kind: "home-claim" });
+  });
+
+  it("refuses a mirror its home already holds, naming the holder and lease, unless forced with a reason", async () => {
+    const holder = { installationId: "inst_prod", workroomId: "WC-HOME", leaseExpiresAt: "2026-11-20T00:00:00.000Z" }; // clock-bomb-guard: allow fixture string, no clock is read
+    const db = gateDb(peerMirror, [peerMirror], { "BI-PEER": { active: true, since: null, workrooms: 1, holder } });
     const refused = await evaluateTwinClaimGate(db, { ...input, itemId: "BI-PEER" });
     expect(refused.kind).toBe("refused");
+    if (refused.kind === "refused") expect(refused.result.message).toContain("held at its home by installation inst_prod in WC-HOME");
     const forced = await evaluateTwinClaimGate(db, { ...input, itemId: "BI-PEER", force: true, overrideReason: "peer asked us to take it" });
-    expect(forced).toMatchObject({ kind: "overridden", reason: "peer asked us to take it", blockers: [{ itemId: "BI-PEER", reason: "peer-mirror" }] });
+    expect(forced).toMatchObject({ kind: "overridden", reason: "peer asked us to take it", homeClaim: true, blockers: [{ itemId: "BI-PEER", reason: "peer-mirror" }] });
+    expect((await evaluateTwinClaimGate(db, { ...input, itemId: "BI-PEER", force: true })).kind).toBe("refused");
   });
 
   it("does not re-gate a re-claim of a room this branch already holds", async () => {
@@ -53,8 +63,4 @@ describe("evaluateTwinClaimGate (AC-4)", () => {
     });
   });
 
-  it("refuses without a reason even when force is set", async () => {
-    const db = gateDb(peerMirror, [peerMirror]);
-    expect((await evaluateTwinClaimGate(db, { ...input, itemId: "BI-PEER", force: true })).kind).toBe("refused");
-  });
 });

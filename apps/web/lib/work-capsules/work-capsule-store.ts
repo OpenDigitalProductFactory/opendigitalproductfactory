@@ -38,7 +38,7 @@ import {
   defaultPlatformRepositoryFullName,
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
-import type { CapsuleDb, CapsuleCreateArgs, ClaimBacklogWorkspaceInput, WorkCapsuleActor } from "./work-capsule-store-types";
+import type { CapsuleDb, ClaimBacklogWorkspaceInput, WorkCapsuleActor } from "./work-capsule-store-types";
 import { assertOAuthWorkroomOwner, workroomOwnershipData } from "./oauth-workroom-ownership";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 import {
@@ -47,7 +47,7 @@ import {
   lockBacklogItemForClaim,
 } from "./backlog-workroom-ownership";
 
-export type { CapsuleDb, CapsuleCreateInput, WorkCapsuleActor } from "./work-capsule-store-types";
+export type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 export { CapsuleBranchOccupiedError } from "./work-capsule-branch-identity";
 export {
   WorkCapsuleCompletionDeniedError,
@@ -59,6 +59,27 @@ export { heartbeatWorkCapsule, reassignWorkCapsuleExecutor } from "./workroom-le
 export { releaseWorkCapsuleScope } from "./scope-release-store";
 export { claimWorkCapsuleScope, detectScopeConflicts, ScopeOverlapError } from "./scope-claim-store";
 export type { ScopeConflict } from "./scope-claim-store";
+
+type CapsuleCreateInput = {
+  title: string;
+  objective: string;
+  source: WorkCapsuleSource;
+  idempotencyKey: string;
+  executorKind?: WorkCapsuleExecutorKind | null;
+  executorRef?: string | null;
+  status?: WorkCapsuleStatus;
+  /** Branch identity is (repositoryFullName, headBranch); null for a business capsule. */
+  repositoryFullName?: string | null;
+  backlogItemId?: string | null;
+  epicId?: string | null;
+  featureBuildId?: string | null;
+  workspaceState?: Record<string, unknown>;
+  acceptanceSource?: import("./delivery-agreement-capture").DeliveryAcceptanceSource;
+  scope?: WorkCapsuleScopeInput | null;
+  // BI-B24F96D0: principal who commissioned the work (Requester), distinct from
+  // the creating actor. Optional.
+  requestedByPrincipalId?: string | null;
+};
 
 type CapsuleWorkspacePlanInput = {
   capsuleId: string;
@@ -88,7 +109,11 @@ async function admitCapsuleWork(db: CapsuleDb, guard: `work-capsule:${string}`):
   await admitRuntimeGuardedWork(db as never, guard);
 }
 
-export async function createWorkCapsule(args: CapsuleCreateArgs) {
+export async function createWorkCapsule(args: {
+  db: CapsuleDb;
+  input: CapsuleCreateInput;
+  actor: WorkCapsuleActor;
+}) {
   if (!isWorkCapsuleSource(args.input.source)) throw new Error("Invalid capsule source");
   if (args.input.executorKind && !isWorkCapsuleExecutorKind(args.input.executorKind)) {
     throw new Error("Invalid executor kind");
@@ -145,11 +170,11 @@ export async function createWorkCapsule(args: CapsuleCreateArgs) {
         summary: `Created Work Capsule ${created.capsuleId}`,
         payload: { deliveryAgreement: readDeliveryAgreement(created.workspaceState) },
         actor: args.actor,
-      }, { deferPublication: args.deferPublication });
+      });
       return created;
     });
   } catch (error) {
-    if (isUniqueViolation(error) && args.db.$transaction) {
+    if (isUniqueViolation(error)) {
       const winner = await args.db.workroom.findUnique({
         where: { idempotencyKey: args.input.idempotencyKey },
       });
@@ -394,7 +419,11 @@ export async function claimBacklogItemWorkspace(args: {
   });
 
   const claimed = admission.overrideConflicts.length === 0;
-  if (claimed) {
+  // The item's claim fields are written only when this Workroom's claim is
+  // the local one. A mirror's claim lives at its home (claimAtHome), and a
+  // claim held here for a paired installation is the Workroom itself, so it
+  // lapses and releases with that Workroom's lease (BI-30EDDB7F).
+  if (claimed && !args.input.claimAtHome && args.input.executorKind !== "federated-peer") {
     await args.db.backlogItem.update({
       where: { id: item.id },
       data: {
@@ -574,6 +603,7 @@ export async function updateWorkCapsuleStatus(args: {
   capsuleId: string;
   status: WorkCapsuleStatus;
   reason: string;
+  routing?: { disposition: string; decisionInteractionId: string | null };
   actor: WorkCapsuleActor;
   now?: Date;
 }) {
@@ -605,14 +635,13 @@ export async function updateWorkCapsuleStatus(args: {
     return completed;
   }
 
-  const currentWorkspaceState =
-    capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
-      ? capsule.workspaceState as Record<string, unknown>
-      : {};
+  const currentWorkspaceState = capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
+    ? capsule.workspaceState as Record<string, unknown> : {};
   const now = args.now ?? new Date();
   const statusOverride = {
     reason: args.reason,
     until: new Date(now.getTime() + STATUS_OVERRIDE_TTL_MS).toISOString(),
+    ...(args.routing ? { routingDisposition: args.routing.disposition, ...(args.routing.decisionInteractionId ? { decisionInteractionId: args.routing.decisionInteractionId } : {}) } : {}),
   };
 
   const updated = await inTransaction(args.db, async (tx) => {

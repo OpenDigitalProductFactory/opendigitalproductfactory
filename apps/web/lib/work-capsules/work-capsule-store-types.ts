@@ -1,4 +1,4 @@
-import type { WorkCapsuleExecutorKind, WorkCapsuleSource, WorkCapsuleScopeInput, WorkCapsuleStatus } from "@/lib/work-capsules";
+import type { WorkCapsuleExecutorKind } from "@/lib/work-capsules";
 
 export type WorkCapsuleActor = {
   userId: string;
@@ -26,6 +26,10 @@ export type ClaimBacklogWorkspaceInput = {
   objective?: string;
   force?: boolean;
   overrideReason?: string | null;
+  /** The item lives on the paired installation, which holds its claim
+   *  (BI-30EDDB7F). The local Workroom is created, but the local copy of the
+   *  item is a read-only mirror and records no claim of its own. */
+  claimAtHome?: boolean;
 };
 
 export type CapsuleDb = Omit<import("./delivery-agreement-capture").DeliveryAgreementCaptureDb, "backlogItem"> & {
@@ -63,32 +67,4 @@ export type CapsuleDb = Omit<import("./delivery-agreement-capture").DeliveryAgre
     create(args: unknown): Promise<any>;
     update(args: unknown): Promise<any>;
   };
-};
-
-
-export type CapsuleCreateInput = {
-  title: string;
-  objective: string;
-  source: WorkCapsuleSource;
-  idempotencyKey: string;
-  executorKind?: WorkCapsuleExecutorKind | null;
-  executorRef?: string | null;
-  status?: WorkCapsuleStatus;
-  /** Branch identity is (repositoryFullName, headBranch); null for a business capsule. */
-  repositoryFullName?: string | null;
-  backlogItemId?: string | null;
-  epicId?: string | null;
-  featureBuildId?: string | null;
-  workspaceState?: Record<string, unknown>;
-  acceptanceSource?: import("./delivery-agreement-capture").DeliveryAcceptanceSource;
-  scope?: WorkCapsuleScopeInput | null;
-  // BI-B24F96D0: principal who commissioned the work (Requester), distinct from
-  // the creating actor. Optional.
-  requestedByPrincipalId?: string | null;
-};
-
-export type CapsuleCreateArgs = {
-  db: CapsuleDb; input: CapsuleCreateInput; actor: WorkCapsuleActor;
-  /** A caller-owned transaction publishes only after its successful commit. */
-  deferPublication?: boolean;
 };

@@ -25,6 +25,7 @@ import { runApprovedExternalRequest, runApprovedPlatformRequest } from "@/lib/co
 import type { ApprovedRequestRun, PlatformRequestRun } from "@/lib/coworker/approved-request-run-types";
 import { approveEnvelope, describeOnBehalfDecision } from "@/lib/coworker/envelope-actions";
 import { readOnBehalfRequest } from "@/lib/coworker/envelope-on-behalf-request";
+import { readMakeStandingRequest } from "@/lib/coworker/envelope-standing-request";
 import { recordApprovalOutcome } from "@/lib/coworker/approval-outcome-store";
 
 type RouteContext = {
@@ -52,11 +53,18 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     return NextResponse.json({ error: "envelopeId required" }, { status: 400 });
   }
 
+  // BI-E5631708: the owner may make this approval standing ("don't ask again").
+  const makeStanding = await readMakeStandingRequest(request);
   // BI-7BCC87BB (AC-OVERRIDE): an admin may decide on the owner's behalf, with a reason.
   const onBehalf = await readOnBehalfRequest(request, session.user);
+  const options = makeStanding ? { makeStanding: true } : undefined;
   const result = onBehalf
-    ? await approveEnvelope(envelopeId, session.user.id, onBehalf)
-    : await approveEnvelope(envelopeId, session.user.id);
+    ? options
+      ? await approveEnvelope(envelopeId, session.user.id, onBehalf, options)
+      : await approveEnvelope(envelopeId, session.user.id, onBehalf)
+    : options
+      ? await approveEnvelope(envelopeId, session.user.id, undefined, options)
+      : await approveEnvelope(envelopeId, session.user.id);
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: result.httpStatus });
   }
@@ -76,7 +84,13 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     status: "failed" as const,
     message: error instanceof Error ? error.message : "The approved action could not be run.",
   }));
-  const response = { ok: true, envelope: result.envelope, execution, ...(decidedOnBehalf ? { onBehalf: decidedOnBehalf } : {}) };
+  const response = {
+    ok: true, envelope: result.envelope, execution,
+    ...(decidedOnBehalf ? { onBehalf: decidedOnBehalf } : {}),
+    ...(result.standing ? { standing: result.standing.recorded
+      ? { recorded: true as const }
+      : { recorded: false as const, message: result.standing.message } } : {}),
+  };
   try {
     // The receipt belongs to the owner's request; an admin deciding for them is its actor.
     await (decidedOnBehalf

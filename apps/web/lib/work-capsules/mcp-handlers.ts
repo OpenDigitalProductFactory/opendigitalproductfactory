@@ -59,6 +59,7 @@ import { describeStageEvidenceReach } from "@/lib/work-management/stage-evidence
 import { ensureExternalSessionCapsule } from "./external-session-capture";
 import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
+import { validatePreHumanRouting } from "./pre-human-routing";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
@@ -67,7 +68,13 @@ import { parseScopeReleaseRequest } from "./scope-release-targets";
 import { materializeQualificationWindowsAction } from "@/lib/remote-action/qualification-windows-action";
 import { parseQualificationExperimentState, verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
 import { isRecord } from "@/lib/shared/coerce";
-type ToolContext = ToolExecutionContext | undefined;
+type ToolContext = {
+  routeContext?: string;
+  agentId?: string;
+  threadId?: string;
+  taskRunId?: string;
+  authorityDecisionId?: string;
+} | undefined;
 
 export function workCapsuleToolEnums() {
   return {
@@ -119,8 +126,37 @@ async function runAutoRenewedCapsuleWrite(args: {
 
 
 export async function listWorkCapsulesTool(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
-  if (params.view !== undefined && params.view !== "instances" && params.view !== "definitions") {
-    return { success: false, error: "invalid_view", message: "view must be instances or definitions." };
+  if (params.view !== undefined && params.view !== "instances" && params.view !== "definitions" && params.view !== "atlas") {
+    return { success: false, error: "invalid_view", message: "view must be instances, definitions or atlas." };
+  }
+  if (params.view === "atlas") {
+    // The Work Atlas picture: the same projection the portal reads (BI-7ACC31F9).
+    const atlasPortfolio = stringParam(params, "portfolioRole");
+    if (atlasPortfolio && !isWorkCapsulePortfolioRole(atlasPortfolio)) {
+      return {
+        success: false,
+        error: "invalid_portfolioRole",
+        message: `portfolioRole must be one of: ${WORK_CAPSULE_PORTFOLIO_ROLES.join(", ")}.`,
+      };
+    }
+    const { ATLAS_HEALTH_STATES } = await import("@/lib/work-management/atlas-health");
+    const health = stringParam(params, "health");
+    if (health && !(ATLAS_HEALTH_STATES as readonly string[]).includes(health)) {
+      return { success: false, error: "invalid_health", message: `health must be one of: ${ATLAS_HEALTH_STATES.join(", ")}.` };
+    }
+    const limit = params.limit ?? 10;
+    if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > 400) {
+      return { success: false, error: "invalid_page_input", message: "For view atlas, use an integer limit from 1 to 400." };
+    }
+    const { loadAtlasPicture } = await import("@/lib/work-management/atlas-projection.server");
+    const picture = await loadAtlasPicture(prisma as never, atlasPortfolio ? { portfolioRole: atlasPortfolio as never } : {});
+    const matching = health ? picture.rooms.filter((room) => room.health === health) : picture.rooms;
+    return {
+      success: true,
+      data: { observedAt: picture.observedAt, total: picture.total, truncated: picture.truncated, counts: picture.counts,
+        roomsMatching: matching.length, rooms: matching.slice(0, limit) },
+      message: `${picture.total} workrooms${picture.truncated ? " (truncated)" : ""}; ${matching.length} match.`,
+    };
   }
   if (params.view === "definitions") {
     const { listReviewDefinitions } = await import("./list-review-definitions");
@@ -271,7 +307,30 @@ export async function updateWorkCapsuleStatusTool(
     };
   }
 
+  const routing = validatePreHumanRouting({
+    status,
+    reason,
+    routingDisposition: params.routingDisposition,
+    decisionInteractionId: params.decisionInteractionId,
+  });
+  if (!routing.valid) {
+    return { success: false, error: routing.error, message: routing.message };
+  }
+
   const db = workCapsuleDb();
+  if (routing.decisionInteractionId) {
+    const interaction = await (db as unknown as Pick<typeof prisma, "decisionInteraction">).decisionInteraction.findUnique({
+      where: { interactionId: routing.decisionInteractionId },
+      select: { id: true },
+    });
+    if (!interaction) {
+      return {
+        success: false,
+        error: "decision_interaction_not_found",
+        message: `DecisionInteraction ${routing.decisionInteractionId} does not exist. Record the owning-scope decision before retrying this Workroom transition.`,
+      };
+    }
+  }
   let renewedCapsule;
   try {
     renewedCapsule = await runAutoRenewedCapsuleWrite({
@@ -283,6 +342,9 @@ export async function updateWorkCapsuleStatusTool(
         capsuleId,
         status,
         reason,
+        routing: routing.disposition
+          ? { disposition: routing.disposition, decisionInteractionId: routing.decisionInteractionId }
+          : undefined,
         actor: currentActor,
       }),
     });
@@ -406,12 +468,6 @@ export async function createWorkCapsuleTool(
   // BI-CB3AEBBF: bind the named backlog item onto the column subject lookups
   // read, not just onto outcomeAnchor. See create-workroom-binding.ts.
   const resolvedActor = await actor(userId, context);
-  if (Object.hasOwn(params, "sessionRef")) {
-    const { createInitiallyAssignedWorkroom } = await import("./initial-workroom-assignment");
-    return createInitiallyAssignedWorkroom({ db: workCapsuleDb() as never, params,
-      actor: resolvedActor, context, input: { title, objective, source, idempotencyKey,
-        executorKind: validatedExecutorKind, repositoryFullName: stringParam(params, "repositoryFullName"), scope: parseScopeInput(params) } });
-  }
   const bound = await createWorkroomBoundToBacklogItem({
     db: workCapsuleDb() as unknown as BacklogBindingReader, params, title,
     create: (backlogItemId) => createWorkCapsule({

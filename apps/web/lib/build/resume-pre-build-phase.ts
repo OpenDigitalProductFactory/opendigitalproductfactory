@@ -450,6 +450,9 @@ export async function resumePreBuildPhase(params: {
 
   try {
     if (phase === "review") {
+      const { reconcileReviewBuildWorkroomShape } = await import("@/lib/build/heal-build-workroom-shape");
+      const shape = await reconcileReviewBuildWorkroomShape({ buildId });
+      if (shape.kind === "held") return { kind: "skipped", phase, reason: shape.detail };
       // Review phase = build-review-verification (UX tests + verification gate).
       // Re-queue it; the queue function persists results and fires the
       // ship-on-review-approval follow-on when it passes.

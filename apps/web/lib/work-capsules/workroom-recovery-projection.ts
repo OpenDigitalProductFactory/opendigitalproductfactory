@@ -2,10 +2,7 @@ import type { BoundedHandoffRequest } from "./bounded-handoff-command";
 import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
 import { projectRecordedTaskState } from "@/lib/tak/task-states";
 import type { loadSemanticReviewRoomProjection } from "@/lib/work-management/semantic-review-room-projection";
-import { isExternalLeaseExecutor, isFullSourceCommitSha } from "./work-capsule-branch-identity";
-import { isWorkCapsuleExecutorKind } from "@/lib/work-capsules";
-import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
-import { ACCEPTANCE_VERIFICATION_SHAPE_KEY } from "@/lib/work-management/acceptance-verification-shape";
+import { isFullSourceCommitSha } from "./work-capsule-branch-identity";
 import { isRecord } from "@/lib/shared/coerce";
 
 export const RECORDED_BLOCKER_REASON_MAX_BYTES = 2048;
@@ -74,9 +71,6 @@ export async function loadContentAuthorizedWorkroomBlocker(
 }
 
 type WorkroomIdentity = {
-  executorKind?: string | null;
-  executorRef?: string | null;
-  scopeClaims?: unknown;
   capsuleId?: string;
   repositoryFullName: string | null;
   headBranch: string | null;
@@ -289,21 +283,7 @@ export function projectWorkroomRecovery(
   handoffRecovery: FailedHandoffRecovery | null = null,
 ) {
   const recordedBlocker = projectRecordedWorkroomBlocker(room, now);
-  // Repository adoption cannot establish an external executor assignment. This
-  // readback never authenticates a locator or creates a transfer/retry packet.
-  const unboundExecutor = room.executorKind !== "human" && isWorkCapsuleExecutorKind(room.executorKind) && isExternalLeaseExecutor(room.executorKind)
-    && !room.executorRef?.trim();
-  const assignmentBlocker = unboundExecutor ? {
-    reason: "executor-assignment-unbound" as const,
-    accountableOwner: { principalId: room.leaseHolderPrincipalId ?? null, role: "delivery-coordinator" as const },
-    nextAction: "Waiting for the coordinator to confirm who will carry out this work.",
-    action: null,
-  } : null;
-  // This existing registered activity verifies the served install; it does not
-  // require a source worktree. Unknown versions and other shapes retain repair.
-  const acceptanceOnly = resolveWorkShapeClaim(room.scopeClaims)?.key === ACCEPTANCE_VERIFICATION_SHAPE_KEY;
-  const identityRepair = assignmentBlocker || acceptanceOnly ? null
-    : projectWorkroomIdentityRepair(room, repairContextFields(room));
+  const identityRepair = projectWorkroomIdentityRepair(room, repairContextFields(room));
   // These are recorded states, not proof of a current heartbeat. In particular,
   // waiting for input or recovery must never look like queued execution.
   const executionState = room.taskRun ? projectRecordedTaskState(room.taskRun.status) : null;
@@ -327,11 +307,11 @@ export function projectWorkroomRecovery(
       repair: { toolName: identityRepair.toolName, packet: identityRepair.packet },
     }
     : null;
-  const failedHandoffRecovery = handoffRecovery?.action && (assignmentBlocker || prerequisite || semantic?.blocker)
+  const failedHandoffRecovery = handoffRecovery?.action && (prerequisite || semantic?.blocker)
     ? { ...handoffRecovery, state: "blocked" as const, reason: "workroom-prerequisite-unresolved", action: null } : handoffRecovery;
   return {
     failedHandoffRecovery,
-    state: assignmentBlocker || identityRepair
+    state: identityRepair
       ? "blocked" as const
       : semantic?.state === "unknown" ? "unknown" as const
         : recordedBlocker ? "blocked" as const : semantic?.state ?? executionState ?? "actionable" as const,
@@ -342,10 +322,10 @@ export function projectWorkroomRecovery(
     reviewerExecutionsTruncated: semantic?.reviewerExecutionsTruncated ?? false,
     historicalReviewerExecutions: semantic?.historicalReviewerExecutions ?? [],
     historicalReviewHistoryTruncated: semantic?.historicalReviewHistoryTruncated ?? false,
-    blocker: assignmentBlocker ?? (prerequisite ? { reason: "source-identity-missing", accountableRole: prerequisite.accountableRole,
+    blocker: prerequisite ? { reason: "source-identity-missing", accountableRole: prerequisite.accountableRole,
       nextAction: prerequisite.nextAction, action: prerequisite.repair } : semantic?.blocker ?? (recordedBlocker ? {
       reason: failedHandoffRecovery?.reason ?? recordedBlocker.reason, accountableOwner: failedHandoffRecovery?.owner ?? null,
       nextAction: "Inspect the recorded blocker and verified handoff history in this Workroom before continuing.", action: failedHandoffRecovery?.action ?? null,
-    } : null)),
+    } : null),
   };
 }

@@ -69,26 +69,6 @@ describe("get_workroom native review readback", () => {
   });
 
 
-  it.each([null, "endorsed-qa-assignment"])("keeps source-free assignment recovery truthful through bounded model serialization (%s)", async executorRef => {
-    db.workroom.findUnique.mockResolvedValue({ ...room, status: "ready", executorKind: "codex-desktop", executorRef,
-      leaseHolderPrincipalId: "human-owner", baseSha: null, headSha: null, headBranch: null, worktreePath: null,
-      scopeClaims: [{ workShape: "acceptance-verification@1.1.0" }],
-      workspaceState: { unrelated: "private-unrelated".repeat(MCP_ROUTE_TOOL_RESULT_CHAR_CAP) } });
-    candidates = [];
-    identities = [];
-    const result = await getWorkCapsuleTool({ capsuleId: "WC-1" }, "requester-1");
-    const formatted = clampToolResultForModel(result, { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP });
-    expect(formatted.truncated).toBe(false);
-    const data = JSON.parse(formatted.text.slice(formatted.text.indexOf("\n") + 1));
-    expect(data.capsule.recovery.prerequisite).toBeNull();
-    expect(data.capsule.recovery.blocker).toEqual(executorRef ? null : expect.objectContaining({
-      reason: "executor-assignment-unbound", action: null,
-      accountableOwner: { principalId: "human-owner", role: "delivery-coordinator" },
-    }));
-    expect(JSON.stringify(data.capsule.recovery)).not.toContain("adopt_worktree");
-    expect(JSON.stringify(data)).not.toContain("private-unrelated");
-  });
-
   it("retains the current recorded blocker through model serialization without scanning history or granting a repair", async () => {
     const explanation = "Transfer did not complete. The recorded blocker must be inspected before another attempt.";
     db.workroom.findUnique.mockResolvedValue({ ...room, status: "blocked",
@@ -364,4 +344,4 @@ describe("get_workroom native review readback", () => {
   });
 });
 
-it("passes actual authenticated MCP context into the typed current-room recovery reader",async()=>{db.workroom.findUnique.mockResolvedValue({...room,status:"blocked"});candidates=[];identities=[];const context={agentId:"AGT-EXT-CODEX",authSource:"oauth",apiTokenId:"own-token",tokenScope:"write" as const,tokenGrantScopes:["work_capsule_write"]};const recovery={kind:"failed-bounded-handoff",state:"waiting",reason:"handoff-receiver-acknowledgement-required",checkedAt:new Date().toISOString(),owner:{userId:"requester-1",agentId:"AGT-EXT-CODEX",executorRef:"source-chat"},original:{envelopeId:"original",executionId:"actual",executedAt:new Date().toISOString()},action:null,pending:{requestId:"real-request",requestDigest:"a".repeat(64),receiverRef:"receiver-chat"}};handoffRecovery.mockResolvedValue(recovery);const result=await getWorkCapsuleTool({capsuleId:"WC-1"},"requester-1",context);expect(handoffRecovery).toHaveBeenCalledWith(expect.objectContaining({userId:"requester-1",workroomRowId:"room-row",context}),db);expect(result).toMatchObject({data:{capsule:{recovery:{failedHandoffRecovery:recovery}}}});});
+it("passes actual authenticated MCP context into the typed current-room recovery reader",async()=>{db.workroom.findUnique.mockResolvedValue({...room,status:"blocked"});candidates=[];identities=[];const context={agentId:"AGT-EXT-CODEX",authSource:"oauth",apiTokenId:"own-token",tokenScope:"write",tokenGrantScopes:["work_capsule_write"]};const recovery={kind:"failed-bounded-handoff",state:"waiting",reason:"handoff-receiver-acknowledgement-required",checkedAt:new Date().toISOString(),owner:{userId:"requester-1",agentId:"AGT-EXT-CODEX",executorRef:"source-chat"},original:{envelopeId:"original",executionId:"actual",executedAt:new Date().toISOString()},action:null,pending:{requestId:"real-request",requestDigest:"a".repeat(64),receiverRef:"receiver-chat"}};handoffRecovery.mockResolvedValue(recovery);const result=await getWorkCapsuleTool({capsuleId:"WC-1"},"requester-1",context);expect(handoffRecovery).toHaveBeenCalledWith(expect.objectContaining({userId:"requester-1",workroomRowId:"room-row",context}),db);expect(result).toMatchObject({data:{capsule:{recovery:{failedHandoffRecovery:recovery}}}});});

@@ -6,7 +6,7 @@ status: draft
 
 - **Backlog item:** BI-B8DAEB71. It is slice 2 of BI-49BC21C1, under epic EP-C00F61F4.
 - **Workroom:** WC-25BC554C
-- **Design:** [Workroom-owned harness evolution](../specs/2026-10-28-harness-evolution-loop-design.md), section "Slice 2 — probe and scope verdict, per room". It covers AC-6, AC-11 and AC-14 – AC-19.
+- **Design:** [Workroom-owned harness evolution](../specs/2026-10-28-harness-evolution-loop-design.md), section "Slice 2 — probe and scope verdict, per room". It covers AC-11 and AC-14 – AC-19; AC-6 moved to slice 3.
 - **Builds on:** slice 1, merged in PR #6718 (3a7706f4454f).
 
 ## Delivery: five pull requests

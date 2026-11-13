@@ -443,7 +443,17 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
         select: { value: true },
       });
       const purpose = (intent?.value as { primaryPurpose?: unknown } | null | undefined)?.primaryPurpose;
+      // BI-ACAA91E5: an undecided change shares by default only when this
+      // scan of the outgoing diff is clean; a scan that cannot run answers null.
+      let businessSpecificHits: number | null = null;
+      if (build.disposition !== "shareable" && build.dispositionSource !== "operator") {
+        try {
+          const { runSanitizationScan } = await import("@/lib/build/contribution-review");
+          businessSpecificHits = (await runSanitizationScan(diff)).mustFixCount;
+        } catch { businessSpecificHits = null; }
+      }
       if (!mayShareToPublicHive(build.disposition, {
+        businessSpecificHits,
         dispositionSource: build.dispositionSource,
         installationPurpose: typeof purpose === "string" ? purpose : null,
       })) {
@@ -589,7 +599,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
 
   // BI-6B57D85F: publish each file's committed content from the build's own
   // tree, not the shared sandbox mount (which sits on the client branch).
-  const { resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
+  const { resolveBuildWorkdir, SANDBOX_WORKSPACE } = await import("@/lib/build/sandbox/build-branch");
   const { execInSandbox } = await import("@/lib/build/sandbox/sandbox");
   const published = await publishBranchCommit({
     headOwner: repoOwner,
@@ -599,7 +609,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     diff: shareableDiff,
     token,
     ...(build.sandboxId
-      ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox }) }
+      ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox, branchFallback: build.buildBranch ? { repoDir: SANDBOX_WORKSPACE, branch: build.buildBranch } : undefined }) }
       : {}),
   });
   let canonicalReadiness = {

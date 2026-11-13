@@ -1,5 +1,12 @@
 # Maintained Mac inference engine candidate
 
+Native host-upkeep heartbeat selection now follows the installation's configured
+canonical origin instead of a detected self-LAN address (BI-7EE97802). Explicit
+authority selection and full Edge discovery retain their existing behavior.
+This does not activate, replace or qualify an inference engine or controller.
+During a configuration-only recovery, preserve those pinned artifacts and the
+existing enrollment, then verify the same node's fresh canonical heartbeat.
+
 October 29, 2026 (Chicago), current physical checkpoint: canonical app update
 `1f8c111c409a4e8cc3575d118a7a154134791ba9` is healthy with the host action channel
 enabled. The supported native installer refreshed the enrolled Mac service and

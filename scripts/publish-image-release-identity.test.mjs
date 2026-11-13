@@ -97,7 +97,8 @@ test("the runner stage ships git-lfs for the git-source upgrade shape", () => {
   // after #4843 merged. The publish path gets materialization from
   // actions/checkout; this stage is that guarantee for the path with no runner.
   const runner = dockerfile.slice(runnerIndex);
-  const apkLine = runner.split("\n").find((l) => l.startsWith("RUN apk add"));
+  // The install runs inside a retry loop (BI-7FFF5CB0), so match the apk line itself.
+  const apkLine = runner.split("\n").find((l) => /\bapk add\b/.test(l));
   assert.ok(apkLine, "the runner stage must install its OS packages via apk add");
   assert.match(
     apkLine,

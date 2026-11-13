@@ -9,9 +9,15 @@ const current = vi.hoisted(() => ({ authority: vi.fn(), user: vi.fn() }));
 vi.mock("@/lib/auth/oauth-tokens", () => ({ isCurrentOAuthExecutionAuthority: current.authority, OAUTH_EXECUTION_AUTHORITY_SELECT: {} }));
 vi.mock("@/lib/auth/oauth-identity-binding", () => ({ resolveOAuthConsent: vi.fn() }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: current.user }));
-vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [{ name: "request_coworker", sideEffect: true }] }));
+vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [
+  { name: "request_coworker", sideEffect: true },
+  { name: "record_workroom_evidence", sideEffect: true },
+] }));
 vi.mock("@/lib/tak/agent-grants", () => ({
-  getToolGrantMapping: () => ({ request_coworker: ["agent_control_write"] }),
+  getToolGrantMapping: () => ({
+    request_coworker: ["agent_control_write"],
+    record_workroom_evidence: ["workroom_evidence_write"],
+  }),
   expandGrants: (grants: string[]) => grants,
 }));
 
@@ -57,6 +63,35 @@ describe("findStandingConnection", () => {
     current.authority.mockResolvedValue(true);
     current.user.mockResolvedValue(null);
     await expect(findStandingConnection("user-1", "AGT-EXT-CODEX", "request_coworker", "x")).resolves.toBeNull();
+  });
+
+  it("skips a credentials-kind row as a request_coworker carrier (BI-9CCB88C4)", async () => {
+    prismaMock.mcpApiToken.findMany.mockResolvedValue([
+      row({
+        id: "TOK-CREDS",
+        agentId: "AGT-EXT-GROK",
+        authorityBindingId: null,
+        oauthClient: { registrationKind: "credentials", revokedAt: null },
+      }),
+    ]);
+    current.authority.mockResolvedValue(true);
+    await expect(findStandingConnection("user-1", "AGT-EXT-GROK", "request_coworker", "platform-reviewer-dispatch"))
+      .resolves.toBeNull();
+  });
+
+  it("still uses a credentials-kind row for tools other than request_coworker (BI-9CCB88C4)", async () => {
+    prismaMock.mcpApiToken.findMany.mockResolvedValue([
+      row({
+        id: "TOK-CREDS",
+        agentId: "AGT-EXT-GROK",
+        authorityBindingId: null,
+        oauthClient: { registrationKind: "credentials", revokedAt: null },
+        scopes: ["workroom_evidence_write"],
+      }),
+    ]);
+    current.authority.mockResolvedValue(true);
+    const connection = await findStandingConnection("user-1", "AGT-EXT-GROK", "record_workroom_evidence", "platform-reviewer-dispatch");
+    expect(connection?.token).toMatchObject({ id: "TOK-CREDS" });
   });
 });
 

@@ -3,7 +3,7 @@
  * Server-only: constructs the anchor ports from prisma and links the capsule NON-FATALLY.
  * See capsule-workitem-anchor.ts for the pure core and design reference.
  */
-import { prisma, type Prisma } from "@dpf/db";
+import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import {
@@ -15,12 +15,12 @@ import {
 /** Stable queueId for the canonical queue capsule-anchored WorkItems land in. */
 const CANONICAL_ANCHOR_QUEUE_ID = "canonical-work-anchor";
 
-export function prismaAnchorPorts(db: Pick<Prisma.TransactionClient, "workItem" | "workQueue" | "workroom"> = prisma): WorkItemAnchorPorts {
+export function prismaAnchorPorts(): WorkItemAnchorPorts {
   return {
     findWorkItemBySource: (sourceType, sourceId) =>
-      db.workItem.findFirst({ where: { sourceType, sourceId }, select: { id: true } }),
+      prisma.workItem.findFirst({ where: { sourceType, sourceId }, select: { id: true } }),
     resolveCanonicalQueueId: async () => {
-      const queue = await db.workQueue.upsert({
+      const queue = await prisma.workQueue.upsert({
         where: { queueId: CANONICAL_ANCHOR_QUEUE_ID },
         update: {},
         create: {
@@ -35,9 +35,9 @@ export function prismaAnchorPorts(db: Pick<Prisma.TransactionClient, "workItem" 
       return queue.id;
     },
     createWorkItem: (data) =>
-      db.workItem.create({ data: data as never, select: { id: true } }),
+      prisma.workItem.create({ data: data as never, select: { id: true } }),
     setCapsuleWorkItem: async (capsuleId, workItemId) => {
-      await db.workroom.updateMany({
+      await prisma.workroom.updateMany({
         where: { OR: [{ capsuleId }, { id: capsuleId }] },
         data: { workItemId },
       });

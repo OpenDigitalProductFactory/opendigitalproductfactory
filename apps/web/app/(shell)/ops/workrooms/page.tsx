@@ -1,15 +1,22 @@
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
 
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { HeldWorkroomsList } from "@/components/ops/workrooms/HeldWorkroomsList";
+import { RhythmStrip } from "@/components/ops/workrooms/atlas/RhythmStrip";
 import { WorkroomActivitySection } from "@/components/ops/workrooms/WorkroomActivitySection";
 import { Surface } from "@/components/ui/Surface";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { loadHeldWorkrooms } from "@/lib/work-management/held-workrooms";
+import { loadStandingRhythms } from "@/lib/work-management/standing-run-history.server";
 
 export const dynamic = "force-dynamic";
 
 export default async function WorkroomsPage() {
-  const held = await loadHeldWorkrooms(prisma);
+  const [held, rhythms, locale] = await Promise.all([
+    loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(),
+  ]);
   // Awaited here rather than rendered as <WorkroomActivitySection>, so the page
   // resolves in one pass (and renders in tests without a Suspense boundary).
   const activity = await WorkroomActivitySection({
@@ -33,6 +40,10 @@ export default async function WorkroomsPage() {
       </div>
       <OpsTabNav />
       {activity}
+      {/* Work Atlas A4 (BI-D8A6F0F2): standing operations get their own band, so a missed day is as visible as a stuck project. */}
+      <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
+        <RhythmStrip rows={rhythms} locale={locale.language} />
+      </MessagesProvider>
     </div>
   );
 }

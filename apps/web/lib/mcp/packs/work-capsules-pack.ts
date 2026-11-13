@@ -12,6 +12,7 @@ import { workroomRuntimeConsequence } from "@/lib/workroom-runtime/runtime-conse
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
+import { ATLAS_HEALTH_STATES } from "@/lib/work-management/atlas-health";
 import { PRINCIPAL_SENSITIVITIES } from "@dpf/db/principal-sensitivity";
 import type { ToolPack } from "../tool-pack";
 
@@ -89,14 +90,15 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        view: { type: "string", enum: ["instances", "definitions"], description: "Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
+        view: { type: "string", enum: ["instances", "definitions", "atlas"], description: "atlas returns the Work Atlas picture: health counts, plus up to limit (max 400) rows, optionally filtered by health. Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
+        health: { type: "string", enum: [...ATLAS_HEALTH_STATES], description: "view atlas only: rows in this health state." },
         status: { type: "string", enum: ENUMS.statuses, description: "Filter by Workroom status." },
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
         headBranch: { type: "string", maxLength: 255, description: "Find the room for this branch, including one another assistant made for you." },
         pullRequestNumber: { type: "integer", minimum: 1, description: "Find the room for this pull request, including one another assistant made for you." },
-        limit: { type: "integer", minimum: 1, maximum: 100, description: "Requested page size (default 5, maximum 100); whole rows are reduced to fit the client budget." },
+        limit: { type: "integer", minimum: 1, maximum: 400, description: "Requested page size (default 5, maximum 100; view atlas default 10, maximum 400); whole rows are reduced to fit the client budget." },
         cursor: { type: "string", maxLength: 1024, description: "Opaque continuation for the selected view. Instance and definition cursors cannot be mixed. Keep instance filters unchanged. Instance expiry or changed definition inventory requires a fresh traversal." },
       },
       required: [],
@@ -142,7 +144,6 @@ const definitions: ToolDefinition[] = [
         source: { type: "string", enum: ENUMS.sources, description: "Origin of the capsule." },
         idempotencyKey: { type: "string", description: "Stable caller-provided key used to make create retries idempotent." },
         executorKind: { type: "string", enum: ENUMS.executors, description: "Optional executor expected to work the capsule." },
-        sessionRef: { type: "string", maxLength: 500, description: "External locator endorsed by your authenticated assistant for a new source-free acceptance room. Use outcomeAnchor for the item to verify; backlogItemId is not an authored subject here. This does not authenticate a physical chat." },
         repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo. The workroom's durable branch identity is keyed on (repository, branch)." },
         ...scopeProperties,
       },
@@ -311,6 +312,15 @@ const definitions: ToolDefinition[] = [
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         status: { type: "string", enum: ENUMS.statuses, description: "Next Workroom status." },
         reason: { type: "string", description: "Reason for the status update or override." },
+        routingDisposition: {
+          type: "string",
+          enum: ["factual-clarification", "owner-consent", "scope-resolved", "legitimate-escalation"],
+          description: "Pre-human routing outcome. Required for decision-shaped blocked reasons; factual infrastructure blockers may omit it.",
+        },
+        decisionInteractionId: {
+          type: "string",
+          description: "Existing DI-* ledger id. Required for scope-resolved and legitimate-escalation.",
+        },
       },
       required: ["capsuleId", "status", "reason"],
     },

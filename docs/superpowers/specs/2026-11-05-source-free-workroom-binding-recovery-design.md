@@ -9,12 +9,15 @@ workroom: WC-DA6C2123
 ## Ownership and admission
 
 This is the bounded corrective design for BI-5C81001E, under EP-WORK-CONVERGENCE.
-The admitted design executor is Codex chat
-01a1421f-60dd-76c3-b146-a8dd1b11ebdb, AGT-EXT-CODEX. Native design admission
-IRD-9702CC1C4D5A selected delivery-medium@1.0.0 in WC-DA6C2123, on protected
-base 256b8317580727136d1cfcb88e9632423adfe691. Design admission is not
-implementation, independent approval, qualification or permission to repeat a
-historical action. Funding ownership remains unresolved in the native claim.
+The design executor is Codex chat
+01a1421f-60dd-76c3-b146-a8dd1b11ebdb, AGT-EXT-CODEX. The initial November5
+admission IRD-9702CC1C4D5A selected delivery-medium@1.0.0 in WC-DA6C2123.
+That classification is historical: the medium appetite elapsed before delivery.
+Current large DESIGN admission IRD-BFFD27510697 retains the same item, branch
+and Workroom and requires the reviewed sequence in the November12 amendment
+below. Current authority is DESIGN only, not implementation, independent
+approval, qualification or permission to repeat a historical action. Funding
+ownership remains unresolved in the native claim.
 
 The original QA room WC-840613D1 and approval
 cmw0314h91dh301n2wne9nnho remain intact. The original source room WC-966F4217
@@ -192,10 +195,11 @@ Current native reads and exact source inspection are author diagnosis inputs,
 not the required failing-then-passing reproduction or an independent approval.
 No new product/dependency is proposed; existing canonical design alternatives
 and shared substrates above are reused. The actual named-ref reproduction and
-current contract inspection are recorded below. This chat owns the admitted
-implementation in WC-DA6C2123 under IRD-722AB2E49222. The earlier observation
-of RESEARCH_REQUIRED and PLAN_REQUIRED is superseded by the current proportional
-medium fix decision: author research was accepted and implementation allowed.
+current contract inspection are recorded below. On November5 this chat held admitted
+medium implementation in WC-DA6C2123 under IRD-722AB2E49222; author research
+was accepted and implementation allowed for that source and scope. These are
+historical receipts. The current large DESIGN decision does not transfer them
+into a new implementation permission or satisfy its reviewed baseline/plan.
 Independent code review, repaired regression proof, protected delivery and served
 acceptance remain owed. Funding ownership remains unresolved; no funding or
 policy decision is inferred from the environment label.
@@ -330,3 +334,103 @@ child outcome and descendant ownership unknown; reconciliation preserves that
 evidence and lock. It is not a guard failure or verification pass. Fresh final
 qualification must retain that uncertainty and use the documented recovery
 contract without changing old evidence or skipping canonical integration.
+
+## Current large-design reconciliation — 2026-11-12
+
+The initial medium classification and implementation receipts above are historical.
+The one-week medium appetite has elapsed without protected delivery or independent
+acceptance. The existing item, branch and Workroom now have current large DESIGN
+admission IRD-BFFD27510697. This changes the design obligations; it neither resets
+spent work nor supplies implementation, reviewer, budget or publication authority.
+Funding remains unresolved. No new item, branch, external provider or grant is
+introduced by this reconciliation.
+
+The signed candidate b818be35600d0f3d05b3bd7ff330350f8907594f preserves the
+initial implementation against protected765. Its source-local168 tests, both web
+programs, database types and normal commit checks passed on that identity. Those
+checks are historical source evidence, not present qualification. Its canonical
+reservation expired without admission or an integration evidence record. Seven
+PostgreSQL cases remain unrun. The older setup failure and inconclusive host
+preflight records retain their original identities and uncertainty; none is
+relabelled as a pass or revived as a current request.
+
+### Required database evidence and CI boundary
+
+The seven existing transaction cases must actually execute with zero skipped
+cases before this repair claims database verification. They cover concurrent
+initial assignments, preserved source-author ownership, omitted-field replay
+against a restricted or missing stored target, final-admission rollback, both
+observed lock orders with the real lease allocator, and a legacy uniqueness
+winner reconciled after rollback. Their qualified identity ports do not prove
+live user identity, physical-chat authentication or reviewer independence.
+
+The test safely accepts an explicitly supplied DPF_JOBS_TEST_DATABASE_URL or a
+leased local-CI database whose name is dpf_local_ci_0 or dpf_local_ci_1. Current
+ordinary cloud web-test jobs use their disposable database named dpf and do not
+set that explicit variable. Consequently the file can be discovered in a green
+shard while all seven cases are skipped. This is missing coverage, not proof
+that the transaction works.
+
+The implementation plan must add a targeted cloud step after the existing
+job-owned database migration. That step alone supplies the existing explicit
+variable from the job-owned DATABASE_URL and runs this exact PostgreSQL suite
+with one worker. Retain its per-case JSON results and require seven executed,
+zero skipped and zero failed cases; missing or incomplete evidence must fail
+closed. Do not weaken the test's database-name safety gate, use a shared install
+database, globally enable unrelated database suites, or turn the invocation into
+proof of native actor eligibility. The workflow change is not yet implemented.
+
+This strengthens AC-BIND-6: protected cloud checks and shared local qualification
+must distinguish cases actually executed from cases merely discovered. A
+publication exception, a client assessment or a green aggregate with skipped
+cases cannot satisfy that criterion.
+
+### Ordered current delivery plan
+
+1. Preserve the signed runtime candidate, authored patch and every prior result.
+   Reconcile the expired canonical reservation through its current native record;
+   do not resurrect its key, controller or evidence. Refresh actual protected main
+   through normal source integration under current admission.
+2. Make the current design independently readable before implementation. If a
+   design-only publication is needed, retain the signed runtime history and use a
+   normal new commit to leave only this canonical design as the authored net diff
+   against protected main. Verify exact scope, ordinary documentation checks and
+   normal push; no hidden runtime change, forced push or fabricated gate record.
+   This is source packaging, not deletion of the preserved implementation.
+3. Obtain the genuine current independent design/spec approval and baseline,
+   architecture/workflow review and proportional plan review required by the
+   large shape. Record this ordered sequence against the existing implementation
+   item's canonical coverage. A malformed or missing coverage record remains
+   unmet. A published document or a local advisory is not an approval.
+4. Request implementation only after native readiness admits the current source
+   and scope. Reapply the preserved authored implementation as a reviewed diff
+   against current main, resolving real compatibility changes rather than
+   overwriting newer protected files with old whole-file snapshots.
+5. Implement the targeted CI verification step and retained case-count evidence.
+   Run meaningful negative controls for skipped or absent database proof. Keep
+   the existing single test suite and shared initializer/authority/lease ports;
+   no second runner policy or status ledger is needed.
+6. Run affected current-source tests and both web programs, then obtain current
+   exact-tree integration evidence and native semantic review. Source and guard
+   receipts remain bound to their own revisions. Normal DCO, protected checks and
+   merge-queue protections apply; no old pass supplies a new source verdict.
+7. Verify a qualified containing runtime and ordinary source-free creation/binding
+   through an actually admitted fixture, including foreign, stale and sensitive
+   controls. A current eligible independent verifier records acceptance against
+   the real baseline. Clean up only that owned fixture through normal actions.
+8. Read the original failed approval and acceptance room without replay. If the
+   historical outcome is still unproven, preserve its accountable hold and state
+   that limit. This item does not close the original feedback acceptance, actual
+   UX Critic result/return/author disposition, or specialist-instantiation work.
+
+At least one fifth of implementation remains consolidation and verification of
+existing shared transaction, authority and projection predicates. Do not add a
+parallel retry mechanism or an abstraction solely to meet a numerical target.
+
+### Current authority and completion limits
+
+Current permission is DESIGN only. The proposed CI change, reapplied runtime
+implementation, new verification request and independent acceptance have not
+occurred under this amendment. Source packaging earns no reviewer or task
+continuation authority. The original acceptance contract is preserved and made
+more explicit; any larger scope requires its own reviewed amendment.

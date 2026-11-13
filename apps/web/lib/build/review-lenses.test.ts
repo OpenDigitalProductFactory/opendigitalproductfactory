@@ -268,6 +268,7 @@ describe("deriveReviewLenses — verification lens", () => {
         build({
           verificationOut: {
             testsPassed: 10,
+            testsExecuted: true, testsApplicable: true, testCommandPassed: true, testSummariesComplete: true,
             testsFailed: 0,
             typecheckPassed: true,
             fullOutput: "",
@@ -277,7 +278,7 @@ describe("deriveReviewLenses — verification lens", () => {
       ),
       "verification",
     );
-    expect(l).toMatchObject({ state: "pass", detail: "typecheck ✓ · tests ✓" });
+    expect(l).toMatchObject({ state: "pass", detail: expect.stringContaining("10 passed, 0 failed") });
   });
 
   it("fails with 'typecheck ✗' when typecheck failed", () => {
@@ -295,7 +296,7 @@ describe("deriveReviewLenses — verification lens", () => {
       ),
       "verification",
     );
-    expect(l).toMatchObject({ state: "fail", detail: "typecheck ✗" });
+    expect(l).toMatchObject({ state: "fail", detail: expect.stringContaining("Typecheck: Failed") });
   });
 
   it("fails with a failing-test count when typecheck passed but tests failed", () => {
@@ -313,7 +314,7 @@ describe("deriveReviewLenses — verification lens", () => {
       ),
       "verification",
     );
-    expect(l).toMatchObject({ state: "fail", detail: "2 tests failing" });
+    expect(l).toMatchObject({ state: "fail", detail: expect.stringContaining("2 failures recorded") });
   });
 });
 
@@ -465,5 +466,19 @@ describe("deriveReviewLenses — per-reviewer graduation", () => {
     const keys = deriveReviewLenses(build({ planReview: review({ decision: "pass" }) })).map((l) => l.key);
     expect(keys).toContain("checklist");
     expect(keys).not.toContain("reviewer:reviewer-1");
+  });
+});
+
+// Unknown execution is a display state; it does not bind a new lifecycle gate.
+describe("verification lens execution facts", () => {
+  it.each([
+    { typecheckPassed: true, testsPassed: 1, testsFailed: 0, testsExecuted: false, testsApplicable: null },
+    { typecheckPassed: null, testsPassed: 0, testsFailed: 0, testsExecuted: false, testsApplicable: null },
+    { typecheckPassed: true, testsPassed: 4, testsFailed: 0, testsExecuted: true, testsApplicable: true,
+      testCommandPassed: true, testSummariesComplete: true, testEvidenceConflict: true },
+  ])("does not mark unknown or conflicting evidence passed: %j", (verificationOut) => {
+    const l = lensByKey(deriveReviewLenses(build({ verificationOut: verificationOut as never })), "verification");
+    expect(l).toMatchObject({ state: "pending" });
+    expect(l?.detail).not.toContain("tests ✓");
   });
 });

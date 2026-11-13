@@ -332,3 +332,13 @@ describe("guardPlanDigest", () => {
     expect(guardPlanDigest("scripts/pregate-preflight.mjs")).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+describe("lastGauntletLine (BI-4F89896B follow-up)", () => {
+  it("carries the preflight's last line into a could-not-run reason", async () => {
+    const { lastGauntletLine } = await import("./guard-gauntlet");
+    expect(lastGauntletLine("first\n\n[pregate-preflight] worktree is SOURCE-ONLY for a code change\n\n"))
+      .toBe(" Last output: [pregate-preflight] worktree is SOURCE-ONLY for a code change");
+    expect(lastGauntletLine("")).toBe("");
+    expect(lastGauntletLine("x".repeat(900)).length).toBeLessThan(430);
+  });
+});
