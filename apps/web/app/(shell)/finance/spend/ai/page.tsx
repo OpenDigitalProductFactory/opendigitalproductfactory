@@ -2,6 +2,7 @@ import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
 import { AiSpendWorkspace } from "@/components/finance/AiSpendWorkspace";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
+import { getT } from "@/lib/i18n/t.server";
 import {
   getAiSpendOverview,
   listAiProviderFinanceProfiles,
@@ -16,12 +17,13 @@ import {
 export default async function AiSpendPage() {
   await maybeRunAiProviderFinanceDailyEvaluation().catch(() => undefined);
 
-  const [overview, rows, orgSettings, subscriptionPlans, unpricedSubscriptions] = await Promise.all([
+  const [overview, rows, orgSettings, subscriptionPlans, unpricedSubscriptions, t] = await Promise.all([
     getAiSpendOverview(),
     listAiProviderFinanceProfiles(),
     getOrgSettings(),
     loadSubscriptionCostEstimates(),
     loadUnpricedSubscriptionProviders(),
+    getT("finance"),
   ]);
 
   return (
@@ -36,7 +38,7 @@ export default async function AiSpendPage() {
       <FinanceTabNav />
 
       <div className="mb-6">
-        <SubscriptionCostEstimatesPanel plans={subscriptionPlans} unpriced={unpricedSubscriptions} />
+        <SubscriptionCostEstimatesPanel plans={subscriptionPlans} unpriced={unpricedSubscriptions} t={t} />
       </div>
 
       <AiSpendWorkspace
