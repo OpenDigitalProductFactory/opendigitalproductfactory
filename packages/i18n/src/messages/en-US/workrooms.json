@@ -406,6 +406,8 @@
     },
     "runningSince": "Running since {$date}",
     "missedCount": "{$count} days did not run",
+    "dueToday": "Not started today",
+    "partialHistory": "Some days unrecorded",
     "steady": "Every recorded day ran",
     "explain": "What the marks mean"
   },
