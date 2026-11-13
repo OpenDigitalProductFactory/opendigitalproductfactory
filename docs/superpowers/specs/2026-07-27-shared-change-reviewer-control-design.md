@@ -770,6 +770,16 @@ No new table, task family, MCP tool, provider, grant or manual success status
 is proposed. Current source, failure-analysis evidence, authority, quiescence,
 allowance and aggregate attempt limits are rechecked before any effect.
 
+Successor admission must not initialize a fresh allowance. Carry the original
+lineage's `dispatchAttempt` monotonically into the successor and charge its
+next delivery against that same limit. Charge successor replacement as the
+next `recoveryAttempt` (`priorRecovery + 1`, within the existing maximum),
+retain the predecessor counters, increment the immutable attempt identity,
+and keep the one-successor cap. Exhaustion of either counter refuses admission.
+A new successor request may use only the existing bounded successor window;
+the original packet/deadline and credited wait remain unchanged. Test a
+near-exhausted predecessor and an exhausted predecessor explicitly.
+
 Two evidence classes remain separate:
 
 1. A complete native positive no-dispatch checkpoint set may supply the
@@ -802,6 +812,10 @@ unknown original consent reviews.
    controls for incomplete/forged capacity proof, a dispatched truncated
    branch, mixed outcomes, stale source/evidence, revoked authority, allowance
    exhaustion, concurrent admission, successor exhaustion and late writes.
+   Cover both input-required and failed/deadline-exhausted predecessors,
+   repeated no-argument readback of an existing successor and concurrent
+   no-argument admission. A mixed PASS plus capacity case must reuse the
+   passing branch and enqueue only one successor without repeating its provider.
 2. Obtain independent review of this immutable amendment and record plan
    coverage on BI-49AA6BE8 before changing production recovery code. Resolve
    the Workroom's recorded funding scope before any paid reviewer dispatch;
