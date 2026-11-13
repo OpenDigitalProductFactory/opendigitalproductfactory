@@ -247,6 +247,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_workroom_evidence: ["workroom_evidence_write"],
   record_agent_activity: ["work_capsule_write"],
   heartbeat_workroom: ["work_capsule_write"],
+  queue_workroom_pull_request: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
   rebind_workroom_shape: ["work_capsule_write"],
   resume_workroom_queue: ["work_capsule_write"],

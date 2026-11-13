@@ -24,7 +24,8 @@
 //   It is intentionally PURE (no DB, no clock of its own — `now` is injected) so
 //   it is exhaustively unit-testable.
 
-import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
+import { describeCapacityWait } from "./executor-capacity";
+import { WORK_CAPSULE_IDLE_STALE_MS, WORK_CAPSULE_PAUSE_GRACE_MS } from "@/lib/work-capsules";
 import type { PrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 
 /** Capsule statuses that mean the work is already closed out. */
@@ -118,7 +119,7 @@ const REAPABLE_LIVENESS = new Set<WorkCapsuleLiveness>([
  *  client (Claude/Codex/Grok) may be down for a usage-window duration and will
  *  return. Conservative — err toward NOT reaping a session that may resume. A
  *  DELIVERED (merged) room bypasses the grace: it need not resume. */
-export const WORK_CAPSULE_PAUSE_GRACE_MS = 24 * 60 * 60 * 1000;
+export { WORK_CAPSULE_PAUSE_GRACE_MS } from "@/lib/work-capsules";
 
 /** Provider "open" is a renewable liveness fact, not a permanent property. */
 export const WORK_CAPSULE_OPEN_PR_FRESHNESS_MS = 20 * 60 * 1000;
@@ -147,6 +148,12 @@ export type CapsuleLivenessInput = {
   /** Independent durable execution state; provider/session flags cannot override it. */
   taskRun?: { status: string | null; updatedAt: Date | null } | null;
   durableWait?: { state: "queued" | "active"; signaledAt: Date | null } | null;
+  /**
+   * The executor's plan is limited and says when it may return (BI-53BED66C),
+   * from `executor-capacity.ts`. A lapsed lease then reads `paused` with that
+   * reason and is not reaped before the reset plus the normal grace.
+   */
+  capacityWait?: Pick<import("./executor-capacity").CapacityWait, "label" | "resetAt" | "alternatives"> | null;
   /**
    * Whether this capsule's work is DELIVERED, computed by the caller from a
    * verified provider observation or positive local git reachability — never an
@@ -365,6 +372,10 @@ export function classifyWorkCapsuleLiveness(
     const expired = elapsed >= 0;
     if (expired) {
       const age = humanAge(elapsed);
+      const wait = input.capacityWait;
+      if (wait && wait.resetAt.getTime() + pauseGraceMs > now.getTime()) {
+        return verdict("paused", `Lease expired ${age} ago. ${describeCapacityWait(wait, now)}`, input.leaseExpiresAt);
+      }
       if (elapsed <= pauseGraceMs) {
         return verdict(
           "paused",
