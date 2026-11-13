@@ -255,6 +255,16 @@ describe("work the platform already knows is not the owner's", () => {
       expect(classifyOwnerAttentionLane(capacity("provider:codex", "self-heals")).lane).toBe("custodian");
     });
 
+    it("brings platform downtime and a lost paired installation to Needs-you (BI-3E2F87FA, BI-85DE8EBD)", () => {
+      const continuity = (key: string) =>
+        item("platform-health", {
+          id: `platform-health:${key}`,
+          triage: { timeToAct: "none", residueReason: "no-self-heal", decideEffort: "review", irreversible: false },
+        });
+      expect(classifyOwnerAttentionLane(continuity("platform-downtime:2026-11-08T14:48:00.000Z")).lane).toBe("needs-you-now");
+      expect(classifyOwnerAttentionLane(continuity("work-sync:link:link_d0ea1f3a6cb948ad")).lane).toBe("needs-you-now");
+    });
+
     it("leaves other platform-health alerts with the custodian", () => {
       expect(
         classifyOwnerAttentionLane(item("platform-health", { id: "platform-health:health_alert:x", triage: { timeToAct: "none", residueReason: "no-self-heal", decideEffort: "review", irreversible: false } })).lane,

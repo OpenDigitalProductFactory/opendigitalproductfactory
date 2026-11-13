@@ -6544,6 +6544,7 @@
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
         "alert-delivery",
         "ai-capacity-watch-bi-24092dc9",
+        "platform-continuity-watch-bi-3e2f87fa",
         "log-capture-runs-by-default-bi-f8024a9d",
         "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
@@ -13222,6 +13223,7 @@
         "promoter-timeout",
         "platform-software-composition-and-currency",
         "what-this-installation-is",
+        "how-this-computer-is-set-up-to-keep-the-platform-running",
         "who-runs-this-installation",
         "what-your-ai-coworkers-may-do-here",
         "operational-posture-across-your-installations",

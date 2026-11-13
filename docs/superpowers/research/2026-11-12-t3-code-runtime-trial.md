@@ -128,11 +128,18 @@ How the numbers were taken:
    the governed executor reassignment and the same-scope handover returned
    `approval_required` for a room the same principal created minutes earlier.
    The M0 plan item BI-F1FC0B62 (same-scope handover without approval) is not
-   covering this case on production.
+   covering this case on production. On 13 November, this record's own room hit
+   the same gap. The owner approved the handover request, but it ended
+   "authorized, but did not complete". What worked was the takeover that
+   `get_workroom` offers to an unadmitted assistant acting for the room's
+   owner: `reassign_workroom_executor` with no `phase`, which ran without an
+   approval.
 3. **Gate evidence is keyed to a different session id than the claim.** The
    gate records the harness thread id. The claim takes whatever `sessionRef` the
    agent chose. Nothing tells the agent to use the thread id, and correcting it
-   later hits gap 2.
+   later hits gap 2. Rebinding the room afterwards does not relink a result
+   already recorded: the gate reuses the passing record unlinked, so the change
+   needs a new commit and a fresh gate run.
 4. **No governed merge-queue route for a coworker.** The runbook says
    `gh pr merge --squash --auto`. The owner's Codex rules make that a prompt,
    and T3 runs Codex unattended, so the command is refused. An in-platform
