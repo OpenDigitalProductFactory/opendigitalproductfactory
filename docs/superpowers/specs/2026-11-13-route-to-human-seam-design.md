@@ -11,6 +11,23 @@ status: draft
 
 The escalation gate (`resolveDecisionEscalation`, BI-6B3DA9DD) runs only on the coworker MCP tool path. Background producers write owner-attention issue reports directly: build-stall escalation, PR delivery reconciliation, PR follow-through, the assurance merge gate and the index sweep. In the 14 days to 2026-11-13 there were 91 such reports. None was consulted against doctrine, and 57 were still with the owner. Most named mechanical blockers an agent can fix, such as PIR-QGQUH, a failing Prose Lint Guard.
 
+## Objectives
+
+**OBJ-1:** The owner receives only escalations that are damaging, or that no recorded doctrine can steer.
+
+**OBJ-2:** Every owner escalation names its reason.
+
+**OBJ-3:** A code change that sends work to the owner any other way fails CI.
+
+## Acceptance
+
+| ID | Objectives | Statement |
+| --- | --- | --- |
+| AC-1 | OBJ-1, OBJ-3 | No code path reaches the owner without a recorded escalation decision. The repo guard fails on an owner-attention literal outside the seam, its writer and tests. |
+| AC-2 | OBJ-1 | A guard or lint failure, a merge conflict, a stale base or an empty-diff stall routes to an agent or independent review, not to the owner. Tested on recorded cases, including PIR-QGQUH. |
+| AC-3 | OBJ-1 | Damaging cases still reach the owner, unchanged, with no consult: critical risk, an outward, irreversible or authority consequence, restricted data, a regulation, a crossed threshold, or a propose boundary. Tighten-only. |
+| AC-4 | OBJ-2 | Every owner escalation states its damaging reason, or which scope could not decide and why. |
+
 ## Design
 
 1. **One seam.** `apps/web/lib/govern/authority/route-to-human.ts` is the only code that may write an owner-attention report: `selfFixClass` set, or `build-stall-escalation` with an owner notification. Producers pass:
