@@ -38,8 +38,14 @@
 
 import { prisma } from "@dpf/db";
 import { randomUUID } from "node:crypto";
-import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
-import { notifyAttentionLive, resolveOperatorRecipient } from "@/lib/attention/notify-live";
+import {
+  decideOwnerAttentionRoute,
+  fileOwnerAttentionRoute,
+  OWNER_ATTENTION_SELF_FIX_CLASS,
+  type OwnerAttentionRoute,
+  type ScopeConsult,
+} from "@/lib/govern/authority/route-to-human";
+import type { DecisionRiskTier } from "@/lib/decision-perspective/types";
 import {
   normalizeDeferralInput,
   type NormalizedDeferral,
@@ -133,7 +139,8 @@ export interface EscalateBuildArgs {
   rounds: number;
   issues: EscalationIssue[];
   expectedUpdatedAt?: string;
-  selfFixClass?: SelfFixClass;
+  /** Test seam for the owning-scope consult; production uses WWMD. */
+  consult?: ScopeConsult;
   log: (summary: string) => Promise<unknown> | unknown;
   now?: Date;
 }
@@ -143,6 +150,21 @@ export interface EscalateBuildResult {
   wipFreed: boolean;
   backlogItemDeferred: boolean;
   transitionUncertain?: boolean;
+  /** Who takes the work, decided by the escalation gate (BI-5E067004). */
+  route?: OwnerAttentionRoute;
+}
+
+/**
+ * The risk tier a stalled build's own findings declare. A critical finding is
+ * critical risk, which the escalation gate always puts to a person. Severity is
+ * the only damage signal a build stall carries; every other declaration
+ * (consequence, threshold, regulation) is absent here by construction.
+ */
+export function riskTierForIssues(issues: EscalationIssue[]): DecisionRiskTier {
+  const severities = new Set(issues.map((i) => i.severity.toLowerCase()));
+  if (severities.has("critical")) return "critical";
+  if (severities.has("high")) return "high";
+  return "medium";
 }
 
 /**
@@ -234,10 +256,10 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
     phase,
     rounds,
     issues,
-    selfFixClass = SELF_FIX_CLASS.NEEDS_HUMAN,
     log,
     now = new Date(),
   } = args;
+  const selfFixClass: SelfFixClass = OWNER_ATTENTION_SELF_FIX_CLASS;
 
   const safeLog = async (m: string) => {
     try { await log(m); } catch { /* never throw from logging */ }
@@ -246,6 +268,50 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
   const { title, description } = formatEscalationReport({
     buildId, featureTitle, biTitle, phase, rounds, issues, selfFixClass,
   });
+  const report = {
+    type: "build-stall-escalation",
+    source: "build-studio",
+    severity: "high",
+    title,
+    description,
+    featureBuildId: buildPk,
+    triggerKind: `${phase}-review-exhausted`,
+    dedupeKey: buildEscalationDedupeKey(buildId),
+  };
+
+  // 0. ROUTE (BI-5E067004). The escalation gate decides who takes this before
+  //    anything is abandoned or parked. A damaging stall (a critical finding)
+  //    reaches the owner exactly as before. Anything else goes to a coding
+  //    agent or independent review as projected backlog work: the build is not
+  //    abandoned and its item is not parked, so the work stays answerable
+  //    (BI-B6894001), and the owner is not asked.
+  const decision = await decideOwnerAttentionRoute(
+    {
+      producer: "build-stall",
+      subject: { kind: "build", id: buildId },
+      blockingFacts: issues.map((i) => `[${i.severity}] ${i.description}`),
+      declarations: { riskTier: riskTierForIssues(issues) },
+    },
+    args.consult,
+  );
+  if (decision.route !== "human") {
+    const routed = await fileOwnerAttentionRoute(decision, report);
+    if (routed.error) await safeLog(`Routed repair not filed: ${routed.error}`.slice(0, 300));
+    try {
+      await prisma.buildActivity.create({
+        data: {
+          buildId,
+          tool: "build:escalation-routed",
+          summary:
+            `Not sent to the owner: routed to ${decision.route} after ${rounds} self-repair round(s) at ${phase} review` +
+            `${routed.reportId ? ` — ${routed.reportId}` : ""}. ${decision.reason}`.slice(0, 1000),
+        },
+      });
+    } catch { /* audit is best-effort */ }
+    await safeLog(`Routed to ${decision.route}, not the owner: ${decision.reason}`.slice(0, 1000));
+    return { reportId: routed.reportId, wipFreed: false, backlogItemDeferred: false, route: decision.route };
+  }
+
   // One phase writer for both existing and version-guarded escalation. The
   // caller supplies the fence and reason; the terminal transition stays shared.
   const abandonBuild = (where: { buildId: string; phase?: string; abandonedAt?: null; updatedAt?: Date }, abandonReason: string) =>
@@ -265,7 +331,7 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
       const claimed = await abandonBuild({ buildId, phase, abandonedAt: null, updatedAt: expected }, abandonReason);
       if (claimed.count !== 1) {
         await safeLog("Escalation stopped: the reviewed build changed; newer work is preserved.");
-        return { reportId: null, wipFreed: false, backlogItemDeferred: false };
+        return { reportId: null, wipFreed: false, backlogItemDeferred: false, route: decision.route };
       }
       guardedWipFreed = true;
     } catch (err) {
@@ -281,55 +347,25 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
         await safeLog("Escalation acknowledgement was lost; the exact saved transition was reconciled.");
       } else {
         await safeLog(`Escalation outcome is unconfirmed; reconcile the existing transition before retrying: ${String(err)}`.slice(0, 300));
-        return { reportId: null, wipFreed: false, backlogItemDeferred: false, transitionUncertain: true };
+        return { reportId: null, wipFreed: false, backlogItemDeferred: false, transitionUncertain: true, route: decision.route };
       }
     }
   }
 
-  // 1. CAPTURE + RAISE — durable report. A self-fix escalation (selfFixClass set)
-  //    is born in awaiting_escalation_ack and held for the responder, NOT generic-
-  //    projected (BI-0ACD9AB2 §5.2). Best-effort: a duplicate (per-dedupeKey "one
-  //    non-resolved report" partial-unique) or any failure must not stop WIP free-up.
-  let reportId: string | null = null;
-  try {
-    const r = await createPlatformIssueReport({
-      type: "build-stall-escalation",
-      source: "build-studio",
-      severity: "high",
-      title,
-      description,
-      featureBuildId: buildPk,
-      triggerKind: `${phase}-review-exhausted`,
-      dedupeKey: buildEscalationDedupeKey(buildId),
-      selfFixClass,
-    });
-    reportId = r.reportId;
-  } catch (err) {
-    await safeLog(`Escalation report not filed (continuing to free WIP): ${String(err)}`.slice(0, 300));
+  // 1. CAPTURE + RAISE + NOTIFY — through the seam, which files the owner
+  //    report with its damaging reason and rings the owner's bell. The report is
+  //    born in awaiting_escalation_ack and held, not generic-projected. The
+  //    notification points at the durable report, not at the build that step 2
+  //    abandons (BI-B6894001). Best-effort: a duplicate (per-dedupeKey "one
+  //    non-resolved report") or any failure must not stop WIP free-up. The
+  //    owner it notifies is also the principal accountable for the parked item
+  //    below; two answers to "who owns this escalation" would be a bug.
+  const filed = await fileOwnerAttentionRoute(decision, report, { deepLink: "/admin/issue-reports" });
+  const reportId = filed.reportId;
+  if (filed.error) {
+    await safeLog(`Escalation report not filed (continuing to free WIP): ${filed.error}`.slice(0, 300));
   }
-
-  // Attention spine (BI-094A124F): proactively tell the operator a new escalation
-  // needs them. The "Needs you" inbox already shows it (re-homed off /ops); this
-  // adds the bell + live refresh. Best-effort by contract — never blocks WIP free-up.
-  // Resolved once: the same operator is both the notification recipient and the
-  // principal accountable for the parked backlog item below. Two different
-  // answers for "who owns this escalation" would be a bug.
-  const operatorUserId = reportId ? await resolveOperatorRecipient() : null;
-
-  if (reportId && operatorUserId) {
-    await notifyAttentionLive({
-      source: "escalation",
-      itemKey: reportId,
-      userId: operatorUserId,
-      title,
-      // Point at the durable escalation record, not at the build. Step 2 below
-      // abandons that build microseconds from now, so `/build?buildId=` would
-      // send the operator to a corpse (BI-B6894001). The report survives and
-      // carries the root cause, what was attempted, and the blocking issues.
-      deepLink: "/admin/issue-reports",
-      riskClass: "high-risk",
-    });
-  }
+  const operatorUserId = filed.ownerUserId;
 
   // 2. FREE WIP — mark the build abandoned (mirrors the inert-build reaper). The
   //    WIP cap counts only abandonedAt-null builds, so this clears the slot.
@@ -435,5 +471,5 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
     `WIP slot freed${backlogItemDeferred ? "; backlog item parked as deferred" : ""}.`,
   );
 
-  return { reportId, wipFreed, backlogItemDeferred };
+  return { reportId, wipFreed, backlogItemDeferred, route: decision.route };
 }
