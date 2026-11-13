@@ -868,7 +868,8 @@ export async function ensureBuildWorktree(buildId: string): Promise<{ materializ
 
 export type BuildBranchRefreshOutcome =
   | { status: "refreshed"; headSha: string; clientSha: string | null }
-  | { status: "conflict"; files: string[] }
+  /** `ontoRef`: the ref the build tree was rebased onto, so a repair can repeat it (BI-2CCD5C0E). */
+  | { status: "conflict"; files: string[]; ontoRef?: string }
   | { status: "unsupported" | "client-not-refreshable" | "unknown"; reason: string };
 
 /**
@@ -919,7 +920,7 @@ export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<B
   const rebase = parseBuildCloneRebaseOutput(
     await execSandboxGit(buildSandboxBuildCloneRebaseCommand(workdir, identity.clientBranch)),
   );
-  if (rebase.status === "conflict") return rebase;
+  if (rebase.status === "conflict") return { ...rebase, ontoRef: identity.clientBranch };
   if (rebase.status === "unknown") return { status: "unknown", reason: rebase.output };
   await execSandboxGit(buildSandboxBuildCloneSyncCommand(workdir, branchName));
   return { status: "refreshed", headSha: rebase.headSha, clientSha: client.headSha };
