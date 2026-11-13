@@ -12407,6 +12407,7 @@
         "what-counts-as-sensitive-detail-and-what-does-not",
         "possible-outcomes",
         "initial-boundaries",
+        "source-code-from-a-public-repository",
         "masking-and-correctness",
         "retention-prompts",
         "standards-and-qualified-review"
