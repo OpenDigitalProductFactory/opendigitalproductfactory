@@ -151,6 +151,10 @@ function jsonRpcOk(id: JsonRpcId, result: unknown): Response {
   return jsonResponse({ jsonrpc: "2.0", id, result } satisfies JsonRpcResponse);
 }
 
+function unknownMethod(id: JsonRpcId, method: string): Response {
+  return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+}
+
 function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
   return scope === "read" ? "read" : "write";
 }
@@ -343,7 +347,7 @@ async function handleTasksLifecycle(
   params: Record<string, unknown> | undefined,
 ): Promise<Response> {
   if (!tasksLifecycleEnabled()) {
-    return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+    return unknownMethod(id, method);
   }
   if (
     method === "tasks/cancel"
@@ -377,7 +381,7 @@ async function handleTasksLifecycle(
       result = await handleTasksCancel(token.userId, params);
       break;
     default:
-      return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+      return unknownMethod(id, method);
   }
   if (result.kind === "ok") return jsonRpcOk(id, result.value);
   return jsonRpcError(id, JSONRPC_INVALID_PARAMS, result.message);
@@ -688,6 +692,9 @@ export async function POST(request: Request): Promise<Response> {
   observeConnection({ request, token, method: body.method, params: body.params });
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
+  if (token.toolSurface && !["initialize", "notifications/initialized", "ping", "tools/list", "tools/call"].includes(body.method)) {
+    return isNotification ? new Response(null, { status: 202 }) : unknownMethod(body.id ?? null, body.method);
+  }
   const floorRefusal = isNotification ? null : await refuseBelowToolchainFloor(request, token, body); // BI-DFC0270C
   if (floorRefusal) return floorRefusal;
 
@@ -781,7 +788,7 @@ export async function POST(request: Request): Promise<Response> {
           // Unknown notifications are silently accepted per JSON-RPC 2.0.
           return new Response(null, { status: 202 });
         }
-        return jsonRpcError(body.id ?? null, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${body.method}`);
+        return unknownMethod(body.id ?? null, body.method);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown internal error";
@@ -801,5 +808,8 @@ export async function POST(request: Request): Promise<Response> {
 export async function GET(request: Request): Promise<Response> {
   const authentication = await authenticateMcpRequest(request);
   if (!authentication.ok) return authentication.response;
+  if (authentication.token.toolSurface) {
+    return new Response(null, { status: 405, headers: { Allow: "POST" } });
+  }
   return openMcpTaskStatusStream(request, authentication.token);
 }

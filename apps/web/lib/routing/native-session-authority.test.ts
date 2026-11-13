@@ -80,10 +80,13 @@ vi.mock("@/lib/jobs", () => ({ jobs: { send: vi.fn() } }));
 import { cliAdapter } from "./cli-adapter";
 import { createMcpSessionToken, verifyMcpSessionToken } from "../mcp/session-token";
 import { authenticateMcpRequest } from "../mcp/transport-auth";
-import { POST } from "../../app/api/mcp/v1/route";
+import { GET, POST } from "../../app/api/mcp/v1/route";
 import { _setGovernanceForTests } from "../mcp-governed-execute";
 import { coworkerAuthorityInputFixture } from "../../test-support/coworker-authority-input-fixture";
 import { getToolGrantMapping } from "../tak/agent-grants";
+import * as taskLifecycle from "../mcp/tasks-lifecycle";
+import * as taskSubmit from "../mcp-task-submit";
+import * as taskStatusStream from "../mcp/task-status-stream";
 
 const writer = "record_initiative_evidence";
 const reader = "read_source_at_version";
@@ -157,6 +160,7 @@ afterEach(() => {
     toolExecutionCreate: null, authorizationDecisionCreate: null, toolExecutionReceiptCreate: null,
     executeTool: null, toolPreflight: null });
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 describe("BI-5163AF47 native terminal-writer authority", () => {
@@ -207,6 +211,30 @@ describe("BI-5163AF47 native terminal-writer authority", () => {
     vi.stubEnv("AUTH_SECRET", "");
     await expect(nativeToken(["initiative_evidence_write", "file_read"])).rejects.toThrow();
     expect(fixture.writes).toEqual([]);
+  });
+
+  it.each(["tasks/get", "tasks/result", "tasks/list", "tasks/cancel", "tasks/submit"])
+    ("does not bypass the restricted tool surface through %s", async (method) => {
+      const handlers = ["handleTasksGet", "handleTasksResult", "handleTasksList", "handleTasksCancel"] as const;
+      const calls = handlers.map(name => vi.spyOn(taskLifecycle, name).mockResolvedValue({ kind: "ok", value: {} } as never));
+      const submit = vi.spyOn(taskSubmit, "submitRemoteCoworkerTask").mockResolvedValue({
+        kind: "result", result: { isError: false, content: [] },
+      } as never);
+      const token = await nativeToken(["initiative_evidence_write", "file_read"]);
+      const response = await POST(rpc(token, method, { taskId: session.taskRunId }));
+      expect((await response.json()).error?.code).toBe(-32601);
+      for (const call of [...calls, submit]) expect(call).not.toHaveBeenCalled();
+    });
+
+  it("does not open the general task status stream for a restricted session", async () => {
+    const stream = vi.spyOn(taskStatusStream, "openMcpTaskStatusStream").mockResolvedValue(new Response("synthetic stream"));
+    const token = await nativeToken(["initiative_evidence_write", "file_read"]);
+    const response = await GET(new Request("http://localhost:3000/api/mcp/v1", {
+      headers: { "X-MCP-Session": token, Accept: "text/event-stream" },
+    }));
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("POST");
+    expect(stream).not.toHaveBeenCalled();
   });
 
   it("does not invent nested reader authority when it was never admitted", async () => {
