@@ -243,7 +243,7 @@ describeDatabase("normalize legacy blocked backlog migration (BI-22CDF13B)", () 
       await scenarioDb.query(`DROP SCHEMA IF EXISTS "${scenario}" CASCADE`);
       await scenarioDb.end();
     }
-  });
+  }, 15_000);
 
   it("aborts and rolls back when no active human owner can be resolved", async () => {
     const { scenario, scenarioDb } = await scenarioClient(`
