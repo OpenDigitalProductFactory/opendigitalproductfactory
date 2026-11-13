@@ -378,15 +378,31 @@ that never fires" failure the platform already named. There is now a weekly cron
 (`ecosystem/weekly-watchdog`, Mondays 06:05, catalogued) and a runner that asks
 the resolver for the posture rather than deciding for itself.
 
-**The delivery binding is explicit, not guessed.** Posting into a room needs two
-things this wiring must not invent: the derived room's case key and the coworker
-principal that speaks. Both room paths in the codebase resolve an agent principal
-before they will write, and fabricating one would post the ecosystem digest under
-an identity nobody authorised. So the binding is read from
-`ecosystem.watchdog-binding.v1`, and until it is set the run reports `no-room`
-with an actionable message in its run data rather than failing silently.
-**Choosing the standing room and the speaking coworker is an operator decision
-this spec does not pre-empt.**
+**Superseded 2026-11-12 (BI-8FBF58AB): the room is derived, and nothing speaks
+as a coworker.** The first cut read a PlatformConfig binding,
+`ecosystem.watchdog-binding.v1`, naming the room and a speaking coworker. Nothing
+ever wrote that key, so the digest could never post, and the promised `no-room`
+message reached no run record either (fixed by BI-6ED89EC6). It is retired. The
+digest now follows the precedent the platform already had:
+
+- the room is a **standing room derived on first use** —
+  `ecosystem-participation:weekly-digest` — exactly as the mailroom queue rooms
+  and the bookkeeping-period room are, which is what this spec required from the
+  start;
+- the digest is a **platform event message** (`senderType: "system"`), the way
+  the deliberation bridge and mailroom post, so no coworker identity is assumed;
+- it is posted **at most once per installation per ISO week**;
+- the organization's **recorded accountable human** is notified with a link to
+  the room; when none is recorded nobody is notified, rather than somebody
+  plausible.
+
+The first cut also read the ballot from backlog items tagged
+`ecosystem-inbound`, which exist only on the upstream controller, so every other
+installation saw an empty ballot. It now reads what a participant holds:
+envelopes received from peers and its own outbound demand. And its disposition
+reader decoded notices with the envelope decoder and looked for a vocabulary the
+contract does not use, so "what happened to what you backed" never appeared; it
+now maps the contract's `accepted | rejected | archived` at the boundary.
 
 **A failed delivery is reported as failed.** A digest built and lost is worse
 than one never built, because the counters suggest it arrived.
