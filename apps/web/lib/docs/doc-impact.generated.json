@@ -701,6 +701,9 @@
     "apps/web/lib/build/build-plan-paths.ts": [
       "docs/architecture/build-studio-namespace.md"
     ],
+    "apps/web/lib/build/build-pr-delivery-recheck.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/build-studio-config.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/operations/build-cost-flags-activation-runbook.md"
@@ -3510,6 +3513,7 @@
     "docs/architecture/build-gate-runbook.md": [
       ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
+      "apps/web/lib/build/build-pr-delivery-recheck.ts",
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/failure-readiness-delivery-refresh.ts",
       "apps/web/lib/build/finalize-repair-routing.ts",

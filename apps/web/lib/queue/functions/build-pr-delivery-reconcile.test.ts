@@ -392,6 +392,107 @@ describe("runBuildPrDeliveryReconcile — Build Studio PR repair dispatch (BI-08
   });
 });
 
+// BI-0EDCF2EC: a room stopped only because GitHub had not yet decided the
+// merge state (WC-8B8A9D6F, PR #6983) is looked at again and carried on.
+describe("runBuildPrDeliveryReconcile — re-evaluating stopped rooms (BI-0EDCF2EC)", () => {
+  const stoppedOnUnknown = () => ({
+    ...createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" }),
+    status: "escalated" as const,
+    lastError: "observation-budget-exhausted:merge-state-unknown",
+    escalationKey: "build-pr-delivery:9:observation-budget-exhausted:merge-state-unknown",
+    lastReadiness: "unknown" as const,
+    lastObservedHeadSha: "sha1",
+    lastObservedAt: "2026-11-13T08:02:06.317Z",
+    reconciliationAttempts: 8,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE = "enforce";
+    mocks.updateMany.mockResolvedValue({ count: 1 });
+    mocks.jobUpsert.mockResolvedValue({ id: "pr-job", runCursor: null, enabled: true });
+    mocks.jobUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.activityCreate.mockResolvedValue({});
+    mocks.createIssue.mockResolvedValue({ reportId: "PIR-1" });
+    mocks.postureDefault.mockResolvedValue(null);
+    mocks.publish.mockResolvedValue(undefined);
+    vi.stubGlobal("fetch", mocks.fetch);
+  });
+  afterEach(() => {
+    delete process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE;
+    vi.unstubAllGlobals();
+  });
+
+  it("resumes the stopped room, records why, and arms the queue once its review is publishable", async () => {
+    mocks.verdict.mockResolvedValue({ mayPublish: true, reason: "reviewed" });
+    mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
+    mocks.findMany.mockResolvedValue([room({ id: "stopped", workspaceState: writeBuildPrDeliveryState({}, stoppedOnUnknown()) })]);
+    mocks.observe.mockResolvedValue(observation([
+      { name: "Merge Readiness", status: "COMPLETED", conclusion: "SUCCESS", required: true },
+      { name: "Failure Readiness", status: "COMPLETED", conclusion: "FAILURE", required: false },
+    ], "UNSTABLE"));
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(result).toMatchObject({ observed: 1, actuated: 1, escalated: 0 });
+    const write = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "stopped")?.[0];
+    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "queued", escalationKey: null });
+    expect(mocks.activityCreate).toHaveBeenCalledWith({ data: expect.objectContaining({
+      workCapsuleId: "stopped", kind: "workroom-pr-delivery-resumed",
+    }) });
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+  });
+
+  it("holds a resumed room without a publishable review instead of queueing it to fail", async () => {
+    mocks.verdict.mockResolvedValue({ mayPublish: false, reason: "No failure-analysis review exists for this final change." });
+    mocks.findMany.mockResolvedValue([room({ id: "stopped", workspaceState: writeBuildPrDeliveryState({}, stoppedOnUnknown()) })]);
+    mocks.observe.mockResolvedValue(observation([
+      { name: "Merge Readiness", status: "COMPLETED", conclusion: "SUCCESS", required: true },
+      { name: "Failure Readiness", status: "COMPLETED", conclusion: "FAILURE", required: false },
+    ], "UNSTABLE"));
+
+    await runBuildPrDeliveryReconcile();
+
+    const write = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "stopped")?.[0];
+    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "checking", escalationKey: null, lastReadiness: "checking" });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a conflict stop while the conflict holds, recording only that it looked", async () => {
+    const conflict = { ...stoppedOnUnknown(), lastError: "true-merge-conflict", escalationKey: "build-pr-delivery:9:true-merge-conflict" };
+    mocks.findMany.mockResolvedValue([room({ id: "conflicted", workspaceState: writeBuildPrDeliveryState({}, conflict) })]);
+    mocks.observe.mockResolvedValue(observation([], "DIRTY"));
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(result).toMatchObject({ observed: 1, actuated: 0, escalated: 0 });
+    const write = mocks.updateMany.mock.calls[0]?.[0];
+    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "escalated", escalationKey: conflict.escalationKey, reconciliationAttempts: 8 });
+    expect(write.data.workspaceState.prDelivery.lastObservedAt).not.toBe(conflict.lastObservedAt);
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+    expect(mocks.activityCreate).not.toHaveBeenCalled();
+  });
+
+  it("tells a person once when the merge state stays undecided past the budget, and keeps observing", async () => {
+    const streak = {
+      ...createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" }),
+      status: "checking" as const, lastReadiness: "unknown" as const, lastObservedHeadSha: "sha1", unknownObservations: 5,
+    };
+    mocks.findMany.mockResolvedValue([room({ id: "undecided", workspaceState: writeBuildPrDeliveryState({}, streak) })]);
+    mocks.observe.mockResolvedValue(observation([{ name: "ci", status: "COMPLETED", conclusion: "SUCCESS" }], "UNKNOWN"));
+
+    await runBuildPrDeliveryReconcile();
+
+    const write = mocks.updateMany.mock.calls[0]?.[0];
+    expect(write.data.workspaceState.prDelivery).toMatchObject({ status: "checking", unknownObservations: 6, escalationKey: null });
+    expect(write.data.workspaceState.prDelivery.nextObservationAt).toEqual(expect.any(String));
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+    expect(mocks.createIssue).toHaveBeenCalledWith(expect.objectContaining({
+      dedupeKey: "build-pr-delivery:9:merge-state-undecided:sha1",
+    }));
+  });
+});
+
 describe("observesRoomHead", () => {
   const head = "a".repeat(40);
   const other = "b".repeat(40);
