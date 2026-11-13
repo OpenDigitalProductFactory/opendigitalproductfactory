@@ -44,6 +44,7 @@ import {
   handleIncomingOperationalPosture,
   type OperationalPostureExchangeDb,
 } from "@/lib/federation/operational-posture-exchange";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const ERROR_STATUS: Record<string, number> = {
   missing_authorization: 401,
@@ -131,6 +132,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
     if (response.action === "rejected") {
       return NextResponse.json({ ok: false, error: "invalid_demand_response", violations: response.violations }, { status: 422 });
+    }
+    // BI-626A4ECA: a vote counts. The response is already stored durably, so a
+    // tally that does not land is retried once and logged with its reason — it
+    // never turns an accepted delivery into a refused one.
+    if ((response.action === "created" || response.action === "updated") && response.localRecordRef) {
+      try {
+        const { tallyAfterInboundVote } = await import("@/lib/ecosystem/vote-tally");
+        await tallyAfterInboundVote(prisma as never, response.localRecordRef);
+      } catch (err) {
+        console.warn(`[federation-demand] vote tally for ${response.localRecordRef} failed: ${getErrorMessage(err)}`);
+      }
     }
     return accepted(response);
   }

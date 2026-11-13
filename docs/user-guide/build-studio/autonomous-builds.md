@@ -49,6 +49,12 @@ governed self-upgrade path.
 If recovery is exhausted, you receive one decision request rather than repeated alerts. If a
 human closes the pull request, Build Studio honors that closure.
 
+Some repository checks need a stated decision, such as how a change reaches existing installs or
+whether it changed the user guide. The coding agent records those decisions on its own commits.
+When Build Studio opens the pull request, it copies them into the pull request's **Readiness
+decisions** section, so the checks read the same decisions the build's review accepted. It copies
+only decisions the build recorded and never writes one itself.
+
 Autonomy can be disabled without deleting build history, evidence, or the active Living Playbook.
 See the [operator runbook](../../operations/autonomous-build-completion.md) for rollout and
 kill-switch details.
