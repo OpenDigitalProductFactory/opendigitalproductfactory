@@ -43,6 +43,14 @@ describe("respondToFederatedDemandAction vote budget", () => {
     expect(mockQueue).not.toHaveBeenCalled();
   });
 
+  it("reads only this week's responses, never the whole history", async () => {
+    mockFindMany.mockResolvedValue([]);
+    await respondToFederatedDemandAction({ mirrorId: "fdm_1", kind: "interest" });
+    const where = mockFindMany.mock.calls[0][0].where;
+    expect(where).toMatchObject({ recordType: "demand-response", canonicalSide: "local" });
+    expect(where.updatedAt.gte).toBeInstanceOf(Date);
+  });
+
   it("lets a voter re-weight the same item, refunding the earlier weight", async () => {
     mockFindMany.mockResolvedValue([sentThisWeek("response:fdm_1:interest", 4)]);
     const result = await respondToFederatedDemandAction({ mirrorId: "fdm_1", kind: "interest", weight: 2 });

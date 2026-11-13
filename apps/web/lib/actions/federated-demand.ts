@@ -160,10 +160,14 @@ export async function respondToFederatedDemandAction(input: {
     // budget. An unaffordable vote is refused with its cost, never clamped or
     // dropped — a voter who believes they voted, and did not, is worse off.
     if (input.kind === "interest") {
-      const { castVote, ledgerFromOutboundVotes } = await import("@/lib/ecosystem/vote-budget");
+      const { castVote, isoWeekStart, ledgerFromOutboundVotes } = await import("@/lib/ecosystem/vote-budget");
       const { outboundVotesFromResponses } = await import("@/lib/ecosystem/vote-tally");
+      // Bounded to this week at the database: only a response sent or re-weighted
+      // since Monday can spend this week's credits. Reading every response ever
+      // sent would grow without limit — the unbounded-read class the architecture
+      // findings name.
       const sent = await prisma.federatedRecordMirror.findMany({
-        where: { recordType: "demand-response", canonicalSide: "local" },
+        where: { recordType: "demand-response", canonicalSide: "local", updatedAt: { gte: isoWeekStart(now) } },
         select: { localRecordRef: true, payload: true },
       });
       const ledger = ledgerFromOutboundVotes(identity.installationId, outboundVotesFromResponses(sent), now);
