@@ -1,4 +1,4 @@
-import { isTerminalLeaseStatus, lockNonprodEnvironment, type NonprodEnvironmentKey } from "./environment-lease-lock";
+import { isTerminalLeaseStatus, type NonprodEnvironmentKey } from "./environment-lease-lock";
 export { NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "./environment-lease-lock";
 import type { ClaimNonprodEnvironmentLeaseResult, LeaseRow, ResolvedNonprodPoolPolicy } from "./environment-lease-result";
 export type { ClaimNonprodEnvironmentLeaseResult } from "./environment-lease-result";
@@ -15,7 +15,16 @@ import type { HeavyResourceClass } from "./host-resource-policy";
 import { lockHostBackedClaimAdmission, resolveHostBackedClaimPolicy } from "./environment-lease-host-backed-reservation";
 import localCiSlotResources from "./local-ci-slot-resources.json";
 import { assertRenewalSlotBinding, type NonprodSlotBinding } from "./environment-lease-slot-binding";
-import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
+import {
+  emitLeaseTransition,
+  emitLeaseTransitions,
+  inLeaseTransaction,
+  isSelfAdmittingEnvironment,
+  lockEnvironment,
+  type LeaseDb,
+  type LeaseTransitionInput,
+  type LeaseTx,
+} from "./environment-lease-transaction";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
@@ -49,94 +58,6 @@ export {
 
 type NonprodSlotKey = keyof typeof localCiSlotResources.slots;
 export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.slots) as NonprodSlotKey[]);
-
-type LeaseTx = Pick<
-  typeof prisma,
-  "$executeRaw" | "$queryRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
-> & Partial<Pick<typeof prisma, "taskRun">>;
-type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
-  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom" | "taskRun"
->>;
-
-async function inLeaseTransaction<T>(
-  db: LeaseDb,
-  body: (tx: LeaseTx) => Promise<T>,
-): Promise<T> {
-  if (typeof db.$transaction !== "function") {
-    return body(db as LeaseTx);
-  }
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await db.$transaction(
-        async (tx) => body(tx as LeaseTx),
-        // The transaction-level advisory lock is the serialization primitive.
-        // READ COMMITTED gives a waiter a fresh snapshot after acquiring that
-        // lock; SERIALIZABLE would retain the pre-wait snapshot and provoke a
-        // retry storm under a long FIFO queue.
-        { isolationLevel: "ReadCommitted" },
-      );
-    } catch (error) {
-      const code = typeof error === "object" && error && "code" in error
-        ? String(error.code)
-        : "";
-      // A concurrent idempotent insert or serializable write conflict means
-      // another claimant committed first. A fresh transaction can now observe
-      // and return that same durable claim row.
-      if (!["P2002", "P2034"].includes(code) || attempt >= 2) throw error;
-    }
-  }
-}
-
-/**
- * Lanes whose queue head is WOKEN, never promoted: the head's own next claim is
- * the only transaction that may admit it.
- */
-function isSelfAdmittingEnvironment(environmentKey: string): boolean {
-  return environmentKey === "local-integration-ci"
-    || environmentKey === "host-heavy-resource";
-}
-
-type LeaseTransitionInput = {
-  lease: LeaseRow;
-  transition: "enqueued" | "started" | "finished" | "cancelled";
-  outcome?: "success" | "failed" | "cancelled";
-  depth?: number;
-  waitMs?: number;
-  processMs?: number;
-  cycleMs?: number;
-};
-
-function emitLeaseTransition(input: LeaseTransitionInput) {
-  return recordQueueTransition({
-    queueKey: `compute:nonprod-${input.lease.environmentKey}`,
-    itemKind: "nonprod-environment-lease",
-    itemId: input.lease.leaseId,
-    transition: input.transition,
-    outcome: input.outcome,
-    laneKey: input.lease.slotKey,
-    actorType: "system",
-    depth: input.depth,
-    durations: {
-      waitMs: input.waitMs,
-      processMs: input.processMs,
-      cycleMs: input.cycleMs,
-    },
-  });
-}
-
-async function emitLeaseTransitions(inputs: LeaseTransitionInput[]) {
-  for (const input of inputs) {
-    await emitLeaseTransition(input);
-  }
-}
-
-async function lockEnvironment(
-  tx: LeaseTx,
-  environmentKey: string,
-): Promise<void> {
-  if (typeof tx.$executeRaw !== "function") return;
-  await lockNonprodEnvironment(tx, environmentKey);
-}
 
 async function reconcileEnvironmentInTransaction(input: {
   tx: LeaseTx;
