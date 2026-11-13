@@ -11,7 +11,6 @@ import type { RepoIdentity } from "@/lib/contributor-change-lanes/github-rest-re
 import type { IntakeControllerVerdict } from "./intake-controller-authority";
 import {
   mapPeerDemandMirrors,
-  mapDependabotAlerts,
   mapUpstreamIssues,
   runInboundIssueTriage,
   type InboundEcosystemItem,
@@ -19,13 +18,27 @@ import {
   type InboundTriageResult,
 } from "./inbound-issue-triage";
 import type { RepositoryAlertRead } from "./dependabot-reader";
+import type { AlertPageRead } from "./github-alert-pager";
+import type { CodeScanningAlert } from "./code-scanning-reader";
+import type { SecretScanningAlert } from "./secret-scanning-reader";
+import {
+  groupCodeScanningAlerts,
+  groupDependabotAlerts,
+  groupSecretScanningAlerts,
+  type SecurityGroupKind,
+} from "./security-finding-groups";
+import type { SecurityLifecycleResult, SecurityLifecycleStore } from "./security-finding-lifecycle";
+
+/** Per-surface security coverage for the run summary (BI-C67E5CCB). Absent = unreadable this run. */
+export type SecuritySurfaceCounts = Partial<Record<SecurityGroupKind, { alerts: number; groups: number }>>;
 
 export type InboundTriageOutcome =
-  | ({ ran: true; complete: boolean; sourceErrors: InboundSourceError[]; scannedAt?: string; issueReadComplete?: boolean } & InboundTriageResult)
+  | ({ ran: true; complete: boolean; sourceErrors: InboundSourceError[]; scannedAt?: string; issueReadComplete?: boolean;
+      security?: { surfaces: SecuritySurfaceCounts; lifecycle: SecurityLifecycleResult | null } } & InboundTriageResult)
   | { ran: false; reason: string };
 
 export interface InboundSourceError {
-  source: "upstream-issue" | "peer-demand" | "dependabot";
+  source: "upstream-issue" | "peer-demand" | "dependabot" | "code-scanning" | "secret-scanning" | "security-lifecycle";
   error: string;
 }
 
@@ -36,6 +49,10 @@ export interface InboundTriageRunnerDeps {
   /** Reads issues from the commissioned repository — never a fallback one. */
   readIssues?: (repo: RepoIdentity) => Promise<{ ok: boolean; issues?: unknown[]; error?: string }>;
   readAlerts?: (repo: RepoIdentity) => Promise<RepositoryAlertRead>;
+  readCodeScanning?: (repo: RepoIdentity) => Promise<AlertPageRead<CodeScanningAlert>>;
+  readSecretScanning?: (repo: RepoIdentity) => Promise<AlertPageRead<SecretScanningAlert>>;
+  /** Moves resolved groups to awaiting-acceptance (BI-C67E5CCB). Prisma-backed when omitted. */
+  lifecycleStore?: () => Promise<SecurityLifecycleStore>;
   readPeerDemand?: () => Promise<Array<{ mirrorId: string; payload: unknown }>>;
   ingest?: (input: unknown) => Promise<InboundIngestOutcome>;
   onFailure?: (item: InboundEcosystemItem, error: unknown) => void;
@@ -89,6 +106,14 @@ async function defaultLoadCommission(): Promise<IntakeControllerVerdict> {
   return loadIntakeControllerCommission();
 }
 
+async function defaultLifecycleStore(): Promise<SecurityLifecycleStore> {
+  const { prisma } = await import("@dpf/db");
+  const { prismaSecurityLifecycleStore } = await import("./security-finding-lifecycle");
+  const { peerOwnedStatusRefusal } = await import("@/lib/backlog/peer-owned-item");
+  return prismaSecurityLifecycleStore(prisma as unknown as Parameters<typeof prismaSecurityLifecycleStore>[0],
+    (itemId, body) => peerOwnedStatusRefusal(itemId, body) !== null);
+}
+
 export async function runEcosystemInboundTriage(
   deps: InboundTriageRunnerDeps = {},
 ): Promise<InboundTriageOutcome> {
@@ -126,19 +151,48 @@ export async function runEcosystemInboundTriage(
     sourceErrors.push({ source: "upstream-issue", error: getErrorMessage(error) });
   }
 
-  // Independent coverage: a security permission failure cannot erase issue work
-  // or be reported as a clean repository. The same commission owns both reads.
-  try {
-    const readAlerts = deps.readAlerts ?? (async (target: RepoIdentity) => {
+  // Independent coverage per surface: a permission failure on one surface can
+  // neither erase issue work nor be reported as a clean repository, and it
+  // never lets the lifecycle treat that surface's items as resolved (AC-5).
+  const securityGroups: InboundEcosystemItem[] = [];
+  const surfaces: SecuritySurfaceCounts = {};
+  const completeKinds: SecurityGroupKind[] = [];
+  const readSurface = async <T,>(
+    source: InboundSourceError["source"], kind: SecurityGroupKind,
+    read: () => Promise<{ ok: true; alerts: T[] } | { ok: false; error: string }>,
+    group: (alerts: T[]) => InboundEcosystemItem[],
+  ) => {
+    try {
+      const result = await read();
+      if (!result.ok) { sourceErrors.push({ source, error: result.error }); return; }
+      const groups = group(result.alerts);
+      securityGroups.push(...groups);
+      surfaces[kind] = { alerts: result.alerts.length, groups: groups.length };
+      completeKinds.push(kind);
+    } catch (error) {
+      sourceErrors.push({ source, error: getErrorMessage(error) });
+    }
+  };
+  await readSurface("dependabot", "dependabot-package",
+    () => (deps.readAlerts ?? (async (target: RepoIdentity) => {
       const { readDependabotAlerts } = await import("./dependabot-reader");
       return readDependabotAlerts({ repo: target });
-    });
-    const alerts = await readAlerts(repo);
-    if (!alerts.ok) sourceErrors.push({ source: "dependabot", error: alerts.error });
-    else items.push(...mapDependabotAlerts(alerts.alerts, repo));
-  } catch (error) {
-    sourceErrors.push({ source: "dependabot", error: getErrorMessage(error) });
-  }
+    }))(repo),
+    (alerts) => groupDependabotAlerts(alerts, repo));
+  await readSurface("code-scanning", "code-scanning-rule",
+    () => (deps.readCodeScanning ?? (async (target: RepoIdentity) => {
+      const { readCodeScanningAlerts } = await import("./code-scanning-reader");
+      return readCodeScanningAlerts({ repo: target });
+    }))(repo),
+    (alerts) => groupCodeScanningAlerts(alerts, repo));
+  await readSurface("secret-scanning", "secret-scanning-alert",
+    () => (deps.readSecretScanning ?? (async (target: RepoIdentity) => {
+      const { readSecretScanningAlerts } = await import("./secret-scanning-reader");
+      return readSecretScanningAlerts({ repo: target });
+    }))(repo),
+    (alerts) => groupSecretScanningAlerts(alerts, repo));
+  // Most urgent first, so a run that is cut short has filed the secrets and criticals.
+  items.push(...[...securityGroups].sort((a, b) => (a.priority ?? 9) - (b.priority ?? 9)));
 
   // Transport 2 — peer-side federated demand envelopes from live
   // cross-organization links only (BI-F4866228).
@@ -178,7 +232,20 @@ export async function runEcosystemInboundTriage(
     }),
   });
 
+  // Resolution and priority run after ingest, only for surfaces read completely.
+  let lifecycle: SecurityLifecycleResult | null = null;
+  if (completeKinds.length > 0) {
+    try {
+      const store = await (deps.lifecycleStore ?? defaultLifecycleStore)();
+      const { reconcileSecurityLifecycle } = await import("./security-finding-lifecycle");
+      lifecycle = await reconcileSecurityLifecycle({ completeKinds, groups: securityGroups, store, now: new Date(scannedAt) });
+    } catch (error) {
+      sourceErrors.push({ source: "security-lifecycle", error: getErrorMessage(error) });
+    }
+  }
+
   // Keep partial work, but never project a failed source as a quiet, complete scan.
   return { ran: true, ...result, complete: sourceErrors.length === 0 && result.failed === 0 && result.needsReview === 0,
-    sourceErrors, scannedAt, issueReadComplete: issueReadComplete && result.failed === 0 };
+    sourceErrors, scannedAt, issueReadComplete: issueReadComplete && result.failed === 0,
+    security: { surfaces, lifecycle } };
 }

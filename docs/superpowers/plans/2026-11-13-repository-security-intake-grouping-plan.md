@@ -6,7 +6,15 @@ backlog: BI-C67E5CCB
 
 # Repository security and issue intake: implementation plan
 
-**Design:** [2026-11-13-repository-security-intake-grouping-design.md](../specs/2026-11-13-repository-security-intake-grouping-design.md) · **Umbrella:** BI-C67E5CCB
+**Design:** [2026-11-13-repository-security-intake-grouping-design.md](../specs/2026-11-13-repository-security-intake-grouping-design.md) 
+
+**Backlog item:** BI-C67E5CCB
+
+## Backlog coverage
+
+- Decision: decomposed
+- Receipt: cmwf80l8g0a8j0eohvtwfxnd6
+- Mapped: BI-C67E5CCB (D1), BI-6B28699D (D2); no dependency between them
 
 ## Deliverables
 
@@ -22,7 +30,7 @@ D1 lands first on branch `feat/security-intake-grouping`. D2 gets its own branch
 ### Phase 1: readers
 
 - `apps/web/lib/ecosystem/code-scanning-reader.ts` and `secret-scanning-reader.ts`, each with a `.test.ts`. The tests cover: a paginated happy path; 403 → `{ok:false}` naming the missing permission; a malformed alert → `{ok:false}`; a truncated page cap → `{ok:false}`; a foreign Link host refused; the secret reader never returns the `secret` field (AC-5, AC-7).
-- The shared pager stays in each reader for now. Extracting it is a follow-up only if a fourth reader appears.
+- Both readers share `github-alert-pager.ts`. The Dependabot reader is left as it is, apart from gaining the package `ecosystem`.
 
 ### Phase 2: grouping and priority
 

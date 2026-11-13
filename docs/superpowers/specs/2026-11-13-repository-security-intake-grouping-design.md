@@ -40,7 +40,7 @@ The daily `security-findings-watch.yml` report (issue #4389) stays report-only. 
 | --- | --- | --- |
 | AC-1 | OBJ-1 | A run with readable surfaces files or reconciles one item per group across all three surfaces; the run summary lists counts per surface. |
 | AC-2 | OBJ-2 | Dependabot groups by (ecosystem, package); CodeQL by rule id; secret scanning by alert number. Re-running with unchanged alerts creates no item and records no change. |
-| AC-3 | OBJ-3 | Priority is secret=1, critical=1, high=2, medium=3, low/note/warning=4, from the highest open severity in the group; it is written on create and when the tier changes, never on an unchanged poll. |
+| AC-3 | OBJ-3 | Priority is secret=1, critical=1, high=2, medium=3, low/note=4, from the highest open severity in the group; it is written on create and raised when the group's tier is more urgent than the item's priority. It is never lowered automatically, so a rise in severity always surfaces. |
 | AC-4 | OBJ-4 | A group absent from a complete open read records resolution evidence on its non-terminal item and moves it to awaiting-acceptance, where the existing acceptance sweep closes it; a reappearing group returns an awaiting-acceptance item to open, and a reappearance on a done item is reported as a regression. |
 | AC-5 | OBJ-5 | A 401/403/404, malformed body or truncated pagination on any surface is a source error; no item from that surface is closed or reopened in that run; the job reports failed with the surface named. |
 | AC-6 | OBJ-2 | No per-alert Dependabot origin is filed after the change; existing per-alert items are retired once as duplicates of their package group item, not deleted. |
@@ -60,7 +60,7 @@ The standard for state is GitHub's REST alert APIs (`/dependabot/alerts`, `/code
 
 ### Readers (beside `dependabot-reader.ts`)
 
-`code-scanning-reader.ts` and `secret-scanning-reader.ts` copy the Dependabot reader's contract exactly: the controller credential from `resolveGithubToken(prisma, { preferRepositoryController: true })`, the owned transport, an origin-pinned Link-header pager, `redirect: "error"`, and a `{ ok:false, error }` result for every non-200, malformed or truncated read. A 403 names the missing permission ("Code scanning alerts: read" / "Secret scanning alerts: read"). The secret reader drops the `secret` field at parse time, so the value never enters process memory beyond the HTTP body.
+`code-scanning-reader.ts` and `secret-scanning-reader.ts` share one pager, `github-alert-pager.ts`, which keeps the Dependabot reader's contract exactly: the controller credential from `resolveGithubToken(prisma, { preferRepositoryController: true })`, the owned transport, an origin-pinned Link-header pager, `redirect: "error"`, and a `{ ok:false, error }` result for every non-200, malformed or truncated read. A 403 names the missing permission ("Code scanning alerts: read" / "Secret scanning alerts: read"). The secret reader drops the `secret` field at parse time, so the value never enters process memory beyond the HTTP body.
 
 ### Grouping (pure, `security-finding-groups.ts`)
 
@@ -79,7 +79,7 @@ This runs after ingest, only for surfaces whose open read was complete. It loads
 - **Absent from the open read, item is triaging/open/in-progress**: the job records one `evidence` activity on the item, "GitHub no longer reports <group> open", with the alert numbers, the read time and, when a best-effort `state=fixed`/`state=dismissed` read succeeds, each alert's final state and dismissal reason. It then moves the item to `awaiting-acceptance`, a legal non-admin transition. The existing acceptance sweep (`acceptance-sweep-daily`) closes it to `done` when the completion gate allows, under the operator pre-authorisation `acceptance-sweep.close-authorisation` (enabled on this install 2026-10-13). This is the same evidence-then-close sequence an agent used by hand for BI-E6A1EB76 (Dependabot #256) on 2026-11-03, now automatic. A dismissed group closes the same way; its resolution names the dismissal reason.
 - **Present again, item is awaiting-acceptance**: the job moves it back to `open` with a `regression` activity.
 - **Present again, item is done**: reopening a done item needs an admin grant, so the job does not do it. Origin reconciliation already records a `reopened` source event on the canonical item. The job counts it as a regression in the run summary, and the scheduled-job attention source surfaces it to an owner.
-- **Priority**: an item whose recorded tier differs from the group's current tier gets its priority updated with an activity. An unchanged tier writes nothing.
+- **Priority**: an open item whose priority is unset or less urgent than its group's tier is raised to that tier, with a `priority_change` activity. The job never lowers a priority. An owner can deprioritise below the tier, but the next run raises it back, because a security finding stays ranked by its severity while it is open.
 
 An item with an active build is not moved. The evidence activity is still recorded, so the person working it sees the finding is gone.
 
