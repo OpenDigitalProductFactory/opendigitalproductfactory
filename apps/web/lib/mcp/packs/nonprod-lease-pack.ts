@@ -207,7 +207,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   // place a client defect fixed on main can be retired from un-rebased
   // branches on every install.
   if (environmentKey === "local-integration-ci") {
-    const { evaluateGateClientRevision, isGateClientClaim } = await import("@/lib/nonprod/gate-client-revision");
+    const { evaluateGateClientRevision } = await import("@/lib/nonprod/gate-client-revision");
     const refusal = evaluateGateClientRevision({
       clientRevision: params["gateClientRevision"],
       worktreePath: stringValue("worktreePath") || undefined,
@@ -219,19 +219,10 @@ async function claimNonprodEnvironmentLeaseHandler(
         error: "gate_client_upgrade_required",
         message:
           `This branch's local-CI gate client is revision ${refusal.clientRevision}; this platform requires `
-          + `revision ${refusal.minimumRevision} or later on ${refusal.platform ?? "all"} hosts because ${refusal.reason}. `
-          + "Merge current origin/main into this branch and re-run pregate. This is not a verdict on the diff, and retrying "
+          + `revision ${refusal.minimumRevision} or later on ${refusal.platform} hosts because ${refusal.reason}. `
+          + "Rebase the branch onto main and re-run pregate. This is not a verdict on the diff, and retrying "
           + "with the same client will be refused again.",
-        data: { admission: { status: "refused", reason: "gate-client-upgrade-required" }, ...refusal, retryable: false },
-      };
-    }
-    if (isGateClientClaim({ clientRevision: params["gateClientRevision"], purpose })
-      && (typeof hostPressure?.totalMemoryBytes !== "number" || !positiveNumber(hostPressure.totalMemoryBytes))) {
-      return {
-        success: false,
-        error: "invalid_host_pressure",
-        message: "A local-CI gate claim requires a positive finite hostPressure.totalMemoryBytes. Refresh the host observation before claiming again.",
-        data: { admission: { status: "refused", reason: "invalid-host-pressure" }, retryable: false },
+        data: { admission: { status: "refused", reason: "gate-client-upgrade-required" }, ...refusal },
       };
     }
   }

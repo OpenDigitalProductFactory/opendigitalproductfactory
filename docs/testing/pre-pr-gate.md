@@ -861,20 +861,15 @@ A fenced run likewise records *which* fence fired
 (`fence reason: lease-authority-deadline`, ...) in its gate record, so a
 self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
 
-**`gate_client_upgrade_required` requires a source refresh.** The gate client
-and its durable-wait resumer run from the branch being gated, so a client defect
+**`gate_client_upgrade_required` means rebase, not retry.** The gate client and
+its durable-wait resumer run from the branch being gated, so a client defect
 fixed on `main` keeps running in every branch cut before the fix. Every claim
-therefore reports `gateClientRevision`, and the admission server refuses an old
-client before creating a lease or durable wait. The floor is revision 4 for
-Windows and POSIX, including claims with an unknown host path: earlier clients
-omit the physical host memory total required by host-backed reservation
-admission. The refusal is non-retryable and is not a verdict on the diff. Merge
-current `origin/main` into the governed branch and run `pregate` again; retrying
-the unchanged client cannot recover. A stale resumer stops after its first
-refusal. A current client with a missing, non-finite or non-positive physical
-total receives non-retryable `invalid_host_pressure` before any wait is created;
-refresh its host observation. Non-gate infrastructure probes keep their existing
-admission path. Older revision floors remain recorded for their original defects.
+therefore reports `gateClientRevision`, and the admission server refuses a
+claim below its floor with `gate_client_upgrade_required`. Today the floor is
+revision 1, on Windows hosts only: older clients opened a focus-stealing
+terminal window on every re-claim (BI-69178E02). The refusal is not a verdict on
+the diff. Re-running the same branch is refused again, and a stale resumer stops
+after the first refusal. Rebase onto `origin/main` and run `pregate` again.
 
 **A queued gate's waiter outlives the session that started it.** On Windows a
 process that node spawns stays inside its caller's job object, and the Claude

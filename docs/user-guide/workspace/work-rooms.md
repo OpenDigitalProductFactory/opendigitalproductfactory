@@ -11,6 +11,7 @@ relatedCode:
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
+  - apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx
   - apps/web/components/workspace-home/MainStreamHero.tsx
   - apps/web/lib/work-management/room-ai-spend.ts
   - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
@@ -20,6 +21,8 @@ relatedCode:
   - apps/web/lib/work-management/room-participation.ts
   - apps/web/lib/work-management/workspace-case-loader.ts
   - apps/web/lib/work-management/workspace-room-access.ts
+  - apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx
+  - apps/web/lib/delivery-outcomes/read-model.ts
 ---
 
 ## Overview
@@ -43,6 +46,27 @@ Coworker service engagements can also appear as Work Cases. When a requested cow
 A human decision shows its recorded question and condition from the room's declared process. A delivery status alone does not mean the owner must approve something, and a waiting lease does not establish progress. Open the original room to review its evidence and use its supported decision controls.
 
 Shared recovery groups retain every room link. A shared action appears only when the rooms agree; different remedies remain on their own rows. **Technical evidence** links to the room's recorded evidence, while cycle and supervision details remain disclosed. The inventory does not preload branch, session and lease diagnostics for every row.
+
+### Delivery outcomes
+
+On **Development Workrooms**, choose **Delivery outcomes** to inspect a fixed
+30-day cohort of rooms you can read. The summary separates source-qualified
+verified outcomes from completed rooms and merged pull requests. Open **Where
+time goes** for process, wait and cycle percentiles, including the number of
+complete and missing observations.
+
+Open **Cohort and sources** before comparing periods. A partial or stale source,
+row limit or missing claim timestamp changes what the numbers can establish.
+Process means recorded execution time; it does not measure human touch time or
+value added. A low completed sample is not proof of low productivity.
+
+**Usage and cost** separates direct work from unique task descendants and keeps
+cache reads, cache writes, output, reasoning, estimated API price and actual
+spend distinct. Unavailable values stay explicit. **Workrooms and evidence**
+provides a bounded search by campaign, model, installation, work kind,
+repository or effort and links back to the underlying records. The view does
+not rank workers by lines changed or PR count, or infer an improvement from a
+correlation.
 
 For development work, a verified repository observation can update the room's
 pull request when it matches the room's current commit. The room journal retains
@@ -304,6 +328,25 @@ Each work shape is reviewed on its own schedule (see **Flow reviews** above). Ev
 
 When two reviews in a row name the same step for the same reason, the platform files it once in the backlog. The item names the step, the shape, the reason and both review dates. It is assigned to whoever the work shape makes accountable for that step, and it records how the fix should be made: as a check at that step, which every room of the shape then inherits. If the same pile is named again later, the open item is updated rather than filed twice. A pile that clears between reviews is never filed, so the backlog holds only problems that persist.
 
+### Asking a coworker in the room
+
+Mention an AI coworker in a room message (for example `@release-coworker please verify the build`) and it answers in the room, usually within a minute. You don't have to start anything. Coworkers can also address each other, or address the room's coordinator, the same way.
+
+- **It runs under your authority.** The answer is produced under the account that posted the message. A coworker cannot do more for you than you could ask of it directly.
+- **Several messages in a short burst get one answer.** Messages arriving within about 15 seconds are read together.
+- **Rooms worked by an outside assistant are left to it.** If Claude Code, Codex or another external assistant is working the room, or you address one of them, no platform coworker takes over. The assistant sees the message the next time it reads the room.
+- **A coworker that may not post in rooms is not asked.** Answering needs the coworker's permission to post in rooms. Without it, nothing is started, and a note in the room says the coworker cannot reply and which permission it lacks. The coworker's owner can grant that permission.
+- **Long exchanges between coworkers stop themselves.** After eight back-and-forth replies between coworkers, the room's coordinator is asked to step in instead. After 30 answers in an hour, the room stops waking anyone until the hour is up. In both cases a note in the room says so. Nothing is lost: every message stays in the room to read.
+
+### Outside assistants that follow a room
+
+An outside assistant connected to the platform, such as Claude Code, Codex or Grok, can follow a room it is allowed to read. When anyone posts there, the assistant is told within a few seconds that the room has something new, and then reads the room itself.
+
+- **The notice carries no message.** It only says which room changed. The assistant reads the room with its own access, so it never sees more than it could read anyway.
+- **Removing access stops it straight away.** If an assistant loses its place in the room, or its connection is revoked, it hears nothing more about the room from that moment.
+- **Nothing is lost while it is offline.** If the assistant was disconnected, it is told what changed when it reconnects, and the room still holds every message.
+- **The assistant has to support it.** Not every assistant acts on these notices yet. One that doesn't still sees new messages the next time it reads the room.
+
 ## Access and Other Channels
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.
@@ -343,6 +386,28 @@ the page stays accurate and safe to act on; the reason is recorded for your
 platform team rather than shown to you.
 
 **Completed cycles** are ordered by completion time. Open a completed cycle to read its Outcome Packet, durable-record count, verification state, and unresolved work. Each unresolved item has an explicit disposition: carry it into the next cycle, open a separate case, defer it, or accept it. Retrying carry-over does not create duplicate work.
+
+### Day-to-day operations
+
+**Operations > Work in progress** has a **Day-to-day operations** band listing every standing room. Each room runs once a day, and its row shows the last 14 days, oldest on the left:
+
+- **Filled:** that day's run finished the same day.
+- **Half filled, amber:** the run finished, but on a later day.
+- **Outlined cross:** the day did not run, usually because an earlier run was still waiting.
+- **Dot:** the run is in progress today.
+- **Dashed:** today's run has not started yet.
+- **Dotted:** no record yet. Days before the room's first recorded run are not counted as missed.
+
+Every mark has its own shape as well as its colour, so a missed or late day is never mistaken for another state even without colour. Beside the marks, the row says how long a stuck run has been going ("Running since Oct 7") or how many days did not run. Select a room's name to open it, or **What the marks mean** to see this key on the page.
+
+The marks come from the room's own drive record, so nothing is guessed. The band appears only when the install has standing rooms.
+
+The summary says **Every recorded day ran** only when the whole displayed
+window has recorded completions. **No record yet** means no result is recorded
+in that window; **Some days unrecorded** means the history is partial. A run
+still due today says **Not started today**. Unrecorded days remain unknown.
+Running and missed-day warnings keep their existing meanings. Select the room
+name to inspect its recorded work and supported next action.
 
 ## Defining the Room
 

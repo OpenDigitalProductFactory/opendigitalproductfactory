@@ -3,8 +3,8 @@ import type { AuthorResearchPolicyBinding } from "@/lib/build/author-research-po
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
 const io = vi.hoisted(() => ({ artifact: vi.fn(), author: vi.fn(), item: vi.fn(), decision: vi.fn(),
-  append: vi.fn(), judgment: vi.fn(), delegation: vi.fn(), transaction: vi.fn(), source: vi.fn(), sourceGuard: vi.fn() }));
-vi.mock("@/lib/mcp/workroom-repository-source", () => ({ prepareWorkroomRepositorySource: io.source }));
+  append: vi.fn(), judgment: vi.fn(), delegation: vi.fn(), transaction: vi.fn(), source: vi.fn(), sourceGuard: vi.fn(), inquiry: vi.fn(), inquiryGuard: vi.fn() }));
+vi.mock("@/lib/mcp/workroom-repository-source", () => ({ prepareWorkroomRepositorySource: io.source, prepareSourceInquiryResearch: io.inquiry }));
 vi.mock("@/lib/build/author-research-policy-binding", () => ({ resolveAuthorResearchPolicyBinding: io.author }));
 vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: io.artifact }));
 vi.mock("./reviewer-identity", () => ({ resolveReviewerIdentity: async () => ({ principalId: "principal-actor", kind: "coworker" }) }));
@@ -30,6 +30,7 @@ let tx: Record<string, unknown>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  io.inquiry.mockResolvedValue(null);
   const item = { id: "item-row", itemId: proof.itemId, organizationId: null, featureBuilds: [] };
   io.item.mockResolvedValue(item);
   decision = { decisionId: "AUTH-1", decision: "allow", actionKey: args.actionKey, policyVersion: "PV-1", organizationId: null,
@@ -104,5 +105,30 @@ describe("which build revision a gate may bind (BI-6F2872FC)", () => {
     expect(io.artifact).toHaveBeenLastCalledWith(expect.objectContaining({ acceptBuildPlan: true }));
     await recordInitiativeGateReceipt(args);
     expect(io.artifact).toHaveBeenLastCalledWith(expect.objectContaining({ acceptBuildPlan: false }));
+  });
+});
+
+describe("source inquiry research publication", () => {
+  it.each([true, false])("publishes only while read-only admission is current: %s", async current => {
+    decision.rationale = {};
+    const artifactRef = { kind: "repo-blob-at-commit" as const, repositoryFullName: "owner/repo",
+      commitSha: "a".repeat(40), path: "package.json", providerBlobId: "b".repeat(40) };
+    const inquiryAdmission = { itemId: proof.itemId, workroomId: "WC-INQUIRY", artifactRef, isCurrent: async () => true };
+    io.inquiryGuard.mockResolvedValue(current);
+    io.inquiry.mockResolvedValue({ inquiryAdmission, admissionGuard: io.inquiryGuard });
+    io.artifact.mockResolvedValue({ ok: true, artifact: { ref: artifactRef, digest: proof.valueDigest,
+      authorPrincipalId: "principal-actor", authorAgentId: args.reviewerAgentId, bytes: Buffer.from("source") } });
+    const result = await recordInitiativeGateReceipt({ ...args, artifactRef, sourceWorkroomId: "WC-INQUIRY" });
+    expect(io.artifact).toHaveBeenCalledWith(expect.objectContaining({ inquiryAdmission }));
+    expect(io.inquiryGuard).toHaveBeenCalledWith(tx);
+    expect(result.ok).toBe(current);
+    expect(io.append).toHaveBeenCalledTimes(current ? 1 : 0);
+    if (current) expect(io.append.mock.calls[0][0].data.payload.sourceInquiryWorkroomId).toBe("WC-INQUIRY");
+  });
+  it("never uses inquiry admission for independent review", async () => {
+    await recordInitiativeGateReceipt({ ...args, gate: "spec-approval", requiresIndependentReviewer: true,
+      sourceWorkroomId: "WC-INQUIRY" });
+    expect(io.inquiry).not.toHaveBeenCalled();
+    expect(io.append).not.toHaveBeenCalled();
   });
 });

@@ -48,7 +48,7 @@ const ARCHIMATE_TYPE_TO_SLUG: Record<string, string> = {
 const ARCHIMATE_REL_TO_SLUG: Record<string, string> = {
   "archimate:AssociationRelationship":    "associated_with",
   "archimate:CompositionRelationship":    "composed_of",
-  "archimate:AggregationRelationship":    "composed_of",
+  "archimate:AggregationRelationship":    "aggregates",
   "archimate:RealizationRelationship":    "realizes",
   "archimate:ServingRelationship":        "serves",
   "archimate:AccessRelationship":         "accesses",
@@ -56,7 +56,7 @@ const ARCHIMATE_REL_TO_SLUG: Record<string, string> = {
   "archimate:InfluenceRelationship":      "influences",
   "archimate:TriggeringRelationship":     "triggers",
   "archimate:FlowRelationship":           "flows_to",
-  "archimate:SpecializationRelationship": "associated_with",
+  "archimate:SpecializationRelationship": "specializes",
 };
 
 // Reverse map: slug → ArchiMate XML type (standard types only)
@@ -75,18 +75,26 @@ export type ParsedElement = {
   archimateRelType?: string;
 };
 
+/** A relationship type the importer does not know; reported as a finding, never coerced (BI-E487F6D9). */
+export type UnknownParsedRelationship = {
+  archimateId: string;
+  xmlType: string;
+};
+
 export type ParsedRelationship = {
   archimateId: string;
   fromArchimateId: string;
   toArchimateId: string;
   slug: string;
-  archimateRelType?: string;
+  /** For an association: the name that says what it means. */
+  role?: string;
 };
 
 export type ParsedArchimateModel = {
   modelName: string;
   elements: ParsedElement[];
   relationships: ParsedRelationship[];
+  unknownRelationships: UnknownParsedRelationship[];
 };
 
 export function parseArchimateXml(xml: string): ParsedArchimateModel {
@@ -101,6 +109,7 @@ export function parseArchimateXml(xml: string): ParsedArchimateModel {
 
   const elements: ParsedElement[] = [];
   const relationships: ParsedRelationship[] = [];
+  const unknownRelationships: UnknownParsedRelationship[] = [];
 
   // Process folders (elements)
   const folders: unknown[] = Array.isArray(model.folder) ? model.folder : model.folder ? [model.folder] : [];
@@ -143,17 +152,25 @@ export function parseArchimateXml(xml: string): ParsedArchimateModel {
   const rawRels: unknown[] = Array.isArray(relsContainer.element) ? relsContainer.element : relsContainer.element ? [relsContainer.element] : [];
   for (const rel of rawRels as Record<string, unknown>[]) {
     const xmlType = String(rel["@_xsi:type"] ?? "");
-    const slug = ARCHIMATE_REL_TO_SLUG[xmlType] ?? "associated_with";
+    // A DPF type exported as a named association round-trips through its dpf:relationshipType property.
+    const dpfSlug = readDpfProperty(rel, "dpf:relationshipType");
+    const slug = dpfSlug ?? ARCHIMATE_REL_TO_SLUG[xmlType];
+    if (!slug) {
+      unknownRelationships.push({ archimateId: String(rel["@_id"] ?? ""), xmlType });
+      continue;
+    }
+    const name = typeof rel["@_name"] === "string" && rel["@_name"].trim() ? rel["@_name"].trim() : undefined;
     relationships.push({
       archimateId: String(rel["@_id"] ?? ""),
       fromArchimateId: String(rel["@_source"] ?? ""),
       toArchimateId: String(rel["@_target"] ?? ""),
       slug,
-      ...( ["archimate:AggregationRelationship", "archimate:SpecializationRelationship"].includes(xmlType) ? { archimateRelType: xmlType } : {}),
+      // An association keeps its name as the role that says what it means.
+      ...(slug === "associated_with" && name ? { role: name } : {}),
     });
   }
 
-  return { modelName, elements, relationships };
+  return { modelName, elements, relationships, unknownRelationships };
 }
 
 export type GenerateInput = {
@@ -171,12 +188,16 @@ export type GenerateInput = {
     fromArchimateId: string;
     toArchimateId: string;
     slug: string;
+    /** An association's role, exported as its name. */
+    role?: string;
   }>;
 };
 
 const REL_SLUG_TO_ARCHIMATE: Record<string, string> = {
   associated_with: "archimate:AssociationRelationship",
   composed_of:     "archimate:CompositionRelationship",
+  aggregates:      "archimate:AggregationRelationship",
+  specializes:     "archimate:SpecializationRelationship",
   realizes:        "archimate:RealizationRelationship",
   serves:          "archimate:ServingRelationship",
   accesses:        "archimate:AccessRelationship",
@@ -184,8 +205,24 @@ const REL_SLUG_TO_ARCHIMATE: Record<string, string> = {
   influences:      "archimate:InfluenceRelationship",
   triggers:        "archimate:TriggeringRelationship",
   flows_to:        "archimate:FlowRelationship",
-  depends_on:      "archimate:AssociationRelationship", // no direct equivalent; use association
 };
+
+/** ArchiMate has no relationship for this DPF slug: export a named association carrying the slug. */
+function associationFallback(slug: string): boolean {
+  return !REL_SLUG_TO_ARCHIMATE[slug];
+}
+
+function readDpfProperty(node: Record<string, unknown>, key: string): string | undefined {
+  // The parser reads `properties` and `property` as arrays (see parseArchimateXml's isArray).
+  const containers = Array.isArray(node.properties) ? node.properties : node.properties ? [node.properties] : [];
+  for (const container of containers as Record<string, unknown>[]) {
+    const list = Array.isArray(container.property) ? container.property : container.property ? [container.property] : [];
+    for (const entry of list as Array<Record<string, unknown>>) {
+      if (entry["@_key"] === key && typeof entry["@_value"] === "string") return entry["@_value"];
+    }
+  }
+  return undefined;
+}
 
 export function generateArchimateXml(input: GenerateInput): string {
   const { modelName, elements, relationships } = input;
@@ -206,8 +243,14 @@ export function generateArchimateXml(input: GenerateInput): string {
   }).join("\n");
 
   const xmlRels = relationships.map(rel => {
-    const xmlType = REL_SLUG_TO_ARCHIMATE[rel.slug] ?? "archimate:AssociationRelationship";
-    return `  <element xsi:type="${xmlType}" id="${rel.archimateId}" source="${rel.fromArchimateId}" target="${rel.toArchimateId}"/>`;
+    if (associationFallback(rel.slug)) {
+      // e.g. has_foreign_key_to, depends_on: a named association that re-imports as the same slug.
+      const name = (rel.role ?? rel.slug).replace(/"/g, "&quot;");
+      return `  <element xsi:type="archimate:AssociationRelationship" id="${rel.archimateId}" source="${rel.fromArchimateId}" target="${rel.toArchimateId}" name="${name}">\n    <properties>\n      <property key="dpf:relationshipType" value="${rel.slug}"/>\n    </properties>\n  </element>`;
+    }
+    const xmlType = REL_SLUG_TO_ARCHIMATE[rel.slug];
+    const nameAttr = rel.slug === "associated_with" && rel.role ? ` name="${rel.role.replace(/"/g, "&quot;")}"` : "";
+    return `  <element xsi:type="${xmlType}" id="${rel.archimateId}" source="${rel.fromArchimateId}" target="${rel.toArchimateId}"${nameAttr}/>`;
   }).join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>

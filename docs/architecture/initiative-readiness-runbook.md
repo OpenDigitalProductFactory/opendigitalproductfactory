@@ -195,7 +195,15 @@ still issues that exact packet. The run writes under the platform's own
 authority, recorded with token scope `organization`. The receipt repository's
 trunk and delivery-actor checks apply unchanged. The anchor room records the
 hand-off once as `platform-reviewer`, with a growing back-off, until the review
-lands. Design-stage reviews keep their author carrier.
+lands. When the author-assistant carrier is missing or credentials-kind, the
+same steward takes design-spec, spec-approval, and architecture-review packets
+in per-gate rooms (`WC-DSR-*`, `WC-SAR-*`, `WC-ARR-*`; see
+[design-stage platform reviewer](../superpowers/specs/2026-11-06-design-stage-platform-reviewer-design.md),
+BI-9CCB88C4). The dispatcher passes the same issuer identity PIR already uses
+(`liveReviewerDispatch` and `dispatchOwedIndependentReviews` when the candidate
+target is `design`; BI-CAB5D233); without it `routeToPlatformReviewer` is
+not-applicable and the steward never opens. Token-bound `request_coworker` from
+a credentials client stays refused.
 
 Build Studio plan rooms (BI-27519C1A): review admission asks the Build Studio
 issuer the dispatcher used whether a review is owed, never the item projection.

@@ -16,6 +16,7 @@
  *   7. Create a PR (handled by the calling code)
  */
 
+import { withConnectRetry } from "@/lib/network/connect-retry";
 import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
@@ -122,7 +123,7 @@ export function extractNewFileContent(diff: string, filePath: string): string | 
   // Find the diff segment for this file
   const escapedPath = filePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const segmentRegex = new RegExp(
-    `^diff --git a/.+ b/${escapedPath}\\n.*?\\n--- /dev/null\\n\\+\\+\\+ b/.+\\n(@@[\\s\\S]*?)(?=^diff --git|$)`,
+    `^diff --git a/.+ b/${escapedPath}\\n(?:(?!diff --git ).*\\n)*?--- /dev/null\\n\\+\\+\\+ b/.+\\n(@@[\\s\\S]*?)(?=^diff --git |(?![\\s\\S]))`,
     "m",
   );
   const match = segmentRegex.exec(diff);
@@ -175,32 +176,48 @@ export async function readSandboxFile(filePath: string): Promise<string | null> 
  * the sandbox (`git show HEAD:<path>` in its workdir). That is exactly the
  * tree the gates verified, whatever is on disk or on the shared mount. Null
  * when the path is not in that commit (the caller then falls back to the diff
- * for an added file, or skips).
+ * for an added file, or refuses to publish).
+ *
+ * BI-F31DB5F8: a build's worktree can be gone when it ships (a sandbox restart
+ * removes it) while its branch still holds every commit. `branchFallback`
+ * names that branch in the shared repository, read when the worktree cannot
+ * answer, so a missing worktree does not cost the build its files.
  */
 export function buildTreeFileReader(deps: {
   containerId: string;
   workdir: string;
   exec: (containerId: string, command: string) => Promise<string>;
+  branchFallback?: { repoDir: string; branch: string } | undefined;
 }): (path: string) => Promise<string | null> {
   const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
-  return async (path: string) => {
-    if (!path || path.startsWith("/") || path.split("/").includes("..")) return null;
+  const readAt = async (dir: string, rev: string, path: string): Promise<string | null> => {
     try {
       // cat-file -e fails (and exec throws) when the path is not in the commit,
       // so an empty file still publishes as empty rather than being skipped.
-      const object = quote(`HEAD:${path}`);
+      const object = quote(`${rev}:${path}`);
       const encoded = await deps.exec(
         deps.containerId,
-        `git -C ${quote(deps.workdir)} cat-file -e ${object} && git -C ${quote(deps.workdir)} show ${object} | base64 | tr -d '\\n'`,
+        `git -C ${quote(dir)} cat-file -e ${object} && git -C ${quote(dir)} show ${object} | base64 | tr -d '\\n'`,
       );
       return Buffer.from(encoded.trim(), "base64").toString("utf-8");
     } catch {
       return null;
     }
   };
+  return async (path: string) => {
+    if (!path || path.startsWith("/") || path.split("/").includes("..")) return null;
+    const fromWorktree = await readAt(deps.workdir, "HEAD", path);
+    if (fromWorktree !== null || !deps.branchFallback) return fromWorktree;
+    return readAt(deps.branchFallback.repoDir, `refs/heads/${deps.branchFallback.branch}`, path);
+  };
 }
 
 // ─── GitHub API Helpers ─────────────────────────────────────────────────────
+
+/** One GitHub request; a connection that never opened is retried (BI-ACAA91E5). */
+function githubFetch(url: string, init?: RequestInit): Promise<Response> {
+  return withConnectRetry(() => fetch(url, init));
+}
 
 function getHeaders(token: string): Record<string, string> {
   return {
@@ -212,7 +229,7 @@ function getHeaders(token: string): Record<string, string> {
 }
 
 async function githubGet<T>(url: string, token: string): Promise<T> {
-  const response = await fetch(url, { headers: getHeaders(token) });
+  const response = await githubFetch(url, { headers: getHeaders(token) });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`GitHub API GET ${url}: ${response.status} ${text.slice(0, 300)}`);
@@ -269,6 +286,51 @@ export async function isAncestorCommit(
   }
 }
 
+/** The `Build: FB-…` trailer the platform writes on every published build commit. */
+export function buildTrailerOf(commitMessage: string): string | null {
+  return /^Build:\s*(\S+)\s*$/m.exec(commitMessage)?.[1] ?? null;
+}
+
+/**
+ * Whether the commit a ref points at is this platform's own earlier publication
+ * of the SAME build, sitting directly on the base branch's history.
+ *
+ * BI-93CB58D6: a first attempt that pushed the branch and then failed to open
+ * the PR (FB-2F2D46D5, 2026-11-11, a transient `fetch failed`) left that
+ * commit behind. Every retry builds a new commit on the current base, which
+ * never descends from it, so the overwrite guard below refused the build's own
+ * publication forever. Replacing such a commit discards nothing: it is the
+ * same build, by the same signed identity, with no other commit under it.
+ *
+ * All three must hold, and anything unreadable answers false — the guard's
+ * direction stays "refuse" (BI-9A405652): the same `Build:` trailer (a
+ * similarly titled build carries a different id), the same DCO author, and a
+ * single parent that is on the base's history.
+ */
+export async function isEarlierPublicationOfSameBuild(
+  apiBase: string,
+  existingSha: string,
+  expected: { commitMessage: string; authorEmail: string; baseSha: string },
+  token: string,
+): Promise<boolean> {
+  const build = buildTrailerOf(expected.commitMessage);
+  if (!build) return false;
+  try {
+    const existing = await githubGet<{
+      message?: unknown;
+      author?: { email?: unknown };
+      parents?: Array<{ sha?: unknown }>;
+    }>(`${apiBase}/git/commits/${encodeURIComponent(existingSha)}`, token);
+    const parent = existing.parents?.length === 1 ? existing.parents[0]?.sha : null;
+    if (typeof existing.message !== "string" || buildTrailerOf(existing.message) !== build) return false;
+    if (typeof existing.author?.email !== "string" || existing.author.email !== expected.authorEmail) return false;
+    if (typeof parent !== "string" || parent.length === 0) return false;
+    return await isAncestorCommit(apiBase, parent, expected.baseSha, token);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Build a specific error for a base-branch lookup failure.
  *
@@ -308,7 +370,7 @@ function explainBaseRefFailure(
 }
 
 async function githubPost<T>(url: string, body: unknown, token: string): Promise<T> {
-  const response = await fetch(url, {
+  const response = await githubFetch(url, {
     method: "POST",
     headers: getHeaders(token),
     body: JSON.stringify(body),
@@ -428,8 +490,12 @@ export async function publishBranchCommit(input: {
     }
 
     if (content === null) {
-      console.warn(`[github-api-commit] Could not read content for ${op.path}, skipping`);
-      continue;
+      // BI-F31DB5F8: never publish a partial change. A commit missing one of
+      // the build's files is not the change that was verified; refuse, and
+      // let the caller retry once the content can be read.
+      throw new Error(
+        `Nothing was published: the content of ${op.path} could not be read, and a change is published whole or not at all.`,
+      );
     }
 
     // Create a blob for this file
@@ -488,17 +554,23 @@ export async function publishBranchCommit(input: {
     const fastForward = existingSha
       ? await isAncestorCommit(headApiBase, existingSha, commit.sha, token)
       : false;
-    if (!fastForward) {
+    // BI-93CB58D6: the platform's own earlier publication of this same build
+    // is replaced, not refused; see isEarlierPublicationOfSameBuild.
+    const ownEarlierPublication = !fastForward && existingSha
+      ? await isEarlierPublicationOfSameBuild(headApiBase, existingSha,
+        { commitMessage, authorEmail: dcoIdentity.email, baseSha }, token)
+      : false;
+    if (!fastForward && !ownEarlierPublication) {
       throw new Error(
         `Refusing to overwrite ${branchName}: it already exists at ${existingSha ?? "an unreadable commit"} `
         + `and the new commit ${commit.sha} does not descend from it. `
         + "Publishing would discard whatever is there, unrecoverably.",
       );
     }
-    const response = await fetch(`${headApiBase}/git/refs/heads/${branchName}`, {
+    const response = await githubFetch(`${headApiBase}/git/refs/heads/${branchName}`, {
       method: "PATCH",
       headers: getHeaders(token),
-      body: JSON.stringify({ sha: commit.sha, force: false }),
+      body: JSON.stringify({ sha: commit.sha, force: ownEarlierPublication }),
     });
     if (!response.ok) {
       throw new Error(`Failed to create/update branch: ${(err as Error).message}`);

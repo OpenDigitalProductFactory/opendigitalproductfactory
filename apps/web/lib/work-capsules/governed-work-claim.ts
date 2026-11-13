@@ -58,6 +58,10 @@ type ClaimInput = {
   overrideReason?: string | null;
   /** v3: the delivery shape resolved at the claim (`delivery-<shape>@<version>`), when any. */
   workShape?: string | null;
+  /** The item lives on the paired installation, which holds its claim
+   *  (BI-30EDDB7F). The local Workroom is created, but the local copy of the
+   *  item is a read-only mirror and records no claim of its own. */
+  claimAtHome?: boolean;
 };
 
 type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;

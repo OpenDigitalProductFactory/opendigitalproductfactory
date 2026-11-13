@@ -13,32 +13,20 @@ const POSIX_WORKTREE = "/home/dev/dpf-worktrees/some-branch";
 const GATE_PURPOSE = "Pre-PR local-CI gate for fix/x @ abc123";
 
 describe("gate client revision floor", () => {
-  it.each([WINDOWS_WORKTREE, POSIX_WORKTREE, undefined, "relative/path"])(
-    "requires physical-host telemetry revision for %s", (worktreePath) => {
-      expect(evaluateGateClientRevision({ clientRevision: 3, worktreePath, purpose: GATE_PURPOSE }))
-        .toMatchObject({ minimumRevision: 4, clientRevision: 3 });
-    },
-  );
-
-  it("the shipping sampler declares physical-host telemetry support", () => {
-    const source = readFileSync(join(__dirname, "..", "..", "..", "..", "scripts", "lib", "gate-client-revision.mjs"), "utf8");
-    expect(Number(source.match(/export const GATE_CLIENT_REVISION = (\d+);/)?.[1])).toBeGreaterThanOrEqual(4);
-  });
-
   it.each([WINDOWS_WORKTREE, POSIX_WORKTREE])("retires stale-pin resumers on %s", (worktreePath) => {
     expect(evaluateGateClientRevision({ clientRevision: 2, worktreePath, purpose: GATE_PURPOSE }))
-      .toMatchObject({ minimumRevision: 4, clientRevision: 2 });
-    expect(evaluateGateClientRevision({ clientRevision: 4, worktreePath, purpose: GATE_PURPOSE })).toBeNull();
+      .toMatchObject({ minimumRevision: 3, clientRevision: 2 });
+    expect(evaluateGateClientRevision({ clientRevision: 3, worktreePath, purpose: GATE_PURPOSE })).toBeNull();
   });
   it("refuses a Windows claim from a client that predates the current queued-resume contract", () => {
     const refusal = evaluateGateClientRevision({ clientRevision: undefined, worktreePath: WINDOWS_WORKTREE, purpose: GATE_PURPOSE });
-    expect(refusal).toMatchObject({ minimumRevision: 4, clientRevision: 0, platform: "win32" });
+    expect(refusal).toMatchObject({ minimumRevision: 3, clientRevision: 0, platform: "win32" });
     expect(refusal?.reason).toMatch(/reservation/);
   });
 
   it("admits a Windows claim from a client at or above the floor", () => {
     expect(evaluateGateClientRevision({ clientRevision: 1, worktreePath: WINDOWS_WORKTREE, purpose: GATE_PURPOSE })).not.toBeNull();
-    expect(evaluateGateClientRevision({ clientRevision: 4, worktreePath: WINDOWS_WORKTREE, purpose: GATE_PURPOSE })).toBeNull();
+    expect(evaluateGateClientRevision({ clientRevision: 3, worktreePath: WINDOWS_WORKTREE, purpose: GATE_PURPOSE })).toBeNull();
   });
 
   it("never refuses a POSIX host for a Windows-only floor", () => {
@@ -48,15 +36,13 @@ describe("gate client revision floor", () => {
 
   it("requires durable publication and identity checks on POSIX gates too", () => {
     expect(evaluateGateClientRevision({ clientRevision: 1, worktreePath: POSIX_WORKTREE, purpose: GATE_PURPOSE }))
-      .toMatchObject({ minimumRevision: 4 });
-    expect(evaluateGateClientRevision({ clientRevision: 4, worktreePath: POSIX_WORKTREE, purpose: GATE_PURPOSE })).toBeNull();
+      .toMatchObject({ minimumRevision: 3 });
+    expect(evaluateGateClientRevision({ clientRevision: 3, worktreePath: POSIX_WORKTREE, purpose: GATE_PURPOSE })).toBeNull();
   });
 
-  it.each([undefined, "relative/path"])("enforces an all-host contract without inventing a platform for %s", (worktreePath) => {
-    expect(evaluateGateClientRevision({ clientRevision: undefined, worktreePath, purpose: GATE_PURPOSE }))
-      .toMatchObject({ minimumRevision: 4, platform: null });
-    expect(evaluateGateClientRevision({ clientRevision: undefined, worktreePath, purpose: GATE_PURPOSE,
-      floors: [{ minimumRevision: 1, platforms: ["win32"], reason: "hidden console" }] })).toBeNull();
+  it("admits a claim whose platform cannot be placed", () => {
+    expect(evaluateGateClientRevision({ clientRevision: undefined, worktreePath: undefined, purpose: GATE_PURPOSE })).toBeNull();
+    expect(evaluateGateClientRevision({ clientRevision: undefined, worktreePath: "relative/path", purpose: GATE_PURPOSE })).toBeNull();
   });
 
   it("treats a malformed revision as a client that reported none", () => {

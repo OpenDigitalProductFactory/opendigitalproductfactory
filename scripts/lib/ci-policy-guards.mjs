@@ -101,6 +101,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-22A2CA0D: every compose service declares dpf.recreate-class, so the
       // self-upgrade knows which services it may converge (BI-C54E691E).
       node("--test", "scripts/check-no-unclassified-compose-services.test.mjs"),
+      // BI-E7553A1C: the root-secret resolver is the pre-migration production
+      // boundary. Exercise its refusal/redaction matrix and image/compose wiring.
+      conformanceTest("scripts/runtime-secret-bootstrap.test.mjs"),
       // BI-334CB7DE: doc-diagram fence extraction must stay line-ending
       // invariant. A CRLF working copy re-hashed every fence in a page and
       // demanded a re-render no diagram needed — invisible in `git diff`
@@ -308,6 +311,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-31F11C37: the installers' monitoring question.
         "scripts/installer/monitoring-choice.test.mjs",
       ),
+      // BI-7EE97802: executes the actual native authority selection before effects.
+      conformanceTest("scripts/installer/native-edge-authority.test.mjs"),
       // BI-0FC727BB: scans the live installer tree for a bare host-wide sync.
       conformanceTest("scripts/installer/no-bare-host-sync.test.mjs"),
       conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),

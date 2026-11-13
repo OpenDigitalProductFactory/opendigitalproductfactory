@@ -20,7 +20,7 @@ import { Surface } from "@/components/ui/Surface";
 import { EnvelopeDecisionButtons } from "./EnvelopeDecisionButtons";
 import { OnBehalfDecision, decidedOnBehalfText } from "./OnBehalfDecision";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
-import { envelopeInboxRoute, envelopeResultRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
+import { envelopeInboxRoute, envelopeResultRoute, envelopeStandingRulingRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
 import { SOURCE_CATALOG } from "@dpf/i18n";
 import { useMessagesContext } from "@/lib/i18n/messages-context";
 import { envelopePrimaryDecision } from "@/lib/attention/coworker-envelope-decision";
@@ -58,6 +58,10 @@ export function CoworkerEnvelopeApproval({
   const [unknown, setUnknown] = useState(false);
   // BI-7BCC87BB: who decided for whom, when an admin decided on the owner's behalf.
   const [onBehalfNote, setOnBehalfNote] = useState<string | null>(null);
+  // BI-E5631708: the owner's "don't ask again" choice, and what became of it.
+  const [makeStanding, setMakeStanding] = useState(false);
+  const [standingNote, setStandingNote] = useState<string | null>(null);
+  const [standingRecorded, setStandingRecorded] = useState(false);
   const decision = approval.decision;
   // Handover and admission (BI-6AE64074) both read as "what changes / what stays".
   const plainChange = decision.kind === "handover" ? decision.handover
@@ -102,7 +106,11 @@ export function CoworkerEnvelopeApproval({
           choice === "approve" ? approval.approveHref : approval.declineHref,
           {
             method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal,
-            ...(onBehalfReason !== undefined ? { body: JSON.stringify({ onBehalf: true, reason: onBehalfReason }) } : {}),
+            ...(onBehalfReason !== undefined
+              ? { body: JSON.stringify({ onBehalf: true, reason: onBehalfReason }) }
+              : choice === "approve" && makeStanding && approval.standingRulingOffered
+                ? { body: JSON.stringify({ makeStanding: true }) }
+                : {}),
           },
         );
       } catch {
@@ -115,11 +123,19 @@ export function CoworkerEnvelopeApproval({
         const body = (await response.json().catch(() => null)) as {
           execution?: Execution; outcomeWarning?: string;
           onBehalf?: { by: string; onBehalfOf: string; reason: string };
+          standing?: { recorded: boolean; message?: string };
         } | null;
         if (body?.execution) setExecution(body.execution);
         setOutcome(choice === "approve" ? "authorized" : "declined");
         if (body?.outcomeWarning) {
           setError(body.outcomeWarning);
+          return;
+        }
+        // BI-E5631708: keep the card so the owner sees the ruling and can undo
+        // it, or reads why this approval could not be made standing.
+        if (body?.standing) {
+          setStandingRecorded(body.standing.recorded);
+          setStandingNote(body.standing.recorded ? COPY.standingRecorded : body.standing.message ?? null);
           return;
         }
         // The admin's inbox holds no result for someone else's request: keep this card, settled.
@@ -148,6 +164,25 @@ export function CoworkerEnvelopeApproval({
       setError(body?.error ?? "That decision could not be saved. Please try again.");
     } finally {
       clearTimeout(timer);
+      setPending(false);
+    }
+  }
+
+  // BI-E5631708: "ask me again" withdraws the ruling just made.
+  async function withdrawStanding() {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(envelopeStandingRulingRoute(approval.envelopeId), {
+        method: "DELETE", signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+      });
+      if (!response.ok) throw new Error("not withdrawn");
+      setStandingRecorded(false);
+      setStandingNote(COPY.standingUndone);
+    } catch {
+      setError(COPY.standingUndoFailed);
+    } finally {
       setPending(false);
     }
   }
@@ -209,6 +244,12 @@ export function CoworkerEnvelopeApproval({
             {recorded ? `${recorded.label}. ${recorded.nextAction}` : outcomeMessage(outcome, execution)}
           </p>
           {onBehalfNote ? <p className="text-xs text-[var(--dpf-muted)]">{onBehalfNote}</p> : null}
+          {standingNote ? <p className="text-xs text-[var(--dpf-muted)]">{standingNote}</p> : null}
+          {standingRecorded ? (
+            <Button size="sm" variant="secondary" disabled={pending} onClick={() => void withdrawStanding()}>
+              {COPY.standingUndo}
+            </Button>
+          ) : null}
         </div>
       ) : unknown ? (
         <div role="alert" className="space-y-1 text-xs text-[var(--dpf-error)]">
@@ -224,11 +265,28 @@ export function CoworkerEnvelopeApproval({
           onDecide={(choice, reason) => void decide(choice, reason)}
         />
       ) : approval.actionable ? (
+        <div className="space-y-2">
+        {approval.standingRulingOffered ? (
+          <label className="flex items-start gap-2 text-dpf-body text-dpf-text">
+            <input
+              type="checkbox"
+              className="mt-1 accent-[var(--dpf-accent)]"
+              checked={makeStanding}
+              disabled={pending}
+              onChange={(event) => setMakeStanding(event.target.checked)}
+            />
+            <span>
+              {COPY.standingChoice}
+              <span className="block text-dpf-caption text-dpf-muted">{COPY.standingHint}</span>
+            </span>
+          </label>
+        ) : null}
         <EnvelopeDecisionButtons
           pending={pending}
           onAuthorize={() => void decide("approve")}
           onDecline={() => void decide("decline")}
         />
+        </div>
       ) : (
         <p className="text-xs text-[var(--dpf-muted)]">
           This request is closed. Your coworker can ask again.

@@ -123,7 +123,7 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
           type: "number",
           description:
             "Revision of the local-CI gate client making this claim. A client below the server's floor is refused " +
-            "with gate_client_upgrade_required: merge current origin/main into the branch and re-run; do not retry the same client.",
+            "with gate_client_upgrade_required: rebase the branch onto main and re-run; do not retry the same client.",
         },
         branchName: { type: "string" },
         buildId: { type: "string" },

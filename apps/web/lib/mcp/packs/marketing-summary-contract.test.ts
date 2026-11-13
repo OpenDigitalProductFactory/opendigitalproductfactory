@@ -35,6 +35,9 @@ vi.mock("@/lib/marketing/archetype-context", () => archetypeContext);
 const signals = vi.hoisted(() => ({ loadAcquisitionSignals: vi.fn() }));
 vi.mock("@/lib/marketing/acquisition-signals", () => signals);
 
+const draftable = vi.hoisted(() => ({ listDraftableAssetTasks: vi.fn() }));
+vi.mock("@/lib/marketing/draftable-assets", () => draftable);
+
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 
 import { marketingOpsPack } from "./marketing-ops-pack";
@@ -66,6 +69,9 @@ beforeEach(() => {
   archetypeContext.resolveMarketingArchetypeContext.mockResolvedValue(ARCHETYPE);
   snapshotModule.getMarketingOperatingSnapshot.mockResolvedValue({ organizationId: "org-1" });
   snapshotModule.projectOperatingSnapshotForTools.mockReturnValue(PROJECTION);
+  draftable.listDraftableAssetTasks.mockResolvedValue([
+    { assetTaskId: "T1", title: "Midweek post", channel: "linkedin", campaignId: "cmp-a" },
+  ]);
   signals.loadAcquisitionSignals.mockResolvedValue({
     inbox: { days: 30, bookings: 2, inquiries: 3, orders: 0, donations: 0, total: 5 },
     pipeline: { engagements: { open: 4 }, opportunities: { qualified: 1 } },
@@ -118,5 +124,23 @@ describe("get_marketing_summary — campaign identities are first-class", () => 
   it("tells the coworker in its description that the summary carries campaign ids", () => {
     const def = marketingOpsPack.definitions.find((d) => d.name === "get_marketing_summary");
     expect(def?.description).toMatch(/campaign/i);
+  });
+});
+
+// BI-3F641F91: draft_marketing_asset needs an assetTaskId the summary never gave,
+// and a capped result cut the campaigns while keeping the playbook.
+describe("get_marketing_summary — a run can name what to draft", () => {
+  it("returns draftable asset task ids for this organization", async () => {
+    const res = await marketingOpsPack.handlers.get_marketing_summary!({}, "u1");
+    const data = res.data as { draftable: Array<{ assetTaskId: string }> };
+    expect(draftable.listDraftableAssetTasks).toHaveBeenCalledWith("org-1");
+    expect(data.draftable.map((d) => d.assetTaskId)).toEqual(["T1"]);
+  });
+
+  it("leads with the actionable fields and puts the playbook last", async () => {
+    const res = await marketingOpsPack.handlers.get_marketing_summary!({}, "u1");
+    const keys = Object.keys(res.data as object);
+    expect(keys.slice(0, 3)).toEqual(["nextStep", "draftable", "campaigns"]);
+    expect(keys.at(-1)).toBe("playbook");
   });
 });

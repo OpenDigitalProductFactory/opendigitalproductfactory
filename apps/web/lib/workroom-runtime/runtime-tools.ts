@@ -33,8 +33,21 @@ export function workroomRuntimeSupervisor(): RuntimeSupervisor {
     },
     issueToken: issueWorkroomSessionToken,
     revokeTokens: revokeWorkroomSessionTokens,
+    // BI-F5D58F29: the room hears that supervision was lost, and its coordinator is woken.
+    onSupervisionLost: async (input) => {
+      const { announceSupervisionLost } = await import("@/lib/work-management/room-message-wake.server");
+      await announceSupervisionLost(input);
+    },
   });
   return globalRuntime.__dpfWorkroomRuntime;
+}
+
+/** Boot (BI-F5D58F29): re-attach every supervised session, or mark it supervision-lost on its room. */
+export async function reattachSupervisedSessionsOnBoot(): Promise<void> {
+  const outcome = await workroomRuntimeSupervisor().reattachSupervised();
+  if (outcome.reattached.length + outcome.lost.length + outcome.closed.length > 0) {
+    console.log("[workroom-runtime] boot re-attach: %d re-attached, %d supervision-lost, %d closed", outcome.reattached.length, outcome.lost.length, outcome.closed.length);
+  }
 }
 
 const str = (params: Record<string, unknown>, key: string) => (typeof params[key] === "string" ? (params[key] as string).trim() : "");
@@ -71,7 +84,7 @@ export async function driveWorkroomRuntimeTool(params: Record<string, unknown>, 
       return runtime.decide({ capsuleId, requestId, decision, reason: str(params, "reason") || "decided on the room", actor });
     }
     case "status":
-      return { success: true, message: `Runtime status for ${capsuleId}.`, data: runtime.status(capsuleId) };
+      return { success: true, message: `Runtime status for ${capsuleId}.`, data: await runtime.status(capsuleId) };
   }
 }
 

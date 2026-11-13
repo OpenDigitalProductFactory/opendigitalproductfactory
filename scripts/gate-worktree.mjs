@@ -1898,10 +1898,9 @@ async function main() {
     // The server retires a gate client below its revision floor (BI-69178E02).
     // Not a verdict on the diff, and re-running this same client can only be
     // refused again, so exit with the usage code: no resumer retries it.
-    if (claimResponse?.error === "gate_client_upgrade_required"
-      || (claimResponse?.error === "invalid_host_pressure" && claimResponse?.data?.retryable === false)) {
+    if (claimResponse?.error === "gate_client_upgrade_required") {
       await releaseLeaseOnce();
-      process.stderr.write(`gate-worktree: ${claimResponse.message || "refresh this gate client and host observation, then re-run pregate"}\n`);
+      process.stderr.write(`gate-worktree: ${claimResponse.message || "this gate client is below the platform's revision floor; rebase onto main and re-run pregate"}\n`);
       process.exit(EXIT_USAGE);
     }
     // BI-D35B85BF / AC-DW-02: the lease this run resumes is running, or is not

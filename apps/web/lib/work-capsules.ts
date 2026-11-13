@@ -137,6 +137,9 @@ export const WORK_CAPSULE_EXECUTOR_KINDS = [
   "human",
   "git-webhook",
   "dpf-native",
+  // A claim this installation holds for a paired installation that asked for
+  // it (BI-30EDDB7F): the work runs there, the claim lives here.
+  "federated-peer",
 ] as const;
 
 export type WorkCapsuleExecutorKind = (typeof WORK_CAPSULE_EXECUTOR_KINDS)[number];
@@ -184,6 +187,9 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   // BI-49BC21C1: the room's own recurring misses recorded as harness-edit
   // candidates, once per room per day, by the harness evolution loop.
   "harness-evolution-candidate",
+  // BI-B8DAEB71: the probe's verdict on one of those candidates (ADOPT,
+  // KEEP_BASE or KERNEL_GAP) with its outcome, load and gate-burden deltas.
+  "harness-evolution-verdict",
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];

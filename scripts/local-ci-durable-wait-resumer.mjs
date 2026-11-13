@@ -17,7 +17,6 @@ import {
   EXIT_CONTROL_PLANE_STARVATION,
   EXIT_SOURCE_DRIFT,
   EXIT_WAIT_CANCELLED,
-  EXIT_USAGE,
 } from "./lib/sandbox-freshness.mjs";
 import {
   createGateObserverIdentity,
@@ -85,7 +84,6 @@ export function classifyResumeOutcome(code) {
   if (code === 0) return { evidence: "passed", reason: "passed" };
   if (code === EXIT_WAIT_CANCELLED) return { evidence: "unrun", reason: "cancelled" };
   if (code === EXIT_SOURCE_DRIFT) return { evidence: "unrun", reason: "source-drift" };
-  if (code === EXIT_USAGE) return { evidence: "unrun", reason: "usage" };
   if (code === EXIT_QUEUED) return { evidence: "unrun", reason: "still-queued" };
   if (isRetryableExit(code) || code === 3 || code === 4 || code === 6) {
     return { evidence: "inconclusive", reason: "infrastructure" };

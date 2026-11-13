@@ -56,6 +56,12 @@ deployment wrapper
 
 The bootstrap process is earlier than `portal-migrate-boot.sh`, Prisma, Auth.js, and application instrumentation. No resolved-value file is created. The child inherits resolved values; stdout/stderr carry names and reason codes only.
 
+The normal Compose topology has two independent bootstrap processes:
+`portal-init` resolves before its one-shot migration/seed command, and `portal`
+resolves before its self-migration/application command. Each performs at most one
+item fetch. A portal-only restart performs only the latter fetch. Values are not
+persisted or passed between containers.
+
 ### 4.1 Provider contract
 
 `DPF_SECRET_PROVIDER` is a closed startup value:

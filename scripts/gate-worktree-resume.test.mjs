@@ -11,7 +11,6 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
-import { isolatedGateFixtureEnvironment } from "./fixtures/gate-worktree.mjs";
 
 // No real resumer may outlive a test that talks to a stub server.
 process.env.DPF_DURABLE_RESUMER = "off";
@@ -31,9 +30,7 @@ function run(args, env) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       cwd: process.cwd(),
-      env: isolatedGateFixtureEnvironment(mkdtempSync(join(tmpdir(), "dpf-gate-resume-env-")), {
-        ...env, DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify(HOST_PRESSURE),
-      }),
+      env: { ...process.env, ...env, NODE_ENV: "test", DPF_LOCAL_CI_HOST_PRESSURE_JSON: JSON.stringify(HOST_PRESSURE) },
     });
     let output = "";
     const timeout = setTimeout(() => { child.kill(); resolve({ code: -1, output: `${output}\n[harness] timed out` }); }, 20_000);

@@ -211,3 +211,19 @@ describe("current child research source observation", () => {
     expect(await result.admissionGuard({ ...f.db, $queryRaw: undefined } as never)).toEqual({ state: "unavailable" });
   });
 });
+
+describe("read-only research freshness", () => {
+  it.each(["current", "blob-mismatch", "shape-changed", "locator-changed"])("revalidates immutable inquiry: %s", async scenario => {
+    const f = fixture();
+    Object.assign(f.research.payload, { sourceInquiryWorkroomId: f.room.capsuleId });
+    Object.assign(f.room, { headBranch: null, baseSha: null, headSha: null,
+      scopeClaims: [{ workShape: "source-inquiry@1.0.0" }] });
+    if (scenario === "blob-mismatch") f.readBlob.mockResolvedValue({ ok: false });
+    const result = await prepareCurrentResearchObservation({ itemId: "BI-CHILD", db: f.db as never, ports: { readBlob: f.readBlob } });
+    expect(f.readBlob).toHaveBeenCalledWith(expect.objectContaining({
+      commitSha: f.research.payload.artifactRef.commitSha, expectedBlobId: blobId, sourceAdmission: undefined }));
+    if (scenario === "shape-changed") Object.assign(f.room, { scopeClaims: [] });
+    if (scenario === "locator-changed") f.research.payload.artifactRef.commitSha = "e".repeat(40);
+    expect(await result.admissionGuard(f.db as never)).toEqual(scenario === "current" ? verified : { state: "unavailable" });
+  });
+});

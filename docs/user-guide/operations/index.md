@@ -30,6 +30,8 @@ Use the arrow beside a portfolio to expand it. Expanding lists the Workrooms in 
 
 Counts describe the Workrooms the page read, not everything in the portfolio. When the page reads its limit, each count reads "N rooms read" and a note below the tree says so. To see beyond that, narrow the inventory below or open the portfolio itself.
 
+**Day-to-day operations** lists every standing room with its last 14 days. A missed day shows as an outlined cross, so it stands out as clearly as a stuck project. See [Day-to-day operations](../workspace/work-rooms.md#day-to-day-operations) for what each mark means.
+
 ## Key Concepts
 
 - **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, awaiting acceptance, done, deferred, or retired.
@@ -69,7 +71,11 @@ their age is then counted from when they were created and the real figure may
 be lower; hover it for the explanation. The progress bar shows done in one
 colour and awaiting acceptance as a separate segment after it. The workspace
 **Backlog** tile shows the same counts as **Awaiting acceptance** and **Awaiting
-14+ days**, above **Done**.
+14+ days**, above **Done**. The tile counts only the items this installation
+can accept. Items copied in from a connected installation by work sync are
+accepted by the installation they came from, so the tile shows them separately
+as **Awaiting at peer installation** and leaves them out of the other two
+counts.
 
 **Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
@@ -367,3 +373,5 @@ that stops describing this installation. Nothing is saved until you confirm it.
 The operator name is different: it is a label rather than a change to what your
 coworkers may do, so it saves directly without an impact preview. The preview
 step is reserved for changes that actually move a brake.
+
+Work in progress keeps recorded executor and invocation details inside each row’s Technical evidence disclosure. These identify the recorded execution path independently of the accountable person. Missing historical evidence is identified explicitly; a schedule alone does not establish agent-to-agent delegation.

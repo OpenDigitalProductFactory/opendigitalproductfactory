@@ -50,6 +50,7 @@ export const STANCE_KEYS = [
   "sourceAuthority",
   "peerWrite",
   "workSync",
+  "relationship",
 ] as const;
 export type StanceKey = (typeof STANCE_KEYS)[number];
 
@@ -83,6 +84,7 @@ export const STANCE_LABEL: Record<StanceKey, string> = {
   sourceAuthority: "Source changes",
   peerWrite: "Paired installation",
   workSync: "Work sync",
+  relationship: "Relationship",
 };
 
 /** Plain-language stance values, keyed by stance then by the resolver's value. */
@@ -109,6 +111,12 @@ export const STANCE_VALUE_LABEL: Record<StanceKey, Record<string, string>> = {
     none: "Nowhere to mirror",
     "same-organization": "Mirrored to the organization",
   },
+  // BI-B50BE189: derived from attested facts; a brake, never a grant.
+  relationship: {
+    authority: "Authority",
+    companion: "Companion",
+    none: "None",
+  },
 };
 
 /**
@@ -129,6 +137,7 @@ export const STANCE_VALUE_INTENT: Record<
   // Mirroring is how work survives a teardown, so having nowhere to mirror is
   // the state that deserves the brake, not the state that has a peer.
   workSync: { "same-organization": "neutral", none: "warning" },
+  relationship: { authority: "neutral", companion: "neutral", none: "neutral" },
 };
 
 /** How each confirmation status is shown. Owned here, not in the component. */
@@ -244,6 +253,11 @@ export interface InstallationIdentityView {
   secondaryPurposes?: InstallationOperatingPurpose[];
   /** One sentence naming what this installation is. */
   headline: string;
+  /**
+   * Set when the saved paired reference names a connection that is no longer
+   * live (BI-B50BE189). `repairRef` is the installation the form can switch to.
+   */
+  pairingRepair?: { message: string; repairRef: string | null; actionLabel: string | null };
   /** A second sentence for the pairing and the environment's authority, when either has something to say. */
   detail: string | null;
   stances: StanceRow[];

@@ -430,6 +430,9 @@
     "apps/web/components/build/WorkflowStageInspector.tsx": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
+    "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/finance/CreateBillForm.tsx": [
       "docs/testing/handoff-invoice-gaps.md"
     ],
@@ -453,6 +456,9 @@
     ],
     "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
       "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
+    "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/components/performance/BusinessPerformanceDashboard.tsx": [
       "docs/user-guide/workspace/performance.md"
@@ -737,6 +743,9 @@
     "apps/web/lib/build/pull-request-merged-signal.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
+    "apps/web/lib/build/review-source-refresh.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/sandbox/grok-governance-seed.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -842,6 +851,9 @@
     ],
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "apps/web/lib/delivery-outcomes/read-model.ts": [
+      "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/demand/duplicate-merge-consequence.ts": [
       "docs/architecture/improvement-signal-intake.md"
@@ -2928,6 +2940,9 @@
       "docs/architecture/dependency-reduction-routine.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/runtime-secret-bootstrap.mjs": [
+      "docs/security/tool-evaluations/2026-08-30-1password.md"
+    ],
     "scripts/safety/transcript-snapshot.ps1": [
       "docs/operations/session-transcript-recovery.md"
     ],
@@ -3481,6 +3496,7 @@
       "apps/web/lib/build/gauntlet-repair.ts",
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
+      "apps/web/lib/build/review-source-refresh.ts",
       "apps/web/lib/build/sandbox/test-scope-guard.ts",
       "apps/web/lib/build/scoped-test-failure.ts",
       "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
@@ -4373,6 +4389,9 @@
       "packages/db/data/approved_tools_registry.json",
       "scripts/probes/marketing-media/local-render-receipt.json"
     ],
+    "docs/security/tool-evaluations/2026-08-30-1password.md": [
+      "scripts/runtime-secret-bootstrap.mjs"
+    ],
     "docs/security/tool-evaluations/2026-09-15-bmad-method.md": [
       "apps/web/lib/explore/build-process-matrix.ts"
     ],
@@ -4662,7 +4681,9 @@
     "docs/user-guide/workspace/work-rooms.md": [
       "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx",
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
+      "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx",
       "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
+      "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx",
       "apps/web/components/workspace-home/MainStreamHero.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
@@ -4670,6 +4691,7 @@
       "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
       "apps/web/components/workspace/workroom/WorkroomHeader.tsx",
       "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
+      "apps/web/lib/delivery-outcomes/read-model.ts",
       "apps/web/lib/work-management/coworker-engagement-case-projection.ts",
       "apps/web/lib/work-management/room-ai-spend.ts",
       "apps/web/lib/work-management/room-channel-continuity.ts",

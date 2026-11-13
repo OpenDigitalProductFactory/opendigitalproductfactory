@@ -57,6 +57,12 @@
     "recommendationLabel": "AI recommendation",
     "coworkerByline": "AI coworker · needs your approval",
     "whyPlain": "This request needs your permission before the coworker can make the change. It covers this exact request once.",
+    "standingChoice": "Don't ask me again when this coworker does this",
+    "standingHint": "Covers only this coworker doing this same kind of action on your behalf. Anything that reaches outside, cannot be undone, or changes someone's access will still come to you.",
+    "standingRecorded": "Saved: you won't be asked again when this coworker does this.",
+    "standingUndo": "Ask me again next time",
+    "standingUndone": "Done: you'll be asked again next time.",
+    "standingUndoFailed": "That could not be changed. Please try again.",
     "primary": {
       "handoverTitle": "Let {$assistant} continue this work?",
       "admissionTitle": "Let {$coworker} into this room with {$level} data access?",
