@@ -6,6 +6,7 @@ status: draft
 
 **Backlog:** BI-218A4555 (epic EP-INPLATFORM-CODING, milestone M1). **Workroom:** WC-230F1C07.
 **Decision:** DI-2C6093E878DC, `extend-pure-planner` (composite 12.993 against 8.873 for a weighted score and 6.424 for a separate overseer service; margin 4.12, high confidence, no commandment conflict).
+**Revision 2 (2026-11-13).** Folds in what implementation established: the module layout, when renewal reads the queue, how a served AI turn is kept out of the local-CI stall check, and what the gate client shows. Revision 1 (`2c0b080`) passed research, design-spec and architecture review. Its spec-approval run ended with an unknown outcome and recorded nothing, so this revision goes back through review.
 **Related:** BI-995E9530 (preview bounded hold, done), BI-B1CB7EC3 (self-admission), BI-D35B85BF (abandoned waiters), BI-0B1DF949 (active-only inference deferral), BI-88D51B8F / PR #6888 (routine release), WC-400B4A63 / DI-4358575D0EF0 (bounded review-turn custody, draft, separate slice).
 
 ## Problem
@@ -36,9 +37,11 @@ Standard followed: priority classes with fair queuing inside a class and a bound
 
 - `environment-lease-admission.ts` `planEnvironmentAdmission`: the pure planner. Only its waiter order changes. Self-admission (a claim admits only itself) and proof of life stay as they are.
 - `environment-lease.ts`: claim, renew, release and reap call the planner under the environment advisory lock. They now pass recent service history to it and report the policy position.
-- `environment-lease-preview-yield.ts`: becomes one case of the general hold bound.
+- `environment-lease-preview-yield.ts`: becomes one case of the general hold bound and is renamed `environment-lease-hold-bound.ts`.
+- New, pure: `environment-lease-overseer.ts` holds the whole policy (classes, order, bounds, explanations). `environment-lease-overseer-view.ts` is the read-only queue view. `local-ai-turn.ts` records and settles AI turns.
 - `durable-wait.ts` `publishNonprodCapacityForHead`: wakes the policy head instead of the oldest row.
-- `routing/local-provider-capacity.ts`: records local AI demand when it defers, and consumes the turn when it proceeds.
+- `routing/local-provider-capacity.ts`: records local AI demand when it defers, and consumes the turn when it proceeds. `change-review/semantic-review-background.ts` records demand when a review recheck is deferred.
+- `queue/functions/substrate-reconciler.ts`: leaves served AI turns out of the local-CI "admitted without a result" stall check.
 - `lease-queries.ts` (`list_nonprod_environment_leases`), the claim result and the gate client show position, estimate and reason.
 - No schema change. Class comes from existing columns (`claimKey`, `resourceClass`, `environmentKey`); fairness history comes from existing `admittedAt`, `releasedAt` and `ownerSessionId` / `ownerProvider`; yield is recorded in `phase`.
 
@@ -82,9 +85,11 @@ Contended means at least one waiter in the same environment proves liveness and 
 
 Existing supervisors already fence the process on `lease_lost`. The reservation then ends on release or at its 2-minute TTL.
 
+Renewal reads the queue only when the hold could reach its bound before the next renewal (`now + 20 min ≥ admittedAt + bound`). Most heartbeats are far from the bound, so they cost no extra query.
+
 ### Local AI turns (reviews)
 
-When a local AI dispatch is deferred by an active gate, the server upserts one queued `inference-turn:local` lease (owner `coworker` / `local-inference`). It proves liveness for 6 minutes after each deferral, longer than the 5-minute review recheck ceiling. While it is live and first in policy order, no gate admits itself past it, so the slot stays free for the next local dispatch check. That check proceeds and settles the turn (`released`, phase `served`), and the class turn then favours gates. If no review returns within 6 minutes, the turn stops blocking. One turn costs at most 6 idle minutes. WC-400B4A63's release-time wake would remove that idle time; this design does not depend on it.
+When a local AI dispatch is deferred by an active gate, the server upserts one queued `inference-turn:local` lease (owner `coworker` / `local-inference`). It proves liveness for 6 minutes after each deferral, longer than the 5-minute review recheck ceiling. While it is live and first in policy order, no gate admits itself past it, so the slot stays free for the next local dispatch check. That check proceeds and settles the turn (`released`, phase `served`, `admittedAt` set), and the class turn then favours gates. The turn row is never admitted as a lease. A served turn records no gate result, so the local-CI stall check excludes `inference-turn:` rows. Recording and settling are bookkeeping only: if either fails, the dispatch decision is unchanged. If no review returns within 6 minutes, the turn stops blocking. One turn costs at most 6 idle minutes. WC-400B4A63's release-time wake would remove that idle time; this design does not depend on it.
 
 ### Visibility
 
@@ -95,7 +100,7 @@ Every queued claim result, durable-wait checkpoint and `list_nonprod_environment
 - `queueReason`: one sentence, for example "2 ahead: a gate and an AI review turn (gates and reviews alternate)";
 - `policyVersion: overseer.v1`.
 
-Active entries carry `holdClass`, `holdBoundAt` and `contended`. The gate client prints the estimate next to the position.
+Active entries carry `holdClass`, `holdBoundAt` and `contended`. `list_nonprod_environment_leases` returns them as an `overseer` array, one entry per environment, next to the existing raw lists. The gate client prints "position N, estimated wait about M min (reason)" while queued, and `pnpm run pregate:status` shows the estimate on its `queue` line and the reason on a `why` line. A yielded renewal names the class and the bound it reached.
 
 ## Objectives and acceptance
 
@@ -113,7 +118,8 @@ Active entries carry `holdClass`, `holdBoundAt` and `contended`. The gate client
 | AC-OVS-5 | OBJ-OVS-3 | A contended renewal never sets `expiresAt` past `admittedAt + bound`; past the bound it returns `yielded` and records the phase. Uncontended renewals are unchanged. |
 | AC-OVS-6 | OBJ-OVS-3 | A waiter from the holder's own session, or one without proof of life, does not count as contention. |
 | AC-OVS-7 | OBJ-OVS-4 | Claim results and the list tool show policy position, estimate, reason and policy version; active holds show class bound and contention. |
-| AC-OVS-8 | OBJ-OVS-1 | The durable-wait wake goes to the policy head. |
+| AC-OVS-8 | OBJ-OVS-1 | The durable-wait wake goes to the policy head, passing over an AI turn, which has no task to wake. |
+| AC-OVS-9 | OBJ-OVS-4 | A served AI turn never raises the local-CI pool stall alarm, and a failure to record or settle a turn never changes whether local AI may run. |
 
 ## Compatibility and rollback
 
