@@ -25,7 +25,7 @@ development workload.
 ### Reading saved proof without a runner
 
 Existing saved builds remain available when no suitable AI runner is available.
-Select a saved build and open **Review proof** to inspect recorded documents,
+Expand **Saved builds** to select another result, then open **Review proof** to inspect recorded documents,
 verification and raw output. Missing or conflicting evidence stays unverified.
 
 Building remains unavailable. Setup guidance is under **Runner setup**; reading

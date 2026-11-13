@@ -38,7 +38,9 @@ export function SavedBuildReader({ builds, initialBuildId, initialActiveBuild, r
         <ReviewPanel build={selected} executionAvailable={false} />
       </section> : null}
     </div> : null}
-    {builds.length > 0 ? <DataTable ariaLabel="Saved builds" columns={columns} rows={builds} getRowKey={build => build.buildId} /> : null}
+    {builds.length > 0 ? <details><summary>Saved builds</summary>
+      <DataTable ariaLabel="Saved builds" columns={columns} rows={builds} getRowKey={build => build.buildId} />
+    </details> : null}
     {builds.length === 0 && !selected ? <p>No saved builds yet.</p> : null}
     </>}
     {runnerSetup ? <details><summary>Runner setup</summary>{runnerSetup}</details> : null}

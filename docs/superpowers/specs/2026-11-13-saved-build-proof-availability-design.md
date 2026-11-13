@@ -90,3 +90,17 @@ its proof control does not depend on history length. Reuse Button, ReviewPanel
 and DataTable; leave shared canvas geometry and every numeric UX limit alone.
 The 76-row disclosure-order regression first failed against ee2a3a02; after the
 repair all 28 affected tests passed. Final rendered measurement remains required.
+
+The b203de74 preview then measured 229 arrival words at 1728×962 with nine
+fleet rows, exceeding the existing 152-word ceiling. Keep the selected proof
+control first and disclose fleet history through native `details`/`summary`.
+The visibility regression failed with the original visible table and passed
+after the disclosure change; no copy or route threshold is raised.
+
+That preview admitted a full tracked-file source proof for 19,775 files before
+creating six labelled abandoned display fixtures, then verified a fresh proof
+before removing all six. These are fixture setup and cleanup observations,
+not six successful UI cases or real test/repair executions. Browser proof
+activation did not persist during repeated navigation/refresh activity; its
+cause remains unqualified. Final proof interaction, mobile width, arrival
+measurement, replacement and critique still require served verification.

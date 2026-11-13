@@ -60,7 +60,7 @@ describe("saved proof without execution", () => {
     const fleet = Array.from({ length: 76 }, (_, index) => ({ ...saved, id: `row-${index}`, buildId: `FB-${index}` }));
     render(<SavedBuildReader builds={fleet} initialActiveBuild={saved} />);
     const trigger = screen.getByRole("button", { name: /^Review proof$/ });
-    expect(trigger.compareDocumentPosition(screen.getByRole("table", { name: "Saved builds" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trigger.compareDocumentPosition(screen.getByRole("table", { hidden: true })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(trigger);
     const proof = screen.getByRole("region", { name: saved.title });
@@ -69,5 +69,11 @@ describe("saved proof without execution", () => {
     expect(screen.getByText("Passed", { exact: true })).toBeInTheDocument();
     fireEvent.click(trigger);
     expect(screen.queryByRole("region", { name: saved.title })).not.toBeInTheDocument();
+  });
+  it("keeps fleet history behind a native disclosure on arrival", () => {
+    render(<SavedBuildReader builds={[saved]} />);
+    expect(screen.getByRole("table", { hidden: true })).not.toBeVisible();
+    expect(screen.getByText("Saved builds", { selector: "summary" }).closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByRole("button", { name: "Review proof" })).toBeInTheDocument();
   });
 });
