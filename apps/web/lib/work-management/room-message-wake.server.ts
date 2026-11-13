@@ -35,6 +35,7 @@ import {
   roomWakeWindow,
   type RoomAddressRole,
   type RoomMessageAddressing,
+  type RoomSessionRef,
   type RoomWakePlan,
 } from "./room-message-addressing";
 import { encodeRoomMessageCursor } from "./room-message-cursor";
@@ -47,7 +48,7 @@ import {
   type SupervisedSessionPort,
   type SupervisedTurnOutcome,
 } from "@/lib/workroom-runtime/supervised-turn-delivery";
-import { readStoredRuntimeSession } from "@/lib/workroom-runtime/supervised-session";
+import { providerClientAgentId, readStoredRuntimeSession } from "@/lib/workroom-runtime/supervised-session";
 
 export const ROOM_MESSAGE_POSTED_EVENT = "room/message.posted";
 export const ROOM_WAKE_REQUESTED_EVENT = "room/wake.requested";
@@ -126,6 +127,29 @@ export type PreparedRoomAddressing =
   | { refused: false; build: (mentionedAgentIds: string[]) => RoomMessageAddressing | null }
   | { refused: true; message: string };
 
+const SESSION_HOP_SCAN = 20;
+
+/**
+ * BI-FDE1B10C (spec §6.5): is this post the room's supervised runtime session?
+ * The session posts with the room token issued to the person who started it,
+ * so its agent id is theirs. The token id is what tells it apart: the room
+ * stores the id of the token it issued its session. Nothing the caller says
+ * decides this, and the token's authority is unchanged.
+ */
+async function resolvePostingSession(db: Db, workItemId: string, apiTokenId: string): Promise<RoomSessionRef | null> {
+  const rooms: Array<{ workspaceState: unknown }> = await db.workroom.findMany({
+    where: { workItemId, archivedAt: null },
+    select: { workspaceState: true },
+  });
+  for (const room of rooms) {
+    const stored = readStoredRuntimeSession(room.workspaceState);
+    if (stored?.addressedAs && stored.tokenId === apiTokenId) {
+      return { addressedAs: stored.addressedAs, clientAgentId: providerClientAgentId(stored.provider) };
+    }
+  }
+  return null;
+}
+
 /**
  * Resolve a caller's addressedTo list (agent ids, GAIDs, roles, session refs)
  * and the sender's GAID and hop count, before the message is written. The
@@ -137,6 +161,8 @@ export async function prepareRoomAddressing(
     sender: { type: "user" | "agent"; id: string };
     actingUserId: string;
     addressedTo: unknown;
+    /** The credential the post was made with; a room's supervised-session token marks the post as the session's. */
+    apiTokenId?: string | null;
   },
   depsIn?: Pick<RoomWakeDeps, "db" | "now">,
 ): Promise<PreparedRoomAddressing> {
@@ -160,17 +186,34 @@ export async function prepareRoomAddressing(
     const missing = parsed.agentRefs.filter((id) => !found.some((row) => row.agentId === id));
     if (missing.length > 0) return { refused: true, message: `No coworker ${missing.join(", ")}.` };
   }
+  const senderSession = args.sender.type === "agent" && args.apiTokenId
+    ? await resolvePostingSession(db, args.workItemId, args.apiTokenId)
+    : null;
+  const addressedTo = (path: "agents" | "sessions", value: string) =>
+    ({ structuredPayload: { path: ["addressing", path], array_contains: [value] } });
   const recentRows: Array<{ structuredPayload: unknown }> = args.sender.type === "agent"
     ? await db.workItemMessage.findMany({
-      where: { workItemId: args.workItemId, structuredPayload: { path: ["addressing", "agents"], array_contains: [args.sender.id] } },
+      where: senderSession
+        ? {
+          workItemId: args.workItemId,
+          OR: [
+            addressedTo("agents", args.sender.id),
+            addressedTo("sessions", senderSession.addressedAs),
+            addressedTo("agents", senderSession.clientAgentId),
+          ],
+        }
+        : { workItemId: args.workItemId, ...addressedTo("agents", args.sender.id) },
       orderBy: [{ createdAt: "desc" }, { messageId: "desc" }],
-      take: 1,
+      // A client-agent match can be a message qualifying another session of that client, which
+      // does not name this one; read a few so computeRoomMessageHop finds the newest that does.
+      take: senderSession ? SESSION_HOP_SCAN : 1,
       select: { structuredPayload: true },
     })
     : [];
   const hop = computeRoomMessageHop({
     senderType: args.sender.type,
     senderAgentId: args.sender.type === "agent" ? args.sender.id : null,
+    senderSession,
     recent: recentRows.map((row) => ({ addressing: readRoomMessageAddressing(row.structuredPayload) })),
   });
   const senderGaid = args.sender.type === "agent"
@@ -188,6 +231,7 @@ export async function prepareRoomAddressing(
         sessions: parsed.sessions,
         hop,
         senderGaid,
+        ...(senderSession ? { senderSession: senderSession.addressedAs } : {}),
         actingUserId: args.actingUserId,
         wake: { state: "pending", at },
       };

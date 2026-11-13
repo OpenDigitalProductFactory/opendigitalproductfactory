@@ -6,12 +6,15 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/identity/principal-linking", () => ({
   getAgentGaidMap: vi.fn(async (ids: string[]) => new Map(ids.map((id) => [id, `gaid:priv:dpf.internal:${id.toLowerCase()}`]))),
-  getAgentIdsForGaids: vi.fn(async () => new Map()),
+  getAgentIdsForGaids: vi.fn(async (gaids: string[]) => new Map(gaids
+    .filter((gaid) => gaid === "gaid:priv:dpf.internal:agt-ext-claude")
+    .map((gaid) => [gaid, "AGT-EXT-CLAUDE"]))),
 }));
 
 import type { RoomMessageAddressing } from "@/lib/work-management/room-message-addressing";
 import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
-import { announceSupervisionLost, dispatchRoomMessage } from "@/lib/work-management/room-message-wake.server";
+import { ROOM_POST_GRANT, ROOM_WAKE_HOP_LIMIT } from "@/lib/work-management/room-message-addressing";
+import { announceSupervisionLost, dispatchRoomMessage, prepareRoomAddressing } from "@/lib/work-management/room-message-wake.server";
 
 import { combineSupervisedWake, type SupervisedSessionPort } from "./supervised-turn-delivery";
 
@@ -63,6 +66,10 @@ function harness(opts: {
   aliases?: Array<{ principalId: string; aliasValue: string }>;
   /** Another dispatch run decided the message between this run's read and its claim. */
   claimLost?: boolean;
+  /** Coworkers a message may address by agent id. */
+  knownAgents?: string[];
+  /** Known coworkers that hold the work_room_write grant, so a wake may reach them (BI-8747A73D). */
+  posters?: string[];
 }) {
   const messages = opts.messages;
   const room = { id: "room-1", capsuleId: "WC-1", executorKind: opts.executorKind === undefined ? "claude-desktop" : opts.executorKind, executorRef: "sess-desk", workItemId: "wi-1", workspaceState: opts.workspaceState ?? stored() };
@@ -103,7 +110,11 @@ function harness(opts: {
     workItem: { findUnique: vi.fn(async () => ({ title: "Room title", parentItemId: null })) },
     workroomParticipant: { findMany: vi.fn(async () => opts.participants ?? []) },
     principalAlias: { findMany: vi.fn(async () => opts.aliases ?? []) },
-    agent: { findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null) },
+    agent: {
+      findMany: vi.fn(async ({ where }: { where: { agentId: { in: string[] } } }) => (opts.knownAgents ?? []).filter((id) => where.agentId.in.includes(id))
+        .map((agentId) => ({ agentId, toolGrants: opts.posters?.includes(agentId) ? [{ grantKey: ROOM_POST_GRANT }] : [], toolGrantRevocations: [] }))),
+      findUnique: vi.fn(async () => null),
+    },
   };
   const deliver = vi.fn(opts.deliver ?? (async () => ({ success: true, message: "Turn started." })));
   const supervision: SupervisedSessionPort = { isLive: () => opts.live ?? true, deliver };
@@ -227,6 +238,69 @@ describe("announceSupervisionLost (AC-ADB-13)", () => {
     await announceSupervisionLost({ capsuleId: "WC-1", reason: "silent", actingUserId: "user-1", addressedAs: ADDRESS, wakeCoordinator: false }, h.deps);
     expect(h.messages).toHaveLength(1);
     expect(h.send).not.toHaveBeenCalled();
+  });
+});
+
+// BI-FDE1B10C (spec §6.5 loop safety): the session posts with the room token
+// issued to whoever started it, so its replies carry that person's agent id,
+// not the session's. The platform knows the post is the session's from the
+// token it was made with, and counts the hop from the message that named it.
+describe("a coworker and a supervised session addressing each other", () => {
+  const STARTER = "AGT-OPS";
+
+  async function post(h: ReturnType<typeof harness>, n: number, from: "coworker" | "session") {
+    const prepared = await prepareRoomAddressing(from === "coworker"
+      ? { workItemId: "wi-1", sender: { type: "agent", id: "AGT-B" }, actingUserId: "user-1", addressedTo: [ADDRESS] }
+      : { workItemId: "wi-1", sender: { type: "agent", id: STARTER }, actingUserId: "user-1", addressedTo: ["AGT-B"], apiTokenId: "tok-1" },
+    { db: h.deps.db, now: () => NOW });
+    if (prepared.refused) throw new Error(prepared.message);
+    const addr = prepared.build([])!;
+    h.messages.push({
+      id: `x${n}`, messageId: `X-${String(n).padStart(2, "0")}`, workItemId: "wi-1", senderType: "agent",
+      senderAgentId: from === "coworker" ? "AGT-B" : STARTER, messageType: "comment", body: `turn ${n}`,
+      createdAt: new Date(NOW.getTime() - 60_000 + n * 1_000),
+      structuredPayload: { workroom: { caseKey: "work-capsule%3AWC-1" }, addressing: { ...addr, wake: { state: "woken", at: "" } } },
+    });
+    return addr;
+  }
+
+  it("climbs a hop on every reply, the session's included, and marks the session's posts", async () => {
+    const h = harness({ messages: [], executorKind: null, knownAgents: ["AGT-B"] });
+    const hops: number[] = [];
+    for (let n = 0; n < 4; n += 1) hops.push((await post(h, n, n % 2 === 0 ? "coworker" : "session")).hop);
+    expect(hops).toEqual([0, 1, 2, 3]);
+    expect(readPath(h.messages[1]!.structuredPayload, ["addressing", "senderSession"])).toBe(ADDRESS);
+    expect(readPath(h.messages[0]!.structuredPayload, ["addressing", "senderSession"])).toBeUndefined();
+  });
+
+  it("does not take a post for the session's because it was made with another token", async () => {
+    const h = harness({ messages: [], executorKind: null, knownAgents: ["AGT-B"] });
+    await post(h, 0, "coworker");
+    const prepared = await prepareRoomAddressing(
+      { workItemId: "wi-1", sender: { type: "agent", id: STARTER }, actingUserId: "user-1", addressedTo: ["AGT-B"], apiTokenId: "tok-other" },
+      { db: h.deps.db, now: () => NOW },
+    );
+    if (prepared.refused) throw new Error(prepared.message);
+    expect(prepared.build([])).toMatchObject({ hop: 0 });
+    expect(prepared.build([])).not.toHaveProperty("senderSession");
+  });
+
+  it("stops at the hop limit: the session gets no further turn and the coordinator is woken", async () => {
+    const h = harness({
+      messages: [], executorKind: null, knownAgents: ["AGT-B", "AGT-COORD"], posters: ["AGT-COORD"],
+      participants: [{ principalId: "PRN-C", roles: ["coordinator"] }], aliases: [{ principalId: "PRN-C", aliasValue: "AGT-COORD" }],
+    });
+    for (let n = 0; n < ROOM_WAKE_HOP_LIMIT; n += 1) await post(h, n, n % 2 === 0 ? "coworker" : "session");
+    const last = await post(h, ROOM_WAKE_HOP_LIMIT, "coworker");
+    expect(last.hop).toBe(ROOM_WAKE_HOP_LIMIT);
+    const posted = h.messages.at(-1)!;
+    posted.structuredPayload = { ...posted.structuredPayload, addressing: { ...last, wake: { state: "pending", at: NOW.toISOString() } } };
+
+    const result = await dispatchRoomMessage(posted.messageId, h.deps);
+    expect(result).toMatchObject({ plan: "wake", woken: ["AGT-COORD"] });
+    expect(h.deliver).not.toHaveBeenCalled();
+    expect(h.send).toHaveBeenCalledWith(expect.objectContaining({ name: "room/wake.requested", data: expect.objectContaining({ agentId: "AGT-COORD" }) }));
+    expect(h.messages.find((m) => m.messageType === "room-wake-notice")?.structuredPayload).toMatchObject({ roomWakeNotice: { kind: "hop-limit" } });
   });
 });
 

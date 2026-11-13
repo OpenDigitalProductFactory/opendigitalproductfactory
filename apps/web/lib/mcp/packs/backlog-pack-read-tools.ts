@@ -1,4 +1,5 @@
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
+import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
 import { publicCompletionActivity } from "@/lib/backlog/initiative-readiness/completion-input-context";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
@@ -94,7 +95,7 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
   if (epicRowId !== undefined) where["epicId"] = epicRowId;
   const limit = resolveListLimit(params["limit"]);
 
-  const [items, matching, epics, epicTotal, open, inProgress, awaitingAcceptance, done, deferred, retired] = await Promise.all([
+  const [items, matching, epics, epicTotal, open, inProgress, awaitingAcceptance, done, deferred, retired, awaitingAcceptancePeerOwned] = await Promise.all([
     prisma.backlogItem.findMany({
       where,
       orderBy: [{ priority: "asc" }, { updatedAt: "desc" }],
@@ -131,13 +132,16 @@ export async function queryBacklog(params: Record<string, unknown>): Promise<Too
     prisma.backlogItem.count({ where: { status: "done" } }),
     prisma.backlogItem.count({ where: { status: "deferred" } }),
     prisma.backlogItem.count({ where: { status: "retired" } }),
+    // BI-17C5F43A: work-sync mirrors are accepted only at their origin installation (BI-C5794F1D).
+    prisma.backlogItem.count({ where: { status: "awaiting-acceptance", body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }),
   ]);
+  const peerAcceptance = awaitingAcceptancePeerOwned > 0 ? ` (${awaitingAcceptancePeerOwned} of them owned by a peer installation, accepted there)` : "";
 
   return {
     success: true,
-    message: `Backlog: ${open} open, ${inProgress} in-progress, ${awaitingAcceptance} awaiting-acceptance, ${deferred} deferred, ${done} done, ${retired} retired. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
+    message: `Backlog: ${open} open, ${inProgress} in-progress, ${awaitingAcceptance} awaiting-acceptance${peerAcceptance}, ${deferred} deferred, ${done} done, ${retired} retired. Showing ${items.length} of ${matching} matching item(s), ${epics.length} of ${epicTotal} epic(s).`,
     data: {
-      summary: { open, inProgress, awaitingAcceptance, deferred, done, retired },
+      summary: { open, inProgress, awaitingAcceptance, awaitingAcceptancePeerOwned, deferred, done, retired },
       total: matching,
       truncated: items.length < matching,
       epicTotal,

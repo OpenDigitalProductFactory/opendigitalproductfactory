@@ -34,6 +34,17 @@ const platformRow: OpenAiCapacityIssue = {
 };
 
 describe("aiCapacityToAttentionItem", () => {
+  it("projects the all-subscriptions-exhausted row as a high-risk item for the AI workforce (BI-5A6C4011)", () => {
+    const item = aiCapacityToAttentionItem({
+      issueKey: "ai-capacity:subscriptions",
+      severity: "error",
+      summary: "Every AI subscription is out of capacity",
+      details: { kind: "subscriptions", explanation: "Codex has hit its usage limit (resets 2026-11-09 18:42 UTC).", href: "/platform/ai/providers" },
+      firstDetectedAt: new Date("2026-11-06T12:15:00.000Z"),
+    });
+    expect(item).toMatchObject({ riskClass: "high-risk", triage: { blastRadius: "AI workforce" }, deepLink: "/platform/ai/providers" });
+  });
+
   it("projects a provider row as one plain-language item with its exact page and action", () => {
     const item = aiCapacityToAttentionItem(providerRow);
     expect(item).toMatchObject({
