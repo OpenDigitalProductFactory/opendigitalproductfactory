@@ -158,6 +158,16 @@ Smaller observations:
 - T3's runtime file records the server bound to `0.0.0.0:3773`, while `t3 status`
   reports local-network access off. Worth checking before T3 runs unattended.
 - The Claude Code dpf connector and the `claude` CLI's needed re-authentication.
+- `claim_workroom_scope` on WC-CD5963F8 threw
+  `scope-epoch-enrollment-held:canonical-writer-evidence-unavailable`.
+- The worktree for this record lost 84 tracked files (installer scripts,
+  `tools/`, `infra/`, `pnpm-lock.yaml`) shortly after it was created. A
+  `dpf-reap.lock` in its git directory is stamped 10:27 PM, the minute it was
+  created, while the session hygiene hook was describing it as "merged and
+  clean". The files were restored from Git before anything was committed. The
+  cause was not confirmed.
+- Both local gate attempts for this record ran into a self-upgrade drain (from
+  11:24 PM); the gate reported `blocked_quiescence`, which is unrun, not failed.
 
 ## Recommendation
 
