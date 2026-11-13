@@ -476,8 +476,21 @@ export async function preflightInitiativeEvidence(params: Record<string, unknown
   context?: ToolExecutionContext): Promise<ToolResult | null> {
   const prepared = await prepareInitiativeWrite("record_initiative_evidence", LANES.record_initiative_evidence, params, context);
   if ("refusal" in prepared) return prepared.refusal;
+  let admitted = prepared.params;
+  // BI-7BA59B8C: admission runs on raw params and applies the strict locator
+  // schema, so the documented {path, headSha} shorthand was refused here before
+  // the handler's completion step could fill it in. Complete it on the same
+  // terms the handler uses (BI-DF34D948) so one shape is accepted by both. A
+  // binding already supplies a complete locator, so leave that path untouched.
+  if ((admitted.operation ?? "gate-receipt") === "gate-receipt" && !prepared.binding
+    && admitted.artifactRef && typeof admitted.artifactRef === "object") {
+    const normalized = await normalizeRepositoryArtifactRefInput(admitted.artifactRef,
+      await defaultArtifactRefInputDeps(), { tool: "record_initiative_evidence", args: admitted });
+    if (!normalized.ok) return normalized.refusal;
+    admitted = { ...admitted, artifactRef: normalized.data.artifactRef };
+  }
   const { preflightEvidenceArtifact } = await import("@/lib/backlog/initiative-readiness/evidence-preflight");
-  return preflightEvidenceArtifact({ params: prepared.params, userId, context,
+  return preflightEvidenceArtifact({ params: admitted, userId, context,
     workroomRef: prepared.binding?.workroomRef ?? undefined });
 }
 

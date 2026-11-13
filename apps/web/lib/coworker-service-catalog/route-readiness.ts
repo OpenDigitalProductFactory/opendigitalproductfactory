@@ -312,6 +312,18 @@ async function evaluateReadinessAtSensitivity(
       )
     : null;
 
+  // Routing no longer re-admits a provider that has said calls will fail
+  // (BI-5A6C4011), so a sole provider needing repair leaves no selection.
+  // Name the repair rather than a generic requirement mismatch.
+  if (
+    !selected &&
+    decision.excludedReasons.some((line) => line.includes(": provider capacity "))
+  ) {
+    return blockedReadiness(
+      "The configured provider needs attention before this coworker can respond.",
+    );
+  }
+
   if (
     !selected ||
     !satisfiesMinimumDimensions(
