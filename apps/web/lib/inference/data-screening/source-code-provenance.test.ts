@@ -8,7 +8,8 @@
 import { describe, expect, it } from "vitest";
 import { endpointClearsSensitivity } from "@/lib/routing/sensitivity-clearance";
 import type { EndpointManifest } from "@/lib/routing/types";
-import { classifyInferencePayload, isPublicSourceProvenance } from "./classify-payload";
+import { classifyInferencePayload } from "./classify-payload";
+import { isPublicSourceProvenance } from "./source-code-provenance";
 import { screenInferencePayload, type ScreenInferencePayloadInput } from "./screen-inference-payload";
 import type { SourceCodeProvenance } from "./types";
 
