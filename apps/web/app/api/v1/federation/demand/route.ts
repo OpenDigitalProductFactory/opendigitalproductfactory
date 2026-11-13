@@ -39,6 +39,7 @@ import {
   handleIncomingOperationalPosture,
   type OperationalPostureExchangeDb,
 } from "@/lib/federation/operational-posture-exchange";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const ERROR_STATUS: Record<string, number> = {
   missing_authorization: 401,
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const { recordEcosystemVoteTally } = await import("@/lib/ecosystem/vote-tally");
         await recordEcosystemVoteTally(prisma as never, response.localRecordRef);
       } catch (err) {
-        console.warn(`[federation-demand] vote tally for ${response.localRecordRef} failed: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(`[federation-demand] vote tally for ${response.localRecordRef} failed: ${getErrorMessage(err)}`);
       }
     }
     return accepted(response);

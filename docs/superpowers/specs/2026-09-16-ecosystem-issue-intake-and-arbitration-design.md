@@ -458,6 +458,24 @@ is only taken when a projector was actually injected — a declared link with no
 way to project would otherwise swallow the report silently. Installs without a
 link keep the relay/direct behaviour byte-for-byte.
 
+### 5.6 Remediation — votes now move the shared priority (BI-626A4ECA), 2026-11-12
+
+Audit on 2026-11-12 found the vote budget built but uncounted: an interest
+response reached the controller as a flat signal and no code turned it into a
+score input. Now:
+
+- `DemandResponseV1` carries an optional integer `weight` (2–4) on `interest`
+  responses only; 1 is the default and is not written. A peer on an older
+  build reads a weighted vote as plain interest.
+- The participant's `respondToFederatedDemandAction` enforces the weekly
+  budget (16 credits, cost = weight²) against this week's outbound responses,
+  read bounded on `updatedAt`. Re-weighting an item refunds its earlier weight.
+- On receipt the controller re-tallies the item (`recordEcosystemVoteTally`):
+  distinct installations become `reach`, mean weight maps onto the impact
+  ladder, written with `demandInputSource = "ai"` through the guarded update,
+  so a human or agreed score is never overwritten. A changed weight updates
+  the held response instead of being dropped as a duplicate.
+
 ## 6. Verification
 
 ### 6.1 Customer-first controller commissioning (BI-FD40397B)
