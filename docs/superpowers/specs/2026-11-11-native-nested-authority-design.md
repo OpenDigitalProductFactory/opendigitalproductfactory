@@ -221,7 +221,11 @@ whitespace checks passed. Managed dependency bootstrap reports compile-ready.
 ### Executed source reproduction (November 12)
 
 The normally admitted test path is
-`apps/web/lib/routing/native-session-authority.test.ts`. On design head
+`apps/web/lib/routing/native-session-authority.test.ts`, preserved in signed
+research commit `3176f747423e7d8b77cda3806d13974df9599d87`. The subsequent
+documentation checkpoint retains that immutable RED without adding the failing
+test to its candidate tree; restore it for the admitted implementation loop.
+On design head
 `d3c6d2bff8b93fa2c027ac3e222eaddd90bcb86d`, whose product source remains
 `95d9746940171a45af9f6bed76208e2e4ab07742`, the isolated regression executed:
 **one failed, two passed**. Its real writer-only CLI adapter stages the signed
@@ -246,7 +250,8 @@ Earlier harness import and synthetic CLI-envelope failures are retained as
 harness failures, not counted as product RED. The preceding queued run settled
 before this changed-source run was requested; no duplicate runner was started.
 
-Product changes, product GREEN, current typechecks, full negative controls,
+Both web TypeScript programs passed in the mandatory precommit hook for the
+signed research commit. Product changes, product GREEN, full negative controls,
 runtime verification, independent reviews, PR and deployment remain unrun. The
 draft is linked to the live build/medium item. Record author research and obtain
 normal implementation admission and product-path claims before production
