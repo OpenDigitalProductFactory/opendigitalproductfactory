@@ -830,33 +830,32 @@ async function main() {
     );
     const receiptStatus = canonicalStageReceiptStatus(finalStatus);
     stageReceipt.complete(receiptStatus, payload);
-    if (finalStatus === "blocked_control_plane_starvation") {
+    // BI-5A1FBCA6: when the build output shows builder resource exhaustion, print
+    // the diagnostic line with cap/workers/killedStep — even if the watchdog ALSO
+    // reported control-plane starvation. The build outcome is the source of truth
+    // for what the build itself hit; the watchdog status is what the shared control
+    // plane looked like. Both matter for different remedies.
+    if (buildOutcome.status === "blocked_builder_resource_exhausted") {
+      const healthy = watchdog.samples.length;
+      process.stderr.write(
+        `[local-ci-bounded-build] builder_resource_exhausted: cap=${policy.memoryBytes}`
+          + ` observedWorkers=${buildOutcome.observedWorkers ?? "unknown"}`
+          + ` killedStep=${buildOutcome.killedStep ?? "unknown"}\n`,
+      );
+      process.stderr.write(
+        `[local-ci-bounded-build] the BUILDER exhausted its own memory cap; `
+          + `the shared control plane stayed healthy for all ${healthy} probe(s). `
+          + `This is build capacity, NOT Docker, PostgreSQL or the portal.\n`,
+      );
+    }
+    if (finalStatus === "blocked_builder_resource_exhausted") {
+      exitCode = buildOutcome.exitCode;
+    } else if (finalStatus === "blocked_control_plane_starvation") {
+      // The shared control plane degraded during the build.
       process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
-      // BI-5A1FBCA6: say WHICH failure. Three different things record this one
-      // status, and they have three different remedies. Only the watchdog's
-      // verdict is about the shared control plane, so only it gets the engine
-      // advisory; the builder exhausting its OWN cap gets the numbers instead.
-      if (watchdog.status === "blocked_control_plane_starvation") {
-        const advisory = controlPlaneEngineAdvisory(failures);
-        if (advisory) process.stderr.write(`[local-ci-bounded-build] ${advisory}\n`);
-        exitCode = EXIT_CONTROL_PLANE_STARVATION;
-      } else {
-        // The control plane being healthy the whole time is the single most
-        // useful fact when the builder was the one that ran out. All of this was
-        // already known here and none of it was printed.
-        const healthy = watchdog.samples.length;
-        process.stderr.write(
-          "[local-ci-bounded-build] the BUILDER exhausted its own memory cap; "
-            + `the shared control plane stayed healthy for all ${healthy} probe(s). `
-            + `cap=${policy.memoryBytes} bytes parallelism=${policy.maxParallelism}`
-            + `${buildOutcome.observedWorkers ? ` observedWorkers=${buildOutcome.observedWorkers}` : ""}`
-            + `${buildOutcome.killedStep ? ` killedStep=${buildOutcome.killedStep}` : ""}\n`,
-        );
-        process.stderr.write(
-          "[local-ci-bounded-build] this is build capacity, NOT Docker, PostgreSQL or the portal.\n",
-        );
-        exitCode = buildOutcome.exitCode;
-      }
+      const advisory = controlPlaneEngineAdvisory(failures);
+      if (advisory) process.stderr.write(`[local-ci-bounded-build] ${advisory}\n`);
+      exitCode = EXIT_CONTROL_PLANE_STARVATION;
     } else {
       // Retention runs ONLY on a green build, so the slot always keeps a working
       // image: the one just produced supersedes the slot's older images. Gating on

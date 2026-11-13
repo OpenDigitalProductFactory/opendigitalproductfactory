@@ -595,7 +595,7 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode, mergeConfl
   }
   if (gateExitCode === EXIT_BUILDER_RESOURCE_EXHAUSTED) {
     return {
-      status: "blocked_control_plane_starvation",
+      status: "blocked_builder_resource_exhausted",
       gatePassed: false,
       productEvidence: false,
       summary: "local-CI gate blocked: the production build ran out of memory inside the BUILDER's own cap — the shared control plane was healthy throughout. This is infrastructure evidence, NOT a product build failure. Do not go looking at Docker, PostgreSQL or the portal: the remedy is build capacity (the recorded policy names the cap, and the build log names the worker count and the step that was killed).",

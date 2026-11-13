@@ -1,3 +1,14 @@
+// Control-plane health monitoring for local-CI bounded builds.
+//
+// This module handles PROBE-BASED control-plane starvation detection: the
+// shared portal, MCP, Docker, and PostgreSQL surfaces are polled during a
+// build, and consecutive probe failures trigger blocked_control_plane_starvation.
+//
+// This is distinct from builder resource exhaustion (blocked_builder_resource_exhausted),
+// which is classified in local-ci-bounded-builder.mjs when the build itself
+// runs out of memory inside the builder's own cap. The control plane stays
+// healthy in that case — only the build exceeds its memory boundary.
+
 const SURFACES = ["portal", "mcp", "docker", "postgres"];
 
 export const EXIT_CONTROL_PLANE_STARVATION = 5;
@@ -18,6 +29,12 @@ export function classifyControlPlaneSample(probes) {
   return { healthy: failures.length === 0, failures };
 }
 
+/**
+ * Monitor control-plane health during a build. Returns blocked_control_plane_starvation
+ * only when consecutive PROBE failures occur on portal, MCP, Docker, or Postgres.
+ * Builder memory exhaustion is a distinct status (blocked_builder_resource_exhausted)
+ * classified by local-ci-bounded-builder.mjs — the control plane stays healthy in that case.
+ */
 export async function monitorControlPlane({
   sample,
   isComplete,

@@ -40,11 +40,11 @@ test("resource-limit termination is infrastructure evidence, not a product red",
     exitCode: 1,
     output: "ResourceExhausted: next build cannot allocate memory",
   }), {
-    status: "blocked_control_plane_starvation",
-    // BI-5A1FBCA6: 6, not 5. The status stays shared so a deployed portal keeps
-    // accepting the write, but the exit code now distinguishes the builder's own
-    // memory cap from the shared control plane degrading, so the summary an
-    // operator reads names the right system.
+    status: "blocked_builder_resource_exhausted",
+    // BI-5A1FBCA6: exit code 6 (EXIT_BUILDER_RESOURCE_EXHAUSTED) distinguishes
+    // the builder hitting its own memory cap from control-plane starvation,
+    // so an operator sees which system failed and applies the correct
+    // remedy (build capacity, not Docker/portal/PostgreSQL).
     exitCode: 6,
     observedWorkers: null,
     killedStep: null,

@@ -14,6 +14,7 @@ describe("classifyAutonomousBuildFailure", () => {
     ["maximum context length exceeded", "code_generated", "context-overflow"],
     ["blocked_sandbox_drift", "sandbox_created", "sandbox-drift"],
     ["blocked_control_plane_starvation", "tests_run", "control-plane-starvation"],
+    ["blocked_builder_resource_exhausted", "tests_run", "builder-resource-exhaustion"],
     ["error TS2322 typecheck failed", "code_generated", "scoped-verification-failure"],
   ] as const)("classifies %s", (message, step, expected) => {
     expect(classifyAutonomousBuildFailure({ message, step })).toBe(expected);
@@ -90,6 +91,19 @@ describe("decideAutonomousRecovery", () => {
     const state = initialAutonomousRecoveryState();
     expect(decideAutonomousRecovery({
       failureClass: "control-plane-starvation",
+      state,
+    })).toMatchObject({
+      action: "await-governed-runner",
+      consumedBudget: false,
+      terminal: false,
+      state,
+    });
+  });
+
+  it("waits for governed recovery after builder resource exhaustion", () => {
+    const state = initialAutonomousRecoveryState();
+    expect(decideAutonomousRecovery({
+      failureClass: "builder-resource-exhaustion",
       state,
     })).toMatchObject({
       action: "await-governed-runner",

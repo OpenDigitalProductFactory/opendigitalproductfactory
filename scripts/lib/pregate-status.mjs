@@ -97,6 +97,7 @@ export function poolClosedReasonFromState(state) {
  * FAIL is a claim about the diff. These must never share a headline.
  */
 const BLOCKED_GATE_STATUSES = new Set([
+  "blocked_builder_resource_exhausted",
   "blocked_sandbox_drift",
   "blocked_control_plane_starvation",
   "blocked_child_signal_death",

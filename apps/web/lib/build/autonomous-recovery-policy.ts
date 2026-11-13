@@ -10,6 +10,7 @@ export const AUTONOMOUS_FAILURE_CLASSES = [
   "plan-oscillation",
   "sandbox-drift",
   "control-plane-starvation",
+  "builder-resource-exhaustion",
   "post-push-ci-failure",
   "queue-stale-base",
   "unresolved-review-thread",
@@ -78,6 +79,9 @@ export function classifyAutonomousBuildFailure(input: {
   }
   if (/blocked_control_plane_starvation|control-plane.*starv/.test(text)) {
     return "control-plane-starvation";
+  }
+  if (/blocked_builder_resource_exhausted|builder.*resource.*exhaust/.test(text)) {
+    return "builder-resource-exhaustion";
   }
   if (
     /typecheck|error ts\d{4}|tests? failed|build failed/.test(text)
@@ -218,6 +222,7 @@ export function decideAutonomousRecovery(input: {
   }
   if (
     failureClass === "self-upgrade-failure"
+    || failureClass === "builder-resource-exhaustion"
     || failureClass === "control-plane-starvation"
   ) {
     return {

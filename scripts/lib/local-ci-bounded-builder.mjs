@@ -114,14 +114,13 @@ export function classifyBoundedBuildExit({ exitCode, output }) {
     exitCode !== 0
     && /ResourceExhausted|cannot allocate memory|SIGKILL.*next build/i.test(output || "")
   ) {
-    // BI-5A1FBCA6: the BUILDER hit its own memory cap. The status stays the
-    // shared one so an already-deployed portal keeps accepting the evidence
-    // write, but the exit code and the recorded detail now say which of the
-    // three failures wearing that name actually happened. `failures` has always
-    // carried `builder:resource-exhausted`; nothing downstream read it, and the
-    // summary an operator sees named the control plane instead.
+    // BI-5A1FBCA6: the BUILDER hit its own memory cap. This is now a distinct
+    // status from control-plane starvation: the shared portal, MCP, Docker and
+    // PostgreSQL were healthy throughout — the build itself exceeded the
+    // builder's memory boundary. The exit code and extracted detail let an
+    // operator size the slot or reduce build concurrency.
     return {
-      status: "blocked_control_plane_starvation",
+      status: "blocked_builder_resource_exhausted",
       exitCode: EXIT_BUILDER_RESOURCE_EXHAUSTED,
       failures: ["builder:resource-exhausted"],
       observedWorkers: observedBuildWorkers(output),

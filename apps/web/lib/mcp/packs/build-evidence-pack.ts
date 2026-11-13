@@ -65,7 +65,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "record_local_integration_result",
-    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, status (passed | failed | conflict | blocked_sandbox_drift | blocked_control_plane_starvation), and evidence including dependency freshness and concurrent control-plane health. Blocked statuses are infrastructure evidence, not product failures.",
+    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, status (passed | failed | conflict | blocked_sandbox_drift | blocked_control_plane_starvation | blocked_builder_resource_exhausted), and evidence including dependency freshness and concurrent control-plane health. Blocked statuses are infrastructure evidence, not product failures.",
     inputSchema: {
       type: "object",
       properties: {
@@ -298,7 +298,7 @@ async function recordLocalIntegrationResultHandler(
       taskRunId: stringValue("taskRunId") || undefined,
       candidateBranch,
       mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-      status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
+      status: status as Parameters<typeof recordLocalIntegrationResult>[0]["status"],
       summary,
       gateKey: stringValue("gateKey") || undefined,
       leaseId: stringValue("leaseId") || undefined,

@@ -12,9 +12,32 @@ export function pageBuildBudget({ memoryBytes, cpuCount }) {
   return { cpus: workers, staticGenerationMaxConcurrency: 1 };
 }
 
+/**
+ * Read the builder/container memory cap from environment when available.
+ * Priority order (first valid wins):
+ *  1. CGROUP_MEMORY_LIMIT_BYTES — kernel/container layer cgroup limit
+ *  2. DPF_LOCAL_CI_BUILDER_MEMORY_BYTES — bounded-build runner's slot cap
+ *
+ * When neither is set, currentPageBuildBudget falls back to totalmem() and
+ * process.constrainedMemory(), which may read host memory on misconfigured
+ * containers and oversubscribe workers.
+ */
+export function builderMemoryCapFromEnv() {
+  for (const name of ["CGROUP_MEMORY_LIMIT_BYTES", "DPF_LOCAL_CI_BUILDER_MEMORY_BYTES"]) {
+    const value = Number(process.env[name]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return null;
+}
+
 export function currentPageBuildBudget() {
-  const limits = [totalmem(), process.constrainedMemory?.(), process.availableMemory?.()]
-    .filter((value) => Number.isFinite(value) && value > 0);
+  const builderCap = builderMemoryCapFromEnv();
+  const limits = [
+    builderCap,
+    totalmem(),
+    process.constrainedMemory?.(),
+    process.availableMemory?.(),
+  ].filter((value) => Number.isFinite(value) && value > 0);
   return pageBuildBudget({
     memoryBytes: limits.length ? Math.min(...limits) : 0,
     cpuCount: availableParallelism(),

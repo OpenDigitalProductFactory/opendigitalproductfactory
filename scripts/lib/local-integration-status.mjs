@@ -24,6 +24,7 @@ export const LOCAL_INTEGRATION_STATUSES = Object.freeze([
   "blocked_sandbox_drift",
   "blocked_control_plane_starvation",
   "blocked_child_signal_death",
+  "blocked_builder_resource_exhausted",
 ]);
 
 /** True when `value` is a status the recorder will accept. */

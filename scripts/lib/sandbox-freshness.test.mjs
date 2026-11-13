@@ -778,12 +778,13 @@ test("a status the recorder does not know still records rather than dropping the
 // own memory cap, and a fenced lease. They have three different remedies, so
 // they must not share the sentence an operator reads. The STATUS stays shared
 // for now so an already-deployed portal keeps accepting the evidence write.
-test("a builder that exhausted its own cap does not send the reader to Docker", () => {
+test("a builder that exhausted its own cap has its own distinct status", () => {
   const outcome = classifyGateOutcome({
     freshnessVerdict: null,
     gateExitCode: EXIT_BUILDER_RESOURCE_EXHAUSTED,
   });
-  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  // BI-5A1FBCA6: builder exhaustion is now a distinct status from control-plane starvation.
+  assert.equal(outcome.status, "blocked_builder_resource_exhausted");
   assert.equal(outcome.gatePassed, false);
   assert.equal(outcome.productEvidence, false);
   assert.match(outcome.summary, /BUILDER's own cap/);
@@ -800,10 +801,12 @@ test("a real control-plane failure still names the control plane", () => {
   assert.equal(outcome.productEvidence, false);
 });
 
-test("the two causes are told apart by their summaries, not by their status", () => {
+test("builder exhaustion and control-plane starvation have distinct statuses and summaries", () => {
   const builder = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_BUILDER_RESOURCE_EXHAUSTED });
   const plane = classifyGateOutcome({ freshnessVerdict: null, gateExitCode: EXIT_CONTROL_PLANE_STARVATION });
-  assert.equal(builder.status, plane.status);
+  // BI-5A1FBCA6: these are now distinct statuses, not one status with different summaries.
+  assert.equal(builder.status, "blocked_builder_resource_exhausted");
+  assert.equal(plane.status, "blocked_control_plane_starvation");
   assert.notEqual(builder.summary, plane.summary);
 });
 
