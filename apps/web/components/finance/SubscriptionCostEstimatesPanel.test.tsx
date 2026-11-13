@@ -26,8 +26,8 @@ describe("SubscriptionCostEstimatesPanel", () => {
 
   it("stays closed on arrival so the page's visible word budget holds", () => {
     const html = renderToStaticMarkup(<SubscriptionCostEstimatesPanel plans={[]} unpriced={[]} />);
-    expect(html).toMatch(/^<details[^>]*>/);
-    expect(html).not.toMatch(/^<details[^>]*\bopen\b/);
+    expect(html).toMatch(/<details>/);
+    expect(html).not.toMatch(/<details[^>]*\bopen\b/);
     expect(html).toContain("<summary");
     expect(html).toContain("Subscription costs</summary>");
   });

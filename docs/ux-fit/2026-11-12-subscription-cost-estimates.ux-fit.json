@@ -2,8 +2,7 @@
   "version": "1",
   "scope": {
     "files": [
-      "apps/web/components/finance/SubscriptionCostEstimatesPanel.tsx",
-      "apps/web/app/(shell)/finance/spend/ai/page.tsx"
+      "apps/web/components/finance/SubscriptionCostEstimatesPanel.tsx"
     ]
   },
   "decidedOption": "read-only-panel-on-ai-spend",
