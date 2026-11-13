@@ -181,6 +181,12 @@ Most common: schema drift. The portal expects a Prisma schema version that doesn
 
 1. Check the portal logs: `docker compose logs portal --tail 100`. Look for `PrismaClientKnownRequestError` or migration errors.
 
+   A `runtime-secret-bootstrap` refusal happens before migrations and is not
+   schema drift. If `onepassword-connect` is selected, restore Connect access or
+   deliberately return to the same values through the environment provider;
+   follow [Runtime secret providers](../install/runtime-secret-providers.md).
+   Never generate replacement root values as a restart shortcut.
+
 2. Re-apply migrations against the current DB:
 
    ```powershell
