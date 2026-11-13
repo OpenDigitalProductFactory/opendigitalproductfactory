@@ -1,21 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { SweepHaltReason } from "./submission-sweep";
 import {
-  AWAITING_CONSENT_PREFIX,
   SUBMISSION_SWEEP_JOB_ID,
+  haltReasonOf,
   WEEKLY_DIGEST_JOB_ID,
   digestHeartbeat,
   recordEcosystemJobHeartbeat,
   sweepHeartbeat,
 } from "./job-heartbeat";
 
-const base = { submitted: 0, skipped: 0, failed: 0, halted: null as string | null };
+const base = { submitted: 0, skipped: 0, failed: 0, halted: null as SweepHaltReason | null };
 
 describe("sweepHeartbeat", () => {
   it("names how many problems are waiting when halted for want of consent", () => {
     const beat = sweepHeartbeat({ ...base, halted: "awaiting-consent", waiting: 3 });
     expect(beat.lastStatus).toBe("not-configured");
-    expect(beat.lastRunSummary.startsWith(AWAITING_CONSENT_PREFIX)).toBe(true);
+    expect(beat.haltReason).toBe("awaiting-consent");
     expect(beat.lastRunSummary).toContain("3 problems triaged here are not reaching the ecosystem");
   });
 
@@ -24,11 +25,13 @@ describe("sweepHeartbeat", () => {
       .toContain("new problems triaged here will be not reaching");
   });
 
-  it("records a deliberate operator choice without the prefix, so it never nags", () => {
-    for (const halted of ["paused", "fork-only", "not-applicable"]) {
+  it("records a deliberate operator choice under its own typed reason, so it never nags", () => {
+    for (const halted of ["paused", "fork-only", "not-applicable"] as const) {
       const beat = sweepHeartbeat({ ...base, halted });
       expect(beat.lastStatus).toBe("not-configured");
-      expect(beat.lastRunSummary.startsWith(AWAITING_CONSENT_PREFIX)).toBe(false);
+      expect(beat.haltReason).toBe(halted);
+      // Plain words for the operator, never a raw internal token like "fork-only".
+      expect(beat.lastRunSummary).not.toMatch(/fork-only|not-applicable|Not run:/);
     }
   });
 
@@ -42,6 +45,7 @@ describe("sweepHeartbeat", () => {
       lastStatus: "completed",
       lastRunSummary: "4 submitted, 1 skipped, 0 failed.",
       lastError: null,
+      haltReason: null,
     });
   });
 });
@@ -55,6 +59,17 @@ describe("digestHeartbeat", () => {
     const beat = digestHeartbeat({ delivered: false, reason: "delivery-failed", message: "room archived" });
     expect(beat.lastStatus).toBe("failed");
     expect(beat.lastError).toBe("room archived");
+  });
+
+  it("names an outcome this build does not model instead of reporting a failed delivery", () => {
+    expect(digestHeartbeat({ delivered: false, reason: "something-new", message: "m" }))
+      .toMatchObject({ lastStatus: "partial", lastError: "m" });
+  });
+
+  it("counts a delivered digest from its plain-JSON shape", () => {
+    expect(digestHeartbeat({ delivered: true, digest: {
+      ballot: { applies: [1, 2] }, alsoAffectsYou: [1], dispositions: [], releases: [],
+    } }).lastRunSummary).toBe("Posted: 2 to vote on, 1 also affecting you, 0 answered, 0 releases.");
   });
 
   it("records a missing ecosystem voice as not configured with its reason", () => {
@@ -77,6 +92,23 @@ describe("recordEcosystemJobHeartbeat", () => {
     expect(args.update).toMatchObject({ schedule: "41 5 * * *", lastRunAt: now, lastStatus: "completed" });
     expect(args.update.nextRunAt).toBeInstanceOf(Date);
     expect(args.create.name).toBeTruthy();
+    expect(args.update).not.toHaveProperty("metadata");
+  });
+
+  it("stores the sweep's halt reason as a typed field the attention source reads", async () => {
+    const upsert = vi.fn().mockResolvedValue({});
+    await recordEcosystemJobHeartbeat(
+      SUBMISSION_SWEEP_JOB_ID,
+      sweepHeartbeat({ ...base, halted: "awaiting-consent", waiting: 1 }),
+      { db: { scheduledJob: { upsert } } },
+    );
+    const metadata = upsert.mock.calls[0][0].update.metadata;
+    expect(haltReasonOf(metadata)).toBe("awaiting-consent");
+  });
+
+  it("reads no halt reason from anything but the typed field", () => {
+    expect(haltReasonOf(null)).toBeNull();
+    expect(haltReasonOf({ haltReason: "awaiting consent: words" })).toBeNull();
   });
 
   it("covers the weekly digest's catalogued schedule too", async () => {

@@ -26,7 +26,7 @@ export default async function AdminUpstreamFeedbackPage() {
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-6" data-dpf-lead>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">{t("upstreamFeedback.pageTitle")}</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">{t("upstreamFeedback.pageSubtitle")}</p>
       </div>

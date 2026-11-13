@@ -12,6 +12,9 @@ export const ecosystemWatchdog = jobs.createFunction(
   { id: "ecosystem/weekly-watchdog", retries: 2, triggers: [cron("5 6 * * 1")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ecosystem/weekly-watchdog");
+    // A run held by the entry gate writes nothing: the gate holds work only while
+    // the platform drains for an upgrade, and a write then is what it exists to
+    // prevent. The next cron tick after the drain records a fresh heartbeat.
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     const outcome = await step.run("bring-the-ecosystem-to-the-room", async () => {
@@ -23,7 +26,7 @@ export const ecosystemWatchdog = jobs.createFunction(
     await step.run("record-digest-outcome", async () => {
       const { recordEcosystemJobHeartbeat, digestHeartbeat, WEEKLY_DIGEST_JOB_ID } =
         await import("@/lib/ecosystem/job-heartbeat");
-      await recordEcosystemJobHeartbeat(WEEKLY_DIGEST_JOB_ID, digestHeartbeat(outcome as never));
+      await recordEcosystemJobHeartbeat(WEEKLY_DIGEST_JOB_ID, digestHeartbeat(outcome));
     });
     return outcome;
   },

@@ -46,6 +46,9 @@ export type SweepHalt =
   | { halted: true; reason: "awaiting-consent"; message: string; promptOperator: true }
   | { halted: true; reason: "not-applicable"; message: string };
 
+/** The closed set of reasons a sweep stops before sending anything. */
+export type SweepHaltReason = SweepHalt["reason"];
+
 export interface SweepPlan {
   halted: false;
   submit: string[];
@@ -119,7 +122,7 @@ export interface SweepResult {
   submitted: number;
   skipped: number;
   failed: number;
-  halted: string | null;
+  halted: SweepHaltReason | null;
   /** When halted for want of consent: how many triaged reports are waiting. A
    *  local count — nothing leaves the installation to produce it. */
   waiting?: number | null;

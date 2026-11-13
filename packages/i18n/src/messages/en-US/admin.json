@@ -385,6 +385,8 @@
     "switchLabel": "Upstream feedback",
     "stateOn": "On. Triaged problems are sent daily.",
     "stateOff": "Off. Nothing leaves this installation.",
+    "pendingOn": "Not saved yet. Still off until you save; after that, triaged problems are sent daily.",
+    "pendingOff": "Not saved yet. Still on until you save; after that, nothing leaves this installation.",
     "reasonPrivate": "This installation keeps everything on its own system, so nothing can be sent.",
     "reasonPaused": "Contributions are paused for this installation, which overrides this switch.",
     "reasonNoAuthority": "Only someone who manages the platform can change this.",

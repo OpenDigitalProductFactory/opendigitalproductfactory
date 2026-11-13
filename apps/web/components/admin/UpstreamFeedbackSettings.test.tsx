@@ -53,7 +53,12 @@ describe("UpstreamFeedbackSettings", () => {
 
   it("explains why it cannot apply on a private installation, and cannot be changed there", () => {
     render(<UpstreamFeedbackSettings optIn={false} forkOnly paused={false} />);
-    expect((screen.getByTestId("upstream-feedback-opt-in") as HTMLInputElement).disabled).toBe(true);
+    const box = screen.getByTestId("upstream-feedback-opt-in") as HTMLInputElement;
+    // Blocked by policy, but still reachable by keyboard so its reason can be found.
+    expect(box.getAttribute("aria-disabled")).toBe("true");
+    expect(box.disabled).toBe(false);
+    fireEvent.click(box);
+    expect((screen.getByTestId("upstream-feedback-save") as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/keeps everything on its own system/)).toBeTruthy();
   });
 
@@ -64,7 +69,7 @@ describe("UpstreamFeedbackSettings", () => {
 
   it("shows the state but cannot be changed by someone who does not manage the platform", () => {
     render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} mayChange={false} />);
-    expect((screen.getByTestId("upstream-feedback-opt-in") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByTestId("upstream-feedback-opt-in").getAttribute("aria-disabled")).toBe("true");
     expect(screen.getByText(/Only someone who manages the platform/)).toBeTruthy();
   });
 
@@ -76,6 +81,41 @@ describe("UpstreamFeedbackSettings", () => {
       fireEvent.click(screen.getByTestId("upstream-feedback-save"));
     });
     expect(screen.getByRole("alert").textContent).toContain("platform management");
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+
+  it("never describes an unsaved change as the current state", () => {
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} />);
+    fireEvent.click(screen.getByTestId("upstream-feedback-opt-in"));
+    const state = screen.getByTestId("upstream-feedback-state").textContent ?? "";
+    expect(state).toContain("Not saved yet");
+    expect(state).not.toMatch(/^On\./);
+  });
+
+  it("treats a save the action answers without confirming as not saved", async () => {
+    mockSet.mockResolvedValueOnce({ ok: false });
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} />);
+    fireEvent.click(screen.getByTestId("upstream-feedback-opt-in"));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("upstream-feedback-save"));
+    });
+    expect(screen.getByRole("status").textContent).toBe("");
+    expect(screen.getByRole("alert").textContent).toBe("Could not save. Try again.");
+    expect(screen.getByTestId("upstream-feedback-state").textContent).toContain("Not saved yet");
+  });
+
+  it("settles on the saved value, so Save disables and turning it back off is still savable", async () => {
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} />);
+    const save = screen.getByTestId("upstream-feedback-save") as HTMLButtonElement;
+    fireEvent.click(screen.getByTestId("upstream-feedback-opt-in"));
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(save.disabled).toBe(true);
+    expect(screen.getByTestId("upstream-feedback-state").textContent).toBe("On. Triaged problems are sent daily.");
+
+    fireEvent.click(screen.getByTestId("upstream-feedback-opt-in"));
+    expect(save.disabled).toBe(false);
+    expect(screen.getByTestId("upstream-feedback-state").textContent).toContain("Still on until you save");
   });
 });
