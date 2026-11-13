@@ -460,12 +460,15 @@ export async function refreshMigrationHandoffAfterDrain(params: {
   now?: () => Date;
 }): Promise<MigrationHandoffRefresh> {
   if (params.dryRun) return ok({ migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false, restamped: false });
-  const now = params.now?.() ?? new Date();
-  const verify = (handoff: InstallStateMigrationHandoff | undefined, digest: string | undefined, bytes: string) => {
+  // Read the clock at each use, never once up front: a re-bind re-runs readiness
+  // (seconds of work) before the launch stamp, and the stamp must not predate
+  // the handoff it re-stamps.
+  const clock = () => params.now?.() ?? new Date();
+  const verify = (handoff: InstallStateMigrationHandoff | undefined, digest: string | undefined, bytes: string, at: Date) => {
     if (!handoff || !digest || !params.runtimeTransitionSecret || !params.hostIdentity) throw new Error("install_state_migration_handoff_missing");
     verifyInstallStateMigrationEnvelope(handoff.envelope, handoff.signature, params.runtimeTransitionSecret, {
       runId: params.runId, promoterDigest: digest,
-      sourceHash: createHash("sha256").update(bytes).digest("hex"), hostIdentity: params.hostIdentity, now: now.getTime(),
+      sourceHash: createHash("sha256").update(bytes).digest("hex"), hostIdentity: params.hostIdentity, now: at.getTime(),
     });
     return { handoff, digest, secret: params.runtimeTransitionSecret };
   };
@@ -477,14 +480,15 @@ export async function refreshMigrationHandoffAfterDrain(params: {
   };
   /** Anchor the TTL to the launch, then prove the re-stamped handoff still verifies against the same bytes. */
   const launch = (bound: { handoff: InstallStateMigrationHandoff; digest: string; secret: string }, bytes: string, refreshed: boolean, code?: string) => {
-    const restamped = restampMigrationHandoffForLaunch(bound.handoff, bound.secret, now);
-    verify(restamped, bound.digest, bytes);
+    const launchAt = clock();
+    const restamped = restampMigrationHandoffForLaunch(bound.handoff, bound.secret, launchAt);
+    verify(restamped, bound.digest, bytes, launchAt);
     return ok({ migrationHandoff: restamped, resolvedPromoterDigest: bound.digest, refreshed, code, restamped: true, expiresAt: restamped.envelope.expiresAt });
   };
   const bytes = await readFile("/dpf-state/install-state.json", "utf8");
   let code: string;
   try {
-    return launch(verify(params.migrationHandoff, params.resolvedPromoterDigest, bytes), bytes, false);
+    return launch(verify(params.migrationHandoff, params.resolvedPromoterDigest, bytes, clock()), bytes, false);
   } catch (error) {
     code = error instanceof Error ? error.message : "install_state_migration_handoff_invalid";
   }
@@ -503,7 +507,7 @@ export async function refreshMigrationHandoffAfterDrain(params: {
   if (!rerun.ok) return { ok: false, reason: rerun.reason };
   try {
     const current = await readFile("/dpf-state/install-state.json", "utf8");
-    return launch(verify(rerun.migrationHandoff, rerun.resolvedPromoterDigest, current), current, true, code);
+    return launch(verify(rerun.migrationHandoff, rerun.resolvedPromoterDigest, current, clock()), current, true, code);
   } catch (error) {
     return fail(error instanceof Error ? error.message : "install_state_migration_handoff_invalid");
   }
