@@ -5,6 +5,7 @@
 import { prisma } from "@dpf/db";
 import type { DemandResponseV1, WorkClaimAction } from "@dpf/db/federated-demand-contract";
 
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { BacklogItemAlreadyClaimedError } from "@/lib/work-capsules/backlog-workroom-ownership";
 import { claimBacklogItemWorkspace } from "@/lib/work-capsules/work-capsule-store";
 import type { CapsuleDb } from "@/lib/work-capsules/work-capsule-store-types";
@@ -54,7 +55,7 @@ export const claimForPeer: ClaimForPeer = async (input) => {
     // readiness) is still a decision. Answering it keeps the requester from
     // retrying a request that can never succeed and leaving its Workroom
     // unconfirmed indefinitely.
-    return { claimed: false, refusedReason: error instanceof Error ? error.message : String(error) };
+    return { claimed: false, refusedReason: getErrorMessage(error) };
   }
 };
 

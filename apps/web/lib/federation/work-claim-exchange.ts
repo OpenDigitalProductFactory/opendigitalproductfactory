@@ -29,7 +29,7 @@ import {
 
 import type { FederationIdentity } from "./demand-identity";
 import { scheduleFederationDeliveryJob, type FederationDeliveryQueueDb } from "./delivery-queue";
-import { bindPeerInstallationIdentity } from "./channel-demand";
+import { bindPeerInstallationIdentity } from "./peer-installation-identity";
 import { claimHolderOf, federatedPeerExecutorRef, federatedPeerWorktreePath, isLapsedPeerClaim } from "./work-claim-ref";
 
 /** The record a claim request travels as in the outbox. */
