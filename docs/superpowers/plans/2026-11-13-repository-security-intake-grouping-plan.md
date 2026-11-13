@@ -1,3 +1,9 @@
+---
+status: draft
+date: 2026-11-13
+backlog: BI-C67E5CCB
+---
+
 # Repository security and issue intake: implementation plan
 
 **Design:** [2026-11-13-repository-security-intake-grouping-design.md](../specs/2026-11-13-repository-security-intake-grouping-design.md) · **Umbrella:** BI-C67E5CCB

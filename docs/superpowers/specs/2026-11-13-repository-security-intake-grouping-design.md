@@ -1,3 +1,9 @@
+---
+status: draft
+date: 2026-11-13
+backlog: BI-C67E5CCB
+---
+
 # Repository security intake: grouped, prioritised, closed when GitHub resolves
 
 **Backlog item:** BI-C67E5CCB · **Extends:** BI-F47386ED (inbound triage), BI-952F08BA (origin reconciliation) · **Related:** BI-3077CFB9 (issue closure observation), BI-FD40397B (controller commission) · **Kernel decision:** DI-9446F1619C33 (issue exclusion scope, D2)
