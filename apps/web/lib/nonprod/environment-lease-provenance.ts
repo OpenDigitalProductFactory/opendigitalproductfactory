@@ -50,6 +50,16 @@ async function previewWaitMatchesOwner(input: {
   return true;
 }
 
+/**
+ * BI-1986D3C1: a local-CI reservation proves its owner through the durable
+ * Task wait bound at admission, not through the slot manifest. Contributor
+ * previews claim the same environment without a manifest (version null); they
+ * now get the same binding, and their owner can free them without a person.
+ */
+function ownableLocalCiManifest(version: number | null | undefined): boolean {
+  return version === 1 || version === null;
+}
+
 /** The existing CI proof and fresh preview proof share one execution boundary.
  * A changed environment must not select an unchecked legacy branch.
  *
@@ -63,7 +73,7 @@ export async function ownsProcessFreeLease(input: {
   const { lease, userId } = input;
   if (lease.environmentKey === "active-candidate") return previewWaitMatchesOwner(input);
   if (!userId || !input.ownerSessionId || !input.db.taskRun
-    || lease.environmentKey !== "local-integration-ci" || lease.slotManifestVersion !== 1
+    || lease.environmentKey !== "local-integration-ci" || !ownableLocalCiManifest(lease.slotManifestVersion)
     || lease.ownerSessionId !== input.ownerSessionId || !lease.claimKey || !lease.worktreePath || !lease.branchName
     || lease.ownerPid !== null || lease.ownerProcessIdentity !== null
     || !["queued", "active", "released", "cancelled", "expired"].includes(lease.status)
@@ -135,7 +145,7 @@ export async function bindFreshLeaseProvenance(input: {
   if (!input.created || !input.authenticatedUserId || lease.taskRunId) return lease;
   const preview = lease.environmentKey === "active-candidate" && !!input.authenticatedAgentId
     && ["active", "queued"].includes(lease.status);
-  const localCi = lease.environmentKey === "local-integration-ci" && lease.slotManifestVersion === 1
+  const localCi = lease.environmentKey === "local-integration-ci" && ownableLocalCiManifest(lease.slotManifestVersion)
     && lease.status === "active" && !!lease.slotKey;
   if (!preview && !localCi) return lease;
   if (!input.db.taskRun) throw new Error("nonprod_immediate_admission_task_store_unavailable");
