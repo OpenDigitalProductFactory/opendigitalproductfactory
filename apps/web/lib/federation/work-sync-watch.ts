@@ -23,7 +23,7 @@ import { openMonitorIssue, resolveMonitorIssuesExcept, type MonitorIssueDb } fro
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import { WORK_SYNC_HEALTH_KEY, type WorkSyncHealthRecordV1 } from "./work-sync";
-import { staleFrom, type WorkSyncErrorClass, type WorkSyncHealthLink } from "./work-sync-health";
+import { parseWorkSyncHealthRecord, staleFrom, type WorkSyncErrorClass, type WorkSyncHealthLink } from "./work-sync-health";
 
 export const WORK_SYNC_FAILURE_ISSUE_TYPE = "work_sync_failure" as const;
 export const WORK_SYNC_FAILURE_THRESHOLD_MS = 6 * 60 * 60_000;
@@ -151,12 +151,6 @@ export interface WorkSyncNotice {
   riskClass: "bounded-write";
 }
 
-function parseRecord(value: unknown): WorkSyncHealthRecordV1 | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const record = value as Partial<WorkSyncHealthRecordV1>;
-  return record.schemaVersion === 1 && Array.isArray(record.links) ? (record as WorkSyncHealthRecordV1) : null;
-}
-
 /** One watch cycle over the live store. Opens, refreshes and resolves `work_sync_failure` rows. */
 export async function runWorkSyncWatch(
   db: WorkSyncWatchDb,
@@ -186,7 +180,7 @@ export async function runWorkSyncWatch(
     });
   }
 
-  const alerts = planWorkSyncAlerts({ record: parseRecord(row?.value), links: watched, now });
+  const alerts = planWorkSyncAlerts({ record: parseWorkSyncHealthRecord(row?.value), links: watched, now });
   const before = new Set(alreadyOpen.map((issue) => issue.issueKey));
   const opened: string[] = [];
   for (const alert of alerts) {
@@ -220,4 +214,21 @@ export async function runWorkSyncWatch(
     now: () => now,
   });
   return { open: alerts.map((alert) => alert.issueKey), opened, resolved };
+}
+
+/**
+ * The watch as the federation cron runs it: a failure is reported, never thrown,
+ * so a database blip in the watch cannot retry the step or hold up the
+ * reconciliation steps that follow it.
+ */
+export async function runWorkSyncWatchSafely(
+  db: WorkSyncWatchDb,
+  deps: Parameters<typeof runWorkSyncWatch>[1] = {},
+): Promise<Awaited<ReturnType<typeof runWorkSyncWatch>> | { failed: string }> {
+  try {
+    return await runWorkSyncWatch(db, deps);
+  } catch (error) {
+    console.warn(`[work-sync-watch] cycle skipped: ${getErrorMessage(error)}`);
+    return { failed: getErrorMessage(error) };
+  }
 }

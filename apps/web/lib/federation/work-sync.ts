@@ -35,7 +35,7 @@ import { fetchWorkPageFromPeer, type PeerPostResult } from "./client";
 import { relationshipPresetForRole } from "./demand-reconciliation";
 import { decryptPeerToken } from "./outbound";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { mergeWorkSyncHealth, type WorkSyncErrorClass } from "./work-sync-health";
+import { mergeWorkSyncHealth, parseWorkSyncHealthRecord, type WorkSyncErrorClass } from "./work-sync-health";
 import {
   claimFromMirrorPayload,
   recordFederatedTwins,
@@ -590,17 +590,11 @@ export async function runWorkSync(
       const previous = db.platformConfig.findUnique
         ? await db.platformConfig.findUnique({ where: { key: WORK_SYNC_HEALTH_KEY }, select: { value: true } })
         : null;
-      const record = mergeWorkSyncHealth(parseHealthRecord(previous?.value), results, now);
+      const record = mergeWorkSyncHealth(parseWorkSyncHealthRecord(previous?.value), results, now);
       await db.platformConfig.upsert({ where: { key: WORK_SYNC_HEALTH_KEY }, create: { key: WORK_SYNC_HEALTH_KEY, value: record }, update: { value: record } });
     } catch (error) {
       console.warn(`[work-sync] could not record health: ${getErrorMessage(error)}`);
     }
   }
   return { linksChecked: results.length, failedLinks: failed.length, links: results };
-}
-
-function parseHealthRecord(value: unknown): WorkSyncHealthRecordV1 | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const record = value as Partial<WorkSyncHealthRecordV1>;
-  return record.schemaVersion === 1 && Array.isArray(record.links) ? (record as WorkSyncHealthRecordV1) : null;
 }

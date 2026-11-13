@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { WORK_SYNC_HEALTH_KEY, runWorkSync, type WorkSyncDb, type WorkSyncHealthRecordV1 } from "./work-sync";
 import { classifyWorkSyncFailure, mergeWorkSyncHealth, mirrorsStaleSince, staleFrom } from "./work-sync-health";
-import { WORK_SYNC_FAILURE_ISSUE_TYPE, planWorkSyncAlerts, runWorkSyncWatch, type WorkSyncWatchDb } from "./work-sync-watch";
+import { WORK_SYNC_FAILURE_ISSUE_TYPE, planWorkSyncAlerts, runWorkSyncWatch, runWorkSyncWatchSafely, type WorkSyncWatchDb } from "./work-sync-watch";
 
 const at = (iso: string) => new Date(iso);
 const LINK = { linkId: "link_peer", peerLabel: "the development installation", peerAuthorityUrl: "http://192.0.2.10:3000", lastMirrorSyncAt: null };
@@ -123,6 +123,14 @@ describe("runWorkSyncWatch", () => {
     const result = await runWorkSyncWatch(db, { now: () => at("2026-11-09T02:05:00.000Z"), notify });
     expect(result.opened).toEqual([]);
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("reports a database failure instead of throwing, so the cron step never retries on it", async () => {
+    const { db } = watchDb(failingRecord);
+    db.platformConfig.findUnique = vi.fn(async () => {
+      throw new Error("connection reset");
+    });
+    await expect(runWorkSyncWatchSafely(db)).resolves.toEqual({ failed: "connection reset" });
   });
 
   it("clears the row once sync works again", async () => {

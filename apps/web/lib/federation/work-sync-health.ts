@@ -18,6 +18,13 @@ const TLS_PATTERN = /certificate|cert_|ssl|tls|self[- ]signed|unable to verify|e
 const REFUSED_PATTERN = /^Peer responded (401|403)\b/;
 const OUTDATED_PATTERN = /does not serve work sync/i;
 
+/** Pure: read a stored health record; anything that is not a version-1 record is null. One parser for every reader. */
+export function parseWorkSyncHealthRecord(value: unknown): WorkSyncHealthRecordV1 | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Partial<WorkSyncHealthRecordV1>;
+  return record.schemaVersion === 1 && Array.isArray(record.links) ? (record as WorkSyncHealthRecordV1) : null;
+}
+
 /** Pure: classify one failed pull. Revocation is told apart from network and TLS failure. */
 export function classifyWorkSyncFailure(outcome: WorkSyncLinkResult["outcome"], detail: string | null): WorkSyncErrorClass {
   const text = detail ?? "";
