@@ -32,6 +32,7 @@ import { inspectLocalGpuAdmission } from "@/lib/inference/host-gpu-admission";
 import { NoEligibleEndpointsError } from "../routing/inference-error";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
 import { endpointIneligibleSummary } from "./semantic-review-evidence-budget";
+import { newSemanticReviewPublication, publishRetainedReview } from "./semantic-review-publication";
 const json = (value: unknown) => value as Prisma.InputJsonValue;
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -500,6 +501,7 @@ export async function executePersistedSemanticReview(taskRunId: string) {
       const current = await prisma.taskRun.findUnique({ where: { taskRunId }, select: { status: true } });
       return { taskRunId, status: current?.status ?? "unknown", finalized: false };
     }
+    const reviewedHead = /^[a-f0-9]{40}$/i.test(packet.input.identity.sourceHeadSha ?? "") ? packet.input.identity.sourceHeadSha! : null;
     const persisted = await prisma.$transaction(async (tx) => {
       if (Date.now() >= Date.parse(reviewDeadline(row, packet))) {
         await tx.taskRun.updateMany({ where: fence(taskRunId, generation), data: {
@@ -547,7 +549,10 @@ export async function executePersistedSemanticReview(taskRunId: string) {
           reason: inconclusive ? outcome.receipt.result.inconclusiveReason ?? "semantic-review-inconclusive" : null,
           capacityRecovery,
           routingEligibility: outcome.receipt.result.routingEligibility ?? [],
-          evidenceRecordId: evidence.id, mayPublish: outcome.mayPublish, nextAction: outcome.nextAction },
+          evidenceRecordId: evidence.id, mayPublish: outcome.mayPublish, nextAction: outcome.nextAction,
+          // BI-2A8A8FC8: the status post is owed from here on, saved with the verdict before any remote effect.
+          ...(reviewedHead ? { publication: newSemanticReviewPublication({ capsuleId: packet.input.identity.capsuleId,
+            sourceHeadSha: reviewedHead }, new Date()) } : {}) },
       }) } });
       return { evidenceRecordId: evidence.id, status: recordedStatus, capsuleId: capsule.id, activityId: activity.id };
     });
@@ -557,14 +562,14 @@ export async function executePersistedSemanticReview(taskRunId: string) {
     }
     publishRecordedWorkCapsuleActivity(persisted.capsuleId, persisted.activityId);
     revalidatePortalContext();
-    const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
-    try { await publishFailureReadinessStatus(packet.input.identity.capsuleId); }
-    catch (error) {
-      // Review is durable. Do not repeat inference because a GitHub response was lost.
-      return { taskRunId, status: persisted.status, evidenceRecordId: persisted.evidenceRecordId,
-        publicationPending: true, publicationReason: error instanceof Error ? error.message : "GitHub status unavailable" };
-    }
-    return { taskRunId, status: persisted.status, evidenceRecordId: persisted.evidenceRecordId };
+    // Review is durable. A failed post stays owed and the reconciler resumes it; inference is never repeated.
+    const published = reviewedHead ? await publishRetainedReview(taskRunId) : await (async () => {
+      const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
+      try { await publishFailureReadinessStatus(packet.input.identity.capsuleId); return { state: "published", reason: null }; }
+      catch (error) { return { state: "pending", reason: error instanceof Error ? error.message : "GitHub status unavailable" }; }
+    })();
+    return { taskRunId, status: persisted.status, evidenceRecordId: persisted.evidenceRecordId,
+      ...(published.state === "published" ? {} : { publicationPending: true, publicationReason: published.reason ?? published.state }) };
   });
 }
 

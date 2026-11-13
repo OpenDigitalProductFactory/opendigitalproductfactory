@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 ---
 
 # Retain completed review publication — BI-2A8A8FC8
@@ -214,6 +214,42 @@ include credential-bearing errors. No new secret collection.
 Unchanged held authority remains held. A protected revert removes the continuation,
 preserves original receipts and publication history, and leaves missing status
 unsatisfied. It does not revoke a real status or relabel an UNKNOWN review.
+
+## As built (2026-11-13)
+
+Owner change: room WC-BA6043DF passed to a Claude session on 2026-11-13 under
+WWMD decision DI-BB9CED5CD546. Build Studio build FB-E91802DE stopped on a
+mechanical Prose Lint Guard failure, not on a question for a person
+(BI-91A085BC), so its earlier claim no longer blocks this work.
+
+- `apps/web/lib/change-review/semantic-review-publication.ts` holds the
+  publication record and one bounded step. The worker saves the record in the
+  same transaction as the verdict, only when the request names its source
+  commit, then makes the first attempt. A review with no bound commit keeps
+  the old single direct attempt.
+- `mcp/task-run-dispatch-reconciliation` gains the step
+  `resume-retained-review-publications` (batch of 25). It does not depend on
+  PR check state or the merge reconciler's mode.
+- `publishFailureReadinessStatus` takes an optional `expectedHeadSha`. It
+  checks that before the verdict or any post, and its errors now carry a typed
+  code, so a rate-limited 403 is told apart from a permission refusal.
+- The room's review view shows each review's publication state, reason, owner,
+  attempts and next action. A current review whose status is not posted yet
+  raises room attention.
+
+Where this differs from the contract above:
+
+- **No status read before a repeat post.** GitHub keeps the newest status per
+  context. A repeat post after a lost response re-reads the server verdict for
+  the same fenced commit and lands on the same result. A claim older than five
+  minutes counts as a dead worker and spends one of the three attempts.
+- **Old reviews with no record are not swept.** Completed reviews saved before
+  this change have no record. They are left alone, never assumed unpublished.
+  The PR delivery reconciler's existing refresh still covers ready PRs.
+- **Authority that cannot be read waits.** It does not use an attempt. The
+  24-hour window bounds it.
+- **The failed-check rerun stays with the PR delivery reconciler.** It runs
+  only after a real post.
 
 ## Delivery evidence
 

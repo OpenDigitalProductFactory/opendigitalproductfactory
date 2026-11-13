@@ -40,6 +40,10 @@ export const mcpTaskRunDispatchReconciliation = jobs.createFunction(
     const gate = await gateAtEntry(step, "mcp/task-run-dispatch-reconciliation");
     if (!gate.proceed) return gate;
     const native = await step.run("reconcile-native-semantic-reviews", () => reconcileSemanticReviews());
+    // BI-2A8A8FC8: a completed review whose status post did not land is resumed here, without inference.
+    const publications = await step.run("resume-retained-review-publications", async () =>
+      (await import("@/lib/change-review/semantic-review-publication")).reconcileSemanticReviewPublications(),
+    );
     const external = await step.run("reconcile-submitted-external-tasks", () =>
       reconcilePersistedRemoteTaskDispatches({
         includeOrdinary: externalMcpTaskAsyncEnabled(),
@@ -49,6 +53,6 @@ export const mcpTaskRunDispatchReconciliation = jobs.createFunction(
     const reviews = await step.run("dispatch-owed-independent-reviews", async () =>
       (await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch")).dispatchOwedIndependentReviews(),
     );
-    return { native, external, reviews };
+    return { native, publications, external, reviews };
   },
 );

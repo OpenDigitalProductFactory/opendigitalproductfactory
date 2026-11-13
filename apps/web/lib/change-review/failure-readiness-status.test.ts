@@ -4,7 +4,7 @@ vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room } } }))
 vi.mock("@/lib/contributor-change-lanes/github-rest-reader", () => ({ resolveGithubToken: mocks.token, resolveRepoIdentity: mocks.repo,
   createGithubReadTransport: () => ({ fetch: mocks.fetch, close: mocks.close }) }));
 vi.mock("./failure-readiness-publication", () => ({ checkWorkroomFailureReadiness: mocks.verdict }));
-import { isWorkroomStatusPublishable, publishFailureReadinessStatus } from "./failure-readiness-status";
+import { FailureReadinessPublicationError, isWorkroomStatusPublishable, publishFailureReadinessStatus } from "./failure-readiness-status";
 const sha = "a".repeat(40);
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,6 +41,20 @@ describe("GitHub failure readiness publication", () => {
     await publishFailureReadinessStatus("room");
     expect(mocks.fetch.mock.calls[0][0]).toBe(mocks.fetch.mock.calls[1][0]);
     expect(mocks.close).toHaveBeenCalledTimes(2);
+  });
+  it("refuses before any effect when the room moved off the expected reviewed commit (BI-2A8A8FC8)", async () => {
+    await expect(publishFailureReadinessStatus("room", { expectedHeadSha: "b".repeat(40) }))
+      .rejects.toMatchObject({ code: "source-changed" });
+    expect(mocks.verdict).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+  it("types an HTTP refusal and tells a rate limit from a permission denial", async () => {
+    mocks.fetch.mockResolvedValueOnce({ ok: false, status: 403, headers: new Headers({ "x-ratelimit-remaining": "0" }), body: { cancel: vi.fn() } });
+    const limited = await publishFailureReadinessStatus("room").catch((error: unknown) => error);
+    expect(limited).toBeInstanceOf(FailureReadinessPublicationError);
+    expect(limited).toMatchObject({ code: "http-status", httpStatus: 403, rateLimited: true });
+    mocks.fetch.mockResolvedValueOnce({ ok: false, status: 403, headers: new Headers(), body: { cancel: vi.fn() } });
+    await expect(publishFailureReadinessStatus("room")).rejects.toMatchObject({ httpStatus: 403, rateLimited: false });
   });
 });
 

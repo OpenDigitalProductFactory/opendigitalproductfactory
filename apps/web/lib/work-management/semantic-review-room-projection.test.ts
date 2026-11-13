@@ -269,4 +269,21 @@ describe("ordinary initiative review observations", () => {
     expect(view.runs[0]).toMatchObject({ identityScope: "unknown", recoveryWait: false, requestDigest: null, sourceHeadSha: null });
     expect(view.runs[0].receipt).toBeUndefined();
   });
+  it("shows a completed review's owed status post separately from its verdict (BI-2A8A8FC8)", async () => {
+    const row = run("completed");
+    row.nodes = [];
+    row.progressPayload = { semanticReview: { schemaVersion: 1, state: "completed", requestDigest: "digest-1",
+      publication: { schemaVersion: 1, state: "held", capsuleId: "WC-1", sourceHeadSha: "a".repeat(40), attempts: 3,
+        firstRecordedAt: "2026-09-08T19:00:00Z", lastAttemptAt: "2026-09-08T19:40:00Z", nextAttemptAt: null, publishedAt: null,
+        reason: "publication-attempts-exhausted", owner: "delivery-coordinator", nextAction: "Restore GitHub status posting.", claim: null } } };
+    const view = await loadSemanticReviewRoomProjection({ taskRun: { findMany: async () => [row] },
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+        requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+        sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-08T19:00:00Z",
+        requesterAgentId: null, receiptId: "receipt-1", receiptDecision: "pass", receiptSummary: "Reviewed", receiptCreatedAt: now }]),
+    }, ["WC-1"], now);
+    expect(view.runs[0]).toMatchObject({ receipt: { decision: "pass" }, publication: { state: "held",
+      reason: "publication-attempts-exhausted", owner: "delivery-coordinator", attempts: 3, nextAction: "Restore GitHub status posting." } });
+    expect(view.attentionReason).toContain("not on GitHub");
+  });
 });

@@ -129,6 +129,17 @@ not from the receipt. A receipt for one role cannot authorize another role.
    `git diff --binary $(git merge-base HEAD origin/main) HEAD`. The PR's
    **Failure Readiness** check passes once the platform publishes the
    `dpf/failure-readiness` status for the reviewed head.
+
+   The post is part of the review's own work. A completed review saves its
+   verdict first. The status post it still owes is kept on the same task as
+   `semanticReview.publication`. If the post fails, the two-minute
+   `mcp/task-run-dispatch-reconciliation` job tries again, up to three attempts
+   within 24 hours. Each attempt is bound to the reviewed commit and re-reads
+   the server's verdict. No model runs again (BI-2A8A8FC8). A moved head,
+   withdrawn authority or a GitHub permission refusal stops it with a recorded
+   reason, owner and next action, which the room's review view shows. Do not
+   resend the review or post the status by hand. The PR delivery reconciler
+   still refreshes an expired status and re-runs the failed check.
 2. Repair blocking code findings. Re-review a changed tree; stop after two failed
    repair rounds. A changed diff, policy, reviewer or specialist set invalidates
    a receipt. An infrastructure refusal or uncertain execution is not a finding.

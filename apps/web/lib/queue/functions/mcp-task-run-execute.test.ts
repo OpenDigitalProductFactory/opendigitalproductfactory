@@ -4,7 +4,10 @@ const inngestMock = vi.hoisted(() => ({ createFunction: vi.fn() }));
 const worker = vi.hoisted(() => ({ execute: vi.fn() }));
 const dispatch = vi.hoisted(() => ({ reconcile: vi.fn() }));
 const feature = vi.hoisted(() => ({ enabled: vi.fn() }));
-const native = vi.hoisted(() => ({ execute: vi.fn(), reconcile: vi.fn() }));
+const native = vi.hoisted(() => ({ execute: vi.fn(), reconcile: vi.fn(), publications: vi.fn() }));
+vi.mock("@/lib/change-review/semantic-review-publication", () => ({
+  reconcileSemanticReviewPublications: (...args: unknown[]) => native.publications(...args),
+}));
 vi.mock("@/lib/change-review/semantic-review-background", () => ({
   executePersistedSemanticReview: (...args: unknown[]) => native.execute(...args),
   reconcileSemanticReviews: (...args: unknown[]) => native.reconcile(...args),
@@ -40,6 +43,7 @@ beforeEach(() => {
   feature.enabled.mockReturnValue(true);
   native.execute.mockResolvedValue(null);
   native.reconcile.mockResolvedValue({ scanned: 0, enqueued: 0, waiting: 0 });
+  native.publications.mockResolvedValue({ scanned: 0, published: 0, pending: 0, held: 0 });
 });
 
 describe("mcp task-run background execution function", () => {
@@ -97,6 +101,20 @@ describe("mcp task-run background execution function", () => {
     });
     expect(dispatch.reconcile).toHaveBeenCalledWith({ includeOrdinary: true });
     expect(native.reconcile).toHaveBeenCalledOnce();
+  });
+
+  it("resumes owed review status posts on the same job, in their own step (BI-2A8A8FC8)", async () => {
+    native.publications.mockResolvedValue({ scanned: 1, published: 1, pending: 0, held: 0 });
+    vi.resetModules();
+    const module = await import("./mcp-task-run-execute");
+    const registered = module.mcpTaskRunDispatchReconciliation as unknown as {
+      handler: (input: { step: { run: (name: string, fn: () => Promise<unknown>) => Promise<unknown> } }) => Promise<Record<string, unknown>>;
+    };
+    const steps: string[] = [];
+    const result = await registered.handler({ step: { run: async (name, fn) => { steps.push(name); return fn(); } } });
+    expect(steps).toContain("resume-retained-review-publications");
+    expect(native.publications).toHaveBeenCalledOnce();
+    expect(result.publications).toEqual({ scanned: 1, published: 1, pending: 0, held: 0 });
   });
 
   it("still reconciles the closed durable recipe when generic async TaskRuns are disabled", async () => {

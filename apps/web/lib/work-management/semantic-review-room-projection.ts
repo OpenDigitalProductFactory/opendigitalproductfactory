@@ -8,6 +8,7 @@ import { loadReviewRoomCandidates } from "./review-room-candidates";
 import { loadRequestIdentities, initiativeRoomIdentity, type RequestIdentity } from "./review-room-request-identity";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkCaseSourceRef } from "./case-types";
+import { readSemanticReviewPublication } from "@/lib/change-review/semantic-review-publication";
 import { isSemanticReviewRecoveryWait, semanticReviewRecoveryObservation, readSemanticReviewBudget, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
 
 /** Read-only facts from existing tasks; neither a verdict nor a new execution ledger. */
@@ -24,6 +25,8 @@ export type ReviewerExecutionObservation = {
   identityScope?: "current" | "historical" | "unknown";
   sourceHeadSha?: string | null;
   receipt?: { id: string; decision: "pass" | "fail" | "inconclusive"; summary: string };
+  /** BI-2A8A8FC8: the verdict's GitHub status post, tracked apart from the verdict itself. */
+  publication?: { state: string; reason: string | null; owner: string; attempts: number; nextAction: string };
   checkpoints: Array<{ taskNodeId: string; recordId: string; title: string; status: string; actorId: string | null }>;
 };
 
@@ -99,6 +102,10 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
           : "The server owns continuation; await its next recorded result.";
     const recoveryAction = recovery.successorTaskRunId ? `Read successor review ${recovery.successorTaskRunId}.`
       : recovery.capacityRecovery || (isSemanticReviewRecoveryWait(row.status) && recovery.budget === "expired") ? recovery.nextAction : null;
+    const publication = ordinary ? null : readSemanticReviewPublication(row.progressPayload);
+    if (publication && publication.state !== "published" && identityScope === "current") {
+      attentionReason ??= `Reviewer ${row.taskRunId}: verdict saved but its status is not on GitHub yet (${publication.state}${publication.reason ? `, ${publication.reason}` : ""}). ${publication.nextAction}`;
+    }
     const heartbeat = row.lastHeartbeatAt ? row.lastHeartbeatAt.toISOString() : "unknown";
     const age = row.lastHeartbeatAt ? now.getTime() - row.lastHeartbeatAt.getTime() : null;
     const freshness = state === "terminal" ? "historical" : age === null || age < 0 ? "unknown" : age >= SEMANTIC_REVIEW_HEARTBEAT_STALE_MS ? "stale" : "recent";
@@ -115,6 +122,8 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
         && (identity.receiptDecision === "pass" || identity.receiptDecision === "fail" || identity.receiptDecision === "inconclusive")
         ? { receipt: { id: identity.receiptId, decision: identity.receiptDecision,
           summary: identity.receiptSummary ?? "No receipt summary recorded." } } : {}),
+      ...(publication ? { publication: { state: publication.state, reason: publication.reason, owner: publication.owner,
+        attempts: publication.attempts, nextAction: publication.nextAction } } : {}),
       reason: recordedReason,
       nextAction: ordinary ? "Inspect this original review result with its bound request digest; status alone is not a verdict." : recoveryAction ?? (row.status === "working" || row.status === "submitted" ? next : typeof progress.action === "string" ? progress.action
         : typeof progress.nextAction === "string" ? progress.nextAction : next),
