@@ -230,20 +230,30 @@ test("source validation refuses conflicting branch, nested path, non-Git and for
   assert.throws(() => verifiedBindingSource({ ...binding, headSha: "0".repeat(40) }), /conflicts/);
   assert.throws(() => verifiedBindingSource({ ...binding, worktreePath: join(f.root, "packages") }), /conflicts/);
   assert.throws(() => verifiedBindingSource({ ...binding, worktreePath: f.pack }), /git .*failed|Command failed/);
+  // A host that runs git with safe.bareRepository=explicit (the Claude desktop
+  // terminal sets it through GIT_CONFIG_PARAMETERS) refuses the bare remote
+  // inside git, before the source check names the conflict. Both are refusals
+  // before import, which is what this asserts.
+  assert.throws(() => verifiedBindingSource({ ...binding, mainRoot: f.remote }),
+    /conflicts|cannot use bare repository/);
+  assert.equal(f.calls.length, 0);
+});
+
+// BI-4704915D: a shell that hardens git (the Claude desktop Terminal exports
+// this; Git 2.54 on macOS defaults to it) makes git refuse to read a bare main
+// root at all. The refusal must be the same conflict, not a raw git error.
+test("source validation gives the same conflict refusal for a bare main root under safe.bareRepository=explicit", async t => {
+  const f = await packagedFixture(t);
+  const binding = { mainRoot: f.root, worktreePath: f.root, branch: "main", headSha: f.sha };
+  const saved = process.env.GIT_CONFIG_PARAMETERS;
+  process.env.GIT_CONFIG_PARAMETERS = "'safe.bareRepository=explicit' 'core.fsmonitor='";
+  t.after(() => {
+    if (saved === undefined) delete process.env.GIT_CONFIG_PARAMETERS;
+    else process.env.GIT_CONFIG_PARAMETERS = saved;
+  });
+  assert.equal(verifiedBindingSource(binding), realpathSync.native(join(f.root, "scripts/lib/workroom-bind.mjs")));
   assert.throws(() => verifiedBindingSource({ ...binding, mainRoot: f.remote }), /conflicts/);
-  // Git refuses a bare repository under safe.bareRepository=explicit; that is still a conflict.
-  // Append after any config the runner already injects, and restore it exactly.
-  const saved = process.env.GIT_CONFIG_COUNT;
-  const index = Number.parseInt(saved ?? "0", 10) || 0;
-  process.env.GIT_CONFIG_COUNT = String(index + 1);
-  process.env[`GIT_CONFIG_KEY_${index}`] = "safe.bareRepository";
-  process.env[`GIT_CONFIG_VALUE_${index}`] = "explicit";
-  try {
-    assert.throws(() => verifiedBindingSource({ ...binding, mainRoot: f.remote }), /conflicts/);
-  } finally {
-    if (saved === undefined) delete process.env.GIT_CONFIG_COUNT; else process.env.GIT_CONFIG_COUNT = saved;
-    delete process.env[`GIT_CONFIG_KEY_${index}`]; delete process.env[`GIT_CONFIG_VALUE_${index}`];
-  }
+  assert.throws(() => verifiedBindingSource({ ...binding, worktreePath: f.pack }), /git .*failed|Command failed/);
   assert.equal(f.calls.length, 0);
 });
 

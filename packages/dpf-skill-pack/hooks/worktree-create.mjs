@@ -166,21 +166,23 @@ async function bindAtBirth({ mainRoot, worktreePath, branch }) {
 /** Resolve only the checkout whose branch and shared Git repository we created. */
 export function verifiedBindingSource({ mainRoot, worktreePath, branch, headSha }) {
   const real = path => realpathSync.native(path);
-  const same = (left, right) => Boolean(left && right) && (process.platform === "win32"
-    ? real(left).toLowerCase() === real(right).toLowerCase() : real(left) === real(right));
+  const same = (left, right) => process.platform === "win32"
+    ? real(left).toLowerCase() === real(right).toLowerCase() : real(left) === real(right);
   const read = (root, args) => git(root, args, { timeout: 3000 });
   const root = real(worktreePath);
-  // A main root Git will not read (a bare repository under safe.bareRepository=explicit,
-  // or no repository at all) cannot share this checkout's repository: that is a conflict,
-  // not a Git error to surface raw.
-  const commonDirOf = (dir) => {
-    try { return read(dir, ["rev-parse", "--path-format=absolute", "--git-common-dir"]); } catch { return null; }
-  };
+  // A main root whose repository git will not read cannot be shown to share
+  // the created checkout's repository, so it is that conflict (fail closed).
+  // Without this the refusal's reason depended on the caller's git config:
+  // under safe.bareRepository=explicit (Claude desktop Terminal, Git 2.54 on
+  // macOS) a bare main root threw a raw git error instead (BI-4704915D).
+  const mainCommonDir = git(mainRoot, ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+    { allowFail: true, timeout: 3000 });
   if (!/^[a-f0-9]{40}$/i.test(headSha ?? "")
     || !same(root, read(root, ["rev-parse", "--show-toplevel"]))
     || read(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]) !== branch
     || read(root, ["rev-parse", "--verify", "HEAD^{commit}"]) !== headSha
-    || !same(read(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]), commonDirOf(mainRoot))) {
+    || !mainCommonDir
+    || !same(read(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]), mainCommonDir)) {
     throw new Error("source checkout, branch or shared repository conflicts with worktree creation");
   }
   if (!existsSync(join(root, "AGENTS.md")) || !existsSync(join(root, "packages/dpf-skill-pack/toolchain-version.json"))) {

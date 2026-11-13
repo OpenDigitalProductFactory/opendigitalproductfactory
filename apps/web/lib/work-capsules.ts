@@ -295,6 +295,13 @@ export const WORK_CAPSULE_EVIDENCE_KINDS = [
 export type WorkCapsuleEvidenceKind = (typeof WORK_CAPSULE_EVIDENCE_KINDS)[number];
 
 export const LEASE_TTL_MS = 30 * 60 * 1000;
+
+/** Default resume grace for a lease-expired external session: a token-limited
+ *  client (Claude/Codex/Grok) may be down for a usage-window duration and will
+ *  return. Conservative — err toward NOT reaping a session that may resume. A
+ *  DELIVERED (merged) room bypasses the grace: it need not resume. Lives in this
+ *  leaf so liveness and executor capacity share it without an import cycle. */
+export const WORK_CAPSULE_PAUSE_GRACE_MS = 24 * 60 * 60 * 1000;
 export const STALE_CACHE_MS = 30 * 60 * 1000;
 export const STATUS_OVERRIDE_TTL_MS = 24 * 60 * 60 * 1000;
 

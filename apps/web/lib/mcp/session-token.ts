@@ -23,9 +23,27 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { McpTokenCapability } from "@/lib/auth/mcp-api-token";
 import { parseTaskExecutionFence, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import { getToolGrantMapping } from "@/lib/tak/agent-grants";
+import { canonicalWorkroomToolName } from "@/lib/tak/workroom-tool-aliases";
 
 const ISSUER = "dpf-mcp-internal";
 const AUDIENCE = "dpf-mcp-server";
+const RESTRICTED_AUDIENCE = "dpf-mcp-server-restricted-v1";
+
+/** Presentation only; scopes remain the authority for nested governed calls. */
+export type McpToolSurface = { version: 1; toolNames: string[] };
+
+function parseToolSurface(value: unknown): McpToolSurface | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const surface = value as Record<string, unknown>;
+  const registry = getToolGrantMapping();
+  if (surface.version !== 1 || !Array.isArray(surface.toolNames)
+    || surface.toolNames.length > Object.keys(registry).length
+    || new Set(surface.toolNames).size !== surface.toolNames.length
+    || surface.toolNames.some(name => typeof name !== "string"
+      || canonicalWorkroomToolName(name) !== name || !Object.hasOwn(registry, name))) return null;
+  return { version: 1, toolNames: [...surface.toolNames] };
+}
 
 /** 5 minutes — long enough for one CLI turn including model thinking, short
  * enough that a leaked token has minimal blast radius. */
@@ -69,6 +87,7 @@ export type McpSessionPayload = {
   /** BI-B949993E: governed TaskRun identity; the route derives the review binding from it. */
   taskRunId?: string | null;
   taskExecutionFence?: TaskExecutionFence | null;
+  toolSurface?: McpToolSurface;
   /** Tool grants this session can exercise — same shape as `McpApiToken.scopes`.
    *  The route's existing scope-vs-tool gate runs identically against either. */
   scopes: string[];
@@ -97,19 +116,26 @@ export async function createMcpSessionToken(payload: McpSessionPayload): Promise
   if (payload.taskExecutionFence != null && (!payload.taskRunId || !taskExecutionFence)) {
     throw new Error("A valid task execution fence requires its bound task.");
   }
+  const restricted = payload.toolSurface !== undefined;
+  const toolSurface = restricted ? parseToolSurface(payload.toolSurface) : null;
+  if (restricted && (!toolSurface || !taskExecutionFence || !payload.taskRunId
+    || payload.scopes.some(scope => typeof scope !== "string" || !scope.trim()))) {
+    throw new Error("A restricted MCP session requires a valid surface, admitted scopes and task fence.");
+  }
   return new SignJWT({
     agentId: payload.agentId ?? null,
     threadId: payload.threadId ?? null,
     routeContext: payload.routeContext ?? null,
     taskRunId: payload.taskRunId ?? null,
     ...(taskExecutionFence ? { taskExecutionFence } : {}),
+    ...(toolSurface ? { toolSurface } : {}),
     scopes: payload.scopes,
     capability: payload.capability,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.userId)
     .setIssuer(ISSUER)
-    .setAudience(AUDIENCE)
+    .setAudience(restricted ? RESTRICTED_AUDIENCE : AUDIENCE)
     .setIssuedAt()
     .setExpirationTime(`${MCP_SESSION_TTL_SECONDS}s`)
     .sign(getSecret());
@@ -119,11 +145,18 @@ export async function verifyMcpSessionToken(token: string): Promise<McpSessionPa
   try {
     const { payload } = await jwtVerify(token, getSecret(), {
       issuer: ISSUER,
-      audience: AUDIENCE,
+      audience: [AUDIENCE, RESTRICTED_AUDIENCE],
       requiredClaims: ["exp", "iat"],
       maxTokenAge: MCP_SESSION_TTL_SECONDS,
       clockTolerance: MCP_SESSION_CLOCK_SKEW_SECONDS,
     });
+    // A dual audience would let a legacy receiver accept scopes while silently
+    // dropping the signed surface. Require one coherent scalar protocol.
+    const restricted = payload.aud === RESTRICTED_AUDIENCE;
+    if (!restricted && payload.aud !== AUDIENCE) return null;
+    const hasSurface = payload.toolSurface !== undefined;
+    const toolSurface = hasSurface ? parseToolSurface(payload.toolSurface) : null;
+    if (restricted !== hasSurface || (hasSurface && !toolSurface)) return null;
     // maxTokenAge bounds age since iat, not the declared lifetime: a freshly
     // issued token claiming exp a year out would pass it. Cap exp - iat too.
     if (typeof payload.exp !== "number") {
@@ -146,6 +179,8 @@ export async function verifyMcpSessionToken(token: string): Promise<McpSessionPa
     }
     const taskExecutionFence = payload.taskExecutionFence === undefined ? null : parseTaskExecutionFence(payload.taskExecutionFence);
     if (payload.taskExecutionFence !== undefined && (!taskExecutionFence || typeof payload.taskRunId !== "string" || !payload.taskRunId)) return null;
+    if (restricted && (!taskExecutionFence || !payload.taskRunId || scopes.length === 0
+      || scopes.some(scope => typeof scope !== "string" || !scope.trim()))) return null;
     return {
       userId,
       agentId: typeof payload.agentId === "string" ? payload.agentId : null,
@@ -153,6 +188,7 @@ export async function verifyMcpSessionToken(token: string): Promise<McpSessionPa
       routeContext: typeof payload.routeContext === "string" ? payload.routeContext : null,
       taskRunId: typeof payload.taskRunId === "string" ? payload.taskRunId : null,
       ...(taskExecutionFence ? { taskExecutionFence } : {}),
+      ...(toolSurface ? { toolSurface } : {}),
       scopes,
       capability,
     };

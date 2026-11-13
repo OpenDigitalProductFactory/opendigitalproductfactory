@@ -73,6 +73,30 @@ numbers. Design: [executor takeover](../superpowers/specs/2026-10-21-executor-ta
 
 While you work, send a `checkpoint` with `heartbeat_workroom` at each stage boundary, so the next executor can start from step 2.
 
+**Same owner, same scope: no approval** (BI-F1FC0B62, BI-1986D3C1, BI-53BED66C). Use `reassign_workroom_executor` with `phase: "request"`, then the receiving session acknowledges with `phase: "acknowledge"`. Between the two steps either party can raise issues on the room. Neither step reaches the owner when all of these hold:
+- the receiver is already admitted;
+- the room's lease is the owner's, or it has lapsed;
+- a lapsed lease is held by the owner or by a platform coworker, such as the Software Engineer a room's drive dispatched.
+
+A step the handler refuses comes back as a refusal with its next action, never as an approval. Approving it could not make it run. A lease held by another person, a live coworker lease, an unadmitted receiver, or a build-linked, restricted or archived room keeps the owner's decision, through the one-call path.
+
+**When your plan runs out.** Before you stop on a usage limit, send `heartbeat_workroom` with `checkpoint.capacity` (`provider` and the `resetAt` it gave). The room then reads "expected back by …" in Central time. It is not reaped before that time, and it lists the executors that can take it now. The platform also reads the provider's own capacity record, so this works if you could not send it. A stated reset is an upper bound: providers reset early, periodically and at random. Any later heartbeat clears the wait. To move the work, use the same two-step handover; it needs no approval.
+
+### Running in T3 Code
+
+T3 Code orchestrates a native client (Codex or Claude) in its own thread. Trial record: [T3 runtime trial](../superpowers/research/2026-11-12-t3-code-runtime-trial.md). Design: [T3 as a first-class executor](../superpowers/specs/2026-11-13-t3-code-first-class-executor-design.md).
+
+1. **Claim first, never adopt first.** Call `claim_backlog_item_for_work` with:
+   - `provider` set to the client T3 drives (`codex` or `claude`);
+   - `harness: "t3-code"`;
+   - `sessionRef` set to the client thread id: `CODEX_THREAD_ID` for Codex, `CLAUDE_CODE_SESSION_ID` for Claude.
+
+   `provider: "t3"` is refused with `provider_harness_only`.
+2. **Create the worktree under the canonical sibling base**, not T3's default `~/.t3/worktrees`.
+3. **Gate in the same thread** with `pnpm gate:wait`. The gate records the same thread id. If it cannot, the platform still binds a passing result to your own single live room on that branch at exactly the gated commit.
+4. **Land with `pnpm land`.** If the client may not run `gh pr merge` (an unattended Codex refuses it under the owner's rules), call `queue_workroom_pull_request` with the room's `capsuleId` through the dpf connector. It queues only when the PR head is the room head and the gate passed there, and the merge queue still runs every required check.
+5. **If the plan runs out mid-task**, record `checkpoint.capacity` as above. Hand the room to the Claude (or Codex) side with the two-step handover. T3 can drive either client from the same project.
+
 ### Contributor preview binding and cleanup
 
 Preview startup resolves the canonical install settings and overlays, then binds

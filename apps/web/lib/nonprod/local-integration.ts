@@ -59,6 +59,8 @@ type LocalIntegrationDependencies = {
   hostRemainingGrowthCalibration?: HostRemainingGrowthCalibrationStore;
   /** BI-C9912C22: where the gated branch's Workroom is found. Defaults to prisma. */
   workroom?: Parameters<typeof findLocalCiEvidenceWorkroom>[0];
+  /** Test seam: the authenticated gate caller's active human principal (relational id). */
+  resolveOwnerPrincipalId?: (userId: string) => Promise<string | null>;
 };
 
 /**
@@ -209,9 +211,14 @@ export async function recordLocalIntegrationResult(
   // Loaded like the blob writer above: a dynamic import keeps this module's
   // static graph unchanged across the build-evidence pack's dynamic boundary.
   const { findLocalCiEvidenceWorkroom } = await import("./local-ci-evidence-workroom");
+  const ownerPrincipalId = typeof evidenceObject?.headTreeHash === "string" && input.actorUserId
+    ? await (dependencies.resolveOwnerPrincipalId
+      ?? (async (userId: string) => (await import("@/lib/identity/principal-linking")).resolveActiveHumanPrincipalRecordIdForUser(userId)))(input.actorUserId)
+      .catch(() => null)
+    : null;
   const room = typeof evidenceObject?.headTreeHash === "string"
     ? await findLocalCiEvidenceWorkroom(dependencies.workroom ?? prisma.workroom, {
-      branch: input.candidateBranch, sha: String(evidenceObject.sha ?? ""), sessionId: input.externalSessionId,
+      branch: input.candidateBranch, sha: String(evidenceObject.sha ?? ""), sessionId: input.externalSessionId, ownerPrincipalId,
     })
     : undefined;
   const result = await (dependencies.recordEvidence ?? recordExternalEvidence)({
@@ -227,6 +234,7 @@ export async function recordLocalIntegrationResult(
     details: {
       ...(gateKey && leaseId ? { inputFingerprint } : {}),
       externalSessionId: input.externalSessionId,
+      ...(room && room !== "ambiguous" && room.attribution ? { workroomAttribution: room.attribution } : {}),
       mode: input.mode,
       status: input.status,
       ...(gateKey && leaseId

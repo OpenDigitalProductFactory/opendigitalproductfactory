@@ -12,12 +12,22 @@ export type { ProductMixDefinition } from "./types";
 const KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function toProductMixKey(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return trimEdgeHyphens(
+    value
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-"),
+  );
+}
+
+/** Linear edge trim: an anchored `-+$` regex backtracks polynomially (CodeQL #528). */
+function trimEdgeHyphens(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === "-") start++;
+  while (end > start && value[end - 1] === "-") end--;
+  return value.slice(start, end);
 }
 
 function requiredString(
