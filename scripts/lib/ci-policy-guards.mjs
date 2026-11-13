@@ -95,6 +95,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
       // BI-2FAE2E5C: CI Node is the exact, qualified .node-version.
       node("--test", "scripts/check-ci-node-qualified.test.mjs"),
+      // BI-8ED87FD9: the check-no-* guards another guard in this profile
+      // already runs on its own are appended below as --standalone-guard /
+      // --standalone-test, so each runs once per profile run.
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
@@ -1220,6 +1223,46 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
   ]),
 });
+
+const LOOP_GUARD_FILE = /^scripts\/(check-no-[^/]+\.mjs)$/;
+
+/**
+ * The scripts/check-no-*.mjs guards (and their self-tests) that a profile runs
+ * as part of a named guard other than the Repo Guard Loop (BI-8ED87FD9).
+ *
+ * The loop discovers every check-no-* file, so without this a guard registered
+ * on its own ran twice in one profile run (17 of them on 2026-11-13). The loop
+ * reads this set under --skip-standalone and runs each of those guards once.
+ */
+export function loopGuardsRunStandalone(profileName = "source") {
+  const guards = new Set();
+  const tests = new Set();
+  for (const entry of POLICY_GUARD_PROFILES[profileName] ?? []) {
+    if (entry.id === "repo-guard-loop") continue;
+    for (const [command, args] of entry.commands) {
+      if (command !== "node") continue;
+      for (const arg of args) {
+        const match = LOOP_GUARD_FILE.exec(arg);
+        if (!match) continue;
+        (match[1].endsWith(".test.mjs") ? tests : guards).add(match[1]);
+      }
+    }
+  }
+  return { guards, tests };
+}
+
+// Hand the loop its standalone set as arguments. The loop must not import this
+// registry: guards that import the loop (for discoverGuardFiles) would then pull
+// the registry, and its docs references, into their import closure.
+{
+  const loop = POLICY_GUARD_PROFILES.source.find((entry) => entry.id === "repo-guard-loop");
+  const call = loop.commands.find(([, args]) => args[0] === "scripts/check-guards.mjs");
+  const standalone = loopGuardsRunStandalone("source");
+  call[1].push(
+    ...[...standalone.guards].sort().flatMap((guard) => ["--standalone-guard", guard]),
+    ...[...standalone.tests].sort().flatMap((test) => ["--standalone-test", test]),
+  );
+}
 
 /**
  * Build the consolidated end-of-run summary for a policy-guard profile.
