@@ -13,8 +13,11 @@ backlog: BI-C67E5CCB
 ## Backlog coverage
 
 - Decision: decomposed
+- Parent: BI-C67E5CCB
 - Receipt: cmwf80l8g0a8j0eohvtwfxnd6
-- Mapped: BI-C67E5CCB (D1), BI-6B28699D (D2); no dependency between them
+- Dependencies: none
+- D1 security intake -> BI-C67E5CCB
+- D2 issue exclusions and reply-on-done -> BI-6B28699D
 
 ## Deliverables
 

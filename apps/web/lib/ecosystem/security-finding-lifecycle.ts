@@ -142,8 +142,9 @@ export function prismaSecurityLifecycleStore(db: LifecycleDb, isPeerOwned: (item
         const payload = r.activities[0]?.payload;
         const actuator = payload && typeof payload === "object" && typeof (payload as { actuator?: unknown }).actuator === "string"
           ? (payload as { actuator: string }).actuator : null;
-        return { id: r.id, itemId: r.itemId, status: r.status, priority: r.priority, body: r.body,
-          activeBuildId: r.activeBuildId, lastStatusActuator: actuator };
+        // A read projection, not a write: the row's own status is reported as found.
+        const { id, itemId, status, priority, body, activeBuildId } = r;
+        return { id, itemId, status, priority, body, activeBuildId, lastStatusActuator: actuator };
       });
     },
     async recordEvidence(item, evidence) {
