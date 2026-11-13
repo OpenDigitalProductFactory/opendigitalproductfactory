@@ -19,28 +19,31 @@ describe("subscription catalog lifecycle (BI-59E37E39)", () => {
   it("admits a previously unknown returned model and reconciles HTTP inventory like CLI inventory", async () => {
     const models = [{ modelId: "future-model-without-code-change", rawMetadata: { source: "chatgpt_backend_discovery" } }];
     mocks.discoverChatGptBackendModels.mockResolvedValue({ models });
-    expect(await discoverViaChatGptBackend(input)).toEqual({ discovered: 1, newCount: 1, modelIds: [models[0].modelId] });
-    expect(mocks.upsertDiscoveredModels).toHaveBeenCalledWith("chatgpt", models);
-    expect(mocks.reconcileDiscoveredModelPresence).toHaveBeenCalledWith("chatgpt", new Set([models[0].modelId]));
-    expect(mocks.readmitListedModels).toHaveBeenCalledWith("chatgpt", input.authMethod, [models[0].modelId]);
+    const agent = { providerId: "codex-like-agent", authMethod: input.authMethod };
+    expect(await discoverViaChatGptBackend(agent)).toEqual({ discovered: 1, newCount: 1, modelIds: [models[0].modelId] });
+    expect(mocks.upsertDiscoveredModels).toHaveBeenCalledWith(agent.providerId, models);
+    expect(mocks.reconcileDiscoveredModelPresence).toHaveBeenCalledWith(agent.providerId, new Set([models[0].modelId]));
+    expect(mocks.readmitListedModels).toHaveBeenCalledWith(agent.providerId, input.authMethod, [models[0].modelId]);
   });
-  it("falls back to execution-channel inventory on an empty consumer response", async () => {
-    mocks.discoverChatGptBackendModels.mockResolvedValue({ models: [] });
-    mocks.discoverCodexCliModels.mockResolvedValue([{ modelId: "cli-current", rawMetadata: {} }]);
-    expect(await discoverViaChatGptBackend(input)).toMatchObject({ discovered: 1, modelIds: ["cli-current"] });
-    expect(mocks.upsertDiscoveredModels).toHaveBeenCalledWith("chatgpt", [{ modelId: "cli-current", rawMetadata: {} }]);
+  it("routes chatgpt on its own Codex catalog even when the consumer endpoint lists app-only models (BI-F0ECD797)", async () => {
+    mocks.discoverChatGptBackendModels.mockResolvedValue({ models: [{ modelId: "gpt-6.1-sol-wm", rawMetadata: {} }] });
+    mocks.discoverCodexCliModels.mockResolvedValue([{ modelId: "gpt-6.1-sol", rawMetadata: {} }]);
+    expect(await discoverViaChatGptBackend(input)).toMatchObject({ discovered: 1, modelIds: ["gpt-6.1-sol"] });
+    expect(mocks.discoverChatGptBackendModels).not.toHaveBeenCalled();
+    expect(mocks.discoverCodexCliModels).toHaveBeenCalledWith("chatgpt");
+    expect(mocks.upsertDiscoveredModels).toHaveBeenCalledWith("chatgpt", [{ modelId: "gpt-6.1-sol", rawMetadata: {} }]);
+    expect(mocks.reconcileDiscoveredModelPresence).toHaveBeenCalledWith("chatgpt", new Set(["gpt-6.1-sol"]));
   });
-  it("preserves the catalog when neither source provides an inventory", async () => {
-    mocks.discoverChatGptBackendModels.mockResolvedValue({ models: [], error: "HTTP 403" });
+  it("preserves the catalog when the Codex catalog provides no inventory", async () => {
     mocks.discoverCodexCliModels.mockResolvedValue([]);
     expect(await discoverViaChatGptBackend(input)).toMatchObject({ discovered: 0, newCount: 0, error: expect.stringContaining("no models") });
     expect(mocks.upsertDiscoveredModels).not.toHaveBeenCalled();
     expect(mocks.reconcileDiscoveredModelPresence).not.toHaveBeenCalled();
   });
   it("does not change inventory on an auth failure", async () => {
-    mocks.getProviderBearerToken.mockResolvedValue({ error: "Reconnect required" });
-    expect(await discoverViaChatGptBackend(input)).toMatchObject({ error: "Reconnect required" });
-    expect(mocks.discoverChatGptBackendModels).not.toHaveBeenCalled();
+    mocks.discoverCodexCliModels.mockRejectedValue(new Error("Selected account authentication failed — reconnect this account"));
+    expect(await discoverViaChatGptBackend(input)).toMatchObject({ error: expect.stringContaining("reconnect this account") });
     expect(mocks.upsertDiscoveredModels).not.toHaveBeenCalled();
+    expect(mocks.reconcileDiscoveredModelPresence).not.toHaveBeenCalled();
   });
 });

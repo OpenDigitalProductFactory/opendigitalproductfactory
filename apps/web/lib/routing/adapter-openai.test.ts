@@ -256,12 +256,18 @@ describe("openAIAdapter", () => {
 // Real model/list field shape captured during the original CE-724328D6 trace.
 describe("verified Codex catalog modalities", () => {
   it("retains published image support without guessing capacity or tool capability", () => {
-    const card = openAIAdapter.extractModelCard("gpt-5.6-sol", { id: "gpt-5.6-sol", model: "gpt-5.6-sol", source: "codex_cli_model_list", inputModalities: ["text", "image"] });
+    // An unresearched slug: capacity stays unknown rather than borrowed from a sibling.
+    const card = openAIAdapter.extractModelCard("gpt-5.6-cyber", { id: "gpt-5.6-cyber", model: "gpt-5.6-cyber", source: "codex_cli_model_list", inputModalities: ["text", "image"] });
     expect(card.inputModalities).toEqual(["text", "image"]);
     expect(card.capabilities.imageInput).toBe(true);
     expect(card.capabilities.toolUse).toBeNull();
     expect(card.maxInputTokens).toBeNull();
     expect(card.maxOutputTokens).toBeNull();
+  });
+  it("takes researched capacity for a referenced Codex slug (BI-F0ECD797)", () => {
+    const card = openAIAdapter.extractModelCard("gpt-5.6-sol", { id: "gpt-5.6-sol", model: "gpt-5.6-sol", source: "codex_cli_model_list", inputModalities: ["text", "image"] });
+    expect(card.maxInputTokens).toBe(272_000);
+    expect(card.maxOutputTokens).toBe(128_000);
   });
   it("honors an explicit text-only catalog model", () => {
     const card = openAIAdapter.extractModelCard("unknown-model", { source: "codex_cli_model_list", inputModalities: ["text"] });
