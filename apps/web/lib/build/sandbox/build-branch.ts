@@ -45,6 +45,8 @@ import {
 } from "./build-clone";
 
 const WORKSPACE = "/workspace";
+/** The shared repository every build branch lives in, inside the sandbox. */
+export const SANDBOX_WORKSPACE = WORKSPACE;
 /**
  * A git lock older than this is left over, never live: no sandbox git
  * operation holds one for 15 minutes (an unshallow of the full history takes
