@@ -944,6 +944,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/reassessment-capability-probe.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        "scripts/lib/git-fetch-serialization.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
         // allowlisted OUT of CI, so nothing enforced its behaviour while it
         // destroyed run after run. The allowlist is shrink-only and its own
