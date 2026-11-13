@@ -64,6 +64,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   } = await import("@/lib/build/pr-follow-through-announce");
   const { getWorkroomPostureDefault } = await import("@/lib/work-management/workroom-posture-defaults");
   const { createPlatformIssueReport } = await import("@/lib/quality/platform-issue-reports");
+  const { MAX_UNKNOWN_OBSERVATIONS, resumeClearedEscalation } = await import("@/lib/build/build-pr-delivery-recheck");
 
   const mode = resolveBuildPrReconcilerMode();
   if (mode === "off") return { observed: 0, actuated: 0, escalated: 0, compareAndSwapLost: 0 };
@@ -96,7 +97,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
     })();
     const [owner, repo] = repository.split("/");
     if (!owner || !repo) continue;
-    const state = existing ?? createBuildPrDeliveryState({ repository, prNumber, prUrl });
+    let state = existing ?? createBuildPrDeliveryState({ repository, prNumber, prUrl });
 
     try {
       const { getAutonomousPlaybookMode } = await import(
@@ -154,6 +155,25 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       observed += 1;
       if (!observesRoomHead(capsule.headSha, observation.headSha, existing)) continue;
       let readiness = projectGithubPrReadiness(observation);
+      // BI-0EDCF2EC: a stopped room the selector handed back is looked at again.
+      // A stop whose cause still holds only records that it looked.
+      const recheck = resumeClearedEscalation(state, readiness);
+      if (recheck.kind === "not-reevaluable") continue;
+      if (recheck.kind === "holds") {
+        const looked = await prisma.workroom.updateMany({
+          where: { id: capsule.id, updatedAt: capsule.updatedAt },
+          data: {
+            workspaceState: writeBuildPrDeliveryState(capsule.workspaceState, {
+              ...state,
+              lastObservedAt: new Date().toISOString(),
+            }) as unknown as import("@dpf/db").Prisma.InputJsonValue,
+          },
+        });
+        if (looked.count === 0) compareAndSwapLost += 1;
+        continue;
+      }
+      const resumedFrom = recheck.kind === "cleared" ? recheck.reason : null;
+      if (recheck.kind === "cleared") state = recheck.state;
       const posture = resolvePrFollowThroughPosture({
         scopeClaims: capsule.scopeClaims,
         executorKind: capsule.executorKind,
@@ -208,6 +228,34 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       if (saved.count === 0) {
         compareAndSwapLost += 1;
         continue;
+      }
+
+      if (resumedFrom) {
+        await prisma.workroomActivity.create({
+          data: {
+            workCapsuleId: capsule.id,
+            kind: "workroom-pr-delivery-resumed",
+            summary: `PR #${prNumber} delivery resumed: the stop (${resumedFrom}) no longer holds; GitHub now reports ${readiness.kind}.`,
+            payload: { prNumber, clearedStop: resumedFrom, readiness: readiness.kind, headSha: observation.headSha } as import("@dpf/db").Prisma.InputJsonValue,
+          },
+        });
+      }
+      if (outcome.state.unknownObservations === MAX_UNKNOWN_OBSERVATIONS) {
+        // Told once per head; the room keeps observing under its backoff.
+        const surface = capsule.featureBuildId ? "Build Studio" : `Workroom ${capsule.capsuleId}`;
+        await createPlatformIssueReport({
+          type: "build-stall-escalation",
+          source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
+          severity: "medium",
+          title: `${surface}: GitHub has not decided PR #${prNumber}'s merge state`,
+          description:
+            `GitHub reported an undecided merge state for PR #${prNumber} (${capsule.capsuleId}) ` +
+            `${MAX_UNKNOWN_OBSERVATIONS} times in a row at head ${outcome.state.lastObservedHeadSha ?? "unknown"}. ` +
+            `The room keeps observing at up to hourly intervals and continues on its own once GitHub decides.\nPR: ${prUrl}`,
+          featureBuildId: capsule.featureBuildId,
+          triggerKind: "build-pr-delivery-reconcile",
+          dedupeKey: `build-pr-delivery:${prNumber}:merge-state-undecided:${outcome.state.lastObservedHeadSha ?? "unknown"}`,
+        });
       }
 
       await announcePrFollowThrough({
