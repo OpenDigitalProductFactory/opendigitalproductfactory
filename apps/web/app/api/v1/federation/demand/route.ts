@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
-import type { DemandDispositionNoticeV1, DemandEnvelopeV1, DemandResponseV1 } from "@dpf/db/federated-demand-contract";
+import {
+  validateDemandResponseV1,
+  type DemandDispositionNoticeV1,
+  type DemandEnvelopeV1,
+  type DemandResponseV1,
+} from "@dpf/db/federated-demand-contract";
 import {
   OPERATIONAL_POSTURE_ACTIVITIES,
   type OperationalPostureV1,
@@ -105,6 +110,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   if (typeof event.type === "string" && RESPONSE_ACTIVITIES.has(event.type)) {
+    // A help offer that asks for an item's claim (BI-30EDDB7F). The answer —
+    // granted, renewed, released or refused naming the holder — travels back
+    // in this acknowledgement, so the requester learns it on the same link. A
+    // refusal is a decision, not a delivery failure, so it is acknowledged.
+    if ((event.data as { workClaim?: unknown }).workClaim !== undefined) {
+      const claim = event.data as DemandResponseV1;
+      const violations = validateDemandResponseV1(claim);
+      if (violations.length > 0) {
+        return NextResponse.json({ ok: false, error: "invalid_demand_response", violations }, { status: 422 });
+      }
+      const { handleWorkClaimFromPeer } = await import("@/lib/federation/work-claim-exchange.server");
+      const decision = await handleWorkClaimFromPeer(authz.linkId, claim);
+      return NextResponse.json({ ...ok(), action: decision.decision, responseId: claim.responseId, workClaim: decision }, { status: 200 });
+    }
     const response = await handleIncomingDemandResponse(
       prisma as unknown as DemandResponseDb,
       authz.linkId,
