@@ -106,7 +106,11 @@ export function resolveSessionRef({ worktreePath, env = process.env } = {}) {
     // caller's own claim (BI-144E4F92, BI-4BEEC539).
     || env.CLAUDE_CODE_SESSION_ID
     || env.CLAUDE_SESSION_ID
+    // BI-53BED66C: the gate records CODEX_THREAD_ID (scripts/lib/agent-identity.mjs);
+    // binding under another Codex id split one session across two names.
+    || env.CODEX_THREAD_ID
     || env.CODEX_SESSION_ID
+    || env.GROK_THREAD_ID
     || env.GROK_SESSION_ID
     || (worktreePath ? `worktree:${toPosixPath(worktreePath)}` : null)
   );

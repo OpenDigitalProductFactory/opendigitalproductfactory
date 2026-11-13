@@ -1,4 +1,14 @@
 {
+  "account": {
+    "trigger": "Signed in as {$name} — account details",
+    "heading": "Your account",
+    "signedInAs": "Signed in as",
+    "role": "Role",
+    "noRole": "No platform role assigned",
+    "superuser": "Superuser",
+    "organization": "Organization",
+    "organizationUnavailable": "Organization unavailable"
+  },
   "area": {
     "workDenied": "Your role does not include viewing Workrooms.",
     "teamEmpty": "No one is assigned to this area yet.",
