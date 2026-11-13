@@ -212,6 +212,8 @@ export async function resolveOAuthAccessToken(
       capability: row.scope === "read" ? "read" : "write",
       // Only reachable after resolveOAuthConsent above accepted the binding.
       authorityBindingId: row.authorityBindingId ?? null,
+      // Room subscriptions follow the refresh family, so a rotation keeps them (BI-ED52AB82).
+      oauthFamilyKey: row.oauthFamilyKey ?? null,
     },
     publicScopes,
     clientId: row.oauthClient?.oAuthClientId ?? null,

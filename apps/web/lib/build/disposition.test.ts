@@ -104,6 +104,23 @@ describe("mayShareToPublicHive", () => {
   });
 });
 
+describe("mayShareToPublicHive share-by-default (BI-ACAA91E5)", () => {
+  it("shares an undecided change whose outbound diff is clean", () => {
+    expect(mayShareToPublicHive("private", { businessSpecificHits: 0 })).toBe(true);
+    expect(mayShareToPublicHive("private", { businessSpecificHits: 0, dispositionSource: "suggested", installationPurpose: "operate-organization" })).toBe(true);
+  });
+
+  it("keeps a change private when the scan found content or did not run", () => {
+    expect(mayShareToPublicHive("private", { businessSpecificHits: 2 })).toBe(false);
+    expect(mayShareToPublicHive("private", { businessSpecificHits: null })).toBe(false);
+    expect(mayShareToPublicHive("private", {})).toBe(false);
+  });
+
+  it("never overrides a person's explicit private", () => {
+    expect(mayShareToPublicHive("private", { businessSpecificHits: 0, dispositionSource: "operator" })).toBe(false);
+  });
+});
+
 describe("privateDispositionBlockMessage", () => {
   it("includes the suggestion reason when provided", () => {
     expect(privateDispositionBlockMessage("because X")).toMatch(/because X/);

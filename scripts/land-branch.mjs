@@ -38,21 +38,23 @@
 
 import { parseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join } from "node:path";
 
 import { probeWorktreeReadiness } from "./lib/bootstrap-worktree-deps.mjs";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 import { gitText } from "./lib/git.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
+import { repositorySlugFromRemote } from "./lib/documentation-evidence-lane.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Run a command, inheriting stdio so gate output stays visible to the operator. */
-function run(cmd, args, { capture = false, allowFail = false } = {}) {
+function run(cmd, args, { capture = false, allowFail = false, cwd = ROOT } = {}) {
   const r = spawnSync(cmd, args, {
-    cwd: ROOT,
+    cwd,
     encoding: "utf8",
     stdio: capture ? "pipe" : "inherit",
   });
@@ -210,53 +212,143 @@ export function recordedPassAction({ status, headSha, dirty, mergeable }) {
  *
  * @returns {{ step: string, message: string, next?: string } | null} the refusal, or null when done
  */
-export function publish({ branch, base, title, body, dry, log, runner = run }) {
-  // ── 7. push ───────────────────────────────────────────────────────────────
-  log(`pushing ${branch}`);
-  if (!dry) {
-    const r = runner("git", ["push", "-u", "origin", branch], { allowFail: true });
-    if (!r.ok) {
-      return { step: "push",
-        message: "push refused (pre-push gate or remote). It was NOT retried: a second push can "
-          + "claim a new gate lease and overwrite a recorded PASS.",
-        next: "read the output above, then `pnpm pregate:status` (read-only) — never re-push to re-read it" };
-    }
+const PR_FIELDS = "number,state,headRefName,baseRefName,headRefOid,isCrossRepository";
+const PR_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){number state headRefName baseRefName headRefOid autoMergeRequest{mergeMethod} mergeQueueEntry{id state position}}}}`;
+const fullSha = value => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
+const publicationRefusal = message => ({ step: "pull-request", message,
+  next: "inspect the current PR and recorded evidence read-only; do not repeat push or queue requests" });
+function jsonResult(result) {
+  if (!result.ok) return null;
+  try { return JSON.parse(result.out); } catch { return null; }
+}
+function currentOpenPr({ branch, base, repository, runner }) {
+  // Explicit OPEN filtering excludes a historical MERGED/CLOSED branch PR.
+  const rows = jsonResult(runner("gh", ["pr", "list", "--repo", `github.com/${repository}`,
+    "--head", branch, "--base", base, "--state", "open", "--limit", "2", "--json", PR_FIELDS],
+  { capture: true, allowFail: true }));
+  if (!Array.isArray(rows) || rows.length > 1) return { refusal: publicationRefusal("Current OPEN PR is unreadable or ambiguous.") };
+  const pr = rows[0] ?? null;
+  if (pr && (!Number.isInteger(pr.number) || pr.number < 1 || pr.state !== "OPEN"
+      || pr.headRefName !== branch || pr.baseRefName !== base || !fullSha(pr.headRefOid)
+      || pr.isCrossRepository !== false)) return { refusal: publicationRefusal("PR does not match the current repository branch and base.") };
+  return { pr };
+}
+function observePublication({ repository, prNumber, branch, base, headSha, runner }) {
+  const [owner, name] = repository.split("/");
+  const payload = jsonResult(runner("gh", ["api", "graphql", "--hostname", "github.com", "-f", `query=${PR_QUERY}`,
+    "-F", `owner=${owner}`, "-F", `name=${name}`, "-F", `number=${prNumber}`], { capture: true, allowFail: true }));
+  const pr = payload?.data?.repository?.pullRequest;
+  if (!payload || payload.errors?.length || !pr || pr.number !== prNumber
+      || pr.headRefName !== branch || pr.baseRefName !== base || pr.headRefOid !== headSha) return "unknown";
+  if (pr.state === "MERGED") return "merged";
+  if (pr.state !== "OPEN" || !Object.hasOwn(pr, "mergeQueueEntry") || !Object.hasOwn(pr, "autoMergeRequest")) return "unknown";
+  if (pr.mergeQueueEntry !== null) return typeof pr.mergeQueueEntry?.id === "string"
+    && pr.mergeQueueEntry.id && typeof pr.mergeQueueEntry.state === "string" ? "queued" : "unknown";
+  if (pr.autoMergeRequest !== null) return typeof pr.autoMergeRequest?.mergeMethod === "string"
+    && pr.autoMergeRequest.mergeMethod ? "requested" : "unknown";
+  return "unconfirmed";
+}
+function publishPushed({ branch, base, title, body, headSha, log, runner }) {
+  const origin = runner("git", ["remote", "get-url", "origin"], { capture: true, allowFail: true });
+  const repository = origin.ok ? repositorySlugFromRemote(origin.out) : "";
+  if (!repository || !fullSha(headSha)) return publicationRefusal("Repository or exact pushed source could not be established.");
+  let selection = currentOpenPr({ branch, base, repository, runner });
+  if (selection.refusal) return selection.refusal;
+  if (!selection.pr) {
+    if (!title) return publicationRefusal("--title is required to create the current PR.");
+    log("opening the current PR");
+    const directory = mkdtempSync(join(tmpdir(), "dpf-land-body-"));
+    try {
+      const bodyFile = join(directory, "body.md");
+      writeFileSync(bodyFile, body, { encoding: "utf8", mode: 0o600 });
+      const created = runner("gh", ["pr", "create", "--repo", `github.com/${repository}`,
+        "--base", base, "--head", branch, "--title", title, "--body-file", bodyFile], { capture: true, allowFail: true });
+      if (!created.ok) return publicationRefusal("Creating the current PR was refused; it was not retried.");
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+    selection = currentOpenPr({ branch, base, repository, runner });
+    if (selection.refusal) return selection.refusal;
   }
-
-  // ── 8. pull request ───────────────────────────────────────────────────────
-  const existing = runner("gh", ["pr", "view", "--json", "number", "-q", ".number"],
-    { capture: true, allowFail: true });
-  const prNumber = existing.ok ? existing.out.trim() : "";
-  if (prNumber) {
-    log(`PR #${prNumber} already open for this branch`);
-  } else if (!title) {
-    return { step: "pull-request", message: "--title is required to open a PR.",
-      next: 'pass --title "type(scope): ..."' };
-  } else {
-    log("opening the PR");
-    if (!dry) {
-      const args = ["pr", "create", "--base", base, "--head", branch, "--title", title, "--body", body];
-      const r = runner("gh", args, { capture: true, allowFail: true });
-      if (!r.ok) {
-        return { step: "pull-request", message: `gh pr create failed.\n${r.out.slice(-800)}`,
-          next: "read the output" };
-      }
-      log(r.out.trim());
-    }
+  const pr = selection.pr;
+  if (!pr || pr.headRefOid !== headSha) return publicationRefusal("Current OPEN PR source is not confirmed as the exact pushed HEAD.");
+  log(`current PR #${pr.number} matches ${headSha.slice(0, 10)}`);
+  const binding = { repository, prNumber: pr.number, branch, base, headSha, runner };
+  let state = observePublication(binding);
+  if (state === "unknown") return publicationRefusal("Current PR publication state is unproven.");
+  if (state === "unconfirmed") {
+    const enabled = runner("gh", ["pr", "merge", String(pr.number), "--repo", `github.com/${repository}`,
+      "--squash", "--auto", "--match-head-commit", headSha], { capture: true, allowFail: true });
+    if (!enabled.ok) return { step: "auto-merge", message: "Queue request was refused; it was not retried.",
+      next: `read pnpm pr:health ${pr.number}; do not repeat the request to discover its outcome` };
+    state = observePublication(binding);
   }
-
-  // ── 9. auto-merge, and VERIFY it took ─────────────────────────────────────
-  if (!dry) {
-    runner("gh", ["pr", "merge", "--squash", "--auto"], { capture: true, allowFail: true });
-    const check = runner("gh", ["pr", "view", "--json", "autoMergeRequest", "-q",
-      ".autoMergeRequest.mergeMethod"], { capture: true, allowFail: true });
-    const method = check.out.trim();
-    // Verified rather than assumed: `gh pr merge --auto` has reported success
-    // while the PR never entered the queue. An unverified enable is a PR that
-    // sits open looking finished.
-    log(method ? `auto-merge enabled (${method})` : "! auto-merge did NOT take — enable it by hand");
-  }
+  if (!["queued", "requested", "merged"].includes(state)) return { step: "auto-merge",
+    message: "Queue request is not confirmed; no second request was made.", next: `read pnpm pr:health ${pr.number}` };
+  log(state === "queued" ? `PR #${pr.number} is queued` : state === "merged"
+    ? `PR #${pr.number} is merged` : `auto-merge requested for PR #${pr.number}; queue membership is not yet observed`);
   return null;
+}
+
+export function publish({ branch, base, title, body, dry, log, runner = run }) {
+  if (dry) { log(`would push and publish ${branch}; no publication performed`); return null; }
+  log(`pushing ${branch}`);
+  const pushed = runner("git", ["push", "-u", "origin", branch], { allowFail: true });
+  if (!pushed.ok) return { step: "push", message: "push refused; it was NOT retried because another push can overwrite a recorded PASS.",
+    next: "read the original output and pnpm pregate:status; do not re-push to re-read a refusal" };
+  const head = runner("git", ["rev-parse", "HEAD"], { capture: true, allowFail: true });
+  return publishPushed({ branch, base, title, body, headSha: head.ok ? head.out.trim() : "", log, runner });
+}
+
+/** Resume only the post-push stages against unchanged, already-qualified bytes. */
+export function resumePublished({ branch, base, title, body, headSha, expectedHeadSha, remoteHeadSha,
+  dirty, status, context, dry, log, runner = run }) {
+  if (!fullSha(expectedHeadSha) || headSha !== expectedHeadSha || remoteHeadSha !== expectedHeadSha
+      || !branch || branch === "HEAD" || branch === base || dirty
+      || status?.headSha !== headSha || status?.boundBranch !== branch || !status?.evidenceId
+      || recordedPassAction({ status, headSha, dirty, mergeable: null }).action !== "land-recorded-pass") {
+    return publicationRefusal("Resume requires a clean named branch, exact expected local/remote HEAD and a real current source-bound PASS.");
+  }
+  if (!context) return { step: "context", message: "Current gate context is unreadable; nothing published." };
+  const missing = missingBodyAttestations(context, body);
+  if (missing.length) return { step: "context", message: `Required PR-body attestations missing: ${missing.join(", ")}` };
+  if (dry) { log("would resume post-push publication; no publication performed"); return null; }
+  // This existing deterministic validator reads the stored receipt and current
+  // policy. It records nothing, dispatches no review and preserves shadow/enforce.
+  const semantic = runner(process.execPath, [resolve(ROOT, "scripts/semantic-review-gate.mjs"), "validate"],
+    { capture: true, allowFail: true });
+  if (!semantic.ok) return { step: "semantic-review", message: "Existing semantic publication policy refused this committed tree.",
+    next: "inspect the existing receipt and its source binding; no new review or push was attempted" };
+  if (semantic.out.trim()) log(semantic.out.trim());
+  log(`resuming already-pushed ${branch}@${headSha.slice(0, 10)}; no push, merge-forward, gate or review replay`);
+  return publishPushed({ branch, base, title, body, headSha, log, runner });
+}
+
+/** Read-only qualification uses the target cwd even when this helper is newer. */
+export function resumeFromWorktree({ target, base, title, body, expectedHeadSha, dry, log,
+  runner = run, readinessProbe = probeWorktreeReadiness }) {
+  if (!fullSha(expectedHeadSha)) return publicationRefusal("--expected-head must identify the exact qualified commit.");
+  const targetRun = (command, args, options = {}) => runner(command, args, { ...options, cwd: target });
+  const readiness = readinessProbe(target);
+  if (readiness.status !== "compile-ready") return publicationRefusal("Resume target is not compile-ready; nothing published.");
+  const branchRead = targetRun("git", ["branch", "--show-current"], { capture: true, allowFail: true });
+  const headRead = targetRun("git", ["rev-parse", "HEAD"], { capture: true, allowFail: true });
+  const dirtyRead = targetRun("git", ["status", "--porcelain"], { capture: true, allowFail: true });
+  if (![branchRead, headRead, dirtyRead].every(read => read.ok)) return publicationRefusal("Target Git identity or cleanliness is unreadable.");
+  const branch = branchRead.out.trim();
+  const headSha = headRead.out.trim();
+  if (!branch || branch === "HEAD" || branch === base || headSha !== expectedHeadSha || dirtyRead.out.trim()) {
+    return publicationRefusal("Target must remain a clean named topic branch at the exact expected HEAD.");
+  }
+  const remote = targetRun("git", ["ls-remote", "--exit-code", "origin", `refs/heads/${branch}`], { capture: true, allowFail: true });
+  const rows = remote.ok ? remote.out.trim().split("\n").filter(Boolean) : [];
+  const fields = rows.length === 1 ? rows[0].split(/\s+/) : [];
+  const remoteHeadSha = fields.length === 2 && fields[1] === `refs/heads/${branch}` ? fields[0] : null;
+  if (remoteHeadSha !== expectedHeadSha) return publicationRefusal("Exact remote branch HEAD is unproven; nothing published.");
+  const statusRead = targetRun("pnpm", ["-s", "pregate:status", "--json"], { capture: true, allowFail: true });
+  const contextRead = targetRun("pnpm", ["-s", "gate:context", "--json"], { capture: true, allowFail: true });
+  const status = statusRead.ok ? parseGateStatus(statusRead.out) : null;
+  const context = contextRead.ok ? parseContext(contextRead.out) : null;
+  return resumePublished({ branch, base, title, body, headSha, expectedHeadSha, remoteHeadSha,
+    dirty: false, status, context, dry, log, runner: targetRun });
 }
 
 function readBody(file) {
@@ -290,11 +382,24 @@ function main() {
       "body-file": { type: "string" },
       title: { type: "string" },
       "dry-run": { type: "boolean", default: false },
+      "resume-publication": { type: "boolean", default: false },
+      worktree: { type: "string" },
+      "expected-head": { type: "string" },
       base: { type: "string", default: "main" },
     },
   });
   const dry = values["dry-run"];
   const log = (s) => process.stdout.write(`[land] ${s}\n`);
+
+  if (values["resume-publication"] || values.worktree || values["expected-head"]) {
+    if (!values["resume-publication"]) return fail("preconditions", "--worktree/--expected-head require --resume-publication.");
+    const target = resolve(values.worktree ?? ROOT);
+    const refusal = resumeFromWorktree({ target, base: values.base, title: values.title,
+      body: readBody(values["body-file"]), expectedHeadSha: values["expected-head"], dry, log });
+    if (refusal) return fail(refusal.step, refusal.message, refusal.next);
+    log(dry ? "dry run done; no publication performed" : "publication observed; pnpm pr:health reports current checks and queue state");
+    return;
+  }
 
   // ── 1. preconditions ──────────────────────────────────────────────────────
   const branch = git("rev-parse", "--abbrev-ref", "HEAD");
@@ -342,7 +447,7 @@ function main() {
     if (missing.length > 0) return failMissingAttestations(missing);
     const refusal = publish({ branch, base: values.base, title: values.title, body, dry, log });
     if (refusal) return fail(refusal.step, refusal.message, refusal.next);
-    log("done. The queue owns it from here; `pnpm pr:health` reports readiness.");
+    log(dry ? "dry run done; no publication performed" : "publication observed; pnpm pr:health reports current checks and queue state");
     return;
   }
   if (recorded?.verdict === "PASS") log(`not landing the recorded PASS: ${shortcut.reason}`);
@@ -468,7 +573,7 @@ function main() {
   const refusal = publish({ branch, base: values.base, title: values.title, body, dry, log });
   if (refusal) return fail(refusal.step, refusal.message, refusal.next);
 
-  log("done. The queue owns it from here; `pnpm pr:health` reports readiness.");
+  log(dry ? "dry run done; no publication performed" : "publication observed; pnpm pr:health reports current checks and queue state");
 }
 
 if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) main();

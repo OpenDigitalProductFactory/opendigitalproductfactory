@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   isRefreshableDivergence,
   refreshDivergedShipBuild,
+  refreshOrRetryShipBuildPr,
   SHIP_SOURCE_REFRESH_RETRY_MS,
   type ShipSourceRefreshDeps,
 } from "./ship-source-refresh";
@@ -105,5 +106,75 @@ describe("refreshDivergedShipBuild", () => {
     const d = deps({ returnToReview: vi.fn(async () => false) });
     await expect(refreshDivergedShipBuild("FB-1", d)).resolves.toBe("not-ship");
     expect(d.queueReview).not.toHaveBeenCalled();
+  });
+});
+
+describe("refreshDivergedShipBuild force (BI-34A05E78)", () => {
+  it("refreshes when the PR attempt itself was refused as diverged, even if the stored snapshot says ahead", async () => {
+    const d = deps({ loadBuild: vi.fn(async () => ({ phase: "ship", buildExecState: { sourceCurrency: { ...diverged, status: "ahead", recommendedAction: "allow" } } })) });
+    expect(await refreshDivergedShipBuild("FB-1", d)).toBe("not-diverged");
+    expect(await refreshDivergedShipBuild("FB-1", d, { force: true })).toBe("returned-to-review");
+  });
+});
+
+describe("refreshOrRetryShipBuildPr (BI-34A05E78)", () => {
+  const logger = { log: vi.fn(), error: vi.fn() };
+  const refresh = async () => "not-diverged" as const;
+  const reviewPublishedHead = async () => "not-applicable" as const;
+
+  function remedy(overrides: Record<string, unknown> = {}) {
+    return {
+      loadShipRefusalHistory: vi.fn(async () => []),
+      remedyRefusedShipBuild: vi.fn(async () => "return-to-review" as const),
+      shipPrRetryIntervalMs: vi.fn(() => 2 * 60 * 60 * 1000),
+      ...overrides,
+    };
+  }
+
+  it("classifies and remedies a refused retry, and reports that the build left ship", async () => {
+    const r = remedy();
+    const retry = vi.fn(async () => "blocked" as const);
+    await expect(refreshOrRetryShipBuildPr("FB-1", logger, { reviewPublishedHead, refresh, remedy: r as never, retry })).resolves.toBe(true);
+    expect(retry).toHaveBeenCalledWith("FB-1", logger, 2 * 60 * 60 * 1000);
+    expect(r.remedyRefusedShipBuild).toHaveBeenCalledWith("FB-1");
+  });
+
+  it("leaves a waiting build in ship and never retries an escalated one", async () => {
+    const waiting = remedy({ remedyRefusedShipBuild: vi.fn(async () => "wait" as const) });
+    await expect(refreshOrRetryShipBuildPr("FB-1", logger, { reviewPublishedHead, refresh, remedy: waiting as never, retry: vi.fn(async () => "blocked" as const) })).resolves.toBe(false);
+
+    const escalated = remedy({ loadShipRefusalHistory: vi.fn(async () => [{ kind: "unknown", action: "escalate" }]) });
+    const retry = vi.fn(async () => "blocked" as const);
+    await expect(refreshOrRetryShipBuildPr("FB-1", logger, { reviewPublishedHead, refresh, remedy: escalated as never, retry })).resolves.toBe(true);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  // BI-C49EC080: FB-2F2D46D5's PR head d38a3c56 had no review of its own.
+  it("sends a published but unreviewed PR head back to review before any refresh or retry", async () => {
+    const refreshSpy = vi.fn(refresh);
+    const retry = vi.fn(async () => "blocked" as const);
+    const r = remedy();
+    await expect(refreshOrRetryShipBuildPr("FB-2F2D46D5", logger, {
+      reviewPublishedHead: async () => "returned-to-review" as const, refresh: refreshSpy, remedy: r as never, retry,
+    })).resolves.toBe(true);
+    expect(refreshSpy).not.toHaveBeenCalled();
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("carries on to the PR retry once the published head is reviewed", async () => {
+    const retry = vi.fn(async () => "skipped" as const);
+    await expect(refreshOrRetryShipBuildPr("FB-1", logger, {
+      reviewPublishedHead: async () => "reviewed" as const, refresh, remedy: remedy() as never, retry,
+    })).resolves.toBe(false);
+    expect(retry).toHaveBeenCalled();
+  });
+});
+
+describe("refreshDivergedShipBuild with a published PR (BI-C49EC080)", () => {
+  it("does not rebase a build whose PR is published, unless the PR attempt itself was refused", async () => {
+    const d = deps({ hasPublishedPr: vi.fn(async () => true) });
+    await expect(refreshDivergedShipBuild("FB-1", d)).resolves.toBe("not-diverged");
+    expect(d.refresh).not.toHaveBeenCalled();
+    await expect(refreshDivergedShipBuild("FB-1", d, { force: true })).resolves.toBe("returned-to-review");
   });
 });

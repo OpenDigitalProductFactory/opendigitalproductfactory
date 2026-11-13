@@ -34,7 +34,7 @@ All dates are US Central. They assume two to four parallel delivery sessions, re
 
 | Item | What |
 |---|---|
-| T3 Code trial | First recorded runtime trial (the 2026-09-04 review was code reading only). Run one delivery-small item end to end inside a workroom on the subscription, recording cost, latency, plan-capacity use and failure behaviour |
+| T3 Code trial | First recorded runtime trial (the 2026-09-04 review was code reading only). Run one delivery-small item end to end inside a workroom on the subscription, recording cost, latency, plan-capacity use and failure behaviour. Result (2026-11-12): [trial record](../research/2026-11-12-t3-code-runtime-trial.md): reached a gated PR, not merged; blockers are platform-side |
 | BI-FC94F754 | Coding sensitivity by repository visibility, so open-source platform code is not confidential |
 | BI-F98BBE4F | Subscription effective-cost estimator v1: monthly fees recorded; cost per unit = fee ÷ observed usable capacity; reset-aware; hourly recheck and immediate re-enable verified |
 | BI-F039D17A | Corpus and vectors converge on update: re-embed on content change, profession corpus included |

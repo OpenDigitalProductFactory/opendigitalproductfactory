@@ -15,7 +15,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import type { PrismaClient } from "../generated/client/client";
-import { VECTOR_COLLECTIONS, upsertVectors, type VectorPoint } from "./pgvector-store";
+import { VECTOR_COLLECTIONS, scrollPoints, upsertVectors, type VectorPoint } from "./pgvector-store";
+import { WIKI_EMBEDDING_DIGEST_KEY, digestOfPoint, wikiEmbeddingDigest } from "./wiki-embedding-digest";
 import {
   PRINCIPLE_CONSUMER_ARCHETYPES,
   PRINCIPLE_DIMENSIONS,
@@ -463,6 +464,7 @@ async function seedWikiPages(
       slug,
       title: frontmatter.title,
       body,
+      abstract: frontmatter.abstract ?? null,
       pageKind: frontmatter.pageKind,
       status,
       // Thread principle metadata into the vector payload (BI-30AA6B76).
@@ -542,6 +544,8 @@ export type SeedablePage = {
   slug: string;
   title: string;
   body: string;
+  /** Embedded with the body; part of the content digest (BI-F039D17A). */
+  abstract?: string | null;
   pageKind: string;
   status: string;
   // Principle payload fields, threaded from `extractPrinciplePayload` so
@@ -596,6 +600,13 @@ export function buildKernelVectorPoints(
       kernelPageId: null,
       timestamp,
     };
+    // BI-F039D17A: stamp the digest only when the sidecar vector was built from
+    // the text this page carries now. An unstamped point is one the runtime
+    // reconcile will re-embed, which is the right outcome for a vector of
+    // unknown provenance.
+    if (rec.contentDigest && rec.contentDigest === wikiEmbeddingDigest(page)) {
+      payload[WIKI_EMBEDDING_DIGEST_KEY] = rec.contentDigest;
+    }
     // Principle-only payload keys — mirror storeWikiPage() so principle
     // retrieval filters (tier/appliesTo/ringScope) match sidecar-seeded
     // principle pages. Absence is the marker; never write null/empty for
@@ -613,13 +624,45 @@ export function buildKernelVectorPoints(
 }
 
 /**
+ * Choose which sidecar records may be written on this seed (BI-F039D17A).
+ *
+ * Every platform update re-runs the seed. Writing the whole sidecar each time
+ * overwrote fresher live embeddings with whatever the sidecar held — and the
+ * sidecar is rebuilt by hand, so it lags the prose. A record is applied only
+ * when it can only improve the store:
+ *   - the page has no vector at all (first install: bootstrap retrieval before
+ *     the embedding provider is reachable), or
+ *   - the record was built from the page's current text and the existing point
+ *     was not.
+ * Everything else is left to the runtime reconcile, which re-embeds any page
+ * whose point digest differs from its current text.
+ *
+ * Pure — exported for testing.
+ */
+export function sidecarRecordsToApply(
+  pages: SeedablePage[],
+  records: EmbeddingRecord[],
+  existingDigestByPageId: ReadonlyMap<string, string | null>,
+): EmbeddingRecord[] {
+  const pageBySlug = new Map(pages.map((p) => [p.slug, p]));
+  return records.filter((rec) => {
+    const page = pageBySlug.get(rec.slug);
+    if (!page) return true; // buildKernelVectorPoints warns and skips it
+    if (!existingDigestByPageId.has(page.id)) return true;
+    const current = wikiEmbeddingDigest(page);
+    return rec.contentDigest === current && existingDigestByPageId.get(page.id) !== current;
+  });
+}
+
+/**
  * Read `docs/founder-kernel/embeddings.jsonl` (if present) and upsert
  * the corresponding points into the `wiki-pages` vector collection.
  *
- * Per EP-WIKI-001 §5: installs whose configured embedding model matches
- * the manifest skip live embedding entirely — the sidecar is the
- * canonical path. Live embedding for the kernel happens via Phase 2b
- * ingest only when the sidecar is missing or stale (handled elsewhere).
+ * Per EP-WIKI-001 §5: the sidecar lets a fresh install retrieve before its
+ * embedding provider is reachable. It never overrides a vector built from the
+ * current text — see `sidecarRecordsToApply` (BI-F039D17A). Pages the sidecar
+ * does not cover, or covers with older text, converge through the runtime
+ * reconcile (`apps/web/lib/wiki/embedding-reconciliation.ts`).
  *
  * Silent-degradation: if the vector store is unreachable or the upsert throws,
  * the seed completes successfully (Postgres rows are still there) but
@@ -635,7 +678,25 @@ async function seedWikiVectors(
     return { pointsSeeded: 0, sidecarPresent: false };
   }
 
-  const vectorPoints = buildKernelVectorPoints(pages, records, kernelVersion);
+  let existing: Map<string, string | null>;
+  try {
+    const points = await scrollPoints(
+      VECTOR_COLLECTIONS.WIKI_PAGES,
+      { must: [{ key: "entityType", match: { value: "wiki-page" } }] },
+      100_000,
+    );
+    existing = new Map();
+    for (const point of points) {
+      const id = point.payload.entityId;
+      if (typeof id === "string") existing.set(id, digestOfPoint(point.payload));
+    }
+  } catch (err) {
+    console.warn("[seed-wiki-kernel] could not read existing wiki points; skipping sidecar so live vectors are not overwritten:", err);
+    return { pointsSeeded: 0, sidecarPresent: true };
+  }
+
+  const toApply = sidecarRecordsToApply(pages, records, existing);
+  const vectorPoints = buildKernelVectorPoints(pages, toApply, kernelVersion);
   if (vectorPoints.length === 0) {
     return { pointsSeeded: 0, sidecarPresent: true };
   }
@@ -756,6 +817,12 @@ export type EmbeddingRecord = {
   vector: number[];
   /** model identifier, e.g. "ai/nomic-embed-text-v1.5" */
   model: string;
+  /**
+   * `wikiEmbeddingDigest` of the text the vector was built from (BI-F039D17A).
+   * Absent on records built before digests existed; such a record is used
+   * only to bootstrap a page that has no vector yet.
+   */
+  contentDigest?: string;
 };
 
 /**

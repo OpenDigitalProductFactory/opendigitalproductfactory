@@ -18,6 +18,14 @@ describe("local-degradation caveat (BI-C0F180E8)", () => {
     expect(out).toContain(substantive);
   });
 
+  it("does not tell an owner to resubmit unverified tool-backed work", () => {
+    const out = applyLocalDegradationCaveat("I could not save the requested checkpoint.", {
+      providerId: "local", executedToolCount: 0,
+    });
+    expect(out).not.toMatch(/send (?:the|your) message again|resubmit|try again in a moment/i);
+    expect(out).toContain("does not confirm completion");
+  });
+
   it("does NOT caveat a strong paid backup (failover is trustworthy)", () => {
     // The routing-resilience path deliberately keeps a downgraded backup answer;
     // only the weak LOCAL model is untrustworthy.

@@ -1,16 +1,27 @@
 /**
  * BI-1ADD56FC — unit tests for shared-safe git fetch helpers.
  */
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import {
   assertRepoNotShallow,
-  fetchOriginMainSharedSafe,
+  fetchOriginMainSharedSafe as fetchSharedSafe,
   isShallowRepository,
   SHALLOW_DEEPEN_MAX_STEPS,
   SHALLOW_DEEPEN_STEP,
-  unshallowRootSharedSafe,
+  unshallowRootSharedSafe as unshallowSharedSafe,
 } from "./git-fetch-shared-safe.mjs";
+
+// Existing depth-policy tests use a real isolated common directory while
+// keeping their fake Git history responses focused on depth and merge-base.
+const common = mkdtempSync(join(tmpdir(), "dpf-fetch-policy-"));
+after(() => rmSync(common, { recursive: true, force: true }));
+const inRepository = git => args => args.includes("--git-common-dir") ? common : git(args);
+const fetchOriginMainSharedSafe = (git, opts) => fetchSharedSafe(inRepository(git), opts);
+const unshallowRootSharedSafe = (git, opts) => unshallowSharedSafe(inRepository(git), opts);
 
 describe("isShallowRepository", () => {
   it("is true when rev-parse reports true", () => {

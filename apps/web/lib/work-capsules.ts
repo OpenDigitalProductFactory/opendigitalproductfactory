@@ -137,6 +137,9 @@ export const WORK_CAPSULE_EXECUTOR_KINDS = [
   "human",
   "git-webhook",
   "dpf-native",
+  // A claim this installation holds for a paired installation that asked for
+  // it (BI-30EDDB7F): the work runs there, the claim lives here.
+  "federated-peer",
 ] as const;
 
 export type WorkCapsuleExecutorKind = (typeof WORK_CAPSULE_EXECUTOR_KINDS)[number];

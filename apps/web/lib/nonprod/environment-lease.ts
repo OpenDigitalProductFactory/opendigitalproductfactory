@@ -1,4 +1,4 @@
-import { isTerminalLeaseStatus, lockNonprodEnvironment, type NonprodEnvironmentKey } from "./environment-lease-lock";
+import { isTerminalLeaseStatus, type NonprodEnvironmentKey } from "./environment-lease-lock";
 export { NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "./environment-lease-lock";
 import type { ClaimNonprodEnvironmentLeaseResult, LeaseRow, ResolvedNonprodPoolPolicy } from "./environment-lease-result";
 export type { ClaimNonprodEnvironmentLeaseResult } from "./environment-lease-result";
@@ -15,14 +15,29 @@ import type { HeavyResourceClass } from "./host-resource-policy";
 import { lockHostBackedClaimAdmission, resolveHostBackedClaimPolicy } from "./environment-lease-host-backed-reservation";
 import localCiSlotResources from "./local-ci-slot-resources.json";
 import { assertRenewalSlotBinding, type NonprodSlotBinding } from "./environment-lease-slot-binding";
-import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
+import {
+  emitLeaseTransitions,
+  inLeaseTransaction,
+  isSelfAdmittingEnvironment,
+  lockEnvironment,
+  type LeaseDb,
+  type LeaseTransitionInput,
+  type LeaseTx,
+} from "./environment-lease-transaction";
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
-import { previewMustYieldSlot } from "./environment-lease-preview-yield";
+import { decideRenewalHoldBound } from "./environment-lease-hold-bound";
+import {
+  boundedRenewalExpiry,
+  explainQueue,
+  SERVICE_LOOKBACK_MS,
+  type HoldClass,
+  type QueueExplanation,
+} from "./environment-lease-overseer";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits, settleNonprodLeaseWait } from "./durable-wait";
 import { bindFreshLeaseProvenance, checkpointQueuedLeaseProvenance, assertOwnedLeaseRelease, freshLeaseBirthFields, type LeaseReleaseContext } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
@@ -43,94 +58,6 @@ export {
 type NonprodSlotKey = keyof typeof localCiSlotResources.slots;
 export const NONPROD_SLOT_KEYS = Object.freeze(Object.keys(localCiSlotResources.slots) as NonprodSlotKey[]);
 
-type LeaseTx = Pick<
-  typeof prisma,
-  "$executeRaw" | "$queryRaw" | "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
-> & Partial<Pick<typeof prisma, "taskRun">>;
-type LeaseDb = Pick<typeof prisma, "nonProductionEnvironmentLease"> & Partial<Pick<
-  typeof prisma, "$transaction" | "$executeRaw" | "platformConfig" | "externalEvidenceRecord" | "workroom" | "taskRun"
->>;
-
-async function inLeaseTransaction<T>(
-  db: LeaseDb,
-  body: (tx: LeaseTx) => Promise<T>,
-): Promise<T> {
-  if (typeof db.$transaction !== "function") {
-    return body(db as LeaseTx);
-  }
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await db.$transaction(
-        async (tx) => body(tx as LeaseTx),
-        // The transaction-level advisory lock is the serialization primitive.
-        // READ COMMITTED gives a waiter a fresh snapshot after acquiring that
-        // lock; SERIALIZABLE would retain the pre-wait snapshot and provoke a
-        // retry storm under a long FIFO queue.
-        { isolationLevel: "ReadCommitted" },
-      );
-    } catch (error) {
-      const code = typeof error === "object" && error && "code" in error
-        ? String(error.code)
-        : "";
-      // A concurrent idempotent insert or serializable write conflict means
-      // another claimant committed first. A fresh transaction can now observe
-      // and return that same durable claim row.
-      if (!["P2002", "P2034"].includes(code) || attempt >= 2) throw error;
-    }
-  }
-}
-
-/**
- * Lanes whose queue head is WOKEN, never promoted: the head's own next claim is
- * the only transaction that may admit it.
- */
-function isSelfAdmittingEnvironment(environmentKey: string): boolean {
-  return environmentKey === "local-integration-ci"
-    || environmentKey === "host-heavy-resource";
-}
-
-type LeaseTransitionInput = {
-  lease: LeaseRow;
-  transition: "enqueued" | "started" | "finished" | "cancelled";
-  outcome?: "success" | "failed" | "cancelled";
-  depth?: number;
-  waitMs?: number;
-  processMs?: number;
-  cycleMs?: number;
-};
-
-function emitLeaseTransition(input: LeaseTransitionInput) {
-  return recordQueueTransition({
-    queueKey: `compute:nonprod-${input.lease.environmentKey}`,
-    itemKind: "nonprod-environment-lease",
-    itemId: input.lease.leaseId,
-    transition: input.transition,
-    outcome: input.outcome,
-    laneKey: input.lease.slotKey,
-    actorType: "system",
-    depth: input.depth,
-    durations: {
-      waitMs: input.waitMs,
-      processMs: input.processMs,
-      cycleMs: input.cycleMs,
-    },
-  });
-}
-
-async function emitLeaseTransitions(inputs: LeaseTransitionInput[]) {
-  for (const input of inputs) {
-    await emitLeaseTransition(input);
-  }
-}
-
-async function lockEnvironment(
-  tx: LeaseTx,
-  environmentKey: string,
-): Promise<void> {
-  if (typeof tx.$executeRaw !== "function") return;
-  await lockNonprodEnvironment(tx, environmentKey);
-}
-
 async function reconcileEnvironmentInTransaction(input: {
   tx: LeaseTx;
   environmentKey: string;
@@ -144,11 +71,17 @@ async function reconcileEnvironmentInTransaction(input: {
   expiredLeaseIds: string[];
   admittedLeaseIds: string[];
   queueDepth: number;
+  queue: QueueExplanation[];
 }> {
+  // BI-218A4555: the same read carries the last hour's admissions, which the
+  // overseer uses as service history (fair share, class turn, estimates).
   const rows = await input.tx.nonProductionEnvironmentLease.findMany({
     where: {
       environmentKey: input.environmentKey,
-      status: { in: ["active", "queued"] },
+      OR: [
+        { status: { in: ["active", "queued"] } },
+        { admittedAt: { gte: new Date(input.now.getTime() - SERVICE_LOOKBACK_MS) } },
+      ],
     },
     orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
   });
@@ -216,10 +149,26 @@ async function reconcileEnvironmentInTransaction(input: {
     }
   }
 
+  const admitted = new Set(plan.admissions.map((entry) => entry.leaseId));
+  const expired = new Set(plan.expiredLeaseIds);
+  const waiterById = new Map(rows.map((row) => [row.id, row]));
+  const ordered = plan.queuePositions
+    .map((entry) => waiterById.get(entry.leaseId))
+    .filter((row): row is (typeof rows)[number] => Boolean(row));
+  const active = rows.filter((row) =>
+    (row.status === "active" && !expired.has(row.id)) || admitted.has(row.id));
+  const queue = explainQueue({
+    ordered,
+    active: active.map((row) => admitted.has(row.id) ? { ...row, status: "active", admittedAt: input.now } : row),
+    capacity: Math.max(1, input.slotKeys.length || 1),
+    history: plan.history,
+    waiterLivenessWindowMs: input.livenessWindowMs ?? admittedLeaseTtlMs(input.environmentKey, DEFAULT_LEASE_TTL_MS),
+  });
   return {
     expiredLeaseIds: plan.expiredLeaseIds,
     admittedLeaseIds: plan.admissions.map((entry) => entry.leaseId),
     queueDepth: plan.queuePositions.length,
+    queue,
   };
 }
 
@@ -486,21 +435,22 @@ export async function claimNonprodEnvironmentLease(input: {
       }
       return { status: "terminal", lease: current, reason: current.status, poolPolicy };
     }
-    const queue = await tx.nonProductionEnvironmentLease.findMany({
-      where: {
-        environmentKey: input.environmentKey,
-        status: "queued",
-      },
-      orderBy: [{ queuedAt: "asc" }, { id: "asc" }],
-      select: { id: true },
-    });
+    // BI-218A4555: the position is the overseer's policy order, decided in the
+    // same reconciliation, with an estimate and a one-sentence reason.
+    const explanation = reconciliation.queue.find((entry) => entry.leaseId === current.id);
+    const queuePosition = explanation?.queuePosition ?? reconciliation.queue.length + 1;
     return {
       status: "queued",
       ...await checkpointQueuedLeaseProvenance({ db: tx, lease: current, created,
         authenticatedUserId: input.authenticatedUserId, authenticatedAgentId: input.authenticatedAgentId,
-        queuePosition: queue.findIndex((row) => row.id === current.id) + 1, waitDeadlineAt: queueExpiresAt, now }),
-      queuePosition: queue.findIndex((row) => row.id === current.id) + 1,
+        queuePosition, waitDeadlineAt: queueExpiresAt, now }),
+      queuePosition,
       waitAgeMs,
+      ...(explanation ? {
+        estimatedWaitMs: explanation.estimatedWaitMs,
+        queueReason: explanation.queueReason,
+        policyVersion: explanation.policyVersion,
+      } : {}),
       poolPolicy,
     };
     },
@@ -657,7 +607,8 @@ export async function renewNonprodEnvironmentLease(input: {
     lease: LeaseRow;
     poolPolicy: ResolvedNonprodPoolPolicy;
   }
-  | { status: "lost"; reason: "not-found" | "not-active" | "not-owner" | "expired" | "yielded" }
+  | { status: "lost"; reason: "not-found" | "not-active" | "not-owner" | "expired" }
+  | { status: "lost"; reason: "yielded"; holdClass: HoldClass; holdBoundAt: Date }
 > {
   const db = input.db ?? prisma;
   const now = input.now ?? new Date();
@@ -668,9 +619,19 @@ export async function renewNonprodEnvironmentLease(input: {
   if (lease.status !== "active") return { status: "lost", reason: "not-active" };
   if (lease.ownerSessionId !== input.ownerSessionId) return { status: "lost", reason: "not-owner" };
   if (lease.expiresAt.getTime() <= now.getTime()) return { status: "lost", reason: "expired" };
-  // BI-995E9530: a long-held preview yields the shared CI slot to a waiting
-  // gate; its keeper treats lease_lost as authoritative and stops the preview.
-  if (await previewMustYieldSlot(db, lease, now)) return { status: "lost", reason: "yielded" };
+  // BI-218A4555 (generalises BI-995E9530): no hold outlives its class bound
+  // while another session waits. Past the bound the holder yields, and the
+  // yield is recorded on the lease; its supervisor treats lease_lost as
+  // authoritative and stops the work.
+  const holdBound = await decideRenewalHoldBound(db, lease, now);
+  if (holdBound.kind === "yield") {
+    await db.nonProductionEnvironmentLease.update({
+      where: { leaseId: input.leaseId },
+      data: { phase: holdBound.phase },
+    });
+    return { status: "lost", reason: "yielded", holdClass: holdBound.classification.holdClass,
+      holdBoundAt: holdBound.holdBoundAt };
+  }
   if (input.slotBinding) {
     assertRenewalSlotBinding(lease, input.slotBinding);
   } else if (
@@ -688,7 +649,8 @@ export async function renewNonprodEnvironmentLease(input: {
     where: { leaseId: input.leaseId },
     data: {
       requestedTtlMs: ttlMs,
-      expiresAt: new Date(now.getTime() + ttlMs),
+      // While contended, a renewal never reaches past the class bound.
+      expiresAt: boundedRenewalExpiry(holdBound, new Date(now.getTime() + ttlMs)),
       heartbeatAt: now,
       phase: "running",
       ...(input.slotBinding

@@ -69,7 +69,9 @@ describe("peerWorkInProgress", () => {
 
 describe("claimFromMirrorPayload", () => {
   it("reads a well-formed claim and tolerates a peer that sends none", () => {
-    expect(claimFromMirrorPayload({ claim: { active: true, since: null, workrooms: 2 } })).toEqual({ active: true, since: null, workrooms: 2 });
+    expect(claimFromMirrorPayload({ claim: { active: true, since: null, workrooms: 2 } })).toEqual({ active: true, since: null, workrooms: 2, holder: null });
+    const holder = { installationId: "inst_x", workroomId: "WC-1", leaseExpiresAt: null };
+    expect(claimFromMirrorPayload({ claim: { active: true, since: null, workrooms: 1, holder } })).toMatchObject({ holder });
     expect(claimFromMirrorPayload({ title: "x", status: "open" })).toBeNull();
     expect(claimFromMirrorPayload({ claim: { active: "yes" } })).toBeNull();
   });

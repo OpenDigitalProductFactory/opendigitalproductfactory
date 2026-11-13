@@ -5,7 +5,58 @@
  * Null when no room carries one: the item is unshaped and v2 applies.
  */
 
-import { readWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { readWorkShapeClaim, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { isRecord } from "@/lib/shared/coerce";
+import { scopeClaimEntries } from "@/lib/work-capsules/scope-input";
+import { isTerminalCapsuleStatus } from "@/lib/work-capsules/work-capsule-branch-identity";
+
+/** Strict inspection for missing-only native recovery; tolerant item readers below stay unchanged. */
+export function inspectNativeDeliveryClaim(carrier: unknown): { kind: "missing" | "invalid" } | { kind: "bound"; workShape: string } {
+  const entries = scopeClaimEntries(carrier);
+  if ((!Array.isArray(carrier) && !isRecord(carrier)) || entries.some(entry => !isRecord(entry))) return { kind: "invalid" };
+  const declarations = entries.filter(entry => isRecord(entry)
+    && ["workShape", "workShapeKey", "workShapeVersion"].some(key => Object.hasOwn(entry, key)));
+  if (!declarations.length) return { kind: "missing" };
+  const declaration = declarations[0];
+  const mixed = isRecord(declaration) && Object.hasOwn(declaration, "workShape")
+    && (Object.hasOwn(declaration, "workShapeKey") || Object.hasOwn(declaration, "workShapeVersion"));
+  if (declarations.length !== 1 || mixed || !resolveWorkShapeClaim([declaration])) return { kind: "invalid" };
+  const ref = readWorkShapeClaim([declaration])!;
+  return { kind: "bound", workShape: `${ref.key}@${ref.version}` };
+}
+
+type NativeBuildRoom = {
+  id: string; capsuleId: string; executorKind: string | null; executorRef: string | null;
+  featureBuildId: string | null; backlogItemId: string | null; status: string;
+  archivedAt: unknown; scopeClaims: unknown;
+};
+export type NativeBuildRoomDb = { workroom?: { findMany?(args: unknown): Promise<NativeBuildRoom[]> } };
+export type NativeBuildRoomBinding = {
+  buildId: string; buildRowId: string; itemId: string; itemRowId: string;
+  expectedWorkroom?: { id: string; capsuleId: string };
+};
+
+/** Review entry reads one carrier for BOTH facts; another room's recency grants no fallback. */
+export async function readNativeBuildDeliveryFacts(db: NativeBuildRoomDb, binding: NativeBuildRoomBinding) {
+  if (!db.workroom?.findMany) return null;
+  const rooms = await db.workroom.findMany({
+    where: { executorKind: "build-studio", executorRef: binding.buildId, archivedAt: null,
+      status: { notIn: ["complete", "abandoned", "archived", "superseded"] } },
+    take: 2,
+    select: { id: true, capsuleId: true, executorKind: true, executorRef: true, featureBuildId: true,
+      backlogItemId: true, status: true, archivedAt: true, scopeClaims: true },
+  });
+  const room = rooms[0];
+  if (rooms.length !== 1 || !room || room.executorKind !== "build-studio" || room.executorRef !== binding.buildId
+    || room.featureBuildId !== binding.buildRowId || ![binding.itemId, binding.itemRowId].includes(room.backlogItemId ?? "")
+    || room.archivedAt != null || isTerminalCapsuleStatus(room.status) || room.status === "superseded"
+    || (binding.expectedWorkroom && (room.id !== binding.expectedWorkroom.id || room.capsuleId !== binding.expectedWorkroom.capsuleId))) return null;
+  const declaration = inspectNativeDeliveryClaim(room.scopeClaims);
+  return declaration.kind === "bound" ? {
+    room: { id: room.id, capsuleId: room.capsuleId }, workShape: declaration.workShape,
+    declaredPaths: editPathsOf(scopeClaimEntries(room.scopeClaims)) ?? [],
+  } : null;
+}
 
 export type BoundWorkShapeDb = {
   workroom: { findFirst(args: unknown): Promise<{ scopeClaims?: unknown } | null> };
