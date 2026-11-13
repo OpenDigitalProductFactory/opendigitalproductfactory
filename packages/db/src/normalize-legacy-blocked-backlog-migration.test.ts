@@ -23,70 +23,84 @@ const describeDatabase = databaseUrl ? describe : describe.skip;
 const schema = `normalize_blocked_${randomUUID().replaceAll("-", "")}`;
 let client: Client;
 
+const schemaTablesSql = `
+  CREATE TYPE "BacklogItemStatus" AS ENUM (
+    'triaging', 'open', 'in-progress', 'awaiting-acceptance', 'done', 'deferred', 'retired'
+  );
+  CREATE TABLE "Principal" (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL,
+    "displayName" TEXT NOT NULL
+  );
+  CREATE TABLE "User" (
+    id TEXT PRIMARY KEY,
+    "isActive" BOOLEAN NOT NULL,
+    "isSuperuser" BOOLEAN NOT NULL,
+    "workHandedOverAt" TIMESTAMPTZ,
+    "createdAt" TIMESTAMPTZ NOT NULL
+  );
+  CREATE TABLE "PrincipalAlias" (
+    id TEXT PRIMARY KEY,
+    "principalId" TEXT NOT NULL,
+    "aliasType" TEXT NOT NULL,
+    "aliasValue" TEXT NOT NULL,
+    issuer TEXT NOT NULL DEFAULT ''
+  );
+  CREATE TABLE "Portfolio" (
+    id TEXT PRIMARY KEY,
+    slug TEXT NOT NULL,
+    "accountablePrincipalId" TEXT
+  );
+  CREATE TABLE "Organization" (
+    id TEXT PRIMARY KEY,
+    "topAccountablePrincipalId" TEXT,
+    "createdAt" TIMESTAMPTZ NOT NULL
+  );
+  CREATE TABLE "BacklogItem" (
+    id TEXT PRIMARY KEY,
+    "itemId" TEXT NOT NULL,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL,
+    "submittedById" TEXT,
+    "deferReason" TEXT,
+    "deferTrigger" TEXT,
+    "deferReviewAt" TIMESTAMPTZ,
+    "deferOwnerPrincipalId" TEXT,
+    "deferredAt" TIMESTAMPTZ,
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT "BacklogItem_status_closed_set"
+      CHECK (status IN ('triaging', 'open', 'in-progress', 'awaiting-acceptance', 'done', 'deferred', 'retired', 'blocked'))
+  );
+  CREATE TABLE "BacklogItemActivity" (
+    id TEXT PRIMARY KEY,
+    "backlogItemId" TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}',
+    "recordedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+`;
+
+async function scenarioClient(seedSql: string) {
+  const scenario = `normalize_blocked_case_${randomUUID().replaceAll("-", "")}`;
+  const scenarioDb = new Client({ connectionString: databaseUrl });
+  await scenarioDb.connect();
+  await scenarioDb.query(`CREATE SCHEMA "${scenario}"`);
+  await scenarioDb.query(`SET search_path TO "${scenario}"`);
+  await scenarioDb.query(schemaTablesSql);
+  await scenarioDb.query(seedSql);
+  return { scenario, scenarioDb };
+}
+
 describeDatabase("normalize legacy blocked backlog migration (BI-22CDF13B)", () => {
   beforeAll(async () => {
     client = new Client({ connectionString: databaseUrl });
     await client.connect();
     await client.query(`CREATE SCHEMA "${schema}"`);
     await client.query(`SET search_path TO "${schema}"`);
+    await client.query(schemaTablesSql);
     await client.query(`
-      CREATE TYPE "BacklogItemStatus" AS ENUM (
-        'triaging', 'open', 'in-progress', 'awaiting-acceptance', 'done', 'deferred', 'retired'
-      );
-      CREATE TABLE "Principal" (
-        id TEXT PRIMARY KEY,
-        kind TEXT NOT NULL,
-        status TEXT NOT NULL,
-        "displayName" TEXT NOT NULL
-      );
-      CREATE TABLE "User" (
-        id TEXT PRIMARY KEY,
-        "isActive" BOOLEAN NOT NULL,
-        "isSuperuser" BOOLEAN NOT NULL,
-        "workHandedOverAt" TIMESTAMPTZ,
-        "createdAt" TIMESTAMPTZ NOT NULL
-      );
-      CREATE TABLE "PrincipalAlias" (
-        id TEXT PRIMARY KEY,
-        "principalId" TEXT NOT NULL,
-        "aliasType" TEXT NOT NULL,
-        "aliasValue" TEXT NOT NULL,
-        issuer TEXT NOT NULL DEFAULT ''
-      );
-      CREATE TABLE "Portfolio" (
-        id TEXT PRIMARY KEY,
-        slug TEXT NOT NULL,
-        "accountablePrincipalId" TEXT
-      );
-      CREATE TABLE "Organization" (
-        id TEXT PRIMARY KEY,
-        "topAccountablePrincipalId" TEXT,
-        "createdAt" TIMESTAMPTZ NOT NULL
-      );
-      CREATE TABLE "BacklogItem" (
-        id TEXT PRIMARY KEY,
-        "itemId" TEXT NOT NULL,
-        title TEXT NOT NULL,
-        status TEXT NOT NULL,
-        "submittedById" TEXT,
-        "deferReason" TEXT,
-        "deferTrigger" TEXT,
-        "deferReviewAt" TIMESTAMPTZ,
-        "deferOwnerPrincipalId" TEXT,
-        "deferredAt" TIMESTAMPTZ,
-        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-        CONSTRAINT "BacklogItem_status_closed_set"
-          CHECK (status IN ('triaging', 'open', 'in-progress', 'awaiting-acceptance', 'done', 'deferred', 'retired', 'blocked'))
-      );
-      CREATE TABLE "BacklogItemActivity" (
-        id TEXT PRIMARY KEY,
-        "backlogItemId" TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        payload JSONB NOT NULL DEFAULT '{}',
-        "recordedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-
       INSERT INTO "Principal" (id, kind, status, "displayName") VALUES
         ('principal-submitter', 'human', 'active', 'Submitter'),
         ('principal-foundational', 'human', 'active', 'Foundational Owner');
@@ -156,6 +170,68 @@ describeDatabase("normalize legacy blocked backlog migration (BI-22CDF13B)", () 
       { itemId: "BI-BLOCKED-1", from: "blocked", to: "deferred", owner: "principal-submitter" },
       { itemId: "BI-BLOCKED-2", from: "blocked", to: "deferred", owner: "principal-foundational" },
     ]);
+  });
+
+  it("uses the organization accountable-owner fallback", async () => {
+    const { scenario, scenarioDb } = await scenarioClient(`
+      INSERT INTO "Principal" (id, kind, status, "displayName") VALUES ('principal-org', 'human', 'active', 'Organization Owner');
+      INSERT INTO "User" (id, "isActive", "isSuperuser", "workHandedOverAt", "createdAt") VALUES ('user-org', true, false, NULL, now());
+      INSERT INTO "PrincipalAlias" (id, "principalId", "aliasType", "aliasValue") VALUES ('alias-org', 'principal-org', 'user', 'user-org');
+      INSERT INTO "Organization" (id, "topAccountablePrincipalId", "createdAt") VALUES ('org', 'principal-org', now());
+      INSERT INTO "BacklogItem" (id, "itemId", title, status) VALUES ('blocked-org', 'BI-ORG', 'Organization fallback', 'blocked');
+    `);
+    try {
+      await scenarioDb.query(readFileSync(migrationPath, "utf8"));
+      const row = await scenarioDb.query(`
+        SELECT "deferOwnerPrincipalId" AS owner
+        FROM "BacklogItem"
+        WHERE id = 'blocked-org'
+      `);
+      expect(row.rows).toEqual([{ owner: "principal-org" }]);
+    } finally {
+      await scenarioDb.query(`DROP SCHEMA IF EXISTS "${scenario}" CASCADE`);
+      await scenarioDb.end();
+    }
+  });
+
+  it("uses the active-superuser last-resort fallback", async () => {
+    const { scenario, scenarioDb } = await scenarioClient(`
+      INSERT INTO "Principal" (id, kind, status, "displayName") VALUES ('principal-super', 'human', 'active', 'Superuser Owner');
+      INSERT INTO "User" (id, "isActive", "isSuperuser", "workHandedOverAt", "createdAt") VALUES ('user-super', true, true, NULL, now());
+      INSERT INTO "PrincipalAlias" (id, "principalId", "aliasType", "aliasValue") VALUES ('alias-super', 'principal-super', 'user', 'user-super');
+      INSERT INTO "BacklogItem" (id, "itemId", title, status) VALUES ('blocked-super', 'BI-SUPER', 'Superuser fallback', 'blocked');
+    `);
+    try {
+      await scenarioDb.query(readFileSync(migrationPath, "utf8"));
+      const row = await scenarioDb.query(`
+        SELECT "deferOwnerPrincipalId" AS owner
+        FROM "BacklogItem"
+        WHERE id = 'blocked-super'
+      `);
+      expect(row.rows).toEqual([{ owner: "principal-super" }]);
+    } finally {
+      await scenarioDb.query(`DROP SCHEMA IF EXISTS "${scenario}" CASCADE`);
+      await scenarioDb.end();
+    }
+  });
+
+  it("aborts and rolls back when no active human owner can be resolved", async () => {
+    const { scenario, scenarioDb } = await scenarioClient(`
+      INSERT INTO "BacklogItem" (id, "itemId", title, status) VALUES ('blocked-unowned', 'BI-UNOWNED', 'Unowned legacy item', 'blocked');
+    `);
+    try {
+      await expect(scenarioDb.query(readFileSync(migrationPath, "utf8"))).rejects.toThrow(
+        "Cannot normalize legacy blocked backlog: no active human deferral owner is available",
+      );
+      await scenarioDb.query("ROLLBACK");
+      const item = await scenarioDb.query(`SELECT status FROM "BacklogItem" WHERE id = 'blocked-unowned'`);
+      const activity = await scenarioDb.query(`SELECT count(*)::int AS count FROM "BacklogItemActivity"`);
+      expect(item.rows).toEqual([{ status: "blocked" }]);
+      expect(activity.rows).toEqual([{ count: 0 }]);
+    } finally {
+      await scenarioDb.query(`DROP SCHEMA IF EXISTS "${scenario}" CASCADE`);
+      await scenarioDb.end();
+    }
   });
 
   it("leaves non-target rows unchanged", async () => {
