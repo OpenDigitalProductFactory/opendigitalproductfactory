@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   const { findTaskOwnerUserId } = await import("@dpf/db/install-work-owner");
   const owner = await resolveCredentialOwner(prisma.user as never, () => findTaskOwnerUserId(prisma as never), email);
   if (!owner.ok) fatal(owner.error);
-  const user = owner.user;
+  const user = owner.data.user;
 
   const result = await ensureGrokCredentialsClient({
     ownerUserId: user.id,

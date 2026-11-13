@@ -207,7 +207,7 @@ async function main(): Promise<void> {
   if (!owner.ok) {
     fatal(`${owner.error} Ensure the platform is running and seeded, then re-run.`);
   }
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } });
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: owner.data.user.id } });
 
   // Available scopes = the union of every grant this install registers in the
   // tool→grant catalog. Mirrors listAvailableMcpScopes (lib/actions/mcp-tokens.ts)

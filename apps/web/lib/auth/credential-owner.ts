@@ -12,30 +12,30 @@
 // portfolio, then the organization, skipping an account whose work was handed
 // over). A named account still wins, but it must exist and be active.
 
+import { err, ok, type ActionResult } from "@/lib/shared/action-result";
+
 type UserLookup = {
   findFirst(args: { where: { email?: string; id?: string }; select?: unknown }): Promise<{ id: string; email: string; isActive: boolean } | null>;
 };
 
-export type CredentialOwner =
-  | { ok: true; user: { id: string; email: string }; source: "named" | "accountable-owner" }
-  | { ok: false; error: string };
+export type CredentialOwner = { user: { id: string; email: string }; source: "named" | "accountable-owner" };
 
 export async function resolveCredentialOwner(
   users: UserLookup,
   findAccountableOwnerUserId: () => Promise<string | null>,
   namedEmail: string | undefined,
-): Promise<CredentialOwner> {
+): Promise<ActionResult<CredentialOwner>> {
   const select = { id: true, email: true, isActive: true };
   if (namedEmail) {
     const user = await users.findFirst({ where: { email: namedEmail }, select });
-    if (!user) return { ok: false, error: `No user found with email "${namedEmail}".` };
-    if (!user.isActive) return { ok: false, error: `The account "${namedEmail}" is deactivated.` };
-    return { ok: true, user: { id: user.id, email: user.email }, source: "named" };
+    if (!user) return err(`No user found with email "${namedEmail}".`);
+    if (!user.isActive) return err(`The account "${namedEmail}" is deactivated.`);
+    return ok({ user: { id: user.id, email: user.email }, source: "named" });
   }
   const ownerId = await findAccountableOwnerUserId();
   const user = ownerId ? await users.findFirst({ where: { id: ownerId }, select }) : null;
   if (!user || !user.isActive) {
-    return { ok: false, error: "No accountable person is recorded for this install. Name one with --user <email>." };
+    return err("No accountable person is recorded for this install. Name one with --user <email>.");
   }
-  return { ok: true, user: { id: user.id, email: user.email }, source: "accountable-owner" };
+  return ok({ user: { id: user.id, email: user.email }, source: "accountable-owner" });
 }

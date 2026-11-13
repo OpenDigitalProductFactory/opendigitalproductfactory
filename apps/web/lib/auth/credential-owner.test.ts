@@ -26,13 +26,13 @@ describe("resolveCredentialOwner", () => {
   it("uses the install's accountable owner when no account is named, not the bootstrap admin", async () => {
     const d = db("u-mark");
     const owner = await resolveCredentialOwner(d.user, d.findOwner, undefined);
-    expect(owner).toEqual({ ok: true, user: { id: "u-mark", email: "mark@example.com" }, source: "accountable-owner" });
+    expect(owner.ok && owner.data).toEqual({ user: { id: "u-mark", email: "mark@example.com" }, source: "accountable-owner" });
   });
 
   it("uses an explicitly named account", async () => {
     const d = db("u-mark");
-    expect(await resolveCredentialOwner(d.user, d.findOwner, "admin@dpf.local"))
-      .toEqual({ ok: true, user: { id: "u-admin", email: "admin@dpf.local" }, source: "named" });
+    const owner = await resolveCredentialOwner(d.user, d.findOwner, "admin@dpf.local");
+    expect(owner.ok && owner.data).toEqual({ user: { id: "u-admin", email: "admin@dpf.local" }, source: "named" });
   });
 
   it("refuses an unknown or deactivated named account", async () => {
