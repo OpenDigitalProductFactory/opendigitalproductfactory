@@ -644,6 +644,17 @@ process probe. The next preflight does the same before it runs, so a dead
 pre-owner receipt no longer fences the worktree. A legacy receipt whose owner is
 alive, unmeasurable or does not match stays unknown and untouched.
 
+An owned receipt settled inconclusive (its controller was killed from outside,
+for example by closing the terminal) is released the same way once nothing it
+started can still be running. Status reports `abandoned-settled`, and
+reconciliation or the next preflight quarantines it, only when all of these
+hold: the lock still names the receipt's own owner, that controller is still
+provably absent, a process scan that succeeded finds no surviving descendant of
+it, and 90 minutes (the 60-minute parent budget plus the 30-minute command
+budget) have passed since its last heartbeat. `quarantine.json` records the
+empty descendant scan. A failed scan, a surviving descendant, a live or changed
+owner, or a heartbeat inside that window keeps the receipt retained.
+
 When a retained receipt does block a run, preflight still exits 88, but it names
 the receipt (`HOST_RECEIPT_RETAINED` and its path) and `pregate` says it is not
 host pressure.
