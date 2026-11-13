@@ -13,7 +13,7 @@ import type { RoomMessageAddressing } from "@/lib/work-management/room-message-a
 import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
 import { announceSupervisionLost, dispatchRoomMessage } from "@/lib/work-management/room-message-wake.server";
 
-import type { SupervisedSessionPort } from "./supervised-turn-delivery";
+import { combineSupervisedWake, type SupervisedSessionPort } from "./supervised-turn-delivery";
 
 const NOW = new Date("2026-11-11T05:00:07.000Z");
 const ADDRESS = "gaid:priv:dpf.internal:agt-ext-claude#session=thr-1";
@@ -227,5 +227,28 @@ describe("announceSupervisionLost (AC-ADB-13)", () => {
     await announceSupervisionLost({ capsuleId: "WC-1", reason: "silent", actingUserId: "user-1", addressedAs: ADDRESS, wakeCoordinator: false }, h.deps);
     expect(h.messages).toHaveLength(1);
     expect(h.send).not.toHaveBeenCalled();
+  });
+});
+
+// BI-8747A73D: a coworker that cannot post is refused (cannot-reply). The
+// supervised-session outcome on the same message must not erase that refusal.
+describe("combineSupervisedWake with a cannot-reply refusal", () => {
+  const refuse = { kind: "refuse", state: "cannot-reply", detail: "AGT-B cannot reply here: it lacks the work_room_write grant, which the coworker's owner grants. No reply turn was started." } as const;
+
+  it("keeps the refusal when the session is held", () => {
+    const combined = combineSupervisedWake(refuse, { kind: "held", detail: "The session is not live." });
+    expect(combined.plan).toBe("refuse");
+    expect(combined.wake.state).toBe("cannot-reply");
+    expect(combined.wake.detail).toContain("work_room_write");
+    expect(combined.wake.detail).toContain("The session is not live.");
+    expect(combined.woken).toEqual([]);
+  });
+
+  it("keeps the refusal's reason when the session takes the turn", () => {
+    const combined = combineSupervisedWake(refuse, { kind: "delivered", addressedAs: ADDRESS });
+    expect(combined.plan).toBe("turn");
+    expect(combined.wake.state).toBe("woken");
+    expect(combined.wake.detail).toContain("work_room_write");
+    expect(combined.woken).toEqual([ADDRESS]);
   });
 });

@@ -12,6 +12,12 @@
 import type { Prisma } from "@dpf/db";
 
 import { APPROVED_EXTERNAL_ROLES } from "@/lib/auth/oauth-identity-binding";
+import {
+  COWORKER_READ_BASELINE_GRANTS,
+  grantsSatisfyRequirement,
+  persistedAgentToolGrants,
+  TOOL_TO_GRANTS,
+} from "@/lib/tak/agent-grants";
 
 import {
   buildRoomReplyPrompt,
@@ -23,6 +29,7 @@ import {
   parseAddressedTo,
   planRoomWake,
   readRoomMessageAddressing,
+  ROOM_POST_GRANT,
   roomReplyTaskId,
   roomWakeEventId,
   roomWakeWindow,
@@ -289,6 +296,8 @@ async function postRoomWakeNotice(deps: RoomWakeDeps, workItemId: string, plan: 
       messageType: "room-wake-notice",
       createdAt: { gte: new Date(now.getTime() - 60 * 60_000) },
       structuredPayload: { path: ["roomWakeNotice", "kind"], equals: kind },
+      // One cannot-reply notice per hour for the same coworkers, not one per room.
+      ...(plan.kind === "refuse" ? { body: plan.detail } : {}),
     },
   });
   if (recent > 0) return;
@@ -302,6 +311,28 @@ async function postRoomWakeNotice(deps: RoomWakeDeps, workItemId: string, plan: 
       structuredPayload: { roomWakeNotice: { kind, at: now.toISOString() } },
     },
   });
+}
+
+/**
+ * The candidates that cannot post in a room: their stored grants (less
+ * revocations) plus the coworker read baseline do not satisfy post_room_message.
+ * The same rule the tool surface applies, so a coworker woken here can answer.
+ * An agent with no record cannot post either.
+ */
+async function agentsWithoutRoomPost(deps: RoomWakeDeps, candidates: string[]): Promise<Set<string>> {
+  if (candidates.length === 0) return new Set();
+  const required = TOOL_TO_GRANTS.post_room_message ?? [ROOM_POST_GRANT];
+  const rows: Array<{ agentId: string; toolGrants: Array<{ grantKey: string }>; toolGrantRevocations: Array<{ grantKey: string }> }> =
+    await deps.db.agent.findMany({
+      where: { agentId: { in: candidates } },
+      select: { agentId: true, toolGrants: { select: { grantKey: true } }, toolGrantRevocations: { select: { grantKey: true } } },
+    });
+  const able = new Set(
+    rows
+      .filter((row) => grantsSatisfyRequirement(required, [...persistedAgentToolGrants(row), ...COWORKER_READ_BASELINE_GRANTS]))
+      .map((row) => row.agentId),
+  );
+  return new Set(candidates.filter((id) => !able.has(id)));
 }
 
 export type RoomMessageDispatchResult = { messageId: string; plan: RoomWakePlan["kind"] | "turn" | "skipped"; woken: string[] };
@@ -320,6 +351,12 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
   const now = clock(deps);
   const room = await loadRoomForWorkItem(deps, message.workItemId);
   const roleAgents = await loadRoleAgents(deps, room?.id ?? null);
+  const externalAgentIds = new Set<string>(APPROVED_EXTERNAL_ROLES);
+  const candidates = [
+    ...addressing.agents,
+    ...addressing.roles.flatMap((role) => roleAgents[role] ?? []),
+    ...(roleAgents.coordinator ?? []),
+  ].filter((id, i, all) => !externalAgentIds.has(id) && all.indexOf(id) === i);
   const wakesLastHour = await countWakesLastHour(deps, message.workItemId, now);
   const plan = planRoomWake({
     addressing,
@@ -328,7 +365,8 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
     coordinatorAgentIds: roleAgents.coordinator ?? [],
     executor: room ? { kind: room.executorKind ?? null, ref: room.executorRef ?? null } : null,
     wakesLastHour,
-    externalAgentIds: new Set<string>(APPROVED_EXTERNAL_ROLES),
+    externalAgentIds,
+    cannotPost: await agentsWithoutRoomPost(deps, candidates),
   });
 
   // BI-F5D58F29: a message naming the room's supervised session becomes its next turn.
@@ -361,8 +399,10 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
       await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
     }
   }
+  // A person who addressed a coworker reads the room, not the wake state, so a
+  // refused wake is said in the room as the stopped and paused ones are.
   if (outcome.kind !== "delivered"
-    && (plan.kind === "pause" || (plan.kind === "wake" && plan.reason === "hop-limit") || (plan.kind === "none" && addressing.hop > 0))) {
+    && (plan.kind === "pause" || plan.kind === "refuse" || (plan.kind === "wake" && plan.reason === "hop-limit") || (plan.kind === "none" && addressing.hop > 0))) {
     await postRoomWakeNotice(deps, message.workItemId, plan, now);
   }
   if (plan.kind !== "wake") return { messageId, plan: combined.plan, woken: combined.woken };
