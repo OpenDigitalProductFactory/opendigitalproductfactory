@@ -3,6 +3,7 @@ import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { selectPrDeliveryRooms } from "./build-pr-delivery-selection";
 import type { BuildPrDeliveryStateV1 } from "@/lib/build/build-pr-delivery-state";
+import type { PrRepairPacket } from "@/lib/build/pr-follow-through";
 
 export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
 
@@ -187,10 +188,24 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         owner,
         repo,
         actuationAllowed,
-        repairAuthority: posture.authority,
-        // No dispatchRepair yet: whether the platform coding coworker can push
-        // to an existing external branch is the design's open question (§8), so
-        // a repair the room may dispatch is staged for a person instead.
+        // BI-085A37EC (WWMD DI-8172B1A35993, design §8): a Build Studio build
+        // repairs through its own bounded loop and pushes a fast-forward
+        // follow-up commit, so its room dispatches unless it is quiet or
+        // advise-only. Other rooms keep their posture and have no dispatcher.
+        repairAuthority: capsule.featureBuildId && posture.authority !== "record" ? "dispatch" : posture.authority,
+        ...(capsule.featureBuildId
+          ? {
+              dispatchRepair: async (packet: PrRepairPacket) => {
+                const buildId = semanticBuildId ?? (await prisma.featureBuild.findUnique({
+                  where: { id: capsule.featureBuildId! },
+                  select: { buildId: true },
+                }))?.buildId;
+                if (!buildId) return "unavailable" as const;
+                const { dispatchBuildPrCiRepair } = await import("@/lib/build/pr-ci-repair");
+                return dispatchBuildPrCiRepair({ buildId, packet, github: { owner, repo, token } });
+              },
+            }
+          : {}),
       });
       if (outcome.actuated) actuated += 1;
 

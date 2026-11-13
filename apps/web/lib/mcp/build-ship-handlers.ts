@@ -607,6 +607,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     commitMessage,
     diff: shareableDiff,
     token,
+    // BI-085A37EC: a CI repair of the open PR lands on its head as a fast-forward follow-up, never a force-push.
+    followUpOf: await (await import("@/lib/build/pr-ci-follow-up")).resolvePendingPrFollowUp({ buildId, owner: repoOwner, repo: repoName, diff: shareableDiff, token }),
     ...(build.sandboxId
       ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox, branchFallback: build.buildBranch ? { repoDir: SANDBOX_WORKSPACE, branch: build.buildBranch } : undefined }) }
       : {}),

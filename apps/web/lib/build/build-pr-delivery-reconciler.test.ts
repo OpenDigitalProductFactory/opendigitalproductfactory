@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { decideBuildPrDeliveryAction, executeBuildPrDeliveryAction } from "./build-pr-delivery-reconciler";
+import { decideBuildPrDeliveryAction, executeBuildPrDeliveryAction, initializeAndReconcileBuildPrDelivery } from "./build-pr-delivery-reconciler";
 import { projectGithubPrReadiness, type GithubPrObservation } from "./github-pr-readiness";
-import { createBuildPrDeliveryState } from "./build-pr-delivery-state";
+import { createBuildPrDeliveryState, readBuildPrDeliveryState, writeBuildPrDeliveryState } from "./build-pr-delivery-state";
 
 const state = createBuildPrDeliveryState({
   repository: "o/r",
@@ -197,5 +197,47 @@ describe("executeBuildPrDeliveryAction — PR follow-through (BI-88341B5D)", () 
     const b = await run({ observed: redDefect, repairAuthority: "propose" });
     expect(a.followThrough).toEqual(b.followThrough);
     expect(a.state.followThrough).toEqual(b.state.followThrough);
+  });
+});
+
+// BI-085A37EC: a repaired build republishes onto its open PR. Starting a fresh
+// delivery record there would reset the PR's repair budget, so the loop could
+// never reach its limit.
+describe("initializeAndReconcileBuildPrDelivery keeps the PR's repair budget", () => {
+  function db(workspaceState: unknown) {
+    let stored = workspaceState;
+    const updatedAt = new Date("2026-11-13T00:00:00Z");
+    return {
+      read: () => stored,
+      workroom: {
+        findMany: vi.fn(async () => [{ id: "room", workspaceState: stored, updatedAt }]),
+        updateMany: vi.fn(async (args: { data: { workspaceState: unknown } }) => {
+          stored = args.data.workspaceState;
+          return { count: 1 };
+        }),
+      },
+    };
+  }
+
+  it("carries the attempts spent on the same PR across a republish", async () => {
+    const prior = createBuildPrDeliveryState({ repository: "o/r", prNumber: 42, prUrl: "https://github.com/o/r/pull/42" });
+    prior.followThrough.attempts.attempts["post-push-ci-failure"] = 1;
+    const fake = db(writeBuildPrDeliveryState({}, prior));
+    await initializeAndReconcileBuildPrDelivery({
+      db: fake as never, featureBuildId: "fb", owner: "o", repo: "r", prNumber: 42,
+      prUrl: "https://github.com/o/r/pull/42", token: "t", eligible: false,
+    });
+    expect(readBuildPrDeliveryState(fake.read())?.followThrough.attempts.attempts["post-push-ci-failure"]).toBe(1);
+  });
+
+  it("starts a different PR with a fresh budget", async () => {
+    const prior = createBuildPrDeliveryState({ repository: "o/r", prNumber: 41, prUrl: "https://github.com/o/r/pull/41" });
+    prior.followThrough.attempts.attempts["post-push-ci-failure"] = 2;
+    const fake = db(writeBuildPrDeliveryState({}, prior));
+    await initializeAndReconcileBuildPrDelivery({
+      db: fake as never, featureBuildId: "fb", owner: "o", repo: "r", prNumber: 42,
+      prUrl: "https://github.com/o/r/pull/42", token: "t", eligible: false,
+    });
+    expect(readBuildPrDeliveryState(fake.read())?.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
   });
 });
