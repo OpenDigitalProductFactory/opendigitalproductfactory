@@ -64,6 +64,43 @@ describe("scheduledJobToAttentionItem", () => {
     }, now)).toBeNull();
   });
 
+  it("asks once, and leads to the switch, when the submission sweep is halted for want of consent", () => {
+    // BI-6ED89EC6: the sweep used to halt daily with only a console line.
+    const item = scheduledJobToAttentionItem({
+      ...failing,
+      jobId: "ecosystem-issue-submission-sweep",
+      name: "Ecosystem: issue submission sweep",
+      schedule: "41 5 * * *",
+      lastStatus: "not-configured",
+      lastError: null,
+      lastRunSummary: "awaiting consent: upstream feedback is off, so 3 problems triaged here are not reaching the ecosystem.",
+    }, now);
+    expect(item).toMatchObject({
+      // One standing item per job, never one per report.
+      id: "scheduled-job:ecosystem-issue-submission-sweep",
+      title: "Problems found here are not reaching the ecosystem",
+      deepLink: "/admin/issue-reports/upstream",
+      actions: [{ kind: "open-in-context", label: "Turn on upstream feedback", href: "/admin/issue-reports/upstream" }],
+      triage: { residueReason: "input-required", decideEffort: "judgment" },
+    });
+    expect(item!.context).toContain("3 problems triaged here");
+    expect(item!.context).toContain("nothing is sent until you do");
+  });
+
+  it("does not nag about a sweep the operator deliberately stopped", () => {
+    for (const lastRunSummary of [
+      "Contributions are paused, so nothing was sent.",
+      "This installation keeps everything on its own system (private), so nothing was sent.",
+    ]) {
+      expect(scheduledJobToAttentionItem({
+        ...failing,
+        jobId: "ecosystem-issue-submission-sweep",
+        lastStatus: "not-configured",
+        lastRunSummary,
+      }, now)).toBeNull();
+    }
+  });
+
   it("does not leak the raw error text into the owner-facing context", () => {
     expect(scheduledJobToAttentionItem(failing, now)!.context).not.toContain("401");
   });

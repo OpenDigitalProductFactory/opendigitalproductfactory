@@ -1,0 +1,74 @@
+// @vitest-environment jsdom
+
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// BI-6ED89EC6: the one standing place to turn upstream feedback on. It saves
+// through the existing consent action, unchanged, so who and when stay recorded.
+const { mockSet } = vi.hoisted(() => ({ mockSet: vi.fn() }));
+vi.mock("@/lib/actions/feedback-escalation", () => ({ setUpstreamFeedbackOptIn: mockSet }));
+
+import { UpstreamFeedbackSettings, UPSTREAM_FEEDBACK_ANCHOR } from "@/components/admin/UpstreamFeedbackSettings";
+
+afterEach(() => cleanup());
+
+describe("UpstreamFeedbackSettings", () => {
+  beforeEach(() => {
+    mockSet.mockReset();
+    mockSet.mockResolvedValue({ ok: true, optIn: true });
+  });
+
+  it("carries the anchor the Needs-you item links to", () => {
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} />);
+    expect(screen.getByTestId("upstream-feedback-settings").id).toBe(UPSTREAM_FEEDBACK_ANCHOR);
+  });
+
+  it("says plainly that nothing leaves while it is off, and what is sent when it is on", () => {
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} />);
+    expect(screen.getByText(/Off — nothing leaves this installation/)).toBeTruthy();
+    expect(screen.getByText(/redacted and sent under this installation's pseudonym/)).toBeTruthy();
+  });
+
+  it("enables Save only once changed, and saves through the existing consent action", async () => {
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} />);
+    const save = screen.getByTestId("upstream-feedback-save") as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+
+    fireEvent.click(screen.getByTestId("upstream-feedback-opt-in"));
+    expect(save.disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(mockSet).toHaveBeenCalledWith({ enabled: true });
+    expect(screen.getByRole("status").textContent).toBe("Saved");
+  });
+
+  it("explains why it cannot apply on a private installation, and cannot be changed there", () => {
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly paused={false} />);
+    expect((screen.getByTestId("upstream-feedback-opt-in") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(/keeps everything on its own system/)).toBeTruthy();
+  });
+
+  it("explains that the master pause overrides it", () => {
+    render(<UpstreamFeedbackSettings optIn forkOnly={false} paused />);
+    expect(screen.getByText(/paused for this installation, which overrides this switch/)).toBeTruthy();
+  });
+
+  it("shows the state but cannot be changed by someone who does not manage the platform", () => {
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} mayChange={false} />);
+    expect((screen.getByTestId("upstream-feedback-opt-in") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(/Only someone who manages the platform/)).toBeTruthy();
+  });
+
+  it("shows the refusal when saving fails rather than claiming success", async () => {
+    mockSet.mockRejectedValueOnce(new Error("You need platform management to change this."));
+    render(<UpstreamFeedbackSettings optIn={false} forkOnly={false} paused={false} />);
+    fireEvent.click(screen.getByTestId("upstream-feedback-opt-in"));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("upstream-feedback-save"));
+    });
+    expect(screen.getByRole("alert").textContent).toContain("platform management");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});

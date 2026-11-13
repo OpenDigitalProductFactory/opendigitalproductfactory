@@ -16,9 +16,18 @@ export const ecosystemSubmissionSweep = jobs.createFunction(
     const gate = await gateAtEntry(step, "ecosystem/issue-submission-sweep");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return step.run("submit-eligible-reports", async () => {
+    const result = await step.run("submit-eligible-reports", async () => {
       const { runEcosystemSubmissionSweep } = await import("@/lib/ecosystem/submission-sweep-runner");
       return runEcosystemSubmissionSweep();
     });
+    // BI-6ED89EC6: record what the run did. Without this the register showed a
+    // job that "reports run data" holding none, and a sweep halted for want of
+    // consent was visible nowhere.
+    await step.run("record-sweep-outcome", async () => {
+      const { recordEcosystemJobHeartbeat, sweepHeartbeat, SUBMISSION_SWEEP_JOB_ID } =
+        await import("@/lib/ecosystem/job-heartbeat");
+      await recordEcosystemJobHeartbeat(SUBMISSION_SWEEP_JOB_ID, sweepHeartbeat(result));
+    });
+    return result;
   },
 );
