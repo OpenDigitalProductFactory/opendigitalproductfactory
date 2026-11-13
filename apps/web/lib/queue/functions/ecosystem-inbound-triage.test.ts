@@ -2,7 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   run: vi.fn(), gate: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), config: null as unknown,
+  rank: vi.fn(), answer: vi.fn(),
 }));
+vi.mock("@/lib/ecosystem/arbitration-cycle", () => ({
+  runEcosystemArbitrationCycle: mocks.rank,
+  sendEcosystemDecisionNotices: mocks.answer,
+  summarizeArbitration: () => "Ecosystem queue: 2 ranked.",
+}));
+vi.mock("@/lib/federation/demand-disposition", () => ({ queueFounderDispositionNotices: vi.fn() }));
+vi.mock("@/lib/federation/demand-exchange", () => ({ decodeDemandMirrorPayload: vi.fn() }));
 vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: (config: unknown, handler: unknown) => { mocks.config = config; return handler; } } }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: mocks.gate }));
 vi.mock("@/lib/ecosystem/inbound-triage-runner", () => ({ runEcosystemInboundTriage: mocks.run }));
@@ -29,6 +37,8 @@ describe("ecosystem intake job reporting", () => {
     mocks.gate.mockResolvedValue({ proceed: true });
     mocks.findUnique.mockResolvedValue({ schedule: "17 6 * * 1" });
     mocks.upsert.mockResolvedValue({});
+    mocks.rank.mockResolvedValue({ ranked: 2, recorded: 0, top: [] });
+    mocks.answer.mockResolvedValue({ sent: 0, withheld: [] });
   });
 
   it("never overwrites scheduled-job metadata, so a commission reference survives every heartbeat", async () => {
@@ -103,6 +113,23 @@ describe("ecosystem intake job reporting", () => {
     expect(summary).toContain("a/b#1");
   });
 
+  it("ranks the ecosystem queue and answers submitters after a commissioned scan (BI-FB03E2FD)", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: true, ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [] });
+    await invoke();
+    expect(mocks.rank).toHaveBeenCalledTimes(1);
+    expect(mocks.answer).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0].update.lastRunSummary).toContain("Ecosystem queue: 2 ranked.");
+  });
+
+  it("keeps the scan heartbeat when ranking fails, and says so", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: true, ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [] });
+    mocks.rank.mockRejectedValue(new Error("database unavailable"));
+    await invoke();
+    const update = mocks.upsert.mock.calls[0][0].update;
+    expect(update.lastStatus).toBe("completed");
+    expect(update.lastRunSummary).toContain("Ecosystem queue not ranked: database unavailable");
+  });
+
   it("allows only one scan of the inbound queue at a time", () => {
     // Local single-run protection (spec §6.1): an overlapping cron and retry must
     // not ingest the same sources concurrently.
@@ -112,6 +139,7 @@ describe("ecosystem intake job reporting", () => {
   it("does not report an uncommissioned installation as a successful scan", async () => {
     mocks.run.mockResolvedValue({ ran: false, reason: "not commissioned: installation is not a production install" });
     await invoke();
+    expect(mocks.rank).not.toHaveBeenCalled();
     expect(mocks.upsert).toHaveBeenCalledWith(expect.objectContaining({
       update: expect.objectContaining({ lastStatus: "not-configured", lastRunSummary: "not commissioned: installation is not a production install" }),
     }));
