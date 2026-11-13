@@ -126,3 +126,30 @@ and setup disclosures use native HTML; no extra execution shell mounts. A real
 catalog/pseudo-locale regression fails with hardcoded heading copy and passes
 with the viewer catalog. ReviewPanel copy tightens from 71 to 52 words and its
 unlocalized fragments tighten from 16 to 12; neither allowance grows.
+
+## Served acceptance at 3f1d3beba29f
+
+The admitted contributor preview NPEL-FB1FB82DD9 served this exact source after
+all 85 host checks, 30 affected tests and both web typechecks passed. Arrival
+showed 22 main-content words at 1728x962, with fleet and setup closed. At
+390x844, expanded proof used 358 pixels and document scrollWidth was 390.
+
+Independent E9 browser observations covered six synthetic saved records:
+missing proof, observed counts, unknown execution, an applicability exemption,
+conflicting retained QA, and interrupted results. The owner then replaced only
+the interrupted saved record under a fresh full-tree proof. Reloading that same
+record showed its replacement counts and explicit synthetic replacement marker.
+No test command or actual repair ran. Conflict raw output retained the earlier
+QA sentinel and unresolved-failure warning. Some immediate post-reload clicks
+stayed collapsed; fresh observation and reopening worked. No cause or universal
+persistence verdict is inferred.
+
+Fresh 19,810-file source proofs guarded fixture creation, replacement and removal.
+All six records were removed before the owner stopped the preview. Four actual
+captures are retained in DOC-5AADC6C4, version cmwfab2db0taq0eohk3cx6167.
+The original advisory engagement CE-8C8F5950 refused its first artifact/capture
+binding with `engagement_room_access_refused:not-admitted`. That operation
+stopped without retry or grant workaround; native UX critique remains unrun.
+The separately attributed source assessment was CLEAR at this source. Full
+integration verification, protected publication and canonical live acceptance
+remain separate delivery obligations.
