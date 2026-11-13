@@ -287,7 +287,7 @@ async function evaluateReadinessAtSensitivity(
       snapshot.taskRequirementByTaskType?.get(probe.taskType) ??
       (probe.taskType === "conversation" ? snapshot.taskRequirement : null),
   });
-  const decision = await routeEndpointV2(
+  const route = (capacityByProvider: CoworkerRoutingReadinessSnapshot["capacityByProvider"]) => routeEndpointV2(
     snapshot.endpoints,
     contract,
     snapshot.policyRules,
@@ -295,7 +295,7 @@ async function evaluateReadinessAtSensitivity(
       (probe.taskType === "conversation" ? snapshot.overrides : []),
     {
       skipRecipe: true,
-      capacityByProvider: snapshot.capacityByProvider,
+      capacityByProvider,
       preferences: {
         ...(options.preferredProviderId
           ? { preferredProviderId: options.preferredProviderId }
@@ -306,6 +306,8 @@ async function evaluateReadinessAtSensitivity(
       },
     },
   );
+  const decision = await route(snapshot.capacityByProvider);
+
   const selected = decision.selectedEndpoint
     ? snapshot.endpoints.find(
         (endpoint) => endpoint.id === decision.selectedEndpoint,
@@ -314,14 +316,22 @@ async function evaluateReadinessAtSensitivity(
 
   // Routing no longer re-admits a provider that has said calls will fail
   // (BI-5A6C4011), so a sole provider needing repair leaves no selection.
-  // Name the repair rather than a generic requirement mismatch.
-  if (
-    !selected &&
-    decision.excludedReasons.some((line) => line.includes(": provider capacity "))
-  ) {
-    return blockedReadiness(
-      "The configured provider needs attention before this coworker can respond.",
-    );
+  // Name the repair only when capacity is what removed the route: the same
+  // route without recorded capacity must select a capacity-blocked provider.
+  if (!selected && snapshot.capacityByProvider.size > 0) {
+    const withoutCapacity = await route(new Map());
+    const wouldSelect = withoutCapacity.selectedEndpoint
+      ? snapshot.endpoints.find((endpoint) => endpoint.id === withoutCapacity.selectedEndpoint)
+      : null;
+    if (
+      wouldSelect &&
+      satisfiesMinimumDimensions(wouldSelect, contract.minimumDimensions) &&
+      capacityRoutingExclusionReason(snapshot.capacityByProvider.get(wouldSelect.providerId), Date.now())
+    ) {
+      return blockedReadiness(
+        "The configured provider needs attention before this coworker can respond.",
+      );
+    }
   }
 
   if (
