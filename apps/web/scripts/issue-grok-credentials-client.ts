@@ -5,19 +5,20 @@
 // one JSON object for the refresher. Stderr is diagnostics. This script does
 // not mint a personal access token.
 //
-//   pnpm --filter web exec tsx apps/web/scripts/issue-grok-credentials-client.ts --user admin@dpf.local
+//   pnpm --filter web exec tsx apps/web/scripts/issue-grok-credentials-client.ts [--user <email>]
+//
+// With no --user, the client belongs to the install's accountable person, never
+// the bootstrap admin account (BI-81F01D3A).
 
 import { prisma } from "@dpf/db";
-
-const DEFAULT_EMAIL = "admin@dpf.local";
 
 function fatal(message: string): never {
   console.error(`issue-grok-credentials-client: ${message}`);
   process.exit(2);
 }
 
-function parseUser(argv: readonly string[]): string {
-  let email = DEFAULT_EMAIL;
+function parseUser(argv: readonly string[]): string | undefined {
+  let email: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--help" || arg === "-h") {
@@ -43,10 +44,11 @@ async function main(): Promise<void> {
   const { decryptSecret } = await import("../lib/govern/credential-crypto");
   const { grokAgentRecordId, bindGrokClientAgent } = await import("../lib/auth/grok-agent-binding");
 
-  const user = await prisma.user.findFirst({ where: { email } });
-  if (!user) {
-    fatal(`No user found with email "${email}". Override with --user <email>.`);
-  }
+  const { resolveCredentialOwner } = await import("../lib/auth/credential-owner");
+  const { findTaskOwnerUserId } = await import("@dpf/db/install-work-owner");
+  const owner = await resolveCredentialOwner(prisma.user as never, () => findTaskOwnerUserId(prisma as never), email);
+  if (!owner.ok) fatal(owner.error);
+  const user = owner.user;
 
   const result = await ensureGrokCredentialsClient({
     ownerUserId: user.id,
@@ -84,7 +86,7 @@ async function main(): Promise<void> {
     prepareSecret: prepareClientSecret,
   });
 
-  console.error(`Grok credentials client ${result.clientId} ${result.created ? "created" : "reused"} for ${email}${result.agentBound ? " (acts as AGT-EXT-GROK)" : " (NOT bound to AGT-EXT-GROK: Grok cannot write workrooms)"}`);
+  console.error(`Grok credentials client ${result.clientId} ${result.created ? "created" : "reused"} for ${user.email}${result.agentBound ? " (acts as AGT-EXT-GROK)" : " (NOT bound to AGT-EXT-GROK: Grok cannot write workrooms)"}`);
   console.log(JSON.stringify({
     clientId: result.clientId,
     clientSecret: result.clientSecret,

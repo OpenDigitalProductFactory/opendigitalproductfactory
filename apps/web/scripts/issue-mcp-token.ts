@@ -38,11 +38,11 @@ import { prisma } from "@dpf/db";
 import type { McpTokenCapability, McpTokenScope } from "../lib/auth/mcp-api-token";
 import type { McpSnippetFormat } from "../lib/auth/mcp-setup-snippets";
 
-const DEFAULT_EMAIL = "admin@dpf.local";
 const DEFAULT_EXPIRES_DAYS = 90;
 
 type Args = {
-  email: string;
+  /** Undefined: the install's accountable person, never the bootstrap admin (BI-81F01D3A). */
+  email: string | undefined;
   name: string;
   scope: McpTokenScope;
   scopes: string[] | null; // null -> resolved from the selected read/write/admin tier
@@ -52,7 +52,7 @@ type Args = {
 };
 
 function parseArgs(argv: readonly string[]): Args {
-  let email = DEFAULT_EMAIL;
+  let email: string | undefined;
   let name = `cli-issued-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   let scope: McpTokenScope = "read";
   let scopes: string[] | null = null;
@@ -154,8 +154,8 @@ function printHelp(): void {
       "The issued token appears in Admin > Platform Development with a full audit trail.",
       "",
       "Flags:",
-      "  --user <email>         Admin user to issue the token for",
-      `                         (default: ${DEFAULT_EMAIL})`,
+      "  --user <email>         User to issue the token for",
+      "                         (default: the install's accountable person)",
       "  --name <label>         Token display name (default: cli-issued-<timestamp>)",
       "  --scope <scope>        read | write | admin (default: read)",
       "  --capability <c>       Deprecated alias for --scope read|write",
@@ -201,14 +201,13 @@ async function main(): Promise<void> {
   const { templateScopesForTier } = await import("../lib/mcp-token-scopes");
   const { getToolGrantMapping } = await import("../lib/tak/agent-grants");
 
-  const user = await prisma.user.findFirst({ where: { email: args.email } });
-  if (!user) {
-    fatal(
-      `No user found with email "${args.email}". ` +
-        `Ensure the platform is running and seeded (pnpm dev or docker compose up), ` +
-        `then re-run. Override with --user <email>.`,
-    );
+  const { resolveCredentialOwner } = await import("../lib/auth/credential-owner");
+  const { findTaskOwnerUserId } = await import("@dpf/db/install-work-owner");
+  const owner = await resolveCredentialOwner(prisma.user as never, () => findTaskOwnerUserId(prisma as never), args.email);
+  if (!owner.ok) {
+    fatal(`${owner.error} Ensure the platform is running and seeded, then re-run.`);
   }
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } });
 
   // Available scopes = the union of every grant this install registers in the
   // tool→grant catalog. Mirrors listAvailableMcpScopes (lib/actions/mcp-tokens.ts)
@@ -241,7 +240,7 @@ async function main(): Promise<void> {
   // Diagnostics to stderr — stdout stays pipeable.
   const expiryStr = result.expiresAt ? result.expiresAt.toISOString() : "never";
   console.error(
-    `Issued MCP token ${result.prefix}…  expires ${expiryStr}  tokenId=${result.tokenId}  user=${args.email}`,
+    `Issued MCP token ${result.prefix}…  expires ${expiryStr}  tokenId=${result.tokenId}  user=${user.email}`,
   );
 
   if (args.format === "raw") {
