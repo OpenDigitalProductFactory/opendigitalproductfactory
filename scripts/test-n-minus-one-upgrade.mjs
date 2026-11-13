@@ -199,10 +199,38 @@ function resolveReal(path) {
   return process.getBuiltinModule("node:fs").realpathSync(path);
 }
 
-export async function cleanupHarness(workspace, composeDown = cleanupNMinusOneBaseline) {
+// BI-9BC79F48: the promoter and the candidate portal run as root and write into
+// the bind-mounted workspace (state/federation/*.json and friends). The runner
+// user cannot unlink root-owned files, so a plain host `rm` died with EACCES
+// after every otherwise complete promotion. Remove what containers wrote with
+// container authority first; the host rm then only meets its own files.
+export async function removeContainerOwnedFiles(root, run = execFile) {
+  await run("docker", ["run", "--rm", "-v", `${root}:/workspace`, "node:24-alpine",
+    "sh", "-c", "find /workspace -mindepth 1 -delete"]);
+}
+
+export async function cleanupHarness(workspace, composeDown = cleanupNMinusOneBaseline, deps = {}) {
   assertSafeHarnessConfig(workspace);
+  const removeOwned = deps.removeContainerOwnedFiles ?? removeContainerOwnedFiles;
   await composeDown(workspace);
+  // Best effort: if Docker cannot help, the host rm below still reports the truth.
+  await removeOwned(workspace.root).catch(() => {});
   await rm(workspace.root, { recursive: true, force: true });
+}
+
+/**
+ * Run the harness cleanup without letting it rewrite the gate's verdict
+ * (BI-9BC79F48). Cleanup used to run bare in `finally`, so its exception
+ * REPLACED whatever the gate produced: a pass became a failure and a real
+ * failure hid behind an unrelated permission error, with no evidence either
+ * way. A cleanup failure is now a warning; the primary result or error stands.
+ */
+export async function cleanupWithoutMaskingVerdict(cleanup, warn = (message) => process.stderr.write(`${message}\n`)) {
+  try {
+    await cleanup();
+  } catch (error) {
+    warn(`warning: N-1 harness cleanup failed and was skipped — the gate verdict above stands (BI-9BC79F48): ${error?.message ?? error}`);
+  }
 }
 
 export async function cleanupProject(project, run = execFile) {
@@ -395,7 +423,7 @@ export async function runNMinusOneUpgrade(options, deps) {
     Object.assign(evidence, completed, { result: "passed", completedAt: new Date().toISOString() });
     return await d.writeEvidence(evidence);
   } finally {
-    await d.cleanup();
+    await cleanupWithoutMaskingVerdict(() => d.cleanup(), d.warn);
   }
 }
 
