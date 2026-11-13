@@ -17,9 +17,7 @@ vi.mock("@/lib/govern/permissions", () => ({ can: vi.fn(() => false) }));
 vi.mock("@/components/build/EnableRunnerButton", () => ({ EnableRunnerButton: () => null }));
 vi.mock("@/components/build/BuildStudio", () => ({ BuildStudio: ({ builds }: { builds: Array<{ title: string }> }) => <div>{builds.map(build => <p key={build.title}>{build.title}</p>)}</div> }));
 vi.mock("@/components/build/DecompositionCoordinator", () => ({ DecompositionCoordinator: () => null }));
-vi.mock("@/components/i18n/MessagesProvider", () => ({ MessagesProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@/lib/i18n/locale-context.server", () => ({ getLocaleContext: vi.fn(async () => ({ language: "en", formatLocale: "en-US" })) }));
-vi.mock("@dpf/i18n", () => ({ namespaceMessages: () => ({}) }));
 vi.mock("child_process", () => ({ execSync: vi.fn(() => "fixture-branch") }));
 
 import BuildPage from "./page";

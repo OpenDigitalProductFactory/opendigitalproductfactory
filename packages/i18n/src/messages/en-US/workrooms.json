@@ -571,5 +571,17 @@
       "review": "Review",
       "ship": "Ship"
     }
+  },
+  "savedProof": {
+    "heading": "Saved builds",
+    "column": "Saved build",
+    "loadFailed": "Saved history unavailable.",
+    "retry": "Try again",
+    "availabilityUnknown": "Runner availability could not be checked. Saved results remain available.",
+    "buildingUnavailable": "Saved results are available. Building is unavailable.",
+    "requestedUnavailable": "Saved build unavailable.",
+    "review": "Review proof",
+    "empty": "No saved builds.",
+    "setup": "Runner setup"
   }
 }

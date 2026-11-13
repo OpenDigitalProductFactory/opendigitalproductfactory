@@ -72,8 +72,8 @@ DI-A96411492A3F compared propagating an unavailable-execution flag through the
 full studio with an isolated reader composed from native reporting and proof
 components. The latter was autonomy-eligible with high confidence; the agent
 recorded that choice. This decision is not a rendered UX measurement or critique.
-The reader shares the existing proof module; all existing copy ceilings and
-route budget limits remain unchanged.
+The reader shares the existing proof module; no existing copy ceilings or
+route budget limits are increased.
 
 ## Rendered composition correction
 
@@ -117,5 +117,12 @@ use the existing default availability setting.
 
 Share repeated UX section titles and keep equivalent empty/error wording concise.
 Delete the unused new-module copy-baseline entry without increasing any existing
-ceiling. The result is 70 components and 16,288 non-test lines, six fewer than
+ceiling. The result is 70 components and 16,286 non-test lines, eight fewer than
 the previous frozen ceiling; retighten that ceiling rather than raise it.
+
+The saved-reader copy uses the existing `workrooms` message catalog. The page
+provides that namespace for both successful reads and read failures. Proof, fleet
+and setup disclosures use native HTML; no extra execution shell mounts. A real
+catalog/pseudo-locale regression fails with hardcoded heading copy and passes
+with the viewer catalog. ReviewPanel copy tightens from 71 to 52 words and its
+unlocalized fragments tighten from 16 to 12; neither allowance grows.

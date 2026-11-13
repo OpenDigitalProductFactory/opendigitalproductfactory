@@ -3,7 +3,7 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
+import { useT } from "@/lib/i18n/use-t";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Spinner } from "@/components/ui/Spinner";
 import { formatText } from "@/lib/actions/local-format";
@@ -864,33 +864,31 @@ type SavedReaderProps = {
   availabilityUnknown?: boolean;
   loadFailed?: boolean;
 };
-const savedBuildColumns: Column<FeatureBuildRow>[] = [{
-  key: "title", header: "Saved build", cell: build => <Link href={`/build?buildId=${encodeURIComponent(build.buildId)}`}>{build.title}</Link>,
-}];
-
 /** No execution shell or mutation effects mount on this unavailable-runner path. */
 export function SavedBuildReader({ builds, initialBuildId, initialActiveBuild, runnerSetup, availabilityUnknown = false, loadFailed = false }: SavedReaderProps) {
-  const [open, setOpen] = useState(false);
+  const t = useT("workrooms");
+  const savedBuildColumns: Column<FeatureBuildRow>[] = [{
+    key: "title", header: t("savedProof.column"), cell: build => <Link href={`/build?buildId=${encodeURIComponent(build.buildId)}`}>{build.title}</Link>,
+  }];
   const selected = initialActiveBuild ?? (initialBuildId
     ? builds.find(build => build.buildId === initialBuildId) ?? null
     : builds[0] ?? null);
   return <section className="relative p-4 space-y-4">
-    <h2 className="text-dpf-h2">Saved builds</h2>
-    {loadFailed ? <div role="alert"><p>Saved history unavailable.</p><Link href="/build">Try again</Link></div> : <>
-    <p role="status">{availabilityUnknown ? "Runner availability could not be checked. Saved results remain available." : "Saved results are available. Building is unavailable."}</p>
-    {initialBuildId && !selected ? <p role="status">Saved build unavailable.</p> : null}
+    <h2 className="text-dpf-h2">{t("savedProof.heading")}</h2>
+    {loadFailed ? <div role="alert"><p>{t("savedProof.loadFailed")}</p><Link href="/build">{t("savedProof.retry")}</Link></div> : <>
+    <p role="status">{availabilityUnknown ? t("savedProof.availabilityUnknown") : t("savedProof.buildingUnavailable")}</p>
+    {initialBuildId && !selected ? <p role="status">{t("savedProof.requestedUnavailable")}</p> : null}
     {selected ? <div>
       <p>{selected.title}</p>
-      <Button aria-expanded={open} aria-controls="saved-build-proof" onClick={() => setOpen(value => !value)}>Review proof</Button>
-      {open ? <section id="saved-build-proof" aria-label={selected.title}>
-        <ReviewPanel build={selected} executionAvailable={false} />
-      </section> : null}
+      <details><summary>{t("savedProof.review")}</summary>
+        <section aria-label={selected.title}><ReviewPanel build={selected} executionAvailable={false} /></section>
+      </details>
     </div> : null}
-    {builds.length > 0 ? <details><summary>Saved builds</summary>
-      <DataTable ariaLabel="Saved builds" columns={savedBuildColumns} rows={builds} getRowKey={build => build.buildId} />
+    {builds.length > 0 ? <details><summary>{t("savedProof.heading")}</summary>
+      <DataTable ariaLabel={t("savedProof.heading")} columns={savedBuildColumns} rows={builds} getRowKey={build => build.buildId} />
     </details> : null}
-    {builds.length === 0 && !selected ? <p>No saved builds.</p> : null}
+    {builds.length === 0 && !selected ? <p>{t("savedProof.empty")}</p> : null}
     </>}
-    {runnerSetup ? <details><summary>Runner setup</summary>{runnerSetup}</details> : null}
+    {runnerSetup ? <details><summary>{t("savedProof.setup")}</summary>{runnerSetup}</details> : null}
   </section>;
 }

@@ -182,6 +182,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
     );
   }
 
+  const locale = await getLocaleContext();
   if (!capability?.ok) {
     let builds;
     let initialActiveBuild;
@@ -190,9 +191,9 @@ export default async function BuildPage({ searchParams }: PageProps) {
       initialActiveBuild = buildId && !builds.some(build => build.buildId === buildId)
         ? await getFeatureBuildById(buildId) : null;
     } catch {
-      return <SavedBuildReader builds={[]} loadFailed />;
+      return <MessagesProvider locale={locale.language} formatLocale={locale.formatLocale} messages={{workrooms:namespaceMessages(locale.language,"workrooms")}}><SavedBuildReader builds={[]} loadFailed /></MessagesProvider>;
     }
-    return <SavedBuildReader builds={builds} initialBuildId={buildId} initialActiveBuild={initialActiveBuild} runnerSetup={runnerSetup} availabilityUnknown={!capability} />;
+    return <MessagesProvider locale={locale.language} formatLocale={locale.formatLocale} messages={{workrooms:namespaceMessages(locale.language,"workrooms")}}><SavedBuildReader builds={builds} initialBuildId={buildId} initialActiveBuild={initialActiveBuild} runnerSetup={runnerSetup} availabilityUnknown={!capability} /></MessagesProvider>;
   }
 
   const [builds, epicRollups, portfolios] = await Promise.all([
@@ -249,7 +250,6 @@ export default async function BuildPage({ searchParams }: PageProps) {
     "manage_backlog",
   );
 
-  const locale = await getLocaleContext();
   return (
     <MessagesProvider locale={locale.language} formatLocale={locale.formatLocale} messages={{workrooms:namespaceMessages(locale.language,"workrooms")}}>
     <section className="min-h-full">
