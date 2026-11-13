@@ -3,7 +3,7 @@ import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
 import { semanticReviewMinimumContextTokens, SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS } from "./semantic-review-context-floor";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
-import { resolveSemanticReviewRoomSensitivity, type SemanticReviewRouteSensitivity } from "./semantic-review-source-sensitivity";
+import { resolveSemanticReviewRoute, type SemanticReviewRoute } from "./semantic-review-source-sensitivity";
 import {
   describeSpecialistCraftContexts,
   layerCraftOntoSpecialistPrompt,
@@ -52,8 +52,8 @@ export async function dispatchRoutedSemanticReview(
   // client inside the function, not here, so importing this module does not
   // pull in the database client.
   craftDb?: SpecialistCraftClient,
-  resolveRoomSensitivity: (capsuleId: string | undefined) => Promise<SemanticReviewRouteSensitivity>
-    = resolveSemanticReviewRoomSensitivity,
+  resolveRoute: (capsuleId: string | undefined) => Promise<SemanticReviewRoute>
+    = resolveSemanticReviewRoute,
 ): Promise<SemanticReviewResult> {
   if (context.specialistIds.some((id) => !Object.hasOwn(SPECIALIST_SYSTEM_PROMPTS, id))) {
     return { decision: "inconclusive", issues: [],
@@ -78,7 +78,11 @@ export async function dispatchRoutedSemanticReview(
   // BI-9F620FE1: the Workroom dictates the type of work. A platform room is
   // public source and routes like Build Studio's code turns; an unknown room
   // keeps "internal", and a confidential room stays confidential.
-  const roomSensitivity = await resolveRoomSensitivity(context.capsuleId).catch(() => "internal" as const);
+  // BI-FC94F754: the room's repository record travels with the review, so the
+  // payload screen classifies the diff by that repository's visibility.
+  const route = await resolveRoute(context.capsuleId)
+    .catch((): SemanticReviewRoute => ({ sensitivity: "internal" }));
+  const roomSensitivity = route.sensitivity;
 
   const branches = [
     {
@@ -135,6 +139,7 @@ export async function dispatchRoutedSemanticReview(
           evaluationPolicy: { evaluator: "review", minimumSignal: "review-passed" },
           requestContractHints: { taskType: "build-review" },
         },
+        ...(route.sourceCodeProvenance ? { sourceCodeProvenance: route.sourceCodeProvenance } : {}),
         agentId: branch.agentId,
         agentDisplayName: branch.displayName,
         effort: context.strategyProfile === "document-authority" ? "max" : "high",

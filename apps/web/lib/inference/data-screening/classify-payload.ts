@@ -11,6 +11,7 @@ import type {
   InferencePayloadClassificationInput,
   InferencePayloadMatch,
   InferencePayloadSensitivity,
+  SourceCodeProvenance,
 } from "./types";
 
 type TextProbe = {
@@ -321,6 +322,8 @@ const AMBIGUOUS_REASONS: ReadonlySet<string> = new Set(
   CLASS_RULES.filter((rule) => rule.ambiguousVocabulary).map((rule) => rule.reason),
 );
 
+// `source-code` is confidential only while its repository is unproven or
+// private; see isPublicSourceProvenance (BI-FC94F754).
 const CONFIDENTIAL_CLASSES = new Set<InferenceDataClass>([
   "customer-records",
   "source-code",
@@ -390,6 +393,7 @@ export function classifyInferencePayload(
   );
   const overallSensitivity = inferOverallSensitivity(
     dataMatches, input.governedData, restrictedCorroborated,
+    isPublicSourceProvenance(input.sourceCodeProvenance),
   );
   const continuations = input.messages.map(message => localNativeContinuationFingerprint(message) ?? null);
   const inputHash = hashCanonical({
@@ -400,6 +404,8 @@ export function classifyInferencePayload(
     tools: input.tools ?? [],
     taskType: input.taskType ?? null,
     governedData: input.governedData ?? [],
+    // Provenance changes the verdict, so it is part of what was screened.
+    ...(input.sourceCodeProvenance ? { sourceCodeProvenance: input.sourceCodeProvenance } : {}),
   });
 
   return {
@@ -747,10 +753,22 @@ function restrictedEvidenceIsCorroborated(
   return new Set(restrictedMatches.map((match) => match.reason)).size >= 2;
 }
 
+/**
+ * True only for a repository the caller PROVED public (BI-FC94F754). `private`,
+ * `unknown` and an absent provenance all keep code confidential: an unproven
+ * visibility is never treated as public.
+ */
+export function isPublicSourceProvenance(
+  provenance: SourceCodeProvenance | null | undefined,
+): boolean {
+  return provenance?.visibility === "public" && provenance.repository.trim().length > 0;
+}
+
 function inferOverallSensitivity(
   dataMatches: readonly InferencePayloadMatch[],
   governedData: readonly GovernedPayloadHint[] | undefined,
   restrictedCorroborated: boolean,
+  publicSource: boolean,
 ): InferencePayloadSensitivity {
   // The same data-only evidence and corroboration result drive both this
   // sensitivity and the PDP class set. Do not re-derive either downstream.
@@ -760,12 +778,29 @@ function inferOverallSensitivity(
   }
 
   const dataClasses = dataMatches.map((match) => match.dataClass);
+  // Source code is confidential because an organization's own code usually is,
+  // not because code is sensitive in itself. Code from a repository proven
+  // public is already published, so it no longer raises the payload; every
+  // other class still does (BI-FC94F754).
+  const raisesToConfidential = (dataClass: InferenceDataClass) =>
+    CONFIDENTIAL_CLASSES.has(dataClass) && !(publicSource && dataClass === "source-code");
   if (
     restrictedMatches.length > 0 ||
     governedData?.some((hint) => hint.sensitivity === "confidential") ||
-    dataClasses.some((dataClass) => CONFIDENTIAL_CLASSES.has(dataClass))
+    dataClasses.some(raisesToConfidential)
   ) {
     return "confidential";
+  }
+  // Public only when the payload's evidence is public code and nothing else.
+  // Provenance speaks for the code: a payload with no code in it, or with any
+  // caller-declared governed data, keeps the fail-closed `internal`.
+  if (
+    publicSource &&
+    !(governedData && governedData.length > 0) &&
+    dataClasses.length > 0 &&
+    dataClasses.every((dataClass) => dataClass === "source-code")
+  ) {
+    return "public";
   }
   return "internal";
 }

@@ -18,6 +18,7 @@ import type {
   InferencePayloadSensitivity,
   InferenceMatchProvenance,
   InferencePolicyVersionSnapshot,
+  SourceCodeProvenance,
 } from "./types";
 import { hasVerticalPolicyPacks } from "./vertical-policy-packs";
 import { SENSITIVITY_RANK } from "./sensitivity-rank";
@@ -60,6 +61,12 @@ export type ScreenInferencePayloadInput = {
   routeContext?: ScreenRouteContextInput;
   activityContract?: ActivityContract;
   governedData?: readonly GovernedPayloadHint[];
+  /**
+   * Repository the payload's code belongs to, resolved by the caller from a
+   * trusted record (BI-FC94F754). Public-repository code measures public;
+   * private or unproven code keeps confidential handling.
+   */
+  sourceCodeProvenance?: SourceCodeProvenance;
   destinationClass?: DestinationClass;
   purpose?: ProcessingPurposeKey | string;
   /**
@@ -112,6 +119,7 @@ export function screenInferencePayload(
     tools: input.tools,
     taskType: input.taskType,
     governedData,
+    ...(input.sourceCodeProvenance ? { sourceCodeProvenance: input.sourceCodeProvenance } : {}),
   });
   let classification = classify();
   const destinationClass = input.destinationClass ?? "external-service";
@@ -151,10 +159,19 @@ export function screenInferencePayload(
   // A verified projection transform changes the payload being routed, not the
   // source/output classification retained in the receipt. Caller sensitivity
   // is still a floor and can never be lowered here.
+  //
+  // `development` is the caller saying "this is platform source work", and on
+  // its own it still lowers a code-only payload to public (founder ruling
+  // 2026-08-12). A repository the caller has resolved outranks that label: code
+  // from a repository that is private, or whose visibility could not be proven,
+  // is never public, whatever the route calls the work (BI-FC94F754).
+  const provenanceDeniesPublic = input.sourceCodeProvenance !== undefined &&
+    input.sourceCodeProvenance.visibility !== "public";
   const routedPayloadSensitivity = prior
     ? "internal"
     : originalSensitivity === "development" &&
         governedData === undefined &&
+        !provenanceDeniesPublic &&
         classification.dataClasses.every((dataClass) => dataClass === "source-code")
       ? "public"
       : classification.overallSensitivity;
@@ -262,6 +279,9 @@ export function screenInferencePayload(
       // against, and "something earlier pinned this thread" is underivable.
       currentTurnStartIndex: currentTurnStartIndex(input.messages),
       sensitivityFloorApplied: sensitivity !== routedPayloadSensitivity,
+      ...(input.sourceCodeProvenance
+        ? { sourceCodeVisibility: input.sourceCodeProvenance.visibility }
+        : {}),
       rawPayloadStored: false,
     },
     classification,
