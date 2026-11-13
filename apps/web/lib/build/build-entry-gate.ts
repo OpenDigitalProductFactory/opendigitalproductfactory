@@ -1,5 +1,5 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
-import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { type BoundWorkShapeDb, type NativeBuildRoomDb, type NativeBuildRoomBinding, readBoundEditPaths, readBoundWorkShapeRef, readNativeBuildDeliveryFacts } from "@/lib/backlog/initiative-readiness/bound-work-shape";
 import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
@@ -21,7 +21,7 @@ type BuildEntryGateDb = {
   backlogItemActivity: { create(args: unknown): Promise<any>; findMany?(args: unknown): Promise<any[]> };
   buildActivity: { create(args: unknown): Promise<any> };
   /** BI-1E8EAD10: the bound delivery shape lives on the Workroom. */
-  workroom?: { findFirst(args: unknown): Promise<{ scopeClaims?: unknown } | null> };
+  workroom?: BoundWorkShapeDb["workroom"] & NonNullable<NativeBuildRoomDb["workroom"]>;
   backlogItem?: { findFirst(args: unknown): Promise<{ itemId: string } | null> };
 };
 
@@ -123,22 +123,24 @@ export type BuildReadinessFactsInput = {
  *
  * A missing room or parent leaves the value null.
  */
-export async function loadBuildReadinessFacts(db: BuildEntryGateDb, build: BuildReadinessFactsInput) {
+export async function loadBuildReadinessFacts(db: BuildEntryGateDb, build: BuildReadinessFactsInput, nativeBinding?: NativeBuildRoomBinding) {
   const originator = build.originator;
+  const native = nativeBinding ? await readNativeBuildDeliveryFacts(db, nativeBinding).catch(() => null) : null;
   const [workShape, inheritedScope, declaredPaths] = await Promise.all([
-    db.workroom
+    nativeBinding ? Promise.resolve(native?.workShape ?? null) : db.workroom
       ? readBoundWorkShapeRef(db as BoundWorkShapeDb, originator.itemId).catch(() => null)
       : Promise.resolve(null),
     db.backlogItemActivity.findMany && db.backlogItem
       ? loadInheritedInitiativeScope(db as InheritanceDb, { childItemId: originator.itemId, childRowId: originator.id })
         .catch(() => null)
       : Promise.resolve(null),
-    db.workroom
+    nativeBinding ? Promise.resolve(native?.declaredPaths ?? []) : db.workroom
       ? readBoundEditPaths(db as BoundWorkShapeDb, originator.itemId).catch(() => [] as string[])
       : Promise.resolve([] as string[]),
   ]);
   return {
     workShape,
+    capsuleIdentity: nativeBinding && !native ? "fail" as const : "pass" as const,
     inheritedScope,
     deliverySensitivity: assessDeliverySensitivity({
       title: originator.title,
@@ -159,6 +161,8 @@ export async function enforceBuildInitiativeReadiness(args: {
   target: ReadinessTarget;
   targetPhase: string;
   expectedPhase?: string;
+  /** Restriction from missing-only recovery, never an alternate room authority. */
+  expectedWorkroom?: { id: string; capsuleId: string };
   evaluatedAt?: string;
   db?: BuildEntryGateDb;
   dependencies?: { projectReadiness?: ProjectReadiness };
@@ -204,7 +208,10 @@ export async function enforceBuildInitiativeReadiness(args: {
     return { allowed: false, error: "classification_required", message: "Build has no canonical originating backlog subject.", decision };
   }
 
-  const facts = await loadBuildReadinessFacts(db, build);
+  const facts = await loadBuildReadinessFacts(db, build, args.expectedPhase === "review" ? {
+    buildId: build.buildId, buildRowId: build.id, itemId: build.originator.itemId, itemRowId: build.originator.id,
+    expectedWorkroom: args.expectedWorkroom,
+  } : undefined);
   const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
     item: {
       ...build.originator,
@@ -227,7 +234,7 @@ export async function enforceBuildInitiativeReadiness(args: {
       targetState: args.targetPhase,
     },
     authorization: "pass",
-    capsuleIdentity: "pass",
+    capsuleIdentity: facts.capsuleIdentity,
     evaluatedAt,
   });
   const decision = withDecisionId(projected.decision);

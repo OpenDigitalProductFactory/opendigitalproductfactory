@@ -28,7 +28,7 @@ export type OpenAiCapacityIssue = {
 };
 
 type AiCapacityDetails = {
-  kind?: "provider" | "platform";
+  kind?: "provider" | "platform" | "subscriptions";
   providerId?: string;
   name?: string;
   cause?: string;
@@ -48,6 +48,9 @@ export function aiCapacityToAttentionItem(issue: OpenAiCapacityIssue): Attention
   const details = detailsOf(issue.details);
   const href = details.href ?? AI_PROVIDER_CONNECTIONS_ROUTE;
   const credential = CREDENTIAL_CAUSES.has(details.cause ?? "");
+  // A single provider's usage limit lifts on its own while other providers carry
+  // the work; everything else here needs the operator (WWMD DI-ECB244DF2109).
+  const selfHeals = details.kind === "provider" && details.cause === "usage-limit";
   return {
     id: `platform-health:${issue.issueKey}`,
     source: "platform-health",
@@ -58,8 +61,8 @@ export function aiCapacityToAttentionItem(issue: OpenAiCapacityIssue): Attention
     riskClass: details.kind === "platform" || issue.severity === "error" ? "high-risk" : "bounded-write",
     triage: {
       timeToAct: "none",
-      residueReason: credential ? "needs-credential" : "no-self-heal",
-      blastRadius: details.kind === "platform" ? "AI workforce" : details.name,
+      residueReason: credential ? "needs-credential" : selfHeals ? "self-heals" : "no-self-heal",
+      blastRadius: details.kind === "provider" ? details.name : "AI workforce",
       decideEffort: credential ? "one-tap" : "review",
       irreversible: false,
     },

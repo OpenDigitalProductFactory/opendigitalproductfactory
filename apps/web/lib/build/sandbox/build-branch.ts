@@ -36,15 +36,21 @@ import { isRecord } from "@/lib/shared/coerce";
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const SANDBOX_PORT = Number(process.env.SANDBOX_PORT ?? "3035");
 import {
+  buildSandboxBuildCloneAlignCommand,
   buildSandboxBuildCloneCommand,
   buildSandboxBuildCloneRebaseCommand,
   buildSandboxBuildCloneRemoveCommand,
   buildSandboxBuildCloneSyncCommand,
+  buildSandboxPublishedHeadFetchCommand,
   buildWorkspaceMode,
+  parseBuildCloneAlignOutput,
   parseBuildCloneRebaseOutput,
+  publishedHeadRef,
 } from "./build-clone";
 
 const WORKSPACE = "/workspace";
+/** The shared repository every build branch lives in, inside the sandbox. */
+export const SANDBOX_WORKSPACE = WORKSPACE;
 /**
  * A git lock older than this is left over, never live: no sandbox git
  * operation holds one for 15 minutes (an unshallow of the full history takes
@@ -297,6 +303,45 @@ export function buildSandboxWorktreeAddCommand(
     `cd ${workspace}`,
     `if [ -d ${path} ] && [ "$(git -C ${path} rev-parse --abbrev-ref HEAD 2>/dev/null)" = "${branchRef}" ]; then ${symlinks}; else ${recreate}; fi`,
   ].join(" && ");
+}
+
+export type PublishedHeadAlignOutcome =
+  | { status: "aligned"; headSha: string }
+  | { status: "refused"; reason: string };
+
+/**
+ * BI-C49EC080: put a build's clone on the exact commit its pull request
+ * publishes, so review earns evidence and a semantic review for the commit
+ * Failure Readiness checks. The client branch is refreshed first, so the
+ * published commit's parent (upstream main when it was published) is on it and
+ * the reviewed diff is exactly the published one. Nothing is rebased, merged or
+ * resolved here; anything unexpected refuses with the branch untouched.
+ */
+export async function alignBuildBranchToPublishedHead(buildId: string, publishedHeadSha: string): Promise<PublishedHeadAlignOutcome> {
+  const ready = await refreshClientBranchForBuild(buildId);
+  if (ready.status !== "ready") return { status: "refused", reason: ready.reason };
+  const ref = publishedHeadRef(buildId);
+  try {
+    await execSandboxGit(buildSandboxPublishedHeadFetchCommand(WORKSPACE, publishedHeadSha, ref));
+  } catch (err) {
+    return { status: "refused", reason: `the published commit could not be fetched from upstream: ${errorTail(err)}` };
+  }
+  const { workdir } = await ensureBuildWorktree(buildId);
+  const outcome = parseBuildCloneAlignOutput(
+    await execSandboxGit(buildSandboxBuildCloneAlignCommand(workdir, ref, publishedHeadSha, ready.identity.clientBranch)),
+  );
+  if (outcome.status !== "aligned") {
+    const reasons: Record<string, string> = {
+      dirty: "the build's clone has uncommitted tracked changes",
+      unfetched: "the clone could not read the published commit from the shared repo",
+      mismatch: "the shared repo's published ref does not point at the published commit",
+      "base-not-on-target": `the published commit's parent is not on ${ready.identity.clientBranch}, so its exact diff cannot be reviewed`,
+      "reset-failed": "the clone could not be moved to the published commit",
+    };
+    return { status: "refused", reason: outcome.status === "unknown" ? `unrecognised alignment output: ${outcome.output}` : reasons[outcome.status] ?? outcome.status };
+  }
+  await execSandboxGit(buildSandboxBuildCloneSyncCommand(workdir, `build/${buildId}`));
+  return outcome;
 }
 
 /**
@@ -868,26 +913,20 @@ export async function ensureBuildWorktree(buildId: string): Promise<{ materializ
 
 export type BuildBranchRefreshOutcome =
   | { status: "refreshed"; headSha: string; clientSha: string | null }
-  | { status: "conflict"; files: string[] }
+  /** `ontoRef`: the ref the build tree was rebased onto, so a repair can repeat it (BI-2CCD5C0E). */
+  | { status: "conflict"; files: string[]; ontoRef?: string }
   | { status: "unsupported" | "client-not-refreshable" | "unknown"; reason: string };
 
+type RefreshedClient = { status: "ready"; identity: ClientIdentity; clientSha: string | null };
+type ClientRefreshRefusal = { status: "unsupported" | "client-not-refreshable"; reason: string };
+
 /**
- * Bring a build's branch back onto upstream main (BI-76BD65E6). A build that
- * waited at ship while main moved on is classed diverged, and publication is
- * rightly refused: the PR lays the clone's touched files over current main.
- *
- * Uses the same steps a build start does. It fetches upstream, fast-forwards
- * the shared client branch when it is purely behind, re-ensures the clone (so
- * its view of client/* and origin/* is the fresh one), then rebases the build
- * branch onto the client branch and records it back in the shared repo. It
- * never resolves a conflict: the rebase is aborted and the files are reported.
- *
- * Clone mode only: in the shared-worktree modes a rebase would move /workspace
- * under every other build.
+ * Bring the shared client branch up to upstream main for one build's work
+ * (clone mode only), the common first step of a refresh and of an alignment.
  */
-export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<BuildBranchRefreshOutcome> {
+async function refreshClientBranchForBuild(buildId: string): Promise<RefreshedClient | ClientRefreshRefusal> {
   if (!isBuildWorktreeIsolationEnabled() || buildWorkspaceMode() !== "clone") {
-    return { status: "unsupported", reason: "Refresh needs isolated build clones (DPF_BUILD_WORKSPACE_MODE=clone)." };
+    return { status: "unsupported", reason: "This needs isolated build clones (DPF_BUILD_WORKSPACE_MODE=clone)." };
   }
   const identity = await getClientIdentity();
   const checkedOut = (await execSandboxGit(`git -C ${WORKSPACE} rev-parse --abbrev-ref HEAD`)).trim();
@@ -912,6 +951,28 @@ export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<B
   if (client.recommendedAction !== "allow") {
     return { status: "client-not-refreshable", reason: formatSandboxSourceCurrencySummary(client) };
   }
+  return { status: "ready", identity, clientSha: client.headSha };
+}
+
+/**
+ * Bring a build's branch back onto upstream main (BI-76BD65E6). A build that
+ * waited at ship while main moved on is classed diverged, and publication is
+ * rightly refused: the PR lays the clone's touched files over current main.
+ *
+ * Uses the same steps a build start does. It fetches upstream, fast-forwards
+ * the shared client branch when it is purely behind, re-ensures the clone (so
+ * its view of client/* and origin/* is the fresh one), then rebases the build
+ * branch onto the client branch and records it back in the shared repo. It
+ * never resolves a conflict: the rebase is aborted and the files are reported.
+ *
+ * Clone mode only: in the shared-worktree modes a rebase would move /workspace
+ * under every other build.
+ */
+export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<BuildBranchRefreshOutcome> {
+  const ready = await refreshClientBranchForBuild(buildId);
+  if (ready.status !== "ready") return ready;
+  const { identity } = ready;
+  const client = { headSha: ready.clientSha };
 
   const { workdir } = await ensureBuildWorktree(buildId);
   const branchName = `build/${buildId}`;
@@ -919,7 +980,7 @@ export async function refreshBuildBranchOntoUpstream(buildId: string): Promise<B
   const rebase = parseBuildCloneRebaseOutput(
     await execSandboxGit(buildSandboxBuildCloneRebaseCommand(workdir, identity.clientBranch)),
   );
-  if (rebase.status === "conflict") return rebase;
+  if (rebase.status === "conflict") return { ...rebase, ontoRef: identity.clientBranch };
   if (rebase.status === "unknown") return { status: "unknown", reason: rebase.output };
   await execSandboxGit(buildSandboxBuildCloneSyncCommand(workdir, branchName));
   return { status: "refreshed", headSha: rebase.headSha, clientSha: client.headSha };

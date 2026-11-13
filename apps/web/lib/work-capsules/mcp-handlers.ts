@@ -74,6 +74,8 @@ type ToolContext = {
   threadId?: string;
   taskRunId?: string;
   authorityDecisionId?: string;
+  authSource?: string;
+  approvedAuthorityEnvelopeId?: string | null;
 } | undefined;
 
 export function workCapsuleToolEnums() {
@@ -601,7 +603,10 @@ export async function reassignCapsuleExecutorTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  return reassignCapsuleExecutor({ params, db: workCapsuleDb(), resolveActor: () => actor(userId, context) });
+  return reassignCapsuleExecutor({ params, db: workCapsuleDb(), resolveActor: () => actor(userId, context),
+    // An assistant's takeover that no person approved ran only because it was
+    // classified as the owner's own room (BI-1986D3C1); prove that again here.
+    ownRoomTakeoverRecheck: context?.authSource === "oauth" && !context.approvedAuthorityEnvelopeId });
 }
 
 export async function recordCapsuleEvidenceTool(

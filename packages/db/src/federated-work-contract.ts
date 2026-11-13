@@ -61,6 +61,17 @@ export interface FederatedWorkClaimV1 {
   active: boolean;
   since: string | null;
   workrooms: number;
+  /** Who holds the item's claim at its home (BI-30EDDB7F, spec 2026-10-27
+   *  §5.2 step 3): the installation, its Workroom and the lease's expiry. The
+   *  home publishes it; a companion that holds the claim sees itself here.
+   *  Absent from an older home; null when nobody holds it. */
+  holder?: FederatedWorkClaimHolderV1 | null;
+}
+
+export interface FederatedWorkClaimHolderV1 {
+  installationId: string;
+  workroomId: string;
+  leaseExpiresAt: string | null;
 }
 
 export interface FederatedWorkItemV1 {
@@ -256,6 +267,14 @@ export function validateFederatedWorkClaimV1(value: unknown, path = "claim"): st
   if (typeof value.active !== "boolean") violations.push(`${path}.active:invalid`);
   if (!isNullableIso(value.since)) violations.push(`${path}.since:invalid`);
   if (!Number.isInteger(value.workrooms) || (value.workrooms as number) < 0) violations.push(`${path}.workrooms:invalid`);
+  if (value.holder !== undefined && value.holder !== null) {
+    if (!isRecord(value.holder)) violations.push(`${path}.holder:not-an-object`);
+    else {
+      if (!isNonEmptyString(value.holder.installationId, 160)) violations.push(`${path}.holder.installationId:invalid`);
+      if (!isNonEmptyString(value.holder.workroomId, 120)) violations.push(`${path}.holder.workroomId:invalid`);
+      if (!isNullableIso(value.holder.leaseExpiresAt)) violations.push(`${path}.holder.leaseExpiresAt:invalid`);
+    }
+  }
   return violations;
 }
 

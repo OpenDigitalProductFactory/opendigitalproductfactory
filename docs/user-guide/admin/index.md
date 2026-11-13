@@ -105,6 +105,18 @@ the failing requirement, until every requirement passes. Once commissioned, the
 panel shows the room, the repository, who commissioned it and when. Only someone
 who can manage the platform can take ownership or commission.
 
+**Ecosystem: issue submission sweep** sends this installation's triaged problems
+to the project team once a day, so other installations can see and vote on them.
+Nothing is sent until someone allows it. Until then the sweep stops each day and
+raises one **Needs you** item, "Problems found here are not reaching the
+ecosystem", saying how many problems are waiting. Its **Turn on upstream
+feedback** action opens **Admin > Issue reports > Upstream feedback**
+(`/admin/issue-reports/upstream`). Turn the switch on and save. Each report is
+redacted and sent under this installation's pseudonym, never a person's name.
+The switch cannot be changed while the installation is private or contributions
+are paused, and only someone who can manage the platform can change it. A paused
+or private installation is recorded on the register but never raised as an item.
+
 The hourly **Backlog triage drain** assesses new or changed items. Once an item
 needs review, unchanged work is skipped on subsequent sweeps; it stays visible
 in triaging for you or a coworker to decide. Editing its decision inputs or

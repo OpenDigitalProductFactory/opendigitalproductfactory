@@ -133,7 +133,7 @@ test("an invalid profile writes nothing", () => {
 
 test("the profile's carriers equal the updater's DEFAULT_CARRIERS", () => {
   const carriers = readUpdaterCarriers(read(CONVERGENCE_PATH));
-  assert.deepEqual(carriers, { "claude-code": "header", codex: "header", grok: "query", antigravity: "header" });
+  assert.deepEqual(carriers, { "claude-code": "helper", codex: "header", grok: "query", antigravity: "header" });
   assert.deepEqual(carrierDrift(profile(), carriers), []);
 });
 

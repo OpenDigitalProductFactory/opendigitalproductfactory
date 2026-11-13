@@ -12,7 +12,7 @@
 import { resolveItemOutcome, type OutcomeSource } from "./intake-outcome";
 
 /** Statuses whose items are still to be delivered: every one owes an outcome. */
-export const OUTCOME_BACKFILL_STATUSES = ["triaging", "open", "in-progress", "awaiting-acceptance", "blocked", "deferred"] as const;
+export const OUTCOME_BACKFILL_STATUSES = ["triaging", "open", "in-progress", "awaiting-acceptance", "deferred"] as const;
 
 export const OUTCOME_BACKFILL_BATCH = 250;
 

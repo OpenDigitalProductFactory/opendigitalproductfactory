@@ -34,9 +34,9 @@ the platform is not".
 - Distinct agent identities measured: **87**
   - canonical agent registry: 87 · workforce roster: 48 · profession roles: 99
   - Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.
-- At 100% of attainable: **36**
+- At 100% of attainable: **37**
 - Median attainable: **88%** · median absolute: **81%**
-- Skills: **157** total, **0** stranded, **41** able to declare a cadence
+- Skills: **159** total, **0** stranded, **43** able to declare a cadence
 - Unresolved `assignTo` targets: `external-coding-agent`, `software-engineer`
 
 ## Consequential-tool gate coverage
@@ -71,7 +71,7 @@ The gate is built, enforced, and its reach is derived from each tool's declared 
 | Corpus / WSID | 1 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Governance / WWWD | 2 | 3 | 0 | 0 | 0 | 87 | 87/87 |
 | Shape | 1 | 2 | 39 | 0 | 48 | 0 | 48/87 |
-| Cadence | 1 | 3 | 46 | 0 | 0 | 41 | 41/87 |
+| Cadence | 1 | 3 | 44 | 0 | 0 | 43 | 43/87 |
 | Tools + Skills | 2 | 3 | 0 | 38 | 0 | 49 | 49/87 |
 | Evidence | 1 | 2 | 39 | 1 | 47 | 0 | 47/87 |
 
@@ -190,8 +190,6 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-904` | superseded | 64% | 59% | 1 | 3 | 3 | 0 | 0 | 3 | 0 |
 | `AGT-WS-MARKET-RESEARCH` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-ONBOARD` | active-roster | 84% | 78% | 3 | 3 | 3 | 2 | 0 | 3 | 1 |
-| `AGT-WS-SECURITY` | defined-roster | 84% | 78% | 2 | 3 | 3 | 2 | 0 | 3 | 2 |
-| `AGT-WS-BUILD` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-CUSTOMER` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-PORTFOLIO` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
 | `AGT-WS-REVIEW` | active-roster | 88% | 81% | 3 | 3 | 3 | 2 | 0 | 3 | 2 |
@@ -200,6 +198,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-ORCH-000` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-FARM-RANCH` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-INTEGRATION` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-SECURITY` | defined-roster | 96% | 89% | 2 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-900` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-903` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-905` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
@@ -219,6 +218,7 @@ _Certification exercises a real domain act, not a generic probe._
 | `AGT-SOC-IR-LEAD` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-SOC-TRIAGE` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-ADMIN` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
+| `AGT-WS-BUILD` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-COMPLIANCE` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-DATA-ARCHITECT` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
 | `AGT-WS-DATA-STEWARD` | active-roster | 100% | 93% | 3 | 3 | 3 | 2 | 3 | 3 | 2 |
