@@ -4,13 +4,13 @@
 // NOT menus (status reports, click-through steps, a menu after consulting).
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { claimTurnBlock, decideStop, readTurn } from "./decision-menu-stop-guard.mjs";
+import { claimTurnBlock, decideStop, readTurn, turnBlockDir } from "./decision-menu-stop-guard.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..", "..");
@@ -114,11 +114,28 @@ test("claimTurnBlock allows exactly one block per session turn (both hook planes
   assert.equal(claimTurnBlock("s2", "u-2", dir), true);
 });
 
+test("the turn marker lives in a per-user directory, not the shared temp dir (CodeQL js/insecure-temporary-file)", () => {
+  assert.equal(turnBlockDir("/home/u"), join("/home/u", ".dpf", "hook-state", "decision-menu-stop-guard"));
+  assert.ok(!turnBlockDir().startsWith(tmpdir()), "default marker dir must not be under os.tmpdir()");
+  assert.ok(turnBlockDir().startsWith(homedir()), "default marker dir is under the user's home");
+  if (process.platform === "win32") return;
+  const dir = join(mkdtempSync(join(tmpdir(), "menu-guard-mode-")), "state");
+  assert.equal(claimTurnBlock("s1", "u-1", dir), true);
+  assert.equal(statSync(dir).mode & 0o777, 0o700, "marker directory is owner-only");
+  const [marker] = readdirSync(dir);
+  assert.equal(statSync(join(dir, marker)).mode & 0o777, 0o600, "marker file is owner-only");
+});
+
+function isolatedHome() {
+  const home = mkdtempSync(join(tmpdir(), "menu-guard-home-"));
+  return { HOME: home, USERPROFILE: home };
+}
+
 function runHook(payload, env = {}) {
   return spawnSync(process.execPath, [join(here, "decision-menu-stop-guard.mjs")], {
     input: JSON.stringify(payload),
     encoding: "utf8",
-    env: { ...process.env, DPF_ALLOW_DIRECT_ASK: "", TMPDIR: mkdtempSync(join(tmpdir(), "menu-guard-tmp-")), ...env },
+    env: { ...process.env, DPF_ALLOW_DIRECT_ASK: "", ...isolatedHome(), ...env },
   });
 }
 
@@ -126,7 +143,7 @@ test("end to end: blocks once in a DPF checkout, then lets the turn end", () => 
   const dir = mkdtempSync(join(tmpdir(), "menu-guard-tx-"));
   const transcriptPath = join(dir, "t.jsonl");
   writeFileSync(transcriptPath, transcript());
-  const env = { TMPDIR: mkdtempSync(join(tmpdir(), "menu-guard-tmp-")) };
+  const env = isolatedHome();
   const payload = { hook_event_name: "Stop", session_id: "s-e2e", transcript_path: transcriptPath, cwd: repoRoot };
   const first = runHook(payload, env);
   assert.equal(first.status, 0);

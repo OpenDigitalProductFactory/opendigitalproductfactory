@@ -331,7 +331,10 @@ Gate A and the Stop guard share one vocabulary module,
 the hook again (BI-FC32F9A6). The guard honours `stop_hook_active`, and because some
 hosts never set it, it also blocks at most once per user turn. An exclusive-create
 marker keyed on session and turn records that block, which also stops the two planes
-from both blocking. The guard fails open on any error.
+from both blocking. The marker lives in a per-user, owner-only directory
+(`~/.dpf/hook-state/decision-menu-stop-guard`, mode 0700, files 0600), not the shared
+OS temp dir, where another local user could pre-create it and suppress the guard. The
+guard fails open on any error.
 
 **Measured, not assumed.** Replayed over the 2026-10-01 session's transcript (22
 turns), the guard blocks exactly the three turns that put a delivery decision to the

@@ -29,7 +29,7 @@
 
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { inDpfAgentHost } from "./lib/hook-io.mjs";
@@ -157,12 +157,21 @@ export function decideStop(turn, env = {}) {
   return { block: true, reason: GUIDANCE };
 }
 
+/**
+ * Where the once-per-turn markers live: a per-user directory under ~/.dpf, never
+ * the shared os temp dir, where another local user could pre-create the directory
+ * or a marker and suppress the guard (CodeQL js/insecure-temporary-file).
+ */
+export function turnBlockDir(home = homedir()) {
+  return join(home, ".dpf", "hook-state", "decision-menu-stop-guard");
+}
+
 /** Claim the one block this turn may get. False when it was already used (by either plane). */
-export function claimTurnBlock(sessionId, turnId, dir = join(tmpdir(), "dpf-decision-menu-stop-guard")) {
+export function claimTurnBlock(sessionId, turnId, dir = turnBlockDir()) {
   const key = createHash("sha256").update(`${sessionId}\u0000${turnId}`).digest("hex").slice(0, 32);
   try {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, key), new Date().toISOString(), { flag: "wx" });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(join(dir, key), new Date().toISOString(), { flag: "wx", mode: 0o600 });
     return true;
   } catch {
     return false; // EEXIST: already blocked this turn; any other error: fail open
