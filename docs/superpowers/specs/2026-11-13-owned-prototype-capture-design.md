@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Owned prototype capture
 
 Backlog: BI-CA4DC298. Workroom: WC-49FB71DF. Status: design draft; implementation and runtime verification unrun.

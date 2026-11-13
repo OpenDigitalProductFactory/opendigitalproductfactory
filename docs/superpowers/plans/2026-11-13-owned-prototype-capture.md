@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Owned prototype capture implementation
 
 Backlog: BI-CA4DC298. Workroom: WC-49FB71DF. Design: `docs/superpowers/specs/2026-11-13-owned-prototype-capture-design.md`. Status: plan draft; implementation unrun. Kernel choice: DI-7652EE1A746E.
