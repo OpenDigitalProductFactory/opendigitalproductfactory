@@ -638,6 +638,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/escalation-parked-return.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
@@ -1815,6 +1818,9 @@
     ],
     "apps/web/scripts/offload-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/scripts/reevaluate-escalation-parked-items.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
     ],
     "apps/web/tsconfig.json": [
       "docs/architecture/dependency-reduction-routine.md"
@@ -3488,9 +3494,11 @@
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/backlog/deferral-contract.ts",
+      "apps/web/lib/backlog/escalation-parked-return.ts",
       "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts",
       "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/govern/data/field-classification.ts",
+      "apps/web/scripts/reevaluate-escalation-parked-items.ts",
       "packages/db/src/table-classification.ts",
       "scripts/check-no-unattributable-deferral.mjs"
     ],
