@@ -142,8 +142,31 @@ else: raise AssertionError("inherited socket was accepted")
             foreign.wait(timeout=3)
 
     def test_real_sandboxed_browser_returns_bound_pixels_and_leaves_no_workers(self):
-        result = asyncio.run(capture.render_prototype(source()))
-        self.assertNotIn("error", result, result)
+        diagnostics = bytearray()
+        original_spawn = asyncio.create_subprocess_exec
+        readers = []
+        async def drain(stream):
+            while True:
+                chunk = await stream.read(4096)
+                if not chunk:
+                    return
+                remaining = 8192 - len(diagnostics)
+                if remaining > 0:
+                    diagnostics.extend(chunk[:remaining])
+        async def spawn(*args, **kwargs):
+            # Fixture-only diagnostics. Production still exposes only its typed
+            # unavailable result. Keep the real identity, guard and cleanup.
+            kwargs["stderr"] = asyncio.subprocess.PIPE
+            child = await original_spawn(*args, **kwargs)
+            readers.append(asyncio.create_task(drain(child.stderr)))
+            return child
+        async def exercise():
+            with patch.object(capture.asyncio, "create_subprocess_exec", side_effect=spawn):
+                result = await capture.render_prototype(source())
+            await asyncio.gather(*readers)
+            return result
+        result = asyncio.run(exercise())
+        self.assertNotIn("error", result, {**result, "fixture_worker_stderr": diagnostics.decode("utf-8", errors="replace")})
         self.assertEqual(result["mime_type"], "image/png")
         self.assertEqual(result["sha256"], source()["sha256"])
         self.assertGreater(result["bytes"], 100)

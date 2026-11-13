@@ -17,8 +17,12 @@ concurrency:
 
 jobs:
   qualify:
-    name: Sandboxed offline capture
-    runs-on: ubuntu-latest
+    name: Sandboxed offline capture (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
