@@ -277,8 +277,11 @@ function publishPushed({ branch, base, title, body, headSha, log, runner }) {
   if (state === "unconfirmed") {
     const enabled = runner("gh", ["pr", "merge", String(pr.number), "--repo", `github.com/${repository}`,
       "--squash", "--auto", "--match-head-commit", headSha], { capture: true, allowFail: true });
+    // BI-53BED66C: an unattended client may not run `gh pr merge` (owner Codex
+    // rules make it a prompt). The governed route is the room's own executor
+    // calling queue_workroom_pull_request through its signed-in dpf connector.
     if (!enabled.ok) return { step: "auto-merge", message: "Queue request was refused; it was not retried.",
-      next: `read pnpm pr:health ${pr.number}; do not repeat the request to discover its outcome` };
+      next: `call the MCP tool queue_workroom_pull_request with this Workroom's capsuleId through your dpf connector (it queues PR #${pr.number} once the gate passed on ${headSha.slice(0, 10)}); otherwise read pnpm pr:health ${pr.number}. Do not repeat the gh request to discover its outcome` };
     state = observePublication(binding);
   }
   if (!["queued", "requested", "merged"].includes(state)) return { step: "auto-merge",

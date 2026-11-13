@@ -2655,6 +2655,9 @@
     "scripts/convergence-surfaces.json": [
       "docs/architecture/enforced-ci-gates.md"
     ],
+    "scripts/derived-artifacts-gate.mjs": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "scripts/detect-hardware-host.ts": [
       "docs/install/linux.md",
       "docs/install/macos.md"
@@ -3548,6 +3551,7 @@
       "scripts/check-build-script-policy.mjs",
       "scripts/check-no-server-imports-in-client.mjs",
       "scripts/check-stuck-auto-merge.mjs",
+      "scripts/derived-artifacts-gate.mjs",
       "scripts/installer/install-release-assets.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/ci-evidence-plan.mjs",

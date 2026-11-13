@@ -862,13 +862,14 @@ describe("work capsule store", () => {
         claimedByAgentId: "agent-1",
         claimedAt: new Date(),
       });
-      // adopt reuse: existing capsule already bound to this BI + session.
+      // adopt reuse: existing capsule already bound to this BI + session + kind.
       db.workroom.findFirst.mockResolvedValueOnce({
         id: "row-1",
         capsuleId: "WC-CLAIM01",
         status: "working",
         backlogItemId: "BI-7D20BFDF",
         epicId: null,
+        executorKind: baseInput.executorKind,
         executorRef: "session-A",
         headBranch: baseInput.headBranch,
         worktreePath: baseInput.worktreePath,

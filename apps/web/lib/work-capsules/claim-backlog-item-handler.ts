@@ -81,6 +81,26 @@ async function resolveClaimShape(args: {
   return { resolution, refusal: null };
 }
 
+/** Orchestrating harnesses DPF recognises (BI-53BED66C). Descriptive only: never an authority identity. */
+export const EXECUTOR_HARNESSES = ["t3-code"] as const;
+export type ExecutorHarness = (typeof EXECUTOR_HARNESSES)[number];
+
+/** A provider string that names only a harness, with no model client in it. */
+export function isHarnessOnlyProvider(provider: string): boolean {
+  const normalized = provider.trim().toLowerCase();
+  return /^t3(?:[-_ ]?code)?$/.test(normalized);
+}
+
+/** Record which harness runs the room's executor, keyed to the session it ran. */
+export async function persistExecutorHarness(db: CapsuleDb, capsuleId: string, harness: ExecutorHarness, sessionRef: string): Promise<void> {
+  const row = await db.workroom.findUnique({ where: { capsuleId }, select: { workspaceState: true } }) as { workspaceState?: unknown } | null;
+  if (!row) return;
+  const state = row.workspaceState && typeof row.workspaceState === "object" && !Array.isArray(row.workspaceState)
+    ? row.workspaceState as Record<string, unknown> : {};
+  await db.workroom.update({ where: { capsuleId },
+    data: { workspaceState: { ...state, executorHarness: { harness, executorRef: sessionRef, recordedAt: new Date().toISOString() } } } });
+}
+
 export async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
   if (!resolution || (resolution.kind !== "declared" && resolution.kind !== "derived")) return;
   if (!db.workroom?.findUnique) return;
@@ -153,6 +173,17 @@ export async function claimBacklogItemForWork(args: {
   const shas = await resolveSourceCommitShas(params, lazyResolverDeps(args.resolveCommitDeps, repositoryFullName));
   if (!shas.ok) return sourceCommitRefusal(shas, { tool: "claim_backlog_item_for_work", args: params });
   const { baseSha, headSha } = shas.data;
+  // BI-53BED66C: a harness (T3 Code) is not the authenticated client. Name the
+  // model client as provider and the harness separately; never let "t3" fall
+  // through to `human`, which hides who did the work.
+  const harness = stringParam(params, "harness");
+  if (harness && !EXECUTOR_HARNESSES.includes(harness as ExecutorHarness)) {
+    return { success: false, error: "invalid_harness", message: `harness must be one of: ${EXECUTOR_HARNESSES.join(", ")}.` };
+  }
+  if (isHarnessOnlyProvider(provider)) {
+    return { success: false, error: "provider_harness_only",
+      message: `"${provider}" names the harness, not the model client. Pass provider "codex" or "claude" (whichever T3 is driving) and harness "t3-code", with sessionRef set to the client thread id (CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID).` };
+  }
   const executorKind = providerToExecutorKind(provider);
   const shape = await resolveClaimShape({
     db: args.db,
@@ -232,6 +263,7 @@ export async function claimBacklogItemForWork(args: {
     const result = governed.data.claim;
     if (twinGate.kind === "overridden") await recordTwinOverride(twinDb as never, result.capsuleId, twinGate, await args.resolveActor(args.userId, args.context));
     await persistClaimShape(args.db, result.capsuleId, shape.resolution);
+    if (harness) await persistExecutorHarness(args.db, result.capsuleId, harness as ExecutorHarness, sessionRef);
     const homeClaim = claimAtHome ? await requestHomeClaim(result.capsuleId) : null;
     await ensureCapsuleWorkItemAnchorWithPrisma({
       capsuleId: result.capsuleId,
@@ -268,6 +300,7 @@ export async function claimBacklogItemForWork(args: {
         workIntent: governed.data.workIntent,
         readiness: governed.data.readiness,
         readback: governed.data.readback,
+        ...(harness ? { executorHarness: harness } : {}),
       },
     };
   } catch (error) {
