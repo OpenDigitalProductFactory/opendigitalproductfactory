@@ -103,6 +103,7 @@ import {
   looksLikeCliRateLimit,
   looksLikeCliUnsupportedModel,
   cliFailureSignal,
+  describeCliFailure,
 } from "./codex-cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -398,7 +399,7 @@ describe("Codex CLI failure verdict is never hidden", () => {
   });
 
   it("bounds and redacts what it logs", async () => {
-    const { logged } = await runFailing(`ERROR: upstream rejected Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl key sk-proj-ABCDEFGHIJKLMNOP ${"x".repeat(5_000)}\n`);
+    const { logged } = await runFailing(`ERROR: ${"x".repeat(5_000)} upstream rejected Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl key sk-proj-ABCDEFGHIJKLMNOP\n`);
     expect(logged).not.toMatch(/eyJhbGci|sk-proj-ABCDEFGH/);
     expect(logged).toContain("[redacted]");
     expect(logged.length).toBeLessThan(1_200);
@@ -590,6 +591,27 @@ describe("cliFailureSignal — classify the CLI's own error, not the echoed prom
     "ERROR: Your access token could not be refreshed.",
   ])("classifies sign-in phrasing %j as auth", (text) => {
     expect(looksLikeCliAuthFailure(cliFailureSignal(text))).toBe(true);
+  });
+
+  // BI-F7D06E2D (live, 2026-11-13 05:23Z): `codex exec` exited 0 with empty
+  // stdout on a scheduled marketing run. With no ERROR line the signal is the
+  // stderr tail, which opens inside the echoed prompt. The log line kept the
+  // head of that tail, so it showed tool schema JSON and cut off what codex
+  // printed after the prompt.
+  it("logs the end of a failure with no ERROR line, where the CLI's own output is", () => {
+    const stderr = [
+      "user",
+      `Tools:\n- save_marketing_review: Parameters: ${JSON.stringify({ body: "x".repeat(2_500) })}`,
+      "Your turn: output the next tool_use JSON object, or your final answer.",
+      "codex",
+      "warning: model returned no final message",
+      "tokens used",
+      "41,207",
+    ].join("\n");
+    const { logLine } = describeCliFailure(stderr);
+    expect(logLine).toContain("warning: model returned no final message");
+    expect(logLine).toContain("tokens used");
+    expect(logLine.length).toBeLessThanOrEqual(501);
   });
 
   it("falls back to the tail when the CLI printed no ERROR line", () => {
