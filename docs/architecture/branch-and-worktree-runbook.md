@@ -12,11 +12,45 @@ Full reference: [`docs/testing/pr-health.md`](../testing/pr-health.md).
 
 ## Merge mechanics
 
-`gh pr merge <n> --squash --auto`. `main` enforces a merge queue (the `main-merge-queue` ruleset) that brings the PR up to date and squash-merges once required checks pass. Consequences worth knowing:
+Agents land with `pnpm land`; its publisher requests `gh pr merge <n> --squash --auto` for the exact current OPEN PR and head commit. Do not chain push, PR creation and queue requests by hand. `main` enforces a merge queue (the `main-merge-queue` ruleset) that brings the PR up to date and squash-merges once required checks pass. Consequences worth knowing:
 
 - Do not hand-merge.
 - Do not pass `--delete-branch` — the queue rejects it.
 - A branch already in the queue cannot be force-pushed.
+
+**Resume publication after a successful push (BI-31D31DEF).**
+
+If `pnpm land` already pushed a qualified commit but stopped during PR creation
+or queue observation, preserve that commit and its evidence. Do not repeat push,
+merge forward, re-run the gate or replay semantic review merely to resume the
+remaining publication steps. Historical MERGED or CLOSED PRs on the same branch
+do not represent its current publication.
+
+The supported bounded resume is:
+
+```sh
+pnpm land -- --resume-publication --expected-head <full-qualified-sha> \
+  --worktree <unchanged-governed-worktree> --title "fix: ..." --body-file <reviewed-body>
+```
+
+Run this from a qualified checkout containing the repaired helper. `--worktree`
+selects the unchanged candidate; the helper's source version and the candidate's
+source version are separate identities. Do not copy helper code into the
+candidate to obtain the command. Every child process reads the candidate's
+working directory. Resume requires compile readiness, readable Git state, a clean
+named topic branch, exact local and remote HEAD, and a real current branch-bound
+canonical PASS. It checks current PR-body requirements and validates the existing
+semantic receipt under the helper's current publication policy without recording
+or dispatching another review. A refusal remains a refusal.
+
+The publisher selects at most one current OPEN PR for the repository, branch and
+base, verifies its exact head, and uses `--match-head-commit` on the protected
+queue request. It observes actual GraphQL queue membership separately from an
+auto-merge request: a queue entry can coexist with a null `autoMergeRequest`.
+Queued, merged and requested states are reported separately. Failed, partial or
+ambiguous reads remain unconfirmed; no second enable request is sent. Protected
+checks and merge-queue verification remain mandatory. Use `pnpm pr:health <n>` to
+read subsequent progress.
 
 ## Private/public change segregation is content-based
 
