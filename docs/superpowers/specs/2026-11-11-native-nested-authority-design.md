@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Preserve admitted native nested authority
 
 Status: design proposal; no implementation approval or passing regression claimed.

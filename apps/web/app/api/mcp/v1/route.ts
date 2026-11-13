@@ -786,17 +786,14 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 /**
- * Streamable HTTP server-to-client lane. A notification is only a wake-up:
- * task frames carry the complete current Task projection, room frames only the
- * room's URI (BI-ED52AB82). TaskRun, tasks/get/list and read_room_messages
- * remain the durable reconciliation path after disconnects; a reconnect with
- * Last-Event-ID replays the room updates the stream missed.
+ * Streamable HTTP wake-ups carry complete task projections or room URIs.
+ * Reconcile through TaskRun, tasks/get/list and read_room_messages;
+ * Last-Event-ID replays missed room updates (BI-ED52AB82).
  */
 export async function GET(request: Request): Promise<Response> {
   const authentication = await authenticateMcpRequest(request);
   if (!authentication.ok) return authentication.response;
-  if (authentication.token.toolSurface) {
+  if (authentication.token.toolSurface)
     return new Response(null, { status: 405, headers: { Allow: "POST" } });
-  }
   return openMcpTaskStatusStream(request, authentication.token, { rooms: roomUpdateFanout() });
 }
