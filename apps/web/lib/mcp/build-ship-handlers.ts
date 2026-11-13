@@ -599,7 +599,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
 
   // BI-6B57D85F: publish each file's committed content from the build's own
   // tree, not the shared sandbox mount (which sits on the client branch).
-  const { resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
+  const { resolveBuildWorkdir, SANDBOX_WORKSPACE } = await import("@/lib/build/sandbox/build-branch");
   const { execInSandbox } = await import("@/lib/build/sandbox/sandbox");
   const published = await publishBranchCommit({
     headOwner: repoOwner,
@@ -609,7 +609,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     diff: shareableDiff,
     token,
     ...(build.sandboxId
-      ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox }) }
+      ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox, branchFallback: build.buildBranch ? { repoDir: SANDBOX_WORKSPACE, branch: build.buildBranch } : undefined }) }
       : {}),
   });
   let canonicalReadiness = {
