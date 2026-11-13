@@ -407,6 +407,7 @@
     "runningSince": "Running since {$date}",
     "missedCount": "{$count} days did not run",
     "steady": "Every recorded day ran",
+    "noRecord": "No runs recorded yet",
     "explain": "What the marks mean"
   },
   "outcomes": {

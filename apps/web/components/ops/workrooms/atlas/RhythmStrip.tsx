@@ -57,8 +57,11 @@ export function RhythmStrip({ rows, locale }: { rows: StandingRhythmRow[]; local
       <ul className="mt-2 divide-y divide-[var(--dpf-border)]">
         {rows.map((row) => {
           const { slots, runningSince, counts } = row.rhythm;
+          // A room whose drive has recorded no run has nothing to vouch for, so it
+          // must not read as steady (BI-7DBE16F9).
           const summary = runningSince
             ? t("rhythm.runningSince", { date: shortDate(runningSince, locale) })
+            : slots.every((slot) => slot.state === "no-record") ? t("rhythm.noRecord")
             : counts.missed > 0 ? t("rhythm.missedCount", { count: counts.missed }) : t("rhythm.steady");
           return (
             <li key={row.capsuleId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2">

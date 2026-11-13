@@ -64,6 +64,16 @@ describe("RhythmStrip", () => {
     expect(html).toContain("Nov 10: Running now");
   });
 
+  it("says no runs are recorded yet, not that every day ran, for a room with no recorded run (BI-7DBE16F9)", () => {
+    const unrecorded: StandingRhythmRow = {
+      capsuleId: "WC-QUIET", title: "Contribution flow",
+      rhythm: classifyStandingRhythm({ rows: [], currentRunKey: null, now }),
+    };
+    const html = render([unrecorded]);
+    expect(html).toContain("No runs recorded yet");
+    expect(html).not.toContain("Every recorded day ran");
+  });
+
   it("links each room to its detail page, and draws no band when there are none", () => {
     expect(render([mixed])).toContain("/workspace/cases/");
     expect(render([])).toBe("");

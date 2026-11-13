@@ -396,7 +396,7 @@ platform team rather than shown to you.
 - **Dashed:** today's run has not started yet.
 - **Dotted:** no record yet. Days before the room's first recorded run are not counted as missed.
 
-Every mark has its own shape as well as its colour, so a missed or late day is never mistaken for another state even without colour. Beside the marks, the row says how long a stuck run has been going ("Running since Oct 7") or how many days did not run. Select a room's name to open it, or **What the marks mean** to see this key on the page.
+Every mark has its own shape as well as its colour, so a missed or late day is never mistaken for another state even without colour. Beside the marks, the row says how long a stuck run has been going ("Running since Oct 7"), how many days did not run, or "No runs recorded yet" when the room has never recorded a run. Select a room's name to open it, or **What the marks mean** to see this key on the page.
 
 The marks come from the room's own drive record, so nothing is guessed. The band appears only when the install has standing rooms.
 
