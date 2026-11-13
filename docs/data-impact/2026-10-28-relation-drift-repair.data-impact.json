@@ -1,7 +1,7 @@
 {
   "version": "1",
   "accountableOwner": "platform-architecture",
-  "summary": "BI-92804832 (EP-5F6369AB). Migration 20261105130000_relation_drift_repair makes every relation store use one spelling and one meaning: lower-case inventory/discovery relationship types become the registry key; the OS-host/Docker-host same-machine link (rule host_is_docker_host) is SAME_AS rather than RUNS_ON; product-to-product dependencies are projected into graph_edge; document references project as PROV-O / schema.org relations. Registers SAME_AS, CITES and SUPERSEDES.",
+  "summary": "BI-92804832 (EP-5F6369AB). Migration 20261113130000_relation_drift_repair makes every relation store use one spelling and one meaning: lower-case inventory/discovery relationship types become the registry key; the OS-host/Docker-host same-machine link (rule host_is_docker_host) is SAME_AS rather than RUNS_ON; product-to-product dependencies are projected into graph_edge; document references project as PROV-O / schema.org relations. Registers SAME_AS, CITES and SUPERSEDES.",
   "affectedCopies": [
     "InventoryRelationship.relationshipType and DiscoveredRelationship.relationshipType: case-normalized in place; relationshipKey unchanged so discovery keeps matching rows; new writes normalized by discovery-normalize.ts",
     "graph_edge: RUNS_ON same-machine edges retyped SAME_AS; ProductDependency rows projected as DEPENDS_ON / PART_OF; DOC_REFERENCES edges with a mapped refType retyped",
@@ -14,7 +14,7 @@
     "reviewDisposition": "Relation-type labels only; identifiers, keys and properties are unchanged."
   },
   "migration": {
-    "name": "20261105130000_relation_drift_repair",
+    "name": "20261113130000_relation_drift_repair",
     "backfill": "In-place. Dry-run on the dev install on 2026-10-28 in a rolled-back transaction: 228 inventory and 872 discovered RUNS_ON rows became SAME_AS; 431 inventory and 11,830 discovered lower-case rows were normalized; 228 graph RUNS_ON edges were retyped; 54 product edges were added; 4 DOC_REFERENCES edges became USED. Afterwards every store held one spelling per type and no RUNS_ON or DOC_REFERENCES edge was left.",
     "rollback": "Forward-only. The previous spellings are recoverable from relationshipKey, which still carries the collector's spelling."
   },
@@ -30,7 +30,7 @@
       "prismaModel": "InventoryRelationship",
       "lifecycleDisposition": "Existing model; relationshipType values normalized.",
       "fields": [
-        { "fieldId": "data:inventory-relationship#relationshipType", "resolution": "governed", "reason": "Stored as the relation-vocabulary key (canonicalRelationKey).", "provenance": "Migration 20261105130000_relation_drift_repair; BI-92804832.", "flags": [] }
+        { "fieldId": "data:inventory-relationship#relationshipType", "resolution": "governed", "reason": "Stored as the relation-vocabulary key (canonicalRelationKey).", "provenance": "Migration 20261113130000_relation_drift_repair; BI-92804832.", "flags": [] }
       ]
     },
     {
@@ -39,7 +39,7 @@
       "prismaModel": "DiscoveredRelationship",
       "lifecycleDisposition": "Existing model; relationshipType values normalized.",
       "fields": [
-        { "fieldId": "data:discovered-relationship#relationshipType", "resolution": "governed", "reason": "Stored as the relation-vocabulary key.", "provenance": "Migration 20261105130000_relation_drift_repair; BI-92804832.", "flags": [] }
+        { "fieldId": "data:discovered-relationship#relationshipType", "resolution": "governed", "reason": "Stored as the relation-vocabulary key.", "provenance": "Migration 20261113130000_relation_drift_repair; BI-92804832.", "flags": [] }
       ]
     },
     {
@@ -48,7 +48,7 @@
       "prismaModel": "GraphEdge",
       "lifecycleDisposition": "Derived projection; retyped and extended in place.",
       "fields": [
-        { "fieldId": "data:graph-edge#relType", "resolution": "governed", "reason": "SAME_AS, PART_OF/DEPENDS_ON for products, PROV-O document relations.", "provenance": "Migration 20261105130000_relation_drift_repair; BI-92804832.", "flags": [] }
+        { "fieldId": "data:graph-edge#relType", "resolution": "governed", "reason": "SAME_AS, PART_OF/DEPENDS_ON for products, PROV-O document relations.", "provenance": "Migration 20261113130000_relation_drift_repair; BI-92804832.", "flags": [] }
       ]
     },
     {
@@ -57,7 +57,7 @@
       "prismaModel": "GraphRelationType",
       "lifecycleDisposition": "Reference data; three rows added.",
       "fields": [
-        { "fieldId": "data:graph-relation-type#key", "resolution": "not-applicable", "reason": "SAME_AS (owl:sameAs), CITES (schema.org citation), SUPERSEDES (dcterms:replaces).", "provenance": "Migration 20261105130000_relation_drift_repair; BI-92804832.", "flags": [] }
+        { "fieldId": "data:graph-relation-type#key", "resolution": "not-applicable", "reason": "SAME_AS (owl:sameAs), CITES (schema.org citation), SUPERSEDES (dcterms:replaces).", "provenance": "Migration 20261113130000_relation_drift_repair; BI-92804832.", "flags": [] }
       ]
     }
   ]
