@@ -21,7 +21,7 @@
 //      whose ProviderCapacityStatus says calls will fail (a usage limit with a
 //      future reset, a rejected sign-in, a billing block) gets its provider row
 //      even with no failed calls, because routing has correctly stopped calling
-//      it. When every active subscription provider is blocked, ONE subscriptions
+//      it. When every active subscription provider is hard-blocked, ONE subscriptions
 //      row names them all and the earliest reset.
 //   5. Rows clear themselves: a later window that serves calls resolves them. A
 //      row whose provider served nothing this window (no calls, or only a few
@@ -39,7 +39,7 @@ import type { MonitorIssueDb } from "@/lib/observability/monitor-issue-writer";
 import { openMonitorIssue, resolveMonitorIssuesExcept } from "@/lib/observability/monitor-issue-writer";
 import { AI_PROVIDER_CONNECTIONS_ROUTE } from "@/lib/ai-provider-routes";
 import { providerDetailHref } from "./provider-health";
-import { capacityRoutingExclusionReason, isHardCapacityBlock } from "./capacity-routing-exclude";
+import { isHardCapacityBlock } from "./capacity-routing-exclude";
 
 export const AI_CAPACITY_ISSUE_TYPE = "ai_capacity_loss" as const;
 export const AI_CAPACITY_WINDOW_MS = 30 * 60_000;
@@ -320,7 +320,9 @@ export function assessAiCapacity(input: {
   const subscriptions = input.providers.filter((p) => p.subscription && p.status === "active");
   const exhausted = subscriptions.filter((p) => {
     if ((byProvider.get(p.providerId)?.served ?? 0) > 0) return false;
-    return capacityRoutingExclusionReason(capacitySnapshot(p.capacity), input.now.getTime()) !== null;
+    // Only providers that have said calls will fail; a short rate limit is
+    // still re-admitted by routing and is not "out of capacity".
+    return isHardCapacityBlock(capacitySnapshot(p.capacity), input.now.getTime());
   });
   if (subscriptions.length > 0 && exhausted.length === subscriptions.length) {
     const listed = exhausted.map((p) => {
