@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   isRefreshableDivergence,
   refreshDivergedShipBuild,
+  refreshOrRetryShipBuildPr,
   SHIP_SOURCE_REFRESH_RETRY_MS,
   type ShipSourceRefreshDeps,
 } from "./ship-source-refresh";
@@ -105,5 +106,45 @@ describe("refreshDivergedShipBuild", () => {
     const d = deps({ returnToReview: vi.fn(async () => false) });
     await expect(refreshDivergedShipBuild("FB-1", d)).resolves.toBe("not-ship");
     expect(d.queueReview).not.toHaveBeenCalled();
+  });
+});
+
+describe("refreshDivergedShipBuild force (BI-34A05E78)", () => {
+  it("refreshes when the PR attempt itself was refused as diverged, even if the stored snapshot says ahead", async () => {
+    const d = deps({ loadBuild: vi.fn(async () => ({ phase: "ship", buildExecState: { sourceCurrency: { ...diverged, status: "ahead", recommendedAction: "allow" } } })) });
+    expect(await refreshDivergedShipBuild("FB-1", d)).toBe("not-diverged");
+    expect(await refreshDivergedShipBuild("FB-1", d, { force: true })).toBe("returned-to-review");
+  });
+});
+
+describe("refreshOrRetryShipBuildPr (BI-34A05E78)", () => {
+  const logger = { log: vi.fn(), error: vi.fn() };
+  const refresh = async () => "not-diverged" as const;
+
+  function remedy(overrides: Record<string, unknown> = {}) {
+    return {
+      loadShipRefusalHistory: vi.fn(async () => []),
+      remedyRefusedShipBuild: vi.fn(async () => "return-to-review" as const),
+      shipPrRetryIntervalMs: vi.fn(() => 2 * 60 * 60 * 1000),
+      ...overrides,
+    };
+  }
+
+  it("classifies and remedies a refused retry, and reports that the build left ship", async () => {
+    const r = remedy();
+    const retry = vi.fn(async () => "blocked" as const);
+    await expect(refreshOrRetryShipBuildPr("FB-1", logger, { refresh, remedy: r as never, retry })).resolves.toBe(true);
+    expect(retry).toHaveBeenCalledWith("FB-1", logger, 2 * 60 * 60 * 1000);
+    expect(r.remedyRefusedShipBuild).toHaveBeenCalledWith("FB-1");
+  });
+
+  it("leaves a waiting build in ship and never retries an escalated one", async () => {
+    const waiting = remedy({ remedyRefusedShipBuild: vi.fn(async () => "wait" as const) });
+    await expect(refreshOrRetryShipBuildPr("FB-1", logger, { refresh, remedy: waiting as never, retry: vi.fn(async () => "blocked" as const) })).resolves.toBe(false);
+
+    const escalated = remedy({ loadShipRefusalHistory: vi.fn(async () => [{ kind: "unknown", action: "escalate" }]) });
+    const retry = vi.fn(async () => "blocked" as const);
+    await expect(refreshOrRetryShipBuildPr("FB-1", logger, { refresh, remedy: escalated as never, retry })).resolves.toBe(true);
+    expect(retry).not.toHaveBeenCalled();
   });
 });
