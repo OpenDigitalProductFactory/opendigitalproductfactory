@@ -9710,5 +9710,21 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 21
+  },
+  "apps/web/app/(shell)/finance/settings/statutory-rates/StatutoryRatesPanel.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/app/(shell)/finance/settings/statutory-rates/page.tsx": {
+    "vocabulary": 0,
+    "retiredVocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
   }
 }

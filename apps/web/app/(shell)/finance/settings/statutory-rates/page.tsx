@@ -126,29 +126,44 @@ export default async function StatutoryRatesPage() {
     label: j.stateProvinceCode ? `${j.authorityName} (${j.countryCode}-${j.stateProvinceCode})` : j.authorityName,
   }));
 
+  const waiting = views.filter((v) => v.status === "proposed").length;
+  const lead = missingLabels.length === 0
+    ? "Federal payroll is ready."
+    : `${missingLabels.length} federal figure${missingLabels.length === 1 ? "" : "s"} missing.`;
+
   return (
     <div>
       <FinanceTabNav />
-      <h1 className="text-xl font-bold text-[var(--dpf-text)]">Statutory rates</h1>
-      <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-        Payroll uses a tax figure only after a person confirms it against the authority&apos;s own publication.
-      </p>
 
-      <section
-        aria-labelledby="statutory-missing"
-        className="mt-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
-      >
-        <h2 id="statutory-missing" className="text-sm font-semibold text-[var(--dpf-text)]">
-          US federal payroll — {missingLabels.length === 0 ? "ready" : `${missingLabels.length} figure${missingLabels.length === 1 ? "" : "s"} missing`}
-        </h2>
-        {missingLabels.length === 0 ? (
-          <p className="mt-1 text-sm text-[var(--dpf-muted)]">Every required federal figure is confirmed for today.</p>
-        ) : (
+      {/* Lead band: one short plain sentence about what payroll still lacks, and
+          one next step. An empty table and a complete one must never look alike,
+          so the count leads rather than sitting below a list. */}
+      <header className="mb-6 space-y-2" data-dpf-lead>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Statutory rates</h1>
+        <p className="max-w-3xl text-sm leading-5 text-[var(--dpf-muted)]">
+          {waiting > 0 ? `${lead} ${waiting} waiting for you.` : lead}
+        </p>
+        <a
+          href={waiting > 0 ? "#statutory-waiting" : "#statutory-entry"}
+          data-dpf-primary-action
+          data-owner-first-next-action="confirm-figures"
+          className="inline-flex text-sm font-semibold text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+        >
+          {waiting > 0 ? "Check figures" : "Add a figure"}
+        </a>
+      </header>
+
+      {missingLabels.length > 0 ? (
+        <section
+          aria-labelledby="statutory-missing"
+          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+        >
+          <h2 id="statutory-missing" className="text-sm font-semibold text-[var(--dpf-text)]">Missing</h2>
           <ul className="mt-2 list-disc pl-5 text-sm text-[var(--dpf-text)]">
             {missingLabels.map((label) => <li key={label}>{label}</li>)}
           </ul>
-        )}
-      </section>
+        </section>
+      ) : null}
 
       <StatutoryRatesPanel rules={views} jurisdictions={jurisdictionOptions} />
     </div>

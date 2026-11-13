@@ -216,7 +216,7 @@ function EntryForm({
   // fallback for when no coworker could, so its ten fields stay out of the
   // default view until someone asks for them.
   return (
-    <details className="mt-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+    <details id="statutory-entry" className="mt-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
       <summary className="cursor-pointer text-sm font-semibold text-[var(--dpf-text)]">
         Enter a figure you have read yourself
       </summary>
@@ -291,8 +291,8 @@ export function StatutoryRatesPanel({
   const ratified = rules.filter((r) => r.status === "ratified");
   const rejected = rules.filter((r) => r.status === "rejected");
 
-  const group = (title: string, items: StatutoryRuleView[], empty: string) => (
-    <section className="mt-6" aria-label={title}>
+  const group = (title: string, items: StatutoryRuleView[], empty: string, id?: string) => (
+    <section className="mt-6" aria-label={title} id={id}>
       <h2 className="text-sm font-semibold text-[var(--dpf-text)]">{title} ({items.length})</h2>
       {items.length === 0 ? (
         <p className="mt-2 text-sm text-[var(--dpf-muted)]">{empty}</p>
@@ -311,7 +311,7 @@ export function StatutoryRatesPanel({
           {message}
         </p>
       ) : null}
-      {group("Waiting for you", proposed, "Nothing is waiting. A coworker's researched figure appears here for you to check.")}
+      {group("Waiting for you", proposed, "Nothing is waiting. A coworker's researched figure appears here for you to check.", "statutory-waiting")}
       {group("Confirmed — in use by payroll", ratified, "No figure is confirmed yet, so payroll cannot compute these taxes.")}
       {rejected.length > 0 ? group("Rejected", rejected, "") : null}
       <EntryForm jurisdictions={jurisdictions} onDone={setMessage} />
