@@ -106,6 +106,19 @@ mutation, and uses explicit preview services with `--no-deps`. Initialization mu
 succeed before `dev-portal` starts. Docker mount/commit labels and the served health
 identity must agree. No hand-built live image is an acceptable substitute.
 
+The canonical image must contain the bounded-clone and initialization-diagnostic
+entry files before runtime mutation. Initialization keeps the same install,
+client-generation, migration and sanitization commands. Its controller retains
+only bounded, validated step/state/category/exit records in the existing log as
+they arrive, so container removal cannot erase the failed step. Command arguments,
+environment values and raw child stdout/stderr are never diagnostic output.
+Missing or invalid records establish no inner cause. Failure still prevents
+portal startup and invokes owned cleanup. Even exit zero requires complete,
+ordered success records for all four steps. Use a qualified delivered helper for
+both the initial claim and durable child; a frozen feature checkout or stale
+install-root checkout is not assumed updated. A fresh diagnostic attempt requires
+the reviewed remedy's canonical containment and ordinary lease admission.
+
 A queued claim stops its shell caller: the returned durable TaskRun resumes the
 wait. A terminal claim stops too; never scan historical `:rerun-N` keys. A new
 explicitly wanted attempt may supply a new `DPF_DEV_PORTAL_CLAIM_KEY`. Durable

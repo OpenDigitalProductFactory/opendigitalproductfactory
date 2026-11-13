@@ -4,6 +4,52 @@ status: active
 
 # Complete external-client verification repair
 
+## Initialization diagnostics follow-up — BI-10AC904B, 2026-11-13
+
+The admitted E9 preview NPEL-A6EE52A575 exited initialization with code 1 before
+starting a portal. Its retained witness identifies no inner command: the runner
+discards stderr and rejects without stdout, while `compose run --rm` removes the
+initializer. Installation, client generation, migration and sanitization cannot
+be distinguished. The cause remains unknown; neither clone OOM nor a date or
+timing defect is established. Existing failure containment and owner cleanup
+worked. Preserve the original witness, frozen feature SHA and merged PR7053.
+
+This bounded source repair extends R2/R3/R5 without adding a store, grant, host
+policy or alternate runtime. Reuse the existing initializer, canonical image,
+lease keeper and retained controller log. A canonical initializer wrapper runs
+the same four commands and working directories, emitting only validated
+stage/state/category/exit records. Child stdout and stderr stay private and are
+discarded; no command arguments, credentials, environment, rows or raw errors
+enter diagnostic records. A bounded line parser accepts only that strict event
+shape and ignores malformed, oversized or extra-field records. The host retains
+the safe records as initialization progresses, before `--rm` can remove the
+container. Exit zero requires the complete ordered four-step progress records;
+missing or inconsistent completion cannot establish a valid preview. Nonzero
+exit still prevents portal startup and triggers owned cleanup.
+
+Ordered work:
+
+1. Claim the prospective paths and consume impact advice before regression work.
+   Demonstrate the current loss of safe failed-substep evidence with an actual
+   child process; never label absent dependencies as a failing behavior test.
+2. Add the fixed-command wrapper and bounded safe-record parser. Package their
+   exact files in the canonical image and check availability before mutation.
+   Preserve install/generate/migrate/sanitize ordering and source/destination
+   separation. No runtime command override or raw-output retention is introduced.
+3. Verify actual failures at each substep, successful ordering, malformed/large
+   streams, secret-bearing child output, missing executables, failed-clone
+   no-serve behavior and owned cleanup. Run affected tests, syntax and derived
+   documentation checks, then normal exact-head verification, review and land.
+4. After canonical containment of this reviewed remedy, permit one fresh finite
+   diagnostic preview through the supported lease and qualified delivered helper
+   for both initial claim and durable child. Stop on its first failure and retain
+   its safe evidence. Never revive A6/A9 or infer a live twenty-minute queue,
+   browser session, persona matrix or full UX pass from module tests or a port.
+
+Convergence uses the canonical self-upgrade image step. The old host root helper
+and a frozen feature checkout are not assumed updated. The existing preview
+preflight must refuse a canonical image lacking the diagnostic entry files.
+
 Backlog: BI-10AC904B and BI-9FA87F90. Workroom: WC-1916B51E.
 Repair branch: codex/external-client-verification, base 4bf3422a1d.
 Preserved feature: codex/session-identity at 7cba454af18d0d25f0d96c8a06ac6d0fed1cf488.
