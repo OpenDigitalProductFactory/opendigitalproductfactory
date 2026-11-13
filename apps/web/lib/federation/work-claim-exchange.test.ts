@@ -214,6 +214,25 @@ describe("handleIncomingWorkClaimRequest — a request speaks only for its own c
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("answers the same request delivered twice the same way, so a lost acknowledgement never turns a held claim into a refusal", async () => {
+    const appliedAt = now.toISOString();
+    const held = { ...heldByDev, workspaceState: { federatedPeerClaim: { linkId: "link_1", lastRequestAt: appliedAt } } };
+    for (const action of ["claim", "renew"] as const) {
+      const { db, update } = homeDb({ held });
+      const claimForPeer = vi.fn();
+      const again = { ...claimRequest({ action }), createdAt: appliedAt };
+      const decision = await handleIncomingWorkClaimRequest(db, "link_1", again, { selfInstallationId: HOME, claimForPeer, now });
+      expect(decision).toMatchObject({ decision: action === "claim" ? "granted" : "renewed", homeWorkroomId: "WC-HOME-PROXY" });
+      expect(claimForPeer).not.toHaveBeenCalled();
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ where: { capsuleId: "WC-HOME-PROXY" } }));
+    }
+    // A release delivered again finds its claim already closed and answers released.
+    const { db } = homeDb({ held: null });
+    const release = { ...claimRequest({ action: "release", releaseReason: "finished" }), createdAt: appliedAt };
+    expect(await handleIncomingWorkClaimRequest(db, "link_1", release, { selfInstallationId: HOME, claimForPeer: vi.fn(), now }))
+      .toEqual({ decision: "released" });
+  });
+
   it("closes a lapsed claim and decides the request afresh, so a takeover is not undone by a late renewal", async () => {
     const lapsed = { ...heldByDev, leaseExpiresAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000) };
     const { db, update } = homeDb({ held: lapsed });

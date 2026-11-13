@@ -227,6 +227,21 @@ describe("validateDemandResponseV1", () => {
       expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, releaseReason: "finished" } }))).toContain("workClaim.releaseReason:not-allowed");
       expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, headBranch: "" } }))).toContain("workClaim.headBranch:invalid");
     });
+
+    it("refuses a repository or branch name git and GitHub would not accept", () => {
+      for (const repositoryFullName of ["repo", "org/repo/x", "org /repo", "org/re po"]) {
+        expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, repositoryFullName } }))).toContain("workClaim.repositoryFullName:invalid");
+      }
+      for (const headBranch of ["feat x", "feat..x", "-x", "x/", "x.lock", "a~b", "a@{b", "a\\b"]) {
+        expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, headBranch } }))).toContain("workClaim.headBranch:invalid");
+      }
+      expect(validateDemandResponseV1(claim({ workClaim: { ...workClaim, headBranch: "feat/cross-install-claims" } }))).toEqual([]);
+    });
+
+    it("checks a claim request's digest against its body", () => {
+      const tampered = { ...claim(), workClaim: { ...workClaim, action: "release" as const, releaseReason: "abandoned" as const } };
+      expect(validateDemandResponseV1(tampered)).toContain("payloadDigest:mismatch");
+    });
   });
 });
 

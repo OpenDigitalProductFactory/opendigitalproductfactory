@@ -132,6 +132,19 @@ export function workClaimEnvelopeId(itemId: string): string {
   return `work:${itemId}`;
 }
 
+/** `owner/name`, as GitHub names a repository. */
+const REPOSITORY_FULL_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+/** A branch name git would accept (git check-ref-format, conservatively):
+ *  no whitespace or control characters, none of ~^:?*[\, no "..", no "@{",
+ *  no leading "-" or "/", no trailing "/", "." or ".lock". */
+function isGitBranchName(value: string): boolean {
+  return !/[\s\x00-\x1f\x7f~^:?*[\\]/.test(value)
+    && !value.includes("..") && !value.includes("@{") && !value.includes("//")
+    && !value.startsWith("-") && !value.startsWith("/")
+    && !value.endsWith("/") && !value.endsWith(".") && !value.endsWith(".lock");
+}
+
 function validateWorkClaimRequestV1(value: unknown): string[] {
   if (!isRecord(value)) return ["workClaim:invalid"];
   const violations: string[] = [];
@@ -139,8 +152,12 @@ function validateWorkClaimRequestV1(value: unknown): string[] {
   if (!(WORK_CLAIM_ACTIONS as readonly unknown[]).includes(value.action)) violations.push("workClaim.action:unsupported");
   if (!isNonEmptyString(value.requesterInstallationId, 160)) violations.push("workClaim.requesterInstallationId:invalid");
   if (!isNonEmptyString(value.requesterWorkroomId, 120)) violations.push("workClaim.requesterWorkroomId:invalid");
-  if (!isNonEmptyString(value.repositoryFullName, 200)) violations.push("workClaim.repositoryFullName:invalid");
-  if (!isNonEmptyString(value.headBranch, 250)) violations.push("workClaim.headBranch:invalid");
+  if (!isNonEmptyString(value.repositoryFullName, 200) || !REPOSITORY_FULL_NAME.test(String(value.repositoryFullName))) {
+    violations.push("workClaim.repositoryFullName:invalid");
+  }
+  if (!isNonEmptyString(value.headBranch, 250) || !isGitBranchName(String(value.headBranch))) {
+    violations.push("workClaim.headBranch:invalid");
+  }
   if (value.action === "release") {
     if (!(WORK_CLAIM_RELEASE_REASONS as readonly unknown[]).includes(value.releaseReason)) {
       violations.push("workClaim.releaseReason:unsupported");
@@ -346,6 +363,12 @@ export function validateDemandResponseV1(value: unknown): string[] {
     if (isRecord(value.workClaim) && (value.originRecordRef !== value.workClaim.itemId
       || value.envelopeId !== workClaimEnvelopeId(String(value.workClaim.itemId)))) {
       violations.push("workClaim:subject-mismatch");
+    }
+    // A claim request is decided on its own body, so its digest is checked
+    // against that body rather than trusted.
+    if (typeof value.payloadDigest === "string" && /^sha256:[a-f0-9]{64}$/.test(value.payloadDigest)
+      && value.payloadDigest !== computeDemandResponseDigest(value as unknown as DemandResponseV1)) {
+      violations.push("payloadDigest:mismatch");
     }
   }
   if (!isIsoTimestamp(value.createdAt)) violations.push("createdAt:invalid");

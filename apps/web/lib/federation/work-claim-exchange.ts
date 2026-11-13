@@ -201,9 +201,11 @@ export async function handleIncomingWorkClaimRequest(
   });
 
   // Requests from one Workroom are applied in the order they were made. The
-  // outbox only ever sends the newest, so an older one is a replay.
+  // outbox only ever sends the newest, so an older one is a replay. The same
+  // request delivered again (its acknowledgement was lost) is not older: it is
+  // answered again, idempotently, below.
   const applied = held ? readPeerClaimRecord(held.workspaceState) : null;
-  if (applied && Date.parse(response.createdAt) <= Date.parse(applied.lastRequestAt)) {
+  if (applied && Date.parse(response.createdAt) < Date.parse(applied.lastRequestAt)) {
     return refusal("stale-request", "A newer request from this Workroom has already been applied.");
   }
   const record: PeerClaimRecord = { linkId, lastRequestAt: response.createdAt };
