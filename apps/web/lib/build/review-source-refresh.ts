@@ -23,10 +23,18 @@ import type { BuildBranchRefreshOutcome } from "./sandbox/build-branch";
 export const REVIEW_SOURCE_REFRESH_TOOL = "review_source_refresh";
 /** One refresh per hour at most: a not-run that survives it is not base drift. */
 export const REVIEW_SOURCE_REFRESH_RETRY_MS = 60 * 60 * 1000;
+/**
+ * BI-E3C5C7E4: refreshes per day before the loop stops. Hourly refresh with no
+ * total bound re-ran the gauntlet ~24 times a day per build for a week when the
+ * crash was not base drift (exit 88 on 33 builds, 11,090 finalize passes).
+ */
+export const REVIEW_SOURCE_REFRESH_MAX_PER_DAY = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ReviewSourceRefreshResult =
   | "not-review"
   | "recently-attempted"
+  | "refresh-exhausted"
   | "refreshed"
   | "conflict-repair-queued"
   | "conflict-escalated"
@@ -36,6 +44,7 @@ export type ReviewSourceRefreshResult =
 export type ReviewSourceRefreshDeps = {
   loadPhase(buildId: string): Promise<string | null>;
   lastAttemptAt(buildId: string): Promise<Date | null>;
+  attemptsSince(buildId: string, since: Date): Promise<number>;
   refresh(buildId: string): Promise<BuildBranchRefreshOutcome>;
   queueReview(buildId: string): Promise<void>;
   record(buildId: string, summary: string): Promise<void>;
@@ -63,6 +72,15 @@ export async function refreshReviewBuildAfterGauntletNotRun(
   if ((await deps.loadPhase(buildId)) !== "review") return "not-review";
   const last = await deps.lastAttemptAt(buildId);
   if (last && deps.now().getTime() - last.getTime() < REVIEW_SOURCE_REFRESH_RETRY_MS) return "recently-attempted";
+  const recent = await deps.attemptsSince(buildId, new Date(deps.now().getTime() - DAY_MS));
+  if (recent >= REVIEW_SOURCE_REFRESH_MAX_PER_DAY) {
+    await deps.record(
+      buildId,
+      `The guard gauntlet still could not run after ${recent} refreshes onto upstream main in 24 hours ` +
+        `(${reason.slice(0, 200)}). That is not base drift, so review is not re-queued; the build waits for the gauntlet crash to be fixed.`,
+    );
+    return "refresh-exhausted";
+  }
 
   const outcome = await deps.refresh(buildId).catch((err: unknown): BuildBranchRefreshOutcome => ({
     status: "unknown",
@@ -115,6 +133,12 @@ function defaultDeps(): ReviewSourceRefreshDeps {
         select: { createdAt: true },
       });
       return row?.createdAt ?? null;
+    },
+    async attemptsSince(buildId, since) {
+      const { prisma } = await import("@dpf/db");
+      return prisma.buildActivity.count({
+        where: { buildId, tool: REVIEW_SOURCE_REFRESH_TOOL, createdAt: { gte: since } },
+      });
     },
     async refresh(buildId) {
       const { refreshBuildBranchOntoUpstream } = await import("./sandbox/build-branch");
