@@ -84,3 +84,26 @@ describe("own-room takeover (BI-1986D3C1)", () => {
     await expect(assess(f)).rejects.toMatchObject({ code: "handoff-lease-dependency" });
   });
 });
+
+// BI-53BED66C: the room's drive dispatched a stage to a platform coworker,
+// whose lease then lapsed. That coworker acts for no person, so the owner's
+// own assistant takes the room over without the owner's approval.
+describe("own-room takeover after a platform coworker's lease lapsed (BI-53BED66C)", () => {
+  function coworkerHeld(kind: string | null, expiresAt: Date) {
+    const f = fixture();
+    f.room.leaseHolderPrincipalId = "build-specialist"; f.room.leaseExpiresAt = expiresAt;
+    (f.db as unknown as { $queryRaw: unknown }).$queryRaw = vi.fn(async (sql: TemplateStringsArray) =>
+      sql.join("").includes("clock_timestamp") ? [{ now: new Date("2026-11-13T19:27:00Z") }] : kind ? [{ kind }] : []);
+    return f;
+  }
+  it("takes over a room whose lapsed lease a coworker held", async () => {
+    await expect(assess(coworkerHeld("agent", new Date("2026-11-13T06:10:00Z")))).resolves.toMatchObject({ capsuleId: "WC-1" });
+  });
+  it.each([
+    ["the coworker's lease is live", "agent", new Date("2026-11-13T20:00:00Z")],
+    ["the lapsed holder is a person", "human", new Date("2026-11-13T06:10:00Z")],
+    ["the holder's kind is unknown", null, new Date("2026-11-13T06:10:00Z")],
+  ] as const)("still needs the owner when %s", async (_, kind, expiresAt) => {
+    await expect(assess(coworkerHeld(kind, expiresAt))).rejects.toMatchObject({ code: "takeover-other-holder" });
+  });
+});
