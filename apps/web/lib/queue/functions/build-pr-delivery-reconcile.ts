@@ -296,7 +296,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
           },
           raiseIssue: async (issue) => {
             await routeToHuman({
-              producer: "pr-follow-through",
+              producer: "pull-request-follow-through",
               subject: { kind: "workroom", id: capsule.capsuleId },
               blockingFacts: issue.blockingFacts,
               declarations: { proposeBoundary: issue.proposeBoundary },

@@ -48,7 +48,7 @@ import { humanDecisionReviewMessage } from "@/lib/decision-perspective/decision-
 export const OWNER_ATTENTION_PRODUCERS = [
   "build-stall",
   "build-pr-delivery",
-  "pr-follow-through",
+  "pull-request-follow-through",
   "assurance-merge-gate",
   "index-integrity-sweep",
 ] as const;
@@ -345,14 +345,16 @@ export function readScopeConsultResult(data: Record<string, unknown> | undefined
   };
 }
 
-/** Consult WWMD (platform) or WWWD (organization) with the fixed options. */
+/**
+ * Consult WWMD (platform) or WWWD (organization) with the fixed options.
+ * Calls the principle_decide runner directly, as policy-action-judgment.ts
+ * does, rather than through the MCP tool hub: this seam sits under build
+ * handlers the hub reaches, so a hub import would close an import cycle. The
+ * runner records the consult on the kernel ledger either way.
+ */
 export async function consultOwningScope(request: ScopeConsultRequest): Promise<ScopeConsultResult> {
-  const { resolveOperatorRecipient } = await import("@/lib/attention/notify-live");
-  const userId = await resolveOperatorRecipient();
-  if (!userId) throw new Error("no operator principal to consult on behalf of");
-  const { executeTool } = await import("@/lib/mcp-tools");
-  const response = await executeTool(
-    "principle_decide",
+  const { runPrincipleDecision } = await import("@/lib/mcp/packs/principle-decide-pack");
+  const response = await runPrincipleDecision(
     {
       context: request.context,
       callingPopulation: "in_platform_coworker",
@@ -361,7 +363,6 @@ export async function consultOwningScope(request: ScopeConsultRequest): Promise<
       callingSurface: request.callingSurface,
       options: request.options,
     },
-    userId,
     { routeContext: "/ops" },
   );
   if (!response.success) throw new Error(response.error ?? "principle_decide failed");

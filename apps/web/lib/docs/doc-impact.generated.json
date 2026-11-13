@@ -996,6 +996,9 @@
     "apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
+    "apps/web/lib/govern/authority/route-to-human.ts": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
+    ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
@@ -2575,6 +2578,9 @@
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/check-no-unrouted-owner-escalation.mjs": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
+    ],
     "scripts/check-no-url-pathname-fs.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -4104,7 +4110,9 @@
       "scripts/pre-push-dco-check.mjs"
     ],
     "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": [
-      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
+      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts",
+      "apps/web/lib/govern/authority/route-to-human.ts",
+      "scripts/check-no-unrouted-owner-escalation.mjs"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
       "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts",

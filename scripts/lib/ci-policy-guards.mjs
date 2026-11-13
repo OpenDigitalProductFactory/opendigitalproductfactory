@@ -86,6 +86,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-no-bare-working-write.test.mjs"),
       // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
+      // BI-5E067004: every owner-attention write goes through the routeToHuman seam.
+      node("--test", "scripts/check-no-unrouted-owner-escalation.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs", "scripts/lib/host-reservation-observation.test.mjs"),
       node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs", "scripts/semantic-review-cli-role.test.mjs"),
       // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
