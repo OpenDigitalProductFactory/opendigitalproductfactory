@@ -10,6 +10,7 @@ import { endpointClearsSensitivity } from "@/lib/routing/sensitivity-clearance";
 import type { EndpointManifest } from "@/lib/routing/types";
 import { classifyInferencePayload } from "./classify-payload";
 import { isPublicSourceProvenance } from "./source-code-provenance";
+import { createRoutedInferenceScreen } from "./routed-screening";
 import { screenInferencePayload, type ScreenInferencePayloadInput } from "./screen-inference-payload";
 import type { SourceCodeProvenance } from "./types";
 
@@ -94,6 +95,35 @@ describe("source code is classified by its repository (BI-FC94F754)", () => {
       expect(result.routeContext.sensitivity).toBe("confidential");
       expect(eligibleProviders(result)).not.toContain("chatgpt");
       expect(eligibleProviders(result)).not.toContain("xai");
+    }
+  });
+
+  it("does not let the development label lower a payload with no code once a repository record is supplied", () => {
+    for (const provenance of [PUBLIC_REPO, PRIVATE_REPO, UNPROVEN_REPO]) {
+      const result = screenInferencePayload({
+        messages: [{ role: "user", content: "What should we work on next?" }],
+        systemPrompt: "You help plan work.",
+        taskType: "build-review",
+        routeContext: { sensitivity: "development" },
+        sourceCodeProvenance: provenance,
+      });
+      expect(result.receipt.measuredSensitivity).toBe("internal");
+      expect(result.routeContext.sensitivity).toBe("internal");
+      expect(eligibleProviders(result)).not.toContain("chatgpt");
+    }
+  });
+
+  it("carries the repository record through the routed screen that routeAndCall uses", () => {
+    for (const [provenance, measured] of [[PUBLIC_REPO, "public"], [PRIVATE_REPO, "confidential"]] as const) {
+      const routed = createRoutedInferenceScreen({
+        messages: [{ role: "user", content: `Review this change:\n${PUBLIC_DIFF}` }],
+        systemPrompt: "You review committed changes.",
+        taskType: "build-review",
+        routeContext: { sensitivity: "development" },
+        sourceCodeProvenance: provenance,
+      });
+      expect(routed.screenInput.sourceCodeProvenance).toEqual(provenance);
+      expect(routed.screen.receipt).toMatchObject({ measuredSensitivity: measured, sourceCodeVisibility: provenance.visibility });
     }
   });
 

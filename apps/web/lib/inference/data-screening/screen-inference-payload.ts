@@ -21,7 +21,6 @@ import type {
   SourceCodeProvenance,
 } from "./types";
 import { hasVerticalPolicyPacks } from "./vertical-policy-packs";
-import { isPublicSourceProvenance } from "./source-code-provenance";
 import { SENSITIVITY_RANK } from "./sensitivity-rank";
 
 const DEFAULT_ORGANIZATION_ID = "org:local-install";
@@ -161,20 +160,18 @@ export function screenInferencePayload(
   // source/output classification retained in the receipt. Caller sensitivity
   // is still a floor and can never be lowered here.
   //
-  // `development` is the caller saying "this is platform source work", and on
-  // its own it still lowers a code-only payload to public (founder ruling
-  // 2026-08-12). A repository the caller has resolved outranks that label: code
-  // from a repository that is private, or whose visibility could not be proven,
-  // is never public, whatever the route calls the work (BI-FC94F754).
-  // The same predicate as the classifier, so a record that is not proven
-  // public (blank repository, any non-public visibility) never lowers code.
-  const provenanceDeniesPublic = input.sourceCodeProvenance !== undefined &&
-    !isPublicSourceProvenance(input.sourceCodeProvenance);
+  // `development` is the caller saying "this is platform source work". With
+  // no repository record it still lowers a code-only payload to public, as it
+  // always has (founder ruling 2026-08-12). A caller that supplies a repository
+  // record gets the classifier's verdict instead (BI-FC94F754): code from a
+  // repository proven public is public, a payload with no code keeps
+  // `internal`, and code from a private or unproven repository is never public,
+  // whatever the route calls the work.
   const routedPayloadSensitivity = prior
     ? "internal"
     : originalSensitivity === "development" &&
         governedData === undefined &&
-        !provenanceDeniesPublic &&
+        input.sourceCodeProvenance === undefined &&
         classification.dataClasses.every((dataClass) => dataClass === "source-code")
       ? "public"
       : classification.overallSensitivity;
