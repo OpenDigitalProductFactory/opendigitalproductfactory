@@ -17,6 +17,8 @@
 // crypto into the browser.
 
 import { createHash } from "node:crypto";
+import { resolveInstallationPairing, pairingSupportsWorkSync, type PairingLink } from "@dpf/db/installation-peer-pairing";
+import { normalizeOrganizationRef } from "@/lib/install/estate-identity-contract";
 
 import {
   resolveInstanceStance,
@@ -126,6 +128,8 @@ function stanceFor(
   declaration: InstallationIdentityDeclaration,
   host: InstanceStanceHostFacts,
   holdsIrreplaceableWork: boolean,
+  pairingLinks?: readonly PairingLink[],
+  estateName?: string | null,
 ): InstanceStanceProfile {
   const withDeclaration = intentWithDeclaration(intent, declaration);
   if (!declaration.pairedProductionInstallationRef) {
@@ -136,6 +140,17 @@ function stanceFor(
     intent: withDeclaration,
     environmentClass: declaration.environmentClass,
   });
+  if (pairingLinks) {
+    const pairing = resolveInstallationPairing({ declaredRef: declaration.pairedProductionInstallationRef, links: pairingLinks });
+    const estate = normalizeOrganizationRef(estateName);
+    return resolveInstanceStance({ ...snapshot, pairedProductionInstallationRef: pairing.ref ?? undefined }, {
+      ...host,
+      pairingIsEstablished: pairingSupportsWorkSync(pairing),
+      peerEnvironmentClass: pairing.peerEnvironmentClass,
+      peerInstallationLabel: pairing.peerInstallationLabel ?? undefined,
+      peerEstateMatches: estate !== null && estate === normalizeOrganizationRef(pairing.ref),
+    }, { holdsIrreplaceableWork });
+  }
   return resolveInstanceStance(snapshot, host, { holdsIrreplaceableWork });
 }
 
@@ -245,6 +260,8 @@ export function buildInstallationIdentityImpact(input: {
   next: InstallationIdentityDeclaration;
   host: InstanceStanceHostFacts;
   holdsIrreplaceableWork: boolean;
+  pairingLinks?: readonly PairingLink[];
+  estateName?: string | null;
 }): InstallationIdentityImpact {
   const current = normalizeIdentityDeclaration(input.current);
   const next = normalizeIdentityDeclaration(input.next);
@@ -275,8 +292,8 @@ export function buildInstallationIdentityImpact(input: {
     });
   }
 
-  const before = stanceFor(input.intent, current, input.host, input.holdsIrreplaceableWork);
-  const after = stanceFor(input.intent, next, input.host, input.holdsIrreplaceableWork);
+  const before = stanceFor(input.intent, current, input.host, input.holdsIrreplaceableWork, input.pairingLinks, input.estateName);
+  const after = stanceFor(input.intent, next, input.host, input.holdsIrreplaceableWork, input.pairingLinks, input.estateName);
 
   const stanceDeltas: StanceDelta[] = STANCE_KEYS.map((stance) => {
     const from = before[stance] as string;

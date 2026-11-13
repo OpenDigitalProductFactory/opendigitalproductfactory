@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
   resolvePrincipal: vi.fn(),
   readFile: vi.fn(),
+  federationLinks: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
@@ -23,6 +24,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     platformConfig: { findUnique: mocks.findUnique, upsert: mocks.upsert },
     backlogItem: { count: mocks.count },
+    federationLink: { findMany: mocks.federationLinks },
     $transaction: mocks.transaction,
   },
 }));
@@ -99,11 +101,40 @@ beforeEach(() => {
   mocks.resolvePrincipal.mockResolvedValue("PRN-1");
   mocks.upsert.mockImplementation((args: unknown) => args);
   mocks.transaction.mockResolvedValue([]);
+  mocks.federationLinks.mockResolvedValue([]);
   delete process.env.DPF_ENVIRONMENT_CLASS;
   seed({});
 });
 
 describe("previewInstallationIdentityChange", () => {
+  it("keeps the preview cautious and read-only when live link evidence cannot be read", async () => {
+    seed({ rows: { [OPERATING_INTENT_CONFIG_KEY]: CONFIRMED_DEV_INTENT } });
+    mocks.federationLinks.mockRejectedValue(new Error("link evidence unavailable"));
+    const result = await previewInstallationIdentityChange(DEV_DECLARATION);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.impact.stanceDeltas.find(d => d.stance === "workSync")).toMatchObject({ from: "Nowhere to mirror", to: "Nowhere to mirror" });
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps the live same-organization fallback when repairing a revoked reference without granting peer writes", async () => {
+    seed({ rows: { [OPERATING_INTENT_CONFIG_KEY]: {
+      ...CONFIRMED_DEV_INTENT, primaryPurpose: "operate-organization",
+      pairedProductionInstallationRef: "revoked-link",
+    } }, installerEnvironmentClass: "production" });
+    mocks.federationLinks.mockResolvedValue([
+      { linkId: "revoked-link", linkState: "revoked", role: "same-org-peer", peerDeviceId: "did-old", revokedAt: new Date(), principal: null },
+      { linkId: "trusted-link", linkState: "trusted", role: "same-org-peer", peerDeviceId: "did-current", peerOrganizationRef: "same-estate", peerEnvironmentClass: null, principal: null },
+    ]);
+    const result = await previewInstallationIdentityChange({ primaryPurpose: "operate-organization", environmentClass: "production", pairedProductionInstallationRef: "did-current" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.impact.stanceDeltas.find(d => d.stance === "workSync")).toMatchObject({ from: "Mirrored to the organization", to: "Mirrored to the organization", direction: "unchanged" });
+    expect(result.data.impact.stanceDeltas.find(d => d.stance === "peerWrite")).toMatchObject({ from: "No peer", to: "No peer" });
+    expect(mocks.upsert).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
   it("refuses an unknown job without reading anything", async () => {
     const result = await previewInstallationIdentityChange({
       ...DEV_DECLARATION,

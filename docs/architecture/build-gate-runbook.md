@@ -309,6 +309,9 @@ last progress and missing proof without changing it. Its explicit
 `--reconcile-host-receipt` option can retain an abandoned controller's outcome as
 inconclusive when strong receipt and lock ownership match. It preserves the
 original child uncertainty and execution lock, and grants no new admission.
+A pre-owner (legacy) receipt whose lock owner is provably gone is quarantined
+with its bytes intact instead, and the slot reopens (BI-93EECD80). An exit 88
+caused by a retained receipt names it as `HOST_RECEIPT_RETAINED`, not host pressure.
 See [host receipt recovery](../testing/pre-pr-gate.md#reading-the-result--ask-the-record-not-the-run).
 
 ## Auto-merge armed is not auto-merge happening (BI-53BE1C77)

@@ -120,6 +120,105 @@ describe("useVisitorStore.fetchMenu", () => {
   });
 });
 
+describe("useVisitorStore cart", () => {
+  const EMPTY_CART_SHAPE = { businessSlug: null, currency: null, lines: [] };
+  const MENU2: PublicMenu = {
+    ...MENU,
+    categories: [
+      {
+        category: "Mains",
+        items: [
+          ...MENU.categories[0].items,
+          { id: "2", name: "Pasta", description: null, category: "Mains", price: 12.5, currency: "USD", imageUrl: null },
+        ],
+      },
+    ],
+  };
+  beforeEach(reset);
+
+  it("starts with an empty cart and idle checkout", () => {
+    const s = useVisitorStore.getState();
+    expect(s.cart).toEqual(EMPTY_CART_SHAPE);
+    expect(s.checkout).toEqual({ status: "idle" });
+    expect(s.cartItemCount()).toBe(0);
+    expect(s.cartTotalMinor()).toBe(0);
+  });
+
+  it("adds, increases and decreases immediately", () => {
+    useVisitorStore.setState({ menu: MENU2 });
+    const s = () => useVisitorStore.getState();
+    expect(s().addItem("1").ok).toBe(true);
+    expect(s().cart.lines).toHaveLength(1);
+    expect(s().cart.businessSlug).toBe("corner-table");
+    expect(s().increaseItem("1").ok).toBe(true);
+    expect(s().addItem("2").ok).toBe(true);
+    expect(s().cartItemCount()).toBe(3);
+    expect(s().cartTotalMinor()).toBe(1400 * 2 + 1250);
+    expect(s().decreaseItem("1").ok).toBe(true);
+    expect(s().cartItemCount()).toBe(2);
+    expect(s().decreaseItem("1").ok).toBe(true);
+    expect(s().cart.lines.map((l) => l.itemId)).toEqual(["2"]);
+    expect(s().decreaseItem("2").ok).toBe(true);
+    expect(s().cart).toEqual(EMPTY_CART_SHAPE);
+  });
+
+  it("rejects when no menu is loaded without mutating state", () => {
+    const before = useVisitorStore.getState().cart;
+    const res = useVisitorStore.getState().addItem("1");
+    expect(res).toEqual({ ok: false, code: "MENU_MISSING" });
+    expect(useVisitorStore.getState().cart).toBe(before);
+  });
+
+  it("rejects stale or unknown ids without mutating state", () => {
+    useVisitorStore.setState({ menu: MENU });
+    useVisitorStore.getState().addItem("1");
+    const before = useVisitorStore.getState().cart;
+    expect(useVisitorStore.getState().addItem("nope")).toEqual({ ok: false, code: "ITEM_NOT_FOUND" });
+    expect(useVisitorStore.getState().increaseItem("nope")).toEqual({ ok: false, code: "LINE_NOT_FOUND" });
+    expect(useVisitorStore.getState().decreaseItem("nope")).toEqual({ ok: false, code: "LINE_NOT_FOUND" });
+    expect(useVisitorStore.getState().cart).toBe(before);
+  });
+
+  it("clearCart empties the cart", () => {
+    useVisitorStore.setState({ menu: MENU });
+    useVisitorStore.getState().addItem("1");
+    useVisitorStore.getState().clearCart();
+    expect(useVisitorStore.getState().cart).toEqual(EMPTY_CART_SHAPE);
+  });
+
+  it("clears the cart when fetchMenu begins for a different business", async () => {
+    useVisitorStore.setState({ menu: MENU });
+    useVisitorStore.getState().addItem("1");
+    let cartDuringLoad: unknown = null;
+    mockMenu.mockImplementationOnce(async () => {
+      cartDuringLoad = useVisitorStore.getState().cart;
+      return { ...MENU, slug: "other" };
+    });
+    await useVisitorStore.getState().fetchMenu("other");
+    expect(cartDuringLoad).toEqual(EMPTY_CART_SHAPE);
+    expect(useVisitorStore.getState().cart).toEqual(EMPTY_CART_SHAPE);
+  });
+
+  it("keeps the cart when fetchMenu reloads the same business", async () => {
+    useVisitorStore.setState({ menu: MENU });
+    useVisitorStore.getState().addItem("1");
+    mockMenu.mockResolvedValueOnce(MENU);
+    await useVisitorStore.getState().fetchMenu("corner-table");
+    expect(useVisitorStore.getState().cartItemCount()).toBe(1);
+  });
+
+  it("reset restores cart and checkout to the empty shape", () => {
+    useVisitorStore.setState({ menu: MENU });
+    useVisitorStore.getState().addItem("1");
+    useVisitorStore.setState({ checkout: { status: "idle" } });
+    useVisitorStore.getState().reset();
+    const s = useVisitorStore.getState();
+    expect(s.cart).toEqual(EMPTY_CART_SHAPE);
+    expect(s.checkout).toEqual({ status: "idle" });
+    expect(s.menu).toBeNull();
+  });
+});
+
 describe("orderForDisplay", () => {
   it("sorts businesses with a menu ahead of those without, order otherwise stable", () => {
     const out = orderForDisplay([biz("no", false), biz("yes1"), biz("no2", false), biz("yes2")]);

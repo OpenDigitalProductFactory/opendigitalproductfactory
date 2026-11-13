@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Account projection has dedicated tests; dispatch fixtures model no account record.
+vi.mock("@/lib/identity/authenticated-account", () => ({ loadAuthenticatedAccount: async () => null }));
+
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
   agent: {
