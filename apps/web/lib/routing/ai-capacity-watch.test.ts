@@ -278,6 +278,13 @@ describe("assessAiCapacity from recorded capacity", () => {
     expect(subs?.explanation).toContain("2026-10-28 18:00 UTC");
   });
 
+  it("does not call subscriptions exhausted when they are only briefly rate limited", () => {
+    const soft = exhausted.map((p) => (p.subscription ? { ...p, capacity: { state: "rate_limited", retryAt: new Date(NOW.getTime() + 60_000) } } : p));
+    const result = assessAiCapacity({ rows: [], providers: soft, now: NOW, previouslyOpen: new Set() });
+    expect(result.findings.some((f) => f.issueKey === AI_CAPACITY_SUBSCRIPTIONS_KEY)).toBe(false);
+    expect(result.findings.some((f) => f.issueKey === aiCapacityProviderKey("codex"))).toBe(false);
+  });
+
   it("does not raise the subscription item while one subscription still has capacity", () => {
     const oneLeft = exhausted.map((p) => (p.providerId === "codex" ? { ...p, capacity: { state: "available", retryAt: null } } : p));
     const result = assessAiCapacity({ rows: [], providers: oneLeft, now: NOW, previouslyOpen: new Set([AI_CAPACITY_SUBSCRIPTIONS_KEY]) });
