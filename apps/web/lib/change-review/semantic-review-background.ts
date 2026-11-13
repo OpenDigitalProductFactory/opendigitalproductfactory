@@ -27,7 +27,7 @@ import { SEMANTIC_REVIEW_MAX_ATTEMPTS as MAX_DISPATCH_ATTEMPTS, semanticReviewRe
   semanticReviewCapacityWaitMs, semanticReviewEffectiveDeadline } from "./semantic-review-recovery-policy";
 import { readSemanticReviewRemediation } from "./semantic-review-remediation";
 import { capacityDeferralProof, capacityRecoveryMarker, hasProvenCapacityCheckpointSet, hasFinalReviewCheckpointSet } from "./semantic-review-capacity-recovery";
-import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
+import { inspectLocalProviderCapacity, noteLocalAiDemand } from "@/lib/routing/local-provider-capacity";
 import { inspectLocalGpuAdmission } from "@/lib/inference/host-gpu-admission";
 import { NoEligibleEndpointsError } from "../routing/inference-error";
 import { readRoutingEligibility } from "../inference/routing-exclusion-buckets";
@@ -634,6 +634,9 @@ async function resumeCapacityWait(row: Run, now: Date): Promise<boolean> {
     return wait("review-capacity-observation-unavailable", "Capacity could not be observed; the server will recheck without dispatching inference.");
   }
   if (!capacity.available) {
+    // BI-218A4555: hold this review's place in the overseer queue so gates
+    // alternate with it instead of starving it.
+    await noteLocalAiDemand(capacity);
     return wait(capacity.reason, "The server will recheck capacity within the original review window; do not submit duplicate inference.");
   }
   const authority = await verifySemanticReviewAuthority(packet, row.taskRunId).catch(() => null);

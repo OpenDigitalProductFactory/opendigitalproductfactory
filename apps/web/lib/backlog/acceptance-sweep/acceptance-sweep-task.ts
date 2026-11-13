@@ -182,7 +182,20 @@ export async function routeAgedSweepCandidates(
     })),
     resolveOwnerUserId: async () => (await resolveWorkOwner(db, {})).userId,
     issuePacket: (args) => issueAcceptanceObjectiveMappingPacket({ db, now, ...args }),
+    verifierWriterGap: storedGrantWriterGap,
   });
+}
+
+/**
+ * BI-1D5FCEBE: the writers a verifier's stored grants do not authorize, read
+ * the way the scheduler attaches tools (getAgentToolGrantsAsync, then
+ * isToolAllowedByGrants with grant implications). Lazy: the grant registry
+ * stays off the sweep's import graph.
+ */
+export async function storedGrantWriterGap(agentId: string, tools: readonly string[]): Promise<string[]> {
+  const { getAgentToolGrantsAsync, isToolAllowedByGrants } = await import("@/lib/tak/agent-grants");
+  const held = await getAgentToolGrantsAsync(agentId);
+  return tools.filter((tool) => !isToolAllowedByGrants(tool, held));
 }
 
 /**

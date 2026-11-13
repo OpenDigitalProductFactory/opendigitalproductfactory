@@ -19,6 +19,7 @@
 import { withConnectRetry } from "@/lib/network/connect-retry";
 import { lazyFsPromises, lazyPath } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { PR_FOLLOW_UP_UNCHANGED } from "./pr-ci-repair-markers";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -424,6 +425,8 @@ export async function publishBranchCommit(input: {
    * so a modified file would carry the client-branch content, not the build's.
    */
   readFile?: (path: string) => Promise<string | null>;
+  /** BI-085A37EC: one follow-up commit on an open PR's head (restoring dropped paths); a fast-forward, never forced. */
+  followUpOf?: { commitSha: string; treeSha: string; restore: Array<{ path: string; sha: string | null }> } | null;
 }): Promise<PublishedBranchCommit> {
   assertDcoSignedCommitMessage(input.commitMessage);
   const dcoIdentity = parseDcoSignedCommitIdentity(input.commitMessage);
@@ -515,9 +518,10 @@ export async function publishBranchCommit(input: {
   // 4. Create a new tree based on the base commit's tree (on HEAD repo).
   const tree = await githubPost<GitHubTree>(
     `${headApiBase}/git/trees`,
-    { base_tree: baseSha, tree: treeEntries },
+    { base_tree: input.followUpOf?.treeSha ?? baseSha, tree: [...treeEntries, ...(input.followUpOf?.restore ?? []).map((r) => ({ ...r, mode: "100644", type: "blob" }))] },
     token,
   );
+  if (input.followUpOf && tree.sha === input.followUpOf.treeSha) throw new Error(PR_FOLLOW_UP_UNCHANGED);
 
   // 5. Create a commit on the HEAD repo.
   const commit = await githubPost<GitHubCommit>(
@@ -525,7 +529,7 @@ export async function publishBranchCommit(input: {
     {
       message: commitMessage,
       tree: tree.sha,
-      parents: [baseSha],
+      parents: [input.followUpOf?.commitSha ?? baseSha],
       author: dcoIdentity,
       committer: dcoIdentity,
     },
@@ -556,7 +560,7 @@ export async function publishBranchCommit(input: {
       : false;
     // BI-93CB58D6: the platform's own earlier publication of this same build
     // is replaced, not refused; see isEarlierPublicationOfSameBuild.
-    const ownEarlierPublication = !fastForward && existingSha
+    const ownEarlierPublication = !fastForward && existingSha && !input.followUpOf
       ? await isEarlierPublicationOfSameBuild(headApiBase, existingSha,
         { commitMessage, authorEmail: dcoIdentity.email, baseSha }, token)
       : false;

@@ -38,7 +38,7 @@ export type ToolchainClientShape = {
   /** Auth the connector uses at this endpoint, from mcpClientBearerHeaderRequired. */
   authMode: "oauth" | "bearer";
   /** How the declaration rides the connection (design §5.2), from the capability profile; see DECLARATION_CARRIERS. */
-  declarationCarrier: "query" | "header";
+  declarationCarrier: "query" | "header" | "helper";
   /** True only once the profile records the carrier as verified for this client. */
   carrierVerified: boolean;
   /** The client's row of packages/dpf-skill-pack/client-capabilities.json (BI-64795FD0). */
@@ -109,7 +109,9 @@ function readVersionSource(root: string): { packVersion: string; floor: Toolchai
  * sign-in and the desktop app's URL check do not change with each release, and
  * a `${DPF_MCP_URL:-…}` template never needs a query appended after it. Grok
  * authenticates with a bearer and its descriptor URL is literal, so it keeps
- * the query. Since BI-64795FD0 the values come from the capability profile
+ * the query. Claude Code takes `helper` (BI-BDC94789): it keys the stored
+ * sign-in on the descriptor's headers too, so the value rides a constant
+ * headersHelper and still arrives as the same header. Since BI-64795FD0 the values come from the capability profile
  * (client-capabilities.json, declarationCarrier); the profile generator checks
  * they equal the updater's fallback, toolchain_convergence.DEFAULT_CARRIERS.
  * The updater reads this map from the signed manifest. Unverified until the

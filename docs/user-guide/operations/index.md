@@ -113,6 +113,27 @@ A retired duplicate is labeled **retired duplicate**; the other backlog item is
 the canonical record, so the duplicate is retained for history without being
 counted as completed. Retired items no longer keep an epic open.
 
+### Security findings from GitHub
+
+On the installation that stewards the repository, inbound issue triage reads
+three GitHub security surfaces every four hours: Dependabot, code scanning and
+secret scanning. Each one becomes backlog work:
+
+- **One item per unit of fix.** Dependabot findings are grouped by package, so
+  one upgrade closes one item. Code scanning is grouped by rule. Each leaked
+  secret is its own item.
+- **Ranked by severity.** Leaked secrets and critical findings are priority 1,
+  high is 2, medium 3 and low 4. A rise in severity raises the item; the job
+  never lowers a priority.
+- **Closed when GitHub resolves it.** When GitHub no longer reports a finding
+  open, the item records that as evidence and moves to awaiting acceptance. The
+  daily acceptance sweep then closes it. If the finding comes back first, the
+  item returns to open.
+- **Unreadable is never zero.** If the installation's GitHub connection cannot
+  read a surface, the schedule view marks that surface **UNREADABLE** and the
+  run as failed. The connection needs read access to Dependabot alerts, code
+  scanning alerts and secret scanning alerts.
+
 ### Clearing copies of a paired installation's demand
 
 Before a fix in November 2026, inbound issue triage filed a second, local copy
@@ -309,6 +330,26 @@ grants, and approved links.
 
 You reach it from the installation badge beside the logo, which appears on every
 installation that is not production.
+
+### How this computer is set up to keep the platform running
+
+The platform stops serving whenever the computer it runs on sleeps, restarts and
+waits at the sign-in screen, or starts without Docker. This section shows three
+checks, read from the computer each time the platform starts after someone signs
+in:
+
+- **Plugged in to power.** On battery a Mac goes to sleep when idle.
+- **Never sleeps on power.** In System Settings, open **Battery**, then
+  **Options**, and turn on **Prevent automatic sleeping on power adapter when the
+  display is off**. On a Mac without a battery this is under **Energy**.
+- **Docker starts at sign-in.** In Docker Desktop, open **Settings**, then
+  **General**, and turn on **Start Docker Desktop when you sign in to your
+  computer**.
+
+These are suggestions. The platform reads the settings but never changes them.
+After a restart, for example for a macOS update, the platform starts again only
+once someone signs in to the computer. If the platform was down for more than half
+an hour, the next time it runs **Needs you** shows how long and the likely cause.
 
 ### Who runs this installation
 

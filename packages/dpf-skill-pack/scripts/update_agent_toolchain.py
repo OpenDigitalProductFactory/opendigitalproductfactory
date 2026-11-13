@@ -1085,12 +1085,27 @@ def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: 
         # BI-3D2FD68C: the OAuth path needs the scope pin or the consent grants
         # read only and every write tool stays out of reach.
         server["oauth"] = {"scopes": MCP_CLIENT_OAUTH_SCOPE_PIN}
+    import toolchain_convergence as convergence
+
+    # BI-BDC94789: every Claude descriptor names the same helper, declared or
+    # not, so its bytes never change with the pack, digest or convergence
+    # status. Claude Code keys the stored sign-in on type, url and headers.
+    server["headersHelper"] = convergence.CLAUDE_HEADERS_HELPER
+    sidecar = None
     if declarations is not None:
         server = declarations.declare_server(server, "claude-code")
+        sidecar = declarations.sidecar("claude-code")
     content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
     if dry_run:
         return True
-    return write_text_if_changed(skill_pack_path / "claude.mcp.json", content)
+    sidecar_path = skill_pack_path / convergence.DECLARATION_SIDECAR
+    if sidecar is not None:
+        sidecar_changed = write_text_if_changed(sidecar_path, json.dumps(sidecar, indent=2) + "\n")
+    else:
+        # Never relay a declaration this run did not make.
+        sidecar_changed = sidecar_path.is_file()
+        sidecar_path.unlink(missing_ok=True)
+    return write_text_if_changed(skill_pack_path / "claude.mcp.json", content) or sidecar_changed
 
 
 def ensure_antigravity_plugin_descriptor(skill_pack_path: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> bool:

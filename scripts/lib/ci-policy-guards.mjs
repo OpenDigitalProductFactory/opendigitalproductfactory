@@ -242,6 +242,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-084F85E5: the start script and host convergence ship as release assets;
       // an existing install converges the native agent at its next logon.
       conformanceTest("scripts/installer/host-convergence.test.mjs"),
+      // BI-3E2F87FA: the sign-in autostart starts under launchd's minimal PATH,
+      // waits for Docker Desktop, and records the host posture read-only.
+      conformanceTest("scripts/installer/dpf-start-consumer.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -944,6 +947,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/reassessment-capability-probe.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        "scripts/lib/git-fetch-serialization.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
         // allowlisted OUT of CI, so nothing enforced its behaviour while it
         // destroyed run after run. The allowlist is shrink-only and its own
