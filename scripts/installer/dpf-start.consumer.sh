@@ -26,7 +26,50 @@ cd "$install_dir"
 host_platform="linux"
 [ "$(uname -s 2>/dev/null)" = "Darwin" ] && host_platform="macos"
 
+# launchd (and a systemd user unit) starts this with a minimal PATH such as
+# /usr/bin:/bin:/usr/sbin:/sbin. Homebrew's node and Docker Desktop's CLI live
+# outside it, so on 2026-11-09 every sign-in start died here with "node: command
+# not found" and the platform stayed down until someone started it by hand
+# (BI-3E2F87FA). Add the usual tool directories that exist, after what is set.
+host_tool_dirs="${DPF_HOST_TOOL_DIRS:-/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:${HOME:-/nonexistent}/.docker/bin}"
+saved_ifs="$IFS"
+IFS=":"
+for tool_dir in $host_tool_dirs; do
+  case ":$PATH:" in
+    *":$tool_dir:"*) ;;
+    *) [ -d "$tool_dir" ] && PATH="$PATH:$tool_dir" ;;
+  esac
+done
+IFS="$saved_ifs"
+export PATH
+
+# Read-only snapshot of the host's power and Docker settings for the portal's
+# installation page (BI-3E2F87FA). Never fails startup; changes no setting.
+if [ -f scripts/installer/host-posture.mjs ] && command -v node >/dev/null 2>&1; then
+  node scripts/installer/host-posture.mjs "$install_dir" || true
+fi
+
+# At sign-in Docker Desktop may still be starting, or not set to start at all.
+# Start it on macOS and wait, bounded, rather than failing compose at once.
+dpf_wait_for_docker() {
+  docker info >/dev/null 2>&1 && return 0
+  if [ "$host_platform" = "macos" ]; then
+    echo "Docker is not running yet; starting Docker Desktop."
+    open -g -a Docker >/dev/null 2>&1 || true
+  fi
+  local tries=0
+  local max_tries="${DPF_DOCKER_WAIT_ATTEMPTS:-60}"
+  while [ "$tries" -lt "$max_tries" ]; do
+    sleep "${DPF_DOCKER_WAIT_INTERVAL:-5}"
+    docker info >/dev/null 2>&1 && return 0
+    tries=$((tries + 1))
+  done
+  echo "Docker did not start in time, so the platform was not started. Open Docker Desktop, then sign out of the computer and back in." >&2
+  return 1
+}
+
 if [ "${1:-}" != "--converge-only" ]; then
+  dpf_wait_for_docker
   projection="$(node scripts/lib/resolve-capability-compose-profiles.mjs --state "$state_path" --host "$host_platform" --migrate --write)"
   COMPOSE_PROFILES="$(printf '%s' "$projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).composeProfiles.join(",")))')"
   export COMPOSE_PROFILES

@@ -1241,6 +1241,9 @@
     "apps/web/lib/observability/monitor-source-reachability.ts": [
       "docs/operations/observability-coverage.md"
     ],
+    "apps/web/lib/observability/platform-continuity-watch.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "apps/web/lib/onboarding/setup-completion-seeds.ts": [
       "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
@@ -2713,10 +2716,14 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/installer/dpf-start.consumer.sh": [
+      "docs/operations/observability-coverage.md",
       "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/gpp-permit-secret-contract.test.mjs": [
       "docs/architecture/gated-permissions-process.md"
+    ],
+    "scripts/installer/host-posture.mjs": [
+      "docs/operations/observability-coverage.md"
     ],
     "scripts/installer/install-release-assets.mjs": [
       "docs/architecture/build-gate-runbook.md",
@@ -4276,12 +4283,15 @@
     "docs/operations/observability-coverage.md": [
       "apps/web/lib/coworker/approval-lifetime.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
+      "apps/web/lib/observability/platform-continuity-watch.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/routing/ai-capacity-watch.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
       "monitoring/prometheus/prometheus.yml",
-      "packages/db/src/quality-issue-registry.ts"
+      "packages/db/src/quality-issue-registry.ts",
+      "scripts/installer/dpf-start.consumer.sh",
+      "scripts/installer/host-posture.mjs"
     ],
     "docs/operations/oss-repo-identity-hygiene.md": [
       "scripts/check-no-private-identity.mjs"
