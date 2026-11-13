@@ -145,6 +145,27 @@ describe.skipIf(!DATABASE_URL)("scope epochs with real PostgreSQL locks", () => 
     expect(targets(await read())).toEqual(reacquired); expect(await activityCount()).toBe(count);
   });
 
+  it("rolls back both the epoch and activity when the qualified writer aborts before commit", async () => {
+    const before = await read();
+    let wroteEpoch = false;
+    await expect(prisma.$transaction(async tx => {
+      const scoped = models(tx);
+      const result = await claimWorkCapsuleScope({
+        db: { ...scoped, $transaction: fn => fn(scoped) },
+        capsuleId: "WC-EPOCH-PG", claims: [incoming], actor, now: NOW,
+      });
+      wroteEpoch = Boolean(targets(result)[0]?.releaseEpoch);
+      expect(wroteEpoch).toBe(true);
+      expect((await tx.$queryRaw<Array<{ count: bigint }>>`SELECT count(*) FROM "WorkCapsuleActivity"`)[0]!.count).toBe(1n);
+      throw new Error("injected writer abort before transaction commit");
+    })).rejects.toThrow("injected writer abort before transaction commit");
+    expect(wroteEpoch).toBe(true);
+    expect((await read()).scopeClaims).toEqual(before.scopeClaims);
+    expect(await activityCount()).toBe(0);
+    expect(targets(await claim())[0]?.releaseEpoch).toEqual(expect.any(String));
+    expect(await activityCount()).toBe(1);
+  });
+
   it("does not publish a pre-release acquisition snapshot after a concurrent release commits", async () => {
     const original = targets(await claim()), admitted = latch(), proceed = latch();
     qualification.afterAdmission = async () => { admitted.resolve(); await proceed.promise; };
