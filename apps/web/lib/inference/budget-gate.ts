@@ -7,9 +7,11 @@
 // Events are written to AgentBudgetEvent for audit and alerting.
 //
 // Only usage on providers priced per token is real spend. Local models
-// (priced by compute) and flat-rate subscriptions (token price recorded as 0)
-// cost nothing extra per call, so they neither count against nor are refused
-// by these caps (BI-F3B6713F, DI-666409F895C5).
+// (priced by compute) and flat-rate subscriptions (token price recorded as 0,
+// or covered by an active subscription contract) cost nothing extra per call,
+// so they neither count against nor are refused by these caps (BI-F3B6713F,
+// DI-666409F895C5). Subscription usage is still recorded at its estimated
+// effective cost for portfolio budgets (BI-F98BBE4F, DI-223FEAA53080).
 //
 // EP-COST-001 Phase 2 — spec §3 Budget Gate
 
@@ -17,6 +19,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { formatMoney } from "../org-locale/org-locale";
+import { subscriptionCoveredProviderIds } from "../finance/subscription-cost-estimator.server";
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
 
 import type { ReassessmentBudgetConfiguration, ReassessmentRecordedBudgetLimits } from "../shared/reassessment-budget-contract";
@@ -94,7 +97,7 @@ export async function readReassessmentBudgetConfiguration(
 
 /** Read authenticated current totals; transport/owner errors must refuse execution. */
 export async function checkReassessmentBudget(config: ReassessmentBudgetConfiguration,
-  database: Pick<Prisma.TransactionClient, "tokenUsage" | "modelProvider"> = prisma): Promise<BudgetCheckResult> {
+  database: Pick<Prisma.TransactionClient, "tokenUsage" | "modelProvider"> & Partial<Pick<Prisma.TransactionClient, "supplierContract">> = prisma): Promise<BudgetCheckResult> {
   const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
   const usageAgentIds = [...new Set([config.agentId, config.registryAgentId, config.registryAgentName])];
   const freeProviderIds = await zeroMarginalProviderIds(database);
@@ -175,12 +178,24 @@ export function isZeroMarginalPricing(pricing: ProviderPricing | null | undefine
   return pricing.costModel === "token" && pricing.inputPricePerMToken === 0 && pricing.outputPricePerMToken === 0;
 }
 
-async function zeroMarginalProviderIds(database: Pick<Prisma.TransactionClient, "modelProvider"> = prisma): Promise<string[]> {
-  const rows = await database.modelProvider.findMany({
-    where: { OR: [{ costModel: "compute" }, { costModel: "token", inputPricePerMToken: 0, outputPricePerMToken: 0 }] },
-    select: { providerId: true },
-  });
-  return rows.map((row) => row.providerId);
+type ZeroMarginalReader = Pick<Prisma.TransactionClient, "modelProvider"> & Partial<Pick<Prisma.TransactionClient, "supplierContract">>;
+
+/**
+ * Providers whose calls cost no extra cash: priced by compute, recorded at a
+ * zero token price, or covered by an active subscription contract. Subscription
+ * calls are recorded at their estimated effective cost (BI-F98BBE4F) so
+ * portfolio budgets see them, but the daily paid-AI allowance governs marginal
+ * cash only and neither counts nor refuses them (WWMD DI-223FEAA53080).
+ */
+async function zeroMarginalProviderIds(database: ZeroMarginalReader = prisma): Promise<string[]> {
+  const [rows, covered] = await Promise.all([
+    database.modelProvider.findMany({
+      where: { OR: [{ costModel: "compute" }, { costModel: "token", inputPricePerMToken: 0, outputPricePerMToken: 0 }] },
+      select: { providerId: true },
+    }),
+    database.supplierContract ? subscriptionCoveredProviderIds(database as never) : Promise.resolve([] as string[]),
+  ]);
+  return [...new Set([...rows.map((row) => row.providerId), ...covered])];
 }
 
 /**
@@ -199,11 +214,16 @@ export function providerSpendClass(pricing: ProviderPricing | null | undefined):
 }
 
 export async function classifyProviderSpend(providerId: string): Promise<ProviderSpendClass> {
-  const pricing = await prisma.modelProvider.findUnique({
-    where: { providerId },
-    select: { costModel: true, inputPricePerMToken: true, outputPricePerMToken: true },
-  });
-  return providerSpendClass(pricing);
+  const [pricing, covered] = await Promise.all([
+    prisma.modelProvider.findUnique({
+      where: { providerId },
+      select: { costModel: true, inputPricePerMToken: true, outputPricePerMToken: true },
+    }),
+    // Unreadable contracts fail toward governed: the call is treated as paid.
+    subscriptionCoveredProviderIds().catch(() => [] as string[]),
+  ]);
+  // A subscription-covered call is already paid for: the allowance never refuses it (DI-223FEAA53080).
+  return covered.includes(providerId) ? "free" : providerSpendClass(pricing);
 }
 
 /** The owner-set installation allowance for paid inference, in USD; null when none is recorded. */

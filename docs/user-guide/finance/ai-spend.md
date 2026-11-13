@@ -58,6 +58,32 @@ supplier, contract, and billing period. Even so, confirm the external charge,
 amount, date, payment method, and reference first. Recording it in DPF does not
 charge the card or initiate a bank transfer.
 
+## What Subscriptions Really Cost
+
+A subscription is not free. Its monthly fee buys the work the plan can do
+before its usage limits reset. The **What AI subscriptions really cost**
+section at the top of `/finance/spend/ai` divides each plan's recorded fee by
+the capacity it actually delivers:
+
+- **Fee:** the active subscription contract recorded by **Record A
+  Subscription Payment**. A quarterly or annual payment is spread per month.
+  One fee covers every provider the plan lists, so their use is pooled.
+- **Capacity:** the last 30 days of use, cut into the plan's reset windows
+  (5 hours for the Claude and ChatGPT/Codex plans). A window in which the
+  plan hit its limit shows what one window holds. Long lockouts lower that
+  figure, so a plan that resets generously costs less per unit than one that
+  locks you out for days.
+- **Result:** about $X per million tokens, with a likely range and a
+  confidence. Confidence is high after 5 or more limited windows over 14 or
+  more days. If the plan never hit its limit, the figure is the most it
+  costs, and the real figure is probably lower.
+
+Each subscription call is recorded at this estimate, not $0, so budgets see
+it. The daily allowance for paid AI governs money spent per call, so it
+neither counts nor refuses subscription use (decision DI-223FEAA53080). A plan
+with no recorded fee is still counted at $0, and the section names it so its
+payment can be recorded.
+
 ## Allowance Evaluation
 
 Daily evaluation reviews active contracts and their included allowance. It can

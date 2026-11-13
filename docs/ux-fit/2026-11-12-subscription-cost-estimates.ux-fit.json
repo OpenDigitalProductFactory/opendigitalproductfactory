@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/components/finance/SubscriptionCostEstimatesPanel.tsx",
+      "apps/web/app/(shell)/finance/spend/ai/page.tsx"
+    ]
+  },
+  "decidedOption": "read-only-panel-on-ai-spend",
+  "decisionInteractionId": "DI-24483B8D55D0",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "read-only-panel-on-ai-spend",
+      "new-estimator-tab",
+      "columns-in-provider-table"
+    ]
+  },
+  "authority": "BI-F98BBE4F (EP-INPLATFORM-CODING M1), workroom WC-EE4F3024. DI-24483B8D55D0 records where the estimate appears; spend classification is DI-223FEAA53080.",
+  "limitations": "DI-24483B8D55D0 ranked the read-only panel first (composite 5.82, margin 2.28, high confidence). The panel adds no inputs, buttons or routes: per plan the fee, one cost sentence with its range, a confidence badge and one sentence of basis, plus a warning naming subscriptions still counted at $0 that points to the existing payment form. Rendering is pinned in SubscriptionCostEstimatesPanel.test.tsx. Author measurement only: no served-route sweep or independent UX review was run."
+}

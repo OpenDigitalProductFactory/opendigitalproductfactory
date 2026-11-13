@@ -7,14 +7,21 @@ import {
   listAiProviderFinanceProfiles,
   maybeRunAiProviderFinanceDailyEvaluation,
 } from "@/lib/finance/ai-provider-finance";
+import { SubscriptionCostEstimatesPanel } from "@/components/finance/SubscriptionCostEstimatesPanel";
+import {
+  loadSubscriptionCostEstimates,
+  loadUnpricedSubscriptionProviders,
+} from "@/lib/finance/subscription-cost-estimator.server";
 
 export default async function AiSpendPage() {
   await maybeRunAiProviderFinanceDailyEvaluation().catch(() => undefined);
 
-  const [overview, rows, orgSettings] = await Promise.all([
+  const [overview, rows, orgSettings, subscriptionPlans, unpricedSubscriptions] = await Promise.all([
     getAiSpendOverview(),
     listAiProviderFinanceProfiles(),
     getOrgSettings(),
+    loadSubscriptionCostEstimates(),
+    loadUnpricedSubscriptionProviders(),
   ]);
 
   return (
@@ -27,6 +34,10 @@ export default async function AiSpendPage() {
       </div>
 
       <FinanceTabNav />
+
+      <div className="mb-6">
+        <SubscriptionCostEstimatesPanel plans={subscriptionPlans} unpriced={unpricedSubscriptions} />
+      </div>
 
       <AiSpendWorkspace
         overview={overview}
