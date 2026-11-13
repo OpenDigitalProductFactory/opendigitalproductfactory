@@ -163,6 +163,15 @@ upgrade. Nothing is lost by waiting.
   preparation finishes before the platform begins quiescing, and so does the
   application build itself: the portal keeps accepting work while the new
   version builds, and pauses new work only for the swap.
+- A brief network outage does not fail an update. Fetching the upstream source
+  and building the new promoter retry automatically when the failure is a
+  dropped or timed-out connection, and every Alpine package install in the
+  images retries up to five times with a 60-second stall timeout. A failure
+  that is not a network problem, such as a package that no longer exists, is
+  never retried. If the server stays offline long enough to exhaust the
+  retries, the update is marked failed as `host-network-unavailable` with the
+  real network error shown. Restore the connection and retry; nothing was
+  installed.
 - A periodic watchdog force-removes any promoter container orphaned by a
   mid-deployment restart, so a stalled build can never linger and cause an
   unexpected later swap.
