@@ -215,6 +215,36 @@ describeDatabase("normalize legacy blocked backlog migration (BI-22CDF13B)", () 
     }
   });
 
+  it("bounds lock acquisition when a concurrent backlog writer holds the table", async () => {
+    const { scenario, scenarioDb } = await scenarioClient(`
+      INSERT INTO "Principal" (id, kind, status, "displayName") VALUES ('principal-lock', 'human', 'active', 'Lock Test Owner');
+      INSERT INTO "User" (id, "isActive", "isSuperuser", "workHandedOverAt", "createdAt") VALUES ('user-lock', true, true, NULL, now());
+      INSERT INTO "PrincipalAlias" (id, "principalId", "aliasType", "aliasValue") VALUES ('alias-lock', 'principal-lock', 'user', 'user-lock');
+      INSERT INTO "BacklogItem" (id, "itemId", title, status) VALUES ('blocked-lock', 'BI-LOCK', 'Lock timeout case', 'blocked');
+    `);
+    const blocker = new Client({ connectionString: databaseUrl });
+    try {
+      await blocker.connect();
+      await blocker.query(`SET search_path TO "${scenario}"`);
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE "BacklogItem" IN ROW EXCLUSIVE MODE');
+
+      const startedAt = Date.now();
+      await expect(scenarioDb.query(readFileSync(migrationPath, "utf8"))).rejects.toThrow(
+        "canceling statement due to lock timeout",
+      );
+      const elapsedMs = Date.now() - startedAt;
+      expect(elapsedMs).toBeGreaterThanOrEqual(4_500);
+      expect(elapsedMs).toBeLessThan(10_000);
+      await scenarioDb.query("ROLLBACK");
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+      await scenarioDb.query(`DROP SCHEMA IF EXISTS "${scenario}" CASCADE`);
+      await scenarioDb.end();
+    }
+  });
+
   it("aborts and rolls back when no active human owner can be resolved", async () => {
     const { scenario, scenarioDb } = await scenarioClient(`
       INSERT INTO "BacklogItem" (id, "itemId", title, status) VALUES ('blocked-unowned', 'BI-UNOWNED', 'Unowned legacy item', 'blocked');
