@@ -295,10 +295,17 @@ export async function routeGauntletFailureToRepair(buildId: string, failure: Gau
   }
 
   if (!canTransitionPhase("review", "build")) return "not-in-review";
+  const { reconcileReviewBuildWorkroomShape } = await import("./heal-build-workroom-shape");
+  const shape = await reconcileReviewBuildWorkroomShape({ buildId });
+  if (shape.kind === "held") {
+    await log(`Repair remains in review: ${shape.detail}`);
+    return "not-ready";
+  }
   // Re-entering build is gated like every entry into build: the initiative must
   // still be ready for implementation.
   const readiness = await enforceBuildInitiativeReadiness({
     buildId, target: "implementation", targetPhase: "build", expectedPhase: "review",
+    expectedWorkroom: shape.room,
   });
   if (!readiness.allowed) {
     await log(`Guards failed on this build's change (${failure.failedGuards.join(", ")}), but it was not handed back: ${readiness.message}`);
