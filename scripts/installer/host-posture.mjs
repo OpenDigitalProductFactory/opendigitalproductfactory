@@ -9,7 +9,7 @@
 // /host-dpf mount and shows on the installation page with plain fix steps
 // (apps/web/lib/install/host-posture.ts holds the reader and the checks).
 //
-// Usage: node scripts/installer/host-posture.mjs <install-dir>
+// Usage: node scripts/installer/host-posture.mjs <install-dir> [--platform macos|linux|windows]
 // Never fails startup: every read is best-effort and an unknown value is null.
 
 import { execFileSync } from "node:child_process";
@@ -124,14 +124,22 @@ export function writeHostPosture(installDir, snapshot) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const { positionals } = parseArgs({ args: scriptArgv(), allowPositionals: true, strict: false });
+  // The start script passes the platform it already detected with uname, so
+  // the snapshot and the start script never disagree about the host.
+  const { positionals, values } = parseArgs({
+    args: scriptArgv(),
+    allowPositionals: true,
+    strict: false,
+    options: { platform: { type: "string" } },
+  });
   const installDir = positionals[0];
+  const platformArg = { macos: "darwin", linux: "linux", windows: "win32" }[String(values.platform ?? "")];
   if (!installDir) {
     console.error("usage: host-posture.mjs <install-dir>");
     process.exit(0);
   }
   try {
-    const path = writeHostPosture(installDir, collectHostPosture());
+    const path = writeHostPosture(installDir, collectHostPosture(platformArg ? { platform: platformArg } : {}));
     console.log(`Host posture: ${path}`);
   } catch (error) {
     console.error(`Host posture not recorded: ${error instanceof Error ? error.message : String(error)}`);

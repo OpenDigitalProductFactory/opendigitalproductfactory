@@ -81,7 +81,7 @@ test("collectHostPosture reads the Mac and writes the snapshot the portal expect
   }
 });
 
-async function startFixture({ dockerUpAfter = 0 } = {}) {
+async function startFixture({ dockerUpAfter = 0, unameOs = "Darwin" } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "dpf-start-consumer-"));
   const install = join(dir, "install");
   const tools = join(dir, "tools");
@@ -108,7 +108,7 @@ async function startFixture({ dockerUpAfter = 0 } = {}) {
   const hostStub = stubIn(shadow);
   // The real node, reachable ONLY through the tool directory, like Homebrew's.
   await stub("node", `case "$1" in scripts/lib/resolve-capability-compose-profiles.mjs) echo '{"composeProfiles":[]}' ;; *) exec '${process.execPath}' "$@" ;; esac`);
-  await hostStub("uname", "echo Darwin");
+  await hostStub("uname", `echo ${unameOs}`);
   await writeFile(join(dir, "pmset-batt.txt"), PMSET_BATT_ON_BATTERY);
   await writeFile(join(dir, "pmset-custom.txt"), PMSET_CUSTOM);
   await hostStub("pmset", `case "$2" in batt) cat '${dir}/pmset-batt.txt' ;; *) cat '${dir}/pmset-custom.txt' ;; esac`);
@@ -152,6 +152,22 @@ test("starts the platform under launchd's minimal PATH", { skip: !posix && "POSI
     assert.equal(posture.powerSource, "battery");
     assert.equal(posture.acSleepMinutes, 0);
     assert.equal(posture.dockerStartsAtLogin, false);
+  } finally {
+    await rm(fx.dir, { recursive: true, force: true });
+  }
+});
+
+test("records the host platform the start script detected, not the platform node runs on", { skip: !posix && "POSIX host only" }, async () => {
+  // A Linux CI runner reports node's os.platform() as linux; the snapshot must
+  // follow the script's own uname detection either way.
+  const fx = await startFixture({ unameOs: "Linux" });
+  try {
+    const result = fx.run();
+    assert.equal(result.status, 0, result.stderr);
+    const posture = JSON.parse(await readFile(join(fx.install, HOST_POSTURE_RELATIVE_PATH), "utf8"));
+    assert.equal(posture.platform, "linux");
+    assert.equal(posture.powerSource, null, "no macOS reads on a Linux host");
+    assert.doesNotMatch(await fx.traceText(), /open -g -a Docker/);
   } finally {
     await rm(fx.dir, { recursive: true, force: true });
   }
