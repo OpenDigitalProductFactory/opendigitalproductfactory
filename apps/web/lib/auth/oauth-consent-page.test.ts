@@ -232,6 +232,29 @@ describe("consent names the account and makes the person confirm it", () => {
   });
 });
 
+// The acceptance criterion of BI-05E0EA33 is a count: a signed-in person
+// connects a supported client with ONE operation and ZERO decisions. It was
+// met, then lost when another change added a required checkbox to this screen,
+// and nothing noticed because nothing counted. This counts. A control the
+// person must touch before Connect works is an operation; adding one to the
+// default flow fails here, and the fix is to fold the confirmation into the
+// Connect action or put the control behind a disclosure, not to raise the number.
+describe("default consent flow costs one human operation", () => {
+  const form = (html: string) => html.slice(html.indexOf("<form"), html.indexOf("</form>"));
+  it("has no control the person must touch before Connect", () => {
+    const html = form(renderConsentPage(base));
+    const mustTouch = [...html.matchAll(/<(input|select|textarea)\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter((tag) => !/type="hidden"/.test(tag) && /\brequired\b/.test(tag));
+    expect(mustTouch).toEqual([]);
+  });
+  it("opens no disclosure and offers exactly one primary action", () => {
+    const html = form(renderConsentPage(base));
+    expect(html).not.toMatch(/<details[^>]*\bopen\b/);
+    expect(html.match(/<button class="primary"/g)).toHaveLength(1);
+  });
+});
+
 describe("consent response headers", () => {
   it("refuses caching and framing", async () => {
     const res = htmlResponse(renderConsentPage(base));
