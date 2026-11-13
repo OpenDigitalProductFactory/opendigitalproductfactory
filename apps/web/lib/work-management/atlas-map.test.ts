@@ -9,6 +9,7 @@ import {
   groupAtlas,
   parseAtlasFilters,
   parseAtlasGroup,
+  parseAtlasRoom,
 } from "./atlas-map";
 
 function room(id: string, overrides: Partial<AtlasRoom> = {}): AtlasRoom {
@@ -61,6 +62,8 @@ describe("Work Atlas URL filters", () => {
     expect(parseAtlasFilters({ portfolio: "nope", state: "on-fire", shape: "<script>" })).toEqual({});
     expect(parseAtlasGroup({ group: "foundational/delivery-small" })).toBe("foundational/delivery-small");
     expect(parseAtlasGroup({ group: "../etc" })).toBeUndefined();
+    expect(parseAtlasRoom({ room: "WC-1A2B3C4D" })).toBe("WC-1A2B3C4D");
+    expect(parseAtlasRoom({ room: "javascript:alert(1)" })).toBeUndefined();
   });
 
   it("builds links that keep the other filters and clear one on request", () => {
