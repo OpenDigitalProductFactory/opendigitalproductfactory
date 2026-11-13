@@ -85,8 +85,8 @@ async function startFixture({ dockerUpAfter = 0 } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "dpf-start-consumer-"));
   const install = join(dir, "install");
   const tools = join(dir, "tools");
-  // Host commands (uname, pmset, open, curl) are shadowed ahead of the system
-  // ones so the test never touches the real Mac; node and docker exist ONLY in
+  // Host commands (uname, pmset, open, curl, docker) are shadowed ahead of the
+  // system ones so the test never touches the real host; node exists ONLY in
   // the tool directory the script has to add itself.
   const shadow = join(dir, "shadow");
   const home = join(dir, "home");
@@ -114,7 +114,9 @@ async function startFixture({ dockerUpAfter = 0 } = {}) {
   await hostStub("pmset", `case "$2" in batt) cat '${dir}/pmset-batt.txt' ;; *) cat '${dir}/pmset-custom.txt' ;; esac`);
   await hostStub("open", `echo "open $*" >> '${trace}'`);
   await hostStub("curl", "exit 0");
-  await stub("docker", [
+  // docker is shadowed too: a CI runner has a real one in /usr/bin. The proof
+  // that the tool directory is added rests on node, which no minimal PATH has.
+  await hostStub("docker", [
     `count_file='${dir}/docker-info-count'`,
     'if [ "$1" = "info" ]; then',
     '  n=$(cat "$count_file" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$count_file"',
