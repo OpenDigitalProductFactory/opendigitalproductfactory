@@ -121,6 +121,23 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
     expect(result.content).toContain("Save & Test");
   });
 
+  it("passes the surface identity into guidance qualification so static Finance cannot exempt live-value requests", async () => {
+    const grounding = await import("@/lib/coworker/authorized-surface-prompt-grounding");
+    vi.mocked(grounding.groundPromptWithAuthorizedSurface).mockResolvedValueOnce({
+      systemPrompt: "STATIC EXPENSE WORKFLOW", grounded: true, surfaceId: "finance.expense-guidance",
+      guidanceHighlights: ["Enter an expense"],
+    });
+    vi.mocked(grounding.isAuthorizedSurfaceGuidanceRequest).mockReturnValueOnce(false);
+    await callLoop("chat", "Where do I enter an expense and how many claims are pending?");
+    expect(grounding.isAuthorizedSurfaceGuidanceRequest).toHaveBeenLastCalledWith(
+      "Where do I enter an expense and how many claims are pending?", "finance.expense-guidance",
+    );
+    const { runAgenticLoop } = await import("./agentic-loop");
+    expect(runAgenticLoop).toHaveBeenLastCalledWith(expect.objectContaining({
+      allowToolFreeInference: false, toolsForProvider: [],
+    }));
+  });
+
   it("grounds the autonomous path and forwards the grounded prompt to the loop", async () => {
     await callLoop(); // default interactionMode → autonomous
     const grounding = await import("@/lib/tak/profession-grounding");
