@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
   verdict: vi.fn(),
   publish: vi.fn(),
+  dispatch: vi.fn(),
+  buildLookup: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -19,7 +21,7 @@ vi.mock("@dpf/db", () => ({
     workroom: { findMany: mocks.findMany, updateMany: mocks.updateMany },
     workroomActivity: { create: mocks.activityCreate },
     scheduledJob: { upsert: mocks.jobUpsert, updateMany: mocks.jobUpdateMany },
-    featureBuild: { findUnique: vi.fn() },
+    featureBuild: { findUnique: mocks.buildLookup },
   },
 }));
 vi.mock("@/lib/contributor-change-lanes/github-rest-reader", () => ({
@@ -43,6 +45,7 @@ vi.mock("@/lib/jobs/triggers", () => ({ cron: () => ({}) }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn() }));
 vi.mock("@/lib/change-review/failure-readiness-publication", () => ({ checkWorkroomFailureReadiness: mocks.verdict }));
 vi.mock("@/lib/change-review/failure-readiness-status", () => ({ publishFailureReadinessStatus: mocks.publish }));
+vi.mock("@/lib/build/pr-ci-repair", () => ({ dispatchBuildPrCiRepair: mocks.dispatch }));
 
 import { observesRoomHead, runBuildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
 import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
@@ -297,6 +300,94 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     expect(mocks.publish).toHaveBeenCalledWith("WC-OK");
     expect(String(mocks.fetch.mock.calls[0]?.[0])).toContain("/actions/runs/41/rerun-failed-jobs");
     expect(mocks.observe).toHaveBeenCalledTimes(2);
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+  });
+});
+
+// BI-085A37EC: a Build Studio PR red on a real defect goes back to the build's
+// own repair loop. PR #6983 (FB-2F2D46D5) was only staged for a person.
+describe("runBuildPrDeliveryReconcile — Build Studio PR repair dispatch (BI-085A37EC)", () => {
+  const red = () => observation([
+    { name: "Unit tests (mobile jest)", status: "COMPLETED", conclusion: "FAILURE", workflowRunId: 7, detailsUrl: "https://github.com/o/r/actions/runs/7/job/70" },
+    { name: "ci", status: "COMPLETED", conclusion: "SUCCESS" },
+  ]);
+  const buildRoom = (overrides: Record<string, unknown> = {}) =>
+    room({ id: "build-room", capsuleId: "WC-8B8A9D6F", featureBuildId: "fb-row", executorKind: "build-studio", ...overrides });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE = "enforce";
+    mocks.updateMany.mockResolvedValue({ count: 1 });
+    mocks.jobUpsert.mockResolvedValue({ id: "pr-job", runCursor: null, enabled: true });
+    mocks.jobUpdateMany.mockResolvedValue({ count: 1 });
+    mocks.activityCreate.mockResolvedValue({});
+    mocks.createIssue.mockResolvedValue({ reportId: "PIR-1" });
+    mocks.postureDefault.mockResolvedValue(null);
+    mocks.verdict.mockResolvedValue({ mayPublish: true, reason: "reviewed" });
+    mocks.publish.mockResolvedValue(undefined);
+    mocks.buildLookup.mockResolvedValue({ buildId: "FB-2F2D46D5" });
+    mocks.dispatch.mockResolvedValue("dispatched");
+    vi.stubGlobal("fetch", mocks.fetch);
+  });
+  afterEach(() => {
+    delete process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE;
+    vi.unstubAllGlobals();
+  });
+
+  it("dispatches the build's repair with the failing check, and asks no person", async () => {
+    mocks.findMany.mockResolvedValue([buildRoom()]);
+    mocks.observe.mockResolvedValue(red());
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+    const [input] = mocks.dispatch.mock.calls[0];
+    expect(input.buildId).toBe("FB-2F2D46D5");
+    expect(input.packet.headSha).toBe("sha1");
+    expect(input.packet.failingChecks.map((c: { name: string }) => c.name)).toEqual(["Unit tests (mobile jest)"]);
+    expect(input.github).toEqual({ owner: "o", repo: "r", token: "token" });
+    expect(result.actuated).toBe(1);
+    const write = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "build-room")?.[0];
+    expect(write.data.workspaceState.prDelivery.followThrough.hold).toBe("repairing");
+    expect(write.data.workspaceState.prDelivery.followThrough.attempts.attempts["post-push-ci-failure"]).toBe(1);
+    expect(String(mocks.activityCreate.mock.calls[0]?.[0]?.data?.summary)).toContain("dispatched repair attempt 1 of 2");
+    expect(mocks.createIssue).not.toHaveBeenCalled();
+  });
+
+  it("stages the repair for a person, spending nothing, when the build cannot take it", async () => {
+    mocks.dispatch.mockResolvedValue("unavailable");
+    mocks.findMany.mockResolvedValue([buildRoom()]);
+    mocks.observe.mockResolvedValue(red());
+
+    await runBuildPrDeliveryReconcile();
+
+    const write = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "build-room")?.[0];
+    expect(write.data.workspaceState.prDelivery.followThrough.hold).toBe("awaiting-person");
+    expect(write.data.workspaceState.prDelivery.followThrough.attempts.attempts["post-push-ci-failure"]).toBeUndefined();
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+  });
+
+  it("escalates once, naming the failing check, when the repair budget is spent", async () => {
+    const spent = createBuildPrDeliveryState({ repository: "o/r", prNumber: 9, prUrl: "https://github.com/o/r/pull/9" });
+    spent.followThrough.attempts.attempts["post-push-ci-failure"] = 2;
+    mocks.findMany.mockResolvedValue([buildRoom({ workspaceState: writeBuildPrDeliveryState({}, spent) })]);
+    mocks.observe.mockResolvedValue(red());
+
+    await runBuildPrDeliveryReconcile();
+
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+    expect(mocks.createIssue).toHaveBeenCalledTimes(1);
+    expect(String(mocks.createIssue.mock.calls[0]?.[0]?.description)).toContain("repair-budget-exhausted");
+    expect(String(mocks.createIssue.mock.calls[0]?.[0]?.description)).toContain("Unit tests (mobile jest)");
+  });
+
+  it("a quiet Build Studio room only records", async () => {
+    mocks.findMany.mockResolvedValue([buildRoom({ scopeClaims: [{ workroomPosture: { proactivityLevel: "quiet" }, recordedAt: "2026-10-01T00:00:00Z" }] })]);
+    mocks.observe.mockResolvedValue(red());
+
+    await runBuildPrDeliveryReconcile();
+
+    expect(mocks.dispatch).not.toHaveBeenCalled();
     expect(mocks.createIssue).not.toHaveBeenCalled();
   });
 });
