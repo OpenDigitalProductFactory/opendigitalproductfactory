@@ -50,4 +50,10 @@ describe("saved proof without execution", () => {
     expect(screen.getByText("No saved builds yet.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Review proof" })).not.toBeInTheDocument();
   });
+  it("keeps directly opened proof readable when its build is outside the fleet list", () => {
+    render(<SavedBuildReader builds={[]} initialBuildId={saved.buildId} initialActiveBuild={saved} />);
+    expect(screen.queryByText("No saved builds yet.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review proof" }));
+    expect(screen.getByText("Passed", { exact: true })).toBeInTheDocument();
+  });
 });

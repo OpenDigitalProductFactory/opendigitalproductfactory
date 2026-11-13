@@ -35,7 +35,8 @@ export function SavedBuildReader({ builds, initialBuildId, initialActiveBuild, r
     <h2 className="text-dpf-h2">Saved builds</h2>
     {loadFailed ? <div role="alert"><p>Saved builds could not be loaded.</p><Link href="/build">Try again</Link></div> : <>
     <p role="status">{availabilityUnknown ? "Runner availability could not be checked. Saved results remain available." : "Saved results are available. Building is unavailable."}</p>
-    {builds.length > 0 ? <DataTable ariaLabel="Saved builds" columns={columns} rows={builds} getRowKey={build => build.buildId} /> : <p>No saved builds yet.</p>}
+    {builds.length > 0 ? <DataTable ariaLabel="Saved builds" columns={columns} rows={builds} getRowKey={build => build.buildId} /> : null}
+    {builds.length === 0 && !selected ? <p>No saved builds yet.</p> : null}
     {initialBuildId && !selected ? <p role="status">The requested saved build is unavailable.</p> : null}
     {selected ? <div>
       <p>{selected.title}</p>
