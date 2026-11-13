@@ -1219,7 +1219,7 @@
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
     ],
-    "apps/web/lib/nonprod/environment-lease-preview-yield.ts": [
+    "apps/web/lib/nonprod/environment-lease-overseer.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/nonprod/gate-client-revision.ts": [
@@ -3515,7 +3515,7 @@
       "apps/web/lib/build/sandbox/test-scope-guard.ts",
       "apps/web/lib/build/scoped-test-failure.ts",
       "apps/web/lib/build/ship-refusal-remedy.ts",
-      "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
+      "apps/web/lib/nonprod/environment-lease-overseer.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "config/ci-evidence-policy.json",

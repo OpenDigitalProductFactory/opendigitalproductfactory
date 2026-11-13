@@ -114,3 +114,21 @@ test("the pre-claim substrate check blocks only when every slot's Postgres is do
     else process.env.DPF_LOCAL_CI_SLOT_SUBSTRATE_JSON = previous.json;
   }
 });
+
+// BI-218A4555: the overseer says how long and why, not only where.
+test("a queued line carries the overseer's estimate and reason when the server gives them", () => {
+  const line = describeQueuedAdmission({
+    admission: {
+      queuePosition: 2,
+      estimatedWaitMs: 7 * 60_000,
+      queueReason: "1 ahead: 1 AI review turn (gates and AI review turns take turns).",
+    },
+    poolPolicy: { effectiveCapacity: 1 },
+    delayMs: 20_000,
+  });
+  assert.equal(
+    line,
+    "local-CI admission queued at position 2, estimated wait about 7 min "
+      + "(1 ahead: 1 AI review turn (gates and AI review turns take turns)); observing again in 20.0s...",
+  );
+});

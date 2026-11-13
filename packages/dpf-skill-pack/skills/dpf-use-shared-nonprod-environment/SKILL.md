@@ -49,7 +49,10 @@ If no shared environment is available and the canonical local install is the rig
    a stable `claimKey` for this exact attempt.
 4. If the result is `queued`, do not touch the runtime and do not call claim
    again. Stop. The returned TaskRun resumes the wait. Reusing `claimKey`
-   only preserves FIFO position for that one wait; it is not a poll loop.
+   only preserves the place in line for that one wait; it is not a poll loop.
+   The order is the overseer's policy, not first-come: gates and AI review
+   turns first, then verification, then previews, with a fair share per
+   session. Report the returned `estimatedWaitMs` and `queueReason` as they are.
 5. If the result is `lease_terminal` (`retryable: false`), stop. That claimKey
    is finished. Do not call again with it, and do not walk `:rerun-1`,
    `:rerun-2`, and onward. A new admission needs a new claimKey, and only
@@ -70,6 +73,11 @@ If no shared environment is available and the canonical local install is the rig
 - Do not start a thread-owned preview server when a shared environment is available.
 - A successful queued response is not runtime ownership; only `admitted` is.
 - Do not hold a lease after the thread is complete, blocked, or handed off.
+- Every hold has a class bound (preview 20 min, gate 30 min, verification
+  45 min). Past it, renewal returns `lease_lost` / `yielded` while another
+  session waits. Stop and re-claim only if the work is still wanted; do not
+  release and re-claim to jump the queue — a session just served waits its
+  fair share.
 - `nonprod_lease_not_owner` on release means the lease is someone else's, or it
   is a durable queue task that outlives your process. It is not a transient
   error and re-calling cannot fix it (`retryable: false`) — list the leases and
@@ -80,7 +88,7 @@ If no shared environment is available and the canonical local install is the rig
 
 ## Worked example
 
-A Build Studio UX check needs `localhost`. This skill requests durable FIFO
+A Build Studio UX check needs `localhost`. This skill requests durable, policy-ordered
 admission once. A queued result stops the caller; the TaskRun resumes the
 wait. A terminal result stops the caller too. Once admitted it returns an
 "Open environment" link and records the lease in audit details. The operator
