@@ -1,9 +1,9 @@
 {
   "generator": "apps/web/scripts/build-route-audience.ts",
-  "pageRouteCount": 373,
+  "pageRouteCount": 374,
   "summary": {
     "byAudience": {
-      "admin": 153,
+      "admin": 154,
       "auth-setup": 10,
       "builder": 3,
       "customer": 11,
@@ -13,7 +13,7 @@
     },
     "byDestinationKind": {
       "advanced-diagnostic": 25,
-      "detail": 256,
+      "detail": 257,
       "legacy-internal": 38,
       "section-home": 32,
       "settings-config": 13,
@@ -124,6 +124,13 @@
     },
     {
       "routePath": "/admin/issue-reports",
+      "audience": "admin",
+      "destinationKind": "detail",
+      "confidence": "high",
+      "source": "heuristic"
+    },
+    {
+      "routePath": "/admin/issue-reports/upstream",
       "audience": "admin",
       "destinationKind": "detail",
       "confidence": "high",
