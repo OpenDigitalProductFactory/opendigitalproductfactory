@@ -4,7 +4,7 @@ status: active
 
 # Owned prototype capture implementation
 
-Backlog: BI-CA4DC298. Workroom: WC-49FB71DF. Design: `docs/superpowers/specs/2026-11-13-owned-prototype-capture-design.md`. Status: plan draft; implementation unrun. Kernel choice: DI-7652EE1A746E.
+Backlog: BI-CA4DC298. Workroom: WC-49FB71DF. Design: `docs/superpowers/specs/2026-11-13-owned-prototype-capture-design.md`. Implementation is in progress; runtime and original acceptance remain unrun. Kernel choices: DI-7652EE1A746E and conditional transport/cleanup choice DI-3D36CA7B4044.
 
 For agentic workers: execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus this completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
@@ -40,8 +40,26 @@ One atomic producer contract: source qualification, isolated rendering, owned im
 
 ## Risks and rollback
 
+The existing-service convergence work is part of step 4, before enabling capture:
+declare a 1 GiB/one-CPU/256-PID browser-service budget in the existing Compose
+and canonical resource-budget registry. At service startup, qualify root-owned
+real profile/evidence directories through no-follow file descriptors before
+narrowing those directory modes to 0700. Preserve their contents, never adopt a
+symlink or wrong owner, and keep ordinary browsing available if capture setup
+cannot qualify. The capture operation itself never changes volume permissions.
+The existing portal's root UID was read back from the canonical runtime; its
+read-only evidence mount remains usable. Source and actual new-image tests must
+still verify this, not infer it from the old runtime.
+
+Read-only canonical diagnostics on November 13 found both directories root:root
+0755 and cgroup memory/PID limits `max`. Source-only tests cannot close those
+live gaps. Publish only after normal gates; the sole release coordinator advances
+the live install. Do not run a manual chmod, change container limits or recreate
+production containers from this chat. Capture must refuse until its actual
+private-directory, cgroup, sandbox and network boundaries qualify.
+
 Untrusted HTML can attempt network access, resource exhaustion or browser escape; isolation and finite resource admission are mandatory. Document identity must not accidentally adopt the human's principal or another organization. A capture result can be orphaned if authority changes during rendering; preserve existing fencing and report the actual outcome. Disable the new producer entry through its existing governed lifecycle if faulty; retain immutable evidence and existing engagement history. Reverting the scoped PR restores prior behavior without changing ordinary browsing, mailbox grants or customer records.
 
 ## Backlog coverage
 
-Native atomic coverage cmwfdz0qx06za0ep4bg9no1ku binds the original plan at c66b98869c86b5d7513a9c138132ce9500bf8517, blob31a2c18d7c8ccea4931082c8b36af83986f97cca, to BI-CA4DC298 and the two traceability rows. This subsequent design-review amendment must receive refreshed coverage before implementation; the earlier receipt does not approve changed content. Research and plan/implementation projections were admitted, but the independent design findings remain unresolved. No implementation/runtime tests, deployment or original acceptance criterion has passed. Funding attribution is awaiting the exact owner approval; no paid review or shared-runtime allocation is inferred. A checklist is not a substitute for the native coverage receipt.
+Native atomic coverage cmwfdz0qx06za0ep4bg9no1ku binds the original plan at c66b98869c86b5d7513a9c138132ce9500bf8517; amended coverage cmwfelwwq0eet0ep4vtzb0qb4 binds f9c597. The requirements and atomic deliverable remain unchanged. Current status metadata and convergence details change the plan blob; refresh exact immutable coverage after the normal topic checkpoint is published and before further producer integration. Funding attribution cmwfe47pk086p0ep48h5v8qfk is EXECUTED. Source-local tests are recorded separately; no runtime, deployment or original acceptance criterion has passed. A checklist is not a substitute for the native coverage receipt.

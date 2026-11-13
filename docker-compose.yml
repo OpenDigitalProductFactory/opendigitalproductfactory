@@ -679,6 +679,12 @@ services:
       context: ./services/browser-use
       dockerfile: Dockerfile
     restart: unless-stopped
+    pids_limit: 256
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
     logging: *default-logging
     ports:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8500:8500"

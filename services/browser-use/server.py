@@ -31,6 +31,7 @@ from url_policy import check_navigation
 # Agent.run() does not raise on an aborted run; without this check a dead
 # browser session becomes success-shaped empty results.
 from agent_outcome import agent_outcome
+from prototype_capture import initialize_capture_directories
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("browser-use-mcp")
@@ -802,6 +803,12 @@ app = FastAPI(title="browser-use MCP Server")
 
 @app.on_event("startup")
 async def startup():
+    try:
+        initialize_capture_directories(PROFILES_DIR, EVIDENCE_DIR)
+    except (OSError, ValueError):
+        # Ordinary browser sessions remain available. The separate capture
+        # identity qualification refuses unsafe directories before any render.
+        logger.warning("Offline prototype capture private-directory setup unavailable")
     await sessions.start()
     logger.info("browser-use MCP server started on port %s", PORT)
     logger.info("LLM: %s @ %s", LLM_MODEL, LLM_BASE_URL)

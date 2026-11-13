@@ -97,6 +97,36 @@ else: raise AssertionError("inherited socket was accepted")
             left.close()
             right.close()
 
+    def test_actual_service_startup_hardens_its_owned_mount_roots(self):
+        import server
+        with tempfile.TemporaryDirectory() as base:
+            profiles, evidence = Path(base) / "profiles", Path(base) / "evidence"
+            profiles.mkdir(mode=0o755)
+            evidence.mkdir(mode=0o755)
+            (evidence / "saved.png").write_bytes(b"unchanged")
+            async def exercise():
+                with patch.object(server, "PROFILES_DIR", str(profiles)), \
+                        patch.object(server, "EVIDENCE_DIR", str(evidence)):
+                    await server.startup()
+                    try:
+                        self.assertEqual(profiles.stat().st_mode & 0o777, 0o700)
+                        self.assertEqual(evidence.stat().st_mode & 0o777, 0o700)
+                        self.assertEqual((evidence / "saved.png").read_bytes(), b"unchanged")
+                    finally:
+                        await server.shutdown()
+            asyncio.run(exercise())
+
+    def test_capture_setup_failure_preserves_ordinary_service_startup(self):
+        import server
+        async def exercise():
+            with patch.object(server, "initialize_capture_directories", side_effect=ValueError("unsafe owner")):
+                await server.startup()
+                try:
+                    self.assertIsNotNone(server.sessions._cleanup_task)
+                finally:
+                    await server.shutdown()
+        asyncio.run(exercise())
+
     def test_dead_pidfd_never_signals_a_different_live_process(self):
         old = subprocess.Popen([sys.executable, "-c", "pass"])
         fd = os.pidfd_open(old.pid)

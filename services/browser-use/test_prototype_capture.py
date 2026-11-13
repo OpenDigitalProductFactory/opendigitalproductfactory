@@ -22,6 +22,40 @@ import prototype_capture as parent
 
 
 class KernelBoundaryTest(unittest.TestCase):
+    def test_service_setup_narrows_existing_root_directories_without_changing_contents(self):
+        with tempfile.TemporaryDirectory() as base:
+            profiles, evidence = Path(base) / "profiles", Path(base) / "evidence"
+            profiles.mkdir(mode=0o755)
+            evidence.mkdir(mode=0o755)
+            (evidence / "saved.png").write_bytes(b"preserved")
+            real_fstat = os.fstat
+            def root_stat(fd):
+                actual = real_fstat(fd)
+                return SimpleNamespace(st_uid=0, st_mode=actual.st_mode)
+            with patch.object(parent.os, "geteuid", return_value=0), \
+                    patch.object(parent.sys, "platform", "linux"), \
+                    patch.object(parent.os, "fstat", side_effect=root_stat):
+                parent.initialize_capture_directories(str(profiles), str(evidence))
+            self.assertEqual(profiles.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(evidence.stat().st_mode & 0o777, 0o700)
+            self.assertEqual((evidence / "saved.png").read_bytes(), b"preserved")
+
+    def test_service_setup_refuses_symlink_before_changing_either_directory(self):
+        with tempfile.TemporaryDirectory() as base:
+            profiles, evidence = Path(base) / "profiles", Path(base) / "evidence"
+            profiles.mkdir(mode=0o755)
+            evidence.symlink_to(profiles, target_is_directory=True)
+            real_fstat = os.fstat
+            def root_stat(fd):
+                actual = real_fstat(fd)
+                return SimpleNamespace(st_uid=0, st_mode=actual.st_mode)
+            with patch.object(parent.os, "geteuid", return_value=0), \
+                    patch.object(parent.sys, "platform", "linux"), \
+                    patch.object(parent.os, "fstat", side_effect=root_stat):
+                with self.assertRaises((ValueError, OSError)):
+                    parent.initialize_capture_directories(str(profiles), str(evidence))
+            self.assertEqual(profiles.stat().st_mode & 0o777, 0o755)
+
     def test_unbounded_container_cannot_admit_capture(self):
         with patch.object(parent.Path, "read_text", side_effect=["0::/\n", "max\n"]):
             with self.assertRaisesRegex(ValueError, "resource_boundary_unavailable"):
@@ -222,6 +256,15 @@ class CaptureContractTest(unittest.TestCase):
             with patch("os.lstat", return_value=SimpleNamespace(st_uid=0, st_mode=0o120700)), self.assertRaises(ValueError):
                 capture_identity("/profiles")
             with patch("pwd.getpwnam", return_value=SimpleNamespace(pw_uid=0, pw_gid=0)), self.assertRaises(ValueError):
+                capture_identity("/profiles")
+
+    def test_capture_identity_also_refuses_readable_shared_screenshot_volume(self):
+        account = SimpleNamespace(pw_uid=10001, pw_gid=10001)
+        with patch("prototype_capture.sys.platform", "linux"), patch("os.geteuid", return_value=0), \
+                patch("pwd.getpwnam", return_value=account), \
+                patch("os.lstat", side_effect=[SimpleNamespace(st_uid=0, st_mode=0o40700),
+                    SimpleNamespace(st_uid=0, st_mode=0o40755)]):
+            with self.assertRaisesRegex(ValueError, "private_evidence_required"):
                 capture_identity("/profiles")
 
     def test_child_does_not_inherit_service_credentials_or_profiles(self):

@@ -118,3 +118,25 @@ limits refuse capture before launch. Two added resource-admission tests first
 errored for missing behavior, then passed, bringing source-local tests to 21.
 This closes an unsafe admission path, not production configuration or resource
 qualification. No container limit or live host setting has been changed here.
+
+Further source inspection found the mounted screenshot evidence directory also
+needed qualification. A regression test against the old helper failed because
+it accepted a readable evidence root; the new helper qualifies both roots.
+Read-only canonical diagnostics confirmed root:root 0755 for both mounts and
+unbounded actual memory/PID limits. The portal's actual UID and mounted evidence
+owner are both root. Source now creates private roots for fresh images and
+converges existing safe root-owned directories at normal service startup through
+no-follow descriptors, preserving their contents. It refuses wrong owners,
+symlinks and writable-by-others roots rather than adopting them. Normal browsing
+still starts if capture setup cannot qualify. Compose and its canonical budget
+registry declare 1 GiB/one CPU/256 PIDs. No live chmod, resource mutation or
+container recreation was performed.
+
+Source-local tests are now 25 passing Python cases plus the existing 16-case
+resource-budget suite. Actual Compose configuration rejects the original
+unbounded configuration and accepts the declared new limits. This is source
+configuration evidence, not proof of deployed limits. Eight Linux image checks,
+including actual service-startup wiring, remain UNRUN. The earlier shared gate
+queued at source9959325 and was normally cancelled before admission to fix this
+newly identified boundary; status is INCONCLUSIVE/cancelled, not a code failure
+or pass. A new source-bound gate and cloud qualification are required.

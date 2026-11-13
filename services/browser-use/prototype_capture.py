@@ -87,7 +87,31 @@ def child_environment(home, chrome_bin):
             "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8"}
 
 
-def capture_identity(profiles_dir):
+def initialize_capture_directories(profiles_dir, evidence_dir):
+    """Service-startup convergence only; rendering never mutates secret mounts.
+
+    Qualify both existing directories before narrowing either one. Root readers
+    retain access; no file is traversed, read, removed or re-owned here.
+    """
+    if sys.platform != "linux" or os.geteuid() != 0:
+        raise ValueError("prototype_capture_private_setup_unavailable")
+    descriptors = []
+    try:
+        for path in (profiles_dir, evidence_dir):
+            os.makedirs(path, mode=0o700, exist_ok=True)
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            descriptors.append(fd)
+            st = os.fstat(fd)
+            if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o022:
+                raise ValueError("prototype_capture_private_setup_unavailable")
+        for fd in descriptors:
+            os.fchmod(fd, 0o700)
+    finally:
+        for fd in descriptors:
+            os.close(fd)
+
+
+def capture_identity(profiles_dir, evidence_dir="/evidence"):
     if sys.platform != "linux" or os.geteuid() != 0:
         raise ValueError("prototype_capture_isolation_unavailable")
     import pwd
@@ -99,9 +123,10 @@ def capture_identity(profiles_dir):
         raise ValueError("prototype_capture_isolation_unavailable")
     # Never change a mounted credential volume as a side effect of rendering.
     # Existing installs must qualify its permissions through normal runtime setup.
-    st = os.lstat(profiles_dir)
-    if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o077:
-        raise ValueError("prototype_capture_private_profiles_required")
+    for path, label in ((profiles_dir, "profiles"), (evidence_dir, "evidence")):
+        st = os.lstat(path)
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o077:
+            raise ValueError("prototype_capture_private_" + label + "_required")
     return account.pw_uid, account.pw_gid
 
 

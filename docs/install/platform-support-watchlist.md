@@ -13,9 +13,20 @@ retry without the browser sandbox to obtain a passing screenshot. This source
 remains unwired pending actual Linux qualification and original-engagement proof.
 Admission also verifies the actual private cgroup-v2 memory and PID limits:
 finite positive limits of at most 1 GiB and 256 processes. CI flags are not
-production configuration evidence. The checked-in service has no declared
-equivalent budget; runtime configuration and successful qualification remain
-required before enabling capture. Unbounded or ambiguous cgroups are refused.
+production configuration evidence. Source now declares the matching browser
+service budget in Compose and the canonical resource registry; deployment and
+successful qualification remain required before enabling capture. Unbounded or
+ambiguous cgroups are refused.
+
+Read-only inspection of the canonical old runtime found both mounted directory
+roots owned by root with mode 0755, and memory/PID limits `max`. The portal runs
+as root and sees the evidence volume owned by root. New source startup qualifies
+both real root-owned, non-writable-by-others directory handles before narrowing
+their modes to 0700; it preserves every file and refuses symlinks or wrong
+owners. Rendering itself never changes mounted permissions. An unavailable
+setup leaves ordinary service startup available and capture refused. Existing
+volumes converge only through the canonical release, not a manual runtime
+chmod. Real new-image startup and sandboxed rendering remain separate proof.
 
 
 **Co-located host-upkeep authority (BI-7EE97802).** Native host-upkeep uses the

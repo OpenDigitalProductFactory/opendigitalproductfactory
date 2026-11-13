@@ -45,6 +45,12 @@
     }
   },
   "optionalProfileServices": {
+    "browser-use": {
+      "memory": "1g",
+      "cpus": "1.0",
+      "profiles": ["runtime-browser-automation"],
+      "notes": "BI-CA4DC298: shared browser service containment. Compose also caps the whole family at 256 PIDs; offline capture independently verifies actual cgroup limits before admission. New-image qualification remains required."
+    },
     "dpf-tts": {
       "memory": "2g",
       "cpus": "2.0",

@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # uses this dedicated account and a fresh per-request directory.
 RUN groupadd --system --gid 10001 dpf-capture \
     && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin dpf-capture \
-    && install -d -m 0700 /profiles /run/dpf-capture
+    && install -d -m 0700 /profiles /evidence /run/dpf-capture
 
 COPY server.py url_policy.py agent_outcome.py prototype_capture.py prototype_capture_worker.py .
 
