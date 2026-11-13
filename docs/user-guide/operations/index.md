@@ -117,6 +117,27 @@ A retired duplicate is labeled **retired duplicate**; the other backlog item is
 the canonical record, so the duplicate is retained for history without being
 counted as completed. Retired items no longer keep an epic open.
 
+### Security findings from GitHub
+
+On the installation that stewards the repository, inbound issue triage reads
+three GitHub security surfaces every four hours: Dependabot, code scanning and
+secret scanning. Each one becomes backlog work:
+
+- **One item per unit of fix.** Dependabot findings are grouped by package, so
+  one upgrade closes one item. Code scanning is grouped by rule. Each leaked
+  secret is its own item.
+- **Ranked by severity.** Leaked secrets and critical findings are priority 1,
+  high is 2, medium 3 and low 4. A rise in severity raises the item; the job
+  never lowers a priority.
+- **Closed when GitHub resolves it.** When GitHub no longer reports a finding
+  open, the item records that as evidence and moves to awaiting acceptance. The
+  daily acceptance sweep then closes it. If the finding comes back first, the
+  item returns to open.
+- **Unreadable is never zero.** If the installation's GitHub connection cannot
+  read a surface, the schedule view marks that surface **UNREADABLE** and the
+  run as failed. The connection needs read access to Dependabot alerts, code
+  scanning alerts and secret scanning alerts.
+
 ### Clearing copies of a paired installation's demand
 
 Before a fix in November 2026, inbound issue triage filed a second, local copy

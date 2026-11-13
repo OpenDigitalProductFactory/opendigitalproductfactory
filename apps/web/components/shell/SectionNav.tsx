@@ -206,8 +206,16 @@ function familyClass(style: "pill" | "tab", active: boolean): string {
 
 function subItemClass(style: "pill" | "tab", active: boolean): string {
   if (style === "tab") {
+    // text-xs, not text-[11px]. The UX sweep counts any link or button set at
+    // 9-11px as sub-legible, and every tab-style section nav (Finance, Compliance
+    // and the three Product navs) rendered ALL its sub-items that way — so every
+    // route under one inherited a sub-legible control per sub-item. A pre-existing
+    // route was grandfathered at that count; a net-new route's budget is zero, so
+    // no new page could be added under these navs at all (BI-8E1FD1BD: Finance's
+    // Configuration family reached eight sub-items and its new Statutory Rates
+    // page measured eight). The pill variant below already uses text-xs.
     return [
-      "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+      "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
       active
         ? "border-[var(--dpf-accent)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
         : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",

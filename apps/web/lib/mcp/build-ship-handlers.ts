@@ -577,11 +577,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   // for the EXACT tree — a pass on an earlier version of this build is not a
   // pass on what is about to be published.
   const preflightRequirement = await requireInPlatformPreflightRecord({
-    buildId,
-    sandboxId: build.sandboxId,
-    repoOwner,
-    repoName,
-    overrideCode: params.preflight_override_reason,
+    buildId, sandboxId: build.sandboxId, buildBranch: build.buildBranch,
+    repoOwner, repoName, overrideCode: params.preflight_override_reason,
   });
   const prePublishBlockers = [...verificationReadiness.blockers, ...preflightRequirement.blockers];
   if (prePublishBlockers.length > 0) {
@@ -610,6 +607,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     commitMessage,
     diff: shareableDiff,
     token,
+    // BI-085A37EC: a CI repair of the open PR lands on its head as a fast-forward follow-up, never a force-push.
+    followUpOf: await (await import("@/lib/build/pr-ci-follow-up")).resolvePendingPrFollowUp({ buildId, owner: repoOwner, repo: repoName, diff: shareableDiff, token }),
     ...(build.sandboxId
       ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox, branchFallback: build.buildBranch ? { repoDir: SANDBOX_WORKSPACE, branch: build.buildBranch } : undefined }) }
       : {}),
@@ -745,6 +744,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
 async function requireInPlatformPreflightRecord(input: {
   buildId: string;
   sandboxId: string | null;
+  buildBranch?: string | null;
   repoOwner: string;
   repoName: string;
   overrideCode?: unknown;
@@ -771,6 +771,7 @@ async function requireInPlatformPreflightRecord(input: {
     containerId: input.sandboxId,
     buildId: input.buildId,
     repository: `${input.repoOwner}/${input.repoName}`,
+    restoreBranch: input.buildBranch, // BI-34A05E78: undo a killed readiness run's detach first.
   });
 
   const records = await prisma.externalEvidenceRecord.findMany({

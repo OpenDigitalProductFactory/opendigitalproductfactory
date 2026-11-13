@@ -436,7 +436,9 @@ preserves the default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell
 debugging and still requires a working shell.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
-already leased). A canonical waiter refreshes its idempotent claim well inside
+already leased). While it waits, it prints its policy position, an estimated wait and
+the reason for that position from the test-machine overseer (BI-218A4555; see
+`docs/architecture/build-gate-runbook.md`). A canonical waiter refreshes its idempotent claim well inside
 its liveness window, while an admitted owner receives a two-minute authority
 window and heartbeats at no more than one third of that effective TTL. This
 bounds recovery when the supervisor disappears without shortening the maximum
@@ -729,6 +731,15 @@ base SHA, and passes that SHA to the child plan without fetching again. A
 failed fetch records `fetch-failed` and exits before integration synthesis or
 expensive gates. This admission boundary avoids repeated rebase/rerun churn
 while queued; later movement on `main` is reconciled by the merge queue.
+
+The shared-safe helper serializes cooperating refreshes and unshallow operations
+with an ownership-token lock in the canonical Git common directory, so linked
+worktrees share the same boundary. The explicit child-plan fetch uses that
+helper too. Contention waits at most 60 seconds before reporting an unavailable
+prerequisite. It never reclaims a foreign or uncertain owner, removes Git's
+lockfiles, resets refs or substitutes an offline baseline. A retained owner
+requires ownership reconciliation; do not delete it to make a gate run. Raw Git
+commands outside the helper do not participate in this exclusion boundary.
 
 Offline operation must be explicit:
 `--offline-accepted-base` or

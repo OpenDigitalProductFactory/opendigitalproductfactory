@@ -4741,7 +4741,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 71
+    "textMass": 52
   },
   "apps/web/components/build/ReviewReadinessStrip.tsx": {
     "vocabulary": 0,

@@ -46,10 +46,11 @@ vi.mock("@/lib/coworker/authorized-surface-prompt-grounding", () => ({
   closeAuthorizedSurfacePromptGrounding: vi.fn(async () => undefined),
 }));
 
-async function callLoop(interactionMode?: "chat" | "autonomous", content = "Do the build task.") {
+async function callLoop(interactionMode?: "chat" | "autonomous", content = "Do the build task.", activeAssignment?: { messageId: string; content: string }) {
   const { executeAutonomousAgenticLoop } = await import("./autonomous-work-run");
   return executeAutonomousAgenticLoop({
     systemPrompt: "BASE",
+    ...(activeAssignment ? { activeAssignment } : {}),
     chatHistory: [{ role: "user", content }],
     sensitivity: "internal",
     tools: [],
@@ -136,6 +137,45 @@ describe("executeAutonomousAgenticLoop — profession-corpus grounding gate", ()
     expect(runAgenticLoop).toHaveBeenLastCalledWith(expect.objectContaining({
       allowToolFreeInference: false, toolsForProvider: [],
     }));
+  });
+
+  it.each([
+    ["Where do I enter an expense?", true],
+    ["Which fields are required for my expense claim?", true],
+    ["Where do I enter an expense and how many claims are pending?", false],
+    ["Enter an expense for me", false],
+  ])("qualifies the original marked native assignment: %s", async (request, expected) => {
+    const grounding = await import("@/lib/coworker/authorized-surface-prompt-grounding");
+    const actual = await vi.importActual<typeof grounding>("@/lib/coworker/authorized-surface-prompt-grounding");
+    vi.mocked(grounding.isAuthorizedSurfaceGuidanceRequest).mockImplementationOnce(actual.isAuthorizedSurfaceGuidanceRequest);
+    vi.mocked(grounding.groundPromptWithAuthorizedSurface).mockResolvedValueOnce({
+      systemPrompt: "STATIC EXPENSE WORKFLOW", grounded: true, surfaceId: "finance.expense-guidance",
+      guidanceHighlights: ["Enter an expense"],
+    });
+    const { buildCurrentTurnHistory } = await import("./agent-coworker-context");
+    const messageId = "usr-current";
+    const marked = String(buildCurrentTurnHistory([], request, messageId).at(-1)!.content);
+    const result = await callLoop("chat", marked, { messageId, content: request });
+    const { runAgenticLoop } = await import("./agentic-loop");
+    expect(runAgenticLoop).toHaveBeenLastCalledWith(expect.objectContaining({ allowToolFreeInference: expected }));
+    expect(result.authoritativeSurfaceEvidence).toBe(expected);
+  });
+
+  it.each([
+    { messageId: "wrong-id", content: "Where do I enter an expense?" },
+    { messageId: "usr-current", content: "Where do I enter an expense?" },
+  ])("does not discard mismatched native assignment content: %j", async activeAssignment => {
+    const grounding = await import("@/lib/coworker/authorized-surface-prompt-grounding");
+    const actual = await vi.importActual<typeof grounding>("@/lib/coworker/authorized-surface-prompt-grounding");
+    vi.mocked(grounding.isAuthorizedSurfaceGuidanceRequest).mockImplementationOnce(actual.isAuthorizedSurfaceGuidanceRequest);
+    vi.mocked(grounding.groundPromptWithAuthorizedSurface).mockResolvedValueOnce({
+      systemPrompt: "STATIC EXPENSE WORKFLOW", grounded: true, surfaceId: "finance.expense-guidance",
+    });
+    const { buildCurrentTurnHistory } = await import("./agent-coworker-context");
+    const marked = String(buildCurrentTurnHistory([], "Where do I enter an expense and how many claims are pending?", "usr-current").at(-1)!.content);
+    await callLoop("chat", marked, activeAssignment);
+    const { runAgenticLoop } = await import("./agentic-loop");
+    expect(runAgenticLoop).toHaveBeenLastCalledWith(expect.objectContaining({ allowToolFreeInference: false }));
   });
 
   it("grounds the autonomous path and forwards the grounded prompt to the loop", async () => {

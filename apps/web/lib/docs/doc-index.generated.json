@@ -12484,6 +12484,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "reading-saved-proof-without-a-runner",
         "development-workrooms",
         "the-operator-workspace",
         "current-maturity",
@@ -12973,6 +12974,7 @@
         "before-you-change-a-control",
         "recurring-invoices",
         "dunning-currency-tax-and-approvals",
+        "statutory-rates-payroll-uses",
         "payment-runs-are-records-not-transfers",
         "recovery-and-evidence",
         "related-help"
@@ -13206,6 +13208,7 @@
         "key-concepts",
         "what-you-can-do",
         "reading-epic-progress",
+        "security-findings-from-github",
         "clearing-copies-of-a-paired-installations-demand",
         "shared-demand",
         "activate-local-demand",
