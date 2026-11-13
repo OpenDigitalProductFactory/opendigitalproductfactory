@@ -405,6 +405,32 @@ describe("retained foreground production response publication", () => {
     expect(governedExecuteTool).not.toHaveBeenCalled();
   });
 
+  it("retains native expense guidance across the marked assignment boundary", async () => {
+    const run = retainedTurn("/finance");
+    const content = "Where do I enter an expense?";
+    vi.mocked(isUnifiedCoworkerEnabled).mockResolvedValue(true);
+    mockPrisma.agentMessage.findFirst.mockResolvedValue({ id: "user-msg-1", role: "user", content, taskRunId: "run-123", createdAt: new Date() });
+    const grounding = await import("@/lib/coworker/authorized-surface-prompt-grounding");
+    const qualified = vi.spyOn(grounding, "isAuthorizedSurfaceGuidanceRequest");
+    const opened = vi.spyOn(grounding, "groundPromptWithAuthorizedSurface").mockResolvedValue({
+      systemPrompt: "STATIC EXPENSE WORKFLOW", grounded: true, surfaceId: "finance.expense-guidance",
+      guidanceHighlights: ["Enter an expense"],
+    });
+    const closed = vi.spyOn(grounding, "closeAuthorizedSurfacePromptGrounding").mockResolvedValue(undefined);
+    vi.mocked(routeAndCall).mockResolvedValue({ content: "Enter an expense at /finance/my-expenses/new. This describes the form, not current claims.",
+      providerId: "local", modelId: "fixture", inputTokens: 1, outputTokens: 1, downgraded: false, downgradeMessage: null, routeDecision: {}, toolCalls: [] } as never);
+    try {
+      const result = await withForegroundWork("run-123", () => sendMessage({ threadId: "thread-1", content, routeContext: "/finance", acceptedUserMessageId: "user-msg-1" }));
+      expect(qualified).toHaveBeenCalledWith(content, "finance.expense-guidance");
+      expect(routeAndCall).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(routeAndCall).mock.calls[0]![0].at(-1)).toMatchObject({ role: "user", content: `${content}\n\nActive assignment [user-msg-1]` });
+      expect(run.status).toBe("completed");
+      expect("agentMessage" in result && result.agentMessage.role).toBe("assistant");
+      expect("agentMessage" in result && result.agentMessage.content).toContain("/finance/my-expenses/new");
+      expect(governedExecuteTool).not.toHaveBeenCalled();
+    } finally { opened.mockRestore(); closed.mockRestore(); qualified.mockRestore(); }
+  });
+
   it.each([[true, false], [false, false], [true, true], [false, true]])("pins the accepted assignment once and marks older unanswered requests as context (window contains current: %s, unified: %s)", async (includesCurrent, unified) => {
     retainedTurn();
     vi.mocked(isUnifiedCoworkerEnabled).mockResolvedValue(unified);

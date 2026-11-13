@@ -1866,7 +1866,7 @@ export async function sendMessage(input: {
     const { runWithTransientInferenceRetry } = await import("@/lib/build/inference-retry");
     const agenticResult = await runWithTransientInferenceRetry(
       () => executeAutonomousAgenticLoop({
-        chatHistory,
+        chatHistory, activeAssignment: { messageId: userMsg.id, content: trimmedContent },
         systemPrompt: populatedPrompt,
         systemPromptInstructionSpans,
         messageOrigins: labelled.origins,
