@@ -457,6 +457,9 @@
     "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
+    "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/performance/BusinessPerformanceDashboard.tsx": [
       "docs/user-guide/workspace/performance.md"
     ],
@@ -698,6 +701,9 @@
     "apps/web/lib/build/build-plan-paths.ts": [
       "docs/architecture/build-studio-namespace.md"
     ],
+    "apps/web/lib/build/build-pr-delivery-recheck.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/build-studio-config.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/operations/build-cost-flags-activation-runbook.md"
@@ -731,6 +737,9 @@
     "apps/web/lib/build/plan-to-build-transition-core.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/build/pr-ci-repair.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/pr-follow-through.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -738,6 +747,9 @@
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/build/pull-request-merged-signal.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "apps/web/lib/build/review-source-refresh.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/sandbox/grok-governance-seed.ts": [
@@ -750,6 +762,9 @@
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/scoped-test-failure.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "apps/web/lib/build/ship-refusal-remedy.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/unified-wip-query.ts": [
@@ -1207,7 +1222,7 @@
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
     ],
-    "apps/web/lib/nonprod/environment-lease-preview-yield.ts": [
+    "apps/web/lib/nonprod/environment-lease-overseer.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/nonprod/gate-client-revision.ts": [
@@ -1230,6 +1245,9 @@
       "docs/operations/local-ci-sandbox-slots.md"
     ],
     "apps/web/lib/observability/monitor-source-reachability.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/observability/platform-continuity-watch.ts": [
       "docs/operations/observability-coverage.md"
     ],
     "apps/web/lib/onboarding/setup-completion-seeds.ts": [
@@ -1631,6 +1649,9 @@
     ],
     "apps/web/lib/voice-synthesis/tts-health-contract.test.ts": [
       "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/wiki/embedding-reconciliation.ts": [
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
     ],
     "apps/web/lib/wiki/enrich-org-corpus.ts": [
       "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
@@ -2118,6 +2139,10 @@
     "packages/db/src/table-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "packages/db/src/wiki-embedding-digest.ts": [
+      "docs/founder-kernel/AUTHORING.md",
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
     ],
     "packages/db/src/wiki-frontmatter.ts": [
       "docs/founder-kernel/AUTHORING.md"
@@ -2697,10 +2722,14 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/installer/dpf-start.consumer.sh": [
+      "docs/operations/observability-coverage.md",
       "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/gpp-permit-secret-contract.test.mjs": [
       "docs/architecture/gated-permissions-process.md"
+    ],
+    "scripts/installer/host-posture.mjs": [
+      "docs/operations/observability-coverage.md"
     ],
     "scripts/installer/install-release-assets.mjs": [
       "docs/architecture/build-gate-runbook.md",
@@ -2868,7 +2897,8 @@
     ],
     "scripts/portal-migrate-boot.sh": [
       "docs/architecture/data-model-stewardship-runbook.md",
-      "docs/architecture/enforced-ci-gates.md"
+      "docs/architecture/enforced-ci-gates.md",
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
     ],
     "scripts/pr-health.mjs": [
       "docs/testing/pr-health.md",
@@ -3483,16 +3513,20 @@
     "docs/architecture/build-gate-runbook.md": [
       ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
+      "apps/web/lib/build/build-pr-delivery-recheck.ts",
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/failure-readiness-delivery-refresh.ts",
       "apps/web/lib/build/finalize-repair-routing.ts",
       "apps/web/lib/build/finalize-stage-runner.ts",
       "apps/web/lib/build/gauntlet-repair.ts",
+      "apps/web/lib/build/pr-ci-repair.ts",
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
+      "apps/web/lib/build/review-source-refresh.ts",
       "apps/web/lib/build/sandbox/test-scope-guard.ts",
       "apps/web/lib/build/scoped-test-failure.ts",
-      "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
+      "apps/web/lib/build/ship-refusal-remedy.ts",
+      "apps/web/lib/nonprod/environment-lease-overseer.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "config/ci-evidence-policy.json",
@@ -4035,6 +4069,7 @@
       "apps/web/lib/decision/golden-decisions.test.ts",
       "apps/web/lib/kernel/governing-principles.ts",
       "packages/db/src/seed-wiki-kernel.ts",
+      "packages/db/src/wiki-embedding-digest.ts",
       "packages/db/src/wiki-frontmatter.ts",
       "packages/db/src/wiki-taxonomy.ts",
       "scripts/build-kernel-embeddings.ts",
@@ -4050,6 +4085,11 @@
     ],
     "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md": [
       "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs"
+    ],
+    "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md": [
+      "apps/web/lib/wiki/embedding-reconciliation.ts",
+      "packages/db/src/wiki-embedding-digest.ts",
+      "scripts/portal-migrate-boot.sh"
     ],
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
@@ -4251,12 +4291,15 @@
     "docs/operations/observability-coverage.md": [
       "apps/web/lib/coworker/approval-lifetime.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
+      "apps/web/lib/observability/platform-continuity-watch.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/routing/ai-capacity-watch.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
       "monitoring/prometheus/prometheus.yml",
-      "packages/db/src/quality-issue-registry.ts"
+      "packages/db/src/quality-issue-registry.ts",
+      "scripts/installer/dpf-start.consumer.sh",
+      "scripts/installer/host-posture.mjs"
     ],
     "docs/operations/oss-repo-identity-hygiene.md": [
       "scripts/check-no-private-identity.mjs"
@@ -4676,6 +4719,7 @@
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
       "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx",
       "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
+      "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx",
       "apps/web/components/workspace-home/MainStreamHero.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",

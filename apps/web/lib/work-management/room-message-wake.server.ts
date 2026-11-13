@@ -12,22 +12,43 @@
 import type { Prisma } from "@dpf/db";
 
 import { APPROVED_EXTERNAL_ROLES } from "@/lib/auth/oauth-identity-binding";
+import {
+  COWORKER_READ_BASELINE_GRANTS,
+  grantsSatisfyRequirement,
+  persistedAgentToolGrants,
+  TOOL_TO_GRANTS,
+} from "@/lib/tak/agent-grants";
 
 import {
   buildRoomReplyPrompt,
   computeRoomMessageHop,
+  isExternalRoomExecutor,
+  ROOM_WAKE_BUDGET_PER_HOUR,
+  ROOM_WAKE_HOP_LIMIT,
   oneShotCronAt,
   parseAddressedTo,
   planRoomWake,
   readRoomMessageAddressing,
+  ROOM_POST_GRANT,
   roomReplyTaskId,
   roomWakeEventId,
   roomWakeWindow,
   type RoomAddressRole,
   type RoomMessageAddressing,
+  type RoomSessionRef,
   type RoomWakePlan,
 } from "./room-message-addressing";
 import { encodeRoomMessageCursor } from "./room-message-cursor";
+import { encodeWorkCaseKey } from "./case-key";
+import {
+  combineSupervisedWake,
+  defaultSupervisedSessionPort,
+  deliverSupervisedTurn,
+  planSupervisedTurn,
+  type SupervisedSessionPort,
+  type SupervisedTurnOutcome,
+} from "@/lib/workroom-runtime/supervised-turn-delivery";
+import { providerClientAgentId, readStoredRuntimeSession } from "@/lib/workroom-runtime/supervised-session";
 
 export const ROOM_MESSAGE_POSTED_EVENT = "room/message.posted";
 export const ROOM_WAKE_REQUESTED_EVENT = "room/wake.requested";
@@ -57,6 +78,8 @@ export interface RoomWakeDeps {
   db: Db;
   send: JobsSend;
   now?: () => Date;
+  /** The portal's runtime supervisor (BI-F5D58F29); loaded only for a room that has a stored session. */
+  supervision?: SupervisedSessionPort;
 }
 
 async function defaultDeps(): Promise<RoomWakeDeps> {
@@ -85,9 +108,47 @@ async function writeWakeState(
   });
 }
 
+/** writeWakeState, but only if the message's wake is still pending; false when another run decided it first. */
+async function claimPendingWake(
+  deps: RoomWakeDeps,
+  message: { id: string; structuredPayload: unknown },
+  addressing: RoomMessageAddressing,
+  wake: RoomMessageAddressing["wake"],
+): Promise<boolean> {
+  const payload = payloadRecord(message.structuredPayload);
+  const claimed = await deps.db.workItemMessage.updateMany({
+    where: { id: message.id, structuredPayload: { path: ["addressing", "wake", "state"], equals: "pending" } },
+    data: { structuredPayload: { ...payload, addressing: { ...addressing, wake } } as Prisma.InputJsonValue },
+  });
+  return claimed.count === 1;
+}
+
 export type PreparedRoomAddressing =
   | { refused: false; build: (mentionedAgentIds: string[]) => RoomMessageAddressing | null }
   | { refused: true; message: string };
+
+const SESSION_HOP_SCAN = 20;
+
+/**
+ * BI-FDE1B10C (spec §6.5): is this post the room's supervised runtime session?
+ * The session posts with the room token issued to the person who started it,
+ * so its agent id is theirs. The token id is what tells it apart: the room
+ * stores the id of the token it issued its session. Nothing the caller says
+ * decides this, and the token's authority is unchanged.
+ */
+async function resolvePostingSession(db: Db, workItemId: string, apiTokenId: string): Promise<RoomSessionRef | null> {
+  const rooms: Array<{ workspaceState: unknown }> = await db.workroom.findMany({
+    where: { workItemId, archivedAt: null },
+    select: { workspaceState: true },
+  });
+  for (const room of rooms) {
+    const stored = readStoredRuntimeSession(room.workspaceState);
+    if (stored?.addressedAs && stored.tokenId === apiTokenId) {
+      return { addressedAs: stored.addressedAs, clientAgentId: providerClientAgentId(stored.provider) };
+    }
+  }
+  return null;
+}
 
 /**
  * Resolve a caller's addressedTo list (agent ids, GAIDs, roles, session refs)
@@ -100,6 +161,8 @@ export async function prepareRoomAddressing(
     sender: { type: "user" | "agent"; id: string };
     actingUserId: string;
     addressedTo: unknown;
+    /** The credential the post was made with; a room's supervised-session token marks the post as the session's. */
+    apiTokenId?: string | null;
   },
   depsIn?: Pick<RoomWakeDeps, "db" | "now">,
 ): Promise<PreparedRoomAddressing> {
@@ -123,17 +186,34 @@ export async function prepareRoomAddressing(
     const missing = parsed.agentRefs.filter((id) => !found.some((row) => row.agentId === id));
     if (missing.length > 0) return { refused: true, message: `No coworker ${missing.join(", ")}.` };
   }
+  const senderSession = args.sender.type === "agent" && args.apiTokenId
+    ? await resolvePostingSession(db, args.workItemId, args.apiTokenId)
+    : null;
+  const addressedTo = (path: "agents" | "sessions", value: string) =>
+    ({ structuredPayload: { path: ["addressing", path], array_contains: [value] } });
   const recentRows: Array<{ structuredPayload: unknown }> = args.sender.type === "agent"
     ? await db.workItemMessage.findMany({
-      where: { workItemId: args.workItemId, structuredPayload: { path: ["addressing", "agents"], array_contains: [args.sender.id] } },
+      where: senderSession
+        ? {
+          workItemId: args.workItemId,
+          OR: [
+            addressedTo("agents", args.sender.id),
+            addressedTo("sessions", senderSession.addressedAs),
+            addressedTo("agents", senderSession.clientAgentId),
+          ],
+        }
+        : { workItemId: args.workItemId, ...addressedTo("agents", args.sender.id) },
       orderBy: [{ createdAt: "desc" }, { messageId: "desc" }],
-      take: 1,
+      // A client-agent match can be a message qualifying another session of that client, which
+      // does not name this one; read a few so computeRoomMessageHop finds the newest that does.
+      take: senderSession ? SESSION_HOP_SCAN : 1,
       select: { structuredPayload: true },
     })
     : [];
   const hop = computeRoomMessageHop({
     senderType: args.sender.type,
     senderAgentId: args.sender.type === "agent" ? args.sender.id : null,
+    senderSession,
     recent: recentRows.map((row) => ({ addressing: readRoomMessageAddressing(row.structuredPayload) })),
   });
   const senderGaid = args.sender.type === "agent"
@@ -151,6 +231,7 @@ export async function prepareRoomAddressing(
         sessions: parsed.sessions,
         hop,
         senderGaid,
+        ...(senderSession ? { senderSession: senderSession.addressedAs } : {}),
         actingUserId: args.actingUserId,
         wake: { state: "pending", at },
       };
@@ -187,13 +268,31 @@ export async function publishRoomMessagePosted(
   return true;
 }
 
+// A work item can carry several Workrooms over its life, and a room can reach
+// status "archived" or "abandoned" without archivedAt being set. Only a live room
+// speaks for the item, so a closed room's old executor never holds a wake (seen
+// live on BI-926A7E90, Nov 2026). When several rooms are live, one an external
+// executor is working wins, so that executor's work is never joined by a
+// platform coworker; otherwise the most recently updated room does.
+const CLOSED_ROOM_STATUSES = ["abandoned", "archived"];
+
+type RoomRow = { id: string; capsuleId: string; executorKind: string | null; executorRef: string | null; workspaceState: unknown };
+
 async function loadRoomForWorkItem(deps: RoomWakeDeps, workItemId: string) {
-  const select = { id: true, capsuleId: true, executorKind: true, executorRef: true };
-  const own = await deps.db.workroom.findFirst({ where: { workItemId, archivedAt: null }, select });
+  const select = { id: true, capsuleId: true, executorKind: true, executorRef: true, workspaceState: true };
+  const liveRoomOf = async (id: string): Promise<RoomRow | null> => {
+    const rooms: RoomRow[] = await deps.db.workroom.findMany({
+      where: { workItemId: id, archivedAt: null, status: { notIn: CLOSED_ROOM_STATUSES } },
+      orderBy: { updatedAt: "desc" },
+      select,
+    });
+    return rooms.find((r) => isExternalRoomExecutor(r.executorKind)) ?? rooms[0] ?? null;
+  };
+  const own = await liveRoomOf(workItemId);
   if (own) return own;
   const item = await deps.db.workItem.findUnique({ where: { id: workItemId }, select: { parentItemId: true } });
   if (!item?.parentItemId) return null;
-  return deps.db.workroom.findFirst({ where: { workItemId: item.parentItemId, archivedAt: null }, select });
+  return liveRoomOf(item.parentItemId);
 }
 
 /** Agent ids of the room's active participants holding each role. */
@@ -241,6 +340,8 @@ async function postRoomWakeNotice(deps: RoomWakeDeps, workItemId: string, plan: 
       messageType: "room-wake-notice",
       createdAt: { gte: new Date(now.getTime() - 60 * 60_000) },
       structuredPayload: { path: ["roomWakeNotice", "kind"], equals: kind },
+      // One cannot-reply notice per hour for the same coworkers, not one per room.
+      ...(plan.kind === "refuse" ? { body: plan.detail } : {}),
     },
   });
   if (recent > 0) return;
@@ -256,14 +357,36 @@ async function postRoomWakeNotice(deps: RoomWakeDeps, workItemId: string, plan: 
   });
 }
 
-export type RoomMessageDispatchResult = { messageId: string; plan: RoomWakePlan["kind"] | "skipped"; woken: string[] };
+/**
+ * The candidates that cannot post in a room: their stored grants (less
+ * revocations) plus the coworker read baseline do not satisfy post_room_message.
+ * The same rule the tool surface applies, so a coworker woken here can answer.
+ * An agent with no record cannot post either.
+ */
+async function agentsWithoutRoomPost(deps: RoomWakeDeps, candidates: string[]): Promise<Set<string>> {
+  if (candidates.length === 0) return new Set();
+  const required = TOOL_TO_GRANTS.post_room_message ?? [ROOM_POST_GRANT];
+  const rows: Array<{ agentId: string; toolGrants: Array<{ grantKey: string }>; toolGrantRevocations: Array<{ grantKey: string }> }> =
+    await deps.db.agent.findMany({
+      where: { agentId: { in: candidates } },
+      select: { agentId: true, toolGrants: { select: { grantKey: true } }, toolGrantRevocations: { select: { grantKey: true } } },
+    });
+  const able = new Set(
+    rows
+      .filter((row) => grantsSatisfyRequirement(required, [...persistedAgentToolGrants(row), ...COWORKER_READ_BASELINE_GRANTS]))
+      .map((row) => row.agentId),
+  );
+  return new Set(candidates.filter((id) => !able.has(id)));
+}
+
+export type RoomMessageDispatchResult = { messageId: string; plan: RoomWakePlan["kind"] | "turn" | "skipped"; woken: string[] };
 
 /** Decide and send the wakes for one posted message. Re-delivery is a no-op once decided. */
 export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDeps): Promise<RoomMessageDispatchResult> {
   const deps = depsIn ?? await defaultDeps();
   const message = await deps.db.workItemMessage.findUnique({
     where: { messageId },
-    select: { id: true, messageId: true, workItemId: true, senderAgentId: true, structuredPayload: true },
+    select: { id: true, messageId: true, workItemId: true, senderType: true, senderAgentId: true, body: true, createdAt: true, structuredPayload: true },
   });
   const addressing = message ? readRoomMessageAddressing(message.structuredPayload) : null;
   if (!message || !addressing || addressing.wake.state !== "pending") {
@@ -272,30 +395,63 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
   const now = clock(deps);
   const room = await loadRoomForWorkItem(deps, message.workItemId);
   const roleAgents = await loadRoleAgents(deps, room?.id ?? null);
+  const externalAgentIds = new Set<string>(APPROVED_EXTERNAL_ROLES);
+  const candidates = [
+    ...addressing.agents,
+    ...addressing.roles.flatMap((role) => roleAgents[role] ?? []),
+    ...(roleAgents.coordinator ?? []),
+  ].filter((id, i, all) => !externalAgentIds.has(id) && all.indexOf(id) === i);
+  const wakesLastHour = await countWakesLastHour(deps, message.workItemId, now);
   const plan = planRoomWake({
     addressing,
     senderAgentId: message.senderAgentId ?? null,
     roleAgents,
     coordinatorAgentIds: roleAgents.coordinator ?? [],
     executor: room ? { kind: room.executorKind ?? null, ref: room.executorRef ?? null } : null,
-    wakesLastHour: await countWakesLastHour(deps, message.workItemId, now),
-    externalAgentIds: new Set<string>(APPROVED_EXTERNAL_ROLES),
+    wakesLastHour,
+    externalAgentIds,
+    cannotPost: await agentsWithoutRoomPost(deps, candidates),
   });
 
-  const woken = plan.kind === "wake" ? plan.agents : [];
-  await writeWakeState(deps, message, addressing, {
-    state: plan.state,
-    at: now.toISOString(),
-    detail: plan.detail,
-    ...(woken.length ? { woken } : {}),
+  // BI-F5D58F29: a message naming the room's supervised session becomes its next turn.
+  const stored = readStoredRuntimeSession(room?.workspaceState);
+  const supervision = room && stored ? deps.supervision ?? await defaultSupervisedSessionPort() : null;
+  const session = planSupervisedTurn({
+    addressing, stored, live: Boolean(room && supervision?.isLive(room.capsuleId)),
+    hopLimit: ROOM_WAKE_HOP_LIMIT, wakesLastHour, budgetPerHour: ROOM_WAKE_BUDGET_PER_HOUR,
   });
-  if (plan.kind === "pause" || (plan.kind === "wake" && plan.reason === "hop-limit") || (plan.kind === "none" && addressing.hop > 0)) {
-    await postRoomWakeNotice(deps, message.workItemId, plan, now);
+  let outcome: SupervisedTurnOutcome = session.kind === "deliver"
+    ? { kind: "delivered", addressedAs: session.addressedAs }
+    : session.kind === "not-named" ? session : { kind: session.kind, detail: session.detail };
+  let combined = combineSupervisedWake(plan, outcome);
+  if (session.kind === "deliver") {
+    // Claim the wake before the turn, and only while it is still pending: a retry or a sweep
+    // re-publish racing this run must never hand the session the same message twice.
+    if (!await claimPendingWake(deps, message, addressing, { ...combined.wake, at: now.toISOString() })) {
+      return { messageId, plan: "skipped", woken: [] };
+    }
+  } else {
+    await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
   }
-  if (plan.kind !== "wake") return { messageId, plan: plan.kind, woken };
-
   const payload = payloadRecord(message.structuredPayload);
   const workroom = payloadRecord(payload.workroom);
+  if (session.kind === "deliver" && room && supervision) {
+    const caseKey = typeof workroom.caseKey === "string" ? workroom.caseKey : null;
+    outcome = await deliverSupervisedTurn({ db: deps.db, port: supervision, addressedAs: session.addressedAs, room, message, addressing, caseKey });
+    if (outcome.kind !== "delivered") {
+      combined = combineSupervisedWake(plan, outcome);
+      await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
+    }
+  }
+  // A person who addressed a coworker reads the room, not the wake state, so a
+  // refused wake is said in the room as the stopped and paused ones are.
+  if (outcome.kind !== "delivered"
+    && (plan.kind === "pause" || plan.kind === "refuse" || (plan.kind === "wake" && plan.reason === "hop-limit") || (plan.kind === "none" && addressing.hop > 0))) {
+    await postRoomWakeNotice(deps, message.workItemId, plan, now);
+  }
+  if (plan.kind !== "wake") return { messageId, plan: combined.plan, woken: combined.woken };
+  const woken = plan.agents;
+
   const item = await deps.db.workItem.findUnique({ where: { id: message.workItemId }, select: { title: true } });
   const { closesAt } = roomWakeWindow(now);
   for (const agentId of woken) {
@@ -391,4 +547,53 @@ export async function sweepPendingRoomWakes(depsIn?: RoomWakeDeps): Promise<{ re
   const sweepId = `sweep-${now.getTime()}`;
   for (const row of rows) if (await publishRoomMessagePosted(row.messageId, deps, sweepId)) republished += 1;
   return { republished, pending: rows.length };
+}
+
+/**
+ * BI-F5D58F29 (§7.1): a supervised session the portal could not re-attach after
+ * a restart. The room says so, so its executor state is never silently wrong;
+ * the session's addressed messages wait on the cursor; and the room's coworker
+ * coordinators are woken to decide what happens next. A room an external
+ * executor holds gets the notice only: its executor reads it, and no platform
+ * coworker is given a task there (BI-A659C3BD).
+ */
+export async function announceSupervisionLost(
+  input: { capsuleId: string; reason: string; actingUserId: string | null; addressedAs: string | null; wakeCoordinator: boolean },
+  depsIn?: RoomWakeDeps,
+): Promise<{ noticeMessageId: string | null; woken: string[] }> {
+  const deps = depsIn ?? await defaultDeps();
+  const room = await deps.db.workroom.findUnique({ where: { capsuleId: input.capsuleId }, select: { id: true, workItemId: true, executorKind: true } });
+  if (!room?.workItemId) return { noticeMessageId: null, woken: [] };
+  const now = clock(deps);
+  const who = input.addressedAs ?? "The supervised runtime session";
+  const notice = await deps.db.workItemMessage.create({
+    data: {
+      workItemId: room.workItemId,
+      senderType: "system",
+      messageType: "room-wake-notice",
+      body: `${who} lost supervision when the portal restarted (${input.reason}). Messages addressed to it wait on the room cursor until its runtime is started again.`,
+      channel: "in-app",
+      structuredPayload: { roomWakeNotice: { kind: "supervision-lost", at: now.toISOString(), capsuleId: input.capsuleId, addressedAs: input.addressedAs } },
+    },
+  });
+  if (!input.wakeCoordinator || !input.actingUserId || isExternalRoomExecutor(room.executorKind)) {
+    return { noticeMessageId: notice.messageId, woken: [] };
+  }
+  const coordinators = (await loadRoleAgents(deps, room.id)).coordinator ?? [];
+  const item = await deps.db.workItem.findUnique({ where: { id: room.workItemId }, select: { title: true } });
+  const { closesAt } = roomWakeWindow(now);
+  for (const agentId of coordinators) {
+    const data: RoomWakeRequestedEvent = {
+      workItemId: room.workItemId,
+      agentId,
+      laneKey: `${room.workItemId}:${agentId}`,
+      actingUserId: input.actingUserId,
+      caseKey: encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: input.capsuleId }),
+      title: item?.title ?? "Work Room",
+      messageId: notice.messageId,
+      closesAt: closesAt.toISOString(),
+    };
+    await deps.send({ name: ROOM_WAKE_REQUESTED_EVENT, id: roomWakeEventId(room.workItemId, agentId, now), data });
+  }
+  return { noticeMessageId: notice.messageId, woken: coordinators };
 }

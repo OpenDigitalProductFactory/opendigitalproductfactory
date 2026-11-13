@@ -182,6 +182,20 @@ own installations share work through work sync, never through intake.
 
 Almost every box is existing substrate. The genuinely new code is the **GitHub issue read path** and the two scheduled jobs. `dpf.demand.dispositioned` is already a declared activity with a handler — §3.5's writeback obligation is satisfied by using it rather than inventing a notification.
 
+**As realized (BI-FB03E2FD, 2026-11-12).** The audit found `arbitrate` with no
+caller. Per WWMD DI-56D5E82AD9D2 it is wired as ordering plus real decisions,
+not a capacity allocator: each commissioned intake cycle ranks the open
+`ecosystem-inbound` items and records rank and reason as an
+`ecosystem_arbitration` activity on the item (only when the position changes),
+with the top of the queue on the intake job's schedule line. The item's
+`priority` is never written, so a person's setting stands; where the capacity
+line falls stays with the accountable human. A peer submitter is answered on a
+real decision through the existing `dpf.demand.dispositioned` writeback:
+`accepted` when the item moves to `in-progress`, `rejected` when it is retired
+with a recorded reason. A retirement without a reason sends nothing and is
+named on the schedule line. `drawAgainstCapacity`/`buildDispositions` (with
+their `deferred` outcome) remain uncalled; the contract has no `deferred`.
+
 ### 4.4 Ballot composition — every participant votes, but not on everything
 
 Operator direction, 2026-09-16: the vote goes to **all** participants, prioritised on items relevant to them — their own submissions, plus archetype-aligned or common issues others have already submitted. *"We don't want to expose all issues, but smartly evaluate what's there, and scope applicability from the specific instance context."*
@@ -457,6 +471,31 @@ filed as an opaque issue cannot be corroborated or voted on. The federation path
 is only taken when a projector was actually injected — a declared link with no
 way to project would otherwise swallow the report silently. Installs without a
 link keep the relay/direct behaviour byte-for-byte.
+
+### 5.6 Remediation — votes now move the shared priority (BI-626A4ECA), 2026-11-12
+
+Audit on 2026-11-12 found the vote budget built but uncounted: an interest
+response reached the controller as a flat signal and no code turned it into a
+score input. Now:
+
+- `DemandResponseV1` carries an optional integer `weight` (2–4) on `interest`
+  responses only; 1 is the default and is not written. A peer on an older
+  build reads a weighted vote as plain interest.
+- The participant's `respondToFederatedDemandAction` enforces the weekly
+  budget (16 credits, cost = weight²) against this week's outbound responses,
+  read bounded on `updatedAt`. Re-weighting an item refunds its earlier weight.
+- On receipt the controller re-tallies the item (`recordEcosystemVoteTally`):
+  distinct installations become `reach`, mean weight maps onto the impact
+  ladder, written with `demandInputSource = "ai"` through the guarded update,
+  so a human or agreed score is never overwritten. A changed weight updates
+  the held response instead of being dropped as a duplicate, but only when it
+  is strictly newer (`createdAt`), so a late retry cannot revert a correction.
+- The budget is also enforced at the receiver: a peer whose weighted votes
+  received this ISO week cost more than 16 credits has its votes counted at
+  weight 1, and the item's scoring activity records how many were over budget.
+  The sender's check is a courtesy across a trust boundary; this is the bound.
+- A tally that loses the optimistic-concurrency race is retried once; a vote
+  still not counted is logged with its reason (`tallyAfterInboundVote`).
 
 ## 6. Verification
 

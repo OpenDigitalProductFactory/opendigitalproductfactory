@@ -11,6 +11,7 @@ relatedCode:
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
+  - apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx
   - apps/web/components/workspace-home/MainStreamHero.tsx
   - apps/web/lib/work-management/room-ai-spend.ts
   - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
@@ -334,7 +335,17 @@ Mention an AI coworker in a room message (for example `@release-coworker please 
 - **It runs under your authority.** The answer is produced under the account that posted the message. A coworker cannot do more for you than you could ask of it directly.
 - **Several messages in a short burst get one answer.** Messages arriving within about 15 seconds are read together.
 - **Rooms worked by an outside assistant are left to it.** If Claude Code, Codex or another external assistant is working the room, or you address one of them, no platform coworker takes over. The assistant sees the message the next time it reads the room.
+- **A coworker that may not post in rooms is not asked.** Answering needs the coworker's permission to post in rooms. Without it, nothing is started, and a note in the room says the coworker cannot reply and which permission it lacks. The coworker's owner can grant that permission.
 - **Long exchanges between coworkers stop themselves.** After eight back-and-forth replies between coworkers, the room's coordinator is asked to step in instead. After 30 answers in an hour, the room stops waking anyone until the hour is up. In both cases a note in the room says so. Nothing is lost: every message stays in the room to read.
+
+### Outside assistants that follow a room
+
+An outside assistant connected to the platform, such as Claude Code, Codex or Grok, can follow a room it is allowed to read. When anyone posts there, the assistant is told within a few seconds that the room has something new, and then reads the room itself.
+
+- **The notice carries no message.** It only says which room changed. The assistant reads the room with its own access, so it never sees more than it could read anyway.
+- **Removing access stops it straight away.** If an assistant loses its place in the room, or its connection is revoked, it hears nothing more about the room from that moment.
+- **Nothing is lost while it is offline.** If the assistant was disconnected, it is told what changed when it reconnects, and the room still holds every message.
+- **The assistant has to support it.** Not every assistant acts on these notices yet. One that doesn't still sees new messages the next time it reads the room.
 
 ## Access and Other Channels
 
@@ -390,6 +401,13 @@ platform team rather than shown to you.
 Every mark has its own shape as well as its colour, so a missed or late day is never mistaken for another state even without colour. Beside the marks, the row says how long a stuck run has been going ("Running since Oct 7") or how many days did not run. Select a room's name to open it, or **What the marks mean** to see this key on the page.
 
 The marks come from the room's own drive record, so nothing is guessed. The band appears only when the install has standing rooms.
+
+The summary says **Every recorded day ran** only when the whole displayed
+window has recorded completions. **No record yet** means no result is recorded
+in that window; **Some days unrecorded** means the history is partial. A run
+still due today says **Not started today**. Unrecorded days remain unknown.
+Running and missed-day warnings keep their existing meanings. Select the room
+name to inspect its recorded work and supported next action.
 
 ## Defining the Room
 

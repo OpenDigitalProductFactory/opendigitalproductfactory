@@ -4154,6 +4154,19 @@
         "related"
       ]
     },
+    "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md": {
+      "publicHref": "/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "corpus-and-vectors-converge-on-every-platform-update",
+        "rule",
+        "why",
+        "how-to-apply",
+        "related-principles"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/count-the-operations-to-outcome.md": {
       "publicHref": "/founder-kernel/wiki/principles/count-the-operations-to-outcome/",
       "portalHref": null,
@@ -4389,6 +4402,7 @@
         "expertise-compounds-in-profession-coworkers",
         "rule",
         "why",
+        "the-ladder",
         "observed-gap-production-week-to-2026-11-04",
         "how-to-apply",
         "related-principles"
@@ -6532,6 +6546,7 @@
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
         "alert-delivery",
         "ai-capacity-watch-bi-24092dc9",
+        "platform-continuity-watch-bi-3e2f87fa",
         "log-capture-runs-by-default-bi-f8024a9d",
         "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
@@ -10560,7 +10575,8 @@
         "2-what-the-next-archetype-costs",
         "3-which-archetype-next",
         "4-the-gap-to-close-before-the-next-run",
-        "5-where-scenario-data-lives"
+        "5-where-scenario-data-lives",
+        "6-jurisdiction-is-a-test-axis-learned-by-pattern"
       ]
     },
     "docs/testing/archetype-job-validation.md": {
@@ -12165,6 +12181,7 @@
         "the-inheritance-chain",
         "profile-kinds",
         "what-onboarding-seeds-for-wwwd",
+        "retracting-a-stance",
         "the-profession-scope-wsid",
         "ratifying-a-policy-once",
         "calling-the-gate",
@@ -12214,6 +12231,7 @@
         "overview",
         "start-with-the-end-to-end-picture",
         "find-and-work-with-a-coworker",
+        "see-what-coworkers-are-doing-now",
         "reading-a-coworkers-shape",
         "key-concepts",
         "what-you-can-do",
@@ -12406,6 +12424,7 @@
         "what-counts-as-sensitive-detail-and-what-does-not",
         "possible-outcomes",
         "initial-boundaries",
+        "source-code-from-a-public-repository",
         "masking-and-correctness",
         "retention-prompts",
         "standards-and-qualified-review"
@@ -12468,6 +12487,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "reading-saved-proof-without-a-runner",
         "development-workrooms",
         "the-operator-workspace",
         "current-maturity",
@@ -12924,6 +12944,7 @@
         "how-the-finance-bridge-starts",
         "activate-a-contract",
         "record-a-subscription-payment",
+        "what-subscriptions-really-cost",
         "allowance-evaluation",
         "recovery-and-evidence",
         "related-routes",
@@ -12956,6 +12977,7 @@
         "before-you-change-a-control",
         "recurring-invoices",
         "dunning-currency-tax-and-approvals",
+        "statutory-rates-payroll-uses",
         "payment-runs-are-records-not-transfers",
         "recovery-and-evidence",
         "related-help"
@@ -13189,6 +13211,7 @@
         "key-concepts",
         "what-you-can-do",
         "reading-epic-progress",
+        "security-findings-from-github",
         "clearing-copies-of-a-paired-installations-demand",
         "shared-demand",
         "activate-local-demand",
@@ -13202,6 +13225,7 @@
         "promoter-timeout",
         "platform-software-composition-and-currency",
         "what-this-installation-is",
+        "how-this-computer-is-set-up-to-keep-the-platform-running",
         "who-runs-this-installation",
         "what-your-ai-coworkers-may-do-here",
         "operational-posture-across-your-installations",
@@ -13766,6 +13790,7 @@
         "the-main-value-stream-on-your-home-page",
         "when-work-keeps-piling-up",
         "asking-a-coworker-in-the-room",
+        "outside-assistants-that-follow-a-room",
         "access-and-other-channels",
         "finite-and-standing-rooms",
         "day-to-day-operations",

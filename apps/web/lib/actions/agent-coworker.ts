@@ -1866,7 +1866,7 @@ export async function sendMessage(input: {
     const { runWithTransientInferenceRetry } = await import("@/lib/build/inference-retry");
     const agenticResult = await runWithTransientInferenceRetry(
       () => executeAutonomousAgenticLoop({
-        chatHistory,
+        chatHistory, activeAssignment: { messageId: userMsg.id, content: trimmedContent },
         systemPrompt: populatedPrompt,
         systemPromptInstructionSpans,
         messageOrigins: labelled.origins,
@@ -2306,7 +2306,7 @@ export async function sendMessage(input: {
 
   await persistCoworkerResponseArtifact({
     taskRunId: currentTaskRun?.taskRunId ?? null,
-    responseContent,
+    acceptedMessage: agentMsg, deliveryOutcome: foregroundResourceWait ? "capacity-wait" : responseIsSystemFailure ? "blocked" : "responded",
     routeContext: input.routeContext,
     threadId: input.threadId,
     agentId: agent.agentId,

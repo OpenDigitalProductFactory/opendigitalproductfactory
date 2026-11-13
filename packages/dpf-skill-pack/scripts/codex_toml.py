@@ -11,7 +11,9 @@ per-layer view is exactly the parsed `config.toml`. Writing the candidate into
 a private, throw-away CODEX_HOME and asking Codex to read it gives the parser
 Codex itself will use, with no added dependency (absorb, don't adopt).
 
-Order: `tomllib` (3.11+), then `tomli`, then the Codex CLI. A TOML date-time is
+Order: `tomllib` (3.11+), then `tomli`, then the Codex CLI. Generic
+loads isolate reserved client keys beneath an unknown table; explicit `loads`
+retains Codex semantic validation. A TOML date-time is
 refused on the Codex path, because its JSON answer turns it into a string and a
 rewrite would silently change the value's type.
 
@@ -189,9 +191,101 @@ def _loads_uncached(text: str, binary: Optional[str] = None, timeout: float = DE
         shutil.rmtree(home, ignore_errors=True)
 
 
+_GENERIC_ROOT = "dpf_generic_toml"
+_JSON_LOSSY_VALUE = re.compile(
+    r"(?:\d{4}-\d{2}-\d{2}|\d{2}:\d{2}:\d{2}|[-+]?(?:nan|inf)(?=[\s,\]}#]|$))"
+)
+
+
+def _scope_generic_document(text: str) -> str:
+    """Hide client schema keys, without interpreting TOML values.
+
+    Codex parses the grammar. This scanner scopes real table headers;
+    quoted tokens and comments are copied verbatim, including multiline strings.
+    An unknown root table keeps Codex's reserved settings out of the document.
+    Unquoted values that JSON cannot preserve are refused before dispatch.
+    """
+    pieces = ["[" + _GENERIC_ROOT + "]\n"]
+    i = 0
+    line_start = True
+    containers = []
+    last_significant = None
+    in_header = False
+    while i < len(text):
+        if line_start:
+            start = i
+            while i < len(text) and text[i] in " \t":
+                i += 1
+            pieces.append(text[start:i])
+            if not containers and text.startswith("[", i):
+                in_header = True
+                width = 2 if text.startswith("[[", i) else 1
+                pieces.append(text[i:i + width] + _GENERIC_ROOT + ".")
+                i += width
+            line_start = False
+            if i == len(text):
+                break
+        char = text[i]
+        expects_value = last_significant in ("=", "[") or (
+            last_significant == "," and containers and containers[-1] == "["
+        )
+        if not in_header and expects_value:
+            token = _JSON_LOSSY_VALUE.match(text, i)
+            if token:
+                raise UnsupportedToml(
+                    "TOML date/time and non-finite values cannot survive the JSON fallback; configuration unchanged"
+                )
+        if char == "#":
+            end = text.find("\n", i)
+            end = len(text) if end < 0 else end
+            pieces.append(text[i:end])
+            i = end
+        elif char in ("'", '"'):
+            width = 3 if text.startswith(char * 3, i) else 1
+            end = i + width
+            while end < len(text):
+                if char == '"' and text[end] == "\\":
+                    end += 2
+                elif text.startswith(char * width, end):
+                    end += width
+                    if width == 3:
+                        while end < len(text) and text[end] == char:
+                            end += 1
+                    break
+                else:
+                    end += 1
+            pieces.append(text[i:end])
+            i = end
+            last_significant = "quoted"
+        else:
+            if not in_header:
+                if char in "[{":
+                    containers.append(char)
+                elif char in "]}" and containers:
+                    containers.pop()
+            pieces.append(char)
+            i += 1
+            line_start = char == "\n"
+            if line_start:
+                in_header = False
+            if not char.isspace():
+                last_significant = char
+    return "".join(pieces)
+
+
 def loads_any(text: str, context_dir: Optional[Path] = None) -> dict[str, Any]:
-    """Parse TOML with tomllib, tomli, or the Codex CLI, in that order."""
+    """Read generic TOML without imposing a client's configuration schema."""
     parser = _stdlib_parser()
     if parser is not None:
         return parser.loads(text)
-    return loads(text, context_dir=context_dir)
+    try:
+        result = loads(_scope_generic_document(text), context_dir=context_dir)
+    except UnsupportedToml:
+        raise
+    except ValueError:
+        # Client diagnostics can quote user values; generic errors never do.
+        raise ValueError("Invalid TOML; configuration unchanged") from None
+    document = result.get(_GENERIC_ROOT)
+    if not isinstance(document, dict):
+        raise CodexTomlUnavailable("the Codex CLI returned no generic TOML document")
+    return document
