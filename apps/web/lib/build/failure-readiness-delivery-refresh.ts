@@ -1,4 +1,4 @@
-import type { GithubPrObservation, GithubPrReadiness } from "./github-pr-readiness";
+import { checkBlocksMerge, type GithubPrObservation, type GithubPrReadiness } from "./github-pr-readiness";
 
 /** The required check that reads the platform-published `dpf/failure-readiness` status. */
 export const FAILURE_READINESS_CHECK_NAME = "Failure Readiness";
@@ -35,9 +35,11 @@ export async function refreshFailureReadinessForDelivery(input: {
 }): Promise<FailureReadinessRefresh> {
   const unchanged = { readiness: input.readiness, observeAgain: false, refreshed: false, rerunRunIds: [] };
   if (!input.observation.checks.some(check => check.name === FAILURE_READINESS_CHECK_NAME)) return unchanged;
-  const failing = input.observation.checks.filter(check => check.status.toUpperCase() === "COMPLETED"
-    && check.conclusion?.toUpperCase() === "FAILURE");
-  // Only a red check that is nothing but Failure Readiness can be cleared by republishing.
+  // Non-required checks (for example GitHub's rate-limited Code Quality scans) do not
+  // block the merge, so they must not stop the re-run either (BI-D081EDD0).
+  const failing = input.observation.checks.filter(check => checkBlocksMerge(check)
+    && check.status.toUpperCase() === "COMPLETED" && check.conclusion?.toUpperCase() === "FAILURE");
+  // Only a required red check that is nothing but Failure Readiness can be cleared by republishing.
   const onlyReadinessRed = input.readiness.kind === "checking" && input.readiness.reason === "checks-failing"
     && failing.length > 0 && failing.every(check => readinessSignal(check.name));
   if (input.readiness.kind !== "ready" && !onlyReadinessRed) return unchanged;

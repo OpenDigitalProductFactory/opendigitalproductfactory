@@ -2,6 +2,7 @@ import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import type { DataEffect, DestinationClass } from "@/lib/govern/data/taxonomy";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { DataPolicyDecision } from "@/lib/govern/data/policy-decision";
+import type { RepositoryVisibility } from "@/lib/forge/managed-repository-access";
 
 export type InferenceDataClass =
   | "customer-records"
@@ -136,6 +137,12 @@ export type InferenceDataScreenReceipt = {
    * provider outage.
    */
   sensitivityFloorApplied?: boolean;
+  /**
+   * Visibility of the repository the payload's code came from, when the caller
+   * supplied it (BI-FC94F754). Explains a `public` measurement of a code
+   * payload. A level, never the code: rawPayloadStored stays false.
+   */
+  sourceCodeVisibility?: RepositoryVisibility;
   rawPayloadStored: false;
 };
 
@@ -169,6 +176,33 @@ export type GovernedPayloadHint = {
   purpose?: string;
 };
 
+/**
+ * Where the source code in a payload comes from (BI-FC94F754).
+ *
+ * Code is classified by the repository it belongs to, not by the fact that a
+ * payload contains code. A public repository's code is already published, so
+ * sending it to a provider discloses nothing new: it measures `public`, and
+ * DPF platform code (an open-source repository) is the common case. A private
+ * repository, or one whose visibility could not be proven, keeps the
+ * `confidential` handling code has always had.
+ *
+ * Supplied ONLY by a caller that resolved it from a trusted record (a
+ * Workroom's repository, read against the forge). It is never inferred from
+ * payload text: scanning code cannot establish where it came from. Licence is
+ * carried as evidence; it governs reuse, not confidentiality, so a licence
+ * never lowers a private repository and its absence never raises a public one.
+ *
+ * Provenance covers the CODE only. Secrets, customer records and every other
+ * governed class found inside a public diff are classified exactly as before.
+ */
+export type SourceCodeProvenance = {
+  /** `owner/name` of the repository, from the caller's trusted record. */
+  repository: string;
+  visibility: RepositoryVisibility;
+  /** SPDX licence id when known, for the record only. */
+  licence?: string | null;
+};
+
 export type InferencePayloadClassificationInput = {
   messages: ChatMessage[];
   systemPrompt: string;
@@ -195,6 +229,8 @@ export type InferencePayloadClassificationInput = {
   tools?: Array<Record<string, unknown>>;
   taskType?: string;
   governedData?: GovernedPayloadHint[];
+  /** Repository the payload's code belongs to; absent means unproven (BI-FC94F754). */
+  sourceCodeProvenance?: SourceCodeProvenance;
 };
 
 export type InferencePayloadClassification = {
