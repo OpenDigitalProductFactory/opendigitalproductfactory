@@ -1,5 +1,6 @@
 import type { WorkPortfolioRoleKey } from "@/lib/navigation/area-portfolio";
 import { loadCapsuleLivenessInventory, type InventoryDb } from "@/lib/work-capsules/liveness-inventory";
+import { readAtlasPlacement } from "@/lib/work-management/atlas-layout";
 import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
 import { loadRoomAccountabilityBatch, type RoomWorkforceDb } from "@/lib/work-management/room-workforce.server";
 import {
@@ -34,10 +35,12 @@ export async function loadAtlasPicture(
   // bounded read keyed by the rooms already read, never one query per room.
   const read = inventory.capsulesAll.slice(0, limit).map((room) => String(room.capsuleId));
   const claims = read.length && db.workroom
-    ? await db.workroom.findMany({ where: { capsuleId: { in: read } }, select: { capsuleId: true, scopeClaims: true } }).catch(() => [])
+    ? await db.workroom.findMany({ where: { capsuleId: { in: read } }, select: { capsuleId: true, scopeClaims: true, outcomeAnchor: true } }).catch(() => [])
     : [];
   const shapeById = new Map(claims.map((row: { capsuleId: string; scopeClaims: unknown }) =>
     [row.capsuleId, readDeclaredWorkShapeKey(row.scopeClaims)] as const));
+  const placementById = new Map(claims.map((row: { capsuleId: string; outcomeAnchor?: unknown }) =>
+    [row.capsuleId, readAtlasPlacement(row.outcomeAnchor)] as const));
   const rooms: AtlasInventoryRoom[] = inventory.capsulesAll.map((room) => {
     const drive = room.drive as { action: string | null; reason: string | null; attentionRecorded?: boolean; stageKey?: string | null } | undefined;
     return {
@@ -51,6 +54,7 @@ export async function loadAtlasPicture(
       drive: drive ? { action: drive.action, reason: drive.reason, attentionRecorded: drive.attentionRecorded } : null,
       stageKey: str(drive?.stageKey),
       shapeKey: shapeById.get(String(room.capsuleId)) ?? null,
+      placement: placementById.get(String(room.capsuleId)) ?? null,
     };
   });
   const rowIds = inventory.capsulesAll.slice(0, limit).flatMap((room) => typeof room.id === "string" ? [room.id] : []);

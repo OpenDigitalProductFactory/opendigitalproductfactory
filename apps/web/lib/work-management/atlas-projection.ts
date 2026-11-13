@@ -13,6 +13,7 @@
 import type { MessageKey } from "@dpf/i18n";
 import { projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 import { ATLAS_HEALTH_STATES, type AtlasHealth } from "@/lib/work-management/atlas-health";
+import type { AtlasPlacement } from "@/lib/work-management/atlas-layout";
 import type { RoomWorkforce } from "@/lib/work-management/room-workforce.server";
 
 /** Longest title carried in the overview; the room page has the full one. */
@@ -34,6 +35,8 @@ export type AtlasInventoryRoom = {
   stageKey: string | null;
   /** Declared delivery or activity shape key (`readDeclaredWorkShapeKey`), null when none. */
   shapeKey?: string | null;
+  /** Where the room sits in a business layout (A6a), from `outcomeAnchor.atlasPlacement`. */
+  placement?: AtlasPlacement | null;
 };
 
 export type AtlasOwner = Pick<RoomWorkforce, "accountability" | "accountableDisplayName">;
@@ -47,6 +50,8 @@ export type AtlasRoom = {
   label: MessageKey<"workrooms">;
   /** Declared shape key; left out when the room declares none ("Unshaped"). */
   shape?: string;
+  /** Business-layout lane and slot; left out when the room records none. */
+  placement?: AtlasPlacement;
   owner?: string;
   stage?: string;
   lastSignalAt?: string;
@@ -81,6 +86,7 @@ export function projectAtlasRoom(room: AtlasInventoryRoom, owner: AtlasOwner | u
     health: summary.health,
     label: summary.label,
     ...(room.shapeKey ? { shape: room.shapeKey } : {}),
+    ...(room.placement ? { placement: room.placement } : {}),
     ...(owner?.accountableDisplayName ? { owner: owner.accountableDisplayName } : {}),
     ...(room.stageKey ? { stage: room.stageKey } : {}),
     ...(room.trueLivenessAt ? { lastSignalAt: room.trueLivenessAt } : {}),
