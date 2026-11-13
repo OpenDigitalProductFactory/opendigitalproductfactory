@@ -24,6 +24,14 @@ describe("SubscriptionCostEstimatesPanel", () => {
     expect(html).toContain("Limits were reached in 10 of 60 5-hour windows");
   });
 
+  it("stays closed on arrival so the page's visible word budget holds", () => {
+    const html = renderToStaticMarkup(<SubscriptionCostEstimatesPanel plans={[]} unpriced={[]} />);
+    expect(html).toMatch(/^<details[^>]*>/);
+    expect(html).not.toMatch(/^<details[^>]*\bopen\b/);
+    expect(html).toContain("<summary");
+    expect(html).toContain("Subscription costs</summary>");
+  });
+
   it("names subscriptions still counted at $0 and asks for the fee", () => {
     const html = renderToStaticMarkup(
       <SubscriptionCostEstimatesPanel plans={[]} unpriced={[{ providerId: "anthropic-sub", name: "Claude subscription" }]} />,

@@ -61,11 +61,10 @@ export function SubscriptionCostEstimatesPanel({
   unpriced: UnpricedSubscription[];
 }) {
   return (
-    <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4" aria-labelledby="subscription-cost-heading">
-      <h2 id="subscription-cost-heading" className="text-base font-semibold text-[var(--dpf-text)]">
-        What AI subscriptions really cost
-      </h2>
-      <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
+    // Closed by default: the AI Spend page's arrival view stays within its frozen word budget.
+    <details className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+      <summary className="cursor-pointer text-base font-semibold text-[var(--dpf-text)]">Subscription costs</summary>
+      <p className="mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
         A subscription is not free. Its monthly fee is spread over the work it can actually do once its usage limits
         reset. Resets make the exact figure uncertain, so each estimate is a range. Subscription use is charged to
         budgets at this estimate; the daily allowance for paid AI does not count it.
@@ -83,6 +82,6 @@ export function SubscriptionCostEstimatesPanel({
           {plans.map((plan) => <PlanEstimate key={plan.contractId} plan={plan} />)}
         </div>
       ) : null}
-    </section>
+    </details>
   );
 }

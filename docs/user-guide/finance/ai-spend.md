@@ -61,9 +61,9 @@ charge the card or initiate a bank transfer.
 ## What Subscriptions Really Cost
 
 A subscription is not free. Its monthly fee buys the work the plan can do
-before its usage limits reset. The **What AI subscriptions really cost**
-section at the top of `/finance/spend/ai` divides each plan's recorded fee by
-the capacity it actually delivers:
+before its usage limits reset. Open **Subscription costs** at the top of
+`/finance/spend/ai` to see each plan's recorded fee divided by the capacity it
+actually delivers:
 
 - **Fee:** the active subscription contract recorded by **Record A
   Subscription Payment**. A quarterly or annual payment is spread per month.
