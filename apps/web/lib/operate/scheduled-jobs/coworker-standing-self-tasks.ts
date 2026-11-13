@@ -449,6 +449,47 @@ export const COWORKER_STANDING_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "rules against the wrong statute is worse than drafting none.",
     ],
   ),
+  // ── acumen craft-stewardship: the two roles whose declared standing shape had
+  //    no standing entry. acumen-room-shapes.ts gives six professions
+  //    `cadence: "standing"` with `standingShape: "craft-stewardship"`;
+  //    data-architect, ux-design-critic, platform-engineer and
+  //    integration-engineer already had entries, these two did not. One of them
+  //    had its cadence axis WAIVED as "event-triggered by construction, not
+  //    standing", which its own shape contradicts — the waiver is removed in the
+  //    same change rather than left to look like a decision.
+  "build-specialist": task(
+    "Name the builds that have stopped moving", "/build", "31 6 * * 1", "31 6 * * 1,4",
+    [
+      "Goal: every in-flight build either moved since the last sweep or is named here with",
+      "what it is waiting on. Craft stewardship for this profession is noticing stalled work",
+      "before a human has to ask why nothing shipped.",
+      "1. Read the builds currently in flight and the phase each sits in.",
+      "2. For each that has not advanced, name the phase, how long it has been there, and the",
+      "   specific thing it waits on — an approval, a gate, a decision, a missing input.",
+      "3. Separate 'waiting on a human' from 'waiting on nothing', because only the second is",
+      "   a defect. A build waiting on a named person is working as designed.",
+      "4. Report a build you could not read as UNREAD, never as moving.",
+      "You abandon nothing, advance nothing and approve nothing — the stall is the finding, and",
+      "clearing it belongs to whoever owns the phase. An empty read is not a healthy pipeline.",
+    ],
+  ),
+  "security-engineer": task(
+    "Re-read the exposure posture", "/platform", "33 6 * * 1", "33 6 * * 1,4",
+    [
+      "Goal: the exposure picture is current rather than as-of-whenever-someone-last-asked.",
+      "This is the standing counterpart to triaging a specific case: it asks what has CHANGED",
+      "in what is reachable, not what to do about one finding.",
+      "1. Re-read what is reachable from outside and from which trust boundary.",
+      "2. Name what changed since the last sweep: a newly exposed surface, a dependency that",
+      "   moved, a grant that widened. No change is a finding too — say so explicitly.",
+      "3. Rank by exposure on THIS install, never by a scanner's severity for a CVE in the",
+      "   abstract. Severity is a property of the vulnerability; exposure is a property of us.",
+      "4. A component you could not read is UNASSESSED, never clean.",
+      "You remediate nothing — no patch, rotation, revocation or reconfiguration. At this risk",
+      "band the proposal rail is the whole point, and a sweep that fixed things silently would",
+      "be worse than no sweep.",
+    ],
+  ),
   "ux-design-critic": task(
     "Critique the surfaces that changed", "/build", "29 5 * * 1-5", "29 5,13 * * 1-5",
     [

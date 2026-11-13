@@ -6,6 +6,8 @@
 // A session is operating state of its provider client (GAID §6.9), never a
 // subject of its own: it is addressed as `<client GAID>#session=<threadId>`.
 
+import { addressingNamesSession } from "@/lib/work-management/room-message-addressing";
+
 import type { RuntimeProvider } from "./types";
 
 export const DEFAULT_RUNTIME_CWD = "/workspace";
@@ -89,18 +91,10 @@ export function readStoredRuntimeSession(workspaceState: unknown): StoredRuntime
 /** The addressing fields a supervised-session decision reads. */
 export type SessionAddressing = { agents: string[]; sessions: string[]; hop: number };
 
-/**
- * Does this message name the stored session? Its exact qualifier does. Its
- * provider client's agent id does too, when the message qualifies no session of
- * that client: an unqualified address reaches the room's supervised session. A
- * qualifier for another thread of the same client does not.
- */
+/** Does this message name the stored session? See addressingNamesSession. */
 export function messageNamesSession(addressing: SessionAddressing, stored: StoredRuntimeSession | null): boolean {
   if (!stored?.addressedAs) return false;
-  if (addressing.sessions.includes(stored.addressedAs)) return true;
-  const clientGaid = stored.addressedAs.split("#")[0]!;
-  const qualifiesClient = addressing.sessions.some((ref) => ref.split("#")[0] === clientGaid);
-  return !qualifiesClient && addressing.agents.includes(providerClientAgentId(stored.provider));
+  return addressingNamesSession(addressing, { addressedAs: stored.addressedAs, clientAgentId: providerClientAgentId(stored.provider) });
 }
 
 export type SupervisedTurnDecision =

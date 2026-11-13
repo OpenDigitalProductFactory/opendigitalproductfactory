@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AI_CAPACITY_ISSUE_TYPE,
   AI_CAPACITY_PLATFORM_KEY,
+  AI_CAPACITY_SUBSCRIPTIONS_KEY,
   aiCapacityProviderKey,
   assessAiCapacity,
   classifyFailureCause,
@@ -242,16 +243,84 @@ describe("assessAiCapacity", () => {
   });
 });
 
+// BI-5A6C4011: 2026-11-06..11-10 Codex (reset 11-09 18:42) and the Claude
+// subscription (reset 11-10 16:00) were exhausted. Routing correctly stopped
+// calling them, so no failed calls, so nothing told the operator.
+describe("assessAiCapacity from recorded capacity", () => {
+  const codexReset = new Date(NOW.getTime() + 30 * 3600_000);
+  const claudeReset = new Date(NOW.getTime() + 52 * 3600_000);
+  const exhausted: CapacityProvider[] = [
+    { providerId: "codex", name: "Codex", status: "active", subscription: true, capacity: { state: "quota_resets_at", retryAt: codexReset } },
+    { providerId: "anthropic-sub", name: "Claude subscription", status: "active", subscription: true, capacity: { state: "quota_resets_at", retryAt: claudeReset } },
+    { providerId: "xai", name: "xAI", status: "active", capacity: { state: "reauth_required", retryAt: null } },
+    { providerId: "zai", name: "Z.ai", status: "inactive", capacity: { state: "billing_action_required", retryAt: null } },
+    { providerId: "local", name: "Local engine", status: "active", capacity: { state: "available", retryAt: null } },
+  ];
+
+  it("raises a provider item with its reset time when routing has stopped calling it", () => {
+    const result = assessAiCapacity({ rows: rows("local", 20, "success"), providers: exhausted, now: NOW, previouslyOpen: new Set() });
+    const byKey = new Map(result.findings.map((f) => [f.issueKey, f]));
+    const codex = byKey.get(aiCapacityProviderKey("codex"));
+    expect(codex).toMatchObject({ kind: "provider", cause: "usage-limit", attempts: 0, retryAtIso: codexReset.toISOString() });
+    expect(codex?.explanation).toContain("resets at 2026-10-28 18:00 UTC");
+    expect(codex?.explanation).not.toMatch(/All 0/);
+    expect(byKey.get(aiCapacityProviderKey("xai"))).toMatchObject({ cause: "sign-in" });
+    expect(byKey.has(aiCapacityProviderKey("zai"))).toBe(false);
+    expect(byKey.has(aiCapacityProviderKey("local"))).toBe(false);
+  });
+
+  it("raises one item naming every exhausted subscription and the earliest reset", () => {
+    const result = assessAiCapacity({ rows: [], providers: exhausted, now: NOW, previouslyOpen: new Set() });
+    const subs = result.findings.find((f) => f.issueKey === AI_CAPACITY_SUBSCRIPTIONS_KEY);
+    expect(subs).toMatchObject({ kind: "subscriptions", earliestResetIso: codexReset.toISOString() });
+    expect(subs?.explanation).toContain("Codex");
+    expect(subs?.explanation).toContain("Claude subscription");
+    expect(subs?.explanation).toContain("2026-10-28 18:00 UTC");
+  });
+
+  it("does not call subscriptions exhausted when they are only briefly rate limited", () => {
+    const soft = exhausted.map((p) => (p.subscription ? { ...p, capacity: { state: "rate_limited", retryAt: new Date(NOW.getTime() + 60_000) } } : p));
+    const result = assessAiCapacity({ rows: [], providers: soft, now: NOW, previouslyOpen: new Set() });
+    expect(result.findings.some((f) => f.issueKey === AI_CAPACITY_SUBSCRIPTIONS_KEY)).toBe(false);
+    expect(result.findings.some((f) => f.issueKey === aiCapacityProviderKey("codex"))).toBe(false);
+  });
+
+  it("does not raise the subscription item while one subscription still has capacity", () => {
+    const oneLeft = exhausted.map((p) => (p.providerId === "codex" ? { ...p, capacity: { state: "available", retryAt: null } } : p));
+    const result = assessAiCapacity({ rows: [], providers: oneLeft, now: NOW, previouslyOpen: new Set([AI_CAPACITY_SUBSCRIPTIONS_KEY]) });
+    expect(result.findings.some((f) => f.issueKey === AI_CAPACITY_SUBSCRIPTIONS_KEY)).toBe(false);
+    expect(result.held).not.toContain(AI_CAPACITY_SUBSCRIPTIONS_KEY);
+  });
+
+  it("releases a usage-limit item once its reset has passed instead of holding it until a call lands", () => {
+    const reset = exhausted.map((p) => (p.providerId === "anthropic-sub" ? { ...p, capacity: { state: "quota_resets_at", retryAt: new Date(NOW.getTime() - 60_000) } } : p));
+    const result = assessAiCapacity({ rows: [], providers: reset, now: NOW, previouslyOpen: new Set([aiCapacityProviderKey("anthropic-sub")]) });
+    expect(result.findings.some((f) => f.issueKey === aiCapacityProviderKey("anthropic-sub"))).toBe(false);
+    expect(result.held).not.toContain(aiCapacityProviderKey("anthropic-sub"));
+  });
+
+  it("does not raise from a stale capacity row while the provider is serving calls", () => {
+    const result = assessAiCapacity({ rows: rows("codex", 3, "success"), providers: exhausted, now: NOW, previouslyOpen: new Set() });
+    expect(result.findings.some((f) => f.issueKey === aiCapacityProviderKey("codex"))).toBe(false);
+  });
+});
+
 type IssueRow = { issueKey: string; status: string; issueType: string; summary?: string; details?: unknown };
 
-function fakeDb(telemetry: CapacityTelemetryRow[], existing: IssueRow[] = []) {
+function fakeDb(
+  telemetry: CapacityTelemetryRow[],
+  existing: IssueRow[] = [],
+  capacity: Array<{ providerId: string | null; state: string; retryAt: Date | null }> = [],
+  subscriptions: string[] = [],
+) {
   const issues = new Map(existing.map((row) => [row.issueKey, { ...row }]));
   const db: AiCapacityWatchDb = {
     adapterRunTelemetry: { findMany: vi.fn(async () => telemetry) },
     modelProvider: {
       findMany: vi.fn(async () => providers.map(({ providerId, name, status }) => ({ providerId, name, status }))),
     },
-    providerCapacityStatus: { findMany: vi.fn(async () => []) },
+    providerCapacityStatus: { findMany: vi.fn(async () => capacity) },
+    aiProviderConnection: { findMany: vi.fn(async () => subscriptions.map((providerId) => ({ providerId }))) },
     portfolioQualityIssue: {
       findMany: vi.fn(async (args: { where: { issueType: string; status: string } }) =>
         [...issues.values()]
@@ -335,5 +404,29 @@ describe("runAiCapacityWatch", () => {
     expect(notify).toHaveBeenCalledWith(
       expect.objectContaining({ itemKey: AI_CAPACITY_PLATFORM_KEY, deepLink: "/platform/ai/providers", riskClass: "high-risk" }),
     );
+  });
+
+  it("tells the operator once when every subscription is exhausted, with no failed calls at all", async () => {
+    const notify = vi.fn(async () => undefined);
+    const reset = new Date(NOW.getTime() + 6 * 3600_000);
+    const { db, issues } = fakeDb(
+      rows("local", 10, "success"),
+      [],
+      [
+        { providerId: "codex", state: "quota_resets_at", retryAt: reset },
+        { providerId: "anthropic-sub", state: "quota_resets_at", retryAt: new Date(reset.getTime() + 3600_000) },
+      ],
+      ["codex", "anthropic-sub"],
+    );
+    await runAiCapacityWatch(db, { now: NOW, notify });
+    expect(issues.get(AI_CAPACITY_SUBSCRIPTIONS_KEY)?.status).toBe("open");
+    expect(issues.get(aiCapacityProviderKey("codex"))?.status).toBe("open");
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ itemKey: AI_CAPACITY_SUBSCRIPTIONS_KEY, riskClass: "high-risk" }));
+
+    // Once the limits reset, the items close on their own.
+    const later = new Date(reset.getTime() + 2 * 3600_000);
+    await runAiCapacityWatch(db, { now: later, notify });
+    expect(issues.get(AI_CAPACITY_SUBSCRIPTIONS_KEY)?.status).toBe("resolved");
+    expect(issues.get(aiCapacityProviderKey("codex"))?.status).toBe("resolved");
   });
 });

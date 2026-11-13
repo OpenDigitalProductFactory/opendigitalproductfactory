@@ -71,7 +71,11 @@ their age is then counted from when they were created and the real figure may
 be lower; hover it for the explanation. The progress bar shows done in one
 colour and awaiting acceptance as a separate segment after it. The workspace
 **Backlog** tile shows the same counts as **Awaiting acceptance** and **Awaiting
-14+ days**, above **Done**.
+14+ days**, above **Done**. The tile counts only the items this installation
+can accept. Items copied in from a connected installation by work sync are
+accepted by the installation they came from, so the tile shows them separately
+as **Awaiting at peer installation** and leaves them out of the other two
+counts.
 
 **Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn

@@ -17,10 +17,17 @@
 //      provider page.
 //   3. >= 10 counted calls in total with a served share below 50% is a platform
 //      collapse. It gets ONE platform row listing what is failing.
-//   4. Rows clear themselves: a later window that serves calls resolves them. A
+//   4. Recorded capacity (BI-5A6C4011, WWMD DI-ED9FE6FEE192): an active provider
+//      whose ProviderCapacityStatus says calls will fail (a usage limit with a
+//      future reset, a rejected sign-in, a billing block) gets its provider row
+//      even with no failed calls, because routing has correctly stopped calling
+//      it. When every active subscription provider is hard-blocked, ONE subscriptions
+//      row names them all and the earliest reset.
+//   5. Rows clear themselves: a later window that serves calls resolves them. A
 //      row whose provider served nothing this window (no calls, or only a few
 //      failures) is HELD, not resolved, because routing may simply have stopped
-//      sending to a dead provider.
+//      sending to a dead provider. A usage-limit row whose reset has passed is
+//      released rather than held until a call happens to land.
 //
 // Thresholds and window: WWMD DI-E5208C7D1666 (window/threshold) and
 // DI-BA01CDC705DB (host and surface). The rows are `ai_capacity_loss`
@@ -32,6 +39,7 @@ import type { MonitorIssueDb } from "@/lib/observability/monitor-issue-writer";
 import { openMonitorIssue, resolveMonitorIssuesExcept } from "@/lib/observability/monitor-issue-writer";
 import { AI_PROVIDER_CONNECTIONS_ROUTE } from "@/lib/ai-provider-routes";
 import { providerDetailHref } from "./provider-health";
+import { isHardCapacityBlock } from "./capacity-routing-exclude";
 
 export const AI_CAPACITY_ISSUE_TYPE = "ai_capacity_loss" as const;
 export const AI_CAPACITY_WINDOW_MS = 30 * 60_000;
@@ -39,6 +47,7 @@ export const PROVIDER_MIN_ATTEMPTS = 5;
 export const PLATFORM_MIN_ATTEMPTS = 10;
 export const PLATFORM_MIN_SERVED_SHARE = 0.5;
 export const AI_CAPACITY_PLATFORM_KEY = "ai-capacity:platform";
+export const AI_CAPACITY_SUBSCRIPTIONS_KEY = "ai-capacity:subscriptions";
 const TELEMETRY_READ_CAP = 5000;
 
 export function aiCapacityProviderKey(providerId: string): string {
@@ -60,6 +69,8 @@ export type CapacityProvider = {
   /** ModelProvider.status — an operator-inactive provider is never held open. */
   status: string;
   capacity?: { state: string; retryAt: Date | null } | null;
+  /** Has an active subscription (subscription-cli) connection. */
+  subscription?: boolean;
 };
 
 export type CapacityCause =
@@ -94,7 +105,14 @@ export type PlatformCapacityFinding = FindingCopy & {
   failing: Array<{ providerId: string; name: string; cause: CapacityCause }>;
 };
 
-export type CapacityFinding = ProviderCapacityFinding | PlatformCapacityFinding;
+export type SubscriptionCapacityFinding = FindingCopy & {
+  kind: "subscriptions";
+  issueKey: string;
+  exhausted: Array<{ providerId: string; name: string; cause: CapacityCause; retryAtIso: string | null }>;
+  earliestResetIso: string | null;
+};
+
+export type CapacityFinding = ProviderCapacityFinding | PlatformCapacityFinding | SubscriptionCapacityFinding;
 
 const SERVED = new Set(["success", "refusal"]);
 const FAILED = new Set(["error", "timeout"]);
@@ -147,7 +165,9 @@ function formatUtc(date: Date): string {
 
 function providerCopy(name: string, providerId: string, cause: CapacityCause, attempts: number, retryAt: Date | null): FindingCopy {
   const href = providerDetailHref(providerId);
-  const failed = `All ${attempts} AI requests sent to ${name} in the last 30 minutes failed.`;
+  const failed = attempts > 0
+    ? `All ${attempts} AI requests sent to ${name} in the last 30 minutes failed.`
+    : `Routing has stopped sending work to ${name}.`;
   switch (cause) {
     case "sign-in":
       return {
@@ -204,6 +224,19 @@ const CAUSE_PHRASE: Record<CapacityCause, string> = {
   "local-saturated": "is overloaded",
   "calls-failing": "is failing every request",
 };
+
+function capacitySnapshot(capacity: CapacityProvider["capacity"]) {
+  return capacity ? { state: capacity.state, retryAtMs: capacity.retryAt?.getTime() ?? null } : null;
+}
+
+/** A usage-limit row whose stated reset has passed: expected to work again. */
+function quotaResetPassed(capacity: CapacityProvider["capacity"], now: Date): boolean {
+  return !!capacity && QUOTA_STATES.has(capacity.state) && !!capacity.retryAt && capacity.retryAt <= now;
+}
+
+function futureReset(capacity: CapacityProvider["capacity"], now: Date): Date | null {
+  return capacity?.retryAt && capacity.retryAt > now ? capacity.retryAt : null;
+}
 
 function share(attempts: number, served: number): number | null {
   return attempts === 0 ? null : served / attempts;
@@ -264,6 +297,58 @@ export function assessAiCapacity(input: {
     });
   }
 
+  // Recorded capacity: routing has stopped calling these, so telemetry is silent.
+  const found = new Set(findings.map((f) => f.issueKey));
+  for (const provider of input.providers) {
+    if (provider.status !== "active" || found.has(aiCapacityProviderKey(provider.providerId))) continue;
+    if ((byProvider.get(provider.providerId)?.served ?? 0) > 0) continue;
+    if (!isHardCapacityBlock(capacitySnapshot(provider.capacity), input.now.getTime())) continue;
+    const cause = causeFromCapacity(provider.capacity?.state) ?? "calls-failing";
+    const retryAt = cause === "usage-limit" ? futureReset(provider.capacity, input.now) : null;
+    findings.push({
+      kind: "provider",
+      issueKey: aiCapacityProviderKey(provider.providerId),
+      providerId: provider.providerId,
+      name: provider.name,
+      cause,
+      attempts: 0,
+      retryAtIso: retryAt?.toISOString() ?? null,
+      ...providerCopy(provider.name, provider.providerId, cause, 0, retryAt),
+    });
+  }
+
+  const subscriptions = input.providers.filter((p) => p.subscription && p.status === "active");
+  const exhausted = subscriptions.filter((p) => {
+    if ((byProvider.get(p.providerId)?.served ?? 0) > 0) return false;
+    // Only providers that have said calls will fail; a short rate limit is
+    // still re-admitted by routing and is not "out of capacity".
+    return isHardCapacityBlock(capacitySnapshot(p.capacity), input.now.getTime());
+  });
+  if (subscriptions.length > 0 && exhausted.length === subscriptions.length) {
+    const listed = exhausted.map((p) => {
+      const cause = causeFromCapacity(p.capacity?.state) ?? "calls-failing";
+      const reset = futureReset(p.capacity, input.now);
+      return { providerId: p.providerId, name: p.name, cause, retryAtIso: reset?.toISOString() ?? null, reset };
+    });
+    const earliest = listed.map((p) => p.reset).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+    const named = listed
+      .map((p) => `${p.name} ${CAUSE_PHRASE[p.cause]}${p.reset ? ` (resets ${formatUtc(p.reset)})` : ""}`)
+      .join("; ");
+    findings.push({
+      kind: "subscriptions",
+      issueKey: AI_CAPACITY_SUBSCRIPTIONS_KEY,
+      exhausted: listed.map(({ reset: _reset, ...rest }) => rest),
+      earliestResetIso: earliest?.toISOString() ?? null,
+      title: "Every AI subscription is out of capacity",
+      explanation:
+        `${named}. Coworkers and builds run only on the remaining providers` +
+        (earliest ? ` until the first reset at ${formatUtc(earliest)}.` : ".") +
+        " Open AI providers to change a plan or restore a sign-in sooner.",
+      actionLabel: "Review AI providers",
+      href: AI_PROVIDER_CONNECTIONS_ROUTE,
+    });
+  }
+
   const total = { attempts, served, share: share(attempts, served) };
   if (attempts >= PLATFORM_MIN_ATTEMPTS && served / attempts < PLATFORM_MIN_SERVED_SHARE) {
     const failing = findings
@@ -296,9 +381,13 @@ export function assessAiCapacity(input: {
       if (attempts < PLATFORM_MIN_ATTEMPTS) held.push(key);
       continue;
     }
+    // Derived from recorded capacity each cycle; nothing to wait for.
+    if (key === AI_CAPACITY_SUBSCRIPTIONS_KEY) continue;
     const providerId = key.slice(aiCapacityProviderKey("").length);
     const provider = providerById.get(providerId);
     if (!provider || provider.status === "inactive") continue;
+    // The provider said when access returns, and that time has passed.
+    if (quotaResetPassed(provider.capacity, input.now)) continue;
     // Only a served call proves recovery. A window of a few failures (below the
     // finding threshold) is still a dark provider (BI-783EBEE6).
     if ((byProvider.get(providerId)?.served ?? 0) === 0) held.push(key);
@@ -314,6 +403,7 @@ export interface AiCapacityWatchDb extends MonitorIssueDb {
   providerCapacityStatus: {
     findMany(args: unknown): Promise<Array<{ providerId: string | null; state: string; retryAt: Date | null }>>;
   };
+  aiProviderConnection: { findMany(args: unknown): Promise<Array<{ providerId: string }>> };
   portfolioQualityIssue: MonitorIssueDb["portfolioQualityIssue"] & {
     findMany(args: { where: { issueType: string; status: string }; select: { issueKey: true } }): Promise<Array<{ issueKey: string }>>;
   };
@@ -364,20 +454,35 @@ export async function runAiCapacityWatch(
     }),
   ]);
   const previouslyOpen = new Set(openRows.map((r) => r.issueKey));
+  const providerPrefix = aiCapacityProviderKey("");
   const providerIds = [
     ...new Set([
       ...rows.map((r) => r.providerId),
-      ...[...previouslyOpen].filter((k) => k !== AI_CAPACITY_PLATFORM_KEY).map((k) => k.slice(aiCapacityProviderKey("").length)),
+      ...[...previouslyOpen].filter((k) => k.startsWith(providerPrefix)).map((k) => k.slice(providerPrefix.length)),
     ]),
   ];
-  const [providerRows, capacityRows] = await Promise.all([
-    db.modelProvider.findMany({ where: { providerId: { in: providerIds } }, select: { providerId: true, name: true, status: true } }),
-    db.providerCapacityStatus.findMany({ where: { providerId: { in: providerIds } }, select: { providerId: true, state: true, retryAt: true } }),
+  // Active providers are read even without traffic: an exhausted provider that
+  // routing has stopped calling is exactly the one telemetry cannot see.
+  const [providerRows, subscriptionRows] = await Promise.all([
+    db.modelProvider.findMany({
+      where: { OR: [{ providerId: { in: providerIds } }, { status: "active" }] },
+      select: { providerId: true, name: true, status: true },
+    }),
+    db.aiProviderConnection.findMany({
+      where: { status: "active", executionChannel: "subscription-cli" },
+      select: { providerId: true },
+    }),
   ]);
+  const capacityRows = await db.providerCapacityStatus.findMany({
+    where: { providerId: { in: providerRows.map((p) => p.providerId) } },
+    select: { providerId: true, state: true, retryAt: true },
+  });
   const capacityById = new Map(capacityRows.filter((r) => r.providerId).map((r) => [r.providerId as string, r]));
+  const subscriptionIds = new Set(subscriptionRows.map((r) => r.providerId));
   const providers: CapacityProvider[] = providerRows.map((p) => ({
     ...p,
     capacity: capacityById.get(p.providerId) ?? null,
+    subscription: subscriptionIds.has(p.providerId),
   }));
 
   const assessment = assessAiCapacity({ rows, providers, now, previouslyOpen });
@@ -387,7 +492,7 @@ export async function runAiCapacityWatch(
     await openMonitorIssue(db, {
       issueKey: finding.issueKey,
       issueType: AI_CAPACITY_ISSUE_TYPE,
-      severity: finding.kind === "platform" ? "error" : "warn",
+      severity: finding.kind === "provider" ? "warn" : "error",
       summary: title,
       details: {
         ...details,
@@ -412,7 +517,7 @@ export async function runAiCapacityWatch(
         title: finding.title,
         body: finding.explanation,
         deepLink: finding.href,
-        riskClass: finding.kind === "platform" ? "high-risk" : "bounded-write",
+        riskClass: finding.kind === "provider" ? "bounded-write" : "high-risk",
       });
     }
   }

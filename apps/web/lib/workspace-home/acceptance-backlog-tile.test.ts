@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
+
 import type { TileStatus } from "@/lib/workspace-home/types";
 import {
   loadAcceptanceBacklogShare,
@@ -46,7 +48,7 @@ describe("loadAcceptanceBacklogShare", () => {
       },
     ]);
     const db = {
-      backlogItem: { findMany: itemFindMany },
+      backlogItem: { findMany: itemFindMany, count: vi.fn(async () => 0) },
       backlogItemActivity: { findMany: activityFindMany },
     } as unknown as AcceptanceBacklogDb;
 
@@ -55,7 +57,33 @@ describe("loadAcceptanceBacklogShare", () => {
     expect(itemFindMany).toHaveBeenCalledTimes(1);
     expect(itemFindMany.mock.calls[0]?.[0]).toMatchObject({ where: { status: "awaiting-acceptance" } });
     expect(activityFindMany).toHaveBeenCalledTimes(1);
-    expect(share).toEqual({ awaiting: 3, aged: 2, agedByCreation: 1 });
+    expect(share).toEqual({ awaiting: 3, aged: 2, agedByCreation: 1, peerOwned: 0 });
+  });
+
+  // BI-17C5F43A: a work-sync mirror is accepted only at its origin installation
+  // (BI-C5794F1D), so it is not part of this install's acceptance queue.
+  it("leaves peer-owned mirrors out of the queue and counts them separately", async () => {
+    const itemFindMany = vi.fn(async (_args: unknown) => [
+      { id: "local", status: "awaiting-acceptance", createdAt: daysAgo(2) },
+    ]);
+    const count = vi.fn(async (_args: unknown) => 341);
+    const db = {
+      backlogItem: { findMany: itemFindMany, count },
+      backlogItemActivity: { findMany: vi.fn(async () => []) },
+    } as unknown as AcceptanceBacklogDb;
+
+    const share = await loadAcceptanceBacklogShare(db, now);
+
+    expect(itemFindMany.mock.calls[0]?.[0]).toMatchObject({
+      where: {
+        status: "awaiting-acceptance",
+        AND: [{ OR: [{ body: null }, { NOT: { body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } } }] }],
+      },
+    });
+    expect(count.mock.calls[0]?.[0]).toEqual({
+      where: { status: "awaiting-acceptance", body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } },
+    });
+    expect(share).toEqual({ awaiting: 1, aged: 0, agedByCreation: 0, peerOwned: 341 });
   });
 });
 
@@ -91,8 +119,21 @@ describe("withAcceptanceBacklogTile", () => {
     ]);
   });
 
+  it("shows peer-owned mirrors as their own row, outside the awaiting count", () => {
+    const tiles = withAcceptanceBacklogTile(baseTiles(), { awaiting: 63, aged: 10, agedByCreation: 0, peerOwned: 341 });
+
+    expect(tiles.backlog?.metrics).toEqual([
+      { label: "Open", value: 5, color: "var(--dpf-info)" },
+      { label: "In progress", value: 2, color: "var(--dpf-warning)" },
+      { label: "Awaiting acceptance", value: 63, color: "var(--dpf-warning)" },
+      { label: "Awaiting 14+ days", value: "10", color: "var(--dpf-error)" },
+      { label: "Awaiting at peer installation", value: 341, color: "var(--dpf-muted)" },
+      { label: "Done", value: 11, color: "var(--dpf-success)" },
+    ]);
+  });
+
   it("uses theme tokens only", () => {
-    const tiles = withAcceptanceBacklogTile(baseTiles(), { awaiting: 1, aged: 1, agedByCreation: 0 });
+    const tiles = withAcceptanceBacklogTile(baseTiles(), { awaiting: 1, aged: 1, agedByCreation: 0, peerOwned: 2 });
 
     for (const metric of tiles.backlog?.metrics ?? []) {
       expect(metric.color).toMatch(/^var\(--dpf-[a-z-]+\)$/);

@@ -521,8 +521,10 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   const acMet = acceptance.filter((a) => a?.met === true).length;
   const acTotal = acceptance.length;
 
-  const readinessTrailers =
-    typeof params.readinessTrailers === "string" ? params.readinessTrailers.trim() : "";
+  // BI-BA6EDCDD: carry the gate decisions the build's own commits recorded; the
+  // published commit is platform-authored, so they are otherwise lost.
+  const readinessTrailers = await (await import("@/lib/build/recorded-gate-decisions"))
+    .readBuildPublicationDecisions({ buildId, sandboxId: build.sandboxId, explicit: params.readinessTrailers });
   const prBody = [
     `## ${build.title}`,
     "",
@@ -599,7 +601,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
 
   // BI-6B57D85F: publish each file's committed content from the build's own
   // tree, not the shared sandbox mount (which sits on the client branch).
-  const { resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
+  const { resolveBuildWorkdir, SANDBOX_WORKSPACE } = await import("@/lib/build/sandbox/build-branch");
   const { execInSandbox } = await import("@/lib/build/sandbox/sandbox");
   const published = await publishBranchCommit({
     headOwner: repoOwner,
@@ -609,7 +611,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     diff: shareableDiff,
     token,
     ...(build.sandboxId
-      ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox }) }
+      ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox, branchFallback: build.buildBranch ? { repoDir: SANDBOX_WORKSPACE, branch: build.buildBranch } : undefined }) }
       : {}),
   });
   let canonicalReadiness = {

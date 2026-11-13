@@ -32,6 +32,13 @@ export interface RoomMessageAddressing {
   sessions: string[];
   hop: number;
   senderGaid: string | null;
+  /**
+   * BI-FDE1B10C: set when the message was posted by the room's supervised
+   * runtime session, recognised from the room token it posted with. The
+   * session's address (`<client GAID>#session=<threadId>`), so the hop count
+   * can follow the session even though it posts as the person who started it.
+   */
+  senderSession?: string;
   /** The user whose authority the message was posted under; a wake runs under it. */
   actingUserId: string;
   wake: { state: RoomWakeState; at: string; detail?: string; woken?: string[] };
@@ -100,6 +107,7 @@ export function readRoomMessageAddressing(structuredPayload: unknown): RoomMessa
     sessions: strings(record.sessions),
     hop: typeof record.hop === "number" && Number.isFinite(record.hop) ? record.hop : 0,
     senderGaid: typeof record.senderGaid === "string" ? record.senderGaid : null,
+    ...(typeof record.senderSession === "string" ? { senderSession: record.senderSession } : {}),
     actingUserId: typeof record.actingUserId === "string" ? record.actingUserId : "",
     wake: {
       state: (typeof wake.state === "string" ? wake.state : "pending") as RoomWakeState,
@@ -129,19 +137,48 @@ export function roomMessageAddressingView(structuredPayload: unknown, fallbackSe
   };
 }
 
+/** A supervised runtime session as the room addresses it. */
+export interface RoomSessionRef {
+  /** `<client GAID>#session=<threadId>`. */
+  addressedAs: string;
+  /** The provider client agent the session runs as (AGT-EXT-CLAUDE, AGT-EXT-CODEX). */
+  clientAgentId: string;
+}
+
+/**
+ * Does this addressing name the session? Its exact qualifier does. Its
+ * provider client's agent id does too, when the message qualifies no session of
+ * that client: an unqualified address reaches the room's supervised session. A
+ * qualifier for another thread of the same client does not.
+ */
+export function addressingNamesSession(addressing: { agents: string[]; sessions: string[] }, session: RoomSessionRef): boolean {
+  if (addressing.sessions.includes(session.addressedAs)) return true;
+  const clientGaid = session.addressedAs.split("#")[0]!;
+  const qualifiesClient = addressing.sessions.some((ref) => ref.split("#")[0] === clientGaid);
+  return !qualifiesClient && addressing.agents.includes(session.clientAgentId);
+}
+
 /**
  * A human message starts an exchange at hop 0. An agent's message is one hop
  * past the newest earlier message in the room that was addressed to it, so two
- * agents answering each other climb toward the limit.
+ * agents answering each other climb toward the limit. A supervised session
+ * posts as the person who started it, so its message is also one hop past the
+ * newest earlier message that named the session (BI-FDE1B10C).
  */
 export function computeRoomMessageHop(args: {
   senderType: "user" | "agent";
   senderAgentId?: string | null;
+  /** Set when the post was made with the room's supervised-session token. */
+  senderSession?: RoomSessionRef | null;
   /** Earlier messages in the room, newest first. */
   recent: ReadonlyArray<{ addressing: RoomMessageAddressing | null }>;
 }): number {
   if (args.senderType !== "agent" || !args.senderAgentId) return 0;
-  const prior = args.recent.find((m) => m.addressing?.agents.includes(args.senderAgentId!));
+  const { senderAgentId, senderSession } = args;
+  const prior = args.recent.find(({ addressing }) => addressing && (
+    addressing.agents.includes(senderAgentId)
+    || (senderSession ? addressingNamesSession(addressing, senderSession) : false)
+  ));
   return prior?.addressing ? prior.addressing.hop + 1 : 0;
 }
 

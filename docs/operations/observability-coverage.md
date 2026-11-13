@@ -159,6 +159,16 @@ a few failures (BI-783EBEE6), because routing may have stopped sending to it. Wi
 WWMD decision DI-E5208C7D1666; the host and surface from DI-BA01CDC705DB. The step
 runs even when both alert evaluators are unreachable.
 
+The watch also reads `ProviderCapacityStatus` for every active provider
+(BI-5A6C4011, WWMD DI-ED9FE6FEE192). A provider whose recorded capacity is a hard
+block (a usage limit with a future reset, `reauth_required`,
+`billing_action_required`, `unsupported_plan`) and that served nothing in the
+window gets its provider row with the reset time, even with no failed calls:
+routing no longer re-admits such providers (DI-39E7B8DFB7BC), so telemetry alone
+would stay silent. When every active `subscription-cli` provider is hard-blocked, one
+`ai-capacity:subscriptions` row names each with its reset and the earliest reset.
+A usage-limit row whose stated reset has passed resolves instead of being held.
+
 The issue-report intake no longer files a repeat signature as a new `BI-PIR-*`
 item. Minted items carry `Signature: <dedupeKey>` and `Source report: <id>`. A
 report whose signature or report id already has a live bug item increments that
