@@ -378,6 +378,10 @@ describe("retained foreground production response publication", () => {
     expect(run.status).toBe("input-required");
     expect(run.progressPayload).toMatchObject({ foregroundOutcome: "blocked", foregroundPublication: { kind: "blocked" } });
     expect("agentMessage" in result && result.agentMessage.role).toBe("system");
+    const { createTaskArtifact } = await import("@/lib/tak/task-records");
+    expect(createTaskArtifact).not.toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ kind: "coworker-response" }),
+    }));
     expect(governedExecuteTool).not.toHaveBeenCalled();
   });
 
@@ -393,6 +397,11 @@ describe("retained foreground production response publication", () => {
     expect(run.status).toBe("completed");
     expect(run.progressPayload).toMatchObject({ foregroundOutcome: "responded", foregroundPublication: { kind: "responded" } });
     expect("agentMessage" in result && result.agentMessage.role).toBe("assistant");
+    const { createTaskArtifact } = await import("@/lib/tak/task-records");
+    expect(createTaskArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ kind: "coworker-response", deliveryState: "responded",
+        acceptedMessageId: "agentMessage" in result ? result.agentMessage.id : "missing" }),
+    }));
     expect(governedExecuteTool).not.toHaveBeenCalled();
   });
 
