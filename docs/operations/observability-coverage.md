@@ -165,7 +165,7 @@ block (a usage limit with a future reset, `reauth_required`,
 `billing_action_required`, `unsupported_plan`) and that served nothing in the
 window gets its provider row with the reset time, even with no failed calls:
 routing no longer re-admits such providers (DI-39E7B8DFB7BC), so telemetry alone
-would stay silent. When every active `subscription-cli` provider is blocked, one
+would stay silent. When every active `subscription-cli` provider is hard-blocked, one
 `ai-capacity:subscriptions` row names each with its reset and the earliest reset.
 A usage-limit row whose stated reset has passed resolves instead of being held.
 
