@@ -3,32 +3,33 @@ import { namespaceMessages } from "@dpf/i18n";
 
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
-import { HeldWorkroomsList } from "@/components/ops/workrooms/HeldWorkroomsList";
 import { RhythmStrip } from "@/components/ops/workrooms/atlas/RhythmStrip";
-import { WorkroomActivitySection } from "@/components/ops/workrooms/WorkroomActivitySection";
-import { Surface } from "@/components/ui/Surface";
+import { WorkAtlas } from "@/components/ops/workrooms/atlas/WorkAtlas";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
+import { getT } from "@/lib/i18n/t.server";
+import { atlasHolds, atlasShapeMeta } from "@/lib/work-management/atlas-page.server";
+import { parseAtlasFilters, parseAtlasGroup } from "@/lib/work-management/atlas-map";
+import { loadAtlasPicture } from "@/lib/work-management/atlas-projection.server";
 import { loadHeldWorkrooms } from "@/lib/work-management/held-workrooms";
 import { loadStandingRhythms } from "@/lib/work-management/standing-run-history.server";
 
 export const dynamic = "force-dynamic";
 
-export default async function WorkroomsPage() {
-  const [held, rhythms, locale] = await Promise.all([
-    loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(),
+type Props = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
+
+/**
+ * Work in progress leads with the Work Atlas (BI-3791FDD8): today's question,
+ * the triage counts and every open room in one picture. It replaces the lead
+ * band, the operator groups, the room inventory, the held-rooms section and
+ * the activity tree (design §6); held rooms are the "Stuck or held" filter,
+ * and their recorded cause shows on their rows.
+ */
+export default async function WorkroomsPage({ searchParams }: Props = {}) {
+  const params = (await searchParams) ?? {};
+  const view = { ...parseAtlasFilters(params), ...(parseAtlasGroup(params) ? { group: parseAtlasGroup(params) } : {}) };
+  const [picture, held, rhythms, locale, t] = await Promise.all([
+    loadAtlasPicture(prisma), loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(), getT("workrooms"),
   ]);
-  // Awaited here rather than rendered as <WorkroomActivitySection>, so the page
-  // resolves in one pass (and renders in tests without a Suspense boundary).
-  const activity = await WorkroomActivitySection({
-    heldCapsuleIds: held.map(room => room.capsuleId),
-    children: (
-      // BI-E8C78E80: rooms the drive is holding, with why and for how long.
-      <Surface className="mt-6" rounded="xl">
-        <h2 className="text-base font-semibold text-[var(--dpf-text)]">Shared recovery issues</h2>
-        <HeldWorkroomsList rows={held} nowIso={new Date().toISOString()} />
-      </Surface>
-    ),
-  });
 
   return (
     <div>
@@ -39,7 +40,8 @@ export default async function WorkroomsPage() {
         </p>
       </div>
       <OpsTabNav />
-      {activity}
+      <WorkAtlas picture={picture} view={view} basePath="/ops/workrooms"
+        shapes={atlasShapeMeta(picture.rooms)} holds={atlasHolds(held)} locale={locale.language} t={t} />
       {/* Work Atlas A4 (BI-D8A6F0F2): standing operations get their own band, so a missed day is as visible as a stuck project. */}
       <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
         <RhythmStrip rows={rhythms} locale={locale.language} />

@@ -156,12 +156,13 @@ A count is not an answer. "12 rooms" tells an operator nothing they can act on,
 so a collapsed branch carries a bounded set of concrete statements — what is
 being done, or what is waiting — chosen attention-first, not a bare number.
 
-A symbol must be earned. Motion means fresh evidence of execution right now. A
+A symbol must be earned. "Working" means fresh evidence of execution right now. A
 held lease, a claimed shape, a successful tool call and a completed task are not
-that. `deriveActivitySignal` in
-[`apps/web/lib/work-management/portfolio-activity-projection.ts`](../../apps/web/lib/work-management/portfolio-activity-projection.ts)
-resolves one of seven states — executing, waiting on a person, queued, blocked,
-completed, stale, unknown — and only `executing` animates.
+that. `classifyAtlasHealth` in
+[`apps/web/lib/work-management/atlas-health.ts`](../../apps/web/lib/work-management/atlas-health.ts)
+resolves one of six states (needs a person, stuck or held, working, waiting its
+turn, no recent signal, finished). It replaced the activity tree's own seven-state
+signal when the Work Atlas retired that tree (BI-3791FDD8).
 
 Three distinctions carry the intent. A verified receipt and a blocker are
 statements about the work and hold regardless of how recently anything was
@@ -223,9 +224,9 @@ Counts supplement statements; they never replace them. A branch row shows how
 many rooms it holds and how many need attention, beside the concrete statements,
 not instead of them.
 
-Symbols are rendered from the server-decided signal, each with an accessible
-name, and only the executing state animates — stilled under reduced motion. See
-[`PortfolioActivityTree.tsx`](../../apps/web/components/ops/workrooms/PortfolioActivityTree.tsx).
+Symbols are rendered from the server-decided state, each with an accessible
+name and its own shape as well as its colour. See
+[`AtlasGlyph.tsx`](../../apps/web/components/ops/workrooms/atlas/AtlasGlyph.tsx).
 
 ## Naming rules
 

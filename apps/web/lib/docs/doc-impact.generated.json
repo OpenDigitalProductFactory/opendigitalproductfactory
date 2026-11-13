@@ -454,10 +454,13 @@
     "apps/web/components/ops/workrooms/AreaFlowPanel.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
-    "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx": [
+    "apps/web/components/ops/workrooms/atlas/AtlasGlyph.tsx": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
     "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/components/ops/workrooms/atlas/WorkAtlas.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/components/performance/BusinessPerformanceDashboard.tsx": [
@@ -1668,6 +1671,9 @@
     "apps/web/lib/work-capsules/work-capsule-store.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
+    "apps/web/lib/work-management/atlas-health.ts": [
+      "docs/architecture/workroom-vocabulary-boundary.md"
+    ],
     "apps/web/lib/work-management/autonomy-envelope.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
@@ -1687,9 +1693,6 @@
     "apps/web/lib/work-management/human-accountability.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md",
       "docs/maintenance/staleness-report.md"
-    ],
-    "apps/web/lib/work-management/portfolio-activity-projection.ts": [
-      "docs/architecture/workroom-vocabulary-boundary.md"
     ],
     "apps/web/lib/work-management/room-ai-spend.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -3993,9 +3996,9 @@
       "scripts/measure-capability-completeness.mjs"
     ],
     "docs/architecture/workroom-vocabulary-boundary.md": [
-      "apps/web/components/ops/workrooms/PortfolioActivityTree.tsx",
+      "apps/web/components/ops/workrooms/atlas/AtlasGlyph.tsx",
+      "apps/web/lib/work-management/atlas-health.ts",
       "apps/web/lib/work-management/human-accountability.ts",
-      "apps/web/lib/work-management/portfolio-activity-projection.ts",
       "apps/web/lib/work-management/worker-rollup.ts",
       "scripts/check-prose-lint.ts",
       "scripts/prose-lint-baseline.json"
@@ -4698,6 +4701,7 @@
       "apps/web/components/build/delivery-outcomes/DeliveryOutcomeScorecard.tsx",
       "apps/web/components/ops/workrooms/AreaFlowPanel.tsx",
       "apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx",
+      "apps/web/components/ops/workrooms/atlas/WorkAtlas.tsx",
       "apps/web/components/workspace-home/MainStreamHero.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
       "apps/web/components/workspace/WorkCaseDetailView.tsx",

@@ -55,7 +55,7 @@ export const AREA_HOME_PURPOSE_CONTRACTS: PurposeContractModule = [
         statePredicate: "No Workroom carries this area's portfolio.",
         stateSource: {
           oracleKey: "route-owned-read-model",
-          sourceRef: "apps/web/components/ops/workrooms/WorkroomActivitySection.tsx",
+          sourceRef: "apps/web/lib/work-management/atlas-projection.server.ts",
         },
         essentialEvidenceKeys: ["area-work", "no-live-rooms"],
         primaryExperience: { kind: "informational", messageKey: "area.no-work" },

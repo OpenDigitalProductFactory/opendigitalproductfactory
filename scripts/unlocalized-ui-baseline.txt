@@ -1016,9 +1016,6 @@ apps/web/components/ops/StandardChangeCatalog.tsx	physical-direction	1
 apps/web/components/ops/TeardownControl.tsx	jsx-copy	17
 apps/web/components/ops/TeardownControl.tsx	physical-direction	2
 apps/web/components/ops/WorkSyncPanel.tsx	jsx-copy	1
-apps/web/components/ops/workrooms/PortfolioActivityTree.tsx	jsx-copy	2
-apps/web/components/ops/workrooms/PortfolioActivityTree.tsx	physical-direction	2
-apps/web/components/ops/workrooms/WorkroomInventory.tsx	jsx-copy	3
 apps/web/components/owner-first/OwnerFirstSummary.tsx	physical-direction	1
 apps/web/components/performance/BusinessAnalysisWorkspace.tsx	jsx-copy	18
 apps/web/components/performance/BusinessAnalysisWorkspace.tsx	physical-direction	1
@@ -1547,7 +1544,6 @@ apps/web/lib/ward/ward-store.ts	physical-direction	1
 apps/web/lib/work-capsules.ts	physical-direction	2
 apps/web/lib/work-capture/recurrence-expander.ts	locale-literal	3
 apps/web/lib/work-management/delivery-shapes.ts	physical-direction	4
-apps/web/lib/work-management/portfolio-activity-projection.ts	locale-literal	3
 apps/web/lib/work-management/worker-rollup.ts	locale-literal	5
 packages/db/src/federation-health.ts	locale-literal	1
 packages/db/src/portfolio-sources/absorption-posture-resolver.ts	locale-literal	1

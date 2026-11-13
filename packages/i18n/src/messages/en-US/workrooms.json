@@ -571,5 +571,46 @@
       "review": "Review",
       "ship": "Ship"
     }
+  },
+  "atlas": {
+    "intro": "Grey means a room is moving on its own. Colour and shape mean you should look. Select a square to open the room, or a group to see its rows.",
+    "questionLabel": "Today's question",
+    "question": "What is waiting on a person?",
+    "answerNone": "No room is waiting on a person.",
+    "answerCount": "{$count} rooms are waiting on a person.",
+    "answerOldest": "“{$title}” has had no new signal since {$date}.",
+    "countsLabel": "Filter by state",
+    "clearFilter": "Show every state",
+    "state": {
+      "needs-person": "Needs a person",
+      "stuck": "Stuck or held",
+      "working": "Working now",
+      "waiting": "Waiting its turn",
+      "no-signal": "No recent signal",
+      "finished": "Finished"
+    },
+    "mapHeading": "Workrooms by portfolio and shape",
+    "mapTotal": "{$count} rooms",
+    "truncated": "Showing the {$count} most recently updated rooms. Counts cover those rooms.",
+    "portfolioSummary": "{$total} rooms · {$need} need you · {$stuck} stuck",
+    "shapeSummary": "{$shape}: {$count} rooms",
+    "unshaped": "Unshaped",
+    "unplaced": "Not yet placed",
+    "cell": "{$title}: {$state}",
+    "showRows": "Show rows for {$shape}",
+    "hideRows": "Hide rows for {$shape}",
+    "more": "{$count} more, in the order above. Filter by state to narrow.",
+    "stages": "Stages",
+    "stageCurrent": "Current step: {$stage}",
+    "owner": "Accountable: {$name}",
+    "ownerNone": "No accountable person",
+    "heldSince": "Held since {$date}: {$reason}",
+    "empty": "No workrooms match this view.",
+    "filtered": "Filtered to {$filter}.",
+    "clearAll": "Clear filters",
+    "areaLink": "See this portfolio's rooms in the Work Atlas",
+    "areaSummary": "{$total} rooms in this portfolio · {$need} need a person · {$stuck} stuck or held",
+    "rowMeta": "{$what} · {$who}",
+    "held": "Held: {$reason}"
   }
 }

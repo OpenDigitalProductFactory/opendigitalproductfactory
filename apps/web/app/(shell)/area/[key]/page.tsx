@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { prisma } from "@dpf/db";
 import { namespaceMessages } from "@dpf/i18n";
 import { notFound, redirect } from "next/navigation";
 
 import { PortfolioFlowTiles, ShapeFlowDrillIn } from "@/components/ops/workrooms/AreaFlowPanel";
-import { WorkroomActivitySection } from "@/components/ops/workrooms/WorkroomActivitySection";
+import { AtlasPortfolioLink } from "@/components/ops/workrooms/atlas/AtlasPortfolioLink";
+import { loadAtlasPicture } from "@/lib/work-management/atlas-projection.server";
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { SectionNav } from "@/components/shell/SectionNav";
 import { Surface } from "@/components/ui/Surface";
@@ -59,7 +61,11 @@ export default async function AreaPage({ params, searchParams }: Props) {
   const team = view === "team" ? await loadAreaTeam(section.key, section.portfolioRole) : [];
   const work =
     view === "work" && canSeeWork
-      ? await WorkroomActivitySection({ portfolioRole: section.portfolioRole, scopeLabel: section.label })
+      ? section.portfolioRole
+        // Work Atlas A2 (BI-3791FDD8): the area counts its rooms and links into the Atlas instead of listing them.
+        ? <AtlasPortfolioLink picture={await loadAtlasPicture(prisma, { portfolioRole: section.portfolioRole })}
+            portfolio={section.portfolioRole} t={tFlow} />
+        : null
       : null;
   // EP-B70E718D F4/F5: how this area's work flows, and one shape drawn across its rooms.
   // A failed read hides the panel; the room list below still renders.
