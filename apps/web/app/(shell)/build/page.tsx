@@ -7,7 +7,7 @@ import { prisma } from "@dpf/db";
 import { getExecutionEpicRollups, getFeatureBuildById, getFeatureBuilds } from "@/lib/feature-build-data";
 import { getPortfoliosForSelect } from "@/lib/backlog-data";
 import { BuildStudio } from "@/components/build/BuildStudio";
-import { SavedBuildReader } from "@/components/build/SavedBuildReader";
+import { SavedBuildReader } from "@/components/build/ReviewPanel";
 import { loadBuildStudioCapability } from "@/lib/build/build-studio-capability";
 import { loadBuildStudioCustomerStatuses, type CapsuleFindManyDelegate } from "@/lib/build/customer-status-loader";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";

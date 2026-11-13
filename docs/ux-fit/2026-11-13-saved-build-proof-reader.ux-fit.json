@@ -4,13 +4,13 @@
   "decisionInteractionId": "DI-A96411492A3F",
   "scope": {
     "files": [
-      "apps/web/components/build/SavedBuildReader.tsx"
+      "apps/web/components/build/ReviewPanel.tsx"
     ]
   },
   "evidence": {
     "kind": "propose-n-pick",
     "consideredOptions": ["guard-existing-studio", "isolated-native-saved-reader"]
   },
-  "rationale": "The recorded autonomy-eligible, high-confidence platform decision selected the isolated native reader over propagating readOnly through the full execution shell. Both options retain existing data and authority. The reader reuses DataTable, Button and ReviewPanel while keeping mutation/inference effects unmounted and setup progressively disclosed. The ee2a3a02 preview measured the canvas drawer at 156 pixels wide on a visible 390-pixel viewport; the corrected composition puts selected proof before the fleet and opens it in the page flow. Shared canvas geometry and numeric limits remain unchanged. Initial decision scores were ordinal estimates, not UX measurements.",
+  "rationale": "The recorded platform decision selected an isolated native reader over propagating readOnly through the full execution shell. It now shares the existing ReviewPanel module, replacing its redundant five-dot summary band with direct access to detailed retained proof. Both normal and saved-reader views retain the detailed evidence sections and existing authority. DataTable, Button and ReviewPanel are reused, with fleet/setup progressively disclosed. Earlier preview findings drove page-flow proof before the fleet. Build Studio has 70 components and 16,288 non-test lines, six below its former frozen ceiling; that ceiling is retightened. Existing copy ceilings and shared canvas geometry are unchanged. Initial decision scores were ordinal estimates, not UX measurements.",
   "verification": "29 affected tests across five suites pass after regressions for direct saved-result truth, 76-row proof order and fleet disclosure. The ee2a3a02 preview rendered retained proof/raw output but failed mobile readability. The b203de74 preview measured 229 arrival words against the existing 152 ceiling; fleet history is now progressively disclosed. Native full-source proofs covered 19,775 files before creation and cleanup of six labelled abandoned fixtures; all six were removed. Six-case UI/replacement acceptance remains unrun because proof activation did not persist during repeated navigation/refresh activity; no cause is claimed. Both preview keepers ended normally. Final rendered measurements, advisory UX engagement CE-8C8F5950, immutable source review, protected delivery and served acceptance remain pending. No existing baseline or numeric limit is changed."
 }

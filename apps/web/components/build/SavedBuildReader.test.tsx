@@ -3,7 +3,7 @@ import "@/test-setup";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
-import { SavedBuildReader } from "./SavedBuildReader";
+import { SavedBuildReader } from "./ReviewPanel";
 
 const effects = vi.hoisted(() => ({ format: vi.fn(), decompose: vi.fn() }));
 vi.mock("@/lib/actions/local-format", () => ({ formatText: effects.format }));
@@ -33,7 +33,7 @@ describe("saved proof without execution", () => {
   });
   it("does not substitute a different saved record for an unavailable requested build", () => {
     render(<SavedBuildReader builds={[saved]} initialBuildId="FB-UNAVAILABLE" />);
-    expect(screen.getByText("The requested saved build is unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("Saved build unavailable.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Review proof" })).not.toBeInTheDocument();
   });
   it("replaces retained proof without borrowing the earlier successful result", () => {
@@ -47,12 +47,12 @@ describe("saved proof without execution", () => {
   });
   it("keeps empty history distinct from unavailable execution", () => {
     render(<SavedBuildReader builds={[]} />);
-    expect(screen.getByText("No saved builds yet.")).toBeInTheDocument();
+    expect(screen.getByText("No saved builds.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Review proof" })).not.toBeInTheDocument();
   });
   it("keeps directly opened proof readable when its build is outside the fleet list", () => {
     render(<SavedBuildReader builds={[]} initialBuildId={saved.buildId} initialActiveBuild={saved} />);
-    expect(screen.queryByText("No saved builds yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No saved builds.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Review proof" }));
     expect(screen.getByText("Passed", { exact: true })).toBeInTheDocument();
   });

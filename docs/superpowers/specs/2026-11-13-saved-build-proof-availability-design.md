@@ -72,8 +72,8 @@ DI-A96411492A3F compared propagating an unavailable-execution flag through the
 full studio with an isolated reader composed from native reporting and proof
 components. The latter was autonomy-eligible with high confidence; the agent
 recorded that choice. This decision is not a rendered UX measurement or critique.
-The new reader initializes its own measured prose ceiling; all existing copy
-ceilings and route budget limits remain unchanged.
+The reader shares the existing proof module; all existing copy ceilings and
+route budget limits remain unchanged.
 
 ## Rendered composition correction
 
@@ -104,3 +104,18 @@ not six successful UI cases or real test/repair executions. Browser proof
 activation did not persist during repeated navigation/refresh activity; its
 cause remains unqualified. Final proof interaction, mobile width, arrival
 measurement, replacement and critique still require served verification.
+
+## Surface convergence
+
+The host preflight found that a standalone reader would exceed Build Studio's
+frozen component and aggregate line budgets. Export the isolated reader from
+the existing ReviewPanel module instead, and remove its redundant five-dot
+summary band. Detailed design, plan, task, verification and acceptance sections
+retain the actual evidence in both normal and saved-reader views. This is an
+explicit presentation change to normal proof too; its execution controls still
+use the existing default availability setting.
+
+Share repeated UX section titles and keep equivalent empty/error wording concise.
+Delete the unused new-module copy-baseline entry without increasing any existing
+ceiling. The result is 70 components and 16,288 non-test lines, six fewer than
+the previous frozen ceiling; retighten that ceiling rather than raise it.

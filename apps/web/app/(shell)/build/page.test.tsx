@@ -16,7 +16,7 @@ vi.mock("@/lib/portal-context", () => ({ resolvePortalContextEnvelope: vi.fn(asy
 vi.mock("@/lib/govern/permissions", () => ({ can: vi.fn(() => false) }));
 vi.mock("@/components/build/EnableRunnerButton", () => ({ EnableRunnerButton: () => null }));
 vi.mock("@/components/build/BuildStudio", () => ({ BuildStudio: ({ builds }: { builds: Array<{ title: string }> }) => <div>{builds.map(build => <p key={build.title}>{build.title}</p>)}</div> }));
-vi.mock("@/components/build/ReviewPanel", () => ({ ReviewPanel: () => null }));
+vi.mock("@/components/build/DecompositionCoordinator", () => ({ DecompositionCoordinator: () => null }));
 vi.mock("@/components/i18n/MessagesProvider", () => ({ MessagesProvider: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@/lib/i18n/locale-context.server", () => ({ getLocaleContext: vi.fn(async () => ({ language: "en", formatLocale: "en-US" })) }));
 vi.mock("@dpf/i18n", () => ({ namespaceMessages: () => ({}) }));
@@ -56,7 +56,7 @@ describe("saved Build Studio history without execution capability", () => {
     mocks.capability.mockResolvedValue({ ok: false, reason: "no_active_llm_providers", enableableRunners: [], suggestedProviders: [], activeProviderNames: [] });
     mocks.builds.mockRejectedValue(new Error("saved data unavailable"));
     const html = renderToStaticMarkup(await BuildPage({ searchParams: Promise.resolve({}) }));
-    expect(html).toContain("Saved builds could not be loaded.");
-    expect(html).not.toContain("No saved builds yet.");
+    expect(html).toContain("Saved history unavailable.");
+    expect(html).not.toContain("No saved builds.");
   });
 });

@@ -9710,13 +9710,5 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 21
-  },
-  "apps/web/components/build/SavedBuildReader.tsx": {
-    "genericLabels": 0,
-    "longSentences": 0,
-    "readability": 0,
-    "retiredVocabulary": 0,
-    "textMass": 26,
-    "vocabulary": 0
   }
 }
