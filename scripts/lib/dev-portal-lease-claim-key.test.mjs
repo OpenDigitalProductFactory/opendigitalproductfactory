@@ -419,6 +419,29 @@ test('the registered preview consumer reclaims the same lease without forking an
   assert.equal(command.env.DPF_DEV_PORTAL_CLAIM_KEY, pin.claimKey);
   assert.equal(command.env.DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA, pin.sha);
   assert.equal(command.env.DPF_DEV_PORTAL_EXPECTED_BRANCH, pin.branch);
+  assert.equal(command.env.DPF_DEV_PORTAL_WAIT_DEADLINE, pin.waitDeadline);
+});
+
+test('preview request timing separates a short resource TTL from a fixed queue deadline', async () => {
+  const { previewLeaseRequestTiming } = await import('../dev-preview-queue-resume.mjs');
+  const start = now();
+  const first = previewLeaseRequestTiming({ now: start, waitMinutes: 120, ttlMinutes: 2 });
+  assert.equal(first.requestedTtlMs, 120_000);
+  assert.equal(Date.parse(first.expiresAt), start + 120_000);
+  assert.equal(Date.parse(first.waitDeadlineAt), start + 120 * 60_000);
+  const resumed = previewLeaseRequestTiming({ now: start + 25 * 60_000, waitMinutes: 120,
+    ttlMinutes: 2, waitDeadline: first.waitDeadlineAt });
+  assert.equal(resumed.waitDeadlineAt, first.waitDeadlineAt);
+  assert.equal(Date.parse(resumed.expiresAt), start + 27 * 60_000);
+  for (const waitMinutes of [0, -1, 121, NaN]) {
+    assert.throws(() => previewLeaseRequestTiming({ now: start, waitMinutes, ttlMinutes: 2 }));
+  }
+  for (const ttlMinutes of [0, -1, 21, NaN]) {
+    assert.throws(() => previewLeaseRequestTiming({ now: start, waitMinutes: 120, ttlMinutes }));
+  }
+  for (const waitDeadline of ['invalid', new Date(start).toISOString(), new Date(start + 121 * 60_000).toISOString()]) {
+    assert.throws(() => previewLeaseRequestTiming({ now: start, waitMinutes: 120, ttlMinutes: 2, waitDeadline }));
+  }
 });
 
 test('the actual shell refuses same-SHA branch drift and newly dirty source before claiming', async t => {
