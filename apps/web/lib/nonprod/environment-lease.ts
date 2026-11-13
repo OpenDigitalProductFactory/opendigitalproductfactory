@@ -16,7 +16,6 @@ import { lockHostBackedClaimAdmission, resolveHostBackedClaimPolicy } from "./en
 import localCiSlotResources from "./local-ci-slot-resources.json";
 import { assertRenewalSlotBinding, type NonprodSlotBinding } from "./environment-lease-slot-binding";
 import {
-  emitLeaseTransition,
   emitLeaseTransitions,
   inLeaseTransaction,
   isSelfAdmittingEnvironment,
