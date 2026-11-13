@@ -944,6 +944,12 @@
     "apps/web/lib/federation/demand-response.ts": [
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
     ],
+    "apps/web/lib/federation/work-sync-health.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/federation/work-sync-watch.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "apps/web/lib/finance/finance-validation.ts": [
       "docs/testing/handoff-invoice-gaps.md"
     ],
@@ -4282,6 +4288,8 @@
     ],
     "docs/operations/observability-coverage.md": [
       "apps/web/lib/coworker/approval-lifetime.ts",
+      "apps/web/lib/federation/work-sync-health.ts",
+      "apps/web/lib/federation/work-sync-watch.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/observability/platform-continuity-watch.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",

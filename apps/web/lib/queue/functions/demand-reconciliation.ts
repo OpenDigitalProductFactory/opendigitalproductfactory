@@ -47,6 +47,22 @@ export const demandReconciliationScheduled = jobs.createFunction(
       const { runWorkSync } = await import("@/lib/federation/work-sync");
       return runWorkSync();
     });
+    // A link that has not synced for over 6 hours gets one Needs-you item, and
+    // the item clears on the next good pull (BI-85DE8EBD). Its own step, so a
+    // watch failure never undoes the pull.
+    const workWatch = await step.run("watch-federated-work", async () => {
+      const { prisma } = await import("@dpf/db");
+      const { runWorkSyncWatch } = await import("@/lib/federation/work-sync-watch");
+      const { notifyAttentionLive, resolveOperatorRecipient } = await import("@/lib/attention/notify-live");
+      return runWorkSyncWatch(prisma as never, {
+        notify: async (notice) => {
+          const recipient = await resolveOperatorRecipient();
+          // No resolvable owner: notification is best-effort; the row still projects.
+          if (!recipient) return;
+          await notifyAttentionLive({ source: "platform-health", userId: recipient, ...notice });
+        },
+      });
+    });
     // Renew each claim this installation holds at an item's home, and release
     // the ones whose Workroom has ended (BI-30EDDB7F). Queued in the outbox,
     // so a home that cannot be reached receives them when it returns.
@@ -66,6 +82,6 @@ export const demandReconciliationScheduled = jobs.createFunction(
       const { reconcileOrganizationMembership } = await import("@/lib/federation/organization-membership");
       return reconcileOrganizationMembership();
     });
-    return { guidance, posture, peerTargets, demand, work, workClaims, links, membership };
+    return { guidance, posture, peerTargets, demand, work, workWatch, workClaims, links, membership };
   },
 );
