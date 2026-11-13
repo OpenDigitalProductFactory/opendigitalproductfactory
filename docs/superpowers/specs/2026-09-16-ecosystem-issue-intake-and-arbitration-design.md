@@ -182,6 +182,20 @@ own installations share work through work sync, never through intake.
 
 Almost every box is existing substrate. The genuinely new code is the **GitHub issue read path** and the two scheduled jobs. `dpf.demand.dispositioned` is already a declared activity with a handler — §3.5's writeback obligation is satisfied by using it rather than inventing a notification.
 
+**As realized (BI-FB03E2FD, 2026-11-12).** The audit found `arbitrate` with no
+caller. Per WWMD DI-56D5E82AD9D2 it is wired as ordering plus real decisions,
+not a capacity allocator: each commissioned intake cycle ranks the open
+`ecosystem-inbound` items and records rank and reason as an
+`ecosystem_arbitration` activity on the item (only when the position changes),
+with the top of the queue on the intake job's schedule line. The item's
+`priority` is never written, so a person's setting stands; where the capacity
+line falls stays with the accountable human. A peer submitter is answered on a
+real decision through the existing `dpf.demand.dispositioned` writeback:
+`accepted` when the item moves to `in-progress`, `rejected` when it is retired
+with a recorded reason. A retirement without a reason sends nothing and is
+named on the schedule line. `drawAgainstCapacity`/`buildDispositions` (with
+their `deferred` outcome) remain uncalled; the contract has no `deferred`.
+
 ### 4.4 Ballot composition — every participant votes, but not on everything
 
 Operator direction, 2026-09-16: the vote goes to **all** participants, prioritised on items relevant to them — their own submissions, plus archetype-aligned or common issues others have already submitted. *"We don't want to expose all issues, but smartly evaluate what's there, and scope applicability from the specific instance context."*
