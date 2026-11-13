@@ -310,6 +310,26 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "queue_workroom_pull_request",
+    description:
+      "Queue this Workroom's own PR into the merge queue (squash). Use after pnpm gate:wait passed on the room's head and the PR is open, " +
+      "instead of `gh pr merge --auto`, which unattended clients may not run. Refused unless the PR head is the room's head and a passing, " +
+      "unexpired gate result is bound to the room at that head. The merge queue still runs every required check. " +
+      "The room's own executor, acting for the room's owner, needs no approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+      },
+      required: ["capsuleId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    consequence: "irreversible",
+    consequenceForCall: async (call) =>
+      (await import("@/lib/work-capsules/queue-workroom-pr")).queueWorkroomPrConsequenceForCall(call),
+  },
+  {
     name: "update_workroom_status",
     description: "Set a Workroom status and record a temporary operator-visible status override reason.",
     inputSchema: {
@@ -603,6 +623,7 @@ export const workCapsulesPack: ToolPack = {
     correct_workroom_sensitivity: (params, userId, context) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.correctWorkroomSensitivityTool(params, userId, context)),
     list_workrooms: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
     get_workroom: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
+    queue_workroom_pull_request: (params, userId, context) => HANDLERS().then((m) => m.queueWorkroomPullRequestTool(params, userId, context)),
     create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
@@ -653,6 +674,7 @@ export const workCapsulesPack: ToolPack = {
     declare_break_fix: ["work_capsule_write"],
     claim_workroom_scope: ["worktree_provision"],
     heartbeat_workroom: ["work_capsule_write"],
+    queue_workroom_pull_request: ["work_capsule_write"],
     update_workroom_status: ["work_capsule_write"],
     release_workroom_scope: ["work_capsule_write"],
     rebind_workroom_shape: ["work_capsule_write"],
