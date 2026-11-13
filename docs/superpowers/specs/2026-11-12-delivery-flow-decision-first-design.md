@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: draft
 ---
 
 # Delivery Flow is decision-first, and its demand has an owning room
