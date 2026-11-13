@@ -3,7 +3,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { commandAuthorityScopeKey, commandPayloadBinding } from "./command-receipts";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { assertBoundedHandoffDependencies } from "./bounded-handoff-dependencies";
-import { assertHandoffSnapshot, assertRequestedSource, databaseWallTime, readHandoffAuthority, snapshotHandoff, type HandoffRoom, type HandoffSnapshot } from "./bounded-handoff-authority";
+import { assertHandoffSnapshot, assertRequestedSource, databaseWallTime, readHandoffAuthority, readLeaseHolderKind, snapshotHandoff, type HandoffRoom, type HandoffSnapshot } from "./bounded-handoff-authority";
 import { BoundedHandoffRefusal, handoffDigest, parseBoundedHandoffCommand, type BoundedHandoffCommand, type BoundedHandoffRequest } from "./bounded-handoff-command";
 import { hasBoundCommandTransaction } from "./receipted-tool";
 import { reassignWorkCapsuleExecutor } from "./workroom-lease";
@@ -105,9 +105,10 @@ export async function assessBoundedHandoff(input: Input, options: { lock?: boole
   if (completion && request) return { capsule, request, proposed, authority, snapshot: request.snapshot, terminal: completion.handoff };
   await assertBoundedHandoffDependencies(db as unknown as Parameters<typeof assertBoundedHandoffDependencies>[0], { capsule, sourceExecutorRef: proposed.expectedExecutorRef, destinationExecutorRef: proposed.toExecutorRef });
   const now = await databaseWallTime(db);
-  const snapshot = snapshotHandoff(capsule, authority.boundary, now, request?.ownerPrincipalId ?? actor.principalId ?? null);
+  const holderKind = await readLeaseHolderKind(db, capsule.leaseHolderPrincipalId, options.lock === true);
+  const snapshot = snapshotHandoff(capsule, authority.boundary, now, request?.ownerPrincipalId ?? actor.principalId ?? null, holderKind);
   if (request) assertHandoffSnapshot(snapshot, request.snapshot);
-  else assertRequestedSource(capsule, proposed, actor.principalId);
+  else assertRequestedSource(capsule, proposed, actor.principalId, now, holderKind);
   return { capsule, request, proposed, authority, snapshot, terminal: null };
 }
 /** Runs only inside the real receipt transaction after the shared lock prefix. */
@@ -148,7 +149,7 @@ export async function executeBoundedHandoff(input: Input): Promise<ToolResult> {
   if (!request) return fail("handoff-request-invalid", "The stored handoff request could not be resolved.");
   const now = await databaseWallTime(db);
   // A long dependency/identity read cannot outlive the lease it validated.
-  snapshotHandoff(capsule, authority.boundary, now, request.ownerPrincipalId);
+  snapshotHandoff(capsule, authority.boundary, now, request.ownerPrincipalId, await readLeaseHolderKind(db, capsule.leaseHolderPrincipalId, true));
   const updated = await reassignWorkCapsuleExecutor({ db, capsuleId: capsule.capsuleId,
     toExecutorKind: proposed.toExecutorKind as WorkCapsuleExecutorKind, toExecutorRef: proposed.toExecutorRef,
     actor, expectedLeaseHolderPrincipalId: snapshot.leaseHolderPrincipalId, reason: proposed.reason,
