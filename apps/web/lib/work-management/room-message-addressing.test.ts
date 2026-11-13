@@ -119,6 +119,35 @@ describe("planRoomWake", () => {
     expect(plan.detail).toContain("hop limit");
   });
 
+  it("says the addressee cannot reply when it lacks the grant to post, and wakes no one (BI-8747A73D)", () => {
+    const plan = planRoomWake({ ...base, addressing: addressing(), cannotPost: new Set(["AGT-B"]) });
+    expect(plan.kind).toBe("refuse");
+    expect(plan.state).toBe("cannot-reply");
+    expect(plan.detail).toContain("AGT-B");
+    expect(plan.detail).toContain("work_room_write");
+  });
+
+  it("wakes the addressees that can post and names the ones that cannot", () => {
+    const plan = planRoomWake({
+      ...base,
+      addressing: addressing({ agents: ["AGT-B", "AGT-C"] }),
+      cannotPost: new Set(["AGT-C"]),
+    });
+    expect(plan).toMatchObject({ kind: "wake", state: "woken", agents: ["AGT-B"] });
+    expect(plan.detail).toContain("AGT-C");
+    expect(plan.detail).toContain("work_room_write");
+  });
+
+  it("says the coordinator cannot reply at the hop limit when it lacks the grant to post", () => {
+    const plan = planRoomWake({ ...base, addressing: addressing({ hop: 8 }), cannotPost: new Set(["AGT-COORD"]) });
+    expect(plan).toMatchObject({ kind: "refuse", state: "cannot-reply" });
+  });
+
+  it("decides cannot-reply before spending the hourly budget", () => {
+    const plan = planRoomWake({ ...base, addressing: addressing(), wakesLastHour: 30, cannotPost: new Set(["AGT-B"]) });
+    expect(plan.state).toBe("cannot-reply");
+  });
+
   it("pauses at the room's hourly wake budget (AC-4)", () => {
     const plan = planRoomWake({ ...base, addressing: addressing(), wakesLastHour: 30 });
     expect(plan.kind).toBe("pause");

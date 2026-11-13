@@ -13,10 +13,10 @@ vi.mock("@/lib/identity/principal-linking", () => ({
 
 import type { RoomMessageAddressing } from "@/lib/work-management/room-message-addressing";
 import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
-import { ROOM_WAKE_HOP_LIMIT } from "@/lib/work-management/room-message-addressing";
+import { ROOM_POST_GRANT, ROOM_WAKE_HOP_LIMIT } from "@/lib/work-management/room-message-addressing";
 import { announceSupervisionLost, dispatchRoomMessage, prepareRoomAddressing } from "@/lib/work-management/room-message-wake.server";
 
-import type { SupervisedSessionPort } from "./supervised-turn-delivery";
+import { combineSupervisedWake, type SupervisedSessionPort } from "./supervised-turn-delivery";
 
 const NOW = new Date("2026-11-11T05:00:07.000Z");
 const ADDRESS = "gaid:priv:dpf.internal:agt-ext-claude#session=thr-1";
@@ -68,6 +68,8 @@ function harness(opts: {
   claimLost?: boolean;
   /** Coworkers a message may address by agent id. */
   knownAgents?: string[];
+  /** Known coworkers that hold the work_room_write grant, so a wake may reach them (BI-8747A73D). */
+  posters?: string[];
 }) {
   const messages = opts.messages;
   const room = { id: "room-1", capsuleId: "WC-1", executorKind: opts.executorKind === undefined ? "claude-desktop" : opts.executorKind, executorRef: "sess-desk", workItemId: "wi-1", workspaceState: opts.workspaceState ?? stored() };
@@ -109,7 +111,8 @@ function harness(opts: {
     workroomParticipant: { findMany: vi.fn(async () => opts.participants ?? []) },
     principalAlias: { findMany: vi.fn(async () => opts.aliases ?? []) },
     agent: {
-      findMany: vi.fn(async ({ where }: { where: { agentId: { in: string[] } } }) => (opts.knownAgents ?? []).filter((id) => where.agentId.in.includes(id)).map((agentId) => ({ agentId }))),
+      findMany: vi.fn(async ({ where }: { where: { agentId: { in: string[] } } }) => (opts.knownAgents ?? []).filter((id) => where.agentId.in.includes(id))
+        .map((agentId) => ({ agentId, toolGrants: opts.posters?.includes(agentId) ? [{ grantKey: ROOM_POST_GRANT }] : [], toolGrantRevocations: [] }))),
       findUnique: vi.fn(async () => null),
     },
   };
@@ -284,7 +287,7 @@ describe("a coworker and a supervised session addressing each other", () => {
 
   it("stops at the hop limit: the session gets no further turn and the coordinator is woken", async () => {
     const h = harness({
-      messages: [], executorKind: null, knownAgents: ["AGT-B"],
+      messages: [], executorKind: null, knownAgents: ["AGT-B", "AGT-COORD"], posters: ["AGT-COORD"],
       participants: [{ principalId: "PRN-C", roles: ["coordinator"] }], aliases: [{ principalId: "PRN-C", aliasValue: "AGT-COORD" }],
     });
     for (let n = 0; n < ROOM_WAKE_HOP_LIMIT; n += 1) await post(h, n, n % 2 === 0 ? "coworker" : "session");
@@ -298,5 +301,28 @@ describe("a coworker and a supervised session addressing each other", () => {
     expect(h.deliver).not.toHaveBeenCalled();
     expect(h.send).toHaveBeenCalledWith(expect.objectContaining({ name: "room/wake.requested", data: expect.objectContaining({ agentId: "AGT-COORD" }) }));
     expect(h.messages.find((m) => m.messageType === "room-wake-notice")?.structuredPayload).toMatchObject({ roomWakeNotice: { kind: "hop-limit" } });
+  });
+});
+
+// BI-8747A73D: a coworker that cannot post is refused (cannot-reply). The
+// supervised-session outcome on the same message must not erase that refusal.
+describe("combineSupervisedWake with a cannot-reply refusal", () => {
+  const refuse = { kind: "refuse", state: "cannot-reply", detail: "AGT-B cannot reply here: it lacks the work_room_write grant, which the coworker's owner grants. No reply turn was started." } as const;
+
+  it("keeps the refusal when the session is held", () => {
+    const combined = combineSupervisedWake(refuse, { kind: "held", detail: "The session is not live." });
+    expect(combined.plan).toBe("refuse");
+    expect(combined.wake.state).toBe("cannot-reply");
+    expect(combined.wake.detail).toContain("work_room_write");
+    expect(combined.wake.detail).toContain("The session is not live.");
+    expect(combined.woken).toEqual([]);
+  });
+
+  it("keeps the refusal's reason when the session takes the turn", () => {
+    const combined = combineSupervisedWake(refuse, { kind: "delivered", addressedAs: ADDRESS });
+    expect(combined.plan).toBe("turn");
+    expect(combined.wake.state).toBe("woken");
+    expect(combined.wake.detail).toContain("work_room_write");
+    expect(combined.woken).toEqual([ADDRESS]);
   });
 });

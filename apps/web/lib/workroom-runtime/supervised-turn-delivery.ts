@@ -130,14 +130,15 @@ export function combineSupervisedWake(plan: RoomWakePlan, session: SupervisedTur
   }
   if (session.kind === "delivered") {
     const woken = [...coworkers, session.addressedAs];
-    const detail = `${plan.kind === "wake" ? `${plan.detail} ` : ""}Delivered as a turn to ${session.addressedAs}.`;
+    const detail = `${plan.kind === "wake" || plan.kind === "refuse" ? `${plan.detail} ` : ""}Delivered as a turn to ${session.addressedAs}.`;
     return { wake: { state: "woken", detail, woken }, plan: plan.kind === "wake" ? "wake" : "turn", woken };
   }
   const detail = session.kind === "failed"
     ? `${session.addressedAs} could not be given a turn (${session.detail}); the message waits on the cursor.`
     : session.detail;
-  if (plan.kind === "wake" || plan.kind === "pause") {
-    // B2's decision for the room's coworkers stands; the session's outcome is added to its detail.
+  if (plan.kind === "wake" || plan.kind === "pause" || plan.kind === "refuse") {
+    // B2's decision for the room's coworkers stands (including a cannot-reply refusal, BI-8747A73D);
+    // the session's outcome is added to its detail.
     return { wake: { state: plan.state, detail: `${plan.detail} ${detail}`, ...withWoken(coworkers) }, plan: plan.kind, woken: coworkers };
   }
   const paused = session.kind === "paused";
