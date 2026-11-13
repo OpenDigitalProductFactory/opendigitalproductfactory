@@ -6,7 +6,7 @@ status: draft
 
 **Backlog:** BI-5E067004 (keystone of EP-8717D32C; atomic). **Workroom:** WC-6F29F1D4.
 **Design:** [`docs/superpowers/specs/2026-11-13-route-to-human-seam-design.md`](../specs/2026-11-13-route-to-human-seam-design.md).
-**Builds on:** BI-6B3DA9DD (`escalation-gate.ts`, `resolveDecisionEscalation`), BI-0ACD9AB2 (escalation stream classifier).
+**Builds on:** BI-6B3DA9DD (`escalation-gate.ts`, `resolveDecisionEscalation`), and the issue-report stream classifier (`issue-report-stream.ts`).
 **Decisions:** DI-82749A6FBEA1 (WWMD: reuse the issue-report projection for the non-owner route rather than a new queue, high confidence); DI-007A5617C3EE (WWMD on the PIR-QGQUH fixture features: `route-to-agent`, high confidence, margin 6.18, autonomy-eligible).
 **Coverage decision:** atomic. The seam, the producers and the guard ship as one change. A seam without the guard is prose. A guard without every producer moved fails its own repo.
 
