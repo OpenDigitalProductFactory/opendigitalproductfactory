@@ -521,8 +521,10 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   const acMet = acceptance.filter((a) => a?.met === true).length;
   const acTotal = acceptance.length;
 
-  const readinessTrailers =
-    typeof params.readinessTrailers === "string" ? params.readinessTrailers.trim() : "";
+  // BI-BA6EDCDD: carry the gate decisions the build's own commits recorded; the
+  // published commit is platform-authored, so they are otherwise lost.
+  const readinessTrailers = await (await import("@/lib/build/recorded-gate-decisions"))
+    .readBuildPublicationDecisions({ buildId, sandboxId: build.sandboxId, explicit: params.readinessTrailers });
   const prBody = [
     `## ${build.title}`,
     "",
