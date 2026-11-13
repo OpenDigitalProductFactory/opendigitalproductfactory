@@ -28,7 +28,7 @@ export type OpenAiCapacityIssue = {
 };
 
 type AiCapacityDetails = {
-  kind?: "provider" | "platform";
+  kind?: "provider" | "platform" | "subscriptions";
   providerId?: string;
   name?: string;
   cause?: string;
@@ -59,7 +59,7 @@ export function aiCapacityToAttentionItem(issue: OpenAiCapacityIssue): Attention
     triage: {
       timeToAct: "none",
       residueReason: credential ? "needs-credential" : "no-self-heal",
-      blastRadius: details.kind === "platform" ? "AI workforce" : details.name,
+      blastRadius: details.kind === "provider" ? details.name : "AI workforce",
       decideEffort: credential ? "one-tap" : "review",
       irreversible: false,
     },
