@@ -22,6 +22,18 @@ operations. The [hardware guide](../../install/hardware.md) distinguishes those
 workloads; a 32 GB operations configuration is not a guarantee for a full
 development workload.
 
+### Reading saved proof without a runner
+
+Existing saved builds remain available when no suitable AI runner is available.
+Expand **Saved builds** to select another result, then open **Review proof** to inspect recorded documents,
+verification and raw output. Missing or conflicting evidence stays unverified.
+
+Building remains unavailable. Setup guidance is under **Runner setup**; reading
+saved results does not enable a provider or start work. Formatting, decomposition,
+editing, deletion and release actions are absent from this saved-reader view.
+If saved records cannot be loaded, use **Try again**; this is different from
+having no saved builds.
+
 ### Development Workrooms
 
 From `/build/work`, open **Delivery outcomes** for the visible Workrooms created
