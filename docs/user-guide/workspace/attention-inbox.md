@@ -24,6 +24,7 @@ Folding "a human must decide this now" into the backlog is a category error: the
 ## Key Concepts
 
 - **Only owner decisions reach the daily count.** Routine platform recovery, missing credentials, stalled builds, and service health stay with your digital team. They appear only if they create a real business choice for you.
+- **Lost AI capacity is the exception.** If an AI provider needs you to sign in again, has hit its spending limit, or every AI subscription is out of capacity, it appears in the daily count under its own title. A provider's usage limit that lifts on its own is named, with its reset time, in the line about what your digital team is handling.
 - **Money and public actions always come to you.** A proactivity setting can change how routine work is handled, but it cannot bypass approval when money leaves the business or something goes public.
 - **Every card explains the decision.** The top of the card gives a short question; for a blocked coworker, a plain line saying **what it was doing and why it stalled**; a concrete **impact** ("if ignored…"); the **recommendation** with the specialist it came from; and no more than three plain choices. It never invents a confidence score.
 - **Technical detail is preserved.** Open **Technical detail** to see the original title, source, work fields, linked identifiers, detection details, and builder actions. That information is moved one click down, not deleted.

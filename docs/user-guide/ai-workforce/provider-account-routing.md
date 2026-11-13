@@ -62,9 +62,12 @@ the reset time the provider gave has passed.
 While a provider has said it will refuse work (a usage limit with a reset time,
 a rejected sign-in, or a billing or plan block), routing does not send it work,
 even when no other provider can take the request. The request then reports that
-no AI model can handle it, instead of failing against that provider. Needs-you
-shows the provider with its reset time, and when every subscription is out of
-capacity one item names them all and the first reset. The nightly model refresh
+no AI model can handle it, instead of failing against that provider. A
+rejected sign-in, a spending limit, or every subscription being out of capacity
+appears in Needs-you, because AI capacity stays lost until you act. A single
+provider's usage limit lifts on its own at its reset while other providers carry
+the work, so it is listed by name and reset time under what your digital team is
+handling, and the bell tells you once when it starts. The nightly model refresh
 also skips such providers until they recover; a refresh you start yourself
 still checks them.
 
