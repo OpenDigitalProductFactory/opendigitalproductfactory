@@ -12407,6 +12407,7 @@
         "what-counts-as-sensitive-detail-and-what-does-not",
         "possible-outcomes",
         "initial-boundaries",
+        "source-code-from-a-public-repository",
         "masking-and-correctness",
         "retention-prompts",
         "standards-and-qualified-review"
@@ -12925,6 +12926,7 @@
         "how-the-finance-bridge-starts",
         "activate-a-contract",
         "record-a-subscription-payment",
+        "what-subscriptions-really-cost",
         "allowance-evaluation",
         "recovery-and-evidence",
         "related-routes",

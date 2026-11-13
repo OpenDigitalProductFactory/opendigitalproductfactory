@@ -146,7 +146,7 @@ describe("toolchain manifest", () => {
 
   it("names each client's declaration carrier", () => {
     const shapes = clientShapes("https://dpf.example/api/mcp/v1");
-    expect(shapes["claude-code"]!.declarationCarrier).toBe("header");
+    expect(shapes["claude-code"]!.declarationCarrier).toBe("helper");
     expect(shapes.codex!.declarationCarrier).toBe("header");
     expect(shapes.antigravity!.declarationCarrier).toBe("header");
     expect(shapes.grok!.declarationCarrier).toBe("query");

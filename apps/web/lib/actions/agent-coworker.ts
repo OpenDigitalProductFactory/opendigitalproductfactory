@@ -2306,7 +2306,7 @@ export async function sendMessage(input: {
 
   await persistCoworkerResponseArtifact({
     taskRunId: currentTaskRun?.taskRunId ?? null,
-    responseContent,
+    acceptedMessage: agentMsg, deliveryOutcome: foregroundResourceWait ? "capacity-wait" : responseIsSystemFailure ? "blocked" : "responded",
     routeContext: input.routeContext,
     threadId: input.threadId,
     agentId: agent.agentId,
