@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "focused-net-new-route",
+  "decisionInteractionId": "DI-F24F5CEB9CDB",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/issue-reports/upstream/page.tsx",
+      "apps/web/components/admin/UpstreamFeedbackSettings.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-card-on-existing-page",
+      "closed-disclosure-on-existing-page",
+      "focused-net-new-route"
+    ]
+  }
+}

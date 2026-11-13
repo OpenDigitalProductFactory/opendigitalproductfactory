@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
-const { mockHandleWorkClaim, mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockHandleIncomingPosture, mockResolveIdentity, mockHandleIncomingGuidance } = vi.hoisted(() => ({
+const { mockHandleWorkClaim, mockResolveAuth, mockHandleIncomingDemand, mockHandleIncomingDemandResponse, mockHandleIncomingDisposition, mockHandleIncomingPosture, mockResolveIdentity, mockHandleIncomingGuidance, mockRecordVoteTally } = vi.hoisted(() => ({
+  mockRecordVoteTally: vi.fn(),
   mockHandleIncomingGuidance: vi.fn(),
   mockResolveAuth: vi.fn(),
   mockHandleIncomingDemand: vi.fn(),
@@ -15,6 +16,7 @@ const { mockHandleWorkClaim, mockResolveAuth, mockHandleIncomingDemand, mockHand
 vi.mock("@/lib/auth/federation-link-token", () => ({ resolveFederationLinkAuth: mockResolveAuth }));
 vi.mock("@/lib/federation/demand-exchange", () => ({ handleIncomingDemand: mockHandleIncomingDemand }));
 vi.mock("@/lib/federation/demand-response", () => ({ handleIncomingDemandResponse: mockHandleIncomingDemandResponse }));
+vi.mock("@/lib/ecosystem/vote-tally", () => ({ tallyAfterInboundVote: mockRecordVoteTally }));
 vi.mock("@/lib/federation/demand-identity", () => ({ resolveFederationIdentity: mockResolveIdentity }));
 vi.mock("@/lib/federation/demand-disposition", () => ({ handleIncomingDemandDisposition: mockHandleIncomingDisposition }));
 vi.mock("@/lib/federation/operational-posture-exchange", () => ({ handleIncomingOperationalPosture: mockHandleIncomingPosture }));
@@ -103,6 +105,30 @@ describe("POST /api/v1/federation/demand", () => {
     expect(response.status).toBe(202);
     expect(mockHandleIncomingDemandResponse).toHaveBeenCalledWith(expect.anything(), "link_1", demandResponse);
     expect(mockHandleIncomingDemand).not.toHaveBeenCalled();
+  });
+
+  it("counts a vote: recomputes the tally for the item an interest is about (BI-626A4ECA)", async () => {
+    mockHandleIncomingDemandResponse.mockResolvedValueOnce({ action: "created", responseId: "rsp_x", localRecordRef: "BI-LOCAL-1" });
+    mockRecordVoteTally.mockResolvedValueOnce({ written: true });
+    const response = await POST(request("dpf.demand.interest-recorded", { specVersion: "dpf.demand-response/1" }));
+    expect(response.status).toBe(202);
+    expect(mockRecordVoteTally).toHaveBeenCalledWith(expect.anything(), "BI-LOCAL-1");
+  });
+
+  it("still accepts the delivery when the tally fails — the response is already stored", async () => {
+    mockHandleIncomingDemandResponse.mockResolvedValueOnce({ action: "updated", responseId: "rsp_x", localRecordRef: "BI-LOCAL-1" });
+    mockRecordVoteTally.mockRejectedValueOnce(new Error("db busy"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const response = await POST(request("dpf.demand.interest-recorded", { specVersion: "dpf.demand-response/1" }));
+    expect(response.status).toBe(202);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("does not recount on a replayed response", async () => {
+    mockHandleIncomingDemandResponse.mockResolvedValueOnce({ action: "noop", responseId: "rsp_x", localRecordRef: "BI-LOCAL-1" });
+    await POST(request("dpf.demand.interest-recorded", { specVersion: "dpf.demand-response/1" }));
+    expect(mockRecordVoteTally).not.toHaveBeenCalled();
   });
 
   it("routes founder disposition notices over the same authenticated channel", async () => {

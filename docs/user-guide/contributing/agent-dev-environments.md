@@ -301,7 +301,11 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 Setup keeps your selected https connection address for later sessions. An explicit `DPF_MCP_URL` overrides it; otherwise setup uses the saved https preference, then the installation's HTTPS default. A plain-http address is never saved for every client, because Claude's sign-in refuses plain http. Codex and Grok keep their own address in their own settings. A saved address does not grant access or prove sign-in works. If the client still uses an older address, verify its saved connection before starting another sign-in.
 
 The approval page names the assistant role this connection will act as and
-has one **Connect** button; you do not pick the role. The server chooses it
+has one **Connect {client} as {account}** button. Check the named account and
+press it once to confirm and connect; there is no separate account checkbox.
+**Use a different account** lets you switch before connecting. If your session
+changes while the page is open, nothing connects until you confirm the current
+account on the refreshed page. You do not normally pick the role. The server chooses it
 from the roles you are allowed to authorize, after checking that they carry
 the same permissions, and reuses the role you approved last time for the same
 client. A client's self-chosen name only labels the connection; it cannot
@@ -313,6 +317,11 @@ authority is preselected. All work remains within your current permissions,
 the permissions you approved, and the assistant's allowed tools. Build Studio
 access and access to each workroom are checked separately. Signing in does not
 admit the assistant to every room.
+
+If this account's work was previously handed over, the page also asks you to
+acknowledge that connecting it will bring new work back to that account. The
+platform automation account cannot authorize an interactive client; sign in
+as yourself instead.
 
 The same connection supports multiple tasks and normal token refresh without
 another sign-in. Each task keeps its own target and evidence. If an older
