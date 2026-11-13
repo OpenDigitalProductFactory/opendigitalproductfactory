@@ -246,6 +246,11 @@ const DEFINITIONS: readonly PackDefinition[] = [
     version: "1.0.0",
     dataClass: "source-code",
     applicableArchetypeCategories: ["software-platform"],
+    // BI-FC94F754: this boundary is for an organization's PRIVATE code. Code
+    // from a repository the caller proved public is published already and
+    // measures `public` in the payload screen (isPublicSourceProvenance), so it
+    // never depends on this eligibility: public-cleared providers can take it.
+    // Private or unproven code keeps `protected-only`.
     publicProviderEligibility: "protected-only",
     protectedExternalEffect: "allow-with-obligations",
     maskingEligibility: "conditional",

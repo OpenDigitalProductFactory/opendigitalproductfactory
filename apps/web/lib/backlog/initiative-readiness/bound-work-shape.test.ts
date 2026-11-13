@@ -1,7 +1,30 @@
 import { describe, expect, it, vi } from "vitest";
-import { readBoundEditPaths, readBoundWorkShapeRef } from "./bound-work-shape";
+import { readBoundEditPaths, readBoundWorkShapeRef, readNativeBuildDeliveryFacts } from "./bound-work-shape";
 
 const CLAIM = [{ workShape: "delivery-small@1.0.0", recordedAt: "2026-09-23T00:00:00.000Z" }];
+
+describe("native review carrier facts (BI-1173F1CC)", () => {
+  const binding = { buildId: "FB-NATIVE", buildRowId: "build-row", itemId: "BI-NATIVE", itemRowId: "item-row" };
+  const room = { id: "room-row", capsuleId: "WC-NATIVE", executorKind: "build-studio", executorRef: binding.buildId,
+    featureBuildId: binding.buildRowId, backlogItemId: binding.itemRowId, status: "working", archivedAt: null,
+    scopeClaims: [...CLAIM, { kind: "path", intent: "edit", value: "apps/web/lib/auth/session.ts" }] };
+  it("reads both shape and edit paths from one exact native room observation", async () => {
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue([room]) } };
+    expect(await readNativeBuildDeliveryFacts(db, binding)).toMatchObject({
+      room: { id: room.id, capsuleId: room.capsuleId }, workShape: "delivery-small@1.0.0", declaredPaths: ["apps/web/lib/auth/session.ts"],
+    });
+    expect(db.workroom.findMany).toHaveBeenCalledOnce();
+  });
+  it.each([[], [room, room], [{ ...room, featureBuildId: "foreign" }], [{ ...room, scopeClaims: [{ workShape: "broken" }] }],
+    [{ ...room, scopeClaims: [...CLAIM, { workShape: "delivery-medium@1.0.0" }] }]].map(rooms => ({ rooms })))("holds unavailable or invalid native facts: %j", async ({ rooms }) => {
+    expect(await readNativeBuildDeliveryFacts({ workroom: { findMany: vi.fn().mockResolvedValue(rooms) } }, binding)).toBeNull();
+  });
+  it("does not silently replace the carrier admitted by recovery", async () => {
+    expect(await readNativeBuildDeliveryFacts({ workroom: { findMany: vi.fn().mockResolvedValue([room]) } }, {
+      ...binding, expectedWorkroom: { id: "old-room", capsuleId: "WC-OLD" },
+    })).toBeNull();
+  });
+});
 
 /** A Workroom table where each room stores its backlogItemId in one form or the other. */
 function roomsStoring(stored: string) {

@@ -366,6 +366,22 @@ ERROR: failed to build: failed to solve: error from sender: readdirent /host-dpf
     expect(c.failingTrace).toContain("cannot allocate memory");
   });
 
+  it("classifies an apk fetch network error as host-network-unavailable, not a readiness defect (BI-7FFF5CB0)", () => {
+    const log = `promoter-readiness-failed: promoter_candidate_build_failed: #6 3.1 WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.24/main: network error (check Internet connectivity and network settings)
+ERROR: failed to build: failed to solve: process "/bin/sh -c apk add --no-cache bash" did not complete successfully: exit code: 9`;
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("host-network-unavailable");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("network error");
+  });
+
+  it("classifies an upstream git fetch timeout as host-network-unavailable", () => {
+    const c = classifyBuildFailure({
+      log: "prep-error: fetch upstream failed: fatal: unable to access 'https://github.com/x/y/': Failed to connect to github.com port 443 after 75004 ms: Could not connect to server",
+    });
+    expect(c.class).toBe("host-network-unavailable");
+  });
+
   it("classifies an OOMKilled container as host-out-of-memory", () => {
     const c = classifyBuildFailure({
       log: "#12 [build 4/8] RUN pnpm --filter web build\nnext build worker terminated: OOMKilled (exit 137)",

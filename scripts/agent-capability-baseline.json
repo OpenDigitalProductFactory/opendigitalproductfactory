@@ -5,9 +5,9 @@
   "unbackedSkillIds": [],
   "consequentialGateFloor": {
     "note": "TAK §8.4.2 — consult-gate coverage is a governed metric. RISE-ONLY: this floor is reach to hold, not debt to burn down. It falls only by a tool losing its declared `consequence` or the composition root losing the resolver install, both of which leave a gate that still passes its own tests.",
-    "gateClassified": 60,
-    "sideEffectingTools": 187,
-    "coveragePct": 32,
+    "gateClassified": 70,
+    "sideEffectingTools": 204,
+    "coveragePct": 34,
     "resolverInstalled": true
   },
   "capabilityCompleteness": {
@@ -64,7 +64,6 @@
       "AGT-R2D-PB",
       "AGT-S2P-PFB",
       "AGT-S2P-POL",
-      "AGT-WS-BUILD",
       "AGT-WS-CUSTOMER",
       "AGT-WS-FARM-RANCH",
       "AGT-WS-INTEGRATION",
@@ -79,7 +78,7 @@
       "corpus": 0,
       "governance": 0,
       "shape": 0,
-      "cadence": 7,
+      "cadence": 5,
       "toolsAndSkills": 0,
       "evidence": 1
     }

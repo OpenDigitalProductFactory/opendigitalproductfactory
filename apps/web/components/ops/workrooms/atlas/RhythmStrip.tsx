@@ -56,10 +56,16 @@ export function RhythmStrip({ rows, locale }: { rows: StandingRhythmRow[]; local
       <h2 id="standing-rhythm-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("rhythm.heading")}</h2>
       <ul className="mt-2 divide-y divide-[var(--dpf-border)]">
         {rows.map((row) => {
-          const { slots, runningSince, counts } = row.rhythm;
+          const { slots, runningSince } = row.rhythm;
+          const completed = slots.filter((slot) => slot.state === "on-time" || slot.state === "late").length;
+          const missed = slots.filter((slot) => slot.state === "missed").length;
           const summary = runningSince
             ? t("rhythm.runningSince", { date: shortDate(runningSince, locale) })
-            : counts.missed > 0 ? t("rhythm.missedCount", { count: counts.missed }) : t("rhythm.steady");
+            : missed > 0 ? t("rhythm.missedCount", { count: missed })
+            : slots.some((slot) => slot.state === "running") ? t("rhythm.state.running")
+            : slots.some((slot) => slot.state === "due") ? t("rhythm.dueToday")
+            : slots.length > 0 && completed === slots.length ? t("rhythm.steady")
+            : completed > 0 ? t("rhythm.partialHistory") : t("rhythm.state.no-record");
           return (
             <li key={row.capsuleId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2">
               <Link className="min-w-[12rem] flex-1 rounded-sm text-dpf-body font-medium text-[var(--dpf-accent)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
