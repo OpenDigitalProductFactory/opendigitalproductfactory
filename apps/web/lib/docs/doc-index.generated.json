@@ -12486,6 +12486,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "reading-saved-proof-without-a-runner",
         "development-workrooms",
         "the-operator-workspace",
         "current-maturity",

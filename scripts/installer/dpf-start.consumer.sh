@@ -46,7 +46,7 @@ export PATH
 # Read-only snapshot of the host's power and Docker settings for the portal's
 # installation page (BI-3E2F87FA). Never fails startup; changes no setting.
 if [ -f scripts/installer/host-posture.mjs ] && command -v node >/dev/null 2>&1; then
-  node scripts/installer/host-posture.mjs "$install_dir" || true
+  node scripts/installer/host-posture.mjs "$install_dir" --platform "$host_platform" || true
 fi
 
 # At sign-in Docker Desktop may still be starting, or not set to start at all.
