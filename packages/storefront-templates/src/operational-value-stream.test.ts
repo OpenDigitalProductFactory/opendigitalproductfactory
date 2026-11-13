@@ -268,3 +268,18 @@ describe("leaf profiles compose with the backbone (BI-4B11F98E)", () => {
     ]);
   });
 });
+
+// BI-B32D8C16: a software platform builds and deploys what it serves, so its
+// default IT4IT binding is Requirement-to-Deploy as well as Request-to-Fulfill.
+describe("deriveOperationalValueStream — IT4IT stream binding defaults", () => {
+  it("binds a software platform to Requirement-to-Deploy and Request-to-Fulfill", () => {
+    expect(ovsmFor("software-platform").it4itStageBinding).toEqual(["requirement-to-deploy", "request-to-fulfill"]);
+  });
+
+  it("keeps Request-to-Fulfill as the default for every other archetype without a declared binding", () => {
+    for (const archetype of ALL_ARCHETYPES) {
+      if (archetype.category === "software-platform" || archetype.activationProfile?.portfolios) continue;
+      expect(deriveOperationalValueStream(archetype).it4itStageBinding, archetype.archetypeId).toEqual(["request-to-fulfill"]);
+    }
+  });
+});

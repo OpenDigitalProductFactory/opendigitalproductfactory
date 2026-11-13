@@ -1,3 +1,4 @@
+import { isRecord } from "./shared/coerce";
 import { prisma } from "@dpf/db";
 import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
 import { currentUserContext } from "@/lib/govern/current-user-context";
@@ -83,6 +84,12 @@ export async function resumeRemoteCoworkerTaskById(
   }) as StoredRemoteTask | null;
   if (!existing || existing.status !== "submitted" || !parseResourceWaitProjection(existing.progressPayload)) {
     return refusal(taskRunId, "The original waiting TaskRun is missing or no longer resumable.");
+  }
+
+  if (isRecord(existing.progressPayload) && existing.progressPayload.reviewExecutionAuthority !== undefined) {
+    // One reconstruction owner for transferred work; never revive origin on a capacity event.
+    const { executePersistedRemoteTask } = await import("./mcp-task-background-worker");
+    return { kind: "result", result: await executePersistedRemoteTask({ taskRunId }) };
   }
 
   const metadata = existing.a2aMetadata && typeof existing.a2aMetadata === "object"

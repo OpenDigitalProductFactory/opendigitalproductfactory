@@ -20,7 +20,16 @@ vi.mock("@dpf/db", () => ({
       upsert: vi.fn(),
       updateMany: vi.fn(),
     },
+    platformDevConfig: {
+      findUnique: vi.fn(),
+    },
   },
+}));
+
+vi.mock("@/lib/forge/managed-repository-access", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/forge/managed-repository-access")>()),
+  readRepositoryVisibility: vi.fn(),
+  invalidateManagedRepositoryStatus: vi.fn(),
 }));
 
 vi.mock("@/lib/build/github-oauth", () => ({
@@ -44,6 +53,7 @@ import {
   requestDeviceCode,
 } from "@/lib/build/github-oauth";
 import { validateGitHubToken } from "@/lib/actions/platform-dev-config";
+import { invalidateManagedRepositoryStatus, readRepositoryVisibility } from "@/lib/forge/managed-repository-access";
 import { disconnectGitHub, initiateDeviceFlow, pollDeviceFlow } from "./github-device-flow";
 
 // Convenience helper: mock the auth() call shape — vitest's mocked() chain is
@@ -96,6 +106,7 @@ describe("initiateDeviceFlow", () => {
       createdAt: new Date(),
       createdBy: "user-1",
       consumed: false,
+      purpose: "hive_contribution",
     });
 
     const result = await initiateDeviceFlow();
@@ -143,6 +154,7 @@ function freshSession(overrides: Partial<{
   expiresAt: Date;
   createdBy: string;
   consumed: boolean;
+  purpose: "hive_contribution" | "repository_controller" | null;
 }> = {}) {
   return {
     id: "sess-1",
@@ -153,6 +165,7 @@ function freshSession(overrides: Partial<{
     createdAt: new Date(),
     createdBy: "user-1",
     consumed: false,
+    purpose: null as "hive_contribution" | "repository_controller" | null,
     ...overrides,
   };
 }
@@ -324,6 +337,124 @@ describe("pollDeviceFlow", () => {
     });
     expect(prisma.credentialEntry.upsert).not.toHaveBeenCalled();
     expect(prisma.deviceCodeSession.update).not.toHaveBeenCalled();
+  });
+});
+
+// BI-985F4EC9: purpose-aware login for the install's managed repository.
+describe("device flow purpose", () => {
+  const deviceCode = {
+    device_code: "dc_secret",
+    user_code: "WDJB-MJHT",
+    verification_uri: "https://github.com/login/device",
+    expires_in: 900,
+    interval: 5,
+  };
+
+  function mockSessionCreate() {
+    vi.mocked(prisma.deviceCodeSession.create).mockResolvedValueOnce(freshSession() as never);
+  }
+
+  it("records hive-contribution by default and keeps public_repo", async () => {
+    vi.mocked(requestDeviceCode).mockResolvedValueOnce(deviceCode);
+    mockSessionCreate();
+
+    await initiateDeviceFlow();
+
+    expect(requestDeviceCode).toHaveBeenCalledWith("public_repo");
+    expect(readRepositoryVisibility).not.toHaveBeenCalled();
+    expect(prisma.deviceCodeSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ purpose: "hive_contribution" }),
+    });
+  });
+
+  it("asks for public_repo when the managed repository is public", async () => {
+    vi.mocked(prisma.platformDevConfig.findUnique).mockResolvedValueOnce({ upstreamRemoteUrl: "https://github.com/acme/widgets.git" } as never);
+    vi.mocked(readRepositoryVisibility).mockResolvedValueOnce("public");
+    vi.mocked(requestDeviceCode).mockResolvedValueOnce(deviceCode);
+    mockSessionCreate();
+
+    const result = await initiateDeviceFlow({ purpose: "repository-controller" });
+
+    expect(result.success).toBe(true);
+    expect(readRepositoryVisibility).toHaveBeenCalledWith(expect.objectContaining({ owner: "acme", repo: "widgets" }));
+    expect(requestDeviceCode).toHaveBeenCalledWith("public_repo");
+    expect(prisma.deviceCodeSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ purpose: "repository_controller" }),
+    });
+  });
+
+  it.each([
+    ["private (404)", "private" as const],
+    ["unreadable", "unknown" as const],
+  ])("asks for repo when the managed repository is %s", async (_label, visibility) => {
+    vi.mocked(prisma.platformDevConfig.findUnique).mockResolvedValueOnce({ upstreamRemoteUrl: "https://github.com/acme/secret.git" } as never);
+    vi.mocked(readRepositoryVisibility).mockResolvedValueOnce(visibility);
+    vi.mocked(requestDeviceCode).mockResolvedValueOnce(deviceCode);
+    mockSessionCreate();
+
+    await initiateDeviceFlow({ purpose: "repository-controller" });
+
+    expect(requestDeviceCode).toHaveBeenCalledWith("repo");
+  });
+
+  it("asks for repo when no managed repository is saved", async () => {
+    vi.mocked(prisma.platformDevConfig.findUnique).mockResolvedValueOnce(null);
+    vi.mocked(requestDeviceCode).mockResolvedValueOnce(deviceCode);
+    mockSessionCreate();
+
+    await initiateDeviceFlow({ purpose: "repository-controller" });
+
+    expect(readRepositoryVisibility).not.toHaveBeenCalled();
+    expect(requestDeviceCode).toHaveBeenCalledWith("repo");
+  });
+
+  it("refuses an unknown purpose before asking GitHub", async () => {
+    const result = await initiateDeviceFlow({ purpose: "something-else" as never });
+    expect(result).toEqual({ success: false, error: "Unknown login purpose." });
+    expect(requestDeviceCode).not.toHaveBeenCalled();
+  });
+
+  function mockSuccessfulPoll(scope: string) {
+    vi.mocked(pollAccessToken).mockResolvedValueOnce({ status: "success", token: "gho_ctrl", scope });
+    vi.mocked(validateGitHubToken).mockResolvedValueOnce({ valid: true, username: "ops-bot", authMethod: "oauth-device", scope: undefined, expiresAt: null });
+    vi.mocked(prisma.credentialEntry.upsert).mockResolvedValueOnce({} as never);
+    vi.mocked(prisma.deviceCodeSession.update).mockResolvedValueOnce({} as never);
+  }
+
+  it("stores a repository-controller token only in the controller slot, by the session's recorded purpose", async () => {
+    vi.mocked(prisma.deviceCodeSession.findUnique).mockResolvedValueOnce(freshSession({ purpose: "repository_controller" }));
+    mockSuccessfulPoll("repo");
+
+    const result = await pollDeviceFlow("sess-1");
+
+    expect(result).toEqual({ status: "success", username: "ops-bot" });
+    expect(prisma.credentialEntry.upsert).toHaveBeenCalledTimes(1);
+    expect(prisma.credentialEntry.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { providerId: "github-repository-controller" },
+      create: expect.objectContaining({ providerId: "github-repository-controller", secretRef: "enc:gho_ctrl", scope: "repo" }),
+    }));
+    expect(invalidateManagedRepositoryStatus).toHaveBeenCalled();
+  });
+
+  it.each([null, "hive_contribution" as const])("routes a %s session to hive-contribution, unchanged", async (purpose) => {
+    vi.mocked(prisma.deviceCodeSession.findUnique).mockResolvedValueOnce(freshSession({ purpose }));
+    mockSuccessfulPoll("public_repo");
+
+    await pollDeviceFlow("sess-1");
+
+    expect(prisma.credentialEntry.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { providerId: "hive-contribution" },
+    }));
+    expect(invalidateManagedRepositoryStatus).not.toHaveBeenCalled();
+  });
+
+  it("never returns the token to the caller", async () => {
+    vi.mocked(prisma.deviceCodeSession.findUnique).mockResolvedValueOnce(freshSession({ purpose: "repository_controller" }));
+    mockSuccessfulPoll("repo");
+
+    const result = await pollDeviceFlow("sess-1");
+
+    expect(JSON.stringify(result)).not.toContain("gho_ctrl");
   });
 });
 

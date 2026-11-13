@@ -289,3 +289,25 @@ describe("sanitizeNextPath", () => {
     expect(sanitizeNextPath(undefined)).toBe("/");
   });
 });
+
+// BI-F586F8A5 — a persona session may consent only to the authorization request it was minted for.
+describe("automation OAuth consent binding", () => {
+  async function exchange(nextPath: string) {
+    const deps = depsFor(fakeDb(state));
+    const minted = await mintAutomationSignIn({ nextPath, baseUrl: "http://127.0.0.1:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    return consumeAutomationSignIn(decodeURIComponent(minted.path.split("token=")[1]!), deps);
+  }
+
+  it("binds the session to the exact authorization request named by nextPath", async () => {
+    const consumed = await exchange("/api/oauth/authorize?client_id=dpfoc_acc&code_challenge=abc123&response_type=code");
+    expect(consumed).toMatchObject({ accepted: true, claims: { automationOAuthConsent: { clientId: "dpfoc_acc", codeChallenge: "abc123" } } });
+  });
+
+  it("grants no OAuth consent to a session minted for any other page", async () => {
+    for (const nextPath of ["/platform/federation-links", "/api/oauth/authorize?client_id=dpfoc_acc", "/api/oauth/authorizex?client_id=a&code_challenge=b"]) {
+      const consumed = await exchange(nextPath);
+      expect(consumed.accepted && consumed.claims.automationOAuthConsent).toBeFalsy();
+    }
+  });
+});

@@ -1,3 +1,5 @@
+import type { DecisionEscalationRoute } from "@dpf/db";
+
 export const DECISION_PROFILE_KINDS = [
   "platform",
   "organization",
@@ -193,6 +195,16 @@ export type DecisionPerspectiveEvaluationInput = {
 };
 
 export type DecisionPerspectiveEvaluationResult = {
+  /** Recorded by the shared rule table before a new interaction is persisted. */
+  escalation?: import("@/lib/govern/authority/escalation-gate").DecisionEscalation;
+  /** Outstanding review; the recorded interim may still allow the step. */
+  heldForIndependentReview?: boolean;
+  /** Set only by an evaluator/resolver fault path, never inferred from prose. */
+  evaluationFault?: boolean;
+  /** A profile's delegated risk limit, independent of confidence or damage. */
+  policyLimitExceeded?: boolean;
+  /** Doctrine-aligned but not previously ruled on; novelty is not a gate. */
+  novelProposition?: boolean;
   outcomeType: DecisionOutcomeType;
   selectedProfileId: string;
   fallbackProfileId: string | null;
@@ -326,6 +338,9 @@ export type DecisionEvaluationSource = {
 };
 
 export type DecisionInteractionGateView = {
+  escalationRoute?: DecisionEscalationRoute | null;
+  escalationReason?: string | null;
+  escalationFollowOn?: string | null;
   interactionId: string;
   profileId: string;
   profileVersionId: string;

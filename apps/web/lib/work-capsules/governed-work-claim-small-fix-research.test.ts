@@ -108,6 +108,8 @@ function database() {
         repositoryFullName: input.repositoryFullName,
         headBranch: input.headBranch,
         worktreePath: input.worktreePath,
+        baseSha: BASE,
+        headSha: HEAD,
         executorKind: input.executorKind,
         executorRef: input.executorRef,
         leaseHolderPrincipalId: actor.principalId,

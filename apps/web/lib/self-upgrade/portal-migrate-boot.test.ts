@@ -75,6 +75,7 @@ function run(opts: {
   pnpmHangMatch?: string;
   subprocessTimeoutMs?: number;
   forcePortableWatchdog?: boolean;
+  startupDelayMs?: number;
 }) {
   const pnpmLog = join(opts.appDir, "pnpm.log");
   const exports = [
@@ -113,10 +114,16 @@ function run(opts: {
     "fi",
   ].join("\n");
   const startedAt = Date.now();
+  const startupDelay = opts.startupDelayMs
+    ? `${q(toBashPath(REAL_SLEEP))} ${(opts.startupDelayMs / 1_000).toFixed(3)}`
+    : ":";
   const r = spawnSync(
     "bash",
-    ["-lc", `${exports}\n${boundedCommand}`],
-    { encoding: "utf8", timeout: subprocessTimeoutMs + 2_000 },
+    ["-lc", `${exports}\n${startupDelay}\n${boundedCommand}`],
+    // Startup precedes the shell-owned watchdog. Leave the existing boot
+    // budget as a minimum outer fail-safe so a short primary deadline is
+    // observed through its own status, rather than killed during host startup.
+    { encoding: "utf8", timeout: Math.max(BOOT_SUBPROCESS_TIMEOUT_MS, subprocessTimeoutMs + 2_000) },
   );
   return {
     status: r.status,
@@ -174,6 +181,9 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       // and before the server starts.
       expect(log.indexOf("scripts/reconcile-catalog-capabilities.ts")).toBeLessThan(log.indexOf("scripts/reembed-wiki-store.ts"));
       expect(log.indexOf("scripts/reembed-wiki-store.ts")).toBeLessThan(log.indexOf("BOOT_MARKER"));
+      // BI-F039D17A: the convergence step is budgeted so a release that edits many
+      // corpus pages cannot hold the portal's start; the scheduled job resumes.
+      expect(log).toContain("scripts/reembed-wiki-store.ts --budget-seconds");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -238,7 +248,7 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
         pnpmFailMatch: "scripts/reembed-wiki-store.ts",
       });
       expect(r.status, bootDiagnostics(r)).toBe(0); // boot still succeeds
-      expect(r.stderr).toContain("wiki embedding self-heal did not reach full coverage");
+      expect(r.stderr).toContain("wiki embedding convergence did not complete");
       expect(r.stdout).toContain("BOOT_MARKER"); // server WAS started despite the failure
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -274,7 +284,8 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
   it.each([
     { watchdog: "native timeout", forcePortableWatchdog: false },
     { watchdog: "portable process group", forcePortableWatchdog: true },
-  ])("terminates a hung boot subprocess with the $watchdog watchdog", ({ forcePortableWatchdog }) => {
+    { watchdog: "portable process group after slow shell startup", forcePortableWatchdog: true, startupDelayMs: 3_000 },
+  ])("terminates a hung boot subprocess with the $watchdog watchdog", ({ forcePortableWatchdog, startupDelayMs }) => {
     const root = mkdtempSync(join(tmpdir(), "dpf-pmb-"));
     try {
       const appDir = join(root, "app");
@@ -286,13 +297,14 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
         pnpmHangMatch: "prisma migrate deploy",
         subprocessTimeoutMs: 1_000,
         forcePortableWatchdog,
+        startupDelayMs,
       });
       // Status 124 IS the watchdog's deadline signal — both the GNU `timeout`
       // path and the portable process-group path normalize to it (see
       // boundedCommand above), and nothing else in this harness produces it. If
-      // the watchdog never fired, the spawnSync backstop at
-      // `subprocessTimeoutMs + 2_000` kills the process instead and the status
-      // is not 124, so these two assertions already prove prompt termination.
+      // the watchdog never fired, a successful fake migration returns zero or
+      // the bounded outer spawnSync backstop returns null; neither is 124.
+      // The outer budget includes startup before the primary timer begins.
       //
       // A wall-clock ceiling used to sit here as a third check: `durationMs`
       // under a bare 2_500 against a 1s deadline plus a 1s kill grace, leaving
@@ -306,6 +318,7 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       // spawnSync backstop, where it can never trip at all. BI-0F2A4137.
       expect(r.timedOut, bootDiagnostics(r)).toBe(true);
       expect(r.status, bootDiagnostics(r)).toBe(124);
+      expect(r.stdout, bootDiagnostics(r)).not.toContain("BOOT_MARKER");
       expect(r.command).toContain("portal-migrate-boot.sh");
     } finally {
       rmSync(root, { recursive: true, force: true });

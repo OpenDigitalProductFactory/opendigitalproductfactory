@@ -95,3 +95,48 @@ describe("buildFederatedWorkPage - deferral attribution (BI-9DA5F179)", () => {
     expect(page.items.map((i) => i.deferral)).toEqual([null, null]);
   });
 });
+
+describe("buildFederatedWorkPage claim presence (BI-91FC6B9A)", () => {
+  it("publishes a held claim and live Workrooms matched by semantic or row id", async () => {
+    const claimedAt = new Date("2026-10-28T00:00:00.000Z");
+    const store = {
+      ...db([
+        { ...row("BI-A"), id: "row-a", claimStatus: "active", claimedAt },
+        { ...row("BI-B"), id: "row-b" },
+        { ...row("BI-C"), id: "row-c" },
+      ]),
+      workroom: { findMany: vi.fn().mockResolvedValue([
+        { backlogItemId: "row-b", capsuleId: "WC-PEER", executorKind: "federated-peer", executorRef: "federation:inst_dev:WC-DEV", leaseExpiresAt: claimedAt },
+        { backlogItemId: "BI-B", capsuleId: "WC-LOCAL", executorKind: "claude-desktop", executorRef: "s", leaseExpiresAt: null },
+      ]) },
+    };
+    const page = await buildFederatedWorkPage(store, { originInstallationId: origin, cursor: null, limit: 10, now: at });
+    expect(store.workroom.findMany).toHaveBeenCalledWith({
+      where: {
+        backlogItemId: { in: ["BI-A", "row-a", "BI-B", "row-b", "BI-C", "row-c"] },
+        status: { notIn: ["complete", "abandoned", "archived"] },
+      },
+      orderBy: [{ createdAt: "asc" }, { capsuleId: "asc" }],
+      select: { backlogItemId: true, capsuleId: true, executorKind: true, executorRef: true, leaseExpiresAt: true, createdAt: true },
+    });
+    // The oldest live Workroom holds the claim. One held for a peer names that
+    // installation and its Workroom (BI-30EDDB7F); a local one names this install.
+    expect(page.items.map((i) => i.claim)).toEqual([
+      { active: true, since: claimedAt.toISOString(), workrooms: 0, holder: null },
+      { active: true, since: null, workrooms: 2, holder: { installationId: "inst_dev", workroomId: "WC-DEV", leaseExpiresAt: claimedAt.toISOString() } },
+      { active: false, since: null, workrooms: 0, holder: null },
+    ]);
+  });
+
+  it("drops a peer's claim once its lease has lapsed past the resume grace, so the item can be taken over", async () => {
+    const lapsedAt = new Date(at.getTime() - 25 * 60 * 60 * 1000);
+    const store = {
+      ...db([{ ...row("BI-B"), id: "row-b" }]),
+      workroom: { findMany: vi.fn().mockResolvedValue([
+        { backlogItemId: "BI-B", capsuleId: "WC-PEER", executorKind: "federated-peer", executorRef: "federation:inst_dev:WC-DEV", leaseExpiresAt: lapsedAt },
+      ]) },
+    };
+    const page = await buildFederatedWorkPage(store, { originInstallationId: origin, cursor: null, limit: 10, now: at });
+    expect(page.items[0]?.claim).toEqual({ active: false, since: null, workrooms: 0, holder: null });
+  });
+});

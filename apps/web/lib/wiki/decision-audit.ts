@@ -5,6 +5,7 @@
 // Prisma I/O and pass rows in, mirroring decision-governance-hub.ts.
 
 import { isWithdrawnHumanOutcome } from "@/lib/quality/decision-residue-staleness";
+import { isHumanEscalation, type HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
 
 export const DECISION_AUDIT_TIERS = ["wwmd", "wwwd", "wsid"] as const;
 export type DecisionAuditTier = (typeof DECISION_AUDIT_TIERS)[number];
@@ -109,7 +110,7 @@ export function tierWhere(tier: DecisionAuditTier): Record<string, unknown> {
   };
 }
 
-export type DecisionAuditRowInput = {
+export type DecisionAuditRowInput = HumanEscalationRow & {
   interactionId: string;
   createdAt: Date;
   question: string;
@@ -180,7 +181,6 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-const UNRESOLVED_OUTCOMES = new Set(["defer", "escalate"]);
 
 function asNullableString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
@@ -258,7 +258,7 @@ export function toAuditRow(row: DecisionAuditRowInput): DecisionAuditRow {
     recommendedOptionId:
       typeof payload.recommendedOptionId === "string" ? payload.recommendedOptionId : null,
     outcomeType: row.outcomeType,
-    awaitingHuman: UNRESOLVED_OUTCOMES.has(row.outcomeType) && !resolvedByHuman && !withdrawn,
+    awaitingHuman: isHumanEscalation(row) && !resolvedByHuman && !withdrawn,
     withdrawn,
     riskTier: row.riskTier,
     principleConflict: row.principleConflict,

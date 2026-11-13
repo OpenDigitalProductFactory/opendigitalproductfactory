@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   resolveDecisionAgentId,
+  resolveGateDecisionAgentId,
   syncDecisionShadowLedger,
   type DecisionAgentLookupDb,
   type DecisionShadowLedgerDb,
@@ -62,6 +63,18 @@ const followed = {
   rationale: "",
   resolvedAt: "2026-10-02T00:00:00.000Z",
 };
+
+describe("resolveGateDecisionAgentId (BI-AE416D75)", () => {
+  it("attributes a gate decision to the coworker the caller names", async () => {
+    const { db } = agentDb(["AGT-WS-EA"]);
+    await expect(resolveGateDecisionAgentId(db, "AGT-WS-EA")).resolves.toBe("AGT-WS-EA");
+  });
+
+  it("records no coworker when the gate's client cannot look one up", async () => {
+    await expect(resolveGateDecisionAgentId({ decisionInteraction: {} }, "AGT-WS-EA")).resolves.toBeNull();
+    await expect(resolveGateDecisionAgentId(null, "AGT-WS-EA")).resolves.toBeNull();
+  });
+});
 
 describe("resolveDecisionAgentId", () => {
   it("returns the canonical coworker when its row exists", async () => {
@@ -127,10 +140,23 @@ describe("syncDecisionShadowLedger", () => {
     expect(rows.get("DSL-DI-1")).toMatchObject({ agreement: true, actualDecision: { chosenOptionId: "a" } });
   });
 
-  it("leaves a row untouched when re-synced without a resolution", async () => {
+  it("re-derives only the proposed half when re-synced without a resolution (BI-AE416D75)", async () => {
     const { db, upsert } = ledgerDb();
     await syncDecisionShadowLedger(db, decision);
-    expect(upsert.mock.calls[0]![0].update).toEqual({});
+    const { update } = upsert.mock.calls[0]![0];
+    // The outcome half is never touched without a resolution, so a recorded
+    // agreement cannot be overwritten with null.
+    expect(Object.keys(update)).toEqual(["proposedDecision"]);
+    expect(update.proposedDecision).toMatchObject({ recommendedOptionId: decision.recommendedOptionId });
+  });
+
+  it("brings a recommendation recovered later into an existing row", async () => {
+    const { db, rows } = ledgerDb();
+    await syncDecisionShadowLedger(db, { ...decision, recommendedOptionId: null });
+    await syncDecisionShadowLedger(db, { ...decision, recommendedOptionId: null, proposedOptionId: "b" });
+    expect(rows.get("DSL-DI-1")).toMatchObject({
+      proposedDecision: { recommendedOptionId: "b", recommendedBy: "coworker" },
+    });
   });
 
   it("fills the outcome half once the resolution is known", async () => {
@@ -138,7 +164,7 @@ describe("syncDecisionShadowLedger", () => {
     const outcome = await syncDecisionShadowLedger(db, { ...decision, chosenOptionId: "a", humanOutcome: followed });
     expect(outcome).toEqual({ written: true, ledgerId: "DSL-DI-1", agreement: true });
     const { update } = upsert.mock.calls[0]![0];
-    expect(Object.keys(update).sort()).toEqual(["actualDecision", "agreement", "metadata", "outcome", "reconciledAt"]);
+    expect(Object.keys(update).sort()).toEqual(["actualDecision", "agreement", "metadata", "outcome", "proposedDecision", "reconciledAt"]);
     expect(update.reconciledAt).toEqual(new Date("2026-10-02T00:00:00.000Z"));
   });
 

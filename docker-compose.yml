@@ -94,7 +94,7 @@ services:
         # unset, the Dockerfile falls back to a content hash of the source.
         DPF_VERSION: ${DPF_VERSION:-}
         DPF_PLATFORM_VERSION: ${DPF_PLATFORM_VERSION:-}
-    command: ["/docker-entrypoint.sh"]
+    command: ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/docker-entrypoint.sh"]
     volumes:
       - dpf-source-code:/workspace
       # Fresh runtime capability rows use the same canonical host snapshot as
@@ -102,6 +102,16 @@ services:
       - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
+      AUTH_SECRET: ${AUTH_SECRET:-}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      DPF_SECRET_PROVIDER: ${DPF_SECRET_PROVIDER:-environment}
+      DPF_RUNTIME_SECRET_NAMES: ${DPF_RUNTIME_SECRET_NAMES:-}
+      DPF_ONEPASSWORD_CONNECT_HOST: ${DPF_ONEPASSWORD_CONNECT_HOST:-}
+      DPF_ONEPASSWORD_CONNECT_TOKEN_FILE: ${DPF_ONEPASSWORD_CONNECT_TOKEN_FILE:-}
+      DPF_ONEPASSWORD_CONNECT_TOKEN: ${DPF_ONEPASSWORD_CONNECT_TOKEN:-}
+      DPF_ONEPASSWORD_VAULT_ID: ${DPF_ONEPASSWORD_VAULT_ID:-}
+      DPF_ONEPASSWORD_ITEM_ID: ${DPF_ONEPASSWORD_ITEM_ID:-}
+      DPF_SECRET_PROVIDER_TIMEOUT_MS: ${DPF_SECRET_PROVIDER_TIMEOUT_MS:-}
       DPF_HOST_PROFILE: ${DPF_HOST_PROFILE:-}
       DPF_HOST_INSTALL_PATH: ${DPF_HOST_INSTALL_PATH:-}
       DPF_SELF_UPGRADE_HOST_SOURCE_MOUNT: /host-dpf
@@ -190,7 +200,10 @@ services:
       - ${DPF_STATE_DIR:-${HOME}/.dpf}/federation:/dpf-federation
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
+      # The image validates these before migrations. Empty values are allowed at
+      # Compose interpolation time so an explicitly selected external provider
+      # can resolve them into the child process without persisting them here.
+      AUTH_SECRET: ${AUTH_SECRET:-}
       # AUTH_TRUST_HOST tells Auth.js to trust the request's Host /
       # X-Forwarded-Host header so callbacks resolve to whatever URL the
       # browser used (localhost, LAN IP, dpf.local, public domain). No
@@ -200,13 +213,21 @@ services:
       # flows (emails, webhooks) where there's no in-flight request.
       AUTH_TRUST_HOST: "true"
       PUBLIC_URL: ${PUBLIC_URL:-}
-      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      DPF_SECRET_PROVIDER: ${DPF_SECRET_PROVIDER:-environment}
+      DPF_RUNTIME_SECRET_NAMES: ${DPF_RUNTIME_SECRET_NAMES:-}
+      DPF_ONEPASSWORD_CONNECT_HOST: ${DPF_ONEPASSWORD_CONNECT_HOST:-}
+      DPF_ONEPASSWORD_CONNECT_TOKEN_FILE: ${DPF_ONEPASSWORD_CONNECT_TOKEN_FILE:-}
+      DPF_ONEPASSWORD_CONNECT_TOKEN: ${DPF_ONEPASSWORD_CONNECT_TOKEN:-}
+      DPF_ONEPASSWORD_VAULT_ID: ${DPF_ONEPASSWORD_VAULT_ID:-}
+      DPF_ONEPASSWORD_ITEM_ID: ${DPF_ONEPASSWORD_ITEM_ID:-}
+      DPF_SECRET_PROVIDER_TIMEOUT_MS: ${DPF_SECRET_PROVIDER_TIMEOUT_MS:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://model-runner.docker.internal/v1}
-      # Management API for Ollama pull/delete/tags (distinct from OpenAI-compat
-      # inference URL above). On Docker Desktop, host.docker.internal reaches
-      # Ollama installed natively on the host. Linux sets this via the
-      # docker-compose.linux.yml overlay instead (to http://ollama:11434).
-      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-http://host.docker.internal:11434}
+      # Optional explicit legacy override. Desktop's local inference and
+      # management root resolve from LLM_BASE_URL unless the operator sets it;
+      # do not inject a competing Ollama endpoint into managed-engine admission.
+      # The Linux overlay supplies its intentional http://ollama:11434 default.
+      OLLAMA_INTERNAL_URL: ${OLLAMA_INTERNAL_URL:-}
       DEPLOYED_VERSION: ${DEPLOYED_VERSION:-}
       # Git SHA of the running image. This compose interpolation only resolves
       # to a value when DEPLOYED_SHA or DPF_VERSION is exported in the SHELL env
@@ -404,6 +425,11 @@ services:
       # per-install operator opt-in via .env.
       DPF_WORKCAPSULE_REAPER_ENABLED: ${DPF_WORKCAPSULE_REAPER_ENABLED:-1}
       DPF_WORKCAPSULE_REAPER_AUTO_REAP: ${DPF_WORKCAPSULE_REAPER_AUTO_REAP:-0}
+      # Per-room overseer duty on the Workroom drive (BI-8E1486FA): closes rooms whose
+      # item is finished or whose merged branch has no session, and routes stuck rooms
+      # to their Process Overseer. Default 0 = acting. Set 1 to keep the per-cycle
+      # summary and write nothing.
+      DPF_WORKROOM_OVERSEER_DRY_RUN: ${DPF_WORKROOM_OVERSEER_DRY_RUN:-0}
       # Runtime-artifact janitor (BI-DBF3F426 / BI-A55BE432): reaps orphaned
       # per-branch CI images + stray compose projects INCLUDING their named
       # volumes — the dominant local-disk leak (dead dpf-<topic> dev stacks

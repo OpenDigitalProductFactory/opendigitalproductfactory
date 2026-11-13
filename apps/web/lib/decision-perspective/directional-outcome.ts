@@ -11,7 +11,7 @@ import type {
   DecisionPerspectiveProfile,
   DecisionRiskTier,
 } from "./types";
-import { riskWithin, type ProfileCoverage } from "./coverage-scoring";
+import { delegatedRiskLimit, riskWithin, type ProfileCoverage } from "./coverage-scoring";
 // BI-DEDAC950: an escalation names the principle page that governs it, when one does.
 import { directionalEscalationPrinciple as cite } from "@/lib/kernel/governing-principles";
 
@@ -107,34 +107,19 @@ export function contentAwareDirectionalOutcome(
     };
   }
 
-  // alignment === "approve".
-  //
-  // Aligned is NOT a licence to act (BI-F5F2869D, operator ruling). Approving
-  // whatever matches recorded doctrine would make the business only ever do
-  // what it already does, and reviewing an unaligned or novel proposal is
-  // exactly where new ideas surface. So an approval acts autonomously only
-  // when the owner has ALREADY RULED on this question — a `ruled` stance
-  // dominating the relevant material — and otherwise escalates with the
-  // reason made explicit, so a genuinely new proposition is legible as new
-  // rather than buried among settled ones.
-  if (!selectedCoverage.settledByRuling) {
+  // BI-74B2A8CD R1 supersedes the settled-ruling gate: record novelty while
+  // retaining the same confidence, damage and delegated-policy boundaries.
+  const novelProposition = !selectedCoverage.settledByRuling;
+  const decisionBase = { ...baseResult, ...(novelProposition ? { novelProposition: true } : {}) };
+  const delegatedLimit = delegatedRiskLimit(selectedProfile.autonomyPolicy);
+  if (!riskWithin(input.riskTier, delegatedLimit)) {
     return {
-      ...baseResult,
-      ...cite("aligned-not-settled"),
-      outcomeType: "escalate",
-      rationale:
-        `This is a NEW proposition: your recorded stance is consistent with it (confidence ${confidence}), but you have not ruled on this question before. Escalating so you can weigh it — a decision that merely matches existing doctrine is not one you have already made.`,
-      gapReason: "aligned-not-settled",
-    };
-  }
-
-  if (input.riskTier === "high") {
-    return {
-      ...baseResult,
+      ...decisionBase,
       ...cite("high-risk"),
       outcomeType: "escalate",
+      policyLimitExceeded: true,
       rationale:
-        `Your recorded stance supports this at confidence ${confidence}, but approving a high-risk decision still needs your live call.`,
+        `Your recorded stance supports this at confidence ${confidence}, but ${input.riskTier} risk exceeds the delegated policy limit ${delegatedLimit}.`,
     };
   }
   if (
@@ -143,16 +128,16 @@ export function contentAwareDirectionalOutcome(
     && confidence >= selectedProfile.autonomyPolicy.minimumConfidenceForArbitration
   ) {
     return {
-      ...baseResult,
+      ...decisionBase,
       outcomeType: "arbitrate",
       rationale:
-        `Arbitrate and proceed: your recorded stance supports this at confidence ${confidence} and the autonomy policy allows arbitration at ${input.riskTier} risk.`,
+        `Arbitrate and proceed: your recorded stance supports this at confidence ${confidence} and the autonomy policy allows arbitration at ${input.riskTier} risk.${novelProposition ? " The owner has not ruled on this proposition before; novelty is recorded." : ""}`,
     };
   }
   return {
-    ...baseResult,
+    ...decisionBase,
     outcomeType: "recommend",
     rationale:
-      `Recommend APPROVING: your recorded stance supports this decision at confidence ${confidence}.`,
+      `Recommend APPROVING: your recorded stance supports this decision at confidence ${confidence}.${novelProposition ? " The owner has not ruled on this proposition before; novelty is recorded." : ""}`,
   };
 }

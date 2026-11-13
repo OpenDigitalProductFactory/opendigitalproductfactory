@@ -13,7 +13,7 @@ export function readSemanticReviewRemediation(
   verification: Verification | null,
   binding: { capsuleId: string; taskRunId: string; requestDigest: string; updatedAt: Date },
   now = Date.now(),
-): { settledNodeIds: string[]; observation: string } | null {
+): { settledNodeIds: string[]; observation: string; eligibilityVerified: boolean } | null {
   const proof = isRecord(verification?.result) && isRecord(verification.result.semanticReviewRecovery)
     ? verification.result.semanticReviewRecovery : null;
   const completed = verification?.completedAt?.getTime() ?? NaN;
@@ -24,5 +24,6 @@ export function readSemanticReviewRemediation(
     || proof?.taskRunId !== binding.taskRunId || proof.requestDigest !== binding.requestDigest
     || proof.executionSettled !== true || typeof proof.observation !== "string" || !proof.observation.trim()
     || !Array.isArray(proof.settledNodeIds) || proof.settledNodeIds.some(id => typeof id !== "string")) return null;
-  return { settledNodeIds: proof.settledNodeIds as string[], observation: proof.observation };
+  return { settledNodeIds: proof.settledNodeIds as string[], observation: proof.observation,
+    eligibilityVerified: proof.eligibilityVerified === true };
 }

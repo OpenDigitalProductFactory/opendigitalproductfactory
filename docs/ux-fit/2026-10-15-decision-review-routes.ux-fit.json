@@ -1,0 +1,23 @@
+{
+  "version": "1",
+  "decidedOption": "existing-domain-review",
+  "decisionInteractionId": "DI-F93C27214441",
+  "scope": {
+    "files": [
+      "apps/web/components/build/DecisionPerspectiveGatePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-F93C27214441",
+    "consideredOptions": [
+      "existing-domain-review",
+      "separate-routing-review-screen"
+    ]
+  },
+  "rationale": {
+    "existing-domain-review": "Chosen by the recorded platform decision: composite 7.218193906116917, margin 3.8657280691748137, high confidence, verdict proceed. Keep the existing domain panel and review/detail routes. Explain the recorded damaging cause and expose only its corresponding capture. Independent review has no owner-capture action. Preserve theme tokens, validation and keyboard focus without another navigation home.",
+    "separate-routing-review-screen": "Considered and rejected: composite 3.352465836942103. Another screen and navigation entry would split the decision context from the existing capture workflow and require the operator to learn and visit another home. It adds no authority or missing evidence."
+  },
+  "notes": "BI-74B2A8CD, WC-8D031416. The option feature magnitudes are explicitly comparative design estimates, not measured route budgets. This is a real recorded presentation choice before publication, not a claim that runtime UX or advisory service fulfillment passed. Working HTML prototype: docs/ux-fit/2026-10-15-decision-review-routes.prototype.html; local browser checks covered light/dark, empty-answer validation, independent/unavailable states and keyboard cancel focus. Separately attributed independent client source assessment led to plainer primary copy. Native advisory engagement CE-BD05D9C6 remains requested: dispatch was refused for lack of an advisory fulfillment binding, tracked by E27; no substitute initiative receipt was made. The other changed TSX pages only receive persisted route/reason or permission facts; they add no controls or visible copy, so they are not over-broad manifest scope. Shared integration, served happy paths and the 48-hour observation remain outstanding."
+}

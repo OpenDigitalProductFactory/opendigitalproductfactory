@@ -170,7 +170,31 @@ ecosystem/inbound-issue-triage          ← NEW scheduled job on evolve-dpf inst
                                                                        EXISTS, unused for this
 ```
 
+**Peer demand comes from other organizations only (BI-F4866228, 2026-11-03).**
+The intake reads demand envelopes only from a live link (`trusted`, not
+revoked or quarantined) to another organization. A `same-org-peer` link sends
+its whole backlog as demand envelopes, and work sync already mirrors that
+backlog here. Before this rule, the first commissioned production run filed
+each envelope as a new item, about 4,000 duplicates. The untouched copies were
+retired, and recorded as duplicates where an original existed, by migration
+`20261103180000_retire_same_org_peer_demand_intake_copies`. An organization's
+own installations share work through work sync, never through intake.
+
 Almost every box is existing substrate. The genuinely new code is the **GitHub issue read path** and the two scheduled jobs. `dpf.demand.dispositioned` is already a declared activity with a handler — §3.5's writeback obligation is satisfied by using it rather than inventing a notification.
+
+**As realized (BI-FB03E2FD, 2026-11-12).** The audit found `arbitrate` with no
+caller. Per WWMD DI-56D5E82AD9D2 it is wired as ordering plus real decisions,
+not a capacity allocator: each commissioned intake cycle ranks the open
+`ecosystem-inbound` items and records rank and reason as an
+`ecosystem_arbitration` activity on the item (only when the position changes),
+with the top of the queue on the intake job's schedule line. The item's
+`priority` is never written, so a person's setting stands; where the capacity
+line falls stays with the accountable human. A peer submitter is answered on a
+real decision through the existing `dpf.demand.dispositioned` writeback:
+`accepted` when the item moves to `in-progress`, `rejected` when it is retired
+with a recorded reason. A retirement without a reason sends nothing and is
+named on the schedule line. `drawAgainstCapacity`/`buildDispositions` (with
+their `deferred` outcome) remain uncalled; the contract has no `deferred`.
 
 ### 4.4 Ballot composition — every participant votes, but not on everything
 
@@ -448,6 +472,31 @@ is only taken when a projector was actually injected — a declared link with no
 way to project would otherwise swallow the report silently. Installs without a
 link keep the relay/direct behaviour byte-for-byte.
 
+### 5.6 Remediation — votes now move the shared priority (BI-626A4ECA), 2026-11-12
+
+Audit on 2026-11-12 found the vote budget built but uncounted: an interest
+response reached the controller as a flat signal and no code turned it into a
+score input. Now:
+
+- `DemandResponseV1` carries an optional integer `weight` (2–4) on `interest`
+  responses only; 1 is the default and is not written. A peer on an older
+  build reads a weighted vote as plain interest.
+- The participant's `respondToFederatedDemandAction` enforces the weekly
+  budget (16 credits, cost = weight²) against this week's outbound responses,
+  read bounded on `updatedAt`. Re-weighting an item refunds its earlier weight.
+- On receipt the controller re-tallies the item (`recordEcosystemVoteTally`):
+  distinct installations become `reach`, mean weight maps onto the impact
+  ladder, written with `demandInputSource = "ai"` through the guarded update,
+  so a human or agreed score is never overwritten. A changed weight updates
+  the held response instead of being dropped as a duplicate, but only when it
+  is strictly newer (`createdAt`), so a late retry cannot revert a correction.
+- The budget is also enforced at the receiver: a peer whose weighted votes
+  received this ISO week cost more than 16 credits has its votes counted at
+  weight 1, and the item's scoring activity records how many were over budget.
+  The sender's check is a courtesy across a trust boundary; this is the bound.
+- A tally that loses the optimistic-concurrency race is retried once; a vote
+  still not counted is logged with its reason (`tallyAfterInboundVote`).
+
 ## 6. Verification
 
 ### 6.1 Customer-first controller commissioning (BI-FD40397B)
@@ -509,7 +558,10 @@ commissioning action evaluate one predicate, and refuse with
    install whose class is only the undeclared cautious default, cannot become the
    controller even with a local Workroom.
 8. The installation operating intent is valid, confirmed and has `evolve-dpf` as its
-   primary purpose.
+   primary purpose or as a declared secondary purpose. An install that operates an
+   organisation can also own platform repository follow-through (kernel decision
+   DI-A6148958CADB, 2026-10-21); the operator declares secondary purposes on the
+   installation identity panel.
 
 Only a user with `manage_platform` whose active human principal owns the Workroom may
 commission it. The queue function runs with a concurrency limit of one. A failing or
@@ -527,10 +579,14 @@ and repeated-poll checks pass. Retain old evidence for audit and rollback of the
 reader; no destructive migration or new model is required by this amendment.
 
 **Operating contract.** Separate intake detection from the weekly voting digest.
-The proposed internal target is hourly detection, acknowledgement and assignment
-within one business day, a disposition within two business days, and a weekly
-update while unresolved. These targets require owner ratification before being
-published as customer commitments. Urgent service, safety or security impact
+The owner ratified these internal targets on 2026-10-21 (the originally proposed
+hourly / one-day / two-day / weekly set was declined as too aggressive): detection
+every four hours, acknowledgement and assignment of external submissions within
+two business days, a triage disposition within five business days, and a
+meaningful progress update every two weeks while unresolved. The scheduled job's
+default cadence is every four hours; an install may tune it on the scheduled-work
+register. These are internal targets, not published customer commitments, until
+the owner says otherwise. Urgent service, safety or security impact
 uses the existing incident/escalation path. Routine external acknowledgement
 precedes internal suggestions; delivery order still considers severity, evidenced
 impact, age, dependencies and available capacity. Unknown origin remains visible
@@ -546,6 +602,40 @@ canonical item for disposition. Follow pagination to completion and distinguish
 partial reads from an empty queue. Comments, edits, closure and reopen events
 must reconcile through the existing issue bridge and source registry. Preserve
 source evidence and canonical delivery state when retiring duplicate imports.
+
+**Identity decision (BI-952F08BA, 2026-10-20).** Kernel decision DI-0C1759862297
+chose this section's design over BI-952F08BA's original schema acceptance criteria
+(a `sourceSystem` enum, an `upstreamRecordKey` column and a database unique
+constraint). Those criteria are superseded; no migration is part of this item.
+The delivered shape uses existing primitives only:
+
+- The origin id of an upstream issue is `owner/repo#<number>`, lowercased, taken
+  from the issue URL and falling back to the commissioned repository. An issue
+  with no resolvable repository is refused, never filed under a bare number.
+  The `intake_origin` payload records `source.repository`, `source.url`,
+  `source.state` and a content/state `source.fingerprint`.
+- `ingestBacklogItem` reconciles only when the caller opts in with `reconcile`;
+  other detectors keep their recurrence semantics (non-terminal match plus an
+  occurrence bump). A reconciled origin matches its item in every status. It
+  never bumps `occurrenceCount`, changes status or creates a second item. A new
+  `intake_origin` event with `change.kind` of `edited`, `closed` or `reopened`
+  is appended to the same item only when the fingerprint differs from the last
+  recorded one.
+- Legacy `[origin:ecosystem-upstream-issue:<n>]` markers are dual-read. A legacy
+  item matches only when its stored source URLs name exactly the same
+  repository. One mapping activity (`payload.mapping`, legacy id to qualified
+  id) is then appended, once. A legacy item whose URL names another repository
+  is a different issue. An unresolvable legacy item, or more than one
+  claimant, returns `needs-review`: nothing is created and no status changes.
+- The scheduled run summary reports created, unchanged, changed, recurred,
+  needs-review and failed counts, and names each origin awaiting review.
+
+Issue #4563 is the measured case. Its retired intake (BI-EADA73BA) and its
+re-created intake (BI-41C048D8) both carry the legacy marker and the same URL,
+so it now stops for review until an owner reconciles the pair. The sweep still
+reads open issues only, so a closure is not observed until the issue is read
+again. Closure and reopen events become complete when the reader moves to an
+incremental `state=all` read, which belongs to the reconciliation item (BI-CCD8D841) in the controller plan.
 
 **Action and communication.** Every unresolved actionable issue has an accountable
 owner, next action, due date, blocker and source link in the existing Work/Attention
@@ -607,6 +697,38 @@ approval timeout has changed, and runtime acceptance remains outstanding.
 - Integration: a report on a non-coding install reaches an upstream BacklogItem with submitter provenance intact and no PII in the envelope (`assertNoExcludedEgress` already enforces this — assert it in the test).
 - Negative: no opt-in → nothing leaves. Budget exhausted → the vote is refused, not silently dropped. Untrusted link → no transport.
 - Runtime: exercised on the canonical runtime per §4 of the rulebook; a gate that cannot run is recorded inconclusive, never passed.
+
+### 6.2 Remediating copies of same-organization demand (BI-39247CB8)
+
+The first commissioned production run, and the run of 2026-11-03, filed 4,138
+local copies from same-organization peer demand. These included envelopes from
+revoked links and envelopes the peer had withdrawn. BI-C7D95F7E and BI-F4866228
+fix the intake.
+
+WWMD DI-F7294B768E8D (high stakes) decides the remediation. It chooses one
+governed, reversible bulk retire over a SQL retire at upgrade, scoring 12.53
+against 7.47.
+
+The tool `retire_peer_demand_intake_copies` (apps/web/lib/backlog/peer-demand-intake-copies.ts
+and peer-demand-intake-copy-retirement.ts) implements it:
+
+- **Selector.** It takes every item that carries the `[origin:ecosystem-peer-demand:fdm_…]`
+  marker and whose mirror is on a same-org-peer link, a revoked link, or withdrawn.
+  Live cross-organization demand is out of scope.
+- **Kept for individual review.** Items not in triaging or open status; items
+  that are claimed, have a build, are in a Workroom, or have demand evidence;
+  items with any activity a person recorded, or with work activity beyond
+  filing, twinning, scoring and automated triage; items that absorbed a local
+  intake origin; items with a mutating tool call after filing; and items whose
+  body carries a work-sync marker.
+- **Governance.** The dry run is read-only and returns a selection digest. The
+  retire call is irreversible, so it opens one approval envelope. When the
+  envelope runs, the call re-derives the selection and refuses if the digest
+  has changed.
+- **Effect.** Each item goes through `retireBacklogItemTool`, with outcome
+  `duplicate` of the earliest same-title work-sync mirror, otherwise `discard`.
+  This writes a status_change activity. The item can be restored with
+  update_backlog_item_status, and repeating the call has no further effect.
 
 ## 7. Open decisions for WWMD / the operator
 

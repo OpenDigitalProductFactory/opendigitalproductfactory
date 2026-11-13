@@ -410,12 +410,9 @@ describe("content-aware directional scoring (BI-7E1F128A)", () => {
     expect(result.confidenceScore).toBeGreaterThan(0);
   });
 
-  // BI-F5F2869D reversed this deliberately. Alignment is NOT a licence to act:
-  // auto-approving whatever matches recorded doctrine would make the business
-  // only ever do what it already does, and an unruled proposal is exactly where
-  // a new idea shows up. Aligned-but-unruled therefore escalates, LABELLED as a
-  // new proposition rather than as a doctrine gap.
-  it("escalates an aligned but never-ruled decision as a NEW proposition", () => {
+  // BI-74B2A8CD R1 supersedes the settled-ruling gate. Novelty is evidence;
+  // confidence, declared damage and existing delegation still govern action.
+  it("recommends an aligned never-ruled decision and records its novelty", () => {
     const result = evaluateDecisionPerspective({
       ...twoStances,
       question: "Should we onboard an MSP as a certified reseller partner?",
@@ -423,8 +420,9 @@ describe("content-aware directional scoring (BI-7E1F128A)", () => {
       relevanceMethod: "semantic",
     });
     expect(result.stanceAlignment).toBe("approve");
-    expect(result.outcomeType).toBe("escalate");
-    expect(result.gapReason).toBe("aligned-not-settled");
+    expect(result.outcomeType).toBe("recommend");
+    expect(result.novelProposition).toBe(true);
+    expect(result.gapReason).toBeUndefined();
     expect(result.alignmentScore).toBeGreaterThan(0);
   });
 

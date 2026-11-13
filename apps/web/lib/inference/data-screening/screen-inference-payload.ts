@@ -1,4 +1,6 @@
 import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { createHash } from "node:crypto";
+import { observeLocalNativeContinuationPolicy } from "@/lib/routing/local-native-continuation";
 import type {
   DestinationClass,
   ProcessingPurposeKey,
@@ -16,6 +18,7 @@ import type {
   InferencePayloadSensitivity,
   InferenceMatchProvenance,
   InferencePolicyVersionSnapshot,
+  SourceCodeProvenance,
 } from "./types";
 import { hasVerticalPolicyPacks } from "./vertical-policy-packs";
 import { SENSITIVITY_RANK } from "./sensitivity-rank";
@@ -58,6 +61,12 @@ export type ScreenInferencePayloadInput = {
   routeContext?: ScreenRouteContextInput;
   activityContract?: ActivityContract;
   governedData?: readonly GovernedPayloadHint[];
+  /**
+   * Repository the payload's code belongs to, resolved by the caller from a
+   * trusted record (BI-FC94F754). Public-repository code measures public;
+   * private or unproven code keeps confidential handling.
+   */
+  sourceCodeProvenance?: SourceCodeProvenance;
   destinationClass?: DestinationClass;
   purpose?: ProcessingPurposeKey | string;
   /**
@@ -102,7 +111,7 @@ export function screenInferencePayload(
     input.governedData,
     hintsFromActivity(input.activityContract),
   );
-  const classification = classifyInferencePayload({
+  const classify = () => classifyInferencePayload({
     messages: input.messages,
     systemPrompt: input.systemPrompt,
     systemPromptInstructionSpans: input.systemPromptInstructionSpans,
@@ -110,13 +119,15 @@ export function screenInferencePayload(
     tools: input.tools,
     taskType: input.taskType,
     governedData,
+    ...(input.sourceCodeProvenance ? { sourceCodeProvenance: input.sourceCodeProvenance } : {}),
   });
+  let classification = classify();
   const destinationClass = input.destinationClass ?? "external-service";
   const policyVersions = input.policyVersionSource?.();
   const prior = input.appliedTransformationSource?.() ?? input.appliedTransformation;
-  const policy = evaluateInferenceDispatchPolicy({
+  const evaluate = (current: typeof classification) => evaluateInferenceDispatchPolicy({
     organizationId: input.organizationId ?? DEFAULT_ORGANIZATION_ID,
-    classification,
+    classification: current,
     governedData,
     destinationClass,
     purpose: input.purpose,
@@ -126,6 +137,20 @@ export function screenInferencePayload(
     policyBundleVersion: policyVersions?.policyBundleVersion,
     transformation: prior?.transformation ?? "none",
   });
+  let policy = evaluate(classification);
+  // A receipt's default classificationVersion is its PAYLOAD hash. Observe
+  // actual policy versions instead, so appending a turn does not erase replay.
+  const policyDigest = createHash("sha256").update(JSON.stringify({
+    asset: policyVersions?.assetVersion ?? null,
+    classification: policyVersions?.classificationVersion ?? null,
+    authority: policyVersions?.authorityVersion ?? null,
+    bundle: policyVersions?.policyBundleVersion ?? null,
+    packs: [...policy.policyPackVersions].sort(),
+  })).digest("hex");
+  if (observeLocalNativeContinuationPolicy(policyDigest)) {
+    classification = classify();
+    policy = evaluate(classification);
+  }
 
   const originalSensitivity = normalizeRoutingSensitivity(input.routeContext?.sensitivity);
   const declaredPayloadSensitivity = originalSensitivity === "development"
@@ -134,10 +159,19 @@ export function screenInferencePayload(
   // A verified projection transform changes the payload being routed, not the
   // source/output classification retained in the receipt. Caller sensitivity
   // is still a floor and can never be lowered here.
+  //
+  // `development` is the caller saying "this is platform source work". With
+  // no repository record it still lowers a code-only payload to public, as it
+  // always has (founder ruling 2026-08-12). A caller that supplies a repository
+  // record gets the classifier's verdict instead (BI-FC94F754): code from a
+  // repository proven public is public, a payload with no code keeps
+  // `internal`, and code from a private or unproven repository is never public,
+  // whatever the route calls the work.
   const routedPayloadSensitivity = prior
     ? "internal"
     : originalSensitivity === "development" &&
         governedData === undefined &&
+        input.sourceCodeProvenance === undefined &&
         classification.dataClasses.every((dataClass) => dataClass === "source-code")
       ? "public"
       : classification.overallSensitivity;
@@ -245,6 +279,9 @@ export function screenInferencePayload(
       // against, and "something earlier pinned this thread" is underivable.
       currentTurnStartIndex: currentTurnStartIndex(input.messages),
       sensitivityFloorApplied: sensitivity !== routedPayloadSensitivity,
+      ...(input.sourceCodeProvenance
+        ? { sourceCodeVisibility: input.sourceCodeProvenance.visibility }
+        : {}),
       rawPayloadStored: false,
     },
     classification,

@@ -91,12 +91,26 @@ export function classifyLeaseProbeOutcome({ error, response } = {}) {
   }
 
   if (response && typeof response === "object" && response.success === true) {
+    const leaseId = response?.data?.lease?.leaseId || "";
+    const admissionStatus = response?.data?.admission?.status || "";
+    // BI-15E1576D: a closed pool still returns success with admission=queued.
+    // That is not a runnable gate. An open pool that queues the probe stays
+    // claim-succeeded, and the override stays refused.
+    if (response?.data?.poolPolicy?.effectiveCapacity === 0) {
+      return {
+        infrastructureUnavailable: true,
+        kind: "pool-closed",
+        message: "a queued claim is not a runnable gate: the local-CI pool effective capacity is 0",
+        leaseId,
+        admissionStatus,
+      };
+    }
     return {
       infrastructureUnavailable: false,
       outcome: "claim-succeeded",
       message: "the local-CI lease claim succeeded — the gate can run",
-      leaseId: response?.data?.lease?.leaseId || "",
-      admissionStatus: response?.data?.admission?.status || "",
+      leaseId,
+      admissionStatus,
     };
   }
 
@@ -183,6 +197,20 @@ export async function probeGateInfrastructure({
   const durationMs = Math.max(0, now() - startedAt);
 
   if (outcome.infrastructureUnavailable) {
+    // A closed-pool probe still holds a lease. Release it before the override
+    // proceeds, the same way a successful open-pool claim is released.
+    if (outcome.leaseId) {
+      try {
+        await call(
+          PROBE_RELEASE_TOOL,
+          { leaseId: outcome.leaseId, ownerSessionId },
+          { mcpUrl, bearerToken: credential.bearer, timeoutMs },
+        );
+      } catch {
+        // The evidence is the closed pool. A release failure does not make
+        // the pool runnable, and the lease expires on its own short TTL.
+      }
+    }
     return {
       ok: true,
       evidence: {

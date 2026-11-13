@@ -749,8 +749,21 @@ justifies (c).
 
 - The canonical origin widens DCR from loopback to one named origin only;
   registration still yields no authority without consent.
-- Installing the root into the machine trust store makes every browser on that
-  machine trust certificates the install CA issues. The CA's provisioner policy
-  must restrict issuance to the install's own names; verify this in S1.
+- Setup installs the root in the installing user's trust store on Windows
+  (`Cert:\CurrentUser\Root`) and macOS (login keychain); Linux uses the system CA
+  directory through `sudo`. Trust applies to clients that consult that store,
+  not automatically to every browser, account or service on the machine.
+  The operating system may request its own confirmation or password once;
+  declining it must not be reported as successful trust installation. The CA's
+  provisioner policy must restrict issuance to the install's own names; verify
+  this in S1.
 - Remote join pins the root by fingerprint; a mismatch trusts nothing.
 - Revocation, resource binding and one-family refresh rotation are unchanged.
+
+This wording follows the installing-user trust correction in §12.4.3, merged
+on 2026-09-25 in [PR #5649](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5649)
+(`18df917ac9c49f6e7b9079879e4eacf831365a29`). It supersedes S2's original
+machine-wide/no-dialog wording, not the remaining acceptance work. Native
+Windows, fresh-install and certificate-renewal verification remain unrun in
+the BI-2D545A0C reconciliation; Mac per-user trust evidence does not establish
+that coverage.

@@ -519,11 +519,14 @@ describe("cliAdapter", () => {
     }
 
     it("mints a session JWT and writes an mcp-config when mcpSession + tools present", async () => {
+      const taskExecutionFence = { schemaVersion: 1 as const, reservation: "original", dispatchClaim: "dispatch", authorityDigest: null, requestDigest: "9".repeat(64) };
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
       mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
-      await cliAdapter.execute(makeMcpRequest());
+      const request = makeMcpRequest();
+      request.mcpSession = { ...request.mcpSession!, taskRunId: "TR-BOUND", taskExecutionFence };
+      await cliAdapter.execute(request);
 
       expect(mockCreateMcpSessionToken).toHaveBeenCalledTimes(1);
       const mintArgs = mockCreateMcpSessionToken.mock.calls[0]![0] as Record<string, unknown>;
@@ -531,18 +534,17 @@ describe("cliAdapter", () => {
       expect(mintArgs.agentId).toBe("build-specialist");
       expect(mintArgs.threadId).toBe("thread-abc");
       expect(mintArgs.routeContext).toBe("/build");
+      expect(mintArgs.taskRunId).toBe("TR-BOUND");
+      expect(mintArgs.taskExecutionFence).toEqual(taskExecutionFence);
       expect(mintArgs.capability).toBe("write"); // create_backlog_item is side-effecting
       expect(mintArgs.scopes).toContain("backlog_read");
       expect(mintArgs.scopes).toContain("backlog_write");
 
-      // mcp-config file write — chown to the node user + chmod 644 so the Claude
-      // CLI process can read the config. These are now params to writeSandboxFile
-      // (the JWT-bearing content flows via stdin, never the command surface).
+      // The private config reaches the node user via stdin, never argv.
       const mcpWrite = sandboxWriteFor("cli-mcp-");
       expect(mcpWrite).toBeDefined();
       expect(mcpWrite!.chownNodeUser).toBe(true);
       expect(mcpWrite!.mode).toBe("600");
-      // The short-lived JWT is carried in the config content, not in argv.
       expect(mcpWrite!.content).toContain("eyJ.test.jwt");
     });
 

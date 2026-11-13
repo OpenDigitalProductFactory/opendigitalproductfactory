@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Decision review routes — working prototype</title>
+<style>
+:root{color-scheme:light dark}body{font:1rem/1.5 system-ui;margin:1rem auto;padding:1rem;max-width:46rem;background:var(--dpf-bg,Canvas);color:var(--dpf-text,CanvasText)}
+header,section,form{display:grid;gap:.75rem}nav{display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:2rem}label{display:grid;gap:.25rem}select,button,textarea{font:inherit;min-height:2.75rem;max-width:100%}textarea{min-height:6rem;width:100%;box-sizing:border-box}button{justify-self:start;padding:.5rem 1rem}article{background:var(--dpf-surface-1,Canvas);border:1px solid var(--dpf-border,ButtonBorder);border-radius:.5rem;padding:1.25rem}h1,h2,p{margin:0}h1{font-size:1.3rem}h2{font-size:1.1rem}small,.muted{color:var(--dpf-muted,GrayText)}details{margin-top:1rem}summary{padding:.5rem 0}output{display:block;margin-top:1rem}[hidden]{display:none!important}
+</style>
+<main>
+<header><h1>Decision review — prototype</h1><p class="muted">Illustrative states only. These controls do not record a decision or run a platform action.</p></header>
+<nav aria-label="Prototype controls">
+<label>Example<select id="example"><option value="human">Critical decision, recommendation present</option><option value="independent">Independent review outstanding</option><option value="earlier">Earlier item, missing evidence</option><option value="unavailable">Review status unavailable</option></select></label>
+<label>Appearance<select id="appearance"><option value="light dark">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+</nav>
+<article aria-labelledby="question"><section aria-live="polite">
+<small id="status">Human review required</small><h2 id="question">Release the customer export?</h2>
+<p id="meaning">This decision requires a person because it carries critical risk.</p>
+<button id="capture" type="button">Capture owner direction</button>
+</section>
+<details><summary>Decision evidence</summary><p id="evidence">The recorded evaluation recommends proceeding. Critical risk still requires a person's direction.</p></details>
+<form id="direction" hidden novalidate><label>Owner direction<textarea id="answer"></textarea></label><p id="error" role="alert" hidden></p><button type="submit">Preview recording direction</button><button type="button" id="cancel">Cancel</button></form>
+<output id="result" aria-live="polite"></output>
+</article>
+</main>
+<script>
+const states={
+human:{status:"Human review required",question:"Release the customer export?",meaning:"This decision requires a person because it carries critical risk.",evidence:"The recorded evaluation recommends proceeding. Critical risk still requires a person's direction.",action:"Capture owner direction"},
+independent:{status:"Independent review outstanding",question:"Use the proposed compatibility view?",meaning:"Independent review is needed because the recorded guidance is insufficient.",evidence:"The recorded evaluation is unresolved. The current interim permits this step within its existing authority. An improvement investigation is separate from proving the proposed action is correct.",action:null},
+earlier:{status:"Missing evidence",question:"Which source supports the rollout decision?",meaning:"Capture the missing evidence for this recorded decision.",evidence:"This earlier item retains its existing evidence-capture workflow.",action:"Capture missing evidence"},
+unavailable:{status:"Review status unavailable",question:"Decision review",meaning:"The review status could not be loaded. Check the decision record before continuing.",evidence:"No review status or permission is inferred from missing information.",action:null}
+};
+const byId=id=>document.getElementById(id);
+byId("example").addEventListener("change",()=>{const s=states[byId("example").value];for(const id of ["status","question","meaning","evidence"])byId(id).textContent=s[id];byId("capture").hidden=!s.action;byId("capture").textContent=s.action||"";byId("direction").hidden=true;byId("answer").value="";byId("result").textContent="";byId("error").hidden=true;});
+byId("appearance").addEventListener("change",()=>{document.documentElement.style.colorScheme=byId("appearance").value;});
+byId("capture").addEventListener("click",()=>{byId("direction").hidden=false;byId("answer").focus();});
+byId("cancel").addEventListener("click",()=>{byId("direction").hidden=true;byId("capture").focus();});
+byId("direction").addEventListener("submit",event=>{event.preventDefault();if(!byId("answer").value.trim()){byId("error").textContent="Direction is required.";byId("error").hidden=false;return;}byId("direction").hidden=true;byId("result").textContent="Preview complete. No decision was recorded and no platform action was sent.";byId("capture").focus();});
+</script>
+</html>

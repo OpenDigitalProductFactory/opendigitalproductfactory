@@ -58,7 +58,7 @@ function FamiliesNav({ config }: { config: FamiliesSectionNavConfig }) {
             {description ? <p className="text-xs text-[var(--dpf-muted)]">{description}</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
               {splitDiagnostic(subItems).primary.map((item) => (
-                <Link key={item.href} href={item.href} className={subItemClass("tab", item.active)}>
+                <Link key={item.href} href={item.href} aria-current={item.primary && item.active ? "page" : undefined} className={subItemClass("tab", item.active)}>
                   {item.label}
                 </Link>
               ))}
@@ -78,7 +78,7 @@ function FamiliesNav({ config }: { config: FamiliesSectionNavConfig }) {
         <p className={dense ? "sr-only" : "text-sm text-[var(--dpf-muted)]"}>{description}</p>
         <div className="flex flex-wrap gap-2">
           {splitDiagnostic(subItems).primary.map((item) => (
-            <Link key={item.href} href={item.href} className={subItemClass("pill", item.active)}>
+            <Link key={item.href} href={item.href} aria-current={item.primary && item.active ? "page" : undefined} className={subItemClass("pill", item.active)}>
               {item.label}
             </Link>
           ))}
@@ -160,12 +160,12 @@ function FlatNav({ config }: { config: FlatSectionNavConfig }) {
 // the route-audience registry sit behind one "More tools" disclosure instead of at
 // the same weight as daily tabs. The open page always stays visible. Simple mode
 // hides the disclosure entirely (globals.css, [data-advanced-tools]).
-type NavItem = { href: string; label: string; active: boolean };
+type NavItem = { href: string; label: string; active: boolean; primary?: boolean };
 
 function splitDiagnostic<T extends NavItem>(items: readonly T[]): { primary: T[]; more: T[] } {
   const primary: T[] = [];
   const more: T[] = [];
-  for (const item of items) (item.active || !isDiagnosticHref(item.href) ? primary : more).push(item);
+  for (const item of items) (item.primary || item.active || !isDiagnosticHref(item.href) ? primary : more).push(item);
   return { primary, more };
 }
 
@@ -206,8 +206,16 @@ function familyClass(style: "pill" | "tab", active: boolean): string {
 
 function subItemClass(style: "pill" | "tab", active: boolean): string {
   if (style === "tab") {
+    // text-xs, not text-[11px]. The UX sweep counts any link or button set at
+    // 9-11px as sub-legible, and every tab-style section nav (Finance, Compliance
+    // and the three Product navs) rendered ALL its sub-items that way — so every
+    // route under one inherited a sub-legible control per sub-item. A pre-existing
+    // route was grandfathered at that count; a net-new route's budget is zero, so
+    // no new page could be added under these navs at all (BI-8E1FD1BD: Finance's
+    // Configuration family reached eight sub-items and its new Statutory Rates
+    // page measured eight). The pill variant below already uses text-xs.
     return [
-      "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+      "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
       active
         ? "border-[var(--dpf-accent)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
         : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]",

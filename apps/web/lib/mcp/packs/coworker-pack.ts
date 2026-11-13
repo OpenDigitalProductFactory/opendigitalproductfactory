@@ -12,6 +12,15 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { dispatchExternalCoworkerTask } from "@/lib/mcp/external-coworker-task-adapter";
 import { authorizeCoworkerRequest } from "@/lib/mcp/independent-review-request";
 
+const originalReviewRecoveryProperty = {
+  reviewRecovery: {
+    type: "object", additionalProperties: false,
+    description: "Original-task recovery target issued with the exact readiness packet. A locator grants no authority; stale or ineligible targets refuse without creating a new task.",
+    properties: { taskRunId: { type: "string" }, requestDigest: { type: "string", pattern: "^[a-f0-9]{64}$" }, expectedUpdatedAt: { type: "string" } },
+    required: ["taskRunId", "requestDigest", "expectedUpdatedAt"],
+  },
+};
+
 const initiativeReviewProperties = {
   requiredToolNames: {
     type: "array",
@@ -67,7 +76,7 @@ const initiativeReviewProperties = {
 const definitions: ToolDefinition[] = [
   {
     name: "get_my_approval_status",
-    description: "Read an exact approval outcome by envelopeId, or use mode pending to discover up to 20 unexpired requests for the authenticated user and current assistant. Pending entries name owner, expiry, exact Inbox link and immutable review locator; hasMore names a bounded page. Does not approve, retry, transfer ownership or grant access.",
+    description: "Read an exact approval outcome by envelopeId and separately report safe stored action evidence for provider-account tests, or explicit missing, conflicting or unsupported evidence. Generic test success does not prove Responses verification or quota reconciliation. Mode pending lists up to 20 unexpired requests FROM THIS ASSISTANT ONLY for the authenticated user, with owner, expiry, Inbox link and immutable review locator; hasMore names a bounded page. This is NOT the owner's whole Inbox: other coworkers' requests are excluded and ownerInboxTotal is unknown. Zero here never establishes that the user's Inbox is empty. Does not execute, approve, retry, transfer ownership or grant access.",
     inputSchema: { type: "object", properties: {
       mode: { type: "string", enum: ["exact", "pending"], description: "Defaults to exact; pending omits envelopeId." },
       envelopeId: { type: "string", minLength: 1, maxLength: 128 },
@@ -100,6 +109,7 @@ const definitions: ToolDefinition[] = [
         enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
         requestKey: { type: "string", description: "Stable idempotency key required for threadless external MCP handoffs." },
         ...initiativeReviewProperties,
+        ...originalReviewRecoveryProperty,
       },
       required: ["targetAgent", "objective"],
     },
@@ -183,6 +193,7 @@ async function requestCoworkerHandler(
       title: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
       requiredToolNames: params["requiredToolNames"],
       initiativeReviewBinding: params["initiativeReviewBinding"],
+      reviewRecovery: params["reviewRecovery"],
       userId,
       context: authority.bounded ? { ...context, routeContext: "/build" } : context,
     });
@@ -235,6 +246,7 @@ async function summonCoworkerHandler(
       requestKey: typeof params["requestKey"] === "string" ? params["requestKey"] : undefined,
       requiredToolNames: params["requiredToolNames"],
       initiativeReviewBinding: params["initiativeReviewBinding"],
+      reviewRecovery: params["reviewRecovery"],
       userId,
       context,
     });
@@ -374,9 +386,18 @@ const handlers: Record<string, ToolPackHandler> = {
       if (!userId || !context?.agentId) return { success: false, error: "approval_identity_required", message: "Approval discovery requires an authenticated user and assistant." };
       const { listPendingApprovalOutcomes } = await import("@/lib/coworker/approval-outcome-store");
       const data = await listPendingApprovalOutcomes(userId, context.agentId);
-      return { success: true, message: data.hasMore
-        ? "Showing 20 pending requests. Open your Inbox to review the remaining requests."
-        : `Found ${data.approvals.length} pending approval request(s) for your current user and assistant.`, data };
+      const page = data.hasMore
+        ? "Showing 20 pending requests from this assistant only; more requests from this assistant remain."
+        : `Found ${data.approvals.length} pending approval request(s) from this assistant only.`;
+      const emptyWarning = data.approvals.length === 0
+        ? " This does not mean the owner's Inbox is empty." : "";
+      return { success: true,
+        message: `${page}${emptyWarning} The owner's Inbox total is unknown: this lookup excludes requests from other coworkers. Open the Inbox to review all requests you can access.`,
+        data: { ...data, ownerInboxTotal: null, scope: {
+          kind: "current-assistant-requests", delegatingUserId: userId,
+          coworkerAgentId: context.agentId, coversOwnerInbox: false,
+        } },
+      };
     }
     const envelopeId = typeof params.envelopeId === "string" ? params.envelopeId.trim() : "";
     if (!envelopeId || envelopeId.length > 128) return { success: false, error: "invalid_params", message: "An approval request ID is required." };

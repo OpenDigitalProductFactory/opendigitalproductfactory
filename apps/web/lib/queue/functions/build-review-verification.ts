@@ -28,6 +28,21 @@ import { jobs } from "@/lib/jobs";
 import { buildPipelineConcurrency } from "../admission";
 import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
 
+/**
+ * BI-E3C5C7E4: review verification runs only for a build that is in review now.
+ * Every caller moves the build into review before queuing, but a stale or
+ * re-delivered event used to run the whole job anyway: from 2026-11-06 to
+ * 11-13, abandoned and in-build builds were each finalized ~230 times, and every
+ * pass spent cloud model calls on a change nobody could ship.
+ */
+export function reviewVerificationSkipReason(
+  build: { sandboxId?: string | null; sandboxPort?: number | null; phase?: string | null } | null,
+): string | null {
+  if (!build || !build.sandboxId || !build.sandboxPort) return "sandbox or build missing";
+  if (build.phase !== "review") return `build is in ${build.phase ?? "no"} phase, not review`;
+  return null;
+}
+
 export const buildReviewVerification = jobs.createFunction(
   {
     id: "build/review-verification",
@@ -56,13 +71,13 @@ export const buildReviewVerification = jobs.createFunction(
           verificationOut: true,
           buildBranch: true,
           designDoc: true,
+          phase: true,
         },
       });
     });
 
-    if (!build || !build.sandboxId || !build.sandboxPort) {
-      return { skipped: true, reason: "sandbox or build missing" };
-    }
+    const skip = reviewVerificationSkipReason(build);
+    if (skip || !build) return { skipped: true, reason: skip ?? "sandbox or build missing" };
 
     const { deriveFixUxTestCases } = await import("@/lib/explore/feature-build-types");
     const brief = build.brief as {
@@ -197,6 +212,20 @@ export const buildReviewVerification = jobs.createFunction(
         });
         return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
       }
+      // BI-33B54E4B: a confirmed scoped-test or typecheck failure goes back to
+      // the coding agent with the failing tests named, through the same bound,
+      // then to the owner. Before this it ended here and the sweep re-ran the
+      // same failing tests on the same tree every 30 minutes.
+      if (finalize.status === "tests-failed") {
+        const routed = await step.run("route-test-failure-to-repair", async () => {
+          const { repairFailureForFinalize } = await import("@/lib/build/finalize-repair-routing");
+          const failure = repairFailureForFinalize(finalize);
+          if (!failure) return "not-routable" as const;
+          const { routeGauntletFailureToRepair } = await import("@/lib/build/gauntlet-repair");
+          return routeGauntletFailureToRepair(buildId, failure);
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
       // BI-AF072BE5: nothing was committed, so there is nothing to repair or
       // review. Tell the owner once; escalation ends the build's sweep.
       if (finalize.status === "no-change") {
@@ -221,6 +250,16 @@ export const buildReviewVerification = jobs.createFunction(
           return "escalated";
         });
         return { status: "finalize-incomplete", finalize: finalize.status, escalation: escalated };
+      }
+      // BI-4F89896B: the grader runs the base commit's guard scripts, so a base
+      // that predates a guard fix keeps the gauntlet from running. Refresh onto
+      // upstream (DI-A9D0CC59F049) and review again; bounded to once an hour.
+      if (finalize.status === "gauntlet-not-run") {
+        const refreshed = await step.run("refresh-base-after-gauntlet-not-run", async () => {
+          const { refreshReviewBuildAfterGauntletNotRun } = await import("@/lib/build/review-source-refresh");
+          return refreshReviewBuildAfterGauntletNotRun(buildId, finalize.reason);
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, refresh: refreshed };
       }
       return { status: "finalize-incomplete", finalize: finalize.status };
     }

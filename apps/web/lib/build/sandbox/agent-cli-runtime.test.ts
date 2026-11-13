@@ -51,7 +51,15 @@ vi.mock("@/lib/shared/lazy-node", () => ({
   lazyUtil: () => ({ promisify: (fn: Function) => fn }),
 }));
 
-import { writeSandboxFile, dockerExecWriteStdin, buildSpecialistTaskPrompt } from "./agent-cli-runtime";
+import {
+  writeSandboxFile,
+  dockerExecWriteStdin,
+  buildSpecialistTaskPrompt,
+  credentialFileExports,
+  removeSandboxFiles,
+  runSandboxAgentCli,
+  MAX_AGENT_CLI_STDERR_TAIL_CHARS,
+} from "./agent-cli-runtime";
 import type { AssignedTask } from "../task-dependency-graph";
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -277,5 +285,117 @@ describe("buildSpecialistTaskPrompt — the build's own checkout (BI-C36D23B9)",
     const prompt = buildSpecialistTaskPrompt({ task, instructions: "x", workdir: "/workspace/.builds/FB-1" });
     expect(prompt).toMatch(/this build's own checkout/i);
     expect(prompt).toMatch(/do not create another git worktree, clone, or branch/i);
+  });
+});
+
+// A runaway writer in the sandbox must not grow the portal's memory without
+// bound: stdout is capped and the run stopped, stderr keeps only its tail.
+describe("runSandboxAgentCli output limits", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("stops the run and rejects once stdout passes the cap", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+    const onStdoutChunk = vi.fn();
+
+    const p = runSandboxAgentCli({
+      containerId: "dpf-sandbox-1",
+      runnerScript: "/tmp/run.sh",
+      timeoutMs: 60_000,
+      maxStdoutChars: 10,
+      onStdoutChunk,
+    });
+    proc.stdout.emit("data", Buffer.from("123456"));
+    proc.stdout.emit("data", Buffer.from("7890ab"));
+    proc.stdout.emit("data", Buffer.from("more"));
+    expect(proc.kill).toHaveBeenCalledWith("SIGKILL");
+    proc.emit("close", null);
+
+    await expect(p).rejects.toMatchObject({ outputLimitExceeded: true, stdout: "" });
+    await expect(p).rejects.not.toHaveProperty("killed");
+    expect(onStdoutChunk).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns stdout unchanged under the cap", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = runSandboxAgentCli({ containerId: "dpf-sandbox-1", runnerScript: "/tmp/run.sh", timeoutMs: 60_000, maxStdoutChars: 10 });
+    proc.stdout.emit("data", Buffer.from("0123456789"));
+    proc.emit("close", 0);
+
+    await expect(p).resolves.toMatchObject({ stdout: "0123456789", exitCode: 0 });
+    expect(proc.kill).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the tail of stderr", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = runSandboxAgentCli({ containerId: "dpf-sandbox-1", runnerScript: "/tmp/run.sh", timeoutMs: 60_000 });
+    proc.stderr.emit("data", Buffer.from("x".repeat(MAX_AGENT_CLI_STDERR_TAIL_CHARS)));
+    proc.stderr.emit("data", Buffer.from("THE-END"));
+    proc.stdout.emit("data", Buffer.from("ok"));
+    proc.emit("close", 0);
+
+    const result = await p;
+    expect(result.stderr.length).toBe(MAX_AGENT_CLI_STDERR_TAIL_CHARS);
+    expect(result.stderr.endsWith("THE-END")).toBe(true);
+  });
+});
+
+// A credential file must never be readable by another user in the shared
+// sandbox, not even between the write and the chmod, and must not outlive the
+// moment the CLI reads it.
+describe("credential files in the shared sandbox", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("writes a secret under umask 077 and leaves it 600, whatever mode was asked for", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = writeSandboxFile({
+      containerId: "dpf-sandbox-1",
+      path: "/tmp/claude-token-x.txt",
+      content: "sk-ant-oat01-SECRET",
+      ownerOnly: true,
+      chownNodeUser: true,
+      mode: "644",
+    });
+    proc.emit("close", 0);
+    await p;
+
+    const inner = (mockSpawn.mock.calls[0] as [string, string[]])[1].at(-1) as string;
+    expect(inner).toBe(
+      "umask 077 && base64 -d > '/tmp/claude-token-x.txt' && chown node:node '/tmp/claude-token-x.txt' && chmod 600 '/tmp/claude-token-x.txt'",
+    );
+  });
+
+  it("leaves a non-secret write unchanged", async () => {
+    const proc = makeMockProcess();
+    mockSpawn.mockReturnValue(proc);
+
+    const p = writeSandboxFile({ containerId: "dpf-sandbox-1", path: "/tmp/cli-run.sh", content: "x", mode: "755" });
+    proc.emit("close", 0);
+    await p;
+
+    const inner = (mockSpawn.mock.calls[0] as [string, string[]])[1].at(-1) as string;
+    expect(inner).not.toContain("umask");
+  });
+
+  it("emits runner lines that load the file into the env var and then delete it", () => {
+    expect(credentialFileExports("ANTHROPIC_API_KEY", "/tmp/k.txt")).toEqual([
+      `export ANTHROPIC_API_KEY="$(cat '/tmp/k.txt')"`,
+      "rm -f '/tmp/k.txt'",
+    ]);
+  });
+
+  it("never throws from best-effort cleanup", async () => {
+    await expect(removeSandboxFiles("dpf-sandbox-1", ["/tmp/k.txt"])).resolves.toBeUndefined();
+    await expect(removeSandboxFiles("dpf-sandbox-1", [])).resolves.toBeUndefined();
   });
 });

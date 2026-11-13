@@ -30,6 +30,11 @@ const mocks = vi.hoisted(() => ({
   notificationCreate: vi.fn(),
   notificationUpdateMany: vi.fn(),
   bindObservations: vi.fn(),
+  applyObserved: vi.fn(),
+}));
+
+vi.mock("@/lib/backlog/pr-submit-awaiting-acceptance", () => ({
+  applyObservedPullRequestsToBacklog: mocks.applyObserved,
 }));
 
 vi.mock("@/lib/work-capsules/pull-request-binding-runtime", () => ({
@@ -139,6 +144,20 @@ beforeEach(() => {
 });
 
 describe("runContributorInventorySync", () => {
+  it("preserves the provider merge timestamp when passing a delivery observation", async () => {
+    const mergedAt = "2026-10-16T05:09:48Z";
+    await runContributorInventorySync({ now: FIXED_NOW, readers: fakeReaders({
+      githubPr: async () => ({ ok: true, rows: [{ sourceKey: "6426", payload: {
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory", number: 6426,
+        url: "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6426",
+        headBranch: "codex/offline-recovery-followthrough", state: "merged", isDraft: false, mergedAt,
+      } }] }),
+    }) });
+    expect(mocks.applyObserved).toHaveBeenCalledWith([
+      expect.objectContaining({ number: 6426, state: "merged", mergedAt }),
+    ]);
+  });
+
   it("happy path: all three sources succeed → status completed, all rows inserted, heartbeat updated", async () => {
     const result = await runContributorInventorySync({
       now: FIXED_NOW,

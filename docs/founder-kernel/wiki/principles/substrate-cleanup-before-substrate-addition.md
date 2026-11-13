@@ -36,9 +36,11 @@ fragmentation in place.
 
 ## What "cleanup before addition" looks like
 
-- **Reserve 20% of implementation capacity** for refactoring existing
-  event/evidence/coordination seams before adding new emitters or
-  consumers. Treat the budget as non-optional, not as slack.
+- **Use the funding owner's allocation.** Founder-funded shared platform
+  work targets approximately 80% refactoring, integration and repair, with
+  20% new capability. Organization/archetype work defaults to the inverse.
+  These are cumulative directions, not per-task quotas; resolve the owner
+  and purpose before applying them. See [investment allocation](../../../user-guide/investment-allocation.md).
 - **Phase 0 of any multi-phase plan consolidates.** Phase 1+ adds. If a
   plan starts at Phase 1 with no Phase 0, ask why the cleanup didn't
   fit; the answer is usually "we didn't think we needed it" — which is

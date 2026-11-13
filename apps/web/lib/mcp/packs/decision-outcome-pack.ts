@@ -66,7 +66,7 @@ const definitions: ToolDefinition[] = [
     description:
       "Report how often each coworker's governed decisions agreed with what a human then chose, per coworker x activity type x risk class, read from TrustState. "
       + "Each row gives the sample count beside the agreement rate. Below the stated minimum sample the rate is WITHHELD and shown as 'insufficient samples' — do not estimate one from the counts. "
-      + "Only human-resolved decisions are samples; a coworker's report on its own decision is counted separately (agentReportedCount) and never pooled into the rate. Decisions with no known resolution appear as unresolvedCount, and a coworker whose decisions have not been measured yet is listed under unmeasuredCoworkers rather than left out. "
+      + "Only human-resolved decisions are samples; a coworker's report on its own decision is counted separately (agentReportedCount) and never pooled into the rate. A decision resolved from what happened downstream, not by a person (e.g. an architecture advisory whose design was then revised or built unchanged), is counted separately too (outcomeResolvedCount, outcomeRateDisplay) and never pooled into the rate. Decisions with no known resolution appear as unresolvedCount, and a coworker whose decisions have not been measured yet is listed under unmeasuredCoworkers rather than left out. "
       + "Agreement is concordance, not correctness: say so when you quote a rate. "
       + "Read-only and report-only: every level is shadow, and nothing here authorizes or recommends autonomy. Figures are as fresh as each row's lastEvaluatedAt (a scheduled recompute every 6 hours). Call once per question; do not poll.",
     inputSchema: {

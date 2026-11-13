@@ -88,4 +88,41 @@ describe("nested Workroom coordination", () => {
     projectNestedRoomCoordination(input);
     expect(JSON.stringify(input)).toBe(before);
   });
+
+  it("escalates an unowned stalled child to the parent owner and then to the named human", () => {
+    const input = fixture();
+    input.rooms[0]!.coordinators = [];
+    const result = projectNestedRoomCoordination(input);
+    expect(result.delegations).toEqual([]);
+    expect(result.escalation.state).toBe("resolved");
+    expect(result.escalation.steps.map(step => step.ref)).toEqual([
+      "orchestrator", "AGT-ORCH-000", "HR-000", "recorded-human",
+    ]);
+  });
+
+  it("pages the parent human when the stalled child has no coordinator", () => {
+    const input = fixture();
+    input.rooms[0]!.coordinators = [];
+    input.rooms[1]!.coordinators = [actor("recorded-human")];
+    const result = projectNestedRoomCoordination(input);
+    expect(result.escalation.state).toBe("resolved");
+    expect(result.escalation.steps.map(step => step.ref)).toEqual(["recorded-human"]);
+  });
+
+  it("does not invent an owner when the whole lineage is unowned", () => {
+    const input = fixture();
+    input.rooms[0]!.coordinators = [];
+    input.rooms[1]!.coordinators = [];
+    expect(projectNestedRoomCoordination(input).escalation).toMatchObject({
+      state: "setup-required", reason: "coordinator-not-recorded",
+    });
+  });
+
+  it("still refuses conflicting coordinators on the stalled child", () => {
+    const input = fixture();
+    input.rooms[0]!.coordinators = [actor("one"), actor("two")];
+    expect(projectNestedRoomCoordination(input).escalation).toMatchObject({
+      state: "setup-required", reason: "conflicting-coordinators",
+    });
+  });
 });

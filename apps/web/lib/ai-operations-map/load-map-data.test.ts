@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
+vi.mock("@/lib/inference/ai-provider-data", () => ({ getProviders: vi.fn(async () => []) }));
+vi.mock("@/lib/inference/provider-routing-control-data", () => ({ loadProviderRoutingControls: vi.fn(async () => new Map()) }));
 const { mockResolveModelSelectionByPhase } = vi.hoisted(() => ({
   mockResolveModelSelectionByPhase: vi.fn(),
 }));

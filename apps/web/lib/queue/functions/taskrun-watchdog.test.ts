@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mocks for the lazy + module imports the watchdog touches.
 const quiescenceFindManyMock = vi.fn();
 const transitionStateMock = vi.fn();
+vi.mock("@/lib/self-upgrade/orphaned-drains", () => ({ recoverOrphanedUpgradeDrains: vi.fn(async () => 0) }));
 const setQuiescenceLevelMock = vi.fn();
 const inngestSendMock = vi.fn();
 const isStallWatchdogEnabledMock = vi.fn();
@@ -122,7 +123,7 @@ describe("isStuckQuiescingTaskRun (BI-8F45BA74)", () => {
 
 describe("recoverStuckQuiescenceCoordinators", () => {
   it("reaps a stuck coordinator: fails it, resets the level, clears the queue", async () => {
-    quiescenceFindManyMock.mockResolvedValueOnce([stuck("QR-1")]);
+    quiescenceFindManyMock.mockResolvedValueOnce([stuck("QR-1", "draining")]);
 
     const recovered = await recoverStuckQuiescenceCoordinators(
       new Date("2026-06-14T00:00:00.000Z"),
@@ -133,8 +134,9 @@ describe("recoverStuckQuiescenceCoordinators", () => {
       "QR-1",
       "failed",
       expect.objectContaining({ outcome: "failed", completionSource: "watchdog" }),
+      expect.any(Date), expect.objectContaining({ status: "draining" }),
     );
-    expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null);
+    expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null, expect.any(Date), "QR-1");
     expect(inngestSendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "platform.quiescence-cleared",
@@ -215,8 +217,8 @@ describe("taskrunWatchdog handler (the early-return fix)", () => {
       reason: "flag-off",
       quiescenceRecovered: 1,
     });
-    expect(transitionStateMock).toHaveBeenCalledWith("QR-1", "failed", expect.any(Object));
-    expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null);
+    expect(transitionStateMock).toHaveBeenCalledWith("QR-1", "failed", expect.any(Object), expect.any(Date), expect.objectContaining({ status: "draining" }));
+    expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null, expect.any(Date), "QR-1");
   });
 
   it("BI-15B42AFE: dedupes taskrun.stalled notification when an unread one already exists", async () => {

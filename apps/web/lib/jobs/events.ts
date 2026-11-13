@@ -141,7 +141,7 @@ export interface AiEvalRunEvent {
    *  left unset on automated enqueue paths (first-boot, page-load
    *  checkBundledProviders, model-discovery refresh) so a freshly-calibrated
    *  model isn't re-evaluated on every Inngest retry. BI-C8164664. */
-  data: { endpointId: string; modelId: string; userId: string; force?: boolean };
+  data: { endpointId: string; modelId: string; userId: string; force?: boolean; calibrationRunId?: string };
 }
 
 export interface AiProbeRunEvent {
@@ -159,6 +159,12 @@ export interface GeocodeAddressRequestedEvent {
 export interface GeocodeOrganizationRequestedEvent {
   name: "geocode/organization.requested";
   data: { organizationId: string };
+}
+
+/** An administrator asked to install the recommended street-map pack (BI-43BBCC26). */
+export interface MapPackInstallRequestedEvent {
+  name: "map-pack/install.requested";
+  data: { packId: string; region: string; bounds: { west: number; south: number; east: number; north: number }; locale: string };
 }
 
 export interface BrandExtractRunEvent {

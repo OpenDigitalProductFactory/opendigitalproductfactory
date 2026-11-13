@@ -43,7 +43,7 @@ describe("A2A coworker task route", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(mockReadCoworkerA2aTask).toHaveBeenCalledWith("CE-A2A");
+    expect(mockReadCoworkerA2aTask).toHaveBeenCalledWith("CE-A2A", { userId: "user-1" });
     await expect(response.json()).resolves.toMatchObject({
       id: "CE-A2A",
       status: { state: "working" },

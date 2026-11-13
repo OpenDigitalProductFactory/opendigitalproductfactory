@@ -116,6 +116,62 @@ describe("provider capacity classification", () => {
     expect(result.retryAt?.getTime()).toBe(resetsAt * 1000);
   });
 
+  it("maps an Anthropic usage-limit 400 to a quota that resets at the stated time", () => {
+    // Live body (2026-10-27): every Anthropic call failed this way for 10 days while
+    // it was classified "unknown", so routing kept choosing the provider.
+    const result = classifyProviderCapacity({
+      providerId: "anthropic",
+      statusCode: 400,
+      bodyText: JSON.stringify({
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: "You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC.",
+        },
+      }),
+      now: NOW,
+    });
+
+    expect(result).toMatchObject({
+      state: "quota_resets_at",
+      action: "retry_at",
+      confidence: "exact",
+      isHumanActionRequired: false,
+    });
+    expect(result.retryAt?.toISOString()).toBe("2026-11-01T00:00:00.000Z");
+    expect(result.retryAfterSeconds).toBe(Math.ceil((Date.parse("2026-11-01T00:00:00.000Z") - NOW.getTime()) / 1000));
+    expect(result.safeSummary).toContain("usage limit");
+  });
+
+  it("keeps an Anthropic usage-limit 400 without a parseable reset time as a quota hold", () => {
+    const result = classifyProviderCapacity({
+      providerId: "anthropic",
+      statusCode: 400,
+      bodyText: JSON.stringify({
+        type: "error",
+        error: { type: "invalid_request_error", message: "You have reached your specified API usage limits." },
+      }),
+      now: NOW,
+    });
+
+    expect(result.state).toBe("rate_limited");
+    expect(result.retryAt).toBeUndefined();
+  });
+
+  it("leaves an ordinary Anthropic invalid_request_error unclassified", () => {
+    const result = classifyProviderCapacity({
+      providerId: "anthropic",
+      statusCode: 400,
+      bodyText: JSON.stringify({
+        type: "error",
+        error: { type: "invalid_request_error", message: "messages: text content blocks must be non-empty" },
+      }),
+      now: NOW,
+    });
+
+    expect(result.state).toBe("unknown");
+  });
+
   it("uses bounded backoff for unknown 429 responses", () => {
     const result = classifyProviderCapacity({
       providerId: "unknown-ai",

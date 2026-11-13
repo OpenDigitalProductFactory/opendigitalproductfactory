@@ -1,4 +1,6 @@
+import { buildServiceHistory, isAiTurnClaimKey, orderWaiters, SERVICE_LOOKBACK_MS, type OverseerLease } from "./environment-lease-overseer";
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 
 export const NONPROD_WAIT_SCHEMA_VERSION = 1 as const;
 
@@ -59,6 +61,7 @@ type DurableWaitDb = {
 };
 
 type WaitLease = {
+  status?: string;
   id: string;
   leaseId: string;
   claimKey: string | null;
@@ -95,7 +98,7 @@ export const WAITER_LIVENESS_WINDOW_MS = 5 * 60_000;
 /** How far down the queue to look for a live waiter before giving up and
  *  falling back to the literal head. Bounded so a long queue of abandoned rows
  *  cannot turn one reconcile tick into an unbounded scan. */
-const HEAD_SCAN_LIMIT = 10;
+const HEAD_SCAN_LIMIT = 25;
 
 function waiterHasProcessBehindIt(lease: WaitLease, now: number): boolean {
   const lastBeat = lease.heartbeatAt ?? lease.queuedAt ?? null;
@@ -153,11 +156,71 @@ function waitPayload(existing: unknown, wait: NonprodLeaseWaitProjection) {
       : wait.state === "capacity-available"
         ? `Capacity may be available for ${wait.environmentKey}; re-read this task and make one fresh claim.`
         : wait.state === "admitted"
-          ? `Lease ${wait.leaseId} was admitted after durable waiting.`
+          ? `Lease ${wait.leaseId} was admitted.`
           : `Lease ${wait.leaseId} reached a terminal state.`,
     nonprodLeaseWait: wait,
   };
 }
+
+function leaseWaitProjection(input: {
+  lease: WaitLease; waitDeadlineAt: Date; now: Date;
+  state: "waiting" | "admitted"; queuePosition: number | null;
+}): NonprodLeaseWaitProjection {
+  return {
+    schemaVersion: NONPROD_WAIT_SCHEMA_VERSION, kind: "nonprod-lease-wait",
+    state: input.state, leaseId: input.lease.leaseId, claimKey: input.lease.claimKey,
+    environmentKey: input.lease.environmentKey, ownerProvider: input.lease.ownerProvider,
+    ownerSessionId: input.lease.ownerSessionId, worktreePath: input.lease.worktreePath,
+    branchName: input.lease.branchName, queuePosition: input.queuePosition,
+    waitDeadlineAt: input.waitDeadlineAt.toISOString(), lastTransitionAt: input.now.toISOString(),
+    eventId: null, eventConsumed: input.state === "admitted",
+  };
+}
+
+/** Only the fresh admission transaction may establish immediate or queued owner provenance.
+ * Never backfill an old active lease or overwrite a caller's existing Task. */
+export async function checkpointFreshNonprodLeaseAdmission(input: {
+  db: Pick<DurableWaitDb, "nonProductionEnvironmentLease"> & {
+    taskRun: Pick<NonNullable<DurableWaitDb["taskRun"]>, "upsert">;
+  };
+  userId: string; lease: WaitLease; waitDeadlineAt: Date; now: Date;
+  previewOwner?: { schemaVersion: 1; userId: string; agentId: string; binding: Record<string, unknown> };
+  queuePosition?: number;
+}): Promise<string> {
+  if (!input.userId.trim() || input.lease.taskRunId) throw new Error("nonprod_immediate_admission_identity_invalid");
+  const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
+  const queued = input.lease.status === "queued" && !!input.previewOwner;
+  const wait = leaseWaitProjection({ ...input, state: queued ? "waiting" : "admitted",
+    queuePosition: queued ? input.queuePosition ?? null : null });
+  const task = record(await input.db.taskRun.upsert({
+    where: { taskRunId },
+    create: {
+      taskRunId, userId: input.userId, title: `Admission to ${input.lease.environmentKey}`,
+      objective: `Retain authenticated ownership of lease ${input.lease.leaseId}.`,
+      source: "proactive", status: queued ? "submitted" : "completed", completedAt: queued ? null : input.now,
+      initiatingAgentId: input.previewOwner?.agentId ?? input.lease.ownerProvider,
+      repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
+      a2aMetadata: { kind: "nonprod-lease-wait", leaseId: input.lease.leaseId, claimKey: input.lease.claimKey },
+      progressPayload: { ...waitPayload(null, wait),
+        ...(input.previewOwner ? { nonprodPreviewOwner: input.previewOwner } : {}) }, lastHeartbeatAt: null,
+    },
+    update: {},
+  }));
+  const storedWait = parseNonprodLeaseWait(task?.["progressPayload"]);
+  if (!task || task["taskRunId"] !== taskRunId || task["userId"] !== input.userId
+    || !storedWait || Object.entries(wait).some(([key, value]) => storedWait[key as keyof NonprodLeaseWaitProjection] !== value)
+    || (input.previewOwner && (task["initiatingAgentId"] !== input.previewOwner.agentId
+      || !isDeepStrictEqual(record(task["progressPayload"])?.["nonprodPreviewOwner"], input.previewOwner)))) {
+    throw new Error("nonprod_immediate_admission_provenance_conflict");
+  }
+  const linked = record(await input.db.nonProductionEnvironmentLease.updateMany({
+    where: { id: input.lease.id, status: queued ? "queued" : "active", taskRunId: null }, data: { taskRunId },
+  }));
+  if (linked?.["count"] !== 1) throw new Error("nonprod_immediate_admission_link_conflict");
+  return taskRunId;
+}
+
+export const checkpointImmediateNonprodLeaseAdmission = checkpointFreshNonprodLeaseAdmission;
 
 export async function checkpointNonprodLeaseWait(input: {
   db: DurableWaitDb & { taskRun: NonNullable<DurableWaitDb["taskRun"]> };
@@ -169,23 +232,16 @@ export async function checkpointNonprodLeaseWait(input: {
 }): Promise<{ taskRunId: string; wait: NonprodLeaseWaitProjection }> {
   const now = input.now ?? new Date();
   const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
-  const wait: NonprodLeaseWaitProjection = {
-    schemaVersion: NONPROD_WAIT_SCHEMA_VERSION,
-    kind: "nonprod-lease-wait",
-    state: "waiting",
-    leaseId: input.lease.leaseId,
-    claimKey: input.lease.claimKey,
-    environmentKey: input.lease.environmentKey,
-    ownerProvider: input.lease.ownerProvider,
-    ownerSessionId: input.lease.ownerSessionId,
-    worktreePath: input.lease.worktreePath,
-    branchName: input.lease.branchName,
-    queuePosition: input.queuePosition,
-    waitDeadlineAt: input.waitDeadlineAt.toISOString(),
-    lastTransitionAt: now.toISOString(),
-    eventId: null,
-    eventConsumed: false,
-  };
+  const wait = leaseWaitProjection({ ...input, now, state: "waiting" });
+  if (input.lease.environmentKey === "active-candidate" && input.lease.taskRunId
+    && input.lease.taskRunId !== taskRunId) {
+    const linked = await input.db.taskRun.findUnique({ where: { taskRunId: input.lease.taskRunId } });
+    if (record(linked?.progressPayload)?.["nonprodPreviewOwner"] !== undefined) {
+      throw new Error("nonprod_preview_ownership_conflict");
+    }
+  }
+  const existing = await input.db.taskRun.findUnique({ where: { taskRunId } });
+  const progressPayload = waitPayload(existing?.progressPayload, wait);
   await input.db.taskRun.upsert({
     where: { taskRunId },
     create: {
@@ -202,7 +258,7 @@ export async function checkpointNonprodLeaseWait(input: {
         leaseId: input.lease.leaseId,
         claimKey: input.lease.claimKey,
       },
-      progressPayload: waitPayload(null, wait),
+      progressPayload,
       lastHeartbeatAt: null,
     },
     update: {
@@ -210,7 +266,7 @@ export async function checkpointNonprodLeaseWait(input: {
       completedAt: null,
       lastHeartbeatAt: null,
       repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
-      progressPayload: waitPayload(null, wait),
+      progressPayload,
     },
   });
   await input.db.nonProductionEnvironmentLease.updateMany({
@@ -280,8 +336,21 @@ export async function publishNonprodCapacityForHead(input: {
       (row): row is WaitLease => Boolean(row),
     );
   const now = (input.now ?? new Date()).getTime();
-  const head = candidates.find((lease) => waiterHasProcessBehindIt(lease, now))
-    ?? candidates[0]
+  // BI-218A4555: wake the overseer's policy head, not merely the oldest row.
+  // An AI turn has no task to wake, so it is passed over here; while it leads,
+  // a woken gate re-claims and simply stays queued behind it.
+  const recent = input.db.nonProductionEnvironmentLease.findMany
+    ? await input.db.nonProductionEnvironmentLease.findMany({
+      where: { environmentKey: input.environmentKey,
+        admittedAt: { gte: new Date(now - SERVICE_LOOKBACK_MS) } },
+      take: 200,
+    }) ?? []
+    : [];
+  const history = buildServiceHistory([...recent, ...candidates] as OverseerLease[], new Date(now));
+  const ordered = orderWaiters(candidates as Array<WaitLease & OverseerLease>, history, input.environmentKey)
+    .filter((lease) => !isAiTurnClaimKey(lease.claimKey));
+  const head = ordered.find((lease) => waiterHasProcessBehindIt(lease, now))
+    ?? ordered[0]
     ?? null;
   if (!head) return { notified: 0, headLeaseId: null };
   if (!input.db.taskRun) return { notified: 0, headLeaseId: head.leaseId };

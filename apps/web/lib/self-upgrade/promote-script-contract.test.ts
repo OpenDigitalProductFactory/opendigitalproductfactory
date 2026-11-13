@@ -412,6 +412,27 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       expect(dryRunResult.stdout).toContain("step=migrate");
     });
 
+    it("guards the activity ingestion failure and verifies its original row before older recovery classifiers", () => {
+      const scriptSource = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+      const recoveryCommand = "node packages/db/scripts/recover-workroom-activity-migration.mjs";
+      const resolveCommand = "prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening";
+      const verifyCommand = "recover-workroom-activity-migration.mjs --verify-rolled-back";
+      const humanCommand = "node packages/db/scripts/recover-human-principal-backfill-migration.mjs";
+      const inventoryCommand = "node packages/db/scripts/recover-inventory-snapshot-migration.mjs";
+      const deployCommand = "-c 'cd /app && pnpm --filter @dpf/db exec prisma migrate deploy'";
+
+      for (const command of [recoveryCommand, resolveCommand, verifyCommand, humanCommand, inventoryCommand, deployCommand]) {
+        expect(scriptSource).toContain(command);
+      }
+      expect(scriptSource.indexOf(recoveryCommand)).toBeLessThan(scriptSource.indexOf(resolveCommand));
+      expect(scriptSource.indexOf(resolveCommand)).toBeLessThan(scriptSource.indexOf(verifyCommand));
+      expect(scriptSource.indexOf(verifyCommand)).toBeLessThan(scriptSource.indexOf(humanCommand));
+      expect(scriptSource.indexOf(humanCommand)).toBeLessThan(scriptSource.indexOf(inventoryCommand));
+      expect(scriptSource.indexOf(inventoryCommand)).toBeLessThan(scriptSource.indexOf(deployCommand));
+      expect(scriptSource).not.toContain(`${resolveCommand}' >/dev/null 2>&1 || true`);
+      expect(scriptSource).not.toContain(`${verifyCommand}' || true`);
+    });
+
     it("guards the known inventory snapshot failure before normal migration deploy", () => {
       const scriptSource = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
       const recoveryCommand =

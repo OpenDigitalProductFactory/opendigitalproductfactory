@@ -62,6 +62,7 @@ function makeMockProcess(): MockProcess {
   return proc;
 }
 
+
 const mockSpawn = vi.fn();
 const mockExecAsync = vi.fn();
 
@@ -102,6 +103,7 @@ import {
   looksLikeCliRateLimit,
   looksLikeCliUnsupportedModel,
   cliFailureSignal,
+  describeCliFailure,
 } from "./codex-cli-adapter";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
@@ -345,6 +347,65 @@ describe("Codex native effect replay fence", () => {
   });
 });
 
+// BI-PIR-0371f80d: from 2026-10-27 every Codex run failed with exit 1 and the
+// CLI's verdict ("You've hit your usage limit ... try again at Nov 2nd, 2026
+// 6:13 AM") was dropped: the run stayed uncertain, the log said only
+// "stderrPresent: true", and the provider still read as available.
+describe("Codex CLI failure verdict is never hidden", () => {
+  const USAGE_LIMIT = "ERROR: You\u2019ve hit your usage limit. Visit https://chatgpt.com/settings/usage to purchase more credits or try again at Nov 2nd, 2026 6:13 AM.";
+
+  async function runFailing(stderr: string) {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "fake-test-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    let calls = 0;
+    mockSpawn.mockImplementation(() => {
+      const proc = makeMockProcess();
+      const isExecution = ++calls === 4;
+      process.nextTick(() => {
+        if (!isExecution) { proc.emit("close", 0); return; }
+        proc.emit("spawn");
+        proc.stderr.emit("data", Buffer.from(stderr));
+        proc.emit("close", 1);
+      });
+      return proc;
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    const error = await codexCliAdapter.execute(makeRequest()).catch((e: unknown) => e);
+    const logged = warn.mock.calls.map((c) => c.join(" ")).join("\n");
+    warn.mockRestore();
+    return { error: error as { name: string; diagnostics?: Record<string, unknown> }, logged };
+  }
+
+  it("logs the CLI's own error line, classifies it, and records the subscription cap", async () => {
+    const { recordCliRateLimit } = await import("./cli-pool-status");
+    const { error, logged } = await runFailing(`Human: PRIVATE_PROMPT discussing 401 Unauthorized\n${USAGE_LIMIT}\n`);
+    expect(error.name).toBe("NativeCliExecutionUncertainError");
+    expect(error.diagnostics).toMatchObject({ exitCode: 1, cliFailureHint: "quota" });
+    expect(logged).toContain("hit your usage limit");
+    expect(logged).toContain("hint=quota");
+    expect(logged).not.toContain("PRIVATE_PROMPT");
+    expect(recordCliRateLimit).toHaveBeenCalledWith("codex-cli", "codex", expect.stringContaining("try again at Nov 2nd, 2026 6:13 AM"), undefined);
+  });
+
+  it("classifies the CLI's auth verdict without recording a rate limit", async () => {
+    const { recordCliRateLimit } = await import("./cli-pool-status");
+    const { error, logged } = await runFailing("ERROR: Your access token could not be refreshed. Please sign in again.\n");
+    expect(error.diagnostics).toMatchObject({ cliFailureHint: "auth" });
+    expect(logged).toContain("hint=auth");
+    expect(recordCliRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("bounds and redacts what it logs", async () => {
+    const { logged } = await runFailing(`ERROR: ${"x".repeat(5_000)} upstream rejected Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl key sk-proj-ABCDEFGHIJKLMNOP\n`);
+    expect(logged).not.toMatch(/eyJhbGci|sk-proj-ABCDEFGH/);
+    expect(logged).toContain("[redacted]");
+    expect(logged.length).toBeLessThan(1_200);
+  });
+});
+
 describe("Codex inference context isolation", () => {
   it("keeps simultaneous account credentials in distinct private homes", async () => {
     vi.clearAllMocks();
@@ -532,9 +593,141 @@ describe("cliFailureSignal — classify the CLI's own error, not the echoed prom
     expect(looksLikeCliAuthFailure(cliFailureSignal(text))).toBe(true);
   });
 
+  // BI-F7D06E2D (live, 2026-11-13 05:23Z): `codex exec` exited 0 with empty
+  // stdout on a scheduled marketing run. With no ERROR line the signal is the
+  // stderr tail, which opens inside the echoed prompt. The log line kept the
+  // head of that tail, so it showed tool schema JSON and cut off what codex
+  // printed after the prompt.
+  it("logs the end of a failure with no ERROR line, where the CLI's own output is", () => {
+    const stderr = [
+      "user",
+      `Tools:\n- save_marketing_review: Parameters: ${JSON.stringify({ body: "x".repeat(2_500) })}`,
+      "Your turn: output the next tool_use JSON object, or your final answer.",
+      "codex",
+      "warning: model returned no final message",
+      "tokens used",
+      "41,207",
+    ].join("\n");
+    const { logLine } = describeCliFailure(stderr);
+    expect(logLine).toContain("warning: model returned no final message");
+    expect(logLine).toContain("tokens used");
+    expect(logLine.length).toBeLessThanOrEqual(501);
+  });
+
   it("falls back to the tail when the CLI printed no ERROR line", () => {
     const text = "x".repeat(10_000) + "\nnot logged in";
     expect(cliFailureSignal(text)).toContain("not logged in");
     expect(cliFailureSignal(text).length).toBeLessThanOrEqual(2_000);
+  });
+});
+
+
+describe("governed read-only Codex MCP transport", () => {
+  it("attaches only the bound native readers, never the bearer in argv or the archived prompt", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "test-provider-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{path: string; content: string}> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({path: args.at(-1)!, content: Buffer.from(data,"base64").toString("utf8")}); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close",0)));
+      } else process.nextTick(() => {proc.stdout.emit("data",Buffer.from('{"summary":"real native result"}'));proc.emit("close",0);});
+      return proc;
+    });
+    const names = ["read_source_at_version", "wiki_query", "search_ux_critique_corpus"];
+    const mintReadOnlySession = vi.fn(async()=>"test-session-secret");
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    const result = await codexCliAdapter.execute(makeRequest({
+      messages:[{role:"user",content:[{type:"text",text:"Inspect rendered input"},{type:"image_url",image_url:{url:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHNcAAAAASUVORK5CYII="}}]}],
+      tools: names.map(name => ({type:"function",function:{name,parameters:{type:"object",properties:{}}}})),
+      mcpSession: {userId:"human",agentId:"ux-design-critic",threadId:"thread",taskRunId:"TR-original",
+        taskExecutionFence:{schemaVersion:1,reservation:"reserved",dispatchClaim:"claimed",authorityDigest:null,requestDigest:"a".repeat(64)},
+        readOnlyToolNames:names,mintReadOnlySession},
+    }));
+    expect(mintReadOnlySession).toHaveBeenCalledExactlyOnceWith();
+    const config = writes.find(w=>w.path.endsWith("/config.toml"));
+    expect(config?.content).toContain('[mcp_servers.dpf]');
+    expect(config?.content).toContain('required = true');
+    expect(config?.content).toContain('enabled_tools = ["read_source_at_version","wiki_query","search_ux_critique_corpus"]');
+    expect(config?.content).toContain('shell_tool = false');
+    expect(config?.content).toContain('multi_agent = false');
+    expect(config?.content).toContain('apps = false');
+    expect(config?.content).toContain('test-session-secret');
+    const prompt = writes.find(w=>w.path.endsWith("-prompt.txt"))!.content;
+    expect(prompt).not.toContain('test-session-secret');
+    expect(prompt).not.toContain('Available tools. To invoke a tool, output ONE JSON');
+    const runner = writes.find(w=>w.content.includes("const config ="))!.content;
+    expect(runner).not.toContain("test-session-secret");
+    expect(runner).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(runner).toContain('read-only');
+    expect(runner).toContain('--image');
+    expect(writes.find(w=>w.path.endsWith('/image-1.png'))).toBeDefined();
+    expect(prompt).not.toContain('iVBORw0KGgo');
+    expect(prompt).toContain('[Attached image 1]');
+    expect(runner).toContain("fs.rmSync(config.home, { recursive: true, force: true })");
+    expect(result.toolCalls).toEqual([]);
+    expect(mockExecAsync.mock.calls.some(([cmd])=>cmd.includes("test-session-secret"))).toBe(false);
+  });
+});
+
+// BI-F7D06E2D — a production install, 2026-11-12 14:10 CST, TR-SCHED-AB4EF624. The
+// marketing run on codex/gpt-5.6-luna emitted get_marketing_summary as text
+// JSON in 37 s. The next turn ran 120 s inside `codex exec`, which still had
+// its own shell, apps, plugins, browser and computer-use tools, and ended:
+// "the campaign action controls were unavailable". The platform tools exist
+// only as described JSON, so every native agent tool is a place to look for
+// them and not find them. Text-tool mode now runs codex as inference only,
+// the way the bound read transport already does.
+describe("codex text-tool mode runs codex as inference only", () => {
+  async function runTextToolTurn() {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "test-provider-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{ path: string; content: string }> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({ path: args.at(-1)!, content: Buffer.from(data, "base64").toString("utf8") }); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else process.nextTick(() => { proc.stdout.emit("data", Buffer.from("done")); proc.emit("close", 0); });
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await codexCliAdapter.execute(makeRequest({
+      messages: [
+        { role: "user", content: "Advance the current campaign." },
+        { role: "assistant", content: '{"type":"tool_use","id":"s1","name":"get_marketing_summary","input":{}}', toolCalls: [{ id: "s1", name: "get_marketing_summary", arguments: {} }] },
+        { role: "tool", content: '{"draftable":[{"assetTaskId":"t1"}]}', toolCallId: "s1" },
+      ],
+      tools: ["get_marketing_summary", "draft_marketing_asset"].map((name) => ({ type: "function", function: { name, parameters: { type: "object", properties: {} } } })),
+    }));
+    return {
+      runner: writes.find((w) => w.content.includes("const config ="))!.content,
+      prompt: writes.find((w) => w.path.endsWith("-prompt.txt"))!.content,
+    };
+  }
+
+  it("switches off codex's own agent tools, so the described tools are the only way to act", async () => {
+    const { runner } = await runTextToolTurn();
+    for (const feature of ["shell_tool", "unified_exec", "apps", "plugins", "browser_use", "computer_use", "multi_agent", "goals", "hooks", "image_generation"]) {
+      expect(runner).toContain(`features.${feature}=false`);
+    }
+    expect(runner).toContain('web_search=\\"disabled\\"');
+    expect(runner).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(runner).toContain("read-only");
+  });
+
+  it("ends the prompt by asking for the next turn: one tool_use object or the final answer", async () => {
+    const { prompt } = await runTextToolTurn();
+    expect(prompt.trimEnd()).toMatch(/Your turn: output the next tool_use JSON object, or your final answer\.$/);
+    expect(prompt).toMatch(/run by the platform when you output that JSON/);
   });
 });

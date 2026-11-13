@@ -1,5 +1,8 @@
+import { revalidateReviewExecutionAuthority } from "./mcp-task-review-recovery";
+import { reconstructPersistedRemoteTask, loadPersistedRemoteTask, persistedTaskString as string,
+  type PersistedRemoteTask, type ReconstructionFailure } from "./mcp-task-persisted-request";
+export { reconstructPersistedRemoteTask, loadPersistedRemoteTask } from "./mcp-task-persisted-request";
 import { prisma } from "@dpf/db";
-import { currentUserContextFromRecord } from "@/lib/govern/current-user-context";
 import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
 import type { Prisma } from "@dpf/db";
 import {
@@ -13,64 +16,19 @@ import {
   reserveSubmittedTaskRunWorking,
   reserveTaskRunGenerationWorking,
 } from "@/lib/observability/heartbeat";
-import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import { mcpTaskNotificationBus } from "./mcp-task-notification-bus";
 import {
   parseResourceWaitProjection,
   remoteTaskRequestDigest,
-  remoteTaskRequestMatches,
 } from "./mcp-task-capacity-contract";
 import {
   parseDurableInferenceProgress,
   parseDurableInferenceTaskMetadata,
 } from "./mcp-task-durable-inference-contract";
 import { admitDurableInferenceTask } from "./mcp-task-durable-inference-runtime";
-import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { automaticReviewerRecoveryWait, healParkedReviewFromReceipt } from "./mcp-task-background-dispatch";
-import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
-import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
-type PersistedRemoteTask = {
-  id: string;
-  taskRunId: string;
-  userId: string;
-  threadId: string | null;
-  contextId: string | null;
-  status: string;
-  routeContext: string | null;
-  title: string;
-  objective: string;
-  currentAgentId: string | null;
-  authorityScope: unknown;
-  progressPayload: unknown;
-  a2aMetadata: unknown;
-  updatedAt: Date;
-  messages: Array<{ parts: unknown }>;
-  user: {
-    id: string;
-    isActive: boolean;
-    isSuperuser: boolean;
-    groups: Array<{ platformRole: { roleId: string } | null }>;
-  };
-};
-
-type ReconstructedRemoteTask = {
-  run: { id: string; taskRunId: string; contextId: string | null };
-  threadId: string;
-  token: RemoteTaskSubmitAuth;
-  userContext: import("@/lib/permissions").UserContext;
-  parsed: RemoteTaskSubmitParams;
-};
-
-type ReconstructionFailure = {
-  ok: false;
-  code:
-    | "persisted_identity_incomplete"
-    | "persisted_request_invalid"
-    | "request_digest_mismatch";
-  message: string;
-};
 
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -78,24 +36,6 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function string(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function stringArray(value: unknown): string[] | null {
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) return null;
-  return value.map((entry) => entry.trim()).filter(Boolean);
-}
-
-function storedTextPart(parts: unknown): string | null {
-  if (!Array.isArray(parts)) return null;
-  for (const part of parts) {
-    const value = record(part);
-    const text = string(value?.["text"]);
-    if (text) return text;
-  }
-  return null;
-}
 
 function taskState(value: unknown): TaskState {
   switch (value) {
@@ -129,138 +69,6 @@ async function publishMcpTaskStatus(taskRunId: string, apiTokenId: string): Prom
   if (task) mcpTaskNotificationBus.publish(apiTokenId, task);
 }
 
-export function reconstructPersistedRemoteTask(
-  row: PersistedRemoteTask,
-): ActionSuccess<ReconstructedRemoteTask> | ReconstructionFailure {
-  const metadata = record(row.a2aMetadata);
-  const idempotencyKey = string(metadata?.["idempotencyKey"]);
-  const requestDigest = string(metadata?.["requestDigest"]);
-  const riskClass = string(metadata?.["riskClass"]);
-  const tokenId = string(metadata?.["apiTokenId"]);
-  const tokenSource = string(metadata?.["tokenSource"]);
-  const tokenCapability = string(metadata?.["tokenCapability"]);
-  const agentId = string(metadata?.["requestedAgentId"]) ?? string(row.currentAgentId);
-  const routeContext = string(row.routeContext);
-  const prompt = storedTextPart(row.messages[0]?.parts);
-  const authorityScope = stringArray(row.authorityScope);
-  const hasRequestObjective = metadata !== null
-    && Object.prototype.hasOwnProperty.call(metadata, "requestObjective");
-  let requestObjective = row.objective;
-  if (hasRequestObjective) {
-    const storedRequestObjective = string(metadata?.["requestObjective"]);
-    if (!storedRequestObjective) {
-      return {
-        ok: false,
-        code: "persisted_request_invalid",
-        message: "Persisted remote task request objective is invalid.",
-      };
-    }
-    requestObjective = storedRequestObjective;
-  }
-
-  const currentHuman = currentUserContextFromRecord(row.userId, row.user);
-  if (
-    !row.id
-    || !currentHuman
-    || !row.taskRunId
-    || !row.userId
-    || !row.threadId
-    || !idempotencyKey
-    || !requestDigest
-    || !tokenId
-    || !agentId
-    || !routeContext
-    || !prompt
-    || !authorityScope
-  ) {
-    return {
-      ok: false,
-      code: "persisted_identity_incomplete",
-      message: "Persisted remote task identity is incomplete and cannot be executed.",
-    };
-  }
-  if (
-    (riskClass !== "read" && riskClass !== "bounded-write" && riskClass !== "high-risk")
-    || (tokenCapability !== "read" && tokenCapability !== "write")
-    || (tokenSource !== "pat" && tokenSource !== "oauth" && tokenSource !== "session-jwt")
-  ) {
-    return {
-      ok: false,
-      code: "persisted_request_invalid",
-      message: "Persisted remote task authorization snapshot is invalid.",
-    };
-  }
-
-  const rawReviewBinding = metadata?.["initiativeReviewBinding"];
-  const initiativeReviewBinding = rawReviewBinding === null || rawReviewBinding === undefined
-    ? undefined
-    : parseInitiativeReviewBinding(rawReviewBinding);
-  if (rawReviewBinding !== null && rawReviewBinding !== undefined && !initiativeReviewBinding) {
-    return {
-      ok: false,
-      code: "persisted_request_invalid",
-      message: "Persisted initiative review binding is invalid.",
-    };
-  }
-  const rawDurableInference = metadata?.["durableInference"];
-  const durableInference = rawDurableInference === undefined
-    ? null
-    : parseDurableInferenceTaskMetadata(rawDurableInference);
-  if (rawDurableInference !== undefined && !durableInference) {
-    return {
-      ok: false,
-      code: "persisted_request_invalid",
-      message: "Persisted durable inference recipe binding is invalid.",
-    };
-  }
-  if (durableInference && (riskClass !== "read" || initiativeReviewBinding)) {
-    return {
-      ok: false,
-      code: "persisted_request_invalid",
-      message: "Persisted durable inference authorization is outside the closed read-only mode.",
-    };
-  }
-  const requestedThreadId = string(metadata?.["requestedThreadId"]);
-  const collaboration = string(metadata?.["collaborationKind"]);
-  const collaborationKind = collaboration === "handoff" || collaboration === "summon"
-    ? collaboration
-    : undefined;
-  const parsed: RemoteTaskSubmitParams = {
-    agentId,
-    routeContext,
-    title: row.title,
-    objective: requestObjective,
-    prompt,
-    idempotencyKey,
-    riskClass,
-    threadId: requestedThreadId,
-    authorityScope,
-    ...(collaborationKind ? { collaborationKind } : {}),
-    ...(initiativeReviewBinding ? { initiativeReviewBinding } : {}),
-    ...(durableInference ? { recipeId: durableInference.recipeId } : {}),
-  };
-
-  if (!remoteTaskRequestMatches(metadata, parsed)) {
-    return {
-      ok: false,
-      code: "request_digest_mismatch",
-      message: "Persisted remote task request does not match its immutable digest.",
-    };
-  }
-
-  return ok({
-      run: { id: row.id, taskRunId: row.taskRunId, contextId: row.contextId },
-      threadId: row.threadId,
-      token: {
-        tokenId,
-        userId: row.userId,
-        capability: tokenCapability,
-        source: tokenSource,
-      },
-      userContext: currentHuman,
-      parsed,
-  });
-}
 
 async function settleReconstructionFailure(
   row: Pick<
@@ -322,45 +130,20 @@ async function settleReconstructionFailure(
 export async function executePersistedRemoteTask(input: {
   taskRunId: string;
 }): Promise<Record<string, unknown>> {
-  const row = await prisma.taskRun.findUnique({
-    where: { taskRunId: input.taskRunId },
-    select: {
-      id: true,
-      taskRunId: true,
-      userId: true,
-      threadId: true,
-      contextId: true,
-      status: true,
-      routeContext: true,
-      title: true,
-      objective: true,
-      currentAgentId: true,
-      authorityScope: true,
-      progressPayload: true,
-      a2aMetadata: true,
-      updatedAt: true,
-      messages: {
-        where: { role: "user" },
-        orderBy: { createdAt: "asc" },
-        take: 1,
-        select: { parts: true },
-      },
-      user: {
-        select: {
-          id: true,
-          isSuperuser: true,
-          isActive: true,
-          groups: { include: { platformRole: true } },
-        },
-      },
-    },
-  }) as PersistedRemoteTask | null;
+  const row = await loadPersistedRemoteTask(input.taskRunId);
   if (!row) return { status: "missing", taskRunId: input.taskRunId };
 
   // Stale queue events are advisory. Canonical terminal state wins without
   // reconstructing credentials that may lawfully have expired since submit.
   if (isTerminalTaskStatus(row.status)) {
     return { status: row.status, taskRunId: row.taskRunId, idempotentReplay: true };
+  }
+
+  // Like terminal replay and the background reconciler, observe a genuine
+  // receipt before reconstructing authority for new execution. The healer
+  // retains artifact/writer checks and cancellation/version fencing.
+  if (await healParkedReviewFromReceipt(row)) {
+    return { taskRunId: row.taskRunId, status: "completed", idempotentReplay: true };
   }
 
   const earlyProgress = record(row.progressPayload) ?? {};
@@ -423,10 +206,9 @@ export async function executePersistedRemoteTask(input: {
 
   const progress = record(row.progressPayload) ?? {};
   const dispatch = record(progress["dispatch"]) ?? {};
-  if (await healParkedReviewFromReceipt(row)) {
-    await publishMcpTaskStatus(row.taskRunId, reconstructed.data.token.tokenId);
-    return { taskRunId: row.taskRunId, status: "completed", idempotentReplay: true };
-  }
+  if (progress.reviewExecutionAuthority !== undefined && !await revalidateReviewExecutionAuthority({
+    ...reconstructed.data, metadata: row.a2aMetadata, progress,
+  })) return { taskRunId: row.taskRunId, status: row.status, recoveryError: "current-review-authority-refused" };
   if (await automaticReviewerRecoveryWait(row)) {
     // The existing replay path owns request matching, generation CAS, bounded
     // attempts, immutable reader evidence and the terminal writer's authority.
@@ -434,7 +216,11 @@ export async function executePersistedRemoteTask(input: {
     const resumed = await submitRemoteCoworkerTask({
       token: reconstructed.data.token,
       userContext: reconstructed.data.userContext,
-      params: reconstructed.data.parsed,
+      params: { ...reconstructed.data.parsed,
+        ...(progress.reviewExecutionAuthority !== undefined ? { reviewRecovery: {
+          taskRunId: row.taskRunId, requestDigest: record(row.a2aMetadata)!["requestDigest"], expectedUpdatedAt: row.updatedAt.toISOString(),
+        } } : {}),
+      },
     });
     return resumed.kind === "result"
       ? resumed.result

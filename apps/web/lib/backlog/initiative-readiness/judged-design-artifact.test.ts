@@ -36,6 +36,51 @@ const codes = (entries: ReadonlyArray<{ code: string; state: string }>) =>
   entries.map((entry) => `${entry.code}:${entry.state}`);
 
 describe("the design a gate judges (BI-4592CF69)", () => {
+  function withCurrent(currentDesign: { state: "verified"; digest: string } | { state: "unavailable" }, activities: Activities = readyActivities()) {
+    return projectBacklogItemReadiness({
+      item, activities, target: "plan", transitionObject,
+      authorization: "pass", capsuleIdentity: "pass", evaluatedAt: "2026-10-16T00:00:00.000Z",
+      ...{ currentDesign },
+    }).decision;
+  }
+
+  it("discovers an unreviewed amendment while every historical gate still passes", () => {
+    const decision = withCurrent({ state: "verified", digest: "sha256:unreviewed-head" });
+    expect(codes([...decision.unmet, ...decision.blockers])).toContain("SPEC_APPROVAL_REQUIRED:stale");
+    expect(codes([...decision.unmet, ...decision.blockers])).toContain("OBJECTIVE_BASELINE_REQUIRED:stale");
+    expect(decision.verdict).not.toBe("allowed");
+  });
+
+  it("does not invalidate identical design bytes merely because its commit changed", () => {
+    expect(withCurrent({ state: "verified", digest: "sha256:design" }).verdict).toBe("allowed");
+  });
+
+  it("uses verified restored baseline bytes instead of a later historical amendment receipt", () => {
+    const decision = withCurrent({ state: "verified", digest: "sha256:design" }, [
+      ...readyActivities(), onDigest("r-older-amendment", "architecture-review", "sha256:shortened", later(60_000)),
+    ]);
+    expect(codes([...decision.unmet, ...decision.blockers])).not.toContain("SPEC_APPROVAL_REQUIRED:stale");
+    expect(codes([...decision.unmet, ...decision.blockers])).not.toContain("OBJECTIVE_BASELINE_REQUIRED:stale");
+  });
+
+  it("cannot report old all-pass evidence as current when the source is unavailable", () => {
+    const decision = withCurrent({ state: "unavailable" });
+    expect(decision.verdict).not.toBe("allowed");
+    expect([...decision.blockers, ...decision.unmet].some(entry => entry.code === "CANONICAL_DESIGN_REQUIRED" && entry.state === "missing")).toBe(true);
+  });
+
+  it("also blocks the medium plan gate that owes a baseline rather than a design review", () => {
+    const decision = projectBacklogItemReadiness({
+      item: { ...item, workShape: "delivery-medium@1.0.0" }, activities: readyActivities(), target: "plan",
+      transitionObject, authorization: "pass", capsuleIdentity: "pass", evaluatedAt: "2026-10-16T00:00:00.000Z",
+      ...{ currentDesign: { state: "unavailable" as const } },
+    }).decision;
+    expect(decision.verdict).not.toBe("allowed");
+    expect([...decision.unmet, ...decision.blockers]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing" }),
+    ]));
+  });
+
   it("counts receipts recorded on the shortened spec at the head the routes named", () => {
     const decision = project([
       ...readyActivities(),

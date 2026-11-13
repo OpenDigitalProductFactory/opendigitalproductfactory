@@ -24,6 +24,7 @@ import { describeContextCapacityFailure } from "./context-capacity-failure";
 import { buildHumanHandoff } from "./escalation-ladder";
 import { classifyDispatchFailure } from "../inference/dispatch-failure-class";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, type ExecutionUncertainty } from "../shared/execution-uncertainty";
+import { isLocalProviderId } from "../routing/provider-locality";
 
 /** Routing eliminated every candidate — a real configuration question. */
 export function noEligibleModelHandoff(): string {
@@ -106,6 +107,23 @@ export function providersUnavailableHandoff(attempts: readonly EndpointAttempt[]
 }
 
 export type EndpointAttempt = { endpointId: string; error: string; code?: string };
+
+/** A queue expiry proves no dispatch for this call, not a provider outage. */
+function isLocalAdmissionWait(message: string): boolean {
+  const marker = /inference admission timeout on local engine after \d+ms \(origin=(?:interactive|autonomous)(?:, provider=[^)]+)?\)/i;
+  if (/All endpoints failed/i.test(message)) {
+    const attempts = parseEndpointAttempts(message);
+    return !!attempts?.length && attempts.every(attempt =>
+      isLocalProviderId(attempt.endpointId) && marker.test(attempt.error),
+    );
+  }
+  return marker.test(message);
+}
+
+function localAdmissionWaitHandoff(): string {
+  return "This AI step did not start: other requests were ahead in this machine's AI queue when its wait limit was reached. "
+    + "Send the request again after local AI capacity becomes available.";
+}
 
 /** The attempts behind "All endpoints failed", or null when the message carries none. */
 export function parseEndpointAttempts(message: string): EndpointAttempt[] | null {
@@ -262,6 +280,32 @@ export function unexplainedDeadEndHandoff(): string {
   });
 }
 
+/**
+ * The platform's own daily allowance for paid AI was used (BI-F3B6713F). This
+ * is a spending limit, not an outage: say so, say when it resets and who can
+ * raise it. Matched by name or message, for the bundle reason below.
+ */
+export function isDailyAllowanceUsed(error: unknown, message: string): boolean {
+  const name = typeof error === "object" && error !== null && "name" in error
+    ? (error as { name?: unknown }).name
+    : undefined;
+  return name === "AgentAllowanceExhaustedError" || /^Daily allowance used:/.test(message);
+}
+
+export function dailyAllowanceUsedHandoff(resetAt: string | null): string {
+  const reset = resetAt ? new Date(resetAt) : null;
+  const when = reset && !Number.isNaN(reset.getTime())
+    ? `at ${reset.toISOString().slice(11, 16)} UTC` : "at 00:00 UTC";
+  return buildHumanHandoff({
+    blocker: `Today's allowance for paid AI is used up. It resets ${when}. Local and subscription models are not affected.`,
+    steps: [
+      "Wait for the reset.",
+      "Or ask an owner to raise it in Admin > Platform Development > Paid AI allowance.",
+    ],
+    verify: "check the allowance",
+  });
+}
+
 /** True when `error` is a local host-capacity deferral, however it reached us.
  *
  * Matched by NAME rather than by importing `LocalProviderCapacityDeferredError`,
@@ -357,6 +401,14 @@ function describeToolRouteFailureMessage(
 
   if (isRequiredTerminalWriterNotEnforceable(error, msg)) {
     return requiredTerminalWriterNotEnforceableHandoff();
+  }
+
+  if (isLocalAdmissionWait(msg)) return localAdmissionWaitHandoff();
+
+  if (isDailyAllowanceUsed(error, msg)) {
+    const resetAt = typeof error === "object" && error !== null && "resetAt" in error
+      && typeof (error as { resetAt?: unknown }).resetAt === "string" ? (error as { resetAt: string }).resetAt : null;
+    return dailyAllowanceUsedHandoff(resetAt);
   }
 
   // Checked early, and before the credential and threshold branches: a deferral
@@ -458,6 +510,7 @@ function describeToolRouteFailureMessage(
 }
 
 export type InferenceDeadEndKind =
+  | "evidence-unavailable"
   | "model-missing"
   | "credentials"
   | "capacity"
@@ -516,6 +569,7 @@ export function describeToolRouteFailureOutcome(
     return { kind: "model-missing", message: modelMissingHandoff() };
   }
   const message = describeToolRouteFailureMessage(msg, toolCount, error);
+  if (isLocalAdmissionWait(msg)) return { kind: "capacity", message };
   if (/REQUEST_TOO_LARGE|exceed_context_size|available context size/i.test(msg)) return { kind: "context", message };
   if (isLocalCapacityDeferral(error, msg)) return { kind: "capacity", message };
   if (/No credential|auth(?:entication|orization)? (?:failed|error)|unauthorized/i.test(msg)) return { kind: "credentials", message };

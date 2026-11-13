@@ -323,6 +323,13 @@ function projectCoworkerEngagement(
       a2aStatus: "input-required",
     });
   }
+  if (["failed", "unavailable", "unknown"].includes(status)) {
+    return projection({ state: "waiting-on-system", sourceRef, blockingActorKind: "system",
+      a2aStatus: status === "unknown" ? "input-required" : "failed",
+      reason: status === "unknown" ? "Coworker execution is uncertain. Reconcile the original task before retrying."
+        : status === "unavailable" ? "No verifiable contribution is available. Inspect source and corpus provenance on the original task."
+        : "Coworker execution failed. Inspect the original task and its supported recovery." });
+  }
   if (status === "requested") {
     return projection({
       state: "intake",

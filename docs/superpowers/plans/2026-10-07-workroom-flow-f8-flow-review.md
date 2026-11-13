@@ -34,4 +34,14 @@ status: active
 
 ## Recorded limitations
 
-- **No baseline-versus-current receipt.** Before and after a shape change is compared through the version picker (F4). This job does not record a separate comparison receipt.
+- ~~**No baseline-versus-current receipt.**~~ Delivered by F8b below.
+
+## F8b: review receipt and version markers (BI-C684AF45)
+
+- **Receipt as a projection.** `computeFlowReviewHistory` (`lib/work-management/flow-review-receipt.ts`) derives each review from the version's daily `QueueMetricSnapshot` rows. It stores nothing new (DI-01E4DB4D7126 scored this 8.19, against 4.82 for a receipt table and 2.92 for signal evidence). The baseline is the version's first 28 days of step data. Reviews fall every `reviewPoint.everyDays` after that, starting with the first one at or after the baseline's end. Each review compares the trailing `FLOW_WINDOW_DAYS` with the baseline.
+- **Bottleneck.** The step with the most rooms held (snapshot `depth`) × its typical wait (`typicalStepWaitMs`), through the same `topByWaitTimesQueue` the home sentence uses (F7b). Snapshots carry no hold cause, so only the latest review names one, taken from the live holds.
+- **Version markers.** `PortfolioFlow.weeklyVersionChanges` marks the week a shape version first ran in a portfolio, but only where an earlier version of the same shape ran there before it. The three trends draw a dashed rule there and name it in their accessible label.
+- **Still blocked:** the escalation rule (two consecutive reviews naming the same pile file one item, routed through EP-C00F61F4) waits for BI-B146AB6B. Until then the daily review's signal threshold (three sightings) stands in.
+
+- **AC-F8b-1:** a version with step data shows its baseline. It shows each review at its review point, newest first, with the measures against baseline and the step where the most waiting accrued. Before the baseline ends, it says when the first review is due.
+- **AC-F8b-2:** the week a newer shape version replaced an older one in a portfolio is marked on the flow time, efficiency and throughput trends.

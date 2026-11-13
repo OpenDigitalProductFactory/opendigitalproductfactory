@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "consolidated",
+  "decisionInteractionId": "DI-8B2807DF98EC",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/RoutingManagementWorkspace.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["consolidated", "add-dashboard"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "evidenceClass": "Reuses the recorded consolidation decision and operator-reviewed prototype. Actual release 102 failed mobile containment (390px viewport, 474px document); this correction composes the existing responsive DataTable and filter controls. Corrected served measurements and the original UX coworker/WSID engagements remain owed. This is not a passing sweep or native critique receipt."
+  },
+  "rationale": {
+    "consolidated": "Keep the existing routing surface, controls and evidence. Reflow labeled traffic/evaluation/catalog rows through report-kit's responsive API, keep identifying task/model cells together, and compose the same four filters in two narrow-screen columns with 44px targets.",
+    "add-dashboard": "A separate mobile dashboard or table implementation duplicates state, evidence presentation and navigation. Hiding overflow or dropping columns would conceal the observed failure rather than repair it."
+  }
+}

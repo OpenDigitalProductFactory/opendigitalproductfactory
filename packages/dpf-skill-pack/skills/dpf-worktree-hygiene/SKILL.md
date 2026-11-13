@@ -36,8 +36,8 @@ Creates are covered by [`dpf-worktree-per-session`](../dpf-worktree-per-session/
 
 | Path | Owner | Agent freestyle? |
 |------|--------|------------------|
-| **Primary reaper** — this session's worktree on **SessionEnd** when Tier-A (merged + clean). Never on `Stop`: that fires every turn, and a live tree becomes Tier-A the moment its own PR merges (BI-E5D810B8) | Client hooks (`worktree-session-hygiene.mjs`) | No — automatic when dpf-platform / global hooks are installed |
-| **Fleet soak** — scheduled observe / optional Tier-A, sandbox leftover GC | Portal Inngest (`ops/worktree-janitor`, `ops/sandbox-build-gc`) + env flags | No — enable flags; do not hand-cron |
+| **Primary reaper** — daily observe, Tier-A reap above `DPF_WORKTREE_JANITOR_MAX` or with `AUTO_REAP=1`; fails closed when liveness is unreadable. Runs with no AI client present (BI-99395B29) | Portal Inngest (`ops/worktree-janitor`) + env flags | No — enable flags; do not hand-cron |
+| **Accelerators** — merged-PR reap of one branch (`pull-request-merged-reap`), sandbox leftover GC (`ops/sandbox-build-gc`), and this session's own tree on **SessionEnd** when Tier-A. Never on `Stop`: that fires every turn, and a live tree becomes Tier-A the moment its own PR merges (BI-E5D810B8) | Portal Inngest + client hook (`worktree-session-hygiene.mjs`) | No — automatic; the hook only speeds things up, nothing depends on it |
 | **Workroom reaper** — transition dead workroom *records* (lease expired / build terminal / idle) `working`→`abandoned`; the DB half of hygiene (WS9) | Portal Inngest (`ops/taskrun-watchdog` tick) + `DPF_WORKCAPSULE_REAPER_*` flags | No — enable flags; observe via `list_work_capsules staleOnly=true` |
 | **Exceptional reclaim** — live Tier-A bulk prune, force-delete locked dirs, kill locking shells | Operator + explicit "go" | Only after dry-run report + operator approval |
 
@@ -194,7 +194,7 @@ Remove that junction with `cmd /c rmdir generated` — **never `rm -rf`**, which
 - **No freestyle `rm -rf` / mass process kill** as hygiene.
 - **Junction-safe only** for worktree directory removal on Windows.
 - **Hide complexity from lay users** — report outcomes (how many reaped, flags on/off), not raw flag names unless the operator is in ops mode.
-- **Primary reaper remains session hooks** — this skill does not replace SessionEnd hygiene.
+- **The platform owns reaping** — `ops/worktree-janitor` is the primary reaper; client session hooks only accelerate it (`platform-function-never-depends-on-a-client`).
 
 ## Output template
 

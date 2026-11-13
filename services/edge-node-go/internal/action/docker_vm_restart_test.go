@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -61,8 +62,10 @@ func TestDockerVmRestartRunsTheFixedProcedureAndReportsEachStep(t *testing.T) {
 	host := &fakeHost{
 		dockerReady: 3,
 		existing: map[string]bool{
-			`C:\Users\op\AppData\Local\Docker\run`:            true,
-			`C:\Users\op\AppData\Local\docker-secrets-engine`: true,
+			// This fake filesystem runs on every test host. Match filepath's
+			// host spelling while retaining the Windows procedure parameters.
+			filepath.Join(`C:\Users\op\AppData\Local`, "Docker", "run"):         true,
+			filepath.Join(`C:\Users\op\AppData\Local`, "docker-secrets-engine"): true,
 		},
 		clock: time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC),
 	}

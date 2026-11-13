@@ -40,13 +40,14 @@ import {
 } from "./triage-verdict";
 import { buildPanelBrief } from "./triage-panel-brief";
 import { isBareQuestion } from "./question-quality";
+import { isHumanEscalation, type HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
 
 /* -------------------------------------------------------------------------- */
 /* Shapes                                                                     */
 /* -------------------------------------------------------------------------- */
 
 /** The decision a panel is being convened for. */
-export type TriageSubject = {
+export type TriageSubject = HumanEscalationRow & {
   /** DecisionInteraction row id. */
   interactionRowId: string;
   interactionId: string;
@@ -120,7 +121,7 @@ export function isPanelWorthy(subject: TriageSubject): Eligibility {
   if (subject.resolved) {
     return { eligible: false, reason: "A human has already settled this decision." };
   }
-  if (subject.outcomeType !== "escalate" && subject.outcomeType !== "defer") {
+  if (!isHumanEscalation(subject)) {
     return { eligible: false, reason: "This decision was settled by the gate, not left to a human." };
   }
   if (isBareQuestion(subject.question)) {

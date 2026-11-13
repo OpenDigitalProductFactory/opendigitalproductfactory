@@ -35,8 +35,12 @@ function deliveryReadinessFromDiscovery(value) {
     if (matches.length !== 1 || row?.serverHasTool !== true) { report.unavailableTools.push(name); continue; }
     if (row.tokenGranted === false) report.missingTokenTools.push(name);
     if (row.agentGranted === false) report.missingCoworkerTools.push(name);
-    if (typeof row.tokenGranted !== "boolean" || typeof row.agentGranted !== "boolean"
-        || (row.tokenGranted && row.agentGranted && row.callableByName !== true)) report.unavailableTools.push(name);
+    // The server emits exactly null when no coworker layer applies (legacy
+    // human credential). It is not a grant: explicit server callability still
+    // proves the effective token, role, clearance and applicable agent checks.
+    if (typeof row.tokenGranted !== "boolean"
+        || (row.agentGranted !== null && typeof row.agentGranted !== "boolean")
+        || row.callableByName !== true) report.unavailableTools.push(name);
   }
   report.ready = !report.missingTokenTools.length && !report.missingCoworkerTools.length && !report.unavailableTools.length;
   return report;

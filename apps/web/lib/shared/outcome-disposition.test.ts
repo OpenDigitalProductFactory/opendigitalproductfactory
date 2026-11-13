@@ -84,6 +84,9 @@ describe("governed rejection classification", () => {
       "alignment_denied",
       "alignment_bypass_forbidden",
       "precondition_denied",
+      "authority_subject_not_found",
+      "authority_binding_mismatch",
+      "authority_scope_missing",
     ] as const) {
       expect(GOVERNED_REJECTION_DISPOSITION[rejection]).toBe("refused");
     }

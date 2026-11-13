@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ source: vi.fn() }));
 vi.mock("./baseline-source", () => ({ loadBaselineSourceForItem: mocks.source }));
 import { ensureItemBodyBaseline } from "./body-baseline-persistence";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 const body = "## Acceptance\n- Verify canonical grants.";
 const item = { id: "row", itemId: "BI-CASE", body, organizationId: null };
 const args = { item: item as never, profile: "fix" as const, effectiveShape: "medium",
@@ -22,6 +23,26 @@ function database() {
 }
 beforeEach(() => { history = []; tx = database(); mocks.source.mockImplementation(async () => ({ origin: "own", baselineRows: history })); });
 describe("body criteria capture in the authorized subject transaction", () => {
+  it.each([new Date("2026-10-16T06:00:00Z"), null])("retains criteria after merged author archival (timestamp=%s), without resuming it", async archivedAt => {
+    const room = { id: "room-row", capsuleId: "WC-CASE", backlogItemId: item.itemId,
+      repositoryFullName: "owner/repo", headSha: "a".repeat(40), baseSha: "b".repeat(40),
+      headBranch: "fix/accepted", createdByPrincipalId: "owner", status: "archived",
+      archivedAt, createdAt: new Date("2026-10-15T06:00:00Z"), pullRequestNumber: 6265 };
+    tx.workroom.findMany.mockImplementation(async ({ where }: { where: { archivedAt?: unknown } }) =>
+      where.archivedAt === null ? [] : [room]);
+    const observed = createPullRequestObservation({ repositoryFullName: room.repositoryFullName,
+      number: room.pullRequestNumber, url: "https://github.com/owner/repo/pull/6265", title: "repair",
+      headBranch: room.headBranch, headSha: room.headSha, state: "merged", isDraft: false,
+      mergeStateStatus: null, mergeCommitSha: "c".repeat(40), mergedAt: "2026-10-16T05:00:00Z",
+      providerUpdatedAt: "2026-10-16T05:00:00Z", observedAt: "2026-10-16T05:01:00Z" });
+    const database = { ...tx, contributorInventorySnapshot: { findMany: vi.fn().mockResolvedValue([{ payload: observed }]) } };
+    await ensureItemBodyBaseline(database as never, args);
+    expect(tx.documentVersion.create).toHaveBeenCalledOnce();
+    expect(tx.backlogItemActivity.create.mock.calls[0]![0].data.payload).toMatchObject({
+      origin: "item-body", sourceIdentity: { repositoryFullName: room.repositoryFullName, headSha: room.headSha },
+      sourceAuthorPrincipalId: "owner", approvalReceiptId: null });
+    expect(room.status).toBe("archived");
+  });
   it("retains criteria and source identity, with no acceptance or spec approval receipt", async () => {
     await ensureItemBodyBaseline(tx as never, args);
     expect(tx.documentVersion.create).toHaveBeenCalledOnce();
@@ -47,6 +68,22 @@ describe("body criteria capture in the authorized subject transaction", () => {
     { authority: { ...args.authority, authoritySnapshot: { ...args.authority.authoritySnapshot, effectiveAgentGrant: "file_read" } } },
   ])("refuses inappropriate shape or authority without writing a snapshot", async (change) => {
     await ensureItemBodyBaseline(tx as never, { ...args, ...change });
+    expect(tx.documentVersion.create).not.toHaveBeenCalled();
+  });
+  // BI-729D9B27: the build-originated item's completion may record the same scope.
+  const buildAuthority = { ...args.authority, actionKey: "complete_feature_build",
+    authoritySnapshot: { ...args.authority.authoritySnapshot, effectiveHumanCapability: "view_platform",
+      effectiveAgentGrant: "build_lifecycle", actionKey: "complete_feature_build" } };
+  it("mints under the build completion authority", async () => {
+    await ensureItemBodyBaseline(tx as never, { ...args, authority: buildAuthority });
+    expect(tx.documentVersion.create).toHaveBeenCalledOnce();
+  });
+  it.each([
+    { ...buildAuthority, actionKey: "advance_build_phase" },
+    { ...buildAuthority, authoritySnapshot: { ...buildAuthority.authoritySnapshot, effectiveAgentGrant: "backlog_write" } },
+    { ...buildAuthority, authoritySnapshot: { ...buildAuthority.authoritySnapshot, effectiveHumanCapability: "manage_backlog" } },
+  ])("refuses any other build_lifecycle pairing", async (authority) => {
+    await ensureItemBodyBaseline(tx as never, { ...args, authority });
     expect(tx.documentVersion.create).not.toHaveBeenCalled();
   });
   it.each(["inherited", "approved"])("preserves %s scope", async (origin) => {

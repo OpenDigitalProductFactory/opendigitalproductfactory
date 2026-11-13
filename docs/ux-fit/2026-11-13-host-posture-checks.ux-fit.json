@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "start-script-snapshot",
+  "decisionInteractionId": "DI-1984B00059B3",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/installation/page.tsx",
+      "apps/web/components/ops/HostPosturePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "start-script-snapshot",
+      "new-host-agent-endpoint",
+      "static-advice-only"
+    ]
+  }
+}

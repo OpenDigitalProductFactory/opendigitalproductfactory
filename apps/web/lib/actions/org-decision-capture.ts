@@ -22,11 +22,13 @@ import { promoteStanceMaterial } from "@/lib/decision-perspective/stance-promoti
 import type { DecisionDomainClass } from "@/lib/decision-perspective/types";
 import { storeWikiPage } from "@/lib/wiki/embeddings";
 import { clusterDecisionReviewRowsSemantic } from "@/lib/decision/review-clustering";
+import { humanCaptureOutcome, humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 import {
   buildStandingStancePage,
   validateOrgDecisionCapture,
   type OrgDecisionCaptureInput,
 } from "@/lib/wiki/org-decision-capture";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 export type CaptureOrgDecisionResult =
   | {
@@ -80,7 +82,8 @@ export async function captureOrgDecisionOutcome(
   if (row.buildId) {
     return { ok: false, error: "This is a build decision — answer it from the build workspace." };
   }
-  if (row.outcomeType !== "escalate" && row.outcomeType !== "defer") {
+  const captureOutcome = humanCaptureOutcome(row);
+  if (!captureOutcome) {
     return { ok: false, error: "This decision was resolved by the gate and needs no answer." };
   }
   if (row.humanOutcome !== null || row.escalationCapture || row.deferralCapture) {
@@ -115,7 +118,7 @@ export async function captureOrgDecisionOutcome(
   const clusterCandidates = await prisma.decisionInteraction.findMany({
     where: {
       profileId: row.profileId,
-      outcomeType: { in: ["defer", "escalate"] },
+      AND: [humanEscalationWhere()],
       buildId: null,
       routeContext: "/coworker-business",
       humanOutcome: { equals: Prisma.DbNull },
@@ -135,7 +138,7 @@ export async function captureOrgDecisionOutcome(
 
   try {
     await prisma.$transaction(async (tx) => {
-      if (row.outcomeType === "escalate") {
+      if (captureOutcome === "escalate") {
         await tx.escalationCapture.create({
           data: {
             escalationId: captureId("ESC"),
@@ -167,13 +170,13 @@ export async function captureOrgDecisionOutcome(
         data: {
           chosenOptionId: v.chosenOptionId,
           humanOutcome: {
-            type: row.outcomeType === "escalate" ? "escalation" : "deferral",
+            type: captureOutcome === "escalate" ? "escalation" : "deferral",
             answer: v.answer,
             rationale,
             candidateMaterial: v.makeStanding,
             resolverUserId: userId,
             capturedAt,
-            clearsGate: row.outcomeType === "escalate",
+            clearsGate: captureOutcome === "escalate",
             chosenOptionId: v.chosenOptionId,
             sourceInteractionId: row.interactionId,
           },
@@ -194,7 +197,7 @@ export async function captureOrgDecisionOutcome(
               candidateMaterial: v.makeStanding,
               resolverUserId: userId,
               capturedAt,
-              clearsGate: row.outcomeType === "escalate",
+              clearsGate: captureOutcome === "escalate",
               chosenOptionId: null,
               sourceInteractionId: row.interactionId,
             },
@@ -240,6 +243,7 @@ export async function captureOrgDecisionOutcome(
         changeSummary: `Standing answer captured from ${row.interactionId}`,
         createdById: userId,
       });
+      await syncWikiPageLinks(prisma, { pageId: saved.id, organizationId: org.id, body: page.body });
 
       // Deliberation layer: embed so coworkers retrieve the ruling as WWWD
       // context. Best-effort — the gate-live material below is the enforcement.

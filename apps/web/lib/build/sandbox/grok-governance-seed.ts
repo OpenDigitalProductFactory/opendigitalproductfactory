@@ -8,22 +8,18 @@
 //
 // Prefer the workspace skill pack at /workspace/packages/dpf-skill-pack (always
 // the branch under build) so the sandbox tracks the PR, not a stale image bake.
+//
+// The hook file is generated inside the sandbox by the pack's own
+// hooks/lib/grok-hook-plane.mjs, from hooks.json minus the Grok exclusions in
+// client-hook-planes.json, which is how the host updater builds it too
+// (BI-413882E5). This file used to keep its own six-guard list with no matchers.
 
-import { sandboxExec, writeSandboxFile } from "./agent-cli-runtime";
+import { sandboxExec } from "./agent-cli-runtime";
 
 const WORKSPACE_SKILL_PACK = "/workspace/packages/dpf-skill-pack";
 const NODE_HOME = "/home/node";
 const MANAGED_PLUGIN = `${NODE_HOME}/.agents/plugins/plugins/dpf-platform`;
 const HOOKS_FILE = `${NODE_HOME}/.grok/hooks/dpf-guards.json`;
-
-const PRE_TOOL_GUARDS = [
-  "lease-punt-guard.mjs",
-  "decision-routing-guard.mjs",
-  "lease-guard.mjs",
-  "root-clone-guard.mjs",
-  "compose-guard.mjs",
-  "plan-backlog-coverage-guard.mjs",
-] as const;
 
 const COMPETITIVE_PLUGIN_IDS = [
   "superpowers",
@@ -39,33 +35,17 @@ export type GrokGovernanceSeedResult = {
   detail?: string;
 };
 
-function commandEntry(scriptPath: string, timeout: number) {
-  return {
-    hooks: [
-      {
-        type: "command" as const,
-        command: `node "${scriptPath}"`,
-        timeout,
-      },
-    ],
-  };
-}
+const GENERATOR = "hooks/lib/grok-hook-plane.mjs";
 
-/** Build the same global hooks payload host install_grok_hooks writes. */
-export function buildSandboxGrokHooksPayload(hooksDir: string): {
-  hooks: Record<string, Array<{ hooks: Array<{ type: string; command: string; timeout: number }> }>>;
-} {
-  const pre = PRE_TOOL_GUARDS.map((g) => commandEntry(`${hooksDir}/${g}`, 15));
-  const sessionStart = commandEntry(`${hooksDir}/grok-session-start.mjs`, 30);
-  const sessionEnd = commandEntry(`${hooksDir}/uncommitted-work-guard.mjs`, 15);
-  return {
-    hooks: {
-      PreToolUse: pre,
-      SessionStart: [sessionStart],
-      SessionEnd: [sessionEnd],
-      Stop: [sessionEnd],
-    },
-  };
+/**
+ * Shell (single-quote safe: no expansion happens outside the sandbox) that has
+ * the managed pack's own generator write the sandbox's dpf-guards.json. The
+ * generator writes atomically and prints "WIRED <n>". A pack without it (a
+ * branch cut before BI-413882E5) prints NO-GENERATOR and the old file stays.
+ */
+export function sandboxGrokHooksCommand(managedPlugin: string = MANAGED_PLUGIN, hooksFile: string = HOOKS_FILE): string {
+  const generator = `${managedPlugin}/${GENERATOR}`;
+  return `if [ -f "${generator}" ]; then node "${generator}" "${managedPlugin}" "${managedPlugin}/hooks" --out "${hooksFile}"; else echo NO-GENERATOR; fi`;
 }
 
 /**
@@ -126,26 +106,20 @@ export async function ensureSandboxGrokGovernance(params: {
   const pluginOk = installOut.includes("dpf-platform") || installOut.includes('"name"');
   const pluginStatus = pluginOk ? "installed" : `failed:${String((install as { stderr?: string }).stderr ?? installOut).slice(0, 200)}`;
 
-  // Global hooks plane (PreToolUse + SessionStart + Stop).
-  const hooksDir = `${MANAGED_PLUGIN}/hooks`;
-  const payload = buildSandboxGrokHooksPayload(hooksDir);
-  try {
-    await writeSandboxFile({
-      containerId,
-      path: HOOKS_FILE,
-      content: `${JSON.stringify(payload, null, 2)}\n`,
-      mode: "644",
-      asNodeUser: true,
-      mkdirParents: `${NODE_HOME}/.grok/hooks`,
-      timeoutMs: 15_000,
-    });
-  } catch (e) {
+  // Global hooks plane, generated from the workspace pack (BI-413882E5).
+  const wire = await exec(
+    `docker exec --user node ${containerId} sh -c '${sandboxGrokHooksCommand()}'`,
+    { timeout: 30_000 },
+  ).catch((e: Error) => ({ stdout: "", stderr: e.message }));
+  const wireOut = String((wire as { stdout?: string }).stdout ?? "");
+  const wired = /WIRED (\d+)/.exec(wireOut);
+  if (!wired) {
     return {
       ok: false,
       plugin: pluginStatus,
-      hooks: "failed-write",
+      hooks: wireOut.includes("NO-GENERATOR") ? "skipped: workspace pack has no grok-hook-plane.mjs" : "failed-write",
       competitive: "skipped",
-      detail: (e as Error).message.slice(0, 300),
+      detail: String((wire as { stderr?: string }).stderr ?? wireOut).slice(0, 300),
     };
   }
 
@@ -162,7 +136,7 @@ export async function ensureSandboxGrokGovernance(params: {
   return {
     ok: pluginOk,
     plugin: pluginStatus,
-    hooks: `wired ${PRE_TOOL_GUARDS.length} PreToolUse + SessionStart/Stop -> ${HOOKS_FILE}`,
+    hooks: `wired ${wired[1]} hook(s) from hooks.json -> ${HOOKS_FILE}`,
     competitive: competitiveParts.join("; ").slice(0, 400),
   };
 }

@@ -18,6 +18,11 @@ const completeBuildPhaseRunMock = vi.fn();
 const dispatchBuildMock = vi.fn();
 const enforceInitiativeReadinessMock = vi.fn();
 
+const ensureCoverageMock = vi.fn(async () => ({ recorded: false, reason: "already-covered" }));
+vi.mock("@/lib/build/record-build-plan-coverage", () => ({
+  ensureBuildPlanCoverage: (...a: unknown[]) => ensureCoverageMock(...(a as [])),
+}));
+
 vi.mock("@dpf/db", () => {
   const prisma = {
     featureBuild: {
@@ -98,6 +103,16 @@ describe("plan-advance pure helpers (BI-05208DE5)", () => {
     const second = recordPlanAdvanceFailure(first, "boom again", now);
     expect(second.failures).toBe(2);
     expect(second.lastError).toBe("boom again");
+  });
+
+  it("recordPlanAdvanceFailure keeps the tail of a long error, where a failed command puts its stderr", () => {
+    // Live: three builds escalated with only the echoed `docker exec … sh -c '…` head
+    // stored, so the escalation never said why the branch could not start.
+    const command = `Command failed: docker exec 'dpf-sandbox-1' sh -c '${"x".repeat(400)}'`;
+    const tracker = recordPlanAdvanceFailure(null, `startBuildBranch failed: ${command}\nfatal: could not lock ref`, new Date());
+    expect(tracker.lastError!.length).toBeLessThanOrEqual(360);
+    expect(tracker.lastError).toContain("startBuildBranch failed");
+    expect(tracker.lastError).toContain("fatal: could not lock ref");
   });
 
   it("recordPlanAdvanceFailure preserves a prior escalatedAt stamp", () => {
@@ -292,5 +307,23 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     expect(updateMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ phase: "abandoned" }) }),
     );
+  });
+});
+
+describe("plan coverage before the readiness gate (BI-6F2872FC)", () => {
+  it("records the reviewed plan's coverage before judging the transition", async () => {
+    ensureCoverageMock.mockClear();
+    findUniqueMock.mockResolvedValueOnce(planBuild());
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(ensureCoverageMock).toHaveBeenCalledWith("FB-X");
+  });
+
+  it("does not cover a plan whose review did not pass, nor an escalated build", async () => {
+    ensureCoverageMock.mockClear();
+    findUniqueMock.mockResolvedValueOnce(planBuild({ planReview: { decision: "fail" } }));
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    findUniqueMock.mockResolvedValueOnce(planBuild({ buildExecState: { planAdvance: { failures: 3, escalatedAt: "2026-09-23T00:00:00Z" } } }));
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(ensureCoverageMock).not.toHaveBeenCalled();
   });
 });

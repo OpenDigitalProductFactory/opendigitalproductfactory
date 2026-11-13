@@ -9,6 +9,7 @@ export const PRODUCT_MANAGEMENT_TOOL_GRANTS = {
   link_product_objective_work: ["backlog_write"],
   record_product_outcome_observation: ["backlog_write"],
   correct_product_outcome_observation: ["backlog_write"],
+  designate_platform_work_product: ["backlog_write"],
   pause_scheduled_agent_task: ["work_capsule_write"],
   resume_scheduled_agent_task: ["work_capsule_write"],
   rerun_scheduled_agent_task: ["work_capsule_write"],
@@ -23,4 +24,5 @@ export const PRODUCT_OUTCOME_WRITE_TOOLS = [
   "link_product_objective_work",
   "record_product_outcome_observation",
   "correct_product_outcome_observation",
+  "designate_platform_work_product",
 ] as const;

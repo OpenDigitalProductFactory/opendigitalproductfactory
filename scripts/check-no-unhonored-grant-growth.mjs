@@ -83,6 +83,12 @@ export const TOOL_TO_GRANTS_SOURCES = Object.freeze([
     path: "apps/web/lib/tak/payables-tool-grants.ts",
     pattern: /PAYABLES_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
   },
+  {
+    // Workbook data and schema-authoring tools (BI-FE8DF004), spread into
+    // TOOL_TO_GRANTS; honors workbook_read and workbook_write.
+    path: "apps/web/lib/tak/workbook-tool-grants.ts",
+    pattern: /WORKBOOK_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+  },
 ]);
 
 const BUDGET = Object.freeze({ owner: "platform-architecture", expiry: "2026-11-16" });

@@ -203,7 +203,7 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
       ...(target.portfolioId ? { portfolioId: target.portfolioId } : {}),
     },
     select: { itemId: true, title: true, body: true },
-    take: 500,
+    orderBy: { itemId: "asc" },
   });
   const { findDuplicateCandidates } = await import("@/lib/demand/dedup");
   const candidates = findDuplicateCandidates(target, pool, threshold).slice(0, limit);
@@ -214,37 +214,154 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
       candidates.length > 0
         ? `${candidates.length} possible duplicate(s) of ${itemId}.`
         : `No open items above similarity ${threshold} for ${itemId}.`,
-    data: { candidates },
+    data: {
+      candidates,
+      coverage: { eligible: pool.length, scanned: pool.length, complete: true },
+    },
   };
 }
 
-export async function mergeBacklogItemsHandler(params: Record<string, unknown>): Promise<ToolResult> {
+const CLOSED_ITEM_STATUSES: ReadonlySet<string> = new Set(["retired", "done"]);
+
+/**
+ * Approval cards asking to merge a duplicate that is now merged can only
+ * replay a finished merge, so they are withdrawn (proposed → cancelled, the
+ * same guarded write as `cancelEnvelope`). A card records its call in
+ * ToolExecution, so it is found by the duplicate it names, whatever rationale
+ * it carried. Best effort: a merge never fails because a card could not be
+ * withdrawn (BI-8EC69BE0).
+ */
+async function cancelSupersededMergeCards(duplicateItemId: string): Promise<{ available: true; cancelled: number } | { available: false; cancelled: null }> {
+  try {
+    const rows = await prisma.toolExecution.findMany({
+      where: { toolName: "merge_backlog_items", envelopeId: { not: null }, parameters: { path: ["duplicateItemId"], equals: duplicateItemId } },
+      select: { envelopeId: true },
+    });
+    const ids = rows.map((row) => row.envelopeId).filter((id): id is string => typeof id === "string");
+    if (ids.length === 0) return { available: true, cancelled: 0 };
+    const cancelled = await prisma.coworkerActionEnvelope.updateMany({
+      where: { id: { in: ids }, status: "proposed", resolvedAt: null },
+      data: { status: "cancelled", resolvedAt: new Date() },
+    });
+    return { available: true, cancelled: cancelled.count };
+  } catch {
+    return { available: false, cancelled: null };
+  }
+}
+
+export async function mergeBacklogItemsHandler(
+  params: Record<string, unknown>,
+  userId?: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
+  const reconcileOnly = params["reconcileOnly"];
+  if (reconcileOnly !== undefined && typeof reconcileOnly !== "boolean") {
+    return { success: false, error: "invalid_reconcile_only", message: "reconcileOnly must be a boolean." };
+  }
   const canonicalItemId = String(params["canonicalItemId"] ?? "");
   const duplicateItemId = String(params["duplicateItemId"] ?? "");
   if (canonicalItemId === duplicateItemId) {
     return { success: false, error: "same_item", message: "Cannot merge an item into itself." };
   }
   const [canonical, duplicate] = await Promise.all([
-    prisma.backlogItem.findUnique({ where: { itemId: canonicalItemId }, select: { id: true, occurrenceCount: true } }),
-    prisma.backlogItem.findUnique({ where: { itemId: duplicateItemId }, select: { id: true, occurrenceCount: true, status: true } }),
+    prisma.backlogItem.findUnique({ where: { itemId: canonicalItemId }, select: { id: true, occurrenceCount: true, status: true } }),
+    prisma.backlogItem.findUnique({
+      where: { itemId: duplicateItemId },
+      select: { id: true, occurrenceCount: true, status: true, triageOutcome: true, duplicateOfId: true, completedAt: true },
+    }),
   ]);
   if (!canonical) return { success: false, error: "not_found", message: `Canonical ${canonicalItemId} not found` };
   if (!duplicate) return { success: false, error: "not_found", message: `Duplicate ${duplicateItemId} not found` };
+  // Idempotent (BI-8EC69BE0): a duplicate already folded is never folded again,
+  // so a replayed approval or a stale card cannot add its reach twice.
+  if (duplicate.duplicateOfId || CLOSED_ITEM_STATUSES.has(duplicate.status)) {
+    if (reconcileOnly === true && duplicate.duplicateOfId !== canonical.id) {
+      return { success: false, error: "already_closed", message: `${duplicateItemId} is already ${duplicate.status}; nothing changed.` };
+    }
+    const cleanup = await cancelSupersededMergeCards(duplicateItemId);
+    if (reconcileOnly === true) {
+      const data = { canonicalItemId, duplicateItemId, alreadyMerged: true, reconcileOnly: true, requestCleanup: cleanup };
+      return cleanup.available
+        ? {
+            success: true,
+            entityId: canonicalItemId,
+            message: `${duplicateItemId} is already merged into ${canonicalItemId}; demand is unchanged. Superseded proposed requests withdrawn: ${cleanup.cancelled}.`,
+            data,
+          }
+        : {
+            success: false,
+            error: "merge_request_reconciliation_unavailable",
+            message: "The merge is already completed and demand is unchanged, but request cleanup could not be verified. Retry the reconcile-only call.",
+            data,
+          };
+    }
+    return duplicate.duplicateOfId === canonical.id
+      ? {
+          success: true,
+          entityId: canonicalItemId,
+          message: `${duplicateItemId} is already merged into ${canonicalItemId}; nothing changed.`,
+          data: { canonicalItemId, duplicateItemId, alreadyMerged: true },
+        }
+      : { success: false, error: "already_closed", message: `${duplicateItemId} is already ${duplicate.status}; nothing changed.` };
+  }
+  // Enforce the nonmutating mode here even if item state changed after the
+  // per-call consequence was resolved. It must never fall through to a fold.
+  if (reconcileOnly === true) {
+    return {
+      success: false,
+      error: "not_already_merged",
+      message: `${duplicateItemId} has not already been merged into ${canonicalItemId}; reconcileOnly cannot merge it.`,
+    };
+  }
+  if (CLOSED_ITEM_STATUSES.has(canonical.status)) {
+    return { success: false, error: "canonical_closed", message: `Canonical ${canonicalItemId} is ${canonical.status}; merge into an open item.` };
+  }
   const { computeMerge } = await import("@/lib/demand/dedup");
   const { mergedOccurrenceCount } = computeMerge({
     survivorOccurrenceCount: canonical.occurrenceCount,
     duplicateOccurrenceCount: duplicate.occurrenceCount,
   });
-  await prisma.$transaction([
-    prisma.backlogItem.update({
+  const claimedFrom = duplicate.status;
+  const folded = await prisma.$transaction(async (tx) => {
+    // Claim the duplicate first: a concurrent merge of the same row loses here
+    // and writes nothing, rather than adding the reach a second time.
+    const claimed = await tx.backlogItem.updateMany({
+      where: { itemId: duplicateItemId, duplicateOfId: null, status: claimedFrom },
+      data: { status: "retired", triageOutcome: "duplicate", duplicateOfId: canonical.id, completedAt: new Date() },
+    });
+    if (claimed.count !== 1) return false;
+    await tx.backlogItem.update({
       where: { itemId: canonicalItemId },
       data: { occurrenceCount: mergedOccurrenceCount, lastSeenAt: new Date() },
-    }),
-    prisma.backlogItem.update({
-      where: { itemId: duplicateItemId },
-      data: { status: "retired", triageOutcome: "duplicate", duplicateOfId: canonical.id, completedAt: new Date() },
-    }),
-  ]);
+    });
+    // The prior state of both rows, so a merge can be undone from the record.
+    await tx.backlogItemActivity.create({
+      data: {
+        backlogItemId: duplicate.id,
+        kind: "duplicate_merge",
+        summary: `Merged into ${canonicalItemId}`,
+        payload: {
+          role: "duplicate",
+          canonicalItemId,
+          duplicateItemId,
+          rationale: typeof params["rationale"] === "string" ? params["rationale"] : null,
+          priorStatus: duplicate.status,
+          priorTriageOutcome: duplicate.triageOutcome,
+          priorDuplicateOfId: duplicate.duplicateOfId,
+          priorCompletedAt: duplicate.completedAt?.toISOString() ?? null,
+          canonicalPriorOccurrenceCount: canonical.occurrenceCount,
+          mergedOccurrenceCount,
+        },
+        ...(userId ? { recordedById: userId } : {}),
+        ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
+      },
+    });
+    return true;
+  });
+  if (!folded) {
+    return { success: false, error: "already_closed", message: `${duplicateItemId} was merged by another call; nothing changed.` };
+  }
+  await cancelSupersededMergeCards(duplicateItemId);
   return {
     success: true,
     entityId: canonicalItemId,
@@ -263,17 +380,21 @@ export async function sweepDuplicateDemandHandler(params: Record<string, unknown
       ...(portfolioId ? { portfolioId } : {}),
     },
     select: { itemId: true, title: true, body: true },
-    take: 500,
+    orderBy: { itemId: "asc" },
   });
   const { findDuplicatePairs } = await import("@/lib/demand/dedup");
-  const pairs = findDuplicatePairs(items, threshold).slice(0, limit);
+  const pairs = findDuplicatePairs(items, threshold, limit);
   return {
     success: true,
     message:
       pairs.length > 0
         ? `${pairs.length} likely-duplicate pair(s) across ${items.length} open item(s).`
         : `No pairs above similarity ${threshold} across ${items.length} open item(s).`,
-    data: { pairs, scanned: items.length },
+    data: {
+      pairs,
+      scanned: items.length,
+      coverage: { eligible: items.length, scanned: items.length, complete: true },
+    },
   };
 }
 
@@ -372,6 +493,9 @@ export async function approveDemandForFundingHandler(
 
   const { evaluateOrgBusinessDecisionGate } = await import("@/lib/decision-perspective/org-business-gate");
   const rationale = typeof params["rationale"] === "string" ? (params["rationale"] as string).trim() : "";
+  // No organization currency funding threshold is configured by this model.
+  // The existing quarterly points allocation above remains its own control;
+  // points are not currency and cannot supply a guessed threshold declaration.
   const decision = await evaluateOrgBusinessDecisionGate({
     db: prisma,
     organizationId: item.organizationId,
@@ -392,7 +516,8 @@ export async function approveDemandForFundingHandler(
     },
   });
 
-  // Only advance to `ready` (funded) when the org's stance recommends/arbitrates.
+  // Advance only through the gate's canonical permission projection, including
+  // damaging holds, decisive declines and the recorded independent-review interim.
   const funded = decision.allowed;
   let volunteered: { offered: boolean; agentId: string | null } = { offered: false, agentId: null };
   if (funded) {

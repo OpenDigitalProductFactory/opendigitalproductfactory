@@ -143,6 +143,76 @@ Prometheus has no Alertmanager here; firing alerts reach the portal via the Inng
 poll-bridge (`apps/web/lib/queue/functions/alert-delivery-bridge.ts`) and surface in
 the System Health UI. The Grafana dashboard UI is opt-in (`observability-ui` profile).
 
+## AI-capacity watch (BI-24092DC9)
+
+The same 5-minute `ops/alert-delivery-bridge` cron runs a second step,
+`watch-ai-capacity` (`apps/web/lib/routing/ai-capacity-watch.ts`). It reads
+`AdapterRunTelemetry` for the last 30 minutes and computes the served share
+(success or refusal, over success, refusal, error and timeout) per provider and in
+total. A provider with 5 or more counted calls and none served, or a platform total
+of 10 or more calls under 50% served, opens one `ai_capacity_loss` monitor row with
+the plain-language cause and the provider page. New rows push a bell notification;
+the platform-health attention source projects them into Needs-you. The watch that
+raises a row resolves it, and only after the provider serves a call. A provider
+that served nothing in the window keeps its row, whether it had no calls or only
+a few failures (BI-783EBEE6), because routing may have stopped sending to it. Window and thresholds come from
+WWMD decision DI-E5208C7D1666; the host and surface from DI-BA01CDC705DB. The step
+runs even when both alert evaluators are unreachable.
+
+The watch also reads `ProviderCapacityStatus` for every active provider
+(BI-5A6C4011, WWMD DI-ED9FE6FEE192). A provider whose recorded capacity is a hard
+block (a usage limit with a future reset, `reauth_required`,
+`billing_action_required`, `unsupported_plan`) and that served nothing in the
+window gets its provider row with the reset time, even with no failed calls:
+routing no longer re-admits such providers (DI-39E7B8DFB7BC), so telemetry alone
+would stay silent. When every active `subscription-cli` provider is hard-blocked, one
+`ai-capacity:subscriptions` row names each with its reset and the earliest reset.
+A usage-limit row whose stated reset has passed resolves instead of being held.
+In the owner inbox (BI-ACE041FE, WWMD DI-ECB244DF2109) every `ai_capacity_loss` row
+routes to Needs-you except a single provider's usage limit, which stays in the
+digital-team-handling lane and is listed there by its title, which carries the
+reset time. Cards use the watch's title rather than the generic outage headline.
+
+## Platform-continuity watch (BI-3E2F87FA)
+
+The `ops/alert-delivery-bridge` cron's first step, `watch-platform-continuity`
+(`apps/web/lib/observability/platform-continuity-watch.ts`), writes a heartbeat to
+`PlatformConfig` key `platform.continuity.heartbeat.v1` every cycle. It runs before
+the quiescence gate, so an upgrade drain or the job's kill switch never reads as a
+gap. A gap longer than 30 minutes between heartbeats is downtime: the window runs
+from the last beat before the gap to the first after it. The cause comes from what
+the containers can see. A `SelfUpgradeRun` or `QuiescenceRun` covering the window
+(with 20 minutes' slack each side) is a planned upgrade and is not raised. The
+Docker VM booting inside the window (`/proc/uptime`) means Docker or the computer
+restarted. Postgres starting inside it (`pg_postmaster_start_time()`) means the
+containers restarted. AI calls recorded inside it mean only the scheduled checks
+stopped. If none of these, the computer was most likely asleep. Unplanned downtime
+opens one `platform_downtime` monitor row naming the window and cause, with the
+host-posture fix steps, and pushes a bell notification. The row routes to
+Needs-you and closes itself after 72 hours; the resolved row stays as the record.
+
+Host posture (WWMD DI-1984B00059B3): the shipped sign-in start script
+(`scripts/installer/dpf-start.consumer.sh`) runs `scripts/installer/host-posture.mjs`,
+which reads `pmset` and Docker Desktop's `AutoStart` setting read-only and writes
+`data/host/posture.json` in the install directory. The portal reads it through the
+`/host-dpf` mount and shows three checks with fix steps on `/ops/installation`
+(on power, never sleeps on power, Docker starts at sign-in). Nothing changes an OS
+setting. The same script now adds the Homebrew, `/usr/local` and Docker Desktop CLI
+directories to launchd's minimal PATH and starts Docker Desktop, waiting up to five
+minutes, before `compose up`. On 2026-11-09 every sign-in start had failed with
+`node: command not found`.
+
+Off-host signal (WWMD DI-452922A2126A): a paired installation's work-sync watch
+(BI-85DE8EBD) notices when this installation stops answering. A separate cloud
+heartbeat is not built.
+
+The issue-report intake no longer files a repeat signature as a new `BI-PIR-*`
+item. Minted items carry `Signature: <dedupeKey>` and `Source report: <id>`. A
+report whose signature or report id already has a live bug item increments that
+item's tally and raises its priority. The report is claimed atomically before
+minting, so the 15-minute sweep and the immediate projection event cannot both
+mint it.
+
 ## Log capture runs by default (BI-F8024A9D)
 
 `loki` and `alloy` are **base compose services, not profile-gated**. They read

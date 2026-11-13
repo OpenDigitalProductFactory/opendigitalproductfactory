@@ -1,85 +1,56 @@
 // apps/web/app/api/calendar/feed/[userId]/route.ts
 // iCal (.ics) feed endpoint for subscribing from external calendars.
+//
+// BI-051A74CE: a calendar app cannot hold a session, so this route is public,
+// and the request must carry the owner's private feed token (`?token=`). Any
+// mismatch — no token, a malformed, rotated, revoked or foreign token, a token
+// for a different user, an inactive owner — answers the same 404, so the route
+// reveals neither whether the user exists nor why it refused.
 
 import { NextRequest } from "next/server";
 import { prisma } from "@dpf/db";
 import { getCalendarEvents } from "@/lib/calendar-data";
+import { resolveCalendarFeedOwner } from "@/lib/workforce/calendar-feed-token";
+import {
+  loadNativeFeedEvents,
+  renderICalendar,
+  scopeProjectedFeedEvents,
+} from "@/lib/workforce/calendar-feed";
+
+const NOT_FOUND = () => new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> },
 ) {
   const { userId } = await params;
+  const token = new URL(request.url).searchParams.get("token");
 
-  // Validate user exists
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true },
-  });
-  if (!user) {
-    return new Response("User not found", { status: 404 });
-  }
+  const owner = await resolveCalendarFeedOwner(userId, token);
+  if (!owner) return NOT_FOUND();
 
   const profile = await prisma.employeeProfile.findUnique({
-    where: { userId: user.id },
+    where: { userId: owner.userId },
     select: { id: true },
   });
 
-  // Fetch 6 months of events
+  // Last month plus the next five.
   const now = new Date();
   const rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 5, 0);
-  const events = await getCalendarEvents(rangeStart, rangeEnd, profile?.id);
 
-  // Build iCalendar output
-  const lines: string[] = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//OpenDigitalProductFactory//Calendar//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    `X-WR-CALNAME:DPF Calendar (${user.email})`,
-  ];
+  const [projected, native] = await Promise.all([
+    getCalendarEvents(rangeStart, rangeEnd).then((events) => scopeProjectedFeedEvents(events, owner.context)),
+    loadNativeFeedEvents({ ownerEmployeeId: profile?.id ?? null, user: owner.context, rangeStart, rangeEnd }),
+  ]);
+  const events = [...native, ...projected]
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
-  for (const event of events) {
-    const uid = `${event.id}@dpf`;
-    const dtStart = event.allDay
-      ? `DTSTART;VALUE=DATE:${formatICalDate(event.start)}`
-      : `DTSTART:${formatICalDateTime(event.start)}`;
-    const dtEnd = event.end
-      ? event.allDay
-        ? `DTEND;VALUE=DATE:${formatICalDate(event.end)}`
-        : `DTEND:${formatICalDateTime(event.end)}`
-      : "";
-
-    lines.push("BEGIN:VEVENT");
-    lines.push(`UID:${uid}`);
-    lines.push(dtStart);
-    if (dtEnd) lines.push(dtEnd);
-    lines.push(`SUMMARY:${escapeICalText(event.title)}`);
-    lines.push(`CATEGORIES:${event.category.toUpperCase()}`);
-    lines.push("END:VEVENT");
-  }
-
-  lines.push("END:VCALENDAR");
-
-  return new Response(lines.join("\r\n"), {
+  return new Response(renderICalendar(events), {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": "attachment; filename=dpf-calendar.ics",
-      "Cache-Control": "no-cache, max-age=300",
+      "Cache-Control": "private, no-store",
     },
   });
-}
-
-function formatICalDate(iso: string): string {
-  return iso.replace(/[-:]/g, "").split("T")[0]!;
-}
-
-function formatICalDateTime(iso: string): string {
-  return iso.replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-}
-
-function escapeICalText(text: string): string {
-  return text.replace(/[\\;,\n]/g, (c) => (c === "\n" ? "\\n" : `\\${c}`));
 }

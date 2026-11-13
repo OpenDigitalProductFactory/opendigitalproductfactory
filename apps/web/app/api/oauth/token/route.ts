@@ -18,6 +18,7 @@
 // contract; the raw-route-error baseline records it deliberately.
 
 import { currentOAuthHuman } from "@/lib/auth/oauth-identity-binding";
+import { credentialsClientConsentBindingId } from "@/lib/auth/credentials-client-consent";
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { findClientByClientId, touchClient } from "@/lib/auth/oauth-clients";
@@ -208,6 +209,11 @@ async function handleRefresh(
  * is created in Admin > Platform Development: `allowedScopes` is the grant, and
  * `ownerUserId` is the human whose role caps it. A request may narrow that set
  * and can never exceed it.
+ *
+ * When the operator also bound an approved assistant (`agentId`), that act is
+ * the consent (BI-79D26E39): the token carries the owner's consent binding for
+ * this client, resource and assistant, so its routine writes are steered like
+ * a consented connection instead of parking on a human approval.
  */
 async function handleClientCredentials(
   form: URLSearchParams,
@@ -251,7 +257,16 @@ async function handleClientCredentials(
   if (client.agentId && (!agent || agent.status !== "active" || agent.archived)) {
     return oauthError("invalid_client", "The approved assistant is not active.");
   }
+  const authorityBindingId = await credentialsClientConsentBindingId({
+    userId: client.ownerUserId,
+    clientRowId: client.rowId,
+    publicClientId: client.clientId,
+    resource: canonicalResourceUri(origin),
+    agentId: agent?.agentId ?? null,
+    scopes,
+  });
   const issued = await issueAccessToken({
+    authorityBindingId,
     userId: client.ownerUserId,
     agentId: agent?.agentId ?? null,
     oauthClientRowId: client.rowId,

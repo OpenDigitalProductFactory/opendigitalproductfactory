@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   commissionIntakeController,
   evaluateIntakeControllerAuthority,
+  evaluateIntakeControllerClauses,
+  INTAKE_CONTROLLER_CLAUSE_IDS,
   loadIntakeControllerCommission,
   type IntakeControllerDb,
   type IntakeControllerFacts,
@@ -158,7 +160,78 @@ describe("evaluateIntakeControllerAuthority", () => {
     expect(refusal(facts({ intent: { ...confirmedIntent, intent: { ...confirmedIntent.intent, confirmation: { status: "needs-review" as never } } } })))
       .toMatch(/not confirmed/);
     expect(refusal(facts({ intent: { ...confirmedIntent, intent: { ...confirmedIntent.intent, primaryPurpose: "operate-organization" } } })))
-      .toMatch(/operate-organization, not evolve-dpf/);
+      .toMatch(/operate-organization without evolve-dpf/);
+  });
+});
+
+describe("installation purpose clause (DI-A6148958CADB)", () => {
+  const purposes = (primaryPurpose: "evolve-dpf" | "operate-organization", secondaryPurposes: string[]) =>
+    facts({ intent: { ...confirmedIntent, intent: { ...confirmedIntent.intent, primaryPurpose, secondaryPurposes: secondaryPurposes as never } } });
+
+  it("passes when evolve-dpf is the primary purpose", () => {
+    expect(evaluateIntakeControllerAuthority(purposes("evolve-dpf", [])).commissioned).toBe(true);
+  });
+
+  it("passes when evolve-dpf is a declared secondary purpose", () => {
+    expect(evaluateIntakeControllerAuthority(purposes("operate-organization", ["evolve-dpf"])).commissioned).toBe(true);
+  });
+
+  it("fails when evolve-dpf is neither the primary nor a secondary purpose", () => {
+    expect(refusal(purposes("operate-organization", ["grow-channel"])))
+      .toBe("not commissioned: installation purpose is operate-organization without evolve-dpf as a secondary purpose");
+  });
+
+  it("still fails an unconfirmed intent that declares evolve-dpf as a secondary purpose", () => {
+    const unconfirmed = purposes("operate-organization", ["evolve-dpf"]);
+    const intent = unconfirmed.intent.status === "valid" ? unconfirmed.intent.intent : confirmedIntent.intent;
+    expect(refusal({ ...unconfirmed, intent: { status: "valid", intent: { ...intent, confirmation: { status: "needs-review" } } } }))
+      .toMatch(/not confirmed \(needs-review\)/);
+  });
+});
+
+describe("evaluateIntakeControllerClauses", () => {
+  const statuses = (input: IntakeControllerFacts) =>
+    Object.fromEntries(evaluateIntakeControllerClauses(input).map((clause) => [clause.id, clause.status]));
+
+  it("reports every clause, in predicate order, as passing for a commissioned controller", () => {
+    const clauses = evaluateIntakeControllerClauses(facts());
+    expect(clauses.map((clause) => clause.id)).toEqual([...INTAKE_CONTROLLER_CLAUSE_IDS]);
+    expect(clauses.every((clause) => clause.status === "pass")).toBe(true);
+  });
+
+  it("reports independent failures together and leaves dependent clauses unchecked", () => {
+    const input = facts({
+      upstreamRemoteUrl: null,
+      intent: { ...confirmedIntent, intent: { ...confirmedIntent.intent, primaryPurpose: "operate-organization" } },
+    });
+    expect(statuses(input)).toMatchObject({
+      "upstream-configured": "fail",
+      "room-repository": "unchecked",
+      "commission-repository": "unchecked",
+      "room-owner": "pass",
+      purpose: "fail",
+    });
+  });
+
+  it("leaves room clauses unchecked when no room was found", () => {
+    expect(statuses(facts({ workroom: null }))).toMatchObject({
+      "room-found": "fail",
+      "room-live": "unchecked",
+      "work-shape": "unchecked",
+      "room-owner": "unchecked",
+      "commissioner-owns": "unchecked",
+      "production-install": "pass",
+    });
+  });
+
+  it("keeps the verdict equal to the first failing clause", () => {
+    const input = facts({ upstreamRemoteUrl: null, environment: { environmentClass: "development", declared: true } });
+    const first = evaluateIntakeControllerClauses(input).find((clause) => clause.status === "fail");
+    expect(first).toMatchObject({ id: "upstream-configured" });
+    expect(evaluateIntakeControllerAuthority(input)).toEqual({
+      commissioned: false,
+      reason: `not commissioned: ${first && first.status === "fail" ? first.reason : ""}`,
+    });
   });
 });
 

@@ -140,6 +140,8 @@ describe("buildDecisionShadowLedgerEntry", () => {
       proposedDecision: {
         outcomeType: "recommend",
         recommendedOptionId: "a",
+        recommendedBy: "kernel",
+        kernelRecommendedOptionId: "a",
         options: ["a", "b"],
       },
       actualDecision: null,
@@ -233,5 +235,115 @@ describe("buildDecisionShadowLedgerEntry", () => {
     if (!backfilled.built || !live.built) throw new Error("expected both to build");
     expect(backfilled.entry.observedAt).toEqual(made);
     expect("observedAt" in live.entry).toBe(false);
+  });
+});
+
+describe("a coworker's own proposal (BI-AE416D75)", () => {
+  function escalationAnswer(overrides: Record<string, unknown> = {}) {
+    return {
+      type: "escalation",
+      answer: "Proceed",
+      rationale: "Proceed",
+      resolverUserId: "user-1",
+      capturedAt: "2026-09-15T22:52:16.259Z",
+      clearsGate: true,
+      chosenOptionId: "proceed",
+      ...overrides,
+    };
+  }
+
+  const escalated = {
+    domainClass: "architecture-tradeoff",
+    riskTier: "medium",
+    outcomeType: "escalate",
+    recommendedOptionId: null,
+    options: ["aligned", "revise-before-building"],
+  } as const;
+
+  it("is the recommendation trust is measured against when the kernel escalated", () => {
+    const result = buildDecisionShadowLedgerEntry(
+      row({ ...escalated, options: [...escalated.options], proposedOptionId: "revise-before-building" }),
+    );
+    if (!result.built) throw new Error("expected a ledger entry");
+    expect(result.entry.proposedDecision).toEqual({
+      outcomeType: "escalate",
+      recommendedOptionId: "revise-before-building",
+      recommendedBy: "coworker",
+      kernelRecommendedOptionId: null,
+      options: ["aligned", "revise-before-building"],
+    });
+  });
+
+  it("leaves a decision with neither a proposal nor a kernel pick without a recommendation", () => {
+    const result = buildDecisionShadowLedgerEntry(row({ ...escalated, options: [...escalated.options] }));
+    if (!result.built) throw new Error("expected a ledger entry");
+    expect(result.entry.proposedDecision).toMatchObject({ recommendedOptionId: null, recommendedBy: null });
+  });
+
+  it("keeps the kernel's pick beside a differing proposal and measures the coworker against its own", () => {
+    const result = buildDecisionShadowLedgerEntry(
+      row({
+        recommendedOptionId: "a",
+        proposedOptionId: "b",
+        chosenOptionId: "b",
+        humanOutcome: resolution({ resolvedBy: "human", disposition: "overridden", chosenOptionId: "b", agreement: false }),
+      }),
+    );
+    if (!result.built) throw new Error("expected a ledger entry");
+    expect(result.entry.proposedDecision).toMatchObject({
+      recommendedOptionId: "b",
+      recommendedBy: "coworker",
+      kernelRecommendedOptionId: "a",
+    });
+    expect(result.entry.agreement).toBe(true);
+    expect(result.entry.outcome).toMatchObject({ disposition: "followed", resolvedBy: "human" });
+  });
+
+  it("reads a person's escalation answer as a human resolution of the coworker's proposal", () => {
+    const followed = buildDecisionShadowLedgerEntry(
+      row({
+        domainClass: "plan-readiness",
+        riskTier: "medium",
+        outcomeType: "escalate",
+        recommendedOptionId: null,
+        options: ["Proceed", "Decline"],
+        proposedOptionId: "proceed",
+        chosenOptionId: "proceed",
+        humanOutcome: escalationAnswer(),
+      }),
+    );
+    if (!followed.built) throw new Error("expected a ledger entry");
+    expect(followed.entry).toMatchObject({
+      agreement: true,
+      actualDecision: { chosenOptionId: "proceed", disposition: "followed" },
+      outcome: { disposition: "followed", resolvedBy: "human", resolvedAt: "2026-09-15T22:52:16.259Z" },
+      reconciledAt: new Date("2026-09-15T22:52:16.259Z"),
+    });
+    expect(followed.entry.metadata.resolvedBy).toBe("human");
+
+    const overridden = buildDecisionShadowLedgerEntry(
+      row({ proposedOptionId: "a", recommendedOptionId: null, humanOutcome: escalationAnswer({ chosenOptionId: "b" }) }),
+    );
+    expect(overridden.built && overridden.entry.agreement).toBe(false);
+  });
+
+  it("does not read an escalation answer that names no chosen option or no person", () => {
+    for (const humanOutcome of [
+      escalationAnswer({ chosenOptionId: null }),
+      escalationAnswer({ resolverUserId: undefined }),
+      { type: "clustered-owner-answer", resolverUserId: "user-1", capturedAt: "2026-09-15T00:00:00.000Z", chosenOptionId: null },
+      { answeredBy: "user-1", resolvedVia: "review-answer" },
+    ]) {
+      const result = buildDecisionShadowLedgerEntry(row({ proposedOptionId: "a", recommendedOptionId: null, humanOutcome }));
+      expect(result.built && result.entry.outcome).toBeNull();
+      expect(result.built && result.entry.agreement).toBeNull();
+    }
+  });
+
+  it("does not compare an escalation answer with a kernel pick the kernel did not stand behind", () => {
+    const result = buildDecisionShadowLedgerEntry(
+      row({ recommendedOptionId: "a", humanOutcome: escalationAnswer({ chosenOptionId: "a" }) }),
+    );
+    expect(result.built && result.entry.agreement).toBeNull();
   });
 });

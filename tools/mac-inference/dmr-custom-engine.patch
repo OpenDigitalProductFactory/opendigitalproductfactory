@@ -1,0 +1,572 @@
+diff --git a/pkg/inference/backends/llamacpp/download.go b/pkg/inference/backends/llamacpp/download.go
+--- a/pkg/inference/backends/llamacpp/download.go
++++ b/pkg/inference/backends/llamacpp/download.go
+@@ -37,14 +37,15 @@
+ )
+ 
+ var (
+-	ShouldUseGPUVariant       bool
+-	ShouldUseGPUVariantLock   sync.Mutex
+-	ShouldUpdateServer        = true
+-	ShouldUpdateServerLock    sync.Mutex
+-	DesiredServerVersion      = pinnedServerVersion
+-	DesiredServerVersionLock  sync.Mutex
+-	errLlamaCppUpToDate       = errors.New("llama.cpp version is up to date, no need to update")
+-	errLlamaCppUpdateDisabled = errors.New("llama.cpp auto-updated is disabled")
++	ShouldUseGPUVariant        bool
++	ShouldUseGPUVariantLock    sync.Mutex
++	ShouldUpdateServer         = true
++	ShouldUpdateServerLock     sync.Mutex
++	DesiredServerVersion       = pinnedServerVersion
++	DesiredServerVersionLock   sync.Mutex
++	errLlamaCppUpToDate        = errors.New("llama.cpp version is up to date, no need to update")
++	errLlamaCppUpdateDisabled  = errors.New("llama.cpp auto-updated is disabled")
++	errLlamaCppOverrideInvalid = errors.New("update-disabled llama.cpp override is not an executable file")
+ )
+ 
+ func GetDesiredServerVersion() string {
+@@ -76,9 +77,13 @@
+ 	ShouldUpdateServerLock.Unlock()
+ 	if !shouldUpdateServer {
+ 		log.Info("downloadLatestLlamaCpp: update disabled")
+-		if binaryPresent {
+-			l.setRunningStatus(log, llamaCppPath, desiredTag, rec.Digest)
++		// A DPF-managed override has its own provenance, not a Docker image tag.
++		overridePath := filepath.Join(l.installDir, resolveLlamaServerBin(l.installDir))
++		info, err := os.Stat(overridePath)
++		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
++			return errLlamaCppOverrideInvalid
+ 		}
++		l.setRunningStatus(log, overridePath, "", "")
+ 		return errLlamaCppUpdateDisabled
+ 	}
+ 
+@@ -243,7 +248,7 @@
+ 		log.Warn("could not get llama.cpp version", "error", err)
+ 		return "unknown"
+ 	}
+-	re := regexp.MustCompile(`version: \d+ \((\w+)\)`)
++	re := regexp.MustCompile(`version: \d+ \(([A-Za-z0-9._+-]{1,100})\)`)
+ 	matches := re.FindStringSubmatch(string(output))
+ 	if len(matches) == 2 {
+ 		return matches[1]
+diff --git a/pkg/inference/backends/llamacpp/llamacpp.go b/pkg/inference/backends/llamacpp/llamacpp.go
+--- a/pkg/inference/backends/llamacpp/llamacpp.go
++++ b/pkg/inference/backends/llamacpp/llamacpp.go
+@@ -184,7 +184,7 @@
+ 		if !errors.Is(err, errLlamaCppUpToDate) && !errors.Is(err, errLlamaCppUpdateDisabled) {
+ 			l.status = inference.FormatError(fmt.Sprintf("failed to install llama.cpp: %v", err))
+ 		}
+-		if errors.Is(err, context.Canceled) {
++		if errors.Is(err, context.Canceled) || errors.Is(err, errLlamaCppOverrideInvalid) {
+ 			return err
+ 		}
+ 	}
+diff --git a/pkg/inference/backends/llamacpp/dpf_override_test.go b/pkg/inference/backends/llamacpp/dpf_override_test.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/inference/backends/llamacpp/dpf_override_test.go
+@@ -0,0 +1,70 @@
++package llamacpp
++
++import (
++	"context"
++	"errors"
++	"log/slog"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/docker/model-runner/pkg/inference"
++	"github.com/docker/model-runner/pkg/logging"
++)
++
++func dpfDisableUpdates(t *testing.T) {
++	t.Helper()
++	ShouldUpdateServerLock.Lock()
++	previous := ShouldUpdateServer
++	ShouldUpdateServer = false
++	ShouldUpdateServerLock.Unlock()
++	t.Cleanup(func() {
++		ShouldUpdateServerLock.Lock()
++		ShouldUpdateServer = previous
++		ShouldUpdateServerLock.Unlock()
++	})
++}
++
++func dpfEngineFixture(t *testing.T) string {
++	t.Helper()
++	dir := t.TempDir()
++	text := "#!/bin/sh\nprintf 'version: 9879 (72874f5-dpf-metal4.1)\\n'\n"
++	if err := os.WriteFile(filepath.Join(dir, "llama-server"), []byte(text), 0700); err != nil {
++		t.Fatal(err)
++	}
++	return dir
++}
++
++func TestDpfUpstreamNamedOverrideHasHonestRunningStatus(t *testing.T) {
++	dpfDisableUpdates(t)
++	log := logging.NewLogger(slog.LevelError)
++	l := &llamaCpp{installDir: dpfEngineFixture(t), status: inference.FormatNotInstalled("")}
++	err := l.downloadLatestLlamaCpp(context.Background(), log, "b9879", "metal")
++	if !errors.Is(err, errLlamaCppUpdateDisabled) {
++		t.Fatalf("expected disabled updater: %v", err)
++	}
++	if !strings.HasPrefix(l.status, inference.StatusRunning) || !strings.Contains(l.status, "72874f5-dpf-metal4.1") {
++		t.Fatalf("custom engine not truthfully identified: %s", l.status)
++	}
++	if strings.Contains(l.status, "b9879-metal") {
++		t.Fatalf("custom engine advertised as vendor variant: %s", l.status)
++	}
++}
++
++func TestDpfDisabledUpdaterRefusesMissingEngine(t *testing.T) {
++	dpfDisableUpdates(t)
++	l := &llamaCpp{installDir: t.TempDir(), status: inference.FormatNotInstalled("")}
++	err := l.downloadLatestLlamaCpp(context.Background(), logging.NewLogger(slog.LevelError), "b9879", "metal")
++	if err == nil || errors.Is(err, errLlamaCppUpdateDisabled) {
++		t.Fatalf("missing custom engine accepted: %v", err)
++	}
++}
++
++func TestDpfInstallRejectsUnavailableOverride(t *testing.T) {
++	dpfDisableUpdates(t)
++	l := &llamaCpp{installDir: t.TempDir(), log: logging.NewLogger(slog.LevelError), status: inference.FormatNotInstalled("")}
++	if err := l.Install(context.Background(), nil); err == nil {
++		t.Fatal("backend Install accepted an unavailable explicit engine")
++	}
++}
+diff --git a/pkg/server/server.go b/pkg/server/server.go
+--- a/pkg/server/server.go
++++ b/pkg/server/server.go
+@@ -38,6 +38,11 @@
+ 
+ // Run starts the HTTP server and blocks until ctx is cancelled.
+ func Run(ctx context.Context, cfg Config) error {
++	ctx, cancelLease, leaseErr := dpfLeasedContext(ctx)
++	if leaseErr != nil {
++		return leaseErr
++	}
++	defer cancelLease()
+ 	exitFunc := cfg.ExitFunc
+ 	if exitFunc == nil {
+ 		exitFunc = os.Exit
+@@ -246,6 +251,7 @@
+ 		Handler:           svc.Router,
+ 		ReadHeaderTimeout: 10 * time.Second,
+ 	}
++	defer httpServer.Close()
+ 	serverErrors := make(chan error, 1)
+ 
+ 	// TLS server (optional).
+@@ -255,7 +261,10 @@
+ 	// Use TCP port when MODEL_RUNNER_PORT is set; otherwise Unix socket.
+ 	tcpPort := envconfig.TCPPort()
+ 	if tcpPort != "" {
+-		addr := ":" + tcpPort
++		addr, err := dpfTCPListenAddress(tcpPort)
++		if err != nil {
++			return err
++		}
+ 		log.Info("Listening on TCP port", "port", tcpPort)
+ 		httpServer.Addr = addr
+ 		go func() {
+@@ -279,6 +288,10 @@
+ 	// Start TLS server if enabled.
+ 	if envconfig.TLSEnabled() {
+ 		tlsPort := envconfig.TLSPort()
++		tlsAddr, err := dpfTCPListenAddress(tlsPort)
++		if err != nil {
++			return err
++		}
+ 
+ 		certPath := envconfig.TLSCert()
+ 		keyPath := envconfig.TLSKey()
+@@ -304,7 +317,7 @@
+ 		}
+ 
+ 		tlsServer = &http.Server{
+-			Addr:              ":" + tlsPort,
++			Addr:              tlsAddr,
+ 			Handler:           svc.Router,
+ 			TLSConfig:         tlsConfig,
+ 			ReadHeaderTimeout: 10 * time.Second,
+diff --git a/pkg/server/dpf_listener.go b/pkg/server/dpf_listener.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/server/dpf_listener.go
+@@ -0,0 +1,24 @@
++package server
++
++import (
++	"fmt"
++	"net"
++	"strconv"
++
++	"github.com/docker/model-runner/pkg/envconfig"
++)
++
++// DPF's host-native distribution never exposes an unauthenticated LAN listener.
++// Container access must be proven through the supported Desktop host gateway.
++func dpfTCPListenAddress(port string) (string, error) {
++	host := envconfig.Var("MODEL_RUNNER_BIND_HOST")
++	if host == "" {
++		host = "127.0.0.1"
++	}
++	ip := net.ParseIP(host)
++	n, err := strconv.Atoi(port)
++	if ip == nil || !ip.IsLoopback() || err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != port {
++		return "", fmt.Errorf("DPF model runner requires a loopback IP and decimal TCP port")
++	}
++	return net.JoinHostPort(host, port), nil
++}
+diff --git a/pkg/server/dpf_listener_test.go b/pkg/server/dpf_listener_test.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/server/dpf_listener_test.go
+@@ -0,0 +1,34 @@
++package server
++
++import "testing"
++
++func TestDpfLoopbackListener(t *testing.T) {
++	for _, tc := range []struct{ host, port, want string }{
++		{"", "12434", "127.0.0.1:12434"},
++		{"127.0.0.1", "12435", "127.0.0.1:12435"},
++		{"::1", "12435", "[::1]:12435"},
++	} {
++		t.Run(tc.host+tc.port, func(t *testing.T) {
++			t.Setenv("MODEL_RUNNER_BIND_HOST", tc.host)
++			got, err := dpfTCPListenAddress(tc.port)
++			if err != nil || got != tc.want {
++				t.Fatalf("got %q / %v, want %q", got, err, tc.want)
++			}
++		})
++	}
++}
++
++func TestDpfListenerRejectsExposureAndInvalidPorts(t *testing.T) {
++	for _, tc := range []struct{ host, port string }{
++		{"0.0.0.0", "12435"}, {"::", "12435"}, {"192.168.1.20", "12435"},
++		{"localhost", "12435"}, {"127.0.0.1", "0"}, {"127.0.0.1", "65536"},
++		{"127.0.0.1", "012435"}, {"127.0.0.1", "http"}, {"127.0.0.1", "12435:1"},
++	} {
++		t.Run(tc.host+tc.port, func(t *testing.T) {
++			t.Setenv("MODEL_RUNNER_BIND_HOST", tc.host)
++			if got, err := dpfTCPListenAddress(tc.port); err == nil || got != "" {
++				t.Fatalf("unsafe listener accepted: %q", got)
++			}
++		})
++	}
++}
+diff --git a/pkg/server/dpf_lease_unix.go b/pkg/server/dpf_lease_unix.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/server/dpf_lease_unix.go
+@@ -0,0 +1,93 @@
++//go:build darwin || linux
++
++package server
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"io"
++	"os"
++	"time"
++
++	"golang.org/x/sys/unix"
++)
++
++// A private projection of the existing server-granted lease bounds a native
++// experiment. It grants no tool authority and contains no bearer credentials.
++type dpfLeaseObservation struct {
++	SchemaVersion int       `json:"schemaVersion"`
++	LeaseID       string    `json:"leaseId"`
++	Owner         string    `json:"ownerSessionId"`
++	Branch        string    `json:"branchName"`
++	Status        string    `json:"status"`
++	Phase         string    `json:"phase"`
++	ExpiresAt     time.Time `json:"expiresAt"`
++}
++
++func readDpfLease(path string, now time.Time) (dpfLeaseObservation, error) {
++	var value dpfLeaseObservation
++	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
++	if err != nil {
++		return value, fmt.Errorf("native experiment lease unavailable")
++	}
++	file := os.NewFile(uintptr(fd), path)
++	defer file.Close()
++	var stat unix.Stat_t
++	if unix.Fstat(fd, &stat) != nil || stat.Mode&unix.S_IFMT != unix.S_IFREG || stat.Mode&0o077 != 0 || stat.Uid != uint32(os.Geteuid()) {
++		return value, fmt.Errorf("native experiment lease must be an owner-only regular file")
++	}
++	data, err := io.ReadAll(io.LimitReader(file, 65537))
++	if err != nil || len(data) > 65536 || json.Unmarshal(data, &value) != nil || value.SchemaVersion != 1 ||
++		value.LeaseID == "" || value.Owner == "" || value.Branch == "" || value.Status != "active" ||
++		value.Phase != "running" || !value.ExpiresAt.After(now) {
++		return value, fmt.Errorf("native experiment lease invalid or expired")
++	}
++	return value, nil
++}
++
++func dpfLeasedContext(parent context.Context) (context.Context, context.CancelFunc, error) {
++	path := os.Getenv("DPF_INFERENCE_LEASE_FILE")
++	if path == "" {
++		return parent, func() {}, nil
++	}
++	now := time.Now()
++	hardEnd, err := time.Parse(time.RFC3339Nano, os.Getenv("DPF_INFERENCE_EXPERIMENT_DEADLINE"))
++	if err != nil || !hardEnd.After(now) || hardEnd.After(now.Add(10*time.Minute)) {
++		return nil, nil, fmt.Errorf("native experiment hard deadline required (at most ten minutes)")
++	}
++	first, err := readDpfLease(path, now)
++	if err != nil {
++		return nil, nil, err
++	}
++	ctx, cancel := context.WithCancel(parent)
++	deadline := func(expiry time.Time) time.Duration {
++		if hardEnd.Before(expiry) {
++			expiry = hardEnd
++		}
++		return time.Until(expiry)
++	}
++	go func() {
++		timer := time.NewTimer(deadline(first.ExpiresAt))
++		defer timer.Stop()
++		ticker := time.NewTicker(250 * time.Millisecond)
++		defer ticker.Stop()
++		for {
++			select {
++			case <-ctx.Done():
++				return
++			case <-timer.C:
++				cancel()
++				return
++			case <-ticker.C:
++				current, err := readDpfLease(path, time.Now())
++				if err != nil || current.LeaseID != first.LeaseID || current.Owner != first.Owner || current.Branch != first.Branch {
++					cancel()
++					return
++				}
++				timer.Reset(deadline(current.ExpiresAt))
++			}
++		}
++	}()
++	return ctx, cancel, nil
++}
+diff --git a/pkg/server/dpf_lease_other.go b/pkg/server/dpf_lease_other.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/server/dpf_lease_other.go
+@@ -0,0 +1,16 @@
++//go:build !darwin && !linux
++
++package server
++
++import (
++	"context"
++	"fmt"
++	"os"
++)
++
++func dpfLeasedContext(parent context.Context) (context.Context, context.CancelFunc, error) {
++	if os.Getenv("DPF_INFERENCE_LEASE_FILE") != "" {
++		return nil, nil, fmt.Errorf("leased native experiments are unsupported on this platform")
++	}
++	return parent, func() {}, nil
++}
+diff --git a/pkg/server/dpf_lease_unix_test.go b/pkg/server/dpf_lease_unix_test.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/server/dpf_lease_unix_test.go
+@@ -0,0 +1,87 @@
++//go:build darwin || linux
++
++package server
++
++import (
++	"context"
++	"encoding/json"
++	"os"
++	"path/filepath"
++	"testing"
++	"time"
++)
++
++func dpfLeaseFixture(t *testing.T) (string, dpfLeaseObservation) {
++	t.Helper()
++	path := filepath.Join(t.TempDir(), "lease.json")
++	value := dpfLeaseObservation{SchemaVersion: 1, LeaseID: "NPEL-TEST", Owner: "test-owner", Branch: "codex/test", Status: "active", Phase: "running", ExpiresAt: time.Now().Add(time.Minute)}
++	data, _ := json.Marshal(value)
++	if err := os.WriteFile(path, data, 0600); err != nil {
++		t.Fatal(err)
++	}
++	return path, value
++}
++
++func TestDpfLeaseRefusesUnsafeFilesAndExpiredObservations(t *testing.T) {
++	path, value := dpfLeaseFixture(t)
++	if _, err := readDpfLease(path, time.Now()); err != nil {
++		t.Fatal(err)
++	}
++	link := filepath.Join(filepath.Dir(path), "link.json")
++	if err := os.Symlink(path, link); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := readDpfLease(link, time.Now()); err == nil {
++		t.Fatal("symlink accepted")
++	}
++	if err := os.Chmod(path, 0644); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := readDpfLease(path, time.Now()); err == nil {
++		t.Fatal("public lease accepted")
++	}
++	if err := os.Chmod(path, 0600); err != nil {
++		t.Fatal(err)
++	}
++	value.ExpiresAt = time.Now().Add(-time.Second)
++	data, _ := json.Marshal(value)
++	os.WriteFile(path, data, 0600)
++	if _, err := readDpfLease(path, time.Now()); err == nil {
++		t.Fatal("expired lease accepted")
++	}
++}
++
++func TestDpfLeaseHardDeadlineStopsWithoutTheClient(t *testing.T) {
++	path, _ := dpfLeaseFixture(t)
++	t.Setenv("DPF_INFERENCE_LEASE_FILE", path)
++	t.Setenv("DPF_INFERENCE_EXPERIMENT_DEADLINE", time.Now().Add(100*time.Millisecond).Format(time.RFC3339Nano))
++	ctx, cancel, err := dpfLeasedContext(context.Background())
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer cancel()
++	select {
++	case <-ctx.Done():
++	case <-time.After(2 * time.Second):
++		t.Fatal("native runtime outlived hard deadline")
++	}
++}
++
++func TestDpfLeaseChangedOwnerFencesNativeRuntime(t *testing.T) {
++	path, value := dpfLeaseFixture(t)
++	t.Setenv("DPF_INFERENCE_LEASE_FILE", path)
++	t.Setenv("DPF_INFERENCE_EXPERIMENT_DEADLINE", time.Now().Add(time.Minute).Format(time.RFC3339Nano))
++	ctx, cancel, err := dpfLeasedContext(context.Background())
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer cancel()
++	value.Owner = "different-owner"
++	data, _ := json.Marshal(value)
++	os.WriteFile(path, data, 0600)
++	select {
++	case <-ctx.Done():
++	case <-time.After(2 * time.Second):
++		t.Fatal("changed owner did not fence runtime")
++	}
++}
+diff --git a/pkg/sandbox/sandbox_darwin.go b/pkg/sandbox/sandbox_darwin.go
+--- a/pkg/sandbox/sandbox_darwin.go
++++ b/pkg/sandbox/sandbox_darwin.go
+@@ -230,11 +230,22 @@
+ 			return nil, fmt.Errorf("unable to determine working directory: %w", err)
+ 		}
+ 
++		// Seatbelt matches canonical filesystem paths. In particular macOS maps
++		// /var to /private/var; a lexical package path otherwise denies dyld's
++		// executable mappings even though the declared library directory is right.
++		if canonical, err := filepath.EvalSymlinks(updatedBinPath); err == nil {
++			updatedBinPath = canonical
++		}
++		updatedLibPath := filepath.Join(filepath.Dir(updatedBinPath), "lib")
++		if canonical, err := filepath.EvalSymlinks(updatedLibPath); err == nil {
++			updatedLibPath = canonical
++		}
++
+ 		// TODO: switch to text/template if this gets any more complex
+ 		profile := strings.ReplaceAll(configuration, "[HOMEDIR]", currentUser.HomeDir)
+ 		profile = strings.ReplaceAll(profile, "[WORKDIR]", currentDirectory)
+ 		profile = strings.ReplaceAll(profile, "[UPDATEDBINPATH]", updatedBinPath)
+-		profile = strings.ReplaceAll(profile, "[UPDATEDLIBPATH]", filepath.Join(filepath.Dir(updatedBinPath), "lib"))
++		profile = strings.ReplaceAll(profile, "[UPDATEDLIBPATH]", updatedLibPath)
+ 
+ 		sandboxedArgs := make([]string, 0, len(arg)+3)
+ 		sandboxedArgs = append(sandboxedArgs, "-p", profile, name)
+diff --git a/pkg/sandbox/dpf_paths_darwin_test.go b/pkg/sandbox/dpf_paths_darwin_test.go
+new file mode 100644
+--- /dev/null
++++ b/pkg/sandbox/dpf_paths_darwin_test.go
+@@ -0,0 +1,67 @@
++package sandbox
++
++import (
++	"os"
++	"os/exec"
++	"path/filepath"
++	"testing"
++)
++
++// Exercise actual dyld executable mapping through a symlinked package root.
++// This contains no model weights or GPU initialization.
++func TestDpfRelocatedNativeLibrariesKeepSandboxProtection(t *testing.T) {
++	root := t.TempDir()
++	bin := filepath.Join(root, "package", "bin")
++	if err := os.MkdirAll(bin, 0700); err != nil {
++		t.Fatal(err)
++	}
++	libSource := filepath.Join(root, "lib.c")
++	mainSource := filepath.Join(root, "main.c")
++	os.WriteFile(libSource, []byte("int dpf_value(void) { return 42; }\n"), 0600)
++	os.WriteFile(mainSource, []byte("int dpf_value(void); int main(void) { return dpf_value() != 42; }\n"), 0600)
++	commands := [][]string{
++		{"-dynamiclib", libSource, "-install_name", "@rpath/libdpf.dylib", "-o", filepath.Join(bin, "libdpf.dylib")},
++		{mainSource, "-L" + bin, "-ldpf", "-Wl,-rpath,@executable_path", "-o", filepath.Join(bin, "probe")},
++	}
++	for _, args := range commands {
++		if output, err := exec.Command("/usr/bin/clang", args...).CombinedOutput(); err != nil {
++			t.Fatalf("compile native fixture: %v: %s", err, output)
++		}
++	}
++	alias := filepath.Join(root, "alias")
++	if err := os.Symlink(filepath.Join(root, "package"), alias); err != nil {
++		t.Fatal(err)
++	}
++	aliasBin := filepath.Join(alias, "bin")
++	process, err := Create(t.Context(), ConfigurationLlamaCpp, nil, aliasBin, filepath.Join(aliasBin, "probe"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer process.Close()
++	if err := process.Command().Wait(); err != nil {
++		t.Fatalf("sandbox rejected relocated runtime libraries: %v", err)
++	}
++	// A relocated package must not grant executable mappings to unrelated files.
++	outside := filepath.Join(root, "unrelated")
++	if err := os.Mkdir(outside, 0700); err != nil {
++		t.Fatal(err)
++	}
++	outsideLib := filepath.Join(outside, "liboutside.dylib")
++	for _, args := range [][]string{
++		{"-dynamiclib", libSource, "-install_name", outsideLib, "-o", outsideLib},
++		{mainSource, outsideLib, "-o", filepath.Join(bin, "outside-probe")},
++	} {
++		if output, err := exec.Command("/usr/bin/clang", args...).CombinedOutput(); err != nil {
++			t.Fatalf("compile denied fixture: %v: %s", err, output)
++		}
++	}
++	denied, err := Create(t.Context(), ConfigurationLlamaCpp, nil, aliasBin, filepath.Join(aliasBin, "outside-probe"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer denied.Close()
++	if err := denied.Command().Wait(); err == nil {
++		t.Fatal("sandbox allowed an unrelated executable library")
++	}
++
++}

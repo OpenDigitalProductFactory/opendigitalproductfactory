@@ -61,6 +61,14 @@ export async function recordToolchainObservation(db: ObservationDb, input: Obser
     loadedPackVersion: input.declaration?.pack ?? null,
     authMode: authMode(input.authSource),
     ...(input.clientInfo ? { clientInfoName: input.clientInfo.name, clientInfoVersion: input.clientInfo.version } : {}),
+    // BI-3E66F76F: the host agent's last outcome, when the connector reports one.
+    ...(input.declaration?.converge
+      ? {
+          convergeStatus: input.declaration.converge.status.replace(/-/g, "_"),
+          convergeCode: input.declaration.converge.code,
+          convergeSince: input.declaration.converge.since,
+        }
+      : {}),
     lastObservedAt: input.now,
   };
   const updated = await db.agentToolchainObservation.updateMany({

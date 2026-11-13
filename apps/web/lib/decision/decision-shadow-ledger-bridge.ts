@@ -76,10 +76,24 @@ export async function resolveDecisionAgentId(
 }
 
 /**
+ * The same lookup for a gate whose client may not carry the Agent model (a
+ * narrow test double, or a caller that predates attribution): no client, no
+ * attribution, which is the honest null rather than an error.
+ */
+export async function resolveGateDecisionAgentId(
+  db: unknown,
+  declaredAgentId: string | null | undefined,
+): Promise<string | null> {
+  const agent = (db as Partial<DecisionAgentLookupDb> | null | undefined)?.agent;
+  if (!agent || typeof agent.findMany !== "function") return null;
+  return resolveDecisionAgentId({ agent }, declaredAgentId);
+}
+
+/**
  * Write (or complete) the one ledger row for this decision. Idempotent: the
  * ledger id is derived from the decision, so a repeat call updates that row.
- * An update without a known resolution changes nothing, so a recorded
- * agreement is never overwritten with null.
+ * An update without a known resolution touches only the proposed half, so a
+ * recorded agreement is never overwritten with null.
  */
 export async function syncDecisionShadowLedger(
   db: DecisionShadowLedgerDb,
@@ -96,15 +110,19 @@ export async function syncDecisionShadowLedger(
     ...(actualDecision ? { actualDecision } : {}),
     ...(outcome ? { outcome } : {}),
   };
+  // The proposed half is derived from the decision's own recorded columns, so
+  // rewriting it is idempotent; it is how a recommendation recovered after the
+  // row was first written reaches the ledger (BI-AE416D75).
   const update: Record<string, unknown> = outcome
     ? {
+        proposedDecision: entry.proposedDecision,
         actualDecision,
         outcome,
         agreement: entry.agreement,
         reconciledAt: entry.reconciledAt,
         metadata: entry.metadata,
       }
-    : {};
+    : { proposedDecision: entry.proposedDecision };
 
   try {
     await db.decisionShadowLedger.upsert({ where: { ledgerId: entry.ledgerId }, create, update });

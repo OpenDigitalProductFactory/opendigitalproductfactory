@@ -252,10 +252,11 @@ function readBaseline(path) {
   }
 }
 
-function readBaselineAtBase() {
+export function readBaselineAtBase({ base = process.env.BASE_SHA || "origin/main", cwd = process.cwd() } = {}) {
   try {
-    const out = gitText(["show", "origin/main:scripts/context-economy-baseline.json"], {
-      cwd: process.cwd(),
+    if (!/^[A-Za-z0-9._\/-]{1,200}$/.test(base) || base.startsWith("-")) throw new Error("Unsafe baseline ref");
+    const out = gitText(["show", `${base}:scripts/context-economy-baseline.json`], {
+      cwd,
       trim: false,
     });
     return JSON.parse(out).entries ?? null;
@@ -268,7 +269,7 @@ function readBaselineAtBase() {
     // rather than a diff range: `git show <ref>:<path>` needs the ref, not a
     // merge base, so a shallow clone usually still resolves here).
     console.warn(
-      "[context-economy] WARN: could not read scripts/context-economy-baseline.json at origin/main — "
+      `[context-economy] WARN: could not read scripts/context-economy-baseline.json at ${base} — `
         + "the growth-against-base comparison did NOT run; the absolute budget "
         + "check below still applies. Remedy: git fetch --no-tags origin main",
     );

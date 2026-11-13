@@ -17,7 +17,6 @@ import {
   type SweepSummary,
 } from "./concierge-sweep";
 import {
-  UNRESOLVED_OUTCOMES,
   excludedFromOwnerRulingQueue,
 } from "@/lib/decision-perspective/owner-ruling-queue";
 import {
@@ -26,7 +25,11 @@ import {
 } from "@/lib/coworker/envelope-expiry";
 import { conductTriage, type TriageSubject } from "./triage-conductor";
 import { runGovernanceTriagePanel } from "./triage-panel-binding";
+import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 import type { ProposalClient } from "./resolution-proposal-store";
+import { objectRecord } from "@/lib/attention/coworker-envelope-decision";
+import { settleObsoleteLeaseReleaseEnvelopes, type ObsoleteReleaseDb, type ObsoleteReleaseSummary } from "@/lib/coworker/obsolete-lease-envelope";
+import { settleObsoleteScopeReleaseEnvelopes, type ObsoleteScopeDb, type ObsoleteScopeSummary } from "@/lib/coworker/obsolete-scope-envelope";
 
 /** Stable identity of the standing governance room. */
 export const GOVERNANCE_ROOM_KEY = "decision-concierge-standing-room";
@@ -53,7 +56,7 @@ const CANDIDATE_SCAN_LIMIT = 50;
  */
 function panelCandidateWhere(): Prisma.DecisionInteractionWhereInput {
   return {
-    outcomeType: { in: [...UNRESOLVED_OUTCOMES] },
+    AND: [humanEscalationWhere()],
     humanOutcome: { equals: Prisma.DbNull },
     question: { not: "" },
     NOT: excludedFromOwnerRulingQueue(),
@@ -76,6 +79,7 @@ async function loadCandidates(): Promise<TriageSubject[]> {
       gateKey: true,
       riskTier: true,
       outcomeType: true,
+      escalationRoute: true,
       options: true,
       evidenceBundle: true,
       sources: true,
@@ -94,6 +98,7 @@ async function loadCandidates(): Promise<TriageSubject[]> {
     gateKey: row.gateKey,
     riskTier: row.riskTier,
     outcomeType: row.outcomeType,
+    escalationRoute: row.escalationRoute,
     options: row.options,
     evidenceBundle: row.evidenceBundle,
     sources: row.sources,
@@ -164,7 +169,8 @@ async function retireStaleProposals(): Promise<number> {
 }
 
 /** Append the pass to the standing room, convening it the first time. */
-async function recordPass(summary: SweepSummary): Promise<void> {
+async function recordPass(summary: SweepSummary, obsoleteReleaseApprovals?: ObsoleteReleaseSummary,
+  obsoleteScopeApprovals?: ObsoleteScopeSummary): Promise<void> {
   const room = await prisma.workroom.upsert({
     where: { idempotencyKey: GOVERNANCE_ROOM_KEY },
     update: { lastSyncedAt: new Date(), executorKind: "dpf-native", executorRef: "concierge-sweep" },
@@ -199,6 +205,8 @@ async function recordPass(summary: SweepSummary): Promise<void> {
         unproductive: summary.unproductive,
         skipped: summary.skipped,
         retiredStaleProposals: summary.retiredStaleProposals,
+        obsoleteReleaseApprovals: obsoleteReleaseApprovals ?? null,
+        obsoleteScopeApprovals: obsoleteScopeApprovals ?? null,
       },
     },
   });
@@ -212,15 +220,31 @@ export async function runConciergeSweepJob(input: {
   userId: string;
   limits?: SweepLimits;
 }): Promise<SweepSummary> {
+  let obsoleteReleaseApprovals: ObsoleteReleaseSummary | undefined;
+  let obsoleteScopeApprovals: ObsoleteScopeSummary | undefined;
   return runConciergeSweep(
     {
       candidates: loadCandidates,
       retireStale: async () => {
         const lapsed = await retireLapsedEnvelopes(new Date());
+        const last = await prisma.workroomActivity.findFirst({
+          where: { capsule: { idempotencyKey: GOVERNANCE_ROOM_KEY }, kind: "concierge-sweep" },
+          orderBy: [{ recordedAt: "desc" }, { id: "desc" }], select: { payload: true },
+        });
+        const checkpoint = objectRecord(objectRecord(last?.payload)?.obsoleteReleaseApprovals)?.nextCursor;
+        const cursor = typeof checkpoint === "string" && checkpoint.length <= 128 ? checkpoint : null;
+        obsoleteReleaseApprovals = await settleObsoleteLeaseReleaseEnvelopes(
+          prisma as unknown as ObsoleteReleaseDb, new Date(), cursor,
+        );
+        const scopeCheckpoint = objectRecord(objectRecord(last?.payload)?.obsoleteScopeApprovals)?.nextCursor;
+        const scopeCursor = typeof scopeCheckpoint === "string" && scopeCheckpoint.length <= 128 ? scopeCheckpoint : null;
+        obsoleteScopeApprovals = await settleObsoleteScopeReleaseEnvelopes(
+          prisma as unknown as ObsoleteScopeDb, new Date(), scopeCursor,
+        );
         const stale = await retireStaleProposals();
-        return lapsed + stale;
+        return lapsed + obsoleteReleaseApprovals.cancelled + obsoleteScopeApprovals.cancelled + stale;
       },
-      report: recordPass,
+      report: summary => recordPass(summary, obsoleteReleaseApprovals, obsoleteScopeApprovals),
       conduct: async (subject) => {
         return conductTriage(
           {

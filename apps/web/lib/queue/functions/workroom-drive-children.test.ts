@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SUB_IN_REWORK, SUB_SEQ } from "@/lib/work-management/__fixtures__/graph-shapes/sub-shape";
 import { resolveDrivePlan, workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
-import type { DriveMarking } from "@/lib/work-management/drive-marking";
+import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 import { projectPersistedWorkroomRoster } from "@/lib/work-management/room-participant-assignment";
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
@@ -28,8 +28,8 @@ import { runWorkroomDriveJob, type WorkroomDriveEffects, type WorkroomDriveRoom 
 import { SUB_SHAPE_DRIVE_ACTOR, createSubShapeChildEffects, withSubShapeChildren } from "./workroom-drive-children";
 
 const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
-vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
+vi.mock("@dpf/validators/gpp/executable-constructs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dpf/validators/gpp/executable-constructs")>();
   flags.original = { ...actual.CONSTRUCT_EXECUTABLE };
   flags.table = { ...actual.CONSTRUCT_EXECUTABLE };
   return { ...actual, CONSTRUCT_EXECUTABLE: flags.table };
@@ -57,6 +57,7 @@ function memoryDb() {
   const failNext = { relationDelete: false };
   let seq = 0;
   const match = (row: Row, where: Row) => Object.entries(where).every(([key, value]) =>
+    value && typeof value === "object" && !Array.isArray(value) && "equals" in value ? JSON.stringify(row[key]) === JSON.stringify(value.equals) :
     value && typeof value === "object" && !Array.isArray(value) && "in" in value ? (value.in as unknown[]).includes(row[key]) : row[key] === value);
   const db: any = {
     state,
@@ -85,6 +86,9 @@ function memoryDb() {
       },
     },
     workroomActivity: { create: async ({ data }: Row) => { const row = { id: `act-${++seq}`, recordedAt: new Date(), ...data }; state.activities.push(row); return row; } },
+    // No account here was handed over (BI-C66B6076 reads these before appointing).
+    principalAlias: { findFirst: async () => null },
+    user: { findFirst: async () => null },
     workroomParticipant: {
       findMany: async ({ where }: Row) => state.participants.filter((row) => row.workroomId === where.workroomId),
       create: async ({ data }: Row) => { state.participants.push({ id: `part-${++seq}`, ...data }); return data; },
@@ -340,4 +344,21 @@ describe("sub-shape child rooms through the runner (PR-3c-5)", () => {
     expect(await tick(h, at(0))).toMatchObject({ action: "pause", reason: "construct_not_executable" });
     expect(children(h)).toEqual([]);
   });
+});
+
+
+it("refuses a stale reused-child shape write after concurrent scope acquisition", async () => {
+  const h = parentWaitingAtB();
+  const ensure = { key: "child", stageKey: "B", stageTitle: "Child", iteration: 0, ref: "delivery-small@1.0.0", idempotencyKey: "existing-child" };
+  h.db.state.workrooms.push({ id: "row-child", capsuleId: "WC-CHILD", status: "working", idempotencyKey: ensure.idempotencyKey, scopeClaims: [], updatedAt: T0 });
+  const update = h.db.workroom.update;
+  h.db.workroom.update = async (args: Row) => {
+    if (args.where.id === "row-child" && args.data.scopeClaims) {
+      if (args.where.scopeClaims) throw new Error("Concurrent child claim changed");
+    }
+    return update(args);
+  };
+  await expect(createSubShapeChildEffects(async () => h.db).ensureChildRoom({
+    parent: { id: "row-parent", capsuleId: "WC-PARENT" }, ensure, now: T0,
+  })).rejects.toThrow("Concurrent child claim changed");
 });

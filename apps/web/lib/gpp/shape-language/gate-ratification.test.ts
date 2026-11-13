@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { DECISION_ID_PATTERN } from "@/lib/gpp/binding-enforcement";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
+import { GENERATED_DECLARED_FLOWS } from "@/lib/work-management/generated/declared-flows.generated";
 import { listWorkShapes, type WorkShapeDefinition, type WorkShapeStage } from "@/lib/work-management/work-shapes";
 
 import {
@@ -18,7 +19,7 @@ import {
   ratifiedGateFor,
   type GateRatificationEntry,
 } from "./gate-ratification";
-import { gppShapeDocumentSchema } from "./gpp-shape-schema";
+import { gppShapeDocumentSchema } from "@dpf/validators/gpp/gpp-shape-schema";
 
 type GovernedUse = { shape: string; stage: WorkShapeStage };
 
@@ -74,7 +75,7 @@ const PROPOSED_GATE = {
 
 describe("gate ratification table", () => {
   it("has exactly one entry per decisionScope across listWorkShapes() and WORK_SHAPE_PRIOR_VERSIONS (two-way)", () => {
-    const registryScopes = [...governedUsesByScope().keys()].sort();
+    const registryScopes = [...new Set([...governedUsesByScope().keys(), ...GENERATED_DECLARED_FLOWS.flatMap((flow) => flow.stages.flatMap((stage) => stage.advance.kind === "governed-decision" ? [stage.advance.decisionScope] : []))])].sort();
     const tableScopes = Object.keys(GATE_RATIFICATION).sort();
 
     const missing = registryScopes.filter((scope) => !(scope in GATE_RATIFICATION));
@@ -101,6 +102,8 @@ describe("gate ratification table", () => {
     const uses = governedUsesByScope();
     const failures: string[] = [];
     for (const [scope, entry] of Object.entries(GATE_RATIFICATION)) {
+      // Registry drive behavior only; declared-flow conformance checks its own resolver contract.
+      if (!uses.has(scope)) continue;
       for (const { shape, stage } of uses.get(scope) ?? []) {
         if (!/^(role|person):/.test(stage.accountablePrincipalRef)) {
           failures.push(

@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Context Engineering & Tool Efficiency — Design & Research
 
 **Status:** VALIDATED — founder greenlit 2026-06-20. The **P0 trio (R1 result-cap, R2 description-lint, R3 deferred external-CLI tools)** and the **keep-fresh / apply-criteria mechanism** are implemented; R3 Phase 2 shipped in PR #4112 and its bootstrap/conformance contract was hardened on 2026-08-08. See the implementation plan `docs/superpowers/plans/2026-06-20-context-engineering-tool-efficiency-implementation.md` and the canonical standard `docs/architecture/context-engineering-standards.md`. Remaining recommendations (R4 code-exec spike, R6, R7, R8, R9) are staged follow-ups. The §10 decisions below are resolved as recommended.
@@ -226,6 +230,98 @@ Effort: M. Effect: cuts the external-CLI startup tax from ~50K toward single-dig
 **R5 — Per-phase tool-subset parity across delivery paths (fixes G2 tail/P5).** Make `/api/mcp/v1` honor the active build phase (or capsule scope) so external CLIs see the same minimized set the native loop does. Composes with R3. Handle: *proposed BI — cli-path-phase-tool-parity*.
 
 **R6 — Verify + exploit local prefix-KV caching (P8).** Confirm DMR/llama.cpp reuses the prefix KV cache across turns for the static prompt prefix; if not fully, reorder so the served model benefits, and document the local-cache contract alongside the cloud one. Handle: *proposed BI — local-prefix-cache-verification*.
+
+### R6 local continuation repair — BI-4761F54E, 2026-10-18
+
+The operator authorized a separate implementation and measured delivery for the
+remaining local-cache work. The cloud stable-prefix `ttl: "1h"` already shipped
+in PR #4109. This addendum extends R6/P8; it does not reopen the cloud TTL work.
+
+#### Observed scope and research
+
+Source base: `20f932062657053e463b93ed4167760085c45dec`. The chat adapter
+extracts a separate reasoning channel, but the adapter-to-inference projection,
+routed results, agent history and OpenAI wire formatter do not carry it forward.
+This establishes a structural gap, not the cause of historical latency.
+`local-tool-thinking.ts` disables thinking when native local tools are attached;
+retain that policy. Successful text-only chat starts a fresh invocation on the
+next user turn, so an invocation-local repair does not promise cross-request
+continuity. Existing no-tools truncation and corrective retries are candidate
+paths to measure before choosing an implementation.
+
+The earlier canonical nonthinking session (WC-1EBA9720 activity290) already
+reused 90–94% of its prefix. Cache is therefore not globally disabled. Live
+read-only metadata confirms DMR 1.2.8, llama.cpp `b9879-metal` at
+`72874f559c598b8f89fbb24864868337cf5afb4c`, the installed 27B Q4_K_M model digest
+`66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9`, and
+template digest `c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041`.
+The template consumes `reasoning_content`, trims it, and defaults
+`preserve_thinking` to true. Configured context is 131072; no division by slot
+count is assumed.
+
+Primary research: [Qwen's model card](https://huggingface.co/Qwen/Qwen3.8-27B)
+recommends preserving reasoning for continuity/cache reuse and warns that less
+effort can increase retries; the installed parser's
+[message conversion](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/common/chat.cpp#L450)
+and [template application](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/common/chat.cpp#L2646)
+accept the field. These establish compatibility, not measured benefit. Adopt
+exact native replay semantics and measured controls; reject lowering thinking,
+changing runtime flags, replacing the engine, or copying another server's
+unverified template recipe. Existing Gemini model-bound opaque continuations
+are a useful precedent, but their persisted tool-call metadata is unsuitable
+for private local reasoning.
+
+#### Bounded continuation contract
+
+- **REQ-LPC1:** first run a matched thinking multi-turn control through the
+  canonical admission/lease path. Keep system/tools order, model, sampling,
+  context and total completion allowance identical; change only exact reasoning
+  replay. Alternate order to expose cache warming. Record correct useful task
+  completion, truncation, cache tokens, TTFT, prefill and decode separately.
+  If refuted, preserve the counterexample and identify the next supported fix.
+- **REQ-LPC2:** any production carrier is private, transient and bound to the
+  exact provider/account/version and transport endpoint, model digest, engine, template and configuration plus
+  the immutable assistant content/tool-call snapshot. Reuse existing runtime
+  evidence; never recognize support from a provider label or model name alone.
+  Production capture/replay is limited to no-tools local requests; existing
+  nonthinking tool requests add no continuation metadata probe.
+- **REQ-LPC3:** raw reasoning must not enter enumerable chat/history fields,
+  UI/progress, checkpoint summaries, audit, telemetry, error text or durable
+  storage. A scoped opaque carrier may live only inside an admitted invocation;
+  scope disposal, cancellation, restart and retry from saved history discard it.
+  No new table, queue, credentials or cross-request memory cache is authorized
+  by this addendum. A separate design is required if evidence needs that scope.
+- **REQ-LPC4:** context accounting includes all carried reasoning. Retain it
+  only with unchanged retained messages; compaction, content mutation, masking,
+  screening-policy changes and identity mismatch invalidate it. Bind opaque
+  continuation digests into dispatch provenance so hidden state cannot bypass
+  the existing screened-payload drift guard. Never summarize private reasoning.
+  Invalidation revokes shared records across dispatch clones and retained
+  originals. Recheck screening at the existing authority seam after admission
+  and runtime observation, so a wait cannot revive obsolete policy evidence.
+- **REQ-LPC5:** native state grants no authority. Historical tool calls and
+  tool-shaped reasoning are never executable requests. Current grants,
+  cancellation/deadlines, screening, output budgets, tool policies and
+  quality-first routing remain authoritative on every attempt. Foreign-provider
+  fallback sends no local native state.
+  HTTP, network, response and tool-argument parsing errors on replay expose
+  typed status/capacity and validated retry timing only, never echoed bodies,
+  arbitrary response headers or parser excerpts.
+- **REQ-LPC6:** source-local tests prove replay, isolation and privacy first;
+  canonical gate, independent exact-commit review, DCO PR/protected queue and
+  canonical upgrade precede any shipped-performance claim. Report unrun or
+  inconclusive checks honestly and leave the original BI-285EF102 acceptance
+  and uncertain D2E5 review unchanged.
+
+#### Rollout and rollback
+
+One atomic delivery remains on BI-4761F54E; the dated Slice 7 plan below owns
+sequencing and live coverage. Gate production implementation on a useful live
+control, proportional design and recorded coverage. Revert the scoped repair
+if replay harms correctness, increases useful-task cost, or cannot preserve
+screening/privacy. Neither a larger replayed prefix nor a source test is a
+performance acceptance result. Record measured benefit or its absence in the
+existing BI and approved AI Ops learning records; create no duplicate monitor.
 
 **R7 — Registry convergence (P5) — RE-SCOPED after verification (2026-06-20).** On inspection the `search_*` and `record_*_evidence` families are **functionally distinct, not redundant**: each `search_*` hits a different backend (code graph / project files / sandbox / versioned source / org knowledge / design DB / integrations / marketplace / portfolio / specs / web) with different params; each `record_*` targets a different entity (backlog item / Work Capsule / runtime / FeatureBuild / external handoff). So this is **faceting distinct tools, not deduplication** — a real trade-off, not a free win: it would cut the tool *count* (helping the local 15-tool cliff) but force a messy union-of-params polymorphic tool and a model-behaviour change that could *degrade* selection. Crucially the cliff is **already scoped** for real contexts by the native loop's grant/phase subsetting and R3's core tier, so the marginal benefit is smaller than the name-prefix clustering suggested. **Decision: do NOT blind-merge; eval-gate any faceting via the R8 gauge** (measure `toolSurface` drop vs `toolAccuracy` drop on a real task set) before changing the external tool contract. The genuine residual is naming near-collisions (`propose_decomposition`/`propose_build_decomposition`, `search_knowledge`/`search_knowledge_base`), already mitigated by R2 description disambiguation; renaming is breaking and low-value. The 16K-switch → `*-mcp-handlers.ts` decomposition (a maintainability refactor with **no** model-facing change) remains worthwhile and unblocked. Handle: *EP-ARCH-CONVERGENCE — switch-file decomposition + an R8-gated faceting experiment*.
 

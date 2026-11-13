@@ -14,7 +14,7 @@ import { prisma } from "@dpf/db";
 import {
   buildBriefingContent,
   briefingSourceDigest,
-  formatBriefingMessage,
+  formatUserBriefingMessage,
   type BriefingSources,
 } from "./coworker-briefing";
 import { loadUserFacts } from "./user-facts";
@@ -38,8 +38,7 @@ async function gatherUserBriefingSources(
   agentId: string,
   userId: string,
 ): Promise<BriefingSources> {
-  const [user, facts, notes, recentThread] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+  const [facts, notes, recentThread] = await Promise.all([
     loadUserFacts(userId, undefined, 8),
     loadNotesForBusinessAgent(agentId),
     // The user's most recent thread with a durable checkpoint provides a
@@ -52,7 +51,7 @@ async function gatherUserBriefingSources(
   ]);
 
   return {
-    subjectLabel: user?.email ?? userId,
+    subjectLabel: "Current user",
     businessLine: null,
     topFacts: facts.map((f) => ({ key: f.key, value: f.value })),
     notes: notes.map((n) => ({ noteKind: n.noteKind, noteKey: n.noteKey, content: n.content })),
@@ -114,7 +113,7 @@ export async function loadUserBriefingMessage(
         console.warn("[coworker-briefing] refresh failed:", e),
       );
     }
-    return formatBriefingMessage(row?.content ?? null);
+    return formatUserBriefingMessage(row?.content ?? null);
   } catch (err) {
     console.warn("[coworker-briefing] load failed:", err);
     return null;

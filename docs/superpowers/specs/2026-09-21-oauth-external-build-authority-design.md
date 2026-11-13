@@ -470,6 +470,31 @@ records the escalation branch and the consent binding. Approval cards show the
 exact proposal, found by the envelope id on the pending execution, and state
 that authorizing is not review.
 
+**Amendment 2026-10-15 (BI-79D26E39, founder decision).** A client-credentials
+client that an operator bound to an approved assistant now steers like a
+consented connection. Grok's "DPF Grok connection" client is bound to
+AGT-EXT-GROK by setup (BI-8D152751). A credentials client has no consent
+screen. Its authority is granted once, when the operator creates it:
+`allowedScopes` is the grant, `ownerUserId` the cap, `agentId` the assistant.
+Without a binding, every routine write from a headless assistant parked on an
+approval card. At the client_credentials grant, the token endpoint now reuses
+the owner's active consent binding for (owner, client, resource, assistant)
+whose grants still verify, or creates one once through
+`createOAuthConsentBinding`, which applies the consent screen's eligibility
+rule (`apps/web/lib/auth/credentials-client-consent.ts`). The token carries the
+binding, and `resolveOAuthConsent` revalidates it on every call, so revoking
+the binding or the assistant's eligibility stops the steering. A client with no
+assistant, or one the rules reject, is issued an unbound token as before. Each
+new binding is logged as `oauth_client_credentials_consent`. Damaging,
+restricted and proposal-shaped actions still reach a person.
+
+First creation and lookup share a transaction that locks the existing OAuth
+client row. Concurrent grants therefore reuse the same binding. Lookup includes
+revoked consent and validates only the newest recorded binding; a revoked or
+ineligible binding cannot silently create a replacement or select an older one.
+A new operator decision is required to restore that consent. The token's scopes,
+current human permissions and assistant eligibility retain their existing caps.
+
 ### Complete proposal disclosure correction (BI-12E5DD91, 2026-10-13)
 
 Current baseline `e4edd79cd6cfa83ac00df4dd64494090573b3e23` preserves the
@@ -556,6 +581,59 @@ eligible options."* The picker was the fallback, and on every real install
 it is the only branch that runs (see "Why the picker always shows" below).
 Everything else in C1, C2, F1 to F3 and V1 to V9 stands unchanged; this
 section removes a decision from the consent screen and adds none.
+
+### Named-account confirmation amendment (2026-10-03)
+
+BI-05E0EA33 and BI-07D21B4A must hold together: one deliberate consent
+action, and an explicit choice of the account receiving the connection and
+its approvals. Live verification on 2026-10-03 confirmed the personal
+account and automatic Codex selection, but the required account checkbox
+still made the normal path two operations. Header role `HR-000` is not an
+account identifier and must not be used as evidence of who is signed in.
+
+Decision DI-50FF7AFF805C recommends `named-account-submit` (high
+confidence, proceed). Replace the separate checkbox with one native
+submit button whose visible text is **Connect {client} as {account}**.
+The full account identifier must remain visible and wrap on narrow
+screens. Keep the account consequence and switch-account link above it.
+The action itself confirms the named account; merely viewing the page
+does not confirm anything.
+
+The submitted account identity remains bound to the identity shown by the
+server. POST still rejects missing or mismatched confirmation and renders
+the current account for a fresh explicit action if the session changes.
+Cancel must never issue a code. No automatic submission, scope expansion,
+role-policy change, or room admission is introduced. Existing CSRF,
+redirect, PKCE, eligibility, and grant-intersection checks remain intact.
+Support old in-flight checkbox forms during rollout; both forms must
+produce the same validated authorization decision.
+
+#### Research & Benchmarking
+
+- [GitLab OAuth provider](https://docs.gitlab.com/integration/oauth_provider/)
+  separates application authorization from authentication. Adopt explicit
+  owner approval; do not adopt administrative preauthorization to avoid
+  the consent action.
+- [Keycloak client registration](https://www.keycloak.org/securing-apps/client-registration)
+  retains permission consent after authentication for registered clients.
+  Adopt that boundary; do not equate a registered client name with a
+  verified identity or additional authority.
+- [RFC 6749](https://www.rfc-editor.org/rfc/rfc6749.html), sections 4.1
+  and 10.12, supplies the authorization and CSRF boundary. The interaction
+  change does not alter the protocol or substitute a display name for
+  server-side authorization.
+- [W3C button pattern](https://www.w3.org/WAI/ARIA/apg/patterns/button/)
+  supports a native action button with its accessible name taken from
+  visible content. Use the same account-bearing name for sighted,
+  keyboard, and screen-reader users; no icon-only confirmation.
+
+Acceptance extends AC-OC-1/3/7: the resolved default path requires one
+account-bearing Connect activation, zero role selections, and no account
+checkbox. A missing or stale account value issues no authorization code;
+cancel works without confirming an account. Verify hostile client/account
+labels are escaped, long account names wrap, and keyboard activation
+submits the same explicit choice. Measure first-connect and reconnect
+separately; a rendered page alone does not prove token issuance.
 
 ### Operator request
 

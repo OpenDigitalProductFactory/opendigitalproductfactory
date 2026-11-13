@@ -66,6 +66,25 @@
         }
       }
     },
+    "managedInference": {
+      "type": "object",
+      "description": "Native installer-owned inference selection. Only an admitted signed host transition writes it. Absence preserves the existing provider; transitioning/uncertain fence new local requests. Host identity and physical qualification are checked before writing.",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "mode", "actionKey", "nodeId", "device", "port", "sourceSha", "profileSha256", "runtimeManifestSha256", "qualificationReportSha256", "baselineEngineSha256"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "mode": { "enum": ["native", "docker", "transitioning", "uncertain"] },
+        "actionKey": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{1,95}$" },
+        "nodeId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+        "device": { "const": "Apple M5 Max" },
+        "port": { "const": 12436 },
+        "sourceSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "profileSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "runtimeManifestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "qualificationReportSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "baselineEngineSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
     "platform": {
       "type": "string",
       "enum": ["darwin", "linux", "win32"],

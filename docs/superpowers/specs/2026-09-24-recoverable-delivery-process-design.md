@@ -180,6 +180,59 @@ timeout, cancellation, duplicate delivery and reassignment.
 - **Timeout:** the resumer's deadline is bounded; exit codes 81 and 82 are
   classified `retry: false`, so no caller loops on them.
 
+#### Repeated reservation replacement — BI-EB864226
+
+The October 21 reproduction keeps source head `5c1c929d2791` fixed while the
+integration tree and evidence-plan digest change. The original detached
+resumer keeps `--resume-lease-id NPEL-6AA04D9236` in every child invocation.
+The first replacement retires that lease; later replacements no longer name
+the current reservation and leave obsolete queued rows behind. A single
+verified resumer and unchanged source exclude a second manual gate as the
+cause. The regression test reproduces the unchanged pin across two replacements.
+
+This bounded repair restores the existing resume contract. The larger
+host-worker replacement remains BI-A6DC9847; this repair neither activates
+that worker nor changes admission authority, queue priority or grants.
+
+Ordered implementation, owned atomically by BI-EB864226:
+
+1. **R-QH-1 / FLOW-BOUND-HANDOFF:** retain bounded stdout and stderr tails from the
+   existing child gate. Only its queued exit and canonical durable-wait packet,
+   bound to the original owner and source claim key, can supply a new lease pin.
+2. **R-QH-2 / FLOW-LATEST-PIN:** carry the returned reservation into the next
+   invocation. Preserve the source, branch, worktree, provider and owner flags.
+   The server's existing ownership checks and atomic supersession remain the
+   authority; reading output grants no permission to release a foreign lease.
+3. **R-QH-3 / FLOW-REFUSE-UNKNOWN:** missing, foreign or contradictory handoff
+   data stops the resumer unrun with the existing prerequisite-unavailable
+   classification. Do not retry the obsolete pin, synthesize a verdict or
+   interpret task completion as passing verification.
+4. **R-QH-4 / FLOW-TERMINAL:** cancellation and source drift remain terminal;
+   host-resource invocations retain their separate immutable-pin contract.
+5. **R-QH-4 / FLOW-TERMINAL / VC-QH-TERMINAL:** retire obsolete clients through
+   the existing gate-client compatibility floor. Raise the client revision and
+   server floor together for Windows and POSIX; revision 2 still contains the
+   stale-pin controller. A deployed floor returns the existing non-retryable
+   update-required response so an old branch cannot perpetuate duplicate waits.
+   Non-gate claims and unknown host platforms retain the existing exemptions.
+   Activate only the merged server through canonical upgrade; this is client
+   compatibility enforcement, not a grant or queue-priority change.
+
+Verification cases **VC-QH-CHAIN**, **VC-QH-IDENTITY**, **VC-QH-BOUNDS** and
+**VC-QH-TERMINAL** cover A → B → C pin progression, rejected foreign/missing/
+ambiguous packets, bounded noisy output, and cancellation/source drift. Run the
+existing resumer and gate-resume suites unchanged, then the mandatory governed
+publication checks. Current live queue observations are reproduction evidence,
+not a passing gate or acceptance receipt. Do not activate unmerged toolchain
+source or bypass a pending employee approval to clean up earlier reservations.
+
+Acceptance criteria, quoted from the implementation item's scope:
+
+- AC-QH-1 (R-QH-1 / VC-QH-IDENTITY): accept a handoff only from the queued child exit and one canonical durable-wait packet matching the original source and owner claim key. Missing, foreign and ambiguous packets stop unrun, with no replay of the old pin.
+- AC-QH-2 (R-QH-2 / VC-QH-CHAIN): across at least two integration-identity replacements A→B→C, the child invocations name A then B then C as resumeLeaseId; source, branch, worktree, provider and owner stay unchanged. Server ownership and atomic queued supersession remain authoritative.
+- AC-QH-3 (R-QH-3 / VC-QH-BOUNDS): bounded noisy child output retains the final handoff without unbounded memory/logs; missing proof uses the existing prerequisite-unavailable classification, never a product failure or fabricated pass.
+- AC-QH-4 (R-QH-4 / VC-QH-TERMINAL): cancellation and source drift stop without replacement; host-resource invocations preserve their separate immutable-pin behavior. Existing resumer and gate-resume suites remain green. Protected publication and one real canonical gate still required; no unmerged activation or bypass of an earlier pending approval.
+
 ### 3.8 Pull request and merge
 
 - **State:** the pull request and the merge queue.

@@ -10,18 +10,21 @@
 // Exit codes: 0 = clean (environment-skipped guards are warnings), 1 = at
 // least one guard reported a genuine violation.
 
+import { runGit } from "./lib/git.mjs";
 import {
   PREFLIGHT_SKIP_ENV,
   planPreflight,
   runPreflight,
   createDefaultExecute,
 } from "./lib/pregate-preflight.mjs";
+import { readPullRequestBody } from "./lib/pull-request-body.mjs";
 import { classifyChangedFiles } from "./ci-change-scope.mjs";
 import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { ensureCompileReady, getChangedFilesAgainstMain } from "./lib/ensure-compile-ready.mjs";
 import { buildGateContext } from "./lib/gate-context.mjs";
 import { guardReceiptDirectory, identifyGuardExecution, runWithGuardReceipt } from "./lib/pregate-preflight-receipt.mjs";
+import { mergedBaseDerivedVerdict } from "./derived-artifacts-gate.mjs";
 
 /**
  * BI-8CDA7F95: classify the diff with the classifier the cloud trusts. When the
@@ -63,6 +66,29 @@ export function obligationLines(repoRoot) {
   } catch {
     return [];
   }
+}
+
+/**
+ * BI-1A06A1AF: refuse, before any guard runs or lease is claimed, a branch
+ * whose derived artifacts CI will judge on a merge HEAD cannot predict. Prints
+ * CI's artifact ids and `run:` remedies. A verdict that cannot be computed is
+ * UNRUN (BI-BD7E0319, BI-20B40955) and does not refuse; CI still enforces.
+ * Returns the exit code.
+ */
+export function refuseOnMergedBaseStaleness({ cwd = process.cwd(), registry, write = text => process.stderr.write(text) } = {}) {
+  const verdict = mergedBaseDerivedVerdict({ cwd, ...(registry ? { registry } : {}) });
+  if (verdict.status === "unrun") {
+    write(`[pregate-preflight] derived artifacts vs ${verdict.baseRef}: UNRUN — the merged base could not be computed; this is not a staleness verdict. CI still enforces.\n`);
+    return 0;
+  }
+  if (verdict.status !== "stale") return 0;
+  write(`[pregate-preflight] HEAD is ${verdict.behind} commit(s) behind ${verdict.baseRef}; CI judges derived artifacts on the merge of both, and both changed these inputs since ${verdict.mergeBase.slice(0, 12)}:\n`);
+  for (const entry of verdict.entries) {
+    write(`[derived-artifacts] ${entry.id}: STALE\n`);
+    write(`[derived-artifacts]   run: ${entry.generate.join(" ")}\n`);
+  }
+  write(`[pregate-preflight] remedy: git merge ${verdict.baseRef}, then run each command above and commit — no lease was claimed.\n`);
+  return 1;
 }
 
 function resolveChangeScope(worktreePath) {
@@ -116,6 +142,14 @@ export async function main() {
     );
   }
 
+  if (!process.env[PREFLIGHT_SKIP_ENV]) {
+    const mergedBase = refuseOnMergedBaseStaleness();
+    if (mergedBase !== 0) {
+      process.exitCode = mergedBase;
+      return;
+    }
+  }
+
   // Stage 0 (BI-6C54223E, DOC-C263E0C9): enforce compile-readiness for code
   // intent BEFORE the guards run. A source-only worktree used to warn and pass,
   // letting the thread attribute unprovisioned-worktree failures to its own
@@ -161,16 +195,31 @@ export async function main() {
   const cancel = () => controller.abort();
   process.once("SIGINT", cancel);
   process.once("SIGTERM", cancel);
+  // BI-E2669F37: CI Policy Guards read PR_BODY. The local guard must see the
+  // same text. A missing gh or no open PR skips the body and does not fail.
+  const branchResult = runGit(["rev-parse", "--abbrev-ref", "HEAD"], { cwd: process.cwd() });
+  const branchName = branchResult.ok ? branchResult.stdout.trim() : "";
+  const prBody = readPullRequestBody({ branch: branchName, cwd: process.cwd() });
+  const guardEnv = prBody.included ? { ...process.env, PR_BODY: prBody.body } : process.env;
+  process.stdout.write(prBody.included
+    ? "[pregate-preflight] included the open pull request body so convergence-impact sees the same text CI does\n"
+    : `[pregate-preflight] skipped pull request body (${prBody.reason}); convergence-impact sees commit messages only\n`);
   let execution;
-  try { execution = await runWithGuardReceipt({
+  // An explicit omission executes nothing. Keep the original uncertain receipt
+  // and lock untouched; normal execution still requires their admission fence.
+  try { execution = guardEnv[PREFLIGHT_SKIP_ENV] ? {
+    result: await runPreflight({ plan: planned.entries, env: guardEnv,
+      execute() { throw new Error("Recorded omission cannot execute guards."); } }),
+    reused: false, executedAt: null, identityVerified: false,
+  } : await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pregate-preflight",
-    identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries }),
+    identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries, env: guardEnv }),
     passed: result => !result.skipped && result.entries.length === planned.entries.length && result.entries.every(entry => entry.status === "passed"),
     execute: ({ progress }) => runPreflight({
     plan: planned.entries,
     signal: controller.signal,
-    execute: createDefaultExecute(process.env, { signal: controller.signal, progress(event) {
+    execute: createDefaultExecute(guardEnv, { signal: controller.signal, progress(event) {
       progress(event);
       if (event.phase) process.stdout.write(`[pregate-preflight] ${event.guardId ?? "guard"}: ${event.phase}\n`);
       else process.stdout.write(`[pregate-preflight] ${event.guardId ?? "guard"}: running (pid ${event.childPid ?? "unknown"})\n`);
@@ -189,6 +238,7 @@ export async function main() {
     process.removeListener("SIGTERM", cancel);
   }
   const { result } = execution;
+  if (!execution.reused) await recordPreflightOutcome({ result, plan: planned.entries, startedAt });
   const fullyVerified = execution.identityVerified && !result.skipped && result.entries.length === planned.entries.length
     && result.entries.every(entry => entry.status === "passed");
   process.stdout.write(`DPF_HOST_PREFLIGHT_RESULT=${JSON.stringify({ status: fullyVerified ? "passed" : "inconclusive",
@@ -281,6 +331,25 @@ export async function main() {
   );
 }
 
+/**
+ * BI-FEDD8F45: record this preflight as a guard outcome run and submit the
+ * spool. A skipped run is recorded with its override and no guard results.
+ * A reused receipt is not recorded again: those guards did not run. Never
+ * throws and never changes the preflight's verdict.
+ */
+export async function recordPreflightOutcome({ result, plan, startedAt, env = process.env, repoRoot = process.cwd() }) {
+  try {
+    const record = await import("./lib/guard-outcome-record.mjs");
+    const runner = env.DPF_GUARD_OUTCOME_RUNNER === "pre-push-gate" ? "pre-push-gate" : "pregate";
+    const { guards: declarations } = record.loadGuardDeclarations({ repoRoot });
+    const guards = result.skipped ? [] : record.policyGuardResults(result.entries, plan, { repoRoot, declarations });
+    const { submitSpool } = await import("./lib/guard-outcome-submit.mjs");
+    await record.recordGuardRun({ runner, guards, startedAt, durationMs: Date.now() - startedAt, cwd: repoRoot, env, submit: submitSpool });
+  } catch {
+    // observation only
+  }
+}
+
 export async function runPreflightEntrypoint(run = main, report = text => process.stderr.write(text)) {
   try {
     await run();
@@ -289,6 +358,13 @@ export async function runPreflightEntrypoint(run = main, report = text => proces
     // An orchestration/receipt exception supplies no guard verdict. Parser
     // excerpts and arbitrary exception text can carry private source material.
     const code = /^[A-Z0-9_]{1,64}$/.test(error?.code ?? "") ? error.code : "execution-exception";
+    if (code === "HOST_RECEIPT_RETAINED") {
+      // BI-93EECD80: name the receipt, not host pressure. Only the receipt path
+      // and the observer's next action are reported, never the exception text.
+      report(`[pregate-preflight] execution blocked by a retained host guard receipt (${code}): ${String(error.receiptPath ?? "unknown")}. ` +
+        `This is not host pressure. Inspect it with pnpm run pregate:status -- --reconcile-host-receipt. ${String(error.nextAction ?? "")}\n`);
+      return 88;
+    }
     report(`[pregate-preflight] execution inconclusive (${code}); no passing verification was recorded. Inspect the host receipt and restore its execution/recording prerequisites before retry.\n`);
     return 88;
   }

@@ -32,10 +32,10 @@ export function OwnerAllCaughtUp({
   );
 }
 
-export function OwnerAttentionCount({ count }: { count: number }) {
+export function OwnerAttentionCount({ count, label }: { count: number; label?: string }) {
   return (
     <p className="text-sm font-semibold text-[var(--dpf-text)]">
-      {count} {count === 1 ? "thing needs" : "things need"} you today
+      {label ?? <>{count} {count === 1 ? "thing needs" : "things need"} you today</>}
     </p>
   );
 }
@@ -43,9 +43,12 @@ export function OwnerAttentionCount({ count }: { count: number }) {
 export function DigitalTeamHandlingStrip({
   custodianCount,
   digestCount,
+  named = [],
 }: {
   custodianCount: number;
   digestCount: number;
+  /** Items worth naming even while handled, e.g. an AI provider limit and its reset (BI-ACE041FE). */
+  named?: string[];
 }) {
   if (custodianCount === 0 && digestCount === 0) return null;
   return (
@@ -54,6 +57,13 @@ export function DigitalTeamHandlingStrip({
         <span>
           <span className="font-semibold text-[var(--dpf-text)]">Your digital team is handling</span>{" "}
           {custodianCount} {custodianCount === 1 ? "item" : "items"} — no action needed.
+          {named.length > 0 ? (
+            <ul className="mt-1 space-y-1">
+              {named.map((headline, index) => (
+                <li key={index}>— {headline}</li>
+              ))}
+            </ul>
+          ) : null}
         </span>
       ) : null}
       {custodianCount > 0 && digestCount > 0 ? " " : null}

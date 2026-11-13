@@ -11,9 +11,10 @@
 // The canonical boundary is the organization decision profile: a decision the
 // owner rules on is one scored against THEIR profile. Route is incidental.
 import type { Prisma } from "@dpf/db";
+import { humanEscalationWhere, isHumanEscalation, type HumanEscalationRow } from "./human-escalation";
 
 /** Outcome types that still need a human ruling. */
-export const UNRESOLVED_OUTCOMES = ["defer", "escalate"] as const;
+export { UNRESOLVED_OUTCOMES } from "./human-escalation";
 
 /**
  * Rows that are never the owner's to rule on, regardless of profile:
@@ -41,7 +42,7 @@ export function ownerRulingQueueWhere(
   unansweredSentinel: unknown,
 ): Prisma.DecisionInteractionWhereInput {
   return {
-    outcomeType: { in: [...UNRESOLVED_OUTCOMES] },
+    AND: [humanEscalationWhere()],
     buildId: null,
     taskRunId: null,
     question: { not: "" },
@@ -52,7 +53,7 @@ export function ownerRulingQueueWhere(
 }
 
 /** One interaction, reduced to the fields the predicate reads. */
-export type OwnerRulingCandidate = {
+export type OwnerRulingCandidate = HumanEscalationRow & {
   outcomeType: string;
   buildId: string | null;
   taskRunId: string | null;
@@ -73,7 +74,7 @@ export function isOwnerRulingQueueRow(
   row: OwnerRulingCandidate,
   organizationProfileIds: readonly string[],
 ): boolean {
-  if (!UNRESOLVED_OUTCOMES.includes(row.outcomeType as (typeof UNRESOLVED_OUTCOMES)[number])) return false;
+  if (!isHumanEscalation(row)) return false;
   if (row.buildId !== null || row.taskRunId !== null) return false;
   if (!row.question) return false;
   if (row.humanOutcome !== null && row.humanOutcome !== undefined) return false;

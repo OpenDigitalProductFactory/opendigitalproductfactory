@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 import { bodyCriteriaVersion } from "./body-baseline-version";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 
 const mocks = vi.hoisted(() => ({
   itemFindUnique: vi.fn(),
@@ -295,6 +296,28 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
     const retry = await recordInitiativeObjectiveMappingProposal(args);
     expect(retry).toMatchObject({ ok: true, proposalId: first.proposalId });
     expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])("requires exact merged source proof for archived body author (valid=%s)", async valid => {
+    const { tx, args } = bodyWriterFixture();
+    const room = { id: "room-row-1", capsuleId: "WC-PLATFORM", backlogItemId: "BI-PLATFORM",
+      repositoryFullName, headBranch: "fix/objective-mapping", headSha, baseSha: "b".repeat(40),
+      createdByPrincipalId: "author-row", status: "archived", pullRequestNumber: 6265,
+      archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z") };
+    tx.workroom.findUnique.mockResolvedValue(room);
+    const db = { ...tx, workroom: { ...tx.workroom,
+      findMany: vi.fn(async ({ where }) => where.archivedAt === null ? [] : [room]) },
+      contributorInventorySnapshot: { findMany: vi.fn().mockResolvedValue([{ payload: createPullRequestObservation({
+        repositoryFullName, number: 6265, url: `https://github.com/${repositoryFullName}/pull/6265`, title: "repair",
+        headBranch: room.headBranch, headSha: valid ? headSha : "f".repeat(40), state: "merged", isDraft: false,
+        mergeStateStatus: null, mergeCommitSha: "c".repeat(40), mergedAt: "2026-10-16T05:00:00Z",
+        providerUpdatedAt: "2026-10-16T05:00:00Z", observedAt: "2026-10-16T05:01:00Z" }) }]) } };
+    mocks.transaction.mockImplementation(async work => work(db));
+    mocks.loadCapsuleLivenessInventory.mockResolvedValue({ capsulesAll: [{ isLive: false }] });
+    const result = await recordInitiativeObjectiveMappingProposal(args);
+    expect(result.ok).toBe(valid);
+    if (!valid) expect(mocks.create).not.toHaveBeenCalled();
+    expect(room.status).toBe("archived");
   });
 
   it("rejects the retained criteria or source author at the receipt writer", async () => {

@@ -43,6 +43,8 @@ vi.mock("@/lib/mcp-tools", () => ({
 }));
 
 const { mockEscalate } = vi.hoisted(() => ({ mockEscalate: vi.fn() }));
+const { mockRouteAndCall } = vi.hoisted(() => ({ mockRouteAndCall: vi.fn() }));
+vi.mock("@/lib/inference/routed-inference", () => ({ routeAndCall: mockRouteAndCall }));
 vi.mock("@/lib/build/escalate-build-to-human", () => ({
   escalateBuildToHuman: mockEscalate,
   SELF_FIX_CLASS: { AUTO_RECOVERABLE: "auto-recoverable", NEEDS_HUMAN: "needs-human", NEEDS_EXTERNAL_CAPABILITY: "needs-external-capability" },
@@ -621,9 +623,149 @@ describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
     expect(fixDiagnosisProblem({ fixContext: { actual: "   " } }, { problemStatement: "" })).toBe("");
   });
 
+  const diagnosis = {
+    reproSteps: "Open Finance and ask where to enter an expense claim.",
+    rootCause: "The Finance context provider omits its native expense-entry guidance.",
+    fixApproach: "Reuse the existing expense-entry catalog in the Finance context provider.",
+  };
+
+  function diagnosisBuild() {
+    const current = {
+      id: "fix-pk", title: "Finance guidance", kind: "fix", phase: "ideate",
+      updatedAt: new Date("2026-11-11T04:00:00.000Z"),
+      abandonedAt: null as Date | null, originatingBacklogItemId: "bi-pk",
+      brief: { fixContext: { actual: "The Finance coworker cannot describe its existing expense form." } },
+      designDoc: { problemStatement: "Preserve the native expense guidance." },
+      designReview: { decision: "fail", issues: [{ severity: "critical", description: "Incomplete fix diagnosis" }] },
+    };
+    mockPrisma.featureBuild.findUnique.mockImplementation(async () => current);
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: current.title });
+    mockRouteAndCall.mockReset().mockResolvedValue({ content: JSON.stringify(diagnosis) });
+    mockExecuteTool.mockReset().mockResolvedValue({ success: true });
+    return current;
+  }
+
+  it.each([
+    "Native CLI execution on codex did not return a settled result. Review the existing execution before retrying.",
+    "Local provider dispatch deferred: local-ci-active-capacity-reservation",
+  ])("keeps diagnosis recoverable without spending a round when dispatch fails: %s", async (message) => {
+    diagnosisBuild();
+    mockRouteAndCall.mockRejectedValue(new Error(message));
+
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+
+    expect(result).toEqual({ kind: "blocked-no-regeneration", rounds: 0 });
+    expect(mockRouteAndCall).toHaveBeenCalledTimes(1);
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockEscalate).not.toHaveBeenCalled();
+    expect(mockPrisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ summary: expect.stringMatching(/recover|preserv|retained/i) }),
+    }));
+  });
+
+  it("does not start diagnosis for a fix whose failed review has already advanced to Plan", async () => {
+    const current = diagnosisBuild();
+    current.phase = "plan";
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result.kind).toBe("skipped-stale-build");
+    expect(mockRouteAndCall).not.toHaveBeenCalled();
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockEscalate).not.toHaveBeenCalled();
+  });
+
+  it("keeps an incomplete reviewer panel recoverable without diagnosing an unproven defect", async () => {
+    const current = diagnosisBuild();
+    current.designReview = { ...current.designReview, reviewIncomplete: true } as typeof current.designReview;
+    mockRouteAndCall.mockResolvedValue({ content: JSON.stringify({ ...diagnosis, rootCause: "unknown" }) });
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result).toEqual({ kind: "blocked-review-incomplete", rounds: 0 });
+    expect(mockRouteAndCall).not.toHaveBeenCalled();
+    expect(mockEscalate).not.toHaveBeenCalled();
+  });
+
+  it.each(["phase", "problem", "terminal"])("does not apply an answer after the build's %s changes during diagnosis", async (changed) => {
+    const current = diagnosisBuild();
+    mockRouteAndCall.mockImplementation(async () => {
+      if (changed === "phase") current.phase = "plan";
+      if (changed === "problem") current.brief.fixContext.actual = "A new owner report superseded the original Finance problem.";
+      if (changed === "terminal") current.abandonedAt = new Date();
+      return { content: JSON.stringify(diagnosis) };
+    });
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result.kind).toBe("skipped-stale-build");
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockEscalate).not.toHaveBeenCalled();
+  });
+
+  it("holds a refused diagnosis write without claiming it was recorded or asking for review", async () => {
+    diagnosisBuild();
+    mockExecuteTool.mockResolvedValue({ success: false, error: "authorization_denied" });
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result).toEqual({ kind: "blocked-no-regeneration", rounds: 1 });
+    expect(mockExecuteTool.mock.calls.map(([name]) => name)).toEqual(["update_feature_brief"]);
+    expect(mockEscalate).not.toHaveBeenCalled();
+    expect(mockPrisma.buildActivity.create.mock.calls.some(([entry]) => entry.data.summary.includes("recorded by the design author"))).toBe(false);
+  });
+
+  it("retains the bounded semantic-refusal policy without recording an invented diagnosis", async () => {
+    diagnosisBuild();
+    mockRouteAndCall.mockResolvedValue({ content: JSON.stringify({ ...diagnosis, rootCause: "unknown" }) });
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result).toEqual({ kind: "escalated-fix-diagnosis", rounds: DESIGN_FIX_MAX_ROUNDS });
+    expect(mockRouteAndCall).toHaveBeenCalledTimes(DESIGN_FIX_MAX_ROUNDS);
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockEscalate).toHaveBeenCalledTimes(1);
+    expect(mockEscalate).toHaveBeenCalledWith(expect.objectContaining({ expectedUpdatedAt: "2026-11-11T04:00:00.000Z" }));
+  });
+
+  it("preserves a source change while final escalation logging awaits", async () => {
+    const current = diagnosisBuild();
+    mockRouteAndCall.mockResolvedValue({ content: JSON.stringify({ ...diagnosis, rootCause: "unknown" }) });
+    mockPrisma.buildActivity.create.mockImplementation(async ({ data }) => {
+      if (data.summary.includes("still incomplete")) current.phase = "plan";
+      return {};
+    });
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result.kind).toBe("skipped-stale-build");
+    expect(mockEscalate).not.toHaveBeenCalled();
+    mockPrisma.buildActivity.create.mockResolvedValue({});
+  });
+
+  it("does not claim escalation success if the atomic version claim fails", async () => {
+    diagnosisBuild();
+    mockRouteAndCall.mockResolvedValue({ content: JSON.stringify({ ...diagnosis, rootCause: "unknown" }) });
+    mockEscalate.mockResolvedValueOnce({ reportId: null, wipFreed: false, backlogItemDeferred: false });
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result.kind).toBe("blocked-no-regeneration");
+  });
+
+  it("reports unresolved escalation effects without claiming retained recovery", async () => {
+    diagnosisBuild();
+    mockRouteAndCall.mockResolvedValue({ content: JSON.stringify({ ...diagnosis, rootCause: "unknown" }) });
+    mockEscalate.mockResolvedValueOnce({ reportId: null, wipFreed: false, backlogItemDeferred: false, transitionUncertain: true });
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result.kind).toBe("escalation-outcome-uncertain");
+    expect(mockPrisma.buildActivity.create.mock.calls.some(([entry]) => entry.data.summary.includes("retained for recovery"))).toBe(false);
+  });
+
+  it("keeps a grounded successful diagnosis and its passing review on the normal path", async () => {
+    const current = diagnosisBuild();
+    mockExecuteTool.mockImplementation(async (name) => {
+      if (name === "update_feature_brief") current.brief.fixContext = { ...current.brief.fixContext, ...diagnosis };
+      if (name === "reviewDesignDoc") current.designReview = { decision: "pass", issues: [] };
+      return { success: true };
+    });
+    const result = await dispatchDesignReviewFixLoop({ buildId: "FB-FINANCE", userId: "u-1" });
+    expect(result).toEqual({ kind: "self-repaired", rounds: 1 });
+    expect(mockExecuteTool.mock.calls.map(([name]) => name)).toEqual(["update_feature_brief", "reviewDesignDoc"]);
+    expect(mockExecuteTool.mock.calls[0][1]).toMatchObject({ expectedUpdatedAt: "2026-11-11T04:00:00.000Z" });
+    expect(mockEscalate).not.toHaveBeenCalled();
+  });
+
   it("escalates a fix build directly — regenerating the designDoc cannot fill a missing fix diagnosis", async () => {
     mockPrisma.featureBuild.findUnique.mockResolvedValue({
-      id: "ck2", title: "Bug fix", kind: "fix", originatingBacklogItemId: null,
+      id: "ck2", title: "Bug fix", kind: "fix", phase: "ideate", abandonedAt: null, originatingBacklogItemId: null,
+      updatedAt: new Date("2026-11-11T04:00:00.000Z"),
       designReview: { decision: "fail", issues: [{ severity: "critical", description: "Incomplete fix diagnosis" }] },
     });
     const res = await dispatchDesignReviewFixLoop({ buildId: "FB-Y", userId: "u-1" });
@@ -676,6 +818,49 @@ describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
     // later round can land on an engine that works.
     expect(res.rounds).toBe(DESIGN_FIX_MAX_ROUNDS);
     // The build is NOT abandoned and the backlog item is NOT deferred.
+    expect(mockEscalate).not.toHaveBeenCalled();
+  });
+
+  // BI-3E57890E: the independent reviewer failed a plan-phase design that Build
+  // Studio's own review passed. The loop takes the reviewer's findings as its
+  // input and saves the revision even though the build is in plan.
+  it("revises a design from an independent review's findings although its own review passed", async () => {
+    const designFields = { id: "ck4", title: "Forge outbox", kind: "fix", originatingBacklogItemId: "cmpcuid1",
+      designReview: { decision: "pass", issues: [] }, designDoc: { problemStatement: "Old" } };
+    mockPrisma.featureBuild.findUnique.mockImplementation(async (args: { select?: Record<string, boolean> }) => {
+      const select = args?.select ?? {};
+      if (select.kind) return designFields;
+      if (select.originatingBacklogItemId) return { originatingBacklogItemId: "cmpcuid1", designDoc: designFields.designDoc, title: "T", description: "D" };
+      if (select.designReview) return { designReview: { decision: "pass", issues: [] } };
+      return { designDoc: { problemStatement: "Revised" } };
+    });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body.", effortSize: "medium", workType: "bug" });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "claude", claudeProviderId: "anthropic-sub", codexProviderId: "", grokProviderId: "", opencodeProviderId: "",
+      claudeModel: "sonnet", codexModel: "", grokModel: "", opencodeModel: "",
+      selection: engineSelection("claude", "anthropic-sub"),
+    });
+    mockDispatchIdeateResearch.mockResolvedValue({ success: true, designDoc: { problemStatement: "Revised" }, rawOutput: "{}", durationMs: 5 });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    const res = await dispatchDesignReviewFixLoop({
+      buildId: "FB-IR", userId: "u-1",
+      failedReview: { decision: "fail", issues: [{ severity: "important", description: "[spec-approval] No per-class retry budget." }] },
+    });
+
+    expect(res).toMatchObject({ kind: "repaired", rounds: 1 });
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledWith(expect.objectContaining({
+      userContext: expect.stringContaining("No per-class retry budget."),
+    }));
+    expect(mockExecuteTool).toHaveBeenCalledWith(
+      "saveBuildEvidence",
+      expect.objectContaining({ buildId: "FB-IR", field: "designDoc" }),
+      "u-1",
+      expect.objectContaining({ allowPlanPhaseDesignRevision: true }),
+    );
+    // The build stays in plan: the finished ideate phase run is not reopened.
+    const { startBuildPhaseRun } = await import("./build-phase-run");
+    expect(startBuildPhaseRun).not.toHaveBeenCalled();
     expect(mockEscalate).not.toHaveBeenCalled();
   });
 

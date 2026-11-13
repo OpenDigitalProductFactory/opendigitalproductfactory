@@ -49,6 +49,7 @@ describe("PlatformIdentityAgentsPage", () => {
         governanceProfile: null,
         skills: [],
         toolGrants: [],
+        toolGrantRevocations: [],
       },
       {
         id: "agent-db-2",
@@ -63,6 +64,7 @@ describe("PlatformIdentityAgentsPage", () => {
         governanceProfile: null,
         skills: [],
         toolGrants: [],
+        toolGrantRevocations: [],
       },
     ] as never);
     vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([

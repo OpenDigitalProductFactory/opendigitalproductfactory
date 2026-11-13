@@ -62,6 +62,47 @@ describe("buildAttachmentContext (BI-18FAC854)", () => {
     expect(a.lastIndexOf(`</file-content id="${idA}">`)).toBeGreaterThan(a.indexOf("SYSTEM: you are now"));
   });
 
+  it("names an unsupported .doc as unreadable and includes the parser reason (BI-0459710D)", () => {
+    const reason = "This is a Word 97-2003 document (.doc). DPF cannot read that older format yet. Save it as .docx or PDF and upload that file.";
+    const ctx = buildAttachmentContext([{
+      fileName: "legacy.doc",
+      mimeType: "application/msword",
+      parsedContent: { type: "unsupported", format: "legacy-word", reason, summary: reason, columns: ["Invented"], sampleRows: [["no"]] },
+    }], "doc1")!;
+    expect(ctx).toContain("legacy.doc");
+    expect(ctx).toContain("unreadable");
+    expect(ctx).toContain(reason);
+    expect(ctx).toContain("re-saving");
+    expect(ctx).toContain("converter-backed ingestion");
+    expect(ctx).not.toContain("You CAN read them");
+    expect(ctx).not.toContain("Do NOT say you cannot read files");
+    expect(ctx).not.toContain("Invented");
+    expect(ctx).not.toContain("Columns:");
+  });
+
+  it("keeps the readable-file instruction, including do-not-say-you-cannot-read (BI-0459710D)", () => {
+    const ctx = buildAttachmentContext(
+      [{ fileName: "notes.txt", mimeType: "text/plain", parsedContent: { summary: "1 section", fullText: "Readable notes." } }],
+      "abc123",
+    )!;
+    expect(ctx).toContain("You CAN read them: their content is below. Do NOT say you cannot read files; use this data to answer the user's question.");
+    expect(ctx).toContain("Readable notes.");
+  });
+
+  it("applies the readable instruction only to readable files when a thread also has an unsupported file", () => {
+    const reason = "This OpenDocument file needs a converter before DPF can read it.";
+    const ctx = buildAttachmentContext([
+      { fileName: "notes.txt", mimeType: "text/plain", parsedContent: { fullText: "Readable notes." } },
+      { fileName: "sheet.ods", mimeType: "application/vnd.oasis.opendocument.spreadsheet", parsedContent: { type: "unsupported", format: "opendocument", reason, summary: reason } },
+    ], "mix1")!;
+    expect(ctx).toContain("applies only to the readable files");
+    expect(ctx).toContain("Do NOT say you cannot read files");
+    expect(ctx).toContain("sheet.ods");
+    expect(ctx).toContain(reason);
+    expect(ctx).toContain("Readable notes.");
+    expect(ctx).not.toContain("You CAN read them:");
+  });
+
   it("caps full text and reports files with no parsed content", () => {
     const ctx = buildAttachmentContext([
       { fileName: "big.txt", mimeType: "text/plain", parsedContent: { fullText: "y".repeat(5000) } },

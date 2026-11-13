@@ -14,7 +14,7 @@
 // a room may narrow what a coworker's standing grants permit; it never widens.
 import { COWORKER_READ_BASELINE_GRANTS, grantsSatisfyRequirement, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle/types";
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 
 import { shapeDefaultPriority, type WorkroomShapeKey } from "./room-shapes";
 
@@ -77,6 +77,8 @@ export type RoomTurnAuthorityFacts = {
     declaredPriority: GoldenTrianglePreference | null;
     /** The shape-derived action boundary (work-posture derive.ts), when any. */
     shapeActionBoundary: ProactivityActionBoundary | null;
+    /** The room's change passes a governed gate chain (isGateGovernedExecutor). */
+    gateGoverned?: boolean;
     /**
      * Every active participant the room records (principal row id → roles).
      * Null when the room records none — the pre-W2 shape, which does not narrow.
@@ -120,6 +122,10 @@ export const WORK_SHAPE_CAPABILITY_GRANTS: Readonly<Record<string, readonly stri
   ],
   // Reversible source work inside the governed sandbox worktree.
   "write-source": ["sandbox_execute"],
+  // Provision a source worktree: plan it and claim the paths it will edit
+  // (BI-D1FB8C4D). Separate from write-internal so a read-only shape that
+  // records its own evidence cannot reach worktree provisioning.
+  "worktree-provision": ["worktree_provision"],
 };
 
 export function roomGrantsFromWorkShape(grants: readonly string[]): string[] {
@@ -162,14 +168,20 @@ function boundaryPermitsHandsOn(boundary: ProactivityActionBoundary | null): boo
  * The room's action boundary: its own declaration, then its collaboration
  * shape's bias, then the decreed platform default. One precedence for the turn
  * authority and for the PR follow-through (BI-88341B5D), so they never disagree.
+ * A gate-governed room skips the shape: its gates review the change, not a
+ * person (BI-D0DFE502) — the same rule the displayed posture applies.
  */
 export function resolveRoomActionBoundary(
-  room: { declaredActionBoundary: ProactivityActionBoundary | null; shapeActionBoundary: ProactivityActionBoundary | null } | null,
+  room: {
+    declaredActionBoundary: ProactivityActionBoundary | null;
+    shapeActionBoundary: ProactivityActionBoundary | null;
+    gateGoverned?: boolean;
+  } | null,
   platformDefaultActionBoundary: ProactivityActionBoundary | null,
 ): ProactivityActionBoundary | null {
-  return room
-    ? room.declaredActionBoundary ?? room.shapeActionBoundary ?? platformDefaultActionBoundary
-    : platformDefaultActionBoundary;
+  if (!room) return platformDefaultActionBoundary;
+  const shapeActionBoundary = room.gateGoverned ? null : room.shapeActionBoundary;
+  return room.declaredActionBoundary ?? shapeActionBoundary ?? platformDefaultActionBoundary;
 }
 
 /**

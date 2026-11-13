@@ -331,6 +331,19 @@ describe("routeAndCall activity harness overrides", () => {
     expect(mocks.callWithFallbackChain).toHaveBeenCalledTimes(2);
   });
 
+  it.each([false, true])("attests initial refusal only; prior reconciliation=%s", async priorDispatch => {
+    const selected = await mocks.routeEndpointV2();
+    if (priorDispatch) {
+      mocks.callWithFallbackChain.mockRejectedValueOnce(new ProviderReconciliationRequiredError(["openai"], []));
+      mocks.routeEndpointV2.mockResolvedValueOnce(selected);
+    }
+    mocks.routeEndpointV2.mockResolvedValueOnce({ ...selected, selectedEndpoint: null, excludedCount: 2,
+      excludedReasons: ["private-id: Sensitivity clearance missing for 'restricted'", "private-id: Activity completion allowance exceeds known model output capacity"] });
+    await expect(routeAndCall([{ role: "user", content: "Review" }], "Review", "internal", { taskType: "build-review" }))
+      .rejects.toMatchObject({ providerDispatch: priorDispatch ? "unknown" : "not-started", eligibility: { excludedCount: 2,
+        exclusions: [{ bucket: "sensitivity-clearance", count: 1 }, { bucket: "output-capacity", count: 1 }] } });
+    expect(mocks.callWithFallbackChain).toHaveBeenCalledTimes(priorDispatch ? 1 : 0);
+  });
   it("keeps preview routing deterministic by not loading approved overrides", async () => {
     await previewRoute(
       [{ role: "user", content: "Summarize this transcript." }],

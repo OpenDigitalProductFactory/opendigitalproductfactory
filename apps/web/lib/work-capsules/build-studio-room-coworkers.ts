@@ -21,7 +21,7 @@ export const BUILD_STUDIO_ROOM_COWORKERS: readonly string[] = [
   "AGT-BUILD-QA",
 ];
 
-export type BuildStudioRoomCoworkerDb = RoomOwnershipDb & {
+export type BuildStudioRoomCoworkerDb = Pick<RoomOwnershipDb, "workroomParticipant"> & {
   principalAlias: {
     findFirst(args: unknown): Promise<{ principalId: string } | null>;
   };

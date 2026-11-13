@@ -20,7 +20,8 @@
 #   literal such as [::1] refuses the connection. A loopback-http choice for
 #   Codex or Grok lives in that client's own config, never here (BI-8FD7C0C9).
 #   NODE_EXTRA_CA_CERTS = the organization root bundle, for an https endpoint
-#                         only: DPF_PKI_TRUST_BUNDLE, then the install's .env,
+#                         only: DPF_MCP_CA_FILE, explicit DPF_PKI_TRUST_BUNDLE,
+#                         process NODE_EXTRA_CA_CERTS, then the install's .env,
 #                         then saved NODE_EXTRA_CA_CERTS, then ~/.dpf/pki/root_ca.crt.
 # Persisted for the installing user in ~/.dpf/agent-toolchain.env, sourced from
 # ~/.zshenv and ~/.profile, and on macOS also in the launchd user environment so
@@ -91,12 +92,14 @@ dpf_resolve_mcp_client_env() {
   fi
   case "$DPF_MCP_CLIENT_URL" in
     https://*)
-      for candidate in "${DPF_PKI_TRUST_BUNDLE:-}" \
+      for candidate in "${DPF_MCP_CA_FILE:-}" "${DPF_PKI_TRUST_BUNDLE:-}" "${NODE_EXTRA_CA_CERTS:-}" \
                        "$(dpf_mcp_install_env_value "$install_dir" DPF_PKI_TRUST_BUNDLE)" \
-                       "$(dpf_mcp_saved_env_value NODE_EXTRA_CA_CERTS)" \
-                       "$HOME/.dpf/pki/root_ca.crt"; do
-        if [ -n "$candidate" ] && [ -f "$candidate" ]; then DPF_MCP_CLIENT_CA_BUNDLE="$candidate"; break; fi
+                       "$(dpf_mcp_saved_env_value NODE_EXTRA_CA_CERTS)"; do
+        if [ -n "$candidate" ]; then DPF_MCP_CLIENT_CA_BUNDLE="$candidate"; break; fi
       done
+      if [ -z "$DPF_MCP_CLIENT_CA_BUNDLE" ] && [ -f "$HOME/.dpf/pki/root_ca.crt" ]; then
+        DPF_MCP_CLIENT_CA_BUNDLE="$HOME/.dpf/pki/root_ca.crt"
+      fi
       ;;
   esac
 }

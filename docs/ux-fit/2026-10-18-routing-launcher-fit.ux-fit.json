@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "header-slot",
+  "decisionInteractionId": "DI-0001AFFADC74",
+  "scope": {
+    "files": [
+      "apps/web/components/agent/AgentFAB.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["header-slot", "reposition-float"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "verdict": "proceed",
+    "confidence": "high",
+    "evidenceClass": "Bounded correction of independently observed release116 launcher occlusion. Existing shell owns visibility and panel action. Containing-release geometry and interaction verification remain required; no native profession acceptance is claimed."
+  }
+}

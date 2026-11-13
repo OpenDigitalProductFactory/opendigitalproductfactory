@@ -22,11 +22,36 @@ operations. The [hardware guide](../../install/hardware.md) distinguishes those
 workloads; a 32 GB operations configuration is not a guarantee for a full
 development workload.
 
+### Reading saved proof without a runner
+
+Existing saved builds remain available when no suitable AI runner is available.
+Expand **Saved builds** to select another result, then open **Review proof** to inspect recorded documents,
+verification and raw output. Missing or conflicting evidence stays unverified.
+
+Building remains unavailable. Setup guidance is under **Runner setup**; reading
+saved results does not enable a provider or start work. Formatting, decomposition,
+editing, deletion and release actions are absent from this saved-reader view.
+If saved records cannot be loaded, use **Try again**; this is different from
+having no saved builds.
+
 ### Development Workrooms
 
-Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view.
+From `/build/work`, open **Delivery outcomes** for the visible Workrooms created
+in the last 30 days. The view shows cycle, recorded process and waiting times,
+source coverage, usage, estimated cost, and links to the underlying evidence.
+Open **Cohort and sources** before comparing periods. Missing milestones remain
+unavailable; a merged PR or completed Workroom alone does not establish a verified
+outcome. Use the separate [flow review](../workspace/work-rooms.md) to investigate
+queues and improvement actions.
+
+Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view. These groups come from the same room-health definition as **Operations > Workrooms**, so a room reads the same on both pages. A room ready to promote is waiting on a person to close it out, so it appears under **Needs attention** on both.
 
 The hub refreshes through one live connection and retains confirmed cards while reconnecting. **Inspect** opens the canonical Workroom, while **Resume**, **Review**, **Handoff**, and pull-request links appear only when the recorded Workroom facts support them. Use **Load older tasks** for the next signed, bounded page. Completion, failure, expiry, approval, review, and takeover attention link back to the same Workroom and are deduplicated, so reading or dismissing a notification does not recreate it. Create/adopt controls remain below the hub. Use **Operations > Workrooms** for every live room plus retained history, and **Architecture > Workrooms** for reusable definitions, participants, queues, and human triggers.
+
+The phase-cost table in **Technical details** retains phase order, active-state
+labels, duration, input/output tokens, calls and estimated USD cost. It adapts to
+narrow screens. Missing estimates remain unavailable, including the total when
+any phase is missing an estimate; subscription fees and invoices stay separate.
 
 ## The operator workspace
 
@@ -92,25 +117,64 @@ does not certify or activate a coworker.
 
 Build Studio turns the requested outcome into an evidence-backed problem statement and acceptance criteria. It searches the existing codebase and platform guidance before proposing change.
 
+Independent reviewers also check the design before building starts. If one of them fails it, Build Studio revises the design from the reviewer's findings, rewrites the plan to match, and the reviewer checks the new version. It does this at most twice. If the reviewer still fails the design, the build comes to you with the findings that are still open.
+
 ### Plan
 
 The AI Coworker creates or refines the implementation plan, including affected files, tests, documentation impact, dependencies, and risk controls. Routine plan progression can remain under coworker custody; unresolved product judgment or elevated consequence returns to you as a clear decision.
+
+Each plan task names the acceptance criteria it delivers. When the work is large, or the files the plan touches make it so, the platform checks that every approved acceptance criterion is covered by some task, records that coverage against the reviewed plan, and asks an independent reviewer to approve the plan before building starts. If a plan cannot be traced to the criteria, the activity log says which criteria no task covers. A plan written before tasks named their criteria is regenerated once so it can be traced. None of this waits on you.
 
 ### Build
 
 The AI Coworker generates code inside the isolated Build runtime. It runs tests and typecheck, gathers concrete evidence, and can use bounded disposable spikes to answer uncertain UX or implementation questions. A spike is evidence, not production code: the normal design, review, and release gates still decide what may ship.
 
+Test totals count cases that actually ran. **No tests ran** can mean that no
+test covers the change, or that the platform could not establish what to test;
+the evidence distinguishes those situations. A clean type check alone never
+counts as a passing test. If the source changes during checking, the observed
+counts remain in the record but do not qualify the new source. A passing scoped
+run cannot resolve an earlier report whose complete failure scope is unknown;
+that report stays visible for independent reconciliation. Saved
+evidence retains that report, the commands and the source identity after reload.
+Checks requested by a coworker use the same build and evidence record. If a
+repair stops before a new check, earlier counts remain observations and current
+verification stays unknown. Saved review sections, evidence summaries and the
+owner's proof view show **Unverified** for incomplete or conflicting checks.
+A confirmed exemption says **Typecheck only** and that no tests ran. The existing
+raw-output disclosure retains the earlier QA report, source identity and commands.
+The platform saves that invalidation before allowing
+the repair to change files, so an interrupted process cannot leave an old check
+looking current. If that save fails, the repair does not start.
+
 If a task stops before it finishes, Build Studio distinguishes *why*. When the coding session died on infrastructure — a timeout, a provider outage, a rate limit, the process being killed — that is not a verdict on your feature, so the same task is re-run once automatically and you see a "retrying" note in the activity feed. When the session instead stopped because it needs something only you can supply — an unresolved product question, a contradiction in the spec — it is **not** retried, because re-running will not answer the question. That one surfaces as a blocked task for you to resolve.
 
 ### Review
 
-Quality gates verify the feature is ready: documentation evidence is present, all tests pass, typecheck is clean, acceptance criteria are met, and accessibility checks pass. The AI Coworker presents a plain-language summary of the results.
+Quality gates apply the change's existing verification requirements, including
+documentation, typecheck, acceptance and accessibility. Test failures remain
+advisory where the delivery policy says so. Where shallow or deep verification
+requires tests, unknown or unrun tests and unresolved conflicting evidence do
+not satisfy that requirement; a confirmed no-covering-test exemption remains
+distinct. The AI Coworker presents a plain-language summary of the results.
 
 If the repository's automated checks, the independent code review, or the build's own risk analysis find problems in the build's own change, such as a missing data-impact note, out-of-date generated files, a bug the reviewer spotted, or a risk the change does not guard against, Build Studio hands the build back to the AI Coworker with the findings to fix, then reviews it again. This happens at most twice. If the checks still fail, the build is escalated to you with the remaining findings instead of retrying forever.
 
 ### Ship
 
 The AI Coworker prepares the promotion record and evidence. Where promotion is enabled, the platform backs up the database, builds a new version with the feature, swaps it into production, and verifies health. Where the surface is still hardening, keep the promotion record honest and finish through the supported source workflow. See [Feature Deployment](deployment.md) for the full process.
+
+Build Studio opens the build's pull request by itself. When a publication check refuses it, the build's activity trail names the reason and what Build Studio did next:
+
+- **The change was not verified as it stands now.** The build goes back to Review, where its checks run again on the current code. If an earlier check was interrupted and left the build's workspace on the wrong version, that is put right first.
+- **Main has moved on.** The build is refreshed onto the latest main and reviewed again.
+- **A repository check needs a fix in the change**, for example a missing user-guide update. The findings go back to the AI Coworker to fix, then the build is reviewed again.
+- **Something outside the change failed**, such as the workspace running out of memory or GitHub limiting requests. Build Studio waits and tries again: after 1 hour, then 2 hours, then 4, and so on up to once a day.
+- **The change is set to stay on your system.** Build Studio checks again less and less often, down to once a day, and opens the pull request after you mark the change shareable.
+
+Build Studio tries at most three fixes that move the build. If the pull request still cannot open after that, or the same unexplained refusal comes back, the build is escalated to you once with the last reason, and Build Studio stops retrying it.
+
+Once the pull request is open, a required check can still fail on the change itself, for example a failing test. When that happens, Build Studio sends the build back to the AI Coworker with the name of the failing check and the relevant part of its log. After the fix is reviewed again, Build Studio adds it to the same pull request as a new commit. It never rewrites what is already there. Build Studio makes at most two such repairs per pull request. If the checks are still red after that, or a repair changes nothing, you are told once, with the failing check named. A check that failed because of an outage rather than the change is re-run, not repaired.
 
 ## Related
 

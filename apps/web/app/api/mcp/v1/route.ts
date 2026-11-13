@@ -1,3 +1,4 @@
+import { reviewTaskTransportRefusal } from "@/lib/mcp-task-reassessment-transport";
 // Real MCP JSON-RPC 2.0 transport for external coding agents (Claude Code,
 // Codex CLI, VS Code MCP) on the user's host. Spec snapshot in
 // docs/Reference/mcp/spec/ (version 2025-11-25).
@@ -18,13 +19,8 @@
 //                              AS, same scope vocabulary, same revocation
 //                              surface. A grant type, not a side door.
 //
-// This file previously read: "We do NOT implement OAuth 2.1 resource-server
-// discovery (the GitHub-PAT pattern, intentionally)." That was right for a
-// single-operator loopback surface and stopped being right once (a) five
-// external clients connect and all of them perform RFC 9728 discovery,
-// (b) `2025-11-25` made Protected Resource Metadata a server MUST while we
-// advertise that revision on the wire, and (c) consumer installs have no
-// operator with a portal habit to mint a token by hand.
+// RFC 9728 resource discovery serves external clients and installs whose
+// operators have no portal session from which to provision a token.
 //
 // The `dpfmcp_` PAT still resolves, and every configured client keeps working.
 // It is on a deprecation horizon: issuance closes first, resolution survives
@@ -85,6 +81,13 @@ import {
   type ResolvedMcpTransportAuth as ResolvedAuth,
 } from "@/lib/mcp/transport-auth";
 import { openMcpTaskStatusStream } from "@/lib/mcp/task-status-stream";
+import {
+  defaultRoomResourceDeps,
+  dispatchRoomResourceMethod,
+  governedReadVia,
+  isRoomResourceMethod,
+} from "@/lib/mcp/room-resources.server";
+import { roomUpdateFanout } from "@/lib/mcp/room-update-fanout.server";
 import { LOAD_TOOLS_LISTED, buildLoadToolsResult, buildLoadToolsStatus, resolveLoadToolsRequest, buildUnknownToolResult, classifyLoadToolsNoMatch, loadToolsSseResponse } from "@/lib/mcp/load-tools";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { invisibleRemovalNotice, looksLikeSmuggling, sanitizeUntrustedValue } from "@dpf/validators";
@@ -95,64 +98,21 @@ import { permitResultMeta, presentedPermitHandle } from "@/lib/gpp/permit-carria
 
 // Protocol revisions: the governed N/N-1 window + grandfathered set, declared
 // ONLY in @/lib/mcp/protocol-versions.ts (W12, BI-EE64547B; guard-enforced).
-// JSON-RPC 2.0 standard error codes
-const JSONRPC_PARSE_ERROR = -32700;
-const JSONRPC_INVALID_REQUEST = -32600;
-const JSONRPC_METHOD_NOT_FOUND = -32601;
-const JSONRPC_INVALID_PARAMS = -32602;
-const JSONRPC_INTERNAL_ERROR = -32603;
+import {
+  JSONRPC_INTERNAL_ERROR,
+  JSONRPC_INVALID_PARAMS,
+  JSONRPC_INVALID_REQUEST,
+  JSONRPC_METHOD_NOT_FOUND,
+  JSONRPC_PARSE_ERROR,
+  jsonRpcError,
+  jsonRpcOk,
+  type JsonRpcId,
+  type JsonRpcRequest,
+  type McpToolsCallResult,
+} from "@/lib/mcp/jsonrpc-response";
 
-type JsonRpcId = string | number | null;
-
-type JsonRpcRequest = {
-  jsonrpc: "2.0";
-  id?: JsonRpcId;
-  method: string;
-  params?: Record<string, unknown>;
-};
-
-type JsonRpcResponse =
-  | {
-      jsonrpc: "2.0";
-      id: JsonRpcId;
-      result: unknown;
-    }
-  | {
-      jsonrpc: "2.0";
-      id: JsonRpcId;
-      error: { code: number; message: string; data?: unknown };
-    };
-
-type McpToolsCallResult = {
-  content: { type: "text"; text: string }[];
-  structuredContent?: unknown;
-  isError: boolean;
-};
-
-function jsonResponse(payload: unknown, status = 200): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function jsonRpcError(
-  id: JsonRpcId,
-  code: number,
-  message: string,
-  data?: unknown,
-  httpStatus = 200,
-): Response {
-  const body: JsonRpcResponse = {
-    jsonrpc: "2.0",
-    id,
-    error: { code, message, ...(data !== undefined ? { data } : {}) },
-  };
-  return jsonResponse(body, httpStatus);
-}
-
-function jsonRpcOk(id: JsonRpcId, result: unknown): Response {
-  return jsonResponse({ jsonrpc: "2.0", id, result } satisfies JsonRpcResponse);
+function unknownMethod(id: JsonRpcId, method: string): Response {
+  return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
 }
 
 function scopeToCapability(scope: McpTokenScope): McpTokenCapability {
@@ -347,7 +307,7 @@ async function handleTasksLifecycle(
   params: Record<string, unknown> | undefined,
 ): Promise<Response> {
   if (!tasksLifecycleEnabled()) {
-    return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+    return unknownMethod(id, method);
   }
   if (
     method === "tasks/cancel"
@@ -372,7 +332,7 @@ async function handleTasksLifecycle(
       result = await handleTasksGet(token.userId, params);
       break;
     case "tasks/result":
-      result = await handleTasksResult(token.userId, params);
+      result = await handleTasksResult(token.userId, params, { actingAgentId: token.agentId ?? null, tokenGrantScopes: token.scopes });
       break;
     case "tasks/list":
       result = await handleTasksList(token.userId, params);
@@ -381,10 +341,29 @@ async function handleTasksLifecycle(
       result = await handleTasksCancel(token.userId, params);
       break;
     default:
-      return jsonRpcError(id, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${method}`);
+      return unknownMethod(id, method);
   }
   if (result.kind === "ok") return jsonRpcOk(id, result.value);
   return jsonRpcError(id, JSONRPC_INVALID_PARAMS, result.message);
+}
+
+// BI-ED52AB82: Work Rooms as MCP resources (spec 2026-10-27 §6.7). Reads and
+// subscribes go through this route's own tools/call handler for
+// read_room_messages, so they meet exactly the checks a tool call meets.
+async function handleRoomResources(
+  method: string,
+  id: JsonRpcId,
+  token: ResolvedAuth,
+  params: JsonRpcRequest["params"],
+  callerClient: string | undefined,
+  stepUp: StepUpContext | undefined,
+): Promise<Response> {
+  const read = governedReadVia((name, args) =>
+    handleToolsCall(id, token, { name, arguments: args }, callerClient, false, stepUp));
+  const outcome = await dispatchRoomResourceMethod(method, params, token, read, await defaultRoomResourceDeps());
+  if (outcome.kind === "response") return outcome.response;
+  if (outcome.kind === "error") return jsonRpcError(id, outcome.code, outcome.message, outcome.data);
+  return jsonRpcOk(id, outcome.result);
 }
 
 async function handleTasksSubmit(
@@ -463,6 +442,10 @@ async function handleToolsList(
     token.source === "session-jwt" ? [] : await getLoadedToolNames(token.tokenId),
   );
   const listed = selectToolsForListing(authorized, tier, loadedNames).map(annotateTool);
+  if (token.toolSurface) {
+    const names = new Set(token.toolSurface.toolNames);
+    return jsonRpcOk(id, { tools: listed.filter(tool => names.has(tool.name)) });
+  }
   return jsonRpcOk(id, { tools: [...listed, LOAD_TOOLS_LISTED] });
 }
 
@@ -479,6 +462,9 @@ async function handleToolsCall(
   }
   const toolName = canonicalWorkroomToolName(params["name"]);
   const args = (params["arguments"] as Record<string, unknown> | undefined) ?? {};
+  if (token.toolSurface && !token.toolSurface.toolNames.includes(toolName)) {
+    return jsonRpcOk(id, buildUnknownToolResult(toolName));
+  }
   const permitHandle = presentedPermitHandle(params["_meta"]);
 
   // load_tools is a transport-level meta-tool, not a governed domain tool:
@@ -573,11 +559,9 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
-      // BI-B949993E: a session JWT minted for a governed TaskRun carries its
-      // id; governed execution resolves the TaskRun's immutable review
-      // binding from it (resolve-coworker-tool-authority), so a native CLI
-      // writer call is admitted routinely instead of parked on an envelope.
+      // Resolve the immutable review binding from the authenticated TaskRun.
       ...(token.taskRunId ? { taskRunId: token.taskRunId } : {}),
+      ...(token.taskExecutionFence ? { taskExecutionFence: token.taskExecutionFence } : {}),
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
@@ -687,6 +671,9 @@ export async function POST(request: Request): Promise<Response> {
   observeConnection({ request, token, method: body.method, params: body.params });
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
+  if (token.toolSurface && !["initialize", "notifications/initialized", "ping", "tools/list", "tools/call"].includes(body.method)) {
+    return isNotification ? new Response(null, { status: 202 }) : unknownMethod(body.id ?? null, body.method);
+  }
   const floorRefusal = isNotification ? null : await refuseBelowToolchainFloor(request, token, body); // BI-DFC0270C
   if (floorRefusal) return floorRefusal;
 
@@ -710,6 +697,17 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    const callbackRefusal = isNotification ? null : await reviewTaskTransportRefusal({
+      token, method: body.method, params: body.params,
+    });
+    if (callbackRefusal) return jsonRpcError(body.id ?? null, JSONRPC_INVALID_REQUEST,
+      callbackRefusal.message, { error: callbackRefusal.error }, 403);
+    if (isRoomResourceMethod(body.method)) {
+      if (isNotification) return new Response(null, { status: 202 });
+      return await handleRoomResources(body.method, body.id ?? null, token, body.params,
+        deriveCallerClient(request.headers.get("user-agent")),
+        token.source === "oauth" ? { granted: oauthGrantedScopes, origin: resolveResourceOrigin(request) } : undefined);
+    }
     switch (body.method) {
       case "initialize":
         if (isNotification) {
@@ -775,7 +773,7 @@ export async function POST(request: Request): Promise<Response> {
           // Unknown notifications are silently accepted per JSON-RPC 2.0.
           return new Response(null, { status: 202 });
         }
-        return jsonRpcError(body.id ?? null, JSONRPC_METHOD_NOT_FOUND, `unknown method: ${body.method}`);
+        return unknownMethod(body.id ?? null, body.method);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown internal error";
@@ -788,12 +786,14 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 /**
- * Streamable HTTP server-to-client lane. A notification is only a wake-up:
- * each frame carries the complete current Task projection, while TaskRun and
- * tasks/get/list remain the durable reconciliation path after disconnects.
+ * Streamable HTTP wake-ups carry complete task projections or room URIs.
+ * Reconcile through TaskRun, tasks/get/list and read_room_messages;
+ * Last-Event-ID replays missed room updates (BI-ED52AB82).
  */
 export async function GET(request: Request): Promise<Response> {
   const authentication = await authenticateMcpRequest(request);
   if (!authentication.ok) return authentication.response;
-  return openMcpTaskStatusStream(request, authentication.token);
+  if (authentication.token.toolSurface)
+    return new Response(null, { status: 405, headers: { Allow: "POST" } });
+  return openMcpTaskStatusStream(request, authentication.token, { rooms: roomUpdateFanout() });
 }

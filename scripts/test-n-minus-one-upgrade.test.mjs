@@ -12,6 +12,9 @@ import {
   assertPromotionSourceIdentity,
   assertRecreatedPortalProvenance,
   cleanupHarness,
+  cleanupWithoutMaskingVerdict,
+  readWorkspaceFile,
+  removeContainerOwnedFiles,
   cleanupNMinusOneBaseline,
   cleanupProject,
   cloneAndCheckoutBaseline,
@@ -205,7 +208,80 @@ test("workspace is mktemp-owned and cleanup refuses root, home, unresolved, and 
   assert.throws(() => assertSafeHarnessConfig({ ...workspace, project: "dpf" }), /project/);
   assert.throws(() => assertSafeHarnessConfig({ ...workspace, root: homedir(), project: "dpf-n1-x" }), /temporary/);
   assert.throws(() => assertSafeHarnessConfig({ ...workspace, root: join(workspace.root, "missing"), project: "dpf-n1-x" }), /resolve/);
-  await cleanupHarness(workspace, async () => {});
+  await cleanupHarness(workspace, async () => {}, { removeContainerOwnedFiles: async () => {} });
+});
+
+test("cleanup removes container-written files with container authority before the host rm (BI-9BC79F48)", async () => {
+  const workspace = await createHarnessWorkspace();
+  workspace.project = "dpf-n1-124";
+  const order = [];
+  await cleanupHarness(workspace, async () => { order.push("compose-down"); }, {
+    removeContainerOwnedFiles: async (root) => { order.push(`owned:${root === workspace.root}`); },
+  });
+  assert.deepEqual(order, ["compose-down", "owned:true"]);
+  await assert.rejects(realpath(workspace.root), /ENOENT/);
+
+  const calls = [];
+  await removeContainerOwnedFiles("/tmp/dpf-n1-x", async (command, args) => { calls.push([command, ...args]); });
+  assert.deepEqual(calls[0].slice(0, 5), ["docker", "run", "--rm", "-v", "/tmp/dpf-n1-x:/workspace"]);
+  assert.equal(calls[0].at(-1), "find /workspace -mindepth 1 -delete");
+
+  // Docker being unable to help must not stop the host rm from running.
+  const second = await createHarnessWorkspace();
+  second.project = "dpf-n1-125";
+  await cleanupHarness(second, async () => {}, { removeContainerOwnedFiles: async () => { throw new Error("docker unavailable"); } });
+  await assert.rejects(realpath(second.root), /ENOENT/);
+});
+
+test("a root-owned workspace file is read with container authority, byte for byte (BI-9BC79F48)", async () => {
+  const bytes = Buffer.from([0xef, 0xbb, 0xbf, 0x7b, 0x7d, 0x0a]);
+  // Readable on the host: no container involved.
+  const direct = await readWorkspaceFile("/tmp/dpf-n1-x/state/install-state.json", {
+    readFile: async () => bytes, run: async () => { throw new Error("must not run docker"); },
+  });
+  assert.deepEqual(direct, bytes);
+  // EACCES: a read-only root container returns the same bytes.
+  const calls = [];
+  const viaContainer = await readWorkspaceFile("/tmp/dpf-n1-x/state/install-state.json", {
+    readFile: async () => { throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" }); },
+    run: async (command, args, options) => { calls.push([command, ...args]); assert.equal(options.encoding, "buffer"); return { stdout: bytes }; },
+  });
+  assert.deepEqual(viaContainer, bytes);
+  assert.deepEqual(calls[0], ["docker", "run", "--rm", "-v", "/tmp/dpf-n1-x/state:/workspace:ro", "node:24-alpine", "cat", "/workspace/install-state.json"]);
+  // Any other error is the truth and is not papered over.
+  await assert.rejects(
+    readWorkspaceFile("/tmp/x", { readFile: async () => { throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); }, run: async () => ({ stdout: bytes }) }),
+    /ENOENT/,
+  );
+});
+
+test("a cleanup failure never replaces the gate's verdict (BI-9BC79F48)", async () => {
+  const warnings = [];
+  await cleanupWithoutMaskingVerdict(async () => { throw new Error("EACCES: permission denied, unlink '/tmp/x/state/federation/peers.json'"); }, (m) => warnings.push(m));
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /cleanup failed and was skipped.*verdict above stands.*EACCES/);
+
+  const eacces = async () => { throw new Error("EACCES: cleanup"); };
+  const base = { baseSha: "a".repeat(40), candidateSha: "b".repeat(40), repository: "o/r", project: "dpf-n1-test" };
+  // A genuine failure keeps ITS error, not the cleanup's.
+  await assert.rejects(
+    runNMinusOneUpgrade(base, {
+      verifyBase: async () => { throw new Error("the real gate failure"); },
+      cleanup: eacces, warn: (m) => warnings.push(m),
+    }),
+    /the real gate failure/,
+  );
+  // A refusal that the gate reports as a result still returns that result.
+  const result = await runNMinusOneUpgrade({ ...base, injectReadinessFailure: true }, {
+    verifyBase: async () => {},
+    prepare: async () => ({ candidateDigest: `sha256:${"c".repeat(64)}`, mode: "current" }),
+    readiness: async () => ({ ok: false, quiescenceBegan: false }),
+    baselineHealth: async () => true,
+    writeEvidence: async (evidence) => evidence,
+    cleanup: eacces, warn: (m) => warnings.push(m),
+  });
+  assert.equal(result.result, "expected-readiness-refusal");
+  assert.equal(warnings.length, 3);
 });
 
 test("readiness failure never requests upgrade and keeps baseline healthy", async () => {

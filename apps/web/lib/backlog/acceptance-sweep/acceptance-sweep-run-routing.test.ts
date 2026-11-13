@@ -100,6 +100,20 @@ describe("runAcceptanceSweep — routing aged items (BI-C1781121)", () => {
     expect(summary.headline).toContain("routing: 1 routed, 0 already routed, 0 routed-unresolved, 0 unroutable, 1 deferred past the limit of 2");
   });
 
+  // BI-729D9B27: a build-originated item whose change is proven live routes at once.
+  it("routes a young item that entered acceptance on its build's proven delivery, and no other young item", async () => {
+    const delivered = { ...item("young"), activities: [{ kind: "status_change", recordedAt: NOW,
+      payload: { to: "awaiting-acceptance", actuator: "build-delivery-proven", buildId: "FB-1" } }] };
+    const p = ports({ selectPage: async () => ({ items: [item("old"), delivered, item("mid")], unsnapshotted: 3, nextCursor: null }), });
+    await runAcceptanceSweep(p, { ...CONFIG, routeLimit: 5 });
+    const [candidates] = vi.mocked(p.route).mock.calls[0]!;
+    expect(candidates.map((candidate) => candidate.item.itemId)).toEqual(["BI-OLD", "BI-YOUNG", "BI-MID"]);
+
+    const plain = ports({ selectPage: async () => ({ items: [item("young")], unsnapshotted: 1, nextCursor: null }) });
+    await runAcceptanceSweep(plain, CONFIG);
+    expect(plain.route).not.toHaveBeenCalled();
+  });
+
   it("closes a closable aged item under the pre-authorisation and never routes it", async () => {
     const p = ports({ resolveCloseAuthorisation: async () => ENABLED });
     const summary = await runAcceptanceSweep(p, CONFIG);
@@ -175,5 +189,39 @@ describe("runAcceptanceSweep — withdrawn and outdated packets (BI-099A0BA3)", 
     });
     const summary = await runAcceptanceSweep(p, CONFIG);
     expect(summary.routing.objectiveMapping).toMatchObject({ withdrawn: 1, shapeOutdated: 1, issued: 0 });
+  });
+});
+
+// BI-1D5FCEBE (WWMD DI-29DB4468BA05): an item whose newest same-kind evidence is
+// a recorded failure owes a fresh check that only a coworker can record, so
+// waiting 14 days adds nothing. It routes from its second day in acceptance,
+// once the nightly deploy has had a chance to ship the fix.
+describe("runAcceptanceSweep — failure-held items route after one day (BI-1D5FCEBE)", () => {
+  const failed = (owner: string | null): SweepEvaluation => ({
+    owed: [{ code: "DELIVERY_EVIDENCE_REQUIRED", state: "fail", accountableRole: "delivery-coordinator", nextAction: "The newest manual evidence on this item is a failure." }],
+    owner: owner ? { agentId: owner, displayName: owner, codes: ["DELIVERY_EVIDENCE_REQUIRED"] } : null,
+    unroutable: [],
+    closable: false,
+  });
+
+  function sweep(evaluations: Record<string, SweepEvaluation>, ages: Record<string, number>) {
+    return ports({
+      loadPoolAges: async () => new Map(Object.entries(ages).map(([id, days]) => [id, age(id, days)])),
+      selectPage: async () => ({ items: Object.keys(evaluations).map(item), unsnapshotted: Object.keys(evaluations).length, nextCursor: null }),
+      evaluate: async (entry) => evaluations[entry.id] ?? null,
+    });
+  }
+
+  it("routes a failure-held item with an owner from one day in acceptance", async () => {
+    const p = sweep({ held: failed("AGT-903"), fresh: failed("AGT-903"), plain: owed }, { held: 2, fresh: 0, plain: 2 });
+    await runAcceptanceSweep(p, { ...CONFIG, routeLimit: 5 });
+    const [candidates] = vi.mocked(p.route).mock.calls[0]!;
+    expect(candidates.map((candidate) => candidate.item.itemId)).toEqual(["BI-HELD"]);
+  });
+
+  it("waits the aged threshold when no coworker owns the failed check", async () => {
+    const p = sweep({ held: failed(null) }, { held: 5 });
+    await runAcceptanceSweep(p, CONFIG);
+    expect(p.route).not.toHaveBeenCalled();
   });
 });

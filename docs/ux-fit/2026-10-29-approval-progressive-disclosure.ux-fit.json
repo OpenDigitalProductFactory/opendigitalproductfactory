@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "purpose-first-compact-list",
+  "decisionInteractionId": "DI-09A133C4952C",
+  "scope": { "files": ["apps/web/components/attention/CoworkerEnvelopeApproval.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["purpose-first-compact-list", "shorten-grid-only", "collapse-whole-card"]
+  },
+  "verification": {
+    "designDecision": "Recorded agent choice; high-confidence kernel recommendation, not runtime acceptance.",
+    "sourceAssessment": "Independent e3c4 source review and real-envelope state regression; not a native review receipt.",
+    "servedChecks": "Required protected UX Route Sweep Runtime and approval scenarios before merge; canonical live acceptance after normal update.",
+    "priorPreview": "Full copies completed; no screen pass before shared preview yielded to queued gates.",
+    "baseline": "Unchanged. No measured-word or accessibility pass is asserted by this manifest.",
+    "additionalReviewedPresentationFiles": [
+      "apps/web/components/attention/OwnerDecisionCards.tsx",
+      "apps/web/components/ui/report-kit/CollapsibleList.tsx",
+      "apps/web/lib/attention/coworker-envelope-decision.ts",
+      "apps/web/lib/attention/sources/coworker-envelope.ts",
+      "packages/i18n/src/messages/en-US/approvals.json"
+    ]
+  }
+}

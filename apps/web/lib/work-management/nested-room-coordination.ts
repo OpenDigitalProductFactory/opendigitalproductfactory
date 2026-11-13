@@ -51,21 +51,26 @@ export function projectNestedRoomCoordination(input: NestedRoomCoordinationInput
   const owners = new Map<string, CoordinationActor>();
   for (const roomId of lineage) {
     const coordinators = [...new Map(rooms.get(roomId)!.coordinators.map(actor => [actor.principalId, actor])).values()];
-    if (coordinators.length !== 1) return blocked(coordinators.length
-      ? "conflicting-coordinators" : "coordinator-not-recorded");
-    owners.set(roomId, coordinators[0]!);
+    if (coordinators.length > 1) return blocked("conflicting-coordinators");
+    // Zero coordinators: the room is unowned. Escalate past it to the parent
+    // rather than inventing an owner or blocking the recorded parent path.
+    if (coordinators.length === 1) owners.set(roomId, coordinators[0]!);
   }
   for (let i = 1; i < lineage.length; i += 1) {
     const childRoomId = lineage[i - 1]!;
     const parentRoomId = lineage[i]!;
+    const parentOwner = owners.get(parentRoomId);
+    const childOwner = owners.get(childRoomId);
+    if (!parentOwner || !childOwner) continue;
     delegations.push({ parentRoomId, childRoomId,
-      parentCoordinatorId: owners.get(parentRoomId)!.principalId,
-      childCoordinatorId: owners.get(childRoomId)!.principalId });
+      parentCoordinatorId: parentOwner.principalId,
+      childCoordinatorId: childOwner.principalId });
   }
   const seenPrincipals = new Set<string>();
   const seenAgents = new Set<string>();
   for (const roomId of lineage) {
-    const owner = owners.get(roomId)!;
+    const owner = owners.get(roomId);
+    if (!owner) continue;
     if (!seenPrincipals.has(owner.principalId)) {
       steps.push({ kind: owner.kind === "person" ? "human" : "room-owner",
         ref: owner.principalId, displayName: owner.displayName, roomId });
@@ -74,11 +79,16 @@ export function projectNestedRoomCoordination(input: NestedRoomCoordinationInput
     if (owner.kind === "person") return { delegations, escalation: { state: "resolved", steps } };
     if (owner.agentId) seenAgents.add(owner.agentId);
   }
-  const root = owners.get(lineage.at(-1)!)!;
-  let agentId = root.agentId;
-  const agents = new Map(input.agents.map(agent => [agent.agentId, agent]));
+  let registryStart: string | null = null;
+  for (let i = lineage.length - 1; i >= 0; i -= 1) {
+    const owner = owners.get(lineage[i]!);
+    if (owner?.agentId) { registryStart = owner.agentId; break; }
+  }
+  if (!registryStart) return blocked("coordinator-not-recorded");
+  const agents = new Map(input.agents.map((row) => [row.agentId, row] as const));
+  let currentAgentId: string = registryStart;
   for (let depth = 0; depth < 32; depth += 1) {
-    const agent = agentId ? agents.get(agentId) : null;
+    const agent = agents.get(currentAgentId);
     if (!agent) return blocked("agent-not-recorded");
     const next = agent.escalatesTo;
     if (!next) return blocked("escalation-target-not-recorded");
@@ -99,7 +109,7 @@ export function projectNestedRoomCoordination(input: NestedRoomCoordinationInput
     const nextAgent = agents.get(next);
     if (!nextAgent) return blocked("agent-not-recorded");
     steps.push({ kind: "agent", ref: next, displayName: nextAgent.displayName });
-    agentId = next;
+    currentAgentId = next;
   }
   return blocked("agent-escalation-limit");
 }

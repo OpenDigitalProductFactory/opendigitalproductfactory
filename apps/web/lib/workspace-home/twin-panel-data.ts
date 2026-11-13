@@ -26,7 +26,7 @@ import { loadVersionedOperationsSnapshot } from "@/lib/twin/operations-loader";
 import {
   toLivingBusinessSnapshot,
   type OperationsSnapshotTelemetry,
-} from "@/lib/twin/operations-snapshot";
+} from "@dpf/storefront-templates/operations";
 import {
   loadOrCreateRestaurantScene,
   type OperationalSceneLayoutDatabase,
@@ -280,6 +280,9 @@ export async function loadWorkspaceTwinPresentation(
       },
       scene,
       restaurantFloor,
+      ...(base.archetypeId === "pet-rescue" || base.archetypeId === "animal-shelter"
+        ? { roomsOperations: null, roomsOperationsDemo: false }
+        : {}),
       demo: false,
     };
   }

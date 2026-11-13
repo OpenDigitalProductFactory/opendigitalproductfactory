@@ -710,7 +710,7 @@ export async function runGovernedBacklogTeeUp(input: {
     },
   });
 
-  const selected = rankGovernedBacklogTeeUpCandidates(items, requestedLimit, await loadStartRankingContext(prisma, config));
+  const selected = rankGovernedBacklogTeeUpCandidates(items, requestedLimit, await loadStartRankingContext(prisma, config, items.map((item: { itemId: string }) => item.itemId)));
   const builds: Array<{ backlogItemId: string; buildId: string }> = [];
   const refused: Array<{ backlogItemId: string; reason: string }> = [];
   let skippedCount = 0;

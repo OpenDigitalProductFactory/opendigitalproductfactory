@@ -28,7 +28,10 @@ import test from "node:test";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dockerfile = readFileSync(join(repoRoot, "Dockerfile"), "utf8");
-const psInstaller = readFileSync(join(repoRoot, "install-dpf.ps1"), "utf8");
+// The Windows installer plus the consumer start script it ships as a release
+// asset (BI-084F85E5): what the start script references is installer-referenced.
+const psInstaller = readFileSync(join(repoRoot, "install-dpf.ps1"), "utf8") +
+  readFileSync(join(repoRoot, "scripts", "installer", "dpf-start.consumer.ps1"), "utf8");
 const shInstaller = readFileSync(join(repoRoot, "install-dpf.sh"), "utf8");
 const promoteScript = readFileSync(join(repoRoot, "scripts/promote.sh"), "utf8");
 const agentPointerPath = "config/consumer-install/agent-pointer.md";

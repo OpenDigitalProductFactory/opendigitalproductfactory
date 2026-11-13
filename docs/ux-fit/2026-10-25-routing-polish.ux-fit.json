@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "reuse-existing-disclosure-and-empty-state",
+  "decisionInteractionId": "DI-BE302413E8F2",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/RoutingManagementInspector.tsx",
+      "apps/web/components/platform/RoutingManagementWorkspace.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "reuse-existing-disclosure-and-empty-state",
+      "retain-inline-identifier-with-empty-state"
+    ]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "recommendationVerdict": "decline",
+    "confidence": "low",
+    "resolvedBy": "agent",
+    "evidenceClass": "Author choice recorded through record_decision_outcome under the existing routing delivery instruction. Five cost-only scoring inputs omitted component reuse and planned evidence; no professional UX approval or human ratification is claimed. Existing Source evidence disclosure, FilterBar count and EmptyState are reused. Containing-release verification and the original native Critic contribution remain outstanding."
+  }
+}

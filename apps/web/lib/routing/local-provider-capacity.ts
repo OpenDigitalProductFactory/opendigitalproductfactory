@@ -1,5 +1,6 @@
 import { listCapacityReservingNonprodEnvironmentLeases } from "@/lib/nonprod/environment-lease";
 import { isLocalProviderId } from "./provider-locality";
+import { isAiTurnClaimKey } from "@/lib/nonprod/environment-lease-overseer";
 
 export type LocalProviderCapacityDeferralReason =
   | "local-ci-active-capacity-reservation"
@@ -98,27 +99,15 @@ export async function inspectLocalProviderCapacity(input: {
         expectedFreeAt: earliestExpiry(active),
       };
     }
-    // A live queued claim is bounded by its heartbeat/expiry contract. Giving
-    // it precedence over *new* local inference reserves the next safe host
-    // window without killing provider work that was already in flight.
-    //
-    // Deliberately UNCHANGED (BI-94D44FDB). The obvious move was to drop the
-    // queued deferral here as DI-405E6765ED90 did for the short-call boundary,
-    // but the evidence does not support it: over seven days on the live install
-    // the queue held 3 rows, not a standing backlog, because BI-D933A328's
-    // contendsForInference filter already removed the dev-portal flood that
-    // made it permanently non-empty (998 of 1,006 expired claims were
-    // dev-portal). The starvation that remains is `active` holds — ~300 real
-    // gate runs averaging 195s — so changing the queued rule would trade a
-    // reasoned safety property for no measured gain.
-    const queued = blocking("queued");
-    if (queued.length > 0) {
-      return {
-        available: false,
-        reason: "local-ci-queued-capacity-reservation",
-        expectedFreeAt: earliestExpiry(queued),
-      };
-    }
+    // BI-0B1DF949 / DI-4369768D28F8 (supersedes BI-94D44FDB): a QUEUED claim
+    // holds no host resources, so it does not defer new local inference; only
+    // an admitted (active) gate does. BI-94D44FDB kept the queued rule on a
+    // seven-day average of ~3 rows. On 2026-11-03/04 the queue stood at 4-7
+    // rows for hours under multi-session load, and while the pool was closed
+    // for host pressure queued rows admitted nobody yet still blocked
+    // inference — so every review that may route only to `local` expired. A
+    // queued gate, once admitted, defers new inference from then on, and
+    // in-flight inference is still never killed.
     return { available: true, reason: null };
   } catch {
     // Starting a resident local model is unsafe when capacity ownership cannot
@@ -127,13 +116,54 @@ export async function inspectLocalProviderCapacity(input: {
   }
 }
 
+/**
+ * BI-218A4555: local AI work waits in the overseer's queue as an "AI turn",
+ * so gates cannot starve it (lib/nonprod/local-ai-turn.ts). Bookkeeping only:
+ * a failure here never changes whether inference may run.
+ */
+export type LocalAiTurnBook = {
+  recordDemand: () => Promise<unknown>;
+  settle: () => Promise<unknown>;
+};
+
+const defaultLocalAiTurnBook: LocalAiTurnBook = {
+  recordDemand: async () => (await import("@/lib/nonprod/local-ai-turn")).recordLocalAiDemand(),
+  settle: async () => (await import("@/lib/nonprod/local-ai-turn")).settleLocalAiTurn(),
+};
+
+/** Note that local AI work is waiting behind an active gate. Never throws. */
+export async function noteLocalAiDemand(
+  status: LocalProviderCapacityStatus,
+  book: LocalAiTurnBook = defaultLocalAiTurnBook,
+): Promise<void> {
+  if (status.available || status.reason !== "local-ci-active-capacity-reservation") return;
+  await book.recordDemand().catch(() => undefined);
+}
+
 export async function assertLocalProviderCapacityAvailable(input: {
   listCapacityLeases?: LeaseReader;
+  /** Injected in tests; the default only applies to the real lease reader. */
+  aiTurnBook?: LocalAiTurnBook | null;
 } = {}): Promise<void> {
-  const status = await inspectLocalProviderCapacity(input);
+  let pendingAiTurn = false;
+  const listCapacityLeases = input.listCapacityLeases
+    ?? (() => listCapacityReservingNonprodEnvironmentLeases({}));
+  const status = await inspectLocalProviderCapacity({
+    listCapacityLeases: async () => {
+      const leases = await listCapacityLeases();
+      pendingAiTurn = leases.some((lease) => lease.status === "queued" && isAiTurnClaimKey(lease.claimKey));
+      return leases;
+    },
+  });
+  const book = input.aiTurnBook !== undefined
+    ? input.aiTurnBook
+    : input.listCapacityLeases ? null : defaultLocalAiTurnBook;
   if (!status.available) {
+    if (book) await noteLocalAiDemand(status, book);
     throw new LocalProviderCapacityDeferredError(status.reason, status.expectedFreeAt ?? null);
   }
+  // The host is free and this dispatch proceeds: the waiting turn is served.
+  if (book && pendingAiTurn) await book.settle().catch(() => undefined);
 }
 
 /** Completion-adapter boundary: remote providers remain independent of host leases. */

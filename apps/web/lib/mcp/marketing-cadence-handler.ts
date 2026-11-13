@@ -24,7 +24,7 @@ export async function planUpcomingMarketingDraftsHandler(
   context?: MarketingToolContext,
 ): Promise<ToolResult> {
   const { planUpcomingForAssetTasks } = await import("@/lib/marketing/scheduler");
-  const { resolveProactivityPlan } = await import("@/lib/proactivity/proactivity-resolver");
+  const { resolveProactivityPlan } = await import("@dpf/validators/workroom-policy/proactivity-resolver");
   const { prisma } = await import("@dpf/db");
 
   const org = await prisma.organization.findFirst({ select: { id: true } });

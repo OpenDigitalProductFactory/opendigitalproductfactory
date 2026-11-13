@@ -94,11 +94,14 @@ describe("founder-review pack — list_open_decision_reviews", () => {
     );
 
     const args = prismaMock.decisionInteractionFindMany.mock.calls[0][0] as {
-      where: { profileId?: unknown; outcomeType?: unknown; humanOutcome?: unknown; question?: unknown; NOT?: unknown };
+      where: { profileId?: unknown; AND?: unknown; humanOutcome?: unknown; question?: unknown; NOT?: unknown };
       take: number;
     };
     expect(args.where.profileId).toEqual({ startsWith: "wsid-" });
-    expect(args.where.outcomeType).toEqual({ in: ["defer", "escalate"] });
+    expect(args.where.AND).toEqual([{ OR: [
+      { escalationRoute: "human" },
+      { escalationRoute: null, outcomeType: { in: ["defer", "escalate"] } },
+    ] }]);
     expect(args.where.humanOutcome).toEqual({ equals: "DbNull" });
     expect(args.where.question).toEqual({ not: "" });
     // Advisory profession/WSID rows and agent-internal consults are excluded at

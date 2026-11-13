@@ -1,17 +1,25 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render as renderUi, screen, waitFor, within } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { DialogHost } from "@/components/ui/Dialog";
 
 vi.mock("@/lib/actions/oauth-clients", () => ({
   createOAuthCredentialsClient: vi.fn(),
   listOAuthClients: vi.fn(),
+  listOAuthCredentialsAssistants: vi.fn(),
   revokeOAuthClient: vi.fn(),
 }));
 
-import { createOAuthCredentialsClient, listOAuthClients, revokeOAuthClient } from "@/lib/actions/oauth-clients";
+import { createOAuthCredentialsClient, listOAuthClients, listOAuthCredentialsAssistants, revokeOAuthClient } from "@/lib/actions/oauth-clients";
 import { McpOAuthClientManager } from "./McpOAuthClientManager";
+
+function render(ui: ReactElement) {
+  return renderUi(<MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>{ui}</MessagesProvider>);
+}
 
 const listMock = listOAuthClients as unknown as ReturnType<typeof vi.fn>;
 const createMock = createOAuthCredentialsClient as unknown as ReturnType<typeof vi.fn>;
@@ -36,10 +44,35 @@ function client(overrides: Partial<Record<string, unknown>> = {}) {
 describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
   beforeEach(() => {
     listMock.mockResolvedValue({ ok: true, data: [client()] });
+    vi.mocked(listOAuthCredentialsAssistants).mockResolvedValue({ ok: true, data: [{ agentId: "AGT-EXT-CODEX", displayName: "Codex" }] });
     createMock.mockReset();
     revokeMock.mockReset();
   });
   afterEach(() => cleanup());
+
+  it("submits the explicitly selected assistant and displays the saved server identity", async () => {
+    createMock.mockResolvedValue({ ok: true, data: { clientId: "dpfoc_new", clientSecret: "fixture-secret", scopes: ["dpf.read"], assistant: { agentId: "AGT-EXT-CODEX", displayName: "Saved Codex" } } });
+    render(<McpOAuthClientManager />);
+    fireEvent.click(screen.getByRole("button", { name: "Add a client" }));
+    const form = screen.getByRole("form", { name: "Add a client" });
+    await screen.findByRole("option", { name: "Codex" });
+    fireEvent.change(within(form).getByLabelText(/Client name/), { target: { value: "Local verification" } });
+    fireEvent.change(within(form).getByLabelText("Acts as assistant"), { target: { value: "AGT-EXT-CODEX" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Create client" }));
+    await waitFor(() => expect(createMock).toHaveBeenCalledWith({ clientName: "Local verification", scopes: ["dpf.read"], agentId: "AGT-EXT-CODEX" }));
+    expect(await screen.findByText("Saved Codex")).toBeTruthy();
+  });
+
+  it("keeps failed assistant discovery inline and blocks anonymous creation", async () => {
+    vi.mocked(listOAuthCredentialsAssistants).mockResolvedValue({ ok: false, error: "Assistant access unavailable." });
+    render(<McpOAuthClientManager />);
+    fireEvent.click(screen.getByRole("button", { name: "Add a client" }));
+    expect(await screen.findByText("Assistant access unavailable.")).toBeTruthy();
+    const form = screen.getByRole("form", { name: "Add a client" });
+    fireEvent.change(within(form).getByLabelText(/Client name/), { target: { value: "Local verification" } });
+    expect((within(form).getByRole("button", { name: "Create client" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(createMock).not.toHaveBeenCalled();
+  });
 
   it("defers the list behind a disclosure that counts the keys, and lists them with kind, scopes, live tokens and status", async () => {
     render(<McpOAuthClientManager />);
@@ -61,9 +94,10 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
     const form = screen.getByRole("form", { name: "Add a client" });
     fireEvent.change(within(form).getByLabelText(/Client name/), { target: { value: "Laptop gate" } });
     fireEvent.click(within(form).getByLabelText(/Do governed work/));
+    await waitFor(() => expect((within(form).getByRole("button", { name: "Create client" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(within(form).getByRole("button", { name: "Create client" }));
 
-    await waitFor(() => expect(createMock).toHaveBeenCalledWith({ clientName: "Laptop gate", scopes: ["dpf.read", "dpf.work"] }));
+    await waitFor(() => expect(createMock).toHaveBeenCalledWith({ clientName: "Laptop gate", scopes: ["dpf.read", "dpf.work"], agentId: null }));
     const region = await screen.findByRole("region", { name: "New client key" });
     expect(within(region).getByText("dpfoc_new")).toBeTruthy();
     expect(within(region).getByText("sekret")).toBeTruthy();
@@ -79,6 +113,7 @@ describe("McpOAuthClientManager (BI-EDB67A2B)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add a client" }));
     const form = screen.getByRole("form", { name: "Add a client" });
     fireEvent.change(within(form).getByLabelText(/Client name/), { target: { value: "x" } });
+    await waitFor(() => expect((within(form).getByRole("button", { name: "Create client" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(within(form).getByRole("button", { name: "Create client" }));
     expect(await screen.findByText("You do not have permission to manage MCP clients.")).toBeTruthy();
     expect(screen.queryByRole("region", { name: "New client key" })).toBeNull();

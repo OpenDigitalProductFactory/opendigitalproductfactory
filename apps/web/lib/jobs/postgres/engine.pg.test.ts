@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Pool } from "pg";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { JOB_CRON_EVENT_NAME, JOB_FAILURE_EVENT_NAME, type JobFunctionOptions } from "../types";
 import { executeRun } from "./engine";
@@ -405,6 +405,80 @@ describe.skipIf(!DATABASE_URL)("Postgres durable-job engine (real database)", ()
     const fn = define({ id: "gated-cron", triggers: [{ cron: "* * * * *" }] }, async () => null);
     await worker([fn], { schedulesEnabled: false }).maintain();
     expect((await pool.query(`SELECT count(*)::int AS n FROM "JobCronState"`)).rows[0].n).toBe(0);
+  });
+
+  it("reclaims slots held by terminal or missing runs and keeps live ones (BI-04B6A2FF)", async () => {
+    const runs = [
+      ["run-cancelled", "evt-cancelled", "cancelled"],
+      ["run-failed", "evt-failed", "failed"],
+      ["run-completed", "evt-completed", "completed"],
+      ["run-queued", "evt-queued", "queued"],
+      ["run-running", "evt-running", "running"],
+      ["run-sleeping", "evt-sleeping", "sleeping"],
+      ["run-waiting", "evt-waiting", "waiting"],
+    ] as const;
+    await pool.query(
+      `INSERT INTO "JobEvent" (id, name, ts, "fannedOutAt")
+       SELECT id, 't/slot', now(), now() FROM unnest($1::text[]) AS id`,
+      [runs.map(([, eventId]) => eventId)],
+    );
+    for (const [id, eventId, status] of runs) {
+      const terminal = status === "completed" || status === "failed" || status === "cancelled";
+      await pool.query(
+        `INSERT INTO "JobRun" (id, "functionKey", "eventId", event, status, "maxAttempts", "updatedAt", "finishedAt")
+         VALUES ($1, 'queue/metrics-aggregator', $2, '{}'::jsonb, $3::"JobRunStatus", 1, now(), $4)`,
+        [id, eventId, status, terminal ? new Date() : null],
+      );
+    }
+    await pool.query(
+      `INSERT INTO "JobConcurrencySlot" ("laneKey", slot, "runId") VALUES
+         ('fn:queue/metrics-aggregator:', 0, 'run-cancelled'),
+         ('fn:queue/metrics-aggregator:', 1, 'run-failed'),
+         ('fn:queue/metrics-aggregator:', 2, 'run-completed'),
+         ('fn:live:', 0, 'run-queued'),
+         ('fn:live:', 1, 'run-running'),
+         ('fn:live:', 2, 'run-sleeping'),
+         ('fn:live:', 3, 'run-waiting')`,
+    );
+    await pool.query(
+      `INSERT INTO "JobWait" (id, "runId", "stepKey", "eventName", "expiresAt")
+       VALUES ('wait-cancelled', 'run-cancelled', 'held', 't/held', now() + interval '1 hour')`,
+    );
+    await pool.query(`ALTER TABLE "JobConcurrencySlot" DROP CONSTRAINT "JobConcurrencySlot_runId_fkey"`);
+    try {
+      await pool.query(
+        `INSERT INTO "JobConcurrencySlot" ("laneKey", slot, "runId") VALUES ('fn:missing:', 0, 'run-missing')`,
+      );
+      const eventsBefore = (await pool.query(`SELECT count(*)::int AS n FROM "JobEvent"`)).rows[0].n;
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const reclaimed = await store.reclaimTerminalSlots(pool);
+        expect(reclaimed.sort()).toEqual(["run-cancelled", "run-completed", "run-failed", "run-missing"]);
+        expect(log).toHaveBeenCalledTimes(1);
+        expect(log).toHaveBeenCalledWith("[jobs/postgres] reclaimed 4 concurrency slot(s) held by terminal or missing runs");
+        log.mockClear();
+        expect(await store.reclaimTerminalSlots(pool)).toEqual([]);
+        expect(log).not.toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
+      }
+      expect((await pool.query(`SELECT count(*)::int AS n FROM "JobEvent"`)).rows[0].n).toBe(eventsBefore);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM "JobWait"`)).rows[0].n).toBe(1);
+      const kept = await pool.query(`SELECT "runId" FROM "JobConcurrencySlot" ORDER BY "runId"`);
+      expect(kept.rows.map((row) => row.runId)).toEqual(["run-queued", "run-running", "run-sleeping", "run-waiting"]);
+    } finally {
+      await pool.query(`DELETE FROM "JobConcurrencySlot" WHERE "runId" = 'run-missing'`);
+      await pool.query(
+        `ALTER TABLE "JobConcurrencySlot" ADD CONSTRAINT "JobConcurrencySlot_runId_fkey"
+         FOREIGN KEY ("runId") REFERENCES "JobRun"("id") ON DELETE CASCADE ON UPDATE CASCADE`,
+      );
+    }
+    await pool.query(
+      `INSERT INTO "JobConcurrencySlot" ("laneKey", slot, "runId") VALUES ('fn:queue/metrics-aggregator:', 0, 'run-cancelled')`,
+    );
+    await worker([], { schedulesEnabled: false }).maintain();
+    const afterMaintain = await pool.query(`SELECT "runId" FROM "JobConcurrencySlot" ORDER BY "runId"`);
+    expect(afterMaintain.rows.map((row) => row.runId)).toEqual(["run-queued", "run-running", "run-sleeping", "run-waiting"]);
   });
 
   it("prunes finished runs and their events after the retention window, keeping live ones", async () => {

@@ -12,6 +12,11 @@ const emptyDeliveryHub: DeliveryTaskHubPage = {
 };
 
 describe("WorkControlPanel", () => {
+  it("opens delivery outcomes within the existing route family",()=>{
+    const html=renderToStaticMarkup(<WorkControlPanel deliveryHub={emptyDeliveryHub} adoptable={[]} createAction={vi.fn()}/>);
+    expect(html).toContain('href="/build/work?view=outcomes"');
+    expect(html).toContain("Delivery outcomes");
+  });
   it("renders active capsule rows", () => {
     const html = renderToStaticMarkup(
       <WorkControlPanel
@@ -19,6 +24,7 @@ describe("WorkControlPanel", () => {
           capsuleId: "WC-1",
           title: "Adopt work",
           objective: "Deliver the governed outcome",
+          health: "working",
           group: "working",
           status: "working",
           statusIntent: "info",

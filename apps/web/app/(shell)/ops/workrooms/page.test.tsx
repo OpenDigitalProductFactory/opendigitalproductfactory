@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -40,6 +41,19 @@ vi.mock("@/lib/work-capsules/liveness-inventory", () => ({
   })),
 }));
 
+vi.mock("@/lib/operate/coo-surface.server", () => ({
+  loadCooSupervision: vi.fn(async (_db: unknown, input: { rooms: Array<{ capsuleId: string; title: string }> }) => ({
+    rooms: input.rooms.map((room) => ({
+      roomId: room.capsuleId, title: room.title, ownerPrincipalId: null, ownerDisplayName: null,
+      ownerIsSuggestion: false, stallRecipientPrincipalId: null, lastCycleKey: null, lastAction: null,
+      lastReason: null, ticksSinceAdvance: null, nextWakeAt: null, spanOfControl: 0, overSpan: false,
+      unowned: true, paused: false, escalationLabel: null, missingAckCount: 0,
+      actionHref: `/workspace/cases/work-capsule%3A${room.capsuleId}`,
+    })),
+    unowned: input.rooms, paused: [], overSpanOwners: [], missingAcks: [],
+  })),
+}));
+
 vi.mock("@/lib/work-management/held-workrooms", () => ({
   loadHeldWorkrooms: vi.fn(async () => [{
     capsuleId: "WC-HELD", title: "Onboard new foster", action: "pause", reason: "conformance_pause",
@@ -47,6 +61,16 @@ vi.mock("@/lib/work-management/held-workrooms", () => ({
     since: new Date(Date.now() - 3 * 3_600_000).toISOString(), stuckTicks: 12, notifiedAt: new Date().toISOString(),
   }]),
 }));
+
+vi.mock("@/lib/work-management/standing-run-history.server", async () => {
+  const { classifyStandingRhythm } = await import("@/lib/work-management/standing-run-history");
+  return {
+    loadStandingRhythms: vi.fn(async () => [{
+      capsuleId: "WC-PAYABLES", title: "Payables watch",
+      rhythm: classifyStandingRhythm({ rows: [], currentRunKey: "payables-watch@1.1.0:2026-10-07", now: new Date() }),
+    }]),
+  };
+});
 
 import WorkroomsPage from "./page";
 
@@ -68,10 +92,18 @@ describe("Work activity page", () => {
 
   it("opens each room in one click from its activity line", async () => {
     const html = renderToStaticMarkup(await WorkroomsPage());
-    expect(html).toContain("/workspace/cases/work-capsule%3AWC-BLOCK");
-    expect(html).toContain("/workspace/cases/work-capsule%3AWC-RUN");
-    expect(html).not.toContain("Session payables-session");
-    expect(html).toContain("Session release-session");
+    const document = new DOMParser().parseFromString(html, "text/html");
+    const details = Array.from(document.querySelectorAll("details"));
+    const activity = details.find((detail) => detail.querySelector("summary")?.textContent === "Activity by portfolio");
+    expect(activity).toBeDefined();
+    expect(activity!.innerHTML).toContain("/workspace/cases/work-capsule%3AWC-BLOCK");
+    expect(activity!.innerHTML).toContain("/workspace/cases/work-capsule%3AWC-RUN");
+    expect(activity!.textContent).not.toContain("Session payables-session");
+    expect(activity!.textContent).not.toContain("Session release-session");
+    expect(activity!.textContent).toContain("blocked: waiting on reviewer");
+    const provenance = details.find((detail) => detail.textContent?.includes("Session release-session"));
+    expect(provenance?.querySelector("summary")?.textContent).toBe("Technical evidence");
+    expect(provenance?.open).toBe(false);
   });
 
   it("does not claim work is executing without evidence", async () => {
@@ -86,5 +118,20 @@ describe("Work activity page", () => {
     expect(html).toContain("Onboard new foster");
     expect(html).toContain("missing explicit coordinator");
     expect(html).toContain("3 h");
+  });
+
+  it("gives standing operations their own band with each room's last 14 days (BI-D8A6F0F2)", async () => {
+    const html = renderToStaticMarkup(await WorkroomsPage());
+    expect(html).toContain("Day-to-day operations");
+    expect(html).toContain("Last 14 days for Payables watch");
+    expect(html).toContain("Running since Oct 7");
+  });
+
+  it("adds nothing to the page when the install has no standing rooms (BI-D8A6F0F2)", async () => {
+    const { loadStandingRhythms } = await import("@/lib/work-management/standing-run-history.server");
+    vi.mocked(loadStandingRhythms).mockResolvedValueOnce([]);
+    const html = renderToStaticMarkup(await WorkroomsPage());
+    expect(html).not.toContain("Day-to-day operations");
+    expect(html).not.toContain("standing-rhythm-heading");
   });
 });

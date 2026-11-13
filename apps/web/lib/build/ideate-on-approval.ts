@@ -91,6 +91,8 @@ async function dispatchIdeateForApprovedBuildInner(params: {
   requestedReusabilityScope?: string;
   /** Bypass the designDoc idempotency guard (a fix-loop regeneration). */
   forceRegenerate?: boolean;
+  /** BI-3E57890E: the fix loop revising a plan-phase design saves the revision. */
+  allowPlanPhaseDesignRevision?: boolean;
 }): Promise<DispatchOutcome> {
   const {
     buildId,
@@ -99,6 +101,7 @@ async function dispatchIdeateForApprovedBuildInner(params: {
     requestedUserContext,
     requestedReusabilityScope,
     forceRegenerate = false,
+    allowPlanPhaseDesignRevision = false,
   } = params;
 
   const logActivity = async (summary: string): Promise<void> => {
@@ -334,7 +337,10 @@ async function dispatchIdeateForApprovedBuildInner(params: {
         return { kind: "deferred-capacity", reason: "waiting for the platform upgrade to finish", durationMs: 0 };
       }
     }
-    try {
+    // BI-3E57890E: a plan-phase design revision runs inside the open plan
+    // phase. Reopening the finished ideate row would leave it open for good
+    // (only ideate → plan closes it), and quiescence reads it as in flight.
+    if (!allowPlanPhaseDesignRevision) try {
       const { startBuildPhaseRun } = await import("./build-phase-run");
       // Await the start. A later release must not race an unawaited insert
       // that would reopen the row after the attempt has already stopped.
@@ -482,7 +488,10 @@ async function dispatchIdeateForApprovedBuildInner(params: {
       "saveBuildEvidence",
       { buildId, field: "designDoc", value: ideateResult.designDoc },
       userId,
-      authoringAgentId ? { agentId: authoringAgentId } : {},
+      {
+        ...(authoringAgentId ? { agentId: authoringAgentId } : {}),
+        ...(allowPlanPhaseDesignRevision ? { allowPlanPhaseDesignRevision: true } : {}),
+      },
     );
 
     if (!saveResult.success) {
@@ -762,15 +771,24 @@ export function fixDiagnosisProblem(brief: unknown, designDoc: unknown): string 
 export async function dispatchDesignReviewFixLoop(params: {
   buildId: string;
   userId: string;
+  /**
+   * BI-3E57890E: a failing INDEPENDENT design review (design-spec,
+   * spec-approval, architecture-review) to revise from, in place of the build's
+   * own designReview. Its findings seed round 1; the revision is saved even
+   * though the build is in plan, and the feature regeneration path is used
+   * whatever the build kind, because the reviewer judged the design itself.
+   */
+  failedReview?: DesignReviewVerdict;
 }): Promise<{ kind: string; rounds: number }> {
-  const { buildId, userId } = params;
+  const { buildId, userId, failedReview } = params;
+  const independent = failedReview?.decision === "fail";
   const log = (s: string) =>
     prisma.buildActivity
       .create({ data: { buildId, tool: "design_fix_loop", summary: s.slice(0, 240) } })
       .then(() => {})
       .catch(() => {});
 
-  const escalate = async (build: { id: string; title: string; originatingBacklogItemId: string | null }, review: DesignReviewVerdict, rounds: number) => {
+  const escalate = async (build: { id: string; title: string; originatingBacklogItemId: string | null }, review: DesignReviewVerdict, rounds: number, expectedUpdatedAt?: string) => {
     const { escalateBuildToHuman, SELF_FIX_CLASS } = await import("@/lib/build/escalate-build-to-human");
     let biTitle: string | null = null;
     if (build.originatingBacklogItemId) {
@@ -778,7 +796,7 @@ export async function dispatchDesignReviewFixLoop(params: {
         .findUnique({ where: { id: build.originatingBacklogItemId }, select: { title: true } })
         .catch(() => null))?.title ?? null;
     }
-    await escalateBuildToHuman({
+    return escalateBuildToHuman({
       buildPk: build.id,
       buildId,
       featureTitle: build.title,
@@ -788,6 +806,7 @@ export async function dispatchDesignReviewFixLoop(params: {
       rounds,
       issues: (review?.issues ?? []).map((i) => ({ severity: i.severity, description: i.description })),
       selfFixClass: SELF_FIX_CLASS.NEEDS_HUMAN,
+      expectedUpdatedAt,
       log,
     });
   };
@@ -795,11 +814,11 @@ export async function dispatchDesignReviewFixLoop(params: {
   try {
     const build = await prisma.featureBuild.findUnique({
       where: { buildId },
-      select: { id: true, title: true, kind: true, originatingBacklogItemId: true, designReview: true, brief: true, designDoc: true },
+      select: { id: true, title: true, kind: true, phase: true, abandonedAt: true, updatedAt: true, originatingBacklogItemId: true, designReview: true, brief: true, designDoc: true },
     });
     if (!build) return { kind: "build-not-found", rounds: 0 };
 
-    let review = build.designReview as DesignReviewVerdict;
+    let review = independent ? failedReview : (build.designReview as DesignReviewVerdict);
     if (review?.decision !== "fail") return { kind: "no-failed-review", rounds: 0 };
 
     // Fix builds: regenerating the designDoc cannot fill the missing fixContext
@@ -817,7 +836,7 @@ export async function dispatchDesignReviewFixLoop(params: {
     // The safety rule lives in fix-context-diagnosis.ts: a diagnosis is either
     // grounded or refused. A refusal escalates exactly as before — a guess
     // recorded as fact would become the evidence the plan phase builds on.
-    if (build.kind === "fix") {
+    if (build.kind === "fix" && !independent) {
       const { executeTool: runTool } = await import("@/lib/mcp-tools");
       const { buildFixDiagnosisPrompt, parseFixDiagnosis, isDiagnosisRefusal } = await import(
         "@/lib/build/fix-context-diagnosis"
@@ -826,14 +845,40 @@ export async function dispatchDesignReviewFixLoop(params: {
         (build as { brief?: unknown }).brief,
         (build as { designDoc?: unknown }).designDoc,
       );
+      const { resolveReviewFixOutcome } = await import("./review-fix-outcome");
+      const readCurrent = () => prisma.featureBuild.findUnique({
+        where: { buildId },
+        select: { phase: true, abandonedAt: true, updatedAt: true, brief: true, designDoc: true, designReview: true },
+      });
+      type DiagnosisState = NonNullable<Awaited<ReturnType<typeof readCurrent>>>;
+      const fingerprint = (state: DiagnosisState) => JSON.stringify([
+        state.brief, state.designDoc, state.designReview,
+      ]);
+      let expectedFingerprint = fingerprint(build);
+      const isCurrent = (state: DiagnosisState | null) => Boolean(state
+        && state.phase === "ideate" && !state.abandonedAt
+        && fingerprint(state) === expectedFingerprint);
+      const stale = async (rounds: number) => {
+        await log("Fix diagnosis stopped: the build or its reviewed source changed; newer work is preserved.");
+        return { kind: "skipped-stale-build", rounds };
+      };
+      const hold = async (rounds: number, reason: string, reviewIncomplete = false) => {
+        const kind = resolveReviewFixOutcome({ reviewFailed: true, regenerated: false, reviewIncomplete });
+        await log(`Fix diagnosis retained for recovery without owner deferral: ${reason}`);
+        return { kind, rounds };
+      };
+      if (!isCurrent(build)) return stale(0);
+      if ((review as { reviewIncomplete?: boolean } | null)?.reviewIncomplete === true) {
+        return hold(0, "the reviewer panel did not complete; no defect verdict exists", true);
+      }
 
       let diagnosisRounds = 0;
       let lastRefusal = "no diagnosis attempted";
 
       while (review?.decision === "fail" && diagnosisRounds < DESIGN_FIX_MAX_ROUNDS && problem) {
-        diagnosisRounds += 1;
+        if (!isCurrent(await readCurrent())) return stale(diagnosisRounds);
         await log(
-          `Fix diagnosis incomplete — investigating (round ${diagnosisRounds}/${DESIGN_FIX_MAX_ROUNDS}) rather than escalating.`,
+          `Fix diagnosis incomplete — investigating (round ${diagnosisRounds + 1}/${DESIGN_FIX_MAX_ROUNDS}) rather than escalating.`,
         );
         const prompt = buildFixDiagnosisPrompt({
           title: build.title,
@@ -854,10 +899,13 @@ export async function dispatchDesignReviewFixLoop(params: {
           raw = answer?.content ?? null;
         } catch (err) {
           const { getErrorMessage } = await import("@/lib/shared/get-error-message");
-          await log(`Fix diagnosis round ${diagnosisRounds} could not dispatch (${getErrorMessage(err)}) — retrying if rounds remain.`);
-          continue;
+          // No diagnosis returned. In particular, an uncertain native CLI may
+          // still have effects: do not spend another round or dispatch it again.
+          return hold(diagnosisRounds, `dispatch did not complete (${getErrorMessage(err)})`);
         }
 
+        if (!isCurrent(await readCurrent())) return stale(diagnosisRounds);
+        diagnosisRounds += 1;
         const parsed = parseFixDiagnosis(raw);
         if (isDiagnosisRefusal(parsed)) {
           lastRefusal = parsed.reason;
@@ -865,30 +913,58 @@ export async function dispatchDesignReviewFixLoop(params: {
           continue;
         }
 
-        await runTool("update_feature_brief", { buildId, fixContext: parsed }, userId, {
+        const beforeWrite = await readCurrent();
+        if (!isCurrent(beforeWrite)) return stale(diagnosisRounds);
+        const written = await runTool("update_feature_brief", {
+          buildId, fixContext: parsed, expectedUpdatedAt: beforeWrite!.updatedAt.toISOString(),
+        }, userId, {
           featureBuildId: buildId,
         });
+        if (!written.success) return hold(diagnosisRounds, "the diagnosis writer did not accept the update");
+        const afterWrite = await readCurrent();
+        const writtenDiagnosis = parseFixDiagnosis(
+          (afterWrite?.brief as { fixContext?: unknown } | null)?.fixContext,
+        );
+        if (!afterWrite || afterWrite.phase !== "ideate" || afterWrite.abandonedAt
+          || fixDiagnosisProblem(afterWrite.brief, afterWrite.designDoc) !== problem
+          || JSON.stringify(afterWrite.designDoc) !== JSON.stringify(build.designDoc)
+          || JSON.stringify(afterWrite.designReview) !== JSON.stringify(review)
+          || JSON.stringify(writtenDiagnosis) !== JSON.stringify(parsed)) return stale(diagnosisRounds);
+        expectedFingerprint = fingerprint(afterWrite);
         await log(
           `Fix diagnosis recorded by the design author (round ${diagnosisRounds}): reproduction, root cause and approach.`,
         );
-        await runTool("reviewDesignDoc", { buildId }, userId, {
+        const reviewed = await runTool("reviewDesignDoc", { buildId }, userId, {
           featureBuildId: buildId,
           suppressDesignReviewAutoRepair: true,
         });
-        const rechecked = await prisma.featureBuild.findUnique({
-          where: { buildId },
-          select: { designReview: true },
-        });
+        if (!reviewed.success) return hold(diagnosisRounds, "the updated diagnosis could not be reviewed", true);
+        const rechecked = await readCurrent();
+        if (!rechecked || rechecked.abandonedAt
+          || JSON.stringify(rechecked.brief) !== JSON.stringify(afterWrite.brief)
+          || JSON.stringify(rechecked.designDoc) !== JSON.stringify(afterWrite.designDoc)) return stale(diagnosisRounds);
         review = rechecked?.designReview as DesignReviewVerdict;
+        if ((review as { reviewIncomplete?: boolean } | null)?.reviewIncomplete === true) {
+          return hold(diagnosisRounds, "the reviewer panel did not complete", true);
+        }
+        expectedFingerprint = fingerprint(rechecked);
       }
 
       if (review?.decision !== "fail") {
         return { kind: "self-repaired", rounds: diagnosisRounds };
       }
+      if (!isCurrent(await readCurrent())) return stale(diagnosisRounds);
       await log(
         `Fix diagnosis still incomplete after ${diagnosisRounds} round(s) (${problem ? lastRefusal : "brief carries no problem statement to investigate"}) — escalating to a human.`,
       );
-      await escalate(build, review, diagnosisRounds);
+      const beforeEscalation = await readCurrent();
+      if (!isCurrent(beforeEscalation)) return stale(diagnosisRounds);
+      const escalated = await escalate(build, review, diagnosisRounds, beforeEscalation!.updatedAt.toISOString());
+      if (escalated.transitionUncertain) {
+        await log("Fix diagnosis escalation outcome is unconfirmed; inspect the saved transition before retrying. Recovery has not been verified.");
+        return { kind: "escalation-outcome-uncertain", rounds: diagnosisRounds };
+      }
+      if (!escalated.wipFreed) return hold(diagnosisRounds, "the escalation could not claim the reviewed version");
       return { kind: "escalated-fix-diagnosis", rounds: diagnosisRounds };
     }
 
@@ -918,7 +994,10 @@ export async function dispatchDesignReviewFixLoop(params: {
       round += 1;
       await log(`Design review failed — regenerating (round ${round}/${DESIGN_FIX_MAX_ROUNDS}) against ${review.issues?.length ?? 0} issue(s)`);
       const feedback = formatPlanReviewFeedback(review.issues ?? []);
-      const regen = await dispatchIdeateForApprovedBuild({ buildId, userId, priorReviewFeedback: feedback });
+      const regen = await dispatchIdeateForApprovedBuild({
+        buildId, userId, priorReviewFeedback: feedback,
+        ...(independent ? { allowPlanPhaseDesignRevision: true } : {}),
+      });
       if (regen.kind === "deferred-capacity") {
         // BI-5098ECEC: a busy host says nothing about the design. Give the round
         // back and stop; the reconciler resumes the loop when the host frees.

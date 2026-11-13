@@ -130,6 +130,56 @@ export function boundLargeStrings<T>(value: T, ceilingBytes = EVIDENCE_INLINE_CE
 
 export type EvidenceBlobWriter = (text: string) => Promise<OffloadedTextReference>;
 
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : undefined;
+}
+
+/**
+ * BI-37D6E04E: PostgreSQL JSONB cannot store NUL, even in a short tail or
+ * oversized log excerpt. Project only the known local-CI captured-log field;
+ * arbitrary bound/signed evidence is not rewritten. Call after fingerprinting
+ * the original request, and retain the original bytes in the existing store.
+ */
+export async function projectLocalCiObservationTails<T>(
+  evidence: T,
+  options: { writeBlob?: EvidenceBlobWriter } = {},
+): Promise<T> {
+  const root = objectRecord(evidence);
+  const content = objectRecord(root?.content);
+  const execution = objectRecord(content?.execution);
+  const vitest = objectRecord(execution?.vitest);
+  const observations = vitest?.observations;
+  if (!Array.isArray(observations)) return evidence;
+  const affected = observations.map(objectRecord).filter((entry) =>
+    typeof entry?.outputTail === "string" && entry.outputTail.includes("\u0000"));
+  if (!affected.length) return evidence;
+  // Validate the whole batch before blob I/O; never overwrite supplied
+  // provenance, even if it looks like a reference a previous writer produced.
+  if (affected.some(entry => Object.hasOwn(entry!, "outputTailProjection"))) {
+    throw new Error("Local-CI outputTailProjection collides with supplied evidence");
+  }
+  const writer = options.writeBlob ?? writeEvidenceTextBlob;
+  const projected: unknown[] = [];
+  for (const value of observations) {
+    const entry = objectRecord(value);
+    const raw = entry?.outputTail;
+    if (typeof raw !== "string" || !raw.includes("\u0000")) {
+      projected.push(value);
+      continue;
+    }
+    const original = await writer(raw);
+    const visible = raw.replaceAll("\u0000", "\\0");
+    projected.push({ ...entry,
+      outputTail: excerptText(visible, original.sha256, utf8ByteLength(visible)),
+      outputTailProjection: { encoding: "nul-visible-v1", nulCount: raw.split("\u0000").length - 1, original },
+    });
+  }
+  return { ...root, content: { ...content, execution: { ...execution,
+    vitest: { ...vitest, observations: projected },
+  } } } as T;
+}
+
 /**
  * Default writer: content-addressed file via lib/documents/blob-storage plus a
  * DocumentBlob row (upsert on sha256) so the bytes are visible to the storage-GC

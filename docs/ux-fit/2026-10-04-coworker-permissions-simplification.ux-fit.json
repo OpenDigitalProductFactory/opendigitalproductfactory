@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "decidedOption": "conflicts-only-bulk",
+  "decisionInteractionId": "DI-B4431F33811A",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/coworker-record/CapabilitiesEditor.tsx",
+      "apps/web/components/platform/coworker-record/AuthorityReconciliation.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["conflicts-only-bulk", "always-per-key"]
+  }
+}

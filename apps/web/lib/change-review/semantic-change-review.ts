@@ -8,6 +8,7 @@
  */
 
 import { z } from "zod";
+import { readRoutingEligibility, type RoutingEligibility } from "../inference/routing-exclusion-buckets.ts";
 import type { DeliberationArtifactType } from "../deliberation/external-review-activation";
 
 export const LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v2";
@@ -49,6 +50,8 @@ export interface SemanticReviewResult {
   parseDiagnostics?: SemanticReviewParseDiagnostic[];
   /** Infrastructure/protocol failure, deliberately separate from semantic findings. */
   inconclusiveReason?: string;
+  /** Trusted routing diagnostics, never parsed from a provider response. */
+  routingEligibility?: RoutingEligibility[];
   failureAnalysisReview?: { adequate: boolean; rationale: string };
 }
 
@@ -386,6 +389,14 @@ function responseStructure(raw: string): z.infer<typeof responseStructureSchema>
  * common review fields, then restore only bounded, content-free diagnostics. */
 export function restoreSemanticReviewCheckpoint(value: unknown, agentId: string): SemanticReviewResult {
   const result = parseSemanticReviewResponse(JSON.stringify(value) ?? "");
+  const eligibility = z.object({ decision: z.literal("inconclusive"),
+    inconclusiveReason: z.literal("review-endpoint-ineligible"), routingEligibility: z.array(z.unknown()).min(1).max(5),
+  }).safeParse(value);
+  if (eligibility.success) {
+    const diagnostics = eligibility.data.routingEligibility.map(readRoutingEligibility);
+    if (diagnostics.every((item): item is RoutingEligibility => item !== null)) return { ...result,
+      decision: "inconclusive", inconclusiveReason: "review-endpoint-ineligible", routingEligibility: diagnostics };
+  }
   const stored = z.object({
     decision: z.literal("inconclusive"),
     parseError: z.literal(true),

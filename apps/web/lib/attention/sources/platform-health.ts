@@ -13,6 +13,8 @@ import type { prisma } from "@dpf/db";
 import { humanizeHealthAlert } from "@/lib/observability/alert-humanize";
 import type { AttentionItem } from "../types";
 import { DOCKER_VM_WEDGED_ISSUE_KEY } from "@/lib/platform-runtime/substrate-reconciler";
+import { loadAiCapacityItems } from "./ai-capacity";
+import { loadPlatformContinuityItems } from "./platform-continuity";
 
 type Db = typeof prisma;
 
@@ -82,5 +84,11 @@ export async function loadPlatformHealthItems(db: Db): Promise<AttentionItem[]> 
     },
     orderBy: { firstDetectedAt: "asc" },
   });
-  return rows.map(healthAlertToAttentionItem);
+  // BI-24092DC9: lost AI capacity is platform health too — same lane, its own rows.
+  // BI-3E2F87FA / BI-85DE8EBD: downtime and a lost paired installation, same lane.
+  return [
+    ...rows.map(healthAlertToAttentionItem),
+    ...(await loadAiCapacityItems(db)),
+    ...(await loadPlatformContinuityItems(db)),
+  ];
 }

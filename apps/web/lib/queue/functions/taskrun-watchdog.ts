@@ -30,6 +30,7 @@ import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
 import { reconcileTerminalBuildPhaseRuns } from "@/lib/self-upgrade/quiescence";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { newestSignal, isStale } from "@/lib/shared/staleness";
+import { hostSuspendedMsSince } from "@/lib/shared/host-suspension";
 import { reap } from "@/lib/operate/reap";
 import { Prisma } from "@dpf/db";
 
@@ -60,6 +61,8 @@ import { Prisma } from "@dpf/db";
  */
 export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<number> {
   const { prisma } = await import("@dpf/db");
+  const { recoverOrphanedUpgradeDrains } = await import("@/lib/self-upgrade/orphaned-drains");
+  const orphanedRecovered = await recoverOrphanedUpgradeDrains(now);
   const STUCK_COORDINATOR_TIMEOUT_MS = 2 * 60 * 1000;
   const stuckCutoff = new Date(now.getTime() - STUCK_COORDINATOR_TIMEOUT_MS);
   const stuckCoordinators = await prisma.quiescenceRun.findMany({
@@ -94,12 +97,12 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
     select: { runId: true, status: true, lastHeartbeatAt: true, startedAt: true },
     take: 10,
   });
-  if (stuckCoordinators.length === 0) return 0;
+  if (stuckCoordinators.length === 0) return orphanedRecovered;
 
   const { transitionState, setQuiescenceLevel } = await import(
     "@/lib/self-upgrade/quiescence"
   );
-  let recovered = 0;
+  let recovered = orphanedRecovered;
   for (const sc of stuckCoordinators) {
     try {
       await transitionState(sc.runId, "failed", {
@@ -107,8 +110,8 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
         completionSource: "watchdog",
         outcomeNotes: `Watchdog reaped stuck coordinator (status=${sc.status}, lastHeartbeat=${sc.lastHeartbeatAt?.toISOString() ?? "never"})`,
         completedAt: now,
-      });
-      await setQuiescenceLevel("normal", null);
+      }, now, { status: sc.status, lastHeartbeatAt: sc.lastHeartbeatAt });
+      await setQuiescenceLevel("normal", null, now, sc.runId);
       await jobs.send({
         name: "platform.quiescence-cleared",
         data: {
@@ -281,6 +284,17 @@ export const taskrunWatchdog = jobs.createFunction(
       console.warn("[taskrun-watchdog] inert-build reaper failed:", err);
     }
 
+    // Sandbox containment spec AC-8: free SandboxSlot leases the reaper above
+    // leaves held (it tears down the worktree, not the lease) and leases idle
+    // past DPF_SANDBOX_LEASE_IDLE_MS. Observe-only unless
+    // DPF_SANDBOX_LEASE_RECLAIM_ENABLED=1. Best-effort, like the reaper.
+    try {
+      const { reclaimSandboxLeases } = await import("@/lib/build/sandbox/sandbox-lease-reclaim");
+      await reclaimSandboxLeases();
+    } catch (err) {
+      console.warn("[taskrun-watchdog] sandbox lease reclaim failed:", err);
+    }
+
     // WS9 (BI-CBAAEA94): governed Workroom reaper — transition capsules whose
     // TRUE liveness is dead (lease expired, linked build terminal, or idle past
     // the floor) out of "working" so abandoned work stops reading as active and
@@ -410,6 +424,7 @@ export const taskrunWatchdog = jobs.createFunction(
           totalPhaseTimeoutSeconds: t.totalPhaseTimeoutSeconds,
         },
         now,
+        hostSuspendedMsSince,
       );
       if (decision) decisions.push(decision);
     }

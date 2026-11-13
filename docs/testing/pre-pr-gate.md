@@ -1,5 +1,11 @@
 # Pre-PR test gate
 
+`pnpm run pregate` applies existing saved host trust even when its desktop parent
+predates the environment setting. A verified TLS probe runs before host guards;
+an unavailable transport exits 88 without a test verdict. See
+[saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
+for explicit overrides and certificate diagnostics.
+
 Every pull request against `main` runs the full DPF unit-test suite as a binding
 merge gate. **Tests run before merge — if they fail, fix in place, don't
 push-and-pray.**
@@ -52,7 +58,12 @@ Uncertain admission returns unrun88 with the same source-bound resume pin.
 Authoritative refusal, foreign identity and active authority owned by another
 process stop recovery. A wrapped executable that cannot spawn is also unrun88;
 an executed child's nonzero exit remains a code result. Windows package-manager
-shims use the existing command resolver.
+shims use the existing command resolver, which launches the installed
+pnpm/Corepack JavaScript entrypoint through Node with literal argv. Native
+pnpm executables run directly; an unsupported shim fails without a shell
+fallback. The observed process runner disables shell parsing on Windows too.
+Local-CI pinning generates a JavaScript forwarding entrypoint so selecting the
+repository version preserves argument boundaries throughout the launch chain.
 Cleanup refusal or uncertainty is reported separately with the original
 lease/session recovery action; it cannot be presented as a verified release
 or change an executed child's nonzero result to success.
@@ -279,6 +290,8 @@ Wired up in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) as the
 CI fails the PR check if any test fails. Branch protection requires the check to
 pass before merge.
 
+Agent toolchain bootstrap checks also feed the required `Merge Readiness` aggregate through the reusable `agent-toolchain-bootstrap-smoke.yml` workflow. Applicable PRs run both POSIX adapter smoke and stock macOS Python checks; merge-group runs exercise them exhaustively. A failed or cancelled bootstrap job blocks the aggregate. The existing change classifier can intentionally skip this job for docs-only PRs. Manual dispatch remains available for diagnostics.
+
 ## Run locally before pushing
 
 In a `compile-ready` worktree, run the source-local slice that covers what you
@@ -395,6 +408,14 @@ state used by `pregate:status`. Its evidence carries no lease id because it
 never enters the scarce sandbox. A failed documentation check is a failed gate;
 it does not retry by consuming the heavyweight lane.
 
+`pregate.mjs` hands every diff to this gate, docs-only included (BI-78176241).
+It used to exit 0 on a docs-only diff before the gate started, so the lane
+never ran, no record was written, and the publish guard refused every
+docs-only push. "Docs-only" has one definition, `classifyDocsOnlyDiff` in
+`scripts/lib/ci-evidence-plan.mjs`. The planner, this lane, the pre-push
+exemption and sandbox admission all call it. If the lane declines a docs-only
+diff, the gate runs the full sandbox path. It does not exit 0 without a record.
+
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 routes to `scripts/gate-worktree.mjs` by default on every host. The Node-native
 gate owns the lease-claim / heartbeat / fenced-run / descendant-quiescence /
@@ -415,7 +436,9 @@ preserves the default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell
 debugging and still requires a working shell.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
-already leased). A canonical waiter refreshes its idempotent claim well inside
+already leased). While it waits, it prints its policy position, an estimated wait and
+the reason for that position from the test-machine overseer (BI-218A4555; see
+`docs/architecture/build-gate-runbook.md`). A canonical waiter refreshes its idempotent claim well inside
 its liveness window, while an admitted owner receives a two-minute authority
 window and heartbeats at no more than one third of that effective TTL. This
 bounds recovery when the supervisor disappears without shortening the maximum
@@ -601,6 +624,54 @@ push` is a correct composition. Add `--json` for machine use. It never claims a
 lease and never runs a gate, so it is safe to call at any time, including while
 someone else's gate is mid-run.
 
+The separate `hostPreflight` observation identifies the retained host-guard
+attempt, its accountable process owner, last progress, missing proof and next
+action. It never changes the integration verdict or authorizes another run.
+For an abandoned controller with matching strong receipt/lock ownership, use
+`pnpm run pregate:status -- --reconcile-host-receipt` (add `--json` for structured
+output). This records an inconclusive disposition and preserves the original
+heartbeat and observations. It does not invent a child result or remove the
+original execution lock. Resolve child outcome and descendant ownership through
+the accountable executor before seeking new admission. Live, reused-PID,
+unreadable or changed ownership stays unknown and untouched; a foreign mutation
+lock is also retained. Normal status reads never reconcile automatically.
+
+A receipt written before receipts carried an `owner` field cannot match its lock
+by token (BI-93EECD80). When its lock names the receipt's own host pid and that
+process is provably gone (not found, or the pid now belongs to another process),
+status reports `abandoned-legacy`. Reconciling it moves the receipt and its lock,
+unchanged, into a timestamped folder under `dpf-host-guard-receipts-quarantine`
+beside the receipts, with a `quarantine.json` that records the lock owner and the
+process probe. The next preflight does the same before it runs, so a dead
+pre-owner receipt no longer fences the worktree. A legacy receipt whose owner is
+alive, unmeasurable or does not match stays unknown and untouched.
+
+An owned receipt settled inconclusive (its controller was killed from outside,
+for example by closing the terminal) is released the same way once nothing it
+started can still be running. Status reports `abandoned-settled`, and
+reconciliation or the next preflight quarantines it, only when all of these
+hold: the lock still names the receipt's own owner, that controller is still
+provably absent, a process scan that succeeded finds no surviving descendant of
+it, and 90 minutes (the 60-minute parent budget plus the 30-minute command
+budget) have passed since its last heartbeat. `quarantine.json` records the
+empty descendant scan. A failed scan, a surviving descendant, a live or changed
+owner, or a heartbeat inside that window keeps the receipt retained.
+
+When a retained receipt does block a run, preflight still exits 88, but it names
+the receipt (`HOST_RECEIPT_RETAINED` and its path) and `pregate` says it is not
+host pressure.
+
+**A gate that is still working says so (BI-F039AA83).** pregate writes
+`dpf-pregate-live.json` into the worktree's own git dir when it starts, moves its
+stage as it goes, and removes it on exit. While that marker's process is
+provably alive — the same pid + start-time proof the queue observers use — or
+the gate's queue observer is alive for HEAD, the status is `PREFLIGHT`,
+`QUEUED`, `ADMITTED` or `RUNNING` with the pid, stage and queue position, and
+the exit code is **75**: wait and read again. It is never `FAIL` or
+`NO-RECORD` for such a gate, and a second pregate in the same worktree is
+refused (exit 75) with a pointer at the live one. `FAIL` means a recorded
+failing verdict, nothing else.
+
 **Queued and broken read differently (BI-277ECBDB).** A queued claim reads
 `queued behind N other claims`: it is waiting on other work, and its waiter runs
 it. Before claiming, the gate probes every slot's PostgreSQL container
@@ -628,7 +699,12 @@ anchor *for that run* — it is what the closing summary block ends with. It is
 just not the thing to build automation on.
 
 **How to invoke it.** Run `pregate` in the **foreground**, unpiped, as the sole
-command. On timeout the harness migrates a foreground run to the background and
+command. A captured run whose stdout is not a terminal stops immediately with
+exit 11 and does not take a pool slot, unless `DPF_PREGATE_ALLOW_CAPTURE=1`,
+`CI=true`, or `GITHUB_ACTIONS=true` is set, or the arguments are `--help` or
+`--dry-run` (BI-4BCD269B). `pnpm gate:wait` sets that allowance and, on Windows,
+launches `pnpm.cmd` so the spawn is not recorded as a failed gate (BI-2FFDBE62).
+On timeout the harness migrates a foreground run to the background and
 it **continues** — that is the working path, and it is the opposite of the
 intuitive choice. Do not background it (`&` or `run_in_background`: the harness
 caps and kills it mid-install), do not chain another command after it with `;`
@@ -680,6 +756,15 @@ base SHA, and passes that SHA to the child plan without fetching again. A
 failed fetch records `fetch-failed` and exits before integration synthesis or
 expensive gates. This admission boundary avoids repeated rebase/rerun churn
 while queued; later movement on `main` is reconciled by the merge queue.
+
+The shared-safe helper serializes cooperating refreshes and unshallow operations
+with an ownership-token lock in the canonical Git common directory, so linked
+worktrees share the same boundary. The explicit child-plan fetch uses that
+helper too. Contention waits at most 60 seconds before reporting an unavailable
+prerequisite. It never reclaims a foreign or uncertain owner, removes Git's
+lockfiles, resets refs or substitutes an offline baseline. A retained owner
+requires ownership reconciliation; do not delete it to make a gate run. Raw Git
+commands outside the helper do not participate in this exclusion boundary.
 
 Offline operation must be explicit:
 `--offline-accepted-base` or
@@ -829,8 +914,10 @@ when its session closed (BI-27A37D27). The resumer is now started through WMI,
 outside that job. If WMI is unavailable, the queued payload says
 `resumerSurvivesSession: false` and the wait ends with the session. For a queued
 claim whose every waiter has ended, `pregate:status` says "no waiter is alive"
-instead of "queued". That is not a verdict on the diff: re-run `pregate`. A
-branch cut before this fix keeps the old resumer until it is rebased.
+instead of "queued". That is not a verdict on the diff: re-run `pregate`. While
+a live waiter already holds the same branch and SHA, another pregate does not
+spawn a second resumer; it exits 75 and names `detached-resumer` (BI-F63D8202).
+A branch cut before this fix keeps the old resumer until it is rebased.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
@@ -874,7 +961,10 @@ metadata, and exits 10 (`EXIT_CANDIDATE_MERGE_CONFLICT`). The wrapper records
 the existing `conflict` status. A run that stopped at its merge graded nothing,
 so the wrapper owes no completion checkpoint and does not rewrite the result as
 infrastructure. `pregate:status` reports FAIL and names the remedy: merge
-`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2).
+`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2). The
+same exit 10 is written before admission when `git merge-tree` reports a
+conflict, including a resumed gate, instead of labelling that resume
+`gate-identity-unavailable` (BI-45553400, BI-1F11D17A).
 
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both
@@ -923,6 +1013,12 @@ does not reserve capacity or authorize a later claim. That late check records
 `blocked_quiescence` for an ordinary run and parks with the same exit 75, while
 preserving existing evidence on `--finalize-evidence`. Neither check polls:
 resume after the server-owned quiescence coordinator completes.
+An already-running durable resumer retains its original reservation pin when
+its child returns the canonical `local_ci_quiescence_wait` packet. It waits
+within its original deadline, then retries that same pin. Only a validated
+`local_ci_durable_wait` handoff can replace the pin. Missing, malformed,
+foreign or mixed quiescence/handoff observations stop unrun; exit 75 alone
+does not authorize a replacement reservation.
 If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts

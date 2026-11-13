@@ -137,13 +137,13 @@ describe("verification-depth binding — blast radius", () => {
 
   it("shows where today's gate already refuses, so 'newly' means newly", () => {
     const refusedToday = cells.filter((c) => !c.allowedToday);
-    // Only build->review refuses today, and only for the two shapes whose
-    // typecheckPassed is false or absent — that is verification-typecheck-passed
-    // doing its job. 16 (kind,size) x 3 depths x 2 profiles.
-    expect(refusedToday).toHaveLength(16 * 3 * 2);
+    // Only build->review refuses today: typecheckPassed false or absent, and
+    // typecheck "not_run" even when the boolean is true (BI-E4E70B9A).
+    // 16 (kind,size) x 3 depths x 3 profiles.
+    expect(refusedToday).toHaveLength(16 * 3 * 3);
     expect([...new Set(refusedToday.map((c) => c.transition))]).toEqual(["build->review"]);
     expect([...new Set(refusedToday.map((c) => c.profile))].sort())
-      .toEqual(["absent", "canonical-typecheck-failed"]);
+      .toEqual(["absent", "canonical-typecheck-failed", "contradictory-not-run"]);
     // review->ship has NO typecheck requirement today. That asymmetry is why
     // the depth binding tightens more at ship than at review.
   });
@@ -178,17 +178,18 @@ describe("verification-depth binding — blast radius", () => {
     const blocking = new Set(post.filter((c) => c.newlyBlocks).map((c) => c.profile));
     expect([...blocking].sort()).toEqual([
       "absent",
+      "canonical-green",
       "canonical-tests-failed",
       "canonical-typecheck-failed",
       "contradictory-not-run",
       "nested-tests-green",
     ]);
-    // canonical-green is the ONLY production shape that clears the bar, at
-    // either depth. Three of the five blocked shapes are spurious or
-    // contradictory rather than genuine quality failures — BI-397F87A9,
-    // BI-E4E70B9A.
+    // BI-57AF5162: the historical "canonical-green" shape has no executed
+    // count or execution facts. Zero failures cannot establish required tests.
+    // No historical profile here qualifies; observed positive cases and
+    // established exemptions are covered in verification-depth-requirement.test.
     const clears = new Set(post.filter((c) => !c.newlyBlocks && c.allowedToday).map((c) => c.profile));
-    expect([...clears]).toEqual(["canonical-green"]);
+    expect([...clears]).toEqual([]);
   });
 
   it("quantifies how much of the new blocking is spurious", () => {
@@ -199,24 +200,26 @@ describe("verification-depth binding — blast radius", () => {
     expect(byProfile("canonical-tests-failed")).toBe(64); // 1185 tests failed
     expect(byProfile("canonical-typecheck-failed")).toBe(32); // already refused at build->review
     expect(byProfile("absent")).toBe(32); // no verification evidence at all
+    expect(byProfile("canonical-green")).toBe(64); // execution unestablished, not a test failure
 
     // SPURIOUS: zero failed tests and a passing typecheck, refused only because
     // the count lives under `tests.failed` instead of `testsFailed`
     // (BI-397F87A9).
     expect(byProfile("nested-tests-green")).toBe(64);
 
-    // Refused for the right outcome but the wrong reason: nothing ran, yet
-    // typecheckPassed reads true (BI-E4E70B9A). The depth check catches it by
-    // accident, via the tests arm, not the typecheck arm.
-    expect(byProfile("contradictory-not-run")).toBe(64);
+    // build->review now refuses this on the typecheck arm (BI-E4E70B9A).
+    // It is newly blocked only at review->ship, which has no typecheck
+    // requirement: 16 (kind,size) x 2 depths.
+    expect(byProfile("contradictory-not-run")).toBe(32);
 
-    // A quarter of everything Phase 3 would turn on is a false positive.
-    expect(byProfile("nested-tests-green") / newly.length).toBeCloseTo(0.25, 5);
+    // Retain the historical nested-profile measurement; the denominator now
+    // includes 64 additional unknown-execution refusals (BI-57AF5162).
+    expect(byProfile("nested-tests-green") / newly.length).toBeCloseTo(64 / 288, 5);
   });
 
   it("reports the headline blast radius", () => {
     const newly = cells.filter((c) => c.newlyBlocks);
-    expect(newly).toHaveLength(256);
+    expect(newly).toHaveLength(288);
     expect(cells).toHaveLength(1152);
     // Every one of them is post-build; none at ideate->plan or plan->build.
     expect([...new Set(newly.map((c) => c.transition))].sort())

@@ -15,15 +15,18 @@
 
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 
+import type { AdvisoryOutcomeSweepDb, AdvisoryOutcomeSweepResult } from "@/lib/build/architecture-advisory-outcome-sweep";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-import { readRecordedResolution } from "./decision-outcome";
+import { readRecordedCoworkerProposal } from "./coworker-proposal";
 import { readOptionIds } from "./decision-outcome-store";
 import { syncDecisionShadowLedger, type DecisionShadowLedgerDb } from "./decision-shadow-ledger-bridge";
 import {
   DECISION_ACTIVITY_TYPES,
   DECISION_LEDGER_SOURCE_KIND,
+  buildDecisionShadowLedgerEntry,
   decisionShadowLedgerId,
+  type BridgeableDecisionRow,
 } from "./decision-shadow-ledger-mapping";
 import {
   REPORT_ONLY_RECOMMENDATION,
@@ -79,10 +82,17 @@ export async function backfillDecisionShadowLedger(
   const maxWrites = options.maxWrites ?? DEFAULT_BACKFILL_MAX_WRITES;
   const ledgerRows = await db.decisionShadowLedger.findMany({
     where: { sourceKind: DECISION_LEDGER_SOURCE_KIND },
-    select: { ledgerId: true, reconciledAt: true },
+    select: { ledgerId: true, reconciledAt: true, proposedDecision: true, metadata: true },
   });
-  const reconciledByLedgerId = new Map(
-    ledgerRows.map((row) => [String(row.ledgerId), row.reconciledAt != null] as const),
+  const ledgerById = new Map(
+    ledgerRows.map((row) => [
+      String(row.ledgerId),
+      {
+        reconciled: row.reconciledAt != null,
+        recommendedOptionId: str(((row.proposedDecision ?? {}) as Row).recommendedOptionId),
+        resolvedBy: str(((row.metadata ?? {}) as Row).resolvedBy),
+      },
+    ] as const),
   );
   const decisions = await db.decisionInteraction.findMany({
     where: { agentId: { not: null } },
@@ -102,6 +112,10 @@ export async function backfillDecisionShadowLedger(
       subjectKind: true,
       subjectRef: true,
       createdAt: true,
+      // BI-AE416D75: where a coworker's own proposal is recorded or recoverable.
+      gateKey: true,
+      scoredOptions: true,
+      outcomePayload: true,
     },
     orderBy: { createdAt: "asc" },
   });
@@ -117,23 +131,20 @@ export async function backfillDecisionShadowLedger(
 
   for (const decision of decisions) {
     const interactionId = String(decision.interactionId);
-    const reconciled = reconciledByLedgerId.get(decisionShadowLedgerId(interactionId));
-    const resolved = readRecordedResolution(decision.humanOutcome) !== null;
-    if (reconciled === true || (reconciled === false && !resolved)) {
-      result.alreadyCurrent += 1;
-      continue;
-    }
-    if (result.written + result.failed >= maxWrites) {
-      result.deferred += 1;
-      continue;
-    }
-    const outcome = await syncDecisionShadowLedger(db, {
+    const bridgeable: BridgeableDecisionRow = {
       interactionId,
       agentId: str(decision.agentId),
       domainClass: String(decision.domainClass ?? ""),
       riskTier: String(decision.riskTier ?? ""),
       outcomeType: String(decision.outcomeType ?? ""),
       recommendedOptionId: str(decision.recommendedOptionId),
+      // Only a recorded or by-construction proposal; never inferred (BI-AE416D75).
+      proposedOptionId: readRecordedCoworkerProposal({
+        gateKey: decision.gateKey,
+        options: decision.options,
+        scoredOptions: decision.scoredOptions,
+        outcomePayload: decision.outcomePayload,
+      }),
       options: readOptionIds(decision.options),
       rationale: str(decision.rationale),
       chosenOptionId: str(decision.chosenOptionId),
@@ -143,12 +154,40 @@ export async function backfillDecisionShadowLedger(
       subjectKind: str(decision.subjectKind),
       subjectRef: str(decision.subjectRef),
       observedAt: decision.createdAt instanceof Date ? decision.createdAt : null,
-    });
+    };
+    const existing = ledgerById.get(decisionShadowLedgerId(interactionId));
+    if (existing && isLedgerRowCurrent(existing, bridgeable)) {
+      result.alreadyCurrent += 1;
+      continue;
+    }
+    if (result.written + result.failed >= maxWrites) {
+      result.deferred += 1;
+      continue;
+    }
+    const outcome = await syncDecisionShadowLedger(db, bridgeable);
     if (outcome.written) result.written += 1;
     else if (outcome.reason === "write-failed") result.failed += 1;
     else result.refused[outcome.reason] = (result.refused[outcome.reason] ?? 0) + 1;
   }
   return result;
+}
+
+/**
+ * A ledger row needs no write when it already carries the recommendation the
+ * decision yields, and either is reconciled or has no resolution to receive.
+ */
+function isLedgerRowCurrent(
+  existing: { reconciled: boolean; recommendedOptionId: string | null; resolvedBy: string | null },
+  row: BridgeableDecisionRow,
+): boolean {
+  const built = buildDecisionShadowLedgerEntry(row);
+  // A refused row stays refused; rewriting it changes nothing.
+  if (!built.built) return true;
+  if (existing.recommendedOptionId !== built.entry.proposedDecision.recommendedOptionId) return false;
+  // A resolution read from downstream outcome (BI-22601A38) gives way to a
+  // person's answer recorded on the decision itself.
+  if (existing.resolvedBy === "outcome" && built.entry.outcome !== null) return false;
+  return existing.reconciled || built.entry.outcome === null;
 }
 
 async function readGovernedDecisionLedger(db: DecisionTrustDb): Promise<DecisionTrustLedgerRow[]> {
@@ -220,10 +259,34 @@ export async function runDecisionTrustRecompute(
   db: DecisionTrustDb,
   now: Date = new Date(),
   options: { maxWrites?: number } = {},
-): Promise<{ backfill: DecisionLedgerBackfillResult; recompute: DecisionTrustRecomputeResult }> {
+): Promise<{
+  backfill: DecisionLedgerBackfillResult;
+  /** Null when the client cannot read builds, so nothing was attempted. */
+  advisoryOutcomes: AdvisoryOutcomeSweepResult | null;
+  recompute: DecisionTrustRecomputeResult;
+}> {
   const backfill = await backfillDecisionShadowLedger(db, options);
+  // After the backfill, so every advisory has a ledger row to complete; before
+  // the recompute, so the outcomes it records are counted this pass.
+  const advisoryOutcomes = await resolveAdvisoryOutcomesIfSupported(db, now);
   const recompute = await recomputeDecisionTrustStates(db, now);
-  return { backfill, recompute };
+  return { backfill, advisoryOutcomes, recompute };
+}
+
+async function resolveAdvisoryOutcomesIfSupported(
+  db: DecisionTrustDb,
+  now: Date,
+): Promise<AdvisoryOutcomeSweepResult | null> {
+  const candidate = db as Partial<AdvisoryOutcomeSweepDb> & DecisionTrustDb;
+  if (typeof candidate.featureBuild?.findMany !== "function") return null;
+  if (typeof candidate.decisionShadowLedger.updateMany !== "function") return null;
+  const { resolveArchitectureAdvisoryOutcomes } = await import("@/lib/build/architecture-advisory-outcome-sweep");
+  try {
+    return await resolveArchitectureAdvisoryOutcomes(candidate as AdvisoryOutcomeSweepDb, { now });
+  } catch (error) {
+    // A measurement pass: one failed sweep must not stop TrustState recomputing.
+    return { examined: 0, resolved: 0, written: 0, failed: 1, firstError: getErrorMessage(error) };
+  }
 }
 
 /** The report. Read-only: it computes nothing it then stores. */

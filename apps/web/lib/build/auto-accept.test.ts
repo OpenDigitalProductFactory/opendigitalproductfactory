@@ -85,6 +85,22 @@ beforeEach(() => {
 });
 
 describe("autoAcceptBuildOnEvidence — accepts on fully-green evidence", () => {
+  it.each([
+    [{ testsExecuted: false, testsPassed: 1, testsFailed: 0 }, "No tests ran."],
+    [{ testsExecuted: true, testsPassed: null, testsFailed: null }, "Unknown passes observed; failure verdict not established."],
+  ])("records truthful advisory evidence for incomplete test facts %j", async (facts, expected) => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: { typecheckPassed: true, ...facts } }));
+    const result = await autoAcceptBuildOnEvidence("FB-UNKNOWN");
+    expect(result.accepted).toBe(true);
+    const evidence = result.acceptanceMet?.[0]?.evidence;
+    expect(evidence).toContain(expected);
+    expect(evidence).not.toMatch(/tests [01] passed \/ 0 failed/);
+    const activity = mockPrisma.buildActivity.create.mock.calls.find(([input]) => input.data.tool === "auto_record_acceptance");
+    expect(activity?.[0].data.summary).toContain(expected);
+    expect(activity?.[0].data.summary).not.toMatch(/tests [01] passed \/ 0 failed/);
+    expect(mockSaveBuildArtifactRevision.mock.calls.every(([input]) => input.field === "acceptanceMet")).toBe(true);
+  });
+
   it("ACCEPTS a fully-green feature build, writing acceptanceMet exactly once", async () => {
     // Sanity: the REAL feature·standard policy gates review->ship on acceptance.
     expect(getProcessPolicy("feature", "medium").gates["review->ship"]).toContain(
@@ -337,6 +353,31 @@ describe("autoAcceptBuildOnEvidence — never throws (fail-closed)", () => {
 });
 
 describe("autoAcceptBuildOnEvidence — a missing verdict is checked, not assumed (BI-1CC992A5)", () => {
+  it("retains unresolved QA during deterministic backfill without changing advisory progression", async () => {
+    const reportedQa = { testsPassed: 99, testsFailed: 3, content: "Three failures; complete failure identities unavailable" };
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: {
+      typecheckPassed: null, testsPassed: 0, testsFailed: null, testsQualified: false, testEvidenceConflict: true, reportedQa,
+    } }));
+    const result = await autoAcceptBuildOnEvidence("FB-CONFLICT", { verifyMissingVerdict: async () => ({
+      verification: { typecheckPassed: true, testsPassed: 2, testsFailed: 0, source: "deterministic-scoped", scope: "scoped", testEvidenceConflict: false },
+      changedFiles: ["apps/web/lib/x.test.ts"], output: "Tests 2 passed",
+    }) });
+    expect(result.accepted).toBe(true);
+    const backfill = mockSaveBuildArtifactRevision.mock.calls.find(([input]) => input.field === "verificationOut");
+    expect(backfill?.[0].value).toMatchObject({ testEvidenceConflict: true, testsQualified: false, reportedQa });
+    expect(result.acceptanceMet?.[0]?.evidence).toContain("Earlier reported test failures remain unresolved");
+  });
+  it("keeps advisory progression without calling a no-test exemption passing tests", async () => {
+    mockPrisma.featureBuild.findUnique.mockResolvedValue(greenBuild({ verificationOut: null }));
+    const result = await autoAcceptBuildOnEvidence("FB-NO-TESTS", { verifyMissingVerdict: async () => ({
+      verification: { typecheckPassed: true, testsPassed: 0, testsFailed: 0, source: "deterministic-scoped", scope: "none" },
+      changedFiles: ["docs/fixture.md"], output: "No tests ran.",
+    }) });
+    expect(result.accepted).toBe(true);
+    const backfill = mockPrisma.buildActivity.create.mock.calls.find(([input]) => input.data.tool === "review_verification_backfill");
+    expect(backfill?.[0].data.summary).toContain("0 passed / 0 failed; no test execution");
+    expect(backfill?.[0].data.summary).not.toContain("tests passed");
+  });
   const ran = (typecheckPassed: boolean) => vi.fn(async () => ({
     verification: { typecheckPassed, testsPassed: 1, testsFailed: 0, source: "deterministic-scoped", scope: "scoped" },
     changedFiles: ["apps/web/lib/x.ts"],

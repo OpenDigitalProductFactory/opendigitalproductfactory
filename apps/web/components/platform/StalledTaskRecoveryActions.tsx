@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { semanticReviewRecoveryBudget, SEMANTIC_REVIEW_MAX_ATTEMPTS, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
-import { semanticReviewRecoveryPresentation } from "@/lib/change-review/semantic-review-presentation";
+import { semanticReviewRecoveryPresentation, semanticReviewEligibilityLabels } from "@/lib/change-review/semantic-review-presentation";
 import { useSemanticReviewRecoveryBudget } from "./useSemanticReviewRecoveryBudget";
 import { useRouter } from "next/navigation";
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
@@ -34,11 +34,13 @@ export function StalledTaskRecoveryActions({
 
   const isShipPhase = phase === "ship";
   const { budgetState, refreshBudget } = useSemanticReviewRecoveryBudget(reviewBudget, nativeReview);
-  const { title: budgetTitle, nextAction } = semanticReviewRecoveryPresentation(budgetState);
+  const { title: budgetTitle, nextAction } = semanticReviewRecoveryPresentation(budgetState, reviewBudget?.eligibilityBlocked);
   const deadline = reviewBudget?.deadlineAt ? Date.parse(reviewBudget.deadlineAt) : NaN;
   const recoveryAttempt = reviewBudget?.recoveryAttempt;
+  const eligibilityBlocked = nativeReview && reviewBudget?.eligibilityBlocked === true;
 
   const onRetry = async () => {
+    if (eligibilityBlocked) return;
     if (nativeReview && semanticReviewRecoveryBudget(reviewBudget?.deadlineAt, reviewBudget?.recoveryAttempt) !== "available") {
       refreshBudget();
       return;
@@ -113,12 +115,15 @@ export function StalledTaskRecoveryActions({
         {Number.isFinite(deadline) && <p>Deadline: <time dateTime={new Date(deadline).toISOString()}>{new Date(deadline).toLocaleString()}</time></p>}
         {typeof recoveryAttempt === "number" && Number.isSafeInteger(recoveryAttempt) && recoveryAttempt >= 0 && <p>Recovery attempts: {recoveryAttempt} / {SEMANTIC_REVIEW_MAX_ATTEMPTS}</p>}
         <p>{nextAction}</p>
+        {reviewBudget?.routingEligibility?.length ? <ul className="list-disc ps-4">
+          {semanticReviewEligibilityLabels(reviewBudget.routingEligibility).map((label, index) => <li key={index}>{label}</li>)}
+        </ul> : null}
       </div>}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onRetry}
-          disabled={pending || (nativeReview && budgetState !== "available")}
+          disabled={pending || eligibilityBlocked || (nativeReview && budgetState !== "available")}
         >
           {nativeReview ? "Resume review" : "Retry"}
         </Button>

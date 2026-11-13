@@ -155,6 +155,7 @@
         "register_tech_debt",
         "report_quality_issue",
         "retire_backlog_item",
+        "retire_peer_demand_intake_copies",
         "save_phase_handoff",
         "submit_feedback",
         "update_backlog_item",
@@ -1593,7 +1594,8 @@
         "adopt_worktree"
       ],
       "implies": [
-        "work_capsule_read"
+        "work_capsule_read",
+        "worktree_provision"
       ]
     },
     {
@@ -1616,17 +1618,13 @@
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
-        "claim_capsule_scope",
         "approve_runtime_permission",
-        "claim_workroom_scope",
         "create_work_capsule",
         "create_workroom",
         "drive_workroom_runtime",
         "heartbeat_capsule",
         "heartbeat_runtime_target",
         "heartbeat_workroom",
-        "plan_capsule_worktree",
-        "plan_workroom_worktree",
         "rebind_workroom_shape",
         "record_capsule_evidence",
         "record_runtime_verification",
@@ -1654,6 +1652,21 @@
         "record_workroom_evidence"
       ],
       "implies": []
+    },
+    {
+      "key": "worktree_provision",
+      "description": "Provision a source worktree for a Workroom: plan its worktree and claim the paths it will edit (BI-D1FB8C4D). Split out of work_capsule_write so a read-only room (source-inquiry) can record its own evidence without reaching worktree provisioning. Implied by work_capsule_adopt (one-way).",
+      "category": "integrate",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "claim_capsule_scope",
+        "claim_workroom_scope",
+        "plan_capsule_worktree",
+        "plan_workroom_worktree"
+      ],
+      "implies": [
+        "work_capsule_read"
+      ]
     },
     {
       "key": "work_engagement_read",
@@ -1699,10 +1712,12 @@
     },
     {
       "key": "work_room_write",
-      "description": "Post a message into a Work Room and invite participants.",
+      "description": "Post a message into a Work Room, invite participants, and broadcast a COO ask.",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "acknowledge_workroom_broadcast",
+        "broadcast_workroom_ask",
         "invite_room_participant",
         "post_room_message"
       ],
@@ -1724,11 +1739,15 @@
     },
     {
       "key": "workbook_write",
-      "description": "Create and update rows and cells in user-defined Workbook / Universal Grid tables (EP-GRID-WORKBOOKS).",
+      "description": "Create Workbooks, tables, typed columns and views, and create and update rows and cells in user-defined Workbook / Universal Grid tables (EP-GRID-WORKBOOKS).",
       "category": "platform",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "workbook_add_column",
+        "workbook_create",
         "workbook_create_row",
+        "workbook_create_table",
+        "workbook_create_view",
         "workbook_update_cells"
       ],
       "implies": []

@@ -384,6 +384,12 @@ enum DecisionSubjectKind {
   backlog_item @map("backlog-item")
 }
 
+enum DecisionEscalationRoute {
+  decided
+  human
+  independent_review
+}
+
 model DecisionInteraction {
   id                      String                            @id @default(cuid())
   interactionId           String                            @unique
@@ -407,6 +413,10 @@ model DecisionInteraction {
   confidenceBefore        Float?
   confidenceAfter         Float?
   outcomeType             String
+  // BI-74B2A8CD: NULL preserves legacy routing; never infer or backfill history.
+  escalationRoute         DecisionEscalationRoute?
+  escalationReason        String?
+  escalationFollowOn      String?
   principleConflict       Boolean                           @default(false)
   outcomePayload          Json                              @default("{}")
   humanOutcome            Json?

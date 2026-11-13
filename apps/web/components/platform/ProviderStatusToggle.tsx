@@ -17,6 +17,7 @@ type Props = {
   initialPause?: { resumeAt: string | null; pausedAt?: string } | null;
   initialConnectionStatus?: string | null;
   endpointType?: string;
+  hideStatus?: boolean;
 };
 
 export function ProviderStatusToggle(props: Props) {

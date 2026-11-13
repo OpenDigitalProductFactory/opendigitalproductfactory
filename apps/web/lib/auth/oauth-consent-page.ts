@@ -16,6 +16,7 @@
 // Design: docs/superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md §4.6
 
 import { PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-scope-map";
+import { agentAccessLocationLabel } from "@/lib/navigation/admin-location";
 
 /** Escape for HTML text and double-quoted attribute contexts. Every dynamic
  *  value below is attacker-influenced — a DCR client picks its own name, and
@@ -47,7 +48,7 @@ const STYLE = `
 :root{color-scheme:light dark}
 *{box-sizing:border-box}
 body{margin:0;background:Canvas;color:CanvasText;font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center;padding:24px}
-main{width:100%;max-width:560px;background:Canvas;border:1px solid GrayText;border-radius:10px;padding:28px}
+main{width:100%;min-width:0;max-width:560px;overflow-wrap:anywhere;background:Canvas;border:1px solid GrayText;border-radius:10px;padding:28px}
 h1{font-size:20px;margin:.2em 0 .4em}
 .eyebrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:GrayText;margin:0}
 p{color:GrayText;margin:.5em 0}
@@ -63,7 +64,8 @@ dl div{display:flex;gap:8px;margin:3px 0}
 dt{font-weight:600;flex:0 0 92px}
 dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
 .actions{display:flex;gap:10px;margin-top:22px}
-button{flex:1;padding:10px 16px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
+button{flex:1;min-width:0;overflow-wrap:anywhere;padding:10px 16px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
+@media(max-width:480px){.actions{flex-direction:column}}
 select{width:100%;padding:10px;border:1px solid GrayText;border-radius:6px;background:Field;color:FieldText;font:inherit}
 button.primary{background:Highlight;color:HighlightText;border:1px solid Highlight}
 button.secondary{background:ButtonFace;color:ButtonText;border:1px solid GrayText}
@@ -93,6 +95,21 @@ export function renderConsentRefusal(title: string, detail: string): string {
   );
 }
 
+/**
+ * The browser is signed in as the platform automation persona, which never
+ * binds a person's interactive client (BI-F586F8A5). Name the account so the
+ * person sees why, and offer the one way forward: sign in as themself.
+ */
+export function renderAutomationAccountRefusal(account: string, signInUrl: string): string {
+  return shell(
+    "Sign in as yourself to connect",
+    `<h1>Sign in as yourself to connect</h1>
+<p>This browser is signed in as <strong>${esc(account)}</strong>, the platform automation account. A connection made here would act as that account, not as you.</p>
+<p><a href="${esc(signInUrl)}">Sign in as yourself</a> and you will come straight back to this request.</p>
+<p class="foot">Nothing was connected and no permission was granted.</p>`,
+  );
+}
+
 export type ConsentView = {
   clientName: string;
   selfAsserted: boolean;
@@ -117,6 +134,10 @@ export type ConsentView = {
   choiceNotice?: boolean;
   /** Set when Connect arrived without the account confirmed, or confirmed for a different session. */
   accountNotice?: boolean;
+  /** When the signed-in account's work was handed over (ISO). Connect then needs an acknowledgement (BI-9D2199D4). */
+  workHandedOverAt?: string | null;
+  /** Set when Connect arrived under a handed-over account without that acknowledgement. */
+  handoverNotice?: boolean;
 };
 
 export type ConsentAssistant = {
@@ -150,7 +171,9 @@ export function renderConsentPage(view: ConsentView): string {
   const permissionList = view.scopes
     .map((s) => `<li><strong>${esc(PUBLIC_SCOPE_COPY[s].title)}</strong> — ${esc(PUBLIC_SCOPE_COPY[s].detail)}</li>`)
     .join("");
-  const driftNotice = view.accountNotice
+  const driftNotice = view.handoverNotice
+    ? `<p class="warn">Confirm you mean to connect under an account whose work was handed over. Nothing was connected.</p>`
+    : view.accountNotice
     ? `<p class="warn">Confirm the account this connection works under. Nothing was connected.</p>`
     : view.driftNotice
     ? `<p class="warn">What this connection is allowed to act as changed while this page was open. Nothing was connected. Check the details below and connect again.</p>`
@@ -183,11 +206,11 @@ ${scopeRows}
 <div><dt>Returns to</dt><dd>${esc(view.redirectUri)}</dd></div>
 </dl>
 <div class="actions">
-<button class="primary" type="submit" name="decision" value="approve">Connect ${esc(truncate(view.clientName, 40))}</button>
+<button class="primary" type="submit" name="decision" value="approve">Connect ${esc(view.clientName)} as ${esc(view.actingUser)}</button>
 <button class="secondary" type="submit" name="decision" value="deny" formnovalidate>Cancel</button>
 </div>
 </form>
-<p class="foot">You can revoke this at any time in Admin &rsaquo; Platform Development &rsaquo; MCP.</p>`,
+<p class="foot">An administrator can end this connection at any time in ${esc(agentAccessLocationLabel())}.</p>`,
   );
 }
 
@@ -196,20 +219,32 @@ ${scopeRows}
  * (BI-07D21B4A). A browser can hold a session the person forgot about — a
  * setup account, a colleague's, a test persona — and consent used to take it
  * silently, so every approval the assistant later asked for went to an inbox
- * nobody reads. The person ticks the account by name; the checkbox carries the
- * session's user id, and the POST binds only if it still matches.
+ * nobody reads. The named Connect action confirms the account; its hidden
+ * field carries the session's user id, and the POST binds only if it still matches.
  */
 function renderAccount(view: ConsentView): string {
   return `<fieldset><legend>Connect as</legend>
-<label class="scope"><input type="checkbox" name="confirm_account" value="${esc(view.actingUserId)}" required>
-<span><span class="scope-title">${esc(view.actingUser)}</span>
-<span class="scope-detail">It acts under this account, and its approval requests will come to this account's inbox.</span></span></label>
-<p class="choice">Not the account you meant? <a href="${esc(view.switchAccountUrl)}">Use a different account</a></p>
+<input type="hidden" name="confirm_account" value="${esc(view.actingUserId)}">
+<p><span class="scope-title">${esc(view.actingUser)}</span>
+<span class="scope-detail">It acts under this account, and its approval requests will come to this account's inbox.</span></p>
+${renderHandover(view)}<p class="choice">Not the account you meant? <a href="${esc(view.switchAccountUrl)}">Use a different account</a></p>
 </fieldset>`;
 }
 
-function truncate(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+/**
+ * A handover moves an account's work, not its access (BI-9D2199D4). On the live
+ * install an operator connected Codex under admin@dpf.local a day after that
+ * account's work was handed over, and new work went back to it. The page says
+ * so and asks the person to confirm; the POST refuses a Connect without it.
+ */
+function renderHandover(view: ConsentView): string {
+  if (!view.workHandedOverAt) return "";
+  const day = view.workHandedOverAt.slice(0, 10);
+  return `<p class="warn">This account's work was handed over on ${esc(day)}. A connection under it brings new work back to it.</p>
+<label class="scope"><input type="checkbox" name="acknowledge_handover" value="${esc(view.actingUserId)}" required>
+<span><span class="scope-title">Connect under this account anyway</span>
+<span class="scope-detail">Its approval requests and new work will come to this account again.</span></span></label>
+`;
 }
 
 /**

@@ -19,7 +19,7 @@ export async function currentOAuthHuman(userId: string, db: Db = prisma) {
 
 /** Human approval is authority. The client-provided app name is never queried. */
 export async function eligibleOAuthCoworkers(
-  userId: string, clientId: string, resource: string, db: Db = prisma,
+  userId: string, clientId: string | null, resource: string | null, db: Db = prisma,
   selection: { agentId?: string; after?: string } = {},
 ) {
   const human = await currentOAuthHuman(userId, db);
@@ -28,17 +28,19 @@ export async function eligibleOAuthCoworkers(
   // their build permission. Other coworker identities require an administrator
   // or an existing delegation for this human/client/resource combination.
   const administrator = can(human, "manage_agents");
-  const delegation: Prisma.AgentWhereInput = { authorityBindings: { some: {
+  // A newly issued headless client has no prior client/resource delegation.
+  // Never turn absent scope into a query for unrelated or unscoped bindings.
+  const delegation: Prisma.AgentWhereInput[] = clientId && resource ? [{ authorityBindings: { some: {
     oauthPurpose: "delegation", oauthUserId: userId, oauthClientId: clientId,
     resourceRef: resource, status: "active",
-  } } };
+  } } }] : [];
   const approvedExternalRole: Prisma.AgentWhereInput[] = can(human, "view_platform")
     ? [{ agentId: { in: [...APPROVED_EXTERNAL_ROLES] } }] : [];
   return db.agent.findMany({
     where: { status: "active", archived: false,
       ...(selection.agentId ? { agentId: selection.agentId } : selection.after ? { agentId: { gt: selection.after } } : {}),
       toolGrants: { some: { grantKey: "work_room_write" } },
-      ...(!administrator ? { OR: [delegation, ...approvedExternalRole] } : {}),
+      ...(!administrator ? { OR: [...delegation, ...approvedExternalRole] } : {}),
       // One choice per assistant: slug mirrors of a canonical AGT-* identity are
       // never offered or bound, even when requested by id (BI-A771AF73).
       AND: [{ agentId: { notIn: dualSeedMirrorSlugs() } }],

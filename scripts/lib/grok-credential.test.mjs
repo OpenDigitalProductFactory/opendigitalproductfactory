@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { exchangeClientCredentials } from "./mcp-credential.mjs";
+import { exchangeClientCredentials } from "../../packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs";
 import {
   GROK_CREDENTIAL_SCOPE,
   grokBearerTokenFilePath,
@@ -75,7 +75,9 @@ test("refresh exchanges client_credentials and writes the bearer file before exp
   const tokenPath = grokBearerTokenFilePath(config);
   assert.equal(await readFile(tokenPath, "utf8"), "short-lived-access");
   const mode = (await stat(tokenPath)).mode & 0o777;
-  assert.equal(mode, 0o600);
+  // Windows stat does not expose POSIX permission bits; this assertion is
+  // meaningful only on hosts that implement chmod's mode contract.
+  if (process.platform !== "win32") assert.equal(mode, 0o600);
   const kept = await refreshGrokCredential({
     tokenPath,
     clientPath: grokClientFilePath(config),

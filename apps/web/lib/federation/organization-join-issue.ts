@@ -20,6 +20,10 @@ import { readFile } from "node:fs/promises";
 import { compactDecrypt, importJWK, SignJWT, type JWK } from "jose";
 
 import { prisma } from "@dpf/db";
+import {
+  isInstallationEnvironmentClass,
+  type InstallationEnvironmentClass,
+} from "@dpf/db/installation-operating-intent";
 import { parseOrganizationJoinPackage } from "@dpf/db/organization-join-action";
 
 import { resolveAppBaseUrl } from "@/lib/app-url";
@@ -28,6 +32,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import { caInternalUrl, caRequest as defaultCaRequest, type CaRequest } from "./ca-client";
 import { classifySan, membershipSanSet } from "./csr";
+import { environmentClassSan } from "./environment-class-attestation";
 import { readMembershipFacts } from "./membership-material";
 import { membershipRelayAvailable } from "./membership-relay";
 import { hostnameFromHostHeader, readReachedAtHosts, type ReachedAtDb } from "./reached-at";
@@ -48,7 +53,8 @@ export type JoinIssueRefusal =
   | "ca-unreachable"
   | "provisioner-missing"
   | "provisioner-key-locked"
-  | "package-invalid";
+  | "package-invalid"
+  | "environment-class-required";
 
 export type JoinIssueResult =
   | { issued: true; packageText: string; fileName: string; packageId: string; intendedPeer: string; caUrl: string; expiresAt: string }
@@ -127,6 +133,7 @@ export function buildJoinPackageText(fields: {
   rootFingerprint: string;
   intendedPeer: string;
   intendedSans: string[];
+  environmentClass?: InstallationEnvironmentClass | null;
   expiresAtEpochSeconds: number;
   enrollmentToken: string;
   edgeClientEnrollmentToken: string;
@@ -138,6 +145,7 @@ export function buildJoinPackageText(fields: {
     `root_fingerprint=${fields.rootFingerprint}`,
     `intended_hostname=${fields.intendedPeer}`,
     `intended_sans=${fields.intendedSans.join(",")}`,
+    ...(fields.environmentClass ? [`environment_class=${fields.environmentClass}`] : []),
     `expires_at=${fields.expiresAtEpochSeconds}`,
     `enrollment_token=${fields.enrollmentToken}`,
     `edge_client_enrollment_token=${fields.edgeClientEnrollmentToken}`,
@@ -146,7 +154,18 @@ export function buildJoinPackageText(fields: {
 }
 
 export async function issueOrganizationJoinFile(
-  input: { intendedPeer: string; extraSans?: string[]; requestHost?: string | null; now?: Date },
+  input: {
+    intendedPeer: string;
+    /**
+     * The joining installation's class, attested by this authority and
+     * certified by the CA (BI-0716C8A8). Required: an unattested member would
+     * be read as production by every peer.
+     */
+    environmentClass: InstallationEnvironmentClass;
+    extraSans?: string[];
+    requestHost?: string | null;
+    now?: Date;
+  },
   deps: {
     db?: ReachedAtDb;
     env?: Record<string, string | undefined>;
@@ -165,6 +184,10 @@ export async function issueOrganizationJoinFile(
   if (!SAFE_PEER.test(intendedPeer)) return { issued: false, reason: "invalid-intended-peer" };
   const extraSans = (input.extraSans ?? []).map((s) => s.trim()).filter(Boolean);
   if (extraSans.some((s) => !SAFE_PEER.test(s))) return { issued: false, reason: "invalid-intended-peer", detail: "an extra name is not a hostname" };
+  if (!isInstallationEnvironmentClass(input.environmentClass)) {
+    return { issued: false, reason: "environment-class-required", detail: "say whether the joining installation is production, development or test" };
+  }
+  const environmentClass = input.environmentClass;
 
   // A member holds the authority's root — it pinned it when it joined — and it
   // has a provisioner password of its own, because every installation ships a
@@ -221,7 +244,10 @@ export async function issueOrganizationJoinFile(
   const edgeClient = provisioners.find((p) => p.name === EDGE_CLIENT_PROVISIONER) ?? installer;
 
   const rootFingerprint = new X509Certificate(relay.rootPem).fingerprint256.replaceAll(":", "").toLowerCase();
-  const sans = membershipSanSet(intendedPeer, extraSans).map((s) => classifySan(s).value);
+  const hostSans = membershipSanSet(intendedPeer, extraSans).map((s) => classifySan(s).value);
+  // The CA certifies only the names this token admits, so the class SAN here is
+  // what makes the member certificate an attestation of the class.
+  const sans = [...hostSans, environmentClassSan(environmentClass)];
   const edgeSubject = `dpf-edge-${intendedPeer.replaceAll(":", "-")}`;
   let enrollmentToken: string;
   let edgeClientEnrollmentToken: string;
@@ -237,7 +263,7 @@ export async function issueOrganizationJoinFile(
   const packageId = randomBytes(16).toString("hex");
   const expiresAtEpochSeconds = Math.floor(now.getTime() / 1000) + JOIN_FILE_TTL_SECONDS;
   const packageText = buildJoinPackageText({
-    packageId, caUrl, rootFingerprint, intendedPeer, intendedSans: sans.slice(1), expiresAtEpochSeconds, enrollmentToken, edgeClientEnrollmentToken,
+    packageId, caUrl, rootFingerprint, intendedPeer, intendedSans: hostSans.slice(1), environmentClass, expiresAtEpochSeconds, enrollmentToken, edgeClientEnrollmentToken,
   });
   // The same parser every importer runs: a package this authority cannot read is never handed out.
   const check = parseOrganizationJoinPackage(packageText, now);

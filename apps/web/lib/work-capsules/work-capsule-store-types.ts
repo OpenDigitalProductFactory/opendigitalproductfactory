@@ -26,9 +26,13 @@ export type ClaimBacklogWorkspaceInput = {
   objective?: string;
   force?: boolean;
   overrideReason?: string | null;
+  /** The item lives on the paired installation, which holds its claim
+   *  (BI-30EDDB7F). The local Workroom is created, but the local copy of the
+   *  item is a read-only mirror and records no claim of its own. */
+  claimAtHome?: boolean;
 };
 
-export type CapsuleDb = {
+export type CapsuleDb = Omit<import("./delivery-agreement-capture").DeliveryAgreementCaptureDb, "backlogItem"> & {
   workroom: {
     create(args: unknown): Promise<any>;
     findFirst(args: unknown): Promise<any>;
@@ -39,6 +43,7 @@ export type CapsuleDb = {
   workroomActivity: {
     create(args: unknown): Promise<any>;
     findFirst?(args: unknown): Promise<any>;
+    findMany?(args: unknown): Promise<any[]>;
   };
   backlogItem?: {
     findFirst(args: unknown): Promise<any>;

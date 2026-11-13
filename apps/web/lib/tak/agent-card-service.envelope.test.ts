@@ -22,7 +22,7 @@ import { listInternalAgentCards } from "./agent-card-service";
 
 const AGENT = {
   agentId: "AGT-OPS", name: "Ops", description: null, status: "active", lifecycleStage: "production",
-  sensitivity: "internal", hitlTierDefault: 2, executionConfig: null, governanceProfile: null, skills: [], toolGrants: [],
+  sensitivity: "internal", hitlTierDefault: 2, executionConfig: null, governanceProfile: null, skills: [], toolGrants: [], toolGrantRevocations: [],
 };
 const PROPOSAL = {
   id: "prop-row-1", proposalId: "prop-1", threadId: "thread-1", messageId: "msg-1", agentId: "AGT-OPS",

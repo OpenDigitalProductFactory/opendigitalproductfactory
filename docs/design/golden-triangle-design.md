@@ -122,6 +122,7 @@ DPF already has most of the hard plumbing this design needs:
 - Situational decision weighting: [`docs/superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md`](../superpowers/specs/2026-06-05-situational-aware-decision-weighting-design.md)
 - Routing/receipt substrate review: [`docs/architecture/2026-06-14-odysseus-review-depth-pass.md`](../architecture/2026-06-14-odysseus-review-depth-pass.md)
 - Agentic loop execution and governors: [`apps/web/lib/tak/agentic-loop.ts`](../../apps/web/lib/tak/agentic-loop.ts)
+  - A direct tool call waiting for approval ends the turn with its recorded waiting message. Routing posture cannot substitute model completion prose for that result. Ordinary platform-origin writes use the existing approval runner after authorization; the runner rechecks current authority and records execution separately from the person's decision. See [workroom reports and approval waits](../user-guide/workroom-approval-recovery.md).
 - Product-surface perception and action: the [Authorized Surface Contract](../superpowers/specs/2026-08-08-authorized-surface-contract-design.md) supplies principal-filtered semantic state and governed actions to the same loop; the Golden Triangle changes model behavior, never the user's or coworker's authority.
 
 The design should therefore be written as **consolidate, compile, and surface**, not "create a new AI model-control system."
@@ -788,3 +789,20 @@ The Golden Triangle earns trust only when the user can answer four questions:
 4. Did the result work?
 
 If any one of those is missing, the feature is decoration. If all four are present, it becomes a real trusted-agent control — and a unit of the platform's load-migration machine: the human keeps the one irreducible judgment (the posture), and the platform carries the rest.
+
+
+## Current acceptance receipt boundary — BI-A009189A
+
+The telemetry receipt adapter reads `AdapterRunTelemetry.userAccepted` only when
+`feedbackSource` is `human` and `feedbackPrincipalId` is present. Coworker and
+unattributed legacy values map to an unavailable acceptance signal. Clearing a
+judgment also yields no current acceptance value. These are preferences, separate
+from execution success and evaluated task quality.
+
+Exact answer feedback reuses the current telemetry row, with revision checks and
+an atomic existing AdminActivity audit. Its indexed AgentMessage attempt pointer
+is deliberately soft under owned decision DI-DF76FEA979F7: asynchronous capture
+and independent 180-day telemetry retention must not prevent answer delivery.
+Missing, edited or ambiguous evidence makes feedback unavailable. See the
+[operator routing guide](../user-guide/ai-workforce/model-routing-lifecycle.md#investigate-routing-and-record-feedback)
+and [current routing document map](../architecture/ai-routing-document-map.md).

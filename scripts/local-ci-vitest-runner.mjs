@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
-import { spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { runVitestWithRecovery } from "./lib/local-ci-vitest-supervisor.mjs";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
-import { resolveVitestSelection } from "./lib/local-ci-vitest-selection.mjs";
+import { changedFilesAgainst, resolveVitestMaxDurationMs, resolveVitestExecution } from "./lib/local-ci-vitest-selection.mjs";
+export { changedFilesAgainst, resolveVitestMaxDurationMs } from "./lib/local-ci-vitest-selection.mjs";
 import {
   classifyPriorStage,
   createStageReceiptWriter,
@@ -17,8 +17,6 @@ import {
   reusablePassedStage,
   stageIdentityMatches,
 } from "./lib/local-ci-stage-receipt.mjs";
-
-const DEFAULT_VITEST_MAX_DURATION_MS = 30 * 60 * 1_000;
 
 function valueAfter(flag, fallback) {
   // strict: false keeps the old tolerance: flags this script does not read are ignored.
@@ -37,33 +35,8 @@ function positiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export function resolveVitestMaxDurationMs(env = process.env) {
-  return positiveInteger(
-    env.DPF_LOCAL_CI_VITEST_MAX_DURATION_MS,
-    DEFAULT_VITEST_MAX_DURATION_MS,
-  );
-}
-
 function resolveGit(ref) {
   return gitTextOrNull(["rev-parse", "--verify", ref], { cwd: process.cwd() });
-}
-
-/**
- * Files this candidate changes relative to the integration base.
- *
- * Returns null — never an empty list — when the diff cannot be computed, so
- * selection falls back to the exhaustive run rather than reading "no changes"
- * out of a failed git call (BI-2227C37C).
- */
-export function changedFilesAgainst(baseRef, { spawn = spawnSync } = {}) {
-  if (!baseRef) return null;
-  const result = spawn(
-    "git",
-    ["diff", "--name-only", `${baseRef}...HEAD`],
-    { encoding: "utf8", shell: false, windowsHide: true },
-  );
-  if (result.status !== 0 || typeof result.stdout !== "string") return null;
-  return result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
 function processAlive(pid) {
@@ -204,22 +177,12 @@ async function main() {
   // rather than after. Selection fails safe to the exhaustive run — see
   // lib/local-ci-vitest-selection.mjs for the conditions.
   const baseRef = valueAfter("--base", "");
-  const selection = resolveVitestSelection({
-    baseRef,
-    changedFiles: changedFilesAgainst(baseRef),
+  const { selection, identity } = resolveVitestExecution({
+    integrationTreeSha: resolveGit("HEAD^{tree}"), initialWorkers,
+    baseRef, changedFiles: changedFilesAgainst(baseRef),
   });
-  process.stdout.write(
-    `[local-ci-vitest] coverage=${selection.mode} (${selection.reason})\n`,
-  );
+  process.stdout.write(`[local-ci-vitest] coverage=${selection.mode} (${selection.reason})\n`);
 
-  const identity = {
-    integrationTreeSha: resolveGit("HEAD^{tree}"),
-    command: [
-      `pnpm --filter web exec vitest run --maxWorkers=${initialWorkers} --reporter=verbose`,
-      ...selection.extraArgs,
-    ].join(" "),
-    maxDurationMs,
-  };
   const priorReceipt = readStageReceipt(diagnosticsPath);
   if (reusablePassedStage({
     receipt: priorReceipt,
@@ -256,6 +219,7 @@ async function main() {
   });
   receipt.start({
     bi: "BI-872CB1BF",
+    selection,
     maxDurationMs,
     executionProfile: recoveryPlan.executionProfile,
     recoveredFrom: recoveryPlan.recoveringPriorTermination
@@ -316,7 +280,7 @@ async function main() {
       });
       if (recoveryPlan.allowRetry && attempt.classification === "runner-termination" && attempt.attempt === 1) {
         process.stderr.write(
-          `[local-ci-vitest] runner termination detected (status=${attempt.status}, signal=${attempt.signal ?? "none"}); retrying the same exhaustive suite once with ${retryWorkers} workers\n`,
+          `[local-ci-vitest] runner termination detected (status=${attempt.status}, signal=${attempt.signal ?? "none"}); retrying the same ${selection.mode} selection once with ${retryWorkers} workers\n`,
         );
       }
     },
@@ -331,9 +295,11 @@ async function main() {
     recoveryPlan,
     startedAt,
     attempts: result.attempts,
+    failedTestFiles: result.failedTestFiles ?? [],
   });
+  const failedFiles = result.failedTestFiles?.length ? ` failed-files=${result.failedTestFiles.join(",")}` : "";
   process.stdout.write(
-    `[local-ci-vitest] classification=${result.classification} attempts=${result.attempts.length} recovered=${recovered} diagnostics=${diagnosticsPath}\n`,
+    `[local-ci-vitest] classification=${result.classification} attempts=${result.attempts.length} recovered=${recovered}${failedFiles} diagnostics=${diagnosticsPath}\n`,
   );
   process.exit(result.status);
 }

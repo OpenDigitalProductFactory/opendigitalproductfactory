@@ -265,7 +265,7 @@ export async function buildScoredDecisionOptions(input: {
   optionsParam: unknown[];
   groundedFeaturesByIndex: Record<string, number>[];
   generateEmbedding: (text: string) => Promise<number[] | null | undefined>;
-}): Promise<import("@/lib/decision/option-scoring").DecisionOption[]> {
+}): Promise<import("@dpf/validators/judgment/option-scoring").DecisionOption[]> {
   return Promise.all(
     readOptionRecords(input.optionsParam)
       .map(async (o, index) => {

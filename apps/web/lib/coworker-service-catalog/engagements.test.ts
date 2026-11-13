@@ -35,6 +35,13 @@ function db(overrides: Record<string, unknown> = {}) {
 }
 
 describe("createCoworkerEngagement", () => {
+  it("rejects caller-forged server execution and result metadata", async () => {
+    for (const metadata of [{ fulfillment: { taskRunId: "forged" } }, { result: { summary: "approved" } }]) {
+      const fakeDb = db();
+      await expect(createCoworkerEngagement({ offerId: "offer-1", requestedOutcome: "Review", metadata }, { db: fakeDb })).rejects.toThrow(/reserved/i);
+      expect(fakeDb.coworkerEngagement.create).not.toHaveBeenCalled();
+    }
+  });
   it("creates a requested engagement without creating a Work Capsule", async () => {
     const fakeDb = db();
 

@@ -250,6 +250,33 @@ The following is target behavior; a shape declaration alone does not implement i
    for obtaining a missing scope baseline. Return the executable baseline-review
    prerequisite without changing the work's classification just to trigger a gate.
 
+#### Native launch identity and interrupted outcomes
+
+OBJ-EXEC-02 and AC-EXEC-03/04/05 require a durable launch identity as well as a
+review packet. The October 16 live review75512C999571 correlated its TaskRun to
+a CLI dispatch log but retained no immutable container/exec binding. A later
+canonical retirement receipt therefore cannot settle that attempt. Keep its
+unknown outcome, original request digest, budget and authority unchanged.
+
+For future managed Claude/Codex launches, extend the existing AsyncInferenceOp
+lifecycle with an explicit typed native handle and version boundary; preserve
+remote version1 provider operation IDs. Kernel decision DI-418EB31838D7 selects
+this canonical extension over a separate artifact-only execution projection.
+The [prospective CLI contract](2026-10-15-maintenance-epoch-recovery-evidence.md#prospective-cli-launch-binding--october-16-design-amendment)
+is the single detailed home for its compatibility matrix, preparation/create/
+start/observe boundaries, cancellation and current-authority checks, bounded
+observations and rollback requirements. That linked section is an explicit
+BI-06AE6833 design amendment; the earlier maintenance-epoch contribution remains
+BI-8B8731EE's separately delivered evidence producer.
+
+This amendment refines the existing execution objectives; it adds no recovery
+authority or historical settlement. Both the native adapter/storage fit and the
+exact canonical design still owe their normal review, mapping and implementation
+admission. Source-local compatibility fixtures and runtime implementation are
+unrun. A failing or unavailable current-source binding returns its supported
+repair action; never force a different room, archive unrelated work or fabricate
+an independent review packet to make a gate routable.
+
 ### 8.2 Work-shape evolution and encoded boundaries
 
 Extend the existing `pull-request-flow-watch` activity family under `BI-06AE6833`.

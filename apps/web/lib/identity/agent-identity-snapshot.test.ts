@@ -33,7 +33,7 @@ describe("listAgentIdentitySnapshots", () => {
     vi.mocked(prisma.agent.findMany).mockResolvedValue([
       {
         id: "1",
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         name: "Build Specialist",
         status: "active",
         lifecycleStage: "production",
@@ -56,6 +56,7 @@ describe("listAgentIdentitySnapshots", () => {
           { label: "repo-grounding", taskType: "analysis" },
           { label: "build-phase-implementation", taskType: "code_generation" },
         ],
+        toolGrantRevocations: [],
         toolGrants: [
           { grantKey: "registry_read" },
           { grantKey: "backlog_write" },
@@ -74,24 +75,25 @@ describe("listAgentIdentitySnapshots", () => {
         executionConfig: null,
         governanceProfile: null,
         skills: [],
+        toolGrantRevocations: [],
         toolGrants: [],
       },
     ] as never);
     vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([
       {
         aliasType: "agent",
-        aliasValue: "build-specialist",
+        aliasValue: "identity-test-agent",
         principalId: "PRN-000002",
       },
       {
         aliasType: "gaid",
-        aliasValue: "gaid:priv:dpf.internal:build-specialist",
+        aliasValue: "gaid:priv:dpf.internal:identity-test-agent",
         principalId: "PRN-000002",
       },
     ] as never);
     vi.mocked(prisma.agentModelConfig.findMany).mockResolvedValue([
       {
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         minimumTier: "strong",
         pinnedProviderId: "openai",
         pinnedModelId: "gpt-5.2",
@@ -100,7 +102,7 @@ describe("listAgentIdentitySnapshots", () => {
     ] as never);
     vi.mocked(prisma.userFact.findMany).mockResolvedValue([
       {
-        sourceAgentId: "build-specialist",
+        sourceAgentId: "identity-test-agent",
         validatedAgainstFingerprint: "legacy-fp",
       },
     ] as never);
@@ -109,9 +111,9 @@ describe("listAgentIdentitySnapshots", () => {
 
     expect(snapshots).toHaveLength(2);
     expect(snapshots[0]).toMatchObject({
-      agentId: "build-specialist",
+      agentId: "identity-test-agent",
       linkedPrincipalId: "PRN-000002",
-      gaid: "gaid:priv:dpf.internal:build-specialist",
+      gaid: "gaid:priv:dpf.internal:identity-test-agent",
       validationState: "validated",
       authorizationClasses: ["observe", "create", "update", "execute"],
       memoryFactPendingRevalidationCount: 1,
@@ -135,15 +137,15 @@ describe("summarizeAgentIdentitySnapshots", () => {
     const summary = summarizeAgentIdentitySnapshots([
       {
         id: "1",
-        agentId: "build-specialist",
+        agentId: "identity-test-agent",
         name: "Build Specialist",
         status: "active",
         lifecycleStage: "production",
         humanSupervisorId: "HR-300",
         linkedPrincipalId: "PRN-000002",
-        gaid: "gaid:priv:dpf.internal:build-specialist",
+        gaid: "gaid:priv:dpf.internal:identity-test-agent",
         aidoc: {
-          gaid: "gaid:priv:dpf.internal:build-specialist",
+          gaid: "gaid:priv:dpf.internal:identity-test-agent",
         } as never,
         authorizationClasses: ["observe", "execute"],
         operatingProfileFingerprint: "fingerprint-1",
@@ -229,6 +231,35 @@ describe("dual-seed collapse (BI-74FD6420 applied to the identity page)", () => 
     governanceProfile: null,
     skills: [],
     toolGrants: [],
+    toolGrantRevocations: [],
+  });
+
+  it("filters canonical revocations before projecting identity authority in one batch", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      { ...row("AGT-EXT-CODEX", "Codex"), toolGrants: [{ grantKey: "registry_read" }, { grantKey: "backlog_write" }], toolGrantRevocations: [{ grantKey: "backlog_write" }] },
+    ] as never);
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([
+      { aliasType: "agent", aliasValue: "AGT-EXT-CODEX", principalId: "PRN-CODEX" },
+      { aliasType: "gaid", aliasValue: "gaid:priv:dpf.internal:codex", principalId: "PRN-CODEX" },
+    ] as never);
+    const [snapshot] = await listAgentIdentitySnapshots();
+    expect(snapshot.authorizationClasses).toEqual(["observe"]);
+    expect(snapshot.aidoc?.tool_surface).not.toContain("record_execution_evidence");
+    expect(prisma.agent.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an orphan alias visible without granting its retired raw permissions", async () => {
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([
+      { ...row("external-codex", "Codex alias"), toolGrants: [{ grantKey: "admin_write" }] },
+    ] as never);
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([
+      { aliasType: "agent", aliasValue: "external-codex", principalId: "PRN-CODEX" },
+      { aliasType: "gaid", aliasValue: "gaid:priv:dpf.internal:codex", principalId: "PRN-CODEX" },
+    ] as never);
+    const [snapshot] = await listAgentIdentitySnapshots();
+    expect(snapshot.name).toBe("Codex alias");
+    expect(snapshot.authorizationClasses).toEqual([]);
+    expect(snapshot.toolSurfaceCount).toBe(0);
   });
 
   it("renders ONE row when a coworker is seeded under both its slug and its canonical id", async () => {

@@ -13,16 +13,22 @@
 // HEAD descends from, the commit distance, and the commit. publish-image.yml
 // publishes dpf-doctools under every `v*` tag, so that tag names a published,
 // digest-recorded image the install can pin exactly as a release install does.
+// A build may instead stamp only its source commit. Resolve that exact commit
+// through the mounted clone, never the clone's mutable HEAD or a guessed tag.
 //
 // A source upgrade re-stamps the version (promote.sh), so the next boot sees
 // the new lineage and re-resolves the pin: the setting survives upgrade.
 //
-// Where no published image is reachable (offline, air-gapped, a lineage that
-// predates dpf-doctools, a fork whose owner publishes nothing), the install
-// builds Dockerfile.doctools from its own clone and pins the local image id.
+// Where the nearest tag published nothing, the install tries a bounded list of
+// ancestor release tags before building (BI-660D77EC). Where no published image
+// is reachable (offline, air-gapped, a lineage that predates dpf-doctools, a
+// fork whose owner publishes nothing), the install builds Dockerfile.doctools
+// from its own clone and pins the local image id. A registry that does not
+// answer stops the walk; it is not treated as "not published".
 // The build context is a scratch copy of the two inputs the Dockerfile reads,
 // never the whole clone.
 
+import { spawnSync } from "node:child_process";
 import { cp, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -72,6 +78,7 @@ export async function loadSourceLineageContext(input: {
   hostSourcePath: string;
   readPlatformVersion: () => Promise<string | null>;
   env?: Record<string, string | undefined>;
+  runGit?: GitRunner;
 }): Promise<SourceLineageContext | null> {
   const env = input.env ?? process.env;
   const ghcrOwner = env.GHCR_OWNER?.trim();
@@ -82,9 +89,20 @@ export async function loadSourceLineageContext(input: {
   } catch {
     return null;
   }
-  const imageTag = releaseTagFromPlatformVersion(version);
+  const sourceRoot = input.hostSourcePath.replace(/\/$/, "");
+  const stamp = version?.trim() ?? "";
+  let imageTag = releaseTagFromPlatformVersion(stamp);
+  if (!imageTag && /^[a-f0-9]{7,40}$/i.test(stamp)) {
+    const lineage = await describeSourceLineage({
+      sourcePath: sourceRoot,
+      targetSha: stamp,
+      ghcrOwner,
+      runGit: input.runGit ?? runGitSync,
+    });
+    imageTag = lineage?.imageTag ?? null;
+  }
   if (!imageTag) return null;
-  return Object.freeze({ imageTag, ghcrOwner, sourceRoot: input.hostSourcePath.replace(/\/$/, "") });
+  return Object.freeze({ imageTag, ghcrOwner, sourceRoot });
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -119,6 +137,49 @@ export async function describeSourceLineage(input: {
   } catch {
     return null;
   }
+}
+
+export const ANCESTOR_RELEASE_TAG_LIMIT = 12;
+
+/** git for-each-ref, used by the production reconciler. Tests inject their own runner. */
+export function runGitSync(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  const result = spawnSync("git", args, { encoding: "utf8" });
+  return Promise.resolve({
+    code: result.status ?? 1,
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+  });
+}
+
+/**
+ * Release tags merged into `tipRef`, newest first, capped. Names that are not
+ * immutable release tags are dropped. A git failure returns no tags so the
+ * caller can still build locally.
+ */
+export async function listAncestorReleaseTags(input: {
+  sourcePath: string;
+  tipRef: string;
+  runGit: GitRunner;
+  limit?: number;
+}): Promise<string[]> {
+  const limit = input.limit ?? ANCESTOR_RELEASE_TAG_LIMIT;
+  const result = await input.runGit([
+    "-C", input.sourcePath,
+    "for-each-ref",
+    "--merged", input.tipRef,
+    "--sort=-creatordate",
+    "--format=%(refname:short)",
+    "refs/tags",
+  ]);
+  if (result.code !== 0) return [];
+  const tags: string[] = [];
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const tag = releaseTagFromPlatformVersion(line);
+    if (!tag || tags.includes(tag)) continue;
+    tags.push(tag);
+    if (tags.length >= limit) break;
+  }
+  return tags;
 }
 
 /** The last line of `docker build -q`: the built image id. */

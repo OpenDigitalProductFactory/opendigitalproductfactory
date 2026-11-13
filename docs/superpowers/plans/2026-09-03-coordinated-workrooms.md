@@ -153,6 +153,16 @@ identity and unread-notice deduplication are retained. This does not start anoth
 or alter the parent's stage. Actual stalled-child dispatch, named-human delivery and nested closure remain live
 acceptance obligations; this source slice does not declare Phase D complete.
 
+### 2026-10-22 implementation continuation — BI-8C04456A / WC-3F2EE718
+
+The nested walk no longer requires the stalled child itself to have a coordinator.
+An unowned child continues to the first recorded parent owner, then registry
+`escalatesTo`, then exactly one `HR-*` human. Conflicting coordinators, cycles and
+orchestrator loops still refuse. A fully unowned lineage stays setup-required.
+Derived ladder owners are not stall recipients. Phase H appointment is unchanged.
+Live named-human delivery, nested closure proof, and independent acceptance remain
+owed after merge and canonical-runtime deploy.
+
 Focused projection, access, workforce and UI tests have passed, including a first-failing
 stale-role membership regression. Both web TypeScript programs and the theme/style guard
 passed. The exact-source publication gates remain pending.

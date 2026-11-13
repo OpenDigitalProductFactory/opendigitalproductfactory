@@ -23,7 +23,7 @@ The three scopes are the same engine pointed at three different bodies of doctri
 | **WSID** | *What Should I Do?* | "What would a **competent professional in this role** do here?" | A per-profession, source-traced corpus |
 
 All three share the inner scoring engine
-([`apps/web/lib/decision/option-scoring.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision/option-scoring.ts)),
+([`packages/validators/src/judgment/option-scoring.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/validators/src/judgment/option-scoring.ts)),
 the four-outcome contract (`recommend` / `arbitrate` / `escalate` / `defer`), and the same audit
 ledger (`DecisionInteraction`). The worked numbers below are **representative illustrations of the
 real math**, not transcripts of a single captured run — they show how the contribution ledger adds
@@ -290,6 +290,26 @@ doubt* it faces:
 In all three, an employee is in the loop at exactly the point where judgment is genuinely required, and
 the ledger makes every path — including the ones where the platform chose *not* to decide —
 reconstructable.
+
+## What a weekly review result proves
+
+The scheduled decision-engine review retains a frozen result for each owner, task,
+ISO week and review definition. It records the measurement window, population
+limits, findings and their destinations. A retry reads that result instead of
+creating another review or repeating a recorded action.
+
+A completed review means its measurement and routing finished. It does not mean
+that a proposal was accepted, a correction worked, or decision quality improved.
+Outcome-quality coverage remains unknown until linked observations establish it.
+Human choices and specialist reports retain their original provenance.
+
+If routing fails, the review keeps its measurement and completed destinations and
+reports incomplete routing. Before retrying an interrupted destination, it checks
+for the existing proposal or craft need. An uncertain effect stays unresolved;
+absence of a record is not permission to repeat it. Cancellation, a changed
+commission and upgrade holds prevent stale attempts from publishing a result.
+These conditions need recovery of the affected work, rather than another approval
+of the same intended tool use.
 
 ## Related reading
 

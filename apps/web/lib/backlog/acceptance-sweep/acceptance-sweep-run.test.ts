@@ -198,4 +198,20 @@ describe("runAcceptanceSweep", () => {
     expect(p.route).not.toHaveBeenCalled();
     expect(summary.headline).toContain("routing off");
   });
+
+  it("reports the obligations skipped because a peer installation owns them (BI-C5794F1D)", async () => {
+    const { ports: p, runs } = ports({
+      loadPoolAges: async () => Object.assign(new Map([["a", age("a", 3)]]), { peerOwnedSkipped: 368 }),
+    });
+    await runAcceptanceSweep(p, CONFIG);
+    expect(runs[0]!.peerOwned).toEqual({ skipped: 368 });
+    expect(runs[0]!.headline).toContain("368 skipped: owned by peer installation");
+  });
+
+  it("reports zero peer-owned skips when the pool reader did not count them", async () => {
+    const { ports: p, runs } = ports();
+    await runAcceptanceSweep(p, CONFIG);
+    expect(runs[0]!.peerOwned).toEqual({ skipped: 0 });
+    expect(runs[0]!.headline).not.toContain("owned by peer installation");
+  });
 });

@@ -19,11 +19,11 @@ import { describe, expect, it } from "vitest";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { getWorkShape, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
-import { lowerToDefinition } from "./emit";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { lowerToDefinition } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
-import { gppShapeDocumentSchema, type GppGate } from "./gpp-shape-schema";
-import { legacyProjection } from "./legacy";
+import { gppShapeDocumentSchema, type GppGate } from "@dpf/validators/gpp/gpp-shape-schema";
+import { legacyProjection } from "@dpf/validators/gpp/legacy";
 
 type JsonObject = Record<string, unknown>;
 

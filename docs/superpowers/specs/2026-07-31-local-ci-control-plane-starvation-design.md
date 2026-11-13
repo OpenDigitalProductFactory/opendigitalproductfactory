@@ -4,6 +4,123 @@ status: active
 
 # Local-CI Control-Plane Starvation Prevention
 
+## Exited-member fixture determinism: BI-D62F4BE4 (2026-11-03)
+
+Workroom `WC-F57A4E37` owns this Small/low atomic regression repair. The
+completed BI-1A4CC847 diagnostics and BI-BFDB98B6 containment remain intact.
+On protected source `4cebc26d759a4b07e7978360735ecfa555b61cd9`, repeated
+Windows readiness runs captured an exited member successfully opening in one
+snapshot, then failing `probe-member-in-snapshot` in the next. Waiting for
+process exit does not prove the process object has disappeared. The failing
+fixtures retain real native provenance; they must not be rewritten as passes.
+
+### Ordered fix and verification
+
+1. Add an `exited-member-retained` control to the existing native fixture and
+   JavaScript suite. Hold an additional query/synchronize handle for the owned
+   member across actual exit and the first real observation. Require the
+   intended OpenProcess/native87 diagnostic, original PID/birth, and successful
+   independent cleanup. Observe the unchanged immediate-disappearance path fail.
+2. Within the same captured membership snapshot, observe the exited member with
+   bounded read-only OpenProcess attempts until a genuine native failure occurs.
+   Compare every successful handle's creation time with the captured identity,
+   close it on every path, and reject PID reuse or unreadable identity. Release
+   the control handle only after two successful, creation-verified observations,
+   closing each observation handle first. On the decisive failing snapshot,
+   require ordered evidence of original probe-handle release, both observations
+   while the extra control is held, observation-handle closes, control release,
+   then the actual null OpenProcess/native87. Never signal a reopened PID,
+   fabricate error87, or change the production observer.
+3. Use only the remaining existing ten-second Job-drain budget, including the
+   exit wait. Exhaustion remains non-success with explicit operation/provenance;
+   retain primary and cleanup errors separately. No timeout increase or blind
+   sleep is a remedy. Extract a shared fixture observation helper where useful.
+4. Run all original15 Windows cancellation/Job cases plus the retained-handle
+   control, with owned cleanup and the existing unrelated cancellation sentinel.
+   Record RED and GREEN separately, check documentation/index and applicable
+   source guards, obtain independent exact-source assessment, then qualify and
+   publish through the canonical gate and protected DCO PR/merge queue. The final
+   review packet must include the exact-head native Windows test command,
+   complete case outcomes and decisive retained-object snapshot, separately
+   from the canonical gate's web tests. Native review receipt
+   `cmw0dcarn0lr601lnbc1y5sri` remains FAIL; these changes address its ordering
+   and missing-primary-evidence findings and require independent reassessment.
+
+Acceptance is the live item's four recorded criteria: a deterministic retained
+handle regression; fail-closed identity/query/cleanup controls; all16 native
+Windows cases passing with containment; and protected exact-source publication.
+The fixture control, bounded observation and assertions are one deliverable:
+none independently repairs readiness. This ordered design is the atomic plan
+artifact for BI-D62F4BE4; it creates no runtime feature, table or runner.
+
+Microsoft's [process handle and identifier contract](https://learn.microsoft.com/en-us/windows/win32/procthread/process-handles-and-identifiers)
+and [OpenProcess contract](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-openprocess)
+define the retained-object lifetime and real failure/handle-release semantics.
+They justify observational retry within the existing fixture budget, without
+turning exit or PID absence into authoritative cleanup evidence.
+
+## Owned-job observation diagnostics: BI-1A4CC847 (2026-10-30)
+
+This Medium/low successor extends the existing Windows cancellation fixture;
+`BI-BFDB98B6` remains delivered. Workroom `WC-5E3531E3` owns this scope.
+The item-body outcome is: Windows cancellation verification either observes
+natural closure of its owned job or reports the precise failing observation
+without losing cleanup provenance or fabricating a pass.
+
+On source `68d68ef805317a0e53da01ae842a294a901b27b2`, the existing
+`query-failure` and `identity-failure` probes both report only "The handle is
+invalid". Their source-local assertions pass because they require a failure,
+not its provenance. An additional assertion requiring the membership query's
+operation fails with `undefined`; no operation or native code is persisted.
+Retained fixtures are `dpf-job-drain-uJKF8g` and `dpf-job-drain-Mjntl7` in the
+host temporary directory. Both complete their owned cleanup. These observations
+prove lost diagnostics, not the cause of the historical g0XmMA cancellation
+failure ("The parameter is incorrect" after three member identities).
+
+### Ordered repair and acceptance
+
+1. Extend the existing query/identity failure probes to require the exact API,
+   native error and available member PID/creation identity in persisted snapshots.
+   Preserve the human-readable failure and distinguish a native API failure from
+   a fixture invariant. The new assertions must fail on the named baseline.
+2. Refactor only the existing observation boundary to capture native errors
+   immediately after the failing call. Preserve a primary observation failure
+   if handle cleanup also fails; retain cleanup failure separately. Allocate
+   approximately 20% of this repair to the shared diagnostic representation and
+   its propagation through the existing snapshot writer. No new runner or table.
+3. Exercise an owned member exiting between enumeration and identity acquisition
+   using the existing bounded probe. Record the actual operation and code. Do
+   not interpret a missing PID as natural job closure or change cleanup policy
+   without evidence. Genuine unreadable membership/identity remains inconclusive.
+4. Re-run the existing empty, short-lived, persistent, query-failure,
+   identity-failure, missing-job and driver-failure cases, plus the actual Windows
+   cancellation cases. Preserve the ten-second observation budget, owned Job
+   containment, unrelated sentinel and original failure outcomes. Complete
+   applicable protected verification and independent assessment before publication.
+
+Acceptance: exact diagnostic provenance is persisted, genuine observation
+failures never become a pass, natural closure still requires zero job accounting
+and members, and cleanup cannot replace an earlier observation error. Source
+fixture verification is distinct from a canonical gate or deployed verification.
+The original historical cause remains unknown unless a matching reproduction
+establishes it. A revert retains fail-closed observation and containment.
+
+This is one atomic diagnostic repair: tests, native capture and persisted fields
+must ship together. Plan coverage belongs to `BI-1A4CC847`; documentation does
+not deliver a separate implementation item. Hydration `BI-E96C5778`, identity
+`BI-CAP-437F7745` and role/room `BI-56E9CEC2` keep their existing ownership.
+
+### Acceptance criteria
+
+- Failed observations persist the exact operation, native error code and available process identity.
+- Genuine observation failures remain non-success; natural closure still requires zero job accounting and members.
+- A primary observation error survives cleanup failure, with cleanup provenance recorded separately.
+- Existing cancellation and owned-job probes retain their bounded containment and truthful outcomes.
+Microsoft's [process handle contract](https://learn.microsoft.com/en-us/windows/win32/procthread/process-handles-and-identifiers)
+distinguishes PID lifetime from retained-handle lifetime. The
+[job process list](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list)
+is a membership snapshot with explicit returned-count bounds. These justify a
+controlled disappearing-member probe, not a conclusion about the old failure.
 ## Supervisor-loss repair: BI-BFDB98B6 (2026-09-13)
 
 Implementation owner: `BI-BFDB98B6`, Workroom `WC-B78D15F5`, branch

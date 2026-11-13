@@ -521,7 +521,88 @@ describe("routing a small item's execution-evidence lane end to end (BI-7C7E8CAC
     expect(objective).toMatch(/record_execution_evidence, itemId BI-SMALL0002/);
     expect(objective).toMatch(/ACCEPTANCE_EVIDENCE_REQUIRED: kind "manual_check"/);
     expect(objective).toMatch(/DELIVERY_EVIDENCE_REQUIRED: kind "test_pass"/);
+    expect(objective).toMatch(/record kind "manual_fail", not "manual_check"/);
+    expect(objective).toMatch(/manual_fail never earns completion credit/);
     expect(objective).not.toMatch(/record_initiative_evidence/);
     expect(objective).not.toMatch(/Not yours/);
+  });
+});
+
+// BI-1D5FCEBE — the verify stage's scheduled run is refused before dispatch when
+// its bound coworker cannot call record_workroom_evidence (or the lane writer it
+// owes). Live, PROD 2026-11-13: WC-ACC-04140C98, -5454A9E6, -683619D9 and
+// -C2467A2E bind AGT-102, which holds neither, and every run ends "not dispatched".
+describe("routeAgedItems verifier writer check (BI-1D5FCEBE)", () => {
+  const HELD: Record<string, string[]> = {
+    "AGT-102": ["record_execution_evidence"],
+    "AGT-WS-BUILD": ["record_workroom_evidence", "record_initiative_evidence", "record_execution_evidence"],
+  };
+  const verifierWriterGap = vi.fn(async (agentId: string, tools: readonly string[]) =>
+    tools.filter((tool) => !(HELD[agentId] ?? []).includes(tool)));
+
+  it("binds no verifier that cannot write the stage evidence, and names the missing writer", async () => {
+    const { db, raw } = fakeDb();
+    const outcomes = await routeWith({
+      db, now: NOW, limit: 10, verifierWriterGap,
+      resolveOwnerUserId: async () => "user-operator",
+      candidates: [candidate("BI-AAAA0001", 20, {
+        projection: projection({ owner: { agentId: "AGT-102", displayName: "Portfolio Backlog", codes: ["ACCEPTANCE_EVIDENCE_REQUIRED"] } }),
+      })],
+    });
+
+    expect(outcomes).toEqual([expect.objectContaining({
+      outcome: "unroutable", ownerAgentId: "AGT-102",
+      reason: "verifier-missing-writer:record_workroom_evidence,record_initiative_evidence",
+    })]);
+    expect(raw.workroom.upsert).not.toHaveBeenCalled();
+  });
+
+  it("asks for the stage writer and the lane writer of each owned code", async () => {
+    const { db } = fakeDb();
+    verifierWriterGap.mockClear();
+    await routeWith({
+      db, now: NOW, limit: 10, verifierWriterGap,
+      resolveOwnerUserId: async () => "user-operator",
+      candidates: [candidate("BI-AAAA0002", 20, {
+        projection: projection({
+          owed: [{ code: "DELIVERY_EVIDENCE_REQUIRED", state: "fail", accountableRole: "delivery-coordinator", nextAction: null }],
+          owner: { agentId: "AGT-WS-BUILD", displayName: "Build", codes: ["DELIVERY_EVIDENCE_REQUIRED"] },
+        }),
+      })],
+    });
+    expect(verifierWriterGap).toHaveBeenCalledWith("AGT-WS-BUILD", ["record_workroom_evidence", "record_execution_evidence"]);
+  });
+
+  it("still routes a verifier that holds every writer", async () => {
+    const { db } = fakeDb();
+    const outcomes = await routeWith({
+      db, now: NOW, limit: 10, verifierWriterGap,
+      resolveOwnerUserId: async () => "user-operator",
+      candidates: [candidate("BI-AAAA0003", 20)],
+    });
+    expect(outcomes).toEqual([expect.objectContaining({ outcome: "routed", ownerAgentId: "AGT-WS-BUILD", reason: null })]);
+  });
+
+  it("reports an existing room bound to a verifier that cannot write, instead of calling it already routed", async () => {
+    const { db, raw } = fakeDb({
+      rooms: [{
+        id: "room-x", idempotencyKey: "acceptance:BI-683619D9", backlogItemId: null, capsuleId: "WC-ACC-683619D9", archivedAt: null,
+        workspaceState: {},
+        scopeClaims: [
+          { workShape: "acceptance-verification@1.1.0", recordedAt: NOW.toISOString() },
+          { workShapeRoleBindings: { "acceptance-verifier": "agent:AGT-102" }, recordedAt: NOW.toISOString() },
+        ],
+      }],
+    });
+    const outcomes = await routeWith({
+      db, now: NOW, limit: 10, verifierWriterGap,
+      resolveOwnerUserId: async () => "user-operator",
+      candidates: [candidate("BI-683619D9", 29)],
+    });
+    expect(outcomes).toEqual([expect.objectContaining({
+      outcome: "routed-unresolved", capsuleId: "WC-ACC-683619D9", ownerAgentId: "AGT-102",
+      reason: "verifier-missing-writer:record_workroom_evidence,record_initiative_evidence",
+    })]);
+    expect(raw.workroom.upsert).not.toHaveBeenCalled();
   });
 });

@@ -15,8 +15,7 @@ The naming: **WWMD** is "What Would Mark Do" — the platform profile, seeded fo
 
 There is a third scope in the same family. **WSID** is "What Should I Do" — the *profession* profile. Where WWMD encodes founder/platform doctrine and WWWD encodes organization doctrine, WSID encodes what a competent professional in a given role should do. Each coworker role family gets its own profile (`WSID-DATA-ARCHITECT`, `WSID-FINANCE`, `WSID-MARKETING`, …) backed by a source-traced professional corpus, reusing the same profile + corpus + retrieval + gate architecture. See [The Profession Scope (WSID)](#the-profession-scope-wsid) below.
 
-> **Want to see it work, not just read what it is?** [Decision Perspective in
-> Practice](decision-perspective-in-practice.md) walks a real question end-to-end through the gate for
+> **Want to see it work, not just read what it is?** [Decision Perspective in Practice](decision-perspective-in-practice.md) walks a real question end-to-end through the gate for
 > each scope (WWMD / WWWD / WSID) — the options framed, the decision vectors scored, the outcome
 > returned, and the ledger row written — plus how oversight and the immutable ledger wrap every one.
 
@@ -90,6 +89,18 @@ Read it with three things in mind:
 - **Nothing changes automatically.** Every coworker stays at the most supervised level, *shadow*. The report measures; deciding whether a coworker has earned more autonomy is a separate decision you make.
 
 A coworker's decisions that nobody has resolved yet are shown as unresolved, so a coworker with no resolved decisions still appears in the report.
+
+**What counts as the coworker's recommendation.** When a coworker brings its own proposal to the gate, that proposal is what it is measured against: the architect's review verdict (*aligned* or *revise before building*), or a coworker's request to run a governed tool (*proceed*). When a coworker brings no proposal, its recommendation is the gate's own pick, if the gate made one. A decision with neither is counted under "no recommendation" and is never a sample. When you answer an escalated decision and choose one of its options, that answer is compared with the coworker's proposal and counts as a sample.
+
+Older decisions are counted only where the recommendation is still on record. Architecture reviews from before this change did not save the architect's verdict, so they stay under "no recommendation". Nothing is guessed.
+
+**Architecture reviews resolved from what happened next.** The architect's review is advisory, so nobody is asked to answer it. Each review now records which build it looked at, the build's backlog item, and a fingerprint of the design or plan it reviewed. At each six-hourly count, a review is resolved from that record:
+
+- If the same design or plan was reviewed again with different content, it was revised before building.
+- If the build moved past that stage with the design or plan exactly as reviewed, it was built as reviewed (*aligned*).
+- In any other case, such as an abandoned build, a still-open review, or a design that changed without another review, the review stays unresolved.
+
+These are counted in the report as outcome-resolved (`outcomeResolvedCount`), beside the samples, not inside them. They record what happened, not what a person chose, and a revision may have had other causes, such as the checklist reviewers' findings. A person's own answer to a review, when there is one, replaces an outcome resolution. Reviews from before this change named no build, so they stay unresolved.
 
 ### The Inheritance Chain
 
@@ -174,6 +185,21 @@ Existing installs converge without operator action: the boot backfill counts the
 holds against the current vector set, so an install seeded before a vector was added re-runs the
 idempotent seeding chain once on its next boot and picks it up. Owner-confirmed and owner-ruled
 material is never downgraded by that re-run.
+
+### Retracting a stance
+
+A stance decides through its `PerspectiveMaterial`, not through its wiki page — the gate reads the
+material and never looks at the page. So a stance's authority follows its page's status: while the
+page is **published** its material is promoted and the gate obeys it; when the page leaves published
+— archived in the editor, or moved with `publish_wiki_overlay_pages` (`targetStatus: "archived"`) —
+its material is revoked and stops deciding. The row is kept, so the audit trail survives, and
+republishing the page restores exactly the authority it had.
+
+To retract a stance that should never have been recorded — a ruling filed against the wrong
+business, a stance that no longer holds — archive its page and say why in the change summary. A
+boot reconcile also revokes material behind any page that was archived before this rule existed. It
+only ever revokes: background work may remove a stance's authority, but only a person republishing
+the page can give it back.
 
 ## The Profession Scope (WSID)
 

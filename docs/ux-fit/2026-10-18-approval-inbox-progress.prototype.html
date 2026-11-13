@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Approval Inbox progress prototype</title>
+<style>
+:root{color-scheme:light dark;--dpf-bg:light-dark(#fff,#17191d);--dpf-text:light-dark(#20242b,#eee);--dpf-border:light-dark(#ccc,#555);--dpf-accent:light-dark(#2457ad,#8cb8ff)}
+body{background:var(--dpf-bg);color:var(--dpf-text);font:16px system-ui;margin:2rem;max-width:56rem}button{font:inherit;margin:.4rem;padding:.5rem;color:var(--dpf-accent);background:var(--dpf-bg);border:1px solid var(--dpf-border);border-radius:.3rem}article{border:1px solid var(--dpf-border);padding:1rem;margin:1rem 0}
+</style>
+<h1>What needs you now</h1>
+<p>This working sample uses local fixture data. It authorizes no real action.</p>
+<div id="result" role="status"></div><p id="summary"></p>
+<p>Completed decisions leave this list. Other requests may take their place. Other notices shown: 4.</p>
+<button id="latest">Latest requests</button><button id="older">Older requests</button><button id="failure">Show unavailable state</button>
+<div id="cards"></div>
+<script>
+const pending=Array.from({length:30},(_,i)=>30-i);let older=false;let failed=false;
+function render(){const rows=older?pending.filter(n=>n<=5):pending.slice(0,25);document.querySelector('#summary').textContent=failed?'Approval queue unavailable. Open latest requests.':`${pending.length} pending approvals in total; ${rows.length} shown.`;document.querySelector('#older').hidden=older||pending.length<=25;document.querySelector('#cards').replaceChildren();if(failed)return;for(const n of rows){const card=document.createElement('article');const label=document.createElement('p');label.textContent=`Request ${n}: Record the progress note for work ${n}.`;const approve=document.createElement('button');approve.textContent='Authorize';approve.onclick=()=>{pending.splice(pending.indexOf(n),1);document.querySelector('#result').textContent=`Request ${n}: Authorized and completed. No further approval needed.`;render()};card.append(label,approve);document.querySelector('#cards').append(card)}}
+document.querySelector('#older').onclick=()=>{older=true;render()};document.querySelector('#latest').onclick=()=>{older=false;failed=false;render()};document.querySelector('#failure').onclick=()=>{failed=true;render()};render();
+</script></html>

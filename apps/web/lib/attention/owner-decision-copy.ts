@@ -1,6 +1,6 @@
 // The placeholder blast-radius strings live with the type: routing reads the
 // same set to decide whether an item is the owner's at all (BI-79E207B9).
-import { GENERIC_BLAST_RADIUS } from "./types";
+import { GENERIC_BLAST_RADIUS, isAiCapacityItem, isOperatorContinuityItem } from "./types";
 import type { AttentionItem, AttentionSource } from "./types";
 
 const HEADLINE: Record<AttentionSource, string> = {
@@ -18,8 +18,10 @@ const HEADLINE: Record<AttentionSource, string> = {
   "coworker-memory": "Review what your coworker learned?",
   "ai-readiness-blocker": "How should we fix your intelligence setup?",
   "platform-health": "How should we handle this outage?",
+  "agent-toolchain": "What does this computer need to update its DPF tools again?",
   "provider-credential": "Reconnect this service?",
   "contribution-setup": "Share your changes?",
+  "organization-direction": "What is your organization working towards?",
   "reservation-exception": "Handle this reservation?",
   "hospitality-capacity": "Resolve this capacity issue?",
   "storefront-inquiry": "Reply to this enquiry?",
@@ -48,8 +50,10 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "coworker-memory": "Digital workforce",
   "ai-readiness-blocker": "Technology",
   "platform-health": "Platform operations",
+  "agent-toolchain": "Platform operations",
   "provider-credential": "Technology",
   "contribution-setup": "Technology",
+  "organization-direction": "Leadership",
   "reservation-exception": "Front of house",
   "hospitality-capacity": "Hospitality operations",
   "storefront-inquiry": "Front of house",
@@ -112,6 +116,12 @@ export function headlineFor(item: AttentionItem): string {
   }
   if (item.source === "coworker-envelope" && item.envelope?.decision) {
     return item.envelope.decision.headline;
+  }
+  // The AI-capacity watch writes a plain title naming the provider and, for a
+  // usage limit, its reset; the generic outage headline hid both (BI-ACE041FE).
+  // The continuity and work-sync watches name the window or the peer the same way.
+  if ((isAiCapacityItem(item) || isOperatorContinuityItem(item)) && item.title) {
+    return item.title;
   }
   return HEADLINE[item.source];
 }

@@ -244,6 +244,14 @@ test("candidate promoter build stages exactly the COPY sources, never the whole 
 // portal is released), only then may a staged script import it.
 const N_MINUS_ONE_CLOSURE_FILE = "scripts/promoter-closure-n-minus-one.json";
 
+test("portal-only reassessment discovery does not expand the staged promoter closure", async () => {
+  const staged = await readPromoterBuildContextSources(root);
+  assert.ok(!staged.includes("scripts/reassessment-capability-probe.mjs"));
+  const dockerfile = await readFile(join(root, "Dockerfile"), "utf8");
+  assert.match(dockerfile, /^COPY scripts\/reassessment-capability-probe\.mjs \.\/scripts\/$/m);
+  assert.doesNotMatch(dockerfile, /^COPY scripts\/reassessment-capability-probe\.mjs \/promoter\//m);
+});
+
 function assertImportCompatibility(staged, released, sources) {
   const deployed = new Set(released.deployedClosure);
   const knownGap = new Set((released.knownGaps ?? []).map(gap => `${gap.from} -> ${gap.to}`));

@@ -18,7 +18,7 @@
 //
 // See docs/superpowers/specs/2026-07-03-proactivity-drives-in-task-initiative.md
 
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 const QUIET_BLOCK = `INITIATIVE — LOW (Quiet posture).
 Do what the employee asked, then stop. Do not chase missing details or take extra steps beyond the request — surface what you found and let the employee drive the next move. Ask at most one short question, and only when the task genuinely cannot proceed without it.`;

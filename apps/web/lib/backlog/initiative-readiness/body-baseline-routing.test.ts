@@ -45,6 +45,25 @@ function ports(options: { currentBody?: string; head?: string; evidence?: string
 }
 const recover = (options: Parameters<typeof ports>[0] = {}) => resolveTerminalInitiativeRecovery({ decision, currentUserId: "user", currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports: ports(options) });
 describe("medium product-linked body acceptance recovery", () => {
+  it("routes the same immutable body request after verified author archival without declaring it live", async () => {
+    const current = ports();
+    current.loadLiveRooms = async () => [];
+    current.loadDeliveredBodyAuthor = vi.fn().mockResolvedValue({ ...room, isLive: false });
+    const result = await resolveTerminalInitiativeRecovery({ decision, currentUserId: "user", currentAgentId: "AGT-AUTHOR",
+      refusedWorkroomId: room.capsuleId, ports: current });
+    expect(result.reviewerRoutes).toHaveLength(1);
+    expect(result.reviewerRoutes[0]!.requestCoworker).toEqual((await recover()).reviewerRoutes[0]!.requestCoworker);
+  });
+  it("does not use a retired author for missing baselines or spec acceptance", async () => {
+    const current = ports();
+    current.loadLiveRooms = async () => [];
+    current.loadBaselinePayloads = async () => [];
+    current.loadDeliveredBodyAuthor = vi.fn().mockResolvedValue({ ...room, isLive: false });
+    const result = await resolveTerminalInitiativeRecovery({ decision, currentUserId: "user", currentAgentId: "AGT-AUTHOR",
+      refusedWorkroomId: room.capsuleId, ports: current });
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(current.loadDeliveredBodyAuthor).not.toHaveBeenCalled();
+  });
   it("issues one executable independent route and reuses its exact identity on retry", async () => {
     const first = await recover();
     const second = await recover();

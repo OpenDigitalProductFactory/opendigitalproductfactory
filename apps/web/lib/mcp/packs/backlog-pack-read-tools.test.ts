@@ -15,9 +15,13 @@ const mocks = vi.hoisted(() => ({
   projectReadiness: vi.fn(),
   resolveTerminalRecovery: vi.fn(),
   readCompletion: vi.fn(),
+  prepareCurrentDesign: vi.fn(),
   roomAccess: vi.fn(),
   roomIdentity: vi.fn(),
   taskAuthority: vi.fn(),
+  recoveryTarget: vi.fn(),
+  presentRequest: vi.fn(),
+  loadBuildFacts: vi.fn(),
 }));
 
 const CORPUS_AVAILABLE = { available: true, root: "/repo", searchedPaths: ["docs/superpowers/specs", "docs/superpowers/plans"], missingPaths: [], fileCount: 2, reason: "Searched 2 markdown file(s)." };
@@ -51,13 +55,19 @@ vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", () => ({
 vi.mock("@/lib/backlog/initiative-readiness/backlog-completion-evaluation", () => ({
   readBacklogItemCompletion: mocks.readCompletion,
 }));
+vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", () => ({
+  prepareCurrentDesignObservation: mocks.prepareCurrentDesign,
+}));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
   resolveAgentWorkroomAccess: mocks.roomAccess,
   resolveHumanWorkroomAccess: mocks.roomAccess,
 }));
+vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: mocks.recoveryTarget }));
+vi.mock("@/lib/mcp-task-review-reassessment", () => ({ issuePresentReassessmentRequest: mocks.presentRequest }));
 vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: mocks.taskAuthority }));
+vi.mock("@/lib/build/build-entry-gate", () => ({ loadBuildReadinessFacts: mocks.loadBuildFacts }));
 
-import { getBacklogItem, listBacklogItems } from "./backlog-pack-read-tools";
+import { getBacklogItem, listBacklogItems, queryBacklog } from "./backlog-pack-read-tools";
 import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
 import { createExhaustedPlanReviewPredicate } from "@/lib/backlog/initiative-readiness/exhausted-plan-review";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
@@ -84,13 +94,35 @@ const baseItem = {
   activeBuildId: null,
   activeBuild: null,
   updatedAt: new Date("2026-08-15T12:00:00Z"),
+  createdAt: new Date("2026-08-15T12:00:00Z"),
   triageOutcome: "defer",
   epic: null,
 };
 
 describe("backlog deferral read projection", () => {
+  it("uses the explicitly located approved policy issuer without resuming the historical task", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-bi", status: "in-progress", body: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null, productLine: null,
+      businessProduct: null, demandEvidenceLinks: [], activities: [], completedAt: null });
+    const decision = { verdict: "input-required", blockers: [], unmet: [{ code: "SPEC_APPROVAL_REQUIRED" }] };
+    mocks.projectReadiness.mockReturnValue({ decisions: { plan: decision, completion: decision } });
+    const packet = { targetAgent: "reviewer", requestKey: "original", initiativeReviewBinding: { gate: "design-spec" } };
+    const present = { ...packet, requestKey: "server-present", initiativeReviewBinding: { gate: "design-spec", presentReassessment: { originalTaskRunId: "TR-original" } } };
+    mocks.resolveTerminalRecovery.mockResolvedValue({ reviewerRoutes: [{ gate: "design-spec", independent: true,
+      workroomId: "WC-BOUND", requestCoworker: packet }], escalations: [], unroutable: [] });
+    mocks.presentRequest.mockResolvedValue(present);
+    const result = await Reflect.apply(getBacklogItem, undefined, [{ itemId: baseItem.itemId, recoveryGate: "design-spec",
+      reassessmentAuthorizationItemId: "BI-7906C73E" }, "AGT-AUTHOR", "user-1",
+      { authSource: "oauth", apiTokenId: "token-row", tokenGrantScopes: ["backlog_read"] }]);
+    expect(result).toMatchObject({ success: true, data: { recovery: { reviewerRoutes: [{ requestCoworker: present }] } } });
+    expect(mocks.presentRequest).toHaveBeenCalledWith({ packet, authorizationItemId: "BI-7906C73E", userId: "user-1",
+      actingAgentId: "AGT-AUTHOR", tokenGrantScopes: ["backlog_read"] });
+    expect(mocks.recoveryTarget).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence: { state: "not-applicable" } });
     vi.clearAllMocks();
+    mocks.recoveryTarget.mockResolvedValue({ kind: "none" });
     mocks.count.mockResolvedValue(1);
     mocks.findMany.mockResolvedValue([]);
     mocks.findUnique.mockResolvedValue(null);
@@ -108,6 +140,28 @@ describe("backlog deferral read projection", () => {
       level: workroomId === "relational-room-row" ? "content" : "none",
     } }));
     mocks.taskAuthority.mockResolvedValue("oauth-family:one");
+  });
+
+  it("shares one exact source observation with the detail and completion projections", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-1", activities: [] });
+    const evidence = { state: "verified", digest: "sha256:new" };
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence });
+    const result = await getBacklogItem({ itemId: baseItem.itemId }, "AGT-AUTHOR", "user-1");
+    expect(result.success).toBe(true);
+    expect(mocks.prepareCurrentDesign).toHaveBeenCalledTimes(1);
+    expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({ currentDesign: evidence }));
+    expect(mocks.readCompletion).toHaveBeenCalledWith(expect.objectContaining({ currentDesign: evidence }));
+  });
+
+  it("does not issue a recovery packet when current immutable verification is unavailable", async () => {
+    mocks.findUnique.mockResolvedValue({ ...baseItem, id: "row-1", activities: [] });
+    mocks.prepareCurrentDesign.mockResolvedValue({ evidence: { state: "unavailable" } });
+    mocks.projectReadiness.mockReturnValue({ currentDesignState: "unavailable", decisions: { completion: {
+      verdict: "input-required", blockers: [], unmet: [{ code: "PLAN_REVIEW_REQUIRED" }],
+    } } });
+    const result = await getBacklogItem({ itemId: baseItem.itemId }, "AGT-AUTHOR", "user-1");
+    expect(result).toMatchObject({ success: true, data: { readiness: { currentDesignState: "unavailable" } } });
+    expect(mocks.resolveTerminalRecovery).not.toHaveBeenCalled();
   });
 
   it("does not report a plan-only epic as having a spec", async () => {
@@ -288,6 +342,15 @@ describe("backlog deferral read projection", () => {
     expect(read.data.recovery.reviewerRoutes).toEqual(validator.reviewerRoutes);
     expect(read.data.recovery.reviewerRoutes[0].requestCoworker).not.toEqual(oldPacket);
     expect(mocks.taskAuthority).toHaveBeenCalledWith({ tokenId: "token-row", userId: "user-1", source: "oauth" });
+    const target = { taskRunId: "TR-MCP-original", requestDigest: "d".repeat(64), expectedUpdatedAt: "2026-10-16T00:00:00.000Z" };
+    mocks.recoveryTarget.mockResolvedValue({ kind: "target", target });
+    const recoveryRead = await Reflect.apply(getBacklogItem, undefined, [params, "AGT-AUTHOR", "user-1", context]);
+    expect(recoveryRead.data.recovery.reviewerRoutes[0].requestCoworker.reviewRecovery).toEqual(target);
+    mocks.recoveryTarget.mockResolvedValue({ kind: "refused", reason: "original-review-ambiguous" });
+    const ambiguous = await Reflect.apply(getBacklogItem, undefined, [params, "AGT-AUTHOR", "user-1", context]);
+    expect(ambiguous).toMatchObject({ success: false, error: "original_review_recovery_required" });
+    expect(ambiguous.data).not.toHaveProperty("recovery");
+
     mocks.taskAuthority.mockResolvedValue(null);
     const revoked = await Reflect.apply(getBacklogItem, undefined, [params, "AGT-AUTHOR", "user-1", context]);
     expect(revoked).toMatchObject({ success: false, error: "review_task_authority_unavailable" });
@@ -355,6 +418,35 @@ describe("backlog deferral read projection", () => {
     expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({
       item: expect.objectContaining({ itemId: "BI-COMPLETE", status: "done" }),
       activities: [terminalActivity],
+    }));
+  });
+
+  // BI-6F2872FC AC-6: an item with an active build reads the facts its build gate uses.
+  it("projects an item with an active build on that build's sensitivity and reviewed design", async () => {
+    mocks.findUnique.mockResolvedValue({
+      ...baseItem, id: "row-b", itemId: "BI-BUILD", status: "open", body: "prose",
+      createdAt: new Date("2026-10-01T00:00:00Z"), completedAt: null,
+      deferOwnerPrincipal: null, epic: null, digitalProduct: null, organization: null,
+      productLine: null, businessProduct: null, demandEvidenceLinks: [], activities: [],
+      activeBuildId: "fb-row",
+      activeBuild: { buildId: "FB-1", kind: "feature", phase: "plan", draftApprovedAt: null, sandboxId: null,
+        createdAt: new Date("2026-10-01T00:00:00Z"), designDoc: { acceptanceCriteria: ["a"] }, designReview: { decision: "pass" },
+        buildPlan: { fileStructure: [{ path: "packages/db/prisma/schema.prisma" }] } },
+    });
+    const raised = { level: "elevated", trigger: { source: "build-plan-paths", signal: "schema" } };
+    mocks.loadBuildFacts.mockResolvedValue({ workShape: "delivery-medium@1.0.0", inheritedScope: null,
+      deliverySensitivity: raised, buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 1 } });
+    mocks.projectReadiness.mockReturnValue({ governed: true, artifactHints: { hasSpec: false, hasPlan: false }, decisions: {} });
+
+    await getBacklogItem({ itemId: "BI-BUILD" });
+
+    expect(mocks.loadBuildFacts).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      originator: expect.objectContaining({ id: "row-b", itemId: "BI-BUILD" }),
+      buildPlan: { fileStructure: [{ path: "packages/db/prisma/schema.prisma" }] },
+    }));
+    expect(mocks.projectReadiness).toHaveBeenCalledWith(expect.objectContaining({
+      item: expect.objectContaining({ deliverySensitivity: raised }),
+      buildDesign: { reviewPassed: true, acceptanceCriteriaCount: 1 },
     }));
   });
 
@@ -490,6 +582,25 @@ describe("backlog deferral read projection", () => {
       reviewDue: false,
     });
     expect(mocks.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  // BI-17C5F43A: peer-owned work-sync mirrors are named apart from local acceptance.
+  it("says how many awaiting-acceptance items are owned by a peer installation", async () => {
+    mocks.findMany.mockResolvedValue([]);
+    mocks.findEpics.mockResolvedValue([]);
+    mocks.countEpics.mockResolvedValue(0);
+    mocks.count.mockImplementation(async (args: { where: { status?: string; body?: { contains: string } } }) =>
+      args.where.status === "awaiting-acceptance" ? (args.where.body ? 341 : 404) : 0);
+
+    const result = await queryBacklog({});
+
+    expect(mocks.count).toHaveBeenCalledWith({
+      where: { status: "awaiting-acceptance", body: { contains: "[origin:federatedWork:inst_" } },
+    });
+    expect(result.message).toContain("404 awaiting-acceptance (341 of them owned by a peer installation, accepted there)");
+    expect((result.data as { summary: Record<string, number> }).summary).toMatchObject({
+      awaitingAcceptance: 404, awaitingAcceptancePeerOwned: 341,
+    });
   });
 
   it("rejects an invalid review horizon before querying the backlog", async () => {

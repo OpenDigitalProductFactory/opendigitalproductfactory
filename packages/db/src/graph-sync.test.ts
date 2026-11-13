@@ -12,7 +12,7 @@ vi.mock("./client", () => ({
 }));
 
 import { prisma } from "./client";
-import { syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./graph-sync";
+import { projectWikiLinksToGraph, replaceGraphEdgesFromSource, syncDocumentReference, syncInfraCI, syncInventoryRelationship } from "./graph-sync";
 
 const exec = vi.mocked(prisma.$executeRawUnsafe);
 
@@ -243,5 +243,40 @@ describe("syncDocumentReference", () => {
       sourceVersionId: "version-a",
       targetVersionId: "version-b",
     });
+  });
+});
+
+describe("replaceGraphEdgesFromSource (BI-23900D0A)", () => {
+  beforeEach(() => exec.mockClear());
+
+  it("deletes only this source's edges of this type that are no longer wanted, then upserts the wanted set", async () => {
+    await replaceGraphEdgesFromSource("page-a", "LINKS_TO", ["page-b", "page-c"]);
+
+    const [del, ...upserts] = exec.mock.calls;
+    expect(del?.[0]).toContain("DELETE FROM graph_edge");
+    expect(del?.[0]).toContain("src_key = $1");
+    expect(del?.[0]).toContain("rel_type = $2");
+    expect(del?.[0]).toContain("NOT (dst_key = ANY($3::text[]))");
+    expect(del?.slice(1)).toEqual(["page-a", "LINKS_TO", ["page-b", "page-c"]]);
+    expect(upserts.map((c) => edgeCall(c))).toEqual([
+      expect.objectContaining({ src: "page-a", dst: "page-b", relType: "LINKS_TO" }),
+      expect.objectContaining({ src: "page-a", dst: "page-c", relType: "LINKS_TO" }),
+    ]);
+  });
+
+  it("with an empty wanted set removes every edge of that type from the source and writes none", async () => {
+    await replaceGraphEdgesFromSource("page-a", "LINKS_TO", []);
+
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(exec.mock.calls[0]?.slice(1)).toEqual(["page-a", "LINKS_TO", []]);
+  });
+});
+
+describe("projectWikiLinksToGraph (BI-23900D0A)", () => {
+  beforeEach(() => exec.mockClear());
+
+  it("replaces the page's LINKS_TO edges", async () => {
+    await projectWikiLinksToGraph("page-a", ["page-b"]);
+    expect(exec.mock.calls[0]?.slice(1)).toEqual(["page-a", "LINKS_TO", ["page-b"]]);
   });
 });

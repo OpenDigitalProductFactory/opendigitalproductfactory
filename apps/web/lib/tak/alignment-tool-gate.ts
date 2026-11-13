@@ -3,6 +3,11 @@ import { prisma } from "@dpf/db";
 import type { ConstitutionalAlignmentResult } from "@/lib/decision-perspective/alignment-criteria";
 import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 import type { SpecialistAlignmentDelegationResult } from "./alignment-specialist-delegation";
+import {
+  TAK_ALIGNMENT_OPTIONS,
+  TAK_ALIGNMENT_PROPOSED_OPTION_ID,
+  TAK_ALIGNMENT_SCORED_OPTIONS,
+} from "./alignment-gate-options";
 
 export type AlignmentGateDecision = {
   verdict: "approve" | "decline" | "escalate";
@@ -91,11 +96,12 @@ export async function runTakAlignmentGate(args: GovernedExecuteArgs): Promise<Al
     db: prisma,
     organizationId,
     question: statement,
-    options: ["Proceed", "Decline"],
-    scoredOptions: [
-      { id: "proceed", description: "Proceed", features: { mission_fit: 1, market_fit: 1, product_fit: 1, gtm_fit: 1 } },
-      { id: "decline", description: "Decline", features: { reversibility: 1, blast_radius: 0 } },
-    ],
+    options: [...TAK_ALIGNMENT_OPTIONS],
+    scoredOptions: TAK_ALIGNMENT_SCORED_OPTIONS,
+    // The coworker asked to run this tool: its proposal is to proceed. Recorded
+    // so the trust ledger can compare it with what a person then chose
+    // (BI-AE416D75).
+    proposedOptionId: TAK_ALIGNMENT_PROPOSED_OPTION_ID,
     domainClass: "plan-readiness",
     riskTier: "medium",
     routeContext: args.context?.routeContext ?? `/tool/${args.toolName}`,

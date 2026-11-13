@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 
 import catalogSeed from "../../../../scripts/capability-service-catalog.generated.json";
-import { loadMonitoringSwitchView, monitoringBudgetCost } from "./monitoring-switch-loader";
+import { loadMonitoringSwitchView, monitoringBudgetCost, monitoringCapabilityDecisionFromInstallState } from "./monitoring-switch-loader";
 
 const catalog = catalogSeed as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };
 const CATALOG_HASH = catalog.catalogHash;
@@ -31,6 +31,25 @@ describe("monitoringBudgetCost", () => {
     expect(monitoringBudgetCost({ optionalProfileServices: { prometheus: { memory: "1g", cpus: "1" } } })).toBeNull();
     expect(monitoringBudgetCost({})).toBeNull();
     expect(monitoringBudgetCost(null)).toBeNull();
+  });
+});
+
+describe("monitoringCapabilityDecisionFromInstallState", () => {
+  it("reads only the monitoring capability decision", () => {
+    expect(monitoringCapabilityDecisionFromInstallState({
+      runtimeCapabilityDecisions: { "runtime:deep-observability": { decision: "undecided", source: "upgrade-carried" } },
+    })).toBe("undecided");
+    expect(monitoringCapabilityDecisionFromInstallState({
+      runtimeCapabilityDecisions: { "runtime:deep-observability": { decision: "enabled", source: "portal" } },
+    })).toBe("enabled");
+    expect(monitoringCapabilityDecisionFromInstallState({
+      runtimeCapabilityDecisions: { "runtime:deep-observability": { decision: "disabled" } },
+    })).toBe("disabled");
+    expect(monitoringCapabilityDecisionFromInstallState({})).toBeNull();
+    expect(monitoringCapabilityDecisionFromInstallState(null)).toBeNull();
+    expect(monitoringCapabilityDecisionFromInstallState({
+      runtimeCapabilityDecisions: { "runtime:deep-observability": { decision: "maybe" } },
+    })).toBeNull();
   });
 });
 

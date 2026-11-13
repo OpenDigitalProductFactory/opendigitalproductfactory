@@ -87,6 +87,13 @@ export interface DemandDigestV1 {
 export const DEMAND_RESPONSE_KINDS = ["interest", "help-offer"] as const;
 export type DemandResponseKind = (typeof DEMAND_RESPONSE_KINDS)[number];
 
+/**
+ * The heaviest an interest response may weigh (BI-626A4ECA). Each installation
+ * spends a quadratic per-week credit budget, so weight N costs N^2 credits; the
+ * budget itself is enforced by the voter, never by the wire.
+ */
+export const DEMAND_RESPONSE_MAX_WEIGHT = 4;
+
 export interface DemandResponseV1 {
   specVersion: "dpf.demand-response/1";
   responseId: string;
@@ -95,9 +102,84 @@ export interface DemandResponseV1 {
   originRecordRef: string;
   responseKind: DemandResponseKind;
   message?: string;
+  /**
+   * How much this interest matters to the responder, 1..DEMAND_RESPONSE_MAX_WEIGHT
+   * (BI-626A4ECA). ABSENT MEANS 1: weight 1 is never written, so every response
+   * sent before this field existed keeps its digest and nothing re-sends. Only an
+   * interest response carries a weight.
+   */
+  weight?: number;
   responderAttribution: DemandAttribution;
+  /** Present when the help offer asks the item's home for its claim
+   *  (BI-30EDDB7F, spec 2026-10-27 §5.2). The subject is then a work-synced
+   *  item, not a projected demand envelope: `originRecordRef` is the home's
+   *  item id and `envelopeId` is `work:<itemId>`. */
+  workClaim?: WorkClaimRequestV1;
   createdAt: string;
   payloadDigest: string;
+}
+
+/** What a claim request asks the item's home to do with its Workroom claim. */
+export const WORK_CLAIM_ACTIONS = ["claim", "renew", "release"] as const;
+export type WorkClaimAction = (typeof WORK_CLAIM_ACTIONS)[number];
+
+/** How a released claim ended, which decides how the home closes its Workroom. */
+export const WORK_CLAIM_RELEASE_REASONS = ["finished", "abandoned"] as const;
+export type WorkClaimReleaseReason = (typeof WORK_CLAIM_RELEASE_REASONS)[number];
+
+export interface WorkClaimRequestV1 {
+  /** The item's id at its home. */
+  itemId: string;
+  action: WorkClaimAction;
+  /** The installation asking, by its federation installation id (`inst_…`). */
+  requesterInstallationId: string;
+  /** The requester's own Workroom, which is the claim's fence. */
+  requesterWorkroomId: string;
+  repositoryFullName: string;
+  headBranch: string;
+  /** Required with `release`. */
+  releaseReason?: WorkClaimReleaseReason;
+}
+
+/** The envelope id a work claim response carries, since it answers no envelope. */
+export function workClaimEnvelopeId(itemId: string): string {
+  return `work:${itemId}`;
+}
+
+/** `owner/name`, as GitHub names a repository. */
+const REPOSITORY_FULL_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+/** A branch name git would accept (git check-ref-format, conservatively):
+ *  no whitespace or control characters, none of ~^:?*[\, no "..", no "@{",
+ *  no leading "-" or "/", no trailing "/", "." or ".lock". */
+function isGitBranchName(value: string): boolean {
+  return !/[\s\x00-\x1f\x7f~^:?*[\\]/.test(value)
+    && !value.includes("..") && !value.includes("@{") && !value.includes("//")
+    && !value.startsWith("-") && !value.startsWith("/")
+    && !value.endsWith("/") && !value.endsWith(".") && !value.endsWith(".lock");
+}
+
+function validateWorkClaimRequestV1(value: unknown): string[] {
+  if (!isRecord(value)) return ["workClaim:invalid"];
+  const violations: string[] = [];
+  if (!isNonEmptyString(value.itemId, 120)) violations.push("workClaim.itemId:invalid");
+  if (!(WORK_CLAIM_ACTIONS as readonly unknown[]).includes(value.action)) violations.push("workClaim.action:unsupported");
+  if (!isNonEmptyString(value.requesterInstallationId, 160)) violations.push("workClaim.requesterInstallationId:invalid");
+  if (!isNonEmptyString(value.requesterWorkroomId, 120)) violations.push("workClaim.requesterWorkroomId:invalid");
+  if (!isNonEmptyString(value.repositoryFullName, 200) || !REPOSITORY_FULL_NAME.test(String(value.repositoryFullName))) {
+    violations.push("workClaim.repositoryFullName:invalid");
+  }
+  if (!isNonEmptyString(value.headBranch, 250) || !isGitBranchName(String(value.headBranch))) {
+    violations.push("workClaim.headBranch:invalid");
+  }
+  if (value.action === "release") {
+    if (!(WORK_CLAIM_RELEASE_REASONS as readonly unknown[]).includes(value.releaseReason)) {
+      violations.push("workClaim.releaseReason:unsupported");
+    }
+  } else if (value.releaseReason !== undefined) {
+    violations.push("workClaim.releaseReason:not-allowed");
+  }
+  return violations;
 }
 
 export const DEMAND_DISPOSITIONS = ["accepted", "rejected", "archived"] as const;
@@ -286,8 +368,33 @@ export function validateDemandResponseV1(value: unknown): string[] {
   if (value.message !== undefined && (typeof value.message !== "string" || value.message.length > 1_000)) {
     violations.push("message:invalid");
   }
+  if (value.weight !== undefined) {
+    if (value.responseKind !== "interest") violations.push("weight:not-applicable");
+    else if (
+      typeof value.weight !== "number"
+      || !Number.isInteger(value.weight)
+      // 1 is the absent canonical form; writing it would change the digest of an
+      // otherwise identical response.
+      || value.weight < 2
+      || value.weight > DEMAND_RESPONSE_MAX_WEIGHT
+    ) violations.push("weight:invalid");
+  }
   if (!(DEMAND_ATTRIBUTIONS as readonly unknown[]).includes(value.responderAttribution)) {
     violations.push("responderAttribution:unsupported");
+  }
+  if (value.workClaim !== undefined) {
+    violations.push(...validateWorkClaimRequestV1(value.workClaim));
+    if (value.responseKind !== "help-offer") violations.push("workClaim:requires-help-offer");
+    if (isRecord(value.workClaim) && (value.originRecordRef !== value.workClaim.itemId
+      || value.envelopeId !== workClaimEnvelopeId(String(value.workClaim.itemId)))) {
+      violations.push("workClaim:subject-mismatch");
+    }
+    // A claim request is decided on its own body, so its digest is checked
+    // against that body rather than trusted.
+    if (typeof value.payloadDigest === "string" && /^sha256:[a-f0-9]{64}$/.test(value.payloadDigest)
+      && value.payloadDigest !== computeDemandResponseDigest(value as unknown as DemandResponseV1)) {
+      violations.push("payloadDigest:mismatch");
+    }
   }
   if (!isIsoTimestamp(value.createdAt)) violations.push("createdAt:invalid");
   if (typeof value.payloadDigest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.payloadDigest)) {

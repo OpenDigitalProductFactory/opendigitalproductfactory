@@ -7,7 +7,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./seed": "./src/seed.ts"
+    "./seed": "./src/seed.ts",
+    "./operations": "./src/operations/index.ts",
+    "./operations/*": "./src/operations/*.ts"
   },
   "scripts": {
     "typecheck": "node ../../scripts/run-tsc.mjs --noEmit",

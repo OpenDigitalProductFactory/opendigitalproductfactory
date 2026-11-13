@@ -13,15 +13,17 @@
 // record it. Identity plumbing lives under Technical detail.
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
 import { EnvelopeDecisionButtons } from "./EnvelopeDecisionButtons";
 import { OnBehalfDecision, decidedOnBehalfText } from "./OnBehalfDecision";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
-import { envelopeInboxRoute, envelopeResultRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
+import { envelopeInboxRoute, envelopeResultRoute, envelopeStandingRulingRoute, envelopeStatusRoute } from "@/lib/coworker/envelope-routes";
 import { SOURCE_CATALOG } from "@dpf/i18n";
+import { useMessagesContext } from "@/lib/i18n/messages-context";
+import { envelopePrimaryDecision } from "@/lib/attention/coworker-envelope-decision";
 
 const COPY = SOURCE_CATALOG.approvals.card;
 const EXPIRED = SOURCE_CATALOG.approvals.expiredUnanswered;
@@ -40,8 +42,10 @@ type Execution = { status: "executed" | "failed" | "not-run"; message: string };
 
 export function CoworkerEnvelopeApproval({
   approval,
+  technicalDetail,
 }: {
   approval: AttentionEnvelopeApproval;
+  technicalDetail?: ReactNode;
 }) {
   const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -54,7 +58,16 @@ export function CoworkerEnvelopeApproval({
   const [unknown, setUnknown] = useState(false);
   // BI-7BCC87BB: who decided for whom, when an admin decided on the owner's behalf.
   const [onBehalfNote, setOnBehalfNote] = useState<string | null>(null);
+  // BI-E5631708: the owner's "don't ask again" choice, and what became of it.
+  const [makeStanding, setMakeStanding] = useState(false);
+  const [standingNote, setStandingNote] = useState<string | null>(null);
+  const [standingRecorded, setStandingRecorded] = useState(false);
   const decision = approval.decision;
+  // Handover and admission (BI-6AE64074) both read as "what changes / what stays".
+  const plainChange = decision.kind === "handover" ? decision.handover
+    : decision.kind === "admission" ? decision.admission : undefined;
+  const { locale } = useMessagesContext();
+  const primary = envelopePrimaryDecision(decision, locale);
 
   // BI-F4EB23C1: a decision that never answered is reconciled against what the
   // server recorded. The card never sends the decision again on its own.
@@ -93,7 +106,11 @@ export function CoworkerEnvelopeApproval({
           choice === "approve" ? approval.approveHref : approval.declineHref,
           {
             method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal,
-            ...(onBehalfReason !== undefined ? { body: JSON.stringify({ onBehalf: true, reason: onBehalfReason }) } : {}),
+            ...(onBehalfReason !== undefined
+              ? { body: JSON.stringify({ onBehalf: true, reason: onBehalfReason }) }
+              : choice === "approve" && makeStanding && approval.standingRulingOffered
+                ? { body: JSON.stringify({ makeStanding: true }) }
+                : {}),
           },
         );
       } catch {
@@ -106,11 +123,19 @@ export function CoworkerEnvelopeApproval({
         const body = (await response.json().catch(() => null)) as {
           execution?: Execution; outcomeWarning?: string;
           onBehalf?: { by: string; onBehalfOf: string; reason: string };
+          standing?: { recorded: boolean; message?: string };
         } | null;
         if (body?.execution) setExecution(body.execution);
         setOutcome(choice === "approve" ? "authorized" : "declined");
         if (body?.outcomeWarning) {
           setError(body.outcomeWarning);
+          return;
+        }
+        // BI-E5631708: keep the card so the owner sees the ruling and can undo
+        // it, or reads why this approval could not be made standing.
+        if (body?.standing) {
+          setStandingRecorded(body.standing.recorded);
+          setStandingNote(body.standing.recorded ? COPY.standingRecorded : body.standing.message ?? null);
           return;
         }
         // The admin's inbox holds no result for someone else's request: keep this card, settled.
@@ -139,6 +164,25 @@ export function CoworkerEnvelopeApproval({
       setError(body?.error ?? "That decision could not be saved. Please try again.");
     } finally {
       clearTimeout(timer);
+      setPending(false);
+    }
+  }
+
+  // BI-E5631708: "ask me again" withdraws the ruling just made.
+  async function withdrawStanding() {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const response = await fetch(envelopeStandingRulingRoute(approval.envelopeId), {
+        method: "DELETE", signal: AbortSignal.timeout(STATUS_TIMEOUT_MS),
+      });
+      if (!response.ok) throw new Error("not withdrawn");
+      setStandingRecorded(false);
+      setStandingNote(COPY.standingUndone);
+    } catch {
+      setError(COPY.standingUndoFailed);
+    } finally {
       setPending(false);
     }
   }
@@ -174,9 +218,95 @@ export function CoworkerEnvelopeApproval({
 
   return (
     <div className="space-y-3">
+      <section className="space-y-2 break-words text-dpf-body text-dpf-text">
+        <p className="text-dpf-caption text-dpf-muted">{primary.target}</p>
+        <p>{primary.description}</p>
+        <p>{primary.consequence}</p>
+        <p className="text-dpf-caption text-dpf-muted">{COPY.recommendationLabel}: {primary.recommendation}</p>
+        {primary.facts.length > 0 ? <dl className="grid gap-2 sm:grid-cols-2">
+          {primary.facts.map((fact, index) => <Fact key={`${fact.label}-${index}`} label={fact.label} value={fact.value} wide />)}
+        </dl> : null}
+      </section>
+      {approval.expiredUnanswered ? (
+        <div className="space-y-2">
+          <p className="text-xs text-[var(--dpf-text)]" role="note">
+            {reraised ? EXPIRED.asked : EXPIRED.explanation}
+          </p>
+          {reraised ? null : (
+            <Button size="sm" variant="secondary" disabled={pending || !approval.reraiseHref} onClick={() => void askAgain()}>
+              {pending ? EXPIRED.asking : EXPIRED.askAgain}
+            </Button>
+          )}
+        </div>
+      ) : outcome ? (
+        <div className="space-y-1" role="status">
+          <p className="text-xs font-semibold text-[var(--dpf-text)]">
+            {recorded ? `${recorded.label}. ${recorded.nextAction}` : outcomeMessage(outcome, execution)}
+          </p>
+          {onBehalfNote ? <p className="text-xs text-[var(--dpf-muted)]">{onBehalfNote}</p> : null}
+          {standingNote ? <p className="text-xs text-[var(--dpf-muted)]">{standingNote}</p> : null}
+          {standingRecorded ? (
+            <Button size="sm" variant="secondary" disabled={pending} onClick={() => void withdrawStanding()}>
+              {COPY.standingUndo}
+            </Button>
+          ) : null}
+        </div>
+      ) : unknown ? (
+        <div role="alert" className="space-y-1 text-xs text-[var(--dpf-error)]">
+          <p>{COPY.unknownResult}</p>
+          <a className="font-semibold text-[var(--dpf-accent)] hover:opacity-80" href={envelopeResultRoute(approval.envelopeId)}>
+            {COPY.unknownLink}
+          </a>
+        </div>
+      ) : approval.actionable && approval.onBehalf ? (
+        <OnBehalfDecision
+          ownerLabel={approval.onBehalf.ownerLabel}
+          pending={pending}
+          onDecide={(choice, reason) => void decide(choice, reason)}
+        />
+      ) : approval.actionable ? (
+        <div className="space-y-2">
+        {approval.standingRulingOffered ? (
+          <label className="flex items-start gap-2 text-dpf-body text-dpf-text">
+            <input
+              type="checkbox"
+              className="mt-1 accent-[var(--dpf-accent)]"
+              checked={makeStanding}
+              disabled={pending}
+              onChange={(event) => setMakeStanding(event.target.checked)}
+            />
+            <span>
+              {COPY.standingChoice}
+              <span className="block text-dpf-caption text-dpf-muted">{COPY.standingHint}</span>
+            </span>
+          </label>
+        ) : null}
+        <EnvelopeDecisionButtons
+          pending={pending}
+          onAuthorize={() => void decide("approve")}
+          onDecline={() => void decide("decline")}
+        />
+        </div>
+      ) : (
+        <p className="text-xs text-[var(--dpf-muted)]">
+          This request is closed. Your coworker can ask again.
+        </p>
+      )}
+
+      {error ? (
+        <p className="text-xs text-[var(--dpf-error)]" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <details>
+        <summary className="cursor-pointer py-2 text-dpf-caption text-dpf-muted">{COPY.whyDisclosure}</summary>
+        <p className="text-dpf-body text-dpf-text">{COPY.whyPlain}</p>
+      </details>
+      <details>
+        <summary className="cursor-pointer py-2 text-dpf-caption text-dpf-muted">{COPY.technicalEvidence}</summary>
       <Surface padding="sm" rounded="md">
-        {decision.kind === "handover" && decision.handover ? (
-          <HandoverDecision approval={approval} decision={decision} handover={decision.handover} />
+        {plainChange ? (
+          <HandoverDecision approval={approval} decision={decision} handover={plainChange} />
         ) : (
         <section>
         <p className="text-dpf-caption font-semibold uppercase tracking-wider text-[var(--dpf-accent)]">
@@ -188,9 +318,6 @@ export function CoworkerEnvelopeApproval({
         <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
           <Fact label="Action" value={decision.action} wide />
           <Fact label="Destination" value={decision.target} wide />
-          {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
-          {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
-          {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
           {decision.kind === "known" ? (
             <Fact
               label="Findings"
@@ -204,11 +331,8 @@ export function CoworkerEnvelopeApproval({
           ) : null}
           {decision.reason ? <Fact label="Reason" value={decision.reason} wide /> : null}
           <Fact label="Consequence" value={decision.consequence} wide />
-          <Fact label="Governing reason" value={decision.whyAPerson} wide />
-          <Fact label="Authorization scope" value={decision.scope} wide />
           <Fact label="Status" value={statusLabel(approval)} />
-          <Fact label="Recommender" value={decision.recommenderLabel} />
-          <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
+          <Fact label="Valid until" value={validUntilLabel(approval.expiresAtIso)} />
         </dl>
         {decision.kind === "known" ? null : decision.kind === "exact" ? (
           <div className="mt-3">
@@ -229,6 +353,25 @@ export function CoworkerEnvelopeApproval({
         <Effects decision={decision} />
         </section>
         )}
+        {plainChange ? null : (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">
+              {COPY.technical}
+            </summary>
+            <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              <Fact label={COPY.tool} value={decision.toolName} wide />
+              <Fact label={COPY.request} value={approval.envelopeId} wide />
+              <Fact label={COPY.assistant} value={approval.coworkerAgentId} wide />
+              {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
+              {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
+              {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
+              <Fact label="Recommender" value={decision.recommenderLabel} />
+              <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
+              <Fact label={COPY.whyAsked} value={decision.whyAPerson} wide />
+              <Fact label={COPY.covers} value={decision.scope} wide />
+            </dl>
+          </details>
+        )}
         {decision.completeProposedContent ? (
           <details className="mt-3">
             <summary className="cursor-pointer text-dpf-caption font-semibold text-dpf-accent">
@@ -240,55 +383,10 @@ export function CoworkerEnvelopeApproval({
           </details>
         ) : null}
       </Surface>
+      {technicalDetail}
+      </details>
 
-      {approval.expiredUnanswered ? (
-        <div className="space-y-2">
-          <p className="text-xs text-[var(--dpf-text)]" role="note">
-            {reraised ? EXPIRED.asked : EXPIRED.explanation}
-          </p>
-          {reraised ? null : (
-            <Button size="sm" variant="secondary" disabled={pending || !approval.reraiseHref} onClick={() => void askAgain()}>
-              {pending ? EXPIRED.asking : EXPIRED.askAgain}
-            </Button>
-          )}
-        </div>
-      ) : outcome ? (
-        <div className="space-y-1" role="status">
-          <p className="text-xs font-semibold text-[var(--dpf-text)]">
-            {recorded ? `${recorded.label}. ${recorded.nextAction}` : outcomeMessage(outcome, execution)}
-          </p>
-          {onBehalfNote ? <p className="text-xs text-[var(--dpf-muted)]">{onBehalfNote}</p> : null}
-        </div>
-      ) : unknown ? (
-        <div role="alert" className="space-y-1 text-xs text-[var(--dpf-error)]">
-          <p>{COPY.unknownResult}</p>
-          <a className="font-semibold text-[var(--dpf-accent)] hover:opacity-80" href={envelopeResultRoute(approval.envelopeId)}>
-            {COPY.unknownLink}
-          </a>
-        </div>
-      ) : approval.actionable && approval.onBehalf ? (
-        <OnBehalfDecision
-          ownerLabel={approval.onBehalf.ownerLabel}
-          pending={pending}
-          onDecide={(choice, reason) => void decide(choice, reason)}
-        />
-      ) : approval.actionable ? (
-        <EnvelopeDecisionButtons
-          pending={pending}
-          onAuthorize={() => void decide("approve")}
-          onDecline={() => void decide("decline")}
-        />
-      ) : (
-        <p className="text-xs text-[var(--dpf-muted)]">
-          This request is closed. Your coworker can ask again.
-        </p>
-      )}
 
-      {error ? (
-        <p className="text-xs text-[var(--dpf-error)]" role="alert">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -314,6 +412,14 @@ function statusLabel(approval: AttentionEnvelopeApproval): string {
   if (approval.status === "declined") return "Declined";
   if (approval.status === "expired") return "Closed: the window expired";
   return approval.status;
+}
+
+function validUntilLabel(expiresAtIso: string | null): string {
+  if (!expiresAtIso) return "No expiry recorded";
+  const expiresAt = new Date(expiresAtIso);
+  return Number.isNaN(expiresAt.getTime())
+    ? "Invalid expiry recorded"
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(expiresAt);
 }
 
 function Effects({ decision }: { decision: AttentionEnvelopeApproval["decision"] }) {

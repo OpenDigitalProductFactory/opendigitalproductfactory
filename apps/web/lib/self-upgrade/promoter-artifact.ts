@@ -1,12 +1,15 @@
 import { createHash } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { redactDiagnosticEvidenceText } from "../shared/diagnostic-evidence-redaction";
+import { excerptHeadAndTail } from "../shared/excerpt-head-and-tail";
 import {
   PROMOTER_DOCKERFILE,
   stageMinimalPromoterBuildContext,
 } from "./promoter-build-context";
+import { retryOnTransientNetwork, summarizeBuildOutput } from "./transient-network";
 
-export const SELF_UPGRADE_CALLER_PROTOCOL_VERSION = 1;
+export const SELF_UPGRADE_CALLER_PROTOCOL_VERSION = 2;
 export const PROMOTER_CONTRACT_SCHEMA_VERSION = 1;
 
 export type ResolvedPromoterArtifact = Readonly<{
@@ -29,21 +32,42 @@ export type PromoterArtifactValidationInput = {
 export type ArtifactDockerResult = { exitCode: number; stdout: string; stderr: string };
 export type ArtifactDockerRunner = (args: string[]) => Promise<ArtifactDockerResult>;
 
+/** Positive local absence, distinct from denied or unavailable inspection. */
+class PromoterImageMissingError extends Error {}
+
 const DEFAULT_PROMOTER_IMAGE = "dpf-promoter";
 
 function isLocalPromoterReference(image: string): boolean {
   return image === DEFAULT_PROMOTER_IMAGE || /^dpf-promoter:[A-Za-z0-9._-]+$/.test(image);
 }
 
-function requireDockerSuccess(result: ArtifactDockerResult, operation: string): string {
+function requireDockerSuccess(result: ArtifactDockerResult, operation: string, includeCauseSummary = false): string {
   if (result.exitCode !== 0) {
-    throw new Error(`${operation}_failed: ${(result.stderr || result.stdout).trim().slice(-500)}`);
+    const streams = ([["stderr", result.stderr], ["stdout", result.stdout]] as const)
+      .filter(([, text]) => text.trim())
+      .map(([label, text]) => [label, redactDiagnosticEvidenceText(text.trim(), {
+        credentialAssignments: true,
+      })] as const);
+    // Preserve the retry repair's buried causal lines without exposing raw
+    // credentials or displacing either stream's bounded beginning and end.
+    const cause = includeCauseSummary ? summarizeBuildOutput(streams.map(([, text]) => text).join("\n")) : "";
+    const summary = cause ? `Cause summary:\n${cause}\n` : "";
+    // Reserve room for labels and the shared excerpt helper's omission markers.
+    // Redact whole streams before slicing: a token can span an excerpt boundary.
+    const budget = Math.floor((12_000 - 128 - summary.length) / Math.max(streams.length, 1));
+    const output = streams.map(([label, text]) =>
+      `--- ${label} ---\n${excerptHeadAndTail(text, budget)}`,
+    ).join("\n");
+    throw new Error(`${operation}_failed: exit code ${result.exitCode}\n${summary}${output || "No Docker diagnostic output was captured; cause unknown."}`);
   }
   return result.stdout;
 }
 
+const CANDIDATE_BUILD_NETWORK_ATTEMPTS = 3;
+const CANDIDATE_BUILD_NETWORK_RETRY_DELAY_MS = 15_000;
+
 export async function buildCandidatePromoterArtifactImage(
-  params: { sourcePath: string; targetSha: string; promoterImage?: string },
+  params: { sourcePath: string; targetSha: string; promoterImage?: string; networkRetryDelayMs?: number },
   runDocker: ArtifactDockerRunner,
 ): Promise<string> {
   if ((params.promoterImage?.trim() || DEFAULT_PROMOTER_IMAGE) !== DEFAULT_PROMOTER_IMAGE) {
@@ -62,13 +86,24 @@ export async function buildCandidatePromoterArtifactImage(
   // instead of the portal's baked-in /promoter/ layout.
   const contextDir = await stageMinimalPromoterBuildContext(params.sourcePath);
   try {
-    requireDockerSuccess(await runDocker([
+    // A network blip during the base-image pull or `apk add` must not fail the
+    // upgrade (BI-7FFF5CB0); only network-caused failures are retried.
+    const result = await retryOnTransientNetwork(() => runDocker([
       "buildx", "build", "--load",
       "-f", join(contextDir, PROMOTER_DOCKERFILE), "-t", targetImage,
       "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${params.targetSha}`,
       "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=${contractDigest}`,
       contextDir,
-    ]), "promoter_candidate_build");
+    ]), {
+      failed: (r) => r.exitCode !== 0,
+      output: (r) => `${r.stderr}\n${r.stdout}`,
+      attempts: CANDIDATE_BUILD_NETWORK_ATTEMPTS,
+      baseDelayMs: params.networkRetryDelayMs ?? CANDIDATE_BUILD_NETWORK_RETRY_DELAY_MS,
+      onRetry: (attempt, cause) => console.warn(
+        `[self-upgrade] candidate promoter build hit a network failure (attempt ${attempt}/${CANDIDATE_BUILD_NETWORK_ATTEMPTS}); retrying: ${excerptHeadAndTail(redactDiagnosticEvidenceText(cause, { credentialAssignments: true }), 1200)}`,
+      ),
+    });
+    requireDockerSuccess(result, "promoter_candidate_build", true);
   } finally {
     await rm(contextDir, { recursive: true, force: true });
   }
@@ -83,13 +118,16 @@ export async function resolveCandidatePromoterArtifact(
   const reference = params.candidateReference ?? (configured.includes("@sha256:") || configured.startsWith("sha256:")
     ? configured
     : `${configured.replace(/:[^/:]+$/, "")}:${params.targetSha}`);
-  if (!isLocalPromoterReference(configured)) {
+  if (!isLocalPromoterReference(configured) && !/^sha256:[a-f0-9]{64}$/.test(configured)) {
     requireDockerSuccess(await runDocker(["pull", reference]), "promoter_pull");
   }
-  const inspectText = requireDockerSuccess(
-    await runDocker(["image", "inspect", reference, "--format", "{{json .}}"]),
-    "promoter_inspect",
-  ).trim();
+  const inspection = await runDocker(["image", "inspect", reference, "--format", "{{json .}}"]);
+  const missing = ["Error: No such image: ", "Error: No such object: ", "Error response from daemon: No such image: ", "Error response from daemon: No such object: "];
+  if (inspection.exitCode === 1 && !inspection.stdout.trim()
+    && missing.some(prefix => inspection.stderr.trim() === `${prefix}${reference}`)) {
+    throw new PromoterImageMissingError(`promoter_image_missing: ${reference}`);
+  }
+  const inspectText = requireDockerSuccess(inspection, "promoter_inspect").trim();
   let inspect: { Id?: string; RepoDigests?: string[]; Config?: { Labels?: Record<string, string> } };
   try { inspect = JSON.parse(inspectText); } catch { throw new Error("promoter_inspect_invalid_json"); }
   const digest = inspect.RepoDigests?.map((value) => value.split("@")[1]).find(Boolean) ?? inspect.Id;
@@ -121,7 +159,11 @@ export function validateResolvedPromoterArtifact(
   if (!range || typeof range.min !== "number" || typeof range.max !== "number" || range.min > range.max) {
     throw new Error("promoter_contract_protocol_invalid");
   }
-  if (input.callerProtocol < range.min || input.callerProtocol > range.max) throw new Error("promoter_caller_protocol_unsupported");
+  if (!Number.isSafeInteger(input.callerProtocol) || input.callerProtocol < 1) throw new Error("promoter_contract_protocol_invalid");
+  // Persisted legacy configuration may be 1; it cannot lower this server's
+  // scope-writer compatibility floor. N-1 callers still run their own version.
+  const callerProtocol = Math.max(SELF_UPGRADE_CALLER_PROTOCOL_VERSION, input.callerProtocol);
+  if (callerProtocol < range.min || callerProtocol > range.max) throw new Error("promoter_caller_protocol_unsupported");
   const sourceSha = input.labels["org.opencontainers.image.revision"];
   if (!sourceSha || sourceSha !== input.targetSha) throw new Error("promoter_source_sha_mismatch");
   if (input.labels["org.opendpf.promoter.contract-schema"] !== String(contract.schemaVersion)) {
@@ -138,4 +180,30 @@ export function validateResolvedPromoterArtifact(
     contractDigest: contractDigest as `sha256:${string}`,
     callerProtocol: Object.freeze({ min: range.min, max: range.max }),
   });
+}
+
+
+/** Resolve the actual actuator again before any privileged command is built.
+ * The same pinned digest is supplied to both ordinary and readiness builders. */
+export async function buildCompatiblePromoterCommand<T extends {
+  targetSha: string; promoterImage?: string; artifact?: ResolvedPromoterArtifact;
+}>(params: T, build: (p: T) => { command: string; args: string[] }, runDocker: ArtifactDockerRunner) {
+  const reference = params.artifact?.digest ?? params.promoterImage ?? DEFAULT_PROMOTER_IMAGE;
+  const exact = /^sha256:[a-f0-9]{64}$/.test(reference) || /@sha256:[a-f0-9]{64}$/.test(reference);
+  if (params.artifact && !exact) throw new Error("promoter_artifact_not_immutable");
+  let artifact: ResolvedPromoterArtifact;
+  try {
+    artifact = await resolveCandidatePromoterArtifact({ promoterImage: reference,
+      ...(exact ? { candidateReference: reference } : {}), targetSha: params.targetSha,
+      callerProtocol: SELF_UPGRADE_CALLER_PROTOCOL_VERSION }, runDocker);
+  } catch (error) {
+    // The existing JIT recovery builder names its image dpf-promoter. Prefer
+    // the qualified target tag, but a missing local tag may use that SAME
+    // configured local image only after full source/protocol verification.
+    // Never substitute another image after source or compatibility refusal.
+    if (exact || !isLocalPromoterReference(reference) || !(error instanceof PromoterImageMissingError)) throw error;
+    artifact = await resolveCandidatePromoterArtifact({ promoterImage: reference, candidateReference: reference,
+      targetSha: params.targetSha, callerProtocol: SELF_UPGRADE_CALLER_PROTOCOL_VERSION }, runDocker);
+  }
+  return build({ ...params, promoterImage: artifact.digest, ...(params.artifact ? { artifact } : {}) });
 }

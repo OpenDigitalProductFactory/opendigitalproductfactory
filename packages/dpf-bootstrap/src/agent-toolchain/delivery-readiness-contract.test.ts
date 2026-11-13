@@ -20,4 +20,17 @@ describe("complete delivery authority evidence", () => {
     expect(deliveryReadinessFromDiscovery({ status: rows.concat(rows[0]!) }).ready).toBe(false);
     expect(deliveryReadinessFromDiscovery({ status: rows.map(row => ({ ...row, agentGranted: undefined })) }).ready).toBe(false);
   });
+  it("accepts an inapplicable coworker layer only with explicit server callability", () => {
+    const rows = statuses().map(row => ({ ...row, agentGranted: null }));
+    expect(deliveryReadinessFromDiscovery({ status: rows }).ready).toBe(true);
+    expect(deliveryReadinessFromDiscovery({ result: { content: [{ type: "text", text: JSON.stringify({ status: rows }) }] } }).ready).toBe(true);
+    for (const fields of [
+      { tokenGranted: false }, { callableByName: false }, { callableByName: undefined },
+      { serverHasTool: false }, { agentGranted: false }, { agentGranted: undefined }, { agentGranted: "true" },
+    ]) {
+      expect(deliveryReadinessFromDiscovery({ status: [{ ...rows[0], ...fields }, ...rows.slice(1)] }).ready).toBe(false);
+    }
+    expect(deliveryReadinessFromDiscovery({ status: [...rows, rows[0]] }).ready).toBe(false);
+    expect(deliveryReadinessFromDiscovery({ status: rows.slice(1) }).ready).toBe(false);
+  });
 });

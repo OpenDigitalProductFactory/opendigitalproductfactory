@@ -1,6 +1,6 @@
 import type { AuditClass } from "@/lib/audit-classes";
 import { slugify } from "@/lib/shared/slugify";
-import { isSemanticReviewRecoveryWait, readSemanticReviewBudget } from "@/lib/change-review/semantic-review-recovery-policy";
+import { semanticReviewRecoveryObservation, readSemanticReviewBudget } from "@/lib/change-review/semantic-review-recovery-policy";
 import type { TaskState } from "@/lib/tak/task-states";
 import { SOFTWARE_PLATFORM_MAP_TEMPLATE } from "./templates";
 import { classifyRunStatus } from "./operations-run-read-model";
@@ -219,10 +219,11 @@ export function projectTaskRun(
   const label = row.source === "proactive" ? "Scheduled task run" : "Task run";
   const nativeReview = row.a2aMetadata !== null && typeof row.a2aMetadata === "object"
     && "gateKind" in row.a2aMetadata && row.a2aMetadata.gateKind === "semantic-review";
+  const reviewRecovery = nativeReview ? semanticReviewRecoveryObservation(row.status, row.progressPayload) : null;
 
   return {
     id: `task-run:${row.id}`,
-    recovery: nativeReview && isSemanticReviewRecoveryWait(row.status)
+    recovery: reviewRecovery?.manualRecoveryWait
       ? "semantic-review" : row.status === "stalled" ? "stalled" : undefined,
     reviewBudget: nativeReview ? readSemanticReviewBudget(row.progressPayload) : undefined,
     occurredAt: row.startedAt.toISOString(),
@@ -236,7 +237,7 @@ export function projectTaskRun(
     label,
     summary: `${row.title} (${row.status})${nativeReview && row.status === "auth-required"
       ? ". The original requester must inspect the submitting authority before recovery. Signing in again does not replace this request's saved credentials; the server rechecks their validity and grants."
-      : ""}`,
+      : reviewRecovery?.capacityRecovery ? `. ${reviewRecovery.nextAction}` : ""}`,
     refs: {
       taskRunId: row.taskRunId,
     },

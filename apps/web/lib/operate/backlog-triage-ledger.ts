@@ -26,6 +26,7 @@
 
 import { MARK_DPF_PLATFORM_PROFILE } from "@/lib/decision-perspective/default-profile";
 import { persistDecisionInteraction } from "@/lib/decision-perspective/persistence";
+import { withDecisionEscalation } from "@/lib/decision-perspective/decision-escalation";
 import type {
   DecisionPerspectiveEvaluationResult,
   DecisionRiskTier,
@@ -121,7 +122,7 @@ export async function recordTriageDecision(input: {
     const { interactionId } = await persistDecisionInteraction({
       db: input.db,
       build: null,
-      evaluation,
+      evaluation: withDecisionEscalation(evaluation),
       routeContext: TRIAGE_LEDGER_ROUTE_CONTEXT,
       phaseFrom: null,
       phaseTo: null,

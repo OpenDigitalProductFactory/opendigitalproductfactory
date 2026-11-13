@@ -600,7 +600,7 @@ async function main(): Promise<void> {
     contexts = await Promise.all(
       Array.from({ length: workerCount }, () =>
         browser!.newContext({
-          viewport, colorScheme,
+          viewport, colorScheme: colorScheme as "light" | "dark",
           ...(existsSync(statePath) ? { storageState: statePath } : {}),
         }),
       ),
@@ -632,9 +632,9 @@ async function main(): Promise<void> {
         onConfirmStart: (count) =>
           console.error(`[ux-sweep] confirming ${count} blocking route(s) with a second measurement (BI-69FE5504)`),
         remeasure: async (confirmRows) => {
-          const run = await runBoundedRouteWork(
+          const run = await runBoundedRouteWork<ShellRow, MeasuredRoute>(
             [...confirmRows],
-            Math.min(workerCount, confirmRows.length),
+            workerCount,
             async (row, workerIndex) =>
               withIsolatedSweepPage(contexts[workerIndex], async (page) => {
                 const result = await measureRoute(page, row, baseUrl, routeParams);

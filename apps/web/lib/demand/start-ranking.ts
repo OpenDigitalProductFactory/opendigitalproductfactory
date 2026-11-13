@@ -20,6 +20,7 @@
 import type { InvestmentBucket } from "../explore/backlog";
 import { bucketBalance, computeBucketMix, deriveBucket, type BucketWeightedItem } from "./buckets";
 import { EFFORT_SIZE_TO_JOB_SIZE } from "./scoring";
+import { classifyInvestment, type InvestmentClass } from "../portfolio/investment-balance";
 
 const ACTIVE_EPIC_STATUSES = new Set(["open", "in-progress"]);
 
@@ -39,6 +40,8 @@ export type StartRankingContext = {
   bucketTargets?: Partial<Record<InvestmentBucket, number>> | null;
   /** Work already in flight, effort-weighted, for the actual bucket mix. */
   inFlight?: BucketWeightedItem[];
+  /** Server-verified scope and measured preference; unknown/insufficient coverage has no preference. */
+  investmentByItem?: Record<string, { scopeKey: string; preferred: InvestmentClass | null; classification?: InvestmentClass }>;
 };
 
 export type RankedForStart<T extends StartRankingCandidate> = {
@@ -114,8 +117,8 @@ export function rankForStart<T extends StartRankingCandidate>(
     const leadScored = scoreOf(remaining[0]!) !== null;
     let index = 0;
     let starvedNote: string | null = null;
+    const starved = targets ? starvedBuckets(targets, mix) : new Map<InvestmentBucket, { actualPct: number; targetPct: number }>();
     if (targets) {
-      const starved = starvedBuckets(targets, mix);
       const found = remaining.findIndex((candidate) => {
         if ((scoreOf(candidate) !== null) !== leadScored) return false;
         const bucket = bucketOf(candidate);
@@ -126,6 +129,34 @@ export function rankForStart<T extends StartRankingCandidate>(
         const bucket = bucketOf(remaining[found]!)!;
         const row = starved.get(bucket)!;
         starvedNote = `Chosen ahead of higher-ranked work because the ${bucket} bucket is below its target (${row.actualPct}% of work in flight against ${row.targetPct}%).`;
+      }
+    }
+    const lead = remaining[index]!;
+    const funding = context.investmentByItem?.[lead.itemId];
+    if (funding?.preferred) {
+      const leadBucket = bucketOf(lead);
+      const leadStarved = leadBucket !== null && starved.has(leadBucket);
+      const preferredIndex = remaining.findIndex((candidate) => {
+        const candidateFunding = context.investmentByItem?.[candidate.itemId];
+        const bucket = bucketOf(candidate);
+        return candidateFunding?.scopeKey === funding.scopeKey && candidateFunding.preferred === funding.preferred
+          && (scoreOf(candidate) !== null) === leadScored
+          && (bucket !== null && starved.has(bucket)) === leadStarved
+          && (candidateFunding.classification ?? classifyInvestment(candidate.workType)) === funding.preferred;
+      });
+      if (preferredIndex >= 0 && preferredIndex !== index) {
+        // Rotate this owner's eligible slots stably; preserve every other owner's slot.
+        const slots = remaining.flatMap((candidate, slot) => {
+          const bucket = bucketOf(candidate);
+          return slot >= index && slot <= preferredIndex
+            && context.investmentByItem?.[candidate.itemId]?.scopeKey === funding.scopeKey
+            && (scoreOf(candidate) !== null) === leadScored
+            && (bucket !== null && starved.has(bucket)) === leadStarved ? [slot] : [];
+        });
+        const preferred = remaining[preferredIndex]!;
+        for (let i = slots.length - 1; i > 0; i--) remaining[slots[i]!] = remaining[slots[i - 1]!]!;
+        remaining[index] = preferred;
+        starvedNote = `${starvedNote ? `${starvedNote} ` : ""}Preferred ${funding.preferred} work to restore this owner's cumulative funding allocation.`;
       }
     }
     const [item] = remaining.splice(index, 1) as [T];

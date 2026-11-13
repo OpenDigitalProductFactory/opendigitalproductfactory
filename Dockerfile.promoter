@@ -11,7 +11,19 @@ LABEL org.opencontainers.image.description="One-shot container that executes san
 LABEL org.opencontainers.image.revision="${DPF_PROMOTER_SOURCE_SHA}"
 LABEL org.opendpf.promoter.contract-schema="1"
 LABEL org.opendpf.promoter.contract-digest="${DPF_PROMOTER_CONTRACT_DIGEST}"
-RUN apk add --no-cache bash docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git curl jq
+# The portal materializes LFS assets before handing this source tree to us.
+# Git must normalize those bytes with the same filters when checking identity;
+# without them, a fresh stat/rehash falsely reports unchanged assets as dirty.
+# apk retries (a stalled fetch times out after 60s, then retries): one dropped
+# connection must not fail an upgrade (BI-7FFF5CB0;
+# guard: apps/web/lib/verify/dockerfile-apk-retry.guard.test.ts).
+RUN for attempt in 1 2 3 4 5; do \
+      apk add --no-cache --timeout 60 bash docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl jq && break; \
+      if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
+      echo "apk add failed (attempt $attempt/5); retrying in $((attempt * 5))s" >&2; \
+      sleep $((attempt * 5)); \
+    done \
+    && git lfs install --system --skip-repo
 WORKDIR /promoter
 COPY promoter-contract.json /app/promoter-contract.json
 

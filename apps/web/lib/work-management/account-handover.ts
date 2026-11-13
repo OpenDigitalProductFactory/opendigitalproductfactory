@@ -18,6 +18,11 @@
 //              that its work was handed over (User.workHandedOverAt), so rules
 //              that name an owner for NEW work skip it (BI-858FDE5A).
 //
+// It moves work, not access (BI-9D2199D4). The account can still sign in and
+// its agent credentials stay live: the plan reports them so the approver can
+// end them through the per-person revoke surface, and OAuth consent under the
+// account says its work was handed over and asks the person to confirm.
+//
 // It never assigns the guessed install owner (`fallback`) and never hands work
 // back to the account it is leaving. It runs under the approving person's
 // authority: the MCP tool is an authority-consequence write, so a person with
@@ -27,6 +32,7 @@ import { createHash } from "node:crypto";
 
 import type { prisma } from "@dpf/db";
 
+import { agentAccessHref, agentAccessLocationLabel } from "@/lib/navigation/admin-location";
 import { resolveWorkOwner, type WorkOwnerSource } from "@/lib/portfolio/accountable-owner";
 import { PORTFOLIO_SLUG_BY_ROLE } from "@/lib/portfolio/portfolio-role";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
@@ -55,8 +61,13 @@ export type HandoverPlan = {
   sourceEmail: string;
   items: HandoverItem[];
   refused: HandoverRefusal[];
+  /** Live agent credentials the account still holds. Not moved, not in the digest. */
+  liveAgentCredentials: LiveAgentCredentials;
   digest: string;
 };
+
+/** Agent tokens (personal and OAuth), refresh grants, and headless clients the account owns. */
+export type LiveAgentCredentials = { accessTokens: number; refreshGrants: number; credentialsClients: number };
 
 export type AccountHandoverDb = {
   user: Pick<Db["user"], "findFirst" | "update">;
@@ -67,6 +78,9 @@ export type AccountHandoverDb = {
   featureBuild: Pick<Db["featureBuild"], "findMany" | "update">;
   buildActivity: Pick<Db["buildActivity"], "create">;
   scheduledAgentTask: Pick<Db["scheduledAgentTask"], "findMany" | "update">;
+  mcpApiToken: Pick<Db["mcpApiToken"], "count">;
+  oAuthRefreshToken: Pick<Db["oAuthRefreshToken"], "count">;
+  oAuthClient: Pick<Db["oAuthClient"], "count">;
 };
 
 const TERMINAL_ROOM_STATUSES = ["complete", "abandoned", "archived"];
@@ -97,7 +111,7 @@ async function principalOf(db: AccountHandoverDb, userId: string) {
 
 export async function planAccountHandover(
   db: AccountHandoverDb,
-  input: { sourceAccount: string },
+  input: { sourceAccount: string; now?: Date },
 ): Promise<ActionResult<HandoverPlan>> {
   const ref = input.sourceAccount.trim();
   const source = ref
@@ -179,7 +193,28 @@ export async function planAccountHandover(
     items.push({ kind: c.kind, id: c.id, ref: c.ref, toUserId: owner.userId, toPrincipalRef: principal.principalId, source: owner.source });
   }
 
-  return ok({ sourceUserId: source.id, sourceEmail: source.email, items, refused, digest: handoverDigest(items, source.id) });
+  const now = input.now ?? new Date();
+  // BI-DB506554 (DI-ECD8C6F6FFB4): a credentials client the account owns mints
+  // tokens with no consent screen, so it counts as access the account keeps.
+  const [accessTokens, refreshGrants, credentialsClients] = await Promise.all([
+    db.mcpApiToken.count({ where: { userId: source.id, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } }),
+    db.oAuthRefreshToken.count({ where: { userId: source.id, revokedAt: null, consumedAt: null, expiresAt: { gt: now } } }),
+    db.oAuthClient.count({ where: { ownerUserId: source.id, registrationKind: "credentials", revokedAt: null } }),
+  ]);
+
+  return ok({ sourceUserId: source.id, sourceEmail: source.email, items, refused,
+    liveAgentCredentials: { accessTokens, refreshGrants, credentialsClients }, digest: handoverDigest(items, source.id) });
+}
+
+/**
+ * What a handover leaves live, and where to end it. The handover moves work,
+ * not access (BI-9D2199D4); this names the panel that lists and ends the
+ * account's credentials, by the menu path the navigation actually shows.
+ */
+export function liveAgentAccessNote(email: string, creds: LiveAgentCredentials): string {
+  if (creds.accessTokens + creds.refreshGrants + creds.credentialsClients === 0) return "";
+  return ` The account keeps its access: ${creds.accessTokens} agent token(s), ${creds.refreshGrants} refresh grant(s) and ${creds.credentialsClients} headless client(s) it owns stay live.`
+    + ` To see and end them, open ${agentAccessLocationLabel()} (${agentAccessHref(email)}).`;
 }
 
 export type HandoverResult = {

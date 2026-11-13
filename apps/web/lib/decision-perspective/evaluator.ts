@@ -1,7 +1,6 @@
 import {
   computeMaterialDecidability,
   resolveProfileMaterial,
-  resolveProfileMaterialForOrg,
 } from "./material";
 
 /**
@@ -11,18 +10,23 @@ import {
  */
 const RECOMMENDATION_BAND = 0.7;
 import { createDecisionInteractionId, findExistingDecisionInteraction, persistDecisionInteraction } from "./persistence";
+import { decisionAllowsStep, decisionEscalationMessage, withDecisionEscalation } from "./decision-escalation";
+import type { DecisionDeclarations } from "@/lib/govern/authority/escalation-gate";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
+import { resolveOrganizationDecisionMaterial } from "./organization-guidance";
 import { resolveGateRecommendedOptionId } from "./option-recommendation";
 import type { AlignmentCorpora } from "./alignment-criteria";
 import { applyConstitutionalAlignment } from "./constitutional-alignment-application";
 import { getRecentOverrideCount } from "./override-count";
+import { resolveGateDecisionAgentId } from "@/lib/decision/decision-shadow-ledger-bridge";
 import { contentAwareDirectionalOutcome } from "./directional-outcome";
 
 // Re-exported for existing importers; owned by ./override-count (BI-ACF0D6D4).
 export { RECENT_OVERRIDE_WINDOW_DAYS } from "./override-count";
 import {
   RISK_PENALTY,
+  delegatedRiskLimit,
   hasPrincipleConflict,
   orderedProfileChain,
   riskWithin,
@@ -185,9 +189,7 @@ export function evaluateDecisionPerspective(
   // Beyond the policy's limit the decision escalates, and says which limit.
   const policy = selectedProfile.autonomyPolicy;
   const maxRiskForRecommendation = policy.maxRiskForRecommendation ?? "medium";
-  const delegatedLimit = policy.allowArbitration && !riskWithin(policy.maxRiskForArbitration, maxRiskForRecommendation)
-    ? policy.maxRiskForArbitration
-    : maxRiskForRecommendation;
+  const delegatedLimit = delegatedRiskLimit(policy);
   if (!riskWithin(input.riskTier, delegatedLimit)) {
     return {
       ...baseResult,
@@ -196,6 +198,7 @@ export function evaluateDecisionPerspective(
         `Escalate: ${input.riskTier} risk exceeds the delegated policy of ${selectedProfile.profileId} `
         + `(maxRiskForArbitration=${policy.maxRiskForArbitration}${policy.allowArbitration ? "" : ", arbitration off"}; `
         + `maxRiskForRecommendation=${maxRiskForRecommendation}).`,
+      policyLimitExceeded: true,
     };
   }
 
@@ -309,6 +312,15 @@ function planDeliberationRunId(build: PerspectiveGateBuild): string | null {
   return build.deliberationSummary?.plan?.deliberationRunId ?? null;
 }
 
+/**
+ * Lead with the companion's account of why it holds no usable organization
+ * guidance (BI-1B165D02), keeping the routed message that says what happens next.
+ */
+function withGuidanceNotice(resolved: unknown, message: string): string {
+  const guidance = (resolved as { organizationGuidance?: { notice?: unknown } } | undefined)?.organizationGuidance;
+  return typeof guidance?.notice === "string" ? `${guidance.notice} ${message}` : message;
+}
+
 export function failClosedEvaluation(input: {
   profile: DecisionPerspectiveProfile;
   question: string;
@@ -322,12 +334,13 @@ export function failClosedEvaluation(input: {
   const className = errorClass(input.error);
   const isWwwd = input.isWwwd ?? false;
   const rationale = isWwwd
-    ? `WWWD fail-closed escalation: ${className}. The decision could not be safely evaluated, so it routes to the owner.`
-    : `WWMD fail-closed escalation: ${className}. The decision kernel could not safely evaluate this advancement request.`;
+    ? `WWWD evaluation fault: ${className}. Caller risk and declarations determine the review route.`
+    : `WWMD evaluation fault: ${className}. Caller risk and declarations determine the review route.`;
 
   return {
     outcomeType: "escalate",
     selectedProfileId: input.profile.profileId,
+    evaluationFault: true,
     fallbackProfileId: null,
     profileVersionId: input.profile.currentVersion.versionId,
     confidenceBefore: 0,
@@ -354,6 +367,8 @@ export function operatorMessageFor(
   orgProfileSelected = false,
   isWwwd = false,
 ): string {
+  const routedMessage = decisionEscalationMessage(evaluation);
+  if (routedMessage) return routedMessage;
   if (isWwwd) {
     const scope = orgProfileSelected
       ? "your organization's recorded stance"
@@ -402,8 +417,11 @@ export async function evaluatePerspectiveGate(input: {
   question: string;
   options: string[];
   scoredOptions?: DecisionScoredOption[];
+  /** The calling coworker's own proposal (BI-AE416D75); see persistDecisionInteraction. */
+  proposedOptionId?: string | null;
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
+  declarations?: DecisionDeclarations;
   routeContext: string;
   build?: PerspectiveGateBuild | null;
   phaseFrom?: string | null;
@@ -419,6 +437,8 @@ export async function evaluatePerspectiveGate(input: {
   coverageGapRationale?: string;
   onComplete?: (interactionId: string) => Promise<void> | void;
   alignmentCorpora?: AlignmentCorpora;
+  /** Caller-recorded facts merged into the ledger payload; the gate's own fields win. */
+  outcomePayloadExtra?: Record<string, unknown>;
   /**
    * BI-7FFFBEE3 slice B: "shadow" when the caller will not act on this verdict.
    * Recorded on the row so the owner inbox never lists it as a decision.
@@ -438,6 +458,10 @@ export async function evaluatePerspectiveGate(input: {
   // ultimately resolved to (BI-1BE30A9A).
   const gateKey: DecisionGateKey = isWwwd ? "org-business" : "build-studio";
   const now = input.now ?? new Date();
+  // BI-AE416D75: attribute a coworker's WWWD decision to it, so the decision
+  // reaches the shadow ledger (the BI-6082C235 backfill did this once; nothing
+  // did it for later rows).
+  const agentId = isWwwd ? await resolveGateDecisionAgentId(input.db, input.caller?.agentId) : null;
 
   let resolved;
   let profile: DecisionPerspectiveProfile = MARK_DPF_PLATFORM_PROFILE;
@@ -445,7 +469,9 @@ export async function evaluatePerspectiveGate(input: {
 
   try {
     if (isWwwd) {
-      const resolve = input.resolver ?? resolveProfileMaterialForOrg;
+      // BI-1B165D02: on a development companion this resolves the production
+      // authority's guidance snapshot; everywhere else it is the org profile.
+      const resolve = input.resolver ?? resolveOrganizationDecisionMaterial;
       resolved = await resolve({
         db: input.db,
         organizationId: input.organizationId,
@@ -464,7 +490,7 @@ export async function evaluatePerspectiveGate(input: {
       profile = resolved.selectedProfile ?? MARK_DPF_PLATFORM_PROFILE;
     }
   } catch (error) {
-    const evaluation = failClosedEvaluation({
+    const evaluation = withDecisionEscalation(failClosedEvaluation({
       profile,
       question: input.question,
       options: input.options,
@@ -473,7 +499,7 @@ export async function evaluatePerspectiveGate(input: {
       error,
       resolvedProfileChain: [input.profileId ?? profile.profileId],
       isWwwd,
-    });
+    }), input.declarations);
 
     const invokeEvent = isWwwd ? "wwwd.org-gate.invoked" : "wwmd.gate.invoked";
     console.info(
@@ -509,6 +535,8 @@ export async function evaluatePerspectiveGate(input: {
       phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
       gateKey,
       gateFallbackUsed: isWwwd && !orgProfileSelected,
+      agentId,
+      proposedOptionId: input.proposedOptionId ?? null,
       outcomePayloadExtra: {
         ...(isWwwd ? { orgProfileSelected, caller: input.caller ?? null } : {}),
         ...(input.enforcement === "shadow" ? { enforcement: "shadow" } : {}),
@@ -523,10 +551,10 @@ export async function evaluatePerspectiveGate(input: {
     );
 
     return {
-      allowed: false,
+      allowed: decisionAllowsStep(evaluation),
       interactionId,
       evaluation,
-      operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),
+      operatorMessage: withGuidanceNotice(resolved, operatorMessageFor(evaluation, orgProfileSelected, isWwwd)),
       orgProfileSelected,
     };
   }
@@ -576,10 +604,10 @@ export async function evaluatePerspectiveGate(input: {
         })}`
       );
       return {
-        allowed: existing.evaluation.outcomeType === "recommend" || existing.evaluation.outcomeType === "arbitrate",
+        allowed: decisionAllowsStep(existing.evaluation),
         interactionId: existing.interactionId,
         evaluation: existing.evaluation,
-        operatorMessage: operatorMessageFor(existing.evaluation, orgProfileSelected, isWwwd),
+        operatorMessage: withGuidanceNotice(resolved, operatorMessageFor(existing.evaluation, orgProfileSelected, isWwwd)),
         orgProfileSelected,
       };
     }
@@ -684,6 +712,7 @@ export async function evaluatePerspectiveGate(input: {
   if (isWwwd && input.alignmentCorpora) applyConstitutionalAlignment({
     evaluation, question: input.question, corpora: input.alignmentCorpora,
   });
+  evaluation = withDecisionEscalation({ ...evaluation, riskTier: input.riskTier }, input.declarations);
   evaluation.recommendedOptionId = await resolveGateRecommendedOptionId({
     db: input.db,
     scoredOptions: input.scoredOptions,
@@ -714,7 +743,10 @@ export async function evaluatePerspectiveGate(input: {
     phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
     gateKey,
     gateFallbackUsed: isWwwd && !orgProfileSelected,
+    agentId,
+    proposedOptionId: input.proposedOptionId ?? null,
     outcomePayloadExtra: {
+      ...(input.outcomePayloadExtra ?? {}),
       ...(isWwwd ? {
         orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
         caller: input.caller ?? null,
@@ -742,10 +774,10 @@ export async function evaluatePerspectiveGate(input: {
   }
 
   return {
-    allowed: evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate",
+    allowed: decisionAllowsStep(evaluation),
     interactionId: persisted.interactionId,
     evaluation,
-    operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),
+    operatorMessage: withGuidanceNotice(resolved, operatorMessageFor(evaluation, orgProfileSelected, isWwwd)),
     orgProfileSelected,
   };
 }

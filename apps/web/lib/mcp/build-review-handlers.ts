@@ -29,6 +29,16 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type HandlerContext = Parameters<ToolPackHandler>[2];
 
+function isVerificationRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** "not_run", "not-run", and "not run" are the same mark. Not free-text parsing. */
+function typecheckMarkedNotRun(status: unknown): boolean {
+  if (typeof status !== "string") return false;
+  return status.trim().toLowerCase().replace(/[\s-]+/g, "_") === "not_run";
+}
+
 /** Mirror of executeTool's catch arm, applied per handler so a thrown error
  *  still becomes a failure ToolResult instead of a transport-level rejection. */
 export function toFailureResult(toolName: string, err: unknown): ToolResult {
@@ -67,7 +77,13 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
 
       // Guide the agent when it saves the wrong field for the current phase
       const currentBuildForPhaseCheck = await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } });
-      if (currentBuildForPhaseCheck?.phase === "plan" && field === "designDoc") {
+      // BI-3E57890E: the design-fix loop revising a plan-phase design is exempt.
+      const { redirectsPlanPhaseDesignSave } = await import("@/lib/build/plan-phase-design-save");
+      if (redirectsPlanPhaseDesignSave({
+        phase: currentBuildForPhaseCheck?.phase,
+        field,
+        allowPlanPhaseDesignRevision: context?.allowPlanPhaseDesignRevision,
+      })) {
         return { success: true, message: 'Design doc updated. IMPORTANT: You are in the PLAN phase. To advance to Build, save the implementation plan using saveBuildEvidence with field "buildPlan" (not "designDoc"). The buildPlan must contain { fileStructure, tasks } arrays.', entityId: buildId };
       }
 
@@ -250,14 +266,12 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
         }
       }
 
-      // When the AI saves verificationOut, ensure typecheckPassed is explicitly set.
-      // The AI often omits it, causing the gate to treat null as false.
+      // BI-E4E70B9A: do not invent a typecheck pass. An omitted or null
+      // typecheckPassed stays omitted. typecheck "not_run" is not a pass,
+      // even when the boolean says true (FB-041879CD).
       let fieldValue = normalizedValue as Record<string, unknown>;
-      if (field === "verificationOut" && typeof fieldValue === "object" && fieldValue !== null) {
-        if (fieldValue.typecheckPassed === undefined || fieldValue.typecheckPassed === null) {
-          fieldValue = { ...fieldValue, typecheckPassed: true };
-          console.log("[saveBuildEvidence] Auto-set typecheckPassed=true (AI omitted it)");
-        }
+      if (field === "verificationOut" && isVerificationRecord(fieldValue) && typecheckMarkedNotRun(fieldValue.typecheck)) {
+        fieldValue = { ...fieldValue, typecheckPassed: false };
       }
       const updateData: Record<string, unknown> = { [field]: fieldValue as import("@dpf/db").Prisma.InputJsonValue };
 
@@ -344,7 +358,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // BI-4396EFEC (D38) — also load the prior planReview so we can pass
       // its issues to the reviewer prompt for delta-awareness and compute
       // the iteration trajectory for the operator-facing chip.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true, kind: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true, kind: true, originatingBacklogItemId: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
       const priorPlanReview = (build.planReview ?? null) as
         | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
@@ -426,7 +440,13 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
-      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewPlanDoc");
+      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewPlanDoc", {
+        // BI-22601A38: the plan exactly as stored, normalized or not.
+        buildId,
+        kind: "plan",
+        document: normalizedPlan.rewrites.length > 0 ? normalizedPlan.plan : build.buildPlan,
+        backlogItemId: build.originatingBacklogItemId ?? null,
+      });
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
         : "";

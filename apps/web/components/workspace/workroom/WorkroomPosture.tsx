@@ -38,6 +38,7 @@ const SOURCE_COPY: Record<string, string> = {
   "hard-policy": "policy",
   "room-declaration": "this room",
   derived: "the work shape",
+  "workroom-default": "your default for rooms",
   agent: "the coworker",
   organization: "the organisation",
   platform: "the default",

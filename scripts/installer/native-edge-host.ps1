@@ -12,6 +12,34 @@ function Get-DPFNativeEdgeReleaseUri {
     return "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/releases/latest/download/$Asset"
 }
 
+function Get-DPFNativeEdgeLocalAuthorityUrl {
+    param([Parameter(Mandatory)][string]$InstallDir)
+    $canonical = $env:DPF_CANONICAL_PUBLIC_URL
+    if (-not $canonical) { $canonical = $env:PUBLIC_URL }
+    $configPath = Join-Path $InstallDir ".env"
+    if (-not $canonical -and (Test-Path -LiteralPath $configPath)) {
+        foreach ($line in (Get-Content -LiteralPath $configPath)) {
+            if ($line -match '^PUBLIC_URL=(.*)$') { $canonical = $Matches[1] }
+        }
+        if ($canonical -and $canonical.Length -ge 2) {
+            $first = $canonical.Substring(0, 1)
+            if (($first -eq '"' -or $first -eq "'") -and $canonical.EndsWith($first)) {
+                $canonical = $canonical.Substring(1, $canonical.Length - 2)
+            }
+        }
+    }
+    if (-not $canonical) { return "http://127.0.0.1:3000" }
+    if ($canonical.EndsWith('/')) { $canonical = $canonical.Substring(0, $canonical.Length - 1) }
+    [Uri]$origin = $null
+    if ($canonical -ne $canonical.Trim() -or $canonical -notmatch '^https?://' -or
+        -not [Uri]::TryCreate($canonical, [UriKind]::Absolute, [ref]$origin) -or
+        $origin.Scheme -notin @('http', 'https') -or $origin.UserInfo -or
+        $origin.Query -or $origin.Fragment -or $origin.AbsolutePath -ne '/' -or $origin.Port -lt 1) {
+        throw "Canonical host-upkeep origin is invalid; no service was changed."
+    }
+    return $canonical
+}
+
 function Install-DPFNativeEdgeNode {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
@@ -23,6 +51,9 @@ function Install-DPFNativeEdgeNode {
         [ValidateSet("full", "host-upkeep")][string]$Role = "full"
     )
 
+    if (-not $AuthorityUrl -and $Role -eq "host-upkeep") {
+        $AuthorityUrl = Get-DPFNativeEdgeLocalAuthorityUrl -InstallDir $InstallDir
+    }
     if (-not $AuthorityUrl) {
         $lanAddress = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
             Where-Object { $_.IPAddress -notmatch '^127\.' -and $_.PrefixOrigin -ne 'WellKnown' } |
@@ -153,11 +184,18 @@ $actionEnvironment& '$escapedBinary' *>> '$($logDir.Replace("'", "''"))\edge-nod
 "@ | Set-Content -LiteralPath $runner -Encoding ASCII
 
     icacls $stateRoot /inheritance:r /grant:r "$env:USERNAME`:(OI)(CI)F" 2>&1 | Out-Null
+    # The mDNS rule needs an elevated session. The logon-time convergence
+    # (BI-084F85E5) is not elevated, and host upkeep does not use mDNS, so a
+    # refused rule is reported and the agent still installs.
     $firewallName = "DPF Native Edge Node mDNS"
-    if (-not (Get-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule -DisplayName $firewallName -Direction Inbound -Action Allow -Protocol UDP -LocalPort 5353 -Program $binary -Profile Private | Out-Null
-    } else {
-        Set-NetFirewallRule -DisplayName $firewallName -Enabled True -Action Allow | Out-Null
+    try {
+        if (-not (Get-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue)) {
+            New-NetFirewallRule -DisplayName $firewallName -Direction Inbound -Action Allow -Protocol UDP -LocalPort 5353 -Program $binary -Profile Private -ErrorAction Stop | Out-Null
+        } else {
+            Set-NetFirewallRule -DisplayName $firewallName -Enabled True -Action Allow -ErrorAction Stop | Out-Null
+        }
+    } catch {
+        Write-Warn "The mDNS firewall rule needs an elevated session; nearby discovery stays off until the installer runs elevated."
     }
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NoLogo -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runner`""
     $trigger = New-ScheduledTaskTrigger -AtLogOn

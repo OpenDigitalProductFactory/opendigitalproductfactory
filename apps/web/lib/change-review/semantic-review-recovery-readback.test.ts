@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ taskNode: { findMany: vi.fn() }, runtimeVerification: { findFirst: vi.fn() } }));
+const authority = vi.hoisted(() => ({ inspect: vi.fn(), request: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
+vi.mock("./semantic-review-authority", () => ({ inspectSemanticReviewAuthority: authority.inspect }));
+vi.mock("./semantic-review-request-store", () => ({ readPersistedSemanticReviewRequest: authority.request }));
 import { readSemanticReviewRecovery } from "./semantic-review-recovery-readback";
 import { readSemanticReviewRemediation } from "./semantic-review-remediation";
 
 const digest = "a".repeat(64);
 const now = new Date("2026-10-12T01:00:00Z");
 const updatedAt = new Date(now.getTime() - 60_000);
-const task = { taskRunId: "TR-OWN", userId: "owner", status: "input-required", updatedAt,
+const task = { id: "row-own", taskRunId: "TR-OWN", userId: "owner", status: "input-required", updatedAt,
   a2aMetadata: { gateKind: "semantic-review", capsuleId: "WC-OWN" },
   progressPayload: { semanticReview: { schemaVersion: 1, requestDigest: digest,
     deadlineAt: "2026-10-11T01:00:00Z", recoveryAttempt: 1, executionOutcome: "unknown" } } };
@@ -21,14 +24,41 @@ function verification() { return { verificationId: "RV-OWN", kind: "health", sta
 const binding = { capsuleId: "room-id", taskRunId: "TR-OWN", requestDigest: digest, updatedAt };
 
 describe("owned semantic review recovery readback", () => {
+  it("reports missing immutable authority evidence without inventing a denial or retry", async () => {
+    const result = await readSemanticReviewRecovery({ ...task, status: "auth-required" }, "owner");
+    expect(result.details).toMatchObject({
+      authority: { state: "unavailable", reason: "immutable-request-unavailable" },
+      remediation: { executionSettled: false, retryAuthorized: false },
+    });
+  });
+  it.each([false, true])("recovers durable eligibility diagnostics beside uncertain=%s task state", async uncertain => {
+    const eligibility = { sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
+      exclusions: [{ bucket: "output-capacity", count: 2 }] };
+    db.taskNode.findMany.mockResolvedValue([{ ...node, status: "completed", outputSnapshot: {
+      requestDigest: digest, providerOutcome: "not-dispatched", routingEligibility: [eligibility], rawPrompt: "private prompt" } }]);
+    db.runtimeVerification.findFirst.mockResolvedValue(verification());
+    const result = await readSemanticReviewRecovery({ ...task, progressPayload: { semanticReview: {
+      ...task.progressPayload.semanticReview, executionOutcome: uncertain ? "unknown" : undefined,
+      reason: uncertain ? "provider-outcome-uncertain" : "review-endpoint-ineligible",
+    } } }, "owner");
+    expect(result).toMatchObject({ classification: uncertain ? "execution-uncertain" : "routing-blocked", eligibilityBlocked: true, details: {
+      nodes: [{ providerOutcome: "not-dispatched", routingEligibility: [eligibility] }],
+      remediation: { state: "eligibility-verification-required", eligibilityVerified: false, retryAuthorized: false },
+    } });
+    expect(JSON.stringify(result)).not.toContain("private prompt");
+  });
   afterEach(() => vi.restoreAllMocks());
   beforeEach(() => { vi.clearAllMocks(); vi.spyOn(Date, "now").mockReturnValue(now.getTime());
+    authority.request.mockResolvedValue(null);
+    authority.inspect.mockResolvedValue({ state: "denied", reason: "saved-token-scope-denied" });
     db.taskNode.findMany.mockResolvedValue([node]); db.runtimeVerification.findFirst.mockResolvedValue(null); });
   it("names uncertain nodes without converting failed/inactive state into settlement", async () => {
     const result = await readSemanticReviewRecovery(task, "owner");
     expect(result).toMatchObject({ budget: "expired", classification: "execution-uncertain", pollUseful: false,
       details: { unresolvedNodeIds: ["TN-OWN"], nodes: [{ taskNodeId: "TN-OWN", settlement: "unverified", digestMatches: true }],
         remediation: { executionSettled: false, state: "missing-current-proof", retryAuthorized: false } } });
+    expect(result.nextAction).toContain("execution settlement");
+    expect(result.nextAction).not.toContain("bounded successor");
     expect(JSON.stringify(result)).not.toContain("provider-private-output");
     expect(db.taskNode.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRun: { taskRunId: "TR-OWN", userId: "owner" } }, take: 101 }));
@@ -42,6 +72,47 @@ describe("owned semantic review recovery readback", () => {
     await expect(readSemanticReviewRecovery(task, "foreign")).rejects.toThrow("not-owned");
     expect(db.taskNode.findMany).not.toHaveBeenCalled();
     expect(db.runtimeVerification.findFirst).not.toHaveBeenCalled();
+    expect(authority.request).not.toHaveBeenCalled();
+    expect(authority.inspect).not.toHaveBeenCalled();
+  });
+  it("uses the verified original packet for current authority without authorizing recovery", async () => {
+    const packet = { actor: { apiTokenId: "private-token-id" } };
+    authority.request.mockResolvedValue(packet);
+    const result = await readSemanticReviewRecovery(task, "owner");
+    expect(authority.inspect).toHaveBeenCalledWith(packet, "TR-OWN");
+    expect(result.details).toMatchObject({ authority: { state: "denied", reason: "saved-token-scope-denied" },
+      remediation: { executionSettled: false, retryAuthorized: false } });
+    expect(JSON.stringify(result)).not.toContain("private-token-id");
+  });
+  it.each(["request", "inspect"] as const)("keeps unavailable %s observation distinct from denial and strips raw errors", async field => {
+    authority.request.mockResolvedValue({ actor: {} });
+    authority[field].mockRejectedValue(new Error("private credential database details"));
+    const result = await readSemanticReviewRecovery(task, "owner");
+    expect(result.details.authority).toMatchObject({ state: "unavailable", reason: "authority-observation-unavailable" });
+    expect(JSON.stringify(result)).not.toContain("private credential");
+    expect(result.details.remediation.retryAuthorized).toBe(false);
+  });
+  it("does not confuse currently valid authority with execution settlement", async () => {
+    authority.request.mockResolvedValue({ actor: {} });
+    authority.inspect.mockResolvedValue({ state: "allowed", reason: "authority-current" });
+    const result = await readSemanticReviewRecovery(task, "owner");
+    expect(result.details.authority.state).toBe("allowed");
+    expect(result.details.remediation).toMatchObject({ executionSettled: false, retryAuthorized: false });
+  });
+  it.each([
+    ["client-missing", "original OAuth client record is missing"],
+    ["client-revoked", "original OAuth client is revoked"],
+    ["continuity-envelope-missing", "continuity binding is incomplete"],
+    ["continuity-evidence-missing", "No eligible access successor or refresh evidence"],
+    ["consent-invalid", "consent is not currently eligible"],
+  ])("projects fixed %s guidance without changing settlement", async (detail, guidance) => {
+    authority.request.mockResolvedValue({ actor: { apiTokenId: "private-token-id" } });
+    authority.inspect.mockResolvedValue({ state: "denied", reason: "oauth-authority-invalid", detail });
+    const result = await readSemanticReviewRecovery(task, "owner");
+    expect(result.details.authority).toMatchObject({ state: "denied", reason: "oauth-authority-invalid", detail,
+      nextAction: expect.stringContaining(guidance) });
+    expect(result.details.remediation).toMatchObject({ executionSettled: false, retryAuthorized: false });
+    expect(JSON.stringify(result)).not.toContain("private-token-id");
   });
   it("returns a scoped current proof without authorizing a retry or exposing diagnostic text", async () => {
     db.runtimeVerification.findFirst.mockResolvedValue(verification());

@@ -1,16 +1,22 @@
 import { OperationsMapLiveShell } from "@/components/platform/OperationsMapLiveShell";
 import { loadOperationsMapData } from "@/lib/ai-operations-map/load-map-data";
 import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
+import { readRoutingScope, routingWindow } from "@/lib/ai-operations-map/routing-management-scope";
 
 export const dynamic = "force-dynamic";
 
 export default async function OperationsMapPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ mode?: string | string[]; focus?: string | string[] }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 } = {}) {
   const query = (await searchParams) ?? {};
-  const data = await loadOperationsMapData();
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    const first = firstQueryValue(value);
+    if (first !== null) params.set(key, first);
+  }
+  const data = await loadOperationsMapData({ window: routingWindow(readRoutingScope(params), Date.now()) });
   const initialArchitectureMode = parseArchitectureMode(query.mode);
   const initialFocusStageId = firstQueryValue(query.focus);
 
@@ -19,6 +25,7 @@ export default async function OperationsMapPage({
       initialData={data}
       initialArchitectureMode={initialArchitectureMode}
       initialFocusStageId={initialFocusStageId}
+      initialTechnicalOpen={params.has("mode") || params.has("focus")}
     />
   );
 }

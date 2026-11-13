@@ -7,12 +7,13 @@
 // while the read projection get_backlog_item returns (and the acceptance sweep
 // reads) passed none of those facts and so reported every merged direct-merge
 // item as input-required. Both now call evaluateBacklogItemCompletion; the read
-// path differs only in that it never mutates and supplies no completion
-// manifest (a read has none — the caller of the transition brings one).
+// path never mutates. For the retained-body acceptance lane it can recover
+// authorized inputs from the latest bound attempt, then evaluate them afresh.
 
 import { prisma } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
 import { sameBodyCriteriaVersion } from "./body-baseline-version";
+import { completionInputBinding, readCompletionInput, retainCompletionInput, type CompletionInputContext } from "./completion-input-context";
 
 import type { CurrentEvidenceFailure } from "@/lib/backlog/completion-evidence-policy";
 import {
@@ -45,6 +46,8 @@ import {
 import { type InheritanceDb, loadInheritedInitiativeScope } from "./parent-scope-inheritance";
 import type { InitiativeReadinessDecision, InitiativeTransitionObject } from "./types";
 import { resolveAggregateCompletion, type AggregateCompletionDb } from "./aggregate-completion";
+import type { CurrentDesignEvidence } from "./judged-design-artifact";
+import type { prepareCurrentDesignObservation } from "./canonical-artifact-discovery";
 
 /** The shape an operational close is gated as (BI-B22E50BC). */
 const OPERATIONAL_CLOSE_WORK_SHAPE = "delivery-small@1.0.0";
@@ -61,6 +64,8 @@ export type BacklogCompletionItem = {
   scopeKind: string | null;
   archetypeCategories: string[];
   archetypeIds: string[];
+  /** Carries the reserved `contractual` tag (BI-B1B44777, DI-1263D968DC26). */
+  lifecycleTags?: string[] | null;
   organizationId: string | null;
   epicId: string | null;
   claimedAt: Date | null;
@@ -73,7 +78,7 @@ export type BacklogCompletionItem = {
 /** The item columns the evaluation reads; both callers select exactly these. */
 export const BACKLOG_COMPLETION_ITEM_SELECT = {
   id: true, itemId: true, status: true, workType: true, type: true, source: true, title: true, body: true,
-  scopeKind: true, archetypeCategories: true, archetypeIds: true, organizationId: true,
+  scopeKind: true, archetypeCategories: true, archetypeIds: true, lifecycleTags: true, organizationId: true,
   epicId: true, claimedAt: true, createdAt: true, digitalProductId: true,
   activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
   productObjectiveWork: { select: { id: true }, take: 1 },
@@ -106,6 +111,7 @@ export type ResolveHasDesignSpec = (args: { itemId: string }) => Promise<boolean
 const defaultResolveHasDesignSpec: ResolveHasDesignSpec = async () => true;
 
 export type BacklogCompletionDependencies = {
+  prepareCurrentDesign?: typeof prepareCurrentDesignObservation;
   resolveCompletionEvidence?: typeof resolveCompletionEvidence;
   reconcileObjectives?: typeof reconcileInitiativeObjectives;
   projectReadiness?: typeof projectBacklogItemReadiness;
@@ -115,6 +121,8 @@ export type BacklogCompletionDependencies = {
 };
 
 export type BacklogCompletionEvaluation = {
+  /** Server-only submitted inputs; persisted by the authorized terminal writer. */
+  completionInputContext?: CompletionInputContext | null;
   governed: boolean;
   decision: InitiativeReadinessDecision;
   independentAcceptanceDecision: InitiativeReadinessDecision;
@@ -125,6 +133,16 @@ export type BacklogCompletionEvaluation = {
   acceptanceState: string;
   hasDesignSpec: boolean;
   deliveryEvidenceRefs: string[];
+  /**
+   * BI-C899BB40: this closure is BI-B1B44777's delivery-closes default (a
+   * non-contractual merge or deployment, nothing failed). Reported, not a gate.
+   */
+  closureFollowsDelivery: boolean;
+  /**
+   * BI-C899BB40: a customer reported this non-contractual work, so its
+   * submitter is asked once. A contractual item keeps its acceptance lane.
+   */
+  customerReported: boolean;
 };
 
 /**
@@ -225,14 +243,82 @@ export function isDirectMergePlatformWork(item: {
 }
 
 /**
+ * Origin markers that mean a customer, not the platform, reported the work
+ * (BI-C899BB40). Each is written by an existing intake path:
+ * ecosystem/inbound-issue-triage.ts (upstream issue, peer demand),
+ * federation/demand-exchange.ts (adopted federated demand) and
+ * federation/founder-portfolio.ts (a founder demand cluster).
+ */
+const CUSTOMER_ORIGIN_MARKERS = [
+  "[origin:ecosystem-upstream-issue:",
+  "[origin:ecosystem-peer-demand:",
+  "[origin:federatedDemand:",
+  "[origin:founderDemandCluster:",
+] as const;
+
+/**
+ * Whether a customer reported this item, read from provenance that already
+ * exists; there is no persisted flag. A customer-reported item still closes on
+ * delivery; its submitter is then asked one question (acceptance sweep §9).
+ *
+ * `upstreamIssueNumber` is deliberately not a signal: the issue bridge sets it
+ * when THIS install files its own item upstream, and already comments on that
+ * issue when the item closes.
+ */
+export function isCustomerReported(item: {
+  itemId: string;
+  body?: string | null;
+  lifecycleTags?: readonly string[] | null;
+}): boolean {
+  if (item.lifecycleTags?.includes("ecosystem-inbound")) return true;
+  // A product quality report (actions/quality.ts): the BI-PIR- id and its source line.
+  if (item.itemId.startsWith("BI-PIR-")) return true;
+  const body = item.body ?? "";
+  if (/^Source report: \S+/m.test(body)) return true;
+  return CUSTOMER_ORIGIN_MARKERS.some((marker) => body.includes(marker));
+}
+
+/**
+ * The reserved lifecycle tag that marks an item contractual (BI-B1B44777,
+ * kernel decision DI-1263D968DC26). It reuses BacklogItem.lifecycleTags, which
+ * create_backlog_item and update_backlog_item already set and query_backlog
+ * already filters, so marking an item needs no new field.
+ */
+export const CONTRACTUAL_LIFECYCLE_TAG = "contractual";
+
+/** Whether the item carries a contractual acceptance commitment. */
+export function isContractualItem(item: { lifecycleTags?: readonly string[] | null }): boolean {
+  return (item.lifecycleTags ?? []).some((tag) => tag.trim().toLowerCase() === CONTRACTUAL_LIFECYCLE_TAG);
+}
+
+/**
+ * Outcomes define done (BI-B1B44777, founder direction 2026-10-27): a merge
+ * through CI and the merge queue closes an item by default. It satisfies
+ * acceptance and objective reconciliation, and no design-time gate is owed
+ * once the change has landed. If something is still wrong, whoever uses the
+ * change reports it and a new item is opened.
+ *
+ * Only a contractual item keeps the separate acceptance step. This replaces
+ * the scope and link terms of the direct-merge-platform predicate
+ * (EP-4614F35E) for completion; `isDirectMergePlatformWork` still bounds the
+ * retained runtime obligations of items that are already done.
+ */
+export function deliveryClosesItem(item: { lifecycleTags?: readonly string[] | null }): boolean {
+  return !isContractualItem(item);
+}
+
+/**
  * Evaluate the completion decision for `item`. Reads only. `db` is the
  * transition's locked transaction client, or the plain client for a read.
  */
 export async function evaluateBacklogItemCompletion(args: {
+  currentDesign?: CurrentDesignEvidence;
   db: BacklogCompletionDb;
   item: BacklogCompletionItem;
-  /** The caller's completion manifest. A read passes `undefined`: it has none. */
+  /** Explicit caller input; reads may resolve the latest bound input when absent. */
   rawManifest: unknown;
+  /** Only read projections may reuse recorded inputs; a new submission stands alone. */
+  reuseRecordedInput?: boolean;
   transitionObject: InitiativeTransitionObject;
   evaluatedAt: string;
   dependencies?: BacklogCompletionDependencies;
@@ -247,10 +333,6 @@ export async function evaluateBacklogItemCompletion(args: {
     take: 500,
     select: { id: true, backlogItemId: true, kind: true, gateKey: true, recordedAt: true, payload: true },
   });
-  const completion = await (deps.resolveCompletionEvidence ?? resolveCompletionEvidence)(
-    db as unknown as CompletionEvidenceRuntimeDb,
-    { itemId: item.itemId, rawManifest: args.rawManifest, now: new Date(evaluatedAt) },
-  );
   // BI-2515F779: a decomposed child with no baseline of its own reconciles
   // its mapping against the baseline it inherits from its mapping parent —
   // the same scope the projection, the router, the admission and the writer
@@ -280,22 +362,36 @@ export async function evaluateBacklogItemCompletion(args: {
       || !sameBodyCriteriaVersion({ criteriaDigest: reconciledBaseline.criteriaDigest }, item.body))) {
     reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };
   }
+  let bodyAuthorRoom: Awaited<ReturnType<typeof import("./body-baseline-author-room").resolveBodyBaselineAuthorRoom>> = null;
   if (isRecord(reconciledBaseline) && reconciledBaseline.origin === "item-body") {
     const source = isRecord(reconciledBaseline.sourceIdentity) ? reconciledBaseline.sourceIdentity : null;
     const authority = isRecord(reconciledBaseline.authoritySnapshot) ? reconciledBaseline.authoritySnapshot : null;
-    const currentRoom = await (db as unknown as import("@dpf/db").Prisma.TransactionClient).workroom.findFirst({
-      where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
-        status: { notIn: ["abandoned", "archived", "superseded"] } },
-      orderBy: { updatedAt: "desc" }, select: { repositoryFullName: true, headSha: true },
-    });
+    const { resolveBodyBaselineAuthorRoom } = await import("./body-baseline-author-room");
+    const currentRoom = await resolveBodyBaselineAuthorRoom(
+      db as unknown as import("@dpf/db").Prisma.TransactionClient, item);
+    bodyAuthorRoom = currentRoom;
     if (!currentRoom || source?.headSha !== currentRoom.headSha || source?.repositoryFullName !== currentRoom.repositoryFullName
       || authority?.organizationId !== (item.organizationId ?? "platform")) {
       reconciliation = { ...reconciliation, state: "missing", evidenceRefs: [] };
     }
   }
+  const editPaths = await readBoundEditPaths(db as unknown as BoundWorkShapeDb, item.itemId).catch(() => null);
+  const binding = editPaths && completionInputBinding({ item, shape: boundWorkShape, baseline: reconciledBaseline,
+    room: bodyAuthorRoom, editPaths });
+  // An explicit invalid submission must never borrow a previous valid input.
+  // Reads and admission use the same current evaluator, not an old verdict.
+  const rawManifest = args.reuseRecordedInput === true && args.rawManifest === undefined
+    ? await readCompletionInput(db, item, binding) : args.rawManifest;
+  const completion = await (deps.resolveCompletionEvidence ?? resolveCompletionEvidence)(
+    db as unknown as CompletionEvidenceRuntimeDb,
+    { itemId: item.itemId, rawManifest, now: new Date(evaluatedAt) },
+  );
+  const completionInputContext = completion.kind === "evaluated" && completion.verdict.allowed
+    ? retainCompletionInput(binding, completion.verdict.normalizedManifest) : null;
   const acceptanceState = reconciliation.state;
   // An initiative's own PR cannot prove its children or hypothesis outcomes.
-  const directMerge = !aggregate && isDirectMergePlatformWork(item);
+  // BI-B1B44777: every other non-contractual item closes on its merge.
+  const directMerge = !aggregate && deliveryClosesItem(item);
   const deploymentResult = directMerge
     ? await (deps.resolveDeploymentClosure ?? resolveBacklogDeploymentClosure)({
       itemId: item.itemId, workType: item.workType, roots: mergeSignalRoots(),
@@ -309,12 +405,11 @@ export async function evaluateBacklogItemCompletion(args: {
     workType: item.workType,
   });
   const hasDesignSpec = await (deps.resolveHasDesignSpec ?? defaultResolveHasDesignSpec)({ itemId: item.itemId });
-  // EP-4614F35E (kernel DI-54AECB341524): recognize a merge through the code
-  // gates (CI + merge queue + PR review) as completing DIRECT-MERGE PLATFORM
-  // work — the governance appropriate to maintainer changes — without the full
-  // demand-driven-feature reviewer lifecycle. Bounded by a tight predicate so
-  // customer feature work keeps every gate; a real objective conflict/malformed
-  // reconciliation is NEVER waved through.
+  // EP-4614F35E (kernel DI-54AECB341524), widened by BI-B1B44777: recognize a
+  // merge through the code gates (CI + merge queue + PR review) as completing
+  // any non-contractual item, without a separate acceptance reviewer. A
+  // contractual item keeps every gate; a real objective conflict/malformed
+  // reconciliation is NEVER waved through, and a current failure still blocks.
   //
   // BI-82DCD601, kernel DI-273E6E15C8EB: `hasDesignSpec` is NOT a term of either
   // predicate below. A bug fix has no design spec — that is what makes it a bug
@@ -376,6 +471,7 @@ export async function evaluateBacklogItemCompletion(args: {
     ? completion.verdict.normalizedManifest?.evidenceActivityIds ?? []
     : [];
   const projectionInput: Parameters<typeof projectBacklogItemReadiness>[0] = {
+    currentDesign: args.currentDesign,
     item: {
       ...item,
       activeBuildKind: item.activeBuild?.kind ?? null,
@@ -383,7 +479,7 @@ export async function evaluateBacklogItemCompletion(args: {
       // BI-243BC956: completion re-reads the room's declared edit scope.
       deliverySensitivity: assessDeliverySensitivity({
         ...item,
-        declaredPaths: await readBoundEditPaths(db as unknown as BoundWorkShapeDb, item.itemId).catch(() => []),
+        declaredPaths: editPaths ?? [],
       }),
     },
     activities: activities as InitiativeReadinessActivity[],
@@ -440,6 +536,15 @@ export async function evaluateBacklogItemCompletion(args: {
     };
   }
   const projected = project(projectionInput);
+  // BI-C899BB40: whether THIS closure is the delivery-closes default of
+  // BI-B1B44777 (deliveryClosesItem, recognizeMergeThroughGates above), so the
+  // terminal transition can record a bounded obligation. A reported fact, not
+  // a second rule: it adds no gate and relaxes nothing. A contractual item, an
+  // aggregate, a current failure or a failed/conflicting reconciliation is
+  // never a delivery closure.
+  const closureFollowsDelivery = recognizeMergeThroughGates && acceptanceFailures.length === 0
+    && reconciliation.state !== "fail" && reconciliation.state !== "conflict" && reconciliation.state !== "malformed";
+
   const independent = project({ ...projectionInput, completion: {
     ...projectionInput.completion!,
     acceptanceEvidence: acceptanceFailures.length === 0
@@ -449,6 +554,7 @@ export async function evaluateBacklogItemCompletion(args: {
       ? "pass" : reconciliation.state === "fail" ? "fail" : "missing",
   } });
   return {
+    completionInputContext,
     governed: projected.governed,
     decision: deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision,
     independentAcceptanceDecision: independent.decision,
@@ -459,6 +565,8 @@ export async function evaluateBacklogItemCompletion(args: {
     acceptanceState,
     hasDesignSpec,
     deliveryEvidenceRefs,
+    closureFollowsDelivery,
+    customerReported: isCustomerReported(item) && !isContractualItem(item),
   };
 }
 
@@ -471,7 +579,7 @@ export type BacklogCompletionReadDb = BacklogCompletionDb & {
 
 /**
  * The read projection's completion decision (get_backlog_item, the acceptance
- * sweep): the gate's own evaluation, with no manifest and no mutation.
+ * sweep): the gate's own evaluation, with bound input recovery and no mutation.
  *
  * Bounded: only an item awaiting acceptance pays for it — the merge signal may
  * run git against a source checkout — and `null` means "not evaluated here",
@@ -481,6 +589,7 @@ export type BacklogCompletionReadDb = BacklogCompletionDb & {
  * exactly as the transition would.
  */
 export async function readBacklogItemCompletion(args: {
+  currentDesign?: CurrentDesignEvidence;
   itemRowId: string;
   status: string;
   evaluatedAt: string;
@@ -493,9 +602,11 @@ export async function readBacklogItemCompletion(args: {
     const item = await db.backlogItem.findUnique({ where: { id: args.itemRowId }, select: BACKLOG_COMPLETION_ITEM_SELECT });
     if (!item || !GATE_EVALUATED_READ_STATUSES.has(item.status)) return null;
     return await evaluateBacklogItemCompletion({
+      currentDesign: args.currentDesign,
       db,
       item,
       rawManifest: undefined,
+      reuseRecordedInput: true,
       transitionObject: { kind: "backlog-item", id: item.itemId, expectedVersion: "read-projection", targetState: "completion" },
       evaluatedAt: args.evaluatedAt,
       ...(args.dependencies ? { dependencies: args.dependencies } : {}),

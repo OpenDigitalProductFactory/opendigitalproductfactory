@@ -18,7 +18,7 @@
 // Pure.
 
 import { hasStoredDriveMarking } from "./drive-graph-tick";
-import { usesGraphConstructs } from "./drive-marking";
+import { usesGraphConstructs } from "@dpf/validators/workroom/marking";
 import { projectDriveCycle, runConcluded } from "./drive-plan-stage";
 import type { StageReceipt } from "./stage-evidence-receipts";
 import {
@@ -27,7 +27,7 @@ import {
   type WorkShapeDefinition,
   type WorkShapeDefinitionContract,
 } from "./work-shapes";
-import { receiptInRun, type PriorWorkroomDrive } from "./workroom-drive-receipts";
+import { receiptInRun, type PriorWorkroomDrive } from "@dpf/validators/workroom/receipts";
 import { driveRunKeyOf } from "./workroom-drive-state";
 
 export type SequentialRun = {

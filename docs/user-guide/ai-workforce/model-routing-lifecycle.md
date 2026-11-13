@@ -176,6 +176,8 @@ Provider claims are not vendor-wide. A business agreement, BAA, DPA, no-training
 
 Open **Platform → AI Operations → Providers & Routing**, choose a provider, and review **Provider trust evidence**. Each claim shows whether its evidence is current, missing, expired, rejected, conflicting, or replaced, along with its age, expiry, and safest next action. Operator declarations expire after 90 days unless stronger reviewed evidence replaces them. Expiry removes the claim from restricted-work eligibility immediately; it does not unnecessarily block separately governed public work.
 
+A provider you have signed in to but whose account is not yet reviewed is cleared only for public work. Coworker conversations and Work Room turns are company (internal) work, so none of them can use it. Providers & Routing labels such a provider **Public work only** instead of **Routable**, and the AI readiness summary does not count it as model supply. To clear it for company work, record the account on its provider page as a business or enterprise account with no-training treatment. A personal subscription, such as an individual ChatGPT plan, should stay public-only.
+
 Every governed route may carry a privacy-safe suitability receipt. The receipt records policy and input versions, the selected provider and any router-selected underlying provider, the connection's channel/account posture, exclusions, obligations, and explanation codes. It deliberately excludes prompts, messages, credentials, vendor account identifiers, organization identifiers, evidence documents, and free-text explanations.
 
 For activity-governed work, the same suitability projection used during provider setup is bound into the live `RequestContract` before `routeEndpointV2` selects a model. Existing operator restrictions can only become narrower: provider allowlists intersect, denials accumulate, and the stricter residency rule wins. A preferred provider/model, cost tuning, model health, or fallback cannot restore a connection removed by this gate.
@@ -290,3 +292,18 @@ Local models are automatically discovered and profiled. They are assigned the `b
 - Visit the AI Workforce providers page to trigger automatic discovery
 - Verify Docker Model Runner is running: `docker model list` should return available models
 - Check that the local provider status is `active` (not `unconfigured`) — the provider ID in the database is `ollama` for historical reasons, even when using Docker Model Runner
+
+
+## Investigate routing and record feedback
+
+Open **Routing management** from the AI operations map. **Traffic** follows work to its provider and model; **Evaluation** groups recorded outcomes for the same task and recipe. Provider, task, data sensitivity and time filters remain in the URL when moving between the map, provider catalog and provider settings.
+
+Open a routing decision to inspect its recorded attempts, exclusions and cost coverage in an overlay. Data policy, context limits, quota, payment and operator pauses have distinct labels. Provider settings include the existing routing overrides and their risk warning; an override is a separate explicit decision.
+
+Use **Review answer** on a recorded response attempt to inspect the exact saved answer within the same overlay. **Back to decision** returns to the investigation and keeps the filters. Answer access is checked against your current conversation ownership and Workroom permissions. A general platform view does not grant access to somebody else's answer.
+
+Beside an eligible saved answer, choose **Kept** or **Needs revision**. Change the choice or use **Clear feedback** later. These actions record your judgment without running a model or changing routing policy. A coworker judgment is labeled separately and cannot replace a human judgment. If saving is uncertain, **Check again** reads the current state before you try another change.
+
+Older, edited, missing or ambiguous response evidence displays **Feedback unavailable**. The platform does not guess which attempt produced an answer. Permission removal also prevents a later write.
+
+Evaluation shows human, agent and unattributed feedback separately, using the recorded attempt denominator. Kept share expresses preference; it does not establish correctness. Execution success, evaluated quality, feedback and cost coverage remain separate. Missing scores and costs stay unavailable rather than becoming zero.

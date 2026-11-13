@@ -1,15 +1,19 @@
 import "server-only";
 import { prisma } from "@dpf/db";
-import { projectApprovalOutcome, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
+import { projectApprovalOutcome, withApprovalFailureEvidence, type ApprovalOutcome, type ApprovalOutcomeRow } from "./approval-outcome";
 import { labelOnBehalfDecision } from "./on-behalf-decision";
 import type { ApprovedRequestRun } from "./approved-request-run-types";
 import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { isRecord } from "@/lib/shared/coerce";
+import { readApprovalActionEvidence, readApprovalFailureEvidence, type ApprovalActionEvidence } from "./approval-action-evidence";
+import { encodeWorkCaseKey } from "@/lib/work-management/case-key";
+import { canonicalWorkCaseHref } from "@/lib/work-management/canonical-case-key";
 
 type Db = typeof prisma;
 
 const select = {
   id: true, status: true, createdAt: true, expiresAt: true, argsJson: true,
+  delegatingUserId: true, coworkerAgentId: true, threadId: true, manifestActionId: true, inputFingerprint: true,
   toolExecutions: {
     where: { executionMode: "approval-outcome" },
     orderBy: { createdAt: "desc" as const }, take: 1,
@@ -41,12 +45,13 @@ export async function recordApprovalOutcome(
 /** Exact caller identity comes from the authenticated MCP context, never params. */
 export async function readApprovalOutcome(
   envelopeId: string, userId: string, agentId: string | undefined, db: Db = prisma, now = new Date(),
-): Promise<ApprovalOutcome | null> {
+): Promise<(ApprovalOutcome & { actionEvidence: ApprovalActionEvidence }) | null> {
   if (!userId || !agentId) return null;
   const row = await db.coworkerActionEnvelope.findFirst({
-    where: { id: envelopeId, delegatingUserId: userId, coworkerAgentId: agentId }, select,
+    where: { id: envelopeId, delegatingUserId: userId, coworkerAgentId: agentId },
+    select,
   });
-  return row ? projectApprovalOutcome(row as ApprovalOutcomeRow, now) : null;
+  return row ? { ...await projectOwnedApprovalOutcome(row, db, now, agentId), actionEvidence: await readApprovalActionEvidence(row, db, now) } : null;
 }
 
 /** Recent history is separate from the actionable Inbox and never inflates its count.
@@ -65,8 +70,29 @@ export async function loadApprovalOutcomes(
     },
     orderBy: { createdAt: "desc" }, take: envelopeId ? 1 : 10, select,
   });
-  const outcomes = rows.map((row) => projectApprovalOutcome(row as ApprovalOutcomeRow, now));
+  const outcomes = await Promise.all(rows.map((row) => projectOwnedApprovalOutcome(row, db, now)));
   return labelOnBehalfOutcomes(outcomes, db);
+}
+
+/** Same safe projection for owner history/API and caller-scoped MCP. */
+async function projectOwnedApprovalOutcome(
+  row: ApprovalOutcomeRow & { delegatingUserId: string; coworkerAgentId: string; threadId: string;
+    manifestActionId: string; inputFingerprint: string | null; argsJson: unknown },
+  db: Db, now: Date, agentId?: string,
+): Promise<ApprovalOutcome> {
+  const outcome = projectApprovalOutcome(row, now);
+  if (outcome.state !== "failed") return outcome;
+  const evidence = await readApprovalFailureEvidence(row, db, now, async capsuleId => {
+    const room = await db.workroom.findUnique({ where: { capsuleId }, select: { id: true, capsuleId: true } });
+    if (!room) return null;
+    const access = await import("@/lib/work-management/workroom-agent-access.server");
+    const input = { userId: row.delegatingUserId, workroomId: room.id, requested: "content" as const };
+    const result = agentId ? await access.resolveAgentWorkroomAccess({ ...input, agentId }, db)
+      : await access.resolveHumanWorkroomAccess(input, db);
+    if (result.decision.level !== "content" && result.decision.level !== "action") return null;
+    return canonicalWorkCaseHref(encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId }), {});
+  });
+  return withApprovalFailureEvidence(outcome, evidence);
 }
 
 /** BI-7BCC87BB: name the admin and the owner of an on-behalf decision by email. */

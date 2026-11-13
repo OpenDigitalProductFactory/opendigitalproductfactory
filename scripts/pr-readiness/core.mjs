@@ -11,6 +11,7 @@ import { classifySlotRecord } from "../lib/pregate-status.mjs";
 import { guardAppliesToScope } from "../lib/pregate-preflight.mjs";
 import { hasBoundDocumentationEvidence } from "../lib/local-ci-gate-state.mjs";
 import { classifyLocalCiOverride, classifyGateInfrastructureEvidence, GATE_INFRASTRUCTURE_UNAVAILABLE_CODE } from "../../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
+import { classifyPublishedCorrection } from "../../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
 import {
   PR_TRAILER_NAMES,
   SUPPORTED_PR_TRAILERS,
@@ -45,14 +46,24 @@ function mutatesGitState([command, args]) {
   return command === "git" && MUTATING_GIT_COMMANDS.has(args[0]);
 }
 
+function fetchesReadinessBase([command, args]) {
+  // This exact CI setup is already performed before readiness resolves main.
+  // Other fetches may obtain independent evidence and must remain in the plan.
+  return command === "git" && args.join("\0") === ["fetch", "--no-tags", "--quiet", "origin", "main"].join("\0");
+}
+
 export function buildGatePlan({
   prBody = "",
   prLabelsJson = "[]",
   profiles = POLICY_GUARD_PROFILES,
   changeScope = null,
+  publishedCorrection = false,
+  baseSha = "origin/main",
+  headSha = "HEAD",
 } = {}) {
   const env = {
-    BASE_SHA: "origin/main",
+    BASE_SHA: baseSha,
+    HEAD_SHA: headSha,
     PR_BODY: prBody,
     PR_LABELS_JSON: prLabelsJson,
     GITHUB_EVENT_NAME: "pull_request",
@@ -60,16 +71,20 @@ export function buildGatePlan({
 
   return LOCAL_READINESS_PROFILE_NAMES.flatMap((profileName) =>
     (profiles[profileName] ?? []).flatMap((entry) => {
+      if (publishedCorrection && !new Set(["docs-impact-gate", "seed-fit-gate", "spec-plan-doc-gate", "data-impact-gate", "convergence-impact-gate", "design-grounding-gate", "hidden-unicode-commit-text-guard"]).has(entry.id)) return [];
       if (!guardAppliesToScope(entry, changeScope)) return [];
       // The readiness command runs in the author's topic worktree. Never replay
       // CI setup that rewrites Git state there. Its checks remain covered by CI
       // and by the exact-tree local-CI gate.
       if (entry.commands.some(mutatesGitState)) return [];
 
-      const commands = entry.commands.filter((command) => !isPolicyGuardSelfTest(command));
+      // Fetch once before resolving the run's source; a profile's CI setup must
+      // not move a shared ref midway through this already-pinned host plan.
+      const commands = entry.commands.filter((command) => !isPolicyGuardSelfTest(command)
+        && !fetchesReadinessBase(command));
       return commands.map((command, index) => ({
         name: commands.length === 1 ? entry.name : `${entry.name} (${index + 1}/${commands.length})`,
-        command,
+        command: [command[0], command[1].map((arg, index) => arg === "origin/main" && command[1][index - 1] === "--merge-with" ? baseSha : arg), ...command.slice(2)],
         env,
       }));
     }),
@@ -114,9 +129,12 @@ export function validatePrBodyTrailers(prBody = "") {
   }
 
   const seedFit = byName.get(PR_TRAILER_NAMES.seedFit)?.[0]?.value;
-  if (seedFit && !VALID_SEED_FIT_DECISIONS.has(seedFit)) {
+  // The seed-fit gate reads the first token and requires `mechanism=` / `symbol=`
+  // on the same line for a scoped decision. Validate the token, not the suffix.
+  const seedFitToken = String(seedFit ?? "").trim().split(/\s+/)[0] ?? "";
+  if (seedFit && !VALID_SEED_FIT_DECISIONS.has(seedFitToken)) {
     blockers.push(
-      `Invalid Seed-Fit-Decision "${seedFit}". Valid values: ${[...VALID_SEED_FIT_DECISIONS].join(", ")}.`,
+      `Invalid Seed-Fit-Decision "${seedFitToken}". Valid values: ${[...VALID_SEED_FIT_DECISIONS].join(", ")}.`,
     );
   }
 
@@ -165,6 +183,12 @@ function publicationAttestation({ repo, trailers, records, now }) {
   } else {
     const classified = classifyLocalCiOverride(override.value);
     if (!classified.ok) blockers.push(classified.reason);
+    else if (classified.code === "published-correction") {
+      const qualified = records.some(({ state, publicationInspection }) => publicationInspection?.ok === true && publicationInspection.state === state && state?.skipReason === override.value
+        && classifyPublishedCorrection(state, { sha: repo.headSha, branch: repo.branch, repositoryFullName: repo.repositoryFullName, now }).ok);
+      if (!qualified) blockers.push("Published correction requires qualified current-head machine proof; prose alone is not evidence. Run the affected correction verifier, not the entire local integration gate.");
+      else notes.push("Local integration UNRUN; affected checks qualified and full integration delegated to protected GitHub checks and merge queue.");
+    }
     else if (classified.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE && !records.some(({ state }) =>
       state?.sha === repo.headSha && state?.branch === repo.branch && state.skipped === true
       && state.gatePassed === false && state.skipReason === override.value
@@ -257,7 +281,7 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
     passed,
     changedFiles,
     branch: repo?.publishedRef && repo?.publishedRefMatchesHead ? repo.publishedRef : (repo?.branch ?? "(unknown)"),
-    base: "origin/main",
+    base: repo?.baseSha ?? "origin/main",
     mergeBase: repo?.mergeBases?.[0] ?? null,
     gateContext,
   };

@@ -5,7 +5,8 @@
 
 import { createHash } from "node:crypto";
 
-import { runBuildStudioFinalize, type FinalizeOutcome } from "./finalize-stage-runner";
+import { runBuildStudioFinalize, type FinalizeOutcome, type ScopedTestsFailure } from "./finalize-stage-runner";
+import { SCOPED_TEST_RUNNER_IDENTITY } from "./scoped-test-failure";
 import type { GauntletBuild } from "./sandbox/run-and-record-gauntlet";
 
 export type FinalizeBuild = GauntletBuild & { designDoc?: unknown };
@@ -104,7 +105,43 @@ export async function finalizeBuildForReview(build: FinalizeBuild): Promise<Fina
       const prior = priorGauntletFailure(record?.details, GUARD_DID_NOT_RUN_MARKER);
       return prior && record ? { ...prior, recordId: record.id } : prior;
     },
+    // BI-33B54E4B: the latest scoped-test record for the tree this build would
+    // test now. Only a confirmed failure by the current runner is reused.
+    priorTestsFailure: async () => {
+      const { readWorktreeTreeSha } = await import("./sandbox/guard-gauntlet");
+      const { execInSandbox } = await import("@/lib/sandbox");
+      const treeSha = await readWorktreeTreeSha(execInSandbox, build.sandboxId, workdir).catch(() => null);
+      if (!treeSha) return null;
+      const record = await prisma.externalEvidenceRecord.findFirst({
+        where: {
+          buildId: build.buildId,
+          operationType: "local_integration_ci",
+          AND: [
+            { details: { path: ["evidence", "tier"], equals: "in-platform-scoped-tests" } },
+            { details: { path: ["evidence", "headTreeHash"], equals: treeSha } },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, details: true },
+      });
+      return priorScopedTestsFailure(record, treeSha);
+    },
   });
+}
+
+/** A reusable scoped-test failure from the latest record for this tree, or null. */
+export function priorScopedTestsFailure(
+  record: { id: string; details: unknown } | null | undefined,
+  treeSha: string | null,
+): ScopedTestsFailure | null {
+  if (!record || !treeSha) return null;
+  const evidence = record.details && typeof record.details === "object" ? (record.details as { evidence?: unknown }).evidence : null;
+  if (!evidence || typeof evidence !== "object") return null;
+  const e = evidence as { passed?: unknown; headTreeHash?: unknown; runner?: unknown; failure?: unknown; failingTests?: unknown };
+  if (e.passed !== false || e.headTreeHash !== treeSha || e.runner !== SCOPED_TEST_RUNNER_IDENTITY) return null;
+  if (e.failure !== "tests" && e.failure !== "typecheck") return null;
+  const failingTests = Array.isArray(e.failingTests) ? e.failingTests.filter((t): t is string => typeof t === "string") : [];
+  return { failure: e.failure, failingTests, recordId: record.id, treeSha };
 }
 
 /** A reusable failing verdict from a recorded gauntlet's details, or null. */

@@ -8,9 +8,14 @@
   ],
   "migration": {
     "name": "20261014012000_workroom_activity_ingestion_hardening",
+    "preparation": "20261014011900_prepare_workroom_activity_ingestion",
+    "recovery": "BI-BF20F828: the additive preparation assigns only NULL ingestion positions under exclusive parent/activity locks, preserving every other activity field and existing position. It verifies original guard definitions and attributes, allows only the sequence-only backfill inside its transaction, and restores the original refusal before commit. Already-hardened installs are a no-op. The promoter resolves only a single exact-checksum zero-step failed attempt after an always-rolled-back replay reproduces the append-only failure with unchanged schema and history. It preserves that failed ledger row and never marks it applied. Missing logs alone cannot authorize recovery; mixed failures, drift, partial effects and competing transactions remain blocked.",
     "backfill": "Reuse BI-62514632 canonical integer counter and sequence. Preserve every existing position. Reconcile counter upward to existing maximum, then assign legacy NULL rows deterministic recordedAt/id positions after that maximum under parent/activity table locks. Skip a room whose legacy prefix exceeds integer headroom: retain its NULL evidence and unknown coverage. No history deletion or renumbering. DI-7588F40259CF supersedes the separate BIGINT candidate. Refreshed shared-sequence qualification 2026-10-14T01:17Z:10000 rooms142282 retained activities, migration8184.732ms,142282 unique positions,zero counter mismatches,existing positions5/9 unchanged,late arrival1976. Numeric indexed200-row page execution0.112ms. Separate real-PG regression retains overflow-room NULL evidence and rejects supplied/mutated positions. Synthetic populated qualification is not production or umbrella operational acceptance."
   },
   "tests": [
+    "packages/db/scripts/workroom-activity-migration-recovery.test.mjs",
+    "packages/db/scripts/workroom-activity-ingestion-recovery.postgres.test.mjs",
+    "packages/db/scripts/workroom-activity-recovery-prisma.postgres.test.mjs",
     "packages/db/src/workroom-activity-ingestion.postgres.test.ts",
     "apps/web/lib/work-management/delivery-room-ownership.test.ts",
     "apps/web/lib/work-management/room-activity-ingestion.test.ts",

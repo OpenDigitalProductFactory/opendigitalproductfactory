@@ -10,6 +10,10 @@ import {
   recordLocalCiBuilderMemorySample,
   type BuilderCalibrationStore,
 } from "./local-ci-builder-memory-calibration";
+import {
+  recordLocalCiHostRemainingGrowthSample,
+  type HostRemainingGrowthCalibrationStore,
+} from "./local-ci-host-remaining-growth-calibration";
 import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 import type { findLocalCiEvidenceWorkroom } from "./local-ci-evidence-workroom";
 import type { LocalIntegrationStatus } from "../../../../scripts/lib/local-integration-status.mjs";
@@ -51,6 +55,8 @@ type LocalIntegrationDependencies = {
   writeEvidenceBlob?: import("@/lib/evidence/bounded-evidence-output").EvidenceBlobWriter;
   /** BI-903FB5F9: where measured builder peaks accumulate. Defaults to PlatformConfig. */
   builderCalibration?: BuilderCalibrationStore;
+  /** BI-34955E1F: valid leased host drawdowns may only raise admission reserve. */
+  hostRemainingGrowthCalibration?: HostRemainingGrowthCalibrationStore;
   /** BI-C9912C22: where the gated branch's Workroom is found. Defaults to prisma. */
   workroom?: Parameters<typeof findLocalCiEvidenceWorkroom>[0];
 };
@@ -106,6 +112,7 @@ export async function recordLocalIntegrationResult(
       return recordLocalIntegrationResult(input, {
         platformConfig: tx.platformConfig,
         builderCalibration: tx.platformConfig,
+        hostRemainingGrowthCalibration: tx.platformConfig,
         workroom: tx.workroom,
         environmentLease: tx.nonProductionEnvironmentLease,
         recordEvidence: (value) => recordExternalEvidenceInStore(value, tx),
@@ -159,10 +166,12 @@ export async function recordLocalIntegrationResult(
   // keeps a head+tail excerpt (still a string, so every existing reader works)
   // plus {sha256, storageKey, sizeBytes}; the bytes live once in the
   // content-addressed blob store, shared with the ToolExecution ledger copy.
-  const { offloadEvidenceOutput } = await import("@/lib/evidence/bounded-evidence-output");
-  const boundedEvidence = await offloadEvidenceOutput(input.evidence, {
+  const { offloadEvidenceOutput, projectLocalCiObservationTails } = await import("@/lib/evidence/bounded-evidence-output");
+  const blobOptions = {
     ...(dependencies.writeEvidenceBlob ? { writeBlob: dependencies.writeEvidenceBlob } : {}),
-  });
+  };
+  const projectedEvidence = await projectLocalCiObservationTails(input.evidence, blobOptions);
+  const boundedEvidence = await offloadEvidenceOutput(projectedEvidence, blobOptions);
   const evidenceObject = boundedEvidence && typeof boundedEvidence === "object"
     && !Array.isArray(boundedEvidence)
     ? boundedEvidence as Record<string, unknown>
@@ -179,6 +188,14 @@ export async function recordLocalIntegrationResult(
   const builderMemoryCalibration = gateKey && leaseId
     ? (await recordLocalCiBuilderMemorySample({
       platformConfig: dependencies.builderCalibration ?? prisma.platformConfig,
+      evidence: input.evidence,
+      now: new Date(),
+    }).catch(() => ({ status: "error" as const }))).status
+    : "not-leased";
+  const hostRemainingGrowthCalibration = gateKey && leaseId
+    ? (await recordLocalCiHostRemainingGrowthSample({
+      platformConfig:
+        dependencies.hostRemainingGrowthCalibration ?? prisma.platformConfig,
       evidence: input.evidence,
       now: new Date(),
     }).catch(() => ({ status: "error" as const }))).status
@@ -221,6 +238,7 @@ export async function recordLocalIntegrationResult(
         : {}),
       capacityCircuitBreaker: circuitBreaker.status,
       builderMemoryCalibration,
+      hostRemainingGrowthCalibration,
       evidence: boundedEvidence,
     } as Prisma.InputJsonValue,
   });

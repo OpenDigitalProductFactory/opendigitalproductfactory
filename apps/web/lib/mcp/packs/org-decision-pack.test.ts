@@ -120,6 +120,19 @@ describe("org-decision pack — record_org_business_answer", () => {
 });
 
 describe("org-decision pack — evaluate_org_business_decision optionFeatures (BI-6DCF772F)", () => {
+  it("forwards declared consequence and a configured threshold fact", async () => {
+    const escalation = { route: "human", reasonCode: "damaging-consequence", damaging: true, followOn: null };
+    gateMock.mockResolvedValue({ interactionId: "DI-DAMAGE", allowed: false, evaluation: { outcomeType: "recommend", confidenceScore: 0.9, rationale: "Review required", escalation }, orgProfileSelected: true });
+    const result = await orgDecisionPack.handlers.evaluate_org_business_decision!({ question: "Approve this commitment?", options: ["approve", "decline"], domainClass: "risk-assessment", riskTier: "medium", decisionScope: "wwwd", consequence: "outward", thresholdExceeded: true }, "user-1");
+    expect(gateMock).toHaveBeenCalledWith(expect.objectContaining({ declarations: { consequence: "outward", thresholdExceeded: true } }));
+    expect(result.data).toMatchObject({ allowed: false, outcomeType: "recommend", escalation });
+  });
+
+  it.each([{ consequence: "reversible" }, { thresholdExceeded: "false" }])("rejects malformed damage declarations (%j)", async (declarations) => {
+    const result = await orgDecisionPack.handlers.evaluate_org_business_decision!({ question: "Approve this commitment?", options: ["approve", "decline"], domainClass: "risk-assessment", riskTier: "medium", decisionScope: "wwwd", ...declarations }, "user-1");
+    expect(result.success).toBe(false);
+    expect(gateMock).not.toHaveBeenCalled();
+  });
   it("rejects optionFeatures that don't align 1:1 with options, before invoking the gate", async () => {
     const res = await orgDecisionPack.handlers.evaluate_org_business_decision!(
       {

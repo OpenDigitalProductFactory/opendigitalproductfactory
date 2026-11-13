@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 // Harness lives in promote-script-functional.test-support.ts; the cleanup
 // sweep suite lives in promote-script-cleanup.test.ts.
 
-import { BASH_OK, GIT_OK, PROMOTE_TEST_TIMEOUT_MS, makeScratch, promoteDiagnostics, runPromote, toBashPath } from "./promote-script-functional.test-support";
+import { BASH_OK, GIT_OK, PROMOTE_TEST_TIMEOUT_MS, makeFakeBin, makeScratch, promoteDiagnostics, runPromote, toBashPath } from "./promote-script-functional.test-support";
 
 describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run", () => {
   it.each([
@@ -166,13 +166,15 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
-  it("derives a -dirty stamp when the build source has uncommitted changes", () => {
+  it("derives an honest -dirty stamp and refuses its unqualified image before swapping", () => {
     const { root, source, backup, fakeBin, head } = makeScratch();
     try {
       writeFileSync(join(source, "Dockerfile"), "FROM scratch\n# changed\n"); // dirty a tracked file
-      const r = runPromote({ source, backup, targetSha: `${head}-dirty`, fakeBin });
-      expect(r.status).toBe(0);
-      expect(r.stdout).toContain(`step=done target=${head}-dirty`);
+      const dockerLog = join(root, "docker.log");
+      const r = runPromote({ source, backup, targetSha: `${head}-dirty`, fakeBin, dockerLog });
+      expect(r.status).toBe(78);
+      expect(r.stdout).toContain(`step=docker-build target=${head}-dirty`);
+      expect(readFileSync(dockerLog, "utf8")).not.toContain("up -d --no-build --no-deps --force-recreate portal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -218,18 +220,12 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       // running container, so /sha returns blank. The verify step must treat an
       // empty stamp as a hard failure (the runtime cannot prove its identity),
       // not retry-until-timeout then pass.
-      const emptyShaBin = join(root, "bin-emptysha");
-      mkdirSync(emptyShaBin, { recursive: true });
-      writeFileSync(
-        join(emptyShaBin, "docker"),
-        '#!/bin/sh\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
-      );
+      const emptyShaBin = makeFakeBin(join(root, "emptysha"));
       // /sha → empty (the bug); other probes → ok.
       writeFileSync(
         join(emptyShaBin, "curl"),
         '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
       );
-      chmodSync(join(emptyShaBin, "docker"), 0o755);
       chmodSync(join(emptyShaBin, "curl"), 0o755);
 
       const r = runPromote({ source, backup, targetSha: head, fakeBin: emptyShaBin });
@@ -259,7 +255,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       expect(log).toContain("build portal");
       // BI-D9BAB4FA: migrations run from the freshly-built image, before the swap.
       expect(log).toContain("run --rm -T --no-deps --entrypoint sh portal -c cd /app && pnpm --filter @dpf/db exec prisma migrate deploy");
-      expect(log).toContain("up -d --no-deps --force-recreate portal");
+      expect(log).toContain("up -d --no-build --no-deps --force-recreate portal");
       // BI-86FC0336: seed runs the full entrypoint from the freshly swapped image, after the swap.
       expect(log).toContain("run --rm -T --no-deps --entrypoint /docker-entrypoint.sh portal");
       expect(log).toContain("exec -T portal cat /app/.dpf-source-content-hash");
@@ -277,6 +273,81 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
         expect(recreate).toContain(`mount_source=${hostStateDir}`);
         expect(recreate).not.toContain("=/dpf-state");
       }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("continues through older migration classifiers without resolving an activity migration when recovery is not needed", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, activityRecoveryDecision: "not-needed" });
+
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog })).toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      const activity = calls.indexOf("recover-workroom-activity-migration.mjs");
+      const principal = calls.indexOf("recover-human-principal-backfill-migration.mjs");
+      const inventory = calls.indexOf("recover-inventory-snapshot-migration.mjs");
+      expect(activity).toBeGreaterThanOrEqual(0);
+      expect(principal).toBeGreaterThan(activity);
+      expect(inventory).toBeGreaterThan(principal);
+      expect(calls.indexOf("prisma migrate deploy")).toBeGreaterThan(inventory);
+      expect(calls).not.toContain("prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening");
+      expect(calls).not.toContain("recover-workroom-activity-migration.mjs --verify-rolled-back");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("resolves only the allowlisted activity migration and verifies its original row before other classifiers", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, activityRecoveryDecision: "recover" });
+
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog })).toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      const check = calls.indexOf("recover-workroom-activity-migration.mjs");
+      const resolve = calls.indexOf("prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening");
+      const verify = calls.indexOf("recover-workroom-activity-migration.mjs --verify-rolled-back");
+      const principal = calls.indexOf("recover-human-principal-backfill-migration.mjs");
+      const inventory = calls.indexOf("recover-inventory-snapshot-migration.mjs");
+      expect(check).toBeGreaterThanOrEqual(0);
+      expect(resolve).toBeGreaterThan(check);
+      expect(verify).toBeGreaterThan(resolve);
+      expect(principal).toBeGreaterThan(verify);
+      expect(inventory).toBeGreaterThan(principal);
+      expect(calls.indexOf("prisma migrate deploy")).toBeGreaterThan(inventory);
+      const verificationCall = calls.split(/\r?\n/).find((line) => line.includes("recover-workroom-activity-migration.mjs --verify-rolled-back"));
+      expect(verificationCall).toContain('"$1" sh 22222222-2222-4222-8222-222222222222');
+      expect(calls.match(/prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening/g)).toHaveLength(1);
+      expect(calls).not.toContain("prisma migrate resolve --rolled-back 20260812110000_backfill_missing_human_principals");
+      expect(calls).not.toContain("prisma migrate resolve --rolled-back 20260728115900_snapshot_inventory_observation_facts");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it.each([
+    { failure: "classification refuses recovery", activityRecoveryDecision: "blocked" as const, activityResolveFails: false, activityVerifyFails: false, resolved: false, verified: false },
+    { failure: "Prisma rollback resolution fails", activityRecoveryDecision: "recover" as const, activityResolveFails: true, activityVerifyFails: false, resolved: true, verified: false },
+    { failure: "the original rolled-back row cannot be verified", activityRecoveryDecision: "recover" as const, activityResolveFails: false, activityVerifyFails: true, resolved: true, verified: true },
+  ])("stops before older classifiers, migration deploy and portal swap when $failure", ({ resolved, verified, ...scenario }) => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({ source, backup, targetSha: head, fakeBin, dockerLog, ...scenario });
+
+      expect(r.status, promoteDiagnostics(r, { "docker.log": dockerLog })).not.toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain("recover-workroom-activity-migration.mjs");
+      expect(calls.includes("prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening")).toBe(resolved);
+      expect(calls.includes("recover-workroom-activity-migration.mjs --verify-rolled-back")).toBe(verified);
+      expect(calls).not.toContain("recover-human-principal-backfill-migration.mjs");
+      expect(calls).not.toContain("recover-inventory-snapshot-migration.mjs");
+      expect(calls).not.toContain("prisma migrate deploy");
+      expect(calls).not.toContain("up -d --no-build --no-deps --force-recreate portal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -415,7 +486,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       const calls = readFileSync(dockerLog, "utf8");
       expect(calls).toContain("recover-human-principal-backfill-migration.mjs");
       expect(calls).not.toContain("prisma migrate deploy");
-      expect(calls).not.toContain("up -d --no-deps --force-recreate portal");
+      expect(calls).not.toContain("up -d --no-build --no-deps --force-recreate portal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -441,7 +512,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       const calls = readFileSync(dockerLog, "utf8");
       expect(calls).toContain("recover-inventory-snapshot-migration.mjs");
       expect(calls).not.toContain("prisma migrate deploy");
-      expect(calls).not.toContain("up -d --no-deps --force-recreate portal");
+      expect(calls).not.toContain("up -d --no-build --no-deps --force-recreate portal");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -456,18 +527,9 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     try {
       // A docker shim that fails ONLY on `compose ... build sandbox`, succeeds
       // otherwise (and still answers the content-hash probe so portal verifies).
-      const bin = join(root, "failbin");
-      mkdirSync(bin, { recursive: true });
-      writeFileSync(
-        join(bin, "docker"),
-        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"build sandbox"*) exit 1 ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
-      );
-      writeFileSync(
-        join(bin, "curl"),
-        '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "%s" "$DPF_VERSION" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
-      );
-      chmodSync(join(bin, "docker"), 0o755);
-      chmodSync(join(bin, "curl"), 0o755);
+      const bin = makeFakeBin(join(root, "failbin"));
+      const docker = join(bin, "docker");
+      writeFileSync(docker, readFileSync(docker, "utf8").replace('case "$*" in', 'case "$*" in\n  *"build sandbox"*) exit 1 ;;'));
 
       const r = runPromote({ source, backup, targetSha: head, fakeBin: bin });
 
@@ -489,21 +551,12 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
   it("SKIPS the pgvector recreate when the image already provides vector (pg_available_extensions=1)", () => {
     const { root, source, backup, head } = makeScratch();
     try {
-      const bin = join(root, "vecbin");
-      mkdirSync(bin, { recursive: true });
+      const bin = makeFakeBin(join(root, "vecbin"));
       const dockerLog = join(root, "docker.log");
       // A docker shim whose `psql ... pg_available_extensions` probe reports vector
       // present ("1"); everything else behaves like the default fake.
-      writeFileSync(
-        join(bin, "docker"),
-        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *pg_available_extensions*) printf "1" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
-      );
-      writeFileSync(
-        join(bin, "curl"),
-        '#!/bin/sh\nfor a in "$@"; do url="$a"; done\ncase "$url" in\n  */sha) printf "%s" "$DPF_VERSION" ;;\n  *) printf "ok" ;;\nesac\nexit 0\n',
-      );
-      chmodSync(join(bin, "docker"), 0o755);
-      chmodSync(join(bin, "curl"), 0o755);
+      const docker = join(bin, "docker");
+      writeFileSync(docker, readFileSync(docker, "utf8").replace('case "$*" in', 'case "$*" in\n  *pg_available_extensions*) printf "1" ;;'));
 
       const r = runPromote({ source, backup, targetSha: head, fakeBin: bin, dockerLog });
 

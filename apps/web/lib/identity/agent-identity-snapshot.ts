@@ -1,5 +1,7 @@
 import { prisma } from "@dpf/db";
 import { collapseDualSeedDuplicates } from "@/lib/coworker-record/selectable-coworker";
+import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
+import { persistedAgentToolGrants } from "@/lib/tak/agent-grants";
 
 import {
   projectInternalAIDoc,
@@ -83,10 +85,12 @@ export async function listAgentIdentitySnapshots(
           grantKey: true,
         },
       },
+      toolGrantRevocations: { select: { grantKey: true } },
     },
   });
 
   const agents = collapseDualSeedDuplicates(agentsRaw);
+  const authorityById = new Map(agentsRaw.map(agent => [agent.agentId, agent]));
 
   const [aliases, modelConfigs, memoryFacts] = await Promise.all([
     db.principalAlias.findMany({
@@ -159,6 +163,7 @@ export async function listAgentIdentitySnapshots(
       ? projectInternalAIDoc({
           gaid,
           principalRef: linkedPrincipalId,
+          authorityGrants: persistedAgentToolGrants(authorityById.get(coworkerAuthorityAgentId(agent.agentId))),
           agent: agent as AIDocProjectionSource["agent"],
           modelConfig: modelConfigByAgentId.get(agent.agentId) ?? null,
         })

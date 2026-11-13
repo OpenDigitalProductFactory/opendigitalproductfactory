@@ -2,6 +2,11 @@ import type { ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { WORK_CAPSULE_EXECUTOR_KINDS, isWorkCapsuleExecutorKind } from "@/lib/work-capsules";
 
+import { BoundedHandoffRefusal, parseBoundedHandoffCommand } from "./bounded-handoff-command";
+import { boundedHandoffRefusalResult, executeBoundedHandoff } from "./bounded-handoff";
+
+import { runBatchExecutorHandover } from "./batch-executor-handover";
+import { assessOwnRoomTakeover } from "./own-room-takeover";
 import { admitRoomAssistant } from "./room-ownership";
 import { reassignWorkCapsuleExecutor } from "./work-capsule-store";
 import { WorkroomLeaseHolderChangedError } from "./workroom-lease";
@@ -22,7 +27,26 @@ export async function reassignCapsuleExecutor(args: {
   params: Record<string, unknown>;
   db: CapsuleDb;
   resolveActor: () => Promise<WorkCapsuleActor>;
+  /** Re-prove an unapproved assistant takeover inside the write (BI-1986D3C1). */
+  ownRoomTakeoverRecheck?: boolean;
 }): Promise<ToolResult> {
+  // A set of rooms: dry run, then one approved apply that hands over each room
+  // through this same single-room path (BI-D4144471).
+  if (Object.hasOwn(args.params, "capsuleIds")) {
+    return runBatchExecutorHandover({
+      params: args.params,
+      db: args.db,
+      handOverOne: (params) => reassignCapsuleExecutor({ ...args, params }),
+    });
+  }
+  if (Object.hasOwn(args.params, "phase")) {
+    let command;
+    try {
+      command = parseBoundedHandoffCommand(args.params);
+      if (!command) throw new Error("The handoff phase could not be resolved.");
+      return await executeBoundedHandoff({ db: args.db, actor: await args.resolveActor(), command });
+    } catch (error) { return boundedHandoffRefusalResult(error, command); }
+  }
   const text = (key: string) => {
     const value = args.params[key];
     return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -52,6 +76,11 @@ export async function reassignCapsuleExecutor(args: {
   try {
     const actor = await args.resolveActor();
     const run = async (tx: CapsuleDb) => {
+      if (args.ownRoomTakeoverRecheck) {
+        await assessOwnRoomTakeover({ db: tx, actor, takeover: { capsuleId, toExecutorKind,
+          toExecutorRef: text("toExecutorRef"),
+          ...(expectedLeaseHolderPrincipalId !== undefined ? { expectedLeaseHolderPrincipalId } : {}) } });
+      }
       const capsule = await reassignWorkCapsuleExecutor({
         db: tx,
         capsuleId,
@@ -90,6 +119,7 @@ export async function reassignCapsuleExecutor(args: {
       data: { capsule, assistantAdmitted: admitted },
     };
   } catch (error) {
+    if (error instanceof BoundedHandoffRefusal) return boundedHandoffRefusalResult(error);
     if (error instanceof WorkroomLeaseHolderChangedError) {
       return {
         success: false,

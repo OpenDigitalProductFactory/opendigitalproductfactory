@@ -156,9 +156,34 @@ export type ComputeAgentToolchainPlanOptions = {
   };
 };
 
+function normalizeMcpEndpoint(endpoint: string): string {
+  try {
+    const parsed = new URL(endpoint);
+    const credentialKeys = new Set([
+      "access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+      "authorization", "client_secret", "clientsecret", "secret", "password",
+    ]);
+    if (!/^https?:\/\/[^/]/i.test(endpoint) || endpoint.includes("\\")
+      || !["http:", "https:"].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password
+      || /\s/.test(endpoint) || [...parsed.searchParams.keys()].some(key => credentialKeys.has(key.toLowerCase().replaceAll("-", "_")))) {
+      throw new Error("Unsafe endpoint");
+    }
+    if (parsed.pathname === "/") {
+      parsed.pathname = "/api/mcp/v1";
+      return parsed.toString();
+    }
+    return endpoint;
+  } catch {
+    throw new Error("MCP endpoint must be a credential-free HTTP(S) URL");
+  }
+}
+
 export function computeAgentToolchainPlan(
   options: ComputeAgentToolchainPlanOptions,
 ): AgentToolchainPlan {
+  // Validate once, before reading any host configuration; every client and probe
+  // receives the same resource. A portal-origin shorthand is not an MCP route.
+  options = { ...options, mcpEndpoint: normalizeMcpEndpoint(options.mcpEndpoint) };
   const fs = options.fs ?? {};
   const _readFile =
     fs.readFileSync ?? ((p: string, e: BufferEncoding) => readFileSync(p, e));

@@ -83,11 +83,25 @@ describe("gateDrivePlanOnWorkItem", () => {
     expect(gateDrivePlanOnWorkItem(ask, "retired").action).toBe("do_not_wake");
   });
 
-  it("keeps a conformance stop or escalation, which a person must still see", () => {
+  it("keeps a conformance stop, which a person must still see", () => {
     const stop = plan({ action: "stop", reason: "conformance_stop" });
-    const escalate = plan({ action: "escalate", reason: "conformance_escalate" });
     expect(gateDrivePlanOnWorkItem(stop, "done")).toBe(stop);
-    expect(gateDrivePlanOnWorkItem(escalate, "deferred")).toBe(escalate);
+    expect(gateDrivePlanOnWorkItem(stop, "deferred")).toBe(stop);
+  });
+
+  it("keeps a delivered item's escalation, which still governs its acceptance", () => {
+    const escalate = plan({ action: "escalate", reason: "conformance_escalate" });
+    expect(gateDrivePlanOnWorkItem(escalate, "awaiting-acceptance")).toBe(escalate);
+  });
+
+  // Live 2026-10-21: WC-F836CFFC (BI-ECFE0AC2, done) had escalated 1,234 ticks
+  // on coordinator_authority_binding_ineligible, a "who should own this?" card
+  // about a room with no work left to coordinate.
+  it("stands a parked item's escalation down: there is no work left to coordinate", () => {
+    const escalate = plan({ action: "escalate", reason: "conformance_escalate" });
+    for (const status of ["done", "deferred", "retired"]) {
+      expect(gateDrivePlanOnWorkItem(escalate, status).action).toBe("do_not_wake");
+    }
   });
 
   it("drops graph token and marking fields, so the stood-down plan is applied as one quiet tick", () => {

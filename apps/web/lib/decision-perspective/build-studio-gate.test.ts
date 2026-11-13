@@ -191,7 +191,7 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
     trace.mockRestore();
   });
 
-  it("blocks advancement when the profile has a coverage gap", async () => {
+  it("records outstanding independent review when the profile has a coverage gap", async () => {
     const db = makeDb();
     db.perspectiveMaterial.findMany.mockResolvedValue([]);
 
@@ -200,9 +200,10 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
       build: makeBuild(),
     });
 
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("defer");
-    expect(result.operatorMessage).toContain("coverage gap");
+    expect(result.evaluation.escalation).toMatchObject({ route: "independent-review", followOn: "corpus-gap" });
+    expect(result.operatorMessage).toMatch(/Independent review/);
   });
 
   it("returns an existing open interaction for the same build and profile version without creating a duplicate", async () => {
@@ -304,9 +305,10 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
         interaction: { select: { recommendedOptionId: true, chosenOptionId: true } },
       },
     });
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("escalate");
     expect(result.evaluation.confidenceScore).toBe(0.6);
+    expect(result.evaluation.escalation?.route).toBe("independent-review");
   });
 
   // The regression BI-ACF0D6D4 fixes: three ANSWERS that agreed with the gate
@@ -352,7 +354,7 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
     );
   });
 
-  it("fails closed and writes an escalation interaction when evaluation throws", async () => {
+  it("records independent review when a non-damaging evaluation throws", async () => {
     const db = makeDb();
     const trace = vi.spyOn(console, "info").mockImplementation(() => {});
 
@@ -366,8 +368,9 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
       },
     });
 
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("escalate");
+    expect(result.evaluation.escalation).toMatchObject({ route: "independent-review", followOn: "evaluation-fault" });
     expect(result.evaluation.rationale).toContain("MalformedPerspectiveInputError");
     expect(db.decisionInteraction.create).toHaveBeenCalledWith(
       expect.objectContaining({

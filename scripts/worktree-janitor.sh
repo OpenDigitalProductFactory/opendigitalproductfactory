@@ -9,6 +9,8 @@
 # FLAGS
 #   --dry-run        (default) Print candidates only; do nothing destructive.
 #   --live           Run live: git worktree remove + branch -D for PRUNE candidates.
+#                    A stale branch with commits on no remote is first saved at
+#                    refs/janitor-backup/<YYYY-MM-DD>/<branch>; if that fails it is KEPT.
 #   --grace-days N   Days without a commit after which a worktree is a candidate
 #                    (default: 14). Merged worktrees are candidates immediately.
 #   --force          Also remove worktrees with untracked files (last resort;
@@ -86,7 +88,11 @@ record() { # verdict path reason
 
 # ── Main clone detection ──────────────────────────────────────────────────────
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-root="$("$GIT_BIN" -C "$script_dir" worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+# BI-2EF2E6D3: awk must read ALL input. An early `exit` leaves git writing into a
+# closed pipe once the list outgrows the pipe buffer (~500 worktrees); git takes
+# SIGPIPE, pipefail reports 141 and set -e kills the janitor before it prints a
+# line — every sweep became a silent no-op. sub() also keeps paths with spaces.
+root="$("$GIT_BIN" -C "$script_dir" worktree list --porcelain | awk '/^worktree / && !seen {sub(/^worktree /, ""); print; seen = 1}')"
 if [ -z "${root:-}" ]; then
   echo "  [fail]  could not determine root clone" >&2; exit 1
 fi
@@ -107,8 +113,11 @@ has_active_lease() {
     -H "Content-Type: application/json" \
     -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_nonprod_environment_leases","arguments":{}}}' \
     2>/dev/null)" || return 1
-  # Check if any active lease worktreePath matches wt_path
-  printf '%s' "$resp" | grep -q "\"$wt_path\""
+  # Check if any active lease worktreePath matches wt_path. Match in-shell, not
+  # `printf | grep -q`: grep -q exits on the first hit, printf can take SIGPIPE,
+  # and pipefail would turn a FOUND lease into "no lease" — pruning a leased
+  # worktree (BI-2EF2E6D3).
+  [[ "$resp" == *"\"$wt_path\""* ]]
 }
 
 # ── Open PR check via gh CLI ──────────────────────────────────────────────
@@ -133,6 +142,25 @@ has_merged_pr() {
   local count
   count="$("$GH_BIN" pr list --head "$branch" --state merged --json number --jq 'length' 2>/dev/null)" || return 1
   [ "${count:-0}" -gt 0 ]
+}
+
+# ── Unpushed-work backup (BI-EBBBDF40) ───────────────────────────────────
+# A stale branch is unmerged by definition, and `branch -D` leaves commits that
+# are on no remote reachable only from the reflog. Before deleting, pin any
+# such tip at refs/janitor-backup/<date>/<branch> (the 2026-10-21 live run had
+# 14 of these, backed up by hand). Returns non-zero when the branch has
+# unpushed commits and the ref could not be written — the caller KEEPs then.
+backup_date="$(date +%Y-%m-%d)"
+backup_unpushed() {
+  local branch="$1" unpushed tip ref
+  unpushed="$("$GIT_BIN" -C "$root" rev-list --count "refs/heads/$branch" --not --remotes 2>/dev/null)" || {
+    warn "cannot count unpushed commits on $branch"; return 1; }
+  [ "${unpushed:-0}" -gt 0 ] || return 0
+  ref="refs/janitor-backup/$backup_date/$branch"
+  tip="$("$GIT_BIN" -C "$root" rev-parse "refs/heads/$branch" 2>/dev/null)" &&
+    "$GIT_BIN" -C "$root" update-ref "$ref" "$tip" 2>/dev/null || {
+    warn "could not write backup ref $ref for $unpushed unpushed commit(s)"; return 1; }
+  ok "backed up $unpushed unpushed commit(s) of $branch at $ref"
 }
 
 printf '\nWorktree janitor — %s (grace=%d days, %s)\n\n' \
@@ -208,6 +236,8 @@ while IFS= read -r wt_path; do
     age_days=$(( age_secs / 86400 ))
     if [ "$dirty" = "1" ]; then
       record KEEP "$wt_path" "branch=$branch stale ${age_days}d but dirty; manual review required"
+    elif [ "$DRY_RUN" = "0" ] && ! backup_unpushed "$branch"; then
+      record KEEP "$wt_path" "branch=$branch stale ${age_days}d but unpushed commits could not be backed up"
     else
       record PRUNE "$wt_path" "branch=$branch stale ${age_days}d (>${GRACE_DAYS}d), unmerged, clean"
       if [ "$DRY_RUN" = "0" ]; then
@@ -222,7 +252,7 @@ while IFS= read -r wt_path; do
   age_days=$(( age_secs / 86400 ))
   record KEEP "$wt_path" "branch=$branch unmerged, ${age_days}d old (<${GRACE_DAYS}d grace)"
 
-done < <("$GIT_BIN" -C "$root" worktree list --porcelain | awk '/^worktree /{print $2}')
+done < <("$GIT_BIN" -C "$root" worktree list --porcelain | awk '/^worktree /{sub(/^worktree /, ""); print}')
 
 printf '\nSummary: %d PRUNE  %d KEEP  %d SKIP  %d PINNED\n' \
   "$count_prune" "$count_keep" "$count_skip" "$count_pinned"

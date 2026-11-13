@@ -37,8 +37,10 @@ export type AttentionSource =
   | "workroom-stall" // a Workroom whose drive has refused consecutive wakes — stalled, or unowned (BI-03E94B5B)
   | "workroom-rebind" // a Workroom pinned to a superseded work-shape version (BI-CB5C0DCE)
   | "orphaned-approval" // coworker approvals going to a delegate who is not using the portal (BI-61DE8177)
+  | "organization-direction" // the instance's mission, vision or top-level outcomes are not recorded yet (BI-916216E7)
   | "contribution-setup" // contribution with the DPF project is undecided, or chosen with no GitHub account connected (BI-D3342020)
-  | "mailroom-item"; // correspondence the Mailroom routed that nobody acknowledged inside its window, or that is immediate (BI-12B0AE91)
+  | "mailroom-item" // correspondence the Mailroom routed that nobody acknowledged inside its window, or that is immediate (BI-12B0AE91)
+  | "agent-toolchain"; // a computer's DPF tools have failed to update, or waited on the operator, for over a day (BI-3E66F76F)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
@@ -73,6 +75,7 @@ export type ResidueReason =
   | "policy-approval" // an agent action awaits approval (AgentActionProposal)
   | "new-memory-note" // a coworker's role-local memory gained a new distilled note
   | "no-self-heal" // a platform service is degraded and has no automated repair path (health_alert)
+  | "self-heals" // a provider usage limit that lifts on its own at its reset; other providers carry the work (BI-ACE041FE)
   | "room-stalled" // a Workroom's drive keeps refusing to advance — typically no accountable owner
   | "awaiting-rebind" // a Workroom runs a superseded work-shape version; moving it is its owner's decision (BI-CB5C0DCE)
   | "approver-absent"; // approvals route to one person, and that person is not using the portal
@@ -136,7 +139,7 @@ export type AttentionTechnicalMetadata = {
  * level union remains canonical; owner-facing labels come from
  * PROACTIVITY_LEVEL_COPY (`quiet` renders as “Quiet”). */
 export type AttentionProactivity = {
-  level: import("@/lib/proactivity/proactivity-types").ProactivityLevel;
+  level: import("@dpf/validators/workroom-policy/proactivity-types").ProactivityLevel;
   actorId?: string;
   policyId?: string;
 };
@@ -200,6 +203,12 @@ export type AttentionEnvelopeApproval = {
   reviewBinding?: AttentionEnvelopeReviewBinding;
   /** Decision-first owner summary (BI-F95B0795). Always present; unknown shapes fail closed. */
   decision: EnvelopeDecisionSummary;
+  /**
+   * BI-E5631708: the owner may make this approval standing ("don't ask again
+   * when this coworker does this"). Set only for a non-damaging request that
+   * reached a person solely because nothing recorded could steer it.
+   */
+  standingRulingOffered?: boolean;
   /** The authenticated envelope state-machine routes (lib/coworker/envelope-routes). */
   approveHref: string;
   declineHref: string;
@@ -271,4 +280,21 @@ export const GENERIC_BLAST_RADIUS: ReadonlySet<string> = new Set([
 export function namesNoConcreteConsequence(blastRadius: string | null | undefined): boolean {
   const value = (blastRadius ?? "").trim().toLowerCase();
   return value.length === 0 || GENERIC_BLAST_RADIUS.has(value);
+}
+
+/** Rows the AI-capacity watch maintains, projected by sources/ai-capacity.ts (BI-ACE041FE). */
+export function isAiCapacityItem(item: Pick<AttentionItem, "source" | "id">): boolean {
+  return item.source === "platform-health" && (item.id ?? "").startsWith("platform-health:ai-capacity:");
+}
+
+/**
+ * Rows the platform-continuity and work-sync watches maintain (BI-3E2F87FA,
+ * BI-85DE8EBD): the platform stopped serving, or lost its paired installation.
+ * Only the operator can fix the cause, so these go to Needs-you.
+ */
+const OPERATOR_CONTINUITY_PREFIXES = ["platform-health:platform-downtime:", "platform-health:work-sync:"];
+
+export function isOperatorContinuityItem(item: Pick<AttentionItem, "source" | "id">): boolean {
+  const id = item.id ?? "";
+  return item.source === "platform-health" && OPERATOR_CONTINUITY_PREFIXES.some((prefix) => id.startsWith(prefix));
 }

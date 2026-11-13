@@ -1,3 +1,4 @@
+vi.mock("@/lib/mcp-task-review-recovery", () => ({ issueOriginalReviewRecoveryTarget: async () => ({ kind: "none" }) }));
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(), human: vi.fn(),
   consent: vi.fn(), access: vi.fn(), item: vi.fn(), recovery: vi.fn(), task: vi.fn(), source: vi.fn(), outcome: vi.fn() }));
@@ -33,7 +34,8 @@ beforeEach(() => {
   mocks.token.mockResolvedValue({ userId: "human", agentId: "AGT-AUTHOR", authorityBindingId: "consent", oauthClient: { registrationKind: "dynamic" } });
   mocks.consent.mockResolvedValue(true);
   mocks.human.mockResolvedValue({ isSuperuser: true, platformRole: null });
-  mocks.room.mockResolvedValue({ id: "room", backlogItemId: "BI-DOC", executorKind: "codex-desktop" });
+  mocks.room.mockResolvedValue({ id: "room", backlogItemId: "BI-DOC", executorKind: "codex-desktop",
+    repositoryFullName: "org/repo", headBranch: "fix/scope", baseSha: "c".repeat(40), headSha: "a".repeat(40) });
   mocks.access.mockResolvedValue({ decision: { level: "action" } });
   mocks.item.mockResolvedValue({ success: true, data: { scopeKind: "platform", readiness: { decisions: { implementation: {
     verdict: "input-required", subject: { id: "BI-DOC" }, blockers: [], unmet: [{ code: "SPEC_APPROVAL_REQUIRED" }],

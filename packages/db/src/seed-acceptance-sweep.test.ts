@@ -23,6 +23,10 @@ function fakePrisma(opts: { hasSuperuser?: boolean } = {}) {
   const tasks = new Map<string, Row>();
   const jobs = new Map<string, Row>();
   const client = {
+    // No accountable owner recorded: the seed falls back to the superuser guess (BI-F0E946D2).
+    portfolio: { findUnique: async () => null },
+    organization: { findFirst: async () => null },
+    principalAlias: { findFirst: async () => null },
     user: { findFirst: async () => (hasSuperuser ? { id: "user-super" } : null) },
     scheduledAgentTask: {
       findUnique: async ({ where }: { where: { taskId: string } }) => tasks.get(where.taskId) ?? null,

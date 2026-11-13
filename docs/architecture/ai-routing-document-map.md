@@ -19,6 +19,22 @@ records.
 Current implementation truth comes from code plus live evidence. A diagram, design
 document, or seeded row does not override those sources.
 
+## Restricted present reassessment
+
+The [review settlement amendment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+defines a separate, restricted path for a new assessment of an exact immutable
+artifact. Its R2 source binds an existing in-process HTTP provider/account/model
+composition and exposes only `read_source_at_version` and the bound canonical
+writer. It disables native execution, provider fallback, tool-free inference and
+auxiliary grounding or reflection. Ordinary routing retains its existing behavior.
+
+Qualification records the actual current budget configuration and execution
+bounds, then rechecks them before each provider start. This source work does not
+establish release or served acceptance. In particular, finite total-token
+qualification still refuses without an authenticated input-bound producer; the
+normal 50,000-token case has not yet passed positive qualification. New task
+admission and genuine current review receipts remain separate required evidence.
+
 ## Streaming versus result delivery
 
 `RouteAndCallOptions.requiresStreaming` expresses token-streaming demand; it
@@ -110,3 +126,22 @@ joined heuristically.
 The owner view uses plain-language subway stations. BPMN, SysML, ArchiMate/C4,
 source versions, rule detail, and remediation appear through progressive
 drill-through rather than competing diagrams.
+
+
+## Exact saved-answer feedback
+
+The [exact-response design](../superpowers/specs/2026-10-31-exact-response-routing-feedback-design.md)
+and [operator workflow](../user-guide/ai-workforce/model-routing-lifecycle.md#investigate-routing-and-record-feedback)
+share one domain in `apps/web/lib/routing/response-feedback.ts`. Browser actions,
+the existing work-thread MCP pack and authorized surfaces recheck current actor,
+conversation ownership, Workroom admission, exact producer and saved content.
+The browser save-envelope helper belongs in
+`apps/web/lib/actions/coworker-response-persistence.ts`; its failure presentation
+uses the allowed actions-to-build dependency.
+
+Owned data-architecture decision DI-DF76FEA979F7 preserves one indexed soft
+telemetry reference so capture failure and 180-day telemetry removal do not
+control answer delivery. The exception names only AgentMessage.responseAttemptId
+and retains the existing baseline owner and expiry. Human acceptance, coworker
+judgment, execution evidence, evaluated quality and cost coverage remain distinct;
+the platform does not infer missing attribution or scores.

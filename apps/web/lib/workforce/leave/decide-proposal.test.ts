@@ -122,25 +122,34 @@ describe("leave decision recommendation", () => {
     }));
   });
 
-  it("an existing guard-only recommendation links nothing", async () => {
-    const store = persistence({ findExistingMessage: vi.fn().mockResolvedValue({ id: "msg-0" }) });
-    const guarded = { ...decision, action: "escalate" as const, interactionId: null };
-    await proposeLeaveDecision({ decision: guarded, userId: "user-1", persistence: store });
-    expect(store.linkDecisionInteraction).not.toHaveBeenCalled();
-  });
-
-  it("a guard-only recommendation has no interaction: keyed by the guard, links nothing", async () => {
+  // BI-5CA6AB34: a recommendation reaches the manager only with the kernel
+  // record behind it. Without one nothing is written; the request stays in the
+  // approver's leave queue, so no human authority is lost.
+  it("a recommendation with no kernel record is refused and nothing is written or linked", async () => {
     const store = persistence();
-    const guarded = {
+    const unrecorded = {
       ...decision, action: "escalate" as const, interactionId: null, orgProfileSelected: false,
       operatorMessage: "Escalated to a human approver: Coverage would breach.", guardReasons: ["Coverage would breach."],
     };
-    const result = await proposeLeaveDecision({ decision: guarded, userId: "user-1", persistence: store });
+    const result = await proposeLeaveDecision({ decision: unrecorded, userId: "user-1", persistence: store });
+    expect(result.status).toBe("refused");
+    expect(store.writeRecommendation).not.toHaveBeenCalled();
+    expect(store.linkDecisionInteraction).not.toHaveBeenCalled();
+    expect(store.ensureThread).not.toHaveBeenCalled();
+  });
+
+  it("a fired rail's recommendation carries its rail record like any other", async () => {
+    const store = persistence();
+    const railed = {
+      ...decision, action: "escalate" as const, interactionId: "DI-RAIL-1", orgProfileSelected: false,
+      operatorMessage: "Escalated to a human approver: Coverage would breach.", guardReasons: ["Coverage would breach."],
+    };
+    const result = await proposeLeaveDecision({ decision: railed, userId: "user-1", persistence: store });
+    expect(result.status).toBe("proposed");
     expect(store.writeRecommendation).toHaveBeenCalledWith(expect.objectContaining({
-      agentId: "time-off-advisor",
-      leaveRequestUpdate: { requestId: "LR-1", decisionInteractionId: null },
+      leaveRequestUpdate: { requestId: "LR-1", decisionInteractionId: "DI-RAIL-1" },
     }));
-    expect(result.recommendationId).toBe("leave-decision:LR-1:guard-escalate");
+    expect(result.recommendationId).toBe("leave-decision:LR-1:DI-RAIL-1");
   });
 
   it("the module no longer touches the proposal table", async () => {

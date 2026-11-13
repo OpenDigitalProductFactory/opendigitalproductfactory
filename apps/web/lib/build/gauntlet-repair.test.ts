@@ -3,7 +3,7 @@
 // escalated to the operator. Never an endless re-review of the same tree.
 import { describe, expect, it } from "vitest";
 
-import { buildGauntletRepairTask, buildReviewRepairTask, decideGauntletRepair, GAUNTLET_REPAIR_MAX_ATTEMPTS, repairTaskFor } from "./gauntlet-repair";
+import { buildGauntletRepairTask, buildReviewRepairTask, decideGauntletRepair, escalationIssuesFor, GAUNTLET_REPAIR_MAX_ATTEMPTS, readGauntletRepairState, repairTaskFor } from "./gauntlet-repair";
 
 const failure = { treeSha: "t1", recordId: "rec-1", failedGuards: ["Data-Impact Gate", "Derived Artifact Registry"] };
 
@@ -90,5 +90,69 @@ describe("review-finding repair", () => {
   it("shares one attempt bound with guard hand-backs", () => {
     const afterGuards = { source: "guards" as const, failedGuards: ["x"], treeSha: "t", recordId: "r", attempts: GAUNTLET_REPAIR_MAX_ATTEMPTS };
     expect(decideGauntletRepair(afterGuards, { treeSha: "t2", recordId: null, failedGuards: ["Semantic change review"], source: "review", findings }).action).toBe("escalate");
+  });
+});
+
+// BI-33B54E4B: a confirmed scoped-test failure goes back to the coding agent with
+// the failing tests named, through the same bound, then to the owner.
+describe("scoped-test repair", () => {
+  const findings = [{ severity: "important", description: "Failing test: lib/queue/functions/self-upgrade.test.ts > skip-before-drain guards > marks a pre-created queued run skipped" }];
+  const state = { source: "tests" as const, findings, failedGuards: ["Scoped tests"], treeSha: "t", recordId: "t1", attempts: 1 };
+
+  it("briefs the failing tests and carries the recorded test output", () => {
+    const task = repairTaskFor(state, "AssertionError: expected vi.fn() to be called with arguments");
+    expect(task.title).toMatch(/Fix failing tests/);
+    expect(task.implement).toContain("self-upgrade.test.ts > skip-before-drain guards");
+    expect(task.implement).toContain("AssertionError: expected vi.fn()");
+    expect(task.implement).toMatch(/never weaken, skip or delete a test/i);
+    expect(task.verify).toMatch(/scoped tests and typecheck pass/);
+  });
+
+  it("keeps the tests source when the state is read back", () => {
+    expect(readGauntletRepairState({ gauntletRepair: state })).toMatchObject({ source: "tests", findings });
+  });
+
+  it("escalates with the still-failing tests named", () => {
+    expect(escalationIssuesFor({ ...state }, 2)).toEqual([{
+      severity: "important",
+      description: "Scoped test still failing after 2 repair attempt(s): Failing test: lib/queue/functions/self-upgrade.test.ts > skip-before-drain guards > marks a pre-created queued run skipped",
+    }]);
+  });
+
+  it("shares the bound with earlier guard hand-backs", () => {
+    const afterGuards = { source: "guards" as const, failedGuards: ["Style Drift Guard"], treeSha: "t", recordId: "r", attempts: GAUNTLET_REPAIR_MAX_ATTEMPTS };
+    expect(decideGauntletRepair(afterGuards, { ...state }).action).toBe("escalate");
+  });
+});
+
+// BI-2CCD5C0E: a review refresh that conflicts with upstream main is handed
+// back to the coding agent to rebase and resolve, through the same bound.
+describe("refresh-conflict repair", () => {
+  const conflict = {
+    treeSha: null,
+    recordId: null,
+    failedGuards: ["Refresh onto upstream main"],
+    source: "conflict" as const,
+    ontoRef: "client/abc",
+    findings: [{ severity: "important", description: "Conflicts with upstream main in apps/web/lib/coworker-self-assessment/assessment-service.ts" }],
+  };
+
+  it("briefs a rebase onto the named ref that resolves each conflicted file and never drops the build's commits", () => {
+    const task = repairTaskFor({ ...conflict, attempts: 1 }, "");
+    expect(task.title).toMatch(/conflict/i);
+    expect(task.implement).toContain("git rebase client/abc");
+    expect(task.implement).toContain("apps/web/lib/coworker-self-assessment/assessment-service.ts");
+    expect(task.implement).toMatch(/never.*--skip/i);
+    expect(task.verify).toMatch(/client\/abc/);
+  });
+
+  it("keeps the conflict source and its rebase target when the state is read back", () => {
+    const read = readGauntletRepairState({ gauntletRepair: { ...conflict, attempts: 1 } });
+    expect(read).toMatchObject({ source: "conflict", ontoRef: "client/abc", attempts: 1 });
+  });
+
+  it("escalates with the conflicted files named once the bound is spent", () => {
+    const issues = escalationIssuesFor(conflict, GAUNTLET_REPAIR_MAX_ATTEMPTS);
+    expect(issues[0]?.description).toMatch(/still conflicts.*assessment-service\.ts/i);
   });
 });

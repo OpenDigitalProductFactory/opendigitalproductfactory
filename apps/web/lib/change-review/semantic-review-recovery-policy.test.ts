@@ -33,6 +33,18 @@ describe("recorded reviewer recovery budget", () => {
 
 
 describe("review recovery status", () => {
+  it("names eligibility remediation instead of recommending an unchanged inference retry", () => {
+    const view = semanticReviewRecoveryObservation("input-required", { semanticReview: {
+      schemaVersion: 1, deadlineAt: future, reason: "review-endpoint-ineligible", recoveryAttempt: 0,
+      routingEligibility: [{ sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
+        exclusions: [{ bucket: "output-capacity", count: 2 }] }],
+    } }, now);
+    expect(view.classification).toBe("routing-blocked");
+    expect(view.nextAction).toContain("eligibility");
+    expect(view.nextAction).not.toContain("then confirm retry");
+    expect(view.pollUseful).toBe(false);
+    expect(view.eligibility).toHaveLength(1);
+  });
   it.each([
     ["submitted", "active-execution", true], ["working", "active-execution", true],
     ["auth-required", "authorization-required", false], ["completed", "completed", false],
@@ -41,6 +53,28 @@ describe("review recovery status", () => {
     expect(semanticReviewRecoveryObservation(status as string, { semanticReview: {
       schemaVersion: 1, deadlineAt: future, reason: "provider-outcome-uncertain", recoveryAttempt: 1,
     } }, now)).toMatchObject({ classification, pollUseful });
+  });
+  it.each([
+    [future, 0], [new Date(now - 1).toISOString(), 0], [future, 3], [null, null],
+  ])("keeps unknown execution proof ahead of budget %s/%s", (deadlineAt, recoveryAttempt) => {
+    for (const uncertainty of [{ executionOutcome: "unknown" }, { reason: "provider-outcome-uncertain:lost-response" }]) {
+      const view = semanticReviewRecoveryObservation("input-required", { semanticReview: {
+        schemaVersion: 1, deadlineAt, recoveryAttempt, ...uncertainty,
+      } }, now);
+      expect(view.classification).toBe("execution-uncertain");
+      expect(view.nextAction).toContain("execution settlement");
+      expect(view.nextAction).not.toContain("bounded successor");
+      expect(view.nextAction).not.toContain("confirm retry_semantic_review");
+      expect(view.pollUseful).toBe(false);
+    }
+  });
+  it("keeps uncertainty ahead of simultaneous routing remediation", () => {
+    const view = semanticReviewRecoveryObservation("input-required", { semanticReview: {
+      schemaVersion: 1, deadlineAt: future, recoveryAttempt: 0,
+      executionOutcome: "unknown", reason: "review-endpoint-ineligible",
+    } }, now);
+    expect(view.classification).toBe("execution-uncertain");
+    expect(view.nextAction).toContain("execution settlement");
   });
   it("does not offer an unlimited chain or expose a corrupt digest", () => {
     const view = semanticReviewRecoveryObservation("input-required", { semanticReview: {

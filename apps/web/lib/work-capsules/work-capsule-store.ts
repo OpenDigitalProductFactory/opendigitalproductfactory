@@ -1,5 +1,7 @@
+import { readDeliveryAgreement } from "@/lib/work-management/delivery-agreement";
 import { randomUUID } from "node:crypto";
-import { normalizePersistedScope, adoptionScopePatch, assertScopeReadback, replaceOwnershipClaims, scopeChangeEvidence, scopeWriteWhere } from "./scope-input";
+import { captureFiniteDeliveryState } from "./delivery-agreement-capture";
+import { normalizePersistedScope, adoptionScopePatch, assertScopeReadback, scopeChangeEvidence, scopeWriteWhere } from "./scope-input";
 import {
   STATUS_OVERRIDE_TTL_MS,
   buildCapsuleBranchName,
@@ -13,8 +15,6 @@ import {
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
   normalizeBranchTaxonomy,
-  parseScopeClaims,
-  type ScopeClaim,
   type WorkCapsuleBranchTaxonomy,
   type WorkCapsuleExecutorKind,
   type WorkCapsuleScopeInput,
@@ -24,10 +24,10 @@ import {
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import { clearBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
-import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import { assertWorkroomPublishable } from "./publication-refusal";
-import { assertScopeClaimLease } from "./scope-claim-lease";
+import { assertDocsImpactDisposed } from "./docs-impact-disposition";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
+import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import {
   CapsuleBranchOccupiedError,
   isReusableLiveCapsule,
@@ -35,14 +35,12 @@ import {
   planTerminalCapsuleResume,
   planLiveCapsuleBinding,
   readBranchIdentityCapsule,
-  TERMINAL_CAPSULE_STATUSES,
   defaultPlatformRepositoryFullName,
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
 import type { CapsuleDb, ClaimBacklogWorkspaceInput, WorkCapsuleActor } from "./work-capsule-store-types";
 import { assertOAuthWorkroomOwner, workroomOwnershipData } from "./oauth-workroom-ownership";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
-import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
 import {
   assertBacklogWorkroomClaimAvailable,
   loadBacklogWorkroomOwnership,
@@ -59,6 +57,8 @@ export { recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
 export { heartbeatWorkCapsule, reassignWorkCapsuleExecutor } from "./workroom-lease";
 export { releaseWorkCapsuleScope } from "./scope-release-store";
+export { claimWorkCapsuleScope, detectScopeConflicts, ScopeOverlapError } from "./scope-claim-store";
+export type { ScopeConflict } from "./scope-claim-store";
 
 type CapsuleCreateInput = {
   title: string;
@@ -74,12 +74,12 @@ type CapsuleCreateInput = {
   epicId?: string | null;
   featureBuildId?: string | null;
   workspaceState?: Record<string, unknown>;
+  acceptanceSource?: import("./delivery-agreement-capture").DeliveryAcceptanceSource;
   scope?: WorkCapsuleScopeInput | null;
   // BI-B24F96D0: principal who commissioned the work (Requester), distinct from
   // the creating actor. Optional.
   requestedByPrincipalId?: string | null;
 };
-type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
 
 type CapsuleWorkspacePlanInput = {
   capsuleId: string;
@@ -156,9 +156,9 @@ export async function createWorkCapsule(args: {
           servesPortfolioRoles: scope.servesPortfolioRoles,
           dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
           // BI-8C54B216: convened WITH a shape. Rides scopeClaims (the home
-          // workroom-shape-claim.ts reads) — no migration, invisible to readers.
+          // workroom-shape-claim.ts reads) â€” no migration, invisible to readers.
           scopeClaims: buildWorkCapsuleScopeClaims(scope, now),
-          workspaceState: args.input.workspaceState ?? {},
+          workspaceState: await captureFiniteDeliveryState(tx, { ...args.input, activityKind: scope.activityKind, now }),
           idempotencyKey: args.input.idempotencyKey,
           ...workroomOwnershipData(args.actor, args.input.executorKind, now, args.input.requestedByPrincipalId),
           status,
@@ -168,6 +168,7 @@ export async function createWorkCapsule(args: {
         workCapsuleId: created.id,
         kind: "created",
         summary: `Created Work Capsule ${created.capsuleId}`,
+        payload: { deliveryAgreement: readDeliveryAgreement(created.workspaceState) },
         actor: args.actor,
       });
       return created;
@@ -272,6 +273,7 @@ export async function adoptWorktreeCapsule(args: {
           title: args.input.title,
           objective: args.input.objective,
           source: "external-adoption",
+          workspaceState: await captureFiniteDeliveryState(tx, { ...args.input, source: "external-adoption", now }),
           status: "ready",
           executorKind: args.input.executorKind ?? null,
           executorRef: args.input.executorRef ?? null,
@@ -300,7 +302,7 @@ export async function adoptWorktreeCapsule(args: {
         workCapsuleId: capsule.id,
         kind: "adopted",
         summary: `Adopted ${args.input.headBranch}`,
-        payload: { worktreePath: args.input.worktreePath },
+        payload: { worktreePath: args.input.worktreePath, deliveryAgreement: readDeliveryAgreement(capsule.workspaceState) },
         actor: args.actor,
       });
       return capsule;
@@ -336,19 +338,7 @@ export type BacklogWorkspaceConflict = {
   }>;
 };
 
-/**
- * Soft claim-at-start (BI-7D20BFDF): bind a BacklogItem to the location + session
- * that is starting work on it, so a directly-working agent's BI no longer looks
- * unclaimed to a parallel session. Creates (or reuses + late-binds) the
- * Workroom for (repositoryFullName, headBranch) and stamps the BI claim
- * fields, FOLLOWING the existing 12h-stale claim convention.
- *
- * This is advisory, not a hard lock (per the WWMD kernel decision): an existing
- * FRESH claim held by a DIFFERENT agent/session is NOT overwritten and is
- * returned as a non-blocking `conflict` — but the capsule is still bound so the
- * work is tracked. Multiple capsules per BI (one per branch) are expected and are
- * NOT themselves a conflict.
- */
+/** Bind existing backlog work to this source identity without overwriting a live owner. */
 export async function claimBacklogItemWorkspace(args: {
   db: CapsuleDb;
   input: ClaimBacklogWorkspaceInput;
@@ -373,7 +363,7 @@ export async function claimBacklogItemWorkspace(args: {
     select: {
       id: true,
       itemId: true,
-      epicId: true,
+      epicId: true, title: true, body: true, outcome: true,
       claimStatus: true,
       claimedById: true,
       claimedByAgentId: true,
@@ -411,7 +401,9 @@ export async function claimBacklogItemWorkspace(args: {
     db: args.db,
     input: {
       title: args.input.title ?? `Work on ${item.itemId}`,
-      objective: args.input.objective ?? `Claim-at-start binding for ${item.itemId}`,
+      // BI-8DE5429B (WWMD DI-139981F74A44): the room's outcome is the item's.
+      objective: args.input.objective ?? item.outcome ?? item.title ?? `Claim-at-start binding for ${item.itemId}`,
+      acceptanceSource: { itemId: item.itemId, body: item.body ?? null },
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,
       worktreePath: args.input.worktreePath,
@@ -427,7 +419,11 @@ export async function claimBacklogItemWorkspace(args: {
   });
 
   const claimed = admission.overrideConflicts.length === 0;
-  if (claimed) {
+  // The item's claim fields are written only when this Workroom's claim is
+  // the local one. A mirror's claim lives at its home (claimAtHome), and a
+  // claim held here for a paired installation is the Workroom itself, so it
+  // lapses and releases with that Workroom's lease (BI-30EDDB7F).
+  if (claimed && !args.input.claimAtHome && args.input.executorKind !== "federated-peer") {
     await args.db.backlogItem.update({
       where: { id: item.id },
       data: {
@@ -593,7 +589,6 @@ export async function recordAgentActivity(args: {
     where: { capsuleId: args.capsuleId },
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
   return recordActivity(args.db, {
     workCapsuleId: capsule.id,
     kind: args.activity.type,
@@ -603,205 +598,12 @@ export async function recordAgentActivity(args: {
   });
 }
 
-/**
- * A scope claim on another active capsule that conflicts with an incoming
- * claim — same `kind:value`, with at least one side claiming `edit` intent.
- */
-export type ScopeConflict = {
-  capsuleId: string;
-  title: string;
-  kind: ScopeClaim["kind"];
-  value: string;
-  existingIntent: ScopeClaim["intent"];
-  incomingIntent: ScopeClaim["intent"];
-  leaseHolderPrincipalId: string | null;
-};
-
-/**
- * Thrown by claimWorkCapsuleScope when an incoming claim overlaps an active
- * claim held by another capsule. Carries the conflicts so the MCP boundary can
- * surface them to the caller (who must coordinate, pick different scope, or pass
- * force to deliberately co-claim).
- */
-export class ScopeOverlapError extends Error {
-  readonly conflicts: ScopeConflict[];
-  constructor(conflicts: ScopeConflict[]) {
-    super(
-      `Scope overlap with ${conflicts.length} active claim(s) on other Work Capsule(s): ` +
-        conflicts.map((c) => `${c.kind}:${c.value} (held by ${c.capsuleId})`).join(", "),
-    );
-    this.name = "ScopeOverlapError";
-    this.conflicts = conflicts;
-  }
-}
-
-/**
- * Find active claims on OTHER capsules that conflict with `claims`. "Active" =
- * not archived, not in a terminal status, and (for lease-backed executors) the
- * lease has not expired — an expired-lease capsule has released its hold, so its
- * scope is reclaimable. Conflict detection is done in JS over the parsed
- * scopeClaims JSON (the active-capsule population is small), mirroring how the
- * rest of this store reasons about scope.
- */
-export async function detectScopeConflicts(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  claims: ScopeClaimInput[];
-  now?: Date;
-}): Promise<ScopeConflict[]> {
-  if (args.claims.length === 0) return [];
-
-  const now = args.now ?? new Date();
-  const others = await args.db.workroom.findMany({
-    where: {
-      capsuleId: { not: args.capsuleId },
-      archivedAt: null,
-      status: { notIn: TERMINAL_CAPSULE_STATUSES },
-      OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { gt: now } }],
-    },
-    select: {
-      capsuleId: true,
-      title: true,
-      scopeClaims: true,
-      leaseHolderPrincipalId: true,
-    },
-  });
-
-  const conflicts: ScopeConflict[] = [];
-  for (const other of others ?? []) {
-    for (const existing of parseScopeClaims(other.scopeClaims)) {
-      // A `path` claim covers its whole subtree, so a directory claim conflicts
-      // with a file/dir beneath it (and vice-versa) even though the kind:value
-      // strings differ — without this, `path:dir/` and `path:dir/file.ts` were
-      // treated as disjoint and two sessions could both "own" overlapping edit
-      // scope. Non-path kinds keep exact-value matching.
-      const incoming = args.claims.find(
-        (c) =>
-          c.kind === existing.kind &&
-          scopeValuesOverlap(existing.kind, existing.value, c.value) &&
-          intentsConflict(existing.intent, c.intent),
-      );
-      if (incoming) {
-        conflicts.push({
-          capsuleId: other.capsuleId,
-          title: other.title,
-          kind: existing.kind,
-          value: existing.value,
-          existingIntent: existing.intent,
-          incomingIntent: incoming.intent,
-          leaseHolderPrincipalId: other.leaseHolderPrincipalId ?? null,
-        });
-      }
-    }
-  }
-  return conflicts;
-}
-
-export async function claimWorkCapsuleScope(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  claims: ScopeClaimInput[];
-  actor: WorkCapsuleActor;
-  now?: Date;
-  /** Deliberately co-claim despite an overlap with another active capsule. */
-  force?: boolean;
-  /** Prospective, advisory impact derived before the scope write. */
-  buildChangeImpactContract?: (paths: string[]) => Promise<CapsuleChangeImpactContract>;
-}) {
-  const capsule = await args.db.workroom.findUnique({
-    where: { capsuleId: args.capsuleId },
-  });
-  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
-  // BI-95E37EA1: never append scope claims to a terminal or foreign capsule
-  // (the abandoned-main false-success path landed claims on an unrelated WC).
-  if (isTerminalCapsuleStatus(capsule.status) || capsule.archivedAt != null) {
-    throw new Error(
-      `Work Capsule ${args.capsuleId} is ${capsule.status ?? "terminal"} and cannot accept scope claims. ` +
-        "Claim a live capsule (or re-run claim_backlog_item_for_work to mint a fresh one).",
-    );
-  }
-
-  // Capsule-first enforcement: refuse to claim scope already held by another
-  // active capsule unless the caller explicitly forces it. This is the lock that
-  // stops two sessions from building the same BI / editing the same files.
-  const conflicts = await detectScopeConflicts({
-    db: args.db,
-    capsuleId: args.capsuleId,
-    claims: args.claims,
-    now: args.now,
-  });
-  if (conflicts.length > 0 && !args.force) throw new ScopeOverlapError(conflicts);
-  // BI-2D65BD1B: the rule the authority gate used to call this claim ordinary.
-  assertScopeClaimLease(capsule, args.actor.principalId ?? null, args.force === true, args.now ?? new Date());
-
-  const recordedAt = (args.now ?? new Date()).toISOString();
-  const nextClaims = new Map<string, ScopeClaim>();
-  for (const entry of parseScopeClaims(capsule.scopeClaims)) {
-    nextClaims.set(`${entry.kind}:${entry.value}`, entry);
-  }
-
-  const added: ScopeClaim[] = [];
-  const refreshed: ScopeClaim[] = [];
-  for (const claim of args.claims) {
-    const normalized: ScopeClaim = {
-      kind: claim.kind,
-      value: claim.value,
-      intent: claim.intent,
-      recordedAt,
-      recordedByPrincipalId: args.actor.principalId ?? "",
-    };
-    const key = `${normalized.kind}:${normalized.value}`;
-    if (nextClaims.has(key)) refreshed.push(normalized);
-    else added.push(normalized);
-    nextClaims.set(key, normalized);
-  }
-
-  const scopeClaims = replaceOwnershipClaims(capsule.scopeClaims, Array.from(nextClaims.values()));
-  const impact = await planCapsuleChangeImpact({
-    scopeClaims: parseScopeClaims(scopeClaims),
-    incomingClaims: args.claims,
-    verificationState: capsule.verificationState,
-    build: args.buildChangeImpactContract,
-  });
-  return inTransaction(args.db, async (tx) => {
-    const updated = await tx.workroom.update({
-      where: scopeWriteWhere(capsule),
-      data: {
-        scopeClaims,
-        ...(impact.verificationState ? { verificationState: impact.verificationState } : {}),
-      },
-    });
-    await recordActivity(tx, {
-      workCapsuleId: capsule.id,
-      kind: "scope-claimed",
-      summary:
-        conflicts.length > 0
-          ? `Force-claimed ${added.length} new scope item(s) over ${conflicts.length} active conflict(s); refreshed ${refreshed.length}.`
-          : `Claimed ${added.length} new scope item(s); refreshed ${refreshed.length}.`,
-      payload: {
-        added,
-        refreshed,
-        ...(conflicts.length > 0 ? { forcedOverConflicts: conflicts } : {}),
-      },
-      actor: args.actor,
-    });
-    if (impact.activity) {
-      await recordActivity(tx, {
-        workCapsuleId: capsule.id,
-        ...impact.activity,
-        actor: args.actor,
-      });
-    }
-    return { ...updated, changeImpactContract: impact.contract };
-  });
-}
-
 export async function updateWorkCapsuleStatus(args: {
   db: CapsuleDb;
   capsuleId: string;
   status: WorkCapsuleStatus;
   reason: string;
+  routing?: { disposition: string; decisionInteractionId: string | null };
   actor: WorkCapsuleActor;
   now?: Date;
 }) {
@@ -814,8 +616,14 @@ export async function updateWorkCapsuleStatus(args: {
 
   const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
   await assertWorkroomPublishable({ ...capsule, capsuleId: args.capsuleId, status: args.status, backlogItem: args.db.backlogItem });
+  await assertDocsImpactDisposed({
+    status: args.status,
+    capsuleRowId: capsule.id,
+    verificationState: capsule.verificationState,
+    workroomActivity: args.db.workroomActivity,
+  });
   if (args.status === "complete" && hasGovernedLink) {
-    return completeGovernedWorkCapsuleStatus({
+    const completed = await completeGovernedWorkCapsuleStatus({
       db: args.db,
       capsuleId: args.capsuleId,
       expectedStatus: capsule.status,
@@ -823,19 +631,20 @@ export async function updateWorkCapsuleStatus(args: {
       actor: args.actor,
       evaluatedAt: (args.now ?? new Date()).toISOString(),
     });
+    await closeEndedRoomSteps(args, capsule.status);
+    return completed;
   }
 
-  const currentWorkspaceState =
-    capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
-      ? capsule.workspaceState as Record<string, unknown>
-      : {};
+  const currentWorkspaceState = capsule.workspaceState && typeof capsule.workspaceState === "object" && !Array.isArray(capsule.workspaceState)
+    ? capsule.workspaceState as Record<string, unknown> : {};
   const now = args.now ?? new Date();
   const statusOverride = {
     reason: args.reason,
     until: new Date(now.getTime() + STATUS_OVERRIDE_TTL_MS).toISOString(),
+    ...(args.routing ? { routingDisposition: args.routing.disposition, ...(args.routing.decisionInteractionId ? { decisionInteractionId: args.routing.decisionInteractionId } : {}) } : {}),
   };
 
-  return inTransaction(args.db, async (tx) => {
+  const updated = await inTransaction(args.db, async (tx) => {
     const updated = await tx.workroom.update({
       where: { capsuleId: args.capsuleId },
       data: {
@@ -855,4 +664,19 @@ export async function updateWorkCapsuleStatus(args: {
     });
     return updated;
   });
+  await closeEndedRoomSteps({ ...args, now }, capsule.status);
+  return updated;
+}
+
+/**
+ * A room that ends stops being driven, so nothing else closes its open steps
+ * (BI-C9F1DE01). Close them once the status is committed. Inside a caller's
+ * transaction the commit is not ours to see; the hourly reconciliation in the
+ * queue metrics aggregator closes those instead.
+ */
+async function closeEndedRoomSteps(args: { db: CapsuleDb; capsuleId: string; status: string; now?: Date }, priorStatus: string) {
+  if (!TERMINAL_WORKROOM_STATUSES.has(args.status) || TERMINAL_WORKROOM_STATUSES.has(priorStatus)) return;
+  if (!("$transaction" in args.db)) return;
+  const { closeStageTelemetryForEndedRoom } = await import("@/lib/work-management/workroom-stage-telemetry");
+  await closeStageTelemetryForEndedRoom(args.capsuleId, args.now ?? new Date());
 }

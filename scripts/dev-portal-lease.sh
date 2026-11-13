@@ -22,7 +22,7 @@ set -eu
 #            the current holder and exits non-zero instead of silently
 #            re-binding. Prints LEASE_ID=<id> on success.
 #   status   Print the active lease holder for :3001 (if any). Exit 0 always.
-#   release  Release a lease previously claimed for the preview. Pass the lease
+#   release  Request governed release of a preview lease. Pass the lease
 #            id via --lease-id or DPF_DEV_PORTAL_LEASE_ID.
 #
 # Reuses the same MCP tools as scripts/gate-worktree.sh:
@@ -62,9 +62,10 @@ Subcommands:
             Refuses (non-zero) when another holder is active and prints them.
   refresh   Claim the lease, stop the shared preview, and restart it from this
             worktree. Stays in the foreground to renew authority; stopping the
-            keeper stops the preview and releases the lease.
+            keeper stops its owned preview and observes reservation settlement.
+            Explicit lease release remains a governed operation.
   status    Print the current holder for the shared lease (if any).
-  release   Release a lease previously claimed for the preview.
+  release   Request governed release of a previously claimed preview lease.
 
 Options:
   --worktree PATH         Worktree to bind (default: $DPF_DEV_WORKTREE).
@@ -256,6 +257,21 @@ claim_lease() {
     [ -n "$BRANCH" ] || die "resolved an empty branch for contributor-preview worktree $WORKTREE_PATH"
   fi
   SOURCE_SHA="$("$GIT_BIN" -C "$WORKTREE_PATH" rev-parse HEAD)" || die "could not resolve preview source SHA"
+  if [ -n "${DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA:-}" ] && [ "$SOURCE_SHA" != "$DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA" ]; then
+    printf '%s\n' 'preview_source_drift_before_claim' >&2
+    return 82
+  fi
+  if [ -n "${DPF_DEV_PORTAL_EXPECTED_BRANCH:-}" ] && [ "$BRANCH" != "$DPF_DEV_PORTAL_EXPECTED_BRANCH" ]; then
+    printf '%s\n' 'preview_branch_drift_before_claim' >&2
+    return 82
+  fi
+  if [ -n "${DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA:-}" ]; then
+    dirty_source="$("$GIT_BIN" -C "$WORKTREE_PATH" status --porcelain)" || return 82
+    if [ -n "$dirty_source" ]; then
+      printf '%s\n' 'preview_dirty_source_before_claim' >&2
+      return 82
+    fi
+  fi
   expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
   # BI-D45898C0: the claim key identifies the RESOURCE, not the claimant.
   #
@@ -314,8 +330,16 @@ process.stdout.write(JSON.stringify(args));
           printf '%s\n' "Host-capacity admission reason: $capacity_reason." >&2
         fi
         task_run_id="$(printf '%s' "$claim_response" | field data.admission.taskRunId)"
-        printf '%s\n' "Durable task ${task_run_id:-unavailable} resumes this wait; stop here without repeating the claim." >&2
-        return 3
+        if [ "$COMMAND" = "refresh" ] && [ "${DPF_DURABLE_RESUME:-}" != "1" ]; then
+          wait_deadline="$(printf '%s' "$claim_response" | field data.lease.expiresAt)"
+          node "$(dirname -- "$0")/dev-preview-queue-resume.mjs" \
+            --worktree "$WORKTREE_PATH" --branch "$BRANCH" --sha "$SOURCE_SHA" \
+            --owner-provider "$OWNER_PROVIDER" --owner-session-id "$OWNER_SESSION_ID" \
+            --resume-lease-id "$CLAIMED_LEASE_ID" --task-run-id "$task_run_id" \
+            --claim-key "$claim_key" --mcp-url "$MCP_URL" --wait-deadline "$wait_deadline"
+        fi
+        printf '%s\n' "Queued lease ${CLAIMED_LEASE_ID}; retain this same claim. No runtime has started." >&2
+        return 75
       fi
       [ "$admission_status" = "admitted" ] || die "claim did not prove admitted ownership"
       CLAIMED_EXPIRES_AT="$(printf '%s' "$claim_response" | field data.lease.expiresAt)"
@@ -338,7 +362,7 @@ EOF
       holder_line="$(printf '%s' "$holder_json" | describe_holder)"
       printf '%s\n' "REFUSING to silently re-bind :3001." >&2
       printf '%s\n' "The shared ${ENVIRONMENT_KEY} lease is already held by: ${holder_line:-$holder}" >&2
-      printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
+      printf '%s\n' "Coordinate explicitly: ask the holder to end its owned keeper and observe native settlement. Explicit release (scripts/dev-portal-lease.sh release --lease-id <id>) remains governed." >&2
       return 3
     fi
     if [ "$claim_error" = "lease_terminal" ]; then

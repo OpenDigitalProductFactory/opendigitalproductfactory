@@ -28,6 +28,30 @@ If you only want the guided experience, use [Build Studio](../build-studio/index
 
 > **One process, five surfaces.** Build Studio, Claude, Codex, Grok, and Antigravity are interchangeable adapters behind one contract wherever each surface's host capabilities are available: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, documentation impact checks, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) and the [Antigravity first-class support design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-17-antigravity-first-class-support-design.md).
 
+### Routine permissions and existing authority
+
+Agents own routine setup and verification for a delegated DEV task. Bootstrap
+uses one shared permission writer for Codex, Claude and Grok, scoped to the
+named source project or governed worktree. It retains explicit restrictive
+settings, deny/ask rules, managed policy, hooks and model/provider choices.
+The installed runtime is an MCP administration context; source coding belongs
+in its separate checkout and worktree.
+
+A configured file proves configuration only. The convergence report separates
+that state from native trust, supported sandbox behavior, restart requirements
+and actual session verification. Check the running session's source roots,
+network access, MCP grants and supported local sign-in route before claiming
+routine work is autonomous. A saved global flag cannot widen a managed chat.
+Older Python without a TOML parser leaves this permission scope explicitly
+unrun while existing skills-and-connector setup continues.
+
+Routine independent review uses the current task's existing delegation; moving
+to review or publication does not create another consent question. External
+provider sign-in, new spend and work outside that delegation retain their owner.
+The client allowlist never supplies DPF server authority. See the
+[installation procedure](../../operations/install.md#routine-development-client-permissions)
+and [worktree procedure](../../architecture/branch-and-worktree-runbook.md#routine-client-permissions).
+
 ### How the pieces fit together
 
 Every surface — the four external agent clients and Build Studio — plugs into the same coordination plane and the same governed lifecycle. The diagram below is the mental model for the rest of this guide:
@@ -118,7 +142,7 @@ The bootstrap is **idempotent** (re-running on a converged install is a no-op) a
 
 1. **Detects** which of Claude / Codex / Grok / Antigravity are installed — resolving GUI-app and non-PATH install locations, not just `which`.
 2. **Defaults supported interactive clients to OAuth**, without automatically minting a PAT while sign-in is pending. Codex supports HTTPS and HTTP loopback. Setup names clients that still require compatibility credentials. Select `-AuthMode legacy` on PowerShell, or `--auth-mode legacy` on Bash, only for explicit compatibility; Bash `--auto-mint` also selects legacy mode. Existing credentials are not revoked.
-3. **Connects the DPF MCP server** using the client-specific credential policy. Supported OAuth configuration contains the endpoint without a managed bearer override. Rerunning setup preserves that choice and unrelated client settings. The endpoint is the install's own https address, read from `PUBLIC_URL` in the install's `.env` (`<PUBLIC_URL>/api/mcp/v1?tier=full`); it is saved for your user as `DPF_MCP_URL`, beside `NODE_EXTRA_CA_CERTS` so clients trust the install's certificate. The installer saves the same two values on every run, so a fresh install needs no hand-set address. When the install names no https address and `DPF_MCP_URL` is unset, setup uses the canonical `https://localhost/api/mcp/v1` with OAuth, the same default the skill-pack updater uses; it no longer falls back to the old `http://127.0.0.1:3000` address.
+3. **Connects the DPF MCP server** using the client-specific credential policy. A credential the bootstrap issues itself (Grok's credentials client, or a compatibility token) belongs to the install's accountable person: the Foundational portfolio's owner, then the organization's. It never belongs to the setup account `admin@dpf.local`. Approvals raised through that client go to that person. Supported OAuth configuration contains the endpoint without a managed bearer override. Rerunning setup preserves that choice and unrelated client settings. The endpoint is the install's own https address, read from `PUBLIC_URL` in the install's `.env` (`<PUBLIC_URL>/api/mcp/v1?tier=full`); it is saved for your user as `DPF_MCP_URL`, beside `NODE_EXTRA_CA_CERTS` so clients trust the install's certificate. The installer saves the same two values on every run, so a fresh install needs no hand-set address. When the install names no https address and `DPF_MCP_URL` is unset, setup uses the canonical `https://localhost/api/mcp/v1` with OAuth, the same default the skill-pack updater uses; it no longer falls back to the old `http://127.0.0.1:3000` address.
 4. **Installs the `dpf-platform` plugin** for each client from its local marketplace/registry — this is the single package that carries the shared **skill pack** and the cross-client hook/MCP contracts (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below). For Codex, the bootstrap registers and verifies the qualified plugin key `dpf-platform@personal`; copying plugin files alone is not considered installed.
 5. **Seeds kernel-tier memory** so the agent is kernel-aware from the first turn, before any MCP retrieval round-trip.
 6. **Runs read-only MCP + kernel smoke probes**, checks whether the DPF-native process-spine replacement skills are installed and visible to the current session, and prints a single **readiness banner**. On Grok, this check is **verified** (`grok plugin list --json`, run automatically by the bootstrap before the health check) rather than merely inferred from install state; Codex and Antigravity have no non-interactive way to list actively loaded skills yet, so their exposure stays `unknown` until their CLIs expose one — see the [process-spine skill exposure health design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-19-process-spine-skill-exposure-health-design.md). OAuth setup reports authorization pending until the client connection is verified; a PAT probe is not proof of OAuth readiness.
@@ -277,7 +301,11 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 Setup keeps your selected https connection address for later sessions. An explicit `DPF_MCP_URL` overrides it; otherwise setup uses the saved https preference, then the installation's HTTPS default. A plain-http address is never saved for every client, because Claude's sign-in refuses plain http. Codex and Grok keep their own address in their own settings. A saved address does not grant access or prove sign-in works. If the client still uses an older address, verify its saved connection before starting another sign-in.
 
 The approval page names the assistant role this connection will act as and
-has one **Connect** button; you do not pick the role. The server chooses it
+has one **Connect {client} as {account}** button. Check the named account and
+press it once to confirm and connect; there is no separate account checkbox.
+**Use a different account** lets you switch before connecting. If your session
+changes while the page is open, nothing connects until you confirm the current
+account on the refreshed page. You do not normally pick the role. The server chooses it
 from the roles you are allowed to authorize, after checking that they carry
 the same permissions, and reuses the role you approved last time for the same
 client. A client's self-chosen name only labels the connection; it cannot
@@ -289,6 +317,11 @@ authority is preselected. All work remains within your current permissions,
 the permissions you approved, and the assistant's allowed tools. Build Studio
 access and access to each workroom are checked separately. Signing in does not
 admit the assistant to every room.
+
+If this account's work was previously handed over, the page also asks you to
+acknowledge that connecting it will bring new work back to that account. The
+platform automation account cannot authorize an interactive client; sign in
+as yourself instead.
 
 The same connection supports multiple tasks and normal token refresh without
 another sign-in. Each task keeps its own target and evidence. If an older
@@ -402,9 +435,47 @@ Harness friction inside a worktree (missing pnpm on PATH, cross-workspace symlin
 
 Full TypeScript and Vitest runs, Next builds, Docker builds, previews, local inference, and semantic review can each retain several gigabytes of memory. The repository routes these commands through a governed host-resource runner. It measures available memory, preserves operating-system and resident-inference reserves, and admits only the work that fits. Inference is always single-flight.
 
-When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Retry after the active heavyweight command releases its lease. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
+The Workroom sets how a semantic review routes. A platform room (its backlog item is platform work, or its declared boundary is public) whose repository is public on GitHub reviews like Build Studio's code turns: any provider cleared for public data may review the diff, so a review does not wait on local inference. A room whose item or boundary is confidential or restricted keeps that level. A platform room on a private or unreadable repository, or a room with no readable type, keeps the internal floor. Payload screening still runs on every diff: a secret, a personal record or a financial identifier inside a platform change is still kept local. If no provider can run a required review, the Failure Readiness check says so, with the data class, the router's exclusions and each enabled provider that is paused or not connected.
+
+When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Resume the recorded attempt after capacity becomes available. Normal host-command completion stops renewal and reads its exact reservation once; it does not ask the operator to approve generic immediate release. A pending or unknown reservation remains explicit, and expiry does not prove the command passed or every descendant exited. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
+
+Server-authorized host qualification is currently unavailable. The normal host
+runner can supervise a command, but it reports with the same MCP credential as
+its caller, so the server cannot authenticate that the runner—not a direct
+caller—observed the claimed success. Do not manufacture or reuse a
+`DPF_QUALIFICATION_ADMISSION_TOKEN`; terminal recovery withholds it and the
+evidence writer refuses qualification payloads. Ordinary host-resource runs
+continue to provide capacity coordination only, not qualification evidence.
+
+#### Recover a review blocked by endpoint eligibility
+
+An endpoint eligibility refusal means no model met the review's requirements.
+Tasks and the Workroom show the effective data class, residency and grouped
+exclusion counts. A proven refusal stops before provider dispatch and produces
+no review verdict. An uncertain or partially dispatched execution retains that
+uncertainty and its checkpoint history.
+
+The existing **Resume review** action stays disabled for an unchanged eligibility
+refusal. Have the platform verify an eligible route for the complete immutable
+review, preserving screening and the required data boundary. Record fresh scoped
+runtime health evidence for the same Workroom, task and request digest, including
+`semanticReviewRecovery.eligibilityVerified=true` and settlement of any uncertain
+executions. General provider health does not prove this review is eligible.
+
+The requester can then use the existing `retry_semantic_review` operation with
+the verification reference, exact request digest and confirmation. Within the
+original window it retains the request, deadline and remaining attempts. After
+expiry, only the existing qualified bounded-successor contract applies. Neither
+task completion nor successful source tests substitute for an independent verdict.
+
+When the execution outcome is unknown, the recovery guidance first directs you
+to the owned task details and complete execution settlement. This takes priority
+over expiry, remaining attempts and endpoint remediation. Reconcile every
+unresolved provider execution through its evidence owner before requesting any
+retry or successor. An elapsed deadline, inactive worker or empty local audit
+does not establish that the original execution and its effects have ended.
 
 #### Clean up when merged
 

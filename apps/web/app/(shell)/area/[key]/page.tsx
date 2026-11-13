@@ -10,7 +10,7 @@ import { Surface } from "@/components/ui/Surface";
 import { loadAreaTeam } from "@/lib/areas/area-team.server";
 import { auth } from "@/lib/auth";
 import { getAreaSetupEntries } from "@/lib/navigation/portal-navigation-model";
-import { AREA_SECTIONS, areaHref } from "@/lib/navigation/portal-shell-sections";
+import { AREA_SECTIONS, AREA_VIEW_LABELS, areaHref } from "@/lib/navigation/portal-shell-sections";
 import { getT } from "@/lib/i18n/t.server";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { loadPortfolioFlowView, loadShapeFlowView } from "@/lib/work-management/area-flow.server";
@@ -86,7 +86,7 @@ export default async function AreaPage({ params, searchParams }: Props) {
           dataComponent: "area-nav",
           tabs: (["work", "team", "setup"] as const).map((candidate) => ({
             key: candidate,
-            label: candidate === "work" ? "Work" : candidate === "team" ? "Team" : "Setup",
+            label: AREA_VIEW_LABELS[candidate],
             href: areaHref(section.key, candidate),
             active: view === candidate,
           })),

@@ -105,7 +105,6 @@ export const DIRECTIONAL_ESCALATION_REASONS = [
   "mixed-stance",
   "critical-risk",
   "below-confidence",
-  "aligned-not-settled",
   "high-risk",
 ] as const;
 export type DirectionalEscalationReason = (typeof DIRECTIONAL_ESCALATION_REASONS)[number];
@@ -115,13 +114,11 @@ export const DIRECTIONAL_ESCALATION_PRINCIPLE: Record<DirectionalEscalationReaso
   // A stance that does not speak to the decision, or points both ways, cannot answer it.
   "below-confidence": CONSULT_SCOPES_BEFORE_ASKING,
   "mixed-stance": CONSULT_SCOPES_BEFORE_ASKING,
-  // Unwritten: no page states that a coarse relevance signal must not decide,
-  // that critical or high risk goes to the owner regardless of stance, or that
-  // matching doctrine is not a prior ruling. BI-74B2A8CD owns the ladder's doctrine.
-  "lexical-fallback": null,
-  "critical-risk": null,
-  "aligned-not-settled": null,
-  "high-risk": null,
+  // Routing, including capability and delegated-policy gaps, is governed by
+  // the shared rule table. A ladder escalation is not itself a human route.
+  "lexical-fallback": "principles/escalation-is-a-gate-not-a-trust-tier",
+  "critical-risk": "principles/escalation-is-a-gate-not-a-trust-tier",
+  "high-risk": "principles/escalation-is-a-gate-not-a-trust-tier",
 };
 
 /** The alignment gate's refusal codes (tak/preexecution-control.ts). */

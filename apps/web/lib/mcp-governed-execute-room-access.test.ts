@@ -11,6 +11,8 @@ import type { ToolResult } from "./mcp-tool-types";
 const room = vi.hoisted(() => ({ refusal: vi.fn() }));
 vi.mock("./work-capsules/oauth-workroom-ownership", () => ({ workroomTargetAccessRefusal: room.refusal }));
 
+const recoveryGuard = vi.hoisted(() => vi.fn());
+vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: recoveryGuard }));
 const NORMAL_USER = { platformRole: "ceo", isSuperuser: true };
 type AuditRow = Record<string, unknown>;
 let auditRows: AuditRow[];
@@ -84,6 +86,7 @@ const handover = {
 };
 
 beforeEach(() => {
+  recoveryGuard.mockResolvedValue(null);
   room.refusal.mockReset().mockResolvedValue(null);
   auditRows = [];
   executeMock = vi.fn(async (): Promise<ToolResult> => ({ success: true, message: "ok" }));
@@ -122,6 +125,13 @@ afterEach(() => {
 });
 
 describe("governedExecuteTool — room access before approval", () => {
+  it("refuses revoked recovered-task authority before a writer or approval is attempted", async () => {
+    recoveryGuard.mockResolvedValue({ success: false, error: "review_execution_authority_refused", message: "Current review authority was revoked." });
+    const result = await governedExecuteTool({ toolName: "query_backlog", rawParams: {}, userId: "user-1", userContext: NORMAL_USER,
+      source: "agentic-loop", context: { taskRunId: "TR-RECOVERED", apiTokenId: "current-token", agentId: "AGT-REVIEWER" } });
+    expect(result).toMatchObject({ success: false, error: "review_execution_authority_refused" });
+    expect(executeMock).not.toHaveBeenCalled(); expect(approvalEnvelopeCreate).not.toHaveBeenCalled();
+  });
   it("runs the masked classification read without creating an approval", async () => {
     const toolName = "review_workroom_sensitivity";
     const rawParams = { capsuleId: "WC-D72FAD2A" };

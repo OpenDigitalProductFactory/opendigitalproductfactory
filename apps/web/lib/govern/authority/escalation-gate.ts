@@ -44,6 +44,67 @@
  */
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 import type { ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
+import type { DecisionRiskTier } from "@/lib/decision-perspective/types";
+
+/** The declared reach shared by the action and decision entry points. */
+export const DAMAGING_CONSEQUENCES = ["outward", "irreversible", "authority"] as const satisfies readonly ToolConsequence[];
+
+export const DECISION_BASES = ["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"] as const;
+export type DecisionBasis = typeof DECISION_BASES[number];
+export const DECISION_ROUTES = ["decided", "human", "independent-review"] as const;
+export type DecisionRoute = typeof DECISION_ROUTES[number];
+
+export type DecisionDeclarations = {
+  consequence?: ToolConsequence | null;
+  thresholdExceeded?: boolean;
+  regulated?: boolean;
+};
+
+export const DECISION_ESCALATION_REASON_CODES = [
+  "damaging-critical-risk", "damaging-consequence", "damaging-threshold",
+  "damaging-regulated", "decided", "independent-review-required",
+] as const;
+export type DecisionEscalationReasonCode = typeof DECISION_ESCALATION_REASON_CODES[number];
+export type DecisionEscalation = {
+  route: DecisionRoute;
+  reasonCode: DecisionEscalationReasonCode;
+  damaging: boolean;
+  followOn: Exclude<DecisionBasis, "decided"> | null;
+};
+
+// Preserve the action gate's existing fail-closed treatment of any declared
+// reach, including a truthy value from an older untyped caller. The closed
+// transport/type vocabulary is DAMAGING_CONSEQUENCES; unknown reach never
+// becomes a way to avoid the damaging branch.
+function hasDamagingConsequence(consequence: ToolConsequence | null | undefined): boolean {
+  return Boolean(consequence);
+}
+
+/** FIRST hit wins: damage precedes even a decisive corpus result. */
+export function resolveDecisionEscalation(input: {
+  basis: DecisionBasis;
+  riskTier: DecisionRiskTier;
+  declarations: DecisionDeclarations;
+}): DecisionEscalation {
+  let damagingReason: DecisionEscalationReasonCode | null = null;
+  if (input.riskTier === "critical") damagingReason = "damaging-critical-risk";
+  else if (hasDamagingConsequence(input.declarations.consequence)) damagingReason = "damaging-consequence";
+  else if (input.declarations.thresholdExceeded === true) damagingReason = "damaging-threshold";
+  else if (input.declarations.regulated === true) damagingReason = "damaging-regulated";
+  if (damagingReason) return { route: "human", reasonCode: damagingReason, damaging: true, followOn: null };
+  if (input.basis === "decided") return { route: "decided", reasonCode: "decided", damaging: false, followOn: null };
+  return { route: "independent-review", reasonCode: "independent-review-required", damaging: false, followOn: input.basis };
+}
+
+export function describeDecisionEscalationRule(): string[] {
+  return [
+    "A decision reaches a person if and only if it is damaging: critical risk, a declared consequence, a crossed threshold, or a regulation.",
+    "Damage precedes a decisive corpus result and remains declared by the caller when evaluation fails.",
+    "A non-damaging decision answered by the corpus stays decided; a decisive decline does not permit the step.",
+    "Every other non-damaging decision routes to independent review with its corpus, vector, capability, policy-limit or evaluation-fault follow-on recorded.",
+    "Legacy rows with no recorded escalation route retain their existing human-review and replay behavior.",
+  ];
+}
 
 /**
  * Sensitivities at which an action is damaging on data grounds alone,
@@ -97,6 +158,18 @@ export const DAMAGING_SENSITIVITIES: readonly PrincipalSensitivity[] = ["restric
  *    had just asked for — reached `unsteered-side-effect` and parked on a card
  *    the human clicked through, while the same human on a PAT client was never
  *    asked at all. Damage still reaches a person: branch 4 precedes this one.
+ *  • standing-ruling — the person whose authority is lent approved this exact
+ *    action class before (this coworker, this tool, on their own authority)
+ *    and, in writing on that approval, made the answer standing (BI-E5631708).
+ *    Server-resolved from the approved envelope that carries the ruling, never
+ *    asserted by a caller, and recorded only when that envelope's own decision
+ *    was non-damaging and unsteered. Revocable by the same person.
+ *
+ *    Owner direction 2026-11-04 (BI-88D51B8F): an approval the owner "will
+ *    always" grant and cannot interpret adds delay with no decision value, so
+ *    a written approval must become a ruling the gate consults. Damage still
+ *    reaches a person (branch 4 precedes this one), and an operator HITL
+ *    policy of "always" still resolves no steering at all.
  */
 export const ESCALATION_STEERING = [
   "independent-reviewer",
@@ -104,6 +177,7 @@ export const ESCALATION_STEERING = [
   "wwmd",
   "scheduled-mandate",
   "connection-delegation",
+  "standing-ruling",
   "none",
 ] as const;
 export type EscalationSteering = (typeof ESCALATION_STEERING)[number];
@@ -116,6 +190,7 @@ export const ESCALATION_REASON_CODES = [
   "steered-by-wwmd",
   "steered-by-scheduled-mandate",
   "steered-by-connection-delegation",
+  "steered-by-standing-ruling",
   "damaging-consequence",
   "damaging-sensitivity",
   "damaging-work-case",
@@ -164,13 +239,13 @@ export type EscalationInput = {
 /** Is this action damaging? Any one of the three grounds is enough. */
 export function isDamagingAction(input: EscalationInput): boolean {
   if (input.action.workCaseConsequential === true) return true;
-  if (input.action.consequence) return true;
+  if (hasDamagingConsequence(input.action.consequence)) return true;
   return DAMAGING_SENSITIVITIES.includes(input.dataPolicy.sensitivity);
 }
 
 function damagingReason(input: EscalationInput): EscalationReasonCode {
   if (input.action.workCaseConsequential === true) return "damaging-work-case";
-  if (input.action.consequence) return "damaging-consequence";
+  if (hasDamagingConsequence(input.action.consequence)) return "damaging-consequence";
   return "damaging-sensitivity";
 }
 
@@ -183,6 +258,7 @@ const STEERED_REASON: Record<
   wwmd: "steered-by-wwmd",
   "scheduled-mandate": "steered-by-scheduled-mandate",
   "connection-delegation": "steered-by-connection-delegation",
+  "standing-ruling": "steered-by-standing-ruling",
 };
 
 /**
@@ -249,7 +325,7 @@ const HUMAN_REASON_SENTENCES: Partial<Record<EscalationReasonCode, string>> = {
   "damaging-sensitivity": "It touches restricted data, so a person decides it.",
   "damaging-work-case": "Its Work Case marks this step as consequential.",
   "unsteered-side-effect":
-    "It changes a record, and no recorded delegation, room decision, schedule or independent review covers it.",
+    "It changes a record, and no recorded delegation, room decision, schedule, independent review or standing ruling covers it.",
 };
 
 export function escalationReasonSentence(reasonCode: EscalationReasonCode): string | null {
@@ -267,11 +343,12 @@ export function describeEscalationRule(): string[] {
     "Escalation is a property of the decision, not of the acting coworker's trust tier.",
     "A coworker whose operator has already graduated it keeps acting alone; this gate never widens that.",
     "For every other coworker, a human is engaged only when the action is damaging, or when nothing recorded can steer it.",
-    `An action is damaging when it declares a consequence (${["outward", "irreversible", "authority"].join(", ")}), when a Work Case declares it consequential, or when its data sensitivity is ${DAMAGING_SENSITIVITIES.join(" or ")}.`,
+    `An action is damaging when it declares a consequence (${DAMAGING_CONSEQUENCES.join(", ")}), when a Work Case declares it consequential, or when its data sensitivity is ${DAMAGING_SENSITIVITIES.join(" or ")}.`,
     "A damaging action is decided by a person; a coworker's steering does not decide damage.",
     `Automated steering is a recorded, server-resolved fact about the action itself: ${ESCALATION_STEERING.filter((s) => s !== "none").join(", ")}.`,
     "A governed scheduled task steers only the tools its registry entry declares; it gets no licence for anything it did not declare.",
     "An external assistant steers only through its human's current OAuth consent, revalidated on the call and bounded by the consented scopes; a personal access token or an unbound connection steers nothing.",
+    "A standing ruling steers only the exact action class its owner approved in writing: the same coworker, the same tool, on that owner's authority; it is recorded only from a non-damaging approval and is revocable.",
     "A non-damaging action with steering is decided automatically and mints no approval envelope.",
     "A non-damaging action with no steering reaches a human only when it has a side effect; an immediate read never escalates.",
     "A tool declared as a proposal is always put to a person, because that is its declared shape.",

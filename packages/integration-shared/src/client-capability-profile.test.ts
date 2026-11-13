@@ -17,7 +17,11 @@ import { bearerHeaderRequiredFor } from "./client-capability-rules.cjs";
 describe("client capability profile", () => {
   it("is the generated copy of client-capabilities.json", () => {
     const source = JSON.parse(readFileSync(resolve(__dirname, "../../dpf-skill-pack/client-capabilities.json"), "utf8"));
-    expect(CLIENT_CAPABILITY_PROFILE.clients).toEqual(source.clients);
+    // `writes` is the Python updater's single-writer contract (BI-1DCF9F23); the module omits it.
+    const capabilities = Object.fromEntries(
+      Object.entries(source.clients as Record<string, Record<string, unknown>>).map(([kind, { writes: _writes, ...row }]) => [kind, row]),
+    );
+    expect(CLIENT_CAPABILITY_PROFILE.clients).toEqual(capabilities);
   });
 
   it("lists every client kind that loads the dpf-platform pack", () => {

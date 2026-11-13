@@ -19,7 +19,15 @@ export interface ResolvedProvider {
  * (currently only the Claude CLI execution adapter, for `--mcp-config`)
  * read this. Other adapters ignore it.
  */
+export type ImageInputDelivery = {sha256:string[];providerId:string;modelId:string;adapterKind:string};
 export interface AdapterMcpSession {
+  /** Original authenticated task grants, independent of model-visible tools. Empty refuses issuance. */
+  admittedTokenGrantScopes?: readonly string[];
+  recordImageInputDelivery?: (delivery:ImageInputDelivery)=>Promise<void>;
+  /** Server-owned exact native read lane; original task authority still gates every call. */
+  readOnlyToolNames?: readonly string[];
+  /** Execution layer prebinds exact identity/fence and fixed read scopes. */
+  mintReadOnlySession?: () => Promise<string>;
   userId: string;
   agentId?: string | null;
   threadId?: string | null;
@@ -32,6 +40,7 @@ export interface AdapterMcpSession {
    * binding data.
    */
   taskRunId?: string | null;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
 }
 
 /** Input to an execution adapter */

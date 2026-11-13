@@ -1,4 +1,5 @@
 "use client";
+import type { WorkroomProcessSnapshot, WorkroomRefreshTarget } from "@/lib/work-management/workroom-process-snapshot";
 
 import {
   Activity,
@@ -40,6 +41,8 @@ type Props = {
   room: WorkroomView;
   /** EP-B70E718D F3: the room's flow map, when its shape resolves. */
   flowMap?: WorkroomFlowMapModel | null;
+  refreshTarget?: WorkroomRefreshTarget;
+  processSnapshot?: WorkroomProcessSnapshot;
 };
 
 const BOUNDARY_GAP_LABEL: Record<WorkroomBoundaryGap, string> = {
@@ -346,6 +349,8 @@ export function WorkroomBodyContent({
   detail,
   room,
   flowMap,
+  refreshTarget,
+  processSnapshot,
   mode,
   onModeChange,
 }: Props & {
@@ -360,6 +365,8 @@ export function WorkroomBodyContent({
         graph={projectRoomShape(room)}
         room={room}
         flowMap={flowMap ?? null}
+        refreshTarget={refreshTarget}
+        processSnapshot={processSnapshot}
         mode={mode}
         onModeChange={onModeChange}
       />
@@ -371,13 +378,15 @@ export function WorkroomBodyContent({
   );
 }
 
-export function WorkroomBody({ detail, room, flowMap }: Props) {
+export function WorkroomBody({ detail, room, flowMap, refreshTarget, processSnapshot }: Props) {
   const [mode, setMode] = useWorkroomViewMode();
   return (
     <WorkroomBodyContent
       detail={detail}
       room={room}
       flowMap={flowMap}
+      refreshTarget={refreshTarget}
+      processSnapshot={processSnapshot}
       mode={mode}
       onModeChange={setMode}
     />

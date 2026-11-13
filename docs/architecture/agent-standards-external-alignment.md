@@ -475,7 +475,7 @@ where standards-body consensus is required.
 
 This informative working-draft mapping supports EP-B932453F. It identifies useful
 views of the same governed system; it does not require every implementation to
-deploy every language. The [composition design](../superpowers/specs/2026-09-27-principle-directed-agent-composition-design.md)
+deploy every language. The [composition design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-09-27-principle-directed-agent-composition-design.md)
 binds these views to TAK/GAID/JSI owners and proposed assessment cases.
 
 | External source | Proposed mapping | Semantic boundary to retain |

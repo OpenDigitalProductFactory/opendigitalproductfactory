@@ -107,6 +107,8 @@ The platform maintains a pool of Build runtime containers so multiple features c
 
 Each slot is a pre-created Docker container that gets assigned to a build when needed and returned to the pool when the build completes, fails, or is cancelled. If all slots are in use, the platform falls back to the legacy persistent Build runtime container.
 
+A slot can also be returned when nothing is using it. Each minute the platform checks held slots and finds two kinds: slots still held by a build that has finished, failed or been abandoned, and slots whose build has shown no activity for an hour (`DPF_SANDBOX_LEASE_IDLE_MS`) with no task running. By default it only logs what it finds. When `DPF_SANDBOX_LEASE_RECLAIM_ENABLED=1` is set on the portal, it returns those slots to the pool and notes it in the build's activity. An idle build keeps its phase and takes a slot again on its next step.
+
 You can monitor pool status from the Build Studio dashboard, which shows how many slots are available and which builds are using them.
 
 ## Live Preview

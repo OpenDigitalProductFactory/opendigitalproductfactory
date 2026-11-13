@@ -7,6 +7,7 @@ import type {
 } from "@/lib/decision-perspective/types";
 import type { WikiPerspective } from "@/lib/wiki/perspective-intent";
 import { decisionInteractionRowToEvaluation } from "./persistence";
+import { isHumanEscalation } from "./human-escalation";
 
 // `WikiPerspective` is the canonical perspective enum, owned by PR #1343 at
 // `apps/web/lib/wiki/perspective-intent.ts`. Do not redeclare locally — every
@@ -178,6 +179,8 @@ function confidenceLabel(score: number): "high" | "medium" | "low" {
 }
 
 function stateFor(input: DecisionPerspectiveEvaluationResult): DecisionCanvasViewModel["recommendation"]["state"] {
+  if (input.escalation && isHumanEscalation(input)) return "needs-review";
+  if (input.escalation && input.outcomeType === "decline") return "blocked";
   if (input.principleConflict) return "blocked";
   if (input.outcomeType === "defer") return "deferred";
   if (input.outcomeType === "escalate") return "needs-review";
@@ -188,7 +191,13 @@ function nextActionFor(
   state: DecisionCanvasViewModel["recommendation"]["state"],
   outcomeType: DecisionOutcomeType,
   perspective: WikiPerspective | null,
+  evaluation: DecisionPerspectiveEvaluationResult,
 ): string {
+  if (evaluation.escalation) {
+    if (isHumanEscalation(evaluation)) return "Ask for an owner decision";
+    if (outcomeType === "decline") return "Respect the recorded decline";
+    if (evaluation.escalation.route === "independent-review") return "Independent review outstanding";
+  }
   if (state === "blocked") return "Resolve blocker before continuing";
   if (outcomeType === "defer") {
     // WWMD -> founder review (Mark's voice); WWWD or unspecified -> owner/operator review.
@@ -335,6 +344,7 @@ export function projectDecisionCanvas(
     state,
     evaluation.outcomeType,
     perspective,
+    evaluation,
   );
   const operatorMessage =
     state === "recommended"

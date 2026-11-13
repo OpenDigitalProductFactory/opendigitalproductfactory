@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "owned-manual-process-snapshot",
+  "decisionInteractionId": "DI-5B7D01BA7AF8",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/ProjectionFreshness.tsx",
+      "apps/web/components/workspace/workroom/WorkroomShape.tsx",
+      "apps/web/components/workspace/workroom/WorkroomShapeSection.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "owned-manual-process-snapshot",
+      "shared-cross-page-query-cache"
+    ]
+  }
+}

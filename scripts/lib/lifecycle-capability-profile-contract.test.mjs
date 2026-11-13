@@ -318,7 +318,7 @@ test("POSIX autostart resolves and executes the XDG state snapshot", async () =>
     await writeFile(join(bin, "docker"), `#!/bin/sh\nprintf 'docker:%s\\n' "$*" >> '${bashPath(trace)}'\n`);
     await chmod(join(bin, "node"), 0o755);
     await chmod(join(bin, "docker"), 0o755);
-    const command = `unset DPF_LIB_AUTOSTART_LOADED DPF_LIB_LOGGING_LOADED DPF_LIB_PLATFORM_LOADED DPF_LIB_STATE_LOADED; export HOME='${bashPath(join(dir, "home"))}' XDG_STATE_HOME='${bashPath(xdg)}' PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin'; source scripts/installer/lib/state.sh; source scripts/installer/lib/autostart.sh; launch=$(_dpf_autostart_write_launch_script '${bashPath(root)}' '-f docker-compose.yml'); "$launch"`;
+    const command = `unset DPF_LIB_AUTOSTART_LOADED DPF_LIB_LOGGING_LOADED DPF_LIB_PLATFORM_LOADED DPF_LIB_STATE_LOADED; export DPF_HEALTH_WAIT_ATTEMPTS=0 HOME='${bashPath(join(dir, "home"))}' XDG_STATE_HOME='${bashPath(xdg)}' PATH='${bashPath(bin)}:/usr/local/bin:/usr/bin:/bin'; source scripts/installer/lib/state.sh; source scripts/installer/lib/autostart.sh; launch=$(_dpf_autostart_write_launch_script '${bashPath(root)}' '-f docker-compose.yml'); "$launch"`;
     const result = runBash(command);
     assert.equal(result.status, 0, result.stderr);
     const lines = await readFile(trace, "utf8");

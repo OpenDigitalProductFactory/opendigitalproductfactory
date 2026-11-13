@@ -8,6 +8,8 @@ import {
   PROVIDER_RECONNECT_ROUTE,
   selectUnclearedCloudProviders,
   unclearedCloudProviderToAttentionItem,
+  selectSignInRequiredAccounts,
+  signInRequiredToAttentionItem,
 } from "./provider-credential";
 import type { ProviderSuitabilityDriftSignal } from "@/lib/routing/provider-suitability/telemetry";
 
@@ -297,5 +299,45 @@ describe("unclearedCloudProviderToAttentionItem", () => {
 
   it("is distinct from the other provider lanes so it cannot collide on id", () => {
     expect(item.id).toBe("provider-uncleared:chatgpt");
+  });
+});
+
+// BI-A53C594E: a renewal the provider refused (confirmed invalid_grant) is one
+// "sign in again" item for that provider, replacing the generic expired item.
+describe("subscription sign-in required lane", () => {
+  const refused = (overrides: Partial<{ jobId: string; lastStatus: string; lastRunAt: Date; metadata: unknown }> = {}) => ({
+    jobId: "subscription-oauth-renewal:provider-default-anthropic-sub",
+    lastStatus: "sign-in-required",
+    lastRunAt: new Date(PAST),
+    metadata: { kind: "subscription-oauth-renewal", providerId: "anthropic-sub", failures: 0 },
+    ...overrides,
+  });
+
+  it("projects a confirmed refusal as one sign-in item on the provider page", () => {
+    const accounts = selectSignInRequiredAccounts([refused()], [row()]);
+    expect(accounts).toEqual([{ providerId: "anthropic-sub", connectionId: "provider-default-anthropic-sub", name: "Claude / Anthropic (OAuth Subscription)", refusedAtIso: PAST }]);
+    const item = signInRequiredToAttentionItem(accounts[0]!);
+    expect(item).toMatchObject({
+      id: "provider-credential:anthropic-sub",
+      source: "provider-credential",
+      title: "Sign in to Claude / Anthropic (OAuth Subscription) again",
+      deepLink: "/platform/ai/providers/anthropic-sub",
+      triage: expect.objectContaining({ residueReason: "needs-credential" }),
+    });
+  });
+
+  it("ignores accounts still retrying, unknown providers, and providers an operator turned off", () => {
+    expect(selectSignInRequiredAccounts([refused({ lastStatus: "retrying" })], [row()])).toEqual([]);
+    expect(selectSignInRequiredAccounts([refused({ metadata: { providerId: "gone" } })], [row()])).toEqual([]);
+    expect(selectSignInRequiredAccounts([refused()], [row({ status: "inactive" })])).toEqual([]);
+  });
+
+  it("surfaces once per provider even when its credential also reads expired", async () => {
+    const { mergeProviderCredentialItems } = await import("./provider-credential");
+    const expired = expiredCredentialToAttentionItem({ providerId: "anthropic-sub", name: "Claude", expiredAtIso: PAST });
+    const signIn = signInRequiredToAttentionItem({ providerId: "anthropic-sub", connectionId: "c", name: "Claude", refusedAtIso: PAST });
+    const merged = mergeProviderCredentialItems([expired], [signIn]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.title).toBe("Sign in to Claude again");
   });
 });

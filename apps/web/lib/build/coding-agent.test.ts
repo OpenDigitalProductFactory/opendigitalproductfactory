@@ -143,6 +143,7 @@ describe("runSandboxTests without a covering test file", () => {
     const out = await runSandboxTests("c1", { changedFiles: ["apps/mobile/src/capture.ts"], workdir: "/workspace/.builds/FB-1" });
     expect(out.scope).toBe("none");
     expect(out.testOutput).toMatch(/no tests ran/);
+    expect(out).toMatchObject({ testsExecuted: false, testsApplicable: false, testsPassed: 0, testsFailed: 0 });
     expect(exec.mock.calls.map(([, cmd]) => cmd).some((cmd) => /pnpm test/.test(cmd))).toBe(false);
   });
 });
@@ -161,7 +162,7 @@ describe("runSandboxTests picks each package's own test runner", () => {
       const cat = /cat "([^"]+)\/package\.json"/.exec(cmd);
       if (cat) return packageJsons[cat[1]!] ?? "";
       if (/pnpm exec jest/.test(cmd)) return `${outputs.jest ?? "Tests: 2 passed, 2 total"}\n__dpf_exit=${outputs.exit ?? 0}`;
-      if (/pnpm exec vitest run/.test(cmd)) return `${outputs.vitest ?? "Test Files  1 passed (1)"}\n__dpf_exit=${outputs.exit ?? 0}`;
+      if (/pnpm exec vitest run/.test(cmd)) return `${outputs.vitest ?? "Test Files  1 passed (1)\n Tests 2 passed (2)"}\n__dpf_exit=${outputs.exit ?? 0}`;
       return "";
     });
     const { runSandboxTests } = await import("./coding-agent");
@@ -187,6 +188,37 @@ describe("runSandboxTests picks each package's own test runner", () => {
   it("treats a non-zero runner exit as a failure even when the output names no failure", async () => {
     const { result } = await run(pkgs, { jest: "Error: Cannot find module 'jest-expo/jest-preset'", exit: 1 });
     expect(result.passed).toBe(false);
+  });
+
+  it("records actual case counts from each scoped package's runner summary", async () => {
+    const { result } = await run(pkgs, {
+      jest: "Tests: 1 failed, 2 passed, 3 total",
+      vitest: "Test Files 1 failed (1)\n Tests 1 failed | 7 passed (8)", exit: 1,
+    });
+    expect(result).toMatchObject({
+      passed: false, testsExecuted: true, testsApplicable: true,
+      testsPassed: 9, testsFailed: 2, testCommandPassed: false,
+    });
+  });
+
+  it("keeps incomplete mixed-package summaries unqualified after save and normalization", async () => {
+    const { result } = await run(pkgs, { jest: "Tests: 2 passed, 2 total", vitest: "Runner ended without a case summary", exit: 0 });
+    const { verificationFromSandboxResult, normalizeVerificationOutput } = await import("./verification-output");
+    const observed = verificationFromSandboxResult(result);
+    expect(result.passed).toBe(false);
+    expect(observed).toMatchObject({ testsPassed: 2, testsQualified: false, testSummariesComplete: false });
+    expect(normalizeVerificationOutput(JSON.parse(JSON.stringify(observed)))).toMatchObject({ testsQualified: false, testsFailed: null });
+  });
+
+  it("does not invent test failures from a runner startup crash", async () => {
+    const { result } = await run(pkgs, {
+      jest: "Error: Cannot find module 'jest-expo/jest-preset'",
+      vitest: "Error: runner could not start", exit: 1,
+    });
+    expect(result).toMatchObject({
+      passed: false, testsExecuted: false, testsApplicable: true,
+      testsPassed: 0, testsFailed: 0, testCommandPassed: false,
+    });
   });
 });
 
@@ -307,6 +339,49 @@ describe("runSandboxTests stays scoped (BI-F5D4FA50)", () => {
     const { result, commands } = await run(undefined);
     expect(result.scope).toBe("none");
     expect(result.testOutput).toMatch(/no tests ran/);
+    expect(result).toMatchObject({
+      passed: false, testsExecuted: false, testsApplicable: null, testsPassed: 0, testsFailed: 0,
+    });
     expect(commands.some((cmd) => /pnpm test|vitest run|jest/.test(cmd))).toBe(false);
+  });
+
+  it("does not qualify partial coverage when another covering-test read fails", async () => {
+    const { execInSandbox } = await import("@/lib/sandbox");
+    vi.mocked(execInSandbox).mockImplementation(async (_id, cmd) => {
+      if (cmd.startsWith("test -f")) {
+        if (cmd.includes("other")) throw new Error("fixture reader unavailable");
+        return cmd.includes("coding-agent.test.ts") ? "__yes__" : "__no__";
+      }
+      if (cmd.includes("vitest run")) return "Tests 2 passed (2)\n__dpf_exit=0";
+      return "";
+    });
+    const { runSandboxTests } = await import("./coding-agent");
+    const result = await runSandboxTests("c1", { changedFiles: ["apps/web/lib/build/coding-agent.ts", "apps/web/lib/other.ts"] });
+    expect(result).toMatchObject({ passed: false, testsApplicable: null, testsExecuted: true, testsPassed: 2 });
+  });
+
+  it("does not call a failed test-file existence read an exemption", async () => {
+    const { execInSandbox } = await import("@/lib/sandbox");
+    vi.mocked(execInSandbox).mockImplementation(async (_id, cmd) => {
+      if (cmd.startsWith("test -f")) throw new Error("fixture reader unavailable");
+      return "";
+    });
+    const { runSandboxTests } = await import("./coding-agent");
+    const result = await runSandboxTests("c1", { changedFiles: ["apps/web/lib/build/coding-agent.ts"] });
+    expect(result).toMatchObject({ passed: false, testsApplicable: null, testsExecuted: false });
+  });
+});
+
+// BI-33B54E4B: the sandbox exports NODE_ENV=development and Vitest keeps an
+// existing NODE_ENV, so a test that relies on the test environment failed in the
+// sandbox only (FB-3F40A125: the objective-mapping key falls back to its test
+// secret only under NODE_ENV=test). Scoped tests run as tests, whatever the host.
+describe("scopedTestRunnerCommand runs under the test environment", () => {
+  it("sets NODE_ENV=test for Vitest and for Jest", async () => {
+    const { scopedTestRunnerCommand } = await import("./coding-agent");
+    const vitestPkg = JSON.stringify({ scripts: { test: "vitest run" }, devDependencies: { vitest: "5.0.3" } });
+    const jestPkg = JSON.stringify({ scripts: { test: "jest" }, devDependencies: { jest: "30.0.0" } });
+    expect(scopedTestRunnerCommand(vitestPkg, '"a.test.ts"')).toBe('NODE_ENV=test pnpm exec vitest run "a.test.ts"');
+    expect(scopedTestRunnerCommand(jestPkg, '"a.test.ts"')).toBe('NODE_ENV=test pnpm exec jest --ci "a.test.ts"');
   });
 });

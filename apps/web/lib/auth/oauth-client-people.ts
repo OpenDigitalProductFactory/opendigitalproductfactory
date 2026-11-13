@@ -44,22 +44,34 @@ async function clientRowId(db: ClientPeopleDb, clientId: string): Promise<string
   return client?.id ?? null;
 }
 
-export async function revokeClientPersonGrants(
-  db: ClientPeopleDb,
-  input: { clientId: string; userId: string; reason: string; actor: ClientPersonActor; now?: Date },
-): Promise<ActionResult<{ revokedAccessTokens: number; revokedRefreshTokens: number }>> {
+/**
+ * The checks and the attributed revocation stamp for ending one person's
+ * access. Shared by the per-client control here and the whole-account control
+ * (account-agent-access.ts), so both refuse alike and read alike in the audit.
+ */
+export function personRevocation(input: {
+  userId: string; reason: string; actor: ClientPersonActor; now?: Date;
+}): ActionResult<{ revokedAt: Date; revokedReason: string }> {
   const reason = input.reason?.trim() ?? "";
   if (!reason) return err("Say why this person's access is ending.");
   if (reason.length > MAX_REASON) return err(`Keep the reason under ${MAX_REASON} characters.`);
   if (input.userId === input.actor.userId) {
     return err("This would end your own access, possibly the session you are using. Disconnect from your own client instead.");
   }
+  return ok({ revokedAt: input.now ?? new Date(), revokedReason: `operator_revoked_person: ${reason} (by ${input.actor.email})` });
+}
+
+export async function revokeClientPersonGrants(
+  db: ClientPeopleDb,
+  input: { clientId: string; userId: string; reason: string; actor: ClientPersonActor; now?: Date },
+): Promise<ActionResult<{ revokedAccessTokens: number; revokedRefreshTokens: number }>> {
+  const stamp = personRevocation(input);
+  if (!stamp.ok) return stamp;
   const rowId = await clientRowId(db, input.clientId);
   if (!rowId) return err("Unknown client.");
 
-  const now = input.now ?? new Date();
   const where = { oauthClientId: rowId, userId: input.userId, revokedAt: null };
-  const data = { revokedAt: now, revokedReason: `operator_revoked_person: ${reason} (by ${input.actor.email})` };
+  const data = stamp.data;
   const [accessTokens, refreshTokens] = await db.$transaction([
     db.mcpApiToken.updateMany({ where, data }),
     db.oAuthRefreshToken.updateMany({ where, data }),

@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@dpf/db";
 import type { SetupStep, StepStatus } from "@/lib/actions/setup-constants";
+import { loadMonitoringCapabilityDecision } from "@/lib/platform-runtime/monitoring-switch-loader";
 import { projectSetupStepCompletion } from "./setup-progress-projection";
 import { runSetupCompletionSeeds } from "./setup-completion-seeds";
 
@@ -44,13 +45,17 @@ export async function completeSetupStepFromEvidence(
   });
   if (!progress) return null;
 
+  const steps = progress.steps as Record<string, StepStatus>;
+  const monitoringDecision = await loadMonitoringCapabilityDecision();
   const projection = projectSetupStepCompletion({
     completedStep,
-    steps: progress.steps as Record<string, StepStatus>,
+    steps,
+    monitoringDecision,
   });
   const alreadyProjected =
     progress.currentStep === projection.currentStep &&
-    (progress.steps as Record<string, StepStatus>)[completedStep] === "completed";
+    steps[completedStep] === "completed" &&
+    (steps.monitoring ?? "pending") === (projection.steps.monitoring ?? "pending");
   if (alreadyProjected) return progress;
 
   const updated = await prisma.platformSetupProgress.update({

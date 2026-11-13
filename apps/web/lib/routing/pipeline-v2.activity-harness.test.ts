@@ -15,6 +15,42 @@ vi.mock("./champion-challenger", () => ({
 }));
 
 describe("routeEndpointV2 activity harness execution plans", () => {
+  it("routes a large confidential review with bounded thinking and preserves other endpoint refusals", async () => {
+    const endpoint = makeEndpoint({
+      id: "eligible-anthropic", providerId: "anthropic", modelId: "claude-opus-4-5",
+      modelFamily: "claude", maxOutputTokens: 64000, maxContextTokens: 200000,
+      sensitivityClearance: ["public", "internal", "confidential"],
+      capabilities: { ...EMPTY_CAPABILITIES, thinking: true, structuredOutput: true },
+    });
+    const decision = await routeEndpointV2([
+      endpoint,
+      { ...endpoint, id: "public-only", sensitivityClearance: ["public"] },
+      { ...endpoint, id: "no-schema", capabilities: { ...endpoint.capabilities, structuredOutput: false } },
+      { ...endpoint, id: "unknown-output", maxOutputTokens: null },
+      { ...endpoint, id: "small-output", maxOutputTokens: 8192 },
+    ], makeContract({
+      taskType: "build-review", sensitivity: "confidential", requiresStrictSchema: true,
+      reasoningDepth: "high", estimatedInputTokens: 50000,
+    }), [], [], {
+      activityContract: makeActivity({
+        successShape: "json",
+        tokenEnvelope: { maxInputTokens: 64000, maxOutputTokens: 16384, compression: "none" },
+      }),
+      capacityByProvider: new Map(),
+    });
+    expect(decision.selectedEndpoint).toBe("eligible-anthropic");
+    expect(decision.fallbackChain).toEqual(["eligible-anthropic"]);
+    expect(decision.executionPlan).toMatchObject({
+      maxTokens: 16384, completionAllowance: 16384,
+      providerSettings: { thinking: { type: "enabled", budget_tokens: 12288 } },
+      responsePolicy: { strictSchema: true },
+    });
+    expect(decision.excludedReasons.join(" ")).toContain("Sensitivity clearance missing");
+    expect(decision.excludedReasons.join(" ")).toContain("Missing required capability: structuredOutput");
+    expect(decision.excludedReasons.join(" ")).toContain("Activity completion capacity is unknown");
+    expect(decision.excludedReasons.join(" ")).toContain("Activity completion allowance exceeds known model output capacity");
+  });
+
   it.each([
     { maxOutputTokens: 4096 },
     { maxOutputTokens: null },

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { renderConsentPage, renderConsentRefusal, htmlResponse } from "./oauth-consent-page";
 import type { PublicScope } from "./oauth-scope-map";
+import { adminPageLocationLabel } from "@/lib/navigation/admin-location";
 
 const assistant = {
   kind: "resolved" as const,
@@ -27,6 +28,13 @@ const base = {
 };
 
 describe("consent rendering", () => {
+  // BI-DB506554: the footer named "Admin › Platform Development › MCP", which no menu shows.
+  it("names the menu path to the agent access controls from the navigation model", () => {
+    const html = renderConsentPage(base);
+    const path = adminPageLocationLabel("/admin/platform-development").replace(/&/g, "&amp;");
+    expect(html).toContain(`in ${path} › Agent access for one account.`);
+    expect(html).not.toContain("Platform Development &rsaquo; MCP");
+  });
   it("shows routine delegation and retained checks beside the requested permissions", () => {
     const html = renderConsentPage(base);
     expect(html).toContain("without another approval for each action");
@@ -74,7 +82,7 @@ describe("consent rendering", () => {
   });
   it("renders one primary Connect button named for the client and no Approve button", () => {
     const html = renderConsentPage(base);
-    expect(html).toContain('value="approve">Connect Claude Code</button>');
+    expect(html).toContain('value="approve">Connect Claude Code as owner@example.com</button>');
     expect(html).not.toContain(">Approve<");
   });
   it("binds a single eligible assistant as a hidden field with no disclosure", () => {
@@ -193,11 +201,17 @@ describe("consent rendering", () => {
 // connection on one install went to a bootstrap account nobody signs in with,
 // and every approval the assistant asked for landed in that account's inbox.
 describe("consent names the account and makes the person confirm it", () => {
-  it("asks the person to confirm the account with a required control bound to that user id", () => {
+  it("confirms the named account with one explicit Connect action", () => {
     const html = renderConsentPage(base);
-    expect(html).toMatch(/<input type="checkbox" name="confirm_account" value="user-owner" required>/);
+    expect(html).toContain('<input type="hidden" name="confirm_account" value="user-owner">');
+    expect(html).not.toContain('type="checkbox" name="confirm_account"');
+    expect(html).toContain('name="decision" value="approve">Connect Claude Code as owner@example.com</button>');
     const form = html.slice(html.indexOf("<form"));
     expect(form).toContain("owner@example.com");
+  });
+  it("keeps the full long account identifier in the explicit action", () => {
+    const actingUser = `${"long".repeat(30)}@example.com`;
+    expect(renderConsentPage({ ...base, actingUser })).toContain(`as ${actingUser}</button>`);
   });
   it("says where the assistant's approval requests will go", () => {
     expect(renderConsentPage(base)).toContain("approval requests will come to this account");
@@ -210,10 +224,34 @@ describe("consent names the account and makes the person confirm it", () => {
     const html = renderConsentPage({ ...base, actingUser: '<img src=x onerror=a>', switchAccountUrl: '"><script>x()</script>' });
     expect(html).not.toContain("<img src=x");
     expect(html).not.toContain("<script>x()</script>");
+    expect(html).toContain('value="approve">Connect Claude Code as &lt;img src=x onerror=a&gt;</button>');
   });
   it("says why nothing was connected when Connect came without the account confirmed", () => {
     expect(renderConsentPage({ ...base, accountNotice: true }))
       .toContain("Confirm the account this connection works under. Nothing was connected.");
+  });
+});
+
+// The acceptance criterion of BI-05E0EA33 is a count: a signed-in person
+// connects a supported client with ONE operation and ZERO decisions. It was
+// met, then lost when another change added a required checkbox to this screen,
+// and nothing noticed because nothing counted. This counts. A control the
+// person must touch before Connect works is an operation; adding one to the
+// default flow fails here, and the fix is to fold the confirmation into the
+// Connect action or put the control behind a disclosure, not to raise the number.
+describe("default consent flow costs one human operation", () => {
+  const form = (html: string) => html.slice(html.indexOf("<form"), html.indexOf("</form>"));
+  it("has no control the person must touch before Connect", () => {
+    const html = form(renderConsentPage(base));
+    const mustTouch = [...html.matchAll(/<(input|select|textarea)\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter((tag) => !/type="hidden"/.test(tag) && /\brequired\b/.test(tag));
+    expect(mustTouch).toEqual([]);
+  });
+  it("opens no disclosure and offers exactly one primary action", () => {
+    const html = form(renderConsentPage(base));
+    expect(html).not.toMatch(/<details[^>]*\bopen\b/);
+    expect(html.match(/<button class="primary"/g)).toHaveLength(1);
   });
 });
 

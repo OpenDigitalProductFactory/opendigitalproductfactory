@@ -1,8 +1,11 @@
+import { preserveResponseProducer, type ResponseProducer } from "./response-producer";
 /**
  * EP-INF-001: Dispatch HTTP calls using the RouteDecision's endpoint selection
  * and fallback chain. Replaces callWithFailover's dispatch loop.
  */
 import { callProvider, InferenceError } from "@/lib/ai-inference";
+import { transferLocalNativeContinuation } from "./local-native-continuation";
+import { GovernedInferenceDeadlineError, withInferenceAuthorityCheck } from "./governed-inference-deadline";
 import { resolveLocalToolCeiling } from "./local-tool-ceiling";
 import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
 import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
@@ -48,6 +51,8 @@ import {
   screenInferencePayload,
   type ScreenInferencePayloadInput,
 } from "@/lib/inference/data-screening/screen-inference-payload";
+import { assertReassessmentActive, assertReassessmentPlan, refuseReassessmentExecution } from "./reassessment-execution-scope";
+import { isConfirmedReauthenticationRequired } from "@/lib/govern/oauth-renewal-errors";
 
 type RouteOutcomeAttribution = {
   /** Provider-managed conversation state is bound to the account that created it. */
@@ -75,6 +80,7 @@ type RouteOutcomeAttribution = {
 };
 
 export interface FallbackResult {
+  responseProducer?: ResponseProducer;
   providerId: string;
   providerConnectionId?: string;
   quotaScopeKey?: string;
@@ -99,12 +105,7 @@ export interface FallbackResult {
   routingEvidence?: import("./provider-suitability/openrouter-policy").OpenRouterRoutingEvidence;
 }
 
-/**
- * Reason-scoped runtime-cooldown durations (ms) for the circuit breaker.
- * Short for self-clearing conditions (rate_limit/overload/transient/provider
- * error); long for conditions that need operator remediation (auth/billing).
- * See spec §4.1 + risk R1.
- */
+/** Runtime circuit cooldowns: short for transient failures; long for auth/billing. */
 const RUNTIME_COOLDOWN_MS: Record<EndpointUnavailableReason, number> = {
   rate_limit: 30_000,
   overloaded: 15_000,
@@ -216,13 +217,21 @@ export async function callWithFallbackChain(
   }
   // Override modelId with the authoritative value from the decision
   selectedEntry.modelId = decision.selectedModelId!;
+  const reassessment = assertReassessmentActive();
+  if (reassessment) {
+    if (!plan) return refuseReassessmentExecution("reassessment-plan-required");
+    assertReassessmentPlan({ providerId: selectedEntry.providerId, modelId: selectedEntry.modelId, plan, tools });
+    if (plan.providerConnectionId !== selectedEntry.providerConnectionId || plan.providerConnectionVersion !== selectedEntry.providerConnectionVersion) {
+      return refuseReassessmentExecution("reassessment-selected-account-changed");
+    }
+  }
 
   // Get fallback entries from the candidates in the decision trace
   const fallbackEntries = decision.fallbackChain
     .map(epId => resolveEntry(epId))
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
-  const allEntries = [selectedEntry, ...fallbackEntries];
+  const allEntries = reassessment ? [selectedEntry] : [selectedEntry, ...fallbackEntries];
 
   // Deduplicate using composite key (providerId + modelId)
   const seen = new Set<string>();
@@ -238,6 +247,7 @@ export async function callWithFallbackChain(
   const attempts: Array<{ endpointId: string; error: string; code?: string }> = [];
   const reconciledProviders = new Set<string>();
   const capacityDeferrals: LocalProviderCapacityDeferredError[] = [];
+  const allowanceRefusals: Error[] = []; // BI-F3B6713F: the platform's own paid allowance refused; no endpoint is at fault
   const changedAccounts: ProviderAccountSelectionChangedError[] = [];
   let rateLimitRetried = false;
   let overloadRetried = false;
@@ -250,25 +260,9 @@ export async function callWithFallbackChain(
   const buildId = outcomeAttribution?.buildId?.trim() || null;
   const threadId = outcomeAttribution?.threadId?.trim() || mcpSession?.threadId?.trim() || null;
 
-  // Small local fallback models (Docker Model Runner / 7-13B class) reliably
-  // handle ~10-15 tools before tool-selection accuracy collapses. When the
-  // caller hands us a large tool surface (Build Studio threads expose 26-36
-  // phase-filtered tools), routing local as a fallback turns the agentic loop
-  // into a 200-iteration spin. Skip local fallbacks above the ceiling; the
-  // selected primary endpoint is still tried regardless. See FB-71FB3A53
-  // thread, 2026-05-22.
-  //
-  // The ceiling comes from `resolveLocalToolCeiling`, the SAME function the
-  // coworker attachment budget uses (BI-A8BFEFCE). This file previously pinned
-  // the raw cliff and asserted the budget matched it; it did not. The budget
-  // honours a MEASURED fidelity ceiling, so once the eval harness measures a
-  // local model above 15 the budget would attach more tools than this gate would
-  // agree to run — the surface would be refused for exceeding a limit nothing
-  // else applied. Sharing the derivation makes that class of drift impossible.
-  //
-  // Resolved LAZILY and memoised: the measured ceiling is a DB read, and it is
-  // only needed when a local fallback entry is actually reached with tools
-  // attached, which is rare. The hot path pays nothing.
+  // Local fallback tool fidelity uses the same measured ceiling as coworker
+  // attachment (BI-A8BFEFCE). Resolve lazily because the DB-backed ceiling is
+  // needed only when an ordinary call reaches a local fallback with tools.
   const attachedToolCount = tools?.length ?? 0;
   let cachedLocalToolCeiling: number | null = null;
   const resolveLocalFallbackCeiling = async (): Promise<number> => {
@@ -324,12 +318,14 @@ export async function callWithFallbackChain(
     }) : null;
     const accountBlock = providerAccountExecutionBlock(account, entry);
     if (accountBlock) {
+      if (reassessment) return refuseReassessmentExecution("reassessment-selected-account-changed", accountBlock);
       attempts.push({ endpointId: entry.endpointId, error: accountBlock });
       changedAccounts.push(new ProviderAccountSelectionChangedError(entry.providerId, accountBlock));
       continue;
     }
 
     if (!provider) {
+      if (reassessment) return refuseReassessmentExecution("reassessment-selected-provider-unavailable");
       attempts.push({ endpointId: entry.providerId, error: "provider not found in database" });
       continue;
     }
@@ -345,7 +341,10 @@ export async function callWithFallbackChain(
           ? plan
           : buildFallbackPlan(entry, decision, tools, plan);
 
-      const result = await callProvider(
+      const result = await withInferenceAuthorityCheck(async () => {
+        revalidateDispatchScreen(decision, screeningInput, messages, systemPrompt, tools);
+        return true;
+      }, () => callProvider(
         entry.providerId,
         entry.modelId,
         messages,
@@ -358,7 +357,7 @@ export async function callWithFallbackChain(
           ? previousResponseId : undefined,
         mcpSession,
         { traceId, agentId, agentMessageId, buildId, threadId },
-      );
+      ));
 
       // EP-INF-004: Record successful request for rate tracking
       recordRequest(entry.providerId, entry.modelId,
@@ -405,11 +404,12 @@ export async function callWithFallbackChain(
         ? result.raw as Record<string, unknown>
         : null;
       const routingEvidence = raw?.openRouterRoutingEvidence;
-      return {
+      return transferLocalNativeContinuation<FallbackResult>(result, {
         providerId: entry.providerId,
         ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, quotaScopeKey: conservativeQuotaScope(entry.providerId) } : {}),
         modelId: entry.modelId,
         content: result.content,
+        responseProducer: preserveResponseProducer(result.responseProducer, result.content, entry),
         toolCalls: result.toolCalls ?? [],
         tokenUsage:
           result.inputTokens !== undefined || result.outputTokens !== undefined
@@ -435,11 +435,13 @@ export async function callWithFallbackChain(
         ...(routingEvidence && typeof routingEvidence === "object"
           ? { routingEvidence: routingEvidence as import("./provider-suitability/openrouter-policy").OpenRouterRoutingEvidence }
           : {}),
-      };
+      });
     } catch (e) {
+      if (reassessment) throw e;
       let accountRenewalUnavailable = false;
       // A caller deadline is not provider failure and cannot authorize a retry.
       cancellation?.throwIfAborted();
+      if (e instanceof GovernedInferenceDeadlineError) throw e;
       if (e instanceof ProviderAccountSelectionChangedError) {
         changedAccounts.push(e);
         attempts.push({ endpointId: entry.providerId, error: e.message });
@@ -450,6 +452,7 @@ export async function callWithFallbackChain(
         attempts.push({ endpointId: entry.providerId, error: e.reason, code: "capacity" });
         continue;
       }
+      if (e instanceof Error && e.name === "AgentAllowanceExhaustedError") { allowanceRefusals.push(e); attempts.push({ endpointId: entry.providerId, error: e.message, code: "daily-allowance-used" }); continue; }
       const errMsg = getErrorMessage(e);
       const errCode = e && typeof e === "object" && typeof (e as { code?: unknown }).code === "string"
         ? (e as { code: string }).code : undefined;
@@ -575,7 +578,7 @@ export async function callWithFallbackChain(
             await markModelDegraded(entry.providerId, entry.modelId, `local_${failure.code}_misclassification`);
             scheduleRecovery(entry.providerId, entry.modelId);
           } else if (entry.providerConnectionId && account) {
-            await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });
+            await (await import("./provider-account-auto-disable")).autoDisableProviderAccount({ providerId: entry.providerId, connectionId: entry.providerConnectionId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, cause: "billing", source: "fallback-chain", detail: failure.message?.slice(0, 160) }).catch((err) => console.error(`[callWithFallbackChain] failed to switch off ${entry.providerConnectionId} after billing error:`, err)); // BI-0ADD46C3: recorded and recovered, like the provider path
           } else {
           // BI-D28A4F55: recorded as automatic and recovered on its own.
           const { autoDisableProvider } = await import("./provider-auto-disable");
@@ -648,6 +651,7 @@ export async function callWithFallbackChain(
             scheduleRecovery(entry.providerId, entry.modelId);
           } else {
           const isOAuth = entry.accountAuthMethod?.startsWith("oauth2") ?? (provider.authMethod?.startsWith("oauth2") ?? false);
+          let signInRefused = false; // BI-A53C594E: only a refused sign-in leaves routing
           if (isOAuth && !authRefreshRetried) {
             authRefreshRetried = true;
             let refreshed: { token: string } | { error: string } | undefined;
@@ -676,17 +680,18 @@ export async function callWithFallbackChain(
               i--;
               continue;
             }
-            if (refreshed && "error" in refreshed) console.warn(
-              `[callWithFallbackChain] Auth error on OAuth provider ${entry.providerId}; token refresh failed (${refreshed.error}). Disabling provider.`,
-            );
+            if (refreshed && "error" in refreshed) {
+              signInRefused = isConfirmedReauthenticationRequired(refreshed.error);
+              console.warn(`[callWithFallbackChain] Auth error on OAuth provider ${entry.providerId}; token refresh failed (${refreshed.error}). ${signInRefused ? "Sign-in refused; disabling." : "Keeping it; background renewal retries."}`);
+            }
           }
           // Non-OAuth provider, refresh failed, or refresh-retry already
           // attempted: disable the provider — as an automatic disable that
           // schedules its own recovery (BI-D28A4F55), not a permanent one.
-          if (accountRenewalUnavailable) {
+          if (accountRenewalUnavailable || (isOAuth && !signInRefused)) {
             console.info("[callWithFallbackChain] Account renewal is temporarily unavailable; trying another eligible account.");
           } else if (entry.providerConnectionId && account) {
-            await prisma.aiProviderConnection.updateMany({ where: { connectionId: entry.providerConnectionId, providerId: entry.providerId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, status: { in: ["active", "degraded"] } }, data: { status: "unconfigured" } });
+            await (await import("./provider-account-auto-disable")).autoDisableProviderAccount({ providerId: entry.providerId, connectionId: entry.providerConnectionId, credentialEntryId: account.credentialEntryId, updatedAt: account.updatedAt, cause: "auth", source: "fallback-chain", detail: failure.message?.slice(0, 160) }).catch((err) => console.error(`[callWithFallbackChain] failed to switch off ${entry.providerConnectionId} after auth error:`, err)); // BI-0ADD46C3: recorded and recovered, like the provider path
           } else {
             const { autoDisableProvider } = await import("./provider-auto-disable");
             await autoDisableProvider({ providerId: entry.providerId, cause: "auth", source: "fallback-chain", detail: failure.message?.slice(0, 160) })
@@ -758,9 +763,8 @@ export async function callWithFallbackChain(
 
   if (changedAccounts.length > 0) throw changedAccounts.at(-1)!;
 
-  if (capacityDeferrals.length === chain.length) {
-    throw capacityDeferrals.at(-1)!;
-  }
+  if (capacityDeferrals.length === chain.length) throw capacityDeferrals.at(-1)!;
+  if (allowanceRefusals.length === chain.length) throw allowanceRefusals.at(-1)!;
 
   if (reconciledProviders.size > 0) {
     throw new ProviderReconciliationRequiredError(reconciledProviders, attempts);
@@ -771,7 +775,7 @@ export async function callWithFallbackChain(
     // Keep both the remote failure history and a typed local capacity reason.
     // A mixed chain is not a local-only outage, but its deferred candidate must
     // remain distinguishable from a provider failure to recovery callers.
-    capacityDeferrals.length > 0 ? { cause: capacityDeferrals.at(-1) } : undefined,
+    capacityDeferrals.length || allowanceRefusals.length ? { cause: capacityDeferrals.at(-1) ?? allowanceRefusals.at(-1) } : undefined,
   );
 }
 

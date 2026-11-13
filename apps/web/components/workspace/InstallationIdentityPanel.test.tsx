@@ -34,6 +34,7 @@ const VIEW: InstallationIdentityView = {
     sourceAuthority: "governed-worktree",
     peerWrite: "read-only",
     workSync: "same-organization",
+    relationship: "none",
     pairedProductionInstallationRef: "dpf-prod-acme",
     rationale: {
       credentials: "Local test credentials may be rotated here.",
@@ -41,6 +42,7 @@ const VIEW: InstallationIdentityView = {
       sourceAuthority: "Source changes belong in a governed worktree.",
       peerWrite: "Read from that peer but never write to it.",
       workSync: "Mirror the backlog this installation owns so the work survives a teardown.",
+      relationship: "No trusted same-organization link backs a pairing, so this installation is neither an authority nor a companion.",
     },
   },
   environment: {
@@ -285,3 +287,54 @@ describe("InstallationIdentityPanel change flow", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("InstallationIdentityPanel other jobs (DI-A6148958CADB)", () => {
+  it("offers every job except the main one as an optional extra, ticked from the view", () => {
+    render(<InstallationIdentityPanel view={{ ...VIEW, secondaryPurposes: ["grow-channel"] }} />);
+    open();
+    const group = screen.getByRole("group", { name: "Other jobs it also does" });
+    const boxes = group.querySelectorAll('input[type="checkbox"]');
+    expect(boxes).toHaveLength(4);
+    expect(screen.queryByRole("checkbox", { name: "Safely improve another DPF" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Grow DPF in a market or region" })).toBeChecked();
+  });
+
+  it("sends the ticked jobs through the same preview and confirm path", async () => {
+    render(<InstallationIdentityPanel view={VIEW} />);
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Run our organization" }));
+    fireEvent.click(screen.getByRole("button", { name: /show me the impact/i }));
+    await waitFor(() => expect(mocks.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ secondaryPurposes: ["operate-organization"] }),
+    ));
+    fireEvent.click(await screen.findByRole("button", { name: /yes, this is what it is/i }));
+    await waitFor(() => expect(mocks.declare).toHaveBeenCalledWith(
+      expect.objectContaining({ secondaryPurposes: ["operate-organization"] }),
+      "token-abc",
+    ));
+  });
+
+  it("drops a job from the extras when it becomes the main job", async () => {
+    render(<InstallationIdentityPanel view={{ ...VIEW, secondaryPurposes: ["operate-organization"] }} />);
+    open();
+    fireEvent.change(screen.getByLabelText(/Its main job/i), { target: { value: "operate-organization" } });
+    fireEvent.click(screen.getByRole("button", { name: /show me the impact/i }));
+    await waitFor(() => expect(mocks.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ primaryPurpose: "operate-organization", secondaryPurposes: [] }),
+    ));
+  });
+
+  it("offers to repair a saved paired reference that names a revoked connection (BI-B50BE189)", () => {
+    const did = "did_" + "a".repeat(64);
+    render(<InstallationIdentityPanel view={{ ...VIEW, pairingRepair: {
+      message: "The saved paired installation, link_old, names a connection that is revoked. Point it at Windows DEV instead.",
+      repairRef: did,
+      actionLabel: "Use Windows DEV",
+    } }} />);
+    fireEvent.click(screen.getByRole("button", { name: /change what this installation is/i }));
+    expect(screen.getByText(/names a connection that is revoked/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use Windows DEV" }));
+    expect((screen.getByLabelText(/Paired installation/i) as HTMLInputElement).value).toBe(did);
+  });
+});
+

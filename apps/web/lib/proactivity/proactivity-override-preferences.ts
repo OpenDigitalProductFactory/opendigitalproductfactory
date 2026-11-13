@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import type { ProactivityChangeProposalParameters } from "./proactivity-change-proposal";
-import type { ProactivityLevel } from "./proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 export const PROACTIVITY_FACT_CATEGORY = "preference";
 export const PROACTIVITY_OVERRIDE_FACT_PREFIX = "aiCoworkerProactivity";

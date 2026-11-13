@@ -17,6 +17,8 @@
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
+import { runForegroundGate, withForegroundCancellation } from "./lib/foreground-gate-process.mjs";
+export { runForegroundGate } from "./lib/foreground-gate-process.mjs";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { readFileSync } from "node:fs";
@@ -37,6 +39,7 @@ function resolveMcpCredentialOrNull({ mcpUrl, env = process.env }) {
   }
 }
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
@@ -55,9 +58,17 @@ import {
   installBrokenPipeTolerance,
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
-import { collectSlotVerdicts, resolveWorktreeContext } from "./pregate-status.mjs";
+import { collectSlotVerdicts, livePregateMarkerPath, resolveWorktreeContext } from "./pregate-status.mjs";
+import {
+  liveGateRefusal,
+  readLivePregate,
+  removePregateLiveMarker,
+  updatePregateLiveStage,
+  writePregateLiveMarker,
+} from "./lib/pregate-live.mjs";
 import { reconcileSlots } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -81,6 +92,12 @@ export function isRecordExemptInvocation(args) {
     || args.includes("--help")
     || args.includes("-h")
   );
+}
+
+// BI-D0C3F242: the host-disk floor guards builds. A routing probe, help or an
+// evidence replay builds nothing, so the runner's free disk must not decide it.
+export function shouldCheckHostDisk(args) {
+  return !isRecordExemptInvocation(args);
 }
 
 /** The flag that forces a re-gate of a HEAD that already passed (BI-1669E08A). */
@@ -121,6 +138,19 @@ export function shouldReuseExistingPass({ args = [], verdictAtHead = "" } = {}) 
     };
   }
   return { reuse: true, reason: "a passing local-CI gate record already covers this HEAD" };
+}
+
+/**
+ * BI-25CB699C: a head that only merged origin/main onto a published, passed
+ * head (regenerated registry outputs included) takes the reduced tier —
+ * derived-artifact freshness, typecheck and affected tests — reusing that
+ * PASS for everything else. The reuse is recorded as a published-correction
+ * proof (gate-unrun, integration delegated); CI and the merge queue stay
+ * authoritative. Any other class, or a forced re-gate, runs the full gate.
+ */
+export function shouldTakeReducedTier({ args = [], classification = null } = {}) {
+  if (isRecordExemptInvocation(args) || args.includes(FORCE_RERUN_FLAG)) return false;
+  return classification === "main-refresh";
 }
 
 /**
@@ -722,7 +752,8 @@ export async function runGateWithQueuedRevival({
   useShell = false,
   env = process.env,
   now = () => Date.now(),
-  spawnSyncImpl = spawnSync,
+  runGateImpl = runForegroundGate,
+  signalSource = process,
   reviveInterruptedQueuedGateImpl = reviveInterruptedQueuedGate,
   recoverInterruptedGateImpl = recoverInterruptedGate,
   stderr = process.stderr,
@@ -734,7 +765,7 @@ export async function runGateWithQueuedRevival({
     env,
     nowMs: now(),
   });
-
+  return withForegroundCancellation(async signal => {
   for (;;) {
     const invocationArgs = queuedRevivals === 0
       ? args
@@ -751,16 +782,16 @@ export async function runGateWithQueuedRevival({
 
     if (useShell) {
       stderr.write("pregate: DPF_PREGATE_FORCE_SH=1 set — routing through compatibility shell entry point.\n");
-      result = spawnSyncImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { stdio: "inherit" });
+      result = await runGateImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { env, signal });
     } else {
       stderr.write("pregate: routing through the Node-native gate (scripts/gate-worktree.mjs).\n");
-      result = spawnSyncImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { stdio: "inherit" });
+      result = await runGateImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { env, signal });
     }
 
     if (result.error || (result.status ?? 1) === 0) {
       return { result, queuedRevivals, timedOut: false };
     }
-    if (now() < queueRevivalWindow.deadlineMs) {
+    if (!signal.aborted && now() < queueRevivalWindow.deadlineMs) {
       const revived = await reviveInterruptedQueuedGateImpl({ args, result });
       if (revived.revived) {
         queuedRevivals += 1;
@@ -771,6 +802,7 @@ export async function runGateWithQueuedRevival({
     await recoverInterruptedGateImpl({ args, result });
     return { result, queuedRevivals, timedOut: false };
   }
+  }, { signalSource });
 }
 
 // Thin, failure-tolerant readers for the two safety guards above. Both fail
@@ -791,14 +823,81 @@ function readWorkingTreePorcelain() {
   return gitTextOrNull(["status", "--porcelain"], { cwd: process.cwd(), trim: false }) ?? "";
 }
 
+/**
+ * BI-4BCD269B. A pregate that is not the sole foreground command used to run
+ * until image-export and then die, leaving status running and no reason.
+ * `pnpm run` on Windows often has no TTY, and gate:wait is the sanctioned
+ * wrapper, so a bare !isTTY check is not the signal. Help and dry-run do not
+ * occupy the pool.
+ */
+export function wrappedForegroundReason({ stdoutIsTTY, env = process.env, args = [] } = {}) {
+  if (args.includes("--help") || args.includes("-h") || args.includes("--dry-run")) return null;
+  if (stdoutIsTTY) return null;
+  if (env.DPF_PREGATE_ALLOW_CAPTURE === "1") return null;
+  if (env.CI === "true" || env.GITHUB_ACTIONS === "true") return null;
+  return "pregate is not the sole foreground command: stdout is not a terminal, so this run would be captured or wrapped and can die with no recorded reason. Run `pnpm run pregate` in the foreground, or use `pnpm gate:wait`.";
+}
+
+/**
+ * BI-F039AA83. Mark this worktree as having a live pregate before any slow
+ * stage, so `pregate:status` reports PREFLIGHT instead of NO-RECORD while the
+ * guard-parity preflight runs. A pregate that is already live here is not
+ * raced: the caller refuses with the pointer this returns.
+ *
+ * Never throws and never blocks on its own failure — an unwritable marker
+ * costs a status reader its precision, not the gate its run.
+ *
+ * @returns {{ refuse: true, reason: string } | { refuse: false, path: string|null, stage(name: string): void, release(): void }}
+ */
+export function startPregateLiveMarker({
+  resolveContextImpl = resolveWorktreeContext,
+  readLiveImpl = readLivePregate,
+  writeImpl = writePregateLiveMarker,
+  updateImpl = updatePregateLiveStage,
+  removeImpl = removePregateLiveMarker,
+  pid = process.pid,
+} = {}) {
+  let context = null;
+  try {
+    context = resolveContextImpl();
+  } catch {
+    context = null;
+  }
+  const path = context ? livePregateMarkerPath(context) : null;
+  if (!path) return { refuse: false, path: null, stage() {}, release() {} };
+  let existing = null;
+  try {
+    existing = readLiveImpl({ path });
+  } catch {
+    existing = null;
+  }
+  if (existing && existing.pid !== pid) return { refuse: true, reason: liveGateRefusal(existing) };
+  writeImpl({ path, branch: context.headBranch, sha: context.headSha, stage: "preflight", pid });
+  return {
+    refuse: false,
+    path,
+    stage(name) { updateImpl({ path, stage: name, pid }); },
+    release() { removeImpl({ path, pid }); },
+  };
+}
+
 async function main() {
   // BI-B1065D41: `pnpm run pregate | head -5` must survive head exiting. Both
   // this wrapper and the gate it spawns need the tolerance — the gate inherits
   // these very file descriptors.
   installBrokenPipeTolerance();
   const args = process.argv.slice(2);
+  const wrapped = wrappedForegroundReason({
+    stdoutIsTTY: Boolean(process.stdout.isTTY),
+    env: process.env,
+    args,
+  });
+  if (wrapped) {
+    process.stderr.write(`pregate: ${wrapped}\n`);
+    process.exit(GATE_EXIT.WRAPPED_INVOCATION);
+  }
 
-  const diskCheck = checkHostDiskSpace();
+  const diskCheck = shouldCheckHostDisk(args) ? checkHostDiskSpace() : { ok: true };
   if (!diskCheck.ok) {
     process.stderr.write(`pregate: ${diskCheck.message}\n`);
     process.exit(1);
@@ -834,9 +933,41 @@ async function main() {
     process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
   }
 
+  const liveMarker = isRecordExemptInvocation(args) ? null : startPregateLiveMarker();
+  if (liveMarker?.refuse) {
+    process.stderr.write(`pregate: ${liveMarker.reason}\n`);
+    process.exit(EXIT_DURABLE_QUEUE_WAIT);
+  }
+  // process.exit runs "exit" listeners synchronously, so every path below clears it.
+  if (liveMarker) process.once("exit", () => liveMarker.release());
+
+  if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
+    // The probe only ever narrows work: a checkout without the correction
+    // module (or its packaged classifier) runs the full gate as before.
+    const correction = await import("./published-correction.mjs").catch(() => null);
+    if (correction && shouldTakeReducedTier({ args, classification: correction.reducedTierClassification() })) {
+      process.stdout.write("pregate: HEAD only merges origin/main onto a passed published head — running the reduced tier (derived-artifact freshness, typecheck, affected tests); the prior PASS covers the rest.\n");
+      liveMarker?.stage("reduced-tier");
+      try {
+        const result = await correction.verifyPublishedCorrection();
+        process.stdout.write(`pregate: reduced tier passed (${result.publicationCorrection.commands.length} command(s)); recorded as ${result.skipReason}. Full integration UNRUN, delegated to protected GitHub checks and the merge queue.\n`);
+        process.exit(0); // exit-0: reduced-tier proof recorded for this HEAD; pre-push accepts it, CI stays authoritative
+      } catch (error) {
+        process.stderr.write(`pregate: reduced tier failed — ${error.message}\npregate: fix the named check; re-gate fully only with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`);
+        process.exit(1);
+      }
+    }
+  }
+
   const preflightStatus = await runHostPreflight({ args });
   if (preflightStatus !== 0) process.exit(preflightStatus);
 
+  // BI-78176241: a docs-only diff goes to the gate like any other. Its
+  // pre-admission documentation lane verifies the docs without a lease or the
+  // sandbox slot and writes the SHA-bound PASS that pregate:status and the
+  // publish guard read. Exiting here (BI-A254A94C) left no record, so every
+  // docs-only push needed an override.
+  liveMarker?.stage("gate");
   const useShell = shouldUseShell();
   const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
   if (result?.error) {
@@ -870,7 +1001,7 @@ export async function runHostPreflight({
   stderr = (text) => process.stderr.write(text),
 } = {}) {
   if (shouldRunPreflight(args, env)) {
-    const quiescence = await readStatusImpl({ args, env, warn: stderr });
+    const quiescence = await readStatusImpl({ args, env, warn: stderr, strictConnection: true });
     if (quiescenceBlocksWrites(quiescence)) {
       // No gate record, lease, observer or pending-evidence mutation on this path.
       stderr(JSON.stringify(quiescenceWait(quiescence)) + "\n");
@@ -920,8 +1051,12 @@ export async function runHostPreflight({
       // runner failure, not a deterministic guard violation — say so, or the
       // reader audits an innocent guard the loop never even reported on.
       const preflightKilled = Boolean(preflight.error) || preflight.status === null || preflight.status === 88;
+      // BI-93EECD80: a retained host receipt also exits 88; it is not host pressure.
+      const receiptRetained = preflight.status === 88 && /\(HOST_RECEIPT_RETAINED\)/.test(String(preflight.stdout ?? "") + String(preflight.stderr ?? ""));
       stderr(
-        preflightKilled
+        receiptRetained
+          ? "pregate: guard parity preflight did not run — a retained host guard receipt blocks this worktree (named above; not host pressure, not a guard violation). Run pnpm run pregate:status -- --reconcile-host-receipt (no lease was claimed).\n"
+          : preflightKilled
           ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
           : "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
       );
@@ -967,8 +1102,8 @@ export function readReconciledVerdictAtHead({
 // comparison must survive symlinked invocation spellings (macOS /var tmpdir),
 // or the guard silently skips main() and exits 0 (BI-745658D7).
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
-    process.stderr.write(`pregate: ${error?.stack || String(error)}\n`);
-    process.exit(1);
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    process.stderr.write(`pregate: ${error?.code ? error.message : error?.stack || String(error)}\n`);
+    process.exit(error?.hostTrustPrerequisite ? GATE_EXIT.HOST_CONNECTION_UNAVAILABLE : 1);
   });
 }

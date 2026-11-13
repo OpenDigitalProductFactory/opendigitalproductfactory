@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "existing-outcome-disclosure",
+  "decisionInteractionId": "DI-ACB148AAC38E",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "existing-outcome-disclosure",
+      "separate-delivery-dashboard"
+    ]
+  }
+}

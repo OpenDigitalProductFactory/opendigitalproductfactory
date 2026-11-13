@@ -21,17 +21,25 @@ const baseSummary: OwnerReleaseSummary = {
   canKeepWorking: { ok: true, detail: "Yes, work continues during the update." },
   keptLocally: { count: 0, detail: "Nothing customised locally." },
   whatCouldGoWrong: [],
-  rollback: { available: true, detail: "Can be undone from a recovery point." },
+  rollback: { available: false, detail: "Database restoration is unavailable until review history can be preserved safely." },
   ifYouDoNothing: "It installs automatically overnight.",
   riskNotice: {
     consequence: "The portal restarts briefly.",
-    reversibility: "Yes, via the recovery point.",
+    reversibility: "Database restoration is unavailable until review history can be preserved safely.",
     duration: "Under five minutes.",
-    recovery: "Restore the recovery point.",
+    recovery: "A prior version can be used only if it is compatible with the retained history.",
   },
 };
 
 describe("OwnerReleaseCard – primary action slot", () => {
+  it("shows unavailable restoration and conditional recovery before the upgrade action", () => {
+    const html = renderToStaticMarkup(<OwnerReleaseCard summary={baseSummary}
+      primaryAction={<button>Upgrade now</button>} />);
+    expect(html).toContain(baseSummary.rollback.detail);
+    expect(html).toContain(baseSummary.riskNotice!.recovery);
+    expect(html.indexOf(baseSummary.rollback.detail)).toBeLessThan(html.indexOf("Upgrade now"));
+    expect(html).not.toContain("Restore recovery point");
+  });
   it("wraps the primaryAction in an owner-release-primary-action marker", () => {
     const html = renderToStaticMarkup(
       <OwnerReleaseCard

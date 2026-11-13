@@ -90,6 +90,22 @@ describe("validateFederatedWorkPageV1", () => {
     expect(validateFederatedWorkPageV1(page({ items: [{ ...base, deferral: "later" as never }] }))).toContain("items[0].deferral:not-an-object");
   });
 
+  it("accepts an absent or null claim and checks every field of a present one (BI-91FC6B9A)", () => {
+    const base = page().items[0]!;
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: null }] }))).toEqual([]);
+    const claim = { active: true, since: "2026-10-28T00:00:00.000Z", workrooms: 1 };
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim }] }))).toEqual([]);
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, active: "yes" as never } }] }))).toContain("items[0].claim.active:invalid");
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, since: "now" } }] }))).toContain("items[0].claim.since:invalid");
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, workrooms: -1 } }] }))).toContain("items[0].claim.workrooms:invalid");
+    // BI-30EDDB7F: the home names the claim's holder and lease.
+    const holder = { installationId: "inst_dev", workroomId: "WC-DEV", leaseExpiresAt: "2026-11-18T00:00:00.000Z" };
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, holder } }] }))).toEqual([]);
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, holder: null } }] }))).toEqual([]);
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, holder: { ...holder, workroomId: "" } } }] }))).toContain("items[0].claim.holder.workroomId:invalid");
+    expect(validateFederatedWorkPageV1(page({ items: [{ ...base, claim: { ...claim, holder: { ...holder, leaseExpiresAt: "soon" } } }] }))).toContain("items[0].claim.holder.leaseExpiresAt:invalid");
+  });
+
   it("never throws on garbage", () => {
     expect(validateFederatedWorkPageV1(null)).toEqual(["page:not-an-object"]);
     expect(validateFederatedWorkPageV1({ items: "x", epics: 1 })).toEqual(

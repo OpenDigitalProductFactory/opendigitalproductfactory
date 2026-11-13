@@ -12,6 +12,11 @@
 // (`detectMissingXrefs`); they belong in Phase 4b alongside the
 // orchestrator that can supply those services.
 
+// The shared extractor (BI-23900D0A): this module used to carry a private copy
+// of the regex that missed `[[slug|label]]`, so lint and the stored links
+// could disagree about what a page links to.
+import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
+
 // ─── Finding shape ──────────────────────────────────────────────────────────
 
 /** Mirrors the `WikiLintFinding.findingKind` enum on the Prisma model. */
@@ -204,16 +209,6 @@ export function detectDanglingXrefs(input: {
     });
   }
   return findings;
-}
-
-/** Internal helper — same regex as `seed-wiki-kernel.ts:extractWikilinks`. */
-function extractWikilinks(body: string): string[] {
-  const matches = body.matchAll(/\[\[([a-zA-Z0-9/_-]+)\]\]/g);
-  const slugs = new Set<string>();
-  for (const m of matches) {
-    if (m[1]) slugs.add(m[1]);
-  }
-  return Array.from(slugs);
 }
 
 // ─── 3. Stance extraction needed ────────────────────────────────────────────

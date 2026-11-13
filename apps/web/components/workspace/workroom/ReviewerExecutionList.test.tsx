@@ -1,14 +1,25 @@
 // @vitest-environment jsdom
-import "@testing-library/jest-dom/vitest";
+import * as matchers from "@testing-library/jest-dom/matchers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { ReviewerExecutionList } from "./ReviewerExecutionList";
-import type { ReviewerExecutionObservation } from "@/lib/work-management/semantic-review-room-projection";
+import type { ReviewerExecutionObservation, ReviewerRunSnapshot } from "@/lib/work-management/semantic-review-room-projection";
+import { loadSemanticReviewRoomProjection } from "@/lib/work-management/semantic-review-room-projection";
+// Isolate presentation from candidate SQL; the PostgreSQL suite covers discovery.
+vi.mock("@/lib/work-management/review-room-candidates", () => ({
+  loadReviewRoomCandidates: async (db: { taskRun: { findMany(): Promise<ReviewerRunSnapshot[]> } }, capsuleIds: string[]) => ({
+    rows: (await db.taskRun.findMany()).map(row => ({ ...row, capsuleId: capsuleIds[0], reviewKind: "semantic-review",
+      createdAt: row.updatedAt, ambiguousReviewKind: false, progressTruncated: false, nodesTruncated: false,
+      initiativeBinding: null, bindingTruncated: false, requestDigest: null, requesterAgentId: null,
+      metadataTrigger: null, roomRepositoryFullName: null, roomHeadBranch: null, roomHeadSha: null, roomBacklogItemId: null })),
+    partial: false, partialCapsuleIds: [],
+  }),
+}));
 vi.mock("@/components/platform/StalledTaskRecoveryActions", () => ({
   StalledTaskRecoveryActions: ({ taskRunId, reviewBudget }: { taskRunId: string; reviewBudget: unknown }) =>
     <div data-testid="recovery">{taskRunId} {JSON.stringify(reviewBudget)}</div>,
 }));
-beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-21T07:00:00Z")); });
+beforeEach(() => { expect.extend(matchers); vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-21T07:00:00Z")); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 const run: ReviewerExecutionObservation = {
   taskRunId: "TR-1", recordId: "row-1", status: "input-required", requesterId: "requester-1",
@@ -18,6 +29,33 @@ const run: ReviewerExecutionObservation = {
   checkpoints: [{ taskNodeId: "TN-1", recordId: "node-1", title: "Architecture review", status: "completed", actorId: "AGT-181" }],
 };
 describe("reviewer execution inside a Workroom", () => {
+  it("renders a readable automatic capacity wait without offering duplicate manual recovery", async () => {
+    const now = new Date("2026-09-21T07:00:00Z");
+    const view = await loadSemanticReviewRoomProjection({
+      taskRun: { findMany: async () => [{ id: "row-1", taskRunId: "TR-1", userId: "requester-1",
+        status: "input-required", updatedAt: now, lastHeartbeatAt: null, nodes: [],
+        progressPayload: { semanticReview: { schemaVersion: 1, requestDigest: "a".repeat(64), reason: "review-capacity-deferred",
+          capacityWaitReason: "host-gpu-busy", nextAction: "retry-review", deadlineAt: "2026-09-21T07:30:00Z", recoveryAttempt: 1,
+          capacityRecovery: { schemaVersion: 1, requestDigest: "a".repeat(64), checks: 0, nextCheckAt: "2026-09-21T07:00:30Z" } } } }] },
+      $queryRaw: vi.fn().mockResolvedValue([{ rowId: "row-1", capsuleId: "WC-1", requestBound: true,
+        requestSchemaVersion: 2, requestArtifactType: "code-change", identityArtifactType: "code-change", identityArtifactTypePresent: true,
+        sourceHeadSha: "a".repeat(40), currentHeadSha: "a".repeat(40), issuedAt: "2026-09-21T06:50:00Z" }]),
+    }, ["WC-1"], now);
+    render(<ReviewerExecutionList runs={view.runs} />);
+    expect(screen.getByText("Review is waiting for the graphics processor to become available.")).toBeInTheDocument();
+    expect(screen.getByText(/server will recheck capacity/)).toBeInTheDocument();
+    expect(screen.queryByTestId("recovery")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Recorded reason: host-gpu-busy/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Request history" })).toHaveAttribute("href", "/api/internal/tasks/TR-1");
+  });
+
+  it("names the eligibility wait and retains expiry instead of generic retry advice", () => {
+    render(<ReviewerExecutionList runs={[{ ...run, reason: "review-endpoint-ineligible",
+      budget: { ...run.budget, deadlineAt: "2026-09-21T06:59:00Z", eligibilityBlocked: true } }]} />);
+    expect(screen.getByText(/affected branches stopped before provider dispatch/)).toBeInTheDocument();
+    expect(screen.getByText(/unchanged retry will not help.*This request cannot resume/)).toBeInTheDocument();
+    expect(screen.queryByText(/original requester can confirm recovery/)).not.toBeInTheDocument();
+  });
   it("shows the correlated receipt's verdict and summary without claiming the room is complete", () => {
     render(<ReviewerExecutionList runs={[{ ...run, receipt: { id: "receipt-1", decision: "inconclusive", summary: "A required branch could not finish." } }]} />);
     expect(screen.getByText(/A required branch could not finish/)).toBeInTheDocument();
@@ -71,5 +109,38 @@ describe("reviewer execution inside a Workroom", () => {
     render(<ReviewerExecutionList runs={[{ ...run, requesterName: "Alex", reason: "unparseable-review-response,unparseable-review-response" }]} />);
     expect(screen.getByText(/Requester: Alex/)).toBeInTheDocument();
     expect(screen.getAllByText("The reviewer response could not be validated. No review verdict was accepted.")).toHaveLength(1);
+  });
+});
+
+
+describe("ordinary initiative review disclosure", () => {
+  it.each(["current", "historical"] as const)("keeps %s originals inspectable without native semantic retry", identityScope => {
+    render(<ReviewerExecutionList runs={[{ ...run, identityScope, reviewKind: "initiative-review",
+      reviewGate: "spec-approval", artifactVersion: "artifact-before-head", sourceHeadSha: "current-head",
+      recoveryWait: true, nextAction: "retry-review", executionUncertain: true }]} />);
+    expect(screen.queryByTestId("recovery")).not.toBeInTheDocument();
+    expect(screen.queryByText(/confirm recovery|bounded successor|Inspect the current request/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Spec approval/)).toBeInTheDocument();
+    expect(screen.getByText(/Source: current-head/)).toBeInTheDocument();
+    expect(screen.getByText(/Artifact: artifact-before-head/)).toBeInTheDocument();
+    expect(screen.getByText("Inspect this original request.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Request history" })).toHaveAttribute("href", "/api/internal/tasks/TR-1");
+  });
+  it("retains both review families for one ambiguous task without duplicate keys", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<ReviewerExecutionList runs={[run, { ...run, reviewKind: "initiative-review", reviewGate: "spec-approval" }]} />);
+      expect(screen.getAllByRole("link", { name: "Request history" })).toHaveLength(2);
+      expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+  it("retains conflicting original requests as separate disclosures", () => {
+    render(<ReviewerExecutionList runs={["TR-A", "TR-B"].map(taskRunId => ({ ...run, taskRunId,
+      reviewKind: "initiative-review", reviewGate: "architecture-review", identityConflict: true }))} />);
+    expect(screen.getAllByRole("link", { name: "Request history" })).toHaveLength(2);
+    expect(screen.getAllByText("Review requests conflict.")).toHaveLength(2);
+    expect(screen.queryByTestId("recovery")).not.toBeInTheDocument();
   });
 });

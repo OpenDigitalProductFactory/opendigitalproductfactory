@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { prisma } from "@dpf/db";
 import type { DecisionGateCaptureDraft } from "@/lib/decision-perspective/capture-types";
+import { humanCaptureOutcome } from "@/lib/decision-perspective/human-escalation";
 
 type CaptureType = "escalation" | "deferral";
 
@@ -66,21 +67,22 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
   if (row.build.createdById !== userId) {
     throw new Error("Forbidden");
   }
-  if (row.outcomeType !== "escalate" && row.outcomeType !== "defer") {
+  const captureOutcome = humanCaptureOutcome(row);
+  if (!captureOutcome) {
     throw new Error("This WWMD outcome does not require capture");
   }
-  if (row.outcomeType !== input.outcomeType) {
+  if (captureOutcome !== input.outcomeType) {
     throw new Error("Capture type does not match the WWMD outcome");
   }
 
-  if (row.outcomeType === "escalate" && row.escalationCapture) {
+  if (captureOutcome === "escalate" && row.escalationCapture) {
     return {
       status: "already-captured",
       captureType: "escalation",
       captureId: row.escalationCapture.escalationId,
     };
   }
-  if (row.outcomeType === "defer" && row.deferralCapture) {
+  if (captureOutcome === "defer" && row.deferralCapture) {
     return {
       status: "already-captured",
       captureType: "deferral",
@@ -108,7 +110,7 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
 
   const capturedAt = new Date().toISOString();
   const result = await prisma.$transaction(async (tx) => {
-    if (row.outcomeType === "escalate") {
+    if (captureOutcome === "escalate") {
       const criteria = splitLines(input.criteriaText);
       const objectionsResolved = splitLines(input.objectionsResolvedText);
       const rationale = trimmed(input.rationale) || answer;

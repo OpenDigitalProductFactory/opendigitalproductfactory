@@ -21,7 +21,7 @@
 // Bounded: readiness is read for at most REVIEW_STAGE_RESOLUTIONS_PER_TICK
 // rooms a tick; the rest keep their attention plan until a later tick.
 
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { DriveReasonFor } from "@/lib/work-management/drive-conclusion";
 import { resolveDrivePlan, type DrivePlan, type DriveResolutionInput } from "@/lib/work-management/drive-resolution";
 import {
@@ -195,7 +195,7 @@ export function createLiveReviewStageDeps(): ReviewStageDeps {
       const [{ readWorkroomPostureClaim }, { readWorkroomShapeClaim }, { shapeBiasFor }, { resolveRoomActionBoundary }] = await Promise.all([
         import("@/lib/work-management/workroom-posture-claim"),
         import("@/lib/work-management/workroom-shape-claim"),
-        import("@/lib/work-posture/derive"),
+        import("@dpf/validators/workroom-policy/derive"),
         import("@/lib/work-management/room-turn-authority"),
       ]);
       const actionBoundary = resolveRoomActionBoundary({
@@ -210,12 +210,13 @@ export function createLiveReviewStageDeps(): ReviewStageDeps {
 /** The live reviewer dispatch: the BI-A835D300 runner. */
 export const liveReviewerDispatch: ReviewerDispatchEffect = async (input) => {
   const { dispatchReviewerRequest } = await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch");
+  const agentId = input.author.kind === "agent" ? input.author.agentId : null;
   const outcome = await dispatchReviewerRequest({
     room: {
       roomId: input.roomId,
       capsuleId: input.capsuleId,
       userId: input.userId,
-      agentId: input.author.kind === "agent" ? input.author.agentId : null,
+      agentId,
     },
     itemId: input.itemId,
     requestCoworker: input.requestCoworker,
@@ -223,8 +224,12 @@ export const liveReviewerDispatch: ReviewerDispatchEffect = async (input) => {
     // authoring assistant; the person's own live connection carries it.
     carrier: input.author.kind === "agent" ? "author-assistant" : "requesting-user",
     now: input.now,
+    // Same issuer identity PIR already uses; without it the steward never opens (BI-CAB5D233).
+    ...(input.userId ? { issuer: { userId: input.userId, agentId } } : {}),
   });
   if (outcome.outcome === "dispatched" || outcome.outcome === "cooling-down") return { outcome: outcome.outcome };
+  // A steward hand-off is the review in motion, not a failed send.
+  if (outcome.outcome === "platform-reviewer") return { outcome: "dispatched" };
   return { outcome: "unavailable", detail: outcome.detail ?? outcome.outcome };
 };
 

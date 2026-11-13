@@ -10,6 +10,19 @@ const budget = { deadlineAt: "2099-01-01T00:00:00Z", recoveryAttempt: 1 };
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 beforeEach(() => { vi.clearAllMocks(); mocks.confirm.mockResolvedValue(true); mocks.retry.mockResolvedValue({ ok: true, data: { newTaskRunId: "TR-1" } }); });
 describe("reviewer recovery confirmation", () => {
+  it("explains eligibility constraints and prevents unchanged paid inference retry", () => {
+    render(<StalledTaskRecoveryActions taskRunId="TR-1" phase={null} nativeReview reviewBudget={{ ...budget,
+      eligibilityBlocked: true, routingEligibility: [{ sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
+        exclusions: [{ bucket: "output-capacity", count: 2 }] }] }} />);
+    expect(screen.getByText("Review needs an eligible endpoint")).toBeTruthy();
+    expect(screen.getByText(/Effective data class: restricted/)).toBeTruthy();
+    expect(screen.getByText(/cannot fit the required review response/)).toBeTruthy();
+    const button = screen.getByRole("button", { name: "Resume review" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(mocks.retry).not.toHaveBeenCalled();
+  });
   it.each([
     [{ deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 1 }, "Review window expired"],
     [{ ...budget, recoveryAttempt: 3 }, "Recovery limit reached"],

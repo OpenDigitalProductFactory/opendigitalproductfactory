@@ -502,7 +502,7 @@ describe("guarded active-account renewal", () => {
     expect(mockPrisma.credentialEntry.update).not.toHaveBeenCalled();
   });
   it("guards expiry writes against a concurrent disabled or replaced account", async () => {
-    vi.mocked(fetch).mockResolvedValue(new Response("expired", { status: 401 }));
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ error: "invalid_grant" }), { status: 401 }));
     await refreshOAuthToken("codex", snapshot.connectionId, snapshot);
     expect(mockPrisma.credentialEntry.update).not.toHaveBeenCalled();
     expect(mockPrisma.credentialEntry.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "owned", refreshToken: "enc:refresh", providerConnection: { is: expect.objectContaining({ status: "active", updatedAt: snapshot.updatedAt }) } }), data: { status: "expired" } });

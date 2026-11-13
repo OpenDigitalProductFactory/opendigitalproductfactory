@@ -19,7 +19,8 @@
 // portal. A judge calibrated on agent-authored verdicts is calibrated against
 // itself, so this is a correctness boundary, not a permissions nicety.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
+import { can } from "@/lib/permissions";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -112,8 +113,15 @@ const CRITIQUE_SLUG_PREFIX = "craft/ux-design/";
 
 async function captureUxCritique(
   params: Record<string, unknown>,
+  userId: string,
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  const { captureCritiqueEntry } = await import("@/lib/actions/critique-entry");
+  if (!userId || !context?.agentId || context.userContext?.userId !== userId
+    || !can(context.userContext, "view_operations")) {
+    return { success: false, error: "unauthorized", message: "An authenticated, authorized capture actor is required." };
+  }
+  const { captureCritiqueEntryWithWriter } = await import("@/lib/ux-critique/capture-entry.server");
+  const { saveWikiOverlayEditForActor } = await import("@/lib/wiki/save-overlay.server");
 
   const str = (k: string): string | undefined => {
     const v = params[k];
@@ -137,7 +145,7 @@ async function captureUxCritique(
   const proposedVerdict = str("proposedVerdict");
   const colorScheme = str("colorScheme");
 
-  const result = await captureCritiqueEntry({
+  const result = await captureCritiqueEntryWithWriter({
     title,
     // PINNED, never read from params. See the authority note in the header.
     callerKind: "agent",
@@ -151,7 +159,7 @@ async function captureUxCritique(
     gitRef: str("gitRef") ?? str("commitSha") ?? null,
     viewportWidth: num("viewportWidth") ?? null,
     colorScheme: (colorScheme as "light" | "dark" | undefined) ?? null,
-  });
+  }, (draft) => saveWikiOverlayEditForActor(draft, { userId, agentId: context.agentId }, { createOnly: true }));
 
   if (!result.ok) {
     return { success: false, error: "capture_rejected", message: result.error };
@@ -250,7 +258,7 @@ export const uxCritiquePack: ToolPack = {
   packId: "ux-critique",
   definitions,
   handlers: {
-    capture_ux_critique: (params) => captureUxCritique(params),
+    capture_ux_critique: (params, userId, context) => captureUxCritique(params, userId, context),
     search_ux_critique_corpus: (params) => searchUxCritiqueCorpus(params),
   },
   // Mirrors TOOL_TO_GRANTS, which stays the gating source; tool-registry.test.ts

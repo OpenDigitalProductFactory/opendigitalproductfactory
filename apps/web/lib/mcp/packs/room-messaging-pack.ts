@@ -16,26 +16,46 @@ import { prisma } from "@dpf/db";
 
 import type { ToolPack } from "@/lib/mcp/tool-pack";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
-import { ensureAgentPrincipalIdentity, syncUserPrincipal } from "@/lib/identity/principal-linking";
+import { ensureAgentPrincipalIdentity, getAgentGaidMap, syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { getCoworkerRoomEngagement } from "@/lib/work-management/coworker-room-engagement.server";
+import { loadWorkspaceMentionRoster } from "@/lib/work-management/mention-roster.server";
 import { heartbeatAgentWorkItemPresence } from "@/lib/work-management/room-agent-presence.server";
 import { postWorkItemComment, type PostCommentDb } from "@/lib/work-management/post-work-item-comment";
 import { persistExplicitWorkroomAssignmentsForWorkItem } from "@/lib/work-management/room-participant-assignment.server";
 import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
 import { loadRoomMembersForWorkItem } from "@/lib/work-management/room-policy-members.server";
 import {
+  applyInviteeClearanceRaise,
   preflightRoomParticipantInvitation,
   resolveRoomMessagingWorkItem,
   ROOM_MESSAGING_WORK_ITEM_SELECT,
 } from "@/lib/work-management/room-participant-invitation-preflight.server";
 import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.server";
+import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
+import { executeCooBroadcastAck, executeCooBroadcastAsk, type CooBroadcastDb } from "@/lib/operate/coo-broadcast.server";
 import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
+import { inviteRoomParticipantConsequence } from "@/lib/work-management/room-charter-consequence.server";
+import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
+import { roomMessageAddressingView } from "@/lib/work-management/room-message-addressing";
+import { prepareRoomAddressing, publishRoomMessagePosted } from "@/lib/work-management/room-message-wake.server";
 
-type PackContext = { agentId?: string };
+type PackContext = { agentId?: string; apiTokenId?: string };
 
 function str(params: Record<string, unknown>, key: string): string | null {
   const value = params[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+// BI-3C837677: room reads page by an opaque (createdAt, messageId) cursor.
+// messageId is unique, so it breaks createdAt ties and no message is skipped or
+// repeated across pages. The feed used to return the OLDEST 20 with no cursor.
+const ROOM_MESSAGE_PAGE_DEFAULT = 20;
+const ROOM_MESSAGE_PAGE_MAX = 100;
+
+function roomMessageLimit(params: Record<string, unknown>): number {
+  const value = params.limit;
+  if (typeof value !== "number" || !Number.isFinite(value)) return ROOM_MESSAGE_PAGE_DEFAULT;
+  return Math.min(ROOM_MESSAGE_PAGE_MAX, Math.max(1, Math.floor(value)));
 }
 
 async function resolveRoomWorkItem(caseKey: string) {
@@ -43,7 +63,7 @@ async function resolveRoomWorkItem(caseKey: string) {
 }
 
 async function agentLabel(agentId: string): Promise<string> {
-  const agent = await prisma.agent.findUnique({ where: { id: agentId }, select: { displayName: true } });
+  const agent = await prisma.agent.findUnique({ where: { agentId }, select: { displayName: true } });
   return agent?.displayName?.trim() || "A coworker";
 }
 
@@ -81,6 +101,16 @@ async function postRoomMessageHandler(
     };
   }
 
+  const prepared = await prepareRoomAddressing({
+    workItemId: item.id,
+    sender: { type: "agent", id: agentId },
+    actingUserId: userId,
+    addressedTo: params.addressedTo,
+    // BI-FDE1B10C: a room's supervised session is recognised by the token it posts with.
+    apiTokenId: context?.apiTokenId ?? null,
+  });
+  if (prepared.refused) return { success: false, error: "invalid_input", message: prepared.message };
+
   const label = await agentLabel(agentId);
   // Posting is joining: heartbeat the agent's presence in the room.
   await heartbeatAgentWorkItemPresence({ workItemId: item.id, agentPrincipalId: access.agentPrincipalId, label });
@@ -97,14 +127,17 @@ async function postRoomMessageHandler(
     roomRef: { caseKey, caseId: `${item.sourceType}:${canonicalSourceId}`, workItemId: item.itemId },
     body,
     sender: { type: "agent", id: agentId, label },
-    roster: {},
+    roster: await loadWorkspaceMentionRoster(),
+    addressing: prepared.build,
   });
+  // After commit: the wake is an accelerator, and the sweeper retries a failed send.
+  if (result.addressed) await publishRoomMessagePosted(result.messageId);
 
   return {
     success: true,
     entityId: result.messageId,
-    message: `Posted to ${caseKey} as ${label}.`,
-    data: { messageId: result.messageId, workItemId: item.id },
+    message: `Posted to ${caseKey} as ${label}.${result.addressed ? " Addressed coworkers are being woken." : ""}`,
+    data: { messageId: result.messageId, workItemId: item.id, addressed: result.addressed },
   };
 }
 
@@ -121,6 +154,22 @@ async function readRoomMessagesHandler(
   if (!caseKey) {
     return { success: false, error: "invalid_input", message: "caseKey is required." };
   }
+  const sinceRaw = str(params, "sinceCursor");
+  const beforeRaw = str(params, "beforeCursor");
+  if (sinceRaw && beforeRaw) {
+    return { success: false, error: "invalid_input", message: "Pass sinceCursor or beforeCursor, not both." };
+  }
+  const cursorRaw = sinceRaw ?? beforeRaw;
+  const cursor = cursorRaw ? decodeRoomMessageCursor(cursorRaw) : null;
+  if (cursorRaw && !cursor) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: "That cursor is not one read_room_messages issued. Pass newestCursor or oldestCursor from an earlier read unchanged.",
+    };
+  }
+  const forward = Boolean(sinceRaw);
+  const limit = roomMessageLimit(params);
 
   const item = await resolveRoomWorkItem(caseKey);
   if (!item) {
@@ -147,10 +196,25 @@ async function readRoomMessagesHandler(
     const childAccess = await resolveAgentRoomAccess({ agentId, userId, requested: "content", workItem: child });
     if (childAccess.decision.level === "content") admittedChildIds.push(child.id);
   }
-  const rows = await prisma.workItemMessage.findMany({
-    where: { workItemId: { in: [item.id, ...admittedChildIds] } },
-    orderBy: [{ createdAt: "asc" }],
-    take: 20,
+  // since: strictly after the cursor, oldest first. Default and before: newest
+  // first, strictly before the cursor when one is given. One extra row says
+  // whether more remain in the paging direction.
+  const comparator = forward ? "gt" : "lt";
+  const direction = forward ? "asc" : "desc";
+  const fetched = await prisma.workItemMessage.findMany({
+    where: {
+      workItemId: { in: [item.id, ...admittedChildIds] },
+      ...(cursor
+        ? {
+            OR: [
+              { createdAt: { [comparator]: cursor.createdAt } },
+              { createdAt: cursor.createdAt, messageId: { [comparator]: cursor.messageId } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: direction }, { messageId: direction }],
+    take: limit + 1,
     select: {
       messageId: true,
       senderType: true,
@@ -159,14 +223,28 @@ async function readRoomMessagesHandler(
       messageType: true,
       body: true,
       createdAt: true,
+      structuredPayload: true,
     },
   });
+  const hasMore = fetched.length > limit;
+  const rows = fetched.slice(0, limit);
+  const senderGaids = await getAgentGaidMap(rows.flatMap((row) => (row.senderAgentId ? [row.senderAgentId] : [])));
+  const newestRow = forward ? rows.at(-1) : rows[0];
+  const oldestRow = forward ? rows[0] : rows.at(-1);
+  // An empty page keeps the caller's position rather than losing it.
+  const newestCursor = newestRow ? encodeRoomMessageCursor(newestRow) : (sinceRaw ?? null);
+  const oldestCursor = oldestRow ? encodeRoomMessageCursor(oldestRow) : (beforeRaw ?? null);
+  const span = forward ? "new since the cursor" : cursor ? "older than the cursor" : "newest";
 
   return {
     success: true,
-    message: `${rows.length} recent message(s) in ${caseKey}.`,
+    message: `${rows.length} ${span} message(s) in ${caseKey}${hasMore ? "; more remain" : ""}.`,
     data: {
       caseKey,
+      order: forward ? "oldest-first" : "newest-first",
+      hasMore,
+      newestCursor,
+      oldestCursor,
       messages: rows.map((row) => ({
         messageId: row.messageId,
         senderType: row.senderType,
@@ -174,6 +252,7 @@ async function readRoomMessagesHandler(
         messageType: row.messageType,
         body: row.body,
         at: row.createdAt.toISOString(),
+        ...roomMessageAddressingView(row.structuredPayload, row.senderAgentId ? senderGaids.get(row.senderAgentId) ?? null : null),
       })),
     },
   };
@@ -186,9 +265,15 @@ async function inviteRoomParticipantHandler(
 ): Promise<ToolResult> {
   const preflight = await preflightRoomParticipantInvitation({ params, userId, agentId: context?.agentId });
   if (preflight.verdict === "deny") return preflight.result;
-  const { agentId, caseKey, item } = preflight;
+  const { agentId, caseKey, item, clearanceRaise } = preflight;
   const inviteeAgentId = str(params, "agentId");
   const inviteeUserId = str(params, "userId");
+
+  // BI-6AE64074: an approved raise happens before admission; a refused one admits nobody.
+  if (clearanceRaise) {
+    const refused = await applyInviteeClearanceRaise(userId, caseKey, clearanceRaise);
+    if (refused) return refused;
+  }
 
   let inviteePrincipalId: string | null = null;
   let inviteeLabel = "A participant";
@@ -317,13 +402,15 @@ async function requirePlatformManager(userId: string): Promise<ToolResult | null
 async function planAccountHandoverHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const refusal = await requirePlatformManager(userId);
   if (refusal) return refusal;
-  const { planAccountHandover } = await import("@/lib/work-management/account-handover");
+  const { liveAgentAccessNote, planAccountHandover } = await import("@/lib/work-management/account-handover");
   const plan = await planAccountHandover(prisma as never, { sourceAccount: str(params, "sourceAccount") ?? "" });
   if (!plan.ok) return { success: false, error: "handover_refused", message: plan.error };
   const count = (kind: string) => plan.data.items.filter((i) => i.kind === kind).length;
+  // The handover moves work, not access (BI-9D2199D4): say what stays live and where to end it.
+  const access = liveAgentAccessNote(plan.data.sourceEmail, plan.data.liveAgentCredentials);
   return {
     success: true,
-    message: `${plan.data.items.length} item(s) would move from ${plan.data.sourceEmail}: ${count("room")} room(s), ${count("build")} build(s), ${count("scheduled-task")} scheduled task(s). ${plan.data.refused.length} refused.`,
+    message: `${plan.data.items.length} item(s) would move from ${plan.data.sourceEmail}: ${count("room")} room(s), ${count("build")} build(s), ${count("scheduled-task")} scheduled task(s). ${plan.data.refused.length} refused.${access}`,
     data: plan.data,
   };
 }
@@ -416,16 +503,119 @@ async function getCoworkerRoomEngagementHandler(
   };
 }
 
+async function broadcastWorkroomAskHandler(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: PackContext,
+): Promise<ToolResult> {
+  const agentId = context?.agentId;
+  if (!agentId) {
+    return { success: false, error: "invalid_caller", message: "broadcast_workroom_ask requires an acting coworker." };
+  }
+  const capsuleId = str(params, "capsuleId");
+  const body = str(params, "body");
+  if (!capsuleId || !body) {
+    return { success: false, error: "invalid_input", message: "capsuleId and body are required." };
+  }
+  const room = await prisma.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
+  if (!room) {
+    return { success: false, error: "not_found", message: `No Workroom ${capsuleId}.` };
+  }
+  const access = await resolveAgentWorkroomAccess({
+    userId, agentId, workroomId: room.id, requested: "action",
+  });
+  if (access.decision.level !== "action") {
+    return {
+      success: false,
+      error: "forbidden",
+      message: `Not admitted to broadcast from ${capsuleId} (${access.decision.reason}).`,
+    };
+  }
+  const commentDb: PostCommentDb = {
+    workItemMessage: { create: (args) => prisma.workItemMessage.create(args as never) },
+    notification: { create: (args) => prisma.notification.create(args as never) },
+  };
+  const label = await agentLabel(agentId);
+  return executeCooBroadcastAsk({
+    db: prisma as CooBroadcastDb,
+    capsuleId,
+    body,
+    commandKey: str(params, "commandKey"),
+    actor: { userId, agentId },
+    postMessage: async ({ capsuleId: targetCapsuleId, workItemId, body: messageBody }) => {
+      const item = await prisma.workItem.findUnique({
+        where: { id: workItemId },
+        select: { id: true, title: true, itemId: true, sourceType: true, sourceId: true },
+      });
+      if (!item) return;
+      await postWorkItemComment({
+        db: commentDb,
+        workItemId: item.id,
+        workItemTitle: item.title,
+        roomRef: {
+          caseKey: `work-capsule:${targetCapsuleId}`,
+          caseId: `${item.sourceType}:${item.sourceId ?? item.itemId}`,
+          workItemId: item.itemId,
+        },
+        body: messageBody,
+        sender: { type: "agent", id: agentId, label },
+        roster: {},
+      });
+    },
+  });
+}
+
+async function acknowledgeWorkroomBroadcastHandler(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: PackContext,
+): Promise<ToolResult> {
+  const agentId = context?.agentId;
+  if (!agentId) {
+    return { success: false, error: "invalid_caller", message: "acknowledge_workroom_broadcast requires an acting coworker." };
+  }
+  const capsuleId = str(params, "capsuleId");
+  const commandKey = str(params, "commandKey");
+  if (!capsuleId || !commandKey) {
+    return { success: false, error: "invalid_input", message: "capsuleId and commandKey are required." };
+  }
+  const room = await prisma.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
+  if (!room) {
+    return { success: false, error: "not_found", message: `No Workroom ${capsuleId}.` };
+  }
+  const access = await resolveAgentWorkroomAccess({
+    userId, agentId, workroomId: room.id, requested: "action",
+  });
+  if (access.decision.level !== "action") {
+    return {
+      success: false,
+      error: "forbidden",
+      message: `Not admitted to acknowledge ${commandKey} in ${capsuleId} (${access.decision.reason}).`,
+    };
+  }
+  return executeCooBroadcastAck({
+    db: prisma as CooBroadcastDb,
+    capsuleId,
+    commandKey,
+    actor: { userId, agentId },
+  });
+}
+
 const definitions: ToolDefinition[] = [
   {
     name: "post_room_message",
     description:
-      "Post a message into a Work Room as the acting coworker. The room is addressed by caseKey (e.g. backlog-item:BI-123). You must be admitted to the room with action rights — admission is outcome-scoped per room. Posting also joins you to the room (presence). Use read_room_messages to see the feed first.",
+      "Post a message into a Work Room as the acting coworker. The room is addressed by caseKey (e.g. backlog-item:BI-123). You must be admitted to the room with action rights — admission is outcome-scoped per room. Posting also joins you to the room (presence). Use read_room_messages to see the feed first. Address a coworker with addressedTo or an @mention to wake it; agent-to-agent exchanges stop at a hop limit and an hourly wake budget per room.",
     inputSchema: {
       type: "object",
       properties: {
         caseKey: { type: "string", description: "The room's case key, e.g. backlog-item:BI-123 (sourceType:sourceId)." },
         body: { type: "string", description: "The message text to post into the room." },
+        addressedTo: {
+          type: "array",
+          items: { type: "string" },
+          description: "Who must act on this message, beyond any @mentions in the body: coworker agent ids, GAIDs (a GAID may carry #session=<id> for one session of an external client), or the room roles \"coordinator\" and \"accountable\". An addressed in-platform coworker is woken to reply within seconds; an external client sees it when it next reads the room.",
+        },
       },
       required: ["caseKey", "body"],
     },
@@ -435,16 +625,50 @@ const definitions: ToolDefinition[] = [
   {
     name: "read_room_messages",
     description:
-      "Read the recent message feed of a Work Room addressed by caseKey. Returns up to 20 recent messages (human and coworker). Requires content-level admission to the room; admission is outcome-scoped per room.",
+      "Read a Work Room's message feed (human and coworker) by caseKey. With no cursor, returns the newest messages, newest first. Pass oldestCursor back as beforeCursor to page to older messages; pass newestCursor back as sinceCursor to get only messages posted since (oldest first). hasMore says whether more remain in that direction. Requires content-level admission to the room; admission is outcome-scoped per room.",
     inputSchema: {
       type: "object",
       properties: {
         caseKey: { type: "string", description: "The room's case key, e.g. backlog-item:BI-123 (sourceType:sourceId)." },
+        sinceCursor: { type: "string", description: "A newestCursor from an earlier read. Returns only later messages, oldest first. Do not combine with beforeCursor." },
+        beforeCursor: { type: "string", description: "An oldestCursor from an earlier read. Returns only earlier messages, newest first. Do not combine with sinceCursor." },
+        limit: { type: "integer", minimum: 1, maximum: ROOM_MESSAGE_PAGE_MAX, description: `Messages per page (default ${ROOM_MESSAGE_PAGE_DEFAULT}, max ${ROOM_MESSAGE_PAGE_MAX}).` },
       },
       required: ["caseKey"],
     },
     requiredCapability: "view_operations",
     sideEffect: false,
+  },
+  {
+    name: "broadcast_workroom_ask",
+    description:
+      "Post a COO ask down the contains hierarchy from a Workroom (capsuleId WC-*). Writes a shared commandKey ask ledger and optional room messages. Records acknowledgements separately via acknowledge_workroom_broadcast. Never dispatches a stage and never changes owners.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Root Workroom id (WC-*). The ask fans out to contains descendants." },
+        body: { type: "string", description: "The ask to post into each room." },
+        commandKey: { type: "string", description: "Optional shared broadcast id. Minted when omitted." },
+      },
+      required: ["capsuleId", "body"],
+    },
+    requiredCapability: "view_operations",
+    sideEffect: true,
+  },
+  {
+    name: "acknowledge_workroom_broadcast",
+    description:
+      "Record that this Workroom acknowledged a COO broadcast commandKey. Writes the ack ledger only. Never dispatches a stage.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Workroom id (WC-*) acknowledging the ask." },
+        commandKey: { type: "string", description: "The shared broadcast id from broadcast_workroom_ask." },
+      },
+      required: ["capsuleId", "commandKey"],
+    },
+    requiredCapability: "view_operations",
+    sideEffect: true,
   },
   {
     name: "appoint_room_coordinator",
@@ -476,13 +700,20 @@ const definitions: ToolDefinition[] = [
         agentId: { type: "string", description: "Invite an AI coworker by agent id (provide agentId OR userId)." },
         userId: { type: "string", description: "Invite a person by user id (provide agentId OR userId)." },
         canAct: { type: "boolean", description: "Whether the invitee may post (true, default) or only read (false)." },
+        raiseClearanceTo: {
+          type: "string",
+          enum: ["internal", "confidential"],
+          description: "Only when an earlier invite was refused with invitee_clearance_below_room: the room's level, as that refusal named it. The room's owner is then asked once to admit the coworker AND raise its data access to that level.",
+        },
       },
       required: ["caseKey"],
     },
     requiredCapability: "view_operations",
     sideEffect: true,
-    // changes identity or authority → consult-gated (TAK §8.4.1).
+    // changes identity or authority → consult-gated (TAK §8.4.1), except an
+    // admission the room's charter already decided (BI-C649809F).
     consequence: "authority",
+    consequenceForCall: inviteRoomParticipantConsequence,
   },
   {
     name: "get_coworker_room_engagement",
@@ -502,7 +733,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "plan_account_handover",
     description:
-      "Dry run of handing over an account's live work: every live room it alone coordinates, every live Build Studio build it created, and every scheduled coworker task it owns, each with its new owner (the accountable person of the item's portfolio, then Foundational, then the organization). Items with no chosen owner are refused, never given a guessed one. Returns a digest; apply_account_handover moves exactly that set. Writes nothing.",
+      "Dry run of handing over an account's live work: every live room it alone coordinates, every live Build Studio build it created, and every scheduled coworker task it owns, each with its new owner (the accountable person of the item's portfolio, then Foundational, then the organization). Items with no chosen owner are refused, never given a guessed one. It also reports the account's live agent credentials, which a handover does not revoke. Returns a digest; apply_account_handover moves exactly that set. Writes nothing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -544,6 +775,8 @@ export const roomMessagingPack: ToolPack = {
     plan_account_handover: (params, userId) => planAccountHandoverHandler(params, userId),
     apply_account_handover: (params, userId) => applyAccountHandoverHandler(params, userId),
     get_coworker_room_engagement: (params, userId, context) => getCoworkerRoomEngagementHandler(params, userId, context),
+    broadcast_workroom_ask: (params, userId, context) => broadcastWorkroomAskHandler(params, userId, context),
+    acknowledge_workroom_broadcast: (params, userId, context) => acknowledgeWorkroomBroadcastHandler(params, userId, context),
   },
   grants: {
     post_room_message: ["work_room_write"],
@@ -553,5 +786,7 @@ export const roomMessagingPack: ToolPack = {
     plan_account_handover: ["work_room_write"],
     apply_account_handover: ["work_room_write"],
     get_coworker_room_engagement: ["work_room_read"],
+    broadcast_workroom_ask: ["work_room_write"],
+    acknowledge_workroom_broadcast: ["work_room_write"],
   },
 };

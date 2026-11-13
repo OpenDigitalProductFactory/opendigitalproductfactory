@@ -237,8 +237,71 @@ room's work is what the Workroom drive dispatches, so the hold lives there:
 - "Delegated results ahead of new work" has no subject until a child result can
   start a parent turn (`BI-AD979E79`, deferred): today it is a message in the
   parent thread. It moves to that item.
-- Usage-limit auto-resume (release a hold at the provider's reset time) is a
-  follow-up; the hold records the failure kind it needs.
+- Holds release themselves (`BI-95638941`, 2026-10-27). Live use showed the
+  manual-only release froze rooms: 40 rate-limit holds from 10-17 to 10-25, none
+  resumed, 36 rooms still held after ten days. Each hold now carries `releaseAt`
+  (30 minutes, doubling for a room re-held within 24 hours of its last release,
+  capped at 6 hours) and its owner; the `workroom/queue-hold-release` job
+  releases due holds every 5 minutes through `resumeWorkroomQueue`, recorded as
+  `provider-unblocked`. Releasing at the provider's own reset time, when one is
+  reported, remains a refinement.
+
+
+**P6b corrective continuation (2026-10-25, BI-9CD95438).** A known provider
+hold must not consume a sequential dispatch slot. At source `22f02871`,
+the drive applied its per-tick admission counter before `applyDrivePlan`
+read the room's hold. The observed tick admitted four held rooms, skipped
+all four, and left eligible work waiting for agent capacity. This demonstrates
+wasted admission on that tick, not indefinite starvation or provider recovery.
+
+One atomic correction, in this order:
+
+1. Add a failing drive-tick regression with four held rooms followed by
+   eligible rooms and a finite cap. Assert that held rooms remain
+   `provider_held`, acquire no lease and enqueue no task, while only eligible
+   dispatches consume the cap. Cover a hold encountered after capacity is
+   exhausted, malformed hold data, explicit removal of a hold, and unchanged
+   ordering of eligible rooms.
+2. Reuse `readWorkroomQueueHold` before the sequential admission counter.
+   Keep the existing later hold check and its persisted blocked explanation.
+   Do not duplicate hold parsing, change the pool-derived cap, refund failed
+   dispatches, reorder eligible rooms, or change graph-token admission.
+3. Run the graph-linked drive tests plus queue-hold and dispatch-cap tests,
+   both web TypeScript programs, style guard and documentation freshness.
+   Complete the canonical exact-tree gate, attributed semantic review and
+   protected PR flow before publication is considered delivered.
+4. After a qualified containing release, observe a bounded canonical tick:
+   already-held rooms remain held, consume no sequential admission, and
+   eligible work can use the available capacity. Do not resume any provider
+   queue or manufacture work for this observation. Missing eligible work or
+   unrelated admission constraints leave the corresponding runtime case unrun.
+
+This restores P6b's room-local pause contract. The repair and regression tests
+are not independent deliverables, and do not complete the broader P6 recovery
+classes or parent initiative acceptance. Existing hold records, resume
+commands, authority checks and task identities remain unchanged. No schema,
+provider setting, grant, worker, new status surface or dependency is added.
+Refactoring reuses the canonical hold reader and existing admission counter.
+Rollback is one source revert; it preserves stored holds and restores the
+previous capacity-waste behavior. The original failed observations remain
+part of the evidence.
+
+
+The existing BI-9CD95438 acceptance criteria remain the baseline:
+
+- A provider failure on a room's stage holds the room; the next drive tick dispatches nothing and concludes `provider_held`.
+- An empty model reply or an ordinary error does not hold the room.
+- `resume_workroom_queue` releases the hold and the held stage runs on the next dispatch; with no hold it is a no-op.
+
+Corrective traceability: `runWorkroomDriveJob` applies the existing
+`readWorkroomQueueHold` result before `createDispatchAdmission` for known held
+sequential rooms. The flow is provider hold to no sequential admission to
+existing held snapshot; eligible rooms retain capacity-bounded scheduling.
+Verification uses `apps/web/lib/queue/functions/workroom-drive-writeback-run.test.ts`,
+`apps/web/lib/queue/functions/workroom-drive.test.ts`,
+`apps/web/lib/work-management/drive-dispatch-cap.test.ts` and
+`apps/web/lib/work-capsules/workroom-queue-hold.test.ts`, followed by the bounded
+installed canonical tick after qualified containing deployment described above.
 
 ### 4.7 Agent CLIs as supervised runtimes (`BI-05715F4C`)
 
@@ -346,3 +409,33 @@ produces; `BI-05D7A0DC` (async completion hub) renders 4.5's results;
 - Cross-installation orchestration (federation owns it).
 - Any UI beyond existing Workroom and queue-health surfaces.
 - Replacing Build Studio's phase orchestrator; it becomes a client of 4.5.
+
+### Root turn correlation repair (BI-1C23E1F3)
+
+The supervised Codex adapter must distinguish its room's root thread and active
+turn from child or unrelated provider activity. Only a terminal event for that
+exact root turn advances the supervisor's queued input. Child approvals still
+reach the room's existing decision path; filtering progress must not discard
+requests that need a decision.
+
+**OBJ-DDL-ROOT:** Concurrent provider activity cannot change or complete another
+room's root turn. A root turn settles once, with its actual terminal status.
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-DDL-ROOT-1 | OBJ-DDL-ROOT | Interleaved child and foreign starts, messages and completions leave the active root identity unchanged and emit no root completion. |
+| AC-DDL-ROOT-2 | OBJ-DDL-ROOT | Matching completed, failed and interrupted root turns each settle once; duplicate, late, unknown-status and identity-missing terminal frames do not settle a current turn. |
+| AC-DDL-ROOT-3 | OBJ-DDL-ROOT | Runtime approval requests remain visible through the existing permission path, including requests from child activity. |
+
+Ordered atomic repair: replay the faulty sequence against the current adapter;
+observe failure; correlate notifications at the existing adapter boundary; replay
+normal, interleaved, duplicate and malformed sequences; run the runtime suites,
+typechecks and governed publication gate. No independently shippable subcomponent,
+new scheduler, schema, package or deployment mechanism is introduced.
+
+This reuses the existing RuntimeSession contract and fake-process transport. It
+is an OS-independent prerequisite for safe concurrency and DPF2 absorption, not a
+DPF2 implementation. The extraction boundary remains owned by
+[the reusable architecture design](2026-10-18-reusable-architecture-extraction-design.md).
+
+Settlement is retained for the session lifetime. A delayed start acknowledgement or replayed notification for an older root remains retired after subsequent roots finish; remembering only the last terminal turn is insufficient. The regression runs two complete roots before delivering their start acknowledgements in reverse order.

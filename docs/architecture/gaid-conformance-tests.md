@@ -44,6 +44,7 @@ Each assertion should identify:
 | `GAID-022` | `Federated` | Private/public subject continuity | Principal/alias mapping evidence, issuer status, and negative missing-mapping test | Each exposed public GAID and protected private GAID resolve to the same canonical subject; missing required public mapping fails closed without private fallback |
 | `GAID-023` | `Federated` | Minimized-participation commitment | Signed public receipt, retained protected graph, private nonce, projection-policy version, and authorized audit-opening test | The commitment opens for authorized audit and graph/context/policy/nonce mutation fails; the public receipt reveals neither hidden identity/topology nor hidden-hop count by default |
 | `GAID-024` | `Public` | Whole-surface private-identity non-disclosure | Automated scan of messages, task history, artifacts, cards, receipts, errors, peer-visible traces/logs, and exports seeded with private identifiers | No private/internal identity or topology leaves the organization boundary and projection failure occurs before signing or delivery |
+| `GAID-025` | `All` | Core consequential-action evidence (§10.1 and §13.1) | Private-profile consequential-action fixture with a retained receipt or equivalent evidence record, plus a missing-record counterexample | The protected record satisfies the core obligation without public disclosure; an action with neither record fails. Stronger federated/public integrity requirements remain separately applicable. |
 
 ## Evidence Publication Guidance
 

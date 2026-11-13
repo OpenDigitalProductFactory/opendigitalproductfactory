@@ -1,0 +1,21 @@
+{
+  "upload": {
+    "prompt": "Drop a file here to add it.",
+    "promptInCollection": "Drop a file here to add it to {$collection}.",
+    "formats": "Word, Excel, PowerPoint, OpenDocument, RTF, PDF, text or markdown, up to {$limitMb} MB.",
+    "uploading": "Uploading {$fileName}…",
+    "chooseFile": "Choose file",
+    "chooseFileLabel": "Choose a file to upload",
+    "failed": "The file could not be uploaded. Try again.",
+    "offline": "The file could not be uploaded. Check your connection and try again."
+  },
+  "collections": {
+    "navLabel": "Collections",
+    "all": "All documents",
+    "new": "New collection",
+    "nameLabel": "Collection name",
+    "namePlaceholder": "Collection name",
+    "onlyMe": "Only me",
+    "create": "Create"
+  }
+}

@@ -20,6 +20,7 @@ import { extractBuildIdHint, logBuildActivity, resolveActiveBuildId } from "@/li
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { handleGuardOutcomesPayload, hasGuardOutcomesPayload } from "@/lib/gpp/efficacy/guard-outcome-intake";
 
 /**
  * Local copy of mcp-tools.ts `resolveSavePhaseHandoffTransition` (left inline
@@ -113,6 +114,10 @@ const definitions: ToolDefinition[] = [
         localIntegration: { type: "object", description: "Local merged-code integration result summary" },
         unresolvedQuestions: { type: "array", items: { type: "string" }, description: "Open questions that still need decision or founder review" },
         skillIds: { type: "array", items: { type: "string" }, description: "DPF skill ids used by the external contributor" },
+        guardOutcomes: {
+          type: "object",
+          description: "Guard outcome runs from pregate, pre-push-gate or the guard loop (BI-FEDD8F45): { records: guard-outcome-run.v1[] (max 20), declarations?: string }. Recorded as guard-outcome.run evidence; returns acknowledged and refused runIds.",
+        },
       },
       required: ["provider", "externalSessionId", "summary", "routeContext"],
     },
@@ -378,6 +383,11 @@ const recordExternalDevelopmentEvidence: ToolPackHandler = async (params, userId
       error: "missing_required",
       message: `Missing required external development evidence field(s): ${missing.join(", ")}`,
     };
+  }
+
+  // BI-FEDD8F45: guard outcome runs ride this existing evidence lane.
+  if (hasGuardOutcomesPayload(params)) {
+    return handleGuardOutcomesPayload({ params, userId, context, db: prisma });
   }
 
   const buildId = stringValue("buildId") || undefined;

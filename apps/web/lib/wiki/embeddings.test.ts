@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { wikiEmbeddingDigest } from "@dpf/db/wiki-embedding-digest";
 
 const upsertVectors = vi.fn();
 const searchSimilar = vi.fn();
@@ -260,7 +261,10 @@ describe("storeWikiPage", () => {
 
 describe("published wiki embedding reconciliation", () => {
   it("idempotently backfills only published pages whose vector is missing", async () => {
-    scrollPoints.mockResolvedValue([{ id: 1, payload: { entityId: "wp-present" } }]);
+    scrollPoints.mockResolvedValue([{
+      id: 1,
+      payload: { entityId: "wp-present", contentDigest: wikiEmbeddingDigest({ abstract: null, body: "body" }) },
+    }]);
     wikiPageFindMany.mockResolvedValue([
       {
         id: "wp-present", slug: "entities/present", title: "Present", body: "body",
@@ -280,7 +284,9 @@ describe("published wiki embedding reconciliation", () => {
     generateEmbedding.mockResolvedValue(stub(768));
 
     const result = await reconcilePublishedWikiEmbeddings();
-    expect(result).toEqual({ scanned: 2, missing: 1, embedded: 1, failed: [] });
+    expect(result).toEqual({
+      scanned: 2, missing: 1, stale: 0, embedded: 1, refreshed: ["entities/missing"], failed: [], deferred: 0,
+    });
     expect(upsertVectors).toHaveBeenCalledTimes(1);
     expect(upsertVectors.mock.calls[0]?.[1]?.[0]?.id).toBe("wiki-page-wp-missing");
   });
@@ -298,6 +304,86 @@ describe("published wiki embedding reconciliation", () => {
     expect(await reconcilePublishedWikiEmbeddings()).toMatchObject({ embedded: 0, failed: ["entities/retry"] });
     generateEmbedding.mockReset().mockResolvedValue(stub(768));
     expect(await reconcilePublishedWikiEmbeddings()).toMatchObject({ embedded: 1, failed: [] });
+  });
+});
+
+// BI-F039D17A — a release that edits a corpus page must refresh its vector; an
+// untouched page must not be re-embedded. The digest of the embedded text is
+// the only key, so the run is idempotent and resumes after a restart.
+describe("corpus vectors converge on changed content (BI-F039D17A)", () => {
+  const pageOf = (id: string, slug: string, body: string) => ({
+    id, slug, title: slug, body, abstract: "Abstract", pageKind: "principle", status: "published",
+    isKernel: true, kernelVersion: "0.4.4", organizationId: null, kernelPageId: null,
+    principleTier: "core", principleAppliesTo: ["platform"], principleRingScope: [],
+    principleDimensionVector: null, principlePublic: true,
+  });
+  const unchanged = pageOf("wp-same", "principles/unchanged", "The same words as last release.");
+  const changed = pageOf("wp-edit", "professions/data-architect/wiki/edited", "New wording shipped in this release.");
+  const legacy = pageOf("wp-old", "principles/pre-digest", "Embedded before digests existed.");
+
+  beforeEach(() => {
+    isEmbeddingAvailable.mockReset().mockResolvedValue(true);
+    generateEmbedding.mockResolvedValue(stub(768));
+    wikiPageFindMany.mockResolvedValue([unchanged, changed, legacy]);
+    scrollPoints.mockResolvedValue([
+      { id: 1, payload: { entityId: "wp-same", contentDigest: wikiEmbeddingDigest(unchanged) } },
+      { id: 2, payload: { entityId: "wp-edit", contentDigest: wikiEmbeddingDigest({ abstract: "Abstract", body: "Old wording." }) } },
+      { id: 3, payload: { entityId: "wp-old" } },
+    ]);
+  });
+
+  it("re-embeds a page whose text changed and skips the unchanged one", async () => {
+    const result = await reconcilePublishedWikiEmbeddings();
+
+    expect(result).toMatchObject({ scanned: 3, missing: 0, stale: 2, embedded: 2, failed: [], deferred: 0 });
+    expect(result.refreshed).toEqual(["professions/data-architect/wiki/edited", "principles/pre-digest"]);
+    const ids = upsertVectors.mock.calls.map((call) => call[1][0].id);
+    expect(ids).toEqual(["wiki-page-wp-edit", "wiki-page-wp-old"]);
+    expect(ids).not.toContain("wiki-page-wp-same");
+    expect(generateEmbedding).toHaveBeenCalledTimes(2);
+    // The new vector is stamped with the digest of the shipped text.
+    expect(upsertVectors.mock.calls[0][1][0].payload.contentDigest).toBe(wikiEmbeddingDigest(changed));
+  });
+
+  it("is idempotent: once every point carries its current digest, a second run embeds nothing", async () => {
+    await reconcilePublishedWikiEmbeddings();
+    const written = new Map<string, Record<string, unknown>>();
+    for (const call of upsertVectors.mock.calls) {
+      const point = call[1][0];
+      written.set(point.payload.entityId as string, point.payload);
+    }
+    scrollPoints.mockResolvedValue([
+      { id: 1, payload: { entityId: "wp-same", contentDigest: wikiEmbeddingDigest(unchanged) } },
+      { id: 2, payload: written.get("wp-edit")! },
+      { id: 3, payload: written.get("wp-old")! },
+    ]);
+    upsertVectors.mockClear();
+    generateEmbedding.mockClear();
+
+    const second = await reconcilePublishedWikiEmbeddings();
+    expect(second).toMatchObject({ stale: 0, missing: 0, embedded: 0, refreshed: [] });
+    expect(generateEmbedding).not.toHaveBeenCalled();
+  });
+
+  it("defers work past its time budget instead of failing it, so the next run resumes", async () => {
+    let t = 0;
+    const now = () => t;
+    generateEmbedding.mockImplementation(async () => { t += 1_000; return stub(768); });
+
+    const result = await reconcilePublishedWikiEmbeddings({ budgetMs: 500, now });
+    expect(result).toMatchObject({ stale: 2, embedded: 1, failed: [], deferred: 1 });
+    expect(result.refreshed).toEqual(["professions/data-architect/wiki/edited"]);
+  });
+
+  it("dry run is the freshness check: it counts every stale page and embeds nothing", async () => {
+    const result = await reconcilePublishedWikiEmbeddings({ dryRun: true });
+    expect(result).toMatchObject({ scanned: 3, missing: 0, stale: 2, embedded: 0, deferred: 2 });
+    expect(result.pending).toEqual([
+      { slug: "professions/data-architect/wiki/edited", reason: "stale" },
+      { slug: "principles/pre-digest", reason: "stale" },
+    ]);
+    expect(upsertVectors).not.toHaveBeenCalled();
+    expect(generateEmbedding).not.toHaveBeenCalled();
   });
 });
 
@@ -631,7 +717,7 @@ describe("wiki embedding boot self-heal (BI-ED117C82)", () => {
   });
 
   it("does not claim an outage when nothing is missing", async () => {
-    scrollPoints.mockResolvedValue([{ payload: { entityId: "wp-1" } }]);
+    scrollPoints.mockResolvedValue([{ payload: { entityId: "wp-1", contentDigest: wikiEmbeddingDigest(page) } }]);
     wikiPageFindMany.mockResolvedValue([page]);
     isEmbeddingAvailable.mockResolvedValue(false);
 
@@ -674,4 +760,19 @@ describe("wiki embedding boot self-heal (BI-ED117C82)", () => {
     await expect(reconcileWikiEmbeddingsOnBoot(logger)).resolves.toBeNull();
     expect(logger.error).toHaveBeenCalled();
   });
+});
+
+
+it("keeps lexical fallback without guessing that an unavailable embedding needs a model download", async () => {
+  generateEmbedding.mockResolvedValue(null);
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    await expect(searchWikiPages({ query: "routing pause", organizationId: null })).resolves.toEqual([]);
+    expect(wikiPageFindMany).toHaveBeenCalled();
+    expect(searchSimilar).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalled();
+    expect(error.mock.calls.flat().join(" ")).not.toContain("docker model pull");
+  } finally {
+    error.mockRestore();
+  }
 });

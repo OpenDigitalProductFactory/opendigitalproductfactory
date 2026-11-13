@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "show-unavailable-reason-omit-form",
+  "decisionInteractionId": "DI-CC66F745BF49",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/SelfUpgradeClient.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-CC66F745BF49",
+    "consideredOptions": [
+      "show-unavailable-reason-omit-form",
+      "show-unavailable-reason-disabled-form"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails: keep saved recovery-point evidence visible, explain why database restoration is unavailable, and omit unusable confirmation and Restore controls. The approved restore refusal remains authoritative.",
+    "owningArea": "Platform",
+    "routeFamily": "/ops/self-upgrade",
+    "persona": "Operator deciding whether to install a release and understanding available recovery.",
+    "navigationLayer": "Existing contextual action; no route or navigation addition.",
+    "reuse": "Existing owner release card, risk notice and recovery/history presentation; shared pure recovery-eligibility owner serves server and live client.",
+    "sourceTruth": "Fresh SelfUpgradeRun recovery evidence plus the canonical restore-eligibility policy. A saved backup alone never grants restoration. No caller-supplied retention proof or permission flag.",
+    "emptyAndFailure": "Missing or incomplete recovery point, running run, retained historical rollback and unproven retention remain distinct. Database restoration is unavailable until review history can be preserved safely. Conditional prior-version fallback is not promised as universal recovery.",
+    "aiBoundary": "The page change sends no coworker prompt. Native advisory UX critique CE-7F4B1050 was requested separately under the UX-fit skill; it is not a delivered verdict.",
+    "prototype": "docs/ux-fit/2026-10-22-review-reassessment-restore-availability.html was authored before the implementation plan. Option A has zero unusable restore controls; Option B retains two disabled controls.",
+    "verification": "Final-source regression tests, both TypeScript programs, independent source review, exhaustive canonical gate and protected served route sweep are required. Actual results are recorded in Workroom WC-A5703D01 and PR6546; prototype exercise does not establish deployed acceptance."
+  }
+}

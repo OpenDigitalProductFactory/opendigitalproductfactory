@@ -1,5 +1,6 @@
 "use server";
 
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import { requireUserId } from "@/lib/actions/shared/guards";
 import { currentOperationAuthority } from "@/lib/govern/operation-authority";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
@@ -67,7 +68,8 @@ export async function createBuildStudioBacklogIntake(input: {
       effortSize: "medium",
       portfolioId: portfolio.id,
       submittedById: userId,
-      body: title,
+      // BI-458CCA8D: the title is all this intake asks for, so it is the outcome.
+      body: composeIntakeBody({ outcome: `"${title}" is delivered for ${portfolio.name}.`, body: title }),
     },
     select: {
       id: true,

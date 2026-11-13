@@ -282,3 +282,19 @@ The third failure mode is neither §9's delivery race nor §14's logic gap. The 
 **Visibility.** A guard fails open whenever it cannot run or answer. The plugin's SessionStart hook `pretooluse-guard-selftest.mjs` now pipes a harmless probe through compose, raw-tool, lease-punt and decision-routing guards, checks each verdict against the Claude contract, and checks that every declared `PreToolUse` command resolves (its `${VAR}` set, its script present). When any check fails it prints "PreToolUse guards inactive in this session" with the reasons; it is silent otherwise.
 
 **What stays true from §15.** A client hook is an accelerator. Remediation item 3, the server-side rule that a decision reaches a person only with a qualifying kernel record (BI-271B8EEC Direction 2), is still the only enforcement no client can skip, and it is not built yet.
+
+## 16. Addendum (2026-10-21): one plane-2 rule for internal and external agents (BI-638024F9)
+
+Plane 2 governed only `source: "agentic-loop"`. External coding agents reach the same consequential tools through the same governed-execution seam, as `source: "external-jsonrpc"` from `/api/mcp/v1`, and were left to plane 1. §15.1 showed how that fails: the desktop host discarded every plane-1 deny for days, and nothing on the server noticed. An internal coworker and an external agent got different verdicts for the same act.
+
+**Decision.** WWMD DI-F3C0940A38E9 (high confidence, proceed): close the parity gap first, then build the escalation backstop (BI-5CA6AB34), which covers both kinds of agent by construction.
+
+**Change.**
+- `GOVERNED_DECISION_SOURCES` = `agentic-loop`, `external-jsonrpc`. Both use one decision table (`decidePreTool`).
+- `resolveDecisionGateMode(env, source)`: internal agents follow `DPF_DECISION_GATE_MODE` (default enforce). External agents follow `DPF_DECISION_GATE_EXTERNAL_MODE` (default shadow), so the rollout audits before it denies. A global `off` wins for every source.
+- The consult is the server's own record: an external agent's `principle_decide` runs through the same `onPostToolUse` and clears the window under the token's user.
+- Audit lines now name `source`.
+
+**Still true.** The consultation ledger is per process (BI-AF7CE2BC). It holds for the single-portal deployment, where the MCP route and the agentic loop share one process. A multi-instance portal needs the durable ledger before the external mode is set to enforce.
+
+**Next.** Watch the `[decision-routing-gate] … source="external-jsonrpc"` shadow lines. Set `DPF_DECISION_GATE_EXTERNAL_MODE=enforce` once they show no unconsulted decisions from agents that did consult.

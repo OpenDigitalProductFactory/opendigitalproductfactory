@@ -15,6 +15,16 @@ The observation and decision slices remain owned by BI-88341B5D. The following
 manifest makes the existing continuation's four outcomes explicit for review;
 it does not claim those outcomes have been delivered.
 
+*Revised 2026-11-13* against `origin/main` 9463c0e1 and live install state.
+Since the October draft: Build Studio rooms gained a repair dispatcher (#7030,
+BI-085A37EC). Undecided merge states no longer stop a room (#7035). Only
+required checks hold a PR (#7005). The live install runs
+`DPF_BUILD_PR_DELIVERY_RECONCILER_MODE=enforce`. Four design questions were
+settled through WWMD and are recorded where they apply: intake in §3.3
+(`DI-80B30E396AE6`), classification in §3.4 (`DI-50FF611567E3`), repair for
+rooms outside Build Studio in §3.5 (`DI-0EE9FA83598B`), and alarms in §3.8
+(`DI-B01D623164CE`).
+
 **OBJ-1:** Deliver a signed CI event to its exact Workroom without waiting for the safety-net poll.
 
 **OBJ-2:** Repair an eligible failed PR within its existing authority, scope and recovery budget.
@@ -25,10 +35,10 @@ it does not claim those outcomes have been delivered.
 
 | ID | Objectives | Criterion |
 | --- | --- | --- |
-| AC-1 | OBJ-1 | A supported CI event reaches the matching repository and current-head Workroom within one minute; duplicates, stale heads and ambiguous identity cannot dispatch another repair. |
+| AC-1 | OBJ-1 | A CI outcome for a room's PR reaches the matching repository and current-head Workroom within one minute, by signed webhook where the install is reachable and by the adaptive poll (§3.3) where it is not; duplicates, stale heads and ambiguous identity cannot dispatch another repair. |
 | AC-2 | OBJ-2 | A preauthorized eligible room produces a new DCO commit on the same PR branch after scoped verification and independent review, at most twice per recovery lineage and never twice for one judged head; missing grants, foreign ownership or remote-head movement stop publication. |
 | AC-3 | OBJ-3 | The three existing PR alarm scripts report to the room, and every client reads the same persisted next action without creating another recurring model monitor. |
-| AC-4 | OBJ-4 | A recorded shadow soak justifies live enablement through its authorized configuration path, and one Build Studio pilot produces a source change, scoped verification, ready PR and protected merge with measured model calls and elapsed time. |
+| AC-4 | OBJ-4 | Every follow-through action still in observe-only or propose mode on the live install is named, a recorded shadow comparison justifies switching each on through its authorized configuration path, and one deliberately red PR in a room whose executor is not live is repaired and merged through the queue with no person or chat session acting, with measured model calls and elapsed time. |
 
 ## 1. Problem
 
@@ -103,6 +113,28 @@ policy table.
   enqueues one reconcile for that room.
 - **Poll.** The 5-minute reconciler remains the recovery path, as §3.9 already
   requires, because GitHub does not redeliver failed webhooks.
+- **Adaptive poll (WWMD `DI-80B30E396AE6`, 2026-11-13).** On 2026-11-13 the
+  production install had never received a webhook: `GitPromotionCandidate` was
+  empty, because GitHub cannot reach a portal on a private host. A webhook-only
+  design would therefore leave AC-1 unmet on every install that does not expose
+  a public URL, and exposing one is operator work the platform should not
+  require. So a room whose bound PR has a check that is pending, or a failure
+  that has not yet been judged, is re-observed every minute. Green, queued and
+  held rooms stay on the 5-minute net. The minute read sends the stored ETag for
+  the PR's check-suites list (`If-None-Match`). GitHub does not count a `304 Not
+  Modified` against the rate limit
+  ([REST best practices](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api#use-conditional-requests-if-appropriate)),
+  so an unchanged PR costs nothing. The full readiness read runs only when the
+  ETag changes. Webhook and poll feed the same per-room reconcile, and the
+  per-head judgment and reservation (§3.4) make a duplicate a no-op, whichever
+  path saw the event first.
+- **Event identity.** `check_suite` and `workflow_run` carry `head_sha` and a
+  `pull_requests` array. A room is selected only when the repository and the
+  head SHA both equal the room's bound PR head. An empty or fork
+  `pull_requests` array selects no room; the poll still covers it. A
+  `merge_group` event's `head_sha` is the integration commit. It is never
+  treated as an authored PR head: the event wakes every room whose PR is
+  currently in the queue, and each re-reads its own PR.
 - **Reconciler scope.** The `featureBuildId` filter is removed. The scope
   becomes every non-terminal room with a bound PR. Build Studio rooms keep their
   autonomy-eligibility check. Other rooms use the room's action boundary
@@ -119,9 +151,10 @@ is classified once per head SHA:
 |---|---|---|---|
 | `infrastructure` | completed normalized conclusion in the existing `INFRASTRUCTURE_CONCLUSIONS` set (`cancelled`, `timed_out`, `startup_failure`, `stale`, legacy status `error`), or verified runner/startup loss without a completed product verdict | Re-run the failed jobs once, when an exact rerunnable workflow ID exists. Persistent or non-rerunnable infrastructure raises attention to the platform operator. | Separate per-head bound 1; never spends `post-push-ci-failure`. |
 | `stale-base` | provider evidence explicitly identifies invalidation of the queued base, bound to this queue entry and authored head | Use the existing `queue-stale-base` recovery only after that proof. `BEHIND` alone and a merge-group SHA differing from the PR head are ordinary queue facts, not this classification. | `queue-stale-base` (1) |
-| `defect` | completed `failure` plus a source-bound, executed product-check diagnostic: a failed test/assertion, compiler diagnostic, or deterministic policy violation; no conflicting infrastructure evidence for that check | Dispatch a repair of the verified product failure (§3.5). A failed setup step or a bare `failure` is insufficient. | `post-push-ci-failure` (2), reserved once per judged head before enqueue |
+| `infrastructure` (setup step) | completed `failure` whose first failed step, read from the Actions jobs API for that exact run and attempt, is a setup step (rule below) and no repository-authored product step ran after setup | Same as the row above: one re-run of the failed jobs, then attention to the platform operator. | Same per-head bound 1. |
+| `defect` | completed `failure` whose first failed step, read from the Actions jobs API for that exact run, attempt and head, is a product step (any executed step that is not a setup step), with no conflicting infrastructure evidence for that check | Dispatch a repair of the verified product failure (§3.5). The failed job ID and step name go into the repair packet. A bare `failure` with no step evidence is insufficient. | `post-push-ci-failure` (2), reserved once per judged head before enqueue |
 | `conflict` | merge state `DIRTY` | Dispatch a repair whose task is to merge base (the existing conflict escalation moves here). | `post-push-ci-failure` |
-| `unclassified` | missing/inaccessible or contradictory evidence, `action_required`, unknown conclusion, unverified head mapping, or `failure` without a product diagnostic | Preserve the evidence and raise attention. No inference call solely to guess the class; no automatic rerun or repair on this evidence. | No attempt consumed |
+| `unclassified` | missing/inaccessible or contradictory evidence, `action_required`, unknown conclusion, unverified head mapping, or `failure` with no readable failed step for that run and attempt | Preserve the evidence and raise attention. No inference call solely to guess the class; no automatic rerun or repair on this evidence. | No attempt consumed |
 
 A repair never counts against the budget twice for the same head SHA. A new
 head SHA from the repair is what the next observation judges.
@@ -153,10 +186,31 @@ provide status and conclusion; they do not declare product-versus-infrastructure
 cause. [Workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs#get-a-job-for-a-workflow-run)
 expose the run/head identity and individual step outcomes. A step having started
 does not establish a product failure. A missing or unsupported diagnostic stays
-`unclassified`; job names, an allowlist of allegedly infra-only workflows and
-free-text model judgment are not substitutes. These are DPF's conservative
-decision rules applied to GitHub's observation contract, not classifications
-claimed to be supplied by GitHub.
+`unclassified`. Whole-job or whole-workflow names, an allowlist of supposedly
+infrastructure-only workflows, and free-text model judgment are not substitutes.
+These are DPF's conservative decision rules applied to GitHub's observation
+contract, not classifications claimed to be supplied by GitHub.
+
+**Setup-step rule (WWMD `DI-50FF611567E3`, 2026-11-13).** The jobs API names
+each step and its conclusion. A step is a *setup step* when it is one of:
+- a step the runner generates itself, not the workflow: `Set up job`,
+  `Initialize containers`, `Stop containers`, `Complete job`, or any `Post …`
+  cleanup step; or
+- a step whose display name is in the checked-in list
+  `apps/web/lib/build/ci-setup-steps.ts`. The list holds the names this
+  repository's workflows give to checkout, toolchain setup (`setup-pnpm`,
+  `setup-node`), dependency install and cache restore. A unit test reads
+  `.github/workflows/*.yml` and `.github/actions/*/action.yml` and fails when a
+  listed name no longer appears in any of them. The list therefore cannot drift
+  into naming steps that do not exist.
+
+Every other executed step is a *product step*. Classification uses the first
+step with conclusion `failure` in the failed job. When the jobs call fails, is
+rate-limited, or returns no failed step for a `failure` conclusion, the check
+is `unclassified`. It holds, and it spends no budget. This is Zuul's pre-run
+versus run split (§6) applied to the step data GitHub already returns. One jobs
+read per failing run per judged head is cached on the follow-through record, so
+a re-observation of the same head costs no further API calls.
 
 Keep the existing verified-defect precedence: a proven product failure can be
 repaired while other checks await attention, but only verified defect checks enter
@@ -196,6 +250,47 @@ only by the merge queue. What changes is the **repair** step in front of it:
   "run repair" (propose, do not act).
 - At **`quiet`**, the room records the state and does nothing else.
 
+**Who runs the repair (WWMD `DI-8172B1A35993` for Build Studio rooms,
+`DI-0EE9FA83598B` for every other room).** A Build Studio room's own build
+repairs through its gauntlet loop and publishes one fast-forward follow-up
+commit onto the PR head (§8). A room with no build uses the same machinery.
+When its executor's lease has lapsed, the reconciler opens a Build Studio repair
+build bound to the room's backlog item, the PR's branch and its current head,
+and dispatches the same packet. No second repair runtime or publication path is
+built. The repair build refuses, and the room raises attention instead, when:
+- the executor holds a live lease (it hears first, §3.6);
+- the PR's head repository differs from its base repository (a fork);
+- the remote head no longer equals the judged head at dispatch or at publish;
+- the room's posture is `quiet` or advise-only; or
+- the PR's budget is spent.
+
+What a repair build needs that a normal build does not (verified at
+`origin/main` 9463c0e1):
+1. **Its source starts at the PR head.** Today `startBuildBranch` always cuts
+   `build/<id>` from the client branch or `origin/main`, and
+   `alignBuildBranchToPublishedHead` refuses unless the head's parent is on
+   that branch. The repair build fetches the PR head and checks it out as the
+   sandbox base. Its recorded diff against the merge base then covers the whole
+   PR. Otherwise the follow-up's "untouched paths return to merge base" step
+   would revert the author's work.
+2. **It publishes to the PR's branch.** `create_portal_pr` names a fresh private
+   branch. A repair build publishes only with `followUpOf` onto the room's
+   `headBranch`, and never opens a second PR.
+3. **The room is bound to it.** The room's `featureBuildId` is set to the
+   repair build, so the existing follow-up lookup and budget carry-over apply
+   unchanged. The original executor keeps the room; the build is its repair
+   worker, not a new owner.
+4. **It enters at ship.** `dispatchBuildPrCiRepair` requires phase `ship`. A
+   repair build is created in ship with the PR's existing review receipt, so it
+   follows the same ship -> review -> build route.
+5. **Its base is the PR's base.** `resolvePendingPrFollowUp` assumes `main`; it
+   reads the room's `baseBranch` instead.
+
+The per-head reservation is written on the follow-through record before the
+build is enqueued, so neither a webhook redelivery nor the poll can open a
+second build for the same head. An unavailable Build Studio engine spends no
+attempt.
+
 When the budget is spent, the room raises `attention` to its Process Overseer
 with the failing checks, both repair attempts and their results. The drive's
 existing "every tick concludes" rule (BI-12A083B4) guarantees the blockage
@@ -227,10 +322,21 @@ never reaped while a PR is open.
 ### 3.8 The GitHub Actions alarms report to the room
 
 `check-stuck-auto-merge`, `check-merge-queue-churn` and
-`check-missing-ci-dispatch` keep commenting on the PR, and also post their
-finding to the platform's signed intake. The platform resolves the room through
-`pr-origin` and records it as room evidence. The same finding then reaches the
-operator inbox (completing BI-F1DE364F) instead of living only in a PR comment.
+`check-missing-ci-dispatch` run on a GitHub Actions schedule. Like webhooks,
+they cannot reach a portal on a private host, so posting to the platform's
+intake would only work on installs that expose a public URL.
+
+*Decided (WWMD `DI-B01D623164CE`, 2026-11-13):* each script's pure detector
+(`findStuckPullRequests`, `analyzeChurn`, `findMissingDispatch`) moves into a
+shared module that both the script and the portal import. The PR-delivery
+reconciler runs the three detectors against room-bound PRs on its existing
+tick, using data it already reads. A finding becomes a room attention with the
+existing `attentionKey` dedupe, keyed by detector and head SHA, so one
+unchanged condition raises one attention. The detectors run the same way for
+every executor, and no new model monitor is added. The Actions workflows keep
+running and commenting unchanged. They cannot tell which PRs a room owns, and
+they remain the only alarm for PRs with no room. Roomless PRs (Dependabot,
+orphans) are BI-C3EBDCEC; that slice decides whether the comments retire.
 
 ## 4. What this reverses, and what it keeps
 
@@ -253,9 +359,13 @@ deferred automatic repair to "a separate governed design"; this is that design.
 ## 5. Impacts
 
 - **Blast radius.** The reconciler's scope widens from Build Studio rooms to
-  all rooms with a PR, and its default changes from `shadow` to `enforce`.
+  all rooms with a PR. The live install already runs it in `enforce`
+  (2026-11-13); what stays off is named and switched on in slice 6.
   Rollout is staged (§7). Webhook handling adds three event types on an
-  existing, signed, idempotent receiver.
+  existing, signed, idempotent receiver. The adaptive poll adds one conditional
+  request per minute per active room; a `304` is not rate-limited.
+- **Repair builds.** At most one per judged head and two per PR. Each uses a
+  Build Studio engine slot, and an unavailable engine spends no attempt.
 - **Capacity.** At most 2 repair dispatches per PR head lineage, plus one infra
   re-run per check. That is bounded by the existing recovery budget.
 - **Cost of being wrong.** A bad repair is a new commit on an unmerged branch.
@@ -334,37 +444,26 @@ Each slice is its own backlog item and PR.
 
 ## 8. Open questions
 
-- **Repair worker capability — source boundary verified, live proof owed.**
-  Inspection for BI-ED7CD0DD at `c38edb55c0ddf10f6db4eab4848698e2aeed7019`
-  establishes that `startExternalWorkTool` only registers ownership. The existing
-  `workroom-runtime/supervisor.ts` can start a governed CLI in a supplied sandbox
-  workspace, but `runtime-request-policy.ts` holds `git push` for a room decision.
-  Build Studio branch preparation is build-scoped; neither registration nor an
-  available CLI proves safe publication to an external branch. Therefore reuse
-  the runtime for repair computation and keep publication a separate governed
-  adapter. Do not grant an agent unrestricted remote publication to fill this gap.
-
-  The adapter resolves the repository, PR branch, expected head and owner from
-  the room, prepares an isolated sandbox workspace at that exact head, and
-  supplies the existing `PrRepairPacket` constraints. It durably reserves one
-  attempt per judged head before enqueue and never spends a second attempt on
-  redelivery. It refuses a live author lease, foreign repository, changed remote
-  head, missing grant, expired authority, edits outside the original PR scope or
-  an exhausted recovery budget. An unavailable runtime spends no attempt.
-
-  Repair output is a proposed signed commit plus scoped verification and
-  independent changed-code review, not permission to push. Publication rechecks
-  room posture, grant intersection, scope and the current remote head and makes
-  a normal non-force update to the same branch. Existing required GitHub checks
-  and the merge queue remain the only integration and merge authority. Never
-  automatically approve a generic outward runtime permission request. Complete
-  a controlled owned-branch probe before enabling this adapter for real PRs;
-  source inspection and mocked tests do not satisfy that live proof.
-- **Classification contract — resolved in §3.4.** No infra-only job-name list
-  is required or inferred. Provider conclusions and verified execution evidence
-  select the existing classes; incomplete evidence holds without spending a
-  recovery attempt. Implementation and fixture proof remain owed before dispatch
-  or live enablement. This resolution does not settle or replay an old review.
+- **Repair worker capability — settled.** For Build Studio rooms (2026-11-13,
+  WWMD `DI-8172B1A35993`, BI-085A37EC): the build repairs through its own
+  gauntlet repair loop. The failing required checks, their run URLs and a
+  bounded tail of each failing job's log go back to the coding agent (ship ->
+  review -> build). When the repaired build is in ship again with its PR still
+  open, the publisher pushes one DCO-signed follow-up commit whose parent is the
+  PR head. It is a fast-forward and is never forced. Paths the PR changed but
+  the repair no longer touches go back to their merge-base content. A repair
+  that changes nothing is escalated once and is not retried. The PR-level
+  budget is the follow-through record's own (2 per PR), and it carries across
+  republishes. For every other room (WWMD `DI-0EE9FA83598B`): the same loop runs
+  in a Build Studio repair build bound to the PR's branch and head (§3.5). The
+  October alternative, a separate sandbox runtime plus a new publication
+  adapter, is not built.
+- **Infra signal list — settled (WWMD `DI-50FF611567E3`).** Classification
+  reads the failed step from the Actions jobs API (§3.4). The only checked-in
+  list names setup steps, and a test keeps it matched to the workflows. No list
+  of infrastructure-only job or workflow names is kept.
+- **Event delivery to a private install — settled (WWMD `DI-80B30E396AE6`).**
+  The adaptive poll in §3.3 meets AC-1 where webhooks cannot arrive.
 
 ## 9. Implementation comparison and standards (BI-ED7CD0DD)
 

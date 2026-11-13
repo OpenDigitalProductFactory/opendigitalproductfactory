@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const m = vi.hoisted(() => ({ human: vi.fn(), alias: vi.fn(), agent: vi.fn(), room: vi.fn(), item: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { principalAlias: { findFirst: m.alias }, agent: { findUnique: m.agent }, workroom: { findUnique: m.room }, backlogItem: { findFirst: m.item } } }));
+const m = vi.hoisted(() => ({ human: vi.fn(), alias: vi.fn(), agent: vi.fn(), room: vi.fn(), principal: vi.fn(), item: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { principal: { findMany: m.principal }, principalAlias: { findFirst: m.alias }, agent: { findUnique: m.agent }, workroom: { findUnique: m.room }, backlogItem: { findFirst: m.item } } }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: m.human }));
-import { resolveAgentWorkroomAccess, resolveHumanWorkroomAccess } from "./workroom-agent-access.server";
+import { resolveCanonicalWorkroomActorAccess, resolveAgentWorkroomAccess, resolveHumanWorkroomAccess } from "./workroom-agent-access.server";
 const human = { id: "human-row", principalId: "PRN-human", kind: "human", status: "active", sensitivityClearance: ["internal"] };
 const agent = { id: "agent-row", principalId: "PRN-agent", kind: "agent", status: "active", sensitivityClearance: ["internal"] };
 const room = () => ({ id: "selected", requestedByPrincipalId: human.id, createdByPrincipalId: agent.id, leaseHolderPrincipalId: human.id, scopeClaims: [], participants: [], workItem: null });
@@ -168,4 +168,47 @@ it("tells a person outside the room nothing about why", async () => {
   const refused = await resolveAgentWorkroomAccess({ ...input, handover: true });
   expect(refused.decision.level).toBe("none");
   expect(refused).not.toHaveProperty("handoverRefusal");
+});
+
+// Same canonical policy on actual internal principals; no synthetic user or elevated-agent shortcut.
+it("keeps internal agent content and action admission distinct and honors explicit removal", async () => {
+  const actor = { userId: null, agentId: "codex", principalId: agent.id };
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: agent.id, lifecycle: "active", roles: ["observer"] }] });
+  expect((await resolveCanonicalWorkroomActorAccess({ actor, workroomId: "selected", requested: "content" })).decision.level).toBe("content");
+  expect((await resolveCanonicalWorkroomActorAccess({ actor, workroomId: "selected", requested: "action" })).decision.level).toBe("none");
+  expect(m.human).not.toHaveBeenCalled();
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: agent.id, lifecycle: "removed", roles: ["contributor"] }] });
+  expect((await resolveCanonicalWorkroomActorAccess({ actor, workroomId: "selected", requested: "content" })).decision.level).toBe("none");
+  expect((await resolveCanonicalWorkroomActorAccess({ actor: { ...actor, principalId: "foreign" }, workroomId: "selected", requested: "content" })).decision.level).toBe("none");
+});
+it("preserves an admitted service mandate without borrowing human identity or bypassing clearance", async () => {
+  const service = { ...agent, id: "service-row", principalId: "PRN-service", kind: "service" };
+  m.principal.mockResolvedValue([service]);
+  m.room.mockResolvedValue({ ...room(), participants: [{ principalId: service.id, lifecycle: "active", roles: ["contributor"] }] });
+  const input = { actor: { userId: null, agentId: null, principalId: service.id }, workroomId: "selected", requested: "action" as const };
+  expect((await resolveCanonicalWorkroomActorAccess(input)).decision.level).toBe("action");
+  expect(m.human).not.toHaveBeenCalled();
+  m.principal.mockResolvedValue([{ ...service, sensitivityClearance: ["public"] }]);
+  expect((await resolveCanonicalWorkroomActorAccess(input)).decision.reason).toBe("insufficient-clearance");
+  m.principal.mockResolvedValue([human]);
+  expect((await resolveCanonicalWorkroomActorAccess(input)).decision.level).toBe("none");
+  m.principal.mockResolvedValue([service, service]);
+  expect((await resolveCanonicalWorkroomActorAccess(input)).decision.level).toBe("none");
+});
+it("returns the exact transaction-observed identities and room context for a paired assistant", async () => {
+  const tx = { principalAlias: { findFirst: m.alias }, agent: { findUnique: m.agent }, workroom: { findUnique: m.room }, backlogItem: { findFirst: m.item } };
+  const access = await resolveAgentWorkroomAccess(input, tx as never);
+  expect(access).toMatchObject({ decision: { level: "action" }, authorityContext: { humanPrincipal: human, agentPrincipal: agent, room: room(), sensitivityCeiling: "internal" } });
+  expect(m.human).toHaveBeenCalledWith("alice", tx);
+});
+
+it.each([null, "human-row", "PRN-human"])("retains paired actor access when the supplied principal identifies its human (%s)", async principalId => {
+  const actor = { userId: "alice", agentId: "codex", principalId };
+  expect((await resolveCanonicalWorkroomActorAccess({ actor, workroomId: "selected", requested: "action" })).decision.level).toBe("action");
+});
+it.each(["another-principal", "agent-row"])("refuses a paired actor whose supplied human principal conflicts (%s)", async principalId => {
+  const actor = { userId: "alice", agentId: "codex", principalId };
+  const result = await resolveCanonicalWorkroomActorAccess({ actor, workroomId: "selected", requested: "action" });
+  expect(result.decision.level).toBe("none");
+  expect(result.authorityContext).toBeUndefined();
 });

@@ -93,7 +93,13 @@ export type BridgeableDecisionRow = {
   domainClass: string;
   riskTier: string;
   outcomeType: string;
+  /** The kernel's commandment argmax, or null when it abstained. */
   recommendedOptionId: string | null;
+  /**
+   * The option the coworker itself proposed (BI-AE416D75), already validated
+   * against the menu. Absent on rows that predate it and on kernel consults.
+   */
+  proposedOptionId?: string | null;
   options: string[];
   rationale: string | null;
   chosenOptionId: string | null;
@@ -119,7 +125,15 @@ export type DecisionShadowLedgerEntry = {
   autonomyLevel: typeof DECISION_LEDGER_AUTONOMY_LEVEL;
   proposedDecision: {
     outcomeType: string;
+    /**
+     * The recommendation trust is measured against: the coworker's own
+     * proposal when it made one, else the kernel's pick, else null.
+     */
     recommendedOptionId: string | null;
+    /** Whose recommendation that is. Null when there is none. */
+    recommendedBy: DecisionRecommender | null;
+    /** The kernel's pick, kept separately so it is never relabelled as the coworker's. */
+    kernelRecommendedOptionId: string | null;
     options: string[];
   };
   rationale: string | null;
@@ -141,6 +155,75 @@ export type DecisionShadowLedgerEntry = {
     subject: { kind: string; ref: string } | null;
   };
 };
+
+export type DecisionRecommender = "coworker" | "kernel";
+
+/** The resolution the ledger records, from whichever writer recorded it. */
+type LedgerResolution = {
+  chosenOptionId: string | null;
+  disposition: DecisionDisposition;
+  resolvedBy: DecisionResolver;
+  resolvedAt: string;
+  agreement: boolean | null;
+};
+
+/**
+ * A person's answer to an escalated decision (decision-perspective.ts and
+ * org-decision-capture.ts write `type: "escalation"`), read as a human
+ * resolution only when it names a chosen option. An answer with no chosen
+ * option says nothing about which option the person picked.
+ */
+function readEscalationAnswer(value: unknown): { chosenOptionId: string; resolvedAt: string } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const answer = value as Record<string, unknown>;
+  if (answer.type !== "escalation") return null;
+  if (typeof answer.resolverUserId !== "string" || !answer.resolverUserId) return null;
+  if (typeof answer.chosenOptionId !== "string" || !answer.chosenOptionId) return null;
+  if (typeof answer.capturedAt !== "string" || Number.isNaN(Date.parse(answer.capturedAt))) return null;
+  return { chosenOptionId: answer.chosenOptionId, resolvedAt: answer.capturedAt };
+}
+
+function readLedgerResolution(
+  humanOutcome: unknown,
+  recommendation: { optionId: string | null; by: DecisionRecommender | null },
+): LedgerResolution | null {
+  const recorded = readRecordedResolution(humanOutcome);
+  if (recorded) {
+    // A kernel-consult resolution compares against the kernel's pick. When the
+    // coworker proposed something else, measure the coworker against its own
+    // proposal, never against the kernel's.
+    if (recommendation.by === "coworker" && recorded.chosenOptionId !== null) {
+      const agreement = recorded.chosenOptionId === recommendation.optionId;
+      return {
+        chosenOptionId: recorded.chosenOptionId,
+        disposition: agreement ? "followed" : "overridden",
+        resolvedBy: recorded.resolvedBy,
+        resolvedAt: recorded.resolvedAt,
+        agreement,
+      };
+    }
+    return {
+      chosenOptionId: recorded.chosenOptionId,
+      disposition: recorded.disposition,
+      resolvedBy: recorded.resolvedBy,
+      resolvedAt: recorded.resolvedAt,
+      agreement: recorded.agreement,
+    };
+  }
+  // An escalation answer is compared only with a coworker's proposal: the
+  // kernel escalated, so it made no pick for the answer to agree with.
+  if (recommendation.by !== "coworker") return null;
+  const answer = readEscalationAnswer(humanOutcome);
+  if (!answer) return null;
+  const agreement = answer.chosenOptionId === recommendation.optionId;
+  return {
+    chosenOptionId: answer.chosenOptionId,
+    disposition: agreement ? "followed" : "overridden",
+    resolvedBy: "human",
+    resolvedAt: answer.resolvedAt,
+    agreement,
+  };
+}
 
 export type DecisionShadowLedgerBuild =
   | { built: true; entry: DecisionShadowLedgerEntry }
@@ -167,7 +250,13 @@ export function buildDecisionShadowLedgerEntry(row: BridgeableDecisionRow): Deci
   const key = mapDecisionTrustKey(row.domainClass, row.riskTier);
   if (!key.mapped) return { built: false, reason: key.reason, detail: key.detail };
 
-  const resolution = readRecordedResolution(row.humanOutcome);
+  const proposed = row.proposedOptionId?.trim() || null;
+  const recommendation: { optionId: string | null; by: DecisionRecommender | null } = proposed
+    ? { optionId: proposed, by: "coworker" }
+    : row.recommendedOptionId
+      ? { optionId: row.recommendedOptionId, by: "kernel" }
+      : { optionId: null, by: null };
+  const resolution = readLedgerResolution(row.humanOutcome, recommendation);
 
   return {
     built: true,
@@ -181,7 +270,9 @@ export function buildDecisionShadowLedgerEntry(row: BridgeableDecisionRow): Deci
       autonomyLevel: DECISION_LEDGER_AUTONOMY_LEVEL,
       proposedDecision: {
         outcomeType: row.outcomeType,
-        recommendedOptionId: row.recommendedOptionId,
+        recommendedOptionId: recommendation.optionId,
+        recommendedBy: recommendation.by,
+        kernelRecommendedOptionId: row.recommendedOptionId,
         options: row.options,
       },
       rationale: row.rationale,
