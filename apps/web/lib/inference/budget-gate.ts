@@ -188,13 +188,13 @@ type ZeroMarginalReader = Pick<Prisma.TransactionClient, "modelProvider"> & Part
  * cash only and neither counts nor refuses them (WWMD DI-223FEAA53080).
  */
 async function zeroMarginalProviderIds(database: ZeroMarginalReader = prisma): Promise<string[]> {
-  const [rows, covered] = await Promise.all([
-    database.modelProvider.findMany({
-      where: { OR: [{ costModel: "compute" }, { costModel: "token", inputPricePerMToken: 0, outputPricePerMToken: 0 }] },
-      select: { providerId: true },
-    }),
-    database.supplierContract ? subscriptionCoveredProviderIds(database as never) : Promise.resolve([] as string[]),
-  ]);
+  // Sequential, not Promise.all: `database` may be an interactive transaction,
+  // which runs one statement at a time on its connection.
+  const rows = await database.modelProvider.findMany({
+    where: { OR: [{ costModel: "compute" }, { costModel: "token", inputPricePerMToken: 0, outputPricePerMToken: 0 }] },
+    select: { providerId: true },
+  });
+  const covered = database.supplierContract ? await subscriptionCoveredProviderIds(database as never) : [];
   return [...new Set([...rows.map((row) => row.providerId), ...covered])];
 }
 
