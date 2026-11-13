@@ -5,9 +5,38 @@
 ```
 pnpm pr:health           # the PR for the current branch
 pnpm pr:health 2427      # a specific PR
+pnpm pr:health 2427 --wait --timeout 30   # poll until terminal (default 30 min, --interval 30 s)
 ```
 
-Exit `0` = **READY**, `1` = **NOT READY** (blockers enumerated), `2` = usage/IO error.
+The first line is the verdict word and the exit code says the same thing (BI-F197C997):
+
+| Exit | Verdict | Meaning |
+|---|---|---|
+| `0` | **READY** / **MERGED** | Every check terminal and green, mergeable, zero unresolved threads — or already merged. |
+| `75` | **WAITING** | Only pending checks stand between the PR and READY. Carries an ETA from the pending workflows' recent successful runs on `main` when one is known. Not a failure. |
+| `1` | **FAILED** | A check failed; the line names it. Wins over every other state. |
+| `2` | **BLOCKED-ACTION** | Someone must act — conflict, unresolved thread, draft, base not `main`, missing or rejected local-CI evidence (the PR author), or a closed PR (its owner). The line names the actor. |
+| `3` | **UNREADABLE** | Usage error, or GitHub could not be read. |
+
+READY requires observed PR identity/state, source head/base, draft and file
+metadata, successfully observed check JSON and complete review-thread pages.
+Missing or malformed output, transport failures, GraphQL errors and
+incomplete pages return UNREADABLE/3, including in wait mode. They are not empty
+successful results. A genuine observed empty result remains valid. Documented
+nonzero check responses still preserve failed and pending verdicts when their
+structured contents support that outcome.
+
+Review threads use the GitHub CLI's native `--paginate --slurp` flow and validate
+each page, including its completion marker. An unresolved thread beyond the
+first 100 is therefore included. This reads evidence; it adds no merge authority
+and does not publish a replacement status check.
+
+MERGED uses GitHub's current PR metadata and exits0 without rereading readiness
+checks or threads. Its report labels those observations as not read. A temporary
+failure of an unnecessary readiness read cannot turn a confirmed merge into
+unfinished work, and the terminal report does not qualify a new publication.
+
+Before BI-F197C997, pending checks exited `1` like a failure, and agents read "still running" as "failed" 154 times in 15 threads. `--wait` replaces their polling with one bounded call: it returns the first terminal verdict, or `75` with a timeout note if checks are still running when the timeout passes.
 
 ## Why it exists
 
@@ -63,13 +92,16 @@ unstaged + untracked, vs the `origin/main` merge base):
 
 - required attestation trailers for this diff shape (Process-Spine, Design
   Grounding, UX-Fit, Seed-Fit body line, Data-Impact manifest,
-  Convergence-Impact decision);
+  Convergence-Impact decision, Docs Impact);
 - module-size caps for touched baselined files and budgets for new modules;
 - shrink-only prose/style ratchet values frozen for touched files;
 - derived artifacts to regenerate in the same change;
 - route budgets: absolute budgets + the four generated companions for
   net-new routes, frozen word/structure budgets for pre-existing ones;
 - migration immutability and safety-attestation contracts.
+- the published docs the doc-impact graph links to the changed files, each
+  `pending` or already `updated`, plus the Docs Impact trailer while any is
+  pending (BI-9B17E889). A Workroom's edit-path claim carries the same list.
 
 Run it before writing code and again before pushing; `--json` emits the
 machine-readable pack (`scripts/lib/gate-context.mjs` is the single source —
@@ -127,6 +159,14 @@ and accepted initial-publication evidence for its published source. A qualified
 canonical record or a previously allowed recorded override can anchor it. An
 open PR by itself, a new correction record or a prose trailer cannot. Initial
 publication keeps its existing requirements.
+
+After an interrupted push, a retained correction may recover its original
+anchor even when its affected-check proof has expired. The verifier qualifies
+that retained record at its original completion time, checks its repository,
+branch and PR, and rederives both Git trees. GitHub must still name the
+record's candidate, its original anchor, or the published head bound when
+that record completed. Recovery preserves every timestamp and requires fresh
+affected checks; it does not renew the expired proof.
 
 Unchanged bytes or a commit-message correction execute no source suite. Changed
 bytes use the existing affected-test/package planner and execute its checks;
@@ -186,7 +226,14 @@ is terminated, recovery is a separately authorized, auditable operation.
 
 ## Tests & CI
 
-The pure verdict (`evaluatePrHealth()`) is unit-tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs) and runs in CI as the **PR Health Logic** job (`node --test`). The script's GitHub I/O is exercised by running it against live PRs; it is not run in CI (it would be circular).
+The pure verdict (`evaluatePrHealth()`) and controlled CLI observation failures
+are tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs),
+which runs as the **PR Health Logic** job (`node --test`). The CLI fixtures run
+the actual command with child-only synthetic GitHub responses; they make no
+network request and use no credential. They cover unreadable observations,
+pagination, real failed/pending responses, valid empty results and wait exits.
+Read-only live-PR verification remains separate; fixture passes do not prove
+GitHub connectivity or the state of a real PR.
 
 **Hosted production-build profile**
 

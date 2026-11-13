@@ -14,6 +14,7 @@
 // the gauntlet on the tree that will actually be published. A conflict is never
 // resolved here: the build stays in ship and the conflicted files are recorded.
 
+import { errorTail } from "./error-tail";
 import type { BuildBranchRefreshOutcome } from "./sandbox/build-branch";
 import type { SandboxSourceCurrencySnapshot } from "./sandbox/sandbox-source-currency";
 
@@ -52,22 +53,30 @@ function storedSourceCurrency(state: unknown): SandboxSourceCurrencySnapshot | n
 }
 
 /**
- * Whether a stored snapshot is the publication refusal this refresh exists for:
- * local source work AND missing upstream commits, on a clean tree. A dirty or
- * unknown snapshot is a different problem and is left to its own recovery.
+ * Whether a stored snapshot is a publication refusal this refresh can clear: a
+ * clean tree that is missing upstream commits, with local work (diverged) or
+ * without (behind). Both are cleared by the same rebase. A dirty or unknown
+ * snapshot is a different problem and is left to its own recovery.
  */
 export function isRefreshableDivergence(snapshot: SandboxSourceCurrencySnapshot | null): boolean {
-  return snapshot?.status === "diverged" && snapshot.recommendedAction === "pause" && snapshot.dirty !== true;
+  if (!snapshot || snapshot.dirty === true) return false;
+  return (snapshot.status === "diverged" && snapshot.recommendedAction === "pause")
+    || (snapshot.status === "behind" && snapshot.recommendedAction === "auto-refresh");
 }
 
 export async function refreshDivergedShipBuild(
   buildId: string,
   deps: ShipSourceRefreshDeps = defaultDeps(),
+  /**
+   * `force`: the PR attempt itself was refused as diverged (BI-34A05E78), which
+   * is fresher evidence than a stored snapshot that may predate main moving.
+   */
+  opts: { force?: boolean } = {},
 ): Promise<ShipSourceRefreshResult> {
   const build = await deps.loadBuild(buildId);
   if (!build || build.phase !== "ship") return "not-ship";
   const snapshot = storedSourceCurrency(build.buildExecState);
-  if (!isRefreshableDivergence(snapshot)) return "not-diverged";
+  if (!opts.force && !isRefreshableDivergence(snapshot)) return "not-diverged";
 
   const last = await deps.lastAttemptAt(buildId);
   if (last && deps.now().getTime() - last.getTime() < SHIP_SOURCE_REFRESH_RETRY_MS) return "recently-attempted";
@@ -75,7 +84,7 @@ export async function refreshDivergedShipBuild(
   const before = `${snapshot?.aheadBy ?? "?"} ahead / ${snapshot?.behindBy ?? "?"} behind ${snapshot?.targetRef ?? "its base"}`;
   const outcome = await deps.refresh(buildId).catch((err: unknown): BuildBranchRefreshOutcome => ({
     status: "unknown",
-    reason: err instanceof Error ? err.message.slice(0, 300) : String(err),
+    reason: errorTail(err),
   }));
 
   if (outcome.status === "conflict") {
@@ -110,20 +119,36 @@ export async function refreshDivergedShipBuild(
 
 /**
  * The ship reconciler's step for a build not yet deployed: a diverged build is
- * refreshed first (and leaves ship for review), anything else gets the hourly
- * PR retry. Returns true when the build left ship, so the caller skips it.
+ * refreshed first (and leaves ship for review). Anything else gets the PR
+ * retry, and a refused retry is classified and remedied (BI-34A05E78): retries
+ * back off while nothing can move the build, and an escalated build is not
+ * retried again. Returns true when the build is done with this tick (it left
+ * ship or was escalated), so the caller skips it.
  */
+export type ShipPrStepDeps = {
+  refresh?: (buildId: string) => Promise<ShipSourceRefreshResult>;
+  retry?: (buildId: string, logger: Pick<Console, "error">, retryIntervalMs: number) => Promise<"opened" | "blocked" | "skipped">;
+  remedy?: Pick<typeof import("./ship-refusal-remedy"), "loadShipRefusalHistory" | "remedyRefusedShipBuild" | "shipPrRetryIntervalMs">;
+};
+
 export async function refreshOrRetryShipBuildPr(
   buildId: string,
   logger: Pick<Console, "log" | "error">,
+  deps: ShipPrStepDeps = {},
 ): Promise<boolean> {
-  if ((await refreshDivergedShipBuild(buildId)) === "returned-to-review") {
+  if ((await (deps.refresh ?? refreshDivergedShipBuild)(buildId)) === "returned-to-review") {
     logger.log(`[auto-complete] ${buildId} refreshed onto upstream main and returned to review`);
     return true;
   }
-  const { retryPrForShipBuild } = await import("./auto-open-build-pr");
-  await retryPrForShipBuild(buildId, logger);
-  return false;
+  const remedy = deps.remedy ?? (await import("./ship-refusal-remedy"));
+  const retry = deps.retry ?? (await import("./auto-open-build-pr")).retryPrForShipBuild;
+  const history = await remedy.loadShipRefusalHistory(buildId);
+  if (history.some((h) => h.action === "escalate")) return true;
+  if ((await retry(buildId, logger, remedy.shipPrRetryIntervalMs(history))) !== "blocked") return false;
+  const outcome = await remedy.remedyRefusedShipBuild(buildId);
+  const moved = outcome !== "wait" && outcome !== "none";
+  if (moved) logger.log(`[auto-complete] ${buildId} PR refused; remedy: ${outcome}`);
+  return moved;
 }
 
 function defaultDeps(): ShipSourceRefreshDeps {

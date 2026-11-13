@@ -8,6 +8,24 @@ import {
 const NOW = Date.parse("2026-07-17T12:00:00.000Z");
 
 describe("capacityRoutingExclusionReason", () => {
+  it("qualifies only the exact checked Responses candidate while preserving CLI/other-model and hard holds", () => {
+    const checked = { providerId: "chatgpt", providerConnectionId: "provider-default-chatgpt", providerConnectionVersion: "a".repeat(64), modelId: "tested" };
+    const other = { ...checked, modelId: "untested" }, cli = { ...checked, providerId: "codex", providerConnectionId: "provider-default-codex" };
+    const local = { providerId: "local", modelId: "local" };
+    const capacity = new Map<string, import("./capacity-routing-exclude").CapacitySnapshot>([
+      ["chatgpt", { state: "quota_resets_at", retryAtMs: NOW + 7 * 86400_000 }],
+      ["codex", { state: "quota_resets_at", retryAtMs: NOW + 7 * 86400_000 }],
+      ["chatgpt:account:provider-default-chatgpt", { state: "available", executionProof: { version: 1, providerId: "chatgpt", connectionId: checked.providerConnectionId, modelId: "tested", accountVersion: checked.providerConnectionVersion,
+        credentialRevision: "b".repeat(64), modelRevision: "c".repeat(64), endpointRevision: "d".repeat(64), quotaRevision: "e".repeat(64), adapter: "responses", observedAt: NOW, expiresAt: NOW + 3600_000 } }],
+    ]);
+    const run = () => applyCapacitySoftExclusion({ endpoints: [checked, other, cli, local], capacityByProvider: capacity, nowMs: NOW });
+    expect(run().eligible).toEqual([checked, local]);
+    capacity.set("chatgpt", { state: "billing_action_required" });
+    expect(run().eligible).toEqual([local]);
+    capacity.set("chatgpt", { state: "quota_resets_at", retryAtMs: NOW + 86400_000 });
+    checked.providerConnectionVersion = "changed";
+    expect(run().eligible).toEqual([local]);
+  });
   it("isolates account health while retaining shared quota restrictions", () => {
     const endpoints = [{ providerId: "openai", providerConnectionId: "a" }, { providerId: "openai", providerConnectionId: "b" }];
     const result = applyCapacitySoftExclusion({ endpoints, capacityByProvider: new Map([["openai:account:a", { state: "reauth_required" }]]), nowMs: NOW });
@@ -118,6 +136,48 @@ describe("applyCapacitySoftExclusion", () => {
     expect(r.excluded).toHaveLength(0);
   });
 
+  // BI-5A6C4011: on 2026-11-07 every remaining candidate was blocked, the
+  // fallback re-admitted them all, and routing chose the API key that had said
+  // "no access until 2026-12-01" ~120 times (every call HTTP 400).
+  it("never re-admits a provider that said no until a known date or rejected its credential", () => {
+    const pool = [
+      { providerId: "anthropic", id: "a" },
+      { providerId: "xai", id: "x" },
+      { providerId: "billing", id: "b" },
+    ];
+    const map = new Map([
+      ["anthropic", { state: "quota_resets_at", retryAtMs: NOW + 18 * 86400_000 }],
+      ["xai", { state: "reauth_required" }],
+      ["billing", { state: "billing_action_required" }],
+    ]);
+    const r = applyCapacitySoftExclusion({ endpoints: pool, capacityByProvider: map, nowMs: NOW });
+    expect(r.eligible).toEqual([]);
+    expect(r.excluded.map((e) => e.endpoint.id)).toEqual(["a", "x", "b"]);
+  });
+
+  it("re-admits only the soft-blocked peers when every candidate is blocked", () => {
+    const pool = [
+      { providerId: "anthropic", id: "a" },
+      { providerId: "codex", id: "c" },
+      { providerId: "local", id: "l" },
+    ];
+    const map = new Map([
+      ["anthropic", { state: "quota_resets_at", retryAtMs: NOW + 86400_000 }],
+      ["codex", { state: "rate_limited", retryAtMs: NOW + 60_000 }],
+      ["local", { state: "provider_degraded" }],
+    ]);
+    const r = applyCapacitySoftExclusion({ endpoints: pool, capacityByProvider: map, nowMs: NOW });
+    expect(r.eligible.map((e) => e.id)).toEqual(["c", "l"]);
+    expect(r.excluded.map((e) => e.endpoint.id)).toEqual(["a"]);
+  });
+
+  it("keeps a usage limit with no known reset soft, so a sole provider is not locked out", () => {
+    const map = new Map([["codex", { state: "quota_resets_at", retryAtMs: null }]]);
+    const r = applyCapacitySoftExclusion({ endpoints: [eps[0]!], capacityByProvider: map, nowMs: NOW });
+    expect(r.eligible).toHaveLength(1);
+    expect(r.excluded).toHaveLength(0);
+  });
+
   it("leaves everyone when capacity map is empty", () => {
     const r = applyCapacitySoftExclusion({
       endpoints: eps,
@@ -126,5 +186,20 @@ describe("applyCapacitySoftExclusion", () => {
     });
     expect(r.eligible).toHaveLength(2);
     expect(r.excluded).toHaveLength(0);
+  });
+});
+
+// BI-F98BBE4F: a limited subscription is re-enabled the moment its limit
+// clears, with no job or operator action in between.
+describe("a limited subscription returns as soon as its limit clears", () => {
+  const T = Date.parse("2026-11-12T16:00:00Z");
+  const endpoints = [{ providerId: "anthropic-sub" }, { providerId: "local" }];
+  it.each(["quota_resets_at", "rate_limited"])("%s: excluded until retryAt, routable again at retryAt", (state) => {
+    const capacityByProvider = new Map([["anthropic-sub", { state, retryAtMs: T }]]);
+    const before = applyCapacitySoftExclusion({ endpoints, capacityByProvider, nowMs: T - 1 });
+    expect(before.eligible.map((e) => e.providerId)).toEqual(["local"]);
+    const at = applyCapacitySoftExclusion({ endpoints, capacityByProvider, nowMs: T });
+    expect(at.eligible.map((e) => e.providerId)).toEqual(["anthropic-sub", "local"]);
+    expect(at.excluded).toEqual([]);
   });
 });

@@ -1,5 +1,50 @@
 import { readFileSync } from "node:fs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { sanitizeForLog } from "./lib/safe-log.mjs";
+
+function safeDiagnostic(value, token, limit) {
+  if (typeof value !== "string") return "";
+  const redacted = value.replaceAll(token, "[REDACTED]")
+    .replace(/\b(?:bearer|basic)\s+[A-Za-z0-9+/_=.-]+/gi, "[REDACTED]")
+    .replace(/\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)/g, "[REDACTED]")
+    .replace(/\b(?:authorization|cookie|set-cookie|token|access_token|password|secret)["']?\s*[:=]\s*["']?[^\s"',;]+/gi, "[REDACTED]");
+  return sanitizeForLog(redacted).slice(0, limit);
+}
+
+async function githubReadDiagnostic(response, token) {
+  const details = [];
+  for (const name of ["x-github-request-id", "x-ratelimit-remaining", "x-ratelimit-reset", "retry-after"]) {
+    try {
+      const value = safeDiagnostic(response.headers?.get(name), token, 120);
+      if (value) details.push(`${name}=${value}`);
+    } catch { /* Optional diagnostics never replace the original refusal. */ }
+  }
+  let reader, timer;
+  try {
+    reader = response.body?.getReader();
+    if (reader) {
+      const capture = async () => {
+        const decoder = new TextDecoder();
+        let text = "", bytes = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) return text + decoder.decode();
+          bytes += value.byteLength;
+          if (bytes > 8192) return "";
+          text += decoder.decode(value, { stream: true });
+        }
+      };
+      const text = await Promise.race([capture(), new Promise(resolve => { timer = setTimeout(() => resolve(""), 1000); })]);
+      const message = safeDiagnostic(JSON.parse(text).message, token, 500);
+      if (message) details.unshift(`message=${message}`);
+    }
+  } catch { /* Missing, malformed, oversized or unreadable body: keep status and safe headers. */ }
+  finally {
+    clearTimeout(timer);
+    try { reader?.cancel().catch(() => {}); } catch { /* Cancellation cannot erase the refusal. */ }
+  }
+  return details.length ? ` ${details.join("; ")}` : "";
+}
 
 export function reviewHeads(event, entries = []) {
   if (event.pull_request?.head?.sha) {
@@ -64,7 +109,7 @@ export async function checkFailureReadiness({ event, repository, token, publishe
     const response = await fetchImpl(`https://api.github.com/${path}`, { method: body ? "POST" : "GET",
       headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
       ...(body ? { body: JSON.stringify(body) } : {}) });
-    if (!response.ok) throw new Error(`GitHub evidence read failed (${response.status}); no approval inferred.`);
+    if (!response.ok) throw new Error(`GitHub evidence read failed (${response.status}); no approval inferred.${await githubReadDiagnostic(response, token)}`);
     const value = await response.json();
     if (value.errors) throw new Error("GitHub queue evidence is unavailable.");
     return value;

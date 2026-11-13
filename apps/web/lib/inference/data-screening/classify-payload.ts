@@ -12,6 +12,7 @@ import type {
   InferencePayloadMatch,
   InferencePayloadSensitivity,
 } from "./types";
+import { isPublicSourceOnlyEvidence, isPublicSourceProvenance, sourceCodeExemptFromConfidential } from "./source-code-provenance";
 
 type TextProbe = {
   path: string;
@@ -91,6 +92,14 @@ const INVOICE_CURRENCY_AMOUNT_PATTERN = new RegExp(
   "iu",
 );
 
+// BI-BC04FEBF: source code has no blank lines between statements, so a whole
+// diff hunk is one "paragraph". There, an invoice's value must sit within this
+// many lines of the mention, as it does in a real fixture or seed record.
+const SOURCE_INVOICE_RECORD_LINES = 3;
+
+const invoiceValueIn = (record: string) =>
+  INVOICE_LABELLED_VALUE_PATTERN.test(record) || INVOICE_CURRENCY_AMOUNT_PATTERN.test(record);
+
 const PAYMENT_RECORD_TEXT_MATCHER: Pick<RegExp, "test"> = {
   test(text) {
     if (NON_INVOICE_FINANCE_TEXT_PATTERN.test(text)) return true;
@@ -103,8 +112,11 @@ const PAYMENT_RECORD_TEXT_MATCHER: Pick<RegExp, "test"> = {
         hasInvoice = true;
         if (INVOICE_REFERENCE_PATTERN.test(details)) return true;
       }
-      return hasInvoice && (INVOICE_LABELLED_VALUE_PATTERN.test(paragraph)
-        || INVOICE_CURRENCY_AMOUNT_PATTERN.test(paragraph));
+      if (!hasInvoice) return false;
+      if (!SOURCE_CODE_VALUE_PATTERN.test(paragraph)) return invoiceValueIn(paragraph);
+      const lines = paragraph.split(/\r?\n/);
+      return lines.some((line, index) => /\binvoice\b/i.test(line) && invoiceValueIn(
+        lines.slice(Math.max(0, index - SOURCE_INVOICE_RECORD_LINES), index + SOURCE_INVOICE_RECORD_LINES + 1).join("\n")));
     });
   },
 };
@@ -310,6 +322,7 @@ const AMBIGUOUS_REASONS: ReadonlySet<string> = new Set(
   CLASS_RULES.filter((rule) => rule.ambiguousVocabulary).map((rule) => rule.reason),
 );
 
+// `source-code` only while its repository is unproven or private (BI-FC94F754).
 const CONFIDENTIAL_CLASSES = new Set<InferenceDataClass>([
   "customer-records",
   "source-code",
@@ -379,6 +392,7 @@ export function classifyInferencePayload(
   );
   const overallSensitivity = inferOverallSensitivity(
     dataMatches, input.governedData, restrictedCorroborated,
+    isPublicSourceProvenance(input.sourceCodeProvenance),
   );
   const continuations = input.messages.map(message => localNativeContinuationFingerprint(message) ?? null);
   const inputHash = hashCanonical({
@@ -389,6 +403,8 @@ export function classifyInferencePayload(
     tools: input.tools ?? [],
     taskType: input.taskType ?? null,
     governedData: input.governedData ?? [],
+    // Provenance changes the verdict, so it is part of what was screened.
+    ...(input.sourceCodeProvenance ? { sourceCodeProvenance: input.sourceCodeProvenance } : {}),
   });
 
   return {
@@ -740,6 +756,7 @@ function inferOverallSensitivity(
   dataMatches: readonly InferencePayloadMatch[],
   governedData: readonly GovernedPayloadHint[] | undefined,
   restrictedCorroborated: boolean,
+  publicSource: boolean,
 ): InferencePayloadSensitivity {
   // The same data-only evidence and corroboration result drive both this
   // sensitivity and the PDP class set. Do not re-derive either downstream.
@@ -749,14 +766,16 @@ function inferOverallSensitivity(
   }
 
   const dataClasses = dataMatches.map((match) => match.dataClass);
+  // Public-repository code no longer raises the payload (BI-FC94F754).
   if (
     restrictedMatches.length > 0 ||
     governedData?.some((hint) => hint.sensitivity === "confidential") ||
-    dataClasses.some((dataClass) => CONFIDENTIAL_CLASSES.has(dataClass))
+    dataClasses.some((dataClass) =>
+      CONFIDENTIAL_CLASSES.has(dataClass) && !sourceCodeExemptFromConfidential(dataClass, publicSource))
   ) {
     return "confidential";
   }
-  return "internal";
+  return isPublicSourceOnlyEvidence({ publicSource, dataClasses, governedData }) ? "public" : "internal";
 }
 
 function hashCanonical(value: unknown): string {

@@ -20,6 +20,7 @@
  * this is the second such source rather than a new mechanism.
  */
 
+import { loadRoomItemOutcome, roomOutcome, type RoomItemOutcomeClient } from "./room-item-outcome";
 import { loadContentAuthorizedWorkroomRecovery, type WorkroomHandoffRecoveryLoader, type WorkroomBlockerContentAuthorizer } from "@/lib/work-capsules/workroom-recovery-projection";
 import { buildWorkCaseDetail } from "./case-read-model";
 import { encodeWorkCaseKey } from "./case-key";
@@ -60,7 +61,7 @@ export type WorkroomOnlyPrismaClient = {
    * throwing. Same guard `canonical-case-key.ts` applies.
    */
   workroom: { findFirst?(args: unknown): Promise<WorkroomOnlyRecord | null> };
-} & WorkroomExecutionClient;
+} & WorkroomExecutionClient & RoomItemOutcomeClient;
 
 const SOURCE_TYPE = "work-capsule";
 
@@ -163,7 +164,7 @@ export async function loadWorkroomOnlyCaseDetail({
     boundary: projectDeclaredBoundary({
       claim: boundaryClaim,
       fallbackPurpose: objective,
-      fallbackOutcome: objective,
+      fallbackOutcome: roomOutcome({ itemOutcome: await loadRoomItemOutcome(prismaClient, room.backlogItemId), objective }),
       sourceRefs: detail.summary.sourceRefs,
     }),
     participants: [],

@@ -1,24 +1,22 @@
-// The flow graph's new home (BI-8875C9DF, GPP Phase 3c PR-3c-1). Plan:
-// docs/superpowers/plans/2026-10-02-gpp-phase-3c-drive-graph-execution.md
-// (PR-3c-1, work-shape-flow-graph.ts): a move, not a rewrite; interpreter.ts
-// re-exports the moved names; and the module's only import, element-ids.ts,
-// has no runtime dependency on the compiler.
+// BI-FCDCAE98: the interpreter and compatibility paths reach the same installed
+// graph. Its pure identity/diagnostic dependency closure stays compiler-free.
 
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import * as interpreter from "@/lib/gpp/shape-language/interpreter";
+import * as interpreter from "@dpf/validators/gpp/interpreter";
 
-import * as flowGraph from "./work-shape-flow-graph";
+import * as flowGraph from "@dpf/validators/workroom/flow-graph";
 
-const WEB = join(__dirname, "..", "..");
+const KERNEL = join(__dirname, "..", "..", "..", "..", "packages", "validators", "src");
 
-/** The module specifiers a source file imports at runtime (type-only imports excluded). */
+/** Runtime imports/re-exports, including the bridges that replaced local bodies. */
 function runtimeImports(relativePath: string): string[] {
-  const source = readFileSync(join(WEB, relativePath), "utf8");
-  return [...source.matchAll(/^import\s+(?!type\b)[^;]*?from\s+"([^"]+)";/gms)].map((match) => match[1]!);
+  const source = readFileSync(isAbsolute(relativePath) ? relativePath : join(KERNEL, relativePath), "utf8");
+  return [...source.matchAll(/^(?:import|export)\s+(?!type\b)[^;]*?from\s+"([^"]+)";/gms)].map((match) => match[1]!);
 }
 
 describe("work-shape-flow-graph.ts", () => {
@@ -28,10 +26,18 @@ describe("work-shape-flow-graph.ts", () => {
     expect(interpreter.backwardReach).toBe(flowGraph.backwardReach);
   });
 
-  it("imports only element-ids, whose runtime dependencies are plain constants: no schema, resolver or design rule", () => {
-    expect(runtimeImports("lib/work-management/work-shape-flow-graph.ts")).toEqual(["@/lib/gpp/shape-language/element-ids"]);
-    expect(runtimeImports("lib/gpp/shape-language/element-ids.ts")).toEqual(["./diagnostics"]);
-    expect(runtimeImports("lib/gpp/shape-language/diagnostics.ts")).toEqual(["./executable-constructs"]);
-    expect(runtimeImports("lib/gpp/shape-language/executable-constructs.ts")).toEqual([]);
+  it("bridges to the installed graph whose identity closure has no schema, resolver or design rule", () => {
+    const graph = "@opendigitalproductfactory/dpf-workroom/flow-graph";
+    const ids = "@opendigitalproductfactory/dpf-workroom/process/element-ids";
+    const diagnostics = "@opendigitalproductfactory/dpf-workroom/process/diagnostics";
+    const constructs = "@opendigitalproductfactory/dpf-workroom/process/executable-constructs";
+    expect(runtimeImports("workroom/flow-graph.ts")).toEqual([graph]);
+    expect(runtimeImports("gpp/element-ids.ts")).toEqual([ids]);
+    expect(runtimeImports("gpp/diagnostics.ts")).toEqual([diagnostics]);
+    expect(runtimeImports("gpp/executable-constructs.ts")).toEqual([constructs]);
+    expect(runtimeImports(fileURLToPath(import.meta.resolve(graph)))).toEqual(["../gpp/element-ids.js"]);
+    expect(runtimeImports(fileURLToPath(import.meta.resolve(ids)))).toEqual(["./diagnostics.js"]);
+    expect(runtimeImports(fileURLToPath(import.meta.resolve(diagnostics)))).toEqual(["./executable-constructs.js"]);
+    expect(runtimeImports(fileURLToPath(import.meta.resolve(constructs)))).toEqual([]);
   });
 });

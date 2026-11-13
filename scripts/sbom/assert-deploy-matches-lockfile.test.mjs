@@ -171,3 +171,31 @@ test("a workspace package must match its local version", () => {
 test("an empty or missing tree yields nothing to pass", () => {
   assert.deepEqual(listInstalledPackages(join(tmpdir(), "deploy-lockfile-does-not-exist")), []);
 });
+
+function fileArchiveFixture(root, kind = "dependencies", integrity = "sha512-pinned") {
+  const archive = "@scope/kernel@file:vendor/kernel.tgz";
+  const declaration = `  .:\n    ${kind}:\n      '@scope/kernel':\n        specifier: file:vendor/kernel.tgz\n        version: file:vendor/kernel.tgz`;
+  write(root, "pnpm-lock.yaml", LOCKFILE.replace("  .: {}", declaration)
+    .replace("packages:\n", `packages:\n\n  '${archive}':\n    resolution: {integrity: ${integrity}, tarball: file:vendor/kernel.tgz}\n    version: 1.2.3\n`)
+    .replace("snapshots:\n", `snapshots:\n\n  '${archive}': {}\n`));
+}
+test("deploy admits exact locked root production archives retained by pnpm", () => {
+  const root = workspace(); try {
+    fileArchiveFixture(root);
+    const allowed = allowedForImporter(root, "services/svc");
+    assert.equal(findUnlockedPackages([{name:"@scope/kernel",version:"1.2.3",path:"fixture"}], allowed).problems.length, 0);
+    assert.equal(findUnlockedPackages([{name:"@scope/kernel",version:"9.9.9",path:"fixture"}], allowed).problems.length, 1);
+  } finally { rmSync(root, {recursive:true,force:true}); }
+});
+test("file development archives do not become production allowances", () => {
+  const root = workspace(); try {
+    fileArchiveFixture(root, "devDependencies");
+    assert.equal(findUnlockedPackages([{name:"@scope/kernel",version:"1.2.3",path:"fixture"}], allowedForImporter(root,"services/svc")).problems.length,1);
+  } finally { rmSync(root, {recursive:true,force:true}); }
+});
+test("file archive allowance requires matching locked resolution integrity", () => {
+  const root = workspace(); try {
+    fileArchiveFixture(root, "dependencies", "missing");
+    assert.throws(()=>allowedForImporter(root,"services/svc"), /file archive.*integrity/i);
+  } finally { rmSync(root, {recursive:true,force:true}); }
+});

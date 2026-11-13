@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/coworker-record/KnowledgeCorpusPanel.tsx"
+    ]
+  },
+  "decidedOption": "identity-page-section",
+  "decisionInteractionId": "DI-603A4F89F105",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "identity-page-section",
+      "grant-list-rows",
+      "new-corpus-dashboard"
+    ]
+  },
+  "authority": "BI-825D3487 approved design (docs/superpowers/specs/2026-10-28-corpus-scoped-read-grants-design.md, spec-approval and architecture-review receipts at 907db354) and plan Phase 3 name a Knowledge corpus section on the coworker identity page. DI-603A4F89F105 ranked identity-page-section first with high confidence (verdict proceed).",
+  "limitations": "The section is read-only and adds no controls: it lists the corpora the coworker can read (kernel, organization, profession families) from the same resolver the read paths use, and says when a coworker has no profession family. Grants are still changed through the existing grant controls. Theme tokens only. Not yet verified on the served portal."
+}

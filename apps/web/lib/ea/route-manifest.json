@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 679,
+  "routeCount": 687,
   "routes": [
     {
       "routePath": "/",
@@ -230,6 +230,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/issue-reports/page.tsx"
+    },
+    {
+      "routePath": "/admin/issue-reports/upstream",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "issue-reports",
+        "upstream"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/issue-reports/upstream/page.tsx"
     },
     {
       "routePath": "/admin/operating-hours",
@@ -654,6 +665,22 @@
       "exposure": "authenticated"
     },
     {
+      "routePath": "/api/agent/envelope/[envelopeId]/standing-ruling",
+      "kind": "route",
+      "segments": [
+        "api",
+        "agent",
+        "envelope",
+        "[envelopeId]",
+        "standing-ruling"
+      ],
+      "dynamicParams": [
+        "envelopeId"
+      ],
+      "file": "apps/web/app/api/agent/envelope/[envelopeId]/standing-ruling/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/agent/health",
       "kind": "route",
       "segments": [
@@ -864,6 +891,17 @@
         "path"
       ],
       "file": "apps/web/app/api/docs-asset/[...path]/route.ts"
+    },
+    {
+      "routePath": "/api/documents",
+      "kind": "route",
+      "segments": [
+        "api",
+        "documents"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/documents/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/documents/[documentId]/content",
@@ -1194,6 +1232,18 @@
         "packId"
       ],
       "file": "apps/web/app/api/map-assets/[packId]/route.ts",
+      "exposure": "authenticated"
+    },
+    {
+      "routePath": "/api/map-assets/install-status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "map-assets",
+        "install-status"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/map-assets/install-status/route.ts",
       "exposure": "authenticated"
     },
     {
@@ -1541,6 +1591,18 @@
         "syncId"
       ],
       "file": "apps/web/app/api/platform/integrations/sync-progress/[syncId]/route.ts"
+    },
+    {
+      "routePath": "/api/platform/managed-inference",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "managed-inference"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/managed-inference/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/platform/metrics",
@@ -2772,6 +2834,20 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/edge/actions/claim/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/actions/inference-admission",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "actions",
+        "inference-admission"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/actions/inference-admission/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/v1/edge/actions/result",
@@ -5670,6 +5746,17 @@
       "file": "apps/web/app/(shell)/finance/settings/setup/page.tsx"
     },
     {
+      "routePath": "/finance/settings/statutory-rates",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings",
+        "statutory-rates"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/statutory-rates/page.tsx"
+    },
+    {
       "routePath": "/finance/settings/tax",
       "kind": "page",
       "segments": [
@@ -5872,6 +5959,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/dev-loop/page.tsx"
+    },
+    {
+      "routePath": "/ops/gate-efficacy",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "gate-efficacy"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/gate-efficacy/page.tsx"
     },
     {
       "routePath": "/ops/health",

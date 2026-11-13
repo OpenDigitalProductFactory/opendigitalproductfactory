@@ -3,6 +3,7 @@ import {
   normalizeDeferralInput,
 } from "@/lib/backlog/deferral-contract";
 import { resolveDuplicateBacklogRowId } from "@/lib/backlog/duplicate-resolution";
+import { peerOwnedStatusRefusal } from "@/lib/backlog/peer-owned-item";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 
 export async function triageBacklogItemTool(params: Record<string, unknown>): Promise<ToolResult> {
@@ -12,6 +13,9 @@ export async function triageBacklogItemTool(params: Record<string, unknown>): Pr
   const rationale = String(params["rationale"] ?? "").trim();
   const item = await prisma.backlogItem.findUnique({ where: { itemId } });
   if (!item) return { success: false, error: "Item not found", message: `Item ${itemId} not found` };
+  // BI-C5794F1D: a work-sync mirror is triaged at its origin, never here.
+  const peerOwned = peerOwnedStatusRefusal(itemId, item.body);
+  if (peerOwned) return { success: false, error: peerOwned.error, message: peerOwned.message, data: { originInstallationId: peerOwned.originInstallationId } };
   if (item.status !== "triaging") return { success: false, error: "Item is not in triaging status", message: `Item ${itemId} is not in triaging status` };
   if (!rationale) return { success: false, error: "Rationale is required", message: "Rationale is required" };
   if (outcome === "build" && typeof params["effortSize"] !== "string") {
@@ -95,6 +99,11 @@ export async function retireBacklogItemTool(
   const result = await prisma.$transaction(async (tx) => {
     const item = await tx.backlogItem.findUnique({ where: { itemId } });
     if (!item) return { success: false, error: "not_found", message: `Item ${itemId} not found` } satisfies ToolResult;
+    // BI-C5794F1D: only the origin installation retires a work-sync mirror.
+    const peerOwned = peerOwnedStatusRefusal(itemId, item.body);
+    if (peerOwned) {
+      return { success: false, error: peerOwned.error, message: peerOwned.message, data: { originInstallationId: peerOwned.originInstallationId } } satisfies ToolResult;
+    }
     if ("activeBuildId" in item && item.activeBuildId) {
       return { success: false, error: "active_build_exists", message: `Item ${itemId} is attached to an active build and cannot be retired` } satisfies ToolResult;
     }

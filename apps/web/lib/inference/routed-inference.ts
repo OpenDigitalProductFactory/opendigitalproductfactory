@@ -1,3 +1,4 @@
+import type { ResponseProducer } from "../routing/response-producer";
 /**
  * EP-INF-009b: Unified V2 routing + inference dispatch.
  *
@@ -8,6 +9,7 @@
  * champion/challenger, rate tracking, and outcome telemetry.
  */
 
+import { assertOrdinaryProviderTransportAllowed } from "../shared/captured-effect-store";
 import { resolveLocalRoutingRuntime } from "@/lib/inference/local-model-context-reconcile";
 import { currentInferenceSignal } from "./inference-admission";
 import { transferLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
@@ -82,6 +84,7 @@ export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
 export interface RoutedInferenceResult {
+  responseProducer?: ResponseProducer;
   providerId: string;
   providerConnectionId?: string;
   quotaScopeKey?: string;
@@ -123,11 +126,6 @@ export interface RoutedInferenceResult {
    *  compaction + the context-pressure gauge to the real window (BI-9679EB1A). */
   resolvedMaxContextTokens?: number | null;
 }
-// ─── Error ──────────────────────────────────────────────────────────────────
-
-
-// ─── Options ────────────────────────────────────────────────────────────────
-
 // ─── Route preparation (shared by routeAndCall + previewRoute) ───────────────
 
 interface PreparedRoute {
@@ -199,7 +197,7 @@ async function prepareRoute(
     tools: options?.tools,
     taskType,
     routeContext: initialRouteContext,
-    activityContract: options?.activityContract,
+    activityContract: options?.activityContract, sourceCodeProvenance: options?.sourceCodeProvenance,
     policyVersionSource: options?.inferencePolicyVersionSource,
     sensitiveDetailUse: options?.sensitiveDetailUse,
     responseRehydration: options?.responseRehydration,
@@ -366,6 +364,7 @@ export async function routeAndCall(
   sensitivity: RouteSensitivity = "internal",
   options?: RouteAndCallOptions,
 ): Promise<RoutedInferenceResult> {
+  assertOrdinaryProviderTransportAllowed();
   if (currentReassessmentExecution()) return routeAndCallAttempt(messages, systemPrompt, sensitivity, options, () => {});
   let reconciled = false;
   let dispatchStarted = false;
@@ -684,7 +683,7 @@ async function routeAndCallAttempt(
       ...(result.providerConnectionId ? { providerConnectionId: result.providerConnectionId, quotaScopeKey: result.quotaScopeKey } : {}),
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
-      inferenceMs: result.inferenceMs,
+      inferenceMs: result.inferenceMs, modelId: result.modelId,
     });
 
     return transferLocalNativeContinuation<RoutedInferenceResult>(result, {
@@ -693,6 +692,7 @@ async function routeAndCallAttempt(
       quotaScopeKey: result.quotaScopeKey,
       modelId: result.modelId,
       content: result.content,
+      responseProducer: result.responseProducer,
       toolCalls: result.toolCalls,
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
@@ -765,7 +765,7 @@ async function routeAndCallAttempt(
     contextKey: routedContextKey(options),
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
-    inferenceMs: result.inferenceMs,
+    inferenceMs: result.inferenceMs, modelId: result.modelId,
   });
 
   // 7. Normalize result to RoutedInferenceResult
@@ -775,6 +775,7 @@ async function routeAndCallAttempt(
     quotaScopeKey: result.quotaScopeKey,
     modelId: result.modelId,
     content: result.content,
+    responseProducer: result.responseProducer,
     toolCalls: result.toolCalls,
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,

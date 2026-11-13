@@ -74,6 +74,8 @@ export type ResolvedMcpToken = {
   capability: McpTokenCapability;
   /** OAuth only: the consent binding revalidated for this request (BI-12E5DD91). */
   authorityBindingId?: string | null;
+  /** OAuth only: the refresh-token family, stable across access-token rotation (BI-ED52AB82). */
+  oauthFamilyKey?: string | null;
 };
 
 export type AddMcpTokenScopesResult =

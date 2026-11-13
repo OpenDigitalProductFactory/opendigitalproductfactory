@@ -28,6 +28,11 @@ export const SCHEDULED_AGENT_TASK_KINDS = [
   // it fetches each client's declared sources, compares them with the last
   // snapshot and files at most one proposal per client; it never edits the profile.
   "client-capability-reverify",
+  // BI-49BC21C1 — the daily harness evolution loop. Deterministic orchestration:
+  // it ranks recurring agent misses into probe candidates with trajectory
+  // evidence and records budget and spend; model judgement is confined to the
+  // bounded editor of a later slice, never the orchestration.
+  "harness-evolution-loop",
 ] as const;
 
 export type ScheduledAgentTaskKind =
@@ -51,6 +56,8 @@ export const DEMAND_SCORING_STEWARD_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[7];
 export const CLIENT_CAPABILITY_REVERIFY_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[8];
+export const HARNESS_EVOLUTION_LOOP_TASK_KIND =
+  SCHEDULED_AGENT_TASK_KINDS[9];
 
 export function isScheduledAgentTaskKind(
   value: unknown,

@@ -5,7 +5,7 @@ import {
   deriveProactivityRoster,
   groupRosterByArea,
 } from "./proactivity-roster";
-import { PROACTIVITY_LEVELS } from "./proactivity-types";
+import { PROACTIVITY_LEVELS } from "@dpf/validators/workroom-policy/proactivity-types";
 
 const agents = [
   { agentId: "coo", displayName: "Chief Operating Officer", role: "orchestrator" },

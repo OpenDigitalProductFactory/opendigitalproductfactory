@@ -33,6 +33,7 @@ import {
   validateConfirmStanceVectors,
   type ConfirmedVectorInput,
 } from "@/lib/onboarding/confirm-stance-vectors";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 export type ConfirmStanceVectorsResult =
   | { ok: true; confirmedVectors: number; upgradedIdentityPages: number }
@@ -113,6 +114,7 @@ export async function confirmStanceVectors(input: {
           changeSummary: "Stance confirmed by the owner (How you decide)",
           createdById: userId,
         });
+        await syncWikiPageLinks(prisma, { pageId: saved.id, organizationId: org.id, body });
         // Deliberation layer; the material below is the enforcement, so a failed
         // embed never rolls back the confirm. BI-D4C1E05E: it must NOT be a
         // SILENT skip — log loudly so the reembed reconcile's self-heal is a

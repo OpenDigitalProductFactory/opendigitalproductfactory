@@ -6,6 +6,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { exportDocumentVersion, isDocumentExportFormat, type DocumentExportDeps } from "./document-office-export";
+const VIEWER = { principalId: "p-reader" };
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -28,7 +29,7 @@ function makeDeps(version: Row | null = versionRow(), overrides: Partial<Documen
   const upserts: Row[] = [];
   const db = {
     document: {
-      findUnique: vi.fn(async () => (version === null ? null : { title: "Q3 / Plan", currentVersion: version, versions: [version] })),
+      findFirst: vi.fn(async () => (version === null ? null : { title: "Q3 / Plan", currentVersion: version, versions: [version] })),
     },
     documentRendition: {
       upsert: vi.fn(async (args: Row) => {
@@ -61,7 +62,7 @@ describe("isDocumentExportFormat", () => {
 describe("exportDocumentVersion", () => {
   it("renders a markdown version to HTML, converts it, and stores the result as a rendition", async () => {
     const { deps, upserts } = makeDeps();
-    const out = await exportDocumentVersion({ documentId: "DOC-1", format: "docx" }, deps);
+    const out = await exportDocumentVersion({ documentId: "DOC-1", format: "docx", viewer: VIEWER }, deps);
     if (!out.ok) throw new Error(out.error);
 
     const call = vi.mocked(deps.convert).mock.calls[0]![0];
@@ -82,7 +83,7 @@ describe("exportDocumentVersion", () => {
     const { deps, upserts } = makeDeps(
       versionRow({ renditions: [{ renditionKind: "odt", mimeType: "application/vnd.oasis.opendocument.text", blob: { storageKey: "k", sha256: "s" } }] }),
     );
-    const out = await exportDocumentVersion({ documentId: "DOC-1", format: "odt" }, deps);
+    const out = await exportDocumentVersion({ documentId: "DOC-1", format: "odt", viewer: VIEWER }, deps);
     if (!out.ok) throw new Error(out.error);
     expect(out.data.reused).toBe(true);
     expect(out.data.bytes.toString()).toBe("stored bytes");
@@ -92,7 +93,7 @@ describe("exportDocumentVersion", () => {
 
   it("converts a stored word-processing file from its own format", async () => {
     const { deps } = makeDeps(versionRow({ contentFormat: DOCX, contentText: null, contentBlob: { storageKey: "k", sha256: "s" } }));
-    const out = await exportDocumentVersion({ documentId: "DOC-1", format: "odt" }, deps);
+    const out = await exportDocumentVersion({ documentId: "DOC-1", format: "odt", viewer: VIEWER }, deps);
     expect(out.ok).toBe(true);
     const call = vi.mocked(deps.convert).mock.calls[0]![0];
     expect(call).toMatchObject({ from: "docx", to: "odt" });
@@ -101,9 +102,9 @@ describe("exportDocumentVersion", () => {
 
   it("refuses to turn a spreadsheet into a word-processing file but still offers its PDF", async () => {
     const { deps } = makeDeps(versionRow({ contentFormat: XLSX, contentText: null, contentBlob: { storageKey: "k", sha256: "s" } }));
-    const docx = await exportDocumentVersion({ documentId: "DOC-1", format: "docx" }, deps);
+    const docx = await exportDocumentVersion({ documentId: "DOC-1", format: "docx", viewer: VIEWER }, deps);
     expect(docx).toMatchObject({ ok: false, reason: "not-exportable" });
-    const pdf = await exportDocumentVersion({ documentId: "DOC-1", format: "pdf" }, deps);
+    const pdf = await exportDocumentVersion({ documentId: "DOC-1", format: "pdf", viewer: VIEWER }, deps);
     expect(pdf.ok).toBe(true);
     expect(vi.mocked(deps.convert).mock.calls[0]![0]).toMatchObject({ from: "xlsx", to: "pdf" });
   });
@@ -112,22 +113,22 @@ describe("exportDocumentVersion", () => {
     const { deps, upserts } = makeDeps(versionRow(), {
       convert: vi.fn(async () => ({ ok: false as const, error: "Document conversion is not available.", reason: "converter-unavailable" as const })) as never,
     });
-    const out = await exportDocumentVersion({ documentId: "DOC-1", format: "pdf" }, deps);
+    const out = await exportDocumentVersion({ documentId: "DOC-1", format: "pdf", viewer: VIEWER }, deps);
     expect(out).toMatchObject({ ok: false, reason: "converter-unavailable" });
     expect(upserts).toHaveLength(0);
   });
 
   it("reports a missing document, a missing version and an empty version", async () => {
-    expect(await exportDocumentVersion({ documentId: "DOC-X", format: "pdf" }, makeDeps(null).deps)).toMatchObject({ ok: false, reason: "not-found" });
-    expect(await exportDocumentVersion({ documentId: "DOC-1", version: 9, format: "pdf" }, makeDeps().deps)).toMatchObject({ ok: false, reason: "not-found" });
+    expect(await exportDocumentVersion({ documentId: "DOC-X", format: "pdf", viewer: VIEWER }, makeDeps(null).deps)).toMatchObject({ ok: false, reason: "not-found" });
+    expect(await exportDocumentVersion({ documentId: "DOC-1", version: 9, format: "pdf", viewer: VIEWER }, makeDeps().deps)).toMatchObject({ ok: false, reason: "not-found" });
     expect(
-      await exportDocumentVersion({ documentId: "DOC-1", format: "pdf" }, makeDeps(versionRow({ contentText: "  " })).deps),
+      await exportDocumentVersion({ documentId: "DOC-1", format: "pdf", viewer: VIEWER }, makeDeps(versionRow({ contentText: "  " })).deps),
     ).toMatchObject({ ok: false, reason: "no-content" });
   });
 
   it("refuses a stored PDF or other binary as a source", async () => {
     const { deps } = makeDeps(versionRow({ contentFormat: "application/pdf", contentText: null, contentBlob: { storageKey: "k", sha256: "s" } }));
-    expect(await exportDocumentVersion({ documentId: "DOC-1", format: "docx" }, deps)).toMatchObject({ ok: false, reason: "not-exportable" });
+    expect(await exportDocumentVersion({ documentId: "DOC-1", format: "docx", viewer: VIEWER }, deps)).toMatchObject({ ok: false, reason: "not-exportable" });
   });
 });
 

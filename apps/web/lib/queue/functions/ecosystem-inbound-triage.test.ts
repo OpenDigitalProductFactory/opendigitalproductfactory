@@ -2,7 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   run: vi.fn(), gate: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), config: null as unknown,
+  rank: vi.fn(), answer: vi.fn(),
 }));
+vi.mock("@/lib/ecosystem/arbitration-cycle", () => ({
+  runEcosystemArbitrationCycle: mocks.rank,
+  sendEcosystemDecisionNotices: mocks.answer,
+  summarizeArbitration: () => "Ecosystem queue: 2 ranked.",
+}));
+vi.mock("@/lib/federation/demand-disposition", () => ({ queueFounderDispositionNotices: vi.fn() }));
+vi.mock("@/lib/federation/demand-exchange", () => ({ decodeDemandMirrorPayload: vi.fn() }));
 vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: (config: unknown, handler: unknown) => { mocks.config = config; return handler; } } }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: mocks.gate }));
 vi.mock("@/lib/ecosystem/inbound-triage-runner", () => ({ runEcosystemInboundTriage: mocks.run }));
@@ -16,11 +24,35 @@ const invoke = () => (ecosystemInboundTriage as unknown as (context: unknown) =>
 });
 
 describe("ecosystem intake job reporting", () => {
+  it("advances the issue cursor from scan start without losing the commission metadata", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: false, issueReadComplete: true, scannedAt: "2026-11-02T12:00:00Z",
+      ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [{ source: "dependabot", error: "HTTP 403" }] });
+    await invoke();
+    expect(mocks.upsert.mock.calls[0][0].update).toMatchObject({ runCursor: "2026-11-02T12:00:00Z", lastStatus: "failed" });
+    expect(mocks.upsert.mock.calls[0][0].update).not.toHaveProperty("metadata");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.gate.mockResolvedValue({ proceed: true });
     mocks.findUnique.mockResolvedValue({ schedule: "17 6 * * 1" });
     mocks.upsert.mockResolvedValue({});
+    mocks.rank.mockResolvedValue({ ranked: 2, recorded: 0, top: [] });
+    mocks.answer.mockResolvedValue({ sent: 0, withheld: [] });
+  });
+
+  it("names an unreadable security surface as UNREADABLE, never as zero (BI-C67E5CCB AC-1, AC-5)", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: false, ingested: 3, deduped: 0, failed: 0, itemIds: [],
+      sourceErrors: [{ source: "secret-scanning", error: "Secret scanning coverage unreadable (HTTP 403)" }],
+      security: { surfaces: { "dependabot-package": { alerts: 33, groups: 2 }, "code-scanning-rule": { alerts: 4, groups: 3 } },
+        lifecycle: { resolved: ["BI-H"], heldByBuild: [], reopened: [], regressions: [], reprioritized: ["BI-U"] } } });
+    await invoke();
+    const summary = mocks.upsert.mock.calls[0][0].update.lastRunSummary as string;
+    expect(summary).toContain("Dependabot 33 open, 2 items");
+    expect(summary).toContain("code scanning 4 open, 3 items");
+    expect(summary).toContain("secret scanning UNREADABLE");
+    expect(summary).toContain("Resolved 1");
+    expect(mocks.upsert.mock.calls[0][0].update.lastStatus).toBe("failed");
   });
 
   it("never overwrites scheduled-job metadata, so a commission reference survives every heartbeat", async () => {
@@ -45,6 +77,17 @@ describe("ecosystem intake job reporting", () => {
     const heartbeat = mocks.upsert.mock.calls[0][0].update;
     expect(deriveHealth({ kind: "recurring", enabled: true, schedule: "17 6 * * 1",
       reportsRunData: true, ...heartbeat }, new Date()).health).toBe("error");
+  });
+
+  it("refreshes a stale stored schedule to the code trigger's cadence (BI-78C6646C)", async () => {
+    mocks.run.mockResolvedValue({ ran: false, reason: "not commissioned: test" });
+    const before = Date.now();
+    await invoke();
+    const { update, create } = mocks.upsert.mock.calls[0][0];
+    expect(update.schedule).toBe("17 */4 * * *");
+    expect(create.schedule).toBe("17 */4 * * *");
+    // Projected from the four-hourly trigger, not the old weekly value.
+    expect(update.nextRunAt.getTime() - before).toBeLessThanOrEqual(4 * 60 * 60 * 1000);
   });
 
   it("clears an old error after a complete scan", async () => {
@@ -84,15 +127,33 @@ describe("ecosystem intake job reporting", () => {
     expect(summary).toContain("a/b#1");
   });
 
+  it("ranks the ecosystem queue and answers submitters after a commissioned scan (BI-FB03E2FD)", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: true, ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [] });
+    await invoke();
+    expect(mocks.rank).toHaveBeenCalledTimes(1);
+    expect(mocks.answer).toHaveBeenCalledTimes(1);
+    expect(mocks.upsert.mock.calls[0][0].update.lastRunSummary).toContain("Ecosystem queue: 2 ranked.");
+  });
+
+  it("keeps the scan heartbeat when ranking fails, and says so", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: true, ingested: 0, deduped: 0, failed: 0, itemIds: [], sourceErrors: [] });
+    mocks.rank.mockRejectedValue(new Error("database unavailable"));
+    await invoke();
+    const update = mocks.upsert.mock.calls[0][0].update;
+    expect(update.lastStatus).toBe("completed");
+    expect(update.lastRunSummary).toContain("Ecosystem queue not ranked: database unavailable");
+  });
+
   it("allows only one scan of the inbound queue at a time", () => {
     // Local single-run protection (spec §6.1): an overlapping cron and retry must
     // not ingest the same sources concurrently.
-    expect(mocks.config).toMatchObject({ concurrency: { limit: 1, scope: "fn" } });
+    expect(mocks.config).toMatchObject({ concurrency: { limit: 1, scope: "account", key: "'ecosystem-inbound-intake'" } });
   });
 
   it("does not report an uncommissioned installation as a successful scan", async () => {
     mocks.run.mockResolvedValue({ ran: false, reason: "not commissioned: installation is not a production install" });
     await invoke();
+    expect(mocks.rank).not.toHaveBeenCalled();
     expect(mocks.upsert).toHaveBeenCalledWith(expect.objectContaining({
       update: expect.objectContaining({ lastStatus: "not-configured", lastRunSummary: "not commissioned: installation is not a production install" }),
     }));

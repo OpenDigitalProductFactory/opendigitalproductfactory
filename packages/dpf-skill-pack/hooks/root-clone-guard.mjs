@@ -36,6 +36,7 @@ import { executableCommandText, shellCommandPayloads, stripHeredocBodies } from 
 import {
   readHookPayload,
   isShellTool,
+  isFileWriteTool,
   emitDeny,
   inDpfWorkspace,
   shellCommandFromInput,
@@ -400,8 +401,6 @@ export function shellWriteTargets(seg) {
   return [...redirectTargets(seg), ...writeVerbTargets(seg)];
 }
 
-const FILE_WRITE_TOOL_NAMES = new Set(["Write", "Edit", "MultiEdit"]);
-
 function fileWriteTargets(toolInput) {
   if (!toolInput || typeof toolInput !== "object") return [];
   const direct = toolInput.file_path ?? toolInput.filePath ?? toolInput.path;
@@ -416,7 +415,7 @@ function fileWriteTargets(toolInput) {
 }
 
 export function decideFileWrite({ toolName, toolInput, cwd = "", env = {}, isDir = () => false }) {
-  if (!FILE_WRITE_TOOL_NAMES.has(toolName)) return { block: false };
+  if (!isFileWriteTool(toolName)) return { block: false };
   if (env.DPF_ALLOW_ROOT_CLONE_MUTATION === "1") return { block: false };
   const cloneRoot = deriveCloneRoot(cwd, isDir);
   if (!cloneRoot || norm(cwd) !== cloneRoot) return { block: false };

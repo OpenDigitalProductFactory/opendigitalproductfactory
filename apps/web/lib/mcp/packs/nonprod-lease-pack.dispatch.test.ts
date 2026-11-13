@@ -148,7 +148,7 @@ describe("nonproduction environment MCP tools", () => {
 
     expect(result.success).toBe(true);
     expect(result.entityId).toBe("NPEL-1");
-    expect(mockReleaseNonprodEnvironmentLease).toHaveBeenCalledWith({ leaseId: "NPEL-1" });
+    expect(mockReleaseNonprodEnvironmentLease).toHaveBeenCalledWith(expect.objectContaining({ leaseId: "NPEL-1", authenticatedUserId: "user-1" }));
   });
 
   it("renews an owned nonproduction environment lease (heartbeat)", async () => {
@@ -217,4 +217,44 @@ describe("nonproduction environment MCP tools", () => {
       evidence: { commands: ["pnpm --filter web typecheck"] },
     });
   });
+});
+
+
+describe("preview actor and atomic wait dispatch", () => {
+  it("forwards the server actor, ignoring forged owner/approval parameters", async () => {
+    mockReleaseNonprodEnvironmentLease.mockResolvedValue({ leaseId: "NPEL-OWNED", status: "released" });
+    await executeTool("release_nonprod_environment_lease", { leaseId: "NPEL-OWNED", ownerSessionId: "own-session",
+      authenticatedUserId: "forged-user", authenticatedAgentId: "forged-agent", approvedAuthorityEnvelopeId: "forged" },
+    "user-1", { agentId: "AGT-EXT-CODEX" });
+    expect(mockReleaseNonprodEnvironmentLease).toHaveBeenLastCalledWith({ leaseId: "NPEL-OWNED", ownerSessionId: "own-session",
+      authenticatedUserId: "user-1", authenticatedAgentId: "AGT-EXT-CODEX", approvedAuthorityEnvelopeId: undefined });
+  });
+  it("uses the preview wait already persisted atomically by admission without re-checkpointing it", async () => {
+    mockCheckpointNonprodLeaseWait.mockClear();
+    mockClaimNonprodEnvironmentLease.mockResolvedValue({ status: "queued", queuePosition: 1, waitAgeMs: 0,
+      durableWaitTaskRunId: "TR-ATOMIC",
+      lease: { leaseId: "NPEL-ATOMIC", environmentKey: "active-candidate", taskRunId: "TR-ATOMIC", ownerProvider: "codex" } });
+    const result = await executeTool("claim_nonprod_environment_lease", { environmentKey: "active-candidate", ownerProvider: "codex",
+      ownerSessionId: "own-session", purpose: "preview", url: "http://localhost:53601", ports: [53601],
+      expiresAt: new Date(Date.now() + 60_000).toISOString() }, "user-1", { agentId: "AGT-EXT-CODEX" });
+    expect(result.success).toBe(true);
+    expect(result.data?.admission).toMatchObject({ taskRunId: "TR-ATOMIC" });
+    expect(mockCheckpointNonprodLeaseWait).not.toHaveBeenCalled();
+    expect(mockClaimNonprodEnvironmentLease).toHaveBeenLastCalledWith(expect.objectContaining({ authenticatedUserId: "user-1",
+      authenticatedAgentId: "AGT-EXT-CODEX" }));
+  });
+});
+
+it("does not mistake a caller Task for the admission's trusted atomic wait", async () => {
+  mockCheckpointNonprodLeaseWait.mockClear();
+  mockCheckpointNonprodLeaseWait.mockResolvedValue({ taskRunId: "TR-NONPROD-WAIT" });
+  mockClaimNonprodEnvironmentLease.mockResolvedValue({ status: "queued", queuePosition: 1, waitAgeMs: 0,
+    lease: { leaseId: "NPEL-CALLER", environmentKey: "active-candidate", taskRunId: "TR-CALLER", ownerProvider: "codex" } });
+  const result = await executeTool("claim_nonprod_environment_lease", { environmentKey: "active-candidate", ownerProvider: "codex",
+    ownerSessionId: "own-session", purpose: "legacy caller Task preview", url: "http://localhost:53601", ports: [53601],
+    taskRunId: "TR-CALLER", durableWaitTaskRunId: "forged-atomic-wait",
+    expiresAt: new Date(Date.now() + 60_000).toISOString() }, "user-1", { agentId: "AGT-EXT-CODEX" });
+  expect(result.success).toBe(true);
+  expect(result.data?.admission).toMatchObject({ taskRunId: "TR-NONPROD-WAIT" });
+  expect(mockCheckpointNonprodLeaseWait).toHaveBeenCalledOnce();
 });

@@ -24,6 +24,8 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. " +
       "New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required. " +
       "Before creating: list_backlog_items or search_knowledge for an existing BI on the same defect. " +
+      "State the outcome the item delivers (what will be true, for whom) in `outcome`: delivery closes the item when its change merges, and a regression found in use becomes a new item. " +
+      "Add `howWeKnow` only when that outcome is not obvious from the change. Tag lifecycleTags with `contractual` only when a customer commitment needs a separate acceptance step; that is rare. " +
       "Do not create-then-recreate on transient errors; read the error and fix the payload once.",
     inputSchema: {
       type: "object",
@@ -40,6 +42,8 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         ...backlogScopeCreateProperties,
         ...backlogProductScopeCreateProperties,
         body: { type: "string", description: "Detailed description" },
+        outcome: { type: "string", description: "The outcome this item delivers: what will be true, and for whom, once it is done. Stored as the body's \"## Outcome\" section. Optional, but an item filed without one is prompted for it." },
+        howWeKnow: { type: "string", description: "How we will know the outcome is reached. Only when it is not obvious from the change; stored as \"## How we'll know\"." },
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
       },
@@ -87,6 +91,27 @@ export const backlogPackDefinitions: ToolDefinition[] = [
     consequence: "irreversible",
   },
   {
+    name: "retire_peer_demand_intake_copies",
+    description:
+      "Retire, in one governed step, the backlog copies that inbound issue triage filed from same-organization, revoked-link or withdrawn peer demand. mode \"dry-run\" (the default) is read-only: it returns counts by category, items kept for individual review (claimed, built, in a Workroom, with evidence, or touched after filing) and a selectionDigest. mode \"retire\" with that digest asks the operator for one approval, then retires each copy as retire_backlog_item does (status history, reversible with update_backlog_item_status). A selection that changed since the dry run is refused. Re-running retires nothing twice.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: { type: "string", enum: ["dry-run", "retire"], description: "dry-run (default) reports only; retire applies the approved selection." },
+        selectionDigest: { type: "string", description: "Required for mode=retire: the selectionDigest from the dry run being approved." },
+        sampleSize: { type: "number", description: "Samples per category in the report (default 5, max 50)." },
+        keptListLimit: { type: "number", description: "Kept-for-review items listed in the report (default 200, max 1000)." },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    consequence: "irreversible",
+    consequenceForCall: async ({ params }) => params["mode"] === "retire"
+      ? { consequence: "irreversible", reason: "peer-demand-copy-bulk-retire" }
+      : { consequence: null, reason: "peer-demand-copy-dry-run" },
+  },
+  {
     name: "size_backlog_item",
     description: "Assign effortSize to a backlog item. Useful when sizing is a follow-up step rather than part of a single triage commit.",
     inputSchema: {
@@ -124,6 +149,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         status: { type: "string", enum: [...BACKLOG_STATUS_VALUES], description: "Update status. For triaged items only; use triage_backlog_item to leave triaging." },
         priority: { type: "number", description: "Priority number (lower = higher priority)" },
         body: { type: "string", description: "Updated description" },
+        outcome: { type: "string", description: "The outcome this item delivers: what will be true, and for whom, once it is done. Replaces a derived draft and is recorded as stated." },
         workType: { type: "string", enum: [...BACKLOG_WORK_TYPE_VALUES], description: "Reclassify what kind of work this is (closed enum)." },
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
@@ -277,6 +303,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       type: "object",
       properties: {
         itemId: { type: "string", description: "Semantic backlog item id (e.g. BI-PORT-005)" },
+        workroomId: { type: "string", description: "Optional exact persisted Workroom locator. Requires current human and assistant action access and matching item/source; never supplies authority or caller source hashes. Preserves unscoped ambiguity when omitted." },
         recoveryGate: { type: "string", enum: RECOVERY_READ_GATES, description: "Return only this gate's exact current recovery request or explicit issuer escalation, without large body/history. Re-read unchanged identity for the same request; never reconstruct a packet." },
         reassessmentAuthorizationItemId: { type: "string", description: "Optional immutable approved policy item locator for a separately authorized present design-spec or spec-approval reassessment. Selects evidence only; cannot grant execution, replay an original task or replenish an allowance." },
       },

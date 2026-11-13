@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 import { parseArgs as utilParseArgs } from "node:util";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hostname, totalmem } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
@@ -37,6 +38,39 @@ export const HEAVY_PROCESS_CLASSES = Object.freeze([
   "inference",
   "semantic-review",
 ]);
+
+export function parseQualificationRunnerBinding(token) {
+  if (typeof token !== "string" || token.length === 0) return null;
+  const separator = token.lastIndexOf(".");
+  if (separator <= 0) return null;
+  try {
+    const admission = JSON.parse(Buffer.from(token.slice(0, separator), "base64url").toString("utf8"));
+    const binding = admission?.binding;
+    if (admission?.schemaVersion !== 1 || admission?.purpose !== "qualification-research-admission"
+      || typeof admission.bindingDigest !== "string" || !/^sha256:[a-f0-9]{64}$/i.test(admission.bindingDigest)
+      || binding?.phase !== "verify" || binding?.executorMode !== "workroom-host"
+      || !["linux", "win32"].includes(binding?.requiredPlatform)
+      || typeof binding?.itemId !== "string" || typeof binding?.workroomId !== "string"
+      || !/^[a-f0-9]{40}$/i.test(binding?.headSha)
+      || !Array.isArray(binding?.allowedPaths) || binding.allowedPaths.length === 0
+      || !Array.isArray(binding?.candidate?.testBlobIds)) return null;
+    return { token, digest: admission.bindingDigest, itemId: binding.itemId,
+      workroomId: binding.workroomId, headSha: binding.headSha,
+      requiredPlatform: binding.requiredPlatform, allowedPaths: binding.allowedPaths,
+      testBlobIds: binding.candidate.testBlobIds };
+  } catch { return null; }
+}
+
+export function qualificationCommandMatchesBinding({ command, commandArgs, qualification }) {
+  if (!qualification || !Array.isArray(qualification.allowedPaths)) return false;
+  const executable = basename(String(command)).toLowerCase();
+  if (executable !== "node" && executable !== "node.exe") return false;
+  const normalizedArgs = commandArgs.map(value => String(value).replaceAll("\\", "/"));
+  const expected = qualification.allowedPaths.map(value => String(value).replaceAll("\\", "/"));
+  return normalizedArgs.length === expected.length + 1
+    && normalizedArgs[0] === "--test"
+    && expected.every((path, index) => normalizedArgs[index + 1] === path);
+}
 
 export function parseHostResourceArgs(argv) {
   const options = { class: { type: "string" }, "resume-pin": { type: "string" } };
@@ -109,6 +143,7 @@ export function buildHostResourceClaim({
   inferenceResident,
   ungovernedProcesses,
   attempt,
+  qualification,
 }) {
   const profile = PROFILE_CONTRACT.profiles[resourceClass];
   if (!profile) throw new Error(`unsupported resource class: ${resourceClass}`);
@@ -119,7 +154,7 @@ export function buildHostResourceClaim({
     ownerSessionId,
     claimKey: attempt.claimKey,
     ...(attempt?.leaseId ? { resumeLeaseId: attempt.leaseId } : {}),
-    purpose: `host-resource:${resourceClass}`,
+    purpose: qualification ? `host-resource:qualification:${qualification.digest}` : `host-resource:${resourceClass}`,
     url: "host://localhost",
     ports: [],
     ...leaseRequestTiming({ now, durationMs: 10 * 60_000, deadline: now.getTime() + 10 * 60_000 }),
@@ -135,6 +170,13 @@ export function buildHostResourceClaim({
       inferenceResident,
       ungovernedProcesses,
     },
+    ...(qualification ? {
+      buildId: qualification.headSha,
+      taskRunId: qualification.workroomId,
+      qualificationAdmissionToken: qualification.token,
+      qualificationPlatform: qualification.requiredPlatform,
+      qualificationCommand: qualification.command,
+    } : {}),
   };
 }
 
@@ -320,20 +362,49 @@ async function runCommand({ command, commandArgs }) {
 
 function createOwnedChild({ command, commandArgs }) {
   const invocation = resolveHostCommandInvocation(command, commandArgs);
+  const stdoutDigest = createHash("sha256");
+  const stderrDigest = createHash("sha256");
+  let startedAt;
+  let completedAt;
   const child = spawn(invocation.command, invocation.args, {
-    stdio: "inherit",
+    stdio: ["inherit", "pipe", "pipe"],
     windowsHide: true,
     shell: false,
     detached: process.platform !== "win32",
   });
   let commandExecuted = false;
-  child.once("spawn", () => { commandExecuted = true; });
+  const observeOutput = (source, target, digest) => {
+    let targetOpen = !target.destroyed;
+    const isClosedConsumer = error => error?.code === "EPIPE" || error?.code === "ERR_STREAM_DESTROYED";
+    target.on("error", error => {
+      if (!isClosedConsumer(error)) throw error;
+      targetOpen = false;
+    });
+    source.on("data", chunk => {
+      digest.update(chunk);
+      if (!targetOpen || target.destroyed || target.writableEnded) return;
+      try { target.write(chunk); }
+      catch (error) {
+        if (!isClosedConsumer(error)) throw error;
+        targetOpen = false;
+      }
+    });
+  };
+  // A caller may intentionally close its read end (for example `head` or an
+  // observer that has enough output). Keep hashing the owned child stream and
+  // preserve the child's actual outcome; a downstream EPIPE is not a child
+  // execution failure.
+  observeOutput(child.stdout, process.stdout, stdoutDigest);
+  observeOutput(child.stderr, process.stderr, stderrDigest);
+  child.once("spawn", () => { commandExecuted = true; startedAt = new Date().toISOString(); });
   return {
     get commandExecuted() { return commandExecuted; },
+    get observation() { return completedAt && startedAt ? { startedAt, completedAt,
+      outputDigest: `sha256:${createHash("sha256").update(`stdout:${stdoutDigest.copy().digest("hex")}\nstderr:${stderrDigest.copy().digest("hex")}`).digest("hex")}` } : null; },
     run: () => new Promise((resolveRun, reject) => {
       child.once("error", () => reject(Object.assign(new Error("Wrapped command could not start."),
         { code: "host_command_unavailable", commandExecuted })));
-      child.once("exit", (code, signal) => resolveRun(signal ? 1 : code ?? 1));
+      child.once("exit", (code, signal) => { completedAt = new Date().toISOString(); resolveRun(signal ? 1 : code ?? 1); });
     }),
     terminate: async () => {
       if (!child.pid || child.exitCode !== null) return;
@@ -363,11 +434,30 @@ async function main() {
   const ownerSessionId = process.env.DPF_GATE_OWNER_SESSION_ID
     || process.env.CODEX_THREAD_ID
     || `host-${hostname()}`;
+  const qualification = process.env.DPF_QUALIFICATION_ADMISSION_TOKEN
+    ? parseQualificationRunnerBinding(process.env.DPF_QUALIFICATION_ADMISSION_TOKEN) : null;
+  if (process.env.DPF_QUALIFICATION_ADMISSION_TOKEN && !qualification) {
+    throw Object.assign(new Error("Qualification admission token is malformed."),
+      { code: "host_admission_refused", reason: "invalid-qualification-token", commandExecuted: false });
+  }
+  if (qualification && qualification.requiredPlatform !== process.platform) {
+    throw Object.assign(new Error("Qualification platform does not match this host."),
+      { code: "host_admission_refused", reason: "qualification-platform-mismatch", commandExecuted: false });
+  }
+  const commandText = [parsed.command, ...parsed.commandArgs].join(" ");
+  if (qualification && !qualificationCommandMatchesBinding({
+    command: parsed.command, commandArgs: parsed.commandArgs, qualification,
+  })) {
+    throw Object.assign(new Error("Qualification command must run exactly the bound test paths through node --test."),
+      { code: "host_admission_refused", reason: "qualification-command-mismatch", commandExecuted: false });
+  }
+  const qualificationClaim = qualification ? { ...qualification, command: commandText } : null;
   const identify = () => readHostAttemptContext({
     resourceClass: parsed.resourceClass, command: parsed.command, commandArgs: parsed.commandArgs,
     expectedMemoryBytes: PROFILE_CONTRACT.profiles[parsed.resourceClass].expectedMemoryMiB * 1024 ** 2,
     ownerProvider, ownerSessionId, worktreePath: cwd.replaceAll("\\", "/"),
     branchName: gitValue(["branch", "--show-current"]), mcpUrl: connection.mcpUrl,
+    ...(qualificationClaim ? { qualificationBindingDigest: qualificationClaim.digest } : {}),
   });
   let attempt;
   let context;
@@ -390,6 +480,7 @@ async function main() {
     availableMemoryBytes: availableMemoryBytes(),
     inferenceResident: processRows.some((row) => classifyHeavyProcess(row.commandLine) === "inference"),
     ungovernedProcesses: findings.slice(0, 20),
+    qualification: qualificationClaim,
   });
   const claim = await claimHostResourceAdmission({ claimArgs, connection, attempt,
     onProgress: progress => process.stderr.write(`[host-resource-runner] ${JSON.stringify(progress)}\n`) });
@@ -480,6 +571,24 @@ async function main() {
   });
   if (result.status !== "completed") {
     process.stderr.write(`host-resource-runner: lease ${leaseId} ${result.status} (${result.reason}); the command was stopped.\n`);
+  }
+  if (qualificationClaim && result.status === "completed" && result.result === 0) {
+    const observation = child.observation;
+    if (!observation) throw Object.assign(new Error("Host qualification observation is unavailable."),
+      { code: "host_admission_unavailable", reason: "qualification-observation-unavailable", commandExecuted: true });
+    const recorded = await mcpCall("record_execution_evidence", {
+      itemId: qualificationClaim.itemId, kind: "test_pass", summary: "Executor-attested qualification passed",
+      qualification: { workroomId: qualificationClaim.workroomId, leaseId,
+        qualificationBindingDigest: qualificationClaim.digest, executorMode: "workroom-host",
+        platform: process.platform, headSha: qualificationClaim.headSha,
+        testBlobIds: qualificationClaim.testBlobIds, command: qualificationClaim.command,
+        outputDigest: observation.outputDigest, startedAt: observation.startedAt,
+        completedAt: observation.completedAt, exitCode: 0, skipped: false },
+    }, connection);
+    if (recorded?.success !== true) throw Object.assign(new Error("Qualification receipt was refused."),
+      { code: "host_admission_unavailable", reason: recorded?.error ?? "qualification-receipt-refused", commandExecuted: true });
+    process.stderr.write(JSON.stringify({ status: "qualification-receipt", leaseId,
+      activityId: recorded.entityId, bindingDigest: qualificationClaim.digest }) + "\n");
   }
   process.exitCode = result.status === "completed" ? result.result : 1;
 }

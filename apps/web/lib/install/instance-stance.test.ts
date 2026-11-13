@@ -349,3 +349,54 @@ describe("loadInstanceStance", () => {
     expect(stance.credentials).toBe("operator-only");
   });
 });
+
+describe("loadInstanceStance — attested peer (BI-0716C8A8)", () => {
+  const prodIntent = { ...CONFIRMED_DEV_INTENT, primaryPurpose: "operate-organization", pairedProductionInstallationRef: "operator-organization" };
+  const linked = (peerEnvironmentClass: "development" | null) => store({
+    readConfig: async (key) => (key === OPERATING_INTENT_CONFIG_KEY ? prodIntent : null),
+    listFederationLinks: async () => [{
+      linkId: "link_1", linkState: "trusted", relationshipPreset: "same-organization", peerLabel: "operator-organization",
+      peerEnvironmentClass, peerInstallationLabel: "Windows DEV (did_ab12…9f0c)",
+    }],
+  });
+
+  it("holds an attested development peer read-only from production and names it", async () => {
+    const stance = await loadInstanceStance(linked("development"), { readText: stateText("production"), readHostProfile: consumerHost });
+    expect(stance.peerWrite).toBe("read-only");
+    expect(stance.pairedInstallationLabel).toBe("Windows DEV (did_ab12…9f0c)");
+    expect(stance.pairedEnvironmentClass).toBe("development");
+  });
+
+  it("neither writes to nor tasks a linked peer the CA never attested", async () => {
+    const stance = await loadInstanceStance(linked(null), { readText: stateText("production"), readHostProfile: consumerHost });
+    expect(stance.peerWrite).toBe("none");
+  });
+});
+
+describe("loadInstanceStance — authority and stale reference (BI-B50BE189)", () => {
+  const DID = "did_" + "a".repeat(64);
+  const intentNaming = (ref: string) => ({ ...CONFIRMED_DEV_INTENT, primaryPurpose: "operate-organization", pairedProductionInstallationRef: ref });
+  const estate = { schemaVersion: 1, estateName: "Operator Organization", source: "operator", declaredAt: "2026-09-06T00:00:00.000Z", declaredByPrincipalId: "PRN-1" };
+  const links = [
+    { linkId: "link_old", linkState: "revoked", relationshipPreset: "same-organization", revokedAt: new Date("2026-08-28T00:00:00Z") },
+    { linkId: "link_live", linkState: "trusted", relationshipPreset: "same-organization", peerLabel: "operator organization",
+      peerEnvironmentClass: "development" as const, peerInstallationLabel: "Windows DEV (did_aaaa…aaaa)", peerDeviceId: DID },
+  ];
+  const withEstate = (ref: string, estateName = estate) => store({
+    readConfig: async (key) => (key === OPERATING_INTENT_CONFIG_KEY ? intentNaming(ref) : key === "installation.estate-identity.v1" ? estateName : null),
+    listFederationLinks: async () => links,
+  });
+
+  it("is the authority for an attested development peer of its own estate, and flags the dead declared link", async () => {
+    const stance = await loadInstanceStance(withEstate("link_old"), { readText: stateText("production"), readHostProfile: consumerHost, env: {} });
+    expect(stance.relationship).toBe("authority");
+    expect(stance.stalePairedRef).toEqual({ ref: "link_old", reason: "revoked", repairRef: DID });
+  });
+
+  it("derives no relationship when the peer's organization is another estate", async () => {
+    const stance = await loadInstanceStance(withEstate(DID, { ...estate, estateName: "Somebody Else" }), { readText: stateText("production"), readHostProfile: consumerHost, env: {} });
+    expect(stance.relationship).toBe("none");
+    expect(stance.rationale.relationship).toContain("different estate");
+    expect(stance.stalePairedRef).toBeUndefined();
+  });
+});

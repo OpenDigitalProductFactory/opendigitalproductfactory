@@ -20,11 +20,11 @@ import { describe, expect, it } from "vitest";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
-import type { GppShapeDocument } from "./gpp-shape-schema";
-import { markedStageKeys, startShapeInstance, stepShapeInstance } from "./interpreter";
-import { parseShapeDocument } from "./parse";
-import { checkSoundness } from "./soundness";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import type { GppShapeDocument } from "@dpf/validators/gpp/gpp-shape-schema";
+import { markedStageKeys, startShapeInstance, stepShapeInstance } from "@dpf/validators/gpp/interpreter";
+import { parseShapeDocument } from "@dpf/validators/gpp/parse";
+import { checkSoundness } from "@dpf/validators/gpp/soundness";
 
 const ALL_DEFINITIONS: readonly WorkShapeDefinition[] = [...listWorkShapes(), ...WORK_SHAPE_PRIOR_VERSIONS];
 const FIXTURE_DIR = join(__dirname, "__fixtures__", "drc");

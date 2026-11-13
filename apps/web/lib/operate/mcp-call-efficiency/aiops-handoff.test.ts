@@ -191,6 +191,7 @@ describe("dispatchMcpEfficiencyAiOps", () => {
         workType: "skill",
         source: "automated-detection",
         agentId: "platform-engineer",
+        outcome: expect.stringMatching(/^get_backlog_item is called once per need/),
         origin: { kind: SIGNAL_SOURCE_TYPE, id: "thrash:get_backlog_item" },
       }),
     );

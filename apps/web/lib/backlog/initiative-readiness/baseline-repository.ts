@@ -241,6 +241,10 @@ export async function recordInitiativeSpecApproval(args: {
 }): Promise<RecordInitiativeSpecApprovalResult> {
   const dispositionError = validateInitiativeDisposition("pass", [], args.resolvedFindingRefs);
   if (dispositionError) return { ok: false, code: "malformed-receipt", error: dispositionError };
+  // BI-46E344FE: a commit range is a merged repair's change, never a design.
+  if (args.artifactRef.kind === "repo-commit-range") {
+    return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "A spec approval binds a design document, not a commit range." };
+  }
   if (!args.reviewerAgentId || !args.authorityDecisionId || !args.tokenScope) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "Authenticated reviewer, authority decision, and token scope are required." };
   }
@@ -332,7 +336,7 @@ export async function recordInitiativeSpecApproval(args: {
       await tx.$queryRaw`SELECT b."id" FROM "DocumentBlob" b JOIN "DocumentVersion" v ON v."contentBlobId" = b."id" WHERE v."id" = ${args.artifactRef.versionId} FOR SHARE OF b`;
     } else if (args.workroomRef) {
       await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${args.workroomRef.workroomId} FOR SHARE`;
-    } else {
+    } else if (args.artifactRef.kind === "repo-blob-at-commit") {
       await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "backlogItemId" = ${item.itemId} AND "repositoryFullName" = ${args.artifactRef.repositoryFullName} AND "headSha" = ${args.artifactRef.commitSha} FOR SHARE`;
     }
     const lockedItem = await tx.backlogItem.findUnique({
@@ -391,7 +395,8 @@ export async function recordInitiativeSpecApproval(args: {
         ? pin.sourceKind === "repository_blob_archive" && Boolean(pin.documentVersionId && pin.documentBlobId)
         : args.artifactRef.kind === "feature-build-revision"
           ? pin.sourceKind === "build_artifact_revision" && pin.buildArtifactRevisionId === args.artifactRef.revisionId
-          : pin.sourceKind === "document_version" && pin.documentVersionId === args.artifactRef.versionId
+          : args.artifactRef.kind === "document-version"
+            && pin.sourceKind === "document_version" && pin.documentVersionId === args.artifactRef.versionId
             && pin.documentBlobId === (lockedArtifact.artifact.documentBlobId ?? null));
       if (!baseline || !chainHead?.ok || baseline.schemaVersion !== 1 || !same(baseline.subject, subject)
         || baseline.profile !== args.profile || baseline.artifactRole !== args.artifactRole

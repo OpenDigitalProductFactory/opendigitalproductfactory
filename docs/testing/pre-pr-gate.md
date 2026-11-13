@@ -290,6 +290,8 @@ Wired up in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) as the
 CI fails the PR check if any test fails. Branch protection requires the check to
 pass before merge.
 
+Agent toolchain bootstrap checks also feed the required `Merge Readiness` aggregate through the reusable `agent-toolchain-bootstrap-smoke.yml` workflow. Applicable PRs run both POSIX adapter smoke and stock macOS Python checks; merge-group runs exercise them exhaustively. A failed or cancelled bootstrap job blocks the aggregate. The existing change classifier can intentionally skip this job for docs-only PRs. Manual dispatch remains available for diagnostics.
+
 ## Run locally before pushing
 
 In a `compile-ready` worktree, run the source-local slice that covers what you
@@ -405,6 +407,14 @@ digest, candidate tree, commands, output, and result through
 state used by `pregate:status`. Its evidence carries no lease id because it
 never enters the scarce sandbox. A failed documentation check is a failed gate;
 it does not retry by consuming the heavyweight lane.
+
+`pregate.mjs` hands every diff to this gate, docs-only included (BI-78176241).
+It used to exit 0 on a docs-only diff before the gate started, so the lane
+never ran, no record was written, and the publish guard refused every
+docs-only push. "Docs-only" has one definition, `classifyDocsOnlyDiff` in
+`scripts/lib/ci-evidence-plan.mjs`. The planner, this lane, the pre-push
+exemption and sandbox admission all call it. If the lane declines a docs-only
+diff, the gate runs the full sandbox path. It does not exit 0 without a record.
 
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 routes to `scripts/gate-worktree.mjs` by default on every host. The Node-native
@@ -612,6 +622,29 @@ push` is a correct composition. Add `--json` for machine use. It never claims a
 lease and never runs a gate, so it is safe to call at any time, including while
 someone else's gate is mid-run.
 
+The separate `hostPreflight` observation identifies the retained host-guard
+attempt, its accountable process owner, last progress, missing proof and next
+action. It never changes the integration verdict or authorizes another run.
+For an abandoned controller with matching strong receipt/lock ownership, use
+`pnpm run pregate:status -- --reconcile-host-receipt` (add `--json` for structured
+output). This records an inconclusive disposition and preserves the original
+heartbeat and observations. It does not invent a child result or remove the
+original execution lock. Resolve child outcome and descendant ownership through
+the accountable executor before seeking new admission. Live, legacy, reused-PID,
+unreadable or changed ownership stays unknown and untouched; a foreign mutation
+lock is also retained. Normal status reads never reconcile automatically.
+
+**A gate that is still working says so (BI-F039AA83).** pregate writes
+`dpf-pregate-live.json` into the worktree's own git dir when it starts, moves its
+stage as it goes, and removes it on exit. While that marker's process is
+provably alive — the same pid + start-time proof the queue observers use — or
+the gate's queue observer is alive for HEAD, the status is `PREFLIGHT`,
+`QUEUED`, `ADMITTED` or `RUNNING` with the pid, stage and queue position, and
+the exit code is **75**: wait and read again. It is never `FAIL` or
+`NO-RECORD` for such a gate, and a second pregate in the same worktree is
+refused (exit 75) with a pointer at the live one. `FAIL` means a recorded
+failing verdict, nothing else.
+
 **Queued and broken read differently (BI-277ECBDB).** A queued claim reads
 `queued behind N other claims`: it is waiting on other work, and its waiter runs
 it. Before claiming, the gate probes every slot's PostgreSQL container
@@ -696,6 +729,15 @@ base SHA, and passes that SHA to the child plan without fetching again. A
 failed fetch records `fetch-failed` and exits before integration synthesis or
 expensive gates. This admission boundary avoids repeated rebase/rerun churn
 while queued; later movement on `main` is reconciled by the merge queue.
+
+The shared-safe helper serializes cooperating refreshes and unshallow operations
+with an ownership-token lock in the canonical Git common directory, so linked
+worktrees share the same boundary. The explicit child-plan fetch uses that
+helper too. Contention waits at most 60 seconds before reporting an unavailable
+prerequisite. It never reclaims a foreign or uncertain owner, removes Git's
+lockfiles, resets refs or substitutes an offline baseline. A retained owner
+requires ownership reconciliation; do not delete it to make a gate run. Raw Git
+commands outside the helper do not participate in this exclusion boundary.
 
 Offline operation must be explicit:
 `--offline-accepted-base` or
@@ -944,6 +986,12 @@ does not reserve capacity or authorize a later claim. That late check records
 `blocked_quiescence` for an ordinary run and parks with the same exit 75, while
 preserving existing evidence on `--finalize-evidence`. Neither check polls:
 resume after the server-owned quiescence coordinator completes.
+An already-running durable resumer retains its original reservation pin when
+its child returns the canonical `local_ci_quiescence_wait` packet. It waits
+within its original deadline, then retries that same pin. Only a validated
+`local_ci_durable_wait` handoff can replace the pin. Missing, malformed,
+foreign or mixed quiescence/handoff observations stop unrun; exit 75 alone
+does not authorize a replacement reservation.
 If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts

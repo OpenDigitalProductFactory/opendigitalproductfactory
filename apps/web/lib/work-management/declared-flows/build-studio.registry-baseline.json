@@ -1,0 +1,7 @@
+{
+  "lib/work-management/generated/inquiry-response-watch.shape.generated.ts": "f3fffd996ce70a780e902c72be4fa2b8f84d472e2065e6b48733f69951734b1f",
+  "lib/work-management/generated/index.generated.ts": "838dd8db11083e5dd18fb7b919b8f4ea40c0b028d453ad4bf5cdf935e9b035d0",
+  "lib/gpp/generated/gate-ratification-report.json": "06bd6e9ab0828285a7ecae98cd94ef3791ec6ff95c1b35e759ae8cda7704303a",
+  "lib/gpp/bindings.ts": "924bcee5240826835cc70c7224f169ce35bedf70ccd874dc4ab754f01403a59a",
+  "lib/gpp/binding-enforcement.ts": "cb9dbe2c13534a2ecb045874ac2cd02e93441ad4c7d050b7ccdc1b4c5dfc9221"
+}

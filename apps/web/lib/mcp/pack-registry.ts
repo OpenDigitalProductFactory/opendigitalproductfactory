@@ -16,6 +16,7 @@
 // `xPack,` line in the array. Nothing in mcp-tools.ts changes.
 
 import { composeToolPacks } from "./tool-registry";
+import { withSandboxRepairDispatch } from "./packs/sandbox-pack";
 import { withEngagementFulfillment } from "./packs/coworker-service-catalog-pack";
 import { fulfillCoworkerEngagement } from "./external-coworker-task-adapter";
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
@@ -213,4 +214,8 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   productOutcomesPack,
   initiativeReadinessPack,
   surfaceReadinessPack,
-].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment(fulfillCoworkerEngagement) : pack));
+].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment((engagementId, locator, userId, context, rawParams) => fulfillCoworkerEngagement(engagementId, locator, userId, context, undefined, rawParams))
+  : pack === sandboxPack ? withSandboxRepairDispatch(async (input) => {
+    const { runGauntletRepairTask } = await import("@/lib/build/build-orchestrator");
+    return runGauntletRepairTask(input);
+  }) : pack));

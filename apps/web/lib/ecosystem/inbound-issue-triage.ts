@@ -11,6 +11,7 @@
  * provenance. It is pure and dependency-injected: no Prisma, no fetch.
  */
 
+import { outcomeUnlessStated } from "@/lib/backlog/intake-outcome";
 import { createHash } from "crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
@@ -23,11 +24,12 @@ import {
   type BacklogIngestOutcome,
 } from "@/lib/operate/backlog-ingest";
 import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
+import { isSecurityGroupKind, securityOriginKind, type SecurityGroupKind } from "./security-finding-groups";
 
 /** Where an inbound item came from. Part of the provenance marker, so a re-run
  *  matches the same origin instead of filing a second copy. Upstream issues
  *  are additionally qualified by repository (BI-952F08BA). */
-export type InboundSourceKind = "upstream-issue" | "peer-demand";
+export type InboundSourceKind = "upstream-issue" | "peer-demand" | SecurityGroupKind;
 
 export interface InboundEcosystemItem {
   sourceKind: InboundSourceKind;
@@ -48,6 +50,10 @@ export interface InboundEcosystemItem {
   repository?: string | null;
   /** Source state as the origin reports it (e.g. "open" / "closed"). */
   state?: string | null;
+  /** Backlog priority to file with (lower is more urgent). Security groups only. */
+  priority?: number | null;
+  /** The open alerts a security group stands for (BI-C67E5CCB). */
+  securityGroup?: { alertNumbers: number[]; highestSeverity: string } | null;
 }
 
 export interface InboundTriageResult {
@@ -84,12 +90,23 @@ function isWorkType(value: unknown): value is BacklogWorkType {
 }
 
 /**
+ * A foreign summary (a peer item's body, an issue body) can carry the origin's
+ * own `[origin:kind:id]` markers. Left live, they give the filed item the same
+ * intake identity as unrelated local items and peer mirrors, so twin notes fan
+ * out across every copy (BI-C7D95F7E). Keep the text readable, make it inert:
+ * the item's only live marker is the one the front door appends.
+ */
+export function neutralizeOriginMarkers(text: string): string {
+  return text.replace(/\[origin:([^\]\r\n]*)\]/g, "(origin:$1)");
+}
+
+/**
  * Compose the body an operator reads, keeping the submitter and the link to the
  * origin visible. Provenance is the point of this slice: an item with no
  * attributable submitter cannot be weighted by submitter later.
  */
 export function composeInboundBody(item: InboundEcosystemItem): string {
-  const lines = [item.summary.trim()];
+  const lines = [neutralizeOriginMarkers(item.summary.trim())];
   const facts: string[] = [];
   if (item.submitter) facts.push(`Submitted by install \`${item.submitter}\``);
   if (typeof item.affectedOrganizations === "number") {
@@ -106,7 +123,9 @@ export function composeInboundBody(item: InboundEcosystemItem): string {
  * issue did not change, so the front door records nothing (BI-952F08BA).
  */
 export function inboundSourceFingerprint(item: InboundEcosystemItem): string {
-  const material = canonicalJson({ title: item.title, summary: item.summary, state: item.state ?? null });
+  const material = canonicalJson({ title: item.title, summary: item.summary, state: item.state ?? null,
+    occurrenceCount: item.occurrenceCount ?? null, archetypeRefs: item.archetypeRefs ?? null,
+    affectedOrganizations: item.affectedOrganizations ?? null });
   return createHash("sha256").update(material).digest("hex");
 }
 
@@ -116,8 +135,19 @@ export function inboundSourceFingerprint(item: InboundEcosystemItem): string {
  * repositories. A peer demand mirror id is already globally unique.
  */
 function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin" | "reconcile"> {
-  const kind = `ecosystem-${item.sourceKind}`;
-  if (item.sourceKind !== "upstream-issue") return { origin: { kind, id: item.sourceId } };
+  const kind = isSecurityGroupKind(item.sourceKind) ? securityOriginKind(item.sourceKind) : `ecosystem-${item.sourceKind}`;
+  if (item.sourceKind === "peer-demand") return {
+    origin: { kind, id: item.sourceId },
+    reconcile: {
+      // A peer mirror has a globally unique identity, independent of a forge.
+      repository: "",
+      sourceUrl: item.url ?? null,
+      state: item.state ?? "open",
+      fingerprint: inboundSourceFingerprint(item),
+      title: item.title,
+      body: composeInboundBody(item),
+    },
+  };
   const repository = item.repository?.trim().toLowerCase();
   if (!repository) {
     // Refuse rather than fall back to the bare number: an unqualified origin is
@@ -131,8 +161,10 @@ function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin
       sourceUrl: item.url ?? null,
       state: item.state ?? "open",
       fingerprint: inboundSourceFingerprint(item),
+      title: item.title,
+      body: composeInboundBody(item),
       // Dual-read the pre-qualification marker until every legacy intake maps.
-      legacyId: item.sourceId,
+      ...(item.sourceKind === "upstream-issue" ? { legacyId: item.sourceId } : {}),
     },
   };
 }
@@ -140,14 +172,22 @@ function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin
 /** Map one inbound item onto the backlog front door's input contract. */
 export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestInput {
   const scope = parseArchetypeRefs(item.archetypeRefs);
+  const body = composeInboundBody(item);
+  // BI-458CCA8D: keep the requester's own outcome; derive one only when they stated none.
+  const outcome = outcomeUnlessStated(
+    body,
+    `${item.submitter ? `The requesting install \`${item.submitter}\`` : "The requester"} gets "${item.title.trim()}", or a clear answer (${item.sourceKind} ${item.sourceId}).`,
+  );
   return {
     title: item.title.slice(0, 500),
-    body: composeInboundBody(item),
+    body,
+    ...(outcome ? { outcome } : {}),
     // The origin really is a person at another install asking for something;
     // it merely ARRIVES by automation. Recording it as automated-detection
     // would erase the submitter the arbitration model depends on.
-    source: "user-request",
+    source: isSecurityGroupKind(item.sourceKind) ? "automated-detection" : "user-request",
     workType: isWorkType(item.workType) ? item.workType : "feature",
+    ...(typeof item.priority === "number" ? { priority: item.priority } : {}),
     // Provenance marker: a re-run of the sweep matches this same origin rather
     // than filing a duplicate.
     ...originFor(item),
@@ -205,6 +245,8 @@ export function mapPeerDemandMirrors(
   return rows.flatMap((row) => {
     const decoded = decode(row.payload);
     if (!decoded) return [];
+    // Withdrawn at the origin: the peer closed it, so it is not open work here (BI-C7D95F7E).
+    if (isWithdrawnDemandPayload(row.payload)) return [];
     const envelope = decoded.envelope;
     return [{
       sourceKind: "peer-demand" as const,
@@ -219,6 +261,12 @@ export function mapPeerDemandMirrors(
       affectedOrganizations: envelope.signal?.affectedOrganizations ?? null,
     }];
   });
+}
+
+function isWithdrawnDemandPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const { activity, disposition } = payload as { activity?: unknown; disposition?: unknown };
+  return disposition === "withdrawn" || activity === "dpf.demand.withdrawn";
 }
 
 /** The envelope fields this mapper reads. Structural on purpose, so the mapper

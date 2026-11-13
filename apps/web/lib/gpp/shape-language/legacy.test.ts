@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import type { WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { legacyDroppedFields, legacyProjection } from "./legacy";
+import { legacyDroppedFields, legacyProjection } from "@dpf/validators/gpp/legacy";
 
 /**
  * inquiry-response-watch@1.0.0 as it was hand-declared, with no additive field

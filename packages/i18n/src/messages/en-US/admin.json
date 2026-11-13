@@ -79,6 +79,36 @@
     "dialogPlaceholder": "For example: setup account nobody uses",
     "revokedNotice": ".input {$grants :integer}\n.input {$tokens :integer}\n.match $grants $tokens\none one {{Ended {$email}'s access (1 sign-in grant, 1 access token).}}\none * {{Ended {$email}'s access (1 sign-in grant, {$tokens} access tokens).}}\n* one {{Ended {$email}'s access ({$grants} sign-in grants, 1 access token).}}\n* * {{Ended {$email}'s access ({$grants} sign-in grants, {$tokens} access tokens).}}"
   },
+  "accountAgentAccess": {
+    "heading": "Agent access for one account",
+    "intro": "Everything an account still uses to let AI agents act for it: personal tokens, sign-ins through each connected app, and automated-tool keys it owns. Handing over an account's work leaves all of this live.",
+    "accountLabel": "Account email",
+    "accountHint": "The person's sign-in email.",
+    "show": "Show access",
+    "loading": "Loading…",
+    "handedOver": "Work handed over {$when}. Its agent access is still live until someone ends it here.",
+    "inactive": "This account cannot sign in.",
+    "nothingLive": "This account holds no live agent access.",
+    "personalHeading": "Personal tokens",
+    "clientsHeading": "Connected apps",
+    "ownedHeading": "Automated-tool keys it owns",
+    "ownedHint": "These connect without a consent screen and act with this account's authority.",
+    "colName": "Name",
+    "colToken": "Token",
+    "colApp": "App",
+    "colClientId": "Client id",
+    "colAccessTokens": "Access tokens",
+    "colGrants": "Sign-in grants",
+    "colLastUsed": "Last used",
+    "colCreated": "Created",
+    "never": "never",
+    "end": "End this account's agent access",
+    "you": "This is your own account. End your own connections from each app instead.",
+    "dialogTitle": "End this account's agent access",
+    "dialogMessage": "Every personal token, app sign-in and automated-tool key that {$email} holds stops working now. Other people stay connected. The account can still sign in and connect again unless it is deactivated. Why is its access ending?",
+    "dialogPlaceholder": "For example: work handed over, account no longer used",
+    "endedNotice": "Ended {$email}'s agent access: {$tokens} token(s), {$grants} sign-in grant(s) and {$clients} automated-tool key(s)."
+  },
   "closeAuthorisation": {
     "heading": "Let the acceptance sweep close finished work",
     "on": "On",
@@ -306,5 +336,63 @@
       "protocolUnavailable": "The host's change tool could not be verified, so nothing was changed. Open runtime health.",
       "unknown": "The platform returned an answer this page does not recognise."
     }
+  },
+  "gateEfficacy": {
+    "title": "Gate efficacy",
+    "from": "From",
+    "to": "to",
+    "summaryRegion": "Summary",
+    "summary": "{$runs} guard checks recorded, {$classified} refusals classified. Unknown measures: {$unknown}.",
+    "none": "none",
+    "noDecision": "Nothing here needs your decision. Guards that look wasteful get a review item automatically.",
+    "stats": {
+      "checks": "Guard checks",
+      "checksHint": "last 14 days",
+      "refusals": "Refusals classified",
+      "waiting": "Approvals waiting",
+      "waitingHint": "requests, not cards",
+      "unknown": "Unknown measures"
+    },
+    "sections": {
+      "measures": "GPP §11 measures",
+      "guards": "Guards, most expensive first"
+    },
+    "tables": {
+      "gpp": "GPP §11 measures",
+      "proxies": "Subset proxies and approval load",
+      "breakdowns": "Breakdowns"
+    }
+  },
+  "paidAiAllowance": {
+    "heading": "Paid AI allowance",
+    "notSet": "Not set. Each coworker's built-in daily cap limits its paid AI use.",
+    "current": "{$allowance} a day for all coworkers. {$spent} used today.",
+    "currentSpendUnavailable": "{$allowance} a day for all coworkers. Today's use could not be read just now.",
+    "scope": "Local and subscription models are never limited. It resets at 00:00 UTC.",
+    "amountLabel": "Dollars per day (leave empty to use the built-in caps)",
+    "reasonLabel": "Reason (recorded)",
+    "lastChanged": "Last changed {$date}",
+    "lastChangedBy": "Last changed {$date} by {$by}",
+    "save": "Save allowance",
+    "saving": "Saving...",
+    "saved": "Saved"
+  },
+  "upstreamFeedback": {
+    "pageTitle": "Admin",
+    "pageSubtitle": "Upstream feedback",
+    "heading": "Send problems found here to the project team",
+    "explanation": "On: once a day, problems this installation has already triaged are sent to the project team so they can be fixed and voted on by other installations. Each report is redacted and sent under this installation's pseudonym, never a person's name. Nothing is sent while this is off.",
+    "switchLabel": "Upstream feedback",
+    "stateOn": "On. Triaged problems are sent daily.",
+    "stateOff": "Off. Nothing leaves this installation.",
+    "pendingOn": "Not saved yet. Still off until you save; after that, triaged problems are sent daily.",
+    "pendingOff": "Not saved yet. Still on until you save; after that, nothing leaves this installation.",
+    "reasonPrivate": "This installation keeps everything on its own system, so nothing can be sent.",
+    "reasonPaused": "Contributions are paused for this installation, which overrides this switch.",
+    "reasonNoAuthority": "Only someone who manages the platform can change this.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveFailed": "Could not save. Try again."
   }
 }

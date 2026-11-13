@@ -1,3 +1,14 @@
+---
+# Doc-impact edges (BI-9B17E889): the per-client dpf connector descriptors this
+# runbook describes. Changing one flags this page in the Docs Impact Gate and in
+# a Workroom's change-impact contract.
+relatedCode:
+  - packages/dpf-skill-pack/claude.mcp.json
+  - packages/dpf-skill-pack/codex.mcp.json
+  - packages/dpf-skill-pack/grok.mcp.json
+  - packages/dpf-skill-pack/antigravity.mcp.json
+---
+
 # MCP tool authorization runbook
 
 Source host tooling applies existing authorized CA trust to native MCP and OAuth
@@ -38,6 +49,16 @@ request failures remain `unavailable`, not a diagnosed denial. This observation
 contains no credential values, actor identifiers or raw errors. A current allowed
 result is neither a historical cause nor permission to retry. Use the returned
 supported remedy for the failed stage; never replace the saved credential by hand.
+
+For `oauth-authority-invalid`, optional `detail` identifies the first current
+failure in the shared execution predicate: token kind/revocation, missing or
+revoked client, ineligible human, missing continuity binding or evidence, or
+missing/invalid consent. The fixed `nextAction` distinguishes account-owner
+review from a binding that the recovery owner must reconcile. Missing continuity
+evidence does not prove expiry caused the original failure, and reconnecting a
+different client does not restore the original binding. Storage failures remain
+unavailable. The diagnostic does not change execution eligibility, settle an old
+execution, or authorize a retry.
 
 The original signed-in human can read the same bounded recovery observation on
 the existing `/api/internal/tasks/<taskId>` task-detail endpoint. Its original
@@ -106,7 +127,17 @@ and receives every approval its assistant asks for. The POST binds only if
 the ticked account is still the session's account. `Use a different
 account` signs in again and returns to the same request. If a connection
 was made under the wrong account, revoke it and reconnect; approvals never
-follow the connection to another person. An administrator ends one person's
+follow the connection to another person. The platform automation persona
+(`automation@dpf.local`) is never offered there (BI-F586F8A5): a browser
+still holding its session gets a page naming that account with a link to
+sign in as yourself, and the POST issues no code. The governed acceptance
+flow keeps its path: mint `issue_ux_verification_sign_in` with `nextPath`
+set to the exact `/api/oauth/authorize?...` request (its `client_id` and
+`code_challenge`); that session may consent to that one request only.
+Fixture verification users are ordinary accounts and are unaffected. A
+connection refused `workroom_access_denied` is told which account it acts
+as (`data.connectedAs`) and to reconnect while signed in as the room's
+owner; the owner is not named to a caller who is not admitted. An administrator ends one person's
 grants under a shared client registration with People > Revoke this person's
 access on Admin > Platform Development (BI-0A724798); the whole-client revoke
 stays the larger control. The default flow is one Connect action;
@@ -279,6 +310,8 @@ Per-invocation gate axes (route-scope, subject-scope, approval/HITL) are **not**
 
 **Asynchronous Task delivery:** for ordinary external task submissions, `/api/mcp/v1` commits the `TaskRun` plus its request/authentication snapshot, enqueues the deterministic worker, and returns the durable task handle immediately. An authenticated GET to the same Streamable HTTP endpoint opens SSE and first replays durable status snapshots before sending `notifications/tasks/status`. Treat that notification as a wake-up hint only: its payload is projected from committed task state, but clients still re-read with `tasks/get` and may use `tasks/list`; clients without notification support poll those methods. DPF does not accept caller-supplied webhook URLs, because redirect targets would create a new outbound trust and credential boundary. The default-on path can be disabled with `DPF_EXTERNAL_MCP_TASK_ASYNC=off` for rollback while preserving the prior synchronous execution contract.
 
+**Work Room resources (BI-ED52AB82):** `/api/mcp/v1` also serves `resources/list`, `resources/templates/list`, `resources/read`, `resources/subscribe` and `resources/unsubscribe` for `dpf://rooms/<caseKey>/messages`, and advertises `resources: { subscribe: true }`. A read or subscribe runs `read_room_messages` through this route's own `tools/call` path, so it needs the same token scope, coworker grant (`work_room_read`), user capability and `content` room admission, and it is audited the same way. A refused subscriber stores nothing. On the GET stream, `notifications/resources/updated` carries only the room URI. Each notice re-checks the credential, the grant and room admission, so revoking any of them stops push immediately. Frames carry `id: <streamId>.<epochMs>.<seq>`; a reconnect with `Last-Event-ID` replays the room updates that stream missed. Design: [agent dialog broker §6.7](../superpowers/specs/2026-10-27-agent-dialog-broker-design.md).
+
 POST and GET share the same bearer-token authentication resolver. A stream is token-scoped, notifications contain no bearer material, and authorization is re-established from persisted server-owned context when the background worker claims the task. Opening an SSE connection never grants execution authority, and losing it never changes task state. Duplicate queue delivery is fenced by the canonical `TaskRun` compare-and-set claim; reconciliation is bounded and auditable rather than a second executor.
 
 **Progressive-disclosure recovery:** `load_tools` is always added to the MCP tool list after authorization filtering. When a DPF tool is not attached in the current model turn, call `load_tools` with either `{ "names": ["exact_tool_name"] }` or `{ "query": "the capability needed in natural language" }`. It can only select tools already permitted by the token/grant intersection and loads at most 16 at a time. A successful call appends matches to the per-token session; it never replaces the core floor. A client that receives `notifications/tools/list_changed` may refresh immediately, while every client can re-fetch `tools/list` after the result and use the loaded tool in the same bearer-token session.
@@ -291,6 +324,7 @@ Codex Desktop can retain a stale top-level model registry even after the server 
 2. HTTP `401` means the bearer credential is absent, invalid or expired. **For an OAuth client this is self-healing and not a defect** — the challenge carries `resource_metadata`, so the client rediscovers, refreshes or re-authorizes on its own; if it does not, the client is not performing RFC 9728 discovery. For a legacy `dpfmcp_` PAT there is no refresh grant: rotate or reseed the local client configuration, and prefer migrating that client to OAuth. Never print the token.
 2b. HTTP `403` with `error="insufficient_scope"` is **not** an auth failure — it is a step-up prompt. See the scope-escalation rule above.
 3. Structured `insufficient_token_scope` / `insufficient_tool_grant` means the server is connected but authorization refused the operation. Stop; do not work around the grant intersection.
+3b. **Every refusal says whether to call again (BI-E458A9CB).** A governed refusal's `data` carries `retry` and `nextAction`: `retry: "never"` with `wakeBy` naming what changes the answer (an approval decision on `envelopeId`, an authority change, or a person), `retry: "after-input"` once the named input exists, or `retry: "after"` with `retryAfterMs` for a check that could not run. An approval wait also names the exact readback call, `get_my_approval_status` with its `envelopeId`. An identical repeat (same principal, tool, arguments and authority facts) inside the window is **parked**: it returns the recorded answer with `governance.parked`, writes no new authority row and raises no new approval card, and the first parked repeat records a `refusal_breaker` ImprovementSignal. A grant, room or argument change is a different call and is evaluated at once; a decided or expired approval releases its park. Code: `apps/web/lib/govern/authority/refusal-breaker.ts`.
 4. Structured `unknown_tool` means the called name is not in the server grant map. Follow its `recovery` payload: try exact-name `load_tools` when spelling is known, otherwise intent query or `search_tool_marketplace`, then re-list or use the host's programmatic catalog fallback.
 5. MCP resources and MCP tools are different discovery surfaces. Listing resources cannot prove that a DPF tool is absent, and installing another plugin is not recovery for an already-connected DPF server.
 6. A fresh Codex task with a healthy connector but only the core catalog usually means its configured URL lacks `?tier=full`; this is bootstrap drift, not missing authority. Re-run bootstrap and reconnect. Preserve `?tier=core` for generic-client diagnosis rather than widening every client.

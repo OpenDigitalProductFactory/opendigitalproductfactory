@@ -24,12 +24,12 @@ import { diffWorkShapeBinding } from "@/lib/work-management/work-shape-binding-d
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { compileShapeDocument, shapeDocumentDigest } from "./compile";
-import { decompile } from "./decompile";
+import { compileShapeDocument, shapeDocumentDigest } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
-import { gppLayoutSchema } from "./gpp-layout-schema";
-import { legacyProjection } from "./legacy";
-import type { GppResolveSources } from "./resolve";
+import { gppLayoutSchema } from "@dpf/validators/gpp/gpp-layout-schema";
+import { legacyProjection } from "@dpf/validators/gpp/legacy";
+import type { GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources, liveDirectExecuteSites } from "./resolve-sources";
 
 const DRC_DIR = join(__dirname, "__fixtures__", "drc");
@@ -72,6 +72,14 @@ function compileFixture(name: string) {
 }
 
 describe("compile refuses a document with any error finding, and emits nothing", () => {
+  it("DPF ignores an injected runtime diagnostic disposition outside its adapter-owned policy", async () => {
+    const result = await compileShapeDocument(readFileSync(join(DRC_DIR, "c-2-unregistered-tool.gpp.json"), "utf8"), sources, {
+      sourcePath: "fixtures/c-2-unregistered-tool.gpp.json", ratification: DRC_RATIFICATION, directSites,
+      ...{ diagnosticDisposition: () => ({ diagnostics: [], blocking: false }) },
+    });
+    expect(result.accepted).toBe(false);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ rule: "C-2", severity: "error" }));
+  });
   it.each(VIOLATIONS.filter((name) => !WARNING_RULES.has(EXPECTED[name]?.rule ?? "")))("%s", async (name) => {
     const expected = EXPECTED[name] as Expected;
     const result = await compileFixture(name);

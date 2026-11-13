@@ -14,7 +14,7 @@ import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
 import { LIMITATION_RESPONSE_BLOCK } from "./limitation-response-block";
 import { ESCALATION_LADDER_BLOCK, COORDINATOR_BLOCK } from "./escalation-ladder";
 import { buildInitiativeBlock } from "./initiative-block";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import { readingLevelDirective, type ReadingLevel } from "@dpf/validators";
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from "./prompt-boundary";
 

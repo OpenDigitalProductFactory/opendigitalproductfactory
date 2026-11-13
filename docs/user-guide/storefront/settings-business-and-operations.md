@@ -20,7 +20,7 @@ by the outcome you need, rather than repeating the same fact in several places.
 | Tab | Use it for | Main effect |
 | --- | --- | --- |
 | **Portal** | public URL, tagline, description, contact details, hero image | changes the public storefront presentation |
-| **Your Business** | mission, target market, business size and reach, address, jurisdictions, payment handling, listing status, and risk posture | updates context used by the portal, compliance logic, and AI coworkers |
+| **Your Business** | your direction (mission, vision and top-level outcomes), target market, business size and reach, address, jurisdictions, payment handling, listing status, and risk posture | updates context used by the portal, compliance logic, and AI coworkers |
 | **Capabilities** | optional business capabilities supported by the selected operating model | changes which platform capabilities are declared active |
 | **Operating Hours** | business timezone and open/closed schedule | changes booking availability and derives safe maintenance windows |
 
@@ -46,13 +46,44 @@ the live customer experience as soon as the save completes. Open **View Live**
 after every change. If the change is wrong, restore the prior value and save
 again; for a slug change, restore the old slug as quickly as possible.
 
+## Set Your Direction
+
+The **Your direction** panel at the top of **Settings → Your Business** holds
+the three things your organization is trying to achieve:
+
+- **Mission**: why your organization exists, in a sentence.
+- **Vision**: where you want to be in a few years.
+- **Top-level outcomes**: up to five results you are working towards. Each one
+  has a plain statement and an optional **How we'll know**, such as a number or
+  a sign you would see.
+
+These sit at the top of everything the platform works on. Every AI coworker
+reads them, and business, platform and profession decisions are weighed
+against them. Epics and backlog items will link up to the outcome they serve.
+
+The fields start empty. The platform never fills them in for you. **Suggest a
+starter** offers a starting mission for your kind of business, and it only
+fills the field when you press it. You can also ask your COO to help you word
+an outcome, but nothing is saved until you select **Save direction**.
+
+Every save is kept as a numbered version with who saved it, so a decision can
+show which version of your direction it read. Removing an outcome retires it
+rather than erasing it.
+
+During first-run setup, **Your Direction** is its own step, right after **Your
+Business**. Setup asks for a mission, a vision and one to three outcomes. You
+can skip the step, and setup carries on. While any of the three is missing,
+**Needs you** shows one item, **Set your direction**, that brings you back to
+this panel. Installs that finished setup before this step existed see the
+same item.
+
 ## Keep Business Context Current
 
 Use **Settings → Your Business** for facts that describe the organization and
 shape platform decisions. The form may begin with suggestions from onboarding,
 but the operator remains responsible for confirming them.
 
-Start with the description, mission, target market, source system, company
+Start with the description, target market, source system, company
 size, geographic scope, and business address. The address can derive the
 business timezone. Then review the jurisdiction detail:
 

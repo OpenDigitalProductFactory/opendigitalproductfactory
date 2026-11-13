@@ -8,12 +8,11 @@ import type { ActionResult } from "@/lib/shared/action-result";
 
 import { loadItemDeliveryActorIds, type DeliveryActorDb } from "./delivery-actors";
 import { excludedAgentSet, projectOwedAcceptance, type OwedAcceptanceOwnerRecovery, type OwedAcceptanceOwnerResolver } from "./owed-acceptance";
-import { executionEvidenceGrants, isExecutionEvidenceLane, resolveExecutionEvidenceOwner } from "./execution-evidence-owner";
+import { executionEvidenceGrants, isExecutionEvidenceLane, resolveExecutionEvidenceOwner, stageEvidenceWriterGrants } from "./execution-evidence-owner";
 import { createOwedAcceptanceOwnerResolver } from "./owed-acceptance-owner";
 import { inPlatformGrants, withNoInPlatformCoworker, type InPlatformOwnerDb } from "./in-platform-owners";
-import { retainedDeploymentObligation, type AcceptanceSweepPageItem } from "./acceptance-sweep-page";
+import type { AcceptanceSweepPageItem } from "./acceptance-sweep-page";
 import type { SweepEvaluation } from "./acceptance-sweep-run";
-import { retainedAcceptanceWithoutBinding } from "./retained-acceptance";
 
 // One item's owed acceptance, as the sweep computes it (BI-DF255666).
 // Design: docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md §3.1, §3.3 step 2.
@@ -37,8 +36,6 @@ export type SweepEvaluateDeps = {
   loadDeliveryActorIds(item: AcceptanceSweepPageItem): Promise<ActionResult<string[]>>;
   loadCompletionDecision(itemId: string, authorAgentId: string | null): Promise<InitiativeReadinessDecision | null>;
   resolveOwner: OwedAcceptanceOwnerResolver;
-  /** Authenticated Small runtime binding; larger lanes never consume this. */
-  loadRetainedSmallCheck?: (itemId: string) => Promise<import("@/lib/runtime-coordination/small-acceptance-binding").RetainedSmallCheck>;
 };
 
 /**
@@ -57,6 +54,8 @@ export function createSweepOwnerResolver(context: {
   ports?: Partial<TerminalRecoveryPorts>;
   /** The grants that authorize record_execution_evidence; the grant registry by default. */
   executionEvidenceGrants?: () => Promise<readonly string[]>;
+  /** The grants that authorize the verify stage's record_workroom_evidence (BI-A8679D84); the grant registry by default. */
+  stageEvidenceWriterGrants?: () => Promise<readonly string[]>;
 }): OwedAcceptanceOwnerResolver {
   const grants = inPlatformGrants(context.db);
   const loadLaneGrants = context.executionEvidenceGrants ?? executionEvidenceGrants;
@@ -97,6 +96,7 @@ export function createSweepOwnerResolver(context: {
       excludedAgentIds: excludedAgentSet(authorAgentId, excludedAgentIds),
       grants,
       satisfyingGrants: await loadLaneGrants(),
+      stageWriterGrants: await (context.stageEvidenceWriterGrants ?? stageEvidenceWriterGrants)(),
     });
     return {
       reviewerRoutes: [...chained.reviewerRoutes, ...owned.reviewerRoutes],
@@ -128,9 +128,12 @@ export async function evaluateOwedAcceptance(
   const actors = await deps.loadDeliveryActorIds(item);
   if (!actors.ok) throw new Error(`The delivery actors of ${item.itemId} could not be read: ${actors.error}`);
   // The completion read can observe a closure newer than the page snapshot.
+  // A done item owes no acceptance (BI-C899BB40, operator direction
+  // 2026-10-27): nothing to close, nothing to route. If its closure left a
+  // bounded step, the next run's confirmation lane takes it.
   if (item.status === "done" || decision.transitionObject.expectedVersion === "done") {
-    const smallCheck = decision.shapeDecision?.effective === "small" ? await deps.loadRetainedSmallCheck?.(item.itemId) : undefined;
-    return retainedAcceptanceWithoutBinding(decision, excludedAgentSet(authorAgentId, actors.data), smallCheck);
+    return { owed: [], owner: null, unroutable: [], closable: false,
+      excludedAgentIds: excludedAgentSet(authorAgentId, actors.data), decision };
   }
   // The decision travels with the projection so a closure (BI-45D3BBF4) cites the gate it acted on.
   return {
@@ -142,11 +145,6 @@ export async function evaluateOwedAcceptance(
 /** Production bindings. Lazy imports keep the read tools off the scheduler's import graph. */
 export function productionSweepEvaluateDeps(db: InPlatformOwnerDb & DeliveryActorDb): SweepEvaluateDeps {
   return {
-    loadRetainedSmallCheck: async itemId => {
-      const { prisma } = await import("@dpf/db");
-      const { readRetainedSmallCheck } = await import("@/lib/runtime-coordination/small-acceptance-binding.server");
-      return readRetainedSmallCheck(prisma, itemId);
-    },
     loadDeliveryActorIds: (item) => loadItemDeliveryActorIds(db, item.itemId),
     loadAuthorAgentId: async (item) => {
       const { loadRoomAuthors } = await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch");
@@ -154,24 +152,6 @@ export function productionSweepEvaluateDeps(db: InPlatformOwnerDb & DeliveryActo
       return authorAgentIdFrom(await loadRoomAuthors({ backlogItemId: { in: [item.itemId, item.id] } }), item);
     },
     loadCompletionDecision: async (itemId, authorAgentId) => {
-      const { prisma } = await import("@dpf/db");
-      const { BACKLOG_COMPLETION_ITEM_SELECT, evaluateBacklogItemCompletion, isDirectMergePlatformWork } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
-      const item = await prisma.backlogItem.findUnique({ where: { itemId }, select: BACKLOG_COMPLETION_ITEM_SELECT });
-      if (item?.status === "done") {
-        const activities = await prisma.backlogItemActivity.findMany({
-          where: { backlogItemId: item.id, kind: "status_change" },
-          orderBy: [{ recordedAt: "desc" }, { id: "desc" }], take: 1,
-          select: { kind: true, recordedAt: true, payload: true },
-        });
-        if (!isDirectMergePlatformWork(item) || !retainedDeploymentObligation({
-          ...item, activities, agentId: null, claimedByAgentId: null,
-        })) return null;
-        const result = await evaluateBacklogItemCompletion({
-          db: prisma, item, rawManifest: undefined, evaluatedAt: new Date().toISOString(),
-          transitionObject: { kind: "backlog-item", id: itemId, expectedVersion: "done", targetState: "completion" },
-        });
-        return result.independentAcceptanceDecision;
-      }
       const { getBacklogItem } = await import("@/lib/mcp/packs/backlog-pack-read-tools");
       const result = await getBacklogItem({ itemId }, authorAgentId);
       const completion = (result.data?.readiness as { decisions?: { completion?: unknown } } | undefined)?.decisions?.completion;

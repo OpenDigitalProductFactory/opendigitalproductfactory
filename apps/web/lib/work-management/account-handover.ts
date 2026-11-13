@@ -32,6 +32,7 @@ import { createHash } from "node:crypto";
 
 import type { prisma } from "@dpf/db";
 
+import { agentAccessHref, agentAccessLocationLabel } from "@/lib/navigation/admin-location";
 import { resolveWorkOwner, type WorkOwnerSource } from "@/lib/portfolio/accountable-owner";
 import { PORTFOLIO_SLUG_BY_ROLE } from "@/lib/portfolio/portfolio-role";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
@@ -61,9 +62,12 @@ export type HandoverPlan = {
   items: HandoverItem[];
   refused: HandoverRefusal[];
   /** Live agent credentials the account still holds. Not moved, not in the digest. */
-  liveAgentCredentials: { accessTokens: number; refreshGrants: number };
+  liveAgentCredentials: LiveAgentCredentials;
   digest: string;
 };
+
+/** Agent tokens (personal and OAuth), refresh grants, and headless clients the account owns. */
+export type LiveAgentCredentials = { accessTokens: number; refreshGrants: number; credentialsClients: number };
 
 export type AccountHandoverDb = {
   user: Pick<Db["user"], "findFirst" | "update">;
@@ -76,6 +80,7 @@ export type AccountHandoverDb = {
   scheduledAgentTask: Pick<Db["scheduledAgentTask"], "findMany" | "update">;
   mcpApiToken: Pick<Db["mcpApiToken"], "count">;
   oAuthRefreshToken: Pick<Db["oAuthRefreshToken"], "count">;
+  oAuthClient: Pick<Db["oAuthClient"], "count">;
 };
 
 const TERMINAL_ROOM_STATUSES = ["complete", "abandoned", "archived"];
@@ -189,13 +194,27 @@ export async function planAccountHandover(
   }
 
   const now = input.now ?? new Date();
-  const [accessTokens, refreshGrants] = await Promise.all([
+  // BI-DB506554 (DI-ECD8C6F6FFB4): a credentials client the account owns mints
+  // tokens with no consent screen, so it counts as access the account keeps.
+  const [accessTokens, refreshGrants, credentialsClients] = await Promise.all([
     db.mcpApiToken.count({ where: { userId: source.id, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } }),
     db.oAuthRefreshToken.count({ where: { userId: source.id, revokedAt: null, consumedAt: null, expiresAt: { gt: now } } }),
+    db.oAuthClient.count({ where: { ownerUserId: source.id, registrationKind: "credentials", revokedAt: null } }),
   ]);
 
   return ok({ sourceUserId: source.id, sourceEmail: source.email, items, refused,
-    liveAgentCredentials: { accessTokens, refreshGrants }, digest: handoverDigest(items, source.id) });
+    liveAgentCredentials: { accessTokens, refreshGrants, credentialsClients }, digest: handoverDigest(items, source.id) });
+}
+
+/**
+ * What a handover leaves live, and where to end it. The handover moves work,
+ * not access (BI-9D2199D4); this names the panel that lists and ends the
+ * account's credentials, by the menu path the navigation actually shows.
+ */
+export function liveAgentAccessNote(email: string, creds: LiveAgentCredentials): string {
+  if (creds.accessTokens + creds.refreshGrants + creds.credentialsClients === 0) return "";
+  return ` The account keeps its access: ${creds.accessTokens} agent token(s), ${creds.refreshGrants} refresh grant(s) and ${creds.credentialsClients} headless client(s) it owns stay live.`
+    + ` To see and end them, open ${agentAccessLocationLabel()} (${agentAccessHref(email)}).`;
 }
 
 export type HandoverResult = {

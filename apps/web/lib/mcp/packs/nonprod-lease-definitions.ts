@@ -6,6 +6,7 @@ const hostPressureSchema = {
   type: "object",
   properties: {
     observedAt: { type: "string" },
+    totalMemoryBytes: { type: "number" },
     availableMemoryBytes: { type: "number" },
     sustainedCpuPercent: { type: "number" },
     diskFreeBytes: { type: "number" },
@@ -16,6 +17,7 @@ const hostPressureSchema = {
   },
   required: [
     "observedAt",
+    "totalMemoryBytes",
     "availableMemoryBytes",
     "sustainedCpuPercent",
     "diskFreeBytes",
@@ -152,6 +154,12 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
           },
           required: ["totalMemoryBytes", "availableMemoryBytes", "inferenceResident"],
         },
+        qualificationAdmissionToken: {
+          type: "string",
+          description: "Opaque server-issued verify-phase qualification binding used only by the canonical host runner.",
+        },
+        qualificationPlatform: { type: "string", enum: ["linux", "win32"] },
+        qualificationCommand: { type: "string" },
       },
       required: ["environmentKey", "ownerProvider", "ownerSessionId", "purpose", "expiresAt"],
     },

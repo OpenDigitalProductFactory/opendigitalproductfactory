@@ -46,6 +46,7 @@ describe("product outcomes MCP pack", () => {
       "link_product_objective_work",
       "record_product_outcome_observation",
       "correct_product_outcome_observation",
+      "designate_platform_work_product",
     ]);
     expect(
       productOutcomesPack.definitions.some((definition) =>

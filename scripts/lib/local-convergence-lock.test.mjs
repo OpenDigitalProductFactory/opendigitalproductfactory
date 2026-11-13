@@ -13,6 +13,16 @@ import {
 
 const NOW = new Date("2026-08-12T17:00:00.000Z");
 
+test("non-reclaiming acquisition preserves even a provably dead foreign owner", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-nonreclaim-lock-"));
+  const path = join(directory, "receipt.lock");
+  const first = acquireLocalConvergenceLock({ path, pid: 818, processIdentity: () => "birth:old" });
+  const second = acquireLocalConvergenceLock({ path, pid: 819, processIdentity: () => "birth:new", processAlive: () => false, reconcileStale: false });
+  assert.equal(second.status, "conflict");
+  assert.equal(JSON.parse(readFileSync(join(path, "owner.json"), "utf8")).token, first.owner.token);
+  releaseLocalConvergenceLock({ path, token: first.owner.token });
+});
+
 test("a live Windows owner remains fail-closed even when its lock is old", () => {
   const directory = mkdtempSync(join(tmpdir(), "dpf-convergence-lock-"));
   const lockPath = join(directory, "converge.lock");

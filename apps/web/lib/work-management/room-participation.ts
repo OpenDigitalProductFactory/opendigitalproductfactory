@@ -17,6 +17,25 @@ const SENSITIVITY_RANK: Record<string, number> = {
   critical: 3,
 };
 
+/** Does any held clearance reach the ceiling? One rule for room access and the room charter. */
+export function clearanceCovers(clearance: readonly string[], ceiling: string): boolean {
+  const required = SENSITIVITY_RANK[ceiling] ?? Number.MAX_SAFE_INTEGER;
+  return Math.max(-1, ...clearance.map((value) => SENSITIVITY_RANK[value] ?? -1)) >= required;
+}
+
+const CLEARANCE_LEVELS = ["public", "internal", "confidential", "restricted"] as const;
+
+/** Every level from public up to and including `ceiling`; empty for an unknown ceiling. */
+export function clearanceLevelsUpTo(ceiling: string): string[] {
+  const index = (CLEARANCE_LEVELS as readonly string[]).indexOf(ceiling);
+  return index < 0 ? [] : CLEARANCE_LEVELS.slice(0, index + 1);
+}
+
+/** The highest level held, in the words a person reads; "public" when nothing known is held. */
+export function highestClearance(clearance: readonly string[]): string {
+  return [...CLEARANCE_LEVELS].reverse().find((level) => clearance.includes(level)) ?? "public";
+}
+
 export type WorkroomAccessDecision = {
   level: WorkroomAccessLevel;
   reason: "authorized" | "discover-only" | "not-admitted" | "insufficient-clearance";
@@ -75,12 +94,7 @@ export function authorizeWorkroomAccess(input: {
       : { level: "none", reason: "not-admitted" };
   }
 
-  const required = SENSITIVITY_RANK[input.sensitivityCeiling ?? "public"] ?? Number.MAX_SAFE_INTEGER;
-  const clearance = Math.max(
-    -1,
-    ...input.sensitivityClearance.map((value) => SENSITIVITY_RANK[value] ?? -1),
-  );
-  if (clearance < required) {
+  if (!clearanceCovers(input.sensitivityClearance, input.sensitivityCeiling ?? "public")) {
     return { level: "discover", reason: "insufficient-clearance" };
   }
 

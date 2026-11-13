@@ -417,6 +417,81 @@ portal_leaf_needs_reissue() {
   return 1
 }
 
+# Expired clients cannot authenticate ordinary mTLS renewal. The authority
+# reuses its restricted issuer; neither TLS nor the CA expiry policy is relaxed.
+repair_authority_edge_client() { (
+  edge_subject="$1"
+  client_lock="$OUT_DIR/.edge-client-recovery.lock"
+  mkdir "$client_lock" || { echo "Another Edge client repair needs reconciliation." >&2; exit 1; }
+  client_work=""; client_previous=0; client_publishing=0
+  cleanup_edge_client() {
+    result=$?
+    trap - EXIT
+    if [ "$client_publishing" = "1" ]; then
+      if [ "$client_previous" = "1" ]; then
+        if ! cp -p "$client_work/previous.key" "$EDGE_CLIENT_KEY" || ! cp -p "$client_work/previous.crt" "$EDGE_CLIENT_CERT"; then
+          echo "Edge client restoration is unproven; retain the private repair checkpoint." >&2
+          exit 1
+        fi
+      else
+        rm -f "$EDGE_CLIENT_KEY" "$EDGE_CLIENT_CERT"
+      fi
+    fi
+    [ -z "$client_work" ] || rm -rf "$client_work"
+    rmdir "$client_lock" || exit 1
+    exit "$result"
+  }
+  trap cleanup_edge_client EXIT
+  trap 'exit 130' HUP INT TERM
+  [ ! -L "$EDGE_CLIENT_KEY" ] && [ ! -L "$EDGE_CLIENT_CERT" ] || exit 1
+  client_work="$(umask 077; mktemp -d "$OUT_DIR/.edge-client.XXXXXX")"
+  client_relative="${client_work##*/}"
+  identity_helper="$REPO_ROOT/scripts/installer/edge-client-certificate.mjs"
+  client_disposition=issue
+  root_before="$(openssl dgst -sha256 "$ROOT_CERT")"
+  if [ -f "$EDGE_CLIENT_CERT" ] || [ -f "$EDGE_CLIENT_KEY" ]; then
+    [ -f "$EDGE_CLIENT_CERT" ] && [ -f "$EDGE_CLIENT_KEY" ] || { echo "Incomplete existing Edge client identity." >&2; exit 1; }
+    identity="$(node "$identity_helper" --certificate "$EDGE_CLIENT_CERT" --root "$ROOT_CERT" --subject "$edge_subject" --allow-expired)"
+    client_disposition="${identity%% *}"
+    case "$client_disposition" in issue|renew) ;; *) exit 1 ;; esac
+    cert_public="$(run_local_step_client certificate key /work/edge-client.crt)"
+    key_public="$(run_local_step_client crypto key public /work/edge-client.key)"
+    [ -n "$cert_public" ] && [ "$cert_public" = "$key_public" ] || exit 1
+    cp -p "$EDGE_CLIENT_CERT" "$client_work/previous.crt"
+    cp -p "$EDGE_CLIENT_KEY" "$client_work/previous.key"
+    client_previous=1
+  fi
+  if [ "$client_disposition" = "renew" ]; then
+    cp -p "$client_work/previous.crt" "$client_work/client.crt"
+    cp -p "$client_work/previous.key" "$client_work/client.key"
+    run_local_step_client ca renew "/work/$client_relative/client.crt" "/work/$client_relative/client.key" \
+      --ca-url https://127.0.0.1:9000 --root /work/root_ca.crt --force >/dev/null
+  else
+    edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
+      --not-after 15m --cert-not-after 720h --provisioner dpf-edge-client \
+      --password-file /home/step/secrets/password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
+    run_local_step_client ca certificate "$edge_subject" "/work/$client_relative/client.crt" "/work/$client_relative/client.key" \
+      --token "$edge_token" --ca-url https://127.0.0.1:9000 --root /work/root_ca.crt --force >/dev/null
+    unset edge_token
+  fi
+  chmod 0600 "$client_work/client.crt" "$client_work/client.key"
+  node "$identity_helper" --certificate "$client_work/client.crt" --root "$ROOT_CERT" --subject "$edge_subject" >/dev/null
+  run_local_step_client certificate verify "/work/$client_relative/client.crt" --roots /work/root_ca.crt >/dev/null
+  cert_public="$(run_local_step_client certificate key "/work/$client_relative/client.crt")"
+  key_public="$(run_local_step_client crypto key public "/work/$client_relative/client.key")"
+  [ -n "$cert_public" ] && [ "$cert_public" = "$key_public" ] || exit 1
+  [ "$root_before" = "$(openssl dgst -sha256 "$ROOT_CERT")" ] || exit 1
+  if [ "$client_previous" = "1" ]; then
+    cmp -s "$EDGE_CLIENT_CERT" "$client_work/previous.crt" && cmp -s "$EDGE_CLIENT_KEY" "$client_work/previous.key" || exit 1
+  else
+    [ ! -e "$EDGE_CLIENT_CERT" ] && [ ! -e "$EDGE_CLIENT_KEY" ] || exit 1
+  fi
+  client_publishing=1
+  mv "$client_work/client.key" "$EDGE_CLIENT_KEY"
+  mv "$client_work/client.crt" "$EDGE_CLIENT_CERT"
+  client_publishing=0
+); }
+
 generate_local_action_material() {
   if [ ! -f "$ACTION_SIGNING_PASSWORD" ]; then
     umask 077
@@ -482,20 +557,7 @@ if [ "$MODE" = "authority" ]; then
   compose cp step-ca:/home/step/certs/dpf-portal.crt "$AUTHORITY_CERT" >/dev/null
   compose cp step-ca:/home/step/secrets/dpf-portal.key "$AUTHORITY_KEY" >/dev/null
   edge_subject="dpf-edge-$(printf '%s' "$HOSTNAME_VALUE" | tr ':' '-')"
-  if [ -f "$EDGE_CLIENT_CERT" ] && [ -f "$EDGE_CLIENT_KEY" ]; then
-    run_local_step_client ca renew /work/edge-client.crt /work/edge-client.key \
-      --ca-url https://127.0.0.1:9000 \
-      --root /work/root_ca.crt --force >/dev/null
-  else
-    edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
-      --not-after 15m --cert-not-after 720h --provisioner dpf-edge-client \
-      --password-file /home/step/secrets/password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
-    run_local_step_client \
-      ca certificate "$edge_subject" /work/edge-client.crt /work/edge-client.key \
-      --token "$edge_token" --ca-url https://127.0.0.1:9000 \
-      --root /work/root_ca.crt --force >/dev/null
-    unset edge_token
-  fi
+  repair_authority_edge_client "$edge_subject"
   EDGE_ACTION_CONFIGURED=1
 elif [ "$MODE" = "issue-join" ]; then
   [ -f "$PASSWORD_FILE" ] || { echo "Organization CA is not initialized on this installation" >&2; exit 69; }
@@ -613,9 +675,9 @@ if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
     }
     @edge_actions path /api/v1/edge/actions/*
     handle @edge_actions {
+        request_header -X-DPF-Edge-Cert-*
+        request_header -X-DPF-MTLS-Proxy-Secret
         reverse_proxy portal:3000 {
-            header_up -X-DPF-Edge-Cert-*
-            header_up -X-DPF-MTLS-Proxy-Secret
             header_up X-DPF-MTLS-Proxy-Secret "$proxy_secret_value"
             header_up X-DPF-Edge-Cert-Fingerprint {tls_client_fingerprint}
             header_up X-DPF-Edge-Cert-Serial {tls_client_serial}

@@ -154,7 +154,7 @@ function installStorage() {
   s.user = { userId, platformRole: "ceo", isSuperuser: true };
   s.agentInfo = { agentId, systemPrompt: "Independently inspect the synthetic research. Retain its evidence.", sensitivity: "internal" };
   s.run = { id: "run-row", taskRunId, userId, currentAgentId: agentId, threadId: "fixture-thread", contextId: "fixture-thread",
-    title: parsed.title, objective: parsed.objective, status: "working", updatedAt: new Date(), authorityScope: parsed.authorityScope,
+    title: parsed.title, objective: parsed.objective, status: "working", archivedAt: null, updatedAt: new Date(), authorityScope: parsed.authorityScope,
     progressPayload: { resumeReservedAt: fence.reservation, dispatch: { claimedAt: fence.dispatchClaim, count: 1, state: "claimed" } },
     a2aMetadata: { trigger: "external-mcp", requestDigest, initiativeReviewBinding: binding,
       sourceRef: { kind: "mcp-token", id: "fixture-token" }, authorityScope: parsed.authorityScope } };
@@ -203,6 +203,10 @@ function installStorage() {
   m["workroom.findMany"] = () => [{ capsuleId: "WC-FIXTURE", headBranch: "codex/fixture", headSha: commitSha,
     createdByPrincipalId: "PRN-AUTHOR", activities: [] }];
   m["modelProvider.findUnique"] = () => provider;
+  // BI-F3B6713F: the daily budget excludes zero-marginal providers; this fixture has none.
+  m["modelProvider.findMany"] = () => [];
+  // The reassessment budget excludes subscription-covered providers (BI-F98BBE4F).
+  m["supplierContract.findMany"] = () => [];
   m["modelProfile.findMany"] = () => [profile]; m["modelProfile.findUnique"] = () => profile;
   m["aiProviderConnection.findMany"] = () => [account]; m["aiProviderConnection.findUnique"] = () => account;
   m["agent.findUnique"] = m["agent.findFirst"] = () => agent;

@@ -7,6 +7,8 @@
 // or API-rate-limited provider is skipped while a healthy local floor remains.
 import { accountRuntimeKey } from "./provider-account-candidates";
 import { isAccountCapacityState } from "./provider-capacity/scopes";
+import { isProviderQuotaState } from "./provider-capacity/types";
+import { currentExecutionProof, type ExecutionProof } from "./provider-capacity/execution-proof";
 
 export type CapacitySnapshot = {
   state: string;
@@ -14,10 +16,15 @@ export type CapacitySnapshot = {
   retryAtMs?: number | null;
   /** Epoch ms when this snapshot was last observed; null/undefined = unknown. */
   observedAtMs?: number | null;
+  /** Most recent completed inference on this exact observation scope. */
+  lastSuccessAtMs?: number | null;
+  observationSource?: string;
   /** Safe operator-facing recovery facts from the same validated observation. */
   safeSummary?: string | null;
   action?: string | null;
   isHumanActionRequired?: boolean;
+  /** Supplied only after the capacity reader revalidates current persisted bindings. */
+  executionProof?: ExecutionProof;
 };
 
 /**
@@ -83,12 +90,31 @@ export function capacityRoutingExclusionReason(
   return `provider capacity ${state}`;
 }
 
+/**
+ * States where the provider itself has said a call will fail: a usage limit
+ * with a known future reset, a rejected or missing credential, or a billing or
+ * plan block. These never win routing through the all-blocked fallback,
+ * because calling them is a guaranteed failure (BI-5A6C4011, WWMD
+ * DI-39E7B8DFB7BC). A usage limit with no known reset stays soft so a sole
+ * provider is not locked out on a guess.
+ */
+const HARD_BLOCK_STATES = new Set(["reauth_required", "billing_action_required", "unsupported_plan"]);
+
+/** True when this snapshot blocks routing and the provider has said calls will fail. Pure. */
+export function isHardCapacityBlock(snapshot: CapacitySnapshot | null | undefined, nowMs: number): boolean {
+  if (!snapshot || !capacityRoutingExclusionReason(snapshot, nowMs)) return false;
+  const state = (snapshot.state ?? "").trim().toLowerCase();
+  if (HARD_BLOCK_STATES.has(state)) return true;
+  return state === "quota_resets_at" && typeof snapshot.retryAtMs === "number" && snapshot.retryAtMs > nowMs;
+}
+
 function formatRetry(retryAtMs: number | null | undefined): string {
   if (typeof retryAtMs !== "number" || !Number.isFinite(retryAtMs)) return "";
   return ` until ${new Date(retryAtMs).toISOString()}`;
 }
 
-export type CapacitySoftExcludeInput<T extends { providerId: string; providerConnectionId?: string }> = {
+type CapacityCandidate = { providerId: string; providerConnectionId?: string; providerConnectionVersion?: string; modelId?: string };
+export type CapacitySoftExcludeInput<T extends CapacityCandidate> = {
   endpoints: readonly T[];
   /** providerId → latest capacity snapshot (missing ⇒ available). */
   capacityByProvider: ReadonlyMap<string, CapacitySnapshot>;
@@ -106,25 +132,42 @@ export type CapacitySoftExcludeResult<T extends { providerId: string }> = {
  * at least one non-blocked peer remains (same degrade-not-lockout contract as
  * the runtime circuit breaker). Pure.
  */
-export function applyCapacitySoftExclusion<T extends { providerId: string; providerConnectionId?: string }>(
+export function applyCapacitySoftExclusion<T extends CapacityCandidate>(
   input: CapacitySoftExcludeInput<T>,
 ): CapacitySoftExcludeResult<T> {
-  const blocked: Array<{ endpoint: T; reason: string }> = [];
+  const blocked: Array<{ endpoint: T; reason: string; hard: boolean }> = [];
   const live: T[] = [];
 
   for (const ep of input.endpoints) {
     const snap = input.capacityByProvider.get(ep.providerId);
+    const owned = ep.providerConnectionId ? input.capacityByProvider.get(accountRuntimeKey(ep.providerId, ep.providerConnectionId)) : null;
+    const proof = owned?.executionProof;
+    // This observation used Responses, not the separately constrained Codex CLI.
+    const checked = ep.providerId === "chatgpt" && owned?.state === "available" && proof
+      && currentExecutionProof(proof, proof, input.nowMs) && proof.providerId === ep.providerId
+      && proof.connectionId === ep.providerConnectionId && proof.modelId === ep.modelId && proof.accountVersion === ep.providerConnectionVersion;
     const inheritedAccountHealth = ep.providerConnectionId && ep.providerConnectionId !== `provider-default-${ep.providerId}` && snap && isAccountCapacityState(snap.state);
-    const reason = capacityRoutingExclusionReason(inheritedAccountHealth ? null : snap, input.nowMs)
-      ?? capacityRoutingExclusionReason(ep.providerConnectionId ? input.capacityByProvider.get(accountRuntimeKey(ep.providerId, ep.providerConnectionId)) : null, input.nowMs);
-    if (reason) blocked.push({ endpoint: ep, reason });
+    const providerSnapshot = inheritedAccountHealth || checked && snap && isProviderQuotaState(snap.state) ? null : snap;
+    const providerReason = capacityRoutingExclusionReason(providerSnapshot, input.nowMs);
+    const blocking = providerReason ? providerSnapshot : owned;
+    const reason = providerReason ?? capacityRoutingExclusionReason(owned, input.nowMs);
+    if (reason) blocked.push({ endpoint: ep, reason, hard: isHardCapacityBlock(blocking, input.nowMs) });
     else live.push(ep);
   }
 
   if (blocked.length > 0 && live.length > 0) {
-    return { eligible: live, excluded: blocked };
+    return { eligible: live, excluded: blocked.map(({ endpoint, reason }) => ({ endpoint, reason })) };
   }
 
-  // All blocked (or none) — keep original list so a sole provider install still works.
-  return { eligible: [...input.endpoints], excluded: [] };
+  // All blocked (or none). Soft blocks (rate limits, cooling down, degraded)
+  // keep degrade-not-lockout so a sole provider install still works. A hard
+  // block stays out even when nothing remains: routing then returns its
+  // existing no-eligible-endpoint result instead of a guaranteed failure.
+  const hard = blocked.filter((b) => b.hard);
+  if (hard.length === 0) return { eligible: [...input.endpoints], excluded: [] };
+  const hardEndpoints = new Set(hard.map((b) => b.endpoint));
+  return {
+    eligible: input.endpoints.filter((ep) => !hardEndpoints.has(ep)),
+    excluded: hard.map(({ endpoint, reason }) => ({ endpoint, reason })),
+  };
 }

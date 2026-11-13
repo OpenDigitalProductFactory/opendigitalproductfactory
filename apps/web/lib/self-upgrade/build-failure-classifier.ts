@@ -12,6 +12,8 @@
 // MUST-ADVANCE → self-upgrade-failed → BLOCKED chain hands the agent the
 // diagnosis, not a raw log.
 
+import { TRANSIENT_NETWORK_LINE } from "./transient-network";
+
 export type BuildFailureClass =
   // Host build passes, Docker build fails: a transitive dep the wider CI/host
   // workspace hoists to top-level but the narrower Docker deps stage does not,
@@ -54,6 +56,10 @@ export type BuildFailureClass =
   // so the remediation path is diagnosable instead of falling through to
   // "unknown".
   | "promoter-readiness-failed"
+  // The deployed portal could not prove the candidate image's packaged
+  // reassessment owners before quiescence; nothing was drained or swapped.
+  // SUR-F2A0D477 fell through to "unknown" with no cause (BI-578131A3).
+  | "reassessment-compatibility-unproven"
   // A migrate-step failure where the target Postgres lacks pgvector, so
   // `CREATE EXTENSION vector` cannot open `vector.control`. A pre-BET-5 install
   // on postgres:16-alpine hits this until its promoter is current; the promoter's
@@ -122,6 +128,14 @@ export type BuildFailureClass =
   // DEFERS on a host-memory-headroom guard and retries after reclaim; a run that
   // still reaches here should be retried once the host frees memory.
   | "host-out-of-memory"
+  // NETWORK: an outbound fetch the upgrade needs (upstream git fetch, base
+  // image pull, `apk add` in a candidate build) failed with a connectivity
+  // error. SUR-B0A4610D / SUR-FF879116 (apk) and SUR-256EAF95 (git fetch),
+  // 2026-11-11: the host dropped connections intermittently and the same
+  // commands succeeded on rerun. Each network step now retries on its own; a
+  // run that still lands here means the host stayed offline for minutes.
+  // Environment, not a main defect (BI-7FFF5CB0).
+  | "host-network-unavailable"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -198,6 +212,11 @@ const PROMOTER_TIMEOUT = /\[promoter-timeout\]/i;
 // ends in a compound snake/kebab token, never from later diagnostics.
 const PROMOTER_READINESS_FAILED = /promoter-readiness-failed:/i;
 const PROMOTER_READINESS_CODE = /(?:^|:)\s*([a-z0-9]+(?:[_-][a-z0-9]+)+)\s*$/i;
+// The portal-side reassessment preflight (BI-578131A3) writes
+// `reassessment-compatibility-unproven: <subcode>…`. An image the engine cannot
+// find by the reference it was handed is an addressing defect (BI-A9BA9583).
+const REASSESSMENT_UNPROVEN = /reassessment-compatibility-unproven(?::\s*([a-z0-9-]+))?/i;
+const IMAGE_NOT_FOUND = /No such image|release-image-unresolved|source-image-unresolved/i;
 // BET-5 migrate-step failures. Both recovery procedures live in the runbook.
 const BET5_PLAYBOOK = "docs/runbooks/bet5-windows-self-upgrade.md";
 // Docker Desktop mounts-denied on the /dpf-state mount (#3262).
@@ -277,6 +296,19 @@ export function classifyBuildFailure(
     };
   }
 
+  // Host network loss next, for the same reason as OOM: the readiness /
+  // prep-error wrapper is noise around a decisive environmental cause.
+  if (TRANSIENT_NETWORK_LINE.test(log)) {
+    return {
+      class: "host-network-unavailable",
+      summary:
+        "The upgrade could not reach the internet for a step it needs (fetching the upstream source, a base image, or an Alpine package): the connection timed out or dropped. This is the host's network, NOT a main defect — each network step already retried with backoff, so the host was offline for minutes. Nothing was deployed and the running portal is untouched. Restore the host's outbound connectivity (VPN, Wi-Fi, DNS) and retry the upgrade.",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, TRANSIENT_NETWORK_LINE),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
   const readinessFailure = log.match(PROMOTER_READINESS_FAILED);
   if (readinessFailure) {
     const readinessLine = log.slice(readinessFailure.index).split(/\r?\n/, 1)[0];
@@ -287,6 +319,21 @@ export function classifyBuildFailure(
       playbookLink: SPEC,
       failingTrace: traceAround(log, PROMOTER_READINESS_FAILED),
       isMainDefectVsEnvironment: null,
+    };
+  }
+
+  const reassessment = log.match(REASSESSMENT_UNPROVEN);
+  if (reassessment) {
+    const subcode = reassessment[1] ?? "unspecified";
+    const addressing = IMAGE_NOT_FOUND.test(log);
+    return {
+      class: "reassessment-compatibility-unproven",
+      summary: `The deployed portal could not prove the candidate's packaged reassessment owners (${subcode}) before quiescence; nothing was drained or swapped.${addressing
+        ? " Docker could not find the candidate image by the reference the portal used. Compare the image store (`docker info` driver-type) with how the preflight addresses the release (BI-A9BA9583) before suspecting the release itself."
+        : " The run's failure log carries the subcode's detail."}`,
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, REASSESSMENT_UNPROVEN),
+      isMainDefectVsEnvironment: addressing ? "main-defect" : null,
     };
   }
 

@@ -1,7 +1,6 @@
 import {
   computeMaterialDecidability,
   resolveProfileMaterial,
-  resolveProfileMaterialForOrg,
 } from "./material";
 
 /**
@@ -15,6 +14,7 @@ import { decisionAllowsStep, decisionEscalationMessage, withDecisionEscalation }
 import type { DecisionDeclarations } from "@/lib/govern/authority/escalation-gate";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
+import { resolveOrganizationDecisionMaterial } from "./organization-guidance";
 import { resolveGateRecommendedOptionId } from "./option-recommendation";
 import type { AlignmentCorpora } from "./alignment-criteria";
 import { applyConstitutionalAlignment } from "./constitutional-alignment-application";
@@ -312,6 +312,15 @@ function planDeliberationRunId(build: PerspectiveGateBuild): string | null {
   return build.deliberationSummary?.plan?.deliberationRunId ?? null;
 }
 
+/**
+ * Lead with the companion's account of why it holds no usable organization
+ * guidance (BI-1B165D02), keeping the routed message that says what happens next.
+ */
+function withGuidanceNotice(resolved: unknown, message: string): string {
+  const guidance = (resolved as { organizationGuidance?: { notice?: unknown } } | undefined)?.organizationGuidance;
+  return typeof guidance?.notice === "string" ? `${guidance.notice} ${message}` : message;
+}
+
 export function failClosedEvaluation(input: {
   profile: DecisionPerspectiveProfile;
   question: string;
@@ -428,6 +437,8 @@ export async function evaluatePerspectiveGate(input: {
   coverageGapRationale?: string;
   onComplete?: (interactionId: string) => Promise<void> | void;
   alignmentCorpora?: AlignmentCorpora;
+  /** Caller-recorded facts merged into the ledger payload; the gate's own fields win. */
+  outcomePayloadExtra?: Record<string, unknown>;
   /**
    * BI-7FFFBEE3 slice B: "shadow" when the caller will not act on this verdict.
    * Recorded on the row so the owner inbox never lists it as a decision.
@@ -458,7 +469,9 @@ export async function evaluatePerspectiveGate(input: {
 
   try {
     if (isWwwd) {
-      const resolve = input.resolver ?? resolveProfileMaterialForOrg;
+      // BI-1B165D02: on a development companion this resolves the production
+      // authority's guidance snapshot; everywhere else it is the org profile.
+      const resolve = input.resolver ?? resolveOrganizationDecisionMaterial;
       resolved = await resolve({
         db: input.db,
         organizationId: input.organizationId,
@@ -541,7 +554,7 @@ export async function evaluatePerspectiveGate(input: {
       allowed: decisionAllowsStep(evaluation),
       interactionId,
       evaluation,
-      operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),
+      operatorMessage: withGuidanceNotice(resolved, operatorMessageFor(evaluation, orgProfileSelected, isWwwd)),
       orgProfileSelected,
     };
   }
@@ -594,7 +607,7 @@ export async function evaluatePerspectiveGate(input: {
         allowed: decisionAllowsStep(existing.evaluation),
         interactionId: existing.interactionId,
         evaluation: existing.evaluation,
-        operatorMessage: operatorMessageFor(existing.evaluation, orgProfileSelected, isWwwd),
+        operatorMessage: withGuidanceNotice(resolved, operatorMessageFor(existing.evaluation, orgProfileSelected, isWwwd)),
         orgProfileSelected,
       };
     }
@@ -733,6 +746,7 @@ export async function evaluatePerspectiveGate(input: {
     agentId,
     proposedOptionId: input.proposedOptionId ?? null,
     outcomePayloadExtra: {
+      ...(input.outcomePayloadExtra ?? {}),
       ...(isWwwd ? {
         orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
         caller: input.caller ?? null,
@@ -763,7 +777,7 @@ export async function evaluatePerspectiveGate(input: {
     allowed: decisionAllowsStep(evaluation),
     interactionId: persisted.interactionId,
     evaluation,
-    operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),
+    operatorMessage: withGuidanceNotice(resolved, operatorMessageFor(evaluation, orgProfileSelected, isWwwd)),
     orgProfileSelected,
   };
 }

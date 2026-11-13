@@ -30,18 +30,6 @@ export const TOOL_REACHABILITY_EXEMPTIONS: Readonly<Record<string, string>> = {
   get_child_threads:
     "SEALED: requires thread_read, held by no registry agent — same thread-orchestration story as get_thread_result.",
 
-  // ── Workbook (spreadsheet substrate) ─────────────────────────────────────
-  workbook_list_tables:
-    "SEALED: requires workbook_read, held by no registry agent — workbook tools ship ahead of the coworker persona that will own them.",
-  workbook_get_schema:
-    "SEALED: requires workbook_read, held by no registry agent — same deferred workbook persona.",
-  workbook_query_rows:
-    "SEALED: requires workbook_read, held by no registry agent — same deferred workbook persona.",
-  workbook_create_row:
-    "SEALED: requires workbook_write, held by no registry agent — write authority deferred with the workbook persona.",
-  workbook_update_cells:
-    "SEALED: requires workbook_write, held by no registry agent — write authority deferred with the workbook persona.",
-
   // ── Screen driving ───────────────────────────────────────────────────────
   screen_set_input:
     "SEALED: requires coworker_screen_fill, held by no registry agent — screen-fill is deliberately ungranted until the screen-drive trust tier assigns it (the read/drive grants are similarly scoped).",

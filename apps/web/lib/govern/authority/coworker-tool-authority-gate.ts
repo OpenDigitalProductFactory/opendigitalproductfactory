@@ -8,11 +8,13 @@ import type {
   GovernedExecuteArgs,
   GovernedExecuteRejection,
 } from "@/lib/mcp-governed-execute-types";
-import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { ScopeReleasePreflightResult } from "@/lib/work-capsules/scope-release-preflight";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 
 import {
   buildCoworkerApprovalBinding,
   evaluateCoworkerAuthority,
+  fingerprintCoworkerInput,
   type CoworkerAuthorityDecision,
   type CoworkerAuthorityInput,
 } from "./coworker-authority-decision";
@@ -20,6 +22,9 @@ import { escalationReasonSentence } from "./escalation-gate";
 import type { ApprovalClassification } from "@/lib/coworker/approval-lifetime";
 import { isBoundReviewTask } from "@/lib/shared/task-execution-fence";
 import { reserveTaskRunGenerationWorking } from "@/lib/observability/heartbeat";
+import { deriveToolAuditClass, retainedGovernedToolParameters } from "@/lib/governed-tool-audit-parameters";
+import { originalToolParameters } from "@/lib/attention/coworker-envelope-decision";
+import { toolTakesSecretInput } from "@/lib/proactivity/propose-interception";
 
 export type CoworkerAuthorityInputResolver = (args: {
   execution: GovernedExecuteArgs;
@@ -99,6 +104,8 @@ export type AuthorityExecutedOutcome = (
 ) => Promise<{ envelopeId: string; status: "executed" | "failed"; result: unknown } | null>;
 
 export type CoworkerToolAuthorityGateResult =
+  | Exclude<ScopeReleasePreflightResult, { outcome: "reject" }>
+  | { outcome: "not-admitted"; result: ToolResult }
   | {
       /** The identical call already ran once on a person's approval. */
       outcome: "settled";
@@ -117,6 +124,7 @@ export type CoworkerToolAuthorityGateResult =
       outcome: "reject";
       rejection: Extract<
         GovernedExecuteRejection,
+        | "precondition_denied"
         | "authority_denied"
         | "approval_required"
         | "authority_evidence_unavailable"
@@ -326,6 +334,9 @@ async function writeAuthorizationDecision(
             escalationReason: decision.escalation.reasonCode,
             escalationSteering: decision.escalation.steering,
             damaging: decision.escalation.damaging,
+            ...(decision.escalation.reasonCode === "steered-by-standing-ruling" && input.standingRulingEnvelopeId
+              ? { standingRulingEnvelopeId: input.standingRulingEnvelopeId }
+              : {}),
           }
         : {}),
     },
@@ -358,14 +369,19 @@ async function writeAuthorizationDecision(
   }
 }
 
-/** The envelope's stored reason: the rule, then the branch that decided it. */
+/**
+ * The envelope's stored reason. When the call says in plain words what will
+ * happen (BI-88D51B8F), that leads; then the rule and the branch that decided it.
+ */
 export function approvalExplanation(
   decision: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>,
+  approverSummary?: string,
 ): string {
   const why = decision.escalation
     ? escalationReasonSentence(decision.escalation.reasonCode)
     : null;
-  return why ? `${decision.explanation} ${why}` : decision.explanation;
+  const rule = why ? `${decision.explanation} ${why}` : decision.explanation;
+  return approverSummary?.trim() ? `${approverSummary.trim()} ${rule}` : rule;
 }
 
 async function ensureApproval(
@@ -472,6 +488,20 @@ export async function enforceCoworkerToolAuthority(
   }
 
   let decision = evaluateCoworkerAuthority(input);
+  if (decision.outcome === "require-approval" && !input.approval
+    && execution.context?.approvalCompletion !== "platform"
+    && execution.context?.allowApprovalRequest !== false
+    && execution.toolName === "request_self_upgrade") {
+    const { preflightUnadmittedUpgrade } = await import("@/lib/self-upgrade/request-approval-preflight");
+    const result = await preflightUnadmittedUpgrade(execution, decision.approvalBinding);
+    if (result) return { outcome: "not-admitted", result };
+  }
+  if (decision.outcome !== "deny" && ["release_workroom_scope", "release_capsule_scope"].includes(execution.toolName)) {
+    const { preflightOriginalScopeRelease } = await import("@/lib/work-capsules/scope-release-preflight");
+    const precondition = await preflightOriginalScopeRelease(execution,
+      () => executedOutcome(buildCoworkerApprovalBinding(input)));
+    if (precondition) return precondition;
+  }
   let projectedDecisionId: string | null = null;
   if (decision.outcome === "require-approval") {
     const projected = await attemptPolicyAuthorityProjection({
@@ -512,6 +542,20 @@ export async function enforceCoworkerToolAuthority(
       };
     }
   }
+  if (decision.outcome === "require-approval") {
+    // An already settled exact call remains its recorded outcome. A new
+    // platform request must survive the same audit round trip as its runner.
+    const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
+    if (settled) return { outcome: "settled", ...settled };
+    if (execution.context?.approvalCompletion === "platform") {
+      const retained = retainedGovernedToolParameters({ tool, rawParams: execution.rawParams }, deriveToolAuditClass(tool));
+      if (toolTakesSecretInput(tool) || retained === null
+        || fingerprintCoworkerInput(originalToolParameters(retained) ?? {}, input.authorResearchBinding) !== decision.approvalBinding.inputFingerprint) {
+        decision = { outcome: "deny", reasonCode: "approval-binding-mismatch", nextAction: "request-authority",
+          explanation: "This call cannot preserve its exact arguments for delayed approval. No approval request was created; the owner must use an authorized direct action." };
+      }
+    }
+  }
   const decisionId = projectedDecisionId ?? await writeAuthorizationDecision(
     input,
     decision,
@@ -535,9 +579,6 @@ export async function enforceCoworkerToolAuthority(
   }
 
   if (decision.outcome === "require-approval") {
-    // A lookup failure only loses the shortcut; it falls back to asking.
-    const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
-    if (settled) return { outcome: "settled", ...settled };
     if (execution.context?.allowApprovalRequest === false) return {
       outcome: "reject", rejection: "authority_denied",
       message: "Scheduled stage authority was withheld. No new approval request was created; reconcile the dispatch or use its existing exact authorization.",
@@ -547,7 +588,7 @@ export async function enforceCoworkerToolAuthority(
         binding: decision.approvalBinding,
         authorityDecisionId: decisionId,
         threadId: execution.context?.threadId ?? null,
-        explanation: approvalExplanation(decision),
+        explanation: approvalExplanation(decision, input.action.consequenceRefinement?.approverSummary),
         // The call's resolved consequence sizes how long the person has to
         // answer: outward stays short, everything else waits for them.
         ...(input.action.consequence !== undefined ? { consequence: input.action.consequence } : {}),

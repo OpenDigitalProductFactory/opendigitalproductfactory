@@ -20,6 +20,8 @@
 //   - route budgets/companions → apps/web/lib/ux-budget/route-budget-baseline.json
 //                              + deriveRoute from lib/ci-evidence-plan.mjs
 //   - migration immutability → the pre-commit guard + migration-safety contract
+//   - docs impact            → apps/web/lib/docs/doc-impact.generated.json +
+//                              DOCS_ROUTE_MAP via check-docs-impact.mjs
 //
 // Consumers: the scripts/gate-context.mjs CLI (`pnpm gate:context`) today; an
 // MCP tool and Build Studio prompt assembly in follow-up slices (they must
@@ -50,6 +52,7 @@ import {
 import { findCanonicalSeedContentPaths } from "./seed-fit-gate.mjs";
 import { PR_TRAILER_NAMES } from "./pr-trailer-contract.mjs";
 import { classifyConvergenceSurfaces } from "../check-convergence-impact.mjs";
+import { computeImpact, parseRouteMap } from "../check-docs-impact.mjs";
 import {
   MODULE_SIZE_HARD_CAP,
   MODULE_SIZE_SOFT_CEILING,
@@ -138,6 +141,34 @@ function guardObligations(paths) {
     add("style-drift-guard", "planned source is scanned for hardcoded colors and off-scale style tokens");
   }
   return selected;
+}
+
+/**
+ * Published docs the doc-impact graph says this diff affects (BI-9B17E889).
+ *
+ * The Docs Impact Gate used to be the first place an author learned which
+ * page described the code they changed, so the answer arrived at push time as
+ * a trailer demand and the page went unedited. Computing it here, from the same
+ * graph and the same `computeImpact` the gate runs, puts the page in the plan.
+ * `pending` docs still need an update or a disposition; `updated` docs are
+ * already in the diff. Fails soft: no graph means an empty list, and CI's gate
+ * still runs.
+ */
+export function docsImpact(paths, repoRoot) {
+  let entries = [];
+  let codeToDocs = {};
+  try {
+    entries = parseRouteMap(readFileSync(join(repoRoot, "apps/web/lib/docs-route-map.ts"), "utf8"));
+  } catch { /* route map absent: code edges still apply */ }
+  codeToDocs = loadJson(repoRoot, "apps/web/lib/docs/doc-impact.generated.json")?.codeToDocs ?? {};
+  const describe = (hit) => (hit.kind === "route" ? `route ${hit.route} (${hit.page})` : `code ${hit.code}`);
+  const pending = computeImpact(paths, entries, codeToDocs);
+  const all = computeImpact(paths.filter((path) => !path.endsWith(".md")), entries, codeToDocs);
+  return [...all.keys()].sort().map((doc) => ({
+    doc,
+    status: pending.has(doc) ? "pending" : "updated",
+    because: all.get(doc).map(describe),
+  }));
 }
 
 function testImpact(files, repoRoot) {
@@ -278,6 +309,17 @@ export function buildGateContext({
 
   // 1. Attestation trailers this diff shape requires.
   const trailers = trailerConstraints(files, addedLinesByFile);
+  const docs = docsImpact(paths, repoRoot);
+  const pendingDocs = docs.filter((entry) => entry.status === "pending");
+  if (pendingDocs.length > 0) {
+    trailers.push({
+      gate: "Docs Impact",
+      trailer: `${PR_TRAILER_NAMES.docsImpact}:`,
+      level: "required",
+      because: `the doc-impact graph links changed files to: ${pendingDocs.slice(0, 5).map((entry) => entry.doc).join(", ")}`,
+      alternative: "update those docs in this change (preferred); the trailer is only for a change that leaves them true",
+    });
+  }
 
   // 2. Module-size ratchet: baselined caps for touched files; absolute budget
   //    for new source files. Baselined files may shrink, never grow.
@@ -389,6 +431,7 @@ export function buildGateContext({
     derivedArtifacts: derived,
     routes,
     migrations,
+    docsImpact: docs,
     guardObligations: guards,
     testImpact: tests,
     verification: [
@@ -436,6 +479,10 @@ export function formatGateContextMarkdown(context) {
     context.migrations.map((m) => `- [${m.severity}] ${m.rule}`),
   ));
   out.push(...formatSection(
+    "Docs this change affects (update each, or record why it stays true)",
+    (context.docsImpact ?? []).map((d) => `- \`${d.doc}\` [${d.status}] ← ${d.because.join(", ")}`),
+  ));
+  out.push(...formatSection(
     "Guards to exercise before implementation is considered complete",
     context.guardObligations.map((g) => `- **${g.name}** (\`${g.id}\`) — ${g.because}`),
   ));
@@ -447,6 +494,7 @@ export function formatGateContextMarkdown(context) {
   if (
     context.trailers.length + context.moduleSize.length + context.ratchets.length +
     context.derivedArtifacts.length + context.routes.length + context.migrations.length +
+    (context.docsImpact?.length ?? 0) +
     context.guardObligations.length + context.testImpact.length === 0
   ) {
     out.splice(2, 0, "_No gate-sensitive surfaces detected in this diff — the always-on verification path still applies._", "");

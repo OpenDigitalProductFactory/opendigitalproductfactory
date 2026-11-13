@@ -23,17 +23,17 @@ import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prio
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
 import { WEB_ROOT } from "../source-files";
-import { compileShapeDocument } from "./compile";
-import { decompile } from "./decompile";
+import { compileShapeDocument } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import {
   emitShapeModule,
   GENERATED_SHAPE_TYPE_IMPORT,
   lowerToDefinition,
   shapeConstantName,
-} from "./emit";
+} from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
-import { gppShapeDocumentSchema, type GppGate, type GppShapeDocument } from "./gpp-shape-schema";
-import type { GppResolveSources } from "./resolve";
+import { gppShapeDocumentSchema, type GppGate, type GppShapeDocument } from "@dpf/validators/gpp/gpp-shape-schema";
+import type { GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources, liveDirectExecuteSites } from "./resolve-sources";
 
 const FIXTURES = join(__dirname, "__fixtures__");

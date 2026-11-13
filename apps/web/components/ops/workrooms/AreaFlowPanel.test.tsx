@@ -59,11 +59,12 @@ describe("PortfolioFlowTiles", () => {
     expect(screen.getByText(/AI on these rooms, last 28 days: \$1\.50 recorded/)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Median flow time per week/ })).toBeInTheDocument();
     // Flow time, efficiency and throughput each have a weekly trend.
-    // Load has no trend or change until a room ending closes its run (BI-B0E285FB).
-    expect(screen.queryByRole("img", { name: /Rooms in flow at the end of each week/ })).toBeNull();
+    // Load has its trend and change again: an ended room closes its run and a
+    // parked room is out of flow (BI-C9F1DE01). 7 now against 8 four weeks ago.
+    expect(screen.getByRole("img", { name: /Rooms in flow at the end of each week/ })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Flow efficiency per week/ })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Runs finished per week/ })).toBeInTheDocument();
-    expect(screen.queryByText(/−1 vs prior 28 days/)).toBeNull();
+    expect(screen.getByText(/−1 vs prior 28 days/)).toBeInTheDocument();
     // The week a shape version replaced an earlier one is marked on each trend, in its accessible name too.
     expect(screen.getByRole("img", { name: /Flow efficiency per week.*New shape version: delivery-small@1\.1\.0/ })).toBeInTheDocument();
   });

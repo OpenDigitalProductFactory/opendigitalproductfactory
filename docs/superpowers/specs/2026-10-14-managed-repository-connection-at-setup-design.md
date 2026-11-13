@@ -12,7 +12,7 @@ status: draft
 | **Author** | Claude Opus 5.5 for Mark Bodman |
 | **Extends** | [GitHub auth / 2FA readiness](2026-04-24-github-auth-2fa-readiness-design.md) (device flow) · [Ecosystem issue intake and arbitration](2026-09-16-ecosystem-issue-intake-and-arbitration-design.md) §6.1 (controller commissioning) · [Public contribution mode](2026-04-23-public-contribution-mode-design.md) |
 | **Supersedes** | Nothing. The device flow, credential encryption, setup step and attention nudge already exist; this spec gives them a managed-repository purpose. |
-| **Out of scope** | GitHub App installation tokens (§7, deferred) · non-GitHub forges · changing the hive contribution login · the controller fencing predicate itself (owned by §6.1 / `BI-FD40397B`) |
+| **Out of scope** | GitHub App installation tokens (§7, deferred) · several repositories per install (§9, deferred, `BI-A77BCB15`) · non-GitHub forges · changing the hive contribution login · the controller fencing predicate itself (owned by §6.1 / `BI-FD40397B`) |
 | **Primary goal** | An install that manages git repositories says which ones during setup, and the operator logs in to them once, through the platform, with a status that shows per repository whether the login actually works. |
 
 ---
@@ -207,3 +207,136 @@ least privilege beyond OAuth scopes.
 4. Managed repository section on `/admin/platform-development` with save,
    connect, status and **Not now**; presenter tests; served-portal UX check.
 5. Attention nudge reads the new status so it closes when connected.
+
+## 9. Deferred: one install, several repositories (`BI-A77BCB15`)
+
+Operator direction, 2026-10-28: "We will see more than one at some point. I'm
+working on a DPF 2, and also to extract out some of the core components here
+into their own projects so we can better allow re-use of them in different
+scenarios. A more robust design is needed. But, we don't need it yet."
+
+This section records the delta so the work starts from a design. The trigger
+was met by the extracted component repositories on 2026-10-31. §9.5 bounds the
+first source-admission slice; the full registry and commissioning work remains
+under `BI-A77BCB15`.
+
+### 9.1 What is single-repository today
+
+Read from the tree at `origin/main` `7fb295cf3a0`.
+
+- **One repository per install.** `PlatformDevConfig` is a singleton
+  (`id: "singleton"`). Its `upstreamRemoteUrl` is the only managed repository,
+  read by `loadManagedRepositoryStatus`
+  (`apps/web/lib/forge/managed-repository-access.ts`), the controller predicate
+  (`apps/web/lib/ecosystem/intake-controller-authority.ts`) and about ten
+  contribution and build paths.
+- **No repository record.** No model stores a repository per product or per
+  purpose. `PlatformDevConfig.gitRemoteUrl` is reserved and unused.
+- **One controller login.** The device flow stores one credential in
+  `CredentialEntry[github-repository-controller]`.
+- **Repository purpose is install-wide.** Whether an install may manage
+  repositories follows its confirmed `evolve-dpf` purpose (§3.1), not a role per
+  repository.
+
+Two parts are already multi-repository safe and need no change:
+- Backlog origin identity is repository-qualified, `owner/repo#n`
+  (DI-0C1759862297).
+- Each Workroom carries `repositoryFullName`, so a standing
+  `issue-triage-watch` room per repository is already the right shape
+  (intake design §6.1).
+
+### 9.2 What changes
+
+1. **A list of managed repositories.** The singleton field gives way to a list
+   kept per install. Each entry records:
+   - the repository (`owner/name`, forge);
+   - its role for this install: it owns the repository's issues, or it
+     consumes the repository as a component;
+   - the digital product it belongs to;
+   - its visibility, and which login serves it.
+
+   `upstreamRemoteUrl` stays as the platform-upstream entry until its about ten
+   readers move. This is a schema change: run the data-architect schema audit
+   first and extend an existing product or estate record if one fits.
+2. **Commissioning per repository.** Each owned repository has its own
+   controller room, and is commissioned by the same checks evaluated against
+   that repository's entry. Commissioning one repository never commissions
+   another.
+3. **One scan per repository.** The inbound triage job loops over the
+   commissioned repositories. Each gets its own scan truth (complete or
+   incomplete), its own counts and its own failure. A repository that errors or
+   hits its page cap is reported on its own and never blocks the others.
+4. **Logins.**
+   - Several repositories in one GitHub organization share one OAuth login.
+   - Repositories in more than one organization, or a need for per-repository
+     least privilege, meet the §7 trigger: adopt the GitHub App.
+   - The status list in §3.4 is already per repository, so each repository
+     adds a row.
+5. **Routing to the right product.** An item lands in the backlog of the
+   product that owns its repository, not one shared backlog. A link between
+   repositories is kept: for example, an issue in an extracted component that
+   breaks DPF 2 links to the affected product's item.
+6. **Transfers keep identity.** When an issue moves between two managed
+   repositories, the backlog item follows it, using the forge's stable issue
+   id, rather than being filed again.
+7. **Roles per repository, not per install.** A DPF 2 install may own its own
+   repository and consume extracted components owned elsewhere. The repository
+   role in item 1 decides intake and follow-through per repository. The
+   install-wide `evolve-dpf` purpose stays the gate for managing any repository
+   at all.
+8. **Setup.** The coworker-led setup (`BI-7B5A0433`) asks which repositories
+   the install manages and suggests them from the install's own source remotes.
+   The operator's only step per login is approving on GitHub.
+
+### 9.3 What does not change
+
+- The controller predicate's other clauses: owner, production, confirmed
+  purpose and local ownership.
+- The one-question customer confirmation and closure rules (spec 2026-09-24 §9).
+- The ratified response targets (intake design §6.1).
+
+### 9.4 Trigger
+
+Start `BI-A77BCB15` when a second repository is ready to be managed: the first
+extracted component's own repository, or the DPF 2 repository. Until then, the
+single-repository design above stands.
+
+### 9.5 First slice: immutable public component source (`BI-32620FB2`)
+
+The component qualification item `BI-A574E138` exposed two singleton checks in
+`repository-artifact.ts`: immutable source reading and research artifact
+resolution rejected a Workroom's component repository because it differed from
+`PlatformDevConfig.upstreamRemoteUrl`. Kernel decision `DI-65F408A19FE6` selects
+a bounded public-source path before the full registry. This does not commission
+another repository or change credentials, intake routing, or product ownership.
+
+- The default canonical repository remains unchanged. A foreign read must select
+  an existing Workroom through its public identifier. The server resolves its
+  persisted item, repository, branch and full current commit, and requires the
+  authenticated actor's existing action admission. Caller-supplied source fields
+  cannot replace that binding.
+- `prepareWorkroomRepositorySource` reuses `resolveWorkroomReadSource` and the
+  current-artifact observation locks. Reads require an exact provider blob;
+  research recording also retains accountable-author/DCO, grant, classification,
+  receipt and subject validation. Source and actor admission are checked again
+  before returning bytes and under publication locks before a receipt is stored;
+  the persisted accountable owner is part of this binding too.
+- Existing readiness observation may recheck a valid latest research receipt's
+  exact current Workroom file anonymously. It returns only a digest through the
+  existing locked projection. The entire receipt/source binding must remain
+  current; this internal observation grants no actor access or write authority.
+- GitHub must independently report the exact repository as public. Every foreign
+  visibility, content and commit-provenance request is anonymous, refuses
+  redirects, and uses the existing bounded provider transport. Private, unknown,
+  changed, unbound or mismatched sources refuse. No credential resolver or local
+  Git fallback runs for foreign source, even if local objects share its commit.
+- This slice covers exact immutable file reading/search and non-independent
+  research. Foreign commit ranges, independent review and build-artifact paths
+  gain no new authority. The full per-product registry, commissioning, credentials
+  and issue routing in §9.2 remain separate work.
+
+Verification must pair the admitted public component case with wrong actor,
+subject, repository, head and blob cases, private/unknown visibility, changed or
+revoked source, and provider failures. A source-local test pass does not prove
+that the canonical install has adopted this repair or that component
+implementation is admitted there.

@@ -5,7 +5,7 @@
 // lands. Spec §4.1; subsumes the unbuilt paused-work inbox.
 
 import type { prisma } from "@dpf/db";
-import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { isProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import { attentionAuthorForAgent } from "../attribution";
 import type { AttentionItem, AttentionRiskClass } from "../types";
 

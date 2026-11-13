@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "decidedOption": "link the current-task title to its existing Workroom when one is present, while keeping unroomed work as plain text",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/WorkforceNowShell.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/platform/ai/right-now": {
+        "defaultVisibleWords": 177,
+        "leadBandWords": 0,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "readingGradeLevel": 2.3,
+        "axeViolations": 0
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "apps/web/components/platform/WorkforceNowShell.uxbudget.test.tsx renders the existing heavy platform-work state plus one live Backlog Steward whose TaskRun is related to a Workroom. The test measures the real shell through lib/ux-budget and axe-core.",
+    "fit": "The owner gets one contextual inspection link on the task title already present in each working coworker row. There is no new card, dashboard, tab, form or disclosure. The full evidence stays on the canonical Workroom route.",
+    "fallback": "A current TaskRun without a Workroom remains plain text, so the UI never invents a destination or suggests evidence exists when it does not.",
+    "theme": "The link uses existing --dpf-accent and --dpf-border tokens, preserves the current row hierarchy and adds no literal colors."
+  }
+}

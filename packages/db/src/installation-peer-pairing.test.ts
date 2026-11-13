@@ -47,6 +47,10 @@ describe("resolveInstallationPairing", () => {
       ref: "operator-production",
       source: "declared-intent",
       declaredButUnconfirmed: true,
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
+      staleDeclaredRef: null,
+      repairRef: null,
     });
   });
 
@@ -55,6 +59,10 @@ describe("resolveInstallationPairing", () => {
       ref: null,
       source: "none",
       declaredButUnconfirmed: false,
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
+      staleDeclaredRef: null,
+      repairRef: null,
     });
   });
 
@@ -131,5 +139,61 @@ describe("pairingSupportsWorkSync", () => {
 
   it("refuses when there is no pairing at all", () => {
     expect(pairingSupportsWorkSync(resolveInstallationPairing({ links: [] }))).toBe(false);
+  });
+});
+
+describe("resolveInstallationPairing — attested peer (BI-0716C8A8)", () => {
+  it("carries the link's attested class and the peer installation's own name", () => {
+    const result = resolveInstallationPairing({
+      links: [link({ peerEnvironmentClass: "development", peerInstallationLabel: "Windows DEV (did_ab12…9f0c)" })],
+    });
+    expect(result).toMatchObject({
+      ref: "operator-production",
+      peerEnvironmentClass: "development",
+      peerInstallationLabel: "Windows DEV (did_ab12…9f0c)",
+    });
+  });
+
+  it("knows no class or installation for a pairing that is only declared", () => {
+    expect(resolveInstallationPairing({ declaredRef: "operator-production", links: [] })).toMatchObject({
+      peerEnvironmentClass: null,
+      peerInstallationLabel: null,
+      staleDeclaredRef: null,
+      repairRef: null,
+    });
+  });
+});
+
+describe("resolveInstallationPairing — stale reference and installation DID (BI-B50BE189)", () => {
+  const live = link({ linkId: "link_live", peerLabel: "operator-organization", peerDeviceId: "did_" + "a".repeat(64) });
+  const revoked = link({ linkId: "link_old", linkState: "revoked", revokedAt: new Date("2026-08-28T00:00:00Z") });
+
+  it("flags a declaration that names a revoked link and offers the live peer's installation DID", () => {
+    const result = resolveInstallationPairing({ declaredRef: "link_old", links: [revoked, live] });
+    expect(result).toMatchObject({
+      ref: "operator-organization",
+      linkId: "link_live",
+      staleDeclaredRef: { ref: "link_old", reason: "revoked" },
+      repairRef: "did_" + "a".repeat(64),
+    });
+  });
+
+  it("accepts the peer's installation DID as a confirmed declaration", () => {
+    const result = resolveInstallationPairing({ declaredRef: "did_" + "a".repeat(64), links: [revoked, live] });
+    expect(result.declaredButUnconfirmed).toBe(false);
+    expect(result.staleDeclaredRef).toBeNull();
+    expect(result.repairRef).toBeNull();
+  });
+
+  it("offers the DID when the declaration names the live link by id, since a link id is not an installation", () => {
+    const result = resolveInstallationPairing({ declaredRef: "link_live", links: [live] });
+    expect(result.declaredButUnconfirmed).toBe(false);
+    expect(result.staleDeclaredRef).toBeNull();
+    expect(result.repairRef).toBe("did_" + "a".repeat(64));
+  });
+
+  it("reports a stale declaration with nothing to repair to when no live link exists", () => {
+    const result = resolveInstallationPairing({ declaredRef: "link_old", links: [revoked] });
+    expect(result).toMatchObject({ source: "declared-intent", staleDeclaredRef: { ref: "link_old", reason: "revoked" }, repairRef: null });
   });
 });

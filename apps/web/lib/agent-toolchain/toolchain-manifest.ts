@@ -24,7 +24,7 @@ import { clientCapabilityRow, type ClientCapabilityRow } from "@dpf/integration-
 import { mcpClientBearerHeaderRequired } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 import { buildPackArchive } from "./pack-archive";
-import { deliveredDigest, listPackFiles } from "./pack-digest";
+import { deliveredDigest, deliveredVersion, listPackFiles } from "./pack-digest";
 import { DECLARING_CLIENT_KINDS } from "./toolchain-verdict";
 
 export const TOOLCHAIN_MANIFEST_SCHEMA_VERSION = 1;
@@ -38,7 +38,7 @@ export type ToolchainClientShape = {
   /** Auth the connector uses at this endpoint, from mcpClientBearerHeaderRequired. */
   authMode: "oauth" | "bearer";
   /** How the declaration rides the connection (design §5.2), from the capability profile; see DECLARATION_CARRIERS. */
-  declarationCarrier: "query" | "header";
+  declarationCarrier: "query" | "header" | "helper";
   /** True only once the profile records the carrier as verified for this client. */
   carrierVerified: boolean;
   /** The client's row of packages/dpf-skill-pack/client-capabilities.json (BI-64795FD0). */
@@ -49,6 +49,12 @@ export type UnsignedToolchainManifest = {
   schemaVersion: number;
   packVersion: string;
   packDigest: string;
+  /**
+   * The version a delivery stamps into client manifests (BI-4F9E3221):
+   * `<packVersion>+c.<packDigest[0:12]>`. Version-keyed client caches refresh
+   * on it, so content never needs a manual packVersion bump to ship.
+   */
+  deliveredVersion: string;
   archiveSha256: string;
   releaseId: string | null;
   mcpEndpoint: string;
@@ -103,7 +109,9 @@ function readVersionSource(root: string): { packVersion: string; floor: Toolchai
  * sign-in and the desktop app's URL check do not change with each release, and
  * a `${DPF_MCP_URL:-…}` template never needs a query appended after it. Grok
  * authenticates with a bearer and its descriptor URL is literal, so it keeps
- * the query. Since BI-64795FD0 the values come from the capability profile
+ * the query. Claude Code takes `helper` (BI-BDC94789): it keys the stored
+ * sign-in on the descriptor's headers too, so the value rides a constant
+ * headersHelper and still arrives as the same header. Since BI-64795FD0 the values come from the capability profile
  * (client-capabilities.json, declarationCarrier); the profile generator checks
  * they equal the updater's fallback, toolchain_convergence.DEFAULT_CARRIERS.
  * The updater reads this map from the signed manifest. Unverified until the
@@ -149,12 +157,14 @@ export function buildToolchainRelease(input: {
 }): { manifest: UnsignedToolchainManifest; archive: Buffer } {
   const { packVersion, floor } = readVersionSource(input.packRoot);
   const archive = buildPackArchive(input.packRoot, listPackFiles(input.packRoot));
+  const packDigest = deliveredDigest(input.packRoot);
   return {
     archive,
     manifest: {
       schemaVersion: TOOLCHAIN_MANIFEST_SCHEMA_VERSION,
       packVersion,
-      packDigest: deliveredDigest(input.packRoot),
+      packDigest,
+      deliveredVersion: deliveredVersion(packVersion, packDigest),
       archiveSha256: createHash("sha256").update(archive).digest("hex"),
       releaseId: input.releaseId,
       mcpEndpoint: input.mcpEndpoint,

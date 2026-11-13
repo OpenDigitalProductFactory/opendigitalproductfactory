@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { classifyOwnerAttentionLane } from "./owner-routing";
 import type { AttentionItem, AttentionSource } from "./types";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 function item(
   source: AttentionSource,
@@ -233,5 +233,32 @@ describe("work the platform already knows is not the owner's", () => {
     });
     expect(classifyOwnerAttentionLane(stall("review")).lane).toBe("custodian");
     expect(classifyOwnerAttentionLane(stall("judgment")).lane).toBe("needs-you-now");
+  });
+
+  // BI-ACE041FE: on 2026-11-13 the AI-capacity watch opened rows for Codex,
+  // xAI and the Anthropic key, and every one was hidden as "your digital team
+  // is handling it", because all platform-health items went to the custodian.
+  describe("AI-capacity items (WWMD DI-ECB244DF2109)", () => {
+    const capacity = (key: string, residueReason: AttentionItem["triage"]["residueReason"]) =>
+      item("platform-health", {
+        id: `platform-health:ai-capacity:${key}`,
+        triage: { timeToAct: "none", residueReason, decideEffort: "review", irreversible: false },
+      });
+
+    it("brings a capacity loss the operator must fix to Needs-you", () => {
+      expect(classifyOwnerAttentionLane(capacity("provider:xai", "needs-credential")).lane).toBe("needs-you-now");
+      expect(classifyOwnerAttentionLane(capacity("provider:anthropic", "no-self-heal")).lane).toBe("needs-you-now");
+      expect(classifyOwnerAttentionLane(capacity("subscriptions", "no-self-heal")).lane).toBe("needs-you-now");
+    });
+
+    it("keeps a usage limit that resets on its own with the digital team", () => {
+      expect(classifyOwnerAttentionLane(capacity("provider:codex", "self-heals")).lane).toBe("custodian");
+    });
+
+    it("leaves other platform-health alerts with the custodian", () => {
+      expect(
+        classifyOwnerAttentionLane(item("platform-health", { id: "platform-health:health_alert:x", triage: { timeToAct: "none", residueReason: "no-self-heal", decideEffort: "review", irreversible: false } })).lane,
+      ).toBe("custodian");
+    });
   });
 });

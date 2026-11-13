@@ -30,6 +30,8 @@ Use the arrow beside a portfolio to expand it. Expanding lists the Workrooms in 
 
 Counts describe the Workrooms the page read, not everything in the portfolio. When the page reads its limit, each count reads "N rooms read" and a note below the tree says so. To see beyond that, narrow the inventory below or open the portfolio itself.
 
+**Day-to-day operations** lists every standing room with its last 14 days. A missed day shows as an outlined cross, so it stands out as clearly as a stuck project. See [Day-to-day operations](../workspace/work-rooms.md#day-to-day-operations) for what each mark means.
+
 ## Key Concepts
 
 - **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, awaiting acceptance, done, deferred, or retired.
@@ -69,7 +71,11 @@ their age is then counted from when they were created and the real figure may
 be lower; hover it for the explanation. The progress bar shows done in one
 colour and awaiting acceptance as a separate segment after it. The workspace
 **Backlog** tile shows the same counts as **Awaiting acceptance** and **Awaiting
-14+ days**, above **Done**.
+14+ days**, above **Done**. The tile counts only the items this installation
+can accept. Items copied in from a connected installation by work sync are
+accepted by the installation they came from, so the tile shows them separately
+as **Awaiting at peer installation** and leaves them out of the other two
+counts.
 
 **Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
@@ -84,9 +90,15 @@ sharing or refreshing.
 - **Triaging** — Waiting for an intake decision.
 - **Open** — Accepted work that has not started.
 - **In progress** — Work is actively underway.
-- **Awaiting acceptance** — Delivered (for example merged) but not yet proven to
-  meet its acceptance criteria. It is not done, and it is not counted in epic
-  progress.
+- **Awaiting acceptance** — Delivered (for example merged) but not yet closed.
+  It is not done, and it is not counted in epic progress. Most items do not wait
+  here: once its change merges, an item closes on its own and the acceptance
+  sweep finishes the move. Only items tagged `contractual` wait for a separate
+  acceptance, because a customer was promised one. If something is still wrong
+  after a change ships, report it as a new item.
+
+When you file an item, say what will be true, and for whom, once it is done (the
+**Outcome** field). Add how you will know only when that is not obvious.
 - **Done** — Completed work; this is the only status counted as done in epic progress.
 - **Deferred** — Parked but still wanted. A deferral records why it is parked,
   what event should resume it, who owns that decision, and when it must be
@@ -100,6 +112,53 @@ sharing or refreshing.
 A retired duplicate is labeled **retired duplicate**; the other backlog item is
 the canonical record, so the duplicate is retained for history without being
 counted as completed. Retired items no longer keep an epic open.
+
+### Security findings from GitHub
+
+On the installation that stewards the repository, inbound issue triage reads
+three GitHub security surfaces every four hours: Dependabot, code scanning and
+secret scanning. Each one becomes backlog work:
+
+- **One item per unit of fix.** Dependabot findings are grouped by package, so
+  one upgrade closes one item. Code scanning is grouped by rule. Each leaked
+  secret is its own item.
+- **Ranked by severity.** Leaked secrets and critical findings are priority 1,
+  high is 2, medium 3 and low 4. A rise in severity raises the item; the job
+  never lowers a priority.
+- **Closed when GitHub resolves it.** When GitHub no longer reports a finding
+  open, the item records that as evidence and moves to awaiting acceptance. The
+  daily acceptance sweep then closes it. If the finding comes back first, the
+  item returns to open.
+- **Unreadable is never zero.** If the installation's GitHub connection cannot
+  read a surface, the schedule view marks that surface **UNREADABLE** and the
+  run as failed. The connection needs read access to Dependabot alerts, code
+  scanning alerts and secret scanning alerts.
+
+### Clearing copies of a paired installation's demand
+
+Before a fix in November 2026, inbound issue triage filed a second, local copy
+of every demand record a same-organization installation sent. It also filed
+copies from revoked links and from demand the other installation had withdrawn.
+Work sync already shows that installation's backlog here, so these copies are
+duplicates. Your coworker clears them in one governed step:
+
+1. **Dry run.** It reports how many copies would be retired, split by source:
+   revoked link, withdrawn demand, or live same-organization demand. It also
+   shows how many will be marked duplicate of the work-sync item with the same
+   title, a few samples from each group, and the copies it will keep. Nothing
+   changes.
+2. **One approval.** You get one approval card for the whole set. The card is
+   tied to the exact selection from the dry run. If anything changes before it
+   runs, such as someone claiming one of the copies, it is refused and your
+   coworker runs a new dry run.
+3. **Retire.** Each copy is retired the same way a single item is. It gets a
+   status-history entry and a resolution that explains why. A copy can be put
+   back with a status change to triaging or open. Running it again retires
+   nothing twice.
+
+Some copies are kept for you to review one at a time. These are copies that are
+claimed, being built, in a Work Room, have evidence, or have been worked on
+since they were filed.
 
 ## Shared Demand
 
@@ -151,7 +210,7 @@ stops when the allowance is nearly spent or a provider reports a rate limit,
 and it only acts while the governed backlog lane is on.
 
 To turn it on or off, open **Admin > Platform Development**, find **Let Build
-Studio pick up work on its own**, open **Daily limit and the autopilot
+Studio pick up work on its own**, open **Daily limits and the autopilot
 switches**, tick or clear **Use spare weekly AI allowance**, and select
 **Save**. Changing it needs the platform management permission. An agent can
 make the same change with the `set_backlog_delivery_budget` tool
@@ -335,3 +394,5 @@ that stops describing this installation. Nothing is saved until you confirm it.
 The operator name is different: it is a label rather than a change to what your
 coworkers may do, so it saves directly without an impact preview. The preview
 step is reserved for changes that actually move a brake.
+
+Work in progress keeps recorded executor and invocation details inside each row’s Technical evidence disclosure. These identify the recorded execution path independently of the accountable person. Missing historical evidence is identified explicitly; a schedule alone does not establish agent-to-agent delegation.

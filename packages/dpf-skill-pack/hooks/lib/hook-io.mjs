@@ -36,8 +36,15 @@ export const SHELL_TOOL_NAMES = new Set([
   "run_terminal_cmd",
 ]);
 
-// Operator-decision tool across surfaces. Claude: "AskUserQuestion"; Grok: "AskQuestion".
-export const DECISION_TOOL_NAMES = new Set(["AskUserQuestion", "AskQuestion"]);
+// Operator-decision tool across surfaces. Claude: "AskUserQuestion"; older Grok:
+// "AskQuestion"; Grok 1.0.52: "ask_user_question" (live-probed 2026-10-14, BI-742D707B).
+export const DECISION_TOOL_NAMES = new Set(["AskUserQuestion", "AskQuestion", "ask_user_question"]);
+
+// File-write tools across surfaces. Claude/Codex: Write, Edit, MultiEdit. Grok
+// 1.0.52: write, search_replace, both with a file_path input (live-probed
+// 2026-10-14, BI-742D707B). A Claude-only set let every write guard fail open on
+// Grok. NotebookEdit stays out: it carries notebook_path, which these guards do not read.
+export const FILE_WRITE_TOOL_NAMES = new Set(["Write", "Edit", "MultiEdit", "write", "search_replace"]);
 
 export function isShellTool(name) {
   return typeof name === "string" && SHELL_TOOL_NAMES.has(name);
@@ -45,6 +52,10 @@ export function isShellTool(name) {
 
 export function isDecisionTool(name) {
   return typeof name === "string" && DECISION_TOOL_NAMES.has(name);
+}
+
+export function isFileWriteTool(name) {
+  return typeof name === "string" && FILE_WRITE_TOOL_NAMES.has(name);
 }
 
 // ── DPF-workspace scoping ────────────────────────────────────────────────────
@@ -78,7 +89,10 @@ export function inDpfWorkspace(startDir) {
 // file, or the folder a shell command moves into (`cd` / `pushd` / `git -C`).
 // With no target, it is the session folder, exactly as before.
 
-const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "edit_file", "write_file", "create_file"]);
+// Grok 1.0.52 names its write tools write / search_replace (BI-742D707B); without
+// them a Grok edit was judged by the session folder, not the file, so an edit of
+// the root clone from a worktree session passed root-clone-guard (BI-5DD46FDA walk).
+const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "edit_file", "write_file", "create_file", "write", "search_replace"]);
 
 /** Git Bash `/d/x` -> `D:/x`; backslashes -> slashes. */
 export function toNativePath(p) {
@@ -166,15 +180,23 @@ export function inDpfAgentHost(startDir) {
  * Normalize a raw PreToolUse payload to a surface-agnostic shape. `cwd` is the
  * folder the action targets (see actionCwd); `sessionCwd` is what the harness sent.
  * @param {any} raw
- * @returns {{ toolName: string|undefined, toolInput: Record<string, any>, cwd: string|undefined, sessionCwd: string|undefined, surface: "claude"|"grok" }}
+ * @returns {{ toolName: string|undefined, toolInput: Record<string, any>, cwd: string|undefined, sessionCwd: string|undefined, surface: "claude"|"codex"|"grok", permissionMode: string|undefined }}
  */
 export function normalizePayload(raw) {
   const p = raw && typeof raw === "object" ? raw : {};
   const toolName = p.toolName ?? p.tool_name;
   const rawInput = p.toolInput ?? p.tool_input ?? {};
   const toolInput = rawInput && typeof rawInput === "object" ? rawInput : {};
-  // Only Grok sends camelCase; Claude and Codex send snake_case.
-  const surface = p.toolName !== undefined && p.tool_name === undefined ? "grok" : "claude";
+  // Only Grok sends camelCase; Claude and Codex send snake_case. Grok 1.0.52 sends
+  // BOTH casings, so any camelCase key means Grok (BI-6145A168).
+  // Codex sends snake_case like Claude, plus turn_id and model on every
+  // PreToolUse (learn.chatgpt.com/docs/hooks, read 2026-10-28); Claude sends neither.
+  const surface =
+    p.toolName !== undefined || p.hookEventName !== undefined || p.workspaceRoot !== undefined
+      ? "grok"
+      : p.turn_id !== undefined
+        ? "codex"
+        : "claude";
   // Both surfaces send the working dir at top level (Claude: cwd; Grok: cwd + workspaceRoot).
   const sessionCwd = p.cwd ?? p.workspaceRoot;
   let cwd = sessionCwd;
@@ -183,7 +205,8 @@ export function normalizePayload(raw) {
   } catch {
     // fail open to the session folder
   }
-  return { toolName, toolInput, cwd, sessionCwd, surface };
+  const permissionMode = typeof p.permission_mode === "string" ? p.permission_mode : undefined;
+  return { toolName, toolInput, cwd, sessionCwd, surface, permissionMode };
 }
 
 // The surface of the payload this process read; emitDeny answers in its envelope.
@@ -218,6 +241,23 @@ export function readHookPayload() {
   const payload = normalizePayload(raw);
   payloadSurface = payload.surface;
   return payload;
+}
+
+// ── Which surfaces may receive a rewritten command (BI-F17F2188) ─────────────
+// A PreToolUse rewrite is `permissionDecision` allow|ask plus `updatedInput`.
+// A surface that cannot honour it runs the RAW command, so a guard keeps its
+// refusal everywhere a rewrite is not proven:
+//   claude : documented (code.claude.com/docs/en/hooks, updatedInput) and pinned
+//            by raw-tool-guard-rewrite.test.mjs plus the hook-output contract.
+//   codex  : its docs list allow + updatedInput for Bash, but an older Codex
+//            parses allow as "not supported yet" and fails OPEN, and no DPF probe
+//            has proven the rewrite on an installed Codex (BI-742D707B).
+//   grok   : no rewrite field is documented or probed; Grok reads only a
+//            top-level decision (BI-883FC2FC).
+export const REWRITE_SURFACES = new Set(["claude"]);
+
+export function surfaceCanRewrite(surface) {
+  return REWRITE_SURFACES.has(surface);
 }
 
 /**

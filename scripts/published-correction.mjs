@@ -18,15 +18,25 @@ import { resolveWorktreeContext } from "./pregate-status.mjs";
 import { readLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { acquireLocalConvergenceLock, releaseLocalConvergenceLock } from "./lib/local-convergence-lock.mjs";
+import { DERIVED_ARTIFACTS, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
+import { classifyDerivedArtifactCheck, entriesTouchedBy } from "./derived-artifacts-gate.mjs";
 import { CORRECTION_POLICY, CORRECTION_TTL_MS, classifyInitialPublication, classifyPublishedCorrection, correctionPlanDigest } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
 
 const STAGE = "published-correction";
-export const correctionReceiptPath = cwd => join(guardReceiptDirectory(cwd), `${correctionPlanDigest(STAGE)}.json`);
-export function readCorrectionRecord(cwd = process.cwd(), candidateGitDir = null) {
+const correctionReceiptKey = sha => correctionPlanDigest([STAGE, sha]);
+export const correctionReceiptPath = (cwd, sha = gitText(["rev-parse", "HEAD"], { cwd })) => join(guardReceiptDirectory(cwd), `${correctionReceiptKey(sha)}.json`);
+export function readCorrectionRecord(cwd = process.cwd(), candidateGitDir = null, expectedSha = null) {
   try {
-    const path = candidateGitDir ? join(candidateGitDir, "dpf-host-guard-receipts", `${correctionPlanDigest(STAGE)}.json`) : correctionReceiptPath(cwd);
-    const receipt = readStageReceipt(path);
-    return receipt?.stage === STAGE && receipt.status === "passed" ? receipt.result : null;
+    const sha = expectedSha ?? gitText(["rev-parse", "HEAD"], { cwd });
+    const directory = candidateGitDir ? join(candidateGitDir, "dpf-host-guard-receipts") : guardReceiptDirectory(cwd);
+    // The legacy stage-only path is read only to preserve already-recorded
+    // proofs; it cannot satisfy a different head.
+    const paths = [join(directory, `${correctionReceiptKey(sha)}.json`), join(directory, `${correctionPlanDigest(STAGE)}.json`)];
+    for (const path of paths) {
+      const receipt = readStageReceipt(path);
+      if (receipt?.stage === STAGE && receipt.status === "passed" && receipt.result?.sha === sha) return receipt.result;
+    }
+    return null;
   } catch { return null; }
 }
 
@@ -83,7 +93,13 @@ export function execute(command, args, { cwd = process.cwd(), env = process.env,
     if (reportDirectory) { try { rmdirSync(reportDirectory); } catch { /* Never traverse unexpected child-created entries. */ } }
   }
 }
-export function qualifyCorrectionExecution(command, result) {
+const isDerivedCheck = (command, registry) => registry.some(entry => entry.check?.[0] === command.command
+  && JSON.stringify(entry.check.slice(1)) === JSON.stringify(command.args));
+export function qualifyCorrectionExecution(command, result, registry = DERIVED_ARTIFACTS) {
+  // A derived-artifact checker that could not run is a runner failure, never
+  // STALE (BI-BD7E0319, BI-20B40955); it still refuses, under its own name.
+  if (result.exitCode !== 0 && !result.outcome && isDerivedCheck(command, registry)
+    && classifyDerivedArtifactCheck({ status: result.exitCode, stdout: result.output ?? "", stderr: "" }) === "unrun") return { ...result, outcome: "derived-check-unrun" };
   if (result.exitCode !== 0 || result.outcome) return result;
   if (command.command === "node" && command.args.includes("--test")) {
     const output = String(result.stdout ?? result.output ?? "");
@@ -139,14 +155,14 @@ const contextIdentity = context => ({ pr: context.pullRequest, protection: {
   ...context.protection, observedAt: undefined,
 } });
 
-export function inspectCorrectionRecord(cwd = process.cwd(), { contextReader = readPublishedContext, identify = identifyGuardExecution, now = Date.now() } = {}) {
+export function inspectCorrectionRecord(cwd = process.cwd(), { contextReader = readPublishedContext, identify = identifyGuardExecution, now = Date.now(), registry = DERIVED_ARTIFACTS } = {}) {
   try {
   const state = readCorrectionRecord(cwd);
   const git = args => gitText(args, { cwd });
   const verdict = classifyPublishedCorrection(state, { sha: git(["rev-parse", "HEAD"]), branch: git(["branch", "--show-current"]), tree: git(["rev-parse", "HEAD^{tree}"]), now });
   if (!verdict.ok) return verdict;
   const proof = verdict.proof;
-  const planned = describeCorrection({ cwd, anchor: proof.anchor, head: proof.sha, tree: proof.tree, relatedTestsBySource: proof.relatedTestsBySource ?? {} });
+  const planned = describeCorrection({ cwd, anchor: proof.anchor, head: proof.sha, tree: proof.tree, relatedTestsBySource: proof.relatedTestsBySource ?? {}, registry });
   if (correctionPlanDigest(planned.commands) !== proof.planDigest || planned.classification !== proof.classification
     || !stageIdentityMatches(planned.changedFiles, proof.changedFiles)) return { ok: false, reason: "Expected affected plan or cumulative source coverage differs from the recorded command list." };
   const current = contextReader(cwd);
@@ -167,19 +183,45 @@ export function inspectCorrectionRecord(cwd = process.cwd(), { contextReader = r
 
 export function chooseInitialAnchor({ records, previous, pullRequest, treeAt, now = Date.now() }) {
   const expected = { repositoryFullName: pullRequest.repositoryFullName, branch: pullRequest.headRefName, pullRequestNumber: pullRequest.number };
-  if (previous?.sha === pullRequest.headRefOid && classifyPublishedCorrection(previous, { ...expected, sha: previous.sha, now }).ok) return previous.publicationCorrection.anchor;
+  const publishedTree = treeAt(pullRequest.headRefOid);
+  const proof = previous?.publicationCorrection;
+  const completedAt = Date.parse(proof?.completedAt);
+  // Recover the qualified historical anchor, never the expired affected result.
+  // An interrupted push may leave GitHub at the anchor rather than this proof.
+  if (Number.isFinite(completedAt) && completedAt <= now
+    && classifyPublishedCorrection(previous, { ...expected, sha: previous.sha, now: completedAt }).ok
+    && proof.pullRequest.number === pullRequest.number
+    && Date.parse(proof.anchor.capturedAt) <= completedAt
+    && [previous.sha, proof.anchor.sha, proof.pullRequest.headRefOid].includes(pullRequest.headRefOid)
+    && treeAt(previous.sha) === proof.tree && treeAt(proof.anchor.sha) === proof.anchor.tree) return proof.anchor;
   for (const { state, metadata } of records) {
     if (state?.sha !== pullRequest.headRefOid) continue;
-    const anchor = { ...expected, sha: state.sha, tree: treeAt(state.sha), state, metadata,
-      capturedAt: new Date(now).toISOString() };
+    const anchor = { ...expected, sha: state.sha, tree: publishedTree, state, metadata,
+      // Initial publication is qualified at its canonical gate capture.  Its
+      // expiry must not erase the historical anchor for a later correction.
+      capturedAt: state.recordedAt };
+    if (classifyInitialPublication(anchor, expected).ok) return anchor;
+  }
+  // Preserve the original record's SHA, lease and metadata.  A rebased commit
+  // can only reconcile to it when the recorded *synthesized integration tree*
+  // is exactly the published tree, so changed bytes never inherit a PASS.
+  for (const { state, metadata } of records) {
+    if (!state || metadata?.candidateSha !== state.sha || metadata?.synthesizedTreeSha !== publishedTree) continue;
+    const anchor = { ...expected, sha: pullRequest.headRefOid, tree: publishedTree, state, metadata,
+      equivalentCandidate: { sha: state.sha, synthesizedTreeSha: metadata.synthesizedTreeSha },
+      capturedAt: state.recordedAt };
     if (classifyInitialPublication(anchor, expected).ok) return anchor;
   }
   throw new Error("No accepted initial-publication anchor covers this published head. Reconcile its existing canonical evidence or permitted initial override; an open PR alone is insufficient.");
 }
 
-export function buildCorrectionCommands(plan, { packageScripts = {}, explicitTests = [] } = {}) {
+export function buildCorrectionCommands(plan, { packageScripts = {}, explicitTests = [], registry = DERIVED_ARTIFACTS } = {}) {
   const tests = [...new Set([...plan.affectedTests, ...explicitTests])].sort();
-  const unmapped = plan.fileDispositions.filter(file => file.kind !== "docs" && file.kind !== "test" && !file.tests.length);
+  // A registered artifact's sources and outputs are mapped by its freshness
+  // check: the same command CI's check-all runs for it (BI-25CB699C).
+  const derived = entriesTouchedBy(plan.fileDispositions.map(file => file.path), registry);
+  const derivedMapped = path => derived.some(entry => matchesAnyGlob(path, entry.sourceGlobs ?? []) || matchesAnyGlob(path, entry.artifactPaths ?? []));
+  const unmapped = plan.fileDispositions.filter(file => file.kind !== "docs" && file.kind !== "test" && !file.tests.length && !derivedMapped(file.path));
   if (unmapped.length) throw new Error(`Affected mapping unresolved for ${unmapped.map(file => file.path).join(", ")}; supply the existing planner's related-test mapping, not a whole local gate.`);
   const commands = [];
   const nodeTests = tests.filter(path => /\.[cm]?js$/.test(path));
@@ -194,7 +236,11 @@ export function buildCorrectionCommands(plan, { packageScripts = {}, explicitTes
     }
   }
   if (tests.some(path => !nodeTests.includes(path) && !Object.keys(loadEvidencePolicy().packageRoots).some(root => path.startsWith(`${root}/`)))) throw new Error("Unsupported affected-test runner; map the existing package runner explicitly.");
-  if (plan.scope.docsOnly) commands.push({ command: "node", args: ["scripts/gen-doc-index.mjs", "--check"] });
+  for (const entry of derived) {
+    const check = { command: entry.check[0], args: entry.check.slice(1) };
+    if (!commands.some(command => command.command === check.command && JSON.stringify(command.args) === JSON.stringify(check.args))) commands.push(check);
+  }
+  if (plan.scope.docsOnly && !commands.some(command => command.args.join(" ") === "scripts/gen-doc-index.mjs --check")) commands.push({ command: "node", args: ["scripts/gen-doc-index.mjs", "--check"] });
   return commands;
 }
 
@@ -207,14 +253,38 @@ function localRecords(cwd) {
   });
 }
 
-export function describeCorrection({ cwd, anchor, head, tree, relatedTestsBySource = {} }) {
+/** Per-file binary patches of a range, keyed by path (renames off). */
+function patchesByFile(git, from, to) {
+  const patches = new Map();
+  for (const chunk of git(["diff", "--binary", "--no-renames", from, to]).split(/^(?=diff --git )/m)) {
+    const path = chunk.match(/^diff --git a\/.+? b\/(.+)$/m)?.[1];
+    if (path) patches.set(path, chunk.replace(/^index .*$/m, ""));
+  }
+  return patches;
+}
+
+/**
+ * BI-25CB699C: after a merge of main, regenerating a registered output (a
+ * route manifest, a doc index) changes its patch against the new base without
+ * the author changing anything. The own diff still counts as unchanged when
+ * every drifting file is a registered output; its freshness check runs instead.
+ */
+export function ownDiffDriftIsRegeneratedOnly({ before, after, registry = DERIVED_ARTIFACTS }) {
+  const paths = new Set([...before.keys(), ...after.keys()]);
+  const drift = [...paths].filter(path => before.get(path) !== after.get(path));
+  return drift.every(path => registry.some(entry => matchesAnyGlob(path, entry.artifactPaths ?? [])));
+}
+
+export function describeCorrection({ cwd, anchor, head, tree, relatedTestsBySource = {}, registry = DERIVED_ARTIFACTS }) {
   const git = args => gitText(args, { cwd });
   const paths = args => git(args).split(/\r?\n/).filter(Boolean);
   const originalBase = git(["merge-base", anchor.sha, "origin/main"]);
   const currentBase = git(["merge-base", head, "origin/main"]);
   const ownFiles = [...new Set([...paths(["diff", "--name-only", originalBase, anchor.sha]), ...paths(["diff", "--name-only", currentBase, head])])];
   const changedFiles = paths(["diff", "--name-only", anchor.sha, head]).filter(path => ownFiles.includes(path));
-  const sameOwnDiff = git(["diff", "--binary", originalBase, anchor.sha]) === git(["diff", "--binary", currentBase, head]);
+  const sameOwnDiff = git(["diff", "--binary", originalBase, anchor.sha]) === git(["diff", "--binary", currentBase, head])
+    || (originalBase !== currentBase && ownDiffDriftIsRegeneratedOnly({ registry,
+      before: patchesByFile(git, originalBase, anchor.sha), after: patchesByFile(git, currentBase, head) }));
   const classification = head === anchor.sha ? "unchanged-head" : tree === anchor.tree ? "commit-metadata" : sameOwnDiff ? "main-refresh" : "authored-correction";
   const policy = loadEvidencePolicy();
   // Classify root Node scripts for the existing colocated-test planner without
@@ -228,14 +298,14 @@ export function describeCorrection({ cwd, anchor, head, tree, relatedTestsBySour
   const plan = createEvidencePlan({ eventName: "pull_request", baseSha: anchor.sha, headSha: head,
     baseTreeSha: anchor.tree, headTreeSha: tree, changedFiles: classification === "main-refresh" ? ownFiles : changedFiles,
     knownTests, relatedTestsBySource, policy });
-  const commands = tree === anchor.tree ? [] : buildCorrectionCommands(plan, { packageScripts });
+  const commands = tree === anchor.tree ? [] : buildCorrectionCommands(plan, { packageScripts, registry });
   if (tree !== anchor.tree && !commands.length) throw new Error("Changed tree has no executable affected checks; no integration lease was requested.");
   return { commands, changedFiles, classification, plan };
 }
 
 export async function verifyPublishedCorrection({ cwd = process.cwd(), relatedTestsBySource = {},
   contextReader = readPublishedContext, run = execute, now = Date.now, recordsReader = localRecords,
-  identify = identifyGuardExecution, persist = true } = {}) {
+  identify = identifyGuardExecution, persist = true, registry = DERIVED_ARTIFACTS } = {}) {
   const git = args => gitText(args, { cwd });
   const head = git(["rev-parse", "HEAD"]), branch = git(["branch", "--show-current"]);
   const tree = git(["rev-parse", "HEAD^{tree}"]);
@@ -243,13 +313,19 @@ export async function verifyPublishedCorrection({ cwd = process.cwd(), relatedTe
   const context = contextReader(cwd), pr = context.pullRequest;
   if (pr.state !== "OPEN" || pr.isDraft || pr.headRefName !== branch || pr.baseRefName !== "main"
     || !context.protection.mergeQueue || !context.protection.requiredChecks.length) throw new Error("Matching published PR and active protected checks/merge queue are required.");
-  const prior = inspectCorrectionRecord(cwd, { contextReader: () => context, identify, now: now() });
+  const prior = inspectCorrectionRecord(cwd, { contextReader: () => context, identify, now: now(), registry });
   if (prior.ok && Object.keys(relatedTestsBySource).length === 0) return prior.state;
-  const retainedMapping = prior.ok ? prior.proof.relatedTestsBySource : prior.reverificationInputs?.relatedTestsBySource;
+  // A new local head has no receipt of its own yet.  The last published head
+  // can nevertheless supply both the original anchor and its already-accepted
+  // related-test mapping, so a hand-run second correction does not need an
+  // otherwise redundant --related-tests override.
+  const previous = readCorrectionRecord(cwd, null, pr.headRefOid);
+  const retainedMapping = prior.ok ? prior.proof.relatedTestsBySource
+    : prior.reverificationInputs?.relatedTestsBySource ?? previous?.publicationCorrection?.relatedTestsBySource;
   relatedTestsBySource = { ...retainedMapping, ...relatedTestsBySource };
-  const anchor = prior.ok ? prior.proof.anchor : chooseInitialAnchor({ records: recordsReader(cwd), previous: readCorrectionRecord(cwd), pullRequest: pr,
+  const anchor = prior.ok ? prior.proof.anchor : chooseInitialAnchor({ records: recordsReader(cwd), previous, pullRequest: pr,
     treeAt: sha => git(["rev-parse", `${sha}^{tree}`]), now: now() });
-  const { commands, changedFiles, classification, plan } = describeCorrection({ cwd, anchor, head, tree, relatedTestsBySource });
+  const { commands, changedFiles, classification, plan } = describeCorrection({ cwd, anchor, head, tree, relatedTestsBySource, registry });
   if (prior.ok && correctionPlanDigest(commands) === prior.proof.planDigest
     && classification === prior.proof.classification && stageIdentityMatches(changedFiles, prior.proof.changedFiles)) return prior.state;
   const identityNow = () => {
@@ -262,15 +338,15 @@ export async function verifyPublishedCorrection({ cwd = process.cwd(), relatedTe
   if (!identity) throw new Error("Source/toolchain/environment identity is unproven; no correction checks started.");
   const directory = guardReceiptDirectory(cwd);
   if (persist) mkdirSync(directory, { recursive: true });
-  const writer = createStageReceiptWriter({ path: persist ? correctionReceiptPath(cwd) : null, stage: STAGE, identity });
-  const lockPath = `${correctionReceiptPath(cwd)}.lock`;
+  const writer = createStageReceiptWriter({ path: persist ? correctionReceiptPath(cwd, head) : null, stage: STAGE, identity });
+  const lockPath = `${correctionReceiptPath(cwd, head)}.lock`;
   const claim = persist ? acquireLocalConvergenceLock({ path: lockPath }) : null;
   if (claim && claim.status !== "acquired") throw new Error("Correction verification is already running or its owner is unmeasurable; observe the existing execution.");
   const results = [];
   try {
     writer.start({ integrationStatus: "UNRUN" });
     for (const command of commands) {
-      const result = qualifyCorrectionExecution(command, await run(command.command, command.args, { cwd, timeout: 10 * 60_000 }));
+      const result = qualifyCorrectionExecution(command, await run(command.command, command.args, { cwd, timeout: 10 * 60_000 }), registry);
       const { stdout: _stdout, testReport: _testReport, ...observation } = result;
       results.push({ ...observation, output: String(result.output ?? "").slice(-8000) });
       writer.heartbeat({ command, exitCode: result.exitCode, outcome: result.outcome ?? null });
@@ -297,6 +373,27 @@ export async function verifyPublishedCorrection({ cwd = process.cwd(), relatedTe
   } finally { if (claim) releaseLocalConvergenceLock({ path: lockPath, token: claim.owner.token }); }
 }
 
+/**
+ * BI-25CB699C: the class a published head would take, or null when it is not
+ * an eligible published correction (no open protected PR, no accepted anchor,
+ * dirty tree) or cannot be read. Runs no checks; pregate uses it to send a
+ * main refresh of a passed head to the reduced tier instead of a full gate.
+ */
+export function reducedTierClassification(cwd = process.cwd(), { contextReader = readPublishedContext, recordsReader = localRecords, registry = DERIVED_ARTIFACTS } = {}) {
+  try {
+    const git = args => gitText(args, { cwd });
+    const branch = git(["branch", "--show-current"]);
+    if (!branch || branch === "main" || git(["status", "--porcelain"])) return null;
+    const pr = contextReader(cwd).pullRequest;
+    if (pr.state !== "OPEN" || pr.isDraft || pr.headRefName !== branch || pr.baseRefName !== "main") return null;
+    const previous = readCorrectionRecord(cwd, null, pr.headRefOid);
+    const anchor = chooseInitialAnchor({ records: recordsReader(cwd), previous, pullRequest: pr,
+      treeAt: sha => git(["rev-parse", `${sha}^{tree}`]) });
+    return describeCorrection({ cwd, anchor, head: git(["rev-parse", "HEAD"]), tree: git(["rev-parse", "HEAD^{tree}"]),
+      relatedTestsBySource: previous?.publicationCorrection?.relatedTestsBySource ?? {}, registry }).classification;
+  } catch { return null; }
+}
+
 async function main() {
   const { values } = parseArgs({ options: { status: { type: "boolean" }, eligible: { type: "boolean" }, "related-tests": { type: "string" } } });
   try {
@@ -310,7 +407,7 @@ async function main() {
       const context = readPublishedContext(), pr = context.pullRequest;
       if (pr.state !== "OPEN" || pr.isDraft || pr.headRefName !== gitText(["branch", "--show-current"]) || pr.baseRefName !== "main"
         || !context.protection.mergeQueue || !context.protection.requiredChecks.length || gitText(["status", "--porcelain"])) throw new Error("No matching protected published correction candidate.");
-      chooseInitialAnchor({ records: localRecords(process.cwd()), previous: readCorrectionRecord(), pullRequest: pr, treeAt: sha => gitText(["rev-parse", `${sha}^{tree}`]) });
+      chooseInitialAnchor({ records: localRecords(process.cwd()), previous: readCorrectionRecord(process.cwd(), null, pr.headRefOid), pullRequest: pr, treeAt: sha => gitText(["rev-parse", `${sha}^{tree}`]) });
       console.log("Eligible for affected verification by the Git pre-push hook; this is not a check result or integration PASS.");
       return;
     }

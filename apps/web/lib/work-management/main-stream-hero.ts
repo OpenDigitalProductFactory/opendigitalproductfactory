@@ -29,9 +29,13 @@ export function resolveHeroPortfolio(
   return [...candidates].sort((a, b) => load(b) - load(a))[0]!;
 }
 
-/** The shape to draw: the one with the most rooms in flow. */
-export function heroShape(flow: Pick<PortfolioFlow, "shapes">): ShapeFlowRow | null {
-  return flow.shapes[0] ?? null;
+/**
+ * The shape to draw: the busiest of the shapes the archetype binds to its
+ * delivery stage (BI-B32D8C16), else the busiest shape in flow. Shapes arrive
+ * busiest first.
+ */
+export function heroShape(flow: Pick<PortfolioFlow, "shapes">, boundShapeRefs: ReadonlySet<string> = new Set()): ShapeFlowRow | null {
+  return flow.shapes.find((shape) => boundShapeRefs.has(shape.shapeRef)) ?? flow.shapes[0] ?? null;
 }
 
 /** A held step's typical wait, by shape version and step; null when it is too few to measure. */

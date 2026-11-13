@@ -170,7 +170,31 @@ ecosystem/inbound-issue-triage          ← NEW scheduled job on evolve-dpf inst
                                                                        EXISTS, unused for this
 ```
 
+**Peer demand comes from other organizations only (BI-F4866228, 2026-11-03).**
+The intake reads demand envelopes only from a live link (`trusted`, not
+revoked or quarantined) to another organization. A `same-org-peer` link sends
+its whole backlog as demand envelopes, and work sync already mirrors that
+backlog here. Before this rule, the first commissioned production run filed
+each envelope as a new item, about 4,000 duplicates. The untouched copies were
+retired, and recorded as duplicates where an original existed, by migration
+`20261103180000_retire_same_org_peer_demand_intake_copies`. An organization's
+own installations share work through work sync, never through intake.
+
 Almost every box is existing substrate. The genuinely new code is the **GitHub issue read path** and the two scheduled jobs. `dpf.demand.dispositioned` is already a declared activity with a handler — §3.5's writeback obligation is satisfied by using it rather than inventing a notification.
+
+**As realized (BI-FB03E2FD, 2026-11-12).** The audit found `arbitrate` with no
+caller. Per WWMD DI-56D5E82AD9D2 it is wired as ordering plus real decisions,
+not a capacity allocator: each commissioned intake cycle ranks the open
+`ecosystem-inbound` items and records rank and reason as an
+`ecosystem_arbitration` activity on the item (only when the position changes),
+with the top of the queue on the intake job's schedule line. The item's
+`priority` is never written, so a person's setting stands; where the capacity
+line falls stays with the accountable human. A peer submitter is answered on a
+real decision through the existing `dpf.demand.dispositioned` writeback:
+`accepted` when the item moves to `in-progress`, `rejected` when it is retired
+with a recorded reason. A retirement without a reason sends nothing and is
+named on the schedule line. `drawAgainstCapacity`/`buildDispositions` (with
+their `deferred` outcome) remain uncalled; the contract has no `deferred`.
 
 ### 4.4 Ballot composition — every participant votes, but not on everything
 
@@ -448,6 +472,31 @@ is only taken when a projector was actually injected — a declared link with no
 way to project would otherwise swallow the report silently. Installs without a
 link keep the relay/direct behaviour byte-for-byte.
 
+### 5.6 Remediation — votes now move the shared priority (BI-626A4ECA), 2026-11-12
+
+Audit on 2026-11-12 found the vote budget built but uncounted: an interest
+response reached the controller as a flat signal and no code turned it into a
+score input. Now:
+
+- `DemandResponseV1` carries an optional integer `weight` (2–4) on `interest`
+  responses only; 1 is the default and is not written. A peer on an older
+  build reads a weighted vote as plain interest.
+- The participant's `respondToFederatedDemandAction` enforces the weekly
+  budget (16 credits, cost = weight²) against this week's outbound responses,
+  read bounded on `updatedAt`. Re-weighting an item refunds its earlier weight.
+- On receipt the controller re-tallies the item (`recordEcosystemVoteTally`):
+  distinct installations become `reach`, mean weight maps onto the impact
+  ladder, written with `demandInputSource = "ai"` through the guarded update,
+  so a human or agreed score is never overwritten. A changed weight updates
+  the held response instead of being dropped as a duplicate, but only when it
+  is strictly newer (`createdAt`), so a late retry cannot revert a correction.
+- The budget is also enforced at the receiver: a peer whose weighted votes
+  received this ISO week cost more than 16 credits has its votes counted at
+  weight 1, and the item's scoring activity records how many were over budget.
+  The sender's check is a courtesy across a trust boundary; this is the bound.
+- A tally that loses the optimistic-concurrency race is retried once; a vote
+  still not counted is logged with its reason (`tallyAfterInboundVote`).
+
 ## 6. Verification
 
 ### 6.1 Customer-first controller commissioning (BI-FD40397B)
@@ -648,6 +697,38 @@ approval timeout has changed, and runtime acceptance remains outstanding.
 - Integration: a report on a non-coding install reaches an upstream BacklogItem with submitter provenance intact and no PII in the envelope (`assertNoExcludedEgress` already enforces this — assert it in the test).
 - Negative: no opt-in → nothing leaves. Budget exhausted → the vote is refused, not silently dropped. Untrusted link → no transport.
 - Runtime: exercised on the canonical runtime per §4 of the rulebook; a gate that cannot run is recorded inconclusive, never passed.
+
+### 6.2 Remediating copies of same-organization demand (BI-39247CB8)
+
+The first commissioned production run, and the run of 2026-11-03, filed 4,138
+local copies from same-organization peer demand. These included envelopes from
+revoked links and envelopes the peer had withdrawn. BI-C7D95F7E and BI-F4866228
+fix the intake.
+
+WWMD DI-F7294B768E8D (high stakes) decides the remediation. It chooses one
+governed, reversible bulk retire over a SQL retire at upgrade, scoring 12.53
+against 7.47.
+
+The tool `retire_peer_demand_intake_copies` (apps/web/lib/backlog/peer-demand-intake-copies.ts
+and peer-demand-intake-copy-retirement.ts) implements it:
+
+- **Selector.** It takes every item that carries the `[origin:ecosystem-peer-demand:fdm_…]`
+  marker and whose mirror is on a same-org-peer link, a revoked link, or withdrawn.
+  Live cross-organization demand is out of scope.
+- **Kept for individual review.** Items not in triaging or open status; items
+  that are claimed, have a build, are in a Workroom, or have demand evidence;
+  items with any activity a person recorded, or with work activity beyond
+  filing, twinning, scoring and automated triage; items that absorbed a local
+  intake origin; items with a mutating tool call after filing; and items whose
+  body carries a work-sync marker.
+- **Governance.** The dry run is read-only and returns a selection digest. The
+  retire call is irreversible, so it opens one approval envelope. When the
+  envelope runs, the call re-derives the selection and refuses if the digest
+  has changed.
+- **Effect.** Each item goes through `retireBacklogItemTool`, with outcome
+  `duplicate` of the earliest same-title work-sync mirror, otherwise `discard`.
+  This writes a status_change activity. The item can be restored with
+  update_backlog_item_status, and repeating the call has no further effect.
 
 ## 7. Open decisions for WWMD / the operator
 

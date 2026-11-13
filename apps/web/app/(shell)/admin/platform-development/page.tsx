@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { prisma } from "@dpf/db";
 import { namespaceMessages } from "@dpf/i18n";
 
+import { AccountAgentAccessPanel } from "@/components/admin/AccountAgentAccessPanel";
 import { AcceptanceSweepCloseAuthorisationCard } from "@/components/admin/AcceptanceSweepCloseAuthorisationCard";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { AuthorStagePreauthorisationCard } from "@/components/admin/AuthorStagePreauthorisationCard";
@@ -10,6 +11,9 @@ import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBan
 import { McpOAuthClientManager } from "@/components/admin/McpOAuthClientManager";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { GovernedBacklogSettings } from "@/components/admin/GovernedBacklogSettings";
+import { PaidInferenceAllowanceSettings } from "@/components/admin/PaidInferenceAllowanceSettings";
+import { readPaidSpendTodayUsd } from "@/lib/inference/budget-gate";
+import { can } from "@/lib/permissions";
 import { ManagedRepositorySection } from "@/components/admin/ManagedRepositorySection";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import { getAutonomousPlaybookMode } from "@/lib/build/build-studio-config";
@@ -46,7 +50,12 @@ import {
   type InstallationIntentDb,
 } from "@/lib/installation-journey/operating-intent";
 
-export default async function AdminPlatformDevelopmentPage() {
+export default async function AdminPlatformDevelopmentPage(props: {
+  searchParams?: Promise<{ account?: string | string[] }>;
+} = {}) {
+  // BI-DB506554: the handover plan links ?account=<email>#agent-access.
+  const requestedAccount = (await props.searchParams)?.account;
+  const initialAccount = typeof requestedAccount === "string" ? requestedAccount : null;
   const config = await getPlatformDevConfig();
   const policyState: PlatformDevPolicyState = config?.policyState ?? "policy_pending";
   const untrackedCount = (config?.contributionMode === "private" || config?.contributionMode === "fork_only")
@@ -90,6 +99,12 @@ export default async function AdminPlatformDevelopmentPage() {
     ? await loadAuthorStagePreauthorisationView(prisma as unknown as AuthorStagePreauthorisationViewDb)
     : null;
 
+  // BI-F3B6713F: the paid AI allowance is a spending decision, shown only to people who may make it.
+  const userContext = session?.user ? { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser } : null;
+  const mayManagePaidAllowance = userContext !== null && can(userContext, "manage_platform") && can(userContext, "manage_finance");
+  const paidSpendTodayUsd = mayManagePaidAllowance ? await readPaidSpendTodayUsd().catch(() => null) : null;
+  const paidAllowance = config?.paidInferenceDailyUsdAllowance;
+
   return (
     <div>
       <div className="mb-6">
@@ -121,7 +136,19 @@ export default async function AdminPlatformDevelopmentPage() {
           dailyCap={config?.backlogTeeUpDailyCap ?? 3}
           capacityDrainEnabled={config?.capacityDrainEnabled === true}
           playbookMode={getAutonomousPlaybookMode()}
-        />
+        >
+          {mayManagePaidAllowance && (
+            <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+              <PaidInferenceAllowanceSettings
+                dailyUsd={paidAllowance == null ? null : Number(paidAllowance)}
+                spentTodayUsd={paidSpendTodayUsd}
+                setAt={config?.paidInferenceAllowanceSetAt?.toISOString() ?? null}
+                setByEmail={config?.paidInferenceAllowanceSetBy?.email ?? null}
+                reason={config?.paidInferenceAllowanceReason ?? null}
+              />
+            </MessagesProvider>
+          )}
+        </GovernedBacklogSettings>
       </div>
       {closeAuthorisationView && (
         <div className="mb-6">
@@ -163,6 +190,7 @@ export default async function AdminPlatformDevelopmentPage() {
       {/* The People panel reads admin; the source-client form reads setup. */}
       <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin"), setup: namespaceMessages(language, "setup") }}>
         <McpOAuthClientManager />
+        <AccountAgentAccessPanel initialAccount={initialAccount} />
       </MessagesProvider>
     </div>
   );

@@ -7,7 +7,15 @@ WORKDIR /app
 # ─── Dev stage (parallel branch — not part of production chain) ──────────────
 FROM base AS dev
 WORKDIR /workspace
-RUN apk add --no-cache git postgresql16-client
+# apk retries (a stalled fetch times out after 60s, then retries): one dropped
+# connection must not fail an upgrade (BI-7FFF5CB0;
+# guard: apps/web/lib/verify/dockerfile-apk-retry.guard.test.ts).
+RUN for attempt in 1 2 3 4 5; do \
+      apk add --no-cache --timeout 60 git postgresql16-client && break; \
+      if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
+      echo "apk add failed (attempt $attempt/5); retrying in $((attempt * 5))s" >&2; \
+      sleep $((attempt * 5)); \
+    done
 # BI-0DF1F354: bake preflight + entrypoint into the IMAGE. The primary failure
 # mode is a deleted/empty bind mount — the worktree copy of this script is not
 # available then, so it must not live only under /workspace.
@@ -53,6 +61,8 @@ COPY packages/integration-shared/package.json ./packages/integration-shared/
 COPY packages/storefront-templates/package.json ./packages/storefront-templates/
 COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
+# The integrity-pinned first-party artifact is an install input, not source to rebuild.
+COPY packages/validators/vendor/ ./packages/validators/vendor/
 # pnpm-workspace.yaml `patchedDependencies` names patch files by repo-relative
 # path. pnpm resolves them against the workspace root, so every stage that runs
 # `pnpm install` needs them in the build context — without this COPY the install
@@ -77,6 +87,9 @@ COPY scripts/lib/canonical-json.mjs ./scripts/lib/
 # The local-CI status set is shared by the gate scripts and the MCP evidence
 # handler, so the build stage needs it too (BI-C59AC8AF).
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
+# Build Studio carries a build's recorded gate decisions into its PR using the
+# same trailer names the readiness gates read (BI-BA6EDCDD).
+COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY apps/web/ ./apps/web/
@@ -142,8 +155,17 @@ COPY scripts/installer/install-state.v2.schema.json ./scripts/installer/
 COPY scripts/installer/monitoring-choice.mjs ./scripts/installer/
 COPY scripts/check-compose-resource-budgets.mjs ./scripts/
 COPY scripts/installer/native-edge-host.ps1 ./scripts/installer/
-COPY scripts/bootstrap-organization-pki.ps1 scripts/rotate-runtime-transition-secret.mjs ./scripts/
+# BI-084F85E5: the consumer start script and the host convergence it runs ship
+# as release assets, so each self-upgrade replaces them in the install dir.
+COPY scripts/installer/dpf-start.consumer.ps1 ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.ps1 ./scripts/installer/lib/
+# ...and their macOS/Linux twins, plus the self-upgrade step that bridges launch
+# scripts written before them (promote.sh runs it from the install root).
+COPY scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs ./scripts/installer/
+COPY scripts/installer/lib/host-convergence.sh ./scripts/installer/lib/
+COPY scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/rotate-runtime-transition-secret.mjs ./scripts/
 COPY scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs ./scripts/installer/
+COPY scripts/installer/edge-client-certificate.mjs ./scripts/installer/
 COPY scripts/publish-host-gpu.ps1 ./scripts/
 COPY scripts/installer/lib/state.ps1 ./scripts/installer/lib/
 COPY scripts/installer/lib/compose-chain.ps1 ./scripts/installer/lib/
@@ -184,6 +206,9 @@ COPY scripts/check-data-impact.mjs ./scripts/
 # names the same surfaces CI will gate.
 COPY scripts/check-convergence-impact.mjs ./scripts/
 COPY scripts/convergence-surfaces.json ./scripts/
+# gate-context lists the docs a planned change affects (BI-9B17E889) through the
+# Docs Impact Gate's own computeImpact, so a Workroom sees them at claim time.
+COPY scripts/check-docs-impact.mjs ./scripts/
 COPY scripts/lib/gate-context.mjs ./scripts/lib/
 COPY scripts/lib/ci-evidence-plan.mjs ./scripts/lib/
 COPY scripts/lib/derived-artifacts-registry.mjs ./scripts/lib/
@@ -219,6 +244,7 @@ COPY scripts/lib/guard-bash.mjs ./scripts/lib/
 COPY scripts/lib/load-pinned-guard-typescript.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
+COPY scripts/lib/local-convergence-lock.mjs ./scripts/lib/
 # check-design-grounding-decision and check-data-impact import the shared
 # unresolvable-diff helper; without this COPY the init image dies at
 # ERR_MODULE_NOT_FOUND (BI-20599979).
@@ -307,10 +333,11 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
     mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp uninstall-dpf.sh uninstall-dpf.ps1 uninstall-dpf.bat /dpf-release-assets/ && \
-    cp scripts/bootstrap-organization-pki.ps1 scripts/publish-host-gpu.ps1 scripts/rotate-runtime-transition-secret.mjs /dpf-release-assets/scripts/ && \
+    cp scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/publish-host-gpu.ps1 scripts/rotate-runtime-transition-secret.mjs /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/script-argv.mjs scripts/lib/git.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \
     cp scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/edge-client-certificate.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/runtime-apply-lock.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/recovery-filesystem.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/lib/canonical-json.mjs /dpf-release-assets/scripts/lib/ && \
@@ -324,10 +351,12 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v1.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/dpf-start.consumer.ps1 /dpf-release-assets/dpf-start.ps1 && \
+    cp scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/monitoring-choice.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/check-compose-resource-budgets.mjs /dpf-release-assets/scripts/ && \
     cp config/install-resource-budgets.json /dpf-release-assets/config/ && \
-    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 /dpf-release-assets/scripts/installer/lib/ && \
+    cp scripts/installer/lib/state.ps1 scripts/installer/lib/compose-chain.ps1 scripts/installer/lib/activation-overlays.txt scripts/installer/lib/canonical-origin.ps1 scripts/installer/lib/machine-trust.ps1 scripts/installer/lib/mcp-client-env.ps1 scripts/installer/lib/host-convergence.ps1 scripts/installer/lib/host-convergence.sh /dpf-release-assets/scripts/installer/lib/ && \
     cp config/consumer-install/agent-pointer.md /dpf-release-assets/AGENTS.md && \
     mkdir -p /dpf-release-assets/scripts/safety && \
     cp scripts/safety/dpf-shell-guard.ps1 scripts/safety/dpf-shell-guard.sh \
@@ -359,6 +388,8 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
 # its devDependencies (prisma CLI, tsx) are runtime executables here, so the
 # install is deliberately NOT --prod. --offline: the pnpm store in this stage
 # already holds every package from the full install above.
+# The root importer also supplies the pinned shared Workroom package to
+# maintenance scripts under /app/apps/web-src that reach shape conformance.
 RUN rm -rf node_modules apps/*/node_modules packages/*/node_modules services/*/node_modules && \
     pnpm install --frozen-lockfile --offline --filter "@dpf/db..." --config.confirmModulesPurge=false && \
     pnpm --filter @dpf/db exec prisma generate && \
@@ -388,7 +419,15 @@ WORKDIR /app
 # is the same guarantee for the path that has no GitHub Actions runner.
 # Dockerfile.sandbox installs it for the same class of reason.
 # Shared HTTPS tooling consumes the installer-owned Bash environment resolver.
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash
+# apk retries (a stalled fetch times out after 60s, then retries): one dropped
+# connection must not fail an upgrade (BI-7FFF5CB0;
+# guard: apps/web/lib/verify/dockerfile-apk-retry.guard.test.ts).
+RUN for attempt in 1 2 3 4 5; do \
+      apk add --no-cache --timeout 60 docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash && break; \
+      if [ "$attempt" = 5 ]; then echo "apk add failed after 5 attempts" >&2; exit 1; fi; \
+      echo "apk add failed (attempt $attempt/5); retrying in $((attempt * 5))s" >&2; \
+      sleep $((attempt * 5)); \
+    done
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
@@ -419,6 +458,8 @@ COPY --from=init /app/.github ./.github
 COPY --from=init /app/config/ci-evidence-policy.json ./config/
 COPY --from=init /app/config/seed-content-paths.json ./config/
 COPY --from=init /app/apps/web/lib/ux-budget/route-budget-baseline.json ./apps/web/lib/ux-budget/
+COPY --from=init /app/apps/web/lib/docs/doc-impact.generated.json ./apps/web/lib/docs/
+COPY --from=init /app/apps/web/lib/docs-route-map.ts ./apps/web/lib/
 COPY --from=init /dpf-release-assets /dpf-release-assets
 # Managed operational scripts (backup/restore/trial-restore) are invoked at
 # runtime by the backup runners. They are committed from a Windows checkout,
@@ -443,6 +484,8 @@ RUN chmod +x /docker-entrypoint.sh
 # path so it is invoked directly, not shadowed by the Node base image's
 # /usr/local/bin/docker-entrypoint.sh passthrough.
 COPY scripts/portal-migrate-boot.sh /usr/local/bin/portal-migrate-boot.sh
+COPY scripts/runtime-secret-bootstrap.mjs /usr/local/bin/runtime-secret-bootstrap.mjs
+COPY scripts/lib/script-argv.mjs /usr/local/bin/lib/script-argv.mjs
 RUN chmod +x /usr/local/bin/portal-migrate-boot.sh
 
 # Source for Build Studio — copied to -src paths to avoid collision with standalone output
@@ -565,4 +608,4 @@ EXPOSE 3000
 # restart) can never leave the DB drifted. It is fail-closed: if migrations
 # can't apply, the portal does not start. portal-init is unaffected — it
 # overrides CMD with /docker-entrypoint.sh.
-CMD ["/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]
+CMD ["node", "/usr/local/bin/runtime-secret-bootstrap.mjs", "--", "/usr/local/bin/portal-migrate-boot.sh", "sh", "-c", "if [ -z \"$DEPLOYED_SHA\" ] && [ -s /app/.dpf-image-version ]; then DEPLOYED_SHA=\"$(tr -d '[:space:]' < /app/.dpf-image-version)\"; export DEPLOYED_SHA; fi; exec node apps/web/server.js"]

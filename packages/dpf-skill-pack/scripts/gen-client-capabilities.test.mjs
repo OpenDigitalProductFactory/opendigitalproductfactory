@@ -133,7 +133,7 @@ test("an invalid profile writes nothing", () => {
 
 test("the profile's carriers equal the updater's DEFAULT_CARRIERS", () => {
   const carriers = readUpdaterCarriers(read(CONVERGENCE_PATH));
-  assert.deepEqual(carriers, { "claude-code": "header", codex: "header", grok: "query", antigravity: "header" });
+  assert.deepEqual(carriers, { "claude-code": "helper", codex: "header", grok: "query", antigravity: "header" });
   assert.deepEqual(carrierDrift(profile(), carriers), []);
 });
 
@@ -146,4 +146,20 @@ test("a carrier the updater and the profile disagree on refuses to generate", ()
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("every pack-loading client declares what it writes, and a CLI-covered file names its CLI (BI-1DCF9F23)", () => {
+  const bad = profile();
+  delete bad.clients.grok.writes;
+  bad.clients.antigravity.writes[0] = { ...bad.clients.antigravity.writes[0], writer: "cli", cli: null };
+  bad.clients.codex.writes[0] = { ...bad.clients.codex.writes[0], writer: "direct", cli: "codex plugin add" };
+  bad.clients["claude-code"].writes[0] = { ...bad.clients["claude-code"].writes[0], format: "yaml", path: "relative/file" };
+  const problems = validateProfile(bad, { knownProbes: probes() });
+  for (const expected of [
+    "grok: writes[] must declare every file the adapter writes",
+    "antigravity.writes[0]: a cli writer must name the CLI",
+    "codex.writes[0]: a direct writer names no CLI",
+    "claude-code.writes[0]: format must be one of",
+    "claude-code.writes[0]: path must start with ~/ or <project>/",
+  ]) assert.ok(problems.some((p) => p.includes(expected)), `${expected}\n${problems.join("\n")}`);
 });

@@ -16,14 +16,16 @@ import { prisma } from "@dpf/db";
 
 import type { ToolPack } from "@/lib/mcp/tool-pack";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
-import { ensureAgentPrincipalIdentity, syncUserPrincipal } from "@/lib/identity/principal-linking";
+import { ensureAgentPrincipalIdentity, getAgentGaidMap, syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { getCoworkerRoomEngagement } from "@/lib/work-management/coworker-room-engagement.server";
+import { loadWorkspaceMentionRoster } from "@/lib/work-management/mention-roster.server";
 import { heartbeatAgentWorkItemPresence } from "@/lib/work-management/room-agent-presence.server";
 import { postWorkItemComment, type PostCommentDb } from "@/lib/work-management/post-work-item-comment";
 import { persistExplicitWorkroomAssignmentsForWorkItem } from "@/lib/work-management/room-participant-assignment.server";
 import { appendRoomPolicyParticipant } from "@/lib/work-management/room-policy";
 import { loadRoomMembersForWorkItem } from "@/lib/work-management/room-policy-members.server";
 import {
+  applyInviteeClearanceRaise,
   preflightRoomParticipantInvitation,
   resolveRoomMessagingWorkItem,
   ROOM_MESSAGING_WORK_ITEM_SELECT,
@@ -32,12 +34,28 @@ import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.
 import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { executeCooBroadcastAck, executeCooBroadcastAsk, type CooBroadcastDb } from "@/lib/operate/coo-broadcast.server";
 import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
+import { inviteRoomParticipantConsequence } from "@/lib/work-management/room-charter-consequence.server";
+import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
+import { roomMessageAddressingView } from "@/lib/work-management/room-message-addressing";
+import { prepareRoomAddressing, publishRoomMessagePosted } from "@/lib/work-management/room-message-wake.server";
 
-type PackContext = { agentId?: string };
+type PackContext = { agentId?: string; apiTokenId?: string };
 
 function str(params: Record<string, unknown>, key: string): string | null {
   const value = params[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+// BI-3C837677: room reads page by an opaque (createdAt, messageId) cursor.
+// messageId is unique, so it breaks createdAt ties and no message is skipped or
+// repeated across pages. The feed used to return the OLDEST 20 with no cursor.
+const ROOM_MESSAGE_PAGE_DEFAULT = 20;
+const ROOM_MESSAGE_PAGE_MAX = 100;
+
+function roomMessageLimit(params: Record<string, unknown>): number {
+  const value = params.limit;
+  if (typeof value !== "number" || !Number.isFinite(value)) return ROOM_MESSAGE_PAGE_DEFAULT;
+  return Math.min(ROOM_MESSAGE_PAGE_MAX, Math.max(1, Math.floor(value)));
 }
 
 async function resolveRoomWorkItem(caseKey: string) {
@@ -45,7 +63,7 @@ async function resolveRoomWorkItem(caseKey: string) {
 }
 
 async function agentLabel(agentId: string): Promise<string> {
-  const agent = await prisma.agent.findUnique({ where: { id: agentId }, select: { displayName: true } });
+  const agent = await prisma.agent.findUnique({ where: { agentId }, select: { displayName: true } });
   return agent?.displayName?.trim() || "A coworker";
 }
 
@@ -83,6 +101,16 @@ async function postRoomMessageHandler(
     };
   }
 
+  const prepared = await prepareRoomAddressing({
+    workItemId: item.id,
+    sender: { type: "agent", id: agentId },
+    actingUserId: userId,
+    addressedTo: params.addressedTo,
+    // BI-FDE1B10C: a room's supervised session is recognised by the token it posts with.
+    apiTokenId: context?.apiTokenId ?? null,
+  });
+  if (prepared.refused) return { success: false, error: "invalid_input", message: prepared.message };
+
   const label = await agentLabel(agentId);
   // Posting is joining: heartbeat the agent's presence in the room.
   await heartbeatAgentWorkItemPresence({ workItemId: item.id, agentPrincipalId: access.agentPrincipalId, label });
@@ -99,14 +127,17 @@ async function postRoomMessageHandler(
     roomRef: { caseKey, caseId: `${item.sourceType}:${canonicalSourceId}`, workItemId: item.itemId },
     body,
     sender: { type: "agent", id: agentId, label },
-    roster: {},
+    roster: await loadWorkspaceMentionRoster(),
+    addressing: prepared.build,
   });
+  // After commit: the wake is an accelerator, and the sweeper retries a failed send.
+  if (result.addressed) await publishRoomMessagePosted(result.messageId);
 
   return {
     success: true,
     entityId: result.messageId,
-    message: `Posted to ${caseKey} as ${label}.`,
-    data: { messageId: result.messageId, workItemId: item.id },
+    message: `Posted to ${caseKey} as ${label}.${result.addressed ? " Addressed coworkers are being woken." : ""}`,
+    data: { messageId: result.messageId, workItemId: item.id, addressed: result.addressed },
   };
 }
 
@@ -123,6 +154,22 @@ async function readRoomMessagesHandler(
   if (!caseKey) {
     return { success: false, error: "invalid_input", message: "caseKey is required." };
   }
+  const sinceRaw = str(params, "sinceCursor");
+  const beforeRaw = str(params, "beforeCursor");
+  if (sinceRaw && beforeRaw) {
+    return { success: false, error: "invalid_input", message: "Pass sinceCursor or beforeCursor, not both." };
+  }
+  const cursorRaw = sinceRaw ?? beforeRaw;
+  const cursor = cursorRaw ? decodeRoomMessageCursor(cursorRaw) : null;
+  if (cursorRaw && !cursor) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: "That cursor is not one read_room_messages issued. Pass newestCursor or oldestCursor from an earlier read unchanged.",
+    };
+  }
+  const forward = Boolean(sinceRaw);
+  const limit = roomMessageLimit(params);
 
   const item = await resolveRoomWorkItem(caseKey);
   if (!item) {
@@ -149,10 +196,25 @@ async function readRoomMessagesHandler(
     const childAccess = await resolveAgentRoomAccess({ agentId, userId, requested: "content", workItem: child });
     if (childAccess.decision.level === "content") admittedChildIds.push(child.id);
   }
-  const rows = await prisma.workItemMessage.findMany({
-    where: { workItemId: { in: [item.id, ...admittedChildIds] } },
-    orderBy: [{ createdAt: "asc" }],
-    take: 20,
+  // since: strictly after the cursor, oldest first. Default and before: newest
+  // first, strictly before the cursor when one is given. One extra row says
+  // whether more remain in the paging direction.
+  const comparator = forward ? "gt" : "lt";
+  const direction = forward ? "asc" : "desc";
+  const fetched = await prisma.workItemMessage.findMany({
+    where: {
+      workItemId: { in: [item.id, ...admittedChildIds] },
+      ...(cursor
+        ? {
+            OR: [
+              { createdAt: { [comparator]: cursor.createdAt } },
+              { createdAt: cursor.createdAt, messageId: { [comparator]: cursor.messageId } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: [{ createdAt: direction }, { messageId: direction }],
+    take: limit + 1,
     select: {
       messageId: true,
       senderType: true,
@@ -161,14 +223,28 @@ async function readRoomMessagesHandler(
       messageType: true,
       body: true,
       createdAt: true,
+      structuredPayload: true,
     },
   });
+  const hasMore = fetched.length > limit;
+  const rows = fetched.slice(0, limit);
+  const senderGaids = await getAgentGaidMap(rows.flatMap((row) => (row.senderAgentId ? [row.senderAgentId] : [])));
+  const newestRow = forward ? rows.at(-1) : rows[0];
+  const oldestRow = forward ? rows[0] : rows.at(-1);
+  // An empty page keeps the caller's position rather than losing it.
+  const newestCursor = newestRow ? encodeRoomMessageCursor(newestRow) : (sinceRaw ?? null);
+  const oldestCursor = oldestRow ? encodeRoomMessageCursor(oldestRow) : (beforeRaw ?? null);
+  const span = forward ? "new since the cursor" : cursor ? "older than the cursor" : "newest";
 
   return {
     success: true,
-    message: `${rows.length} recent message(s) in ${caseKey}.`,
+    message: `${rows.length} ${span} message(s) in ${caseKey}${hasMore ? "; more remain" : ""}.`,
     data: {
       caseKey,
+      order: forward ? "oldest-first" : "newest-first",
+      hasMore,
+      newestCursor,
+      oldestCursor,
       messages: rows.map((row) => ({
         messageId: row.messageId,
         senderType: row.senderType,
@@ -176,6 +252,7 @@ async function readRoomMessagesHandler(
         messageType: row.messageType,
         body: row.body,
         at: row.createdAt.toISOString(),
+        ...roomMessageAddressingView(row.structuredPayload, row.senderAgentId ? senderGaids.get(row.senderAgentId) ?? null : null),
       })),
     },
   };
@@ -188,9 +265,15 @@ async function inviteRoomParticipantHandler(
 ): Promise<ToolResult> {
   const preflight = await preflightRoomParticipantInvitation({ params, userId, agentId: context?.agentId });
   if (preflight.verdict === "deny") return preflight.result;
-  const { agentId, caseKey, item } = preflight;
+  const { agentId, caseKey, item, clearanceRaise } = preflight;
   const inviteeAgentId = str(params, "agentId");
   const inviteeUserId = str(params, "userId");
+
+  // BI-6AE64074: an approved raise happens before admission; a refused one admits nobody.
+  if (clearanceRaise) {
+    const refused = await applyInviteeClearanceRaise(userId, caseKey, clearanceRaise);
+    if (refused) return refused;
+  }
 
   let inviteePrincipalId: string | null = null;
   let inviteeLabel = "A participant";
@@ -319,15 +402,12 @@ async function requirePlatformManager(userId: string): Promise<ToolResult | null
 async function planAccountHandoverHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const refusal = await requirePlatformManager(userId);
   if (refusal) return refusal;
-  const { planAccountHandover } = await import("@/lib/work-management/account-handover");
+  const { liveAgentAccessNote, planAccountHandover } = await import("@/lib/work-management/account-handover");
   const plan = await planAccountHandover(prisma as never, { sourceAccount: str(params, "sourceAccount") ?? "" });
   if (!plan.ok) return { success: false, error: "handover_refused", message: plan.error };
   const count = (kind: string) => plan.data.items.filter((i) => i.kind === kind).length;
-  // The handover moves work, not access (BI-9D2199D4): say what stays live.
-  const { accessTokens, refreshGrants } = plan.data.liveAgentCredentials;
-  const access = accessTokens + refreshGrants > 0
-    ? ` The account keeps its access: ${accessTokens} live agent token(s) and ${refreshGrants} refresh grant(s) stay live unless ended under Admin > Platform Development > MCP.`
-    : "";
+  // The handover moves work, not access (BI-9D2199D4): say what stays live and where to end it.
+  const access = liveAgentAccessNote(plan.data.sourceEmail, plan.data.liveAgentCredentials);
   return {
     success: true,
     message: `${plan.data.items.length} item(s) would move from ${plan.data.sourceEmail}: ${count("room")} room(s), ${count("build")} build(s), ${count("scheduled-task")} scheduled task(s). ${plan.data.refused.length} refused.${access}`,
@@ -525,12 +605,17 @@ const definitions: ToolDefinition[] = [
   {
     name: "post_room_message",
     description:
-      "Post a message into a Work Room as the acting coworker. The room is addressed by caseKey (e.g. backlog-item:BI-123). You must be admitted to the room with action rights — admission is outcome-scoped per room. Posting also joins you to the room (presence). Use read_room_messages to see the feed first.",
+      "Post a message into a Work Room as the acting coworker. The room is addressed by caseKey (e.g. backlog-item:BI-123). You must be admitted to the room with action rights — admission is outcome-scoped per room. Posting also joins you to the room (presence). Use read_room_messages to see the feed first. Address a coworker with addressedTo or an @mention to wake it; agent-to-agent exchanges stop at a hop limit and an hourly wake budget per room.",
     inputSchema: {
       type: "object",
       properties: {
         caseKey: { type: "string", description: "The room's case key, e.g. backlog-item:BI-123 (sourceType:sourceId)." },
         body: { type: "string", description: "The message text to post into the room." },
+        addressedTo: {
+          type: "array",
+          items: { type: "string" },
+          description: "Who must act on this message, beyond any @mentions in the body: coworker agent ids, GAIDs (a GAID may carry #session=<id> for one session of an external client), or the room roles \"coordinator\" and \"accountable\". An addressed in-platform coworker is woken to reply within seconds; an external client sees it when it next reads the room.",
+        },
       },
       required: ["caseKey", "body"],
     },
@@ -540,11 +625,14 @@ const definitions: ToolDefinition[] = [
   {
     name: "read_room_messages",
     description:
-      "Read the recent message feed of a Work Room addressed by caseKey. Returns up to 20 recent messages (human and coworker). Requires content-level admission to the room; admission is outcome-scoped per room.",
+      "Read a Work Room's message feed (human and coworker) by caseKey. With no cursor, returns the newest messages, newest first. Pass oldestCursor back as beforeCursor to page to older messages; pass newestCursor back as sinceCursor to get only messages posted since (oldest first). hasMore says whether more remain in that direction. Requires content-level admission to the room; admission is outcome-scoped per room.",
     inputSchema: {
       type: "object",
       properties: {
         caseKey: { type: "string", description: "The room's case key, e.g. backlog-item:BI-123 (sourceType:sourceId)." },
+        sinceCursor: { type: "string", description: "A newestCursor from an earlier read. Returns only later messages, oldest first. Do not combine with beforeCursor." },
+        beforeCursor: { type: "string", description: "An oldestCursor from an earlier read. Returns only earlier messages, newest first. Do not combine with sinceCursor." },
+        limit: { type: "integer", minimum: 1, maximum: ROOM_MESSAGE_PAGE_MAX, description: `Messages per page (default ${ROOM_MESSAGE_PAGE_DEFAULT}, max ${ROOM_MESSAGE_PAGE_MAX}).` },
       },
       required: ["caseKey"],
     },
@@ -612,13 +700,20 @@ const definitions: ToolDefinition[] = [
         agentId: { type: "string", description: "Invite an AI coworker by agent id (provide agentId OR userId)." },
         userId: { type: "string", description: "Invite a person by user id (provide agentId OR userId)." },
         canAct: { type: "boolean", description: "Whether the invitee may post (true, default) or only read (false)." },
+        raiseClearanceTo: {
+          type: "string",
+          enum: ["internal", "confidential"],
+          description: "Only when an earlier invite was refused with invitee_clearance_below_room: the room's level, as that refusal named it. The room's owner is then asked once to admit the coworker AND raise its data access to that level.",
+        },
       },
       required: ["caseKey"],
     },
     requiredCapability: "view_operations",
     sideEffect: true,
-    // changes identity or authority → consult-gated (TAK §8.4.1).
+    // changes identity or authority → consult-gated (TAK §8.4.1), except an
+    // admission the room's charter already decided (BI-C649809F).
     consequence: "authority",
+    consequenceForCall: inviteRoomParticipantConsequence,
   },
   {
     name: "get_coworker_room_engagement",

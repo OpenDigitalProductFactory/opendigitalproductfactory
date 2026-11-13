@@ -40,7 +40,7 @@ import { resolveHostMcpTrust } from "./mcp-host-trust.mjs";
 // The packaged exchanger keeps its host-independent default for pack callers.
 export function exchangeClientCredentials(options) {
   const trust = new URL(options.mcpUrl).protocol === "https:"
-    ? resolveHostMcpTrust({ mcpUrl: options.mcpUrl }) : null;
+    ? resolveHostMcpTrust({ mcpUrl: options.mcpUrl, env: options.env, connection: options.connection }) : null;
   return exchangeBase({ ...options, tlsOptions: trust?.tlsOptions });
 }
 
@@ -101,7 +101,7 @@ export function readClientCredentials(env = process.env) {
  * token string valid for at least EXPIRY_SKEW_SECONDS; mcp-client.mjs accepts
  * this object anywhere it accepts a bearer string.
  */
-export function createClientCredentialsBearer({ mcpUrl, clientId, clientSecret, exchange = exchangeClientCredentials, now = () => Date.now() }) {
+export function createClientCredentialsBearer({ mcpUrl, clientId, clientSecret, exchange = exchangeClientCredentials, now = () => Date.now(), env = process.env, connection }) {
   let current = null;
   let inFlight = null;
   return {
@@ -109,7 +109,7 @@ export function createClientCredentialsBearer({ mcpUrl, clientId, clientSecret, 
     async get() {
       if (current && current.expiresAt - EXPIRY_SKEW_SECONDS * 1000 > now()) return current.accessToken;
       if (!inFlight) {
-        inFlight = exchange({ mcpUrl, clientId, clientSecret, now })
+        inFlight = exchange({ mcpUrl, clientId, clientSecret, now, env, connection })
           .then((minted) => { current = minted; return minted.accessToken; })
           .finally(() => { inFlight = null; });
       }
@@ -126,14 +126,14 @@ export function createClientCredentialsBearer({ mcpUrl, clientId, clientSecret, 
  * MCP_CREDENTIAL_HELP when nothing is configured. `bearer` is either a
  * self-refreshing object (client_credentials) or the PAT string.
  */
-export function resolveMcpCredential({ mcpUrl, env = process.env, exchange = exchangeClientCredentials } = {}) {
+export function resolveMcpCredential({ mcpUrl, env = process.env, exchange = exchangeClientCredentials, connection } = {}) {
   if (!mcpUrl) throw new Error("resolveMcpCredential: mcpUrl is required");
   const client = readClientCredentials(env);
   if (client) {
     return {
       kind: "client_credentials",
       source: client.source,
-      bearer: createClientCredentialsBearer({ mcpUrl, clientId: client.clientId, clientSecret: client.clientSecret, exchange }),
+      bearer: createClientCredentialsBearer({ mcpUrl, clientId: client.clientId, clientSecret: client.clientSecret, exchange, env, connection }),
     };
   }
   const pat = env[MCP_BEARER_TOKEN_ENV]?.trim() ?? "";

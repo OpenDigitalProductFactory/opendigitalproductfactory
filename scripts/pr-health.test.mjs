@@ -1,12 +1,128 @@
 // scripts/pr-health.test.mjs
-// node --test (no vitest). Covers the pure evaluatePrHealth() verdict — the three
-// blocker classes that were missed in practice (non-required failing guards,
-// mid-CI pending, unresolved review threads) plus conflict/draft/state handling.
+// node --test (no vitest). Covers the pure verdict and real CLI observations:
+// failing/pending checks, unreadable evidence, complete review-thread history,
+// conflict/draft/state handling and bounded waits.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawnSync } from "node:child_process";
 
-import { evaluatePrHealth, selectLocalCiStateRecord } from "./pr-health.mjs";
+import {
+  evaluatePrHealth,
+  parsePrHealthArgs,
+  PR_HEALTH_EXIT,
+  selectLocalCiStateRecord,
+  waitForPrHealth,
+} from "./pr-health.mjs";
+
+// Run the actual CLI with child-only gh responses. No GitHub request or credential.
+function runObservationFixture(fixture, args = []) {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-pr-health-observation-"));
+  try {
+    const preload = join(dir, "observations.mjs");
+    writeFileSync(preload, `
+import cp from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
+const original = cp.execFileSync;
+const fixture = ${JSON.stringify(fixture)};
+const meta = { number: 42, title: "Labelled fixture", state: "OPEN", mergeable: "MERGEABLE",
+  mergeStateStatus: "CLEAN", isDraft: false, baseRefName: "main", headRefName: "fixture/readability",
+  headRefOid: "a".repeat(40), body: "", files: [{path:"docs/README.md"}], commits: [],
+  author: {login:"fixture"}, ...fixture.meta };
+const page = {data:{repository:{pullRequest:{reviewThreads:{nodes:[],pageInfo:{hasNextPage:false,endCursor:null}}}}}};
+function response(value) {
+  const output = value.raw ?? JSON.stringify(value.data);
+  if (value.exit) throw Object.assign(new Error("Labelled unavailable observation"), {status:value.exit,stdout:output});
+  return output;
+}
+cp.execFileSync = function(command, args, options) {
+  if (command !== "gh") return Reflect.apply(original, this, [command,args,options]);
+  if (args[0] === "pr" && args[1] === "view") return JSON.stringify(meta);
+  if (args[0] === "pr" && args[1] === "checks") return response(fixture.checks ?? {data:[]});
+  if (args[0] === "repo") return JSON.stringify({owner:{login:"fixture"},name:"repository"});
+  if (args[0] === "api") return response(fixture.threads ?? {data:args.includes("--slurp") ? [page] : page});
+  if (args[0] === "run") return "[]";
+  throw new Error("Unexpected fixture gh operation");
+};
+syncBuiltinESMExports();
+`);
+    return spawnSync(process.execPath, ["--import", pathToFileURL(preload).href,
+      fileURLToPath(new URL("./pr-health.mjs", import.meta.url)), "42", ...args],
+    { cwd: dir, encoding: "utf8", timeout: 10_000 });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+const threadPage = (nodes = [], hasNextPage = false, endCursor = null) =>
+  ({ data: { repository: { pullRequest: { reviewThreads: { nodes, pageInfo: { hasNextPage, endCursor } } } } } });
+const observationCases = [
+  ["valid empty observations", {}, 0],
+  ["missing PR state", {meta:{state:null}}, 3],
+  ["missing PR source head", {meta:{headRefOid:null}}, 3],
+  ["missing PR target identity", {meta:{number:null}}, 3],
+  ["missing PR base observation", {meta:{baseRefName:null}}, 3],
+  ["missing PR file observations", {meta:{files:null}}, 3],
+  ["invalid PR draft observation", {meta:{isDraft:"false"}}, 3],
+  ["failed checks JSON on exit1", {checks:{exit:1,data:[{name:"Failed",bucket:"fail"}]}}, 1],
+  ["pending checks JSON on exit8", {checks:{exit:8,data:[{name:"Pending",bucket:"pending"}]}}, 75],
+  ["merged PR with valid observations", {meta:{state:"MERGED"}}, 0],
+  ["merged PR without readiness-only metadata", {meta:{state:"MERGED",headRefOid:null,files:null,isDraft:null}}, 0],
+  ["merged PR with unavailable checks", {meta:{state:"MERGED"},checks:{exit:1,raw:""}}, 0],
+  ["merged PR with unavailable threads", {meta:{state:"MERGED"},threads:{exit:1,raw:""}}, 0],
+  ["check transport failure", {checks:{exit:1,raw:""}}, 3],
+  ["malformed check JSON", {checks:{raw:"{broken"}}, 3],
+  ["missing check output", {checks:{raw:""}}, 3],
+  ["check object instead of array", {checks:{data:{}}}, 3],
+  ["null check row", {checks:{data:[null]}}, 3],
+  ["unknown check bucket", {checks:{data:[{name:"Unknown",bucket:"unknown"}]}}, 3],
+  ["check missing its name", {checks:{data:[{bucket:"pass"}]}}, 3],
+  ["nonzero empty check result", {checks:{exit:1,data:[]}}, 3],
+  ["unexpected exit carrying passing JSON", {checks:{exit:2,data:[{name:"Pass",bucket:"pass"}]}}, 3],
+  ["thread transport failure", {threads:{exit:1,raw:""}}, 3],
+  ["GraphQL errors with partial data", {threads:{data:[{...threadPage(),errors:[{message:"Unavailable"}]}]}}, 3],
+  ["malformed thread JSON", {threads:{raw:"{broken"}}, 3],
+  ["null pull request", {threads:{data:[{data:{repository:{pullRequest:null}}}]}}, 3],
+  ["incomplete thread pagination", {threads:{data:[threadPage([],true,"next")]}}, 3],
+  ["missing pagination evidence", {threads:{data:[{data:{repository:{pullRequest:{reviewThreads:{nodes:[]}}}}}]}}, 3],
+  ["thread without resolution state", {threads:{data:[threadPage([{}])]}}, 3],
+  ["absent thread pages", {threads:{data:[]}}, 3],
+  ["null thread page", {threads:{data:[null]}}, 3],
+  ["cursor absent before another page", {threads:{data:[threadPage([],true),threadPage()]}}, 3],
+  ["repeated pagination cursor", {threads:{data:[threadPage([],true,"next"),threadPage([],true,"next"),threadPage()]}}, 3],
+  ["extra page after terminal page", {threads:{data:[threadPage(),threadPage()]}}, 3],
+  ["unresolved thread on the second page", {threads:{data:[threadPage([],true,"next"),threadPage([{isResolved:false,path:"fixture.ts",line:1}])]}}, 2],
+  ["complete two-page resolved history", {threads:{data:[threadPage([{isResolved:true}],true,"next"),threadPage([{isResolved:true}])]}}, 0],
+];
+for (const [name, fixture, expected] of observationCases) {
+  test(`CLI observation: ${name}`, () => {
+    const run = runObservationFixture(fixture);
+    assert.equal(run.error, undefined);
+    assert.equal(run.status, expected, `${run.stdout}\n${run.stderr}`);
+    if (expected === 3) {
+      assert.doesNotMatch(run.stdout, /^READY/m);
+      assert.match(run.stderr, /^UNREADABLE/m);
+      if (fixture.checks?.exit) assert.match(run.stderr, /GitHub checks command failed/);
+      if (fixture.checks?.raw === "{broken") assert.doesNotMatch(run.stderr, /command failed/);
+    }
+    if (fixture.meta?.state === "MERGED") {
+      assert.match(run.stdout, /^MERGED/m);
+      assert.match(run.stdout, /not read/);
+      assert.doesNotMatch(run.stdout, /checks: 0 total/);
+    }
+  });
+}
+test("CLI wait stops unreadable observations instead of reporting ready", () => {
+  const run = runObservationFixture({checks:{exit:1,raw:""}}, ["--wait","--timeout","0.001","--interval","0.1"]);
+  assert.equal(run.status, 3, `${run.stdout}\n${run.stderr}`);
+});
+test("CLI wait retains pending exit75 at its bounded timeout", () => {
+  const run = runObservationFixture({checks:{exit:8,data:[{name:"Pending",bucket:"pending"}]}}, ["--wait","--timeout","0.001","--interval","0.1"]);
+  assert.equal(run.status, 75, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /timed out/);
+});
 
 const okMeta = { number: 1, title: "x", state: "OPEN", mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", isDraft: false };
 const pass = (name) => ({ name, bucket: "pass" });
@@ -511,4 +627,131 @@ test("localCi: a test-stub record for the head SHA is a blocker, not a pass", ()
   assert.equal(r.ready, false);
   assert.doesNotMatch(r.notes.join("\n"), /local-CI sandbox gate passed/);
   assert.match(r.blockers.join("\n"), /DPF_ALLOW_LOCAL_CI_STUB/);
+});
+
+// ── BI-F197C997: the exit code alone tells waiting from failed from blocked ──
+
+test("verdict: pending checks with mergeStateStatus BLOCKED is WAITING (75), not a failure", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, mergeStateStatus: "BLOCKED" },
+    checks: [pass("Typecheck"), { name: "Unit Tests", bucket: "pending" }],
+    threads: [],
+  });
+  assert.equal(r.verdict, "WAITING");
+  assert.equal(r.exitCode, 75);
+  assert.equal(r.ready, false);
+  assert.deepEqual(r.waitingOn, ["Unit Tests"]);
+});
+
+test("verdict: a failed check is FAILED (1) and names the check, even while others are pending", () => {
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [{ name: "Module Size Guard", bucket: "fail" }, { name: "Unit Tests", bucket: "pending" }],
+    threads: [],
+  });
+  assert.equal(r.verdict, "FAILED");
+  assert.equal(r.exitCode, 1);
+  assert.deepEqual(r.failingChecks, ["Module Size Guard"]);
+});
+
+test("verdict: an unresolved thread is BLOCKED-ACTION (2) and names who must act", () => {
+  const r = evaluatePrHealth({
+    meta: { ...okMeta, author: { login: "codex-bot" } },
+    checks: [pass("Typecheck"), { name: "Unit Tests", bucket: "pending" }],
+    threads: [{ isResolved: false, path: "a.ts", line: 3 }],
+  });
+  assert.equal(r.verdict, "BLOCKED-ACTION");
+  assert.equal(r.exitCode, 2);
+  assert.match(r.actions[0].actor, /PR author \(@codex-bot\)/);
+});
+
+test("verdict: CONFLICTING and draft are BLOCKED-ACTION for the author", () => {
+  assert.equal(evaluatePrHealth({ meta: { ...okMeta, mergeable: "CONFLICTING" }, checks: [], threads: [] }).verdict, "BLOCKED-ACTION");
+  assert.equal(evaluatePrHealth({ meta: { ...okMeta, isDraft: true }, checks: [], threads: [] }).exitCode, 2);
+});
+
+test("verdict: MERGED exits 0 as MERGED; READY exits 0 as READY", () => {
+  const merged = evaluatePrHealth({ meta: { ...okMeta, state: "MERGED" }, checks: [], threads: [] });
+  assert.equal(merged.verdict, "MERGED");
+  assert.equal(merged.exitCode, 0);
+  const ready = evaluatePrHealth({ meta: okMeta, checks: [pass("Typecheck")], threads: [] });
+  assert.equal(ready.verdict, "READY");
+  assert.equal(ready.exitCode, 0);
+});
+
+test("verdict: a closed, unmerged PR needs its owner to act", () => {
+  const r = evaluatePrHealth({ meta: { ...okMeta, state: "CLOSED" }, checks: [], threads: [] });
+  assert.equal(r.verdict, "BLOCKED-ACTION");
+  assert.match(r.actions[0].actor, /owner/i);
+});
+
+test("WAITING carries an ETA when the pending check's workflow has a typical duration", () => {
+  const now = Date.parse("2026-10-28T12:00:00Z");
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [{ name: "Unit Tests", bucket: "pending", workflow: "CI", startedAt: "2026-10-28T11:50:00Z" }],
+    threads: [],
+    typicalDurationsMs: { CI: 25 * 60_000 },
+    now,
+  });
+  assert.equal(r.verdict, "WAITING");
+  assert.equal(r.etaMs, 15 * 60_000);
+  const unknown = evaluatePrHealth({ meta: okMeta, checks: [{ name: "Unit Tests", bucket: "pending" }], threads: [], now });
+  assert.equal(unknown.etaMs, null);
+});
+
+test("--wait polls until the verdict is terminal and returns it", async () => {
+  const verdicts = ["WAITING", "WAITING", "READY"];
+  let reads = 0;
+  const slept = [];
+  const r = await waitForPrHealth({
+    read: async () => ({ verdict: verdicts[reads++], exitCode: verdicts[reads - 1] === "READY" ? 0 : 75 }),
+    sleep: async (ms) => { slept.push(ms); },
+    now: () => 0,
+    timeoutMs: 60_000,
+    intervalMs: 1_000,
+  });
+  assert.equal(r.verdict, "READY");
+  assert.equal(r.exitCode, 0);
+  assert.equal(reads, 3);
+  assert.deepEqual(slept, [1_000, 1_000]);
+});
+
+test("--wait stops at a FAILED or BLOCKED-ACTION verdict immediately", async () => {
+  let reads = 0;
+  const r = await waitForPrHealth({
+    read: async () => { reads++; return { verdict: "FAILED", exitCode: 1 }; },
+    sleep: async () => assert.fail("must not sleep on a terminal verdict"),
+    now: () => 0,
+    timeoutMs: 60_000,
+    intervalMs: 1_000,
+  });
+  assert.equal(r.exitCode, 1);
+  assert.equal(reads, 1);
+});
+
+test("--wait --timeout returns WAITING (75) with timedOut when checks never finish", async () => {
+  let clock = 0;
+  const r = await waitForPrHealth({
+    read: async () => ({ verdict: "WAITING", exitCode: 75 }),
+    sleep: async (ms) => { clock += ms; },
+    now: () => clock,
+    timeoutMs: 5_000,
+    intervalMs: 2_000,
+  });
+  assert.equal(r.verdict, "WAITING");
+  assert.equal(r.exitCode, 75);
+  assert.equal(r.timedOut, true);
+});
+
+test("argument parsing: PR number, --wait, --timeout minutes, and pnpm's literal --", () => {
+  assert.deepEqual(parsePrHealthArgs(["6718"]), { pr: "6718", wait: false, timeoutMinutes: 30, intervalSeconds: 30 });
+  assert.deepEqual(parsePrHealthArgs(["--", "6718", "--wait", "--timeout", "10"]),
+    { pr: "6718", wait: true, timeoutMinutes: 10, intervalSeconds: 30 });
+  assert.deepEqual(parsePrHealthArgs([]), { pr: "", wait: false, timeoutMinutes: 30, intervalSeconds: 30 });
+  assert.throws(() => parsePrHealthArgs(["--timeout", "soon"]), /--timeout/);
+});
+
+test("exit-code table is the documented contract", () => {
+  assert.deepEqual({ ...PR_HEALTH_EXIT }, { READY: 0, MERGED: 0, FAILED: 1, "BLOCKED-ACTION": 2, UNREADABLE: 3, WAITING: 75 });
 });

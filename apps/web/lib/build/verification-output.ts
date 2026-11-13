@@ -1,19 +1,80 @@
 import type { FailureAnalysis } from "@/lib/change-review/failure-analysis";
 
 /** Existing Build Studio verification payload, shared by authoring and review. */
-export type VerificationOutput = {
+export type VerificationOutput = TestExecutionFacts & {
   failureAnalysis?: FailureAnalysis;
-  testsPassed: number;
-  testsFailed: number;
-  typecheckPassed: boolean;
+  testsPassed: number | null;
+  testsFailed: number | null;
+  typecheckPassed: boolean | null;
   fullOutput: string;
   timestamp: string;
 };
 
 import type { BuildFailureAxis } from "./progress-visibility-types";
 import { isRecord } from "@/lib/shared/coerce";
+import type { SandboxTestResult } from "./coding-agent";
 
-export type NormalizedVerificationOutput = {
+export type TestExecutionFacts = {
+  verificationSource?: { workdir: string; baseRef: string; digest: string | null; unchanged: boolean; checkedAt: string };
+  testsExecuted?: boolean;
+  testsApplicable?: boolean | null;
+  testsQualified?: boolean;
+  testCommandPassed?: boolean | null;
+  testSummariesComplete?: boolean | null;
+  testCommands?: string[];
+  testEvidenceConflict?: boolean;
+  reportedQa?: { testsPassed: number; testsFailed: number; content: string };
+};
+
+/** Persist before any repair can mutate source. Counts and timestamps remain
+ * historical observations; only a fresh check may restore current qualification. */
+export function invalidateVerificationForRepair<T extends TestExecutionFacts>(value: T) {
+  return { ...value, typecheckPassed: null, testsQualified: false, verificationRepaired: false,
+    ...(value.verificationSource ? { verificationSource: { ...value.verificationSource, unchanged: false } } : {}) };
+}
+
+/** A specialist report has no native completeness provenance. Keep its failure
+ * separately until an independent reconciliation establishes complete scope.
+ * Passing a few named files, even beside plausible summary prose, cannot do so. */
+export function retainReportedQa<T extends TestExecutionFacts>(verification: T, reportedQa: TestExecutionFacts["reportedQa"], priorConflict = false) {
+  const testEvidenceConflict = priorConflict || verification.testEvidenceConflict === true || (reportedQa?.testsFailed ?? 0) > 0;
+  return { ...verification, ...(reportedQa ? { reportedQa } : {}), testEvidenceConflict,
+    ...(testEvidenceConflict ? { testsQualified: false, parseConfidence: "low" as const } : {}) };
+}
+
+/** Qualification is separate from both a case count and the typecheck verdict. */
+export function testsAreQualified(value: unknown): boolean {
+  if (!isRecord(value) || value.testEvidenceConflict === true || value.testsQualified === false) return false;
+  if (isRecord(value.verificationSource) && value.verificationSource.unchanged !== true) return false;
+  if (value.testsApplicable === false && value.testsExecuted === false) {
+    return value.testsPassed === 0 && value.testsFailed === 0;
+  }
+  return value.testsApplicable === true && value.testsExecuted === true && value.testCommandPassed === true && value.testSummariesComplete === true
+    && typeof value.testsPassed === "number" && Number.isSafeInteger(value.testsPassed) && value.testsPassed > 0 && value.testsFailed === 0;
+}
+
+/** Only native runner observations enter executed counters; overall success is not a count. */
+export function verificationFromSandboxResult(result: SandboxTestResult) {
+  const testsPassed = numberOrNull(result.testsPassed) ?? 0;
+  const testsFailed = numberOrNull(result.testsFailed) ?? 0;
+  const testsExecuted = result.testsExecuted === true;
+  const testsApplicable = typeof result.testsApplicable === "boolean" ? result.testsApplicable : null;
+  const testCommandPassed = typeof result.testCommandPassed === "boolean" ? result.testCommandPassed : null;
+  const testSummariesComplete = result.testSummariesComplete === true;
+  const facts = { testsPassed, testsFailed, testsExecuted, testsApplicable, testCommandPassed, testSummariesComplete };
+  return {
+    typecheckPassed: result.typeCheckPassed,
+    ...facts,
+    testsQualified: testsAreQualified(facts),
+    parseConfidence: testsApplicable === false || (testsExecuted && testCommandPassed !== null && testSummariesComplete) ? "high" as const : "low" as const,
+    source: "deterministic-scoped" as const,
+    scope: result.scope ?? "none" as const,
+    testCommands: result.testCommands ?? [],
+    testEvidenceConflict: false,
+  };
+}
+
+export type NormalizedVerificationOutput = TestExecutionFacts & {
   typecheckPassed: boolean | null;
   testsPassed: number | null;
   testsFailed: number | null;
@@ -27,9 +88,32 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
     return emptyVerification();
   }
 
-  const typecheckPassed = booleanOrNull(value.typecheckPassed) ?? booleanOrNull(value.typeCheckPassed);
+  // An explicit current unknown must not revive a stale legacy spelling.
+  const typecheckPassed = Object.prototype.hasOwnProperty.call(value, "typecheckPassed")
+    ? booleanOrNull(value.typecheckPassed) : booleanOrNull(value.typeCheckPassed);
   const testsPassed = numberOrNull(value.testsPassed);
-  const testsFailed = numberOrNull(value.testsFailed);
+  const observedFailed = numberOrNull(value.testsFailed);
+  const hasTestFacts = ["testsExecuted", "testsApplicable", "testsQualified", "testEvidenceConflict", "testSummariesComplete", "verificationSource"]
+    .some((key) => Object.prototype.hasOwnProperty.call(value, key)) || value.scope === "none";
+  // Unqualified zero is not a passing verdict. Retain actual positive failures.
+  const testsFailed = hasTestFacts && !testsAreQualified(value) && observedFailed === 0 ? null : observedFailed;
+  const facts: TestExecutionFacts = hasTestFacts ? {
+    ...(isRecord(value.verificationSource) && typeof value.verificationSource.workdir === "string" && typeof value.verificationSource.baseRef === "string" && typeof value.verificationSource.checkedAt === "string" ? {
+      verificationSource: { workdir: value.verificationSource.workdir, baseRef: value.verificationSource.baseRef,
+        digest: stringOrNull(value.verificationSource.digest), unchanged: value.verificationSource.unchanged === true, checkedAt: value.verificationSource.checkedAt },
+    } : {}),
+    testsExecuted: value.testsExecuted === true,
+    testsApplicable: booleanOrNull(value.testsApplicable),
+    testsQualified: testsAreQualified(value),
+    testCommandPassed: booleanOrNull(value.testCommandPassed),
+    testSummariesComplete: booleanOrNull(value.testSummariesComplete),
+    testEvidenceConflict: value.testEvidenceConflict === true,
+    ...(Array.isArray(value.testCommands) ? { testCommands: value.testCommands.filter((v): v is string => typeof v === "string") } : {}),
+    ...(isRecord(value.reportedQa) && typeof value.reportedQa.content === "string" ? {
+      reportedQa: { testsPassed: numberOrNull(value.reportedQa.testsPassed) ?? 0,
+        testsFailed: numberOrNull(value.reportedQa.testsFailed) ?? 0, content: value.reportedQa.content },
+    } : {}),
+  } : {};
   const output = firstString(
     value.fullOutput,
     value.testOutput,
@@ -40,6 +124,7 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
   const outputExcerpt = output ? output.slice(0, 2000) : null;
 
   return {
+    ...facts,
     typecheckPassed,
     testsPassed,
     testsFailed,
@@ -51,6 +136,44 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
       output: outputExcerpt,
     }),
   };
+}
+
+/** One prompt summary for both coworker context paths; a positive count is not PASS. */
+export function formatVerificationSummary(value: unknown): string {
+  const observed = normalizeVerificationOutput(value);
+  const tests = observed.testsExecuted === false
+    ? observed.testsApplicable === false ? "Tests: not applicable; no tests ran." : "Tests: no execution observed."
+    : observed.testsExecuted === true
+      ? observed.testsFailed === null ? `Tests: ${observed.testsPassed ?? "unknown"} passes observed; failure verdict not established.`
+        : `Tests: ${observed.testsPassed ?? "unknown"} passed / ${observed.testsFailed} failed.`
+      : "Tests: execution not established.";
+  const typecheck = observed.typecheckPassed === null ? "not verified" : observed.typecheckPassed ? "passed" : "failed";
+  return `${tests} Typecheck: ${typecheck}.${observed.testEvidenceConflict ? " Earlier reported test failures remain unresolved." : ""}`;
+}
+
+/** Saved-reader projection. Presentation never decides whether a lifecycle may advance. */
+export function projectVerificationEvidence(verification: NormalizedVerificationOutput) {
+  const qualified = verification.typecheckPassed === true && testsAreQualified(verification);
+  const exempt = qualified && verification.testsExecuted === false && verification.testsApplicable === false;
+  const failed = verification.verificationSource?.unchanged !== false
+    && (verification.typecheckPassed === false || (verification.testsFailed ?? 0) > 0);
+  const label = failed ? "Failed" : exempt ? "Typecheck only" : qualified ? "Passed" : "Unverified";
+  const typecheckLabel = verification.typecheckPassed === null ? "Not verified" : verification.typecheckPassed ? "No errors" : "Failed";
+  const testsLabel = verification.testsExecuted === false
+    ? verification.testsApplicable === false ? "Not applicable; no tests ran." : "No tests ran."
+    : verification.testsExecuted === true
+      ? verification.testsFailed === null ? `${verification.testsPassed ?? "Unknown"} passes observed; failure verdict not established.`
+        : `${verification.testsPassed ?? "Unknown"} passed, ${verification.testsFailed} failed${qualified ? "" : " (observed)"}`
+      : (verification.testsFailed ?? 0) > 0 ? `${verification.testsFailed} failures recorded; execution not established.` : "Execution not established.";
+  const conflictNotice = verification.testEvidenceConflict ? "Earlier reported test failures remain unresolved." : null;
+  const source = verification.verificationSource;
+  const rawOutput = [verification.outputExcerpt,
+    verification.reportedQa ? `Earlier QA report (retained):\n${verification.reportedQa.content}` : null,
+    source ? `Source: ${source.workdir}\nBase: ${source.baseRef}\nDigest: ${source.digest ?? "Not recorded"}\nSource unchanged: ${source.unchanged}\nChecked: ${source.checkedAt}` : null,
+    verification.testCommands?.length ? `Recorded commands:\n${verification.testCommands.join("\n")}` : null,
+  ].filter(Boolean).join("\n\n");
+  return { qualified, exempt, failed, label, typecheckLabel, testsLabel, conflictNotice, rawOutput,
+    summary: `${label}. Typecheck: ${typecheckLabel}. ${testsLabel}${conflictNotice ? ` ${conflictNotice}` : ""}` };
 }
 
 export function classifyVerificationFailureAxis(args: {

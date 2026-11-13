@@ -49,7 +49,7 @@ import {
   ACCEPTANCE_VERIFIER_ROLE,
   ACCEPTANCE_VERIFIER_WRITES,
 } from "@/lib/work-management/acceptance-verification-shape";
-import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
+import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim, readWorkShapeRoleBindings } from "@/lib/work-management/workroom-shape-claim";
 
 import type { PacketIssueOutcome } from "./issue-objective-mapping-packet";
 import { EXECUTION_EVIDENCE_WRITER } from "./execution-evidence-owner";
@@ -94,7 +94,34 @@ export type IssueObjectiveMappingPacket = (input: {
   excludedAgentIds: readonly string[];
 }) => Promise<PacketIssueOutcome | null>;
 
-type RoomRow = { capsuleId: string; archivedAt: Date | null; workspaceState: unknown };
+type RoomRow = { capsuleId: string; archivedAt: Date | null; workspaceState: unknown; scopeClaims?: unknown };
+
+/**
+ * BI-1D5FCEBE: of `tools`, the ones `agentId` cannot call. The verify stage's
+ * scheduled run is refused before dispatch without its evidence writer
+ * (scheduled-required-procedural-tool.ts), so a verifier missing one is never
+ * bound, and a room already bound to one is reported, not left to fail.
+ */
+export type VerifierWriterGap = (agentId: string, tools: readonly string[]) => Promise<string[]>;
+
+/** The scheduler-mandated writer every Workroom stage run must reach. Literal, like execution-evidence-owner.ts. */
+const STAGE_EVIDENCE_WRITER = "record_workroom_evidence";
+
+export const VERIFIER_MISSING_WRITER = "verifier-missing-writer";
+
+/** The stage writer, then the lane writer of each code the verifier owns. */
+function verifierWriters(projection: OwedAcceptance): string[] {
+  const owned = new Set<string>(projection.owner?.codes ?? []);
+  const lane = projection.owed.filter((entry) => owned.has(entry.code)).map(acceptanceWriterTool)
+    .filter((tool): tool is string => tool !== null);
+  return [...new Set([STAGE_EVIDENCE_WRITER, ...lane])];
+}
+
+/** The agent a room binds as its verifier, or null. */
+function boundVerifier(scopeClaims: unknown): string | null {
+  const bound = readWorkShapeRoleBindings(scopeClaims)[ACCEPTANCE_VERIFIER_ROLE];
+  return bound?.startsWith("agent:") ? bound.slice("agent:".length) : null;
+}
 
 /** Exactly the reads and writes routing performs; `prisma` satisfies it. */
 export type AcceptanceRouteDb = {
@@ -308,6 +335,8 @@ export async function routeAgedItems(input: {
   resolveOwnerUserId: () => Promise<string | null>;
   /** BI-099A0BA3: issue the owner's objective-mapping packet to a live room. Without it none is issued. */
   issuePacket?: IssueObjectiveMappingPacket;
+  /** BI-1D5FCEBE: which writers a verifier lacks. Without it no verifier is checked. */
+  verifierWriterGap?: VerifierWriterGap;
 }): Promise<RouteOutcome[]> {
   const { db, now } = input;
   const ordered = [...input.candidates]
@@ -320,6 +349,11 @@ export async function routeAgedItems(input: {
   };
   let created = 0;
   const outcomes: RouteOutcome[] = [];
+  const missingWriters = async (agentId: string, projection: OwedAcceptance): Promise<string | null> => {
+    if (!input.verifierWriterGap) return null;
+    const missing = await input.verifierWriterGap(agentId, verifierWriters(projection));
+    return missing.length > 0 ? `${VERIFIER_MISSING_WRITER}:${missing.join(",")}` : null;
+  };
   // An existing room is always asked, so a packet whose coworker is now a known
   // delivery actor is withdrawn even when nothing new is owed (security review M1).
   const issue = async (candidate: AgedRouteCandidate, existingRoom: boolean): Promise<RouteOutcome["objectiveMapping"]> => {
@@ -344,8 +378,15 @@ export async function routeAgedItems(input: {
     const key = acceptanceRoomKey(candidate.itemId);
     const existing = await db.workroom.findUnique({
       where: { idempotencyKey: key },
-      select: { capsuleId: true, archivedAt: true, workspaceState: true },
+      select: { capsuleId: true, archivedAt: true, workspaceState: true, scopeClaims: true },
     } satisfies Prisma.WorkroomFindUniqueArgs);
+    const boundAgentId = existing && !existing.archivedAt ? boundVerifier(existing.scopeClaims) : null;
+    const boundGap = boundAgentId ? await missingWriters(boundAgentId, candidate.projection) : null;
+    if (existing && boundAgentId && boundGap) {
+      // The drive can never dispatch this room: report it with the missing writer.
+      outcomes.push({ ...base, capsuleId: existing.capsuleId, ownerAgentId: boundAgentId, outcome: "routed-unresolved", reason: boundGap, objectiveMapping: null });
+      continue;
+    }
     if (existing) {
       outcomes.push({
         ...base,
@@ -363,6 +404,11 @@ export async function routeAgedItems(input: {
     const operatorPrincipalId = await (operator ??= operatorPrincipal());
     if (!operatorPrincipalId) {
       outcomes.push({ ...base, outcome: "unroutable", reason: NO_INSTALL_OPERATOR });
+      continue;
+    }
+    const ownerGap = await missingWriters(owner.agentId, candidate.projection);
+    if (ownerGap) {
+      outcomes.push({ ...base, outcome: "unroutable", reason: ownerGap });
       continue;
     }
     if (created >= input.limit) {

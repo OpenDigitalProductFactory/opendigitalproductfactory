@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { InferenceError } from "./inference-error";
 import type { GoldenTest } from "./golden-tests";
+import { getTestsForDimension } from "./golden-tests";
 
 const { dispatch } = vi.hoisted(() => ({ dispatch: vi.fn() }));
 vi.mock("@/lib/ai-inference", async () => ({ ...(await import("./inference-error")), callProvider: dispatch }));
@@ -16,6 +17,14 @@ describe("golden-test provenance", () => {
   });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
+  it.each(getTestsForDimension("conversational"))("keeps an unavailable grader unverified ($id)", async test => {
+    dispatch.mockResolvedValue({ content: "A complete response.", truncated: false });
+    const result = await runGoldenTest("local", "selected-model", test);
+    expect(result.score).toBeNull();
+    expect(result.error).toMatch(/grader|unverified/i);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("returns the dispatch trace without inventing a coworker thread or changing the target/budget", async () => {
     dispatch.mockResolvedValue({ content: "OK" });
     const result = await runGoldenTest("local", "selected-model", fixture);
@@ -25,6 +34,15 @@ describe("golden-test provenance", () => {
     expect(args[8]).toMatchObject({ traceId: expect.stringMatching(/^[a-f0-9]{32}$/) });
     expect(args[8]).not.toHaveProperty("threadId");
     expect(result).toMatchObject({ traceId: args[8].traceId, score: 10 });
+  });
+
+  it("uses a commissioned dispatcher and leaves uncertain completion unscored", async () => {
+    dispatch.mockResolvedValue({ content: "OK" });
+    const commissioned = vi.fn().mockResolvedValue({ content: "OK" });
+    const result = await runGoldenTest("chatgpt", "selected", fixture, { dispatch: commissioned, requireComplete: true });
+    expect(commissioned).toHaveBeenCalledOnce();
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(result.score).toBeNull();
   });
 
   it.each(["exact", "tool_call"] as const)("does not score a known-truncated %s match", async scoring => {
@@ -54,6 +72,15 @@ describe("golden-test provenance", () => {
     const result = await runGoldenTest("local", "selected-model", fixture);
     expect(result).toMatchObject({ traceId: expect.stringMatching(/^[a-f0-9]{32}$/), score: 0, error: "transport unavailable" });
     expect(result.traceId).toBe(dispatch.mock.calls[0]![8].traceId);
+  });
+
+  it.each(["failed", "incomplete", "content_filter", "max_output_tokens", "length"])("does not score explicitly unfinished output (%s)", async finishReason => {
+    dispatch.mockResolvedValue({ content: "OK", finishReason, truncated: false });
+    expect((await runGoldenTest("local", "selected", fixture)).score).toBeNull();
+  });
+  it("requires verified completion on a Responses calibration even without an owned dispatcher", async () => {
+    dispatch.mockResolvedValue({ content: "OK" });
+    expect((await runGoldenTest("chatgpt", "selected", fixture)).score).toBeNull();
   });
 
   it.each([false, true])("correlates both bounded retry attempts with the stored result (terminal error=%s)", async terminalError => {

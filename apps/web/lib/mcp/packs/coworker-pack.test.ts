@@ -53,6 +53,27 @@ beforeEach(() => {
 });
 
 describe("coworker pack — registration", () => {
+  it.each([
+    { name: "empty", approvals: [], hasMore: false },
+    { name: "nonempty", approvals: [{ envelopeId: "e1" }], hasMore: false },
+    { name: "bounded", approvals: Array.from({ length: 20 }, (_, i) => ({ envelopeId: `e${i}` })), hasMore: true },
+  ])("does not present the $name assistant page as the owner's Inbox total", async ({ approvals, hasMore }) => {
+    approvalStatus.list.mockResolvedValue({ approvals, hasMore, inboxHref: "/workspace/inbox" });
+    const result = await coworkerPack.handlers.get_my_approval_status(
+      { mode: "pending", userId: "victim", agentId: "other" }, "u1", { agentId: "a1" },
+    );
+    expect(result.success).toBe(true);
+    expect(approvalStatus.list).toHaveBeenCalledWith("u1", "a1");
+    expect(result.data).toMatchObject({
+      approvals, hasMore, inboxHref: "/workspace/inbox", ownerInboxTotal: null,
+      scope: { kind: "current-assistant-requests", delegatingUserId: "u1", coworkerAgentId: "a1", coversOwnerInbox: false },
+    });
+    expect(result.message).toMatch(/this assistant only/i);
+    expect(result.message).toMatch(/owner.*Inbox total.*unknown/i);
+    if (!approvals.length) expect(result.message).toMatch(/does not mean.*Inbox is empty/i);
+    if (hasMore) expect(result.message).toMatch(/more requests from this assistant/i);
+  });
+
   it("discovers pending requests without an ID using only authenticated identity", async () => {
     approvalStatus.list.mockResolvedValue({ approvals: [{ envelopeId: "e1" }], hasMore: false });
     const result = await coworkerPack.handlers.get_my_approval_status(

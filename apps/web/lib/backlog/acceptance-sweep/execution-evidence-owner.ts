@@ -31,19 +31,26 @@ import type { OwedAcceptanceOwnerRecovery } from "./owed-acceptance";
 // review M1: delivery-actors.ts). Nothing here defaults to a person.
 
 export const EXECUTION_EVIDENCE_WRITER = "record_execution_evidence";
+// Same name as scheduled-task-runs.ts WORKROOM_STAGE_EVIDENCE_TOOL, kept literal so
+// the sweep does not import the scheduler's module graph.
+const STAGE_EVIDENCE_WRITER = "record_workroom_evidence";
 const LANE_ROLE = "delivery-coordinator";
 
 /** The delivery-coordinator requirement the sweep routes to the execution-evidence lane. */
 export function isExecutionEvidenceLane(
   decision: Pick<InitiativeReadinessDecision, "shapeDecision">,
-  entry: Pick<ReadinessRequirementResult, "code" | "accountableRole">,
+  entry: Pick<ReadinessRequirementResult, "code" | "accountableRole"> & { state?: ReadinessRequirementResult["state"] },
 ): boolean {
   if (entry.accountableRole !== LANE_ROLE) return false;
   // Only the small shape assigns acceptance to the delivery-coordinator; this
   // is the predicate terminal-recovery.ts answers with the small-shape escalation.
   if (entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED") return true;
+  if (entry.code !== "DELIVERY_EVIDENCE_REQUIRED") return false;
+  // BI-1D5FCEBE: a recorded failure is superseded only by a passing
+  // record_execution_evidence of the same kind, on any shape; a merge does not.
+  if (entry.state === "fail") return true;
   const shape = decision.shapeDecision?.effective;
-  return entry.code === "DELIVERY_EVIDENCE_REQUIRED" && (shape === "small" || shape === "break-fix");
+  return shape === "small" || shape === "break-fix";
 }
 
 /**
@@ -52,8 +59,24 @@ export function isExecutionEvidenceLane(
  * implies it). Lazy: the grant registry stays off the scheduler's import graph.
  */
 export async function executionEvidenceGrants(): Promise<string[]> {
+  return grantsAuthorizing(EXECUTION_EVIDENCE_WRITER);
+}
+
+/**
+ * Every grant key any one of which authorizes the verify stage's own evidence
+ * writer, record_workroom_evidence (BI-A8679D84). The owner this lane names is
+ * bound to an acceptance room, and every Workroom stage run must reach that
+ * writer (scheduled-task-runs.ts scheduledMandatoryToolNames), so an owner
+ * without it can only be refused before dispatch.
+ */
+
+export async function stageEvidenceWriterGrants(): Promise<string[]> {
+  return grantsAuthorizing(STAGE_EVIDENCE_WRITER);
+}
+
+async function grantsAuthorizing(toolName: string): Promise<string[]> {
   const { getToolGrantMapping, grantsSatisfyRequirement, knownGrantKeys } = await import("@/lib/tak/agent-grants");
-  const required = getToolGrantMapping()[EXECUTION_EVIDENCE_WRITER] ?? [];
+  const required = getToolGrantMapping()[toolName] ?? [];
   // An empty requirement would be universal; a lane owner is never "anyone".
   if (required.length === 0) return [];
   return knownGrantKeys().filter((grant) => grantsSatisfyRequirement(required, [grant]));
@@ -66,11 +89,16 @@ export async function resolveExecutionEvidenceOwner(input: {
   excludedAgentIds?: readonly string[];
   grants: InPlatformGrants;
   satisfyingGrants: readonly string[];
+  /** Grants authorizing the stage's own evidence writer; when given, the owner must hold one (BI-A8679D84). */
+  stageWriterGrants?: readonly string[];
 }): Promise<OwedAcceptanceOwnerRecovery> {
   const codes: ReadinessCode[] = [...new Set(input.entries.map((entry) => entry.code))];
   const excluded = [...new Set([...(input.authorAgentId ? [input.authorAgentId] : []), ...(input.excludedAgentIds ?? [])])];
+  const stageWriters = input.stageWriterGrants
+    ? new Set((await loadEligibleGrantHolders(input.grants.db, input.stageWriterGrants)).map((row) => row.agent.agentId))
+    : null;
   const holders = (await loadEligibleGrantHolders(input.grants.db, input.satisfyingGrants))
-    .filter((row) => !excluded.includes(row.agent.agentId));
+    .filter((row) => !excluded.includes(row.agent.agentId) && (!stageWriters || stageWriters.has(row.agent.agentId)));
   const owner = holders[0];
   if (owner) {
     return {

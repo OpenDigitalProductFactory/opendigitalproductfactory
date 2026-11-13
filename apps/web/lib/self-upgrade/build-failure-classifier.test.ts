@@ -366,6 +366,22 @@ ERROR: failed to build: failed to solve: error from sender: readdirent /host-dpf
     expect(c.failingTrace).toContain("cannot allocate memory");
   });
 
+  it("classifies an apk fetch network error as host-network-unavailable, not a readiness defect (BI-7FFF5CB0)", () => {
+    const log = `promoter-readiness-failed: promoter_candidate_build_failed: #6 3.1 WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.24/main: network error (check Internet connectivity and network settings)
+ERROR: failed to build: failed to solve: process "/bin/sh -c apk add --no-cache bash" did not complete successfully: exit code: 9`;
+    const c = classifyBuildFailure({ log });
+    expect(c.class).toBe("host-network-unavailable");
+    expect(c.isMainDefectVsEnvironment).toBe("environment");
+    expect(c.failingTrace).toContain("network error");
+  });
+
+  it("classifies an upstream git fetch timeout as host-network-unavailable", () => {
+    const c = classifyBuildFailure({
+      log: "prep-error: fetch upstream failed: fatal: unable to access 'https://github.com/x/y/': Failed to connect to github.com port 443 after 75004 ms: Could not connect to server",
+    });
+    expect(c.class).toBe("host-network-unavailable");
+  });
+
   it("classifies an OOMKilled container as host-out-of-memory", () => {
     const c = classifyBuildFailure({
       log: "#12 [build 4/8] RUN pnpm --filter web build\nnext build worker terminated: OOMKilled (exit 137)",
@@ -480,5 +496,27 @@ describe("formatClassifiedExcerpt", () => {
     expect(excerpt).toMatch(/^\[build-failure-class\] host-docker-hoist-divergence/);
     expect(excerpt).toContain("playbook:");
     expect(excerpt).toContain("Cannot find module '@opentelemetry/api'");
+  });
+});
+
+// BI-578131A3: SUR-F2A0D477 fell through to "unknown" and auto-filed an
+// unactionable "[self-upgrade] unknown" item.
+describe("reassessment-compatibility-unproven", () => {
+  it("is its own class, never unknown, even for the bare legacy code", () => {
+    expect(classifyBuildFailure({ log: "reassessment-compatibility-unproven" }).class).toBe("reassessment-compatibility-unproven");
+  });
+
+  it("names the subcode and blames image addressing when Docker could not find the image", () => {
+    const c = classifyBuildFailure({ log: `reassessment-compatibility-unproven: release-image-unresolved: sha256:${"d".repeat(64)} -> No such image` });
+    expect(c.class).toBe("reassessment-compatibility-unproven");
+    expect(c.summary).toContain("release-image-unresolved");
+    expect(c.summary).toContain("image store");
+    expect(c.isMainDefectVsEnvironment).toBe("main-defect");
+  });
+
+  it("does not guess an owner for a refusal that is not about addressing", () => {
+    const c = classifyBuildFailure({ log: "reassessment-compatibility-unproven: probe-source-mismatch: expected a, image reports b" });
+    expect(c.summary).toContain("probe-source-mismatch");
+    expect(c.isMainDefectVsEnvironment).toBeNull();
   });
 });

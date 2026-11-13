@@ -43,7 +43,7 @@ import {
   usesGraphConstructs,
   type DriveGateVerdict,
   type DriveMarking,
-} from "./drive-marking";
+} from "@dpf/validators/workroom/marking";
 import { REFUSE_TO_STOP, REWORK_1, REWORK_INSIDE_BRANCH, SHADOW_GATE, REFUSE_BOUND_NO_BUDGET_STOP, DEFER_ON_REFUSE_ROUTE } from "./__fixtures__/graph-shapes/rework";
 
 const NOW = new Date("2026-03-01T09:00:00.000Z");

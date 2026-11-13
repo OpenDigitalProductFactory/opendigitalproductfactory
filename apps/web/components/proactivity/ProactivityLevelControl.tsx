@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { getProactivityLevelCopy, PROACTIVITY_LEVEL_COPY } from "@/lib/proactivity/proactivity-copy";
-import { PROACTIVITY_LEVELS, type ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import { PROACTIVITY_LEVELS, type ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 
 import { ProactivityGaugeIcon } from "./ProactivityGaugeIcon";
 

@@ -30,6 +30,7 @@ import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
 import { reconcileTerminalBuildPhaseRuns } from "@/lib/self-upgrade/quiescence";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { newestSignal, isStale } from "@/lib/shared/staleness";
+import { hostSuspendedMsSince } from "@/lib/shared/host-suspension";
 import { reap } from "@/lib/operate/reap";
 import { Prisma } from "@dpf/db";
 
@@ -283,6 +284,17 @@ export const taskrunWatchdog = jobs.createFunction(
       console.warn("[taskrun-watchdog] inert-build reaper failed:", err);
     }
 
+    // Sandbox containment spec AC-8: free SandboxSlot leases the reaper above
+    // leaves held (it tears down the worktree, not the lease) and leases idle
+    // past DPF_SANDBOX_LEASE_IDLE_MS. Observe-only unless
+    // DPF_SANDBOX_LEASE_RECLAIM_ENABLED=1. Best-effort, like the reaper.
+    try {
+      const { reclaimSandboxLeases } = await import("@/lib/build/sandbox/sandbox-lease-reclaim");
+      await reclaimSandboxLeases();
+    } catch (err) {
+      console.warn("[taskrun-watchdog] sandbox lease reclaim failed:", err);
+    }
+
     // WS9 (BI-CBAAEA94): governed Workroom reaper — transition capsules whose
     // TRUE liveness is dead (lease expired, linked build terminal, or idle past
     // the floor) out of "working" so abandoned work stops reading as active and
@@ -412,6 +424,7 @@ export const taskrunWatchdog = jobs.createFunction(
           totalPhaseTimeoutSeconds: t.totalPhaseTimeoutSeconds,
         },
         now,
+        hostSuspendedMsSince,
       );
       if (decision) decisions.push(decision);
     }

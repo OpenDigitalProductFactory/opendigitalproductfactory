@@ -32,7 +32,9 @@ test("Windows start publishes a host GPU snapshot for local admission", () => {
   assert.match(publisher, /nvidia-smi/);
   assert.match(publisher, /host-gpu\.json/);
   assert.doesNotMatch(publisher, /[^\x00-\x7F]/);
-  for (const caller of ["dpf-start.ps1", "scripts/dpf-start.ps1", "install-dpf.ps1"]) {
+  // The consumer start script install-dpf.ps1 used to embed is now the shipped
+  // release asset scripts/installer/dpf-start.consumer.ps1 (BI-084F85E5).
+  for (const caller of ["dpf-start.ps1", "scripts/dpf-start.ps1", "scripts/installer/dpf-start.consumer.ps1"]) {
     assert.match(read(caller), /publish-host-gpu\.ps1/, `${caller} does not start the GPU publisher`);
   }
 });

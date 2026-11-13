@@ -1,6 +1,7 @@
 import { cron } from "@/lib/jobs/triggers";
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
+import { selectPrDeliveryRooms } from "./build-pr-delivery-selection";
 import type { BuildPrDeliveryStateV1 } from "@/lib/build/build-pr-delivery-state";
 
 export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
@@ -11,9 +12,6 @@ export const BUILD_PR_DELIVERY_RECONCILE_CRON = "2,7,12,17,22,27,32,37,42,47,52,
  * Studio rooms keep their autonomy-eligibility check; every other room acts
  * within its own posture (resolvePrFollowThroughPosture).
  */
-const ROOM_SCAN_WINDOW = 200;
-const ROOMS_PER_RUN = 25;
-
 /**
  * Whether an observed PR head belongs to the room's current source (#6148): a
  * PR still showing the head a room held before it was re-adopted elsewhere is
@@ -46,7 +44,11 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
   const {
     observeGithubPullRequest,
     projectGithubPrReadiness,
+    rerunFailedWorkflowJobs,
   } = await import("@/lib/build/github-pr-readiness");
+  const { refreshFailureReadinessForDelivery } = await import("@/lib/build/failure-readiness-delivery-refresh");
+  const { checkWorkroomFailureReadiness } = await import("@/lib/change-review/failure-readiness-publication");
+  const { publishFailureReadinessStatus } = await import("@/lib/change-review/failure-readiness-status");
   const {
     executeBuildPrDeliveryAction,
     resolveBuildPrReconcilerMode,
@@ -73,36 +75,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
 
   const platformDefaultActionBoundary = (await getWorkroomPostureDefault())?.actionBoundary ?? null;
 
-  const scanWindow = await prisma.workroom.findMany({
-    where: {
-      pullRequestNumber: { not: null },
-      pullRequestUrl: { not: null },
-      status: { notIn: ["complete", "abandoned", "archived"] },
-    },
-    select: {
-      id: true,
-      capsuleId: true,
-      featureBuildId: true,
-      repositoryFullName: true,
-      headSha: true,
-      pullRequestNumber: true,
-      pullRequestUrl: true,
-      scopeClaims: true,
-      workspaceState: true,
-      updatedAt: true,
-    },
-    take: ROOM_SCAN_WINDOW,
-    orderBy: { updatedAt: "asc" },
-  });
-  // A room the reconciler has stopped on is skipped without a write, so its
-  // updatedAt never advances. Filtering before the per-run cap keeps a pile of
-  // stopped rooms from starving every live one behind them.
-  const capsules = scanWindow
-    .filter((capsule) => {
-      const status = readBuildPrDeliveryState(capsule.workspaceState)?.status;
-      return status !== "escalated" && status !== "closed" && status !== "deployed";
-    })
-    .slice(0, ROOMS_PER_RUN);
+  const capsules = await selectPrDeliveryRooms(prisma);
 
   let observed = 0;
   let actuated = 0;
@@ -177,14 +150,34 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
           }
         }
       }
-      const observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
+      let observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
       observed += 1;
       if (!observesRoomHead(capsule.headSha, observation.headSha, existing)) continue;
-      const readiness = projectGithubPrReadiness(observation);
+      let readiness = projectGithubPrReadiness(observation);
       const posture = resolvePrFollowThroughPosture({
         scopeClaims: capsule.scopeClaims,
+        executorKind: capsule.executorKind,
         platformDefaultActionBoundary,
       });
+      // Build Studio rooms were gated by autonomy eligibility above.
+      const actuationAllowed = capsule.featureBuildId ? true : posture.actuationAllowed;
+      if (mode === "enforce" && actuationAllowed) {
+        // A passed review's status expires after an hour (BI-4D0B2AAB); refresh
+        // it from the server verdict before queueing or when it is the only red check.
+        const refresh = await refreshFailureReadinessForDelivery({
+          observation,
+          readiness,
+          verdict: () => checkWorkroomFailureReadiness(capsule.capsuleId),
+          publish: () => publishFailureReadinessStatus(capsule.capsuleId),
+          rerun: (workflowRunId) => rerunFailedWorkflowJobs({ owner, repo, workflowRunId, token }),
+        });
+        readiness = refresh.readiness;
+        if (refresh.observeAgain) {
+          observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
+          if (!observesRoomHead(capsule.headSha, observation.headSha, existing)) continue;
+          readiness = projectGithubPrReadiness(observation);
+        }
+      }
       const outcome = await executeBuildPrDeliveryAction({
         state,
         observation,
@@ -193,8 +186,7 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         token,
         owner,
         repo,
-        // Build Studio rooms were gated by autonomy eligibility above.
-        actuationAllowed: capsule.featureBuildId ? true : posture.actuationAllowed,
+        actuationAllowed,
         repairAuthority: posture.authority,
         // No dispatchRepair yet: whether the platform coding coworker can push
         // to an existing external branch is the design's open question (§8), so

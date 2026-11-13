@@ -24,6 +24,7 @@ Folding "a human must decide this now" into the backlog is a category error: the
 ## Key Concepts
 
 - **Only owner decisions reach the daily count.** Routine platform recovery, missing credentials, stalled builds, and service health stay with your digital team. They appear only if they create a real business choice for you.
+- **Lost AI capacity is the exception.** If an AI provider needs you to sign in again, has hit its spending limit, or every AI subscription is out of capacity, it appears in the daily count under its own title. A provider's usage limit that lifts on its own is named, with its reset time, in the line about what your digital team is handling.
 - **Money and public actions always come to you.** A proactivity setting can change how routine work is handled, but it cannot bypass approval when money leaves the business or something goes public.
 - **Every card explains the decision.** The top of the card gives a short question; for a blocked coworker, a plain line saying **what it was doing and why it stalled**; a concrete **impact** ("if ignored…"); the **recommendation** with the specialist it came from; and no more than three plain choices. It never invents a confidence score.
 - **Technical detail is preserved.** Open **Technical detail** to see the original title, source, work fields, linked identifiers, detection details, and builder actions. That information is moved one click down, not deleted.
@@ -61,6 +62,14 @@ request ID still lets the assistant check whether that request completed. These
 reads do not approve anything, transfer ownership or change permissions. If the
 connection belongs to another account, reconnect under the intended account;
 administrator privileges do not let you answer someone else's request.
+
+## Not being asked the same thing again
+
+Some requests are routine: nothing leaves your business, nothing is permanent, and nobody's access changes. On those, the card shows **Don't ask me again when this coworker does this**. Tick it before you choose **Authorize** and your answer stands for that coworker doing that same kind of action for you, so the request no longer comes to your inbox.
+
+The choice is narrow. It covers only that coworker, that one kind of action, and only requests made on your behalf. A different coworker, a different action, or someone else's request still asks. Anything that reaches outside, cannot be undone, or changes someone's access still comes to you every time, even when the same action was ruled routine before. If your administrator has set a coworker to always ask, it still asks.
+
+Right after you authorize, the card shows **Ask me again next time**. Choose it and you will be asked again from then on. An administrator deciding on your behalf cannot make your answer standing.
 
 ## How long a coworker's request waits
 

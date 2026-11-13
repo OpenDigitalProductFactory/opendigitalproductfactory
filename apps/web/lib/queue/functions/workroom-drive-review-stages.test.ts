@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { buildWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 
 import { runWorkroomDriveJob, type WorkroomDriveEffects, type WorkroomDriveRoom } from "./workroom-drive";
-import { REVIEW_STAGE_RESOLUTIONS_PER_TICK, type ReviewStageContext, type ReviewStageDeps } from "./workroom-drive-review-stages";
+import { liveReviewerDispatch, REVIEW_STAGE_RESOLUTIONS_PER_TICK, type ReviewStageContext, type ReviewStageDeps } from "./workroom-drive-review-stages";
+
+const dispatchReviewerRequestMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/backlog/initiative-readiness/server-reviewer-dispatch", () => ({
+  dispatchReviewerRequest: (...args: unknown[]) => dispatchReviewerRequestMock(...args),
+}));
 
 // BI-2C8750FC: the drive tick rebinds a readiness review stage to its
 // non-author reviewer and executes the dispatch as the reviewer packet.
@@ -135,5 +140,45 @@ describe("workroom drive review stages (BI-2C8750FC)", () => {
     const rooms = Array.from({ length: REVIEW_STAGE_RESOLUTIONS_PER_TICK + 3 }, (_, index) => room(`WC-${index}`));
     await runWorkroomDriveJob(NOW, { listRooms: async () => rooms, effects: fx, reviewStages });
     expect(reviewStages.loadContext).toHaveBeenCalledTimes(REVIEW_STAGE_RESOLUTIONS_PER_TICK);
+  });
+});
+
+describe("liveReviewerDispatch (BI-CAB5D233)", () => {
+  const packet = { targetAgent: "AGT-WS-REVIEW", requestKey: "rk-design-spec" };
+
+  beforeEach(() => {
+    dispatchReviewerRequestMock.mockReset();
+    dispatchReviewerRequestMock.mockResolvedValue({ outcome: "platform-reviewer", detail: "The platform asked AGT-WS-REVIEW to review it in WC-DSR-1." });
+  });
+
+  it("passes the room author's issuer so the platform steward can open when no connection carries the packet", async () => {
+    await liveReviewerDispatch({
+      roomId: "row-1",
+      capsuleId: "WC-1",
+      itemId: "BI-CAB5",
+      author: { kind: "agent", agentId: "AGT-EXT-GROK" },
+      userId: "user-1",
+      requestCoworker: packet,
+      now: NOW,
+    });
+    expect(dispatchReviewerRequestMock).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: "BI-CAB5",
+      requestCoworker: packet,
+      carrier: "author-assistant",
+      issuer: { userId: "user-1", agentId: "AGT-EXT-GROK" },
+      room: expect.objectContaining({ roomId: "row-1", capsuleId: "WC-1", userId: "user-1", agentId: "AGT-EXT-GROK" }),
+    }));
+  });
+
+  it("treats a platform-reviewer hand-off as dispatched so the drive does not record the steward as unavailable", async () => {
+    await expect(liveReviewerDispatch({
+      roomId: "row-1",
+      capsuleId: "WC-1",
+      itemId: "BI-CAB5",
+      author: { kind: "agent", agentId: "AGT-EXT-GROK" },
+      userId: "user-1",
+      requestCoworker: packet,
+      now: NOW,
+    })).resolves.toEqual({ outcome: "dispatched" });
   });
 });

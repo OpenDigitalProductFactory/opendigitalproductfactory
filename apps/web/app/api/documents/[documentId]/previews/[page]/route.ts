@@ -2,12 +2,14 @@
 // managed document (BI-543819B1): the slide thumbnails on the document page.
 // `?version=N` pins a version; the default is the current one.
 //
-// Access matches the document page it serves: a signed-in session.
+// Access matches the document page it serves: a signed-in session that may
+// read the document (BI-957915CB); any other answers 404, like a missing one.
 // @exposure authenticated
 
 import { auth } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api/error";
 import { resolvePreviewImage } from "@/lib/documents/document-previews";
+import { resolveDocumentViewer } from "@/lib/documents/document-access";
 
 export const runtime = "nodejs";
 
@@ -23,7 +25,8 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   }
   const versionParam = new URL(request.url).searchParams.get("version");
   const version = versionParam && /^\d+$/.test(versionParam) ? Number(versionParam) : null;
-  const result = await resolvePreviewImage({ documentId: decodeURIComponent(documentId), page: Number(page), version });
+  const viewer = await resolveDocumentViewer(session.user.id);
+  const result = await resolvePreviewImage({ documentId: decodeURIComponent(documentId), page: Number(page), version, viewer });
   if (!result.ok) {
     return apiErrorResponse(result.status === 404 ? "NOT_FOUND" : "GONE", result.error, result.status);
   }

@@ -5,7 +5,7 @@ import {
   type CoordinationActor,
   type NestedRoomCoordinationInput,
 } from "@/lib/work-management/nested-room-coordination";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@dpf/validators/workroom/receipts";
 import { isRecord } from "@/lib/shared/coerce";
 
 /** FEMA ICS span-of-control upper bound used as the COO workload measurable. */

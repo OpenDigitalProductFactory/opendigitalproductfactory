@@ -106,6 +106,9 @@ describe("nonprod-lease pack — registration", () => {
     const renew = nonprodLeasePack.definitions.find((d) => d.name === "renew_nonprod_environment_lease");
     expect(claim?.inputSchema.properties).toHaveProperty("slotManifestVersion");
     expect(claim?.inputSchema.properties).toHaveProperty("hostPressure");
+    expect(claim?.inputSchema.properties).toHaveProperty(
+      "hostPressure.properties.totalMemoryBytes",
+    );
     expect(claim?.inputSchema.properties).toHaveProperty("resourceClass");
     expect(claim?.inputSchema.properties).toHaveProperty("hostResource");
     expect(claim?.inputSchema.properties).toHaveProperty("ownerProcessIdentity");
@@ -616,7 +619,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     const res = await nonprodLeasePack.handlers.release_nonprod_environment_lease({ leaseId: "L1" }, "u1");
     expect(res.success).toBe(true);
     expect(() => JSON.stringify(res)).not.toThrow();
-    expect(lease.releaseNonprodEnvironmentLease).toHaveBeenCalledWith({ leaseId: "L1" });
+    expect(lease.releaseNonprodEnvironmentLease).toHaveBeenCalledWith(expect.objectContaining({ leaseId: "L1", authenticatedUserId: "u1" }));
   });
 });
 

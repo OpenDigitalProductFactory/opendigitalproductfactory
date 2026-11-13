@@ -430,6 +430,74 @@ Changing objective or acceptance scope requires a new independently approved bas
 
 ---
 
+### 8.5a Exact authorized room readiness (BI-38EC23B2)
+
+This corrective amendment is owned by BI-38EC23B2, not the delivered
+BI-7531B73C. On source `4718cd4f1c5418ab2eba819dd47d5cb839f8eca0`,
+`getBacklogItem` cannot select a persisted room; current-design discovery
+requires one room, while dispatch can select source only after a packet exists.
+Two preserved rooms therefore prevent an otherwise admitted owner from obtaining
+the packet. The original BI-7A4E70E9 rooms and their uncertain executions remain
+intact. Independent source assessment is pending; this bounded repair does not approve the original addendum.
+
+Extend the existing `get_backlog_item` input with optional `workroomId`. The
+server resolves it to the persisted room and requires the current human and
+assistant to have action access, the same backlog subject, a nonterminal room,
+repository and branch, and full immutable base/head commits. It accepts no
+caller-provided source tuple or digest. Invalid, foreign or incomplete selection
+returns a bounded refusal before source or review-packet disclosure.
+
+Use the server-resolved tuple for current-design observation and the same
+selected room for the existing terminal recovery issuer. Dispatch must reissue
+against that exact room using the existing action-access and immutable-source
+checks. Recheck the selected source after provider reads; a changed binding
+must refuse rather than issue a stale packet. Without a selector, retain current
+ambiguity behavior. A selected room does not bypass liveness, independence,
+consent, original-task recovery, funding, or implementation admission.
+
+**OBJ-ROOM-READ-01:** An admitted owner can obtain readiness and an eligible
+server-issued packet for one exact preserved Workroom without acquiring a
+conflicting edit claim or changing either room's history.
+
+**AC-ROOM-READ-01:** Reproduce the two-room refusal on the named base, then prove
+the supported selector carries the same room/source through observation, issuer
+and dispatch. **AC-ROOM-READ-02:** Deny foreign actors/items, incomplete or changed
+source, terminal rooms and forged source fields; preserve unscoped behavior.
+**AC-ROOM-READ-03:** No room/status/grant/baseline/attempt mutations or review
+dispatch occur during a read. **AC-ROOM-READ-04:** After protected deployment,
+the original owner reads its exact addendum readiness and reports any remaining
+refusal; historical execution settlement is not inferred.
+
+The item-body acceptance contract is retained verbatim for proportional coverage:
+
+- Reproduce two preserved same-item rooms where unscoped read is unavailable and ordinary claims conflict.
+- An exact room selector resolves current source only after existing actor access, item binding, repository and full immutable base/head validation; caller-provided hashes never confer authority.
+- The recovery issuer and dispatch revalidation agree on the same selected room and exact immutable packet.
+- Foreign, mismatched, incomplete or changed bindings fail closed; unscoped legacy behavior remains unchanged.
+- Both historical rooms, WIP and uncertain execution records remain intact; no implicit release, replay, approval or settlement.
+- Verify supported original addendum read after protected deployment, reporting any remaining refusal honestly.
+
+This is one atomic fix: the reader, issuer and dispatcher must agree before the
+owner can use the packet. None is an independently shippable outcome. Traceability:
+requirements AC-ROOM-READ-01..04; contract existing authenticated Workroom action
+access and immutable packet equality; flow get_backlog_item → terminal recovery
+issuer → authorizeCoworkerRequest; verification source roundtrip and negative
+controls, then original owner canonical-runtime read.
+
+Research on base `4718cd4f1c5418ab2eba819dd47d5cb839f8eca0`: the amended-design
+public-selector regression failed with `recovery_gate_unavailable`; seven existing
+roundtrip cases passed. This rules out dependency setup and a general issuer
+failure in that harness. The fix and passing regression are pending implementation;
+no live acceptance or historical settlement is claimed.
+
+Ordered implementation coverage belongs to BI-38EC23B2: (1) reproduce and record
+research against this immutable design; (2) obtain normal design/implementation
+admission; (3) extend the existing reader schema and validated room adapter;
+(4) bind canonical issuer and dispatcher to the selected room; (5) exercise
+positive roundtrip and negative authority/source controls, affected tests and
+package types; (6) independent assessment, protected publication and original-owner
+live readback. No new table, tool, grant, importer or review namespace is needed.
+
 ### 8.5 Current repository design with historical references (BI-E2EEE278)
 
 The baseline is the current canonical selection; a list of Markdown links is

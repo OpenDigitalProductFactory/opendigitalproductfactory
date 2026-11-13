@@ -12,6 +12,7 @@ import { prisma } from "@dpf/db";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 
 import { knownGrantKeys } from "./agent-grants";
+import { isCorpusGrantKey, isExtraFamilyGrantKey } from "./corpus-read-scope";
 
 export type CoworkerToolGrantAction = "grant" | "revoke";
 
@@ -24,9 +25,28 @@ export type ResolvedCoworker = {
   displayName: string;
 };
 
-/** True iff the grant key is one the runtime actually understands. */
+/** True iff the grant key is one the runtime actually understands. An extra
+ *  profession family (`wiki_profession_read:<key>`, BI-825D3487) is known only
+ *  for a family registered in docs/professions/registry.json. */
 export function isKnownGrantKey(grantKey: string): boolean {
-  return knownGrantKeys().includes(grantKey);
+  return knownGrantKeys().includes(grantKey) || isExtraFamilyGrantKey(grantKey);
+}
+
+type GrantAuditDb = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/** BI-825D3487 (AC-CRG-6): a corpus grant change leaves an authority-trail row,
+ *  the same writer coworker grant reconciliation uses. */
+async function recordCorpusGrantChange(db: GrantAuditDb, agentCuid: string, grantKey: string, action: CoworkerToolGrantAction, by: string) {
+  if (!isCorpusGrantKey(grantKey)) return;
+  // The trail is keyed by the business agentId, as the identity page reads it.
+  const row = (await db.agent.findFirst({ where: { id: agentCuid }, select: { agentId: true } })) as { agentId: string } | null;
+  const agentId = row?.agentId ?? agentCuid;
+  await db.toolExecution.create({ data: {
+    threadId: `coworker-corpus-grant:${agentId}`, agentId, userId: by,
+    toolName: "manage_coworker_tool_grant", executionMode: "human", auditClass: "authority-trail",
+    routeContext: `/platform/ai/agent/${agentId}`, parameters: { agentCuid, grantKey, action }, result: {}, success: true,
+    summary: `Knowledge corpus grant ${grantKey} ${action === "grant" ? "granted" : "revoked"}.`,
+  } });
 }
 
 /**
@@ -83,6 +103,7 @@ export async function applyCoworkerToolGrant(
   // BI-4FA040D5: a (re-)grant clears any durable revocation tombstone, so the
   // key is no longer skipped by the boot seed and the grant survives restarts.
   await db.agentToolGrantRevocation.deleteMany({ where: { agentId: agentCuid, grantKey } });
+  await recordCorpusGrantChange(db, agentCuid, grantKey, "grant", grantedBy);
   }, { isolationLevel: "Serializable" });
   return { ok: true };
 }
@@ -108,6 +129,9 @@ export async function removeCoworkerToolGrant(
     update: { revokedBy },
     create: { agentId: agentCuid, grantKey, revokedBy },
   });
+  // Both governed doors pass the acting user. An actorless revoke (no caller today) has no User to
+  // attribute, and there is no "system" user, so its tombstone row is its record.
+  if (revokedBy) await recordCorpusGrantChange(db, agentCuid, grantKey, "revoke", revokedBy);
   }, { isolationLevel: "Serializable" });
   return { ok: true };
 }

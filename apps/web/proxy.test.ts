@@ -38,13 +38,16 @@ describe("proxy route classification", () => {
     expect(classifyRoute("/api/storefront/config")).toBe(RouteClass.PublicApi);
     expect(classifyRoute("/api/auth/callback/google")).toBe(RouteClass.PublicApi);
     expect(classifyRoute("/api/health")).toBe(RouteClass.PublicApi);
-    expect(classifyRoute("/api/calendar/feed")).toBe(RouteClass.PublicApi);
+    // BI-051A74CE: the token-gated .ics feed is public; the rest of /api/calendar is not.
+    expect(classifyRoute("/api/calendar/feed/user-1")).toBe(RouteClass.PublicApi);
     expect(classifyRoute("/api/docs")).toBe(RouteClass.PublicApi);
   });
 
   it("classifies protected API routes (auth enforced at route level)", () => {
     expect(classifyRoute("/api/workspace/portfolio")).toBe(RouteClass.ProtectedApi);
     expect(classifyRoute("/api/platform/users")).toBe(RouteClass.ProtectedApi);
+    expect(classifyRoute("/api/calendar/events")).toBe(RouteClass.ProtectedApi);
+    expect(classifyRoute("/api/calendar/sync")).toBe(RouteClass.ProtectedApi);
   });
 
   it("classifies shell/workspace areas as requiring auth", () => {

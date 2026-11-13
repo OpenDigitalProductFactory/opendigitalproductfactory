@@ -29,12 +29,13 @@ import {
   appendRevision,
   attachSource,
   getWikiPage,
-  linkPages,
   recordIngestEvent,
   upsertWikiPage,
   type WikiStoreClient,
 } from "@dpf/db/wiki-store";
-import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
+import type { WikiLinkClient } from "@dpf/db/wiki-store";
+
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 import type {
   ClaimProposal,
   HeuristicProposal,
@@ -49,10 +50,10 @@ type CommitClient = Pick<
   WikiStoreClient,
   | "wikiPage"
   | "wikiPageRevision"
-  | "wikiPageLink"
   | "wikiPageSource"
   | "wikiIngestEvent"
->;
+> &
+  WikiLinkClient;
 
 export type CommitProposalInput = {
   /** RawSource.id from Phase 2.1's `ingestRawSourceFromFile`. */
@@ -588,36 +589,6 @@ async function commitHeuristic(
   return { kind: "created", pageId: created.id, slug: heuristic.targetSlug };
 }
 
-// ─── Wikilink graph ─────────────────────────────────────────────────────────
-
-/**
- * After every page write, scan the new body for `[[wikilinks]]` and
- * upsert WikiPageLink edges for the ones that resolve to existing pages
- * in the same scope (org overlay or kernel). Dangling links are not
- * upserted — the lint detector flags them.
- */
-async function syncOutLinks(
-  db: CommitClient,
-  fromPageId: string,
-  body: string,
-  organizationId: string,
-): Promise<void> {
-  const slugs = extractWikilinks(body).filter(
-    (s) => !s.startsWith("raw-sources/"),
-  );
-  if (slugs.length === 0) return;
-
-  for (const slug of slugs) {
-    const target = (await getWikiPage(db, {
-      organizationId,
-      slug,
-    })) as { id: string } | null;
-    if (target && target.id !== fromPageId) {
-      await linkPages(db, { fromPageId, toPageId: target.id });
-    }
-  }
-}
-
 // ─── Orchestrator ───────────────────────────────────────────────────────────
 
 /**
@@ -725,7 +696,12 @@ export async function commitIngestProposal(
         select: { body: true },
       })) as { body: string } | null;
       if (page) {
-        await syncOutLinks(db, pageId, page.body, input.organizationId);
+        const { error } = await syncWikiPageLinks(db, {
+          pageId,
+          organizationId: input.organizationId,
+          body: page.body,
+        });
+        if (error) errors.push(`link-sync ${pageId}: ${error}`);
       }
     } catch (err) {
       errors.push(

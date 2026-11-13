@@ -66,7 +66,7 @@ describe("one-click consent (BI-05E0EA33)", () => {
     const html = await res.text();
     expect(res.status).toBe(200);
     expect(html).toContain('<strong class="who default" data-agent="AGT-EXT-CODEX">Codex (external CLI)</strong>');
-    expect(html).toContain("Connect Codex</button>");
+    expect(html).toContain("Connect Codex as h@example</button>");
     expect(mock.resolveDefault).toHaveBeenCalledWith(expect.objectContaining({ userId: "human", resource: "http://127.0.0.1:3000/api/mcp/v1" }), expect.anything());
   });
 
@@ -128,6 +128,7 @@ describe("consent needs a person's explicit decision", () => {
     const response = await POST(form(rest));
     expect(response.headers.get("location")).toContain("error=access_denied");
     expect(mock.binding).not.toHaveBeenCalled();
+    expect(mock.code).not.toHaveBeenCalled();
   });
 
   it("refuses a decision that did not come from the consent page itself", async () => {
@@ -180,7 +181,7 @@ describe("consent binds only the account the person confirmed", () => {
   it("GET names the account and links to sign in as someone else, returning to this request", async () => {
     const res = await GET(new Request("http://127.0.0.1:3000/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x"));
     const html = await res.text();
-    expect(html).toContain('name="confirm_account" value="human" required');
+    expect(html).toContain('type="hidden" name="confirm_account" value="human"');
     const back = encodeURIComponent("/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x");
     expect(html).toContain(`href="/login?callbackUrl=${back.replace(/&/g, "&amp;")}"`);
   });
@@ -228,5 +229,47 @@ describe("consent under an account whose work was handed over", () => {
     expect(mock.log).toHaveBeenCalledWith({ data: expect.objectContaining({
       rationale: expect.objectContaining({ accountWorkHandedOverAt: handedOver.toISOString() }),
     }) });
+  });
+});
+
+// BI-F586F8A5 — a browser still holding the automation persona's session must
+// not hand a person's interactive client to that account.
+describe("consent under the platform automation sign-in", () => {
+  const persona = { id: "automation", email: "automation@dpf.local" };
+  const personaForm = { ...baseForm, confirm_account: "automation" };
+
+  it("GET refuses to offer the automation account and sends the person to sign in as themself", async () => {
+    mock.auth.mockResolvedValue({ user: persona });
+    const res = await GET(new Request("http://127.0.0.1:3000/api/oauth/authorize?client_id=dpfoc_x&code_challenge=c"));
+    const html = await res.text();
+    expect(res.status).toBe(403);
+    expect(html).toContain("automation@dpf.local");
+    expect(html).toContain('href="/login?callbackUrl=%2Fapi%2Foauth%2Fauthorize%3Fclient_id%3Ddpfoc_x%26code_challenge%3Dc"');
+    expect(html).not.toContain("confirm_account");
+    expect(mock.eligible).not.toHaveBeenCalled();
+  });
+
+  it("POST issues no code for the automation account even when the page was confirmed", async () => {
+    mock.auth.mockResolvedValue({ user: persona });
+    const res = await POST(form(personaForm));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: "access_denied" });
+    expect(mock.binding).not.toHaveBeenCalled();
+    expect(mock.code).not.toHaveBeenCalled();
+  });
+
+  it("POST refuses a governed automation session minted for a different authorization request", async () => {
+    mock.auth.mockResolvedValue({ user: { ...persona, automationOAuthConsent: { clientId: "dpfoc_x", codeChallenge: "other" } } });
+    expect((await POST(form(personaForm))).status).toBe(403);
+    expect(mock.code).not.toHaveBeenCalled();
+  });
+
+  it("still lets the governed automation flow consent to the exact request its sign-in was minted for", async () => {
+    mock.auth.mockResolvedValue({ user: { ...persona, automationOAuthConsent: { clientId: "dpfoc_x", codeChallenge: "c" } } });
+    const get = await GET(new Request("http://127.0.0.1:3000/api/oauth/authorize?client_id=dpfoc_x&code_challenge=c"));
+    expect(get.status).toBe(200);
+    const res = await POST(form(personaForm));
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("code=dpfoac_code");
   });
 });

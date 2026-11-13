@@ -57,6 +57,8 @@ describe("owned semantic review recovery readback", () => {
     expect(result).toMatchObject({ budget: "expired", classification: "execution-uncertain", pollUseful: false,
       details: { unresolvedNodeIds: ["TN-OWN"], nodes: [{ taskNodeId: "TN-OWN", settlement: "unverified", digestMatches: true }],
         remediation: { executionSettled: false, state: "missing-current-proof", retryAuthorized: false } } });
+    expect(result.nextAction).toContain("execution settlement");
+    expect(result.nextAction).not.toContain("bounded successor");
     expect(JSON.stringify(result)).not.toContain("provider-private-output");
     expect(db.taskNode.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRun: { taskRunId: "TR-OWN", userId: "owner" } }, take: 101 }));
@@ -96,6 +98,21 @@ describe("owned semantic review recovery readback", () => {
     const result = await readSemanticReviewRecovery(task, "owner");
     expect(result.details.authority.state).toBe("allowed");
     expect(result.details.remediation).toMatchObject({ executionSettled: false, retryAuthorized: false });
+  });
+  it.each([
+    ["client-missing", "original OAuth client record is missing"],
+    ["client-revoked", "original OAuth client is revoked"],
+    ["continuity-envelope-missing", "continuity binding is incomplete"],
+    ["continuity-evidence-missing", "No eligible access successor or refresh evidence"],
+    ["consent-invalid", "consent is not currently eligible"],
+  ])("projects fixed %s guidance without changing settlement", async (detail, guidance) => {
+    authority.request.mockResolvedValue({ actor: { apiTokenId: "private-token-id" } });
+    authority.inspect.mockResolvedValue({ state: "denied", reason: "oauth-authority-invalid", detail });
+    const result = await readSemanticReviewRecovery(task, "owner");
+    expect(result.details.authority).toMatchObject({ state: "denied", reason: "oauth-authority-invalid", detail,
+      nextAction: expect.stringContaining(guidance) });
+    expect(result.details.remediation).toMatchObject({ executionSettled: false, retryAuthorized: false });
+    expect(JSON.stringify(result)).not.toContain("private-token-id");
   });
   it("returns a scoped current proof without authorizing a retry or exposing diagnostic text", async () => {
     db.runtimeVerification.findFirst.mockResolvedValue(verification());

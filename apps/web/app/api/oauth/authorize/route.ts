@@ -40,9 +40,11 @@ import { touchClient } from "@/lib/auth/oauth-clients";
 import { parseScopeParam } from "@/lib/auth/oauth-scope-map";
 import {
   htmlResponse,
+  renderAutomationAccountRefusal,
   renderConsentPage,
   renderConsentRefusal,
 } from "@/lib/auth/oauth-consent-page";
+import { automationConsentPermitted } from "@/lib/auth/oauth-automation-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -83,8 +85,22 @@ export async function GET(request: Request) {
     );
   }
 
+  if (!automationConsentPermitted(session.user, consentRequest(parsed.request))) {
+    // The browser is still signed in as the platform automation persona: send
+    // the person to sign in as themself and come back to this same request.
+    const requestParams = [...url.searchParams.entries()].filter(([k]) => !CONSENT_FORM_FIELDS.has(k));
+    const back = `${OAUTH_AUTHORIZE_PATH}?${new URLSearchParams(requestParams).toString()}`;
+    return htmlResponse(renderAutomationAccountRefusal(session.user.email ?? session.user.id,
+      `/login?callbackUrl=${encodeURIComponent(back)}`), 403);
+  }
+
   return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
     url.searchParams, origin, { after: url.searchParams.get("assistant_after") ?? undefined });
+}
+
+/** What an automation session's minted consent is compared against (BI-F586F8A5). */
+function consentRequest(request: AuthorizeRequest) {
+  return { clientId: request.client.clientId, codeChallenge: request.codeChallenge };
 }
 
 const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after", "confirm_account", "acknowledge_handover"]);
@@ -206,6 +222,14 @@ export async function POST(request: Request) {
       }),
       302,
     );
+  }
+
+  // The automation persona never binds a person's interactive client; only the
+  // governed flow's own minted request may (BI-F586F8A5). Checked before any
+  // other consent field, so no confirmation on the page can override it.
+  if (!automationConsentPermitted(session.user, consentRequest(parsed.request))) {
+    return directError("access_denied",
+      "This browser is signed in as the platform automation account. Sign in as yourself and connect again.", 403);
   }
 
   // The account is the person's decision, not the browser's (BI-07D21B4A).

@@ -2,18 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findMany: vi.fn(),
+  jobUpsert: vi.fn(),
+  jobUpdateMany: vi.fn(),
   updateMany: vi.fn(),
   activityCreate: vi.fn(),
   observe: vi.fn(),
   createIssue: vi.fn(),
   postureDefault: vi.fn(),
   fetch: vi.fn(),
+  verdict: vi.fn(),
+  publish: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     workroom: { findMany: mocks.findMany, updateMany: mocks.updateMany },
     workroomActivity: { create: mocks.activityCreate },
+    scheduledJob: { upsert: mocks.jobUpsert, updateMany: mocks.jobUpdateMany },
     featureBuild: { findUnique: vi.fn() },
   },
 }));
@@ -36,6 +41,8 @@ vi.mock("@/lib/build/build-studio-config", () => ({
 vi.mock("@/lib/jobs", () => ({ jobs: { createFunction: () => ({}) } }));
 vi.mock("@/lib/jobs/triggers", () => ({ cron: () => ({}) }));
 vi.mock("../quiescence-gates", () => ({ gateAtEntry: vi.fn() }));
+vi.mock("@/lib/change-review/failure-readiness-publication", () => ({ checkWorkroomFailureReadiness: mocks.verdict }));
+vi.mock("@/lib/change-review/failure-readiness-status", () => ({ publishFailureReadinessStatus: mocks.publish }));
 
 import { observesRoomHead, runBuildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
 import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
@@ -69,14 +76,66 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     vi.clearAllMocks();
     process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE = "enforce";
     mocks.updateMany.mockResolvedValue({ count: 1 });
+    mocks.jobUpsert.mockResolvedValue({ id: "pr-job", runCursor: null, enabled: true });
+    mocks.jobUpdateMany.mockResolvedValue({ count: 1 });
     mocks.activityCreate.mockResolvedValue({});
     mocks.createIssue.mockResolvedValue({ reportId: "PIR-1" });
     mocks.postureDefault.mockResolvedValue(null);
+    mocks.verdict.mockResolvedValue({ mayPublish: true, reason: "reviewed" });
+    mocks.publish.mockResolvedValue(undefined);
     vi.stubGlobal("fetch", mocks.fetch);
   });
   afterEach(() => {
     delete process.env.DPF_BUILD_PR_DELIVERY_RECONCILER_MODE;
     vi.unstubAllGlobals();
+  });
+
+  it("eventually observes every eligible room despite repeated unrelated drive timestamp writes", async () => {
+    let clock = Date.parse("2026-11-01T00:00:00Z");
+    let cursor: string | null = null;
+    const rows = Array.from({ length: 100 }, (_, index) => room({
+      id: `row-${String(index).padStart(3, "0")}`,
+      capsuleId: `WC-${index}`,
+      pullRequestNumber: index + 1,
+      updatedAt: new Date(++clock),
+    }));
+    const observed = new Set<number>();
+    mocks.jobUpsert.mockImplementation(async () => ({ id: "pr-job", runCursor: cursor, enabled: true }));
+    mocks.jobUpdateMany.mockImplementation(async ({ where, data }) => {
+      if (where.runCursor !== cursor) return { count: 0 };
+      cursor = data.runCursor;
+      return { count: 1 };
+    });
+    // Repository fixture honors the real query's keyset boundary, order and cap.
+    // It does not substitute a preselected batch for the production selector.
+    mocks.findMany.mockImplementation(async ({ where, orderBy, take }) => {
+      const key = Object.keys(orderBy)[0] as "id" | "updatedAt";
+      return rows.filter(row => !where.id?.gt || row.id > where.id.gt)
+        .sort((a, b) => a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0)
+        .slice(0, take).map(row => ({ ...row }));
+    });
+    mocks.updateMany.mockImplementation(async ({ where, data }) => {
+      const row = rows.find(row => row.id === where.id);
+      if (!row || row.updatedAt.getTime() !== where.updatedAt.getTime()) return { count: 0 };
+      Object.assign(row, data, { updatedAt: new Date(++clock) });
+      return { count: 1 };
+    });
+    mocks.observe.mockImplementation(async ({ prNumber }) => {
+      observed.add(prNumber);
+      return observation([{ name: "ci", status: "IN_PROGRESS", conclusion: null }]);
+    });
+
+    for (let tick = 0; tick < 12; tick++) {
+      if (tick % 3 === 0) {
+        // The existing standing drive writes a quiet snapshot every 15 minutes.
+        for (const row of rows) row.updatedAt = new Date(++clock);
+      }
+      await runBuildPrDeliveryReconcile();
+    }
+
+    expect(observed.size).toBe(100);
+    expect(observed.has(100)).toBe(true);
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it("selects rooms without a Build Studio build and skips rooms the reconciler stopped on", async () => {
@@ -131,6 +190,41 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
+  it("does not contact GitHub after losing the durable batch claim", async () => {
+    mocks.findMany.mockResolvedValue([room({})]);
+    mocks.jobUpdateMany.mockResolvedValue({ count: 0 });
+    expect(await runBuildPrDeliveryReconcile()).toEqual({ observed: 0, actuated: 0, escalated: 0, compareAndSwapLost: 0 });
+    expect(mocks.observe).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("claims progress before a stale head or GitHub failure without rebinding the stale room", async () => {
+    mocks.findMany.mockResolvedValue([
+      room({ id: "a-stale", headSha: "current-head", pullRequestNumber: 1 }),
+      room({ id: "b-network", pullRequestNumber: 2 }),
+    ]);
+    mocks.observe.mockImplementation(async ({ prNumber }) => {
+      if (prNumber === 2) throw new Error("GitHub unavailable");
+      return observation([], "CLEAN");
+    });
+    const result = await runBuildPrDeliveryReconcile();
+    expect(result).toMatchObject({ observed: 1, actuated: 0 });
+    expect(mocks.jobUpdateMany.mock.calls[0]?.[0].data.runCursor).toBe("b-network");
+    expect(mocks.jobUpdateMany.mock.invocationCallOrder[0]).toBeLessThan(mocks.observe.mock.invocationCallOrder[0]!);
+    expect(mocks.updateMany).toHaveBeenCalledTimes(1);
+    expect(mocks.updateMany.mock.calls[0]?.[0].where.id).toBe("b-network");
+    expect(mocks.updateMany.mock.calls[0]?.[0].data).not.toHaveProperty("headSha");
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("performs no GitHub effects if durable progress cannot be recorded", async () => {
+    mocks.findMany.mockResolvedValue([room({})]);
+    mocks.jobUpdateMany.mockRejectedValue(new Error("cursor store unavailable"));
+    await expect(runBuildPrDeliveryReconcile()).rejects.toThrow("cursor store unavailable");
+    expect(mocks.observe).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
   // BI-ECA50241: the reconciler's own update-branch moves the PR head to
   // GitHub's merge commit; the room follows it instead of freezing in updating.
   it("follows a PR head moved by its own update-branch and records the new head", async () => {
@@ -161,6 +255,49 @@ describe("runBuildPrDeliveryReconcile — every room with a PR, whichever client
     expect(String(mocks.fetch.mock.calls[0]?.[1]?.body)).toContain("enablePullRequestAutoMerge");
     const quietWrite = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "quiet")?.[0];
     expect(quietWrite.data.workspaceState.prDelivery.lastError).toBe("withheld:queue");
+  });
+
+  // BI-4D0B2AAB: a passed review's status expires after an hour, and the merge queue re-checks it.
+  it("republishes Failure Readiness before arming auto-merge, and withholds a PR with no publishable review", async () => {
+    mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) });
+    mocks.findMany.mockResolvedValue([room({ id: "reviewed", capsuleId: "WC-OK" }), room({ id: "unreviewed", capsuleId: "WC-NONE" })]);
+    mocks.verdict.mockImplementation(async (capsuleId: string) => capsuleId === "WC-OK"
+      ? { mayPublish: true, reason: "reviewed" } : { mayPublish: false, reason: "No failure-analysis review exists for this final change." });
+    const order: string[] = [];
+    mocks.publish.mockImplementation(async () => { order.push("publish"); });
+    mocks.fetch.mockImplementation(async () => { order.push("arm"); return { ok: true, status: 200, json: async () => ({ data: { enablePullRequestAutoMerge: { pullRequest: { number: 9 } } } }) }; });
+    mocks.observe.mockResolvedValue(observation([{ name: "Failure Readiness", status: "COMPLETED", conclusion: "SUCCESS" }], "CLEAN"));
+
+    const result = await runBuildPrDeliveryReconcile();
+
+    expect(mocks.publish).toHaveBeenCalledWith("WC-OK");
+    expect(mocks.publish).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["publish", "arm"]);
+    expect(result.actuated).toBe(1);
+    const withheld = mocks.updateMany.mock.calls.find((call) => call[0].where.id === "unreviewed")?.[0];
+    expect(withheld.data.workspaceState.prDelivery.status).not.toBe("queued");
+    expect(withheld.data.workspaceState.prDelivery.lastReadiness).toBe("checking");
+  });
+
+  it("clears a PR whose only red check is an expired Failure Readiness status, without staging a repair", async () => {
+    mocks.findMany.mockResolvedValue([room({ id: "expired", capsuleId: "WC-OK" })]);
+    mocks.fetch.mockResolvedValue({ ok: true, status: 201, json: async () => ({}) });
+    mocks.observe
+      .mockResolvedValueOnce(observation([
+        { name: "Failure Readiness", status: "COMPLETED", conclusion: "FAILURE", workflowRunId: 41 },
+        { name: "ci", status: "COMPLETED", conclusion: "SUCCESS" },
+      ], "BLOCKED"))
+      .mockResolvedValueOnce(observation([
+        { name: "Failure Readiness", status: "IN_PROGRESS", conclusion: null, workflowRunId: 41 },
+        { name: "ci", status: "COMPLETED", conclusion: "SUCCESS" },
+      ], "BLOCKED"));
+
+    await runBuildPrDeliveryReconcile();
+
+    expect(mocks.publish).toHaveBeenCalledWith("WC-OK");
+    expect(String(mocks.fetch.mock.calls[0]?.[0])).toContain("/actions/runs/41/rerun-failed-jobs");
+    expect(mocks.observe).toHaveBeenCalledTimes(2);
+    expect(mocks.createIssue).not.toHaveBeenCalled();
   });
 });
 

@@ -210,7 +210,28 @@ public static class DpfConsoleFixture {
     public sealed class JobSnapshot {
         public int? activeCount;
         public string[] members=new string[0];
-        public string failure;
+        public string failure, failureOperation, failureIdentity;
+        public int? failureNativeError, failurePid;
+        public string cleanupFailure, probeExitedIdentity;
+        public int? cleanupNativeError;
+        public bool probeRetainedHandleObserved, probeRetainedHandleReleased;
+        public List<string> probeObservationEvents=new List<string>();
+    }
+    static void RecordObservationFailure(JobSnapshot snapshot,Exception error,string operation,int? pid,string identity) {
+        if(snapshot.failure!=null) return; // Cleanup must never replace the primary failure.
+        snapshot.failure=error.Message; snapshot.failureOperation=operation;
+        var native=error as Win32Exception;
+        snapshot.failureNativeError=native==null ? (int?)null : native.NativeErrorCode;
+        snapshot.failurePid=pid; snapshot.failureIdentity=identity;
+    }
+    static void CloseObservationHandle(JobSnapshot snapshot,IntPtr handle,int pid,string identity,bool injectFailure) {
+        bool closed=CloseHandle(handle);
+        // The real observation handle is closed first; the fault uses no owned resource.
+        if(closed && injectFailure) closed=CloseHandle(IntPtr.Zero);
+        if(closed) return;
+        var error=new Win32Exception(Marshal.GetLastWin32Error());
+        snapshot.cleanupFailure=error.Message; snapshot.cleanupNativeError=error.NativeErrorCode;
+        RecordObservationFailure(snapshot,error,"CloseHandle",pid,identity);
     }
     static int ActiveJobCount() {
         if(job==IntPtr.Zero) throw new InvalidOperationException("Owned Job handle unavailable");
@@ -220,35 +241,140 @@ public static class DpfConsoleFixture {
             return Marshal.ReadInt32(info,40);
         } finally { Marshal.FreeHGlobal(info); }
     }
-    public static JobSnapshot ObserveJob(string fault) {
+    static void ObserveExitedMember(JobSnapshot snapshot,int pid,string expectedIdentity,ref IntPtr control,int budgetMs) {
+        var elapsed=Stopwatch.StartNew();
+        int retainedObservations=0;
+        while(elapsed.ElapsedMilliseconds<budgetMs) {
+            var handle=OpenProcess(0x100000|0x1000,false,pid);
+            if(handle==IntPtr.Zero) {
+                // Capture immediately: cleanup and later native calls may change it.
+                var error=new Win32Exception(Marshal.GetLastWin32Error());
+                snapshot.probeObservationEvents.Add("native-open-failed");
+                RecordObservationFailure(snapshot,error,"OpenProcess",pid,expectedIdentity);
+                return;
+            }
+            string operation="GetProcessTimes", observedIdentity=null;
+            try {
+                var process=new OwnedProcess(pid,handle);
+                observedIdentity=pid+":"+process.StartTime.ToUniversalTime().Ticks;
+                operation="exited-member-creation-identity";
+                if(observedIdentity!=expectedIdentity)
+                    throw new InvalidOperationException("Exited probe PID was reused before native failure observation");
+                if(control!=IntPtr.Zero) {
+                    snapshot.probeRetainedHandleObserved=true;
+                    retainedObservations++;
+                    snapshot.probeObservationEvents.Add("retained-object-observed");
+                }
+            } catch(Exception error) { RecordObservationFailure(snapshot,error,operation,pid,observedIdentity); }
+            finally {
+                CloseObservationHandle(snapshot,handle,pid,observedIdentity,false);
+                if(control!=IntPtr.Zero && snapshot.cleanupFailure==null)
+                    snapshot.probeObservationEvents.Add("observation-handle-released");
+                // Keep the control across two independently opened and identity-verified
+                // observations, closing each observation handle before releasing it.
+                if(control!=IntPtr.Zero && (retainedObservations>=2 || snapshot.failure!=null)) {
+                    CloseObservationHandle(snapshot,control,pid,expectedIdentity,false);
+                    control=IntPtr.Zero;
+                    snapshot.probeRetainedHandleReleased=snapshot.cleanupFailure==null;
+                    if(snapshot.probeRetainedHandleReleased)
+                        snapshot.probeObservationEvents.Add("retained-control-released");
+                }
+            }
+            if(snapshot.failure!=null) return;
+            int remaining=budgetMs-(int)elapsed.ElapsedMilliseconds;
+            if(remaining>0) Thread.Sleep(Math.Min(10,remaining));
+        }
+        RecordObservationFailure(snapshot,new TimeoutException("Exited probe process object remained observable within the Job drain budget"),
+            "OpenProcess(exited-member-budget)",pid,expectedIdentity);
+    }
+    public static JobSnapshot ObserveJob(string fault,int exitPid,string exitRequest,int remainingBudgetMs) {
+        var elapsed=Stopwatch.StartNew();
         var observation=new JobSnapshot();
+        string operation="owned-job-handle", identity=null; int? memberPid=null;
         // Query the owned kernel Job only; PID values never grant kill authority.
         const int capacity=128; int size=8+IntPtr.Size*capacity;
         var info=Marshal.AllocHGlobal(size);
+        IntPtr probeControl=IntPtr.Zero;
+        bool retainProbe=fault=="exited-member-retained";
+        if(retainProbe) fault="exited-member";
         try {
             if(job==IntPtr.Zero || fault=="missing-job") throw new InvalidOperationException("Owned Job handle unavailable");
             uint returned;
+            operation="QueryInformationJobObject(membership)";
             Check(QueryInformationJobObject(fault=="query-failure" ? new IntPtr(-1) : job,3,info,(uint)size,out returned));
+            operation="membership-count-bounds";
             int assigned=Marshal.ReadInt32(info,0), count=Marshal.ReadInt32(info,4);
             if(count<0 || count>capacity || assigned!=count)
                 throw new InvalidOperationException("Owned Job membership exceeds observation bound");
+            operation="QueryInformationJobObject(accounting)";
             observation.activeCount=ActiveJobCount();
+            if(fault=="exited-member") {
+                // Deterministically retire an owned member AFTER its PID was enumerated.
+                operation="probe-member-in-snapshot"; memberPid=exitPid;
+                bool listed=false;
+                for(int i=0;i<count;i++) if(Marshal.ReadIntPtr(info,8+i*IntPtr.Size).ToInt64()==exitPid) listed=true;
+                if(!listed || exitPid<=0) throw new InvalidOperationException("Exit probe member absent from owned snapshot");
+                operation="OpenProcess(probe)";
+                var retained=OpenProcess(0x100000|0x1000,false,exitPid); Check(retained!=IntPtr.Zero);
+                try {
+                    operation="GetProcessTimes(probe)";
+                    var exiting=new OwnedProcess(exitPid,retained);
+                    identity=exitPid+":"+exiting.StartTime.ToUniversalTime().Ticks;
+                    operation="IsProcessInJob(probe)";
+                    bool member; Check(IsProcessInJob(retained,job,out member));
+                    if(!member) throw new InvalidOperationException("Exit probe is not an owned Job member");
+                    if(retainProbe) {
+                        operation="OpenProcess(retained-control)";
+                        probeControl=OpenProcess(0x100000|0x1000,false,exitPid); Check(probeControl!=IntPtr.Zero);
+                        var control=new OwnedProcess(exitPid,probeControl);
+                        if(control.StartTime!=exiting.StartTime) throw new InvalidOperationException("Retained control identity changed");
+                    }
+                    operation="request-probe-exit";
+                    System.IO.File.WriteAllText(exitRequest,"exit after owned membership snapshot");
+                    operation="WaitForSingleObject(probe)";
+                    if(!exiting.WaitForExit(Math.Max(0,Math.Min(3000,remainingBudgetMs-(int)elapsed.ElapsedMilliseconds)))) throw new InvalidOperationException("Exit probe did not terminate within its bound");
+                    observation.probeExitedIdentity=identity;
+                } catch(Exception error) { RecordObservationFailure(observation,error,operation,memberPid,identity); }
+                finally {
+                    CloseObservationHandle(observation,retained,exitPid,identity,false);
+                    if(observation.cleanupFailure==null)
+                        observation.probeObservationEvents.Add("original-probe-released");
+                }
+                if(observation.failure!=null) return observation;
+                // Exit signals termination, not process-object disappearance. Keep the
+                // original membership/creation identity while observing real native
+                // failure. Reopened handles grant observation only, never kill authority.
+                ObserveExitedMember(observation,exitPid,identity,ref probeControl,
+                    Math.Max(0,remainingBudgetMs-(int)elapsed.ElapsedMilliseconds));
+                return observation;
+            }
             var identities=new List<string>();
             for(int index=0;index<count;index++) {
+                operation="member-pid-bounds"; memberPid=null; identity=null;
                 int pid=checked((int)Marshal.ReadIntPtr(info,8+index*IntPtr.Size).ToInt64());
+                memberPid=pid; operation="OpenProcess";
                 var handle=OpenProcess(0x100000|0x1000,false,pid); Check(handle!=IntPtr.Zero);
                 try {
                     // Use a deliberately invalid observation handle in the failure
                     // probe. Containment always retains the real owned Job handle.
-                    var process=new OwnedProcess(pid,fault=="identity-failure" ? IntPtr.Zero : handle);
+                    operation="GetProcessTimes";
+                    var process=new OwnedProcess(pid,(fault=="identity-failure" || fault=="identity-cleanup-failure") ? IntPtr.Zero : handle);
+                    identity=pid+":"+process.StartTime.ToUniversalTime().Ticks;
+                    operation="IsProcessInJob";
                     bool member; Check(IsProcessInJob(handle,job,out member));
+                    operation="owned-job-membership";
                     if(!member) throw new InvalidOperationException("Observed process left owned Job before identity validation");
-                    identities.Add(pid+":"+process.StartTime.ToUniversalTime().Ticks);
+                    identities.Add(identity);
                     observation.members=identities.ToArray();
-                } finally { Check(CloseHandle(handle)); }
+                } catch(Exception error) { RecordObservationFailure(observation,error,operation,memberPid,identity); }
+                finally { CloseObservationHandle(observation,handle,pid,identity,fault=="identity-cleanup-failure"); }
+                if(observation.failure!=null) break;
             }
-        } catch(Exception error) { observation.failure=error.Message; }
-        finally { Marshal.FreeHGlobal(info); }
+        } catch(Exception error) { RecordObservationFailure(observation,error,operation,memberPid,identity); }
+        finally {
+            if(probeControl!=IntPtr.Zero) CloseObservationHandle(observation,probeControl,exitPid,observation.probeExitedIdentity,false);
+            Marshal.FreeHGlobal(info);
+        }
         return observation;
     }
     public static void ReleaseRetained() {
@@ -298,9 +424,13 @@ function Wait-OwnedJobClosure([string]$Fault) {
     $result = @{ outcome='timed-out'; budgetMs=$budgetMs; elapsedMs=0; initialActiveCount=$null; finalActiveCount=$null; initialMembers=@(); finalMembers=@(); failure=$null; observedAt=$null; snapshots=$snapshots }
     try {
         do {
-            $snapshot = [DpfConsoleFixture]::ObserveJob($Fault)
-            $entry = @{ observedAt=[DateTime]::UtcNow.ToString('o'); elapsedMs=$elapsed.ElapsedMilliseconds; activeCount=$snapshot.activeCount; members=@($snapshot.members); failure=$snapshot.failure }
+            $exitPid = 0
+            $exitRequest = Join-Path $config.evidenceDirectory 'probe-exit.request'
+            if ($Fault -in @('exited-member','exited-member-retained')) { $exitPid = [int]((Get-Content -LiteralPath (Join-Path $config.evidenceDirectory 'probe-identity.json') -Raw | ConvertFrom-Json).pid) }
+            $snapshot = [DpfConsoleFixture]::ObserveJob($Fault,$exitPid,$exitRequest,[Math]::Max(0,$budgetMs-[int]$elapsed.ElapsedMilliseconds))
+            $entry = @{ observedAt=[DateTime]::UtcNow.ToString('o'); elapsedMs=$elapsed.ElapsedMilliseconds; activeCount=$snapshot.activeCount; members=@($snapshot.members); failure=$snapshot.failure; failureOperation=$snapshot.failureOperation; failureNativeError=$snapshot.failureNativeError; failurePid=$snapshot.failurePid; failureIdentity=$snapshot.failureIdentity; cleanupFailure=$snapshot.cleanupFailure; cleanupNativeError=$snapshot.cleanupNativeError; probeExitedIdentity=$snapshot.probeExitedIdentity; probeRetainedHandleObserved=$snapshot.probeRetainedHandleObserved; probeRetainedHandleReleased=$snapshot.probeRetainedHandleReleased; probeObservationEvents=@($snapshot.probeObservationEvents) }
             $snapshots.Add($entry)
+            foreach ($field in @('failureOperation','failureNativeError','failurePid','failureIdentity','cleanupFailure','cleanupNativeError')) { $result[$field]=$entry[$field] }
             if ($snapshots.Count -eq 1) { $result.initialActiveCount=$entry.activeCount; $result.initialMembers=$entry.members }
             $result.finalActiveCount=$entry.activeCount; $result.finalMembers=$entry.members; $result.observedAt=$entry.observedAt
             $result.elapsedMs=$elapsed.ElapsedMilliseconds

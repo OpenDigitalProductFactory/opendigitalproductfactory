@@ -233,7 +233,7 @@ enabling, not assumed.
 
 | System | Mechanism | DPF adopts | DPF rejects |
 |---|---|---|---|
-| ServiceNow Incident: `Resolved` then `Closed` | A resolved incident awaits caller confirmation and auto-closes after N days (`glide.ui.autoclose.time`) | A distinct resolved-but-unconfirmed state with a clock on it | Auto-close on timeout. Silence is not acceptance, and `structural-verification-is-not-functional` forbids treating it as one |
+| ServiceNow Incident: `Resolved` then `Closed` | A resolved incident awaits caller confirmation and auto-closes after N days (`glide.ui.autoclose.time`) | A distinct resolved-but-unconfirmed state with a clock on it; since §9, the auto-close on timeout too, for the customer question only | (Until §9) auto-close on timeout |
 | GitLab `gitlab-triage` policies | Scheduled, declarative sweeps over issues by age and label that mention or reassign an owner | A deterministic scheduled sweep keyed on age, routing to an owner, idempotent per run | Label-driven ownership. DPF resolves the owner from grant-backed readiness lanes, not a free-form label |
 | Jira Service Management SLAs | A clock per state with breach and at-risk thresholds, shown on the work item | Age measured from state entry, not last update, and shown where delivery is reported | Per-project SLA configuration. One named threshold serves every install until evidence says otherwise |
 | GitHub auto-merge | A maintainer opts a PR in; it merges only once every required check and review passes, and the opt-in is revocable and attributed | §3.6: an explicit, attributed, revocable opt-in; the action fires only when the existing gate already passes | A per-object opt-in. One install-wide scope suits a pool of hundreds of items |
@@ -289,6 +289,138 @@ remedy is raising the page size, not a redesign.
 - Changing the delivery shapes' `accept` stage from `role:` to an agent. The
   steward room carries the agent stage, so the delivery shape keeps its human
   governed decision for rooms the author drives.
-- Closing items on a timeout or on silence. The only closure is §3.6's: an item
-  the completion gate already allows, under a recorded operator
-  pre-authorisation.
+- ~~Closing items on a timeout or on silence.~~ Superseded for non-customer
+  work by §9 (operator direction 2026-10-27): delivery evidence closes the
+  item, and a customer-reported item's one confirmation question is satisfied
+  by silence after a bounded window. Closures still go only through §3.6's
+  governed transition under the recorded operator pre-authorisation.
+
+## 9. Closure follows delivery (operator direction 2026-10-27)
+
+Backlog item: BI-C899BB40. The completion gate is BI-B1B44777's
+([outcomes define done](2026-10-27-outcomes-define-done-design.md), kernel
+DI-1263D968DC26): a merge closes every item not tagged `contractual`. This
+section adds what that design left alone: the bounded obligation a closure
+records, the acceptance sweep's handling of done items, and the one question to
+a customer submitter. This section supersedes §8's "never on a timeout or on silence" for work no
+customer reported, and the "acceptance remains a separate verification
+obligation" wording of §3.6 and of the delivery-closeout addendum
+(`2026-09-04-delivery-closeout-cost-efficiency-design.md`).
+
+### 9.1 The direction
+
+> "We seem to have more process gates than needed, the actual closure is
+> predicated on seeing results, which unless it's automatable, we don't want
+> to have open items hanging out forever. We have LOTS of items remaining open
+> and no thread to close them automatically. I can't imagine this is how most
+> organizations work, as getting validation is really only required if there
+> is a customer reported thing, and even then a simple question and response
+> would do it." (Mark Bodman, owner of platform doctrine, 2026-10-27)
+
+Measured on the production install the same day: 352 items in
+`awaiting-acceptance`, 318 of them older than seven days, 105 owing
+`ACCEPTANCE_EVIDENCE_REQUIRED` and nothing else. Done items closed by
+canonical deployment were re-selected by the sweep on every run because their
+`acceptanceObligation` was `pending-independent-verification`, which nothing
+could discharge.
+
+### 9.2 The rule
+
+1. **Delivery closes every non-contractual item (BI-B1B44777).** One rule,
+   owned by `deliveryClosesItem` in `backlog-completion-evaluation.ts`: a merge
+   through CI, the merge queue and PR review, or a canonical deployment, closes
+   any item not tagged `contractual`, with acceptance, baseline and
+   reconciliation recognised on the merge. This change adds no second
+   predicate. It reads the result as `closureFollowsDelivery`, a reported fact
+   the terminal transition uses to record the obligation (rule 4). A
+   `contractual` item keeps its acceptance lane and is never a delivery
+   closure.
+2. **Recorded failure still blocks.** The newest evidence in any dimension
+   being a failure (BI-4A222439), an objective reconciliation that failed, a
+   conflicting or malformed baseline, and an xlarge aggregate whose children are
+   not delivered all keep the item open. A merge never outranks a failure.
+3. **Automated checks are the only other post-delivery gate.** An acceptance
+   check declared at filing and run by the platform (BI-B1B44777) is the lane
+   for "not obvious" outcomes. No such declaration exists in the substrate
+   today, so nothing waits on one; when BI-B1B44777 adds it, a declared check
+   that has not yet run holds the close and is the only thing that does.
+4. **No indefinite obligation.** The terminal transition records
+   `acceptanceObligation` on every delivery closure:
+   - `satisfied` when acceptance evidence passed;
+   - `corrective-work-required` when a deployment closure carried a failed
+     acceptance;
+   - `not-owed` for non-contractual work no customer reported;
+   - `pending-submitter-confirmation` for customer-reported, non-contractual
+     work.
+   A `contractual` item closes only through its acceptance lane, so it is
+   never recorded `not-owed`.
+   `pending-independent-verification` is no longer written. A legacy done item
+   carrying it is re-selected only if it is customer-reported, and then only to
+   ask its one question. Every other legacy item is treated as `not-owed`.
+5. **Customer-reported, non-contractual work gets one question.** `isCustomerReported`
+   (`backlog-completion-evaluation.ts`) reads the provenance that exists:
+   lifecycle tag `ecosystem-inbound`, the origin markers
+   `[origin:ecosystem-upstream-issue:`, `[origin:ecosystem-peer-demand:`,
+   `[origin:federatedDemand:` and `[origin:founderDemandCluster:`, a `BI-PIR-`
+   id, or a `Source report:` line (`actions/quality.ts`). `upstreamIssueNumber`
+   is not a customer signal: the issue bridge sets it when this install files
+   its own item upstream, and the bridge already comments when that item closes.
+6. **The question, its answer and its clock.** The sweep sends the question
+   once, records it as a `submitter_confirmation` activity, and observes the
+   answer on later runs:
+   - GitHub origin: one comment through `GitHubForgeAdapter.commentOnIssue`,
+     authenticated with the managed-repository controller credential. With no
+     controller credential it records `question-not-sent` (`no-credential`)
+     and the clock still runs. The item is never held.
+   - A transient send failure (network, 5xx, rate limit) is recorded as
+     `question-attempt-failed` and retried on later runs, at most three
+     attempts in all (`SUBMITTER_QUESTION_MAX_ATTEMPTS`). A permanent one (no
+     credential, 403, 404) is recorded once as `question-not-sent` and not
+     retried. After the last attempt the sweep records `question-not-sent`
+     and stops.
+   - Founder demand cluster: one disposition notice through
+     `queueFounderDispositionNotices`, under its own notice identity so the
+     peer does not dedupe it against the original acceptance notice.
+   - Any other customer origin: `question-not-sent` (`no-channel`).
+   - Answer: the inbound re-poll records the source issue's state changes as
+     `intake_origin` rows (`backlog-origin-reconciliation.ts`). The issue
+     reopened after the question means "not fixed": `fileAcceptanceMiss` files
+     one corrective item and the original stays done. Closed by the submitter
+     means confirmed. No change within 14 days
+     (`SUBMITTER_CONFIRMATION_WINDOW_DAYS`) is `satisfied-by-silence`. Each
+     outcome is recorded with `resolved: true`, and a resolved item is never
+     selected again.
+   - A reply comment is not read: the inbound reader polls issue state, not
+     comments. The question asks the submitter to reopen the issue if the
+     change did not fix it. That is the signal the platform can observe.
+7. **Drain.** The sweep keeps §3.6's governed close and pre-authorisation.
+   Items with delivery evidence now read `allowed` and are closed. Items
+   without it stay where they are. The default per-run bound rises from 25 to
+   100 (`DEFAULT_CLOSE_LIMIT`, the existing maximum), so the measured pool
+   drains in about four daily runs. A recorded authorisation that names its
+   own bound keeps it (the live record says 25). The Admin card shows the
+   bound; to raise it, the operator stops closing and allows it again with
+   the higher number.
+
+### 9.3 Research
+
+| Practice | Mechanism | DPF adopts |
+|---|---|---|
+| Scrum / Kanban Definition of Done | An increment is done when it meets the team's DoD at merge or deploy; nobody re-opens a ticket to prove it again | Delivery evidence is the DoD |
+| GitHub / Linear / Jira auto-close on merge | `Fixes #N` closes the issue when the PR merges; Linear and Jira move the ticket to Done on merge | Merge closes the item; no separate acceptance step |
+| DORA continuous delivery guidance | Post-deployment verification is automated (tests, monitors, rollbacks), not a manual approval gate | Only an automated, declared check may hold a delivered item |
+| Zendesk / Intercom solved-to-closed | A solved ticket asks the requester "did this fix it?"; a reply reopens it, silence auto-closes after a set number of days | The one-question lane, with a 14-day window and the corrective item as the "reopen" |
+| Harness 2 (arXiv 2610.14224) | An agent loop runs under a bounded budget, always concludes, and compares outcomes without a separate verifier | Every obligation has a bound: one question, one window, one recorded outcome |
+
+Rejected: holding delivered work open for an independent reviewer when no
+customer is waiting. It produced the 352-item pool and no extra assurance:
+any later defect is reported by whoever uses the change and becomes a new item.
+
+### 9.4 Acceptance
+
+| Criterion | Statement |
+|---|---|
+| AC-CFD-1 | A merged, green, non-customer item reaches done with `acceptanceObligation: not-owed` and is never selected by the sweep again. |
+| AC-CFD-2 | A customer-reported item closes on delivery and gets exactly one question. A negative answer files one corrective item. Silence past the window records `satisfied-by-silence`. The question is never repeated. |
+| AC-CFD-3 | The sweep closes awaiting-acceptance items whose delivery evidence passes, within the per-run bound, and leaves items without delivery evidence untouched. |
+| AC-CFD-4 | The principles and this specification describe the behaviour that ships. |

@@ -23,3 +23,15 @@ export async function discoverProviderAccount(connectionId: string) {
   const { discoverProviderAccountModels } = await import("@/lib/inference/provider-account-discovery");
   return discoverProviderAccountModels(connectionId);
 }
+
+export async function recheckProviderAccountQuota(connectionId: string, modelId: string, hourly?: boolean) {
+  await requireCapability("manage_provider_connections");
+  const { recheckSubscriptionQuota } = await import("@/lib/inference/subscription-quota-recovery");
+  return recheckSubscriptionQuota(connectionId, modelId, hourly);
+}
+
+export async function stopProviderAccountQuotaRecovery(connectionId: string) {
+  await requireCapability("manage_provider_connections");
+  const { stopSubscriptionQuotaRecovery } = await import("@/lib/inference/subscription-quota-recovery");
+  return stopSubscriptionQuotaRecovery(connectionId);
+}

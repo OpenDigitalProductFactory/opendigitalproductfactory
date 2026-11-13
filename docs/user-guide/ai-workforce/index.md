@@ -47,6 +47,12 @@ outcome is reviewed. The pages in this area own the detail for each of those ste
 
 The roster keeps filter state in the URL. Returning from a coworker record restores the same directory view.
 
+### See What Coworkers Are Doing Now
+
+Open **AI Workforce > Right Now** (`/platform/ai/right-now`) to see active coworkers and the work each one is doing. When the current task belongs to a Workroom, select the task title to open that room's canonical case. The room carries the scope, progress, evidence, decisions, exceptions and next action, so Right Now stays a quick operating view instead of becoming another dashboard.
+
+A task title without a Workroom remains plain text. DPF does not invent an inspection destination or imply that room evidence exists. Use the Workroom to judge what was checked or changed; a running status in Right Now is not proof that the outcome is complete.
+
 An availability label is not a runtime guess. It is projected from the current storefront business type, explicit coworker service declarations, enabled skill assignments, registered tools, effective grants, lifecycle certification, governed blockers, and the same routing requirements used for a representative task from that service. Those routing requirements include task type, tool use, sensitivity clearance, capability and context floors, Golden Triangle priority, model assignment, policy, capacity, and local-only settings. Provider and model assignments are preferences: an eligible fallback may keep work available, while a provider known to need reauthentication or billing repair is not advertised as ready. **Available** means at least one applicable advertised service has verified backing and an eligible task route. The searchable work, area, job description, interaction labels, availability, and named Ask action all describe that same service. A ready service does not make unresolved sibling work ready; each sibling and its evidence remain visible under **Availability evidence**.
 
 Missing declarations or unevaluated readiness appear as **Coverage not defined**. Missing backing appears as **Setup needed**, and lifecycle, safety, or routing blockers appear as **Needs attention**. These states fail closed and do not show the Ask action. A recovery action appears only when DPF has an owner-capable destination that the signed-in operator can access, such as business type, capabilities, capability needs, the runnable certification job, or AI readiness. Platform-managed catalog defects remain visible in Availability evidence without a misleading operator action. Coworker-specific actions preserve the current roster filters. Opening a named Ask action never sends work automatically; the operator must submit a message explicitly.
@@ -209,6 +215,14 @@ The panel reports; it never changes a coworker's authority. Granting a
 permission, assigning a skill, or raising an autonomy level remains a deliberate
 human action.
 
+## Paid AI allowance
+
+Only paid AI counts against a daily limit. Local models and flat-rate subscriptions cost nothing extra per call, so they are never limited. A provider counts as paid when its recorded price per token is above zero. One with no price recorded is treated as paid, and its cost is estimated from the model's known price, or at $3 per million tokens when that is unknown too. Local models are costed from how long they run.
+
+An owner can set one **Paid AI allowance** for the whole installation in **Admin → Platform Development**, under **Daily limits and the autopilot switches**. It is a dollar amount per day, shared by every coworker, and it resets at 00:00 UTC. Setting it needs the platform and finance permissions and a recorded reason. While no allowance is set, each coworker's built-in daily cap limits its paid use instead.
+
+When the allowance is used, a coworker says so, gives the reset time and keeps working on local or subscription models where they can serve. An independent change review reports **daily allowance used** with the reset time. Retrying it before the reset is refused, so no recovery attempt is wasted. Raise the allowance or wait for the reset, then request a fresh review.
+
 ## Authority & Governance
 
 The **Authority** tab (`/platform/ai/authority`) provides visibility into the agent governance model:
@@ -238,6 +252,19 @@ Agent tool availability is the **intersection** of two authority systems:
 2. **Agent tool grants** — what the agent's declared grants in `agent_registry.json` permit
 
 An action is only possible if BOTH allow it. This prevents agents from exceeding their design scope, even when triggered by a user with broad permissions.
+
+### Knowledge Corpus Grants
+A coworker reads three bodies of knowledge, and each has its own grant:
+
+| Knowledge | Grant |
+|---|---|
+| Platform kernel (principles and doctrine) | `wiki_kernel_read` |
+| Your organization's knowledge | `wiki_org_read` |
+| Profession knowledge, for the coworker's own profession family | `wiki_profession_read` |
+
+Every coworker holds all three by default. Revoking one removes that knowledge from search, recall and decision tools for that coworker. If a coworker's job spans several professions, grant it `wiki_profession_read:<family>` once for each extra family.
+
+The coworker's record page shows its **Knowledge corpus** section: which grants it holds and which profession families it can read. The family limit starts in report-only mode, so a coworker that maps to no profession family still reads every family. Each of those reads is recorded, which lets you map the coworker before the limit is enforced. People are never limited by family.
 
 ## Reading Decision Separation
 

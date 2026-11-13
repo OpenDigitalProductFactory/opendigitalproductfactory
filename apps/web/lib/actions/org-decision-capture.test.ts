@@ -26,9 +26,11 @@ vi.mock("@/lib/actions/shared/guards", () => ({ requireCapability: mockRequireCa
 vi.mock("@/lib/decision-perspective/stance-promotion", () => ({ promoteStanceMaterial: vi.fn() }));
 vi.mock("@/lib/wiki/embeddings", () => ({ storeWikiPage: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/wiki/page-links", () => ({ syncWikiPageLinks: vi.fn(async () => ({ error: null })) }));
 
 import { captureOrgDecisionOutcome } from "./org-decision-capture";
 import { upsertWikiPage } from "@dpf/db/wiki-store";
+import { syncWikiPageLinks } from "@/lib/wiki/page-links";
 
 function row(overrides: Record<string, unknown> = {}) {
   return {

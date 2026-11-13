@@ -80,16 +80,23 @@ async function convergeUxSweepWorkCase(db, now) {
   // A room, so the posture section has something to resolve and render.
   const room = await db.workroom.findFirst({
     where: { capsuleId: "WC-UX-SWEEP" },
-    select: { id: true },
+    select: { id: true, scopeClaims: true, updatedAt: true },
   });
   const scopeClaims = [
     { workroomShape: "change-consequential", recordedAt: now.toISOString() },
     { workroomPosture: { proactivityLevel: "balanced" }, recordedAt: now.toISOString() },
   ];
   if (room) {
+    if (!Array.isArray(room.scopeClaims)) throw new Error("Existing fixture room scope is unproven; refusing replacement.");
+    const preserved = room.scopeClaims.flatMap(entry => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [entry];
+      if (!("workroomShape" in entry) && !("workroomPosture" in entry)) return [entry];
+      const { workroomShape, workroomPosture, ...rest } = entry;
+      return Object.keys(rest).some(key => !["recordedAt", "source"].includes(key)) ? [rest] : [];
+    });
     await db.workroom.update({
-      where: { id: room.id },
-      data: { scopeClaims, workItemId: item.id, archivedAt: null },
+      where: { id: room.id, updatedAt: room.updatedAt, scopeClaims: { equals: room.scopeClaims } },
+      data: { scopeClaims: [...preserved, ...scopeClaims], workItemId: item.id, archivedAt: null },
     });
   } else {
     await db.workroom.create({
@@ -112,7 +119,8 @@ async function convergeUxSweepWorkCase(db, now) {
   return { caseKey: encodeURIComponent(`${SOURCE_TYPE}:${SOURCE_ID}`), reason: null };
 }
 
-export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = {}) {
+export async function convergeUxSweepFixture(db, now = new Date(), { dbNull, storefrontArchetype = "pet-rescue" } = {}) {
+  if (!["pet-rescue", "software-platform"].includes(storefrontArchetype)) throw new Error("Invalid fixture business context");
   if (dbNull === undefined) {
     throw new Error("dbNull is required to converge unresolved JSON-null decisions");
   }
@@ -137,7 +145,7 @@ export async function convergeUxSweepFixture(db, now = new Date(), { dbNull } = 
   // list: one pet-rescue storefront on the seeded platform organisation, the
   // animals-available section, and four listed animals covering the ordering
   // rules the owner decided — two dated, one future-dated, one undated.
-  const storefront = await convergeStorefrontFixture(db, now);
+  const storefront = await convergeStorefrontFixture(db, now, storefrontArchetype);
 
   const heartbeat = await db.runtimeTarget.updateMany({
     where: { targetId: "RT-ROOT-PORTAL", status: "running" },
@@ -249,24 +257,34 @@ export async function convergeUxSweepEstate(db, now, persist) {
  * measured-as-redirect and the sweep reports them, rather than the fixture
  * throwing.
  */
-export async function convergeStorefrontFixture(db, now) {
+export async function convergeStorefrontFixture(db, now, archetypeId = "pet-rescue") {
+  if (!["pet-rescue", "software-platform"].includes(archetypeId)) throw new Error("Invalid fixture business context");
   const org = await db.organization.findFirst({ where: { slug: "platform" }, select: { id: true } });
   const archetype = await db.storefrontArchetype.findFirst({
-    where: { archetypeId: "pet-rescue" },
+    where: { archetypeId },
     select: { id: true },
   });
-  if (!org || !archetype) return null;
+  if (!org || !archetype) {
+    if (archetypeId === "software-platform") throw new Error("Missing fixture business context");
+    return null;
+  }
 
   const existing = await db.storefrontConfig.findFirst({
     where: { organizationId: org.id },
-    select: { id: true },
+    select: { id: true, archetypeId: true },
   });
+  if (archetypeId === "software-platform" && existing && existing.archetypeId !== archetype.id)
+    throw new Error("Foreign fixture business context");
   const config =
     existing ??
     (await db.storefrontConfig.create({
       data: { organizationId: org.id, archetypeId: archetype.id, isPublished: false },
       select: { id: true },
     }));
+
+  if (archetypeId === "software-platform") return {
+    storefrontId: config.id, storefrontCreated: !existing, animalsCreated: 0,
+  };
 
   const section = await db.storefrontSection.findFirst({
     where: { storefrontId: config.id, type: "animals-available" },

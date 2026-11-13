@@ -10,28 +10,39 @@ import {
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import {
   INITIATIVE_READINESS_LANES as LANES,
   type InitiativeReadinessLane as Lane,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-context";
-import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS } from "@/lib/tak/terminal-tool-policy";
+import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
+import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
+import { parseQualificationExperimentState,
+  parseQualificationVerificationEvidence, qualificationBindingDigest,
+  verifyQualificationExperimentAdmission } from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+import { normalizeRepositoryArtifactRefInput } from "@/lib/backlog/initiative-readiness/artifact-ref-input";
+import { defaultArtifactRefInputDeps, initiativeWorkedExample, initiativeRetry } from "@/lib/backlog/initiative-readiness/worked-example";
 
 const artifactRefSchema = {
   type: "object",
+  description: "For a repository file pass just {path, headSha}: the server fills kind, the canonical repository, the full commit (a 7+ character prefix is expanded) and providerBlobId. The commit must be pushed.",
   properties: {
-    kind: { type: "string", enum: ["feature-build-revision", "document-version", "repo-blob-at-commit"] },
+    kind: { type: "string", enum: ["feature-build-revision", "document-version", "repo-blob-at-commit", "repo-commit-range"] },
     revisionId: { type: "string" },
     versionId: { type: "string" },
     repositoryFullName: { type: "string" },
     commitSha: { type: "string" },
+    headSha: { type: "string", description: "Alias of commitSha for a repository file." },
     path: { type: "string" },
     providerBlobId: { type: "string" },
+    // BI-46E344FE: a post-implementation review of a merged repair's whole change.
+    ranges: { type: "array", items: { type: "object", properties: { baseSha: { type: "string" }, headSha: { type: "string" } },
+      required: ["baseSha", "headSha"] } },
+    digest: { type: "string" },
   },
-  required: ["kind"],
 };
 
 function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"] {
@@ -103,8 +114,13 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
         },
       },
       ...(name === "record_initiative_evidence" ? {
+        workroomId: { type: "string", description: "Optional exact actor-admitted Workroom selecting current public component research; never supplies source hashes or authority." },
         operation: { type: "string", enum: ["gate-receipt", "objective-mapping"] },
         baselineId: { type: "string" },
+        qualificationEvidenceId: {
+          type: "string",
+          description: "Required when a passing research receipt resolves a finding from a bounded qualification experiment. Must name the exact terminal verification Workroom evidence row.",
+        },
         objectiveMappings: {
           type: "array",
           items: {
@@ -141,9 +157,9 @@ function gateGuidance(lane: Lane): string {
   return ` What satisfies the research gate depends on the item's profile — ${shapes.join(" | ")}.`;
 }
 
-function definitionBase(lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
+function definitionBase(name: string, lane: Lane): Omit<ToolDefinition, "name" | "inputSchema"> {
   return {
-    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.${gateGuidance(lane)}`,
+    description: `Record authenticated initiative evidence for only these gate lanes: ${lane.gates.join(", ")}. Artifact identity, digest, subject, author, reviewer, and authority are server resolved.${gateGuidance(lane)} Worked example: ${initiativeWorkedExample(name, lane)}`,
     requiredCapability: lane.capability,
     executionMode: "immediate",
     sideEffect: true,
@@ -154,52 +170,52 @@ const definitions: ToolDefinition[] = [
   {
     name: "record_initiative_evidence",
     inputSchema: inputSchemaFor("record_initiative_evidence", LANES.record_initiative_evidence),
-    ...definitionBase(LANES.record_initiative_evidence),
+    ...definitionBase("record_initiative_evidence", LANES.record_initiative_evidence),
   },
   {
     name: "record_initiative_design_review",
     inputSchema: inputSchemaFor("record_initiative_design_review", LANES.record_initiative_design_review),
-    ...definitionBase(LANES.record_initiative_design_review),
+    ...definitionBase("record_initiative_design_review", LANES.record_initiative_design_review),
   },
   {
     name: "record_initiative_architecture_review",
     inputSchema: inputSchemaFor("record_initiative_architecture_review", LANES.record_initiative_architecture_review),
-    ...definitionBase(LANES.record_initiative_architecture_review),
+    ...definitionBase("record_initiative_architecture_review", LANES.record_initiative_architecture_review),
   },
   {
     name: "record_initiative_data_review",
     inputSchema: inputSchemaFor("record_initiative_data_review", LANES.record_initiative_data_review),
-    ...definitionBase(LANES.record_initiative_data_review),
+    ...definitionBase("record_initiative_data_review", LANES.record_initiative_data_review),
   },
   {
     name: "record_initiative_ux_review",
     inputSchema: inputSchemaFor("record_initiative_ux_review", LANES.record_initiative_ux_review),
-    ...definitionBase(LANES.record_initiative_ux_review),
+    ...definitionBase("record_initiative_ux_review", LANES.record_initiative_ux_review),
   },
   {
     name: "record_initiative_security_review",
     inputSchema: inputSchemaFor("record_initiative_security_review", LANES.record_initiative_security_review),
-    ...definitionBase(LANES.record_initiative_security_review),
+    ...definitionBase("record_initiative_security_review", LANES.record_initiative_security_review),
   },
   {
     name: "record_initiative_compliance_review",
     inputSchema: inputSchemaFor("record_initiative_compliance_review", LANES.record_initiative_compliance_review),
-    ...definitionBase(LANES.record_initiative_compliance_review),
+    ...definitionBase("record_initiative_compliance_review", LANES.record_initiative_compliance_review),
   },
   {
     name: "record_initiative_domain_review",
     inputSchema: inputSchemaFor("record_initiative_domain_review", LANES.record_initiative_domain_review),
-    ...definitionBase(LANES.record_initiative_domain_review),
+    ...definitionBase("record_initiative_domain_review", LANES.record_initiative_domain_review),
   },
   {
     name: "record_initiative_post_implementation_review",
     inputSchema: inputSchemaFor("record_initiative_post_implementation_review", LANES.record_initiative_post_implementation_review),
-    ...definitionBase(LANES.record_initiative_post_implementation_review),
+    ...definitionBase("record_initiative_post_implementation_review", LANES.record_initiative_post_implementation_review),
   },
   {
     name: "record_initiative_archetype_review",
     inputSchema: inputSchemaFor("record_initiative_archetype_review", LANES.record_initiative_archetype_review),
-    ...definitionBase(LANES.record_initiative_archetype_review),
+    ...definitionBase("record_initiative_archetype_review", LANES.record_initiative_archetype_review),
   },
 ];
 
@@ -220,6 +236,43 @@ function parseStringArray(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string" && entry.trim())
     ? value as string[]
     : null;
+}
+
+async function qualificationEvidenceSupportsResearch(itemId: string, evidenceId: string): Promise<boolean> {
+  const activity = await prisma.workroomActivity.findUnique({ where: { id: evidenceId },
+    select: { id: true, workCapsuleId: true, payload: true } });
+  if (!activity) return false;
+  const room = await prisma.workroom.findUnique({ where: { id: activity.workCapsuleId },
+    select: { backlogItemId: true, workspaceState: true } });
+  if (!room || room.backlogItemId !== itemId || !room.workspaceState || typeof room.workspaceState !== "object"
+    || Array.isArray(room.workspaceState)) return false;
+  const state = parseQualificationExperimentState(
+    (room.workspaceState as Record<string, unknown>).qualificationExperimentAdmission,
+  );
+  if (!state || state.status !== "settled" || state.evidenceId !== evidenceId) return false;
+  const admission = verifyQualificationExperimentAdmission(state.token, { allowExpired: true });
+  if (!admission.ok || admission.data.binding.phase !== "verify"
+    || admission.data.bindingDigest !== state.bindingDigest) return false;
+  const payload = activity.payload && typeof activity.payload === "object" && !Array.isArray(activity.payload)
+    ? activity.payload as Record<string, unknown> : null;
+  const result = payload?.result && typeof payload.result === "object" && !Array.isArray(payload.result)
+    ? payload.result as Record<string, unknown> : null;
+  const proof = parseQualificationVerificationEvidence(result);
+  if (result?.qualificationOutcome !== "positive" || !proof
+    || proof.executorMode !== admission.data.binding.executorMode
+    || proof.requiredPlatform !== admission.data.binding.requiredPlatform
+    || proof.headSha.toLowerCase() !== admission.data.binding.candidate?.headSha.toLowerCase()
+    || canonicalJson(proof.testBlobIds) !== canonicalJson(admission.data.binding.candidate?.testBlobIds)
+    || result.qualificationBindingDigest !== qualificationBindingDigest(admission.data.binding)) return false;
+  if (admission.data.binding.executorMode === "workroom-host") {
+    // The current Workroom writer authenticates the submitter but does not
+    // independently observe a host process. Caller metadata cannot satisfy
+    // research, even when every field matches the signed binding.
+    return false;
+  }
+  // Historical sandbox receipts are auditable but not sufficient evidence:
+  // they do not prove which sandbox, source tree, or test cases actually ran.
+  return false;
 }
 
 function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; evidenceRefs: string[] }> | null {
@@ -295,8 +348,9 @@ async function resolveExternalInitiativeReviewBinding(
     && typeof artifact["revisionId"] === "string" && artifact["revisionId"].trim().length > 0;
   const isDocument = artifact["kind"] === "document-version"
     && typeof artifact["versionId"] === "string" && artifact["versionId"].trim().length > 0;
+  const commitRange = parseRepoCommitRangeRef(artifact);
   if (
-    (!isRepoBlob && !isRevision && !isDocument)
+    (!isRepoBlob && !isRevision && !isDocument && !commitRange)
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
@@ -314,6 +368,7 @@ async function resolveExternalInitiativeReviewBinding(
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
     artifactRef: isDocument ? { kind: "document-version", versionId: (artifact["versionId"] as string).trim() }
+      : commitRange ? commitRange
       : isRevision
       ? { kind: "feature-build-revision", revisionId: (artifact["revisionId"] as string).trim() }
       : {
@@ -350,20 +405,57 @@ async function resolveStewardRoomBinding(
   return { binding: { ...binding, artifactRef: binding.artifactRef as InitiativeArtifactRef } };
 }
 
-function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
-  return async (params, userId, context): Promise<ToolResult> => {
+/**
+ * BI-AA47C672: a platform post-implementation review room's scheduled run may
+ * write only the review the platform issued that room, for its item, while
+ * readiness still issues it (platform-review-room.ts). Null for every other
+ * run, which is untouched.
+ */
+async function resolvePlatformReviewBinding(
+  actionKey: string,
+  taskRunId: string | undefined,
+): Promise<{ binding: ExternalInitiativeReviewBinding } | { refusal: ToolResult } | null> {
+  const { PLATFORM_REVIEW_WRITERS } = await import("@/lib/work-management/platform-review-shape");
+  if (!(PLATFORM_REVIEW_WRITERS as readonly string[]).includes(actionKey)) return null;
+  const { resolvePlatformReviewRunBinding } = await import("@/lib/backlog/initiative-readiness/platform-review-room");
+  const platform = await resolvePlatformReviewRunBinding(taskRunId);
+  if (!platform) return null;
+  if (!platform.ok) {
+    return { refusal: { success: false, error: "platform-review-packet-unavailable", message: `This room holds no current platform-issued review it may record (${platform.reason}). Record what blocked you with record_workroom_evidence; the reviewer dispatch issues a current packet while the review is owed.` } };
+  }
+  const { binding } = platform.data;
+  return { binding: {
+    itemId: binding.itemId,
+    gate: binding.gate,
+    artifactRef: binding.artifactRef as InitiativeArtifactRef,
+    ...(binding.workroomRef ? { workroomRef: binding.workroomRef } : {}),
+    ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId") ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId ?? null } : {}),
+  } };
+}
+
+/** One trusted binding selection for admission and execution; caller fields never replace it. */
+async function prepareInitiativeWrite(actionKey: string, lane: Lane, params: Record<string, unknown>,
+  context?: ToolExecutionContext): Promise<{ params: Record<string, unknown>; binding: ExternalInitiativeReviewBinding | null;
+    platformReview: boolean } | { refusal: ToolResult }> {
     const resolved = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
     let binding = resolved.binding;
-    if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
-      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
+    if (binding?.workroomRef === null) return { refusal: { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
+      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." } };
     if (lane.independent && resolved.externalMcp && !resolved.validated) {
-      return { success: false, error: "initiative_review_binding_required",
-        message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." };
+      return { refusal: { success: false, error: "initiative_review_binding_required",
+        message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." } };
     }
     if (!binding) {
       const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
-      if (steward && "refusal" in steward) return steward.refusal;
+      if (steward && "refusal" in steward) return steward;
       if (steward) binding = steward.binding;
+    }
+    // BI-AA47C672: the platform's own reviewer, dispatched with no client token.
+    let platformReview = false;
+    if (!binding) {
+      const platform = await resolvePlatformReviewBinding(actionKey, context?.taskRunId);
+      if (platform && "refusal" in platform) return platform;
+      if (platform) { binding = platform.binding; platformReview = true; }
     }
     if (binding) {
       params = {
@@ -376,6 +468,38 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
           : {}),
       };
     }
+    return { params, binding, platformReview };
+}
+
+/** Read-only admission for the ordinary evidence lane, before any owner escalation. */
+export async function preflightInitiativeEvidence(params: Record<string, unknown>, userId: string,
+  context?: ToolExecutionContext): Promise<ToolResult | null> {
+  const prepared = await prepareInitiativeWrite("record_initiative_evidence", LANES.record_initiative_evidence, params, context);
+  if ("refusal" in prepared) return prepared.refusal;
+  let admitted = prepared.params;
+  // BI-7BA59B8C: admission runs on raw params and applies the strict locator
+  // schema, so the documented {path, headSha} shorthand was refused here before
+  // the handler's completion step could fill it in. Complete it on the same
+  // terms the handler uses (BI-DF34D948) so one shape is accepted by both. A
+  // binding already supplies a complete locator, so leave that path untouched.
+  if ((admitted.operation ?? "gate-receipt") === "gate-receipt" && !prepared.binding
+    && admitted.artifactRef && typeof admitted.artifactRef === "object") {
+    const normalized = await normalizeRepositoryArtifactRefInput(admitted.artifactRef,
+      await defaultArtifactRefInputDeps(), { tool: "record_initiative_evidence", args: admitted });
+    if (!normalized.ok) return normalized.refusal;
+    admitted = { ...admitted, artifactRef: normalized.data.artifactRef };
+  }
+  const { preflightEvidenceArtifact } = await import("@/lib/backlog/initiative-readiness/evidence-preflight");
+  return preflightEvidenceArtifact({ params: admitted, userId, context,
+    workroomRef: prepared.binding?.workroomRef ?? undefined });
+}
+
+function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
+  return async (params, userId, context): Promise<ToolResult> => {
+    const prepared = await prepareInitiativeWrite(actionKey, lane, params, context);
+    if ("refusal" in prepared) return prepared.refusal;
+    const { binding, platformReview } = prepared;
+    params = prepared.params;
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);
@@ -383,7 +507,9 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         ? binding.expectedCurrentBaselineId
         : params.baselineId;
       if (typeof baselineId !== "string" || !baselineId.trim() || !mappings) {
-        return { success: false, error: "malformed-receipt", message: "Objective mapping requires a current baselineId and non-empty objective/evidence mappings." };
+        return { success: false, error: "malformed-receipt", message: `Objective mapping requires a current baselineId and non-empty objective/evidence mappings. ${initiativeRetry(actionKey, params, {
+          baselineId: typeof baselineId === "string" && baselineId.trim() ? baselineId : "<current baselineId from get_backlog_item readiness>",
+          objectiveMappings: mappings ?? [{ objectiveId: "OBJ-1", evidenceRefs: ["<evidence activity id>"] }] })}` };
       }
       const result = await recordInitiativeObjectiveMappingProposal({
         taskRunId: context?.taskRunId ?? null,
@@ -402,7 +528,7 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         : { success: false, error: result.code, message: result.error };
     }
     if (operation !== "gate-receipt") {
-      return { success: false, error: "malformed-receipt", message: `${actionKey} does not support that operation.` };
+      return { success: false, error: "malformed-receipt", message: `${actionKey} does not support that operation. ${initiativeRetry(actionKey, params, { operation: "gate-receipt" })}` };
     }
     const gate = params.gate;
     const decision = params.decision;
@@ -410,19 +536,37 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       return { success: false, error: "gate-not-authorized", message: `${actionKey} cannot record that gate.` };
     }
     if (decision !== "pass" && decision !== "fail" && decision !== "not-applicable") {
-      return { success: false, error: "malformed-receipt", message: "decision must be pass, fail, or not-applicable." };
+      return { success: false, error: "malformed-receipt", message: `decision must be pass, fail, or not-applicable. ${initiativeRetry(actionKey, params, { decision: "pass" })}` };
     }
     if (!params.artifactRef || typeof params.artifactRef !== "object") {
-      return { success: false, error: "malformed-receipt", message: "artifactRef is required." };
+      return { success: false, error: "malformed-receipt", message: `artifactRef is required. ${initiativeRetry(actionKey, params, {
+        artifactRef: { path: "docs/superpowers/specs/<file>.md", headSha: "<40-hex output of git rev-parse HEAD>" } })}` };
+    }
+    if (!binding) {
+      // BI-DF34D948: complete a caller's {path, headSha} instead of refusing it.
+      const normalized = await normalizeRepositoryArtifactRefInput(params.artifactRef, await defaultArtifactRefInputDeps(),
+        { tool: actionKey, args: params });
+      if (!normalized.ok) return normalized.refusal;
+      params = { ...params, artifactRef: normalized.data.artifactRef };
     }
     const findings = parseFindings(params.findings);
     const resolvedFindingRefs = parseStringArray(params.resolvedFindingRefs);
     if (!findings || !resolvedFindingRefs) {
-      return { success: false, error: "malformed-receipt", message: "findings and resolvedFindingRefs must match the governed receipt schema." };
+      return { success: false, error: "malformed-receipt", message: `findings and resolvedFindingRefs must be arrays: findings is [] on a pass, and each failing finding is {issue, severity: "critical"|"important"}; resolvedFindingRefs is [] unless closing open finding ids. ${initiativeRetry(actionKey, params, {
+        findings: Array.isArray(params.findings) ? params.findings : [], resolvedFindingRefs: [] })}` };
     }
     const dispositionError = validateInitiativeDisposition(decision, findings, resolvedFindingRefs);
-    if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
-    if (binding && findings.length > 0 && binding.artifactRef.kind === "repo-blob-at-commit") {
+    if (dispositionError) return { success: false, error: "malformed-receipt", message: `${dispositionError} ${initiativeRetry(actionKey, params,
+      decision === "pass" ? { findings: [], resolvedFindingRefs } : { findings: findings.length ? findings : [{ issue: "<the blocking defect>", severity: "important" }], resolvedFindingRefs })}` };
+    const qualificationEvidenceId = typeof params.qualificationEvidenceId === "string"
+      ? params.qualificationEvidenceId.trim() : "";
+    if (gate === "research" && decision === "pass" && resolvedFindingRefs.includes("IF-91E987DA433B0C82")
+      && (!qualificationEvidenceId || !await qualificationEvidenceSupportsResearch(String(params.itemId ?? ""), qualificationEvidenceId))) {
+      return { success: false, error: "qualification-evidence-required",
+        message: "Resolving IF-91E987DA433B0C82 requires the exact positive terminal verification evidence from the bound qualification experiment." };
+    }
+    if (binding && findings.length > 0
+      && (binding.artifactRef.kind === "repo-blob-at-commit" || binding.artifactRef.kind === "repo-commit-range")) {
       const reads = await prisma.toolExecution.findMany({
         where: { taskRunId: context?.taskRunId, toolName: { in: [...IMMUTABLE_PAGE_READER_TOOLS] }, success: true },
         orderBy: { createdAt: "asc" },
@@ -434,11 +578,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       for (const finding of findings) {
         const evidence = finding.evidence;
         const artifact = binding.artifactRef;
+        // The reader identity of a blob or (BI-46E344FE) a whole commit range.
+        const read = immutableReaderArgumentsFor(artifact);
         let matchedRead = evidence && reads.some((row) => {
           const page = (row.result as { data?: Record<string, unknown> } | null)?.data;
-          return page && page.version === artifact.commitSha && page.path === artifact.path
+          return page && page.version === read.version && page.path === read.path
             && page.repositoryFullName === artifact.repositoryFullName
-            && findingEvidenceMatchesRead(evidence, page, artifact.providerBlobId);
+            && findingEvidenceMatchesRead(evidence, page, read.expectedBlobId);
         });
         if (!matchedRead && evidence && contentFreeReads) {
           const dispatch = context?.governedDispatch;
@@ -457,14 +603,14 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     const selectedProfile = params.profile;
     if (gate === "classification" && decision === "pass"
       && !(selectedProfile === "doc-only" || selectedProfile === "fix" || selectedProfile === "feature" || selectedProfile === "cross-domain" || selectedProfile === "archetype")) {
-      return { success: false, error: "malformed-receipt", message: "Passing classification requires a governed profile." };
+      return { success: false, error: "malformed-receipt", message: `Passing classification requires a governed profile (doc-only, fix, feature, cross-domain or archetype). ${initiativeRetry(actionKey, params, { profile: "fix" })}` };
     }
     if (gate === "spec-approval" && decision === "pass") {
       const profile = params.profile;
       const artifactRole = params.artifactRole;
       if (!(profile === "doc-only" || profile === "fix" || profile === "feature" || profile === "cross-domain" || profile === "archetype")
         || !(artifactRole === "design-spec" || artifactRole === "problem-statement" || artifactRole === "documentation-scope")) {
-        return { success: false, error: "malformed-receipt", message: "Passing spec approval requires profile and artifactRole." };
+        return { success: false, error: "malformed-receipt", message: `Passing spec approval requires profile and artifactRole. ${initiativeRetry(actionKey, params, { profile: "feature", artifactRole: "design-spec" })}` };
       }
       const approval = await recordInitiativeSpecApproval({
         itemId: String(params.itemId ?? ""),
@@ -512,13 +658,17 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       boundReviewTask: lane.independent ? binding?.boundReviewTask : undefined,
       workroomRef: binding?.workroomRef ?? undefined,
       expectedCurrentBaselineId: binding?.expectedCurrentBaselineId,
+      sourceWorkroomId: params.workroomId,
       reason: String(params.reason ?? ""),
       findings,
       resolvedFindingRefs,
       reviewerUserId: userId,
       reviewerAgentId: context?.agentId ?? null,
       authorityDecisionId: context?.authorityDecisionId ?? null,
-      tokenScope: context?.tokenScope ?? null,
+      // A platform review run carries no client token: it writes under the
+      // platform's own authority, recorded as such (platform-review-room.ts).
+      tokenScope: context?.tokenScope ?? (platformReview
+        ? (await import("@/lib/backlog/initiative-readiness/platform-review-room")).PLATFORM_REVIEW_TOKEN_SCOPE : null),
       requiresIndependentReviewer: lane.independent,
       authorizationParams: params,
       selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,

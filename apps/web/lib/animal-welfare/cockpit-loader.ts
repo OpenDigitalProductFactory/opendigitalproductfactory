@@ -1,3 +1,4 @@
+import { loadCanonicalAnimalPopulation, type AnimalOperatingFactsClient } from "./operating-facts";
 import { prisma } from "@dpf/db";
 
 import { loadWardBoard, type WardStoreClient } from "@/lib/ward/ward-store";
@@ -371,13 +372,7 @@ export async function loadRescueCockpitData(
 
   const results = await Promise.all([
     observe(async () => {
-      const [inCare, intakeReview, legalHold, placementReady] = await Promise.all([
-        prisma.animalProfile.count({ where: { organizationId, lifecycleStatus: { in: ["in_care", "placement_ready"] } } }),
-        prisma.animalCustodyEpisode.count({ where: { organizationId, closedAt: null, currentStage: "intake" } }),
-        prisma.animalCustodyEpisode.count({ where: { organizationId, closedAt: null, legalHoldActive: true } }),
-        prisma.animalProfile.count({ where: { organizationId, lifecycleStatus: "placement_ready" } }),
-      ]);
-      return { inCare, intakeReview, legalHold, placementReady };
+      return loadCanonicalAnimalPopulation(prisma as unknown as AnimalOperatingFactsClient, organizationId);
     }, (value) => value.inCare === 0, "Animal records could not be read."),
     observe(async () => {
       const board = await loadWardBoard({ organizationId, db: prisma as unknown as WardStoreClient });

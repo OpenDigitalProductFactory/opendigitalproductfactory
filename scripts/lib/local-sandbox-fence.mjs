@@ -122,6 +122,22 @@ export function isProcessAlive(pid) {
   }
 }
 
+// Unlike the legacy boolean probe, only ESRCH proves absence. A reused PID,
+// permission failure or unreadable birth identity retains uncertainty.
+export function inspectProcessIdentity(owner, { kill = process.kill, processIdentity = readProcessIdentity } = {}) {
+  if (!Number.isInteger(owner?.pid) || owner.pid <= 0 || !owner.processIdentity) return { status: "unknown", reason: "missing-process-identity" };
+  try { kill(owner.pid, 0); } catch (error) {
+    return error?.code === "ESRCH" ? { status: "absent", reason: "process-not-found" }
+      : { status: "unknown", reason: error?.code ?? "probe-failed" };
+  }
+  try {
+    const identity = processIdentity(owner.pid);
+    if (!identity) return { status: "unknown", reason: "birth-identity-unreadable" };
+    return identity === owner.processIdentity ? { status: "live", reason: "same-process" }
+      : { status: "unknown", reason: "pid-reused" };
+  } catch { return { status: "unknown", reason: "birth-identity-probe-failed" }; }
+}
+
 export function readProcessIdentity(
   pid,
   {

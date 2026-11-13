@@ -27,6 +27,11 @@ import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { loadTaskInitiativeReviewOutcome, reconcilePersistedReviewStatus } from "./mcp-task-review-outcome";
 
 export { REMOTE_TASK_EXECUTION_EVENT };
+function sameCallEngagement(row: { progressPayload?: unknown; a2aMetadata?: unknown }): boolean {
+  const binding = record(record(row.a2aMetadata)?.engagementBinding);
+  return record(record(row.progressPayload)?.engagementPresent)?.mode === "same-governed-call"
+    || Boolean(binding && Object.hasOwn(binding, "presentAssessment"));
+}
 
 /** Shared admission for the reconciler and worker. A missing call can retry;
  * a recorded writer call is an outcome/approval to reconcile, never to guess. */
@@ -67,7 +72,7 @@ export async function automaticReviewerRecoveryWait(row: {
 export async function healParkedReviewFromReceipt(row: {
   taskRunId: string; status: string; updatedAt: Date; progressPayload: unknown; a2aMetadata: unknown;
 }): Promise<boolean> {
-  if (row.status !== "input-required" && row.status !== "submitted") return false;
+  if (!["input-required", "submitted", "failed"].includes(row.status)) return false;
   const metadata = record(row.a2aMetadata);
   if (metadata?.["trigger"] !== "external-mcp") return false;
   const binding = parseInitiativeReviewBinding(metadata["initiativeReviewBinding"]);
@@ -182,9 +187,9 @@ export async function enqueuePersistedRemoteTask(input: {
   if (!input.projectionAlreadyPersisted) {
     const current = await prisma.taskRun.findUnique({
       where: { taskRunId: input.taskRunId },
-      select: { status: true, updatedAt: true, progressPayload: true },
+      select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true },
     });
-    if (!current || (current.status !== "working" && current.status !== "submitted")) {
+    if (!current || sameCallEngagement(current) || (current.status !== "working" && current.status !== "submitted")) {
       return { eventId, queued: false, error: "TaskRun dispatch reservation is no longer available." };
     }
     const reserved = await prisma.taskRun.updateMany({
@@ -208,12 +213,13 @@ export async function enqueuePersistedRemoteTask(input: {
   }
   const snapshot = await prisma.taskRun.findUnique({
     where: { taskRunId: input.taskRunId },
-    select: { status: true, updatedAt: true, progressPayload: true },
+    select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true },
   });
   const snapshotProgress = record(snapshot?.progressPayload) ?? {};
   const snapshotDispatch = priorDispatch(snapshot?.progressPayload);
   if (
     !snapshot
+    || sameCallEngagement(snapshot)
     || snapshot.status !== "submitted"
     || snapshotDispatch.state !== "pending"
     || snapshotDispatch.eventId !== eventId
@@ -337,7 +343,9 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     progressPayload: { path: ["resourceWait", "kind"], equals: "provider-capacity" },
   };
   const missingReviewerReceipt: Prisma.TaskRunWhereInput = {
-    status: "input-required",
+    // Failed writer waits can hold a committed exact-task receipt too. Only
+    // input-required waits remain eligible for automatic inference recovery.
+    status: { in: ["input-required", "failed"] },
     archivedAt: null,
     actionEnvelopes: { none: {} },
     a2aMetadata: { path: ["trigger"], equals: "external-mcp" },
@@ -347,20 +355,30 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
       { progressPayload: { path: ["terminalWriterWait", "attempt"], lt: TERMINAL_WRITER_MAX_ATTEMPTS } },
     ],
   };
-  const rows = await prisma.taskRun.findMany({
+  // BI-AF428359: one bounded, oldest-first read PER CATEGORY. A single shared
+  // window let rows the loop below never acts on (e.g. exhausted reviewer-receipt
+  // waits, whose updatedAt never moves) fill every slot, so no newer category —
+  // capacity waits included — was ever reached again.
+  const take = Math.min(Math.max(input?.limit ?? 25, 1), 100);
+  const categories: Prisma.TaskRunWhereInput[] = [
+    durableSubmitted,
+    durableAdmitting,
+    resourceWaitSubmitted,
+    missingReviewerReceipt,
+    ...(input?.includeOrdinary === false ? [] : [ordinarySubmitted]),
+  ];
+  const batches = await Promise.all(categories.map((category) => prisma.taskRun.findMany({
     where: {
       updatedAt: { lt: cutoff },
       ...(input?.taskRunId ? { taskRunId: input.taskRunId } : {}),
-      OR: [
-        durableSubmitted,
-        durableAdmitting,
-        resourceWaitSubmitted,
-        missingReviewerReceipt,
-        ...(input?.includeOrdinary === false ? [] : [ordinarySubmitted]),
-      ],
+      OR: [category],
     },
-    orderBy: { updatedAt: "asc" },
-    take: Math.min(Math.max(input?.limit ?? 25, 1), 100),
+    // Reviewer-receipt waits the loop cannot recover (a writer or envelope
+    // already exists, or the wait no longer parses) are never touched, so
+    // oldest-first would let them hold this category's window too. Newest
+    // first keeps fresh recoverable waits in reach while those age out.
+    orderBy: { updatedAt: category === missingReviewerReceipt ? "desc" : "asc" },
+    take,
     select: {
       id: true,
       taskRunId: true,
@@ -370,7 +388,11 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
       progressPayload: true,
       a2aMetadata: true,
     },
-  });
+  })));
+  const seen = new Set<string>();
+  const rows = batches.flat()
+    .filter((row) => (seen.has(row.id) ? false : (seen.add(row.id), true)))
+    .sort((left, right) => left.updatedAt.getTime() - right.updatedAt.getTime());
 
   let enqueued = 0;
   let exhausted = 0;
@@ -378,6 +400,8 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
   for (const row of rows) {
     const progress = record(row.progressPayload) ?? {};
     const metadata = record(row.a2aMetadata);
+    // A same-handler assessment has no durable execution outbox.
+    if (sameCallEngagement(row)) { raced += 1; continue; }
     const durableMetadata = parseDurableInferenceTaskMetadata(metadata?.["durableInference"]);
     const durableProgress = parseDurableInferenceProgress(progress["durableInference"]);
     const isDurableCandidate = Boolean(
@@ -578,7 +602,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
     }
     const reservedSnapshot = await prisma.taskRun.findUnique({
       where: { taskRunId: row.taskRunId },
-      select: { status: true, updatedAt: true, progressPayload: true },
+      select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true },
     });
     const reservedProgress = record(reservedSnapshot?.progressPayload) ?? {};
     const reservedDispatch = priorDispatch(reservedSnapshot?.progressPayload);

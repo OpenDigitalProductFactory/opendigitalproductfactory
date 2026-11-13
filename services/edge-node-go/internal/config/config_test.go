@@ -1,9 +1,49 @@
 package config
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestManagedInferenceRequiresExplicitCompleteNativeMacProvisioning(t *testing.T) {
+	clearEnv(t)
+	t.Setenv(EnvAuthorityURL, "http://localhost:3000")
+	t.Setenv(EnvPlatformOverride, "darwin")
+	cfg, err := Load("fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ManagedInferenceConfigured() {
+		t.Fatal("feature enabled without native provisioning")
+	}
+	t.Setenv(EnvManagedInferenceEnabled, "1")
+	t.Setenv(EnvStateDir, "/state/edge-node")
+	t.Setenv(EnvManagedInferenceRoot, "/state/native-inference-controller/"+strings.Repeat("a", 40))
+	t.Setenv(EnvManagedInferenceManifest, strings.Repeat("b", 64))
+	t.Setenv(EnvManagedInferenceSource, strings.Repeat("a", 40))
+	t.Setenv(EnvManagedInferenceState, "/state")
+	t.Setenv(EnvManagedInferenceBaseline, "/host/.docker/bin/inference/llama-server")
+	cfg, err = Load("fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ManagedInferenceOptIn || cfg.ManagedInferenceSource != strings.Repeat("a", 40) {
+		t.Fatal("native installer binding not loaded")
+	}
+	if cfg.ManagedInferenceConfigured() != (runtime.GOOS == "darwin" && runtime.GOARCH == "arm64") {
+		t.Fatal("unqualified platform configured")
+	}
+	cfg.ManagedInferenceManifest = ""
+	if cfg.ManagedInferenceConfigured() {
+		t.Fatal("partial native provisioning enabled")
+	}
+	cfg.ManagedInferenceManifest = strings.Repeat("b", 64)
+	cfg.InstallMode = "container-host"
+	if cfg.ManagedInferenceConfigured() {
+		t.Fatal("container runtime enabled native host handler")
+	}
+}
 
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
@@ -22,6 +62,7 @@ func clearEnv(t *testing.T) {
 		EnvEdgeActionURL, EnvEdgeActionCAFile, EnvEdgeActionCertFile,
 		EnvEdgeActionKeyFile, EnvEdgeActionSigningPublicKeyFile,
 		EnvInstallRoot, EnvOrganizationTrustRole, EnvPkiDir, EnvOrganizationCAURL,
+		EnvManagedInferenceEnabled, EnvManagedInferenceRoot, EnvManagedInferenceManifest, EnvManagedInferenceSource, EnvManagedInferenceState, EnvManagedInferenceBaseline,
 	} {
 		t.Setenv(k, "")
 	}

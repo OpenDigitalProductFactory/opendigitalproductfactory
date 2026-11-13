@@ -138,30 +138,46 @@ export function formatChildOutput(output, limit = CHILD_OUTPUT_LINE_LIMIT) {
 // Pure orchestrator: run every guard (and its self-test) through the injected
 // `spawn`, sorting outcomes into genuine violations vs runner failures. No
 // process I/O, so tests can inject killed/errored/violating spawn results.
-export function runGuards({ guards, tests, spawn, maxRetries = DEFAULT_SPAWN_RETRIES }) {
+//
+// `results` (BI-FEDD8F45) carries one verdict and duration per guard for the
+// guard outcome record. A failing self-test is `self-test-failed`, not
+// `refused`: the guard failed, not the code it checks.
+export function runGuards({ guards, tests, spawn, maxRetries = DEFAULT_SPAWN_RETRIES, now = Date.now }) {
   const violations = [];
   const runnerFailures = [];
+  const results = [];
   const run = (argv) => spawnWithRunnerRetry(argv, { spawn, maxRetries });
 
   for (const guard of guards) {
+    const startedAt = now();
+    const finish = (verdict) => results.push({ guard, verdict, durationMs: Math.max(0, now() - startedAt) });
     const testFile = guard.replace(/\.mjs$/, ".test.mjs");
     if (tests.has(testFile)) {
       const t = run(["--test", join(SCRIPTS_DIR, testFile)]);
       if (t.outcome === SPAWN_OUTCOME.RUNNER_FAILURE) {
         runnerFailures.push(`${testFile} (guard self-test) — ${t.detail}`);
+        finish("runner-failed");
         continue; // couldn't run the self-test; don't run the guard on this pass
       }
       if (t.outcome === SPAWN_OUTCOME.VIOLATION) {
         violations.push(`${testFile} (guard self-test)${formatChildOutput(t.output)}`);
+        finish("self-test-failed");
         continue; // don't run a guard whose own logic is broken
       }
     }
     const r = run([join(SCRIPTS_DIR, guard)]);
-    if (r.outcome === SPAWN_OUTCOME.RUNNER_FAILURE) runnerFailures.push(`${guard} — ${r.detail}`);
-    else if (r.outcome === SPAWN_OUTCOME.VIOLATION) violations.push(guard);
+    if (r.outcome === SPAWN_OUTCOME.RUNNER_FAILURE) {
+      runnerFailures.push(`${guard} — ${r.detail}`);
+      finish("runner-failed");
+    } else if (r.outcome === SPAWN_OUTCOME.VIOLATION) {
+      violations.push(guard);
+      finish("refused");
+    } else {
+      finish("passed");
+    }
   }
 
-  return { violations, runnerFailures };
+  return { violations, runnerFailures, results };
 }
 
 // Pure summary: decide the exit code and the exact operator lines from a run.
@@ -192,7 +208,7 @@ export function summarizeGuardRun({ guards, tests, violations, runnerFailures })
   return { exitCode: 0, lines };
 }
 
-export function main() {
+export async function main() {
   const { guards, tests } = discoverGuardFiles(readdirSync(SCRIPTS_DIR));
 
   if (guards.length === 0) {
@@ -212,13 +228,46 @@ export function main() {
       ? spawnSync(process.execPath, argv, { cwd: REPO_ROOT, encoding: "utf8", env })
       : spawnSync(process.execPath, argv, { cwd: REPO_ROOT, stdio: "inherit", env });
 
-  const { violations, runnerFailures } = runGuards({ guards, tests, spawn });
+  const startedAt = Date.now();
+  const { violations, runnerFailures, results } = runGuards({ guards, tests, spawn });
   const { exitCode, lines } = summarizeGuardRun({ guards, tests, violations, runnerFailures });
 
   console.log("");
   const sink = exitCode === 0 ? console.log : console.error;
   for (const line of lines) sink(line);
+  // BI-FEDD8F45: spool the run's outcome record. Observation only: it never
+  // changes the exit code, and the pregate run that called us submits it.
+  await recordGuardLoopRun({ results, startedAt });
   process.exit(exitCode);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main();
+/** Build and spool the guard-loop outcome record. Never throws. */
+export async function recordGuardLoopRun({ results, startedAt, repoRoot = REPO_ROOT }) {
+  try {
+    const record = await import("./lib/guard-outcome-record.mjs");
+    const { guards: declarations } = record.loadGuardDeclarations({ repoRoot });
+    const guards = results.map(({ guard, verdict, durationMs }) => {
+      const guardId = `loop:${guard.replace(/\.mjs$/, "")}`;
+      return record.buildGuardResult({
+        guardId,
+        kind: "guard",
+        guardDigest: record.digestLoopGuard(guard, { repoRoot }),
+        baselineDigest: record.baselineDigestFor(guardId, declarations, { repoRoot }),
+        verdict,
+        durationMs,
+      });
+    });
+    await record.recordGuardRun({
+      runner: "guard-loop",
+      guards,
+      startedAt,
+      durationMs: Date.now() - startedAt,
+      cwd: repoRoot,
+      submit: async () => null,
+    });
+  } catch {
+    // recording is observation; a guard verdict never depends on it
+  }
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();

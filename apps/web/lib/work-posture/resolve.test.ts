@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveWorkPosture, type WorkPostureInput } from "./resolve";
-import { TIGHTEN_RANKS } from "./tighten";
+import { resolveWorkPosture, type WorkPostureInput } from "@dpf/validators/workroom-policy/resolve";
+import { TIGHTEN_RANKS } from "@dpf/validators/workroom-policy/tighten";
 import type {
   ProactivityActionBoundary,
   ProactivityLevel,
   ProactivityPlan,
-} from "@/lib/proactivity/proactivity-types";
+} from "@dpf/validators/workroom-policy/proactivity-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 

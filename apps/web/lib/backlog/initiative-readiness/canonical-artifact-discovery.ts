@@ -6,6 +6,7 @@ import { prepareCurrentArtifactObservation } from "./current-artifact-observatio
 import { prepareCurrentResearchObservation, type CurrentResearchPorts } from "./current-research-artifact";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
+import { changesFromProviderCompare, commitRangeDigest, type CommitRange } from "./repo-commit-range";
 
 import {
   cancelGithubResponseBody,
@@ -33,6 +34,7 @@ type CurrentDesignBinding = BoundDesign
   | { kind: "not-applicable"; mayInheritResearch?: true }
   | { kind: "unavailable" };
 type ClaimSource = {
+  workroomId?: string;
   repositoryFullName: string; headBranch: string;
   baseSha?: string | null; headSha?: string | null;
 };
@@ -60,6 +62,7 @@ async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, cla
   const rooms = await db.workroom.findMany({
     where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
       status: { notIn: ["abandoned", "archived", "superseded"] },
+      ...(claimSource?.workroomId ? { capsuleId: claimSource.workroomId } : {}),
       ...(claimSource ? { repositoryFullName: claimSource.repositoryFullName, headBranch: claimSource.headBranch,
         baseSha: claimSource.baseSha, headSha: claimSource.headSha } : {}) }, take: 2,
     select: { capsuleId: true, repositoryFullName: true, baseSha: true, headSha: true, headBranch: true },
@@ -126,7 +129,7 @@ export async function prepareCurrentDesignObservation(args: {
   const db = args.db ?? prisma;
   const load = args.ports?.loadBinding ?? loadCurrentDesignBinding;
   // Capture the selection once, including across the provider await and guard.
-  const claimSource = args.claimSource ? { repositoryFullName: args.claimSource.repositoryFullName,
+  const claimSource = args.claimSource ? { ...(args.claimSource.workroomId ? { workroomId: args.claimSource.workroomId } : {}), repositoryFullName: args.claimSource.repositoryFullName,
     headBranch: args.claimSource.headBranch, baseSha: args.claimSource.baseSha, headSha: args.claimSource.headSha } : undefined;
   const read = args.ports?.readCurrentArtifact ?? readCurrentDesignArtifact;
   const unavailable = { state: "unavailable" } as const;
@@ -158,8 +161,11 @@ export type DiscoveredCanonicalArtifact = {
   providerBlobId: string;
 };
 
+/** BI-46E344FE: a post-implementation review of a multi-file repair binds its whole range. */
+export type DiscoveredCommitRangeArtifact = { kind: "repo-commit-range"; ranges: CommitRange[]; digest: string };
+
 export type CanonicalArtifactDiscoveryResult =
-  | { resolved: true; artifact: DiscoveredCanonicalArtifact }
+  | { resolved: true; artifact: DiscoveredCanonicalArtifact | DiscoveredCommitRangeArtifact }
   | {
     resolved: false;
     code: "no-canonical-design" | "ambiguous-canonical-design" | "no-repair-artifact" | "ambiguous-repair-artifact" | "provider-unavailable";
@@ -283,9 +289,13 @@ export async function discoverCanonicalReviewArtifact(args: {
 /** Design gates retain their design-only contract; only PIR may bind repair source. */
 export async function discoverCanonicalDesignArtifact(
   args: Omit<Parameters<typeof discoverCanonicalReviewArtifact>[0], "purpose">,
-): Promise<CanonicalArtifactDiscoveryResult> {
-  return discoverCanonicalReviewArtifact({ ...args, purpose: undefined });
+): Promise<CanonicalDesignDiscoveryResult> {
+  // Without the PIR purpose discovery never binds a commit range.
+  return discoverCanonicalReviewArtifact({ ...args, purpose: undefined }) as Promise<CanonicalDesignDiscoveryResult>;
 }
+
+export type CanonicalDesignDiscoveryResult = Exclude<CanonicalArtifactDiscoveryResult, { resolved: true }>
+  | { resolved: true; artifact: DiscoveredCanonicalArtifact };
 
 async function discoverCanonicalDesignArtifactWithFetch(
   args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null; purpose?: "post-implementation-review";
@@ -394,7 +404,7 @@ async function discoverCanonicalDesignArtifactWithFetch(
     .sort((left, right) => left.filename.localeCompare(right.filename));
   if (candidates.length === 0) {
     if (args.purpose === "post-implementation-review") {
-      return discoverRepairArtifact(files);
+      return discoverRepairArtifact(files, payload, { baseSha: args.baseSha, headSha: args.headSha });
     }
     return {
       resolved: false,
@@ -433,8 +443,13 @@ function isVersionOnlyChange(file: CompareFile): boolean {
     && changed.some((line) => line.startsWith("+")) && changed.some((line) => line.startsWith("-"));
 }
 
-/** A single implementation artifact may be accompanied by tests, explanatory docs and version bumps. */
-function discoverRepairArtifact(files: CompareFile[]): CanonicalArtifactDiscoveryResult {
+/**
+ * A single implementation artifact may be accompanied by tests, explanatory docs
+ * and version bumps, and is bound as that one blob. A repair with several
+ * implementation files is bound whole, as its compared range (BI-46E344FE):
+ * no file is chosen arbitrarily, and none is left out of the review.
+ */
+function discoverRepairArtifact(files: CompareFile[], payload: unknown, range: CommitRange): CanonicalArtifactDiscoveryResult {
   const valid = files.filter((file) => /^[a-f0-9]{40}$/i.test(file.sha)
     && !file.filename.includes("\\")
     && file.filename.split("/").every((part) => part.length > 0 && part !== "." && part !== ".."));
@@ -448,11 +463,19 @@ function discoverRepairArtifact(files: CompareFile[]): CanonicalArtifactDiscover
     const file = candidates[0]!;
     return { resolved: true, artifact: { path: file.filename, providerBlobId: file.sha } };
   }
+  if (candidates.length > 1) {
+    const changes = changesFromProviderCompare(payload);
+    if (!changes) {
+      return { resolved: false, code: "provider-unavailable",
+        nextAction: "Repository provider returned an incomplete file list for the repair range. Retry once provider access is restored." };
+    }
+    const ranges = [{ baseSha: range.baseSha.toLowerCase(), headSha: range.headSha.toLowerCase() }];
+    return { resolved: true, artifact: { kind: "repo-commit-range", ranges,
+      digest: commitRangeDigest([{ range: ranges[0]!, files: changes }]) } };
+  }
   return {
     resolved: false,
-    code: candidates.length > 1 ? "ambiguous-repair-artifact" : "no-repair-artifact",
-    nextAction: candidates.length > 1
-      ? `The repair has multiple implementation artifacts (${candidates.map((file) => file.filename).join(", ")}). Narrow the review to an independently reviewable repair or use its existing canonical design. No artifact was selected arbitrarily.`
-      : "The recorded range contains no unique surviving repair artifact. Verify the pushed base/head and repair scope; a post-implementation review does not require a new design document.",
+    code: "no-repair-artifact",
+    nextAction: "The recorded range contains no unique surviving repair artifact. Verify the pushed base/head and repair scope; a post-implementation review does not require a new design document.",
   };
 }

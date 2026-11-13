@@ -103,11 +103,13 @@ A build can reach Ship and then wait while other changes land on the platform. I
 1. Updates its copy of the platform and replays the build's changes on top.
 2. Sends the build back to **Review**, which checks the updated change from scratch: tests, typecheck, change review, guards and acceptance. It then returns to Ship and opens its pull request.
 
-If the build's changes clash with the newer platform changes, nothing is replayed. The build stays in Ship, its activity names the files that clash, and Build Studio tries again later.
+If the build's changes clash with the newer platform changes, nothing is replayed. The build stays in Ship, its activity names the files that clash, and Build Studio tries again later. If the update itself cannot run (for example, the sandbox is busy), the build also stays in Ship: its activity records the reason the update failed, and Build Studio tries again later. A failed attempt never changes what Build Studio knows about the build's own changes.
 
 A merged pull request does not make the build complete. Completion waits for the
 governed release and live-version evidence. Build Studio does not directly
 merge, force-push, or silently edit a true conflict.
+
+Once the release is live, the backlog item behind the build moves to **Awaiting acceptance**. A coworker who did not work on the build is routed to it straight away to check its acceptance criteria on the live system; it does not wait for the usual 14-day aged-item review. Once that check is recorded, the build is marked complete.
 
 ### Configuration
 

@@ -1,0 +1,57 @@
+{
+  "kind": "private-installed-component-candidate",
+  "component": "@opendigitalproductfactory/dpf-workroom",
+  "version": "0.1.0-candidate.5",
+  "sourceCommit": "4bf0818b280afa32ec1ca80890398be90d2b755d",
+  "sourceRepository": "OpenDigitalProductFactory/dpf-workroom",
+  "seedCommit": "b43be400326f8cc5777a9d40c1f058a8f0363dc8",
+  "upstreamKernelRevision": "56f3a5d2d57d751eb3ac435dcca4133c5ff46686",
+  "tarball": "opendigitalproductfactory-dpf-workroom-0.1.0-candidate.5.tgz",
+  "sha256": "74f04029b39fad0dff0395edc4ca8e6445b961348adc76f8b376b794eb0fa987",
+  "checks": {
+    "originalSourceProvenanceFiles": 22,
+    "sourceProtocolScenarios": 13,
+    "installedProtocolScenarios": 13,
+    "allDeclaredExportsAndDeclarations": "passed",
+    "emittedImportClosure": "passed",
+    "unownedGppAnalysisExcluded": "passed",
+    "outcomeDispositionNormalAdverse": "passed",
+    "strictEngineBuildRuntime": "passed on 24.16.0",
+    "allPublicCommonJsExportsMatchEsmIdentity": "passed on Node 24.16.0 (build) and 24.22.2 (receiver)"
+  },
+  "toolchain": {
+    "node": "24.16.0",
+    "typescript": "6.0.3",
+    "npm": "11.13.0"
+  },
+  "runtimeDependencies": [],
+  "publicPackagePublication": false,
+  "realDpfConsumerMigration": false,
+  "dpf2Migration": false,
+  "nativeOrProductionQualification": false,
+  "independentReview": "Pending: upstream PR OpenDigitalProductFactory/dpf-workroom#1",
+  "builder": "Local source worktree on Darwin arm64, Node 24.16.0 / npm 11.13.0; Linux CI pack of the same source yields a different archive digest (bcd15a29…), so the vendored digest binds the Darwin build like prior candidates",
+  "emittedParity": "Emitted dist files unchanged from candidate.4; package version and engines metadata only.",
+  "engines": {
+    "node": ">=24.16.0 <25"
+  },
+  "receivingPolicy": {
+    "range": ">=24.16.0 <25",
+    "derivedFrom": ".node-version build pin (24.16.0); check-package refuses a range not derived from it",
+    "continuousEvidence": "Component checks receive-latest job installs the packed tarball with --engine-strict and runs the 13 installed protocol cases on the newest Node 24, on push, pull request and weekly",
+    "firstRun": {
+      "node": "24.22.2",
+      "run": "https://github.com/OpenDigitalProductFactory/dpf-workroom/actions/runs/41708632391",
+      "result": "passed"
+    },
+    "outOfRangeRefusal": "Node 26.5.0: test:receive refuses and npm --engine-strict reports EBADENGINE",
+    "decision": "DPF DI-89054A6F7D1A"
+  },
+  "priorReceivingMatrix": {
+    "candidate": "0.1.0-candidate.4",
+    "evidence": [
+      "foundation-v5-node24.22.0-ts7-receiver-result.json",
+      "foundation-v5-node24.22.1-ts7-receiver-result.json"
+    ]
+  }
+}

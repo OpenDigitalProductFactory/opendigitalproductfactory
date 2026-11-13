@@ -9,17 +9,17 @@ export type CodeGraphNodeKind =
   | "TestFile"
   | "ExternalModule";
 
+// Every kind is a key in the relation vocabulary (packages/db/src/relation-vocabulary-entries.ts).
 export type CodeGraphEdgeKind =
   | "DEFINES"
   | "IMPORTS"
-  | "REFERENCES"
   | "IMPLEMENTS_ROUTE"
   | "EXPOSES_TOOL"
   | "USES_MODEL"
   | "USES_PROMPT"
   | "TESTED_BY"
   | "HAS_FIELD"
-  | "RELATES_TO";
+  | "HAS_FOREIGN_KEY_TO";
 
 export type CodeGraphConfidence = "exact" | "heuristic";
 

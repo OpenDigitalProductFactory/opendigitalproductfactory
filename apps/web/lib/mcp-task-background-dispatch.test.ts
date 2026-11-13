@@ -95,8 +95,8 @@ describe("external TaskRun durable dispatch", () => {
     });
     expect(result).toMatchObject({ enqueued: 1, exhausted: 0 });
     expect(queue.send).toHaveBeenCalledWith("TR-REVIEW", "mcp-task-run:TR-REVIEW:execute:1");
-    expect(db.findMany.mock.calls[0]![0].where.OR).toEqual(expect.arrayContaining([
-      expect.objectContaining({ status: "input-required" }),
+    expect(db.findMany.mock.calls.flatMap((call) => call[0].where.OR)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: { in: ["input-required", "failed"] } }),
     ]));
     expect(db.updateMany.mock.calls[0]![0].data.progressPayload.terminalWriterWait).toEqual(wait);
     for (const writerAttempt of [{ id: "approval-pending" }, { id: "declined" }, { id: "verified-receipt" }]) {
@@ -345,17 +345,14 @@ describe("external TaskRun durable dispatch", () => {
       includeOrdinary: false,
     });
 
-    expect(db.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        OR: expect.arrayContaining([
-          expect.objectContaining({ status: "submitted" }),
-          expect.objectContaining({
-            status: { in: ["working", "quiescing"] },
-            progressPayload: { path: ["durableInference", "state"], equals: "admitting" },
-          }),
-        ]),
+    // BI-AF428359: each category is read with its own bounded query.
+    expect(db.findMany.mock.calls.flatMap((call) => call[0].where.OR)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: "submitted" }),
+      expect.objectContaining({
+        status: { in: ["working", "quiescing"] },
+        progressPayload: { path: ["durableInference", "state"], equals: "admitting" },
       }),
-    }));
+    ]));
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ taskRunId: "TR-DURABLE", status: "working" }),
     }));
@@ -743,4 +740,22 @@ describe("external TaskRun durable dispatch", () => {
 it("limits an explicit capacity wake to the already authorized original task", async () => {
   await reconcilePersistedRemoteTaskDispatches({ taskRunId: "TR-ORIGINAL", includeOrdinary: false } as never);
   expect(db.findMany.mock.calls[0][0].where).toMatchObject({ taskRunId: "TR-ORIGINAL" });
+});
+
+it("never queues a same-call engagement assessment even when a caller claims its projection was persisted", async () => {
+  db.findUnique.mockResolvedValue({ status: "submitted", updatedAt: new Date(), progressPayload: {
+    dispatch: { state: "pending", eventId: "mcp-task-run:TR-MCP-present:execute:1", attempt: 1 },
+    engagementPresent: { schemaVersion: 1, mode: "same-governed-call", resumable: false } } });
+  const result = await enqueuePersistedRemoteTask({ taskRunId: "TR-MCP-present", projectionAlreadyPersisted: true });
+  expect(result.queued).toBe(false);
+  expect(queue.send).not.toHaveBeenCalled();
+  expect(db.updateMany).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("refuses queue mutation/send from a persisted present binding with a missing progress marker (persisted=%s)", async persisted => {
+  db.findUnique.mockResolvedValue({ status: persisted ? "submitted" : "working", updatedAt: new Date(),
+    a2aMetadata: { engagementBinding: { presentAssessment: { schemaVersion: 1 } } },
+    progressPayload: { dispatch: { state: "pending", eventId: "mcp-task-run:TR-MCP-present:execute:1", attempt: 1 } } });
+  const result = await enqueuePersistedRemoteTask({ taskRunId: "TR-MCP-present", projectionAlreadyPersisted: persisted });
+  expect(result.queued).toBe(false); expect(queue.send).not.toHaveBeenCalled(); expect(db.updateMany).not.toHaveBeenCalled();
 });

@@ -15,7 +15,7 @@ import { isProcessAlive, readProcessIdentity } from "./local-sandbox-fence.mjs";
 export const CONVERGENCE_LOCK_STALE_MS = 30 * 60_000;
 const OWNER_FILE = "owner.json";
 
-function readOwner(path) {
+export function readLocalConvergenceOwner(path) {
   try {
     return JSON.parse(readFileSync(join(path, OWNER_FILE), "utf8"));
   } catch {
@@ -23,7 +23,9 @@ function readOwner(path) {
   }
 }
 
-function validOwner(owner) {
+const readOwner = readLocalConvergenceOwner;
+
+export function validLocalConvergenceOwner(owner) {
   return owner?.schema === "dpf-local-convergence-lock/v1"
     && typeof owner.token === "string"
     && owner.token.length > 0
@@ -33,6 +35,8 @@ function validOwner(owner) {
     && owner.processIdentity.length > 0
     && typeof owner.acquiredAt === "string";
 }
+
+const validOwner = validLocalConvergenceOwner;
 
 export function inspectLocalConvergenceLock({
   path,
@@ -104,6 +108,7 @@ export function acquireLocalConvergenceLock({
   processAlive = isProcessAlive,
   processIdentity = readProcessIdentity,
   token = randomUUID(),
+  reconcileStale = true,
 }) {
   const identity = processIdentity(pid);
   if (!identity) throw new Error(`cannot establish convergence owner identity for ${pid}`);
@@ -126,6 +131,9 @@ export function acquireLocalConvergenceLock({
         throw error;
       }
     }
+    // Receipt mutation locks never reclaim a foreign lock, including legacy
+    // or apparently dead owners. Their uncertainty must remain observable.
+    if (!reconcileStale) return { status: "conflict", active: { owner: readOwner(path) } };
     const reconciled = reconcileStaleLocalConvergenceLock({
       path, now, processAlive, processIdentity,
     });

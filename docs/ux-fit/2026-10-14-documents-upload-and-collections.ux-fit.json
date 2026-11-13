@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "decidedOption": "inline-drop-zone-and-collection-chips",
+  "decisionInteractionId": "DI-28B4B731284B",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workspace/documents/DocumentCollectionsNav.tsx",
+      "apps/web/app/(shell)/workspace/documents/DocumentUploadZone.tsx",
+      "apps/web/app/(shell)/workspace/documents/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["inline-drop-zone-and-collection-chips", "separate-upload-page", "modal-upload-dialog"]
+  }
+}

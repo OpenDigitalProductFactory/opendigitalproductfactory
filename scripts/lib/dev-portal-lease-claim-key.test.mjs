@@ -123,14 +123,14 @@ test('configuration rejects the original root checkout mount and missing prerequ
   assert.throws(() => assertPreviewConfig(production, identity), /identity_mismatch/);
 });
 test('actual Docker mount and source/lease labels must match the admitted preview', () => {
-  const actual = { Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' }], Config: { Labels: previewOverride(identity).services['dev-portal'].labels, Env: ["DPF_ENVIRONMENT_CLASS=development", `DPF_PREVIEW_SOURCE_SHA=${identity.sha}`, `DPF_PREVIEW_LEASE_ID=${identity.leaseId}`] } };
+  const actual = { NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }] } }, Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' }], Config: { Labels: previewOverride(identity).services['dev-portal'].labels, Env: ["DPF_ENVIRONMENT_CLASS=development", `DPF_PREVIEW_SOURCE_SHA=${identity.sha}`, `DPF_PREVIEW_LEASE_ID=${identity.leaseId}`] } };
   assertPreviewContainer(actual, identity);
   actual.Mounts[0].Source = '/root';
   assert.throws(() => assertPreviewContainer(actual, identity), /actual_mount_mismatch/);
 });
 test('actual Docker Desktop Windows mount identifies only its admitted host worktree', () => {
   const windows = { ...identity, worktree: 'D:/DPF-worktrees/scoped-investment-balance' };
-  const actual = { Mounts: [{ Type: 'bind', Source: '/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance', Destination: '/workspace' }], Config: { Labels: previewOverride(windows).services['dev-portal'].labels, Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${windows.sha}`, `DPF_PREVIEW_LEASE_ID=${windows.leaseId}`] } };
+  const actual = { NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }] } }, Mounts: [{ Type: 'bind', Source: '/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance', Destination: '/workspace' }], Config: { Labels: previewOverride(windows).services['dev-portal'].labels, Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${windows.sha}`, `DPF_PREVIEW_LEASE_ID=${windows.leaseId}`] } };
   assertPreviewContainer(actual, windows);
   for (const wrong of ['/run/desktop/mnt/host/e/DPF-worktrees/scoped-investment-balance', '/run/desktop/mnt/host/d/DPF-source-root', 'DPF-worktrees/scoped-investment-balance', '/run/desktop/mnt/host/d/DPF-worktrees/../DPF-source-root']) {
     actual.Mounts[0].Source = wrong;
@@ -140,6 +140,7 @@ test('actual Docker Desktop Windows mount identifies only its admitted host work
 
 const macIdentity = { ...identity, worktree: '/Users/markbodman/dpf-worktrees/reusable-continuation' };
 const actualForMount = (source, target = macIdentity) => ({
+  NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }] } },
   Mounts: [{ Type: 'bind', Source: source, Destination: '/workspace' }],
   Config: { Labels: previewOverride(target).services['dev-portal'].labels,
     Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${target.sha}`, `DPF_PREVIEW_LEASE_ID=${target.leaseId}`] },
@@ -275,11 +276,33 @@ test('startup checks the whole shared delivery contract and both permission laye
 });
 
 test('protected live-service identity detects recreation, restart or volume substitution', () => {
-  const container = { Id: 'live-db', Config: { Labels: { 'com.docker.compose.service': 'postgres' } }, State: { Running: true, StartedAt: 'before' }, Mounts: [{ Type: 'volume', Name: 'live-data', Destination: '/var/lib/postgresql/data' }] };
+  const container = { Id: 'live-db', Config: { Labels: { 'com.docker.compose.service': 'postgres', 'com.docker.compose.oneoff': 'False' } }, State: { Running: true, StartedAt: 'before' }, Mounts: [{ Type: 'volume', Name: 'live-data', Destination: '/var/lib/postgresql/data' }] };
   const before = protectedServiceIdentity([container]);
   assert.notDeepEqual(protectedServiceIdentity([{ ...container, Id: 'recreated-db' }]), before);
   assert.notDeepEqual(protectedServiceIdentity([{ ...container, State: { ...container.State, StartedAt: 'after' } }]), before);
   assert.notDeepEqual(protectedServiceIdentity([{ ...container, Mounts: [{ ...container.Mounts[0], Name: 'wrong-data' }] }]), before);
+});
+
+// BI-5DF11E81: compose stamps project/service labels onto the images it builds, so a bare
+// `docker run dpf-portal:latest` and a `compose run` one-off look like the service by label.
+const liveService = { Id: 'live-portal', Config: { Labels: { 'com.docker.compose.project': 'dpf', 'com.docker.compose.service': 'portal', 'com.docker.compose.oneoff': 'False', 'com.docker.compose.container-number': '1' } }, State: { Running: true, StartedAt: 'before' }, Mounts: [] };
+
+test('protected identity ignores a transient image-run container that inherits compose labels from the image', () => {
+  const imageRun = { Id: 'hardcore_dhawan', Config: { Labels: { 'com.docker.compose.project': 'dpf', 'com.docker.compose.service': 'portal' } }, State: { Running: true, StartedAt: 'transient' }, Mounts: [] };
+  assert.deepEqual(protectedServiceIdentity([liveService, imageRun]), protectedServiceIdentity([liveService]));
+});
+
+test('protected identity ignores compose run one-off containers', () => {
+  const oneOff = { Id: 'dpf-portal-run-abc', Config: { Labels: { 'com.docker.compose.project': 'dpf', 'com.docker.compose.service': 'portal', 'com.docker.compose.oneoff': 'True' } }, State: { Running: true, StartedAt: 'transient' }, Mounts: [] };
+  assert.deepEqual(protectedServiceIdentity([oneOff, liveService]), protectedServiceIdentity([liveService]));
+});
+
+test('protected identity still detects a real compose service recreated alongside transient containers', () => {
+  const before = protectedServiceIdentity([liveService]);
+  assert.equal(before.length, 1);
+  assert.notDeepEqual(protectedServiceIdentity([{ ...liveService, Id: 'recreated-portal', State: { ...liveService.State, StartedAt: 'after' } }]), before);
+  const devService = { ...liveService, Id: 'dev', Config: { Labels: { ...liveService.Config.Labels, 'com.docker.compose.service': 'dev-portal' } } };
+  assert.deepEqual(protectedServiceIdentity([liveService, devService]), before);
 });
 
 test('preserved feature initialization takes the bounded clone from the canonical image', () => {
@@ -812,7 +835,7 @@ test('the existing preview config and actual-container boundaries both enforce t
   assertPreviewConfig(config, identity);
   config.services['dev-portal'].volumes.pop();
   assert.throws(() => assertPreviewConfig(config, identity), /declaration_mount_mismatch/);
-  const container = { Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' },
+  const container = { NetworkSettings: { Ports: { '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3001' }] } }, Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' },
     { Type: 'bind', Source: identity.declarationPath, Destination: PREVIEW_DECLARATION_TARGET, RW: true }],
     Config: { Labels: previewOverride(identity).services['dev-portal'].labels,
       Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${identity.sha}`, `DPF_PREVIEW_LEASE_ID=${identity.leaseId}`] } };
@@ -913,4 +936,35 @@ test('initializer source mutation still refuses portal startup and cleans up', a
   }), /preview_source_changed/);
   assert.equal(calls.some(c => Array.isArray(c) && c[0] === 'up' && c.at(-1) === 'dev-portal'), false);
   assert.equal(calls.at(-1), 'cleanup');
+});
+
+
+test('preview prerequisite failure preserves the error without requesting immediate lease release', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dpf-preview-finalize-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const calls = [];
+  const server = createServer((request, response) => {
+    let body = '';
+    request.on('data', chunk => { body += chunk; });
+    request.on('end', () => {
+      const packet = JSON.parse(body);
+      if (packet.method === 'tools/call') calls.push(packet.params.name);
+      response.end(JSON.stringify({ jsonrpc: '2.0', id: packet.id, result: {
+        content: [{ type: 'text', text: JSON.stringify({ success: true }) }],
+      } }));
+    });
+  });
+  await new Promise(resolveListen => server.listen(0, '127.0.0.1', resolveListen));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const { main } = await import('./dev-preview-runtime.mjs');
+  await assert.rejects(main({
+    DPF_DEV_WORKTREE: directory,
+    DPF_DEV_PORTAL_LEASE_ID: 'NPEL-PREREQUISITE-FIXTURE',
+    DPF_DEV_PORTAL_OWNER_SESSION_ID: 'fixture-owner',
+    DPF_INSTALL_STATE_PATH: join(directory, 'missing-install-state.json'),
+    DPF_MCP_CLIENT_CREDENTIALS_FILE: join(directory, 'absent-private-credentials.json'),
+    DPF_MCP_BEARER_TOKEN: 'fixture-local-only',
+    DPF_MCP_URL: 'http://127.0.0.1:' + server.address().port + '/api/mcp/v1',
+  }), { code: 'ENOENT' });
+  assert.deepEqual(calls, [], 'missing retained admission must not request release or broaden readback');
 });

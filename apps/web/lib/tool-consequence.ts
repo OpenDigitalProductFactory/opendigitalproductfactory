@@ -7,7 +7,8 @@
  * Closed set: a new axis is a deliberate widening of what the gate governs,
  * not a string literal someone invents at a call site.
  */
-export type ToolConsequence = "outward" | "irreversible" | "authority";
+export type { ToolConsequence } from "@dpf/validators/gpp/tool-facts";
+import type { ToolConsequence } from "@dpf/validators/gpp/tool-facts";
 
 /**
  * The closed set, as a runtime value. `deriveConsequentialToolNames`
@@ -15,11 +16,7 @@ export type ToolConsequence = "outward" | "irreversible" | "authority";
  * set from `sideEffect && consequence != null` — TAK §8.4.1, classification is
  * derived from a declared property, never re-enumerated in a second allowlist.
  */
-export const TOOL_CONSEQUENCES: readonly ToolConsequence[] = [
-  "outward",
-  "irreversible",
-  "authority",
-] as const;
+export { TOOL_CONSEQUENCES } from "@dpf/validators/gpp/tool-facts";
 
 /** See `ToolDefinition.consequenceScope`. Closed set. */
 export type ToolConsequenceScope = "business" | "platform";
@@ -40,6 +37,11 @@ export type ToolCallConsequenceInput = {
 export type ToolCallConsequence = {
   consequence: ToolConsequence | null;
   reason: string;
+  /**
+   * BI-88D51B8F: when this call still needs a person, what will happen and why
+   * it matters, in the approver's words. Shown on the approval request.
+   */
+  approverSummary?: string;
 };
 
 /**
@@ -53,7 +55,7 @@ export type ToolCallConsequenceRefiner = (call: ToolCallConsequenceInput) => Pro
 
 export type ResolvedCallConsequence = {
   consequence: ToolConsequence | null;
-  refinement: { declared: ToolConsequence; reason: string } | null;
+  refinement: { declared: ToolConsequence; reason: string; approverSummary?: string } | null;
 };
 
 /** Apply a tool's refiner under the narrow-only rule. Fails closed. */
@@ -65,9 +67,11 @@ export async function resolveCallConsequence(
   if (!declared || !tool.consequenceForCall) return { consequence: declared, refinement: null };
   try {
     const refined = await tool.consequenceForCall(call);
+    const ordinary = refined.consequence === null;
     return {
-      consequence: refined.consequence === null ? null : declared,
-      refinement: { declared, reason: refined.reason },
+      consequence: ordinary ? null : declared,
+      refinement: { declared, reason: refined.reason,
+        ...(!ordinary && refined.approverSummary ? { approverSummary: refined.approverSummary } : {}) },
     };
   } catch {
     return { consequence: declared, refinement: { declared, reason: "refinement-unavailable" } };

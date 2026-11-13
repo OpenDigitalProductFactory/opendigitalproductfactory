@@ -202,3 +202,153 @@ with 41 incumbent SQL tests passing. Preserve the cold 16 MiB assertion, all mea
 controls and the real PrismaPg writer. Final owned qualification requires the
 complete exact-source experiment to pass this changed default; its actual outcome
 belongs in the Workroom and PR record, separately from source-local checks.
+
+
+**October 28 follow-up: stream the incumbent cursor order (BI-B47BB1D7).**
+The bulk writer is already deployed. A read-only, five-second-bounded EXPLAIN
+on the canonical database found a top-level Sort over an estimated 14,541,988
+telemetry rows, sorting solely on the generated row-number expression. The
+native preview stopped before serving after 20m33s; the collapsed terminal
+category does not prove which liveness check fired. No full-copy timing or
+repair success is inferred from planner estimates.
+
+The bounded repair is to expose the same original ordering keys at the outer
+join, followed by the existing ordinal as the final tie breaker. This is
+lexicographically equivalent to the incumbent ordinal order, including tied
+keys. For the observed ID-ordered table, PostgreSQL instead plans an Incremental
+Sort with id as its presorted key; estimated startup cost changes from6580321.35
+to1.76 in planner units, not milliseconds. The remaining transaction overhead
+still needs real measurement. Physical ctid fallback, audit LIMIT/direction,
+User ranking/COALESCE, all source rows, sanitization, native omissions and the
+50-row read window stay unchanged. No classification, data policy, source or
+runtime mutation, timeout, privacy or lease-fence change belongs to this repair.
+
+Ordered loop: exercise the actual cursor-query builder; observe the old outer
+sort fail the original-key regression; add the ordering prefix and retain the
+ordinal tie breaker; compare actual PostgreSQL legacy/repaired ordered values,
+audit cohort, user aliases and cursor batches; run all clone, source-integrity,
+cleanup/memory tests and DB typecheck. Run the PostgreSQL proof only through
+the governed shared test database, then normal exact-tree integration, review,
+DCO and protected publication. After normal canonical release, measure one
+full-cohort startup with unchanged bounds before resuming approval-screen QA.
+The existing six acceptance obligations above remain obligations; this targeted
+source repair does not claim sampling policy, scale timing or served acceptance.
+PostgreSQL documents explicit multi-key ordering and planner startup costs at
+https://www.postgresql.org/docs/current/queries-order.html and
+https://www.postgresql.org/docs/current/using-explain.html.
+
+## October 28 continuation: measure the remaining copy cost
+
+The operator explicitly authorized the bounded test-environment repair in the
+paired approval chat, followed by one repaired full-size screen-verification
+attempt. The direct human reply was independently retrieved before resuming.
+This does not authorize a third unchanged preview, sampling, larger read windows,
+longer timeouts, more memory, new grants or an alternative deployment route.
+
+The ordering repair is installed. The next admitted full-cohort attempt,
+`NPEL-DD3E51BE41`, still stopped before serving after 20m33s. Its telemetry phase
+began with 14,523,204 source rows; read-only destination counts progressed from
+1,220,000 to 10,937,800. The reservation was released and no owned containers
+remained. Native activity `cmvst8r8h08ph01k0xctzucck` and skipped verification
+`RV-APPROVAL-PREVIEW-5EAA-20261029` retain this infrastructure-inconclusive result.
+Neither failure is evidence that the approval UI failed.
+
+The caller still supplies 50 rows to each writer invocation. The writer's
+500-row ceiling does not combine invocations. Database-wide observations over
+43.368 seconds counted 9,746 committed transactions and 485,706 inserted tuples.
+These observations support measuring transaction cost; they do not isolate it
+from source fetch, transformation, statements or other database work.
+
+**OBJ-COPY-COST:** Make the existing full-cohort clone usable within its unchanged
+startup budget without changing data, privacy, memory or publication semantics.
+The original six acceptance obligations above remain verbatim and unresolved
+where not evidenced. This preservation-only source slice does not introduce
+the separately owed data-owner sampling policy.
+
+`CLONE-PHASES` records aggregate row/batch counts and elapsed source-fetch,
+sanitization and destination-write phases, never row values, SQL arguments,
+credentials or per-row events. `CLONE-STREAM` retains one fetched 50-row array,
+awaited destination backpressure, the existing 128 KiB statement target and
+native omissions. `CLONE-TRANSACTION` retains the current 500-row transaction
+ceiling, 10-second acquisition and 30-second transaction timeout. Existing
+`CLONE-ROWS`, `CLONE-ATTEMPT` and `CLONE-PUBLISH` remain authoritative.
+
+Ordered internal phases, one atomic BI-B47BB1D7 delivery:
+
+1. `FLOW-MEASURE`: add bounded, aggregate phase measurements through the actual
+   confidential-copy caller. Extend the existing governed PostgreSQL fixture
+   with telemetry-shaped rows and the existing wide JSON/vector positive
+   controls. Record source fetch, transform, write and transaction counts plus
+   total elapsed time. No production benchmark or new full clone is needed to
+   choose a source change. A first-failing diagnostic-contract test precedes
+   implementation; measurements must not retain row payloads.
+2. Select a repair only from those measurements. If destination transaction
+   round trips dominate, compare the current per-50-row transaction path with
+   bounded streamed groups inside the existing 500-row ceiling. Fetch the first
+   batch before acquiring a destination transaction; do not put cold source
+   startup inside its timeout. Await every write and release its array before
+   fetching again. Never aggregate ten raw batches, increase the cursor window,
+   carry a transaction between tables or retain it after failure. Keep trigger
+   suppression on its transaction connection and metadata local to the attempt.
+   If measurements do not support this candidate, record the result and revise
+   the selected repair before changing behavior.
+3. `FLOW-STREAM-COST`: prove exact ordered persisted values and duplicate winners,
+   audit cohort, aliases, type/default/null behavior, statement limits and
+   bounded transaction size with the real caller. Keep existing memory and
+   deliberately retained-payload controls. Inject fetch/write/commit failures
+   and prove source read-only snapshot, rollback, destination cleanup and no
+   partial publication. The failure of any group aborts the whole clone.
+4. `VC-PHASES`, `VC-STREAM-PG` and `VC-COPY-FAILURE` cover the diagnostics and
+   behavior above. Run all clone, batching, SQL, cleanup, source-integrity and
+   memory suites and both DB typechecks, then the normal exact-tree integration
+   gate, independent review and protected DCO publication. Compare real elapsed
+   phases; fewer mocked transactions alone are not a performance result.
+5. Only after normal canonical release contains the verified repair, execute
+   `VC-FULL-STARTUP`: one full-cohort preview with unchanged limits and actual
+   counts, elapsed time, memory and readiness identity. A terminal failure is
+   inconclusive for UI, never permission for another unchanged attempt. If
+   ready, continue the separately owned approval-screen baseline, fixtures,
+   accessibility, narrow viewport, disclosures, live acceptance and delivery.
+
+The diagnostic and selected source change are internal sequencing: neither is
+accepted as a separately completed performance repair. Rollback is a normal
+source revert and governed release; no migration or source-data edit exists.
+The Workroom records the immutable coverage receipt and actual measurements.
+
+The continuation's immutable coverage is `cmvswfuh91d7j01k0zzhnfz4n`, bound to
+`ea28f3a4c91b53b4db03d171ef591d9937a0c16c`. Governed PostgreSQL measurement on
+diagnostic source `d0cc35d6baf71c7e3779e7f59999687d153469f5` copied 50,001
+narrow fixture rows in 4,763.97 ms: 678.61 ms fetching, 23.90 ms sanitizing,
+4,048.30 ms across 1,001 destination transactions, and 2,048.58 ms inside their
+callbacks. About 1,999.72 ms (42% of total elapsed) lay outside the callbacks.
+This includes acquisition, framing and commit; it is not isolated server WAL
+latency or a full-cohort performance result. An earlier unmatched sample has
+different timing and is not a speedup comparison. Evidence:
+`cmvswyrgx1h1g01k0itoukm9x`.
+
+These measurements select the planned streamed-transaction candidate. The
+existing direct writer keeps its original behavior. The actual confidential
+caller uses a shared attempt-local writer and scoped cursor reader; a reader
+cannot fetch ahead of an unreleased array or finish before EOF. Consecutive
+50-row writes share at most a 500-row destination transaction. A one-second
+group-age check includes source fetch, transformation and inserts and ends
+groups only between batches. An already fetched but unwritten window can carry
+across that commit; no second window is retained. A blocked in-flight operation
+is still subject to the existing transaction/runtime fences: the age check is
+not a promise to interrupt PostgreSQL mid-query. Cold first fetches happen
+before transaction acquisition. Errors abort the attempt and retain whole-clone
+cleanup and publication isolation, including after earlier groups committed.
+
+Diagnostics now name nested transaction/callback and insert time explicitly;
+these axes overlap fetch and transformation inside a streamed group and must
+not be summed. Qualification compares identical source/order/value/cohort under
+50 and 500 transaction ceilings in both execution orders, with actual persisted
+duplicate winners and omitted vectors. Original cold/warm/retained-payload
+controls stay ordered; an additional fresh-client streamed wide-payload case
+keeps the same 16 MiB bound, measured after each awaited 50-row window of inserts inside the
+real destination transaction as well as after COMMIT. A paired positive
+control deliberately retains more than that bound during the callback and
+clears it before COMMIT: the inner probe must detect it while the old
+post-transaction probe misses it. Source-only counters do not declare this repair
+qualified. Its PostgreSQL, gate, review, canonical release and one full-size
+startup outcomes remain to be recorded.

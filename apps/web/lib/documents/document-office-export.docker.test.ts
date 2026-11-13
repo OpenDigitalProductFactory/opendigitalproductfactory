@@ -76,7 +76,7 @@ function harness(format: "docx" | "odt" | "pdf") {
   const version = { id: "ver-1", version: 1, contentFormat: "text/markdown", contentText: FIXTURE, contentBlob: null, renditions: [] };
   const deps: DocumentExportDeps = {
     db: {
-      document: { findUnique: vi.fn(async () => ({ title: "Quarterly Board Pack", currentVersion: version, versions: [version] })) },
+      document: { findFirst: vi.fn(async () => ({ title: "Quarterly Board Pack", currentVersion: version, versions: [version] })) },
       documentRendition: {
         upsert: vi.fn(async (args: { create: { renditionKind: string; blobId: string } }) => {
           upserts.push(args);
@@ -92,7 +92,7 @@ function harness(format: "docx" | "odt" | "pdf") {
       return { id };
     },
   };
-  return { deps, blobs, upserts, run: () => exportDocumentVersion({ documentId: "DOC-1", format }, deps) };
+  return { deps, blobs, upserts, run: () => exportDocumentVersion({ documentId: "DOC-1", format, viewer: { principalId: "p-reader" } }, deps) };
 }
 
 describe.skipIf(!ready)("document export against the real dpf-doctools image", () => {

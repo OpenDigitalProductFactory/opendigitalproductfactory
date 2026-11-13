@@ -279,6 +279,18 @@ describe("classifyScheduledRequiredTools (BI-4F64C5D3)", () => {
 });
 
 describe("createTaskRunForScheduledTask", () => {
+  it("binds a reporting run to its server-observed commission without copying extra context", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.taskRun.create).mockResolvedValue({ id: "row", taskRunId: "TR-WATCH", contextId: "thread" } as never);
+    const { createTaskRunForScheduledTask } = await import("./scheduled-task-runs");
+    await createTaskRunForScheduledTask({ taskId: "agent-task-56e05d88", ownerUserId: "owner", agentId: "platform-engineer",
+      threadId: "thread", routeContext: "/platform", title: "Observe", prompt: "Original commission",
+      scheduledReporting: { mode: "read-only-history", scopeDigest: "a".repeat(64), nextRunAt: null } });
+    expect(vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0].data.a2aMetadata).toMatchObject({
+      sourceRef: { kind: "scheduled-task", id: "agent-task-56e05d88" },
+      scheduledReporting: { mode: "read-only-history", scopeDigest: "a".repeat(64), nextRunAt: null },
+    });
+  });
   beforeEach(async () => {
     const { prisma } = await import("@dpf/db");
     vi.mocked(prisma.taskRun.create).mockReset();
@@ -440,6 +452,52 @@ describe("a tool name is a token, not a substring (BI-4F64C5D3 follow-on)", () =
 // BI-43C3E914 — a Workroom stage's declared tools are pinned alongside the
 // writers the prompt names. Pinning only prompt-named tools was a GPP C-6
 // "Reach reconciliation" gap in the reverse direction.
+// BI-3F641F91 — a coworker cadence's declared writes (mandatedTools) granted
+// authority but were never pinned, so draft_marketing_asset competed on
+// relevance for 15 of 174 slots and a scheduled marketing run never drafted.
+describe("scheduledToolsNeedingPin with a cadence's declared writes", () => {
+  const SUMMARY_PROMPT = "Review the plan (get_marketing_summary), then record it with save_marketing_review.";
+  const REVIEW = { name: "save_marketing_review", sideEffect: true };
+  const DRAFT = { name: "draft_marketing_asset", sideEffect: true };
+
+  it("pins a declared write that was left deferred", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: SUMMARY_PROMPT, attached: [REVIEW], deferred: [DRAFT],
+      cadenceTools: ["save_marketing_review", "draft_marketing_asset"],
+    })).toEqual(["save_marketing_review", "draft_marketing_asset"]);
+  });
+
+  it("a Workroom stage keeps its own declared tools", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: SUMMARY_PROMPT, attached: [REVIEW], deferred: [DRAFT],
+      declaredStageTools: ["save_marketing_review"], cadenceTools: ["draft_marketing_asset"],
+    })).toEqual([]);
+  });
+});
+
+// BI-8747A73D — a woken coworker's reply turn named read_room_messages, but only
+// side-effect tools were pinned, so the read could be deferred under the cap and
+// the coworker answered that Work Room capabilities were unavailable.
+describe("scheduledToolsNeedingPin for a room reply", () => {
+  const READ = { name: "read_room_messages", sideEffect: false };
+  const POST = { name: "post_room_message", sideEffect: true };
+  const PROMPT = 'Read them with read_room_messages (caseKey "backlog-item:BI-1") and answer what is asked of you in the room with post_room_message.';
+  const ROOM_REPLY = { roomReply: { workItemId: "wi-1", caseKey: "backlog-item:BI-1", messageId: "MSG-1" } };
+
+  it("pins both room tools when either is deferred", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    const pinned = scheduledToolsNeedingPin({ prompt: PROMPT, attached: [POST], deferred: [READ], taskConfig: ROOM_REPLY });
+    expect(pinned).toEqual(expect.arrayContaining(["read_room_messages", "post_room_message"]));
+  });
+
+  it("pins only the room tools the coworker is authorized for", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({ prompt: PROMPT, attached: [], deferred: [READ], taskConfig: ROOM_REPLY })).toEqual(["read_room_messages"]);
+  });
+});
+
 describe("scheduledToolsNeedingPin with a stage's declared tools", () => {
   const PROMPT = "Record what you did by calling record_workroom_evidence.";
   const WRITER = { name: "record_workroom_evidence", sideEffect: true };

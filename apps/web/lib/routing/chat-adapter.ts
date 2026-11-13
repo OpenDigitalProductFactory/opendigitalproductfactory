@@ -233,10 +233,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
           .map((m) => formatMessageForAnthropic(m)),
       };
 
-      // EP-INF-013: Map effort → extended thinking for Anthropic.
-      // effort="low" (or absent) → no thinking parameter (default, fast).
-      // effort="medium/high/max" → enable thinking with a token budget.
-      // Explicit providerSettings.thinking takes precedence over effort.
+      // Capability-aware explicit thinking takes precedence over generic caller effort.
+      // Legacy effort-only plans retain their manual budget behavior.
       const effortBudgets: Record<string, number> = { medium: 8_000, high: 32_000, max: 64_000 };
       const effort = plan.providerSettings?.effort as string | undefined;
       if (plan.providerSettings?.thinking) {
@@ -257,6 +255,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
         body.max_tokens = total ?? Math.max(plan.maxTokens, budget + 2_048);
         // Anthropic rejects temperature when thinking is enabled
         delete (body as Record<string, unknown>).temperature;
+      }
+      if ((body.thinking as { type?: string } | undefined)?.type === "adaptive" && plan.providerSettings?.output_config) {
+        body.output_config = plan.providerSettings.output_config;
       }
 
       // Apply temperature (only when thinking is NOT enabled — handled above)
@@ -375,6 +376,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       if (plan.temperature !== undefined) {
         (body as Record<string, unknown>).temperature = plan.temperature;
       }
+      if (plan.responsePolicy?.strictSchema) body.text = { format: { type: "json_object" } }; // BI-B76DC66C: Responses twin of BI-5C48438C
       // Convert OpenAI Chat Completions format tools to Responses API format
       // Responses API expects: tools: [{ type: "function", name, description, parameters }]
       if (tools && tools.length > 0) {

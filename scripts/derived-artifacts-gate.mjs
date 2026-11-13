@@ -33,6 +33,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DERIVED_ARTIFACTS, affectedEntries, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
+import { classifyDocsOnlyDiff } from "./lib/ci-evidence-plan.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { availableMermaidRenderer } from "./lib/mermaid-renderer.mjs";
 import { gitText, gitTextOrNull } from "./lib/git.mjs";
@@ -77,21 +78,20 @@ export function planRegenerate(stagedFiles, registry = DERIVED_ARTIFACTS, binary
  * replaces the assumption "docs-only diff => safe" with "docs-only diff AND
  * no registered artifact invalidated by it is stale => safe".
  */
-function isRegisteredArtifactOutput(filePath, registry) {
-  return registry.some((entry) => matchesAnyGlob(filePath, entry.artifactPaths ?? []));
-}
-
 export function evaluatePushExemption(diffFiles, registry = DERIVED_ARTIFACTS, runCheck = () => true) {
-  // BI-AC48D79F: registered artifact outputs (e.g. doc-index.generated.json)
-  // are regenerated and staged by pre-commit when their docs sources change.
-  // They are not runtime sources. Counting them as "non-docs runtime" made
-  // the freshness branch unreachable, so every indexed-docs push needed a
-  // sandbox gate or an override.
-  const nonDocChanges = diffFiles.filter(
-    (f) => !isRegisteredArtifactOutput(f, registry) && !/^docs\/|^memory\/|\.md$/.test(f),
-  );
-  if (nonDocChanges.length > 0) {
-    return { exempt: false, reason: "non-docs runtime changes present", files: nonDocChanges };
+  // BI-78176241: "docs-only" is decided by the evidence planner's classifier,
+  // the same one the documentation evidence lane and CI use. A registered
+  // artifact output (e.g. doc-index.generated.json) rides with its docs
+  // source (BI-AC48D79F); its freshness is checked below.
+  const docs = classifyDocsOnlyDiff(diffFiles, { registry });
+  if (docs.nonDocFiles.length > 0) {
+    return { exempt: false, reason: "non-docs runtime changes present", files: docs.nonDocFiles };
+  }
+  if (docs.workspaceRequiredFiles.length > 0) {
+    return { exempt: false, reason: "docs diff changes an executable standard the workspace build reads", files: docs.workspaceRequiredFiles };
+  }
+  if (!docs.docsOnly) {
+    return { exempt: false, reason: "empty diff — nothing for the docs-only exemption to cover", files: [] };
   }
 
   const affected = affectedEntries(diffFiles, registry);
@@ -172,7 +172,7 @@ export function decideSandboxAdmission(exemption) {
   if (Array.isArray(exemption.files) && exemption.files.length > 0) {
     return {
       claim: true,
-      message: `sandbox required — these non-docs files forfeit the docs-only exemption: ${exemption.files.join(", ")}`,
+      message: `sandbox required (${exemption.reason}) — these files forfeit the docs-only exemption: ${exemption.files.join(", ")}`,
     };
   }
   const stale = Array.isArray(exemption.staleArtifacts) && exemption.staleArtifacts.length > 0
@@ -196,7 +196,12 @@ export function sandboxDecisionForHead({
   const diff = git(["diff", "--name-only", mergeBase, "HEAD"]);
   if (diff == null) return null;
   const files = String(diff).split(/\r?\n/).filter(Boolean);
-  return decideSandboxAdmission(evaluatePushExemption(files, registry, runCheck));
+  try {
+    return decideSandboxAdmission(evaluatePushExemption(files, registry, runCheck));
+  } catch {
+    // An unreadable evidence policy cannot classify anything; it is not exempt.
+    return null;
+  }
 }
 
 /**
@@ -229,6 +234,56 @@ export function evaluateCheckAll(registry = DERIVED_ARTIFACTS, runCheck = () => 
     const tolerated = outcome === "stale" && mergeQueue === true && entry.mergeQueueRaceTolerant === true;
     return { entry, ok, tolerated, outcome };
   });
+}
+
+/** Registry entries whose sources OR outputs appear in `files`. */
+export function entriesTouchedBy(files, registry = DERIVED_ARTIFACTS) {
+  return registry.filter((entry) => files.some((f) => (
+    matchesAnyGlob(f, entry.sourceGlobs ?? []) || matchesAnyGlob(f, entry.artifactPaths ?? [])
+  )));
+}
+
+/**
+ * BI-1A06A1AF. CI judges freshness on the pull_request merge (main + branch);
+ * preflight runs check-all on HEAD. Those agree for every entry whose inputs
+ * changed on at most one side since the merge base: a branch-only change is
+ * the HEAD verdict, a main-only change inherits main's. An entry whose inputs
+ * (sources or outputs) changed on BOTH sides is exposed: its merged output is
+ * something neither tree generated, so HEAD cannot predict CI.
+ */
+export function evaluateMergedBaseExposure({ branchFiles = [], mainFiles = [], registry = DERIVED_ARTIFACTS } = {}) {
+  const onMain = new Set(entriesTouchedBy(mainFiles, registry).map((entry) => entry.id));
+  return entriesTouchedBy(branchFiles, registry).filter((entry) => onMain.has(entry.id));
+}
+
+/**
+ * Merged-base freshness verdict for HEAD against `baseRef`.
+ *   current — HEAD contains baseRef; check-all on HEAD is CI's verdict
+ *   clear   — behind, but no entry is exposed on both sides
+ *   stale   — exposed entries; CI's merge cannot be judged fresh from HEAD
+ *   unrun   — the merge base could not be computed (runner failure, not STALE)
+ */
+export function mergedBaseDerivedVerdict({
+  cwd = REPO_ROOT,
+  baseRef = "origin/main",
+  git = (args) => gitTextOrNull(args, { cwd }),
+  registry = DERIVED_ARTIFACTS,
+} = {}) {
+  const mergeBase = git(["merge-base", "HEAD", baseRef]);
+  const behindText = mergeBase ? git(["rev-list", "--count", `HEAD..${baseRef}`]) : null;
+  if (!mergeBase || behindText == null) return { status: "unrun", baseRef, entries: [] };
+  const behind = Number(String(behindText).trim());
+  if (!Number.isFinite(behind)) return { status: "unrun", baseRef, entries: [] };
+  if (behind === 0) return { status: "current", baseRef, behind, mergeBase, entries: [] };
+  const list = (range) => {
+    const out = git(["diff", "--name-only", "--no-renames", ...range]);
+    return out == null ? null : String(out).split(/\r?\n/).filter(Boolean);
+  };
+  const branchFiles = list([mergeBase, "HEAD"]);
+  const mainFiles = list([mergeBase, baseRef]);
+  if (branchFiles == null || mainFiles == null) return { status: "unrun", baseRef, entries: [] };
+  const entries = evaluateMergedBaseExposure({ branchFiles, mainFiles, registry });
+  return { status: entries.length ? "stale" : "clear", baseRef, behind, mergeBase, entries };
 }
 
 // ── IO-touching implementations used by the CLI ────────────────────────────

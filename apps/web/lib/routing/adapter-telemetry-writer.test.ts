@@ -26,6 +26,10 @@ afterEach(() => {
 });
 
 describe("writeAdapterTelemetry", () => {
+  it("preserves the server-preallocated primary id", async () => {
+    await writeAdapterTelemetry({ id: "attempt-exact", adapterKind: "http", adapterVersion: "1", providerId: "openai", modelId: "model", executionMode: "single", startedAt: new Date(), status: "success" });
+    expect(writeOverride).toHaveBeenCalledWith(expect.objectContaining({ id: "attempt-exact" }));
+  });
   it.each(["success", "error"])("keeps the dispatch funding snapshot on %s attempts", async (status) => {
     const investment = { investmentPrincipalId: "p1", investmentOrganizationId: "org1", investmentItemId: "item1", investmentPurpose: "sharedPlatform" as const, investmentClass: "refactor" as const, investmentPolicyRef: "revision-1", investmentInstallationRef: "install-1", investmentCapturedAt: new Date("2026-10-13T00:00:00Z") };
     await writeAdapterTelemetry({ adapterKind: "http", adapterVersion: "1", providerId: "test", modelId: "test", executionMode: "single", startedAt: investment.investmentCapturedAt, status, investment });

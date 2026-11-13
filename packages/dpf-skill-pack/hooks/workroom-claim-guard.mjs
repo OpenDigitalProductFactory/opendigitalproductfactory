@@ -41,7 +41,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { readHookPayload, isShellTool, emitDeny, emitContext, inDpfWorkspace, shellCommandFromInput } from "./lib/hook-io.mjs";
+import { readHookPayload, isShellTool, emitDeny, emitContext, inDpfWorkspace, shellCommandFromInput, FILE_WRITE_TOOL_NAMES } from "./lib/hook-io.mjs";
 import {
   CLAIM_MARKER_NAME,
   NUDGE_STAMP_NAME,
@@ -54,12 +54,18 @@ import {
 const GIT_TIMEOUT_MS = 3_000;
 
 /** Tools that mutate the working tree and therefore constitute "work". */
-const EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+const EDIT_TOOLS = new Set([...FILE_WRITE_TOOL_NAMES, "NotebookEdit"]);
+
+// Git global options that may sit before the subcommand (`git -C <dir> commit`,
+// `git -c k=v commit`, `git --no-pager rebase`). Missing them let a commit made
+// from another folder pass as not-work (BI-6145A168).
+const GIT_GLOBAL_OPTS = String.raw`(?:\s+(?:-[Cc]\s+(?:"[^"]*"|'[^']*'|\S+)|--[\w-]+(?:=\S+)?))*`;
+const WORK_COMMAND_RE = new RegExp(String.raw`\bgit${GIT_GLOBAL_OPTS}\s+(commit|cherry-pick|revert|merge|rebase)\b`);
 
 /** Shell commands that record work. Reading, branching and status do not. */
 export function isWorkCommand(command) {
   if (typeof command !== "string" || command === "") return false;
-  return /\bgit\s+(commit|cherry-pick|revert|merge|rebase)\b/.test(command);
+  return WORK_COMMAND_RE.test(command);
 }
 
 /** Does this invocation constitute work on the tree? */

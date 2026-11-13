@@ -27,6 +27,7 @@
     "ai-providers": "AI Providers",
     "branding": "Branding",
     "business-context": "Your Business",
+    "direction": "Your Direction",
     "how-you-decide": "How You Decide",
     "operating-hours": "Operating Hours",
     "storefront": "Storefront",
@@ -103,7 +104,11 @@
     "updateFailed": "Update failed. Try again.",
     "pauseChanged": "Pause changed. Refresh.",
     "stillUnavailable": "Provider remains unavailable.",
-    "positiveDuration": "Enter a positive duration."
+    "positiveDuration": "Enter a positive duration.",
+    "reason": "Reason for pausing",
+    "reasonRequired": "Enter a reason for pausing.",
+    "pauseForDuration": "Pause for this long",
+    "overrideRecentResume": "Pause anyway, overriding that resume"
   },
   "providerRouting": {
     "heading": "Routing right now",
@@ -112,7 +117,9 @@
     "pauseEnds": "Pause ends",
     "nextAttempt": "Next attempt after",
     "indefinite": "Until you enable it.",
-    "pauseExplanation": "Pausing stops new requests. Running work may finish. Resuming preserves usage, account and health restrictions.",
+    "health": "Health",
+    "pauseExplanation": "Pausing blocks new inference, including chat and embeddings. Running work may finish. Health checks continue.",
+    "resumeRestrictions": "Resuming preserves usage, account and health restrictions.",
     "sharedAuth": "ChatGPT and Codex share one OpenAI sign-in. Traffic controls are separate.",
     "manageSignIn": "Manage shared sign-in",
     "manageChatGPT": "Manage ChatGPT",
