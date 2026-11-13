@@ -145,7 +145,8 @@ function withReadOnlySourceLfs(fixture, run) {
 
 test("the promoter image supplies Git LFS and initializes its system filters", () => {
   const instructions = dockerfile.replace(/\\\r?\n/g, " ");
-  assert.match(instructions, /^RUN\s+apk\s+add\b[^\n]*\bgit-lfs\b/m,
+  // The install sits inside a retry loop (BI-7FFF5CB0), so apk need not open the RUN.
+  assert.match(instructions, /^RUN\b[^\n]*\bapk\s+add\b[^\n]*\bgit-lfs\b/m,
     "the identity-checking promoter needs the same LFS normalization as source preparation");
   assert.match(instructions, /^RUN\b[^\n]*\bgit\s+lfs\s+install\b(?=[^\n]*--system)(?=[^\n]*--skip-repo)/m,
     "filters belong in the image's system Git config, without modifying source hooks");

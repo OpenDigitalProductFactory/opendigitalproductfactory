@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-ED52AB82 (agent dialog broker item C, spec 2026-10-27 §6.7). Migration 20261112000000_mcp_room_resource_subscriptions adds McpResourceSubscription (one row per MCP client and room resource, so a resources/subscribe on one portal process is heard by a GET stream on another) and an AFTER INSERT trigger on WorkItemMessage that sends pg_notify('dpf_room_message') with the message's workItemId, messageId and createdAt. The notice carries no message content and is delivered only on commit.",
+  "affectedCopies": [
+    "McpResourceSubscription rows: written only by resources/subscribe (upsert) and resources/unsubscribe (delete) in apps/web/lib/mcp/room-resources.server.ts; an open GET stream extends its subscriber's rows (apps/web/lib/mcp/task-status-stream.ts); read by the fan-out in apps/web/lib/mcp/room-update-fanout.server.ts. Rows cascade away with their WorkItem.",
+    "WorkItemMessage: unchanged columns; every insert now also queues one pg_notify on dpf_room_message, heard by each portal process's shared LISTEN connection."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: an opaque subscriber key (OAuth refresh-family or credential id), a room URI and case key, and the room's work item id. No message text, no names, no contact data.",
+    "dataSubjectRights": "No content about a person. A subscription is keyed by a credential, not a person, and is removed by unsubscribe, by expiry or with its room.",
+    "reviewDisposition": "Ephemeral operational state; the retention sweep purges rows seven days past expiresAt (the platform floor for any purge window)."
+  },
+  "migration": {
+    "name": "20261112000000_mcp_room_resource_subscriptions",
+    "backfill": "None. The table starts empty; the trigger fires on new inserts only.",
+    "rollback": "Forward-only and additive. Dropping the trigger stops live push (pull via read_room_messages is unaffected); dropping the table removes subscriptions, which clients recreate with resources/subscribe."
+  },
+  "tests": [
+    "apps/web/lib/mcp/room-resource.test.ts",
+    "apps/web/lib/mcp/room-resources.server.test.ts",
+    "apps/web/lib/mcp/room-update-fanout.server.test.ts",
+    "apps/web/lib/mcp/task-status-stream.test.ts",
+    "apps/web/app/api/mcp/v1/route.resources.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:mcp-resource-subscription",
+      "prismaModel": "McpResourceSubscription",
+      "lifecycleDisposition": "Ephemeral: lapses 24 h after the last subscribe or stream open; purged 7 days past expiresAt; cascades with its WorkItem.",
+      "fields": [
+        { "fieldId": "data:mcp-resource-subscription#subscriberKey", "resolution": "not-applicable", "reason": "Opaque auth-context key: family:<oauthFamilyKey> or token:<credential id>. Not a person identifier.", "provenance": "apps/web/lib/mcp/room-resource.ts mcpSubscriberKey", "flags": [] },
+        { "fieldId": "data:mcp-resource-subscription#uri", "resolution": "not-applicable", "reason": "Room resource URI dpf://rooms/<caseKey>/messages.", "provenance": "apps/web/lib/mcp/room-resource.ts roomResourceUri", "flags": [] },
+        { "fieldId": "data:mcp-resource-subscription#caseKey", "resolution": "not-applicable", "reason": "The room's case key, e.g. backlog-item:BI-ED52AB82.", "provenance": "resources/subscribe params.uri", "flags": [] },
+        { "fieldId": "data:mcp-resource-subscription#workItemId", "resolution": "inherited", "reason": "Foreign key to the room's WorkItem; governed by the WorkItem asset.", "provenance": "resolveRoomMessagingWorkItem", "flags": [] },
+        { "fieldId": "data:mcp-resource-subscription#expiresAt", "resolution": "not-applicable", "reason": "Lapse time and retention time axis.", "provenance": "room-resources.server.ts ROOM_SUBSCRIPTION_TTL_MS", "flags": [] }
+      ]
+    }
+  ]
+}

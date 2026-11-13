@@ -1,17 +1,32 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const io = vi.hoisted(() => ({ readFile: vi.fn(), rm: vi.fn(), stage: vi.fn() }));
-vi.mock("node:fs/promises", () => ({ readFile: io.readFile, rm: io.rm }));
+const io = vi.hoisted(() => ({ stage: vi.fn() }));
 vi.mock("./promoter-build-context", () => ({
   PROMOTER_DOCKERFILE: "Dockerfile.promoter",
   stageMinimalPromoterBuildContext: io.stage,
 }));
 
-import { buildCandidatePromoterArtifactImage } from "./promoter-artifact";
+import { buildCandidatePromoterArtifactImage, type ArtifactDockerResult } from "./promoter-artifact";
 
 const targetSha = "a".repeat(40);
-const params = { sourcePath: "/labelled-fixture-source", targetSha };
-const context = "/labelled-fixture-context";
+let source: string;
+let context: string;
+let params: { sourcePath: string; targetSha: string; networkRetryDelayMs: number };
+
+beforeEach(async () => {
+  vi.resetAllMocks();
+  source = await mkdtemp(join(tmpdir(), "promoter-source-fixture-"));
+  context = await mkdtemp(join(tmpdir(), "promoter-context-fixture-"));
+  await writeFile(join(source, "promoter-contract.json"), '{"schemaVersion":1}');
+  io.stage.mockResolvedValue(context);
+  params = { sourcePath: source, targetSha, networkRetryDelayMs: 0 };
+});
+afterEach(async () => {
+  await Promise.all([source, context].map(path => rm(path, { recursive: true, force: true })));
+});
 
 // All runner output is synthetic. No Docker command or production build runs.
 async function failure(stdout: string, stderr: string): Promise<string> {
@@ -23,13 +38,6 @@ async function failure(stdout: string, stderr: string): Promise<string> {
   throw new Error("Expected the injected runner to fail");
 }
 
-beforeEach(() => {
-  vi.resetAllMocks();
-  io.readFile.mockResolvedValue(Buffer.from('{"schemaVersion":1}'));
-  io.stage.mockResolvedValue(context);
-  io.rm.mockResolvedValue(undefined);
-});
-
 describe("candidate-promoter failure evidence", () => {
   it("keeps a leading causal line and the final Docker summary", async () => {
     const causal = "ERROR: labelled fixture package download failed";
@@ -40,7 +48,7 @@ describe("candidate-promoter failure evidence", () => {
     expect(message).toContain("chars elided");
     expect(message).toContain("promoter_candidate_build_failed: exit code 1");
     expect(message.length).toBeLessThanOrEqual(12_100);
-    expect(io.rm).toHaveBeenCalledWith(context, { recursive: true, force: true });
+    await expect(access(context)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("does not let stderr wrapper noise erase useful stdout", async () => {
@@ -87,7 +95,7 @@ describe("candidate-promoter failure evidence", () => {
     await expect(buildCandidatePromoterArtifactImage(params, runner)).resolves.toBe(`dpf-promoter:${targetSha}`);
     expect(runner).toHaveBeenCalledOnce();
     expect(runner.mock.calls[0]?.[0]).toEqual(expect.arrayContaining(["--load", `DPF_PROMOTER_SOURCE_SHA=${targetSha}`, context]));
-    expect(io.rm).toHaveBeenCalledWith(context, { recursive: true, force: true });
+    await expect(access(context)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("does not build or inspect a configured custom artifact", async () => {
@@ -99,6 +107,66 @@ describe("candidate-promoter failure evidence", () => {
 
   it("still cleans staging if the injected runner rejects", async () => {
     await expect(buildCandidatePromoterArtifactImage(params, async () => { throw new Error("labelled spawn failure"); })).rejects.toThrow("labelled spawn failure");
-    expect(io.rm).toHaveBeenCalledWith(context, { recursive: true, force: true });
+    await expect(access(context)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+const SHA = "a".repeat(40);
+const APK_NETWORK =
+  "#6 3.1 WARNING: fetching https://dl-cdn.alpinelinux.org/alpine/v3.24/main: network error (check Internet connectivity and network settings)";
+
+describe("buildCandidatePromoterArtifactImage — transient network (BI-7FFF5CB0)", () => {
+  const failure = (stderr: string): ArtifactDockerResult => ({ exitCode: 1, stdout: "", stderr });
+
+  it("retries the candidate build when the failure is a network fetch, then succeeds", async () => {
+    const results = [failure(`${APK_NETWORK}\nERROR: failed to solve: exit code: 9`), { exitCode: 0, stdout: "", stderr: "" }];
+    const runDocker = vi.fn(async () => results.shift()!);
+    const image = await buildCandidatePromoterArtifactImage(
+      { sourcePath: source, targetSha: SHA, networkRetryDelayMs: 0 },
+      runDocker,
+    );
+    expect(image).toBe(`dpf-promoter:${SHA}`);
+    expect(runDocker).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a deterministic build failure", async () => {
+    const runDocker = vi.fn(async () => failure("ERROR: unable to select packages:\n  foo (no such package)"));
+    await expect(buildCandidatePromoterArtifactImage(
+      { sourcePath: source, targetSha: SHA, networkRetryDelayMs: 0 },
+      runDocker,
+    )).rejects.toThrow(/promoter_candidate_build_failed: .*no such package/s);
+    expect(runDocker).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the network cause when every attempt fails, instead of a truncated tail", async () => {
+    const padded = [APK_NETWORK, ...Array.from({ length: 30 }, () => "#7 noise ".repeat(8)),
+      "ERROR: failed to build: failed to solve: process did not complete successfully: exit code: 14"].join("\n");
+    const runDocker = vi.fn(async () => failure(padded));
+    await expect(buildCandidatePromoterArtifactImage(
+      { sourcePath: source, targetSha: SHA, networkRetryDelayMs: 0 },
+      runDocker,
+    )).rejects.toThrow(/network error \(check Internet connectivity/);
+    expect(runDocker.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("retains a buried network cause and redacts it in both the saved error and retry warnings", async () => {
+    const secret = "synthetic-network-fixture";
+    const cause = `${APK_NETWORK} https://fixture:${secret}@registry.invalid token=${secret}`;
+    const output = `${"labelled preamble\n".repeat(1200)}${cause}\n${"labelled detail\n".repeat(1200)}final build failure`;
+    const runDocker = vi.fn(async () => failure(output));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      let message = "";
+      try { await buildCandidatePromoterArtifactImage(params, runDocker); }
+      catch (error) { message = (error as Error).message; }
+      expect(message).toContain("network error (check Internet connectivity");
+      expect(message).toContain("final build failure");
+      expect(message).not.toContain(secret);
+      expect(message.length).toBeLessThanOrEqual(12_100);
+      expect(runDocker).toHaveBeenCalledTimes(3);
+      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn.mock.calls.flat().join("\n")).not.toContain(secret);
+      await expect(access(context)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally { warn.mockRestore(); }
   });
 });

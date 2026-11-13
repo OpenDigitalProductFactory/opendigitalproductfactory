@@ -28,6 +28,7 @@ import {
 import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
 import { embedPublishedOverlayPage } from "@/lib/wiki/embed-published-overlay";
 import { syncWikiPageLinks } from "@/lib/wiki/page-links";
+import { syncPageMaterialAfterTransition } from "@/lib/decision-perspective/page-material-lifecycle";
 import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -282,6 +283,13 @@ export async function saveWikiOverlayEditForActor(
       : await writePageAndRevision(prisma);
 
     await syncWikiPageLinks(prisma, { pageId: saved.id, organizationId: org.id, body: input.body });
+
+    // BI-BD9DEC45: the editor is one of the two paths that archive a stance, and
+    // the gate reads the page's material, never the page. Keep them in step on
+    // every real status transition; a new row has no material to move.
+    if (previousStatus !== null && previousStatus !== saved.status) {
+      await syncPageMaterialAfterTransition({ db: prisma, pageId: saved.id, pageStatus: saved.status, origin: "wiki-edit" });
+    }
 
     // BI-8AC24F3D: this action is what the portal Edit page calls, so flipping
     // Status to `published` here IS how an operator publishes a craft override.
