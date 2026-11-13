@@ -234,6 +234,24 @@ test("source validation refuses conflicting branch, nested path, non-Git and for
   assert.equal(f.calls.length, 0);
 });
 
+// BI-4704915D: a shell that hardens git (the Claude desktop Terminal exports
+// this; Git 2.54 on macOS defaults to it) makes git refuse to read a bare main
+// root at all. The refusal must be the same conflict, not a raw git error.
+test("source validation gives the same conflict refusal for a bare main root under safe.bareRepository=explicit", async t => {
+  const f = await packagedFixture(t);
+  const binding = { mainRoot: f.root, worktreePath: f.root, branch: "main", headSha: f.sha };
+  const saved = process.env.GIT_CONFIG_PARAMETERS;
+  process.env.GIT_CONFIG_PARAMETERS = "'safe.bareRepository=explicit' 'core.fsmonitor='";
+  t.after(() => {
+    if (saved === undefined) delete process.env.GIT_CONFIG_PARAMETERS;
+    else process.env.GIT_CONFIG_PARAMETERS = saved;
+  });
+  assert.equal(verifiedBindingSource(binding), realpathSync.native(join(f.root, "scripts/lib/workroom-bind.mjs")));
+  assert.throws(() => verifiedBindingSource({ ...binding, mainRoot: f.remote }), /conflicts/);
+  assert.throws(() => verifiedBindingSource({ ...binding, worktreePath: f.pack }), /git .*failed|Command failed/);
+  assert.equal(f.calls.length, 0);
+});
+
 test("source validation does not follow a binder junction outside the verified checkout", async t => {
   const f = await packagedFixture(t);
   const original = resolve(f.root, "scripts/lib");
