@@ -7,6 +7,7 @@ import { prisma } from "@dpf/db";
 import { getExecutionEpicRollups, getFeatureBuildById, getFeatureBuilds } from "@/lib/feature-build-data";
 import { getPortfoliosForSelect } from "@/lib/backlog-data";
 import { BuildStudio } from "@/components/build/BuildStudio";
+import { SavedBuildReader } from "@/components/build/SavedBuildReader";
 import { loadBuildStudioCapability } from "@/lib/build/build-studio-capability";
 import { loadBuildStudioCustomerStatuses, type CapsuleFindManyDelegate } from "@/lib/build/customer-status-loader";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
@@ -70,8 +71,9 @@ export default async function BuildPage({ searchParams }: PageProps) {
   // cannot satisfy that floor. Rather than letting Dale type into a doomed
   // pipeline and hit opaque agent failures, surface "connect a provider" as
   // the obvious next step.
-  const capability = await loadBuildStudioCapability();
-  if (!capability.ok) {
+  const capability = await loadBuildStudioCapability().catch(() => null);
+  let runnerSetup: React.ReactNode = null;
+  if (capability && !capability.ok) {
     const isOnlyLocal = capability.reason === "only_local_provider_active";
     // Inline-enable only makes sense for operators who can flip provider
     // status; everyone else still gets the connect-a-provider link.
@@ -94,7 +96,7 @@ export default async function BuildPage({ searchParams }: PageProps) {
       : isOnlyLocal
         ? "Build Studio writes code and orchestrates tools for you. The local AI on this install can chat, but it is not the right runner for production code work yet. Connect a subscription CLI path or an API-key provider below, then the build flow opens up."
         : "Build Studio needs an active runner that can write code and use tools at production quality. ChatGPT/OpenAI Codex and Claude can both satisfy this through OAuth subscription CLI paths; OpenAI and Anthropic API keys are separate pay-per-token licensing paths.";
-    return (
+    runnerSetup = (
       <div className="flex items-start justify-center min-h-[60vh] px-6 py-10">
         <div className="max-w-2xl w-full space-y-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-8 shadow-sm">
           <div className="flex items-start gap-4">
@@ -178,6 +180,19 @@ export default async function BuildPage({ searchParams }: PageProps) {
         </div>
       </div>
     );
+  }
+
+  if (!capability?.ok) {
+    let builds;
+    let initialActiveBuild;
+    try {
+      builds = await getFeatureBuilds(session.user.id);
+      initialActiveBuild = buildId && !builds.some(build => build.buildId === buildId)
+        ? await getFeatureBuildById(buildId) : null;
+    } catch {
+      return <SavedBuildReader builds={[]} loadFailed />;
+    }
+    return <SavedBuildReader builds={builds} initialBuildId={buildId} initialActiveBuild={initialActiveBuild} runnerSetup={runnerSetup} availabilityUnknown={!capability} />;
   }
 
   const [builds, epicRollups, portfolios] = await Promise.all([

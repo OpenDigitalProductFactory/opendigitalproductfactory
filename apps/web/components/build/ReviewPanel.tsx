@@ -24,9 +24,10 @@ import { isReviewExecutionIncomplete } from "@/lib/build/review-execution-state"
 
 type Props = {
   build: FeatureBuildRow;
+  executionAvailable?: boolean;
 };
 
-export function ReviewPanel({ build }: Props) {
+export function ReviewPanel({ build, executionAvailable = true }: Props) {
   const taskResults = normalizeTaskResults(build.taskResults);
   const verification = normalizeVerificationOutput(build.verificationOut);
   const deliberationEntries = Object.entries(build.deliberationSummary ?? {}) as Array<
@@ -57,6 +58,7 @@ export function ReviewPanel({ build }: Props) {
         review={build.designReview}
         buildId={build.buildId}
         buildTitle={build.title}
+        executionAvailable={executionAvailable}
       />
       <BuildPlanSection plan={build.buildPlan} review={build.planReview} />
       <TaskResultsSection results={taskResults} />
@@ -206,11 +208,13 @@ function DesignDocSection({
   review,
   buildId,
   buildTitle,
+  executionAvailable,
 }: {
   doc: BuildDesignDoc | null;
   review: FeatureBuildRow["designReview"];
   buildId: string;
   buildTitle: string;
+  executionAvailable: boolean;
 }) {
   const [formatted, setFormatted] = useState<Record<string, string>>({});
   const [isFormatting, startFormatting] = useTransition();
@@ -247,7 +251,7 @@ function DesignDocSection({
     <Section title="Design Document" badge={reviewBadge} badgeColor={reviewColor} hidden={!doc}>
       {doc && (
         <div className="space-y-2 text-sm">
-          {Object.keys(formatted).length === 0 && (
+          {executionAvailable && Object.keys(formatted).length === 0 && (
             <button
               type="button"
               onClick={handleFormat}
@@ -279,7 +283,7 @@ function DesignDocSection({
           {review && (
             <ReviewBadgeBlock decision={review.decision} executionIncomplete={isReviewExecutionIncomplete(review)} summary={review.summary} issues={review.issues} />
           )}
-          {review?.decision === "pass" && !isReviewExecutionIncomplete(review) && (
+          {executionAvailable && review?.decision === "pass" && !isReviewExecutionIncomplete(review) && (
             <DecompositionCoordinator
               buildId={buildId}
               buildTitle={buildTitle}
