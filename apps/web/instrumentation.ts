@@ -457,6 +457,10 @@ export async function reconcileDeployedShipBuilds(
     const { reconcileBuildCompletion, completeLocalDeliveryBuild } = await import("@/lib/build-flow-state");
     const { isFeatureBuildDeployed } = await import("@/lib/self-upgrade/completion");
 
+    // BI-8129F585: a PR that merged after its room closed is never seen by the
+    // PR reconciler; settle it from a verified GitHub observation first.
+    await (await import("@/lib/build/merged-ship-room-settlement")).settleMergedShipBuildRoomsNow()
+      .catch((err: unknown) => logger.error("[auto-complete] merged-room settlement failed: %s", JSON.stringify(String(err))));
     const shipBuilds = await prisma.featureBuild.findMany({
       where: { phase: "ship" },
       select: { id: true, buildId: true },
