@@ -4153,6 +4153,19 @@
         "related"
       ]
     },
+    "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md": {
+      "publicHref": "/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "corpus-and-vectors-converge-on-every-platform-update",
+        "rule",
+        "why",
+        "how-to-apply",
+        "related-principles"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/count-the-operations-to-outcome.md": {
       "publicHref": "/founder-kernel/wiki/principles/count-the-operations-to-outcome/",
       "portalHref": null,
