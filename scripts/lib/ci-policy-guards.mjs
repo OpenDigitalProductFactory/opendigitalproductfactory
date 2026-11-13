@@ -95,7 +95,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
       // BI-2FAE2E5C: CI Node is the exact, qualified .node-version.
       node("--test", "scripts/check-ci-node-qualified.test.mjs"),
-      node("scripts/check-guards.mjs"),
+      // BI-8ED87FD9: skip the check-no-* guards another guard in this profile
+      // already runs on its own, so each runs once per profile run.
+      node("scripts/check-guards.mjs", "--skip-standalone"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
       // BI-22A2CA0D: every compose service declares dpf.recreate-class, so the
@@ -1220,6 +1222,33 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
   ]),
 });
+
+const LOOP_GUARD_FILE = /^scripts\/(check-no-[^/]+\.mjs)$/;
+
+/**
+ * The scripts/check-no-*.mjs guards (and their self-tests) that a profile runs
+ * as part of a named guard other than the Repo Guard Loop (BI-8ED87FD9).
+ *
+ * The loop discovers every check-no-* file, so without this a guard registered
+ * on its own ran twice in one profile run (17 of them on 2026-11-13). The loop
+ * reads this set under --skip-standalone and runs each of those guards once.
+ */
+export function loopGuardsRunStandalone(profileName = "source") {
+  const guards = new Set();
+  const tests = new Set();
+  for (const entry of POLICY_GUARD_PROFILES[profileName] ?? []) {
+    if (entry.id === "repo-guard-loop") continue;
+    for (const [command, args] of entry.commands) {
+      if (command !== "node") continue;
+      for (const arg of args) {
+        const match = LOOP_GUARD_FILE.exec(arg);
+        if (!match) continue;
+        (match[1].endsWith(".test.mjs") ? tests : guards).add(match[1]);
+      }
+    }
+  }
+  return { guards, tests };
+}
 
 /**
  * Build the consolidated end-of-run summary for a policy-guard profile.

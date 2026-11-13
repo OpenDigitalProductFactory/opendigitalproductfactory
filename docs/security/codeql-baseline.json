@@ -1,7 +1,0 @@
-{
-  "$schema": "./codeql-baseline.schema.json",
-  "description": "CodeQL findings accepted as pre-existing at the time of snapshot. The security-inflow-gate workflow blocks PRs that introduce alert NUMBERS not in this list. Burn-down is tracked via the cluster BIs referenced in docs/security/README.md.",
-  "generatedAt": "2026-05-24T01:11:45.614Z",
-  "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
-  "alerts": []
-}
