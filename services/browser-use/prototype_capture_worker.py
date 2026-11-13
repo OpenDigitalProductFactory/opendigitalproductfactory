@@ -2,9 +2,14 @@
 import asyncio
 import base64
 import datetime
+import ctypes
+import errno
 import json
 import os
 import resource
+import platform
+import socket
+import stat
 import sys
 
 from prototype_capture import MAX_HTML_BYTES, MAX_PNG_BYTES, validate_capture_request
@@ -15,6 +20,84 @@ PROTOTYPE_CSP = (
     "media-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; "
     "form-action 'none'; object-src 'none'; frame-ancestors 'none'"
 )
+
+
+def reject_inherited_sockets():
+    """Only pipes and files may cross the parent's close_fds boundary."""
+    for name in os.listdir("/proc/self/fd"):
+        try:
+            mode = os.fstat(int(name)).st_mode
+        except OSError as error:
+            if error.errno == errno.EBADF:  # the closed directory iterator fd
+                continue
+            raise
+        if stat.S_ISSOCK(mode):
+            raise ValueError("prototype_capture_inherited_socket")
+
+
+def install_transport_guard():
+    """Kernel denial inherited by Node/Chromium, not just HTTP interception.
+
+    Only private connected Unix stream/seqpacket socketpairs remain available
+    for child IPC. Neither IP sockets nor connections to Unix brokers/proxies
+    can be created. Missing filter support fails closed before browser loading.
+    libseccomp API: https://github.com/seccomp/libseccomp/blob/main/include/seccomp.h.in
+    """
+    if sys.platform != "linux" or platform.machine() not in ("x86_64", "aarch64"):
+        raise ValueError("prototype_capture_transport_guard_unavailable")
+    reject_inherited_sockets()
+
+    class Comparison(ctypes.Structure):
+        _fields_ = [("arg", ctypes.c_uint), ("op", ctypes.c_int),
+                    ("datum_a", ctypes.c_uint64), ("datum_b", ctypes.c_uint64)]
+
+    lib = ctypes.CDLL("libseccomp.so.2", use_errno=True)
+    lib.seccomp_init.argtypes = [ctypes.c_uint32]
+    lib.seccomp_init.restype = ctypes.c_void_p
+    lib.seccomp_release.argtypes = [ctypes.c_void_p]
+    lib.seccomp_release.restype = None
+    lib.seccomp_attr_set.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_uint32]
+    lib.seccomp_syscall_resolve_name.argtypes = [ctypes.c_char_p]
+    lib.seccomp_rule_add_array.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_int,
+                                          ctypes.c_uint, ctypes.POINTER(Comparison)]
+    lib.seccomp_load.argtypes = [ctypes.c_void_p]
+    context = lib.seccomp_init(0x7fff0000)  # SCMP_ACT_ALLOW
+    if not context:
+        raise ValueError("prototype_capture_transport_guard_unavailable")
+    def checked(result):
+        if result != 0:
+            raise ValueError("prototype_capture_transport_guard_unavailable")
+    def deny(name, comparison=None):
+        number = lib.seccomp_syscall_resolve_name(name.encode("ascii"))
+        if number < 0:
+            raise ValueError("prototype_capture_transport_guard_unavailable")
+        checked(lib.seccomp_rule_add_array(context, 0x00050000 | errno.EPERM,
+            number, 0 if comparison is None else 1,
+            None if comparison is None else ctypes.byref(comparison)))
+    try:
+        checked(lib.seccomp_attr_set(context, 3, 1))  # CTL_NNP: no setuid privilege gains
+        for name in ("socket", "connect", "bind", "listen", "accept", "accept4",
+                     "io_uring_setup", "pidfd_getfd", "ptrace", "process_vm_readv",
+                     "process_vm_writev"):
+            deny(name)
+        deny("socketpair", Comparison(0, 1, socket.AF_UNIX, 0))  # NE
+        deny("socketpair", Comparison(2, 1, 0, 0))
+        for socket_type in range(16):
+            if socket_type not in (socket.SOCK_STREAM, socket.SOCK_SEQPACKET):
+                deny("socketpair", Comparison(1, 7, 0xf, socket_type))  # MASKED_EQ
+        checked(lib.seccomp_load(context))
+    finally:
+        lib.seccomp_release(context)
+
+
+def run_guarded_capture(source, playwright_loader):
+    install_transport_guard()
+    return asyncio.run(render_capture(source, playwright_loader()))
+
+
+def load_playwright():
+    from playwright.async_api import async_playwright
+    return async_playwright
 
 
 async def render_capture(source, playwright_factory):
@@ -92,8 +175,7 @@ def main():
     if len(raw) > MAX_HTML_BYTES * 6 + 4000:
         raise ValueError("prototype_capture_request_size")
     source = validate_capture_request(json.loads(raw))
-    from playwright.async_api import async_playwright
-    result = asyncio.run(render_capture(source, async_playwright))
+    result = run_guarded_capture(source, load_playwright)
     sys.stdout.write(json.dumps(result))
 
 

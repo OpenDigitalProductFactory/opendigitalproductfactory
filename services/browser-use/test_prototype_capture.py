@@ -1,5 +1,7 @@
 """Offline prototype capture contracts; no provider or running service required."""
 import hashlib
+import contextlib
+import tempfile
 import os
 import base64
 from pathlib import Path
@@ -15,6 +17,30 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from prototype_capture import validate_capture_request, validate_capture_result
 from prototype_capture import child_environment, capture_identity, render_prototype
 from prototype_capture_worker import render_capture
+import prototype_capture_worker as worker
+import prototype_capture as parent
+
+
+class KernelBoundaryTest(unittest.TestCase):
+    def test_guard_failure_prevents_loading_playwright(self):
+        loader = MagicMock()
+        with patch.object(worker, "install_transport_guard", create=True,
+                          side_effect=ValueError("filter unavailable")) as guard:
+            with self.assertRaisesRegex(ValueError, "filter unavailable"):
+                worker.run_guarded_capture(request(), loader)
+        guard.assert_called_once()
+        loader.assert_not_called()
+
+    def test_unreadable_process_inventory_is_not_an_empty_family(self):
+        with patch.object(parent.Path, "iterdir", side_effect=PermissionError("proc hidden")):
+            with self.assertRaisesRegex(ValueError, "inventory_unavailable"):
+                parent.pin_capture_processes(10001)
+
+    def test_descriptor_inventory_rejects_an_inherited_socket(self):
+        with patch.object(worker.os, "listdir", return_value=["0", "7"]), \
+                patch.object(worker.os, "fstat", return_value=SimpleNamespace(st_mode=0o140777)):
+            with self.assertRaisesRegex(ValueError, "inherited_socket"):
+                worker.reject_inherited_sockets()
 
 
 def request(**changes):
@@ -47,7 +73,10 @@ class ParentIsolationTest(unittest.IsolatedAsyncioTestCase):
         source = request(width=320, height=240)
         child = self.child(source)
         with patch("prototype_capture.capture_identity", return_value=(10001, 10001)), \
-                patch("prototype_capture.os.chown"), patch("prototype_capture.os.killpg") as kill, \
+                patch("prototype_capture.os.chown"), \
+                tempfile.TemporaryFile() as lock, \
+                patch("prototype_capture.capture_lock", return_value=contextlib.nullcontext(lock.fileno())), \
+                patch("prototype_capture._stop_child", AsyncMock()) as stop, \
                 patch("prototype_capture.asyncio.create_subprocess_exec", AsyncMock(return_value=child)) as start:
             result = await render_prototype(source)
         self.assertEqual(result["mime_type"], "image/png")
@@ -55,10 +84,58 @@ class ParentIsolationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((options["user"], options["group"], options["extra_groups"]), (10001, 10001, ()))
         self.assertTrue(options["start_new_session"])
         self.assertNotIn("OPENAI_API_KEY", options["env"])
-        kill.assert_called_once()  # also when the leader has already exited
+        self.assertTrue(options["close_fds"])
+        stop.assert_awaited_once_with(child, 10001)
+
+    async def test_detached_family_is_signalled_by_pinned_identity_not_process_group(self):
+        child = self.child(request(width=320, height=240))
+        with patch.object(parent, "pin_capture_processes", side_effect=[[(789, 42, "birth")], []]), \
+                patch.object(parent.signal, "pidfd_send_signal", create=True) as send, \
+                patch.object(parent.os, "close"), patch.object(parent.os, "waitpid") as reap:
+            await parent._stop_child(child, 10001)
+        send.assert_called_once_with(42, parent.signal.SIGKILL)
+        reap.assert_called_once_with(789, parent.os.WNOHANG)
+
+    async def test_repeated_cancellation_and_failed_inventory_retain_directory_and_hold(self):
+        source = request(width=320, height=240)
+        child = self.child(source)
+        exchange_started, cleanup_started, finish_cleanup = (asyncio.Event() for _ in range(3))
+        async def hang(_size):
+            exchange_started.set()
+            await asyncio.Event().wait()
+        async def failed_cleanup(*_args):
+            cleanup_started.set()
+            await finish_cleanup.wait()
+            raise ValueError("prototype_capture_inventory_unavailable")
+        child.stdout.read.side_effect = hang
+        home = tempfile.mkdtemp(prefix="dpf-capture-test-")
+        try:
+            with patch.object(parent, "capture_identity", return_value=(10001, 10001)), \
+                    patch.object(parent.os, "chown"), patch.object(parent.os, "chmod"), \
+                    tempfile.TemporaryFile() as lock, \
+                    patch.object(parent, "capture_lock", return_value=contextlib.nullcontext(lock.fileno())), \
+                    patch.object(parent.tempfile, "mkdtemp", return_value=home), \
+                    patch.object(parent.shutil, "rmtree") as remove, \
+                    patch.object(parent, "_stop_child", side_effect=failed_cleanup), \
+                    patch.object(parent.asyncio, "create_subprocess_exec", AsyncMock(return_value=child)):
+                task = asyncio.create_task(render_prototype(source))
+                await exchange_started.wait()
+                task.cancel()
+                await cleanup_started.wait()
+                task.cancel()
+                await asyncio.sleep(0)
+                self.assertFalse(task.done())
+                finish_cleanup.set()
+                with self.assertRaisesRegex(ValueError, "inventory_unavailable"):
+                    await task
+                self.assertEqual(os.pread(lock.fileno(), 32, 0), b"unsettled\n")
+                remove.assert_not_called()
+        finally:
+            import shutil
+            shutil.rmtree(home)
         child.stdin.close.assert_called_once()
 
-    async def test_timeout_kills_the_entire_child_group_without_returning_pixels(self):
+    async def test_timeout_settles_the_owned_family_without_returning_pixels(self):
         source = request(width=320, height=240)
         child = self.child(source)
         child.returncode = None
@@ -67,13 +144,15 @@ class ParentIsolationTest(unittest.IsolatedAsyncioTestCase):
             return b""
         child.stdout.read.side_effect = hang
         with patch("prototype_capture.capture_identity", return_value=(10001, 10001)), \
-                patch("prototype_capture.os.chown"), patch("prototype_capture.os.killpg") as kill, \
+                patch("prototype_capture.os.chown"), \
+                tempfile.TemporaryFile() as lock, \
+                patch("prototype_capture.capture_lock", return_value=contextlib.nullcontext(lock.fileno())), \
+                patch("prototype_capture._stop_child", AsyncMock()) as stop, \
                 patch("prototype_capture.CAPTURE_SECONDS", 0.01), \
                 patch("prototype_capture.asyncio.create_subprocess_exec", AsyncMock(return_value=child)):
             result = await render_prototype(source)
         self.assertEqual(result, {"error": "prototype_capture_timeout"})
-        kill.assert_called_once()
-        child.wait.assert_awaited()
+        stop.assert_awaited_once_with(child, 10001)
 
 
 class CaptureContractTest(unittest.TestCase):

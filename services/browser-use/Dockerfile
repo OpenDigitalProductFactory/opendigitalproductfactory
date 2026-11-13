@@ -5,6 +5,7 @@ FROM python:3.11-slim
 # explicitly so a `chromium` package bump can't silently drop them.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
+    libseccomp2 \
     curl \
     wget \
     gnupg \
@@ -40,7 +41,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # uses this dedicated account and a fresh per-request directory.
 RUN groupadd --system --gid 10001 dpf-capture \
     && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin dpf-capture \
-    && install -d -m 0700 /profiles
+    && install -d -m 0700 /profiles /run/dpf-capture
 
 COPY server.py url_policy.py agent_outcome.py prototype_capture.py prototype_capture_worker.py .
 

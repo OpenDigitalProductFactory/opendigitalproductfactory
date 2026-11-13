@@ -1,0 +1,34 @@
+name: Browser Capture Contracts
+
+on:
+  push:
+    branches-ignore: ['main']
+    paths:
+      - 'services/browser-use/**'
+      - '.github/workflows/browser-capture-contracts.yml'
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-capture-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    name: Sandboxed offline capture
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the production browser service for qualification
+        run: docker build --tag dpf-browser-capture-qualification services/browser-use
+      - name: Exercise kernel denial, browser sandbox and complete cleanup
+        # No credentials, profile mounts, Docker socket, privilege additions or
+        # security-policy exceptions. This image never advances a live install.
+        run: |
+          docker run --rm --network none --cpus 1 --memory 1g --pids-limit 256 \
+            --mount type=bind,src="${GITHUB_WORKSPACE}/services/browser-use/prototype_capture_linux_test.py",dst=/qualification/test_capture.py,readonly \
+            --env PYTHONPATH=/app \
+            dpf-browser-capture-qualification python /qualification/test_capture.py

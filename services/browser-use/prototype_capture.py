@@ -4,11 +4,15 @@ The portal must qualify engagement/source authority before calling this transpor
 It receives pixels internally; model-facing callers receive document references.
 """
 import asyncio
+import contextlib
+import ctypes
+import fcntl
 import base64
 import hashlib
 import json
 import os
 import signal
+import shutil
 import stat
 import struct
 import sys
@@ -101,13 +105,105 @@ def capture_identity(profiles_dir):
     return account.pw_uid, account.pw_gid
 
 
-async def _stop_child(child):
-    # Reap descendants even when the worker leader already exited abnormally.
+def pin_capture_processes(uid):
+    """Pin before reading identity. Never signal a numeric PID from an old scan.
+
+    The uid is reserved exclusively for captures. The cross-controller lock and
+    empty preflight make later members ours, even after setsid/reparenting.
+    An unreadable inventory is not evidence of an empty family.
+    """
+    pinned = []
     try:
-        os.killpg(child.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    await child.wait()
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdecimal():
+                continue
+            fd = None
+            try:
+                pid = int(entry.name)
+                fd = os.pidfd_open(pid, 0)
+                status = (entry / "status").read_text()
+                uids = next(line.split()[1:] for line in status.splitlines() if line.startswith("Uid:"))
+                birth = (entry / "stat").read_text().rsplit(") ", 1)[1].split()[19]
+                # A dead pinned process may already have had its number reused.
+                # pidfd_send_signal validates the pinned identity, not that number.
+                signal.pidfd_send_signal(fd, 0)
+                info = Path("/proc/self/fdinfo", str(fd)).read_text()
+                bound_pid = next(int(line.split()[1]) for line in info.splitlines() if line.startswith("Pid:"))
+                if bound_pid != pid:
+                    raise ValueError("prototype_capture_inventory_unavailable")
+                if uid in [int(value) for value in uids]:
+                    pinned.append((pid, fd, birth))
+                    fd = None
+            except (ProcessLookupError, FileNotFoundError):
+                pass  # vanished before qualification, never signalled
+            finally:
+                if fd is not None:
+                    os.close(fd)
+        return pinned
+    except (OSError, ValueError, StopIteration, IndexError, AttributeError) as error:
+        for _, fd, _ in pinned:
+            os.close(fd)
+        raise ValueError("prototype_capture_inventory_unavailable") from error
+
+
+@contextlib.contextmanager
+def capture_lock(uid):
+    """Root-owned cross-process admission; an unsettled cleanup stays blocked."""
+    directory = Path("/run/dpf-capture")
+    st = directory.lstat()
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o077:
+        raise ValueError("prototype_capture_lock_unavailable")
+    fd = os.open(str(directory / "worker.lock"), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or st.st_mode & 0o077:
+            raise ValueError("prototype_capture_lock_unavailable")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("prototype_capture_busy") from None
+        if os.read(fd, 32):
+            raise ValueError("prototype_capture_cleanup_unsettled")
+        if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
+            raise ValueError("prototype_capture_inventory_unavailable")
+        stale = pin_capture_processes(uid)
+        for _, process_fd, _ in stale:
+            os.close(process_fd)
+        if stale:
+            raise ValueError("prototype_capture_existing_worker")
+        libc = ctypes.CDLL(None, use_errno=True)
+        # Adopt orphaned grandchildren so detached browser processes can be reaped.
+        if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
+            raise ValueError("prototype_capture_subreaper_unavailable")
+        yield fd
+    finally:
+        os.close(fd)  # releases flock; never remove the lock inode
+
+
+async def _stop_child(child, uid):
+    """Keep admission locked until every reserved-uid descendant is gone."""
+    for _ in range(40):
+        pinned = pin_capture_processes(uid)
+        try:
+            for pid, fd, _birth in pinned:
+                try:
+                    signal.pidfd_send_signal(fd, signal.SIGKILL)
+                    if child is None or pid != child.pid:
+                        try:
+                            os.waitpid(pid, os.WNOHANG)
+                        except ChildProcessError:
+                            pass  # still parented by another dying family member
+                except ProcessLookupError:
+                    pass
+        finally:
+            for _, fd, _ in pinned:
+                os.close(fd)
+        if not pinned:
+            if child is not None:
+                await asyncio.wait_for(child.wait(), timeout=1)
+            return
+        await asyncio.sleep(0.025)
+    raise ValueError("prototype_capture_cleanup_unsettled")
 
 
 async def render_prototype(value, chrome_bin="/usr/bin/chromium", profiles_dir="/profiles"):
@@ -116,37 +212,76 @@ async def render_prototype(value, chrome_bin="/usr/bin/chromium", profiles_dir="
     if _slots.locked():
         return {"error": "prototype_capture_busy"}
     async with _slots:
-        with tempfile.TemporaryDirectory(prefix="dpf-prototype-") as home:
-            os.chown(home, uid, gid)
-            child = await asyncio.create_subprocess_exec(
-                sys.executable, str(Path(__file__).with_name("prototype_capture_worker.py")),
-                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL, cwd=home,
-                env=child_environment(home, chrome_bin), user=uid, group=gid,
-                extra_groups=(), start_new_session=True,
-            )
-            async def exchange():
-                child.stdin.write(json.dumps(source).encode("utf-8"))
-                await child.stdin.drain()
-                child.stdin.close()
-                output = await child.stdout.read(MAX_REPLY_BYTES + 1)
-                # read(n) may return a partial frame; retain a strictly bounded buffer.
-                while len(output) <= MAX_REPLY_BYTES:
-                    more = await child.stdout.read(min(65536, MAX_REPLY_BYTES + 1 - len(output)))
-                    if not more:
-                        break
-                    output += more
-                if len(output) > MAX_REPLY_BYTES:
-                    raise ValueError("prototype_capture_output_size")
-                await child.wait()
-                if child.returncode != 0:
-                    raise ValueError("prototype_capture_renderer_unavailable")
-                return validate_capture_result(json.loads(output), source)
+        with capture_lock(uid) as lock_fd:
+            home = tempfile.mkdtemp(prefix="dpf-prototype-")
             try:
-                return await asyncio.wait_for(exchange(), timeout=CAPTURE_SECONDS)
-            except asyncio.TimeoutError:
-                return {"error": "prototype_capture_timeout"}
-            except (ValueError, OSError):
-                return {"error": "prototype_capture_renderer_unavailable"}
+                return await _render_owned(source, uid, gid, home, chrome_bin, lock_fd)
             finally:
-                await _stop_child(child)
+                # _render_owned owns process cleanup. Its failure marks the lock
+                # before propagating; never erase a directory still in use.
+                if os.pread(lock_fd, 32, 0):
+                    os.chown(home, 0, 0)
+                    os.chmod(home, 0o700)
+                else:
+                    shutil.rmtree(home)
+
+
+async def _render_owned(source, uid, gid, home, chrome_bin, lock_fd):
+    # capture_lock remains held by the caller across cancellation and cleanup.
+    child = None
+    os.pwrite(lock_fd, b"unsettled\n", 0)
+    os.fsync(lock_fd)
+    try:
+        os.chown(home, uid, gid)
+        launch = asyncio.create_task(asyncio.create_subprocess_exec(
+            sys.executable, str(Path(__file__).with_name("prototype_capture_worker.py")),
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL, cwd=home,
+            env=child_environment(home, chrome_bin), user=uid, group=gid,
+            extra_groups=(), start_new_session=True, close_fds=True,
+        ))
+        cancelled = False
+        while not launch.done():
+            try:
+                await asyncio.shield(launch)
+            except asyncio.CancelledError:
+                cancelled = True
+        child = launch.result()
+        if cancelled:
+            raise asyncio.CancelledError()
+        async def exchange():
+            child.stdin.write(json.dumps(source).encode("utf-8"))
+            await child.stdin.drain()
+            child.stdin.close()
+            output = await child.stdout.read(MAX_REPLY_BYTES + 1)
+            # read(n) may return a partial frame; retain a strictly bounded buffer.
+            while len(output) <= MAX_REPLY_BYTES:
+                more = await child.stdout.read(min(65536, MAX_REPLY_BYTES + 1 - len(output)))
+                if not more:
+                    break
+                output += more
+            if len(output) > MAX_REPLY_BYTES:
+                raise ValueError("prototype_capture_output_size")
+            await child.wait()
+            if child.returncode != 0:
+                raise ValueError("prototype_capture_renderer_unavailable")
+            return validate_capture_result(json.loads(output), source)
+        try:
+            return await asyncio.wait_for(exchange(), timeout=CAPTURE_SECONDS)
+        except asyncio.TimeoutError:
+            return {"error": "prototype_capture_timeout"}
+        except (ValueError, OSError):
+            return {"error": "prototype_capture_renderer_unavailable"}
+    finally:
+        cleanup = asyncio.create_task(_stop_child(child, uid))
+        cancelled = False
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                cancelled = True  # repeated cancellation cannot release admission
+        cleanup.result()  # a failure keeps the persisted marker and directory
+        os.ftruncate(lock_fd, 0)
+        os.fsync(lock_fd)
+        if cancelled:
+            raise asyncio.CancelledError()

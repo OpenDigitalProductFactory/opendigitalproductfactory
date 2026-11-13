@@ -72,3 +72,36 @@ Subsequent checkpoint: funding approval cmwfe47pk086p0ep48h5v8qfk is EXECUTED; a
 The DPF connector subsequently returned `MCP authentication required. Reconnect to continue using this server.` Native coordination, new scope admission, canonical verification and publication cannot proceed through it until an authenticated call succeeds. No alternate token, DB write or grant bypass was used. Work remains source-local under existing admission. Native engagement wiring, owned document/image/manifest production, actual preview, container/browser security qualification, independent native review, protected PR, deployment and original business acceptance are still unrun. The renderer findings are not closed by these source tests.
 
 CLIENT source review of local checkpoint f8e814d6b22a8b918342bd209b13bd1099e0791c found two further blocking gaps: HTTP/WebSocket interception does not establish a network boundary for channels such as WebRTC/STUN, and process-group termination does not contain descendants that create another session/group. The worker still shares the service network namespace. The mocked cleanup tests do not prove real Chromium/driver termination. The source is therefore a partial, unpublished implementation, not a qualified offline renderer; no native entry was wired and it must not be invoked as acceptance evidence. After reconnect, obtain a current architecture decision for an enforceable network boundary and complete owned-family cleanup, then run actual adverse egress and detached-descendant tests on a governed target. Do not weaken host security or ordinary SSRF policy, and do not infer a successful native review from this CLIENT assessment.
+
+## Kernel transport and cleanup repair checkpoint
+
+MCP coordination is restored through an authenticated room read and heartbeat.
+The funding approval above is executed; no replacement approval is needed.
+DI-3D36CA7B4044 selects a kernel-filtered worker within the existing service,
+subject to actual qualification. It does not approve weaker host security.
+
+The source now installs libseccomp before loading Playwright or starting its
+driver. It denies new sockets, external connections/listeners, io_uring and
+descriptor-acquisition paths, and refuses inherited sockets. Only private Unix
+stream/seqpacket socketpairs remain available for descendant IPC. Filters and
+no-new-privileges inherit across fork/exec. HTTP interception and CSP remain
+additional controls, not the asserted network boundary. This is not a claim
+that seccomp alone is a complete browser sandbox.
+
+The root controller holds a cross-process lock, requires an empty reserved-UID
+inventory and enables orphan adoption before launch. It pins kernel process
+handles before accepting process identity; cleanup follows the reserved identity
+across new groups/sessions and repeats until empty. Unknown inventory is a hold,
+never empty. The controller persists an unsettled marker before launch and
+clears it only after cleanup succeeds. Cancellation cannot release admission
+early; uncertain cleanup retains the directory and durable hold.
+
+Nineteen worktree unit tests pass, including guard-before-browser-load and
+repeated cancellation followed by inventory failure. Browser/process APIs in
+those tests are doubles. Existing URL-policy and outcome tests pass separately.
+The new cloud workflow builds the existing production browser Dockerfile and
+executes Linux kernel, detached-process and real sandboxed-browser tests with
+bounded resources, no credentials and no security exceptions. Those tests are
+UNRUN at this checkpoint. Compatibility, memory containment, actual sandboxing,
+native producer wiring, image/manifest storage, Critic findings and business
+acceptance remain unproven. Keep the producer unwired until qualification.

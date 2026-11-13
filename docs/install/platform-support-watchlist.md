@@ -1,5 +1,18 @@
 # Platform Support Watch-List (living document)
 
+**Offline prototype capture qualification (BI-CA4DC298).** The prospective
+browser-service worker requires Linux x86-64 or AArch64, libseccomp, pidfds,
+readable process inventory, a reserved unprivileged identity and private
+root-owned control/profile directories. Host macOS source tests cannot qualify
+these controls. The new cloud image tests exercise the production Dockerfile
+without credentials or security exceptions; they are not live-install evidence.
+Chromium must start with its sandbox enabled under the inherited socket filter.
+Missing kernel support, incompatible sandbox/IPC or uncertain descendant cleanup
+must leave capture unavailable. Never relax the container security policy or
+retry without the browser sandbox to obtain a passing screenshot. This source
+remains unwired pending actual Linux qualification and original-engagement proof.
+
+
 **Co-located host-upkeep authority (BI-7EE97802).** Native host-upkeep uses the
 configured canonical installation origin instead of an incidental self-LAN
 address. Shell fixtures exercise macOS and Linux selection, network changes,
