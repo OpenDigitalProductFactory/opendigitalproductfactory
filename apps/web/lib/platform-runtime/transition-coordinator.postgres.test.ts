@@ -225,14 +225,17 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
 
   it.each(["ReadCommitted", "Serializable", "RepeatableRead"] as const)("handles earlier writes without weakening %s", async isolationLevel => {
     const itemId = "BI-AD017001";
-    await db.backlogItem.create({ data: { itemId, title: "isolated admission fixture", status: "triaging", type: "product", source: "automated-detection", workType: "bug" } });
+    // LIKE preserves public enum defaults, while Prisma's create binds enum
+    // inputs to its adapter schema. Seed only this isolated row without making
+    // a second, incompatible enum type; the transactional write stays real.
+    await db.$executeRaw`INSERT INTO "BacklogItem" ("id", "itemId", "title", "status", "type", "source", "workType", "updatedAt") VALUES (${randomUUID()}, ${itemId}, 'isolated admission fixture', 'triaging', 'product', 'automated-detection', 'bug', CURRENT_TIMESTAMP)`;
     const action = db.$transaction(async tx => {
-      await tx.backlogItem.update({ where: { itemId }, data: { status: "open", triageOutcome: "build" } });
+      await tx.backlogItem.update({ where: { itemId }, data: { status: "open", triageOutcome: "build" }, select: { status: true } });
       await admitRuntimeGuardedWork(tx as never, "task-run:coworker");
     }, { isolationLevel });
     if (isolationLevel === "ReadCommitted") await action;
     else await expect(action).rejects.toThrow(/DEFERRABLE.*before any query/);
-    expect((await db.backlogItem.findUniqueOrThrow({ where: { itemId } })).status).toBe(isolationLevel === "ReadCommitted" ? "open" : "triaging");
+    expect((await db.backlogItem.findUniqueOrThrow({ where: { itemId }, select: { status: true } })).status).toBe(isolationLevel === "ReadCommitted" ? "open" : "triaging");
   });
 
   it.each(["Serializable", "RepeatableRead"] as const)("preserves %s settings and supports later reentry after an early fence", async isolationLevel => {
