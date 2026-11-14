@@ -24,6 +24,15 @@ The four phases are one deliverable, delivered in one PR. None is independently 
 
 Out of scope: the push channel (`BI-ED52AB82`) and supervised turns (`BI-F5D58F29`) are built and do not move the read cursor. Design §5 says why, so neither item needs a change.
 
+## Traceability
+
+| Objective | Contracts | Flows | Acceptance |
+| --- | --- | --- | --- |
+| OBJ-RRC1 | `WorkItemPresence.readCursorAt`, `WorkItemPresence.readCursorMessageId`, `read_room_messages.unreadForMe`, `read_room_messages.readCursor`, `advanceRoomReadCursor` | `room-read-unread-for-me`, `room-wake-reply-prompt` | AC-RRC-01, AC-RRC-02, AC-RRC-04, AC-RRC-05 |
+| OBJ-RRC2 | `read_room_messages.unreadForMe` (opt-in only) | `room-read-unread-for-me` | AC-RRC-03 |
+
+The flow `room-read-unread-for-me` is Phases 1 to 3: admission, start rules, the "for me" filter, compare-and-set. The flow `room-wake-reply-prompt` is Phase 4.
+
 ## Phase 1: schema and migration
 
 - `packages/db/prisma/schema/work-coordination.prisma`: add `readCursorAt DateTime?` and `readCursorMessageId String?` to `WorkItemPresence`, with a comment naming this item.
