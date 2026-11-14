@@ -62,7 +62,7 @@ export const PERSON_FACING_WRITE_PRIMITIVES: readonly PersonFacingWritePrimitive
       "lib/build/plan-gate-stall-invariant.ts": "passed Build Studio plan still refused on PLAN_REQUIRED (BI-9FA1F9CF)",
       "lib/actions/feedback-support.ts": "support feedback report",
       "lib/actions/quality.ts": "quality issue report",
-      "lib/govern/authority/route-to-human.ts": "the routeToHuman seam (BI-5E067004): build stalls, PR delivery, PR follow-through and the assurance merge gate file here after the escalation gate decides the route",
+      "lib/govern/authority/route-to-human.ts": "the routeToHuman seam: build stalls, PR delivery, PR follow-through and the assurance merge gate file here after the escalation gate decides the route",
       "lib/mcp/packs/feedback-pack.ts": "report_quality_issue / submit_feedback",
       "lib/operate/coworker-regression-detector.ts": "coworker regression detected",
       "lib/operate/scheduled-jobs/staleness-escalation.ts": "scheduled job stale",
