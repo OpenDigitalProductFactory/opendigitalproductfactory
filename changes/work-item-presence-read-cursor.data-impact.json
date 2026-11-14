@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-31E0C874 / DI-87225C71AAE4. Migration 20261114160000_work_item_presence_read_cursor adds two nullable columns to WorkItemPresence: the room read position of each participant. Additive, no default and no backfill; existing rows read as no position yet. The columns follow their row, which is deleted only with its work item.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "WorkItemPresence",
+      "lifecycleDisposition": "retain-with-work-item",
+      "fields": [
+        {
+          "name": "readCursorAt",
+          "resolution": "governed",
+          "reason": "createdAt of the newest room message handed to this principal. Internal: a timestamp, no message content.",
+          "provenance": "Written only by readUnreadRoomMessages and advanceRoomReadCursor (room-read-cursor.server.ts), forward-only.",
+          "flags": []
+        },
+        {
+          "name": "readCursorMessageId",
+          "resolution": "governed",
+          "reason": "messageId of that message, which breaks createdAt ties. Internal: an opaque id, no message content.",
+          "provenance": "Written with readCursorAt in the same update; both null or both set.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

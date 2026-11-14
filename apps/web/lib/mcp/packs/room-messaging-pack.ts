@@ -38,6 +38,7 @@ import { inviteRoomParticipantConsequence } from "@/lib/work-management/room-cha
 import { decodeRoomMessageCursor, encodeRoomMessageCursor } from "@/lib/work-management/room-message-cursor";
 import { roomMessageAddressingView } from "@/lib/work-management/room-message-addressing";
 import { prepareRoomAddressing, publishRoomMessagePosted } from "@/lib/work-management/room-message-wake.server";
+import { readUnreadRoomMessages } from "@/lib/work-management/room-read-cursor.server";
 
 type PackContext = { agentId?: string; apiTokenId?: string };
 
@@ -161,6 +162,15 @@ async function readRoomMessagesHandler(
   if (sinceRaw && beforeRaw) {
     return { success: false, error: "invalid_input", message: "Pass sinceCursor or beforeCursor, not both." };
   }
+  // BI-31E0C874: unreadForMe reads from the caller's own stored position.
+  const unreadForMe = params.unreadForMe === true;
+  if (unreadForMe && (sinceRaw || beforeRaw)) {
+    return {
+      success: false,
+      error: "invalid_input",
+      message: "unreadForMe reads from your own position in the room; do not pass sinceCursor or beforeCursor with it.",
+    };
+  }
   const cursorRaw = sinceRaw ?? beforeRaw;
   const cursor = cursorRaw ? decodeRoomMessageCursor(cursorRaw) : null;
   if (cursorRaw && !cursor) {
@@ -197,6 +207,16 @@ async function readRoomMessagesHandler(
   for (const child of children) {
     const childAccess = await resolveAgentRoomAccess({ agentId, userId, requested: "content", workItem: child });
     if (childAccess.decision.level === "content") admittedChildIds.push(child.id);
+  }
+  if (unreadForMe) {
+    return readUnreadForMeHandler({
+      caseKey,
+      roomWorkItemId: item.id,
+      workItemIds: [item.id, ...admittedChildIds],
+      agentId,
+      principalId: access.agentPrincipalId,
+      limit,
+    });
   }
   // since: strictly after the cursor, oldest first. Default and before: newest
   // first, strictly before the cursor when one is given. One extra row says
@@ -248,6 +268,66 @@ async function readRoomMessagesHandler(
       newestCursor,
       oldestCursor,
       messages: rows.map((row) => ({
+        messageId: row.messageId,
+        senderType: row.senderType,
+        senderId: row.senderAgentId ?? row.senderUserId ?? null,
+        messageType: row.messageType,
+        body: row.body,
+        at: row.createdAt.toISOString(),
+        ...roomMessageAddressingView(row.structuredPayload, row.senderAgentId ? senderGaids.get(row.senderAgentId) ?? null : null),
+      })),
+    },
+  };
+}
+
+/**
+ * BI-31E0C874: what is unread for the acting coworker, oldest first. The
+ * position is the coworker's own and moves forward as it reads, so two reads
+ * never return the same message (design 2026-11-11-room-read-cursor §4).
+ */
+async function readUnreadForMeHandler(args: {
+  caseKey: string;
+  roomWorkItemId: string;
+  workItemIds: string[];
+  agentId: string;
+  principalId: string | null;
+  limit: number;
+}): Promise<ToolResult> {
+  if (!args.principalId) {
+    return { success: false, error: "forbidden", message: `Not admitted to read ${args.caseKey} as a coworker with an identity.` };
+  }
+  const ownGaid = (await getAgentGaidMap([args.agentId])).get(args.agentId) ?? null;
+  const result = await readUnreadRoomMessages({
+    roomWorkItemId: args.roomWorkItemId,
+    workItemIds: args.workItemIds,
+    agentId: args.agentId,
+    principalId: args.principalId,
+    gaid: ownGaid,
+    limit: args.limit,
+    label: await agentLabel(args.agentId),
+  });
+  if (!result.ok) {
+    return {
+      success: false,
+      error: "conflict",
+      message: `Another read of ${args.caseKey} by you moved your position at the same moment. Read again; nothing was skipped.`,
+    };
+  }
+  const senderGaids = await getAgentGaidMap(result.messages.flatMap((row) => (row.senderAgentId ? [row.senderAgentId] : [])));
+  const readCursor = result.readCursor ? encodeRoomMessageCursor(result.readCursor) : null;
+  const first = result.messages[0];
+  return {
+    success: true,
+    message: `${result.messages.length} unread message(s) for you in ${args.caseKey}${result.hasMore ? "; more remain, read again" : ""}.`,
+    data: {
+      caseKey: args.caseKey,
+      order: "oldest-first",
+      unreadForMe: true,
+      hasMore: result.hasMore,
+      readCursor,
+      newestCursor: readCursor,
+      oldestCursor: first ? encodeRoomMessageCursor(first) : null,
+      messages: result.messages.map((row) => ({
         messageId: row.messageId,
         senderType: row.senderType,
         senderId: row.senderAgentId ?? row.senderUserId ?? null,
@@ -627,13 +707,14 @@ const definitions: ToolDefinition[] = [
   {
     name: "read_room_messages",
     description:
-      "Read a Work Room's message feed (human and coworker) by caseKey. With no cursor, returns the newest messages, newest first. Pass oldestCursor back as beforeCursor to page to older messages; pass newestCursor back as sinceCursor to get only messages posted since (oldest first). hasMore says whether more remain in that direction. Requires content-level admission to the room; admission is outcome-scoped per room.",
+      "Read a Work Room's message feed (human and coworker) by caseKey. With no cursor, returns the newest messages, newest first. Pass oldestCursor back as beforeCursor to page to older messages; pass newestCursor back as sinceCursor to get only messages posted since (oldest first). hasMore says whether more remain in that direction. Requires content-level admission to the room; admission is outcome-scoped per room. Pass unreadForMe: true to get only what you have not yet been handed: messages addressed to you or to the room since your own position, oldest first. That read moves your position forward, so asking again never repeats a message.",
     inputSchema: {
       type: "object",
       properties: {
         caseKey: { type: "string", description: "The room's case key, e.g. backlog-item:BI-123 (sourceType:sourceId)." },
         sinceCursor: { type: "string", description: "A newestCursor from an earlier read. Returns only later messages, oldest first. Do not combine with beforeCursor." },
         beforeCursor: { type: "string", description: "An oldestCursor from an earlier read. Returns only earlier messages, newest first. Do not combine with sinceCursor." },
+        unreadForMe: { type: "boolean", description: "Return only messages addressed to you or to the room that you have not yet been handed, oldest first, and move your read position past them. Do not combine with sinceCursor or beforeCursor." },
         limit: { type: "integer", minimum: 1, maximum: ROOM_MESSAGE_PAGE_MAX, description: `Messages per page (default ${ROOM_MESSAGE_PAGE_DEFAULT}, max ${ROOM_MESSAGE_PAGE_MAX}).` },
       },
       required: ["caseKey"],
