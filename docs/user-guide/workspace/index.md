@@ -95,6 +95,11 @@ outcome separately from the approval status. Missing, conflicting or unsupported
 evidence stays explicit. A saved test success alone does not prove a completed
 Responses verification or a quota update. Private test output is not returned.
 
+For service-setting changes, the result distinguishes the request's report from
+verified evidence that the change ran. If the effect or recovery is unconfirmed,
+your assistant must reconcile the original request before another attempt.
+Viewing a result never retries it.
+
 How long a coworker's request waits for you, and what happens if nobody
 answers, is explained in [the attention inbox guide](attention-inbox.md#how-long-a-coworkers-request-waits).
 

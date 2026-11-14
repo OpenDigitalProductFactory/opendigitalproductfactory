@@ -105,6 +105,15 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     createdAt: new Date(Date.now() - minutesAgo * 60_000),
   });
 
+  it("does not resume a build parked on an owner answer (BI-B6894001)", async () => {
+    findUniqueMock.mockResolvedValue({ ...incompletePlan, waitingOnOwnerSince: new Date("2026-11-14T00:00:00Z") });
+    buildActivityFindManyMock.mockResolvedValue([incompleteRow(31)]);
+    const result = await resumePreBuildPhase({ buildId: "FB-PARKED", phase: "plan", userId: "u" });
+    expect(result).toMatchObject({ kind: "skipped", reason: "waiting on an owner answer" });
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+  });
+
   it("backs off after an incomplete plan review, preserving the plan", async () => {
     findUniqueMock.mockResolvedValue(incompletePlan);
     buildActivityFindManyMock.mockResolvedValue([incompleteRow(5)]);
@@ -852,6 +861,13 @@ describe("abandonStrandedPreBuild", () => {
     const updateArg = txUpdateMock.mock.calls[0]![0] as { data: { phase: string } };
     expect(updateArg.data.phase).toBe("abandoned");
     expect(txActivityCreateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never ages out a build parked on an owner answer (BI-B6894001)", async () => {
+    txFindUniqueMock.mockResolvedValue({ phase: "ideate", abandonedAt: null, waitingOnOwnerSince: new Date("2026-11-01T00:00:00Z") });
+    const ok = await abandonStrandedPreBuild({ buildId: "FB-PARKED", phase: "ideate", ageMs: 20 * 86_400_000 });
+    expect(ok).toBe(false);
+    expect(txUpdateMock).not.toHaveBeenCalled();
   });
 
   it("never throws — returns false when the row is missing", async () => {

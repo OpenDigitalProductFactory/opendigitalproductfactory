@@ -1,7 +1,9 @@
 import type {
   SurfaceActionDefinition,
+  SurfaceDefinition,
   SurfacePrincipalContext,
 } from "@dpf/types";
+import { prisma } from "@dpf/db";
 
 import { getDiscoveryOperationsViewModel } from "@/lib/discovery-operations-view-model";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
@@ -21,10 +23,14 @@ import {
 
 import { getResponseFeedback } from "@/lib/routing/response-feedback";
 import { RESPONSE_FEEDBACK_LOADER_ID, RESPONSE_FEEDBACK_SURFACE, projectResponseFeedbackSurface } from "./surfaces/response-feedback-surface";
+import { readPlatformFundingSetup } from "@/lib/portfolio/platform-funding-setup";
+import { PLATFORM_FUNDING_SETUP_ID, PLATFORM_FUNDING_SETUP_LOADER_ID, PLATFORM_FUNDING_SETUP_SURFACE,
+  fundingSetupCanConfirm, projectPlatformFundingSetupSurface } from "./surfaces/platform-funding-setup-surface";
 
-export const ALL_SURFACE_DEFINITIONS = [DISCOVERY_OPERATIONS_SURFACE, RESPONSE_FEEDBACK_SURFACE, FINANCE_EXPENSE_GUIDANCE_SURFACE] as const;
+export const ALL_SURFACE_DEFINITIONS = [DISCOVERY_OPERATIONS_SURFACE, RESPONSE_FEEDBACK_SURFACE, FINANCE_EXPENSE_GUIDANCE_SURFACE, PLATFORM_FUNDING_SETUP_SURFACE] as const;
 
 const loaders = new Map([
+  [PLATFORM_FUNDING_SETUP_LOADER_ID, async (context: SurfacePrincipalContext) => projectPlatformFundingSetupSurface(await loadFundingSetup(context))],
   [FINANCE_EXPENSE_GUIDANCE_LOADER, async (context: SurfacePrincipalContext) => projectExpenseWorkflowGuidance(context.locale)],
   [RESPONSE_FEEDBACK_LOADER_ID, async (context: SurfacePrincipalContext) => {
     const ids = context.workContext?.resourceIds;
@@ -72,9 +78,16 @@ export const AUTHORIZED_SURFACE_CATALOG = compileSurfaceDefinitions(
 
 const AUTHORIZED_TOOL_NAMES = Symbol("authorized-surface-tool-names");
 const GOVERNED_DISPATCH = Symbol("authorized-surface-governed-dispatch");
+const CURRENT_TOOL_AUTHORITY = Symbol("authorized-surface-current-tool-authority");
+
+export type CurrentSurfaceToolAuthority = (
+  toolName: string,
+  principal: Pick<SurfacePrincipalContext, "delegatingUserId" | "actingAgentId">,
+) => Promise<boolean>;
 
 type ServerSurfaceContext = SurfacePrincipalContext & {
   [AUTHORIZED_TOOL_NAMES]: ReadonlySet<string>;
+  [CURRENT_TOOL_AUTHORITY]?: CurrentSurfaceToolAuthority;
   [GOVERNED_DISPATCH]?: (
     toolName: string,
     params: Record<string, unknown>,
@@ -87,12 +100,16 @@ export function createServerSurfaceContext(
   authority: {
     authorizedToolNames: ReadonlySet<string>;
     governedDispatch?: ServerSurfaceContext[typeof GOVERNED_DISPATCH];
+    /** Server-owned proof for the current request, never the original opening
+     * request. Implement with the canonical current grant/token intersection. */
+    currentToolAuthority?: CurrentSurfaceToolAuthority;
   },
 ): SurfacePrincipalContext {
   const serverContext = { ...context } as ServerSurfaceContext;
   Object.defineProperties(serverContext, {
     [AUTHORIZED_TOOL_NAMES]: { value: authority.authorizedToolNames, enumerable: false },
     [GOVERNED_DISPATCH]: { value: authority.governedDispatch, enumerable: false },
+    [CURRENT_TOOL_AUTHORITY]: { value: authority.currentToolAuthority, enumerable: false },
   });
   return serverContext;
 }
@@ -101,10 +118,48 @@ function serverContext(context: SurfacePrincipalContext): ServerSurfaceContext {
   return context as ServerSurfaceContext;
 }
 
+async function fundingSetupAuthorized(context: SurfacePrincipalContext): Promise<boolean> {
+  if (!context.actingAgentId?.trim() || !serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has("read_platform_funding_setup")) return false;
+  const human = await currentUserContext(context.delegatingUserId);
+  return !!human && can(human, "manage_platform") && await currentToolAuthorized(context, "read_platform_funding_setup");
+}
+
+async function currentToolAuthorized(context: SurfacePrincipalContext, toolName: string): Promise<boolean> {
+  const proof = serverContext(context)[CURRENT_TOOL_AUTHORITY];
+  if (!proof) return false;
+  try {
+    return await proof(toolName, { delegatingUserId: context.delegatingUserId, actingAgentId: context.actingAgentId }) === true;
+  } catch { return false; }
+}
+
+function refreshSurfaceContext(stored: SurfacePrincipalContext, current: SurfacePrincipalContext | undefined, definition: SurfaceDefinition): SurfacePrincipalContext | null {
+  if (!current) return definition.surfaceId === PLATFORM_FUNDING_SETUP_ID ? null : stored;
+  if (stored.delegatingUserId !== current.delegatingUserId || stored.actingAgentId !== current.actingAgentId) return null;
+  const authority = serverContext(current);
+  if (!authority[AUTHORIZED_TOOL_NAMES] || (definition.surfaceId === PLATFORM_FUNDING_SETUP_ID && !authority[CURRENT_TOOL_AUTHORITY])) return null;
+  // Keep the admitted route/work context. Only fresh server-private authority
+  // and dispatch can replace their original counterparts; raw caller fields
+  // cannot redirect this session or provide a token-proof callback.
+  return createServerSurfaceContext(stored, {
+    authorizedToolNames: authority[AUTHORIZED_TOOL_NAMES],
+    governedDispatch: authority[GOVERNED_DISPATCH],
+    currentToolAuthority: authority[CURRENT_TOOL_AUTHORITY],
+  });
+}
+
+async function loadFundingSetup(context: SurfacePrincipalContext) {
+  // Recheck before loading, as well as at surface admission. Raw surface args
+  // never select another user or act as tool/role authority.
+  if (!await fundingSetupAuthorized(context)) return { ok: false as const, error: "funding-setup-not-authorized" };
+  return readPlatformFundingSetup(prisma, { userId: context.delegatingUserId });
+}
+
 export const authorizedSurfaceRuntime = createAuthorizedSurfaceRuntime({
   catalog: AUTHORIZED_SURFACE_CATALOG,
   loaders,
+  refreshContext: refreshSurfaceContext,
   authorizeSurface: async (context, definition) => {
+    if (definition.surfaceId === PLATFORM_FUNDING_SETUP_ID) return fundingSetupAuthorized(context);
     if (definition.surfaceId === FINANCE_EXPENSE_GUIDANCE_ID) {
       const human = await currentUserContext(context.delegatingUserId);
       return !!human && can(human, "view_finance") && !!context.actingAgentId?.trim()
@@ -115,9 +170,22 @@ export const authorizedSurfaceRuntime = createAuthorizedSurfaceRuntime({
       && context.workContext?.resourceType === "agent-message" && context.workContext.resourceIds?.length === 1
       && !!context.workContext.resourceIds[0]?.trim() && !!context.actingAgentId?.trim());
   },
-  authorizeAction: async (context, action) =>
-    action.actionClass === "ui-local"
-    || (!!action.tool && serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has(action.tool)),
+  authorizeAction: async (context, action) => {
+    if (PLATFORM_FUNDING_SETUP_SURFACE.actions.some(({ actionId }) => actionId === action.actionId)) {
+      if (!await fundingSetupAuthorized(context)) return false;
+      if (action.actionClass === "domain" && (!action.tool || !serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has(action.tool)
+        || !await currentToolAuthorized(context, action.tool))) return false;
+      if (["platform-funding-confirm", "platform-funding-organization", "platform-funding-reason", "platform-funding-attestation"].includes(action.actionId)) {
+        // Node visibility/disabled metadata is not action authority. Current
+        // ownership must still permit initial setup before even dispatching the
+        // existing writer, which separately verifies digest and human approval.
+        return fundingSetupCanConfirm(await loadFundingSetup(context));
+      }
+      return true;
+    }
+    return action.actionClass === "ui-local"
+      || (!!action.tool && serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has(action.tool));
+  },
   authorityDigest: async (context) => surfaceContractDigest({
     organizationId: context.organizationId,
     delegatingUserId: context.delegatingUserId,

@@ -18,6 +18,7 @@ import {
   type StatutoryProposalInput,
   type StatutoryRuleKind,
   type StatutoryRuleStatus,
+  statutoryQualifierKey,
 } from "./statutory-rules";
 import { isPlatformAutomationPersona } from "@/lib/govern/automation-persona-identity";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
@@ -52,6 +53,8 @@ export interface StatutoryRuleRow {
   effectiveFrom: Date;
   effectiveTo: Date | null;
   sourceUrl: string | null;
+  /** See ResolvableStatutoryRule.qualifierKey. Absent on rows read before BI-2BC8D614. */
+  qualifierKey?: string;
 }
 
 export interface StatutoryRatificationDb {
@@ -79,6 +82,7 @@ function toResolvable(row: StatutoryRuleRow): ResolvableStatutoryRule {
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo,
     sourceUrl: row.sourceUrl,
+    qualifierKey: row.qualifierKey ?? "",
   };
 }
 
@@ -102,6 +106,7 @@ async function closeSupersededWindows(
       taxType: incoming.taxType,
       ruleKind: incoming.ruleKind,
       side: incoming.side,
+      qualifierKey: incoming.qualifierKey ?? "",
       status: "ratified",
     },
   });
@@ -230,6 +235,7 @@ export async function recordAndRatifyStatutoryRule(
         value: proposal.value,
         currency: proposal.currency ?? null,
         qualifiers: proposal.qualifiers ?? {},
+        qualifierKey: statutoryQualifierKey(proposal.qualifiers),
         effectiveFrom: proposal.effectiveFrom,
         effectiveTo: proposal.effectiveTo ?? null,
         status: "proposed",
