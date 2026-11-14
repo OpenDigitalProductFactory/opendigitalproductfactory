@@ -107,10 +107,16 @@ export function AtlasInspector({ room, data, hold, roomHref, flowHref, closeHref
           : t("atlas.inspector.noLive")}
       </p>
 
-      {room.health === "needs-person" ? (
-        <p className="mt-3 rounded-dpf-xl border border-[var(--dpf-warning)] p-3 text-dpf-body text-[var(--dpf-text)]" data-inspector-callout="needs-person">
-          {t("atlas.inspector.needsPerson", { who: room.owner ?? t("atlas.ownerNone"), what: t(room.label) })}
-        </p>
+      {room.nextAction ? (
+        <div className="mt-3 rounded-dpf-xl border border-[var(--dpf-border)] p-3 text-dpf-body text-[var(--dpf-text)]" data-inspector-action>
+          {room.action ? <>
+            <p>{t(room.action.actor)} · {t(room.action.instruction)}</p>
+            {room.action.detail ? <p className="mt-1">{room.action.detail}</p> : null}
+            {(room.action.decisionCount ?? 0) > 1 ? <p className="mt-1 text-dpf-caption text-dpf-muted">{t("inventory.decisionCount", { count: room.action.decisionCount })}</p> : null}
+          </> : <p>{t(room.nextAction)}</p>}
+        </div>
+      ) : room.health !== "finished" ? (
+        <p className="mt-3 text-dpf-caption text-dpf-muted" data-inspector-action>{t("inventory.actor.unknown")} · {t("inventory.action.unknown")}</p>
       ) : null}
       {room.health === "stuck" ? (
         <div className="mt-3 rounded-dpf-xl border border-[var(--dpf-error)] p-3 text-dpf-body text-[var(--dpf-text)]" data-inspector-callout="stuck">

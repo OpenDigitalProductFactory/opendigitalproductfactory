@@ -32,7 +32,7 @@ export default async function WorkroomsPage({ searchParams }: Props = {}) {
   const selected = parseAtlasRoom(params);
   const view = { ...parseAtlasFilters(params), ...(group ? { group } : {}), ...(selected ? { room: selected } : {}) };
   const [picture, held, rhythms, locale, t] = await Promise.all([
-    loadAtlasPicture(prisma), loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(), getT("workrooms"),
+    loadAtlasPicture(prisma, { selectedCapsuleId: selected }), loadHeldWorkrooms(prisma), loadStandingRhythms(prisma), getLocaleContext(), getT("workrooms"),
   ]);
 
   // A3 (BI-94C9AFC1): the selected room opens beside the map. A room that is
