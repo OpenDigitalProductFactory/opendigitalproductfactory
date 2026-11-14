@@ -3,6 +3,8 @@ import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../../../../packages/db/generated/client/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { getScheduledReportDiagnosticFor } from "./agent-task-core";
+import { failScheduledReportingRun } from "./scheduled-reporting-run";
 import { configureScheduledReportingFor } from "./scheduled-reporting-config";
 import { settleScheduledReportingRun, type ScheduledReportingRunInput } from "./scheduled-reporting-run";
 import { scheduledReportingRevision, scheduledReportingScopeDigest } from "./scheduled-reporting-contract";
@@ -73,6 +75,25 @@ describe.skipIf(!url)("scheduled reporting transactions on PostgreSQL", () => {
     expect((await db.taskRun.findUniqueOrThrow({ where: { taskRunId: input.taskRunId } })).status).toBe("working");
     expect((await db.scheduledAgentTask.findUniqueOrThrow({ where: { taskId: "watch" } })).taskConfig).not.toHaveProperty("routineReportingState");
   }
+  it("retains safe failure metadata and reads the selected old run after a newer run exists",async()=>{
+    const diagnostic={version:1 as const,code:"report-invalid-json" as const,original:{sha256:"a".repeat(64),bytes:23,truncated:false,redacted:true}};
+    await failScheduledReportingRun({...input,diagnostic},"Scheduled report must be one JSON object.",{db});
+    const oldRunId=input.taskRunId;
+    await createRun("TR-NEWER");
+    const task=await db.scheduledAgentTask.findUniqueOrThrow({where:{taskId:"watch"}});
+    const selector={taskRunId:oldRunId,expectedRevision:scheduledReportingRevision(task)};
+    expect(await getScheduledReportDiagnosticFor("owner","watch",selector,db)).toMatchObject({taskRunId:oldRunId,retention:"retained",diagnostic});
+    await expect(getScheduledReportDiagnosticFor("other","watch",selector,db)).rejects.toThrow();
+    await expect(getScheduledReportDiagnosticFor("owner","watch",{...selector,expectedRevision:"0".repeat(64)},db)).rejects.toThrow();
+    await db.taskRun.update({where:{taskRunId:oldRunId},data:{userId:"another-owner"}});
+    await expect(getScheduledReportDiagnosticFor("owner","watch",selector,db)).rejects.toThrow();
+    await db.taskRun.update({where:{taskRunId:oldRunId},data:{userId:"owner"}});
+    await db.taskRun.update({where:{taskRunId:oldRunId},data:{a2aMetadata:{sourceRef:{kind:"scheduled-task",id:"another-watch"},scheduledReporting:{mode:"read-only-history"}}}});
+    await expect(getScheduledReportDiagnosticFor("owner","watch",selector,db)).rejects.toThrow();
+    expect(await db.notification.count()).toBe(0);
+    expect((await db.taskRun.findUniqueOrThrow({where:{taskRunId:"TR-NEWER"}})).status).toBe("working");
+    expect(JSON.stringify(task.taskConfig)).not.toContain("diagnostic");
+  });
   it("persists the existing history and settles a routine observation without a notice", async () => {
     expect(await settleScheduledReportingRun(input, { db })).toMatchObject({ status: "completed" });
     expect(await db.taskMessage.count()).toBe(1);

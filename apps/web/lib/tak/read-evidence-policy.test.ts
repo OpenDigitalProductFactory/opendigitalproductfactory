@@ -50,3 +50,9 @@ it("excludes native DPF tokens without changing original hash or byte attributio
  });
  expect(result.readEvidenceInspection!.original).toMatchObject({text:null,redacted:true,bytes:Buffer.byteLength(original),sha256:expect.stringMatching(/^[a-f0-9]{64}$/)});
 });
+
+it("does not infer missing execution proof from an invalid contribution",()=>{
+ const result=readEvidenceExit({complete:false,message:"Synthetic invalid report"});
+ expect(result).toMatchObject({kind:"blocked",message:expect.stringContaining("held without replay")});
+ expect(result.message).not.toMatch(/Native execution proof is unavailable/);
+});
