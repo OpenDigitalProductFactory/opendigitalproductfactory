@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { parseArgs, promisify } from 'node:util';
-import { readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { canonicalJson } from './lib/canonical-json.mjs';
@@ -81,6 +81,72 @@ export async function inspectScopeEpochWriterImage({ image, expectedSource = '',
   } catch { throw new Error('scope_writer_image_unproven'); }
   if ((await runDocker(['image', 'inspect', image, '--format', '{{.Id}}'])).trim() !== config) throw new Error('scope_writer_image_moved');
   return config;
+}
+
+const serviceImageInvalid = () => { throw new Error('runtime_service_image_unproven'); };
+const serviceImageId = value => typeof value === 'string' && /^sha256:[a-f0-9]{64}$/.test(value);
+const serviceImageKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
+  && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+const SERVICE_IMAGE_INSPECTION = '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"sourceSha":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"inputTreeOid":{{json (index .Config.Labels "dpf.service-image.input-tree")}},"repoDigests":{{json .RepoDigests}}}';
+
+/** Existing artifact evidence owner; the native actuator supplies bounded IO.
+ * No compose apply, arbitrary context or mutable source checkout is accepted. */
+export async function prepareRuntimeServiceImage({ source, sourceSha, platform, stateDir, runDocker, runGit }) {
+  if (!/^[a-f0-9]{40}$/.test(sourceSha ?? '') || !['linux/amd64', 'linux/arm64'].includes(platform)
+    || !isAbsolute(stateDir ?? '') || typeof runDocker !== 'function') serviceImageInvalid();
+  const published = source?.kind === 'published', restore = source?.kind === 'restore';
+  if (restore) {
+    if (!serviceImageKeys(source, ['kind', 'imageId', 'expectedImageId'])
+      || !serviceImageId(source.imageId) || !serviceImageId(source.expectedImageId)) serviceImageInvalid();
+  } else if (published) {
+    if (!serviceImageKeys(source, ['kind', 'sourceSha', 'reference']) || source.sourceSha !== sourceSha
+      || !/^ghcr\.io\/[A-Za-z0-9][A-Za-z0-9_.-]*\/dpf-browser-use@sha256:[a-f0-9]{64}$/.test(source.reference ?? '')) serviceImageInvalid();
+  } else if (!serviceImageKeys(source, ['kind', 'sourceSha']) || source.kind !== 'source'
+    || source.sourceSha !== sourceSha || typeof runGit !== 'function') serviceImageInvalid();
+  let scratch;
+  try {
+    let image, proofSource = structuredClone(source);
+    if (restore) image = source.imageId;
+    else if (published) {
+      await runDocker(['pull', '--platform', platform, source.reference], { timeoutMs: 5 * 60_000 });
+      image = source.reference;
+    } else {
+      // Archive one immutable tree directly to the Docker client's stdin. The
+      // moving host checkout and every unrelated service stay outside context.
+      const object = `${sourceSha}:services/browser-use`;
+      const inputTreeOid = String(await runGit(['rev-parse', object])).trim();
+      if (!/^[a-f0-9]{40}$/.test(inputTreeOid)) serviceImageInvalid();
+      const archive = await runGit(['archive', '--format=tar', object]);
+      if (!Buffer.isBuffer(archive) || archive.length === 0 || archive.length > 64 * 1024 * 1024) serviceImageInvalid();
+      scratch = await mkdtemp(join(stateDir, '.runtime-image-'));
+      const iid = join(scratch, 'image.id');
+      await runDocker(['build', '--platform', platform, '--file', 'Dockerfile', '--iidfile', iid,
+        '--label', `org.opencontainers.image.revision=${sourceSha}`,
+        '--label', `dpf.service-image.input-tree=${inputTreeOid}`, '-'],
+      { timeoutMs: 5 * 60_000, input: archive });
+      image = (await readFile(iid, 'utf8')).trim();
+      if (!serviceImageId(image)) serviceImageInvalid();
+      proofSource = { ...source, inputTreeOid };
+    }
+    const bytes = await runDocker(['image', 'inspect', image, '--format', SERVICE_IMAGE_INSPECTION], { timeoutMs: 30_000 });
+    if (Buffer.byteLength(bytes) > 8192) serviceImageInvalid();
+    const actual = JSON.parse(bytes);
+    if (!serviceImageId(actual.id) || `${actual.os}/${actual.architecture}` !== platform
+      || (restore && actual.id !== source.imageId)
+      || (!restore && actual.sourceSha !== sourceSha)
+      || (published && (!Array.isArray(actual.repoDigests) || !actual.repoDigests.includes(source.reference)))
+      || (!published && !restore && (actual.id !== image || actual.inputTreeOid !== proofSource.inputTreeOid))) serviceImageInvalid();
+    return { imageId: actual.id, source: proofSource };
+  } catch (error) {
+    if (error?.message === 'runtime_image_preparation_unsettled') throw new Error('runtime_image_preparation_unsettled');
+    serviceImageInvalid();
+  }
+  finally {
+    if (scratch) {
+      try { await rm(scratch, { recursive: true, force: true }); }
+      catch { throw new Error('runtime_service_image_cleanup_unverified'); }
+    }
+  }
 }
 
 /** Legacy classification is positive absence, never a generic failed probe.

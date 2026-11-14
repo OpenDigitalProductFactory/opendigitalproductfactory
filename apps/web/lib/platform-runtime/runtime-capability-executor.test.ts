@@ -4,9 +4,11 @@ import { createHash } from "node:crypto";
 const mocks = vi.hoisted(() => ({
   readFile: vi.fn(), probe: vi.fn(), resolveArtifact: vi.fn(), promoter: vi.fn(),
   coordinate: vi.fn(), rows: vi.fn(), active: vi.fn(), imageVersion: vi.fn(),
+  process: vi.fn(),
 }));
 vi.mock("@/lib/platform/image-version", () => ({ readImageVersion: mocks.imageVersion }));
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
+vi.mock("@/lib/shared/run-process-with-budget", () => ({ runProcessWithBudget: mocks.process }));
 vi.mock("@dpf/db", () => ({ prisma: {
   platformCapability: { findMany: mocks.rows }, runtimeCapabilityTransition: { findMany: mocks.active },
 } }));
@@ -40,6 +42,7 @@ describe("production reconciliation protocol admission", () => {
       contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } });
     mocks.promoter.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ ownershipToken: "fixture-owner" }), stderr: "" });
     mocks.coordinate.mockResolvedValue({ status: "succeeded" });
+    mocks.process.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ digest: `sha256:${"f".repeat(64)}` }), stderr: "", outputLimitExceeded: false });
   });
   afterEach(() => vi.unstubAllEnvs());
 
@@ -55,6 +58,55 @@ describe("production reconciliation protocol admission", () => {
     mocks.probe.mockResolvedValue({ schemaVersion: 1, sourceSha: "a".repeat(40), actuatorSha256: "d".repeat(64), signerSha256: "e".repeat(64), signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [2] });
     return { ...request, reconciliation };
   }
+  function imageRequest() {
+    const input = explicitRequest(), keys = ["runtime:browser-automation", "runtime:core"];
+    input.desiredKeys = [...keys];
+    input.reconciliation.observedHost.enabledRuntimeCapabilities = [...keys];
+    input.reconciliation.observedHost.capabilityStateVersion = hostHash(catalog.catalogHash, keys, catalog.capabilities.map(entry => entry.capabilityId));
+    input.reconciliation.observedDatabaseStates = { ...input.reconciliation.observedDatabaseStates, "runtime:browser-automation": "active" };
+    input.reconciliation.desiredHostEnabledKeys = [...keys];
+    input.reconciliation.desiredDatabaseStates = { ...input.reconciliation.observedDatabaseStates };
+    input.reconciliation.touchedKeys = [];
+    mocks.rows.mockResolvedValue(Object.entries(input.reconciliation.observedDatabaseStates).map(([capabilityId, state]) => ({ capabilityId, state, manifest: {} })));
+    mocks.probe.mockResolvedValue({ schemaVersion: 1, sourceSha: "a".repeat(40), actuatorSha256: "d".repeat(64), signerSha256: "e".repeat(64), imageQualifierSha256: "f".repeat(64), signingVersions: [1, 2, 3], applyVersions: [1, 2, 3], reconciliationVersions: [2, 3], imageReconciliationVersions: [3] });
+    return { ...input, imageServices: ["browser-use"] };
+  }
+
+  it("derives selected source image work from its verified packaged identity", async () => {
+    const input = imageRequest();
+    await expect(executeProductionRuntimeCapabilityTransition(input)).resolves.toEqual({ status: "succeeded" });
+    expect(mocks.coordinate).toHaveBeenCalledWith(expect.objectContaining({ imagePlan: {
+      schemaVersion: 1, sourceSha: "a".repeat(40), platform: "linux/amd64", operation: "prepare",
+      services: [{ service: "browser-use", source: { kind: "source", sourceSha: "a".repeat(40) } }],
+    } }), expect.anything());
+    expect(mocks.probe).toHaveBeenCalledWith(expect.objectContaining({ expected: expect.objectContaining({ imageQualifierSha256: createHash("sha256").update("x".repeat(32)).update("\0").update("x".repeat(32)).digest("hex") }) }));
+    expect(mocks.process).not.toHaveBeenCalled();
+  });
+
+  it("resolves only the immutable installed consumer release to a pinned service manifest", async () => {
+    const input = imageRequest();
+    vi.stubEnv("GHCR_OWNER", "Fixture-Owner");
+    Object.assign(input.reconciliation.observedHost, { installMode: "consumer", imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install" });
+    await expect(executeProductionRuntimeCapabilityTransition(input)).resolves.toEqual({ status: "succeeded" });
+    expect(mocks.process).toHaveBeenCalledWith("docker", ["buildx", "imagetools", "inspect", "ghcr.io/fixture-owner/dpf-browser-use:v2026.10.15-dev-recovery.96", "--format", "{{json .Manifest}}"], expect.objectContaining({ timeoutMs: 60_000 }));
+    expect(mocks.coordinate).toHaveBeenCalledWith(expect.objectContaining({ imagePlan: expect.objectContaining({ services: [{ service: "browser-use", source: { kind: "published", sourceSha: "a".repeat(40), reference: `ghcr.io/fixture-owner/dpf-browser-use@sha256:${"f".repeat(64)}` } }] }) }), expect.anything());
+  });
+
+  it.each(["old-protocol", "settings-change", "unsupported-service", "manifest"])("holds image %s before host authority reservation", async kind => {
+    const input = imageRequest();
+    if (kind === "old-protocol") mocks.probe.mockResolvedValue({ signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [2] });
+    if (kind === "settings-change") { input.reconciliation.desiredDatabaseStates = { ...input.reconciliation.desiredDatabaseStates, "runtime:build": "disabled" }; input.reconciliation.touchedKeys = ["runtime:build"]; }
+    if (kind === "unsupported-service") input.imageServices = ["postgres"];
+    if (kind === "manifest") {
+      vi.stubEnv("GHCR_OWNER", "fixture-owner");
+      Object.assign(input.reconciliation.observedHost, { installMode: "consumer", imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install" });
+      mocks.process.mockResolvedValue({ exitCode: 0, stdout: "{}", stderr: "", outputLimitExceeded: false });
+    }
+    expect(await executeProductionRuntimeCapabilityTransition(input)).toMatchObject({ status: "failed" });
+    expect(mocks.promoter).not.toHaveBeenCalled();
+    expect(mocks.coordinate).not.toHaveBeenCalled();
+    expect(mocks.readFile).not.toHaveBeenCalledWith("/dpf-state/runtime-transition.secret", "utf8");
+  });
 
   it("passes independent complete baselines and immutable artifact identity to the existing coordinator", async () => {
     const explicit = explicitRequest();
@@ -195,6 +247,7 @@ describe("production reconciliation protocol admission", () => {
     expect(mocks.probe).toHaveBeenCalledWith(expect.objectContaining({
       artifact: expect.objectContaining({ sourceSha: "a".repeat(40) }),
       expected: { sourceSha: "a".repeat(40),
+        imageQualifierSha256: createHash("sha256").update("x".repeat(32)).update("\0").update("x".repeat(32)).digest("hex"),
         actuatorSha256: createHash("sha256").update("x".repeat(32)).digest("hex"),
         signerSha256: createHash("sha256").update("x".repeat(32)).digest("hex") },
       containerName: expect.stringMatching(/^dpf-runtime-protocol-[a-f0-9-]{36}$/),
