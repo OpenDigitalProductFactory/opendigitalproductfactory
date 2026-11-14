@@ -352,6 +352,11 @@ is now the process host only.
   the old claim-before-turn guard (`claimPendingWake`). A retried or
   concurrent dispatch hands it over once, and a crash before the hand-over
   leaves the message pending for the sweep instead of marked delivered.
+- Claim and adopt make a room whole in one transaction (AC-5). Shape and
+  executor harness (claim) and ownership (adopt) are written with the room.
+  Its WorkItem anchor is owed as a `WorkroomEffect` that the worker runs and
+  retries (`room-setup-effects.server.ts`), so a crash cannot leave a half-made
+  room.
 
 An executor adapter contract with DPF-owned ids and provider ids as references:
 `openSession`, `ensureThread`, `resumeThread`, `startTurn`, `steerTurn`,

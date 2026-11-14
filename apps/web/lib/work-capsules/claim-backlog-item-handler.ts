@@ -8,7 +8,7 @@ import {
   resolveDeliveryShape,
   type DeliveryShapeResolution,
 } from "@/lib/work-management/derive-delivery-shape";
-import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import { kickRoomSetup, oweRoomSetup } from "@/lib/workroom-runtime/room-setup-effects.server";
 
 import { providerToExecutorKind } from "./external-session-capture";
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
@@ -246,6 +246,18 @@ export async function claimBacklogItemForWork(args: {
       },
       actor: await args.resolveActor(args.userId, args.context),
       workIntent: requestedIntent as WorkIntent | null,
+      // BI-C64EDA33 PR 3 (AC-5): the room's shape and harness, and the anchor it is owed, commit with the claim.
+      dependencies: {
+        afterClaimInTx: async (tx, claim) => {
+          await persistClaimShape(tx, claim.capsuleId, shape.resolution);
+          if (harness) await persistExecutorHarness(tx, claim.capsuleId, harness as ExecutorHarness, sessionRef);
+          const room = await tx.workroom.findUnique({ where: { capsuleId: claim.capsuleId }, select: { id: true } }) as { id: string } | null;
+          if (room && "$queryRaw" in tx) {
+            await oweRoomSetup(tx as never, { roomRowId: room.id, capsuleId: claim.capsuleId, backlogItemId: claim.backlogItemId,
+              title: `Work on ${claim.backlogItemId}`, source: "claim" });
+          }
+        },
+      },
     });
     if (!governed.ok) {
       return {
@@ -262,16 +274,9 @@ export async function claimBacklogItemForWork(args: {
     }
     const result = governed.data.claim;
     if (twinGate.kind === "overridden") await recordTwinOverride(twinDb as never, result.capsuleId, twinGate, await args.resolveActor(args.userId, args.context));
-    await persistClaimShape(args.db, result.capsuleId, shape.resolution);
-    if (harness) await persistExecutorHarness(args.db, result.capsuleId, harness as ExecutorHarness, sessionRef);
     const homeClaim = claimAtHome ? await requestHomeClaim(result.capsuleId) : null;
-    await ensureCapsuleWorkItemAnchorWithPrisma({
-      capsuleId: result.capsuleId,
-      backlogItemId: result.backlogItemId,
-      title: `Work on ${result.backlogItemId}`,
-    }).catch((error) => {
-      console.warn(`[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${error instanceof Error ? error.message : "unknown"}`);
-    });
+    // The anchor the claim owes its room runs now on the effect worker, and is retried there if it fails.
+    kickRoomSetup();
     const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
     const investment = await (await import("../portfolio/investment-balance-server")).projectItemInvestment(
       (await import("@dpf/db")).prisma, { itemId: result.backlogItemId, roomId: result.capsuleId },

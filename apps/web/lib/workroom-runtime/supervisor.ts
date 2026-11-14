@@ -271,6 +271,11 @@ export function createRuntimeSupervisor(deps: RuntimeSupervisorDeps) {
         return {};
       case "record-plan-limit":
         return recordPlanLimit(p, effect.capsuleId);
+      case "ensure-workitem-anchor": {
+        // PR 3 (AC-5): setup a claim or adoption owes its room, run by whichever portal process holds the worker.
+        const { executeRoomSetupEffect } = await import("./room-setup-effects.server");
+        return executeRoomSetupEffect(effect);
+      }
     }
   }
 

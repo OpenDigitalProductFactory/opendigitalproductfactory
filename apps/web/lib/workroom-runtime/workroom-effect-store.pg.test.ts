@@ -14,6 +14,7 @@ import { claimEffects, insertEffects, recoverExpiredLeases, retireEffects, retir
 
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() ?? "";
 const MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114060000_workroom_effect_outbox/migration.sql");
+const SETUP_MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114080000_workroom_room_setup_effect/migration.sql");
 const T0 = new Date("2026-11-14T05:00:00.000Z");
 const later = (ms: number) => new Date(T0.getTime() + ms);
 
@@ -34,6 +35,10 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     const sql = readFileSync(MIGRATION, "utf8");
     await pool.query(sql);
     await pool.query(sql); // additive and re-runnable
+    // PR 3 (AC-5): the room-setup effect kind.
+    const setup = readFileSync(SETUP_MIGRATION, "utf8");
+    await pool.query(setup);
+    await pool.query(setup);
   });
 
   afterAll(async () => {
@@ -118,5 +123,15 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     ]);
     // The revoke behind the retired close is runnable again.
     expect((await claim([])).map((e) => e.kind)).toEqual(["revoke-token"]);
+  });
+
+  it("a room's setup owed by its claim survives a crash and runs from any process (PR 3, AC-5)", async () => {
+    const { oweRoomSetup } = await import("./room-setup-effects.server");
+    const owe = { roomRowId: "row-1", capsuleId: "WC-1", backlogItemId: "BI-1", title: "Work on BI-1", source: "claim" as const, now: T0 };
+    await oweRoomSetup(run, owe);
+    await oweRoomSetup(run, owe); // the same claim again owes it once
+    // The portal dies before the worker runs it; the boot retirement leaves it, it needs no provider process.
+    expect(await retireOrphanedEffects(run, T0)).toBe(0);
+    expect((await claim([])).map((e) => [e.kind, e.processBound, e.commandKey])).toEqual([["ensure-workitem-anchor", false, "room-setup:claim:WC-1:BI-1"]]);
   });
 });
