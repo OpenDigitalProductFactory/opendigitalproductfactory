@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "decidedOption": "single-collapsed-add-or-claim-disclosure",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/finance/mileage/MileageEntryPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/finance/mileage": {
+        "defaultVisibleWords": 88,
+        "leadBandWords": 6,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    },
+    "sourceSha": "fb575960b8be75671d4c1f207b85ed9a2869788c",
+    "workflowRun": 43643371945,
+    "artifactId": 14132748660,
+    "artifactSha256": "46092b75dce47d074d6ad8617a0a4527bfb503e6e3de37c07dafdf01b09a461c",
+    "rationale": "Measured by an update_baseline sweep of this branch. The rate, drive and claim forms sit behind one collapsed disclosure, so no field is visible on arrival and words on arrival fell from 104 to 88 (the empty-table text no longer points only at the phone app). Every other axis holds its frozen value. The accessibility tree gains the disclosure group, so only the /finance/mileage entry of the committed baseline is re-frozen from the same run."
+  }
+}

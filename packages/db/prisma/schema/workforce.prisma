@@ -1624,10 +1624,10 @@ model Trip {
   vehicleId            String?
   startedAt            DateTime
   endedAt              DateTime
-  startLatitude        Decimal                @db.Decimal(10, 7)
-  startLongitude       Decimal                @db.Decimal(10, 7)
-  endLatitude          Decimal                @db.Decimal(10, 7)
-  endLongitude         Decimal                @db.Decimal(10, 7)
+  startLatitude        Decimal?                @db.Decimal(10, 7)
+  startLongitude       Decimal?                @db.Decimal(10, 7)
+  endLatitude          Decimal?                @db.Decimal(10, 7)
+  endLongitude         Decimal?                @db.Decimal(10, 7)
   startPlaceLabel      String?
   endPlaceLabel        String?
   /// ISO 3166-1 alpha-2 of where the drive happened, DERIVED by the capturing
