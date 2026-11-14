@@ -2,13 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GET, POST } from "./route";
 
-const { mockAuth, mockLoadCoworkerCatalog, mockCreateCoworkerA2aTask } = vi.hoisted(() => ({
+const { mockAuth, mockLoadCoworkerCatalog, mockCreateCoworkerA2aTask, mockResolveFederationLinkAuth } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
+  mockResolveFederationLinkAuth: vi.fn(),
   mockLoadCoworkerCatalog: vi.fn(),
   mockCreateCoworkerA2aTask: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
+vi.mock("@/lib/auth/federation-link-token", () => ({ resolveFederationLinkAuth: mockResolveFederationLinkAuth }));
 vi.mock("@/lib/coworker-service-catalog/catalog", () => ({
   loadCoworkerCatalog: mockLoadCoworkerCatalog,
 }));
@@ -16,9 +18,22 @@ vi.mock("@/lib/coworker-service-catalog/a2a-tasks", () => ({
   createCoworkerA2aTask: mockCreateCoworkerA2aTask,
 }));
 
+const TRUSTED_LINK = {
+  ok: true,
+  linkId: "link-peer",
+  role: "same-org-peer",
+  linkState: "trusted",
+  peerOrganizationRef: "org-1",
+  projectionContractId: null,
+  authorityBindingId: null,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mockResolveFederationLinkAuth.mockResolvedValue({ ok: false, error: "missing_authorization", message: "Authorization header is required" });
 });
+
+const LINK_HEADERS = { authorization: "Bearer dpflink_peer" };
 
 function catalogOffer(overrides: Record<string, unknown> = {}) {
   const provider = {
@@ -131,6 +146,7 @@ describe("A2A coworker offer route", () => {
 
   it("submits an external A2A task for a selected offer", async () => {
     mockAuth.mockResolvedValue(null);
+    mockResolveFederationLinkAuth.mockResolvedValue(TRUSTED_LINK);
     mockLoadCoworkerCatalog.mockResolvedValue({ services: [], offers: [catalogOffer()] });
     mockCreateCoworkerA2aTask.mockResolvedValue({
       id: "CE-A2A",
@@ -153,6 +169,7 @@ describe("A2A coworker offer route", () => {
     const response = await POST(
       new Request("http://test/api/a2a/coworkers/sales-coworker/offers/offer-sales", {
         method: "POST",
+        headers: LINK_HEADERS,
         body: JSON.stringify({
           requestedOutcome: "Qualify this buyer.",
           inputPayload: { inquiry: "Need enterprise pricing." },
@@ -177,13 +194,16 @@ describe("A2A coworker offer route", () => {
         authorityBoundary: "proposal-only",
         riskTier: "medium",
         requiredGrants: ["registry_read"],
+        submittingFederationLinkId: "link-peer",
       }),
     );
+    expect(mockResolveFederationLinkAuth).toHaveBeenCalledWith("Bearer dpflink_peer");
     await expect(response.json()).resolves.toMatchObject({ id: "CE-A2A", status: { state: "submitted" } });
   });
 
   it("rejects external A2A task submission without an acting GAID", async () => {
     mockAuth.mockResolvedValue(null);
+    mockResolveFederationLinkAuth.mockResolvedValue(TRUSTED_LINK);
     mockLoadCoworkerCatalog.mockResolvedValue({ services: [], offers: [catalogOffer()] });
 
     const response = await POST(
@@ -209,6 +229,7 @@ describe("A2A coworker offer route", () => {
 
   it("rejects external A2A task submission without terms and data-boundary context", async () => {
     mockAuth.mockResolvedValue(null);
+    mockResolveFederationLinkAuth.mockResolvedValue(TRUSTED_LINK);
     mockLoadCoworkerCatalog.mockResolvedValue({ services: [], offers: [catalogOffer()] });
 
     const response = await POST(
@@ -233,5 +254,94 @@ describe("A2A coworker offer route", () => {
       },
     });
     expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
+  });
+
+  // BI-D00C5FD4: a cross-boundary submission needs a verified credential.
+  describe("credential on cross-boundary submission (BI-D00C5FD4)", () => {
+    const externalBody = JSON.stringify({
+      requestedOutcome: "Qualify this buyer.",
+      contractContext: { termsRef: "terms://sales", dataBoundaryRef: "boundary://sales" },
+      actingAgentGaid: "gaid:public:buyer",
+    });
+
+    it("AC-1: an external submission with no credential is refused with 401 and creates nothing", async () => {
+      mockAuth.mockResolvedValue(null);
+      mockLoadCoworkerCatalog.mockResolvedValue({ services: [], offers: [catalogOffer()] });
+
+      const response = await POST(
+        new Request("http://test/api/a2a/coworkers/sales-coworker/offers/offer-sales", { method: "POST", body: externalBody }),
+        { params: Promise.resolve({ agentId: "sales-coworker", offerId: "offer-sales" }) },
+      );
+
+      expect(response.status).toBe(401);
+      expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
+    });
+
+    it("AC-1: a partner submission with an unknown or untrusted link token is refused", async () => {
+      mockAuth.mockResolvedValue(null);
+      mockResolveFederationLinkAuth.mockResolvedValue({ ok: false, error: "link_not_trusted", message: "not trusted" });
+      mockLoadCoworkerCatalog.mockResolvedValue({ services: [], offers: [catalogOffer({ availabilityScope: "partner" })] });
+
+      const response = await POST(
+        new Request("http://test/api/a2a/coworkers/sales-coworker/offers/offer-sales", { method: "POST", headers: LINK_HEADERS, body: externalBody }),
+        { params: Promise.resolve({ agentId: "sales-coworker", offerId: "offer-sales" }) },
+      );
+
+      expect(response.status).toBe(403);
+      expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
+    });
+
+    it("AC-1: a signed-in session alone is not a cross-boundary credential", async () => {
+      mockAuth.mockResolvedValue({ user: { id: "u1" } });
+      mockLoadCoworkerCatalog.mockResolvedValue({ services: [], offers: [catalogOffer()] });
+
+      const response = await POST(
+        new Request("http://test/api/a2a/coworkers/sales-coworker/offers/offer-sales", { method: "POST", body: externalBody }),
+        { params: Promise.resolve({ agentId: "sales-coworker", offerId: "offer-sales" }) },
+      );
+
+      expect(response.status).toBe(401);
+      expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
+    });
+
+    it("AC-2: the query string cannot reach an internal offer through an external profile", async () => {
+      mockAuth.mockResolvedValue(null);
+      mockResolveFederationLinkAuth.mockResolvedValue(TRUSTED_LINK);
+      mockLoadCoworkerCatalog.mockResolvedValue({
+        services: [],
+        offers: [catalogOffer({ availabilityScope: "internal" })],
+      });
+
+      const response = await POST(
+        new Request("http://test/api/a2a/coworkers/sales-coworker/offers/offer-sales?accessProfile=external-a2a", {
+          method: "POST",
+          headers: LINK_HEADERS,
+          body: externalBody,
+        }),
+        { params: Promise.resolve({ agentId: "sales-coworker", offerId: "offer-sales" }) },
+      );
+
+      expect(response.status).toBe(403);
+      expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
+    });
+
+    it("AC-2: without a session, the query string cannot downgrade an internal offer either", async () => {
+      mockAuth.mockResolvedValue(null);
+      mockLoadCoworkerCatalog.mockResolvedValue({
+        services: [],
+        offers: [catalogOffer({ availabilityScope: "internal" })],
+      });
+
+      const response = await POST(
+        new Request("http://test/api/a2a/coworkers/sales-coworker/offers/offer-sales?accessProfile=partner-a2a", {
+          method: "POST",
+          body: externalBody,
+        }),
+        { params: Promise.resolve({ agentId: "sales-coworker", offerId: "offer-sales" }) },
+      );
+
+      expect([401, 403]).toContain(response.status);
+      expect(mockCreateCoworkerA2aTask).not.toHaveBeenCalled();
+    });
   });
 });
