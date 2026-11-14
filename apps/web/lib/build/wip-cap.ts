@@ -17,8 +17,49 @@
 
 import type { WipPool } from "./unified-wip";
 
-/** Phases that count as finished — they no longer occupy a WIP slot. */
-export const TERMINAL_BUILD_PHASES = ["complete", "failed"] as const;
+/**
+ * Phases that count as finished — they no longer occupy a WIP slot. The one
+ * definition (BI-B6894001): `lib/mcp/build-tool-helpers.ts` re-exports it.
+ * `abandoned` is listed because an abandoned build is finished; every WIP
+ * query also filters `abandonedAt: null`, so listing it changes no count.
+ */
+export const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
+
+/**
+ * What "active" means for a FeatureBuild (BI-B6894001): not abandoned and not
+ * parked waiting on an owner answer. A needs-human escalation parks a build by
+ * setting `waitingOnOwnerSince` and leaves its real phase, design and review in
+ * place, so it frees WIP without being destroyed. Spread this into every query
+ * that counts WIP or picks builds for an autonomous sweep to act on, rather
+ * than writing `abandonedAt: null` inline. Clearing `waitingOnOwnerSince`
+ * makes the build active again.
+ */
+export const ACTIVE_BUILD_WHERE = { abandonedAt: null, waitingOnOwnerSince: null } as const;
+
+/**
+ * The parked builds: not abandoned, waiting on an owner answer. Read models
+ * that list builds (the build list, quiescence) still see them; sweeps that
+ * would reap, age out or resume a build must not act on them.
+ */
+export const WAITING_ON_OWNER_WHERE = {
+  abandonedAt: null,
+  waitingOnOwnerSince: { not: null },
+} as const;
+
+type ParkableBuild = {
+  abandonedAt?: Date | string | null;
+  waitingOnOwnerSince?: Date | string | null;
+};
+
+/** In-memory form of WAITING_ON_OWNER_WHERE, for rows already loaded. */
+export function isBuildWaitingOnOwner(build: ParkableBuild): boolean {
+  return !build.abandonedAt && build.waitingOnOwnerSince != null;
+}
+
+/** In-memory form of ACTIVE_BUILD_WHERE, for rows already loaded. */
+export function isActiveBuild(build: ParkableBuild): boolean {
+  return !build.abandonedAt && build.waitingOnOwnerSince == null;
+}
 
 /**
  * The Build Studio sandbox pool size: the machine's PHYSICAL limit on builds

@@ -68,9 +68,8 @@ export default async function DemandPage({
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Delivery Flow</h1>
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-          One flow from investment to execution: what&apos;s asked for, how valuable and how big, funded at
-          the bet, then built. The Flow lens shows the whole river; Funnel, Value × effort and Balance zoom
-          into the invest half.
+          One flow from investment to delivery: review requests, value and effort, then fund and build
+          the work. Flow shows the whole process; Funnel, Value × effort and Balance focus on investment.
         </p>
       </div>
       <OpsTabNav />
@@ -99,7 +98,7 @@ export default async function DemandPage({
       <MessagesProvider locale={locale.language} messages={{ portfolio: namespaceMessages(locale.language, "portfolio") }}>
         <PortfolioTieOutPanel {...JSON.parse(JSON.stringify(tieOutPanel))} formatLocale={locale.formatLocale} initiallyOpen={investment === "1"}>
           <PortfolioOwnership view={ownership} canManage={canManageOwners} />
-          <InvestmentBalance views={investmentPage.views} canManage={canManageAllocation} formatLocale={locale.formatLocale} nextHref={investmentPage.nextCursor ? investmentHref(investmentPage.nextCursor) : undefined} firstHref={investmentAfter ? investmentHref() : undefined} />
+          <InvestmentBalance views={investmentPage.views} canManage={canManageAllocation} canManageSetup={canManageOwners} formatLocale={locale.formatLocale} nextHref={investmentPage.nextCursor ? investmentHref(investmentPage.nextCursor) : undefined} firstHref={investmentAfter ? investmentHref() : undefined} />
         </PortfolioTieOutPanel>
       </MessagesProvider>
     </div>

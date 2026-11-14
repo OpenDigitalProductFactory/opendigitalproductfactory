@@ -81,6 +81,16 @@ describe("getFeatureBuilds", () => {
     );
   });
 
+  it("still lists a build parked on an owner answer (BI-B6894001)", async () => {
+    await getFeatureBuilds("user-parked-build");
+
+    const where = (vi.mocked(prisma.featureBuild.findMany).mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+    // Abandoned builds are hidden; a parked build is not abandoned and must
+    // not be filtered on its park.
+    expect(where.abandonedAt).toBeNull();
+    expect(where).not.toHaveProperty("waitingOnOwnerSince");
+  });
+
   it("loads and projects only the business brief linked to the selected build", async () => {
     vi.mocked(prisma.featureBuild.findUnique).mockResolvedValue({
       id: "feature-build-row-a",

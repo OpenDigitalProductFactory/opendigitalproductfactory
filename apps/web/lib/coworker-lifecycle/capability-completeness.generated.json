@@ -300,10 +300,10 @@
       "byConsequenceClass": {
         "outward": 17,
         "irreversible": 23,
-        "authority": 30
+        "authority": 31
       },
-      "sideEffectingTools": 205,
-      "gateClassified": 71,
+      "sideEffectingTools": 206,
+      "gateClassified": 72,
       "ungated": 134,
       "coveragePct": 35,
       "classifiedTools": [
@@ -319,6 +319,7 @@
         "claim_workroom_scope",
         "configure_gateway_scan",
         "configure_scheduled_agent_task_reporting",
+        "confirm_platform_funding_owner",
         "contribute_to_hive",
         "correct_workroom_sensitivity",
         "create_bank_account",
@@ -5904,8 +5905,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 32,
-          "reachableGatedTools": 10,
+          "reachableSideEffectingTools": 33,
+          "reachableGatedTools": 11,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -5930,7 +5931,7 @@
           "level": 3,
           "directSkills": 2,
           "wildcardSkills": 10,
-          "reachableTools": 122,
+          "reachableTools": 123,
           "heldGrants": [
             "file_read",
             "web_search",
@@ -5944,7 +5945,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "2 skill(s), 122 tool(s), all service backings resolve",
+          "detail": "2 skill(s), 123 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -9027,8 +9028,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 31,
-          "reachableGatedTools": 13,
+          "reachableSideEffectingTools": 32,
+          "reachableGatedTools": 14,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -9053,7 +9054,7 @@
           "level": 3,
           "directSkills": 6,
           "wildcardSkills": 10,
-          "reachableTools": 114,
+          "reachableTools": 116,
           "heldGrants": [
             "admin_read",
             "admin_write",
@@ -9066,7 +9067,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "6 skill(s), 114 tool(s), all service backings resolve",
+          "detail": "6 skill(s), 116 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
@@ -10635,8 +10636,8 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 63,
-          "reachableGatedTools": 25,
+          "reachableSideEffectingTools": 64,
+          "reachableGatedTools": 26,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
           "levelKey": "proven",
@@ -10661,7 +10662,7 @@
           "level": 3,
           "directSkills": 36,
           "wildcardSkills": 10,
-          "reachableTools": 164,
+          "reachableTools": 166,
           "heldGrants": [
             "agent_control_read",
             "admin_read",
@@ -10676,7 +10677,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "36 skill(s), 164 tool(s), all service backings resolve",
+          "detail": "36 skill(s), 166 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true
