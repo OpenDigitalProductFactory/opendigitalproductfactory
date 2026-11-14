@@ -16,10 +16,12 @@ import { classifyRoute } from "../lib/navigation/route-audience";
 import { shellPolicyFor } from "../lib/ux-budget/route-shells";
 import { getErrorMessage } from "../lib/shared/get-error-message";
 import baseline from "../lib/ux-budget/route-budget-baseline.json";
-import { waitForRouteDomToSettle, BROWSER_EVALUATION_RUNTIME, uxSweepAxeOptions } from "./ux-route-sweep";
+import { waitForRouteDomToSettle, DOM_SETTLE_EXPRESSION, BROWSER_EVALUATION_RUNTIME, uxSweepAxeOptions } from "./ux-route-sweep";
 import { assertProviderQuotaFixtureRuntime, startQuotaFixtureTransport, prepareProviderQuotaFixtures,
   resetProviderQuotaFixture, cleanupProviderQuotaFixtures, type ProviderQuotaFixture } from "./provider-quota-recovery-fixtures";
 import { verifySubscriptionCalibrationHistory } from "./subscription-calibration-verification";
+import { isQuotaControlSettled, quotaMeasurementStatus, readQuotaControlState, waitForQuotaControlSettlement } from "./provider-quota-recovery-settlement";
+import { verifyQuotaControlSettlement } from "./provider-quota-recovery-settlement.browser-verification";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const OUT = resolve(ROOT, "apps/web/test-results/ux-route-sweep/provider-quota-recovery");
@@ -60,6 +62,8 @@ export async function verifyProviderQuotaRecovery() {
   const write = (name: string, value: unknown) => writeFileSync(resolve(OUT, name), JSON.stringify(value, null, 2));
   write("execution.json", { status: "running", ...runtime, syntheticTransport: true, realSubscriptionCapacity: "unrun" });
   try {
+    write("control-settlement-regression.json", { sourceSha: runtime.sourceSha,
+      ...await verifyQuotaControlSettlement(browser, DOM_SETTLE_EXPRESSION) });
     // The ordinary populated-route budget is measured before scenario data alters it.
     const initial = await browser.newContext({ storageState: resolve(ROOT, "e2e/.auth/state.json"), viewport: { width: 1440, height: 1000 } });
     try {
@@ -149,6 +153,9 @@ export async function verifyProviderQuotaRecovery() {
           check(geometry.documentWidth <= geometry.width && geometry.dark === (theme === "dark") && geometry.visibility === "visible", "Scenario viewport or theme is incorrect");
           const panelId = await summary.getAttribute("aria-controls");
           check(panelId, "Recovery disclosure has no associated panel");
+          const checkControl = scenario === "limited" || scenario === "recovered"
+            ? details.getByRole("button", { name: copy.capacityCheck, exact: true }) : null;
+          const controlStateBeforeAxe = checkControl ? await waitForQuotaControlSettlement(checkControl) : null;
           const axe = await new AxeBuilder({ page }).include('[id="' + panelId + '"]').options(uxSweepAxeOptions()).analyze();
           const serious = axe.violations.filter(value => value.impact === "serious" || value.impact === "critical");
           const slug = `${scenario}-${layout}-${theme}`, path = resolve(OUT, slug + ".png");
@@ -157,17 +164,20 @@ export async function verifyProviderQuotaRecovery() {
               nodes: value.nodes.slice(0, 20).map(node => ({ target: node.target, failureSummary: node.failureSummary?.slice(0, 2000) })) })) };
           // Known axe findings must survive a later screenshot or aria-capture failure.
           write(slug + ".json", { scenario, layout, theme, status: serious.length ? "failed" : "capture-pending",
-            sourceSha: runtime.sourceSha, syntheticTransport: true, realSubscriptionCapacity: "unrun", geometry, accessibility });
+            sourceSha: runtime.sourceSha, syntheticTransport: true, realSubscriptionCapacity: "unrun", geometry, controlStateBeforeAxe, accessibility });
+          // Preserve any axe finding before a later state read can fail as well.
+          const controlStateAfterAxe = checkControl ? await readQuotaControlState(checkControl) : null;
           const bytes = await row.screenshot({ path });
-          const evidence = { scenario, layout, theme, status: serious.length ? "failed" : "passed", sourceSha: runtime.sourceSha, syntheticTransport: true, realSubscriptionCapacity: "unrun",
+          const evidence = { scenario, layout, theme, status: quotaMeasurementStatus(serious.length, controlStateAfterAxe), sourceSha: runtime.sourceSha, syntheticTransport: true, realSubscriptionCapacity: "unrun",
             path: slug + ".png", sha256: createHash("sha256").update(bytes).digest("hex"), geometry, ariaSnapshot: await details.ariaSnapshot(),
-            accessibility,
+            accessibility, controlStateBeforeAxe, controlStateAfterAxe,
             checks: { initiallyClosed: true, keyboard: true, exactModel: true, resetGuidance: true, broadForecastPreserved: true, cliPreserved: true },
             requestCount: transport.counts().requests - countBefore };
           // Keep bounded fixture-only diagnostics even when accessibility fails.
           // A failed capture never enters the completed-case manifest.
           write(slug + ".json", evidence);
           check(serious.length === 0, "Recovery disclosure has serious accessibility findings: " + serious.map(value => value.id).join(", "));
+          check(!controlStateAfterAxe || isQuotaControlSettled(controlStateAfterAxe), "Quota control changed state during accessibility measurement");
           captures.push(evidence);
         }
       } finally { await context.close(); }
