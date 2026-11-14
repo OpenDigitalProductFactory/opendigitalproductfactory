@@ -39,4 +39,15 @@ describe("loadAtlasPicture", () => {
     }));
     expect(picture).toMatchObject({ total: 3, truncated: true });
   });
+
+  it("reads each room's declared shape in one bounded query (BI-3791FDD8)", async () => {
+    loadCapsuleLivenessInventory.mockResolvedValueOnce({ capsulesAll: [inventoryRow(0), inventoryRow(1)], livenessSummary: {} });
+    loadRoomAccountabilityBatch.mockResolvedValueOnce(new Map());
+    const findMany = vi.fn(async () => [{ capsuleId: "WC-0", scopeClaims: [{ workShape: "delivery-small@1.0.0" }] }]);
+    const picture = await loadAtlasPicture({ workroom: { findMany } } as never);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith({ where: { capsuleId: { in: ["WC-0", "WC-1"] } }, select: { capsuleId: true, scopeClaims: true } });
+    expect(picture.rooms[0]).toMatchObject({ capsuleId: "WC-0", shape: "delivery-small" });
+    expect(picture.rooms[1]).not.toHaveProperty("shape");
+  });
 });
