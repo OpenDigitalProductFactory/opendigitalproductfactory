@@ -39,7 +39,7 @@ vi.mock("@dpf/db", () => ({
 vi.mock("./agent-thread-dispatcher", () => ({
   dispatchAgentThread: mockDispatchAgentThread,
 }));
-vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
+vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn(), lockRuntimeTransitionAdmission: vi.fn() }));
 
 // BI-QUIESCE-005 gate: spawnWorkThread now calls getQuiescenceLevel.
 // Default to "normal" for all existing tests; tests that want to
@@ -60,6 +60,7 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
 }));
 
 import { spawnWorkThread } from "./agent-threads";
+import { lockRuntimeTransitionAdmission } from "@/lib/platform-runtime/work-admission";
 
 describe("spawnWorkThread guards", () => {
   beforeEach(() => {
@@ -76,6 +77,14 @@ describe("spawnWorkThread guards", () => {
     mockPrisma.taskRun.findFirst.mockResolvedValue(null);
     mockPrisma.agentThread.findMany.mockResolvedValue([]);
     mockPrisma.taskRun.count.mockResolvedValue(0);
+  });
+
+  it("fences the Serializable transaction before parent reads without bypassing ownership", async () => {
+    mockPrisma.agentThread.findUniqueOrThrow.mockResolvedValue({ id: "parent-1", userId: "other-owner" });
+    await expect(spawnWorkThread("parent-1", "fixture objective", "owner")).rejects.toThrow("Parent thread is owned by another user");
+    expect(vi.mocked(lockRuntimeTransitionAdmission).mock.invocationCallOrder[0]).toBeLessThan(mockPrisma.agentThread.findUniqueOrThrow.mock.invocationCallOrder[0]);
+    expect(mockPrisma.agentThread.create).not.toHaveBeenCalled();
+    expect(mockPrisma.taskRun.create).not.toHaveBeenCalled();
   });
 
   async function expectSpawnError(parent: {
