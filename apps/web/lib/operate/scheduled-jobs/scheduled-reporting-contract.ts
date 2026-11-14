@@ -55,12 +55,38 @@ export function scheduledReportingPrompt(prompt: string, taskConfig: unknown): s
     + "\nOriginal task context follows unchanged:\n" + prompt;
 }
 
+export class ScheduledReportFormatError extends Error {
+  constructor(readonly code: "report-oversized" | "report-invalid-json" | "report-invalid-contract", message: string) { super(message); }
+}
+
+const diagnosticSchema = z.object({
+  version: z.literal(1),
+  code: z.enum(["report-format-accepted", "report-oversized", "report-invalid-json", "report-invalid-contract", "report-inspection-unavailable"]),
+  original: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), bytes: z.number().int().nonnegative().safe(),
+    truncated: z.boolean(), redacted: z.boolean() }).strict(),
+}).strict();
+export type ScheduledReportDiagnostic = z.infer<typeof diagnosticSchema>;
+/** Format metadata only: this is neither successful observation nor execution proof. */
+export function projectScheduledReportDiagnostic(inspection: unknown): ScheduledReportDiagnostic | undefined {
+  if (!isRecord(inspection) || !isRecord(inspection.check) || !isRecord(inspection.original)) return undefined;
+  const { check, original } = inspection;
+  if (typeof check.complete !== "boolean") return undefined;
+  if (check.complete !== (check.code === "report-format-accepted")) return undefined;
+  const parsed = diagnosticSchema.safeParse({ version: 1, code: check.code,
+    original: { sha256: original.sha256, bytes: original.bytes, truncated: original.truncated, redacted: original.redacted } });
+  return parsed.success ? parsed.data : undefined;
+}
+export function readScheduledReportDiagnostic(value: unknown): ScheduledReportDiagnostic | null {
+  const parsed = diagnosticSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export function parseScheduledReport(content: string): ScheduledReport {
-  if (Buffer.byteLength(content, "utf8") > 16 * 1024) throw new Error("Scheduled report exceeds its size limit.");
+  if (Buffer.byteLength(content, "utf8") > 16 * 1024) throw new ScheduledReportFormatError("report-oversized", "Scheduled report exceeds its size limit.");
   let value: unknown;
-  try { value = JSON.parse(content); } catch { throw new Error("Scheduled report must be one JSON object."); }
+  try { value = JSON.parse(content); } catch { throw new ScheduledReportFormatError("report-invalid-json", "Scheduled report must be one JSON object."); }
   const parsed = reportSchema.safeParse(value);
-  if (!parsed.success) throw new Error("Scheduled report is malformed or lacks required evidence selectors.");
+  if (!parsed.success) throw new ScheduledReportFormatError("report-invalid-contract", "Scheduled report is malformed or lacks required evidence selectors.");
   return parsed.data;
 }
 

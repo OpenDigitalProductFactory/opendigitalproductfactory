@@ -13,11 +13,11 @@ import { recordDeliveryAttempt } from "@/lib/communications/delivery-evidence";
 import type { CommunicationDeliveryResult, SendCommunicationInput } from "@/lib/communications/channel-types";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { assertCurrentScheduledReportingContext } from "./scheduled-reporting-authority";
-import { isScheduledReportingRead, parseScheduledReport, readScheduledReportingState, type ScheduledReportingState } from "./scheduled-reporting-contract";
+import { isScheduledReportingRead, parseScheduledReport, ScheduledReportFormatError, readScheduledReportDiagnostic, type ScheduledReportDiagnostic, readScheduledReportingState, type ScheduledReportingState } from "./scheduled-reporting-contract";
 
 type ReportingStatus = NonNullable<ScheduledReportingState["lastRun"]>["status"];
 export type ScheduledReportingRunInput = { taskId: string; userId: string; taskRunId: string; threadId: string; agentId: string; scopeDigest: string;
-  content: string; admittedTools: readonly ToolDefinition[]; failure?: InferenceDeadEndOutcome; now?: Date };
+  diagnostic?: ScheduledReportDiagnostic; content: string; admittedTools: readonly ToolDefinition[]; failure?: InferenceDeadEndOutcome; now?: Date };
 type RunInput = ScheduledReportingRunInput;
 type Dispatch = (tx: Prisma.TransactionClient, input: SendCommunicationInput) => Promise<CommunicationDeliveryResult>;
 type Dependencies = { db?: typeof prisma; dispatch?: Dispatch };
@@ -36,8 +36,9 @@ const safeReportFailures = new Set([
  * Format inspection alone never earns completion; settlement verifies DB reads. */
 export function runScheduledReportingLoop<T extends { content: string }>(tools: readonly ToolDefinition[], run: () => Promise<T>) {
   return withReadEvidencePolicy({ toolNames: tools.filter(isScheduledReportingRead).map(tool => tool.name), inspect: async content => {
-    try { parseScheduledReport(content); return { complete: true, message: "Report format accepted; persisted observations still require settlement." }; }
-    catch { return { complete: false, message: "A bounded observation report with evidence selectors is required." }; }
+    try { parseScheduledReport(content); return { complete: true, code: "report-format-accepted", message: "Report format accepted; persisted observations still require settlement." }; }
+    catch (error) { return { complete: false, code: error instanceof ScheduledReportFormatError ? error.code : "report-inspection-unavailable",
+      message: error instanceof ScheduledReportFormatError ? error.message : "The scheduled report could not be inspected." }; }
   } }, run);
 }
 
@@ -89,7 +90,8 @@ async function persistOutcome(tx: Prisma.TransactionClient, input: RunInput,
   const nextRunAt = parked || isOneShotCron(task.schedule) ? null : computeNextCronRun(task.schedule, now);
   const runChanged = await tx.taskRun.updateMany({ where: { taskRunId: input.taskRunId, userId: input.userId, status: { equals: "working" } },
     data: { status, completedAt: parked ? null : now, progressPayload: { summary, ...(decisionBrief ? { decisionBrief } : {}), scheduledReporting: { status, summary, evidence,
-      conditionId: state.condition?.conditionId ?? null, reportDigest } } } });
+      conditionId: state.condition?.conditionId ?? null, reportDigest,
+      ...(readScheduledReportDiagnostic(input.diagnostic) ? { diagnostic: readScheduledReportDiagnostic(input.diagnostic)! } : {}) } } } });
   if (runChanged.count !== 1) throw new Error("Scheduled reporting run already settled or changed.");
   const config = isRecord(task.taskConfig) ? task.taskConfig : {};
   const changed = await tx.scheduledAgentTask.updateMany({ where: { taskId: input.taskId, ownerUserId: input.userId, taskRunId: input.taskRunId },
