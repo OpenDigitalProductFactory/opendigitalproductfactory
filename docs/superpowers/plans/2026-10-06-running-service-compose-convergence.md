@@ -69,6 +69,7 @@ status: active
 
 - **Change:** the `compose` surface checks the services a PR changes. `auto-converges` is valid only when each changed service is in a resolvable chain and has a `recreateClass`. Otherwise the gate refuses with the reason.
 - **Tests first:** the fixtures include #6020's shape, a `portal-tls` change before D1/D2. It is refused before and accepted after.
+- **As delivered (2026-11-14):** `composeConvergence` in `convergence-surfaces.json` names the chain files and, per recreate class, the step that recreates a changed running service. While 7e is report-only and 3c does not exist, `stateless` and `data-owner` have no mechanism. #6020's shape is therefore still refused, honestly, and a sidecar PR names an `operator-action`. When 7e enforces, `stateless` flips to step 7e and the same fixture is accepted. Removed services, and services in files outside every chain, are refused too.
 
 ## Risks and rollback
 
