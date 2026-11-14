@@ -23,7 +23,10 @@ export type EmploymentEventType =
   | "offboarding_started"
   | "offboarding_completed"
   | "terminated"
-  | "reactivated";
+  | "reactivated"
+  // A Form W-4 recorded or replaced (BI-2BC8D614). Its answers ride in metadata
+  // and effectiveAt is the first pay date it governs.
+  | "withholding_recorded";
 
 // ─── Lifecycle Transition Validation ─────────────────────────────────────────
 

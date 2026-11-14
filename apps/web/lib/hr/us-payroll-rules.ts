@@ -97,7 +97,7 @@ function tableFor(rows: readonly QualifiedRule[], on: Date, status: FilingStatus
 export function buildFederalPayrollRules(
   rows: readonly QualifiedRule[],
   on: Date,
-): { ok: true; data: FederalPayrollRules } | { ok: false; missing: string[] } {
+): { ready: true; rules: FederalPayrollRules } | { ready: false; missing: string[] } {
   const missing: string[] = [];
   const scalar = new Map<string, number>();
   for (const [label, sel] of SCALARS) {
@@ -119,12 +119,12 @@ export function buildFederalPayrollRules(
     schedules[status] = { ...(schedules[status] ?? { standard: [], step2: [] }), [schedule]: table };
   }
 
-  if (missing.length > 0) return { ok: false, missing };
+  if (missing.length > 0) return { ready: false, missing };
 
   const get = (label: string) => scalar.get(label)!;
   return {
-    ok: true,
-    data: {
+    ready: true,
+    rules: {
       federal: {
         line1g: {
           married_jointly: get("Federal withholding line 1g amount: married filing jointly"),

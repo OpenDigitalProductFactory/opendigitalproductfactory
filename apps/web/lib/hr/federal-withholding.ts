@@ -86,3 +86,58 @@ export function federalWithholdingWorksheet1A(
   // Step 4 — extra withholding the employee asked for.
   return round2(line3c + w4.step4cExtraWithholding);
 }
+
+// ── The W-4 in force (BI-2BC8D614) ───────────────────────────────────────────
+// A W-4 is recorded as an EmploymentEvent of type "withholding_recorded" whose
+// metadata holds the form's answers, plus the two-letter state where the work
+// is done. effectiveAt is the first pay date the form governs, so a new form
+// never re-prices an earlier run.
+
+export const WITHHOLDING_EVENT_TYPE = "withholding_recorded";
+
+export interface RecordedW4 extends W4Election {
+  /** Two-letter US state where the work is performed. */
+  workStateCode: string;
+}
+
+const FILING_STATUSES = new Set<string>(["single", "married_jointly", "head_of_household"]);
+
+/** Read a W-4 from event metadata, or null when it is not a complete form. */
+export function parseRecordedW4(metadata: unknown): RecordedW4 | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const m = metadata as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null);
+  const status = typeof m.filingStatus === "string" && FILING_STATUSES.has(m.filingStatus) ? (m.filingStatus as FilingStatus) : null;
+  const state = typeof m.workStateCode === "string" && /^[A-Z]{2}$/.test(m.workStateCode) ? m.workStateCode : null;
+  const amounts = [m.step3Credits, m.step4aOtherIncome, m.step4bDeductions, m.step4cExtraWithholding].map(num);
+  if (!status || !state || amounts.some((a) => a === null) || typeof m.step2Checked !== "boolean" || typeof m.exempt !== "boolean") {
+    return null;
+  }
+  return {
+    filingStatus: status,
+    step2Checked: m.step2Checked,
+    step3Credits: amounts[0]!,
+    step4aOtherIncome: amounts[1]!,
+    step4bDeductions: amounts[2]!,
+    step4cExtraWithholding: amounts[3]!,
+    exempt: m.exempt,
+    workStateCode: state,
+  };
+}
+
+/** The latest complete W-4 effective on or before `on`, or null. */
+export function w4InForce(
+  events: ReadonlyArray<{ eventType: string; effectiveAt: Date; metadata: unknown; createdAt?: Date }>,
+  on: Date,
+): RecordedW4 | null {
+  const candidates = events
+    .filter((e) => e.eventType === WITHHOLDING_EVENT_TYPE && e.effectiveAt.getTime() <= on.getTime())
+    .sort((a, b) =>
+      b.effectiveAt.getTime() - a.effectiveAt.getTime()
+      || (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  for (const event of candidates) {
+    const parsed = parseRecordedW4(event.metadata);
+    if (parsed) return parsed;
+  }
+  return null;
+}

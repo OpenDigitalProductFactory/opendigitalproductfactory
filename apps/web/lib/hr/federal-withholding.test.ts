@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   federalWithholdingWorksheet1A,
+  w4InForce,
   type FederalWithholdingTables,
   type W4Election,
 } from "./federal-withholding";
@@ -100,5 +101,37 @@ describe("federalWithholdingWorksheet1A", () => {
     // + 32% x 54,450 (17,424) + 35% x 384,375 (134,531.25) + 37% x 123,300 (45,621)
     // = 238,600.25; / 52 = 4,588.4663 -> 4,588.47.
     expect(federalWithholdingWorksheet1A({ periodWages: 15_000, periodsPerYear: 52, w4: plain }, TABLES)).toBe(4_588.47);
+  });
+});
+
+describe("w4InForce", () => {
+  const form = (over: Record<string, unknown> = {}) => ({
+    filingStatus: "single", step2Checked: false, step3Credits: 0, step4aOtherIncome: 0,
+    step4bDeductions: 0, step4cExtraWithholding: 0, exempt: false, workStateCode: "TX", ...over,
+  });
+  const ev = (effectiveAt: string, metadata: unknown, eventType = "withholding_recorded") =>
+    ({ eventType, effectiveAt: new Date(effectiveAt), metadata });
+
+  it("uses the latest form effective on the pay date, never a later one", () => {
+    const events = [
+      ev("2026-01-01T00:00:00Z", form()),
+      ev("2026-06-01T00:00:00Z", form({ filingStatus: "married_jointly" })),
+      ev("2026-09-01T00:00:00Z", form({ filingStatus: "head_of_household" })),
+    ];
+    expect(w4InForce(events, new Date("2026-07-15T00:00:00Z"))?.filingStatus).toBe("married_jointly");
+  });
+
+  it("ignores other employment events and incomplete forms", () => {
+    const events = [
+      ev("2026-01-01T00:00:00Z", form()),
+      ev("2026-02-01T00:00:00Z", form(), "manager_changed"),
+      ev("2026-03-01T00:00:00Z", form({ workStateCode: "Texas" })),
+      ev("2026-03-02T00:00:00Z", form({ step3Credits: -5 })),
+    ];
+    expect(w4InForce(events, new Date("2026-04-01T00:00:00Z"))).toMatchObject({ filingStatus: "single", workStateCode: "TX" });
+  });
+
+  it("returns null when no form is on file — the caller applies the IRS default", () => {
+    expect(w4InForce([], new Date("2026-04-01T00:00:00Z"))).toBeNull();
   });
 });

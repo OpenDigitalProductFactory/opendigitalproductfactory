@@ -50,23 +50,23 @@ function completeFederal(): QualifiedRule[] {
 describe("buildFederalPayrollRules", () => {
   it("assembles every federal figure from ratified rows", () => {
     const result = buildFederalPayrollRules(completeFederal(), ON);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.data.fica).toEqual({
+    expect(result.ready).toBe(true);
+    if (!result.ready) return;
+    expect(result.rules.fica).toEqual({
       socialSecurityRate: 0.062, socialSecurityWageBase: 184_500, medicareRate: 0.0145,
       additionalMedicareRate: 0.009, additionalMedicareThreshold: 200_000,
     });
-    expect(result.data.futa).toEqual({ futaRate: 0.006, futaWageBase: 7_000 });
-    expect(result.data.federal.line1g).toEqual({ married_jointly: 12_900, other: 8_600 });
-    expect(result.data.federal.schedules.single.standard).toEqual([
+    expect(result.rules.futa).toEqual({ futaRate: 0.006, futaWageBase: 7_000 });
+    expect(result.rules.federal.line1g).toEqual({ married_jointly: 12_900, other: 8_600 });
+    expect(result.rules.federal.schedules.single.standard).toEqual([
       { over: 0, rate: 0 }, { over: 7_500, rate: 0.1 }, { over: 19_900, rate: 0.12 },
     ]);
   });
 
   it("names every missing figure rather than computing with a gap", () => {
     const result = buildFederalPayrollRules([], ON);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
+    expect(result.ready).toBe(false);
+    if (result.ready) return;
     expect(result.missing).toContain("Social Security rate, employee share");
     expect(result.missing).toContain("FUTA wage base");
     expect(result.missing).toContain("Federal withholding table: single, standard");
@@ -78,16 +78,16 @@ describe("buildFederalPayrollRules", () => {
     const rows = completeFederal().map((r) =>
       r.taxType === "futa" && r.ruleKind === "rate" ? { ...r, status: "proposed" as const } : r);
     const result = buildFederalPayrollRules(rows, ON);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.missing).toEqual(["FUTA rate"]);
+    expect(result.ready).toBe(false);
+    if (!result.ready) expect(result.missing).toEqual(["FUTA rate"]);
   });
 
   it("treats a table with no row starting at zero as incomplete", () => {
     const rows = completeFederal().filter((r) =>
       !(r.qualifiers.filingStatus === "head_of_household" && r.qualifiers.schedule === "step2" && r.qualifiers.over === 0));
     const result = buildFederalPayrollRules(rows, ON);
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.missing).toEqual(["Federal withholding table: head of household, Step 2 checkbox"]);
+    expect(result.ready).toBe(false);
+    if (!result.ready) expect(result.missing).toEqual(["Federal withholding table: head of household, Step 2 checkbox"]);
   });
 
   it("uses the table in force on the pay date, not a later one", () => {
@@ -95,6 +95,6 @@ describe("buildFederalPayrollRules", () => {
       ...r, effectiveFrom: new Date("2027-01-01T00:00:00.000Z"),
     }));
     const result = buildFederalPayrollRules([...completeFederal(), ...later], ON);
-    expect(result.ok && result.data.federal.schedules.single.standard[1]).toEqual({ over: 7_500, rate: 0.1 });
+    expect(result.ready && result.rules.federal.schedules.single.standard[1]).toEqual({ over: 7_500, rate: 0.1 });
   });
 });

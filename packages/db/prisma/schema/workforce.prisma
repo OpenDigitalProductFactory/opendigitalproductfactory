@@ -87,7 +87,6 @@ model EmployeeProfile {
   changeRequestsExecuted       ChangeRequest[]                     @relation("ChangeExecutedBy")
   standardChangesApproved      StandardChangeCatalog[]             @relation("StandardChangeApprover")
   deductionElections           EmployeeDeductionElection[]         @relation("EmployeeDeductionElections")
-  withholdingElections         EmployeeWithholdingElection[]       @relation("EmployeeWithholdingElections")
   vehicles                     Vehicle[]                           @relation("VehicleDriver")
   trips                        Trip[]                              @relation("TripDriver")
   tripClassificationRules      TripClassificationRule[]            @relation("TripRuleDriver")
@@ -1733,48 +1732,3 @@ model DriverLocationConsent {
   @@index([organizationId, consentStatus])
 }
 
-/// What an employee wrote on Form W-4 (2020 or later), effective-dated so a
-/// new form governs pay from its date and never re-prices an earlier run
-/// (BI-2BC8D614). Federal withholding follows IRS Pub 15-T Worksheet 1A from
-/// these answers. Annual amounts except step4cExtraWithholding, which is per
-/// pay period, exactly as the form asks.
-model EmployeeWithholdingElection {
-  id                            String                     @id @default(cuid())
-  employeeWithholdingElectionId String                     @unique
-  employeeProfileId             String
-  filingStatus                  WithholdingFilingStatus
-  step2Checked                  Boolean                    @default(false)
-  step3Credits                  Decimal                    @default(0) @db.Decimal(14, 2)
-  step4aOtherIncome             Decimal                    @default(0) @db.Decimal(14, 2)
-  step4bDeductions              Decimal                    @default(0) @db.Decimal(14, 2)
-  step4cExtraWithholding        Decimal                    @default(0) @db.Decimal(14, 2)
-  /// "Exempt" written on the form: no federal income tax is withheld.
-  exempt                        Boolean                    @default(false)
-  /// Two-letter US state where the work is performed, for state withholding
-  /// and unemployment. Null until someone records it; never inferred.
-  workStateCode                 String?
-  /// The person who entered the form, for audit.
-  recordedByUserId              String?
-  effectiveFrom                 DateTime
-  effectiveTo                   DateTime?
-  lifecycle                     RecordLifecycle            @default(active)
-  lifecycleAt                   DateTime?
-  lifecycleReason               String?
-  createdAt                     DateTime                   @default(now())
-  updatedAt                     DateTime                   @updatedAt
-
-  employeeProfile EmployeeProfile @relation("EmployeeWithholdingElections", fields: [employeeProfileId], references: [id], onDelete: Cascade)
-  recordedByUser  User?           @relation("EmployeeWithholdingElectionRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
-
-  // FK-leading (employeeProfileId): the W-4 in force for an employee on a pay date.
-  @@index([employeeProfileId, lifecycle, effectiveFrom], map: "EmployeeWithholdingElection_employeeProfileId_lifecycle_eff_idx")
-  // FK-leading: required by the FK-index ratchet.
-  @@index([recordedByUserId])
-}
-
-/// Form W-4 Step 1(c). Married filing separately uses the single schedule.
-enum WithholdingFilingStatus {
-  single
-  married_jointly
-  head_of_household
-}

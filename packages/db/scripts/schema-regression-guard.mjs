@@ -334,7 +334,7 @@ export const INTENTIONAL_MODEL_ATTRIBUTE_REMOVALS = new Set([
   // the rows of one withholding bracket table, which share a tax, kind, side
   // and start date, are distinct figures. Widening a key by one column only
   // relaxes it: every existing row keeps a unique identity under the new key.
-  // Migration: 20261114180000_payroll_withholding_elections.
+  // Migration: 20261114180000_payroll_tax_rule_qualifier_key.
   "PayrollTaxRule.@@unique([jurisdictionRefId, taxType, ruleKind, side, effectiveFrom])",
 ]);
 

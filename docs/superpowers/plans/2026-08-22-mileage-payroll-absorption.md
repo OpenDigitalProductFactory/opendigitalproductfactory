@@ -163,7 +163,8 @@ fixture set. This phase must not ship on structural verification.
 standard deduction and one bracket list, with no caller. That is not the IRS
 method. Federal withholding now follows Pub 15-T Worksheet 1A
 (`apps/web/lib/hr/federal-withholding.ts`) from the employee's Form W-4, recorded
-in `EmployeeWithholdingElection`; an employee with no W-4 is withheld on as single
+as a `withholding_recorded` EmploymentEvent (effective-dated, attributed, no new
+table under the model-count ratchet); an employee with no W-4 is withheld on as single
 with no entries, which is the IRS rule. `PayrollTaxRule.qualifierKey` joins the
 unique key so every row of a bracket table is its own confirmed figure, and
 resolution and supersession match on it. `apps/web/lib/hr/us-payroll-rules.ts`
