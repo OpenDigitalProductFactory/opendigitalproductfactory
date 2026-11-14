@@ -181,19 +181,19 @@ describe("chatgpt discovery mirrors the shared account's Codex catalog (BI-AA618
     credState.rows.delete("chatgpt");
   });
 
-  it("never seeds the static gpt-5.4 catalog when both discovery paths fail", async () => {
+  it("never seeds the static gpt-5.4 catalog when the Codex catalog fails", async () => {
     discoverCodexCliModelsMock.mockRejectedValue(new Error("app-server unavailable"));
 
     const result = await autoDiscoverAndProfile("chatgpt");
 
     expect(result.discovered).toBe(0);
-    expect(result.error).toMatch(/HTTP 403/);
     expect(result.error).toMatch(/app-server unavailable/);
+    expect(result.error).toMatch(/previous inventory retained/);
     expect(seedKnownModelsMock).not.toHaveBeenCalled();
     expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
   });
 
-  it("upserts the Codex catalog for chatgpt when the consumer backend refuses discovery", async () => {
+  it("upserts chatgpt's own Codex catalog and never reads the consumer app catalog (BI-F0ECD797)", async () => {
     discoverCodexCliModelsMock.mockResolvedValue([
       { modelId: "gpt-5.6-terra", rawMetadata: { source: "codex_cli_model_list" } },
     ]);
@@ -204,7 +204,8 @@ describe("chatgpt discovery mirrors the shared account's Codex catalog (BI-AA618
 
     await autoDiscoverAndProfile("chatgpt").catch(() => undefined);
 
-    expect(discoverCodexCliModelsMock).toHaveBeenCalledWith("codex");
+    expect(discoverCodexCliModelsMock).toHaveBeenCalledWith("chatgpt");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(seedKnownModelsMock).not.toHaveBeenCalled();
     expect(discoveredModelMock.createMany).toHaveBeenCalledTimes(1);
     const rows = (discoveredModelMock.createMany.mock.calls[0]?.[0] as { data: Array<{ providerId: string; modelId: string }> }).data;
