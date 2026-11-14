@@ -231,6 +231,8 @@ export async function resolveInitiativeAuthorityContext(input: {
   toolName?: string;
   trustedBoundItemId?: string | null;
   authenticatedOrganizationId?: string | null;
+  /** Install-organization seam used only when no caller supplies an organization. */
+  resolveInstallOrganizationId?: () => Promise<string | null>;
   db: InitiativeAuthorityDb;
 }): Promise<{
   subject: CoworkerAuthoritySubject;
@@ -254,7 +256,17 @@ export async function resolveInitiativeAuthorityContext(input: {
     return { subject, organizationId: "platform" };
   }
   if (!input.authenticatedOrganizationId && !input.trustedBoundItemId) {
-    throw new Error("Backlog-item authority requires an authenticated organization context.");
+    // BI-3895E6F5: no caller (in-portal loop, native-MCP CLI session, external
+    // MCP) carries an organization yet, so every coworker call on an
+    // organization-owned item was refused. Until BI-1B4AB42A gives the session
+    // a membership, fall back to the fail-closed single-organization seam: it
+    // answers only when the install holds exactly one organization. This only
+    // names the scope; grants, capabilities and HITL policy still decide.
+    const installOrganizationId = await input.resolveInstallOrganizationId?.() ?? null;
+    if (installOrganizationId !== item.organizationId) {
+      throw new Error("Backlog-item authority requires an authenticated organization context.");
+    }
+    return { subject, organizationId: item.organizationId };
   }
   if (
     input.authenticatedOrganizationId
@@ -494,6 +506,8 @@ export const resolveCoworkerToolAuthorityInput =
         toolName: execution.toolName,
         trustedBoundItemId,
         authenticatedOrganizationId: execution.context?.organizationId,
+        resolveInstallOrganizationId: async () => (await import("@/lib/wiki/reader-organization"))
+          .resolveReaderOrganizationId(prisma),
         db,
       }),
     ]);
