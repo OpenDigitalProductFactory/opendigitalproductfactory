@@ -35,17 +35,18 @@ function fakeDb(failOnEffectInsert = { value: false }) {
           findFirst: async ({ where }: { where: Row }) =>
             staged.activities.find((a) => a["commandScopeKey"] === where["commandScopeKey"] && a["commandKey"] === where["commandKey"]) ?? null,
         },
-        $queryRaw: async () => [{ id: "row-1" }],
+        $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+          const sql = strings.join("?");
+          if (!sql.includes(`"WorkroomEffect"`)) return [{ id: "row-1" }]; // the receipt's room lock
+          if (sql.includes(`INSERT INTO "WorkroomEffect"`)) {
+            if (failOnEffectInsert.value) throw new Error("effect insert failed");
+            staged.effects.push({ commandId: values[2], ordinal: values[3], kind: values[4], processBound: values[5], sessionGeneration: values[6] });
+          }
+          return [];
+        },
         $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
           if (strings.join("?").includes("jsonb_set")) staged.workspaceState = { ...staged.workspaceState, runtimeSession: JSON.parse(String(values[0])) };
           return 1;
-        },
-        $queryRawUnsafe: async (sql: string, ...params: unknown[]) => {
-          if (sql.includes(`INSERT INTO "WorkroomEffect"`)) {
-            if (failOnEffectInsert.value) throw new Error("effect insert failed");
-            staged.effects.push({ commandId: params[2], ordinal: params[3], kind: params[4], processBound: params[5], sessionGeneration: params[6] });
-          }
-          return [];
         },
       };
       const result = await fn(tx);

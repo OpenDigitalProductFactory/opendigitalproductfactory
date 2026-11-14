@@ -10,7 +10,7 @@ import type { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createJobsPool } from "@/lib/jobs/postgres/pool";
-import { claimEffects, insertEffects, recoverExpiredLeases, retireEffects, retireOrphanedEffects, settleEffect, type SqlRunner } from "./workroom-effect-store";
+import { claimEffects, insertEffects, recoverExpiredLeases, retireEffects, retireOrphanedEffects, settleEffect, type EffectSqlDb } from "./workroom-effect-store";
 
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() ?? "";
 const MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114060000_workroom_effect_outbox/migration.sql");
@@ -19,11 +19,15 @@ const later = (ms: number) => new Date(T0.getTime() + ms);
 
 describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => {
   let pool: Pool;
-  let run: SqlRunner;
+  let run: EffectSqlDb;
 
   beforeAll(async () => {
     pool = createJobsPool(DATABASE_URL, 4);
-    run = { query: async <T>(sql: string, params: unknown[]) => (await pool.query(sql, params)).rows as T[] };
+    // Prisma's tagged-template call, over pg: each interpolation becomes $n.
+    run = {
+      $queryRaw: async <T>(strings: TemplateStringsArray, ...values: unknown[]) =>
+        (await pool.query(strings.reduce((sql, part, i) => sql + (i ? "$" + i : "") + part, ""), values)).rows as T,
+    };
     await pool.query(`DROP TABLE IF EXISTS "WorkroomEffect", "WorkCapsule" CASCADE`);
     await pool.query(`DROP TYPE IF EXISTS "WorkroomEffectKind", "WorkroomEffectStatus"`);
     await pool.query(`CREATE TABLE "WorkCapsule" (id TEXT PRIMARY KEY, "capsuleId" TEXT UNIQUE NOT NULL, "workspaceState" JSONB)`);

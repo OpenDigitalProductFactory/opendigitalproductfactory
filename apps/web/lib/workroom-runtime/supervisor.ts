@@ -37,7 +37,7 @@ import {
   type SupervisionActor,
 } from "./supervised-session";
 import type { ExecutorAdapter, RuntimeDecision, RuntimeEvent, RuntimeProvider, RuntimeRequest, RuntimeSession } from "./types";
-import { claimEffects, recoverExpiredLeases, retireOrphanedEffects, type ClaimedEffect, type SqlRunner } from "./workroom-effect-store";
+import { claimEffects, recoverExpiredLeases, retireOrphanedEffects, type ClaimedEffect, type EffectSqlDb } from "./workroom-effect-store";
 
 export { DEFAULT_RUNTIME_CWD, readStoredRuntimeSession, type StoredRuntimeSession };
 
@@ -134,7 +134,7 @@ async function defaultListSupervisedRooms() {
 }
 
 function defaultEffectStore(clock: () => Date): EffectStorePort {
-  const run: SqlRunner = { query: async <T>(sql: string, params: unknown[]) => (await prisma.$queryRawUnsafe<T[]>(sql, ...params)) ?? [] };
+  const run = prisma as unknown as EffectSqlDb;
   return {
     claim: (input) => claimEffects(run, { ...input, now: clock() }),
     recoverExpired: () => recoverExpiredLeases(run, clock()),

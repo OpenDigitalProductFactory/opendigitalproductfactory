@@ -1,18 +1,21 @@
-// BI-C64EDA33: the Workroom runtime's outbox (WorkroomEffect). Plain SQL over a
-// one-method runner, so the same statements run inside a Prisma transaction in
-// the portal and against a disposable database in the real-database test.
+// BI-C64EDA33: the Workroom runtime's outbox (WorkroomEffect). Each statement is
+// one static tagged template over `$queryRaw`, so it runs inside a Prisma
+// transaction in the portal, against a disposable database in the
+// real-database test, and stays statically readable by the raw-SQL guards.
 //
 // A room's effects run one at a time, in the order they were decided: an
 // effect waiting on its backoff blocks the room's later effects, so a retry
 // never races ahead of the work it depends on (T3 Code's EffectOutbox rule,
 // pingdotgg/t3code@24e77473, MIT; reproduced, not copied). Lease and attempt
-// fields follow AsyncInferenceOp.
+// fields follow AsyncInferenceOp. Times are stored as UTC timestamp(3)
+// (Prisma's mapping); a JS Date arrives as timestamptz and is converted.
 
 import { randomUUID } from "node:crypto";
 
 import { isProcessBound, type EffectIntent, type EffectKind, type EffectSettlement } from "./runtime-decider";
 
-export type SqlRunner = { query<T = Record<string, unknown>>(sql: string, params: unknown[]): Promise<T[]> };
+/** Prisma's client or transaction; the real-database test passes a pg adapter with the same shape. */
+export type EffectSqlDb = { $queryRaw<T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T> };
 
 export type ClaimedEffect = {
   id: string;
@@ -27,52 +30,49 @@ export type ClaimedEffect = {
   maxAttempts: number;
 };
 
-const UNSETTLED = `('pending','running')`;
-/** Times are stored as UTC timestamp(3) (Prisma's mapping); a JS Date arrives as timestamptz. */
-const utc = (param: string) => `(${param}::timestamptz AT TIME ZONE 'UTC')`;
-
 /** Insert a decision's effects; a replayed decision inserts nothing twice. */
-export async function insertEffects(run: SqlRunner, input: {
+export async function insertEffects(db: EffectSqlDb, input: {
   roomRowId: string; commandId: string; generation: string | null; effects: EffectIntent[]; now: Date;
 }): Promise<void> {
   let ordinal = 0;
   for (const effect of input.effects) {
     const bound = isProcessBound(effect.kind);
-    await run.query(
-      `INSERT INTO "WorkroomEffect" ("id","workCapsuleId","commandKey","ordinal","kind","processBound","sessionGeneration","payload","status","availableAt","createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5::"WorkroomEffectKind",$6,$7,$8::jsonb,'pending'::"WorkroomEffectStatus",${utc("$9")},${utc("$9")},${utc("$9")})
-       ON CONFLICT ("workCapsuleId","commandKey","ordinal") DO NOTHING`,
-      [randomUUID(), input.roomRowId, input.commandId, ordinal, effect.kind, bound, bound ? input.generation : null, JSON.stringify(effect.payload), input.now],
-    );
+    const generation = bound ? input.generation : null;
+    await db.$queryRaw`
+      INSERT INTO "WorkroomEffect" ("id","workCapsuleId","commandKey","ordinal","kind","processBound","sessionGeneration","payload","status","availableAt","createdAt","updatedAt")
+      VALUES (${randomUUID()}, ${input.roomRowId}, ${input.commandId}, ${ordinal}, ${effect.kind}::"WorkroomEffectKind", ${bound}, ${generation},
+        ${JSON.stringify(effect.payload)}::jsonb, 'pending'::"WorkroomEffectStatus",
+        (${input.now}::timestamptz AT TIME ZONE 'UTC'), (${input.now}::timestamptz AT TIME ZONE 'UTC'), (${input.now}::timestamptz AT TIME ZONE 'UTC'))
+      ON CONFLICT ("workCapsuleId","commandKey","ordinal") DO NOTHING
+      RETURNING "id"`;
     ordinal += 1;
   }
 }
 
 /** Retire the room's unsettled process-bound effects decided for any generation but `keepGeneration`. */
-export async function retireEffects(run: SqlRunner, input: { roomRowId: string; keepGeneration: string | null; reason: string; now: Date }) {
-  return run.query<{ id: string; kind: EffectKind }>(
-    `UPDATE "WorkroomEffect" SET "status"='retired'::"WorkroomEffectStatus", "lastError"=$3, "settledAt"=${utc("$4")}, "updatedAt"=${utc("$4")}, "leaseOwner"=NULL, "leaseExpiresAt"=NULL
-     WHERE "workCapsuleId"=$1 AND "processBound"=true AND "status"::text IN ${UNSETTLED}
-       AND ($2::text IS NULL OR "sessionGeneration" IS DISTINCT FROM $2::text)
-     RETURNING "id", "kind"::text AS "kind"`,
-    [input.roomRowId, input.keepGeneration, input.reason, input.now],
-  );
+export async function retireEffects(db: EffectSqlDb, input: { roomRowId: string; keepGeneration: string | null; reason: string; now: Date }) {
+  return db.$queryRaw<Array<{ id: string; kind: EffectKind }>>`
+    UPDATE "WorkroomEffect" SET "status"='retired'::"WorkroomEffectStatus", "lastError"=${input.reason},
+      "settledAt"=(${input.now}::timestamptz AT TIME ZONE 'UTC'), "updatedAt"=(${input.now}::timestamptz AT TIME ZONE 'UTC'),
+      "leaseOwner"=NULL, "leaseExpiresAt"=NULL
+    WHERE "workCapsuleId"=${input.roomRowId} AND "processBound"=true AND "status"::text IN ('pending','running')
+      AND (${input.keepGeneration}::text IS NULL OR "sessionGeneration" IS DISTINCT FROM ${input.keepGeneration}::text)
+    RETURNING "id", "kind"::text AS "kind"`;
 }
 
 /**
  * Settle a running effect. Guarded by its attempt, so a report from an attempt
  * whose lease already expired (and was claimed again) changes nothing.
  */
-export async function settleEffect(run: SqlRunner, settlement: EffectSettlement, now: Date): Promise<boolean> {
+export async function settleEffect(db: EffectSqlDb, settlement: EffectSettlement, now: Date): Promise<boolean> {
   const retry = settlement.status === "pending";
-  const rows = await run.query<{ id: string }>(
-    `UPDATE "WorkroomEffect" SET "status"=$2::"WorkroomEffectStatus", "lastError"=$3, "leaseOwner"=NULL, "leaseExpiresAt"=NULL, "updatedAt"=${utc("$4")},
-       "availableAt"=CASE WHEN $5::boolean THEN ${utc("$4")} + ($6::int * interval '1 millisecond') ELSE "availableAt" END,
-       "settledAt"=CASE WHEN $5::boolean THEN NULL ELSE ${utc("$4")} END
-     WHERE "id"=$1 AND "status"='running'::"WorkroomEffectStatus" AND "attemptCount"=$7
-     RETURNING "id"`,
-    [settlement.effectId, settlement.status, settlement.error ?? null, now, retry, settlement.retryAfterMs ?? 0, settlement.attempt],
-  );
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    UPDATE "WorkroomEffect" SET "status"=${settlement.status}::"WorkroomEffectStatus", "lastError"=${settlement.error ?? null},
+      "leaseOwner"=NULL, "leaseExpiresAt"=NULL, "updatedAt"=(${now}::timestamptz AT TIME ZONE 'UTC'),
+      "availableAt"=CASE WHEN ${retry}::boolean THEN (${now}::timestamptz AT TIME ZONE 'UTC') + (${settlement.retryAfterMs ?? 0}::int * interval '1 millisecond') ELSE "availableAt" END,
+      "settledAt"=CASE WHEN ${retry}::boolean THEN NULL ELSE (${now}::timestamptz AT TIME ZONE 'UTC') END
+    WHERE "id"=${settlement.effectId} AND "status"='running'::"WorkroomEffectStatus" AND "attemptCount"=${settlement.attempt}
+    RETURNING "id"`;
   return rows.length > 0;
 }
 
@@ -81,32 +81,31 @@ export async function settleEffect(run: SqlRunner, settlement: EffectSettlement,
  * in the process that holds their generation, so another portal never answers
  * a provider process it does not own.
  */
-export async function claimEffects(run: SqlRunner, input: { owner: string; liveGenerations: string[]; limit: number; leaseMs: number; now: Date }): Promise<ClaimedEffect[]> {
-  const rows = await run.query<ClaimedEffect & { payload: unknown }>(
-    `WITH candidate AS (
-       SELECT e."id" FROM "WorkroomEffect" e
-       WHERE e."status"='pending'::"WorkroomEffectStatus" AND e."availableAt" <= ${utc("$5")}
-         AND (e."processBound"=false OR e."sessionGeneration" = ANY($2::text[]))
-         AND NOT EXISTS (SELECT 1 FROM "WorkroomEffect" p WHERE p."workCapsuleId"=e."workCapsuleId"
-           AND p."sequence" < e."sequence" AND p."status"::text IN ${UNSETTLED})
-       ORDER BY e."sequence" LIMIT $3 FOR UPDATE OF e SKIP LOCKED)
-     UPDATE "WorkroomEffect" w SET "status"='running'::"WorkroomEffectStatus", "leaseOwner"=$1,
-       "leaseExpiresAt"=${utc("$5")} + ($4::int * interval '1 millisecond'), "attemptCount"=w."attemptCount"+1, "updatedAt"=${utc("$5")}
-     FROM candidate, "WorkCapsule" r WHERE w."id"=candidate."id" AND r."id"=w."workCapsuleId"
-     RETURNING w."id", w."workCapsuleId", r."capsuleId", w."commandKey", w."kind"::text AS "kind", w."processBound",
-       w."sessionGeneration", w."payload", w."attemptCount", w."maxAttempts"`,
-    [input.owner, input.liveGenerations, input.limit, input.leaseMs, input.now],
-  );
+export async function claimEffects(db: EffectSqlDb, input: { owner: string; liveGenerations: string[]; limit: number; leaseMs: number; now: Date }): Promise<ClaimedEffect[]> {
+  const rows = await db.$queryRaw<Array<ClaimedEffect & { payload: unknown }>>`
+    WITH candidate AS (
+      SELECT e."id" FROM "WorkroomEffect" e
+      WHERE e."status"='pending'::"WorkroomEffectStatus" AND e."availableAt" <= (${input.now}::timestamptz AT TIME ZONE 'UTC')
+        AND (e."processBound"=false OR e."sessionGeneration" = ANY(${input.liveGenerations}::text[]))
+        AND NOT EXISTS (SELECT 1 FROM "WorkroomEffect" p WHERE p."workCapsuleId"=e."workCapsuleId"
+          AND p."sequence" < e."sequence" AND p."status"::text IN ('pending','running'))
+      ORDER BY e."sequence" LIMIT ${input.limit} FOR UPDATE OF e SKIP LOCKED)
+    UPDATE "WorkroomEffect" w SET "status"='running'::"WorkroomEffectStatus", "leaseOwner"=${input.owner},
+      "leaseExpiresAt"=(${input.now}::timestamptz AT TIME ZONE 'UTC') + (${input.leaseMs}::int * interval '1 millisecond'),
+      "attemptCount"=w."attemptCount"+1, "updatedAt"=(${input.now}::timestamptz AT TIME ZONE 'UTC')
+    FROM candidate, "WorkCapsule" r WHERE w."id"=candidate."id" AND r."id"=w."workCapsuleId"
+    RETURNING w."id", w."workCapsuleId", r."capsuleId", w."commandKey", w."kind"::text AS "kind", w."processBound",
+      w."sessionGeneration", w."payload", w."attemptCount", w."maxAttempts"`;
   return rows.map((row) => ({ ...row, payload: (row.payload && typeof row.payload === "object" ? row.payload : {}) as Record<string, unknown> }));
 }
 
 /** An effect whose worker died mid-run goes back to pending; its attempt was already counted. */
-export async function recoverExpiredLeases(run: SqlRunner, now: Date): Promise<number> {
-  const rows = await run.query<{ id: string }>(
-    `UPDATE "WorkroomEffect" SET "status"='pending'::"WorkroomEffectStatus", "leaseOwner"=NULL, "leaseExpiresAt"=NULL, "updatedAt"=${utc("$1")}
-     WHERE "status"='running'::"WorkroomEffectStatus" AND "leaseExpiresAt" < ${utc("$1")} RETURNING "id"`,
-    [now],
-  );
+export async function recoverExpiredLeases(db: EffectSqlDb, now: Date): Promise<number> {
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    UPDATE "WorkroomEffect" SET "status"='pending'::"WorkroomEffectStatus", "leaseOwner"=NULL, "leaseExpiresAt"=NULL,
+      "updatedAt"=(${now}::timestamptz AT TIME ZONE 'UTC')
+    WHERE "status"='running'::"WorkroomEffectStatus" AND "leaseExpiresAt" < (${now}::timestamptz AT TIME ZONE 'UTC')
+    RETURNING "id"`;
   return rows.length;
 }
 
@@ -119,16 +118,15 @@ export async function recoverExpiredLeases(run: SqlRunner, now: Date): Promise<n
  * supervised room's current-generation effects are left to its re-attach,
  * which retires them as it opens the new generation and requeues its input.
  */
-export async function retireOrphanedEffects(run: SqlRunner, now: Date): Promise<number> {
-  const rows = await run.query<{ id: string }>(
-    `UPDATE "WorkroomEffect" e SET "status"='retired'::"WorkroomEffectStatus", "lastError"='the provider process ended with the portal',
-       "settledAt"=${utc("$1")}, "updatedAt"=${utc("$1")}, "leaseOwner"=NULL, "leaseExpiresAt"=NULL
-     FROM "WorkCapsule" r
-     WHERE r."id"=e."workCapsuleId" AND e."processBound"=true AND e."status"::text IN ${UNSETTLED}
-       AND (COALESCE(r."workspaceState"->'runtimeSession'->>'status', '') NOT IN ('supervised', 'open')
-         OR (r."workspaceState"->'runtimeSession'->>'generation') IS DISTINCT FROM e."sessionGeneration")
-     RETURNING e."id"`,
-    [now],
-  );
+export async function retireOrphanedEffects(db: EffectSqlDb, now: Date): Promise<number> {
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    UPDATE "WorkroomEffect" e SET "status"='retired'::"WorkroomEffectStatus", "lastError"='the provider process ended with the portal',
+      "settledAt"=(${now}::timestamptz AT TIME ZONE 'UTC'), "updatedAt"=(${now}::timestamptz AT TIME ZONE 'UTC'),
+      "leaseOwner"=NULL, "leaseExpiresAt"=NULL
+    FROM "WorkCapsule" r
+    WHERE r."id"=e."workCapsuleId" AND e."processBound"=true AND e."status"::text IN ('pending','running')
+      AND (COALESCE(r."workspaceState"->'runtimeSession'->>'status', '') NOT IN ('supervised', 'open')
+        OR (r."workspaceState"->'runtimeSession'->>'generation') IS DISTINCT FROM e."sessionGeneration")
+    RETURNING e."id"`;
   return rows.length;
 }

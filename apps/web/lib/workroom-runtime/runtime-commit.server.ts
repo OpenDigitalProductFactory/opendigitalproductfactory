@@ -17,7 +17,7 @@ import type { CapsuleDb, WorkCapsuleActor } from "@/lib/work-capsules/work-capsu
 
 import { decideRuntimeCommand, type ActivityIntent, type RuntimeCommand } from "./runtime-decider";
 import { readStoredRuntimeSession, type StoredRuntimeSession } from "./supervised-session";
-import { insertEffects, retireEffects, settleEffect, type SqlRunner } from "./workroom-effect-store";
+import { insertEffects, retireEffects, settleEffect } from "./workroom-effect-store";
 
 export type RuntimeCommitInput = { capsuleId: string; commandId: string; command: RuntimeCommand; actor: WorkCapsuleActor };
 
@@ -35,13 +35,9 @@ export class StaleEffectSettlementError extends Error {
 class RoomNotFoundError extends Error {}
 
 type CommitTx = CapsuleDb & {
-  $queryRawUnsafe<T = unknown>(sql: string, ...values: unknown[]): Promise<T>;
+  $queryRaw<T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T>;
   $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<number>;
 };
-
-const runnerOf = (tx: CommitTx): SqlRunner => ({
-  query: async <T>(sql: string, params: unknown[]) => (await tx.$queryRawUnsafe<T[]>(sql, ...params)) ?? [],
-});
 
 /** The runtime writes as the person who opened the session, attributed to the runtime agent. */
 function actorFor(intent: ActivityIntent, actor: WorkCapsuleActor, session: StoredRuntimeSession | null): WorkCapsuleActor {
@@ -69,7 +65,7 @@ export function createRuntimeCommitter(deps: { db?: unknown; now?: () => Date } 
           if (!room) throw new RoomNotFoundError();
           const before = readStoredRuntimeSession(room.workspaceState);
           const decision = decideRuntimeCommand({ session: before }, input.commandId, input.command);
-          const run = runnerOf(tx);
+          const run = tx;
           const at = clock();
           if (decision.settle && !(await settleEffect(run, decision.settle, at))) throw new StaleEffectSettlementError(decision.settle.effectId);
           const activities = [...decision.activities];
