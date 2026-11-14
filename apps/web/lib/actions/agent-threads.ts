@@ -5,7 +5,7 @@ import { prisma } from "@dpf/db";
 import { THREAD_ERRORS, ThreadSpawnError } from "./agent-thread-errors";
 import { dispatchAgentThread } from "./agent-thread-dispatcher";
 import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
-import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import { admitRuntimeGuardedWork, lockRuntimeTransitionAdmission } from "@/lib/platform-runtime/work-admission";
 import { TERMINAL_TASK_STATE_LIST } from "@/lib/tak/task-states";
 
 /** Children a parent may have open at once; finished children free their place (BI-A0BFA63E). */
@@ -42,6 +42,7 @@ export async function spawnWorkThread(
 
   const spawnResult = await prisma.$transaction(
     async (tx) => {
+      await lockRuntimeTransitionAdmission(tx);
       const parent = await tx.agentThread.findUniqueOrThrow({
         where: { id: parentId },
         select: {

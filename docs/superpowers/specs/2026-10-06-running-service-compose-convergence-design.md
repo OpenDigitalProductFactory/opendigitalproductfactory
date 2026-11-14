@@ -294,11 +294,25 @@ browser recipe's guards, rather than silently losing its scope or stopping
 unrelated producers. Settled recovery releases the image guard. Legacy active
 key-removal admission retains its previous behavior.
 
-The actual TaskRun entry point calls admission first and retains its default
-Serializable isolation. Build Studio's current callers use ReadCommitted and
-some make earlier writes; that guard now checks the actual isolation with `SHOW`
-and refuses an unsupported fixed-snapshot override instead of silently admitting
-old data. This is a supported internal-call contract, not a new caller grant.
+All eight actual production admission sites and their outer transaction wrappers
+are inventoried in the existing plan. Autonomous/build TaskRun admission already
+comes first; coworker spawn and durable Workroom tasks now acquire the same
+helper before parent/authority reads or a WorkCapsule row lock. Later admission
+reuses only a successful fence on that exact transaction object, preserving
+transactional ownership checks and existing-task replay. Capsule stores can
+receive an already-open transaction; their wrappers must not be treated as a
+snapshot reset. Current late-read Build/Capsule wrappers use ReadCommitted.
+
+The helper verifies actual isolation for every guard. In fixed-snapshot modes,
+SHOW and same-value `SET TRANSACTION [NOT] DEFERRABLE` preserve existing settings
+and assert that no first snapshot exists. PostgreSQL's
+[deferrable check](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/commands/variable.c)
+rejects a prior snapshot even on the same value; its isolation check explicitly
+permits same-value SET and is unsuitable. An unsupported late fixed-snapshot
+caller fails before capabilities or transitions are read, rather than silently
+admitting stale state. No isolation downgrade, new persistent epoch, durable
+authority, grant, or transaction timeout change is introduced. Actual Prisma/
+PostgreSQL coverage must prove the utility ordering and real caller behavior.
 The existing ten-minute authority lifetime is preserved. Preparation reserves time
 for bounded apply and restoration; a short remaining lifetime holds before effects.
 

@@ -107,7 +107,7 @@ describe("production reconciliation protocol admission", () => {
     mocks.taskCount.mockResolvedValue(2);
     const transactionCount = vi.fn(async () => 2);
     mocks.taskCount.mockImplementation(() => { throw new Error("drain must use the held transaction connection"); });
-    mocks.transaction.mockImplementationOnce(async operation => operation({ $executeRaw: vi.fn(), platformCapability: { findMany: mocks.rows }, taskRun: { count: transactionCount }, runtimeCapabilityTransition: { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => null), create } }));
+    mocks.transaction.mockImplementationOnce(async operation => operation({ $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(), platformCapability: { findMany: mocks.rows }, taskRun: { count: transactionCount }, runtimeCapabilityTransition: { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => null), create } }));
     await expect(executeProductionRuntimeCapabilityTransition(input)).resolves.toEqual({ status: "drain_required", blockingCounts: { "task-run:coworker": 2 } });
     expect(create).not.toHaveBeenCalled();
     expect(transactionCount).toHaveBeenCalledOnce();

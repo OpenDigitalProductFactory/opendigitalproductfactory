@@ -205,7 +205,7 @@ describe("dual-baseline reconciliation coordinator", () => {
     const replay = { ...input, envelope: structuredClone(input.envelope), status: "pending" };
     const changed = { ...input, envelope: structuredClone(input.envelope) };
     changed.envelope.protocolIdentity!.promoterDigest = `sha256:${"f".repeat(64)}`;
-    const tx = { $executeRaw: vi.fn(), runtimeCapabilityTransition: { findUnique: vi.fn(async () => replay) } };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(), runtimeCapabilityTransition: { findUnique: vi.fn(async () => replay) } };
     const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     await expect(receipts.createPending(changed)).rejects.toThrow("transition_id_conflict");
   });
@@ -236,7 +236,7 @@ describe("dual-baseline reconciliation coordinator", () => {
     await coordinateRuntimeCapabilityTransition(input, d);
     const envelope = vi.mocked(d.receipts.createPending).mock.calls[0]![0].envelope;
     const states = { ...input.previousStates, ...(stale ? { "runtime:build": "disabled" } : {}) };
-    const tx = { $executeRaw: vi.fn(async () => 1),
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => 1),
       runtimeCapabilityTransition: { findUnique: vi.fn(async () => ({ status: "host_applied", envelope, previousStates: input.previousStates, desiredStates: input.desiredStates, hostReceipt: null as RuntimeTransitionReceipt | null })), updateMany: vi.fn(async () => ({ count: 1 })) },
       platformCapability: { findMany: vi.fn(async () => Object.entries(states).map(([capabilityId, state]) => ({ capabilityId, state }))), updateMany: vi.fn(async () => ({ count: 1 })) },
       runtimeCapabilityTransitionEvent: { create: vi.fn(async () => undefined) } };
@@ -337,7 +337,7 @@ describe("runtime capability transition coordinator", () => {
     { "runtime:core": "active" },
   ])("rejects a changed complete database baseline before creating a receipt", async (states) => {
     const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(), runtimeCapabilityTransition: model,
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(), runtimeCapabilityTransition: model,
       platformCapability: { findMany: vi.fn(async () => Object.entries(states).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
     const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64) })).rejects.toThrow("runtime_transition_database_baseline_changed");
@@ -351,7 +351,7 @@ describe("runtime capability transition coordinator", () => {
   ])("rejects replay with a different owner or complete state map", async (change) => {
     const row = { ...request, ...persistedEnvelope, status: "pending", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64), ...change };
     const model = { findUnique: vi.fn(async () => row), findFirst: vi.fn(), create: vi.fn() };
-    const tx = { $executeRaw: vi.fn(), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: persistedEnvelope, envelopeSignature: "a".repeat(64) })).rejects.toThrow("transition_id_conflict");
     expect(model.create).not.toHaveBeenCalled();
@@ -447,7 +447,7 @@ describe("runtime capability transition coordinator", () => {
 
   it("rechecks attributed work under the receipt lock and returns drain_required", async () => {
     const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     const d = deps({ receipts, recheckAttributedWork: vi.fn(async () => ({ "build-studio-active": 1 })) });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "drain_required", blockingCounts: { "build-studio-active": 1 } });
@@ -457,7 +457,7 @@ describe("runtime capability transition coordinator", () => {
 
   it("creates sorted durable receipts under an advisory lock and serializable transaction", async () => {
     const model = { findFirst: vi.fn(async () => null), findUnique: vi.fn(async () => null), create: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) };
-    const tx = { $executeRaw: vi.fn(async (_strings: TemplateStringsArray, ..._values: unknown[]) => []), runtimeCapabilityTransition: model, platformCapability: { findMany: vi.fn(async () => Object.entries(request.previousStates).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async (_strings: TemplateStringsArray, ..._values: unknown[]) => []), runtimeCapabilityTransition: model, platformCapability: { findMany: vi.fn(async () => Object.entries(request.previousStates).map(([capabilityId, state]) => ({ capabilityId, state }))) } };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
     const envelope = { ...persistedEnvelope, previousKeys: ["z", "a"], desiredKeys: ["z", "b"], previousProfiles: [], desiredProfiles: [] };
@@ -472,7 +472,7 @@ describe("runtime capability transition coordinator", () => {
   it("reconciles an idempotent transition-id retry without creating another row", async () => {
     const identity = persistedEnvelope;
     const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ ...request, status: "host_applied", ...identity, envelope: identity, envelopeSignature: "a".repeat(64) })), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const prisma = { runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) };
     const receipts = createPrismaRuntimeTransitionReceipts(prisma as never);
     await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: identity, envelopeSignature: "a".repeat(64) })).resolves.toEqual({ created: false, kind: "replay", status: "host_applied", envelope: identity, envelopeSignature: "a".repeat(64) });
@@ -481,14 +481,14 @@ describe("runtime capability transition coordinator", () => {
 
   it("fails closed when a replayed transition id carries a different immutable envelope", async () => {
     const model = { findFirst: vi.fn(), findUnique: vi.fn(async () => ({ status: "pending", catalogHash: request.catalogHash, previousStateHash: "different", desiredStateHash: "after", previousKeys: [...request.previousKeys], desiredKeys: [...request.desiredKeys] })), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     await expect(receipts.createPending({ ...request, previousProfiles: ["build"], desiredProfiles: [], previousStateHash: "before", desiredStateHash: "after", envelope: {} as never, envelopeSignature: "a".repeat(64) })).rejects.toThrow("transition_id_conflict");
   });
 
   it("surfaces a different active receipt as transition_in_progress through the Prisma repository", async () => {
     const model = { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => ({ transitionId: "RCT-OTHER", status: "applying" })), create: vi.fn(), updateMany: vi.fn() };
-    const tx = { $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
+    const tx = { $queryRaw: vi.fn(async () => [{ transaction_isolation: "read committed" }]), $executeRaw: vi.fn(async () => []), runtimeCapabilityTransition: model };
     const receipts = createPrismaRuntimeTransitionReceipts({ runtimeCapabilityTransition: model, $transaction: vi.fn(async (fn) => fn(tx)) } as never);
     const d = deps({ receipts });
     await expect(coordinateRuntimeCapabilityTransition(request, d)).resolves.toEqual({ status: "transition_in_progress" });

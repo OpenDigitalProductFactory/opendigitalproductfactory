@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { admitRuntimeGuardedWork } from "./work-admission";
+import { admitRuntimeGuardedWork, lockRuntimeTransitionAdmission } from "./work-admission";
 import { validateRuntimeServiceImagePlan, type RuntimeTransitionEnvelope } from "./transition-protocol";
 
 describe("runtime guarded work admission", () => {
@@ -8,12 +8,13 @@ describe("runtime guarded work admission", () => {
     // `void`. Prisma 7.8's driver adapter throws P2010 (UnsupportedNativeDataType)
     // deserializing a void column from $queryRaw — which crashed EVERY Build Studio
     // promote/start. The lock must be acquired with $executeRaw (no result-set
-    // deserialization). The $queryRaw spy below throws to pin that regression.
+    // deserialization). Only snapshot-free SHOW is read through $queryRaw.
     const calls: string[] = [];
     const tx = {
       $executeRaw: vi.fn(async (..._args: unknown[]) => { calls.push("lock"); return 1; }),
-      $queryRaw: vi.fn(() => {
-        throw new Error("advisory lock must use $executeRaw (void column crashes $queryRaw under Prisma 7.8)");
+      $queryRaw: vi.fn(async (strings: TemplateStringsArray) => {
+        if (strings.join("") === "SHOW transaction_isolation") return [{ transaction_isolation: "read committed" }];
+        throw new Error("advisory lock must use $executeRaw");
       }),
       platformCapability: { findMany: vi.fn(async () => { calls.push("capabilities"); return []; }) },
       runtimeCapabilityTransition: { findMany: vi.fn(async () => { calls.push("transition"); return []; }) },
@@ -21,11 +22,54 @@ describe("runtime guarded work admission", () => {
     await admitRuntimeGuardedWork(tx, "task-run:proactive");
     expect(calls).toEqual(["lock", "lock", "capabilities", "transition"]);
     expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
-    expect(tx.$queryRaw).not.toHaveBeenCalled();
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     const strings = tx.$executeRaw.mock.calls[0][0] as unknown as string[];
     expect(strings.join("")).toContain('LOCK TABLE "RuntimeCapabilityTransition" IN SHARE ROW EXCLUSIVE MODE');
     const advisory = tx.$executeRaw.mock.calls[1][0] as unknown as string[];
     expect(advisory.join("")).toContain("pg_advisory_xact_lock");
+  });
+
+  it("refuses a fixed snapshot acquired before the fence for every work source", async () => {
+    const tx = fakeTx({ isolation: "serializable" });
+    tx.$executeRaw.mockImplementation(async (strings) => {
+      if (strings.join("").startsWith("SET TRANSACTION")) throw new Error("SET TRANSACTION [NOT] DEFERRABLE must be called before any query");
+      return 1;
+    });
+    await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).rejects.toThrow("before any query");
+    expect(tx.platformCapability.findMany).not.toHaveBeenCalled();
+    expect(tx.runtimeCapabilityTransition.findMany).not.toHaveBeenCalled();
+  });
+
+  it("reenters only the exact transaction after successful early acquisition", async () => {
+    const tx = fakeTx({ isolation: "serializable" });
+    await lockRuntimeTransitionAdmission(tx);
+    const count = tx.$executeRaw.mock.calls.length;
+    await admitRuntimeGuardedWork(tx, "task-run:coworker");
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(count);
+    const next = fakeTx({ isolation: "serializable" });
+    await lockRuntimeTransitionAdmission(next);
+    expect(next.$executeRaw).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not mark a failed lock acquisition as fenced", async () => {
+    const tx = fakeTx({ isolation: "serializable" });
+    tx.$executeRaw.mockRejectedValueOnce(new Error("settings failed"));
+    await expect(lockRuntimeTransitionAdmission(tx)).rejects.toThrow("settings failed");
+    await lockRuntimeTransitionAdmission(tx);
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(4);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not transfer a successful fence to an externally supplied adapter", async () => {
+    const tx = fakeTx({ isolation: "serializable" });
+    await lockRuntimeTransitionAdmission(tx);
+    const proxy = { ...tx };
+    tx.$executeRaw.mockImplementation(async strings => {
+      if (strings.join("").startsWith("SET TRANSACTION")) throw new Error("snapshot already taken");
+      return 1;
+    });
+    await expect(lockRuntimeTransitionAdmission(proxy)).rejects.toThrow("snapshot already taken");
+    await expect(lockRuntimeTransitionAdmission(tx)).resolves.toBeUndefined();
   });
 
   it("does not let an unrelated already-disabled capability suppress a shared source", async () => {
@@ -96,11 +140,12 @@ describe("runtime guarded work admission", () => {
     await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).resolves.toBeUndefined();
   });
 
-  it.each(["serializable", "repeatable read"])("refuses a Build Studio %s snapshot override", async isolation => {
+  it.each(["serializable", "repeatable read"])("preserves a fresh %s transaction for any work source", async isolation => {
     const tx = fakeTx({ isolation });
-    await expect(admitRuntimeGuardedWork(tx, "build-studio-active")).rejects.toThrow("runtime_capability_work_isolation_unsupported:build-studio-active");
-    expect(tx.$executeRaw).not.toHaveBeenCalled();
+    await expect(admitRuntimeGuardedWork(tx, "build-studio-active")).resolves.toBeUndefined();
+    expect(tx.$executeRaw.mock.calls[0]![0].join("")).toBe("SET TRANSACTION NOT DEFERRABLE");
   });
+
 });
 
 type CapabilityRow = { capabilityId: string; state: string; manifest: unknown };
@@ -130,8 +175,8 @@ function fakeTx(input: { capabilities?: CapabilityRow[]; transition?: ActiveTran
       ? row.status === clause.status && row.failure?.recoveryRequired === true
       : clause.status.in.includes(row.status)));
   return {
-    $executeRaw: vi.fn(async () => 1),
-    $queryRaw: vi.fn(async () => [{ transaction_isolation: input.isolation ?? "read committed" }]),
+    $executeRaw: vi.fn(async (_strings: TemplateStringsArray) => 1),
+    $queryRaw: vi.fn(async (strings: TemplateStringsArray) => strings.join("") === "SHOW transaction_deferrable" ? [{ transaction_deferrable: "off" }] : [{ transaction_isolation: input.isolation ?? "read committed" }]),
     platformCapability: { findMany: vi.fn(async () => input.capabilities ?? []) },
     runtimeCapabilityTransition: {
       findFirst: vi.fn(async ({ where }) => selected(where)[0] ?? null),

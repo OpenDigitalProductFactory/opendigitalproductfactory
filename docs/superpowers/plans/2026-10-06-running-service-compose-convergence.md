@@ -202,17 +202,45 @@ a two-connection pool case and earlier-write Build Studio isolation controls.
 Those new PostgreSQL cases still require an observed current-source gate; source
 unit/type results alone are not the repair's acceptance.
 
-Caller inventory for the supported isolation contract: TaskRun admission is
-first in `tak/autonomous-work-run.ts` (default Serializable, unchanged).
-`governed-backlog-tee-up.ts` owns the other guard. Its current callers in that
-file, `actions/backlog-build.ts`, `assurance/remediation-teeup.ts`,
-`mcp/packs/build-ops-pack.ts` and `optimization/dispatch-bet.ts` use default
-ReadCommitted transactions; the actions and remediation callers can write
-before promotion. The guard now verifies that isolation and fails closed on a
-future fixed-snapshot override. Scope-epoch enrollment takes the advisory lock
-but only reads the transition table, so its AccessShare read does not invert
-the new table-write order. Startup recovery/status writers do not acquire the
-advisory lock; the two coordinator writers that do use the shared helper.
+Caller inventory (all eight production `admitRuntimeGuardedWork` sites, not
+only autonomous runs and backlog promotion):
+
+| Site / transaction owner | Isolation and prior SQL | Fence placement |
+| --- | --- | --- |
+| `tak/autonomous-work-run.ts` | Serializable default; initiative review binding or explicit override may use ReadCommitted | Admission is first in the transaction. |
+| `actions/agent-threads.ts` | Serializable; parent/children reads and child writes previously preceded admission | Early lock helper before parent lookup; later admission reuses only that exact transaction's successful fence. Ownership, cancellation, child limits and lineage stay inside the same transaction. |
+| `inference/async-operation-workroom-runtime.ts` | Serializable; WorkCapsule row lock, authority and task reads previously preceded admission | Early lock before the row lock; later creation admission reenters. Existing authorized task replay still works without creating new work. |
+| `build/build-execute-helpers.ts` | Serializable; build/existing-task lookup is outside the creating transaction | Admission first inside the creating transaction. |
+| `actions/build.ts` | Default ReadCommitted | Admission first before FeatureBuild and attached Workroom creation. |
+| `build/approve-decomposition.ts` | Default ReadCommitted through its native Prisma wrapper | Admission first before Epic/child builds. |
+| `governed-backlog-tee-up.ts` | Caller-owned default ReadCommitted; backlog actions and assurance remediation can update BacklogItem first | Shared invariant checks actual transaction mode. Other callers: own tee-up loop, MCP build-ops, optimization dispatch-bet. No fixed-snapshot override exists in these wrappers. |
+| `work-capsules/work-capsule-store.ts` | Native own transactions default ReadCommitted; supplied transaction paths include Build attachment, child-room drive and federation claim | Own create/resume admission is first in its writing transaction; outer Build has already fenced. Child drive/federation may read/lock first under ReadCommitted. Shared guard refuses any future late fixed-snapshot adapter rather than trusting stale state. |
+
+The native database client has no global isolation override. Capsule `inTransaction`
+uses the supplied transaction as-is when no `$transaction` member exists, so
+it must never be assumed to create a fresh snapshot. Existing capsule reuse/
+late binding does not create guarded work and retains its behavior. No call
+changes isolation or moves authorization outside its transaction.
+
+For every source, the shared helper reads actual isolation with snapshot-free
+`SHOW`. Fixed modes additionally preserve the actual DEFERRABLE value with
+same-value `SET TRANSACTION [NOT] DEFERRABLE`; PostgreSQL's
+[`check_transaction_deferrable`](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/commands/variable.c)
+rejects any first snapshot already taken even for the same value. Same-value
+isolation SET does **not** enforce this and must not be substituted. The exact
+transaction object receives a private weak marker only after both locks succeed.
+A new transaction/proxy must acquire its own valid fence; failures do not mark it.
+`SHOW`, `SET` and `LOCK` do not take a snapshot under PostgreSQL's
+[utility command rule](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/tcop/pquery.c).
+Real PostgreSQL tests must prove this through the actual Prisma adapter, including
+fresh settings preservation, late-read rejection, reentry, and the actual spawn/
+durable-task callers' successful saved lineage/replay and transition contention.
+Source unit tests and primary-source reasoning do not replace that runtime proof.
+
+Scope-epoch enrollment takes the advisory lock but only reads the transition
+table, so its AccessShare read does not invert the new table-write order.
+Startup recovery/status writers do not acquire the advisory lock. The two
+coordinator writers that do use the same shared helper before any prior SQL.
 
 Before completion, freeze the exact tree, run its required source/runtime gates,
 obtain independent code review, deliver through protected `pnpm land`, then use

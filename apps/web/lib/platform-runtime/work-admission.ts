@@ -6,7 +6,7 @@ const ACTIVE_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "comp
 
 type AdmissionTx = {
   $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>;
-  $queryRaw?(strings: TemplateStringsArray, ...values: unknown[]): Promise<Array<{ transaction_isolation: string }>>;
+  $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<Array<Record<string, unknown>>>;
   platformCapability: { findMany(args: unknown): Promise<Array<{ capabilityId: string; state: string; manifest: unknown }>> };
   runtimeCapabilityTransition: { findMany(args: unknown): Promise<Array<{ previousKeys: string[]; desiredKeys: string[]; status: string; envelope: unknown }>> };
 };
@@ -19,14 +19,31 @@ function guardsFromManifest(manifest: unknown): string[] {
   return Array.isArray(guards) ? guards.filter((guard): guard is string => typeof guard === "string") : [];
 }
 
-/** LOCK is a utility command that does not establish an MVCC snapshot. It
- * must precede the advisory SELECT in every transition writer taking both.
- * Snapshot-isolated producers call this before any other statement; current
- * Build Studio callers use ReadCommitted. No host work runs under these locks. */
-export async function lockRuntimeTransitionAdmission(tx: Pick<AdmissionTx, "$executeRaw">): Promise<void> {
+// Only the exact successful transaction object may reenter after its first SQL.
+// Prisma gives each interactive transaction its own proxy; a different adapter
+// or transaction must establish its own fence. No marker survives as authority
+// outside that transaction: LOCK itself refuses autocommit clients.
+const fencedTransactions = new WeakSet<object>();
+
+/** Before any snapshot in fixed-snapshot transactions, acquire the existing
+ * transition table lock, then its advisory lock. Preserve isolation/deferrable
+ * settings. PostgreSQL's same-value DEFERRABLE check still rejects prior SQL;
+ * same-value isolation SET does not. SHOW/SET/LOCK are snapshot-free utilities. */
+export async function lockRuntimeTransitionAdmission(tx: Pick<AdmissionTx, "$executeRaw" | "$queryRaw">): Promise<void> {
+  if (fencedTransactions.has(tx)) return;
+  const isolation = (await tx.$queryRaw`SHOW transaction_isolation`)[0]?.transaction_isolation;
+  if (isolation === "serializable" || isolation === "repeatable read") {
+    const deferrable = (await tx.$queryRaw`SHOW transaction_deferrable`)[0]?.transaction_deferrable;
+    if (deferrable === "on") await tx.$executeRaw`SET TRANSACTION DEFERRABLE`;
+    else if (deferrable === "off") await tx.$executeRaw`SET TRANSACTION NOT DEFERRABLE`;
+    else throw new Error("runtime_transition_admission_settings_unproven");
+  } else if (isolation !== "read committed" && isolation !== "read uncommitted") {
+    throw new Error("runtime_transition_admission_settings_unproven");
+  }
   await tx.$executeRaw`LOCK TABLE "RuntimeCapabilityTransition" IN SHARE ROW EXCLUSIVE MODE`;
   // BI-8BA6AC56: execute, never deserialize this void-returning SELECT.
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+  fencedTransactions.add(tx);
 }
 
 /**
@@ -36,14 +53,6 @@ export async function lockRuntimeTransitionAdmission(tx: Pick<AdmissionTx, "$exe
  * between the coordinator's drain count and a producer's insert.
  */
 export async function admitRuntimeGuardedWork(tx: AdmissionTx, guard: RuntimeWorkGuard): Promise<void> {
-  // Some Build Studio callers make earlier writes in their ReadCommitted
-  // transaction. Refuse a future fixed-snapshot override rather than silently
-  // accepting a snapshot taken before the admission fence. SHOW takes none.
-  if (guard === "build-studio-active") {
-    if (!tx.$queryRaw || (await tx.$queryRaw`SHOW transaction_isolation`)[0]?.transaction_isolation !== "read committed") {
-      throw new Error("runtime_capability_work_isolation_unsupported:build-studio-active");
-    }
-  }
   await lockRuntimeTransitionAdmission(tx);
   const capabilities = await tx.platformCapability.findMany({
     where: { capabilityId: { startsWith: "runtime:" } },

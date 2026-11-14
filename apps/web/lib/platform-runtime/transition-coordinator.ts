@@ -66,7 +66,7 @@ type TransitionModel = {
 };
 type CapabilityModel = { findMany(args: unknown): Promise<Array<{ capabilityId: string; state: string }>>; updateMany(args: unknown): Promise<{ count: number }> };
 type EventModel = { create(args: unknown): Promise<unknown> };
-type TransitionTx = { $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel; platformCapability: CapabilityModel; runtimeCapabilityTransitionEvent: EventModel } & Parameters<typeof createPrismaWorkAttributionStore>[0];
+type TransitionTx = { $queryRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<Array<Record<string, unknown>>>; $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel; platformCapability: CapabilityModel; runtimeCapabilityTransitionEvent: EventModel } & Parameters<typeof createPrismaWorkAttributionStore>[0];
 type TransitionPrisma = {
   runtimeCapabilityTransition: TransitionModel;
   $transaction<T>(operation: (tx: TransitionTx) => Promise<T>, options: { isolationLevel: "Serializable" }): Promise<T>;
