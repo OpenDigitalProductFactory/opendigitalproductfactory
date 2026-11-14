@@ -4,15 +4,17 @@ import { prisma } from "@dpf/db";
 import { readImageVersion } from "@/lib/platform/image-version";
 import { parseReleaseInstallContext } from "@/lib/self-upgrade/release-target";
 import { RELEASE_IMAGE_TAG } from "@/lib/self-upgrade/registry-release";
+import { parseImagetoolsDigest } from "@/lib/self-upgrade/doctools-release-image";
+import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
 import catalogSeed from "../../../../scripts/capability-service-catalog.generated.json";
 import { isPromoterAvailable, resolvePromoterArtifact, runPromoter, runRuntimeCapabilityProtocolProbe } from "@/lib/self-upgrade/promoter";
 import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
 import { computeCapabilityStateVersion, coordinateRuntimeCapabilityTransition, createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
-import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, type RuntimeReconciliationIntent, type RuntimeTransitionReceipt } from "./transition-protocol";
+import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, type RuntimeReconciliationIntent, type RuntimeServiceImagePlan, type RuntimeTransitionReceipt } from "./transition-protocol";
 import { computeCapabilityStateVersion as computeHostStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 import { runtimeTransitionHostContext, runtimeTransitionHostPlatform } from "./runtime-transition-host-context";
 
-type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string; hostPlatforms: string[] }> };
+type CatalogEntry = { capabilityId: string; dependencies: string[]; workGuards: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string; hostPlatforms: string[] }> };
 const catalog = catalogSeed as { catalogHash: string; capabilities: CatalogEntry[] };
 
 export function requiredRuntimeServicesAreHealthy(
@@ -71,11 +73,14 @@ async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: Runt
   if (!image || image.source !== "git-sha" || !/^[a-f0-9]{40}$/.test(image.raw)) throw new Error("runtime_protocol_server_identity_missing");
   const sourceSha = image.raw;
   if (process.env.DEPLOYED_SHA && process.env.DEPLOYED_SHA !== sourceSha) throw new Error("runtime_protocol_server_identity_mismatch");
-  const [actuator, signer] = await Promise.all([
+  const [actuator, signer, imageQualifier, gitReader] = await Promise.all([
     readFile("/promoter/scripts/apply-runtime-capability-transition.mjs"),
     readFile("/promoter/scripts/lib/transition-signing.mjs"),
+    readFile("/promoter/scripts/promoter-epoch-evidence.mjs"),
+    readFile("/promoter/scripts/lib/git.mjs").catch(() => null),
   ]);
-  const expected = { sourceSha, actuatorSha256: createHash("sha256").update(actuator).digest("hex"), signerSha256: createHash("sha256").update(signer).digest("hex") };
+  const expected = { sourceSha, actuatorSha256: createHash("sha256").update(actuator).digest("hex"), signerSha256: createHash("sha256").update(signer).digest("hex"),
+    ...(gitReader ? { imageQualifierSha256: createHash("sha256").update(imageQualifier).update("\0").update(gitReader).digest("hex") } : {}) };
   // Consumer installs carry published promoter images, not a source-built
   // dpf-promoter:<sha>. Resolve the installed immutable release, never its
   // moving discovery channel; the existing artifact validator still binds the
@@ -91,7 +96,29 @@ async function inspectPackagedReconciliationProtocol(observedHostSnapshot?: Runt
     ...(reference ? { promoterImage: reference, candidateReference: reference } : {}) });
   const info = await runRuntimeCapabilityProtocolProbe({ artifact, expected, containerName: `dpf-runtime-protocol-${randomUUID()}`, ...(observedHostSnapshot ? { observedHostSnapshot } : {}) });
   if (!info.signingVersions.includes(2) || !info.applyVersions.includes(2) || !info.reconciliationVersions.includes(2)) throw new Error("runtime_reconciliation_protocol_unsupported");
-  return { info, artifact };
+  return { info, artifact, release };
+}
+
+async function serverServiceImagePlan(protocol: Awaited<ReturnType<typeof inspectPackagedReconciliationProtocol>>,
+  intent: RuntimeReconciliationIntent): Promise<RuntimeServiceImagePlan> {
+  const info = protocol.info;
+  if (!info.imageReconciliationVersions?.includes(3) || !info.signingVersions.includes(3)
+    || !info.applyVersions.includes(3) || !info.reconciliationVersions.includes(3)
+    || !/^[a-f0-9]{64}$/.test(info.imageQualifierSha256 ?? "")) throw new Error("runtime_service_image_protocol_unsupported");
+  const platform = intent.observedHost.arch === "arm64" ? "linux/arm64" : "linux/amd64";
+  const sourceSha = info.sourceSha;
+  let source: RuntimeServiceImagePlan["services"][number]["source"] = { kind: "source", sourceSha };
+  if (protocol.release) {
+    // Reuse the release manifest format and parser used by the existing image
+    // owner. Discovery channels and caller-supplied image references are absent.
+    const reference = `ghcr.io/${protocol.release.ghcrOwner.toLowerCase()}/dpf-browser-use:${protocol.release.imageTag}`;
+    const result = await runProcessWithBudget("docker", ["buildx", "imagetools", "inspect", reference, "--format", "{{json .Manifest}}"],
+      { timeoutMs: 60_000, maxStdoutBytes: 8192, timeoutLabel: "runtime-service-image-resolution-timeout" });
+    const digest = result.exitCode === 0 && !result.outputLimitExceeded ? parseImagetoolsDigest(result.stdout) : null;
+    if (!digest) throw new Error("runtime_service_image_manifest_unproven");
+    source = { kind: "published", sourceSha, reference: `ghcr.io/${protocol.release.ghcrOwner.toLowerCase()}/dpf-browser-use@${digest}` };
+  }
+  return { schemaVersion: 1, sourceSha, platform, operation: "prepare", services: [{ service: "browser-use", source }] };
 }
 
 /** Observe both authorities without proposing defaults or reserving apply rights. */
@@ -112,8 +139,11 @@ export async function readProductionRuntimeCapabilityReconciliationPreview() {
     protocolIdentity: { ...protocol.info, promoterDigest: protocol.artifact.digest } };
 }
 
-export async function executeProductionRuntimeCapabilityTransition(input: { transitionId: string; desiredKeys: string[]; requestedById: string; mode?: "transition" | "reconciliation"; reconciliation?: RuntimeReconciliationIntent }) {
-  input = { ...input, desiredKeys: [...input.desiredKeys], ...(input.reconciliation ? { reconciliation: structuredClone(input.reconciliation) } : {}) };
+export async function executeProductionRuntimeCapabilityTransition(input: { transitionId: string; desiredKeys: string[]; requestedById: string; mode?: "transition" | "reconciliation"; reconciliation?: RuntimeReconciliationIntent; imageServices?: string[] }) {
+  if (input.imageServices !== undefined && (!Array.isArray(input.imageServices) || input.imageServices.length !== 1
+    || input.imageServices[0] !== "browser-use" || input.mode !== "reconciliation")) return { status: "failed" as const, failure: "runtime_image_plan_invalid" as const };
+  input = { ...input, desiredKeys: [...input.desiredKeys], ...(input.reconciliation ? { reconciliation: structuredClone(input.reconciliation) } : {}),
+    ...(input.imageServices ? { imageServices: [...input.imageServices] } : {}) };
   let prepared: ReturnType<typeof prepareRuntimeReconciliationIntent> | undefined;
   let protocol: Awaited<ReturnType<typeof inspectPackagedReconciliationProtocol>> | undefined;
   if (input.mode === "reconciliation") {
@@ -148,12 +178,28 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
     previousProjection.stateHash = prepared.observedHost.capabilityStateVersion;
     desiredProjection.stateHash = computeHostStateVersion(catalog.catalogHash, input.desiredKeys, catalog.capabilities.map(entry => entry.capabilityId));
   }
+  let imagePlan: RuntimeServiceImagePlan | undefined;
+  if (input.imageServices) {
+    if (!prepared || !protocol || prepared.touchedKeys.length !== 0
+      || JSON.stringify(previousKeys) !== JSON.stringify(desiredProjection.enabledKeys)
+      || canonicalTransitionPayload({ version: 2, kind: "runtime-capability-transition", states: previousStates })
+        !== canonicalTransitionPayload({ version: 2, kind: "runtime-capability-transition", states: desiredStates })
+      || !previousProjection.requiredServices.includes("browser-use")) return { status: "failed" as const, failure: "runtime_image_plan_invalid" as const };
+    try { imagePlan = await serverServiceImagePlan(protocol, prepared); }
+    catch (error) { return { status: "failed" as const, failure: error instanceof Error && error.message === "runtime_service_image_protocol_unsupported"
+      ? "runtime_service_image_protocol_unsupported" as const : "runtime_service_image_manifest_unproven" as const }; }
+  }
   const disabling = rows.filter((row) => (row.state === "active" && desiredStates[row.capabilityId] !== "active") || (previousKeys.includes(row.capabilityId) && !desiredSet.has(row.capabilityId)));
-  const guards = [...new Set(disabling.flatMap((row) => {
+  // Image-only repair recreates an in-use service without disabling its
+  // capability. Its existing owners' work guards still apply at admission.
+  const selectedServices = new Set<string>(imagePlan?.services.map(entry => entry.service) ?? []);
+  const imageOwners = catalog.capabilities.filter(capability => capability.services.some(service => selectedServices.has(service.service)));
+  const guardedIds = new Set([...disabling.map(row => row.capabilityId), ...imageOwners.map(capability => capability.capabilityId)]);
+  const guards = [...new Set([...imageOwners.flatMap(capability => capability.workGuards), ...rows.filter(row => guardedIds.has(row.capabilityId)).flatMap((row) => {
     const runtime = row.manifest && typeof row.manifest === "object" && !Array.isArray(row.manifest) ? (row.manifest as { runtime?: { workGuards?: unknown } }).runtime : undefined;
     return Array.isArray(runtime?.workGuards) ? runtime.workGuards.filter((guard): guard is string => typeof guard === "string") : [];
-  }))];
-  const recheckAttributedWork = async () => (await countAttributedWork(guards, createPrismaWorkAttributionStore(prisma))).blockingCounts;
+  })])];
+  const recheckAttributedWork = async (store = createPrismaWorkAttributionStore(prisma)) => (await countAttributedWork(guards, store)).blockingCounts;
   const protocolSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
   const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH, stateDirHostPath = process.env.DPF_STATE_DIR_HOST, protocolSecretFileHostPath = process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST;
   if (!hostInstallPath || !stateDirHostPath || !protocolSecretFileHostPath) throw new Error("runtime_transition_host_configuration_missing");
@@ -164,7 +210,7 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
   const authorityToken = (() => { try { const parsed = JSON.parse(reserve.stdout) as { ownershipToken?: unknown }; return typeof parsed.ownershipToken === "string" ? parsed.ownershipToken : null; } catch { return null; } })();
   if (!authorityToken) throw new Error("runtime_transition_authority_token_missing");
   try {
-    return await coordinateRuntimeCapabilityTransition({ transitionId: input.transitionId, catalogHash: catalog.catalogHash, previousKeys, desiredKeys: desiredProjection.enabledKeys, previousStates, desiredStates, requestedById: input.requestedById, ...(prepared ? { reconciliation: prepared } : {}) }, {
+    return await coordinateRuntimeCapabilityTransition({ transitionId: input.transitionId, catalogHash: catalog.catalogHash, previousKeys, desiredKeys: desiredProjection.enabledKeys, previousStates, desiredStates, requestedById: input.requestedById, ...(prepared ? { reconciliation: prepared } : {}), ...(imagePlan ? { imagePlan } : {}) }, {
     ...(prepared && protocol ? { reconciliationProtocol: protocol.info, reconciliationPromoterDigest: protocol.artifact.digest, catalogCapabilityIds: catalog.capabilities.map(entry => entry.capabilityId) } : {}),
     receipts: createPrismaRuntimeTransitionReceipts(prisma as never), isPromoterAvailable, runPromoter, protocolSecret, protocolSecretFileHostPath, recheckAttributedWork, readHostReceipt: readReceipt,
     resolveProjection: async (keys) => keys.join("\0") === previousKeys.join("\0") ? previousProjection : desiredProjection,

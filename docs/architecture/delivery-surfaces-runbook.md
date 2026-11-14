@@ -119,6 +119,28 @@ both the initial claim and durable child; a frozen feature checkout or stale
 install-root checkout is not assumed updated. A fresh diagnostic attempt requires
 the reviewed remedy's canonical containment and ordinary lease admission.
 
+The keeper handles failed child launches before reading optional process streams,
+reports controlled error categories, and attempts owned container cleanup even
+when child termination is unverified. Failed cleanup remains unverified.
+Client loss also has an independent native safety net: the existing five-minute
+lease-wait reconciliation, capacity events and hourly expiry owner fence only
+proven ended previews, behind their normal quiescence gate. They reuse the
+durable Task owner pins, admitted source Workroom, actual development environment,
+mount and full container ID. Unknown bindings and live data services are held.
+Renewal shares the admission/release/expiry environment lock; a stale read cannot
+revive a committed terminal reservation. Gate claims are excluded because their
+separate settlement contract can revive them.
+
+The native fence uses a fixed bounded Docker socket stop, never a subprocess or
+stored cleanup command. A timeout is followed by exact-ID readback; stopped or
+absent state must be confirmed. Pending cleanup is retained as pending for normal
+reconciliation. Expiry alone is never proof of process termination, and periodic
+reconciliation does not promise an instantaneous stop.
+Each pass checks at most four unique container IDs. Sorted IDs rotate through
+bounded windows using the existing five-minute cadence, so held containers do
+not permanently hide later candidates in a stable inventory. Capacity events
+reuse the current window. A changing inventory supplies no fixed cleanup deadline.
+
 A queued claim stops its shell caller: the returned durable TaskRun resumes the
 wait. A terminal claim stops too; never scan historical `:rerun-N` keys. A new
 explicitly wanted attempt may supply a new `DPF_DEV_PORTAL_CLAIM_KEY`. Durable

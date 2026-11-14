@@ -165,8 +165,9 @@ export function parseArchimateXml(xml: string): ParsedArchimateModel {
       fromArchimateId: String(rel["@_source"] ?? ""),
       toArchimateId: String(rel["@_target"] ?? ""),
       slug,
-      // An association keeps its name as the role that says what it means.
-      ...(slug === "associated_with" && name ? { role: name } : {}),
+      // An association keeps its name as the role that says what it means; a DPF type exported
+      // as a named association keeps its name unless the export only filled in the slug.
+      ...(name && (slug === "associated_with" || (dpfSlug && name !== dpfSlug)) ? { role: name } : {}),
     });
   }
 
@@ -224,6 +225,11 @@ function readDpfProperty(node: Record<string, unknown>, key: string): string | u
   return undefined;
 }
 
+/** Escape a value for a double-quoted XML attribute; names are free text from imports and users. */
+function xmlAttr(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
 export function generateArchimateXml(input: GenerateInput): string {
   const { modelName, elements, relationships } = input;
 
@@ -231,7 +237,7 @@ export function generateArchimateXml(input: GenerateInput): string {
     const xmlType = el.isExtension && el.archimateExportSlug
       ? `archimate:${el.archimateExportSlug.split("-").map(w => w[0].toUpperCase() + w.slice(1)).join("")}`
       : (SLUG_TO_ARCHIMATE_TYPE[el.slug] ?? "archimate:ApplicationComponent");
-    const escapedName = el.name.replace(/"/g, "&quot;");
+    const escapedName = xmlAttr(el.name);
 
     if (el.isExtension) {
       const ontologyProp = el.ontologyRole
@@ -245,18 +251,18 @@ export function generateArchimateXml(input: GenerateInput): string {
   const xmlRels = relationships.map(rel => {
     if (associationFallback(rel.slug)) {
       // e.g. has_foreign_key_to, depends_on: a named association that re-imports as the same slug.
-      const name = (rel.role ?? rel.slug).replace(/"/g, "&quot;");
+      const name = xmlAttr(rel.role ?? rel.slug);
       return `  <element xsi:type="archimate:AssociationRelationship" id="${rel.archimateId}" source="${rel.fromArchimateId}" target="${rel.toArchimateId}" name="${name}">\n    <properties>\n      <property key="dpf:relationshipType" value="${rel.slug}"/>\n    </properties>\n  </element>`;
     }
     const xmlType = REL_SLUG_TO_ARCHIMATE[rel.slug];
-    const nameAttr = rel.slug === "associated_with" && rel.role ? ` name="${rel.role.replace(/"/g, "&quot;")}"` : "";
+    const nameAttr = rel.slug === "associated_with" && rel.role ? ` name="${xmlAttr(rel.role)}"` : "";
     return `  <element xsi:type="${xmlType}" id="${rel.archimateId}" source="${rel.fromArchimateId}" target="${rel.toArchimateId}"${nameAttr}/>`;
   }).join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <archimate:model xmlns:archimate="http://www.archimatetool.com/archimate"
                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                 name="${modelName.replace(/"/g, "&quot;")}">
+                 name="${xmlAttr(modelName)}">
   <folder name="Elements" type="other">
 ${xmlElements}
   </folder>

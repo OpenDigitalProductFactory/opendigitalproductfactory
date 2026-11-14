@@ -364,6 +364,15 @@ class FromPortalEndToEndTest(unittest.TestCase):
         self.assertEqual(self.run_portal(origin="http://dpf.example"), portal_source.EXIT_REFUSED)
         self.assertEqual(self.refusal(), "insecure_origin")
 
+    def test_a_refusal_is_reported_when_the_report_directory_does_not_exist_yet(self) -> None:
+        self.report = self.root / "not-yet" / "report.json"
+        args = SimpleNamespace(from_portal="http://dpf.example", expect_installation=device_of(SEED),
+                               approve_identity_change=False, report_json=str(self.report), mcp_url=None, dry_run=False)
+        with patch("builtins.print"):
+            code = portal_source.run_from_portal(args, [], self.home, self.env, lambda command: None)
+        self.assertEqual(code, portal_source.EXIT_REFUSED)
+        self.assertEqual(self.refusal(), "insecure_origin")
+
     def test_missing_expected_installation_is_refused(self) -> None:
         self.assertEqual(self.run_portal(expect="did_a192…199d"), portal_source.EXIT_REFUSED)
         self.assertEqual(self.refusal(), "no_expected_identity")

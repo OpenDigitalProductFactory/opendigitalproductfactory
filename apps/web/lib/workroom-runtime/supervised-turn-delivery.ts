@@ -21,7 +21,12 @@ import {
 /** The supervisor calls the dispatcher needs; production passes the portal's one supervisor. */
 export interface SupervisedSessionPort {
   isLive(capsuleId: string): boolean;
-  deliver(input: { capsuleId: string; prompt: string; deliveredCursor: string }): Promise<{ success: boolean; message: string }>;
+  /**
+   * BI-C64EDA33 PR 2: `messageId` makes the hand-over idempotent (one command per message), and `wake`
+   * is the message's decided wake state, committed in the same transaction as the turn decision.
+   */
+  deliver(input: { capsuleId: string; prompt: string; deliveredCursor: string; messageId?: string;
+    wake?: { messageRowId: string; structuredPayload: Record<string, unknown> } | null }): Promise<{ success: boolean; message: string }>;
 }
 
 export async function defaultSupervisedSessionPort(): Promise<SupervisedSessionPort> {
@@ -80,9 +85,11 @@ export function planSupervisedTurn(args: {
 }
 
 /**
- * Hand a named message to the session as its turn. The caller has already
- * claimed the wake (written it woken), so a retried dispatch can never give
- * the session the same message twice.
+ * Hand a named message to the session as its turn. The hand-over is one
+ * runtime command per message (room-message:<messageId>:deliver), and the
+ * message's "woken" state commits with it, so a retried or concurrent dispatch
+ * gives the session the message once, and a crash before the hand-over
+ * leaves the message pending for the sweep rather than marked delivered.
  */
 export async function deliverSupervisedTurn(args: {
   db: Db;
@@ -92,6 +99,8 @@ export async function deliverSupervisedTurn(args: {
   message: { messageId: string; workItemId: string; senderType: string; senderAgentId: string | null; body: string; createdAt: Date };
   addressing: RoomMessageAddressing;
   caseKey: string | null;
+  /** The message row and its payload with the wake decided "woken". */
+  wake?: { messageRowId: string; structuredPayload: Record<string, unknown> } | null;
 }): Promise<SupervisedTurnOutcome> {
   const stored = readStoredRuntimeSession(args.room.workspaceState);
   const cursor = stored?.deliveredCursor ? decodeRoomMessageCursor(stored.deliveredCursor) : null;
@@ -106,7 +115,8 @@ export async function deliverSupervisedTurn(args: {
     context,
   });
   try {
-    const result = await args.port.deliver({ capsuleId: args.room.capsuleId, prompt, deliveredCursor: encodeRoomMessageCursor(args.message) });
+    const result = await args.port.deliver({ capsuleId: args.room.capsuleId, prompt, deliveredCursor: encodeRoomMessageCursor(args.message),
+      messageId: args.message.messageId, wake: args.wake ?? null });
     return result.success
       ? { kind: "delivered", addressedAs: args.addressedAs }
       : { kind: "failed", addressedAs: args.addressedAs, detail: result.message };

@@ -17,6 +17,8 @@
 // could disagree about what a page links to.
 import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
 
+import { buildWikiSlugIndex, danglingTargets, resolvableSlugs } from "./link-resolution";
+
 // ─── Finding shape ──────────────────────────────────────────────────────────
 
 /** Mirrors the `WikiLintFinding.findingKind` enum on the Prisma model. */
@@ -165,36 +167,14 @@ export function detectOrphans(input: {
 export function detectDanglingXrefs(input: {
   pages: LintWikiPage[];
 }): LintFinding[] {
-  // Build per-organization slug sets. Kernel slugs are visible to every
-  // org overlay (kernel fallback), so each org's resolution set is
-  // (org slugs) ∪ (kernel slugs).
-  const kernelSlugs = new Set<string>();
-  const orgSlugs = new Map<string, Set<string>>();
-
-  for (const page of input.pages) {
-    if (page.organizationId === null) {
-      kernelSlugs.add(page.slug);
-    } else {
-      let set = orgSlugs.get(page.organizationId);
-      if (!set) {
-        set = new Set<string>();
-        orgSlugs.set(page.organizationId, set);
-      }
-      set.add(page.slug);
-    }
-  }
+  // The rule lives in the shared resolver (BI-2F7BE778), which the wiki
+  // editor also runs on a draft: org pages resolve against their own slugs
+  // plus the kernel's (kernel fallback); kernel pages against the kernel's.
+  const index = buildWikiSlugIndex(input.pages);
 
   const findings: LintFinding[] = [];
   for (const page of input.pages) {
-    const tokens = extractWikilinks(page.body);
-    if (tokens.length === 0) continue;
-
-    const visible =
-      page.organizationId === null
-        ? kernelSlugs
-        : new Set<string>([...(orgSlugs.get(page.organizationId) ?? []), ...kernelSlugs]);
-
-    const dangling = tokens.filter((slug) => !visible.has(slug));
+    const dangling = danglingTargets(page.body, resolvableSlugs(index, page.organizationId));
     if (dangling.length === 0) continue;
 
     findings.push({

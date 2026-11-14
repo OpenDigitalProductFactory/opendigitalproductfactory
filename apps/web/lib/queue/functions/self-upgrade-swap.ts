@@ -21,7 +21,7 @@ import {
 } from "@/lib/self-upgrade/preflight";
 import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
-import { completeRun, failRun, getRun, recordPromoterReadiness, recordRunRecoveryPoint, recordReassessmentCompatibility, type SelfUpgradeRunRow } from "@/lib/self-upgrade/run-store";
+import { completeRun, failRun, getRun, recordMigrationHandoffLaunchStamp, recordPromoterReadiness, recordRunRecoveryPoint, recordReassessmentCompatibility, type SelfUpgradeRunRow } from "@/lib/self-upgrade/run-store";
 import { resumedSwapAlreadyLanded } from "@/lib/self-upgrade/landed-swap-identity";
 import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
@@ -145,28 +145,6 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   // No-op when quiescenceRunId is null (dryRun path).
   if (quiescenceRunId) await signalSwapStarting(quiescenceRunId);
 
-  // The drain and recovery point above take minutes; the handoff was verified
-  // BEFORE them. Re-bind it to the bytes the promoter will actually migrate,
-  // re-running readiness if a host-side writer moved the state meanwhile
-  // (SUR-4758058F, BI-95DF1BFC). Fail-closed on anything that is not a
-  // legitimate state move or TTL expiry.
-  const preflightParams: PreflightParams = {
-    ...ctx.preflight,
-    runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun: recordPreflightFailure, emitFailure,
-    hostIdentity, runtimeTransitionSecret,
-  };
-  const refreshed = await refreshMigrationHandoffAfterDrain({
-    dryRun, runId, migrationHandoff: ctx.migrationHandoff, resolvedPromoterDigest: ctx.resolvedPromoterDigest,
-    runtimeTransitionSecret, hostIdentity, failRun: recordPreflightFailure, emitFailure,
-    rerunPreflight: () => runCandidatePreflight(preflightParams),
-  });
-  if (!refreshed.ok) {
-    return finishFailure(refreshed.reason, { reason: "installer-state-repair-required", excerpt: refreshed.reason });
-  }
-  if (refreshed.data.refreshed) console.warn(`[self-upgrade] ${runId}: install-state handoff re-bound after the drain (${refreshed.data.code})`);
-  const migrationHandoff = refreshed.data.migrationHandoff;
-  const resolvedPromoterDigest = refreshed.data.resolvedPromoterDigest;
-
   // BI-F9EE05E5: never swap with admission open. The drain may have waited an
   // hour; if anything reopened admission meanwhile (a portal restart resets
   // the level on boot), close it again and re-check before the promoter runs.
@@ -185,6 +163,45 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
       return finishFailure(compatibility.reason, { reason: compatibility.reason });
     }
   }
+
+  // The drain, recovery point and reassessment preflight above take minutes;
+  // the handoff was signed at preflight, BEFORE them. Immediately before the
+  // promoter launches, re-bind it to the bytes the promoter will actually
+  // migrate — re-running readiness if a host-side writer moved the state
+  // meanwhile (SUR-4758058F, BI-95DF1BFC) — and re-stamp its validity window so
+  // the 10-minute TTL starts at launch, not at preflight (SUR-4DC82F3C: the
+  // recovery point ate the window and promote.sh refused a handoff that had
+  // been 4 seconds from expiry when it was handed over, BI-2074D622). Nothing
+  // slow may run between this call and runPromoter. Fail-closed on anything
+  // that is not a legitimate state move or TTL expiry.
+  const preflightParams: PreflightParams = {
+    ...ctx.preflight,
+    runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun: recordPreflightFailure, emitFailure,
+    hostIdentity, runtimeTransitionSecret,
+  };
+  const refreshed = await refreshMigrationHandoffAfterDrain({
+    dryRun, runId, migrationHandoff: ctx.migrationHandoff, resolvedPromoterDigest: ctx.resolvedPromoterDigest,
+    runtimeTransitionSecret, hostIdentity, failRun: recordPreflightFailure, emitFailure,
+    rerunPreflight: () => runCandidatePreflight(preflightParams),
+  });
+  if (!refreshed.ok) {
+    return finishFailure(refreshed.reason, { reason: "installer-state-repair-required", excerpt: refreshed.reason });
+  }
+  if (refreshed.data.refreshed) console.warn(`[self-upgrade] ${runId}: install-state handoff re-bound after the drain (${refreshed.data.code})`);
+  const migrationHandoff = refreshed.data.migrationHandoff;
+  if (refreshed.data.restamped && migrationHandoff) {
+    console.log(`[self-upgrade] ${runId}: install-state handoff re-stamped at launch; valid until ${refreshed.data.expiresAt}`);
+    // The promoter verifies THIS handoff; the readiness evidence still holds the
+    // one signed before the drain. Record the launch stamp so a run's evidence
+    // shows the window the promoter saw (SUR-4DC82F3C was read from that field).
+    const readiness = refreshed.data.refreshed ? undefined : ctx.migrationHandoff?.envelope;
+    await recordMigrationHandoffLaunchStamp(runId, {
+      migrationHandoff,
+      ...(readiness ? { readinessWindow: { issuedAt: readiness.issuedAt, expiresAt: readiness.expiresAt } } : {}),
+      ...(refreshed.data.code ? { reboundFor: refreshed.data.code } : {}),
+    });
+  }
+  const resolvedPromoterDigest = refreshed.data.resolvedPromoterDigest;
 
   let result: { exitCode: number; stdout: string; stderr: string };
   try {

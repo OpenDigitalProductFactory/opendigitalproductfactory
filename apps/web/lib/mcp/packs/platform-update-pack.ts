@@ -23,9 +23,10 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "reconcile_runtime_capabilities",
-    description: "Apply explicitly chosen runtime settings using the original preview's separate host and saved-state baselines. Supply complete desired saved states, desired host keys and the keys whose saved state may change. Untouched settings are preserved. Changed baselines, incompatible packaged code or attributed active work refuse the apply. Retain the transition id for recovery; never create another request to bypass uncertainty.",
+    description: "Apply explicitly chosen runtime settings using the original preview's separate host and saved-state baselines. Supply complete desired saved states, desired host keys and the keys whose saved state may change. Untouched settings are preserved. Changed baselines, incompatible packaged code or attributed active work refuse the apply. Optionally select browser-use for image-only qualification with unchanged settings; its image is derived by the server from the installed source or release. Retain the transition id for recovery; never create another request to bypass uncertainty.",
     inputSchema: { type: "object", additionalProperties: false, required: ["transitionId", "reconciliation"], properties: {
       transitionId: { type: "string", pattern: "^RCT-[A-Za-z0-9-]+$" },
+      imageServices: { type: "array", minItems: 1, maxItems: 1, uniqueItems: true, items: { type: "string", enum: ["browser-use"] } },
       reconciliation: { type: "object", additionalProperties: false, required: ["observedHost", "observedDatabaseStates", "desiredHostEnabledKeys", "desiredDatabaseStates", "touchedKeys"], properties: {
         observedHost: { type: "object", description: "The complete validated host snapshot returned by the preview; preserve every field." },
         observedDatabaseStates: { type: "object", additionalProperties: { type: "string" } },
@@ -167,8 +168,12 @@ export const platformUpdatePack: ToolPack = {
       try {
         const { requestRuntimeCapabilityTransitionForActor } = await import("@/lib/platform-runtime/runtime-capability-commands");
         const intent = structuredClone(params.reconciliation) as RuntimeReconciliationIntent;
-        const result = await requestRuntimeCapabilityTransitionForActor({ transitionId: params.transitionId as string, desiredKeys: [...intent.desiredHostEnabledKeys], mode: "reconciliation", reconciliation: intent }, userId);
-        return { success: result.status === "succeeded", message: result.status === "succeeded" ? "Runtime capability reconciliation completed." : "Runtime capability reconciliation is not complete; retain this request for recovery.", data: result };
+        const result = await requestRuntimeCapabilityTransitionForActor({ transitionId: params.transitionId as string, desiredKeys: [...intent.desiredHostEnabledKeys], mode: "reconciliation", reconciliation: intent, ...(params.imageServices !== undefined ? { imageServices: structuredClone(params.imageServices) as string[] } : {}) }, userId);
+        let message = "Runtime capability reconciliation is not complete; retain this request for recovery.";
+        if (result.status === "succeeded") message = "Runtime capability reconciliation completed.";
+        else if (result.status === "failed" && result.failure === "runtime_service_image_protocol_unsupported") message = "Image reconciliation needs a governed platform update before this packaged executor can perform it. Retain this request.";
+        else if (result.status === "failed" && result.failure === "runtime_image_configuration_unverified") message = "The running configuration could not be verified. Retain this request and resolve the configuration difference through the governed platform update workflow.";
+        return { success: result.status === "succeeded", message, data: result };
       } catch (error) { return { success: false, message: "Runtime capability reconciliation refused or requires recovery.", error: getErrorMessage(error) }; }
     },
     apply_platform_update: applyPlatformUpdateTool,

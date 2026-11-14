@@ -41,7 +41,7 @@ function fixture() {
     try { return await run(tx); } catch (error) { state = prior; throw error; }
   }) };
   let generation = 0;
-  const deps = (now: string) => ({ db: db as unknown as PauseDatabase, now: new Date(now), send: vi.fn(async () => undefined), probe: vi.fn(async () => true), newId: () => `pause-${++generation}` });
+  const deps = (now: string) => ({ db: db as unknown as PauseDatabase, now: new Date(now), send: vi.fn(async () => undefined), probe: vi.fn(async () => true), reconcileLocalRuntime: vi.fn(async () => undefined), newId: () => `pause-${++generation}` });
   return { get state() { return state; }, deps };
 }
 const provenance = (reason = "Freeing the GPU for a model swap"): PauseProvenance => ({
