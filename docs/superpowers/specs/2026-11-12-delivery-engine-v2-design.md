@@ -104,3 +104,53 @@ E1–E3 are independent. E4 depends on E1. E5 can start any time; its audit info
 - **Less blocking review could let a defect through.** Mitigation: production-integrity surfaces still block; review is still run on every PR; catch rates make gaps visible.
 - **Bypass in a sandbox widens what a client can do locally.** Mitigation: OS sandbox limits on filesystem and network; server-side authority unchanged; destructive git forms stay on ask.
 - **Subscription terms.** Native clients are used as their vendors intend; background automation moves to API keys.
+
+## 8. E2 implementation amendment: combined review and qualified cloud evidence
+
+**Status:** proposed design, not implementation admission or a production policy change.
+**Carrier:** BI-A3D63948, Large, WC-557937A2, branch `codex/combined-review-evidence`.
+**Source inspected:** fc59dc8e6b6937a0cf019836b6f68f6b755aa595; initial executable characterization at 89b09949eb0fb44d67e0070213364f2b29f1ad72 is recorded as cmwgqdra41j4q0eqqvb7hlh2j. Funding ownership remains unresolved; no paid assessment or budget change is authorized by this amendment.
+
+### 8.1 Observed contract drift and scope
+
+PR7105's four quota verification script paths have no runtime-bound surface according to `runtimeBoundFiles` and receive `evaluateLocalCiAdmission`'s cloud-primary exemption. `pr-health.isDocsOnlyFileSet` returns false for the same paths. Separately, `apps/web/lib/change-review/failure-analysis-evidence.ts` resolves only `local_integration_ci` records; external workrooms need a governed lease or the documentation lane. Successful protected cloud verification therefore does not supply the evidence this resolver requires. These are distinct classifier and evidence-contract gaps, not a failed product test or an outage caused by an occupied queue.
+
+E3/BI-31C988D5 and its landing follow-up BI-087B42D5 remain delivered history. BI-E4E9BD73 explicitly preserves external workroom behavior and does not cover the missing cloud lane. This amendment retains all of E2: one combined, triggered review, an explicit score/bar, appropriate specialist perspectives, production-integrity-only blocking, server-side enforcement, and epic-level design prerequisites for fix-lane work. It is not a small exemption for one PR. Existing queued gate98688, original review identities and historical unknown outcomes remain untouched.
+
+### 8.2 Objectives and acceptance baseline
+
+**OBJ-E2-1:** Every current immutable PR change receives one combined review obligation, with bounded specialist contributions selected by actual affected surfaces.
+**OBJ-E2-2:** Verification and publication use one current source-classification contract and evidence from the permitted execution lane.
+**OBJ-E2-3:** Production-integrity requirements remain enforced by trusted server-side CI; unavailable evidence is never a fabricated pass.
+**OBJ-E2-4:** Break-fix delivery reuses the approved epic's research/design/plan boundaries without serially repeating them for each fix.
+
+| Acceptance | Objective | Observable requirement |
+|---|---|---|
+| AC-E2-1 | OBJ-E2-1 | One immutable review identity yields one combined result. UX, data and architecture sections are included only when their affected-surface predicates apply; unknown classification requests resolution rather than silently omitting review. |
+| AC-E2-2 | OBJ-E2-1 | The combined result exposes a versioned rubric, per-applicable-section score, pass bar and accountable findings. Malformed or incomplete reviewer output is explicitly unverified; it cannot become a positive verdict. |
+| AC-E2-3 | OBJ-E2-2 | Landing, PR health and server evidence resolution agree on the same file inventory, classification version and required verification lane, including the four-file7105 regression. |
+| AC-E2-4 | OBJ-E2-2 | A trusted cloud run for the exact source can resolve evidence within its owning workroom. Foreign repository/workroom, stale head, wrong merge parent, untrusted workflow, failed or missing required job, expired or mismatched artifact, and revoked authority fail closed. |
+| AC-E2-5 | OBJ-E2-3 | Data, migrations, install/upgrade convergence and security changes retain blocking checks in server-side CI. Other review findings are advisory under the approved E2 policy; unavailable review is visibly unrun, never approved. Existing repository protection is unchanged until normal rollout qualifies the replacement. |
+| AC-E2-6 | OBJ-E2-4 | A fix covered by the current approved epic does not repeat epic research/design/plan gates; changed scope or production-integrity requirements still obtain their applicable admission. |
+| AC-E2-7 | OBJ-E2-1 | Restart, duplicate notification, provider failure and interrupted review reuse the existing TaskRun/review identity and bounded recovery; no new assessment is created to escape an unknown execution. |
+| AC-E2-8 | OBJ-E2-3 | Served end-to-end evidence covers an ordinary change and each production-integrity class, including rejected tampering and an unavailable provider. Source tests alone do not establish rollout acceptance. |
+
+### 8.3 Contracts and reuse
+
+**CT-E2-CLASSIFICATION:** Reuse `scripts/derived-artifacts-gate.mjs` and the existing convergence/data classifiers as the source of verification-lane policy. PR health must consume the same decision instead of inventing a second docs-only test. Runtime verification need and review-blocking sensitivity are separate fields: a cloud-primary decision cannot by itself waive a security or migration review. Unknown classifiers and stale derived artifacts retain their existing conservative result.
+
+**CT-E2-CLOUD-EVIDENCE:** Extend the existing external evidence store and provider-backed workflow readers, not author-supplied prose or a new receipt database. A server-owned importer must authenticate current workroom access and repository provider authority, fetch the provider run and artifacts, and bind repository, workflow identity and trusted workflow revision, event, run ID/attempt, source head/tree/diff, completion time, required job inventory and artifact digest. PR-head runs bind the exact head; merge-group runs additionally bind the immutable group commit, actual parents and verified membership of the source PR. A later main success is not evidence for an arbitrary earlier head. Missing, cancelled, skipped-required, failed, superseded, oversized or unverifiable artifacts remain unavailable. Recheck source, provenance, authority and freshness at review dispatch and publication. Retain the cloud execution kind: never label it local integration or invent a lease.
+
+**CT-E2-REVIEW:** Extend existing semantic review identity, schema, parser and recovery. The versioned rubric must be independently agreed before implementation; no arbitrary numeric bar is introduced by this draft. Relevant professional experts retain their own bounded tools and corpus retrieval. The combined result assembles their applicable conclusions and citations without loading every profession's corpus into one prompt. Architecture participates when package/interface boundaries require it. Failure of a required contribution stays explicit. Publication policy distinguishes advisory findings from production-integrity blockers; failed or missing evidence never masquerades as an approved review.
+
+**CT-E2-ROLLOUT:** Reconcile the older local-lane-only wording in `docs/architecture/failure-analysis-and-recovery.md` and PR-health documentation with sections3.3–3.4. Publish and qualify the server evidence producer, consumer and CI policy before changing protection. Existing exception/grant mechanisms are not repurposed. No schema migration is proposed until existing evidence records are proven insufficient. Readers preserve old evidence kinds; new kinds are versioned and rejected by older consumers. Roll back through a protected revert that restores conservative admission, retaining all evidence and original tasks.
+
+### 8.4 Ordered delivery and verification
+
+1. **FLOW-E2-DESIGN:** Obtain ordinary research, independent design/architecture and scope-baseline admission for this full Large item. Resolve funding ownership before paid work. Compare the existing shared-change-reviewer design and E2's absorbed items; enumerate current provider readers and reviewer/parser contracts. Agree the rubric and measurable bar. **VERIFY-E2-DESIGN:** independently checked baseline maps every AC above and original E2 outcome; unresolved doctrine is recorded, not silently combined.
+2. **FLOW-E2-PLAN:** Produce immutable implementation coverage with source paths, impact obligations and explicit delivery boundaries. Independently shippable pieces require live existing/new BI coverage under the normal decomposition contract; the parent cannot close on classifier-only work. **VERIFY-E2-PLAN:** valid server coverage and plan/architecture admission before implementation.
+3. **FLOW-E2-EVIDENCE:** Reproduce classifier disagreement and evidence rejection, then implement shared classification and authenticated cloud evidence resolution using existing stores. **VERIFY-E2-EVIDENCE:** positive exact-head and merge-group cases plus every rejection in AC-E2-4, race between import and publication, artifact retrieval failure, and existing local/documentation/Build Studio regressions.
+4. **FLOW-E2-REVIEW:** Implement the combined rubric/triggered contributions, epic-level fix admission and proportional server-CI publication. **VERIFY-E2-REVIEW:** malformed output, missing applicable section, duplicate/restart/provider interruption, advisory versus blocking surfaces, changed baseline and unknown-execution controls.
+5. **FLOW-E2-RELEASE:** Affected tests/typechecks, independent exact-source review, normal `pnpm land`, protected merge and canonical release. **VERIFY-E2-LIVE:** actual served workflow for ordinary and sensitive changes; original7105 can consume only evidence genuinely valid for its still-current identity. No old task replay or cancellation is part of this amendment.
+
+The steps are proposed sequencing, not a coverage receipt. No implementation, score approval, independent review, paid allocation, repository-protection change or passing runtime result is claimed by this document.
