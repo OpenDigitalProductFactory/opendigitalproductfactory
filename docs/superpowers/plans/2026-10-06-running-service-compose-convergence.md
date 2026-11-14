@@ -248,3 +248,37 @@ obtain independent code review, deliver through protected `pnpm land`, then use
 an admitted served target for native preview/apply, saved results, holds and
 recovery. The coordinator alone advances the canonical install. Preserve the
 original D4/D5 unfinished status and step 7e shadow mode throughout.
+
+## Qualified shadow inventory (BI-BD708C80)
+
+This is a separately shippable prerequisite to D4, selected by
+DI-9546056ED84F. It corrects the existing report; it does not enable active
+data-owner convergence. D5 and bind-render repairs have their own delivery.
+
+| Deliverable | Backlog item | Objectives | Contracts | Flow | Verification |
+|---|---|---|---|---|---|
+| Qualified shadow observations | BI-BD708C80 | OBJ-STATEFUL, OBJ-HONEST-GATE | `scripts/promote.sh`, `service-converge-outcome.json` | step 7e read-only inventory | AC-S1, AC-S2, AC-S3 |
+
+1. In `scripts/promote-sidecar-converge.test.mjs`, reproduce duplicate service
+   owners, missing/invalid IDs and hashes, and stopped data-owner classification
+   on the unchanged promoter. Preserve changed/unchanged, bind-drift and render
+   failure controls. Use injected fake Docker and isolated temporary files only.
+2. In the existing `scripts/promote.sh` shadow step, request full IDs, group all
+   observations before classification, reject ambiguous identities and hashes,
+   then distinguish stopped, unchanged and changed data owners. Preserve the
+   managed/out-of-chain exclusions, bind drift, sorted output and zero effects.
+3. Run the affected script harness and existing promoter contracts, source shell
+   checks and document checks. Complete the normal exact-tree gate, independent
+   review and protected publication. No extra image/runtime/lease is authorized.
+4. After the coordinator's normal update contains this correction, inspect the
+   actual saved shadow report and exact container identities. Record unknowns
+   and fixture-vs-live limits. Keep D4 and D6 acceptance obligations separate.
+
+Acceptance, quoted from BI-BD708C80:
+
+- AC-S1: Duplicate service owners, missing/invalid full IDs, or missing/invalid config hashes on running observations never produce wouldRecreate or dataOwnerChanged candidates; report failed/degraded with service evidence.
+- AC-S2: A uniquely observed stopped data owner is skippedStopped; a uniquely observed unchanged running data owner is unchanged, and only qualified changed running data owners enter dataOwnerChanged.
+- AC-S3: Shadow classification makes no runtime changes and retains managed/out-of-chain exclusions, bindDrift, deterministic output and explicit render/inspection failure.
+
+Rollback reverts this report-only correction. It must not recreate or clean up
+any service, weaken runtime ownership checks, or change the D3 shadow policy.
