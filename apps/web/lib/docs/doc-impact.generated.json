@@ -482,8 +482,7 @@
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/components/shell/SectionNav.tsx": [
-      "docs/architecture/section-navigation.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/section-navigation.md"
     ],
     "apps/web/components/shell/shell-action-result-contract.test.tsx": [
       "docs/platform-usability-standards.md"
@@ -544,7 +543,6 @@
     ],
     "apps/web/instrumentation.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/maintenance/staleness-report.md",
       "docs/testing/ci-evidence.md"
     ],
     "apps/web/lib/actions/agent-task-scheduler.ts": [
@@ -709,8 +707,7 @@
       "docs/operations/build-cost-flags-activation-runbook.md"
     ],
     "apps/web/lib/build/claude-dispatch.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/build/coding-agent.ts": [
       "docs/architecture/build-gate-runbook.md",
@@ -825,7 +822,8 @@
       "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/datetime.ts": [
-      "docs/architecture/data-model-stewardship-runbook.md"
+      "docs/architecture/data-model-stewardship-runbook.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/decision-perspective/build-studio-gate.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1133,8 +1131,7 @@
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
     ],
     "apps/web/lib/marketing/scheduler.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/marketing/utm.ts": [
       "docs/architecture/unified-connector-kernel.md"
@@ -1235,8 +1232,7 @@
       "docs/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do.md"
     ],
     "apps/web/lib/navigation/section-nav-model.ts": [
-      "docs/architecture/section-navigation.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/section-navigation.md"
     ],
     "apps/web/lib/nonprod/environment-lease-overseer.ts": [
       "docs/architecture/build-gate-runbook.md"
@@ -1370,7 +1366,8 @@
       "docs/specs/device-identification-and-portfolio-placement-spec.md"
     ],
     "apps/web/lib/queue/functions/index.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/queue/functions/quiescence-run.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
@@ -1412,8 +1409,7 @@
       "docs/architecture/agent-client-capability-parity.md"
     ],
     "apps/web/lib/routing/chat-adapter.ts": [
-      "docs/design/golden-triangle-design.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/design/golden-triangle-design.md"
     ],
     "apps/web/lib/routing/chat-message-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1422,7 +1418,8 @@
       "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
     ],
     "apps/web/lib/routing/cost-ranking.ts": [
-      "docs/design/golden-triangle-design.md"
+      "docs/design/golden-triangle-design.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/routing/fallback.ts": [
       "docs/architecture/context-engineering-standards.md",
@@ -1510,8 +1507,7 @@
       "docs/architecture/background-operation-observation-contract.md"
     ],
     "apps/web/lib/shared/action-result.ts": [
-      "docs/architecture/data-model-stewardship-runbook.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/data-model-stewardship-runbook.md"
     ],
     "apps/web/lib/shared/coerce.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
@@ -1526,7 +1522,8 @@
       "docs/user-guide/workspace/supported-file-formats.md"
     ],
     "apps/web/lib/shared/markdown.ts": [
-      "docs/architecture/data-model-stewardship-runbook.md"
+      "docs/architecture/data-model-stewardship-runbook.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/shared/office-conversion.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
@@ -1564,9 +1561,7 @@
       "docs/prompts/a2a-coworker-substrate-prompt.md"
     ],
     "apps/web/lib/tak/agent-grants.ts": [
-      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
-      "docs/architecture/agent-standards-dpf-conformance.md",
-      "docs/architecture/contributor-procedure-runbook.md"
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/tak/agent-routing.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1628,6 +1623,7 @@
     ],
     "apps/web/lib/tak/scheduled-task-runs.ts": [
       "docs/architecture/gated-permissions-process.md",
+      "docs/maintenance/staleness-report.md",
       "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/tak/tool-intent.ts": [
@@ -1697,7 +1693,8 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
     "apps/web/lib/work-capsules/governed-work-claim.ts": [
-      "docs/architecture/initiative-readiness-runbook.md"
+      "docs/architecture/initiative-readiness-runbook.md",
+      "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/work-capsules/scope-claim-lease.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -1725,8 +1722,7 @@
       "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/human-accountability.ts": [
-      "docs/architecture/workroom-vocabulary-boundary.md",
-      "docs/maintenance/staleness-report.md"
+      "docs/architecture/workroom-vocabulary-boundary.md"
     ],
     "apps/web/lib/work-management/room-ai-spend.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -2811,6 +2807,8 @@
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
+      "docs/architecture/context-engineering-standards.md",
+      "docs/maintenance/gate-cost-inventory-2026-11.md",
       "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/compose-safety.mjs": [
@@ -3461,7 +3459,6 @@
       "apps/web/lib/mcp/tool-tier.ts",
       "apps/web/lib/performance/business-analysis-watch-run.ts",
       "apps/web/lib/tak/agent-card-service.ts",
-      "apps/web/lib/tak/agent-grants.ts",
       "apps/web/lib/tak/agent-routing.ts",
       "apps/web/lib/tak/context-arbitrator.ts",
       "apps/web/lib/tak/context-economy-metrics.ts",
@@ -3622,12 +3619,12 @@
       "apps/web/lib/tool-description-hygiene.test.ts",
       "packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs",
       "scripts/check-instruction-plane-size.mjs",
-      "scripts/gate-worktree.mjs"
+      "scripts/gate-worktree.mjs",
+      "scripts/lib/ci-policy-guards.mjs"
     ],
     "docs/architecture/contributor-procedure-runbook.md": [
       "apps/web/lib/actions/coworker-tool-filter.ts",
       "apps/web/lib/backlog.ts",
-      "apps/web/lib/tak/agent-grants.ts",
       "packages/db/data/approved_tools_registry.json",
       "packages/db/src/agent-identity.test.ts",
       "packages/db/src/agent-identity.ts",
@@ -4255,22 +4252,21 @@
       "apps/web/lib/inference/budget-gate.ts",
       "config/merge-readiness-policy.json",
       "scripts/check-guards.mjs",
-      "scripts/guard-declarations.json"
+      "scripts/guard-declarations.json",
+      "scripts/lib/ci-policy-guards.mjs"
     ],
     "docs/maintenance/staleness-coverage.md": [
       "scripts/measure-doc-staleness-coverage.mjs"
     ],
     "docs/maintenance/staleness-report.md": [
       "apps/mobile/eas.json",
-      "apps/web/components/shell/SectionNav.tsx",
-      "apps/web/instrumentation.ts",
-      "apps/web/lib/build/claude-dispatch.ts",
+      "apps/web/lib/datetime.ts",
       "apps/web/lib/inference/routed-inference.ts",
-      "apps/web/lib/marketing/scheduler.ts",
-      "apps/web/lib/navigation/section-nav-model.ts",
-      "apps/web/lib/routing/chat-adapter.ts",
-      "apps/web/lib/shared/action-result.ts",
-      "apps/web/lib/work-management/human-accountability.ts",
+      "apps/web/lib/queue/functions/index.ts",
+      "apps/web/lib/routing/cost-ranking.ts",
+      "apps/web/lib/shared/markdown.ts",
+      "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-capsules/governed-work-claim.ts",
       "docker-compose.edge.macvlan.yml",
       "packages/db/prisma/schema/ai-coworker.prisma",
       "packages/db/prisma/schema/work-coordination.prisma",
