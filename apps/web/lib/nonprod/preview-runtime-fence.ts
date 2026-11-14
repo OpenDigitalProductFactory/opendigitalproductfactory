@@ -31,13 +31,17 @@ const TERMINAL = new Set(["expired", "released", "cancelled"]);
 const date = (value: unknown): value is Date => value instanceof Date && Number.isFinite(value.getTime());
 
 /** A clock observation is not expiry authority. Only the existing committed,
- * serialized terminal transition can authorize this independent cleanup. */
-function terminalPreview(lease: LeaseRow, now: Date): string | null {
+ * serialized terminal transition can authorize this independent cleanup.
+ * firstAdmittedAt is an immutable database-clock witness, while admittedAt,
+ * releasedAt and the observer use application clocks. Their ordering is not
+ * authority (including across clock rollback). Only expiry couples its recorded
+ * deadline and terminal time: the locked producer selects expiresAt <= now and
+ * writes that same now as releasedAt. Keep that producer-established invariant. */
+function terminalPreview(lease: LeaseRow): string | null {
   if (!TERMINAL.has(lease.status) || lease.activeKey !== null || !date(lease.releasedAt)
-    || lease.releasedAt > now || !date(lease.expiresAt)
+    || !date(lease.expiresAt)
     || (lease.status === "expired" && lease.expiresAt > lease.releasedAt)
     || lease.admissionHistoryVersion !== 1 || !date(lease.firstAdmittedAt) || !date(lease.admittedAt)
-    || lease.firstAdmittedAt > lease.admittedAt || lease.admittedAt > lease.releasedAt
     || !["local-integration-ci", "active-candidate"].includes(lease.environmentKey)
     || !lease.claimKey || isImmutableGateClaimKey(lease.claimKey)
     || lease.slotManifestVersion !== null || lease.buildId !== null
@@ -133,7 +137,7 @@ export async function fenceEndedPreviewRuntimes(deps: Dependencies = {}): Promis
       leaseId = before.Config?.Labels?.["dpf.preview.lease"];
       if (!leaseId || !/^NPEL-[A-Z0-9]+$/.test(leaseId)) { add({ containerId: id, state: "held", reason: "lease-unverified" }); continue; }
       const lease = await readLease(leaseId);
-      const sha = lease && terminalPreview(lease, passNow);
+      const sha = lease && terminalPreview(lease);
       if (!lease || !sha) { add({ containerId: id, leaseId, state: "held", reason: "not-terminal-preview" }); continue; }
       if (!containerMatches(before, id, project, lease, sha, operatingSystem, before.State?.Running === true)) {
         add({ containerId: id, leaseId, state: "held", reason: "container-binding-unverified" }); continue;
@@ -150,7 +154,7 @@ export async function fenceEndedPreviewRuntimes(deps: Dependencies = {}): Promis
         add({ containerId: id, leaseId, state: "held", reason: "source-owner-unverified" }); continue;
       }
       const current = await readLease(leaseId);
-      if (!current || !terminalPreview(current, passNow) || !sameBinding(current, lease)) {
+      if (!current || !terminalPreview(current) || !sameBinding(current, lease)) {
         add({ containerId: id, leaseId, state: "held", reason: "lease-changed" }); continue;
       }
       // Non-gate terminality cannot be renewed/reclaimed. Labels and mounts

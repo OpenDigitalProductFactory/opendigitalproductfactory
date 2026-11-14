@@ -5,9 +5,12 @@
 //   scoped tests recorded as evidence -> failure analysis citing that evidence.
 // Every stop is a named status recorded on the build, never a silent pass.
 
-import type { FailureVerificationEvidence } from "@/lib/change-review/failure-analysis";
+import type { FailureAnalysisIdentity, FailureVerificationEvidence } from "@/lib/change-review/failure-analysis";
 import type { SandboxTestResult } from "./coding-agent";
-import { authorFailureAnalysis, authorGateDecisions, trailerKeysForFailedGuards, type UnmitigatedRisk } from "./finalize-stage";
+import {
+  authorFailureAnalysis, authorGateDecisions, trailerKeysForFailedGuards,
+  type RiskAcceptanceOutcome, type UnmitigatedRisk,
+} from "./finalize-stage";
 import type { GauntletRun } from "./sandbox/run-and-record-gauntlet";
 import { classifyScopedTestResult } from "./scoped-test-failure";
 
@@ -39,6 +42,14 @@ export type FinalizeDeps = {
    * failing tests 500 times).
    */
   priorTestsFailure?: () => Promise<ScopedTestsFailure | null>;
+  /**
+   * BI-09FB398D: decide the risks the analysis places outside this change
+   * through the escalation gate, recording each acceptance in this Workroom.
+   */
+  acceptOutOfScopeRisks?: (
+    risks: UnmitigatedRisk[],
+    context: { identity: FailureAnalysisIdentity; workroomId: string },
+  ) => Promise<RiskAcceptanceOutcome>;
 };
 
 /** A confirmed scoped-test failure, bound to the tree it ran on and its record. */
@@ -64,7 +75,8 @@ export type FinalizeOutcome =
   | { status: "tests-not-run"; reason: string }
   | { status: "evidence-unresolvable"; resolved: number }
   | { status: "analysis-invalid"; reasons: string[] }
-  | { status: "risk-blocked"; risks: UnmitigatedRisk[]; treeSha: string };
+  | { status: "risk-blocked"; risks: UnmitigatedRisk[]; treeSha: string }
+  | { status: "risk-needs-owner"; risks: UnmitigatedRisk[]; treeSha: string };
 
 /**
  * The semantic review needs the failure analysis only a finished finalize
@@ -164,15 +176,18 @@ export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps
     return done(deps, buildId, { status: "evidence-unresolvable", resolved: evidence.length });
   }
 
+  const identity = { capsuleId: room.capsuleId, headTreeHash: gauntlet.binding.headTreeHash, diffDigest: gauntlet.binding.diffDigest };
+  const accept = deps.acceptOutOfScopeRisks;
   const analysis = await authorFailureAnalysis({
     llm: deps.llm,
-    identity: { capsuleId: room.capsuleId, headTreeHash: gauntlet.binding.headTreeHash, diffDigest: gauntlet.binding.diffDigest },
+    identity,
     designReference: await deps.designReference(),
     evidence,
     diffSummary: captured.changedFiles.join("\n"),
+    acceptOutOfScopeRisks: accept ? (risks) => accept(risks, { identity, workroomId: room.id }) : undefined,
   });
-  if (analysis.kind === "risk-blocked") {
-    return done(deps, buildId, { status: "risk-blocked", risks: analysis.risks, treeSha: gauntlet.binding.headTreeHash });
+  if (analysis.kind === "risk-blocked" || analysis.kind === "risk-needs-owner") {
+    return done(deps, buildId, { status: analysis.kind, risks: analysis.risks, treeSha: gauntlet.binding.headTreeHash });
   }
   if (analysis.kind !== "ok") return done(deps, buildId, { status: "analysis-invalid", reasons: analysis.reasons });
   await deps.saveFailureAnalysis(analysis.failureAnalysis);

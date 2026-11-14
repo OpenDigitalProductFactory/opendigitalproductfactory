@@ -17,14 +17,17 @@
 //        escalation responder (BI-0ACD9AB2 §5.2), NOT generic-projected into a
 //        BI: the responder consults WWMD/WWWD/WSID and escalates only the
 //        residue a human truly needs, so the signal is received, not drowned;
-//     3. FREE the WIP slot — mark the build abandoned (wip-cap counts only
-//        abandonedAt-null builds), so the jam clears;
+//     3. FREE the WIP slot — PARK the build on its owner (BI-B6894001): set
+//        waitingOnOwnerSince and keep its real phase, design and review.
+//        ACTIVE_BUILD_WHERE (wip-cap.ts) excludes a parked build from WIP and
+//        every autonomous sweep, so the jam clears without destroying the work
+//        the owner is being asked about. Clearing the column resumes it;
 //     4. RE-QUEUE without re-stalling — park the originating backlog item as
 //        "deferred" (not "open", which would just auto-re-promote into the same
 //        stall) so the work is never lost but waits for a human. That park is
 //        ATTRIBUTABLE: reason, trigger, review date and accountable owner, plus
-//        a status_change row on the ITEM (not only a BuildActivity on the build
-//        being abandoned). Without those four fields the item does not wait for
+//        a status_change row on the ITEM (not only a BuildActivity on the
+//        parked build). Without those four fields the item does not wait for
 //        a human, it disappears from every sweep that would surface it — which
 //        is what happened to seven items including BI-F0715C9C (BI-9DA5F179).
 //
@@ -38,7 +41,6 @@
 // WIP free-up.
 
 import { prisma } from "@dpf/db";
-import { randomUUID } from "node:crypto";
 import {
   decideOwnerAttentionRoute,
   fileOwnerAttentionRoute,
@@ -119,10 +121,10 @@ export function formatEscalationReport(args: {
     `Self-fix feasibility: ${selfFixClass}\n\n` +
     `What was attempted:\n${roundsAttempted}\n\n` +
     `Unresolved blocking issues (root cause):\n${issueLines}${overflow}\n\n` +
-    `The build's WIP slot has been freed (build marked abandoned) and the ` +
-    `originating backlog item parked as "deferred" so the work is not lost — ` +
-    `it awaits an owner (or reseller/partner) before it is re-promoted. ` +
-    `(BI-3E0EE3BA)`;
+    `The build is waiting on you: it keeps its phase, design and review, and ` +
+    `its WIP slot has been freed. The originating backlog item is parked as ` +
+    `"deferred" so the work is not lost — it awaits an owner (or ` +
+    `reseller/partner) before it is re-promoted. (BI-3E0EE3BA, BI-B6894001)`;
 
   return { title, description };
 }
@@ -313,23 +315,25 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
     return { reportId: routed.reportId, wipFreed: false, backlogItemDeferred: false, route: decision.route };
   }
 
-  // One phase writer for both existing and version-guarded escalation. The
-  // caller supplies the fence and reason; the terminal transition stays shared.
-  const abandonBuild = (where: { buildId: string; phase?: string; abandonedAt?: null; updatedAt?: Date }, abandonReason: string) =>
+  // One park writer for both existing and version-guarded escalation
+  // (BI-B6894001). Parking keeps the build's phase, design and review; it only
+  // marks the build as waiting on its owner, which ACTIVE_BUILD_WHERE excludes
+  // from WIP and from every sweep. The reason lives on the activity trail and
+  // the owner report, not on the build row.
+  const parkBuild = (where: { buildId: string; phase?: string; abandonedAt: null; waitingOnOwnerSince?: null; updatedAt?: Date }) =>
     prisma.featureBuild.updateMany({
       where,
-      data: { phase: "abandoned", abandonedAt: now, updatedAt: now, abandonReason },
+      data: { waitingOnOwnerSince: now, updatedAt: now },
     });
 
   // Claim the reviewed source atomically before filing an owner question or
   // deferring work. A read followed by an unconditional write loses edits.
   let guardedWipFreed = false;
   if (args.expectedUpdatedAt !== undefined) {
-    const abandonReason = `Escalated after ${rounds} self-repair round(s) at ${phase} review (${selfFixClass}). Freed a Build Studio WIP slot. (BI-3E0EE3BA; claim ${randomUUID()})`;
     try {
       const expected = new Date(args.expectedUpdatedAt);
       if (!Number.isFinite(expected.getTime())) throw new Error("Invalid expected build version");
-      const claimed = await abandonBuild({ buildId, phase, abandonedAt: null, updatedAt: expected }, abandonReason);
+      const claimed = await parkBuild({ buildId, phase, abandonedAt: null, waitingOnOwnerSince: null, updatedAt: expected });
       if (claimed.count !== 1) {
         await safeLog("Escalation stopped: the reviewed build changed; newer work is preserved.");
         return { reportId: null, wipFreed: false, backlogItemDeferred: false, route: decision.route };
@@ -337,13 +341,14 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
       guardedWipFreed = true;
     } catch (err) {
       // An acknowledgement can be lost after commit. Only this attempt's
-      // retained marker proves its transition; an unchanged or unreadable row
-      // cannot prove that a still-settling transaction had no effects.
+      // retained marker proves its transition: the exact park instant written
+      // by this attempt, on the phase it claimed. An unchanged or unreadable
+      // row cannot prove that a still-settling transaction had no effects.
       const current = await prisma.featureBuild.findUnique({
-        where: { buildId }, select: { phase: true, abandonedAt: true, abandonReason: true },
+        where: { buildId }, select: { phase: true, abandonedAt: true, waitingOnOwnerSince: true },
       }).catch(() => null);
-      if (current?.phase === "abandoned" && current.abandonedAt?.getTime() === now.getTime()
-        && current.abandonReason === abandonReason) {
+      if (current && !current.abandonedAt && current.phase === phase
+        && current.waitingOnOwnerSince?.getTime() === now.getTime()) {
         guardedWipFreed = true;
         await safeLog("Escalation acknowledgement was lost; the exact saved transition was reconciled.");
       } else {
@@ -356,8 +361,7 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
   // 1. CAPTURE + RAISE + NOTIFY — through the seam, which files the owner
   //    report with its damaging reason and rings the owner's bell. The report is
   //    born in awaiting_escalation_ack and held, not generic-projected. The
-  //    notification points at the durable report, not at the build that step 2
-  //    abandons (BI-B6894001). Best-effort: a duplicate (per-dedupeKey "one
+  //    notification points at the durable report (BI-B6894001). Best-effort: a duplicate (per-dedupeKey "one
   //    non-resolved report") or any failure must not stop WIP free-up. The
   //    owner it notifies is also the principal accountable for the parked item
   //    below; two answers to "who owns this escalation" would be a bug.
@@ -368,30 +372,25 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
   }
   const operatorUserId = filed.ownerUserId;
 
-  // 2. FREE WIP — mark the build abandoned (mirrors the inert-build reaper). The
-  //    WIP cap counts only abandonedAt-null builds, so this clears the slot.
+  // 2. FREE WIP — park the build on its owner (BI-B6894001). ACTIVE_BUILD_WHERE
+  //    excludes a parked build from WIP, so this clears the slot without
+  //    abandoning the build: its phase, design, review and worktree survive,
+  //    and dependents keep reading a live sibling. The phase run that ended in
+  //    this escalation is closed so it does not read as work in flight.
   let wipFreed = guardedWipFreed;
   try {
     if (!guardedWipFreed) {
-      const claimed = await abandonBuild({ buildId },
-          `Escalated to the owner after ${rounds} self-repair round(s) at ${phase} review ` +
-          `(${selfFixClass})${reportId ? `; tracked as ${reportId}` : ""}. ` +
-          `Freed a Build Studio WIP slot. (BI-3E0EE3BA)`);
-      if (claimed.count !== 1) throw new Error("Build not found while freeing escalation WIP");
+      const claimed = await parkBuild({ buildId, abandonedAt: null });
+      if (claimed.count !== 1) throw new Error("Build not found (or already abandoned) while parking it on the owner");
     }
     wipFreed = true;
     await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { now });
-    // BI-8BD61C30: tear down isolation worktree when escalating (same as self-abandon).
-    const { releaseSandboxForTerminalBuild } = await import(
-      "@/lib/build/sandbox/sandbox-build-gc"
-    );
-    await releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }).catch(() => {});
   } catch (err) {
-    await safeLog(`Failed to abandon build to free WIP: ${String(err)}`.slice(0, 300));
+    await safeLog(`Failed to park build on the owner to free WIP: ${String(err)}`.slice(0, 300));
   }
 
   // 3. RE-QUEUE WITHOUT RE-STALLING — park the originating item as "deferred"
-  //    and detach the (now-abandoned) build so it is not auto-re-promoted into
+  //    and detach the (now parked) build so it is not auto-re-promoted into
   //    the same stall. A human re-opens it once the escalation is resolved.
   let backlogItemDeferred = false;
   if (originatingBacklogItemId) {
@@ -462,14 +461,15 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
         tool: "build:escalate-human",
         summary:
           `Escalated to the owner (${selfFixClass}) after ${rounds} self-repair round(s) at ${phase} review` +
-          `${reportId ? ` — ${reportId}` : ""}. WIP freed; backlog item parked.`,
+          `${reportId ? ` — ${reportId}` : ""}. Build parked waiting on the owner in ${phase}; ` +
+          `WIP freed; backlog item parked. Clearing the park resumes it. (BI-B6894001)`,
       },
     });
   } catch { /* audit is best-effort */ }
 
   await safeLog(
     `Escalated to the owner: ${selfFixClass}${reportId ? ` (${reportId})` : ""}. ` +
-    `WIP slot freed${backlogItemDeferred ? "; backlog item parked as deferred" : ""}.`,
+    `Build parked waiting on the owner; WIP slot freed${backlogItemDeferred ? "; backlog item parked as deferred" : ""}.`,
   );
 
   return { reportId, wipFreed, backlogItemDeferred, route: decision.route };

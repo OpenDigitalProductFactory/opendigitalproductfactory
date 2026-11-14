@@ -49,6 +49,22 @@ const balancePolicySchema = {
 
 const definitions: ToolDefinition[] = [
   {
+    name: "read_platform_funding_setup",
+    description: "Read explicit initial platform ownership setup for the authenticated person. Lists only that person's accountable organizations, the exact current-state confirmation digest and prospective allocation. No owner or allocation is inferred or changed.",
+    inputSchema: { type: "object", additionalProperties: false, properties: { afterOrganizationId: { type: ["string", "null"] } }, required: [] },
+    requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: false,
+  },
+  {
+    name: "confirm_platform_funding_owner",
+    description: "Confirm initial platform policy AND funding ownership for the authenticated person and chosen accountable organization. Requires a fresh read's exact digest, explicit attestation and reason. An agent requires the same person's actual human approval. Existing, partial or conflicting ownership cannot be replaced. Allocation history and policy ratification are unchanged.",
+    inputSchema: {
+      type: "object", additionalProperties: false,
+      properties: { organizationId: { type: "string", minLength: 1 }, expectedDigest: { type: "string", minLength: 1 }, attestation: { type: "boolean", const: true }, reason: { type: "string", minLength: 1 } },
+      required: ["organizationId", "expectedDigest", "attestation", "reason"],
+    },
+    requiredCapability: "manage_platform", sideEffect: true, consequence: "authority",
+  },
+  {
     name: "get_investment_balance",
     description: "Read your funding scope's cumulative refactor/new target, revision and measured token coverage. Founder shared platform defaults to 80% refactor; organization/archetype work defaults to 20%. Unobserved external spending is not estimated. Requires the recorded funding owner; an admin role does not substitute.",
     inputSchema: { type: "object", properties: { scope: fundingScopeSchema }, required: ["scope"] },
@@ -313,10 +329,29 @@ async function investmentHandler(operation: "read" | "save" | "bind", params: Re
   return { success: true, message: "Investment allocation loaded.", data: resolved.data };
 }
 
+async function fundingSetupHandler(operation: "read" | "confirm", params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  const { readPlatformFundingSetup, confirmPlatformFundingOwner } = await import("@/lib/portfolio/platform-funding-setup");
+  if (operation === "read") {
+    const cursor = params.afterOrganizationId;
+    if (!(cursor === undefined || cursor === null || typeof cursor === "string"))
+      return { success: false, error: "invalid-funding-setup-input", message: "Choose a valid organization page." };
+    const result = await readPlatformFundingSetup(prisma, { userId, afterOrganizationId: cursor });
+    return result.ok ? { success: true, message: "Platform ownership setup loaded.", data: result.data }
+      : { success: false, error: result.error, message: "Platform ownership setup is unavailable." };
+  }
+  // Preserve exact inputs: the shared service verifies the server-reserved
+  // human approval against this original payload, never caller-added identity.
+  const result = await confirmPlatformFundingOwner(prisma, { userId, params, context });
+  return result.ok ? { success: true, message: "Platform ownership recorded.", data: result.data }
+    : { success: false, error: result.error, message: "Platform ownership was not changed. Reload the current setup before confirming." };
+}
+
 export const portfolioBudgetPack: ToolPack = {
   packId: "portfolio-budget",
   definitions,
   handlers: {
+    read_platform_funding_setup: (params, userId) => fundingSetupHandler("read", params, userId),
+    confirm_platform_funding_owner: (params, userId, context) => fundingSetupHandler("confirm", params, userId, context),
     get_investment_balance: (params, userId) => investmentHandler("read", params, userId),
     set_investment_balance: (params, userId) => investmentHandler("save", params, userId),
     bind_investment_funding: (params, userId, context) => investmentHandler("bind", params, userId, context),
@@ -327,6 +362,8 @@ export const portfolioBudgetPack: ToolPack = {
     set_portfolio_owner: (params, userId) => setPortfolioOwnerHandler(params, userId),
   },
   grants: {
+    read_platform_funding_setup: ["admin_read"],
+    confirm_platform_funding_owner: ["admin_write"],
     get_investment_balance: ["backlog_read"],
     set_investment_balance: ["backlog_write"],
     bind_investment_funding: ["backlog_write"],

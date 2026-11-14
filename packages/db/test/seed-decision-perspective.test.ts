@@ -24,6 +24,65 @@ describe("buildDecisionPerspectiveSeed", () => {
 });
 
 describe("seedDecisionPerspective", () => {
+  it.each([null, "confirmed-owner-principal"])("preserves confirmed runtime ownership and the existing version promoter %j across reseeds", async (promotedByPrincipalId) => {
+    // Apply the real seed's writes to stored rows, including SQL-like null
+    // defaults. This checks the resulting state, not just the requested shape.
+    let profile: Record<string, unknown> | null = null;
+    let version: Record<string, unknown> | null = null;
+    const stored = (row: Record<string, unknown> | null) => {
+      if (!row) throw new Error("The initial seed must have created its stored row.");
+      return row;
+    };
+    const materials = new Map<string, Record<string, unknown>>();
+    type Upsert = { where: Record<string, string>; update: Record<string, unknown>; create: Record<string, unknown> };
+    const db = {
+      decisionPerspectiveProfile: {
+        findUnique: vi.fn(async () => structuredClone(profile)),
+        upsert: vi.fn(async ({ update, create }: Upsert) => {
+          profile = profile ? { ...profile, ...structuredClone(update) }
+            : { ownerPrincipalId: null, ownerOrganizationId: null, currentVersionId: null, ...structuredClone(create) };
+          return profile;
+        }),
+        update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+          if (!profile) throw new Error("The profile must exist before selecting its current version.");
+          profile = { ...profile, ...structuredClone(data) };
+          return profile;
+        }),
+      },
+      decisionPerspectiveProfileVersion: {
+        upsert: vi.fn(async ({ update, create }: Upsert) => {
+          version = version ? { ...version, ...structuredClone(update) } : { promotedByPrincipalId: null, ...structuredClone(create) };
+          return version;
+        }),
+      },
+      perspectiveMaterial: {
+        upsert: vi.fn(async ({ where, update, create }: Upsert) => {
+          const key = where.materialId!;
+          materials.set(key, structuredClone(materials.has(key) ? { ...materials.get(key), ...update } : create));
+          return materials.get(key);
+        }),
+      },
+    };
+
+    const initial = await seedDecisionPerspective(db as never);
+    expect(profile).toMatchObject({ ownerPrincipalId: null, ownerOrganizationId: null, currentVersionId: initial.versionId });
+    expect(version).toMatchObject({ promotedByPrincipalId: null });
+
+    // The supported runtime confirmation owns these FKs. Ratification is a
+    // separate fact: both an unratified and an already-ratified version survive.
+    profile = { ...stored(profile), ownerPrincipalId: "confirmed-owner-principal", ownerOrganizationId: "confirmed-owner-organization", name: "Stale seed label" };
+    version = { ...stored(version), promotedByPrincipalId, materialFingerprint: "stale-seed-material" };
+    const seed = buildDecisionPerspectiveSeed();
+    for (let pass = 0; pass < 2; pass += 1) {
+      const result = await seedDecisionPerspective(db as never);
+      expect(profile).toMatchObject({ ownerPrincipalId: "confirmed-owner-principal", ownerOrganizationId: "confirmed-owner-organization",
+        currentVersionId: initial.versionId, name: seed.profile.name });
+      expect(version).toMatchObject({ promotedByPrincipalId, materialFingerprint: seed.version.materialFingerprint });
+      expect(result.materialCount).toBe(materials.size);
+      expect(result.versionId).toBe(initial.versionId);
+    }
+  });
+
   it.each([
     null,
     { autonomyPolicy: { workroomPostureDefault: { actionBoundary: "preauthorized" } } },

@@ -41,7 +41,7 @@ import { resolveDelegatedPosture } from "@dpf/validators/workroom-policy/delegat
 import { resolveScheduledTickPlan } from "@/lib/scheduling/scheduled-work-posture.server";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
 import { getRequiredProceduralToolForScheduledTask } from "@/lib/operate/scheduled-jobs/scheduled-required-procedural-tool";
-import { assertScheduledReportingEligible, readScheduledReportingMode, scheduledReportingScopeDigest, scheduledReportingPrompt } from "@/lib/operate/scheduled-jobs/scheduled-reporting-contract";
+import { projectScheduledReportDiagnostic, assertScheduledReportingEligible, readScheduledReportingMode, scheduledReportingScopeDigest, scheduledReportingPrompt } from "@/lib/operate/scheduled-jobs/scheduled-reporting-contract";
 import { settleScheduledReportingRun, failScheduledReportingRun, runScheduledReportingLoop, type ScheduledReportingRunInput } from "@/lib/operate/scheduled-jobs/scheduled-reporting-run";
 import { scheduledRunEffortWarrant } from "@/lib/tak/stage-effort-routing";
 import {
@@ -541,7 +541,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       ? await runScheduledReportingLoop([...tools, ...deferredTools], () => executeAutonomousAgenticLoop(loopInput))
       : await executeAutonomousAgenticLoop(loopInput);
     if (reportingRun) {
-      reportingRun = { ...reportingRun, content: result.content ?? "", admittedTools: [...tools, ...deferredTools], failure: result.failure };
+      reportingRun = { ...reportingRun, content: result.content ?? "", admittedTools: [...tools, ...deferredTools], failure: result.failure, diagnostic: projectScheduledReportDiagnostic("readEvidenceInspection" in result ? result.readEvidenceInspection : undefined) };
       await settleScheduledReportingRun(reportingRun);
       return;
     }
