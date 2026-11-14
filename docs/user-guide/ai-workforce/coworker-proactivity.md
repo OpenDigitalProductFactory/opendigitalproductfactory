@@ -167,6 +167,13 @@ completed report. A provider that cannot enforce the limited access leaves the
 run unverified. Ask a coworker to configure the paused watch, then resume the
 same watch through its existing controls.
 
+For a failed history report, ask a coworker to inspect the exact run. The
+owner-bound diagnostic distinguishes an oversized report, invalid JSON and an
+invalid report contract. It retains only a fixed category, content digest, byte
+count and redaction/truncation flags; private report text and rejected values
+are excluded. Older runs without this record say it was not retained. A format
+check does not prove that observations succeeded or authorize another execution.
+
 Changing the watch's action boundary is a governed configuration choice. Its
 reports then go to history under that choice; existing data and action
 permissions still apply. Pausing stops future runs and keeps the history.

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const core = vi.hoisted(() => ({
   scheduleAgentTaskFor: vi.fn(),
   getScheduledAgentTasksFor: vi.fn(),
+  getScheduledReportDiagnosticFor: vi.fn(),
   cancelAgentTaskFor: vi.fn(),
   setAgentTaskActiveFor: vi.fn(),
   rerunAgentTaskFor: vi.fn(),
@@ -283,4 +284,17 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
       "agent-task-1",
     );
   });
+});
+
+it("reads an exact bounded report diagnostic using the authenticated owner and no prompt list",async()=>{
+ core.getScheduledReportDiagnosticFor.mockResolvedValue({taskId:"watch",taskRunId:"TR-OLD",retention:"not-retained"});
+ const reportDiagnostic={taskRunId:"TR-OLD",expectedRevision:"a".repeat(64)};
+ const result=await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({taskId:"watch",reportDiagnostic},"owner");
+ expect(result.success).toBe(true);
+ expect(core.getScheduledReportDiagnosticFor).toHaveBeenCalledWith("owner","watch",reportDiagnostic);
+ expect(core.getScheduledAgentTasksFor).not.toHaveBeenCalled();
+});
+it.each([{reportDiagnostic:{}},{taskId:"watch",reportDiagnostic:{taskRunId:"TR-X",expectedRevision:"invalid"}},{taskId:"watch",reportDiagnostic:{taskRunId:"TR-X",expectedRevision:"a".repeat(64),raw:true}}])("never broadens invalid diagnostics into task listings %j",async params=>{
+ const result=await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks(params,"owner");
+ expect(result.success).toBe(false);expect(core.getScheduledAgentTasksFor).not.toHaveBeenCalled();
 });

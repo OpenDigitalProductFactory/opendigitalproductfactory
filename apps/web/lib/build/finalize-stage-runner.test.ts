@@ -190,6 +190,37 @@ describe("an unmitigated risk ends finalize as a verdict", () => {
     expect(out).toMatchObject({ status: "risk-blocked", treeSha: binding.headTreeHash, risks: [{ key: "bad-tier", disposition: "blocked" }] });
     expect(d.saved).toHaveLength(0);
   });
+  // BI-09FB398D: a risk outside the change goes to the escalation gate with
+  // the gated identity and room; an accepted one lets finalize finish.
+  const deferred = narrative.replace('"disposition":"mitigated"', '"disposition":"deferred"');
+  const llmWith = (analysis: string) => vi.fn(async (prompt: string) => prompt.includes("gate decisions")
+    ? "Docs-Impact-Decision: internal seed validation, no user-visible change\nSeed-Fit-Decision: global-default"
+    : analysis);
+
+  it("hands out-of-scope risks to the gate with this change's identity, and saves the accepted analysis", async () => {
+    const accept = vi.fn(async (risks: Array<{ key: string }>, ctx: { identity: { capsuleId: string; headTreeHash: string; diffDigest: string } }) => ({
+      accepted: risks.map((r) => ({
+        key: r.key, followUpReference: "PIR-OWNER", note: "Accepted under WWMD; PIR-OWNER owns it.",
+        authority: { id: "act-1", kind: "risk-acceptance" as const, ...ctx.identity, status: "accepted", expected: "WWMD", observed: "decided",
+          completedAt: "2026-11-14T10:00:00Z", scenarioKey: r.key, followUpReference: "PIR-OWNER" },
+      })),
+      owner: [], unaccepted: [],
+    }));
+    const d = deps({ llm: llmWith(deferred), acceptOutOfScopeRisks: accept });
+    const out = await runBuildStudioFinalize("FB-837ACE25", d);
+    expect(accept).toHaveBeenCalledWith([expect.objectContaining({ key: "bad-tier" })], {
+      identity: { capsuleId: "WC-1E7C7DC8", headTreeHash: binding.headTreeHash, diffDigest: binding.diffDigest }, workroomId: "room-row",
+    });
+    expect(out.status).toBe("ready");
+    expect(d.saved[0]).toMatchObject({ scenarios: [{ residualRisk: { disposition: "accepted", authorityEvidenceId: "act-1", followUpReference: "PIR-OWNER" } }] });
+  });
+
+  it("ends risk-needs-owner for a damaging out-of-scope risk and saves nothing", async () => {
+    const d = deps({ llm: llmWith(deferred), acceptOutOfScopeRisks: vi.fn(async (risks) => ({ accepted: [], owner: risks, unaccepted: [] })) });
+    const out = await runBuildStudioFinalize("FB-837ACE25", d);
+    expect(out).toMatchObject({ status: "risk-needs-owner", treeSha: binding.headTreeHash, risks: [{ key: "bad-tier" }] });
+    expect(d.saved).toHaveLength(0);
+  });
 });
 
 // BI-AF072BE5 (2026-10-01): FB-C36BC1AD reached review with 0 commits and
@@ -214,6 +245,7 @@ describe("finalizeAllowsSemanticReview", () => {
       { status: "tests-failed", failure: "tests", failingTests: ["a"], recordId: "t", treeSha: "t" },
       { status: "tests-not-run", reason: "r" },
       { status: "risk-blocked", risks: [], treeSha: "t" },
+      { status: "risk-needs-owner", risks: [], treeSha: "t" },
     ];
     for (const outcome of unfinished) {
       expect(finalizeAllowsSemanticReview(outcome)).toBe(false);

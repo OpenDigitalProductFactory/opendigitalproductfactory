@@ -152,13 +152,26 @@ uses the heartbeat lifetime (two minutes by default, at most twenty), while
 preserves the original `DPF_DEV_PORTAL_WAIT_DEADLINE`; it neither substitutes the
 short returned lease expiry nor extends the admission deadline on each resume.
 
-WWMD DI-E1203C00715D supports ordinary cleanup only for a verified principal and
-its exact owning session. Current leases lack principal provenance, so their
-release remains an authority action requiring approval. Report the exact lease
-and owning session and the returned approval link; never suppress the request.
-The existing Concierge envelope-expiry sweep settles lapsed proposed/approved
-requests using the envelope state machine. It does not silently approve or replay
-them. Restricted connections never receive grants from the client.
+WWMD DI-E1203C00715D supports ordinary cleanup for a verified owner and exact
+session. The current `routineLeaseRelease` predicate uses the canonical durable
+Task provenance to release a proven own process-free reservation; already-ended
+or lapsed reservations are also routine (BI-1986D3C1, BI-88D51B8F). Unproven or
+foreign live reservations retain authority approval. Use the returned native
+classification, surface the exact lease/session/action and any approval link,
+and never suppress a justified request or infer ownership from a session string.
+The existing obsolete-release reconciliation settles only proven obsolete
+requests; Concierge envelope expiry settles lapsed proposed/approved requests
+through the state machine. Neither silently approves or replays them. Restricted
+connections never receive grants from the client.
+
+Native preview fencing consumes the database-owned admission-history witness
+without ordering it against application admission, terminal or observer clocks.
+A finite first witness and history version1 prove admission; the committed,
+irreversible terminal state and exact owner/source/full-ID recheck authorize
+cleanup. Only retain timestamp ordering guaranteed by the writer: expiry selects
+its deadline against a supplied now and records that same now as releasedAt.
+Clock offsets or rollback never substitute for a terminal decision, and unknown
+history, gate reservations and mismatched owners/containers remain held.
 
 Preview browser authentication uses `issue_ux_verification_sign_in` with the
 admitted preview lease and active verification Workroom session. The source

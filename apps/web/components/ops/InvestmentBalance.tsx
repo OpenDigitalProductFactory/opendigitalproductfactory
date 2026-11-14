@@ -10,12 +10,14 @@ import { Notice, StatusBadge } from "@/components/ui/report-kit";
 import { useT } from "@/lib/i18n/use-t";
 import { saveInvestmentBalanceAction, bindInstallationInvestmentAction } from "@/lib/actions/portfolio-budget";
 import type { OwnerInvestmentView } from "@/lib/portfolio/investment-balance-server";
+import { PlatformFundingSetup } from "./PlatformFundingSetup";
 
-export function InvestmentBalance({ views, canManage, formatLocale, nextHref, firstHref }: { views: OwnerInvestmentView[]; canManage: boolean; formatLocale?: string; nextHref?: string; firstHref?: string }) {
+export function InvestmentBalance({ views, canManage, canManageSetup = false, formatLocale, nextHref, firstHref }: { views: OwnerInvestmentView[]; canManage: boolean; canManageSetup?: boolean; formatLocale?: string; nextHref?: string; firstHref?: string }) {
   const t = useT("portfolio");
   return <section id="investment-balance" className="mt-6 space-y-4" aria-labelledby="investment-balance-heading">
     <h3 id="investment-balance-heading" className="text-dpf-title font-dpf-semibold">{t("investment.heading")}</h3>
     <p className="text-dpf-body text-dpf-text">{t("investment.intro")}</p>
+    {canManageSetup ? <PlatformFundingSetup /> : null}
     {views.length === 0 ? <p className="text-dpf-body text-dpf-text">{t("investment.empty")}</p> : null}
     {views.map((view) => <ScopeBalance key={`${view.scope.organizationId}:${view.scope.purpose}:${view.report.ok ? view.report.data.revision?.revision ?? "default" : "unavailable"}`} view={view} canManage={canManage} formatLocale={formatLocale} />)}
     {nextHref || firstHref ? <nav aria-label={t("investment.pagination")} className="flex flex-wrap gap-4 text-dpf-body text-dpf-accent">

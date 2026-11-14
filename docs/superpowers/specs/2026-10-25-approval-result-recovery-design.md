@@ -39,6 +39,59 @@ No table, migration, grant, credential, approval engine, scheduler, retry endpoi
 Additional outcome fields are additive. Existing provider-account action evidence keeps its public shape and semantics. No historical record is rewritten. Rollback is one protected source revert; it removes richer explanation without changing saved decisions.
 The raw internal evidence object remains server-only. No consumer receives messages, arguments, credentials or arbitrary result fields.
 
+## Runtime reconciliation result readback (BI-08B1B79B)
+
+This successor extends the same recorded-result contracts. It does not reopen
+BI-A83A4188 or change approval or runtime execution policy. D6
+BI-0282088D retains its original incomplete runtime acceptance.
+
+On November 14 the coordinator's original image-only request reported an
+authorized but failed approval, while both evidence readers returned
+`operation-unsupported`. Source `6b9dc5c` supports provider tests and one handoff
+refusal only. An absent local journal is not proof that nothing happened.
+Normal DESIGN admission is IRD-A00D9C0EFD55 / WC-7F3ECF54. The item retains its
+unresolved funding warning; the original D6 binding is not transferred.
+
+The existing typed projection selected by DI-D71AABE80783 remains the design.
+A generic raw-result panel would expose private data. A new transition/history
+tool would duplicate the owned-envelope boundary. Instead, reuse the exact
+bound execution selector, then admit a runtime-specific safe observation.
+
+**OBJ-ARR-1:** The owner and their currently admitted assistant can inspect the
+original runtime reconciliation without replaying it.
+**OBJ-ARR-2:** Approval, recorded operation result, durable transition and
+verified host receipt remain separate facts; missing proof stays unverified.
+
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-ARR-1 | OBJ-ARR-1 | Existing owner Inbox, exact API and caller-scoped MCP share the original reconcile-runtime evidence without raw arguments, errors or receipt payloads. |
+| AC-ARR-2 | OBJ-ARR-1, OBJ-ARR-2 | Original envelope, human, assistant, input digest, tool, thread and unique actual-execution fences remain; status receipts cannot shadow the operation. |
+| AC-ARR-3 | OBJ-ARR-2 | An exact transition read additionally checks current platform read authority, requested owner and the complete original request binding; it never selects the latest transition. |
+| AC-ARR-4 | OBJ-ARR-2 | Only closed known operation codes receive explanations. A failed approval, absent row, unsigned file absence or unverified receipt never establishes no effects, success, restoration or retry authority. |
+| AC-ARR-5 | OBJ-ARR-1, OBJ-ARR-2 | Provider and handoff behavior remains compatible; meaningful regressions cover identity drift, ambiguity, unsafe payloads, missing/conflicting transition and receipt proof. |
+| AC-ARR-6 | OBJ-ARR-1, OBJ-ARR-2 | Record protected source delivery separately from deployment and actual owner saved-result/reload verification; retain the original action uncertainty until its own proof resolves it. |
+
+CT-ARR-READ extends CT-APR-BOUND-EXEC/READ/PRESENT. The original operation may
+report a closed status or allowlisted refusal even when host proof is missing.
+The runtime observation reads only the exact bound transition under current
+`manage_platform` authority. It checks `requestedById`, original reconciliation
+baselines/intent and image-service selection before projecting a closed recorded
+status. No row, unavailable access or contradictory binding stays explicit.
+No current live-host inventory is substituted for the original result.
+
+A stored host receipt is verified with the existing historical transition
+validator, matching signed envelope and original request. Missing or rotated
+verification material, malformed or partial receipts remain unverified. Reading
+this evidence never calls the executor, startup reconciler, compensation,
+approval writer or Docker. Recorded recovery-required state is disclosed as a
+recorded requirement, never a completed restoration. No raw failure, signature,
+secret, host path or private execution data crosses this boundary.
+
+The existing result card uses short localized copy and its existing technical
+disclosure. It adds no retry/authorize control and no new destination. Schema,
+migrations, credentials, grants, host services and original records are unchanged.
+Rollback is a protected source revert, with no data rewrite.
+
 ## Ownership and investment
 BI-AFEAAA76 and BI-130120F1 are delivered predecessors. BI-038AA4BC retains broader consequence-first presentation. BI-E458A9CB owns unchanged retry parking; BI-035BE8D1 owns pre-approval preconditions; retired BI-FA22D90B did not diagnose Inbox presentation. This repair does not execute those scopes.
 Windows BI-BFDB98B6/WC-C6796FCF and transaction BI-5366EF78/WC-A4E8BC72 retain their owners and acceptance. Original uncertain reviews remain unchanged.
