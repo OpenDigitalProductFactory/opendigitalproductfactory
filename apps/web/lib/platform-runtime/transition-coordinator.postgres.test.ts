@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../../../../packages/db/generated/client/client";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
 import { computeCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 import { createRuntimeCompensationEnvelope, signTransitionPayload, validateRuntimeServiceImagePlan, type RuntimeTransitionEnvelope } from "./transition-protocol";
@@ -24,7 +24,7 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
   beforeAll(async () => {
     admin = new Pool({ connectionString: url });
     await admin.query(`CREATE SCHEMA "${schema}"`);
-    pool = new Pool({ connectionString: url, options: `-c search_path=${schema},public -c statement_timeout=5000`, max: 4 });
+    pool = new Pool({ connectionString: url, options: `-c search_path=${schema},public -c statement_timeout=5000 -c application_name=${schema}`, max: 4 });
     db = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
     for (const table of ["PlatformCapability", "RuntimeCapabilityTransition", "RuntimeCapabilityTransitionEvent", "TaskRun"]) {
       await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
@@ -117,6 +117,48 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
     } finally {
       releaseProducer();
       await producer;
+    }
+  });
+
+  it.each(["ReadCommitted", "Serializable"] as const)("does not insert a %s producer behind an uncommitted transition", async isolationLevel => {
+    const input = await imageRequest();
+    let releaseTransition!: () => void, reportTransitionReady!: () => void;
+    const hold = new Promise<void>(resolve => { releaseTransition = resolve; });
+    const ready = new Promise<void>(resolve => { reportTransitionReady = resolve; });
+    // Execute the real receipt owner against a real transaction, holding only
+    // its commit so the producer's first admission statement must contend.
+    const heldReceipts = createPrismaRuntimeTransitionReceipts({ $transaction: (callback: (tx: unknown) => Promise<unknown>, options: unknown) =>
+      db.$transaction(async tx => {
+        const result = await callback(tx);
+        reportTransitionReady();
+        await hold;
+        return result;
+      }, options as never) } as never);
+    const transition = heldReceipts.createPending(input);
+    let producer: Promise<void> | undefined, outcome: PromiseSettledResult<void> | undefined;
+    try {
+      await Promise.race([ready, transition.then(() => { throw new Error("transition finished before the commit checkpoint"); })]);
+      producer = db.$transaction(async tx => {
+        // No preceding SQL: this is the ordinary TaskRun producer's ordering.
+        await admitRuntimeGuardedWork(tx as never, "task-run:coworker");
+        await tx.taskRun.create({ data: { taskRunId: "TR-isolated-waiting-producer", userId: "fixture-owner", title: "isolated waiting producer", objective: "fixture only", source: "coworker" } });
+      }, { isolationLevel }).then(() => { outcome = { status: "fulfilled", value: undefined }; }, reason => { outcome = { status: "rejected", reason }; });
+      // Observe actual server lock contention, or an immediate safe refusal;
+      // elapsed time alone is not evidence that the producer reached the lock.
+      await vi.waitFor(async () => {
+        const observed = await admin.query("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = $1 AND wait_event = 'advisory' AND query LIKE '%runtime-capability-transition%') AS waiting", [schema]);
+        expect(observed.rows[0].waiting || outcome?.status === "rejected").toBe(true);
+      });
+      releaseTransition();
+      expect(await transition).toMatchObject({ created: true });
+      await producer;
+      expect(outcome?.status).toBe("rejected");
+      if (outcome?.status === "rejected") expect(outcome.reason?.code === "P2034"
+        || /runtime_capability_work_draining|runtime_transition_admission_busy|serializ|40001/i.test(String(outcome.reason))).toBe(true);
+      expect(await db.taskRun.count()).toBe(0);
+    } finally {
+      releaseTransition();
+      await Promise.allSettled([transition, ...(producer ? [producer] : [])]);
     }
   });
 
