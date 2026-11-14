@@ -202,6 +202,50 @@ advertising that exact procedure and its allowed action type; do not infer suppo
 from `action.execute`, host OS or an unattested peer. A stale, absent or ambiguous
 producer is unavailable, not permission to use a user-authored execution receipt.
 
+### Producer contract and implementation prerequisites
+
+Owning scale/architecture boundary: EP-B9DD37C7, with this local change retained
+under BI-224F56F1. The following table describes required amendments, not existing
+capabilities. Every absent component is a prerequisite to Verify, not work to be
+discovered after starting the experiment.
+
+| Contract | Existing owner and current capability | Required local amendment / admission prerequisite |
+|---|---|---|
+| Protocol and single-start admission | `qualification-terminal-admission.ts` / `qualification-research-admission.ts`: reviewed script protocol, signed Prepare/Verify bindings | Versioned local TypeScript profile with exact production and transitive loaded-generation identities. Legacy parsing cannot issue it. |
+| Canonical image acquisition | Existing canonical build/release artifact owners; no candidate-image producer is established for this experiment | Resolve an already governed candidate artifact and its verified OCI descriptor through an admitted build. The protocol cannot build/tag an image or turn a source checkout into runtime evidence. No token if this artifact/reservation is absent. |
+| Runtime and database reservation | Existing nonproduction lease service and `scripts/lib/local-ci-slot-manifest.mjs` / `local-ci-slot-substrate.mjs`: owned slot resources and isolated test database | Bind the exact reservation and a closed runtime layout for the candidate writer, observer and fault actions. Ordinary CI's successful slot reservation alone does not attest that layout or loaded closure. |
+| Production exclusion | Existing slot isolation checks in `scripts/lib/local-ci-slot-isolation.test.mjs`; no complete real-writer qualification isolation attestation yet | Producer verifies database identity/role, dedicated test schema, credential origin and network destination allowlist before launch; denies production datastore/receipt endpoints and production secrets. Credentials remain machine-local and are never copied into caller evidence. |
+| Action dispatch | `remote-action/qualification-windows-action.ts` and `services/edge-node-go/internal/action/qualification_windows_action.go`: closed Windows action, trusted node and exact source resolution | Independently reviewed local typed action/profile in these existing action/producer registries; current same-installation capability advertisement, policy intersection and source/runtime binding. No generic-command delegation or inferred Windows support. |
+| Loaded writer and fault execution | Production claim/receipt transaction owners exist; current child lab invokes only admission locks | Candidate entrypoint must invoke the actual claim and receipt writers and emit independently observable transaction barriers. Producer proves its complete loaded-module inventory and code-changing-writer exclusions before faults. This component is not implemented. |
+| Machine result verification | Existing `remote-action/qualification-windows-result.ts` and Edge action-result route verify producer-owned Windows output | Extend existing result verification with the reviewed local profile's process/runtime/transaction identities, bounded artifacts and cleanup attestations; a host-authored test log or marker cannot settle it. |
+
+The local profile must have a concrete reviewed implementation for each row before
+Verify is issuable. Missing image production, isolated runtime layout, loaded-code
+attestation or typed producer/verifier returns a named unavailable prerequisite.
+It never substitutes an existing Windows action, live production container,
+ordinary sandbox command, or the already passing marker suite.
+
+### Initial profile limits and overflow semantics
+
+These are proposed hard ceilings, requiring independent review and an observed
+whole-closure fit before issuance; they are not claims that today's Next.js writer
+fits them. No caller may increase them through protocol prose or command flags.
+
+| Resource / evidence | Ceiling | Overflow or missing proof |
+|---|---|---|
+| Protocol bytes | 32 KiB UTF-8 | Refuse issuance; no Prepare/Verify start. |
+| Transitive module inventory | 512 distinct entries, dependency depth 32, 64 MiB total application code bytes | Refuse issuance on overflow, unresolved dynamic dependency, missing native-module identity or incomplete closure. Cycles require finite visited-node accounting, not silent truncation. Runtime/base-image bytes are separately bound by descriptor/digest, not excluded from identity. |
+| Inventory/result artifact | 8 MiB per complete artifact; envelope 64 KiB; sanitized error detail 2 KiB | Reject oversize input before start. Overflow/truncation after start is inconclusive, never positive. Detail can live only in digest-bound artifacts within this ceiling. |
+| Preparation / verification | Prepare 15 minutes; Verify 10 minutes; measurement 30 seconds; cleanup 2 minutes | Expired admission cannot start. Post-start timeout aborts owned work and records inconclusive/unrun as appropriate; failed cleanup retains a recovery-required hold. |
+| Runtime child / database | At most 2 writer/fault children plus 1 observer, 6 database sessions, 2 CPUs and 4 GiB child memory | Normal environment/resource admission must reserve the full envelope before start. Exhaustion aborts the experiment without changing host floors or taking unrelated processes' resources. |
+| Results / cases | One start and the fixed reviewed fault set; 128 barrier observations and 64 evidence references maximum | No continuation run or omitted case can be relabelled complete. An incomplete case set or observation overflow is inconclusive and requires normal recovery, not a new key. |
+
+The source manifest resolver must enforce count, depth and byte limits before
+materializing the complete closure, and the producer must stream bounded output
+without retaining unbounded logs. A larger target requires a reviewed profile
+revision owned by EP-B9DD37C7 and fresh source/scope admission; it cannot raise a
+limit mid-experiment or borrow the Windows profile's authority.
+
 ### Experiment and acceptance of its evidence
 
 The producer must invoke the actual claim and command-receipt path against its
