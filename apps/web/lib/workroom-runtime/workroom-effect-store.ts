@@ -18,7 +18,7 @@ export type ClaimedEffect = {
   id: string;
   workCapsuleId: string;
   capsuleId: string;
-  commandId: string;
+  commandKey: string;
   kind: EffectKind;
   processBound: boolean;
   sessionGeneration: string | null;
@@ -39,9 +39,9 @@ export async function insertEffects(run: SqlRunner, input: {
   for (const effect of input.effects) {
     const bound = isProcessBound(effect.kind);
     await run.query(
-      `INSERT INTO "WorkroomEffect" ("id","workCapsuleId","commandId","ordinal","kind","processBound","sessionGeneration","payload","status","availableAt","createdAt","updatedAt")
+      `INSERT INTO "WorkroomEffect" ("id","workCapsuleId","commandKey","ordinal","kind","processBound","sessionGeneration","payload","status","availableAt","createdAt","updatedAt")
        VALUES ($1,$2,$3,$4,$5::"WorkroomEffectKind",$6,$7,$8::jsonb,'pending'::"WorkroomEffectStatus",${utc("$9")},${utc("$9")},${utc("$9")})
-       ON CONFLICT ("workCapsuleId","commandId","ordinal") DO NOTHING`,
+       ON CONFLICT ("workCapsuleId","commandKey","ordinal") DO NOTHING`,
       [randomUUID(), input.roomRowId, input.commandId, ordinal, effect.kind, bound, bound ? input.generation : null, JSON.stringify(effect.payload), input.now],
     );
     ordinal += 1;
@@ -93,7 +93,7 @@ export async function claimEffects(run: SqlRunner, input: { owner: string; liveG
      UPDATE "WorkroomEffect" w SET "status"='running'::"WorkroomEffectStatus", "leaseOwner"=$1,
        "leaseExpiresAt"=${utc("$5")} + ($4::int * interval '1 millisecond'), "attemptCount"=w."attemptCount"+1, "updatedAt"=${utc("$5")}
      FROM candidate, "WorkCapsule" r WHERE w."id"=candidate."id" AND r."id"=w."workCapsuleId"
-     RETURNING w."id", w."workCapsuleId", r."capsuleId", w."commandId", w."kind"::text AS "kind", w."processBound",
+     RETURNING w."id", w."workCapsuleId", r."capsuleId", w."commandKey", w."kind"::text AS "kind", w."processBound",
        w."sessionGeneration", w."payload", w."attemptCount", w."maxAttempts"`,
     [input.owner, input.liveGenerations, input.limit, input.leaseMs, input.now],
   );

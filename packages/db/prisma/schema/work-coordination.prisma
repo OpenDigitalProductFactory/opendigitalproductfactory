@@ -550,8 +550,9 @@ enum WorkroomEffectStatus {
 model WorkroomEffect {
   id                String               @id @default(cuid())
   workCapsuleId     String
-  /// Deterministic id of the command whose decision emitted it.
-  commandId         String
+  /// Deterministic key of the command whose decision emitted it (an idempotency
+  /// key, like WorkroomActivity.commandKey; not a reference to another row).
+  commandKey        String
   /// 0-based position within that decision.
   ordinal           Int
   /// Insert order under the room's row lock: a room's effects run in this order.
@@ -574,7 +575,7 @@ model WorkroomEffect {
   settledAt         DateTime?
   capsule           Workroom             @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
-  @@unique([workCapsuleId, commandId, ordinal])
+  @@unique([workCapsuleId, commandKey, ordinal])
   @@index([status, availableAt])
   @@index([workCapsuleId, status, sequence])
   @@index([createdAt]) // retention sweep cutoff scan

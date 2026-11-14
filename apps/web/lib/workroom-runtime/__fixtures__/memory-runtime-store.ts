@@ -57,10 +57,10 @@ export function createMemoryRuntimeStore(rooms: (capsuleId: string) => Room | nu
     }
     if (decision.session !== undefined) room.workspaceState = { ...room.workspaceState, runtimeSession: JSON.parse(JSON.stringify(decision.session)) };
     decision.effects.forEach((effect, ordinal) => {
-      if (effects.some((e) => e.workCapsuleId === room.id && e.commandId === commandId && e.ordinal === ordinal)) return;
+      if (effects.some((e) => e.workCapsuleId === room.id && e.commandKey === commandId && e.ordinal === ordinal)) return;
       const bound = isProcessBound(effect.kind);
       effects.push({
-        id: `eff-${++sequence}`, sequence, ordinal, workCapsuleId: room.id, capsuleId, commandId, kind: effect.kind as EffectKind,
+        id: `eff-${++sequence}`, sequence, ordinal, workCapsuleId: room.id, capsuleId, commandKey: commandId, kind: effect.kind as EffectKind,
         processBound: bound, sessionGeneration: bound ? after?.generation ?? null : null, payload: effect.payload,
         status: "pending", attemptCount: 0, maxAttempts: 5, availableAt: now(), leaseExpiresAt: null,
       });

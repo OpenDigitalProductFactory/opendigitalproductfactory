@@ -17,7 +17,7 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE TABLE IF NOT EXISTS "WorkroomEffect" (
     "id" TEXT NOT NULL,
     "workCapsuleId" TEXT NOT NULL,
-    "commandId" TEXT NOT NULL,
+    "commandKey" TEXT NOT NULL,
     "ordinal" INTEGER NOT NULL,
     "sequence" BIGSERIAL NOT NULL,
     "kind" "WorkroomEffectKind" NOT NULL,
@@ -39,8 +39,8 @@ CREATE TABLE IF NOT EXISTS "WorkroomEffect" (
 );
 
 -- @migration-safety: data-safe: the table is created empty by this migration, so no existing row can violate the unique index.
-CREATE UNIQUE INDEX IF NOT EXISTS "WorkroomEffect_workCapsuleId_commandId_ordinal_key"
-  ON "WorkroomEffect"("workCapsuleId", "commandId", "ordinal");
+CREATE UNIQUE INDEX IF NOT EXISTS "WorkroomEffect_workCapsuleId_commandKey_ordinal_key"
+  ON "WorkroomEffect"("workCapsuleId", "commandKey", "ordinal");
 CREATE INDEX IF NOT EXISTS "WorkroomEffect_status_availableAt_idx" ON "WorkroomEffect"("status", "availableAt");
 CREATE INDEX IF NOT EXISTS "WorkroomEffect_workCapsuleId_status_sequence_idx" ON "WorkroomEffect"("workCapsuleId", "status", "sequence");
 CREATE INDEX IF NOT EXISTS "WorkroomEffect_createdAt_idx" ON "WorkroomEffect"("createdAt");

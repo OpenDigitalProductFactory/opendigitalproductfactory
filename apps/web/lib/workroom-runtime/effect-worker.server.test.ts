@@ -7,7 +7,7 @@ import { createEffectWorker, effectBackoffMs, effectResultCommandId, RetireEffec
 import type { ClaimedEffect } from "./workroom-effect-store";
 
 const effect = (over: Partial<ClaimedEffect> = {}): ClaimedEffect => ({
-  id: "e1", workCapsuleId: "row-1", capsuleId: "WC-1", commandId: "cmd", kind: "start-turn", processBound: true,
+  id: "e1", workCapsuleId: "row-1", capsuleId: "WC-1", commandKey: "cmd", kind: "start-turn", processBound: true,
   sessionGeneration: "gen-1", payload: { prompt: "go" }, attemptCount: 1, maxAttempts: 3, ...over,
 });
 

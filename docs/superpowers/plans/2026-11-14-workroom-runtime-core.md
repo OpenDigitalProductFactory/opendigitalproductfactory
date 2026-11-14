@@ -162,5 +162,9 @@ The item's criteria, word for word:
 ## Backlog coverage
 
 - Decision: decomposed
-- Receipt: `cmwfx1zh709qg0emodzww40th`
-- PR 1, PR 2 and PR 3 all map to BI-C64EDA33; PR 2 and PR 3 depend on PR 1.
+- Parent: BI-C64EDA33
+- Receipt: cmwfx1zh709qg0emodzww40th
+- Dependencies: PR 2 and PR 3 depend on PR 1
+- PR 1, the core -> BI-C64EDA33
+- PR 2, room delivery on the outbox -> BI-C64EDA33
+- PR 3, the claim saga -> BI-C64EDA33

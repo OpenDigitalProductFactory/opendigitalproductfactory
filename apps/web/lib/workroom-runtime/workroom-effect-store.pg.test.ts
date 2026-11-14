@@ -13,7 +13,7 @@ import { createJobsPool } from "@/lib/jobs/postgres/pool";
 import { claimEffects, insertEffects, recoverExpiredLeases, retireEffects, retireOrphanedEffects, settleEffect, type SqlRunner } from "./workroom-effect-store";
 
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() ?? "";
-const MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114050000_workroom_effect_outbox/migration.sql");
+const MIGRATION = join(__dirname, "../../../../packages/db/prisma/migrations/20261114060000_workroom_effect_outbox/migration.sql");
 const T0 = new Date("2026-11-14T05:00:00.000Z");
 const later = (ms: number) => new Date(T0.getTime() + ms);
 
@@ -42,7 +42,7 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     await pool.query(`INSERT INTO "WorkCapsule" (id, "capsuleId") VALUES ('row-1','WC-1'), ('row-2','WC-2')`);
   });
 
-  const statuses = async () => (await pool.query(`SELECT "commandId", "status"::text AS status FROM "WorkroomEffect" ORDER BY "sequence"`)).rows;
+  const statuses = async () => (await pool.query(`SELECT "commandKey", "status"::text AS status FROM "WorkroomEffect" ORDER BY "sequence"`)).rows;
   const claim = (liveGenerations: string[], now = T0) => claimEffects(run, { owner: "host-1", liveGenerations, limit: 10, leaseMs: 60_000, now });
 
   it("inserts a decision's effects once, however often the decision is replayed", async () => {
@@ -61,11 +61,11 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     await insertEffects(run, { roomRowId: "row-1", commandId: "b", generation: "gen-1", effects: [{ kind: "revoke-token", payload: {} }], now: T0 });
     await insertEffects(run, { roomRowId: "row-2", commandId: "c", generation: "gen-9", effects: [{ kind: "start-turn", payload: {} }], now: T0 });
     // gen-9 is not this process's: room 2 waits; room 1's second effect waits behind its first.
-    expect((await claim(["gen-1"])).map((e) => [e.commandId, e.capsuleId, e.attemptCount])).toEqual([["a", "WC-1", 1]]);
+    expect((await claim(["gen-1"])).map((e) => [e.commandKey, e.capsuleId, e.attemptCount])).toEqual([["a", "WC-1", 1]]);
     expect(await claim(["gen-1"])).toEqual([]);
-    const [a] = (await pool.query(`SELECT id FROM "WorkroomEffect" WHERE "commandId"='a'`)).rows as Array<{ id: string }>;
+    const [a] = (await pool.query(`SELECT id FROM "WorkroomEffect" WHERE "commandKey"='a'`)).rows as Array<{ id: string }>;
     expect(await settleEffect(run, { effectId: a!.id, attempt: 1, status: "succeeded" }, T0)).toBe(true);
-    expect((await claim(["gen-1"])).map((e) => e.commandId)).toEqual(["b"]);
+    expect((await claim(["gen-1"])).map((e) => e.commandKey)).toEqual(["b"]);
   });
 
   it("a retry waits out its backoff and blocks the room's later effects meanwhile", async () => {
@@ -74,7 +74,7 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     const [first] = await claim([]);
     await settleEffect(run, { effectId: first!.id, attempt: 1, status: "pending", error: "busy", retryAfterMs: 5000 }, T0);
     expect(await claim([], later(1000))).toEqual([]);
-    expect((await claim([], later(6000))).map((e) => [e.commandId, e.attemptCount])).toEqual([["a", 2]]);
+    expect((await claim([], later(6000))).map((e) => [e.commandKey, e.attemptCount])).toEqual([["a", 2]]);
   });
 
   it("a report from an attempt that lost its lease changes nothing", async () => {
@@ -94,7 +94,7 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     const retired = await retireEffects(run, { roomRowId: "row-1", keepGeneration: "gen-2", reason: "new process", now: T0 });
     expect(retired.map((r) => r.kind)).toEqual(["answer-request"]);
     expect(await statuses()).toEqual([
-      { commandId: "old", status: "retired" }, { commandId: "revoke", status: "pending" }, { commandId: "new", status: "pending" },
+      { commandKey: "old", status: "retired" }, { commandKey: "revoke", status: "pending" }, { commandKey: "new", status: "pending" },
     ]);
     await retireEffects(run, { roomRowId: "row-1", keepGeneration: null, reason: "stopped", now: T0 });
     expect((await statuses()).map((r) => r.status)).toEqual(["retired", "pending", "retired"]);
@@ -109,8 +109,8 @@ describe.skipIf(!DATABASE_URL)("Workroom runtime outbox (real database)", () => 
     await insertEffects(run, { roomRowId: "row-2", commandId: "current", generation: "gen-2", effects: [{ kind: "start-turn", payload: {} }], now: T0 });
     expect(await retireOrphanedEffects(run, T0)).toBe(2);
     expect(await statuses()).toEqual([
-      { commandId: "stop", status: "retired" }, { commandId: "stop", status: "pending" },
-      { commandId: "old", status: "retired" }, { commandId: "current", status: "pending" },
+      { commandKey: "stop", status: "retired" }, { commandKey: "stop", status: "pending" },
+      { commandKey: "old", status: "retired" }, { commandKey: "current", status: "pending" },
     ]);
     // The revoke behind the retired close is runnable again.
     expect((await claim([])).map((e) => e.kind)).toEqual(["revoke-token"]);
