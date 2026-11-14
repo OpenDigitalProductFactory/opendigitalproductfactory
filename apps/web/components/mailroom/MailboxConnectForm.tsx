@@ -5,12 +5,15 @@
 // provider error and saves nothing. Credentials go only into this form, never
 // into chat.
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import type { ConnectMailboxResult } from "@/lib/mailroom/mailbox-form";
 import { connectMailbox } from "@/app/(shell)/workspace/mailroom/actions";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/report-kit/Notice";
+import { registerActiveFormAssist } from "@/lib/agent-form-assist";
+
+import { MAILBOX_FORM_ASSIST_ID, mailboxFormAssistFields, readMailboxFormValues, sanitizeMailboxFormUpdates } from "./mailbox-form-assist";
 
 export type ExpectedMailboxOption = { purposeKey: string; label: string; examples: string[]; why: string };
 
@@ -22,9 +25,39 @@ const LABEL = "block text-xs font-medium text-[var(--dpf-text-muted)] mb-1";
 export function MailboxConnectForm({ purposes, defaultPurposeKey }: { purposes: ExpectedMailboxOption[]; defaultPurposeKey?: string }) {
   const [provider, setProvider] = useState<Provider>("imap");
   const [state, action, pending] = useActionState<ConnectMailboxResult | null, FormData>(connectMailbox, null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const pendingUpdates = useRef<Record<string, string> | null>(null);
+
+  // The coworker beside this page reads and can fill this form's non-secret
+  // fields through form assist (BI-2A815481). Secrets never leave the form.
+  useEffect(() => {
+    return registerActiveFormAssist({
+      routeContext: "/workspace/mailroom",
+      formId: MAILBOX_FORM_ASSIST_ID,
+      formName: "Connect a mailbox",
+      fields: mailboxFormAssistFields(purposes),
+      getValues: () => (formRef.current ? readMailboxFormValues(new FormData(formRef.current)) : {}),
+      applyFieldUpdates: (updates) => {
+        const clean = sanitizeMailboxFormUpdates(updates, purposes);
+        if (clean.provider && clean.provider !== provider) {
+          // Provider-specific inputs mount after the re-render; apply the rest then.
+          pendingUpdates.current = clean;
+          setProvider(clean.provider as Provider);
+          return;
+        }
+        applyToForm(formRef.current, clean);
+      },
+    });
+  }, [purposes, provider]);
+
+  useEffect(() => {
+    if (!pendingUpdates.current) return;
+    applyToForm(formRef.current, pendingUpdates.current);
+    pendingUpdates.current = null;
+  }, [provider]);
 
   return (
-    <form action={action} className="space-y-4" aria-label="Connect a mailbox">
+    <form ref={formRef} action={action} className="space-y-4" aria-label="Connect a mailbox">
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className={LABEL} htmlFor="mailbox-provider">Provider</label>
@@ -111,4 +144,13 @@ export function MailboxConnectForm({ purposes, defaultPurposeKey }: { purposes: 
       <Button type="submit" disabled={pending}>{pending ? "Checking the mailbox…" : "Test and connect"}</Button>
     </form>
   );
+}
+
+function applyToForm(form: HTMLFormElement | null, values: Record<string, string>): void {
+  if (!form) return;
+  for (const [name, value] of Object.entries(values)) {
+    if (name === "provider") continue;
+    const field = form.elements.namedItem(name);
+    if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement) field.value = value;
+  }
 }

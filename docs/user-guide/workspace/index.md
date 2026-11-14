@@ -40,6 +40,11 @@ one request covers that exact change once.
 
 ## Connecting business mail
 
+The coworker beside the Mailroom can see the **Connect a mailbox** form and
+which mailboxes are connected. Ask it to help, and it fills in everything
+except the password or client secret, which you type yourself. For Gmail, use
+IMAP, server `imap.gmail.com`, port 993 and an app password.
+
 Mailroom tests the mailbox connection before saving it, then attempts a first
 read. A successful connection test alone does not finish setup. If the first
 read fails, setup stays incomplete; the saved connection remains available for
