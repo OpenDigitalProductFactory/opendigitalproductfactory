@@ -212,7 +212,7 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
     expect(res.message).toBe("Non-UTC timezones are not yet supported.");
   });
 
-  it("list_scheduled_agent_tasks scopes to the caller and truncates long prompts", async () => {
+  it("list_scheduled_agent_tasks scopes compact census to the caller without prompts", async () => {
     const longPrompt = "x".repeat(250);
     core.getScheduledAgentTasksFor.mockResolvedValue([
       { taskId: "agent-task-1", agentId: "a", title: "t", prompt: longPrompt, schedule: "0 9 * * *", isActive: true, nextRunAt: null, lastRunAt: null, lastStatus: null },
@@ -220,11 +220,11 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
     ]);
     const res = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({}, "u1");
     expect(res.success).toBe(true);
-    expect(res.message).toBe("2 scheduled agent task(s).");
+    expect(res.data?.total).toBe(2);
     expect(core.getScheduledAgentTasksFor).toHaveBeenCalledWith("u1");
     const tasks = (res.data as { tasks: Array<{ prompt: string }> }).tasks;
-    expect(tasks[0].prompt).toBe(`${"x".repeat(200)}…`);
-    expect(tasks[1].prompt).toBe("short");
+    expect(tasks[0]).not.toHaveProperty("prompt");
+    expect(tasks[1]).not.toHaveProperty("prompt");
   });
 
   it("cancel_scheduled_agent_task requires a taskId", async () => {
@@ -297,4 +297,60 @@ it("reads an exact bounded report diagnostic using the authenticated owner and n
 it.each([{reportDiagnostic:{}},{taskId:"watch",reportDiagnostic:{taskRunId:"TR-X",expectedRevision:"invalid"}},{taskId:"watch",reportDiagnostic:{taskRunId:"TR-X",expectedRevision:"a".repeat(64),raw:true}}])("never broadens invalid diagnostics into task listings %j",async params=>{
  const result=await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks(params,"owner");
  expect(result.success).toBe(false);expect(core.getScheduledAgentTasksFor).not.toHaveBeenCalled();
+});
+
+describe("bounded scheduled task census", () => {
+  const rows = Array.from({ length: 7 }, (_, n) => ({
+    taskId: "task-" + n, agentId: "a", title: "Task " + n, prompt: "private".repeat(500),
+    schedule: "0 9 * * *", isActive: true, revision: String(n), taskKind: "workroom-stage",
+    taskConfig: { checkpoint: "x".repeat(100000) },
+  }));
+  it("traverses bounded compact pages without exposing prompts or checkpoints", async () => {
+    core.getScheduledAgentTasksFor.mockResolvedValue([...rows].reverse());
+    let cursor: unknown; const ids: string[] = [];
+    do {
+      const r = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ limit: 2, ...(cursor ? { cursor } : {}) }, "owner");
+      expect(r.success).toBe(true);
+      expect(JSON.stringify(r).length).toBeLessThan(20000);
+      expect(r.data?.total).toBe(7);
+      const page = r.data?.tasks as Array<Record<string, unknown>>;
+      expect(page.length).toBeLessThanOrEqual(2);
+      for (const row of page) { expect(row).not.toHaveProperty("prompt"); expect(row).not.toHaveProperty("taskConfig"); ids.push(String(row.taskId)); }
+      cursor = r.data?.nextCursor;
+      expect(r.data?.complete).toBe(!cursor);
+    } while (cursor);
+    expect(ids).toEqual(rows.map(r => r.taskId));
+    expect(core.getScheduledAgentTasksFor).toHaveBeenCalledWith("owner");
+  });
+  it("rejects a cursor reused by another owner or after inventory changes", async () => {
+    core.getScheduledAgentTasksFor.mockResolvedValue(rows);
+    const first = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ limit: 2 }, "owner");
+    expect(first.data?.nextCursor).toBeTruthy();
+    const stolen = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ limit: 2, cursor: first.data?.nextCursor }, "other-owner");
+    expect(stolen.success).toBe(false);
+    core.getScheduledAgentTasksFor.mockResolvedValue(rows.map((row, index) => index === 0 ? { ...row, revision: "changed" } : row));
+    const revised = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ limit: 2, cursor: first.data?.nextCursor }, "owner");
+    expect(revised.success).toBe(false);
+    core.getScheduledAgentTasksFor.mockResolvedValue(rows.slice(1));
+    const stale = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ limit: 2, cursor: first.data?.nextCursor }, "owner");
+    expect(stale.success).toBe(false);
+  });
+});
+
+it("binds cursors to product scope and applies inventory filters", async () => {
+  const row = { taskId: "mine-one", title: "Watch one", agentId: "agent", taskKind: "workroom-stage", isActive: true, prompt: "secret", revision: "r" };
+  core.getScheduledAgentTasksFor.mockResolvedValue([row, { ...row, taskId: "mine-two" }]);
+  const args = { organizationId: "org-one", taskIdPrefix: "mine-", agentId: "agent", isActive: true, limit: 1 };
+  const first = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks(args, "owner");
+  expect(core.getScheduledAgentTasksFor).toHaveBeenCalledWith("owner", { organizationId: "org-one", productLineId: null, businessProductId: null }, undefined);
+  expect(first.data?.nextCursor).toBeTruthy();
+  const changedScope = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ ...args, organizationId: "org-two", cursor: first.data?.nextCursor }, "owner");
+  expect(changedScope.success).toBe(false);
+  const none = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ taskIdPrefix: "other-" }, "owner");
+  expect(none.data).toMatchObject({ total: 0, complete: true, nextCursor: null, tasks: [] });
+});
+it.each([0, -1, 51, 1.5, "2"])("rejects invalid inventory limit %j", async limit => {
+  core.getScheduledAgentTasksFor.mockResolvedValue([]);
+  const r = await scheduledAgentTaskPack.handlers.list_scheduled_agent_tasks({ limit }, "owner");
+  expect(r.success).toBe(false);
 });
