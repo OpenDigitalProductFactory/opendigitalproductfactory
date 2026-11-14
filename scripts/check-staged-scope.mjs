@@ -19,17 +19,17 @@
 // one, or a claim with no scope all report INACTIVE and allow the commit — but
 // they SAY SO. A guard that is off must never look like a guard that passed.
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { classifyStagedScope } from "./lib/staged-scope.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { gitText } from "./lib/git.mjs";
 import { CLAIM_MARKER_NAME } from "./lib/workroom-bind.mjs";
 
-function git(args) {
-  return execFileSync("git", args, { encoding: "utf8" }).trim();
-}
+// The shared helper, not a direct execFileSync("git", ...) — enforced by
+// check-no-direct-git-spawn so every git invocation keeps one home.
+const git = (args) => gitText(args);
 
 export function readStagedPaths() {
   const out = git(["diff", "--cached", "--name-only", "--diff-filter=ACMRT"]);

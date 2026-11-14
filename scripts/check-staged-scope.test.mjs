@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ALWAYS_ALLOWED, classifyStagedScope, editClaimedPaths } from "./lib/staged-scope.mjs";
+import { classifyStagedScope, editClaimedPaths } from "./lib/staged-scope.mjs";
 import { formatReport } from "./check-staged-scope.mjs";
 
 const CLAIM = [
@@ -42,8 +42,16 @@ test("a path claim covers its subtree but not a sibling with the same prefix", (
 });
 
 test("derived artifacts the hook itself stages are always allowed", () => {
+  // Explicit examples rather than a sweep of ALWAYS_ALLOWED: asserting over the
+  // exported collection would make this a live-registry conformance test
+  // (guard-conformance-marks), and the behaviour worth pinning is that a
+  // regenerated artifact survives the guard, not that a constant has N entries.
   const out = classifyStagedScope({
-    stagedPaths: [...ALWAYS_ALLOWED.filter((p) => !p.endsWith("/")), "docs/user-guide/assets/diagrams/a.svg"],
+    stagedPaths: [
+      "apps/web/lib/docs/doc-index.generated.json",
+      "apps/web/lib/docs/doc-impact.generated.json",
+      "docs/user-guide/assets/diagrams/a.svg",
+    ],
     scopePaths: ["apps/web/lib/observability"],
   });
   assert.deepEqual(out.violations, [], "refusing these would refuse the pre-commit hook's own work");
