@@ -1,7 +1,7 @@
 {
   "version": "1",
   "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
-  "summary": "BI-31E0C874 / DI-87225C71AAE4. Migration 20261114160000_work_item_presence_read_cursor adds two nullable columns to WorkItemPresence: the room read position of each participant. Additive, no default and no backfill; existing rows read as no position yet. The columns follow their row, which is deleted only with its work item.",
+  "summary": "BI-31E0C874 / DI-87225C71AAE4. Migration 20261114220000_work_item_presence_read_cursor adds two nullable columns to WorkItemPresence: the room read position of each participant. Additive, no default and no backfill; existing rows read as no position yet. The columns follow their row, which is deleted only with its work item.",
   "changes": [
     {
       "kind": "model",
