@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
-import { refreshMigrationHandoffAfterDrain, resolveReadinessBackupHostPath, runCandidatePreflight, runReassessmentCandidatePreflight, type InstallStateMigrationHandoff } from "./preflight";
+import { verifyTransitionSignature } from "../../../../scripts/lib/transition-signing.mjs";
+import { INSTALL_STATE_ENVELOPE_TTL_MS, refreshMigrationHandoffAfterDrain, resolveReadinessBackupHostPath, runCandidatePreflight, runReassessmentCandidatePreflight, type InstallStateMigrationHandoff } from "./preflight";
 
 const fsMocks = vi.hoisted(() => ({ readFile: vi.fn() }));
 vi.mock("node:fs/promises", () => ({ readFile: fsMocks.readFile }));
@@ -307,13 +308,28 @@ describe("refreshMigrationHandoffAfterDrain (BI-95DF1BFC)", () => {
   };
   const base = () => ({ runId: "SUR-1", resolvedPromoterDigest: digest, runtimeTransitionSecret: secret, hostIdentity, failRun: vi.fn(), emitFailure: vi.fn() });
 
-  it("keeps the readiness handoff when the install-state did not move", async () => {
+  /** The binding fields a re-stamp must carry verbatim — everything but the clock. */
+  const bindingOf = ({ envelope }: InstallStateMigrationHandoff) => {
+    const { issuedAt: _issuedAt, expiresAt: _expiresAt, ...binding } = envelope;
+    return binding;
+  };
+  const expectStampedAt = (handoff: InstallStateMigrationHandoff, launch: Date) => {
+    expect(handoff.envelope.issuedAt).toBe(launch.toISOString());
+    expect(handoff.envelope.expiresAt).toBe(new Date(launch.getTime() + INSTALL_STATE_ENVELOPE_TTL_MS).toISOString());
+    expect(() => verifyTransitionSignature(handoff.envelope, handoff.signature, secret)).not.toThrow();
+  };
+
+  it("keeps the readiness binding but re-stamps the window at launch when the install-state did not move", async () => {
     const state = '{"schemaVersion":2}';
     fsMocks.readFile.mockResolvedValue(state);
     const migrationHandoff = handoffFor(state);
     const rerunPreflight = vi.fn();
-    const result = await refreshMigrationHandoffAfterDrain({ ...base(), migrationHandoff, rerunPreflight });
-    expect(result).toMatchObject({ ok: true, data: { refreshed: false, migrationHandoff, resolvedPromoterDigest: digest } });
+    const launch = new Date(Date.now() + 60_000);
+    const result = await refreshMigrationHandoffAfterDrain({ ...base(), migrationHandoff, rerunPreflight, now: () => launch });
+    expect(result).toMatchObject({ ok: true, data: { refreshed: false, restamped: true, resolvedPromoterDigest: digest } });
+    const launched = (result as { data: { migrationHandoff: InstallStateMigrationHandoff } }).data.migrationHandoff;
+    expect(bindingOf(launched)).toEqual(bindingOf(migrationHandoff));
+    expectStampedAt(launched, launch);
     expect(rerunPreflight).not.toHaveBeenCalled();
   });
 
@@ -327,22 +343,59 @@ describe("refreshMigrationHandoffAfterDrain (BI-95DF1BFC)", () => {
     const fresh = handoffFor(after);
     const rerunPreflight = vi.fn(async () => ({ ok: true as const, resolvedPromoterDigest: digest, migrationHandoff: fresh }));
     const params = base();
-    const result = await refreshMigrationHandoffAfterDrain({ ...params, migrationHandoff: stale, rerunPreflight });
-    expect(result).toMatchObject({ ok: true, data: { refreshed: true, code: "install_state_envelope_state_changed", migrationHandoff: fresh } });
+    const launch = new Date();
+    const result = await refreshMigrationHandoffAfterDrain({ ...params, migrationHandoff: stale, rerunPreflight, now: () => launch });
+    expect(result).toMatchObject({ ok: true, data: { refreshed: true, restamped: true, code: "install_state_envelope_state_changed" } });
+    const launched = (result as { data: { migrationHandoff: InstallStateMigrationHandoff } }).data.migrationHandoff;
+    expect(bindingOf(launched)).toEqual(bindingOf(fresh));
+    expectStampedAt(launched, launch);
     expect(rerunPreflight).toHaveBeenCalledTimes(1);
     expect(params.failRun).not.toHaveBeenCalled();
   });
 
-  it("re-runs readiness when the drain outlived the envelope TTL", async () => {
+  it("hands the promoter a full TTL even when preflight's window is seconds from lapsing (SUR-4DC82F3C)", async () => {
+    // The recovery-point backup took 6m19s of the 10-minute window; the old
+    // re-bind saw 4 seconds left, passed the handoff through unchanged, and
+    // promote.sh refused it at its migrate step 5 seconds later.
+    const state = '{"schemaVersion":2}';
+    fsMocks.readFile.mockResolvedValue(state);
+    const nearlyExpired = handoffFor(state);
+    const launch = new Date(Date.parse(nearlyExpired.envelope.expiresAt) - 4_000);
+    const rerunPreflight = vi.fn();
+    const result = await refreshMigrationHandoffAfterDrain({ ...base(), migrationHandoff: nearlyExpired, rerunPreflight, now: () => launch });
+    expect(result).toMatchObject({ ok: true, data: { refreshed: false, restamped: true } });
+    const launched = (result as { data: { migrationHandoff: InstallStateMigrationHandoff } }).data.migrationHandoff;
+    expectStampedAt(launched, launch);
+    expect(Date.parse(launched.envelope.expiresAt) - launch.getTime()).toBe(INSTALL_STATE_ENVELOPE_TTL_MS);
+    expect(rerunPreflight).not.toHaveBeenCalled();
+  });
+
+  it("re-stamps an already-expired handoff without re-running readiness, because its bytes still match", async () => {
     const state = '{"schemaVersion":2}';
     fsMocks.readFile.mockResolvedValue(state);
     const expired = handoffFor(state);
     expired.envelope.expiresAt = new Date(Date.now() - 1_000).toISOString();
     expired.signature = signTransitionPayload(expired.envelope, secret);
-    const fresh = handoffFor(state);
+    const rerunPreflight = vi.fn();
+    const launch = new Date();
+    const result = await refreshMigrationHandoffAfterDrain({ ...base(), migrationHandoff: expired, rerunPreflight, now: () => launch });
+    expect(result).toMatchObject({ ok: true, data: { refreshed: true, restamped: true, code: "install_state_envelope_expired" } });
+    const launched = (result as { data: { migrationHandoff: InstallStateMigrationHandoff } }).data.migrationHandoff;
+    expect(bindingOf(launched)).toEqual(bindingOf(expired));
+    expectStampedAt(launched, launch);
+    expect(rerunPreflight).not.toHaveBeenCalled();
+  });
+
+  it("does not re-stamp an expired handoff whose bytes moved: the state check outranks the clock and readiness re-runs", async () => {
+    fsMocks.readFile.mockResolvedValue('{"schemaVersion":2,"moved":true}');
+    const expired = handoffFor('{"schemaVersion":2}');
+    expired.envelope.expiresAt = new Date(Date.now() - 1_000).toISOString();
+    expired.signature = signTransitionPayload(expired.envelope, secret);
+    const fresh = handoffFor('{"schemaVersion":2,"moved":true}');
     const rerunPreflight = vi.fn(async () => ({ ok: true as const, resolvedPromoterDigest: digest, migrationHandoff: fresh }));
     const result = await refreshMigrationHandoffAfterDrain({ ...base(), migrationHandoff: expired, rerunPreflight });
-    expect(result).toMatchObject({ ok: true, data: { refreshed: true, code: "install_state_envelope_expired", migrationHandoff: fresh } });
+    expect(result).toMatchObject({ ok: true, data: { refreshed: true, code: "install_state_envelope_state_changed" } });
+    expect(rerunPreflight).toHaveBeenCalledTimes(1);
   });
 
   it("stays fail-closed on a tampered or wrong-run envelope instead of re-projecting over it", async () => {
