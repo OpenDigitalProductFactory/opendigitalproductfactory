@@ -34,6 +34,7 @@
 import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ACTIVE_BUILD_WHERE } from "@/lib/build/wip-cap";
 import { classifyRetrySafePreDispatchFailure } from "./build-engine-selection";
 
 /** BI-0B95D268: poll the sandbox container until it runs again (bounded). */
@@ -692,7 +693,8 @@ export async function dispatchApprovedIdeateBuilds(params: {
     where: {
       phase: "ideate",
       draftApprovedAt: { not: null },
-      abandonedAt: null,
+      // Not abandoned and not parked on an owner answer (BI-B6894001).
+      ...ACTIVE_BUILD_WHERE,
       parentEpicId: null,
       originatingBacklogItemId: { not: null },
     },

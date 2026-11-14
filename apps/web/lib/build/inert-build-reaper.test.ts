@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   isInertBuildReapable,
   isStalledBuildReapable,
@@ -124,5 +124,42 @@ describe("isStalledBuildReapable (BI-EB33BD37 — stalled-after-activity remedia
 
   it("exports a conservative default well beyond a healthy activity gap", () => {
     expect(STALLED_BUILD_REAP_MS).toBeGreaterThanOrEqual(2 * 60 * 60 * 1000);
+  });
+});
+
+describe("a build parked on an owner answer is never reaped (BI-B6894001)", () => {
+  const parkedAt = new Date(NOW.getTime() - 48 * 60 * 60 * 1000);
+
+  it("is not inert-reapable however old and quiet it is", () => {
+    expect(isInertBuildReapable(base())).toBe(true);
+    expect(isInertBuildReapable(base({ waitingOnOwnerSince: parkedAt }))).toBe(false);
+  });
+
+  it("is not stalled-reapable however long it has waited", () => {
+    const stalled = {
+      phase: "review",
+      abandonedAt: null,
+      parentEpicId: null,
+      activityCount: 40,
+      liveTaskRunCount: 0,
+      lastActivityAt: new Date(NOW.getTime() - 48 * 60 * 60 * 1000),
+      now: NOW,
+      staleMs: STALLED_BUILD_REAP_MS,
+    };
+    expect(isStalledBuildReapable(stalled)).toBe(true);
+    expect(isStalledBuildReapable({ ...stalled, waitingOnOwnerSince: parkedAt })).toBe(false);
+  });
+
+  it("does not even pick a parked build as a reap candidate", async () => {
+    const findMany = vi.fn(async () => []);
+    vi.doMock("@dpf/db", () => ({ prisma: { featureBuild: { findMany } } }));
+    try {
+      const { reapInertStuckBuilds } = await import("./inert-build-reaper");
+      await reapInertStuckBuilds(NOW);
+    } finally {
+      vi.doUnmock("@dpf/db");
+    }
+    const where = (findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where;
+    expect(where).toMatchObject({ abandonedAt: null, waitingOnOwnerSince: null });
   });
 });

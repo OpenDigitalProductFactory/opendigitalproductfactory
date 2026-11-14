@@ -15,6 +15,7 @@
 // pre-build work during a pause, so its own attempts do not mint fresh waits.
 
 import { prisma as defaultPrisma } from "@dpf/db";
+import { isActiveBuild } from "@/lib/build/wip-cap";
 import {
   UPGRADE_PAUSE_RESUME_TOOL,
   UPGRADE_WAIT_ACTIVITY_TOOL,
@@ -60,11 +61,12 @@ export async function findBuildsHeldByUpgradePause(
   if (waitedIds.length === 0) return [];
   const builds = await db.featureBuild.findMany({
     where: { buildId: { in: waitedIds } },
-    select: { buildId: true, phase: true, abandonedAt: true, createdById: true },
+    select: { buildId: true, phase: true, abandonedAt: true, waitingOnOwnerSince: true, createdById: true },
   });
   const held: HeldBuild[] = [];
   for (const build of builds) {
-    if (build.abandonedAt || !HELD_PHASES.includes(build.phase)) continue;
+    // Parked on an owner answer (BI-B6894001): it waits for the owner, not the pause.
+    if (!isActiveBuild(build) || !HELD_PHASES.includes(build.phase)) continue;
     if (!(await isBuildHeldByUpgradePause(db, build.buildId))) continue;
     held.push({ buildId: build.buildId, phase: build.phase, userId: build.createdById });
   }
@@ -83,9 +85,9 @@ export async function resumeBuildHeldByUpgradePause(params: { buildId: string; d
   try {
     const build = await db.featureBuild.findUnique({
       where: { buildId },
-      select: { phase: true, abandonedAt: true, createdById: true },
+      select: { phase: true, abandonedAt: true, waitingOnOwnerSince: true, createdById: true },
     });
-    if (!build || build.abandonedAt || !HELD_PHASES.includes(build.phase)) return "not-held";
+    if (!build || !isActiveBuild(build) || !HELD_PHASES.includes(build.phase)) return "not-held";
     if (!(await isBuildHeldByUpgradePause(db, buildId))) return "not-held";
     if (isOrchestrationRunning(buildId)) return "running";
 

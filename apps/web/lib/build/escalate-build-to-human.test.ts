@@ -52,13 +52,13 @@ const NOW = new Date("2026-06-19T18:00:00.000Z");
 describe("guarded diagnosis escalation", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("does not abandon, notify or defer when the reviewed version changed", async () => {
+  it("does not park, notify or defer when the reviewed version changed", async () => {
     mockFn(prisma.featureBuild.updateMany).mockResolvedValueOnce({ count: 0 });
     const expectedUpdatedAt = "2026-06-19T17:00:00.000Z";
     const result = await escalateBuildToHuman(args({ phase: "ideate", expectedUpdatedAt }));
     expect(result).toEqual({ reportId: null, wipFreed: false, backlogItemDeferred: false, route: "human" });
     expect(prisma.featureBuild.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { buildId: "FB-ABC123", phase: "ideate", abandonedAt: null,
+      where: { buildId: "FB-ABC123", phase: "ideate", abandonedAt: null, waitingOnOwnerSince: null,
         updatedAt: new Date(expectedUpdatedAt) },
     }));
     expect(prisma.featureBuild.update).not.toHaveBeenCalled();
@@ -68,7 +68,7 @@ describe("guarded diagnosis escalation", () => {
     expect(releaseSandboxForTerminalBuild).not.toHaveBeenCalled();
   });
 
-  it("claims a matching version before reporting and never abandons it a second time", async () => {
+  it("claims a matching version before reporting and never parks it a second time", async () => {
     mockFn(prisma.featureBuild.updateMany).mockResolvedValueOnce({ count: 1 });
     const result = await escalateBuildToHuman(args({ expectedUpdatedAt: "2026-06-19T17:00:00.000Z" }));
     expect(result).toEqual({ reportId: "PIR-TEST1", wipFreed: true, backlogItemDeferred: true, route: "human" });
@@ -76,7 +76,9 @@ describe("guarded diagnosis escalation", () => {
       mockFn(createPlatformIssueReport).mock.invocationCallOrder[0],
     );
     expect(prisma.featureBuild.update).not.toHaveBeenCalled();
-    expect(releaseSandboxForTerminalBuild).toHaveBeenCalledWith("FB-ABC123", { deleteBranch: false });
+    expect(mockFn(prisma.featureBuild.updateMany)).toHaveBeenCalledTimes(1);
+    // A parked build keeps its worktree: it is waiting, not dead (BI-B6894001).
+    expect(releaseSandboxForTerminalBuild).not.toHaveBeenCalled();
   });
 
   it("does not create owner work after an uncertain version claim", async () => {
@@ -94,7 +96,7 @@ describe("guarded diagnosis escalation", () => {
   it("continues the claimed escalation when commit succeeded before the connection failed", async () => {
     mockFn(prisma.featureBuild.updateMany).mockImplementationOnce(async ({ data }) => {
       // PostgreSQL committed; the acknowledgement was lost.
-      mockFn(prisma.featureBuild.findUnique).mockResolvedValueOnce(data);
+      mockFn(prisma.featureBuild.findUnique).mockResolvedValueOnce({ phase: "plan", abandonedAt: null, ...data });
       throw new Error("connection lost after commit");
     });
     const result = await escalateBuildToHuman(args({ expectedUpdatedAt: "2026-06-19T17:00:00.000Z" }));
@@ -158,6 +160,9 @@ describe("formatEscalationReport (pure)", () => {
     expect(description).toContain("[important] No test-first step for the migration");
     expect(description).toMatch(/deferred/);
     expect(description).toContain("BI-3E0EE3BA");
+    // The report tells the owner the build waits for them; it is not abandoned.
+    expect(description).toMatch(/waiting on you/);
+    expect(description).not.toMatch(/marked abandoned/);
   });
 
   it("falls back to the feature title, then buildId, when no BI title", () => {
@@ -255,14 +260,25 @@ describe("escalateBuildToHuman (orchestration)", () => {
     expect(input.triggerKind).toBe("plan-review-exhausted");
   });
 
-  it("frees the WIP slot by abandoning the build (by FB-* buildId)", async () => {
+  // BI-B6894001: escalating to the owner parks the build; it does not abandon it.
+  it("frees the WIP slot by parking the build on the owner, never abandoning it", async () => {
     const res = await escalateBuildToHuman(args());
     const call = (prisma.featureBuild.updateMany as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(call.where).toEqual({ buildId: "FB-ABC123" });
-    expect(call.data.phase).toBe("abandoned");
-    expect(call.data.abandonedAt).toBe(NOW);
-    expect(call.data.abandonReason).toContain("PIR-TEST1");
+    expect(call.where).toEqual({ buildId: "FB-ABC123", abandonedAt: null });
+    expect(call.data).toEqual({ waitingOnOwnerSince: NOW, updatedAt: NOW });
+    expect(call.data).not.toHaveProperty("phase");
+    expect(call.data).not.toHaveProperty("abandonedAt");
     expect(res.wipFreed).toBe(true);
+    expect(releaseSandboxForTerminalBuild).not.toHaveBeenCalled();
+  });
+
+  it("puts the escalation reason on the build's activity trail", async () => {
+    await escalateBuildToHuman(args());
+    const call = mockFn(prisma.buildActivity.create).mock.calls[0][0];
+    expect(call.data.tool).toBe("build:escalate-human");
+    expect(call.data.summary).toContain("PIR-TEST1");
+    expect(call.data.summary).toContain("waiting on the owner");
+    expect(call.data.summary).toContain("plan review");
   });
 
   it("parks the originating backlog item as deferred and detaches the build", async () => {
@@ -309,7 +325,7 @@ describe("escalateBuildToHuman (orchestration)", () => {
     expect(data.deferReviewAt.getTime()).toBeGreaterThan(NOW.getTime());
   });
 
-  it("records the status change on the ITEM, not only on the build being abandoned", async () => {
+  it("records the status change on the ITEM, not only on the parked build", async () => {
     await escalateBuildToHuman(args());
     const { data } = mockFn(prisma.backlogItemActivity.create).mock.calls[0][0];
     expect(data.backlogItemId).toBe("bi-1");
@@ -330,9 +346,8 @@ describe("escalateBuildToHuman (orchestration)", () => {
     expect(res.wipFreed).toBe(true); // the jam still clears
   });
 
-  // BI-B6894001 — the build is abandoned microseconds later, so a link to it
-  // lands the operator on a corpse.
-  it("points the escalation notification at the durable report, not the abandoned build", async () => {
+  // BI-B6894001 — the notification lands on the durable report.
+  it("points the escalation notification at the durable report", async () => {
     await escalateBuildToHuman(args());
     const event = mockFn(notifyAttentionLive).mock.calls[0][0];
     expect(event.deepLink).not.toContain("buildId");

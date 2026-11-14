@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { countAttributedWork, createPrismaWorkAttributionStore, type WorkAttributionStore } from "./work-attribution";
 import { WORK_CAPSULE_STATUSES } from "@/lib/work-capsules";
+import { ACTIVE_BUILD_WHERE } from "@/lib/build/wip-cap";
 
 function store(counts: Partial<Record<keyof WorkAttributionStore, number>> = {}): WorkAttributionStore {
   return {
@@ -65,8 +66,19 @@ describe("runtime work attribution", () => {
       db.countActiveTaskRuns("build", ["working"]),
       db.countActiveWorkCapsules("build-studio", ["blocked"]),
     ]);
-    expect(prisma.featureBuild.count).toHaveBeenCalledWith({ where: { abandonedAt: null, phase: { in: ["ideate", "plan", "build", "review"] } } });
+    expect(prisma.featureBuild.count).toHaveBeenCalledWith({ where: { abandonedAt: null, waitingOnOwnerSince: null, phase: { in: ["ideate", "plan", "build", "review"] } } });
     expect(prisma.taskRun.count).toHaveBeenCalledWith({ where: { source: "build", status: { in: ["working"] } } });
     expect(prisma.workroom.count).toHaveBeenCalledWith({ where: { source: "build-studio", status: { in: ["blocked"] } } });
+  });
+
+  it("does not attribute a build parked on an owner answer as active work (BI-B6894001)", async () => {
+    const prisma = {
+      featureBuild: { count: vi.fn(async () => 0) },
+      taskRun: { count: vi.fn(async () => 0) },
+      workroom: { count: vi.fn(async () => 0) },
+    };
+    await createPrismaWorkAttributionStore(prisma).countActiveFeatureBuilds();
+    const where = (prisma.featureBuild.count.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where;
+    expect(where).toMatchObject(ACTIVE_BUILD_WHERE);
   });
 });

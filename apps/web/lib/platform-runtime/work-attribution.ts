@@ -1,5 +1,6 @@
 export const ACTIVE_TASK_RUN_STATES = ["submitted", "working", "input-required", "auth-required", "quiescing"] as const;
 import type { WorkCapsuleStatus } from "@/lib/work-capsules";
+import { ACTIVE_BUILD_WHERE } from "@/lib/build/wip-cap";
 
 // Draft has not entered execution. Every later nonterminal state can still own
 // runtime-dependent work and therefore blocks deactivation.
@@ -38,7 +39,7 @@ type PrismaWorkAttributionClient = {
 
 export function createPrismaWorkAttributionStore(prisma: PrismaWorkAttributionClient): WorkAttributionStore {
   return {
-    countActiveFeatureBuilds: () => prisma.featureBuild.count({ where: { abandonedAt: null, phase: { in: [...ACTIVE_BUILD_PHASES] } } }),
+    countActiveFeatureBuilds: () => prisma.featureBuild.count({ where: { ...ACTIVE_BUILD_WHERE, phase: { in: [...ACTIVE_BUILD_PHASES] } } }),
     countActiveTaskRuns: (source, states) => prisma.taskRun.count({ where: { source, status: { in: [...states] } } }),
     countActiveWorkCapsules: (source, states) => prisma.workroom.count({ where: { source, status: { in: [...states] } } }),
   };
