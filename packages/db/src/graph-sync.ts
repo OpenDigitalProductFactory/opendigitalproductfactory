@@ -16,7 +16,14 @@
 
 import { prisma } from "./client";
 import { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
-import { assertRelationWrite, toRelationType, type RelationType } from "./relation-vocabulary";
+import {
+  assertRelationWrite,
+  canonicalRelationKey,
+  documentReferenceRelation,
+  getRelationType,
+  toRelationType,
+  type RelationType,
+} from "./relation-vocabulary";
 
 // ─── Graph-mirror primitives ──────────────────────────────────────────────────
 
@@ -361,10 +368,11 @@ export async function syncDocumentReference(ref: {
     documentKind: ref.targetKind ?? null,
     syncedAt,
   });
-  // DOC_REFERENCES edge. A reference is also identified by refType +
-  // source/targetVersionId; the mirror's (src,dst,rel_type) uniqueness cannot
-  // hold parallel references, so those are stored as props on the single edge.
-  await upsertGraphEdge(ref.sourceDocumentId, ref.targetDocumentId, "DOC_REFERENCES", {
+  // A typed PROV-O / schema.org edge per refType (BI-92804832); a refType with no
+  // mapping stays DOC_REFERENCES, qualified by its refType prop. A reference is also
+  // identified by source/targetVersionId; the mirror's (src,dst,rel_type) uniqueness
+  // cannot hold parallel references, so those are stored as props on the single edge.
+  await upsertGraphEdge(ref.sourceDocumentId, ref.targetDocumentId, documentReferenceRelation(ref.refType), {
     refType: ref.refType,
     sourceVersionId: ref.sourceVersionId ?? null,
     targetVersionId: ref.targetVersionId ?? null,
@@ -552,20 +560,25 @@ export async function syncInventoryEntityAsInfraCI(entity: {
   );
 }
 
-/** Relationship types that get their own typed edge instead of DEPENDS_ON. */
-const TYPED_EDGE_RELATIONSHIP_TYPES = new Set([
-  ...NETWORK_RELATIONSHIP_TYPES.map((t) => t.toUpperCase()),
-  "MONITORS",
-]);
+/** Relationship types that get their own typed edge instead of DEPENDS_ON: every registered,
+ *  writable configuration-item relation (BI-92804832; UPLINKS_TO and SAME_AS used to fall
+ *  through to DEPENDS_ON). */
+function isTypedInventoryRelation(key: string): boolean {
+  const def = getRelationType(key);
+  return (
+    (def?.status === "active" && def.domain.includes("InfraCI")) ||
+    NETWORK_RELATIONSHIP_TYPES.some((t) => t.toUpperCase() === key)
+  );
+}
 
 export async function syncInventoryRelationship(rel: {
   fromEntityKey: string;
   toEntityKey: string;
   relationshipType: string;
 }): Promise<void> {
-  const neoType = rel.relationshipType.toUpperCase();
+  const neoType = canonicalRelationKey(rel.relationshipType).toUpperCase();
 
-  if (TYPED_EDGE_RELATIONSHIP_TYPES.has(neoType)) {
+  if (isTypedInventoryRelation(neoType)) {
     await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, toRelationType(neoType), {
       syncedAt: nowIso(),
     });
@@ -642,6 +655,19 @@ export async function syncEaRelationship(rel: {
     relationshipId: rel.id,
     notationId: rel.notationSlug,
     relationshipType: rel.relationshipTypeSlug,
+    syncedAt: nowIso(),
+  });
+}
+
+/** Product-to-product dependency (BI-92804832): ProductDependency rows had no graph edge,
+ *  so impact analysis could not see them. Keys are the products' public productIds. */
+export async function syncProductDependency(dep: {
+  fromProductId: string;
+  toProductId: string;
+  relationType: "depends_on" | "part_of";
+}): Promise<void> {
+  await upsertGraphEdge(dep.fromProductId, dep.toProductId, dep.relationType === "part_of" ? "PART_OF" : "DEPENDS_ON", {
+    source: "ProductDependency",
     syncedAt: nowIso(),
   });
 }

@@ -1,11 +1,12 @@
 // @exposure authenticated — internal-a2a (the default) requires a session;
 // partner/external profiles are scope-gated to offers explicitly published at
-// that availabilityScope and cross-boundary POSTs additionally require the
-// GAID call chain + contract context, so the endpoint is not "public" in the
-// path-segmentation sense.
+// that availabilityScope. A cross-boundary POST additionally requires a verified
+// federation link credential (BI-D00C5FD4) plus the GAID call chain and contract
+// context; the GAIDs it carries are provenance, never the credential.
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { resolveFederationLinkAuth } from "@/lib/auth/federation-link-token";
 import { apiErrorResponse } from "@/lib/api/error";
 import { loadCoworkerCatalog } from "@/lib/coworker-service-catalog/catalog";
 import { createCoworkerA2aTask } from "@/lib/coworker-service-catalog/a2a-tasks";
@@ -64,9 +65,21 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
 
   const accessProfile = resolveAccessProfile(request, offer.availabilityScope);
   if (!accessProfile) return apiErrorResponse("INVALID_ARGUMENT", "invalid_accessProfile", 400);
+  let submittingFederationLinkId: string | null = null;
   if (accessProfile === "internal-a2a") {
     const session = await auth();
     if (!session?.user) return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
+  } else {
+    // BI-D00C5FD4: a cross-boundary submission is accepted only from a trusted,
+    // dual-approved federation link. A session, a query string or a GAID string
+    // in the body is not a credential.
+    const link = await resolveFederationLinkAuth(request.headers.get("authorization"));
+    if (!link.ok) {
+      return link.error === "link_not_trusted"
+        ? apiErrorResponse("FORBIDDEN", link.error, 403)
+        : apiErrorResponse("UNAUTHORIZED", link.error, 401);
+    }
+    submittingFederationLinkId = link.linkId;
   }
 
   const projection = projectCoworkerOfferAgentCard(offer, { accessProfile });
@@ -122,6 +135,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     authorityBoundary: projection.card.authorityBoundary,
     riskTier: projection.card.riskTier,
     requiredGrants: projection.card.security.requiredGrants,
+    submittingFederationLinkId,
   });
 
   return NextResponse.json(task, { status: 202 });

@@ -9,6 +9,7 @@
 // (the @@unique([from,to,relationType]) makes re-runs safe).
 
 import { prisma } from "../client";
+import { syncProductDependency } from "../graph-sync";
 import {
   PLATFORM_CAPABILITY_MANIFEST,
   type PlatformCapabilityManifestEntry,
@@ -75,17 +76,22 @@ export async function linkProductDependency(input: {
     },
     select: { id: true },
   })) as { id: string } | null;
-  if (existing) return "exists";
-
-  await db.productDependency.create({
-    data: {
-      fromProductId: from.id,
-      toProductId: to.id,
-      relationType: input.relationType,
-      source: input.source ?? null,
-    },
-  });
-  return "created";
+  if (!existing) {
+    await db.productDependency.create({
+      data: {
+        fromProductId: from.id,
+        toProductId: to.id,
+        relationType: input.relationType,
+        source: input.source ?? null,
+      },
+    });
+  }
+  // Project into the graph mirror (BI-92804832). Best-effort, and only against the real
+  // database: Postgres rows stay the source of truth, a re-run re-projects.
+  if (!input.db) {
+    await syncProductDependency(input).catch(() => undefined);
+  }
+  return existing ? "exists" : "created";
 }
 
 export type ProjectDependencyResult = {
