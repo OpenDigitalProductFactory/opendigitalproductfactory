@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Preserve database admission proof across application clocks
 
 BI-F19DDBCA · WC-DF321588 · Medium, atomic reliability repair.
