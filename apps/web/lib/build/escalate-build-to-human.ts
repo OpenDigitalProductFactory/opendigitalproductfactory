@@ -11,7 +11,8 @@
 //   resume-restall forever. The honest outcome is to:
 //     1. CAPTURE a durable, human-facing escalation record (root cause, what was
 //        attempted, why blocked, and a self-fix-feasibility class);
-//     2. RAISE it for attendance — reuse createPlatformIssueReport(). A self-fix
+//     2. RAISE it for attendance — through the routeToHuman seam (BI-5E067004),
+//        which files the report only after the escalation gate. A self-fix
 //        escalation is born in awaiting_escalation_ack and HELD for the
 //        escalation responder (BI-0ACD9AB2 §5.2), NOT generic-projected into a
 //        BI: the responder consults WWMD/WWWD/WSID and escalates only the
