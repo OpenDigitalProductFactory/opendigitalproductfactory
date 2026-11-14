@@ -1680,8 +1680,8 @@ docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_
   "${_converge_f_args[@]}" config --format json > "$_converge_rendered" 2>/dev/null || _converge_ok=0
 docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
   "${_converge_f_args[@]}" config --hash '*' > "$_converge_hashes" 2>/dev/null || _converge_ok=0
-docker ps -a --filter "label=com.docker.compose.project=$_project" \
-  --format '{{.Label "com.docker.compose.service"}}	{{.Label "com.docker.compose.config-hash"}}	{{.State}}	{{.Ports}}' \
+docker ps -a --no-trunc --filter "label=com.docker.compose.project=$_project" \
+  --format '{{.Label "com.docker.compose.service"}}	{{.Label "com.docker.compose.config-hash"}}	{{.State}}	{{.Ports}}	{{.ID}}' \
   > "$_converge_running" 2>/dev/null || _converge_ok=0
 _converge_summary="$(node -e '
   const fs = require("node:fs");
@@ -1710,23 +1710,37 @@ _converge_summary="$(node -e '
     if (ok !== "1") throw new Error("render");
     const services = JSON.parse(fs.readFileSync(renderedPath, "utf8")).services ?? {};
     const desired = new Map(fs.readFileSync(hashesPath, "utf8").split("\n").map((l) => l.trim().split(/\s+/)).filter((p) => p.length === 2));
+    // BI-BD708C80: a diagnostic container can share compose service labels.
+    // Group before classifying so neither observation becomes a false change.
+    const observed = new Map(), idCounts = new Map();
     for (const line of fs.readFileSync(runningPath, "utf8").split("\n").filter(Boolean)) {
-      const [service, current, state, ports] = line.split("\t");
+      const [service, current, state, ports, id] = line.split("\t");
+      const rows = observed.get(service) ?? [];
+      rows.push({ current, state, ports, id });
+      observed.set(service, rows);
+      idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+    }
+    for (const [service, rows] of observed) {
       const spec = services[service];
       if (!spec) continue; // a container outside this chain is not ours to judge
       const cls = spec.labels?.["dpf.recreate-class"];
       const want = desired.get(service);
-      if (!cls) { out.unclassified.push(service); continue; }
       if (cls === "managed") continue;
-      if (!want) { out.failed.push(service); continue; }
+      if (!["stateless", "data-owner"].includes(cls)) { out.unclassified.push(service); continue; }
+      if (rows.length !== 1) { out.failed.push(service); continue; }
+      const { current, state, ports, id } = rows[0];
+      if (!/^[a-f0-9]{64}$/.test(id ?? "") || idCounts.get(id) !== 1) { out.failed.push(service); continue; }
+      // Stopped data owners are not change candidates, even when hashes differ.
+      if (state !== "running") { out.skippedStopped.push(service); continue; }
+      if (!/^[a-f0-9]{64}$/.test(current ?? "") || !/^[a-f0-9]{64}$/.test(want ?? "")) { out.failed.push(service); continue; }
       const drift = bindDrift(service, spec, ports);
       if (drift.length) { out.bindDrift.push(...drift); continue; }
       const change = { service, from: current, to: want };
-      if (cls === "data-owner") { if (want !== current) out.dataOwnerChanged.push(change); continue; }
-      if (state !== "running") { out.skippedStopped.push(service); continue; }
-      if (want !== current) out.wouldRecreate.push(change); else out.unchanged.push(service);
+      if (want === current) { out.unchanged.push(service); continue; }
+      if (cls === "data-owner") out.dataOwnerChanged.push(change);
+      else out.wouldRecreate.push(change);
     }
-    out.outcome = out.failed.length ? "degraded" : out.wouldRecreate.length ? "would-recreate" : "current";
+    out.outcome = out.failed.length ? "degraded" : (out.wouldRecreate.length || out.dataOwnerChanged.length) ? "would-recreate" : "current";
   } catch { out.outcome = "degraded"; }
   const byName = (a, b) => (a.service ?? a).localeCompare(b.service ?? b);
   for (const key of ["wouldRecreate", "unchanged", "skippedStopped", "dataOwnerChanged", "unclassified", "failed", "bindDrift"]) out[key].sort(byName);
