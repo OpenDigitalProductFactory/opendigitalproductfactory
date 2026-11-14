@@ -96,6 +96,8 @@ Rules carried over from [upgrade service recovery](2026-10-02-upgrade-service-re
 
 Outcome: `service-converge-outcome.json` lists `recreated`, `unchanged`, `skipped-stopped` and `failed`, each with the before and after hash. It is recorded on the run like `service-reconcile-outcome.json` and shown on `/ops/self-upgrade`.
 
+Exposure guard (BI-94C4722B, from the first live shadow report): when a running service publishes a host port on a different host IP than the render, it is listed under `bindDrift` (service, port, running IP, rendered IP) and is never recreated. The first shadow report would have moved `portal-tls` from `127.0.0.1` to `0.0.0.0`, because a source install never persisted `DPF_HOST_BIND_ADDRESS`; the promoter now persists it. Recreating a service must never change who can reach it. An operator resolves a `bindDrift` row by setting `DPF_HOST_BIND_ADDRESS` to the exposure they want.
+
 ### 4. The convergence gate becomes checkable (OBJ-HONEST-GATE)
 
 The `compose` surface in `scripts/convergence-surfaces.json` gains a per-service check. When a PR changes a service that the resolved chain covers and that has a `recreateClass`, then `auto-converges` is valid and its mechanism is named (step 3c or 7e). When the service is outside every chain the resolver can produce, `auto-converges` is refused with that reason.
