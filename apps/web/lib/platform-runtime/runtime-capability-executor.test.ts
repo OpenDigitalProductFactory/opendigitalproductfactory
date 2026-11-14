@@ -4,13 +4,14 @@ import { createHash } from "node:crypto";
 const mocks = vi.hoisted(() => ({
   readFile: vi.fn(), probe: vi.fn(), resolveArtifact: vi.fn(), promoter: vi.fn(),
   coordinate: vi.fn(), rows: vi.fn(), active: vi.fn(), imageVersion: vi.fn(),
-  process: vi.fn(),
+  process: vi.fn(), taskCount: vi.fn(), transaction: vi.fn(), receipts: vi.fn(),
 }));
 vi.mock("@/lib/platform/image-version", () => ({ readImageVersion: mocks.imageVersion }));
 vi.mock("node:fs/promises", () => ({ readFile: mocks.readFile }));
 vi.mock("@/lib/shared/run-process-with-budget", () => ({ runProcessWithBudget: mocks.process }));
 vi.mock("@dpf/db", () => ({ prisma: {
   platformCapability: { findMany: mocks.rows }, runtimeCapabilityTransition: { findMany: mocks.active },
+  taskRun: { count: mocks.taskCount }, $transaction: mocks.transaction,
 } }));
 vi.mock("@/lib/self-upgrade/promoter", () => ({
   isPromoterAvailable: vi.fn(async () => true), runPromoter: mocks.promoter,
@@ -19,7 +20,7 @@ vi.mock("@/lib/self-upgrade/promoter", () => ({
 vi.mock("./transition-coordinator", () => ({
   computeCapabilityStateVersion: vi.fn(() => "0".repeat(64)),
   coordinateRuntimeCapabilityTransition: mocks.coordinate,
-  createPrismaRuntimeTransitionReceipts: vi.fn(() => ({})),
+  createPrismaRuntimeTransitionReceipts: mocks.receipts,
 }));
 
 import { executeProductionRuntimeCapabilityTransition, readProductionRuntimeCapabilityReconciliationPreview } from "./runtime-capability-executor";
@@ -38,10 +39,12 @@ describe("production reconciliation protocol admission", () => {
     mocks.imageVersion.mockResolvedValue({ raw: "a".repeat(40), source: "git-sha" });
     mocks.rows.mockResolvedValue([{ capabilityId: "runtime:core", state: "active", manifest: {} }]);
     mocks.active.mockResolvedValue([]);
+    mocks.taskCount.mockResolvedValue(0);
     mocks.resolveArtifact.mockResolvedValue({ digest: `sha256:${"b".repeat(64)}`, sourceSha: "a".repeat(40),
       contractSchema: 1, contractDigest: `sha256:${"c".repeat(64)}`, callerProtocol: { min: 1, max: 1 } });
     mocks.promoter.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ ownershipToken: "fixture-owner" }), stderr: "" });
     mocks.coordinate.mockResolvedValue({ status: "succeeded" });
+    mocks.receipts.mockReturnValue({});
     mocks.process.mockResolvedValue({ exitCode: 0, stdout: JSON.stringify({ digest: `sha256:${"f".repeat(64)}` }), stderr: "", outputLimitExceeded: false });
   });
   afterEach(() => vi.unstubAllEnvs());
@@ -81,6 +84,31 @@ describe("production reconciliation protocol admission", () => {
     } }), expect.anything());
     expect(mocks.probe).toHaveBeenCalledWith(expect.objectContaining({ expected: expect.objectContaining({ imageQualifierSha256: createHash("sha256").update("x".repeat(32)).update("\0").update("x".repeat(32)).digest("hex") }) }));
     expect(mocks.process).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("rechecks active coworker tasks for selected image ownership with manifest guard %s", async manifestGuard => {
+    const input = imageRequest();
+    mocks.rows.mockResolvedValue(Object.entries(input.reconciliation.observedDatabaseStates).map(([capabilityId, state]) => ({ capabilityId, state,
+      manifest: capabilityId === "runtime:browser-automation" && manifestGuard ? { runtime: { workGuards: ["task-run:coworker"] } } : {} })));
+    mocks.taskCount.mockResolvedValue(2);
+    await executeProductionRuntimeCapabilityTransition(input);
+    const dependencies = mocks.coordinate.mock.calls[0]![1];
+    expect(await dependencies.recheckAttributedWork()).toEqual({ "task-run:coworker": 2 });
+    expect(mocks.taskCount).toHaveBeenCalledWith({ where: { source: "coworker", status: { in: ["submitted", "working", "input-required", "auth-required", "quiescing"] } } });
+  });
+
+  it("drains selected image work through the real coordinator and receipt admission before creating or applying", async () => {
+    const real = await vi.importActual<typeof import("./transition-coordinator")>("./transition-coordinator");
+    mocks.coordinate.mockImplementationOnce(real.coordinateRuntimeCapabilityTransition);
+    mocks.receipts.mockImplementationOnce(real.createPrismaRuntimeTransitionReceipts);
+    const input = imageRequest(), create = vi.fn(() => { throw new Error("test_unexpected_pending_creation_while_coworker_active"); });
+    mocks.rows.mockResolvedValue(Object.entries(input.reconciliation.observedDatabaseStates).map(([capabilityId, state]) => ({ capabilityId, state,
+      manifest: capabilityId === "runtime:browser-automation" ? { runtime: { workGuards: ["task-run:coworker"] } } : {} })));
+    mocks.taskCount.mockResolvedValue(2);
+    mocks.transaction.mockImplementationOnce(async operation => operation({ $executeRaw: vi.fn(), platformCapability: { findMany: mocks.rows }, runtimeCapabilityTransition: { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => null), create } }));
+    await expect(executeProductionRuntimeCapabilityTransition(input)).resolves.toEqual({ status: "drain_required", blockingCounts: { "task-run:coworker": 2 } });
+    expect(create).not.toHaveBeenCalled();
+    expect(mocks.promoter.mock.calls.every(([params]) => params.runtimeCapabilityEnvelope === undefined)).toBe(true);
   });
 
   it("resolves only the immutable installed consumer release to a pinned service manifest", async () => {

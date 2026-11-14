@@ -266,6 +266,10 @@ durable recovery barrier; another attempt cannot erase that uncertainty. Native
 unhealthy apply restores the exact prior cached image. Database compensation
 requires the authenticated original applied receipt and a signed restore-only
 plan. Identical capability settings alone never prove that image effects were absent.
+Selected image owners retain their existing catalog and saved manifest work guards.
+The ordinary serializable receipt admission rechecks attributed tasks even though
+image-only reconciliation disables no capability; active work returns drain-required
+before a transition row or service apply is created.
 The existing ten-minute authority lifetime is preserved. Preparation reserves time
 for bounded apply and restoration; a short remaining lifetime holds before effects.
 

@@ -14,7 +14,7 @@ import { canonicalTransitionPayload, prepareRuntimeReconciliationIntent, type Ru
 import { computeCapabilityStateVersion as computeHostStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 import { runtimeTransitionHostContext, runtimeTransitionHostPlatform } from "./runtime-transition-host-context";
 
-type CatalogEntry = { capabilityId: string; dependencies: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string; hostPlatforms: string[] }> };
+type CatalogEntry = { capabilityId: string; dependencies: string[]; workGuards: string[]; services: Array<{ service: string; profiles: string[]; dependsOn: string[]; targetClassification?: string; healthSemantics?: string; hostPlatforms: string[] }> };
 const catalog = catalogSeed as { catalogHash: string; capabilities: CatalogEntry[] };
 
 export function requiredRuntimeServicesAreHealthy(
@@ -190,10 +190,15 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
       ? "runtime_service_image_protocol_unsupported" as const : "runtime_service_image_manifest_unproven" as const }; }
   }
   const disabling = rows.filter((row) => (row.state === "active" && desiredStates[row.capabilityId] !== "active") || (previousKeys.includes(row.capabilityId) && !desiredSet.has(row.capabilityId)));
-  const guards = [...new Set(disabling.flatMap((row) => {
+  // Image-only repair recreates an in-use service without disabling its
+  // capability. Its existing owners' work guards still apply at admission.
+  const selectedServices = new Set<string>(imagePlan?.services.map(entry => entry.service) ?? []);
+  const imageOwners = catalog.capabilities.filter(capability => capability.services.some(service => selectedServices.has(service.service)));
+  const guardedIds = new Set([...disabling.map(row => row.capabilityId), ...imageOwners.map(capability => capability.capabilityId)]);
+  const guards = [...new Set([...imageOwners.flatMap(capability => capability.workGuards), ...rows.filter(row => guardedIds.has(row.capabilityId)).flatMap((row) => {
     const runtime = row.manifest && typeof row.manifest === "object" && !Array.isArray(row.manifest) ? (row.manifest as { runtime?: { workGuards?: unknown } }).runtime : undefined;
     return Array.isArray(runtime?.workGuards) ? runtime.workGuards.filter((guard): guard is string => typeof guard === "string") : [];
-  }))];
+  })])];
   const recheckAttributedWork = async () => (await countAttributedWork(guards, createPrismaWorkAttributionStore(prisma))).blockingCounts;
   const protocolSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
   const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH, stateDirHostPath = process.env.DPF_STATE_DIR_HOST, protocolSecretFileHostPath = process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST;
