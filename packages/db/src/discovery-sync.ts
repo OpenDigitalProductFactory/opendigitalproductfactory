@@ -14,6 +14,7 @@ import type {
   DiscoveryRunMeta,
   DiscoverySyncClient,
 } from "./discovery-sync-contracts";
+import { DISCOVERY_PERSIST_TRANSACTION_OPTIONS } from "./discovery-sync-contracts";
 
 export type {
   DiscoveryPersistenceSummary,
@@ -102,6 +103,8 @@ export function summarizeDiscoveryPersistence(
 
   return normalizedSummary;
 }
+
+export { DISCOVERY_PERSIST_TRANSACTION_OPTIONS };
 
 export async function persistBootstrapDiscoveryRun(
   db: DiscoverySyncClient,
@@ -774,7 +777,7 @@ export async function persistBootstrapDiscoveryRun(
         }];
       }),
     };
-  });
+  }, DISCOVERY_PERSIST_TRANSACTION_OPTIONS);
 
   for (const entity of projected.entitiesToProject) {
     await projector.projectInventoryEntity(entity).catch((error: unknown) => {

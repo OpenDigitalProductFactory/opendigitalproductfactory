@@ -45,6 +45,14 @@ describe("scheduled reporting settlement", () => {
     expect(db.notification.create).not.toHaveBeenCalled();
     expect(run.status).toBe("completed");
   });
+  it("persists safe inspection metadata only on the fenced run, never in task configuration or messages",async()=>{
+    const diagnostic={version:1 as const,code:"report-invalid-json" as const,original:{sha256:"a".repeat(64),bytes:17,truncated:false,redacted:true}};
+    await failScheduledReportingRun({...input(),diagnostic},"Scheduled report must be one JSON object.");
+    expect(run.progressPayload).toMatchObject({scheduledReporting:{diagnostic}});
+    expect(JSON.stringify(task.taskConfig)).not.toContain("diagnostic");
+    expect(JSON.stringify(db.taskMessage.create.mock.calls)).not.toContain("diagnostic");
+    expect(db.notification.create).not.toHaveBeenCalled();
+  });
   it("requires actual fresh successful observations rather than inference or discovery", async () => {
     db.toolExecution.findMany.mockResolvedValue([]);
     await expect(settleScheduledReportingRun(input())).rejects.toThrow();
@@ -110,4 +118,15 @@ describe("scheduled reporting settlement", () => {
     expect(stored).not.toContain("fixture-recommendation-secret");
     expect(stored).not.toContain("fixture-decision-secret");
   });
+});
+
+describe("bounded scheduled report inspection",()=>{
+ it.each([["x".repeat(16385),"report-oversized"],["not JSON","report-invalid-json"],["{}","report-invalid-contract"]])("classifies rejected input without returning its content",async(content,code)=>{
+  const result=await runScheduledReportingLoop([],async()=>{
+   const check=await currentReadEvidencePolicy()!.inspect(content);
+   return {content:"held",check};
+  });
+  expect(result.check).toMatchObject({complete:false,code});
+  expect(result.check.message).not.toContain(content);
+ });
 });
