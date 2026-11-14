@@ -2,6 +2,13 @@
 
 import { useState, useMemo } from "react";
 import type { RouteDecisionLogRow } from "@/lib/actions/route-decision-logs";
+import type { RoutingConfidenceSignal } from "@/lib/deliberation/routing-confidence";
+import { useT } from "@/lib/i18n/use-t";
+import {
+  describeProvenance,
+  describeVariability,
+  type CallParameterReceipt,
+} from "@/lib/routing/call-parameter-receipt";
 import type { CandidateTrace } from "@/lib/routing/types";
 import type { ProviderSuitabilityRouteReceipt } from "@/lib/routing/provider-suitability/evidence";
 
@@ -104,6 +111,122 @@ function SuitabilityReceipt({ receipt }: { receipt: ProviderSuitabilityRouteRece
         {receipt.explanationCodes.length > 0 && <div>Decision evidence: <span style={{ color: "var(--dpf-text)" }}>{receipt.explanationCodes.join(", ")}</span></div>}
       </div>
       <div style={{ marginTop: 6, color: "var(--dpf-muted)" }}>This receipt records policy facts only—never prompts, attachments, credentials, or external account IDs.</div>
+    </div>
+  );
+}
+
+
+// ── How the model was called (BI-B4081AA1) ────────────────────────────────────
+//
+// The routing log could say WHICH model ran and never HOW it was called. Intent
+// first, numbers second, provenance last: "temperature 0.6 — the model's
+// published setting for reasoning mode" reads as a documented requirement rather
+// than an arbitrary choice, which is the difference that decides whether an
+// operator trusts it.
+
+/** Catalog keys for the sampling labels, so the names travel with the copy. */
+const PARAMETER_KEYS = ["temperature", "topP", "topK", "minP", "repeatPenalty"] as const;
+type ParameterKey = (typeof PARAMETER_KEYS)[number];
+
+function isParameterKey(key: string): key is ParameterKey {
+  return (PARAMETER_KEYS as readonly string[]).includes(key);
+}
+
+export function CallParameters({ receipt }: { receipt: CallParameterReceipt }) {
+  const t = useT("routeAudit");
+  const entries = Object.entries(receipt.sampling) as Array<[string, number]>;
+
+  return (
+    <div style={{ marginTop: 12, padding: 10, background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-text)", marginBottom: 6 }}>
+        {t("callParameters.heading")}
+      </div>
+
+      {entries.length === 0 ? (
+        <div style={{ fontSize: 11, color: "var(--dpf-muted)" }}>
+          {t("callParameters.providerDefaults")}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 4, fontSize: 11 }}>
+          {entries.map(([key, value]) => {
+            const origin = receipt.provenance[key as keyof typeof receipt.provenance];
+            return (
+              <div key={key} style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "baseline" }}>
+                <span style={{ color: "var(--dpf-muted)", minWidth: 96 }}>
+                  {isParameterKey(key) ? t(`callParameters.${key}`) : key}
+                </span>
+                <span style={{ color: "var(--dpf-text)", fontFamily: "monospace", fontWeight: 600 }}>{value}</span>
+                {key === "temperature" && (
+                  <span style={{ color: "var(--dpf-muted)" }}>({describeVariability(value)})</span>
+                )}
+                {origin && (
+                  <span style={{ color: "var(--dpf-accent)" }}>
+                    — {describeProvenance(origin, receipt.mode === "thinking")}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 12, fontSize: 11, color: "var(--dpf-muted)" }}>
+        <span>{t("callParameters.outputCeiling")} <span style={{ color: "var(--dpf-text)", fontFamily: "monospace" }}>{receipt.maxTokens}</span></span>
+        {receipt.effort && (
+          <span>
+            {t("callParameters.reasoningLabel")}{" "}
+            <span style={{ color: "var(--dpf-success)" }}>{t("callParameters.reasoningOn")}</span>
+            {receipt.effort.budgetTokens !== undefined && (
+              <span style={{ fontFamily: "monospace" }}>
+                {" "}
+                {t("callParameters.reasoningBudget", { tokens: receipt.effort.budgetTokens })}
+              </span>
+            )}
+            <span style={{ fontFamily: "monospace" }}> · {receipt.effort.expressedAs}</span>
+          </span>
+        )}
+        {receipt.constrainedDecoding && <span style={{ color: "var(--dpf-success)" }}>{t("callParameters.jsonConstrained")}</span>}
+        {receipt.recipeId && <span>{t("callParameters.recipe")} <span style={{ fontFamily: "monospace", color: "var(--dpf-text)" }}>{receipt.recipeId.slice(0, 10)}…</span></span>}
+      </div>
+
+      {receipt.effortUnexpressed && (
+        // The honest version of a silent no-op.
+        <div style={{ marginTop: 8, fontSize: 11, color: "var(--dpf-warning)" }}>
+          {t("callParameters.effortUnexpressed")}
+        </div>
+      )}
+
+      {receipt.dropped && receipt.dropped.length > 0 && (
+        <div style={{ marginTop: 6, fontSize: 11, color: "var(--dpf-muted)" }}>
+          {t("callParameters.dropped", { names: receipt.dropped.join(", ") })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── How confident routing was (BI-A08285BC) ──────────────────────────────────
+//
+// A below-floor run used to leave only a sentence in `reason`. Showing it here
+// makes it countable by eye, and the panel stays silent when routing was
+// confident so it never becomes noise on a healthy decision.
+
+export function RoutingConfidence({ signal }: { signal: RoutingConfidenceSignal }) {
+  const t = useT("routeAudit");
+  const belowFloor = signal.qualityFloorRelaxed === true;
+  const noChoice = typeof signal.candidateCount === "number" && signal.candidateCount <= 1;
+  if (!belowFloor && !noChoice && !signal.fallbackUsed) return null;
+
+  return (
+    <div style={{ marginTop: 12, padding: 10, background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-warning)", borderRadius: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--dpf-warning)", marginBottom: 4 }}>
+        {t("lowConfidence.heading")}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--dpf-muted)", display: "grid", gap: 2 }}>
+        {belowFloor && <div>{t("lowConfidence.belowFloor")}</div>}
+        {noChoice && <div>{t("lowConfidence.noChoice")}</div>}
+        {signal.fallbackUsed && <div>{t("lowConfidence.fallback")}</div>}
+      </div>
     </div>
   );
 }
@@ -232,6 +355,8 @@ function DecisionRow({ row }: { row: RouteDecisionLogRow }) {
               <CandidateTable candidates={row.excludedTrace} />
             </>
           )}
+          {row.routingConfidence && <RoutingConfidence signal={row.routingConfidence} />}
+          {row.callParameters && <CallParameters receipt={row.callParameters} />}
           {row.suitabilityReceipt && <SuitabilityReceipt receipt={row.suitabilityReceipt} />}
         </div>
       )}

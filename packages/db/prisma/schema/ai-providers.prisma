@@ -431,6 +431,18 @@ model RouteDecisionLog {
   selectedModelId            String?
   suitabilityReceipt         Json?
   inferenceDataScreenReceipt Json?
+  // BI-B4081AA1: how the model was CALLED — resolved sampling values, where each
+  // came from, how effort was expressed, and whether the provider could carry it.
+  // The plan already held this and nothing persisted it, so the audit log could
+  // say why a model was chosen but not that it ran at temperature 1.0. Policy-safe
+  // by construction: numbers and provenance only, never request content.
+  callParameters             Json?
+  // BI-A08285BC: how much confidence routing had in this answer — whether it had
+  // to relax the quality floor, how many candidates actually competed, whether a
+  // fallback was used. Persisted so "how often did we run below the floor last
+  // week, and why" is answerable; before this the only trace was a sentence in
+  // `reason` that nothing read.
+  routingConfidence          Json?
 
   @@index([taskType])
   @@index([agentMessageId, createdAt])
