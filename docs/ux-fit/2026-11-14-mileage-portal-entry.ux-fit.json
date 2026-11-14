@@ -3,9 +3,7 @@
   "decidedOption": "single-collapsed-add-or-claim-disclosure",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/finance/mileage/MileageEntryPanel.tsx",
-      "apps/web/app/(shell)/finance/mileage/page.tsx",
-      "apps/web/app/(shell)/finance/mileage/MileageTripsTable.tsx"
+      "apps/web/app/(shell)/finance/mileage/MileageEntryPanel.tsx"
     ]
   },
   "evidence": {
