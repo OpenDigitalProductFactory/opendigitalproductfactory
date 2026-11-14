@@ -75,5 +75,19 @@
   "side": {
     "employee_withheld": "employee",
     "employer_contribution": "employer"
+  },
+  "table": {
+    "heading": "Enter a federal withholding table",
+    "help": "From IRS Publication 15-T, Annual Percentage Method tables. Paste one row per line: the wage the row starts at, then its rate as printed, for example 7,500 10%. Every row is confirmed together.",
+    "filingStatus": "Filing status",
+    "single": "Single or married filing separately",
+    "marriedJointly": "Married filing jointly",
+    "headOfHousehold": "Head of household",
+    "schedule": "Which table",
+    "standard": "Standard",
+    "step2": "Form W-4, Step 2 checkbox",
+    "line1g": "Worksheet 1A line 1g amount (standard table only)",
+    "rows": "Rows: wage over, then rate",
+    "submit": "Confirm this table"
   }
 }

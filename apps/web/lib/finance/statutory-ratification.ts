@@ -250,3 +250,99 @@ export async function recordAndRatifyStatutoryRule(
     return ratifyRow(tx, created, input.actor, input.now);
   });
 }
+
+// ── Withholding tables (BI-099EAE30) ─────────────────────────────────────────
+// An IRS Annual Percentage Method table is several figures that only mean
+// something together: a table missing its top rows would quietly under-withhold
+// every high earner. So a table is entered and confirmed in ONE transaction,
+// each row at the same citation bar as a single figure, and any refused row
+// rolls the whole table back.
+
+export interface WithholdingTableEntry {
+  jurisdictionRefId: string;
+  filingStatus: "single" | "married_jointly" | "head_of_household";
+  schedule: "standard" | "step2";
+  taxYear: number;
+  effectiveFrom: Date;
+  sourceUrl: string;
+  sourceExcerpt: string;
+  retrievedAt: Date;
+  /** Rows as the IRS prints them: wages over `over` taxed at `rate` (a fraction). */
+  rows: ReadonlyArray<{ over: number; rate: number }>;
+  /** Worksheet 1A line 1g for this filing status, when entering the standard table. */
+  line1g?: number | null;
+}
+
+class TableRefused extends Error {}
+
+export async function recordAndRatifyWithholdingTable(
+  db: StatutoryRatificationDb,
+  input: { entry: WithholdingTableEntry; actor: StatutoryActor; now: Date; idSeed: string },
+): Promise<ActionResult<{ created: number }>> {
+  const { entry, actor, now } = input;
+  if (statutoryActorKind(actor) !== "human") return err("only a person can enter a statutory figure directly");
+  if (!entry.sourceExcerpt.trim()) {
+    return err("Quote the passage or table that states these figures; without it nobody can later check what was read.");
+  }
+  const rows = [...entry.rows];
+  if (rows.length === 0) return err("Enter at least one row of the table.");
+  if (rows[0]!.over !== 0) return err("A table starts with the row for wages over 0.");
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]!;
+    if (!Number.isFinite(r.over) || r.over < 0 || !Number.isFinite(r.rate) || r.rate < 0 || r.rate >= 1) {
+      return err(`Row ${i + 1} is not a wage amount and a percentage below 100.`);
+    }
+    if (i > 0 && r.over <= rows[i - 1]!.over) return err("Each row must start above the one before it.");
+  }
+
+  const base = {
+    jurisdictionRefId: entry.jurisdictionRefId,
+    taxType: "federal_withholding",
+    taxYear: entry.taxYear,
+    effectiveFrom: entry.effectiveFrom,
+    effectiveTo: null,
+    sourceUrl: entry.sourceUrl,
+    sourceExcerpt: entry.sourceExcerpt,
+    retrievedAt: entry.retrievedAt,
+    proposedByAgentId: null,
+    notes: null,
+  };
+  const proposals = [
+    ...rows.map((r) => ({
+      ...base, ruleKind: "rate" as const, side: "employee_withheld", value: r.rate, currency: null,
+      qualifiers: { filingStatus: entry.filingStatus, schedule: entry.schedule, over: r.over },
+    })),
+    ...(entry.line1g != null
+      ? [{
+          ...base, ruleKind: "amount" as const, side: null, value: entry.line1g, currency: "USD",
+          qualifiers: { line: "1g", filingStatus: entry.filingStatus === "married_jointly" ? "married_jointly" : "other" },
+        }]
+      : []),
+  ];
+  for (const proposal of proposals) {
+    const check = checkStatutoryProposal(proposal);
+    if (!check.valid) return err(check.detail);
+  }
+
+  try {
+    await db.$transaction(async (tx) => {
+      for (const [i, proposal] of proposals.entries()) {
+        const created = await tx.payrollTaxRule.create({
+          data: {
+            ...proposal,
+            payrollTaxRuleId: `PTR-${input.idSeed}-${i}`,
+            qualifierKey: statutoryQualifierKey(proposal.qualifiers),
+            status: "proposed",
+            proposedAt: now,
+          },
+        });
+        const ratified = await ratifyRow(tx, created, actor, now);
+        if (!ratified.ok) throw new TableRefused(ratified.error);
+      }
+    });
+  } catch (error) {
+    if (error instanceof TableRefused) return err(error.message);
+    throw error;
+  }
+  return ok({ created: proposals.length });
+}

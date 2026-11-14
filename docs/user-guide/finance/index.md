@@ -212,6 +212,14 @@ each item named, so a missing figure is never mistaken for nothing being owed.
   and the first pay date it applies to. A new W-4 applies from that date and never
   changes an earlier run.
 
+**Entering the withholding tables.** On Statutory Rates, open **Enter a figure you
+have read yourself**, then **Enter a federal withholding table**. Choose the filing
+status and whether it is the standard table or the Step 2 checkbox table. Paste the
+rows from Publication 15-T as printed, one per line, such as `7,500 10%`. Add the
+line 1g amount with the standard table, then add the source and the quoted table.
+All the rows are confirmed together, or none are. There are six tables: three
+filing statuses, each with a standard and a Step 2 table.
+
 **Running it.** Under **Run payroll for a period**, give the first and last day, the
 pay date and how often you pay. DPF computes a draft run: salaried staff from their
 salary, hourly staff from approved timesheets in the period. Federal income tax

@@ -17,6 +17,7 @@ import { useT } from "@/lib/i18n/use-t";
 import {
   ratifyStatutoryRuleAction,
   recordStatutoryRuleAction,
+  recordWithholdingTableAction,
   rejectStatutoryRuleAction,
 } from "@/lib/actions/statutory-rates";
 import type { StatutoryRuleKind } from "@/lib/finance/statutory-rules";
@@ -37,7 +38,10 @@ export interface StatutoryRuleView {
 }
 
 export interface JurisdictionOption {
+  /** The reference row's internal id: what PayrollTaxRule.jurisdictionRefId points at. */
   jurisdictionRefId: string;
+  /** The US federal authority, preselected. */
+  isDefault: boolean;
   label: string;
 }
 
@@ -140,7 +144,7 @@ function EntryForm({
   const [pending, start] = useTransition();
   const year = new Date().getUTCFullYear();
   const [form, setForm] = useState({
-    jurisdictionRefId: jurisdictions.find((j) => j.jurisdictionRefId === "TAX-JUR-US-FEDERAL")?.jurisdictionRefId
+    jurisdictionRefId: jurisdictions.find((j) => j.isDefault)?.jurisdictionRefId
       ?? jurisdictions[0]?.jurisdictionRefId ?? "",
     taxType: "social_security",
     ruleKind: "rate" as StatutoryRuleKind,
@@ -239,8 +243,86 @@ function EntryForm({
         >
           {t("entry.submit")}
         </Button>
+        <TableForm jurisdictionRefId={form.jurisdictionRefId} onDone={onDone} />
       </details>
     </Surface>
+  );
+}
+
+// BI-099EAE30: an IRS withholding table is many figures confirmed together, so
+// it has its own form. Rows are pasted as the IRS prints them.
+function TableForm({ jurisdictionRefId, onDone }: { jurisdictionRefId: string; onDone: (msg: string | null) => void }) {
+  const t = useT("statutoryRates");
+  const [pending, start] = useTransition();
+  const year = new Date().getUTCFullYear();
+  const [form, setForm] = useState({
+    filingStatus: "single",
+    schedule: "standard",
+    taxYear: String(year),
+    effectiveFrom: `${year}-01-01`,
+    retrievedAt: new Date().toISOString().slice(0, 10),
+    sourceUrl: "",
+    sourceExcerpt: "",
+    rowsText: "",
+    line1g: "",
+  });
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const submit = () => start(async () => {
+    const res = await recordWithholdingTableAction({ ...form, jurisdictionRefId, taxYear: Number(form.taxYear) });
+    if (res.ok) setForm((f) => ({ ...f, rowsText: "", line1g: "", sourceExcerpt: "" }));
+    onDone(res.ok ? null : res.error);
+  });
+
+  return (
+    <div className="mt-6 border-t border-[var(--dpf-border)] pt-4">
+      <h3 className="text-sm font-semibold text-[var(--dpf-text)]">{t("table.heading")}</h3>
+      <p className="mt-1 text-xs text-[var(--dpf-muted)]">{t("table.help")}</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label className={LABEL}>{t("table.filingStatus")}
+          <select value={form.filingStatus} onChange={set("filingStatus")} className={FIELD}>
+            <option value="single">{t("table.single")}</option>
+            <option value="married_jointly">{t("table.marriedJointly")}</option>
+            <option value="head_of_household">{t("table.headOfHousehold")}</option>
+          </select>
+        </label>
+        <label className={LABEL}>{t("table.schedule")}
+          <select value={form.schedule} onChange={set("schedule")} className={FIELD}>
+            <option value="standard">{t("table.standard")}</option>
+            <option value="step2">{t("table.step2")}</option>
+          </select>
+        </label>
+        <label className={LABEL}>{t("table.line1g")}
+          <input inputMode="decimal" value={form.line1g} onChange={set("line1g")} className={FIELD} />
+        </label>
+        <label className={LABEL}>{t("entry.taxYear")}
+          <input inputMode="numeric" value={form.taxYear} onChange={set("taxYear")} className={FIELD} />
+        </label>
+        <label className={LABEL}>{t("entry.effectiveFrom")}
+          <input type="date" value={form.effectiveFrom} onChange={set("effectiveFrom")} className={FIELD} />
+        </label>
+        <label className={LABEL}>{t("entry.readOn")}
+          <input type="date" value={form.retrievedAt} onChange={set("retrievedAt")} className={FIELD} />
+        </label>
+        <label className={`${LABEL} sm:col-span-2 lg:col-span-3`}>{t("entry.sourceUrl")}
+          <input type="url" value={form.sourceUrl} onChange={set("sourceUrl")} className={FIELD} />
+        </label>
+        <label className={`${LABEL} sm:col-span-2 lg:col-span-3`}>{t("table.rows")}
+          <textarea value={form.rowsText} onChange={set("rowsText")} rows={8} className={FIELD} />
+        </label>
+        <label className={`${LABEL} sm:col-span-2 lg:col-span-3`}>{t("entry.excerpt")}
+          <textarea value={form.sourceExcerpt} onChange={set("sourceExcerpt")} rows={3} className={FIELD} />
+        </label>
+      </div>
+      <Button
+        size="sm"
+        className="mt-3"
+        onClick={submit}
+        disabled={pending || !form.rowsText.trim() || !form.sourceUrl.trim() || !form.sourceExcerpt.trim()}
+      >
+        {t("table.submit")}
+      </Button>
+    </div>
   );
 }
 
