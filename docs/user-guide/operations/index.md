@@ -8,27 +8,31 @@ order: 1
 
 Operations is the delivery backlog for the platform. It tracks the work items, epics, priorities, and deployments that make up your team's delivery commitments. It is designed for transparency — blockers are visible, work in progress is limited by investment (each portfolio admits new work while its points in flight fit its allowance, so ten small items and two large ones that cost the same are treated alike), and progress is always up to date.
 
-## Workroom Inventory
+## Work in progress: the Work Atlas
 
 **Work** in the main navigation opens this same page — there is one entry for work activity, not a separate dashboard beside it. It is distinct from the coworker directory under **Workforce**: the Workforce portfolio groups business work, including supporting activities such as hiring and finance, while the coworker directory is a people-and-agent view across all four portfolios.
 
-Open **Work in progress** (`/ops/workrooms`) to follow business, coworker and development work in one place. Choose **Needs attention**, **Working now** or **Waiting**. The page starts with attention when it is recorded. A renewed session lease alone does not mean work is progressing.
+Open **Work in progress** (`/ops/workrooms`) to see every open workroom on one screen, called the **Work Atlas**. Grey means a room is moving on its own. Colour and shape mean you should look.
 
-Each row shows the work, its accountable person and its next step. Accountability comes from the room, its responsibility chain or the recorded organization owner. **Not assigned** means a person has not been resolved; the page does not guess from who started the session. Select the work's title to open its existing case and supported actions.
+**Today's question** sits at the top: how many rooms are waiting on a person, and which of them has gone longest without a new signal. Select that room to open it.
 
-Rooms waiting on the same recovery condition are grouped under **Shared recovery issues**. Expand a group to see its affected rooms. A missing stage result needs evidence or writeback from the executor; changing ownership alone does not restore it.
+Below it are five counts, each with the mark it uses on the map:
 
-**Technical evidence** reveals session information, branches, lease reasons and recovery conditions. **History** loads the retained rows only when opened. **System details** explains the system's protected leases and cleanup candidates. Routine expiry follows the existing policy: a valid held lease is not reaped, paused sessions retain their resume grace, and unmerged work is preserved. The Waiting view does not promise that an unavailable worker will automatically return.
+- **Needs a person** (amber diamond): a decision, approval, owner or closeout is waiting on someone.
+- **Stuck or held** (red square with a bar): the room is blocked, failed, or paused by its drive. This replaces the old **Shared recovery issues** section.
+- **Working now** (light grey square): an executor is demonstrably working.
+- **Waiting its turn** (dark grey square): the room is waiting for capacity or input.
+- **No recent signal** (hatched square): nothing recorded says what the room is doing.
 
-History says **Closed** for an archived room. **Source merged** requires recorded merge evidence; it does not assert that the change is deployed or accepted.
+Select a count to highlight those rooms and dim the rest. Select it again to show every state. A renewed session lease alone does not mean work is progressing.
 
-The page reads up to 200 recent rooms. Shared recovery can include older rooms. The attention total combines both and counts each room once. Open a portfolio's Work view to narrow the same inventory. Open **Architecture > Workrooms** for reusable definitions rather than instance history.
+The map draws one square per room. Rooms group by portfolio (Manufacturing and Delivery first, **Not yet placed** last), then by delivery shape (**Unshaped** when a room declares none). Within a shape, rooms that need a look sit at the left. Each portfolio heading gives its totals, for example "118 rooms · 18 need you · 7 stuck". Select a portfolio name to show only that portfolio. Select any square to open its room.
 
-**Activity by portfolio** groups the same Workrooms under the four portfolios and summarises each one with a few concrete activities rather than a bare count. Every line names its Workroom and says what is happening to it, so two Workrooms blocked for the same reason stay distinguishable. Select any line to open that Workroom's activity case in one step.
+Select a shape's name to open its rows. Each row shows the room, its stage rail (done, current, still to do) and what it is doing or why it is held, with its accountable person. A held room shows the drive's recorded cause and since when. Rows show eight at a time; filter by state to narrow the rest. **Not assigned** accountability means no person has been resolved; the page does not guess from who started the session.
 
-Use the arrow beside a portfolio to expand it. Expanding lists the Workrooms in that portfolio, up to twenty-five at a time, and tells you how many it is not listing. Expanding one portfolio does not collapse the others and does not change what you already have open.
+Filters live in the address, for example `/ops/workrooms?portfolio=forEmployees&state=stuck&shape=delivery-small`, so other pages and agents can link straight to a view and a refresh keeps it. An area's **Work** view now gives its room counts and links here filtered to that portfolio. Agents read the same picture through `list_workrooms` with `view: "atlas"`.
 
-Counts describe the Workrooms the page read, not everything in the portfolio. When the page reads its limit, each count reads "N rooms read" and a note below the tree says so. To see beyond that, narrow the inventory below or open the portfolio itself.
+The Atlas reads every open room, up to 2,000. Above that it says the picture is truncated. Open **Architecture > Workrooms** for reusable definitions rather than instance history.
 
 **Day-to-day operations** lists every standing room with its last 14 days. A missed day shows as an outlined cross, so it stands out as clearly as a stuck project. See [Day-to-day operations](../workspace/work-rooms.md#day-to-day-operations) for what each mark means.
 

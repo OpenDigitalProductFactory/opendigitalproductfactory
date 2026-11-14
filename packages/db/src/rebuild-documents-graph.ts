@@ -59,7 +59,7 @@ async function rebuildDocuments(): Promise<void> {
       anchor: reference.anchor,
     });
   }
-  console.log(`Synced ${references.length} DOC_REFERENCES edges`);
+  console.log(`Synced ${references.length} document reference edges`);
 
   console.log("Managed document graph rebuild complete.");
 }

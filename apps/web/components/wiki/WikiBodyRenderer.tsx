@@ -96,7 +96,7 @@ export function wikilinkHref(slug: string): string {
   return `/coworker-decisions/${slug}`;
 }
 
-const MARKDOWN_OPTIONS: RenderMarkdownOptions = {
+const BASE_MARKDOWN_OPTIONS: RenderMarkdownOptions = {
   classes: {
     h1: "text-xl font-semibold text-[var(--dpf-text)] mt-6 mb-3",
     h2: "text-base font-semibold text-[var(--dpf-text)] mt-6 mb-2 pb-1 border-b border-[var(--dpf-border)]",
@@ -120,9 +120,19 @@ const MARKDOWN_OPTIONS: RenderMarkdownOptions = {
 
 // ─── Public component ───────────────────────────────────────────────────────
 
-type WikiBodyRendererProps = { body: string };
+type WikiBodyRendererProps = {
+  body: string;
+  /**
+   * BI-A63A9476: hrefs of the readable entity ids in the body, resolved on the
+   * server. Absent (kernel and profession pages) every id stays plain text.
+   */
+  entityRefHrefs?: Readonly<Record<string, string>>;
+};
 
-export function WikiBodyRenderer({ body }: WikiBodyRendererProps): ReactNode {
+export function WikiBodyRenderer({ body, entityRefHrefs }: WikiBodyRendererProps): ReactNode {
+  const MARKDOWN_OPTIONS = entityRefHrefs
+    ? { ...BASE_MARKDOWN_OPTIONS, entityRefHref: (id: string) => entityRefHrefs[id] ?? null }
+    : BASE_MARKDOWN_OPTIONS;
   const sections = splitMarkdownSections(body);
   const hasCollapsibleSections = sections.some((section) => section.kind === "section");
 

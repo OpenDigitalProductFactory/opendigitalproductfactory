@@ -39,10 +39,17 @@ export interface SysmlDesiredElement {
   properties?: Record<string, unknown>;
 }
 
+/** What a weak SysML `traces` edge actually records (BI-52280538). A trace without one
+ *  says only that two elements are connected; cross-layer traces must name it. */
+export const TRACE_KINDS = ["instance-of", "navigates-to", "protects", "implemented-by"] as const;
+export type TraceKind = (typeof TRACE_KINDS)[number];
+
 export interface SysmlDesiredRel {
   fromKey: string;
   toKey: string;
   relSlug: string;
+  /** Required on a cross-layer `traces` edge; stored as properties.traceKind. */
+  traceKind?: TraceKind;
   /** Relationship metadata carried into EaRelationship.properties. Use this for
    * bounded explanation codes, condition labels, and source revisions — never
    * payload content. */
@@ -299,6 +306,14 @@ export async function applySysmlModel(
       });
     };
     for (const rel of model.crossLayerRelationships) {
+      if (rel.relSlug === "traces" && !rel.traceKind) {
+        // A cross-layer trace must say what it records (BI-52280538); refuse it loudly, like an unresolved endpoint.
+        crossLayerUnresolved++;
+        console.warn(
+          `[sysml-model-seed] cross-layer ${rel.fromKey} -[traces]-> ${rel.toKey}: no traceKind (${TRACE_KINDS.join(" | ")}) — skipping`,
+        );
+        continue;
+      }
       const relNotationSlug = rel.relationshipNotationSlug ?? notationSlug;
       const relationshipTypeId = await resolveRelationshipTypeId(
         rel.relSlug,
@@ -323,6 +338,7 @@ export async function applySysmlModel(
       );
       const properties: Prisma.InputJsonObject = {
         crossLayer: true,
+        ...(rel.traceKind ? { traceKind: rel.traceKind } : {}),
         ...(rel.properties ?? {}),
       };
       const found = await db.eaRelationship.findFirst({

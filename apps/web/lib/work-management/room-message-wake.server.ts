@@ -108,21 +108,6 @@ async function writeWakeState(
   });
 }
 
-/** writeWakeState, but only if the message's wake is still pending; false when another run decided it first. */
-async function claimPendingWake(
-  deps: RoomWakeDeps,
-  message: { id: string; structuredPayload: unknown },
-  addressing: RoomMessageAddressing,
-  wake: RoomMessageAddressing["wake"],
-): Promise<boolean> {
-  const payload = payloadRecord(message.structuredPayload);
-  const claimed = await deps.db.workItemMessage.updateMany({
-    where: { id: message.id, structuredPayload: { path: ["addressing", "wake", "state"], equals: "pending" } },
-    data: { structuredPayload: { ...payload, addressing: { ...addressing, wake } } as Prisma.InputJsonValue },
-  });
-  return claimed.count === 1;
-}
-
 export type PreparedRoomAddressing =
   | { refused: false; build: (mentionedAgentIds: string[]) => RoomMessageAddressing | null }
   | { refused: true; message: string };
@@ -424,20 +409,18 @@ export async function dispatchRoomMessage(messageId: string, depsIn?: RoomWakeDe
     ? { kind: "delivered", addressedAs: session.addressedAs }
     : session.kind === "not-named" ? session : { kind: session.kind, detail: session.detail };
   let combined = combineSupervisedWake(plan, outcome);
-  if (session.kind === "deliver") {
-    // Claim the wake before the turn, and only while it is still pending: a retry or a sweep
-    // re-publish racing this run must never hand the session the same message twice.
-    if (!await claimPendingWake(deps, message, addressing, { ...combined.wake, at: now.toISOString() })) {
-      return { messageId, plan: "skipped", woken: [] };
-    }
-  } else {
-    await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
-  }
   const payload = payloadRecord(message.structuredPayload);
   const workroom = payloadRecord(payload.workroom);
+  if (session.kind !== "deliver") {
+    await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });
+  }
   if (session.kind === "deliver" && room && supervision) {
     const caseKey = typeof workroom.caseKey === "string" ? workroom.caseKey : null;
-    outcome = await deliverSupervisedTurn({ db: deps.db, port: supervision, addressedAs: session.addressedAs, room, message, addressing, caseKey });
+    // BI-C64EDA33 PR 2: "woken" commits in the same transaction as the turn decision, under one
+    // command id per message, so a retry or a concurrent sweep re-publish hands it over once and a
+    // crash before the hand-over leaves the message pending, not marked delivered.
+    const wake = { messageRowId: message.id, structuredPayload: { ...payload, addressing: { ...addressing, wake: { ...combined.wake, at: now.toISOString() } } } };
+    outcome = await deliverSupervisedTurn({ db: deps.db, port: supervision, addressedAs: session.addressedAs, room, message, addressing, caseKey, wake });
     if (outcome.kind !== "delivered") {
       combined = combineSupervisedWake(plan, outcome);
       await writeWakeState(deps, message, addressing, { ...combined.wake, at: now.toISOString() });

@@ -184,6 +184,7 @@ const SEARCH_NODES_SQL = `
         OR n.props->>'path' ILIKE $1 ESCAPE '\\'
          )
      AND ($3::text[] IS NULL OR n.labels && $3::text[])
+     AND NOT (n.labels && ARRAY['BacklogItem', 'Epic', 'Document', 'Workroom', 'WorkroomMessage']::text[])
    ORDER BY (lower(coalesce(n.props->>'name', n.key)) = lower($2)) DESC,
             (coalesce(n.props->>'name', '') ILIKE $1 ESCAPE '\\') DESC,
             length(coalesce(n.props->>'name', n.key)) ASC,
@@ -192,21 +193,24 @@ const SEARCH_NODES_SQL = `
 `;
 
 const NODES_BY_KEY_SQL = `
-  SELECT key, labels, props FROM graph_node WHERE key = ANY($1::text[])
+  SELECT n.key, n.labels, n.props FROM graph_node n WHERE n.key = ANY($1::text[])
+     AND NOT (n.labels && ARRAY['BacklogItem', 'Epic', 'Document', 'Workroom', 'WorkroomMessage']::text[])
 `;
 
 const NODE_DETAIL_SQL = `
-  SELECT key, labels, props FROM graph_node WHERE key = $1
+  SELECT n.key, n.labels, n.props FROM graph_node n WHERE n.key = $1
+     AND NOT (n.labels && ARRAY['BacklogItem', 'Epic', 'Document', 'Workroom', 'WorkroomMessage']::text[])
 `;
 
 const NODE_DEGREE_SQL = `
-  SELECT count(*)::bigint AS count FROM graph_edge WHERE src_key = $1 OR dst_key = $1
+  SELECT count(*)::bigint AS count FROM graph_edge WHERE (src_key = $1 OR dst_key = $1) AND rel_type <> 'MENTIONS'
 `;
 
 const EDGES_TOUCHING_SQL = `
   SELECT e.src_key, e.dst_key, e.rel_type
     FROM graph_edge e
    WHERE (e.src_key = ANY($1::text[]) OR e.dst_key = ANY($1::text[]))
+     AND e.rel_type <> 'MENTIONS'
      AND ($2::text[] IS NULL OR e.rel_type = ANY($2::text[]))
    LIMIT $3
 `;
@@ -216,22 +220,30 @@ const EDGES_AMONG_SQL = `
     FROM graph_edge e
    WHERE e.src_key = ANY($1::text[])
      AND e.dst_key = ANY($1::text[])
+     AND e.rel_type <> 'MENTIONS'
      AND ($2::text[] IS NULL OR e.rel_type = ANY($2::text[]))
    LIMIT $3
 `;
 
 const LABEL_CENSUS_SQL = `
-  SELECT unnest(labels) AS label, count(*)::bigint AS count
-    FROM graph_node GROUP BY 1 ORDER BY 2 DESC
+  SELECT unnest(n.labels) AS label, count(*)::bigint AS count
+    FROM graph_node n WHERE NOT (n.labels && ARRAY['BacklogItem', 'Epic', 'Document', 'Workroom', 'WorkroomMessage']::text[]) GROUP BY 1 ORDER BY 2 DESC
 `;
 
 const REL_TYPE_CENSUS_SQL = `
   SELECT rel_type, count(*)::bigint AS count
-    FROM graph_edge GROUP BY 1 ORDER BY 2 DESC
+    FROM graph_edge WHERE rel_type <> 'MENTIONS' GROUP BY 1 ORDER BY 2 DESC
 `;
 
-const NODE_TOTAL_SQL = `SELECT count(*)::bigint AS count FROM graph_node`;
-const EDGE_TOTAL_SQL = `SELECT count(*)::bigint AS count FROM graph_edge`;
+const NODE_TOTAL_SQL = `SELECT count(*)::bigint AS count FROM graph_node n WHERE NOT (n.labels && ARRAY['BacklogItem', 'Epic', 'Document', 'Workroom', 'WorkroomMessage']::text[])`;
+const EDGE_TOTAL_SQL = `SELECT count(*)::bigint AS count FROM graph_edge WHERE rel_type <> 'MENTIONS'`;
+
+// BI-A63A9476 (AC-KLR-7): every statement above leaves out MENTIONS edges and
+// the gated reference labels (backlog items, epics, documents, Workrooms and
+// messages; GATED_REFERENCE_LABELS in @dpf/db). Those are read only through the
+// shared reader (lib/references/read-references.ts), which checks the reader's
+// access; this explorer is gated by view_admin alone. The label list is
+// written out so each statement stays a static literal (see the note above).
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
