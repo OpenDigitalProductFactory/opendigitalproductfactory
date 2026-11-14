@@ -32,6 +32,8 @@ export type AtlasInventoryRoom = {
   trueLivenessAt: string | null;
   drive: { action: string | null; reason: string | null; attentionRecorded?: boolean } | null;
   stageKey: string | null;
+  /** Declared delivery or activity shape key (`readDeclaredWorkShapeKey`), null when none. */
+  shapeKey?: string | null;
 };
 
 export type AtlasOwner = Pick<RoomWorkforce, "accountability" | "accountableDisplayName">;
@@ -43,6 +45,8 @@ export type AtlasRoom = {
   portfolio: string;
   health: AtlasHealth;
   label: MessageKey<"workrooms">;
+  /** Declared shape key; left out when the room declares none ("Unshaped"). */
+  shape?: string;
   owner?: string;
   stage?: string;
   lastSignalAt?: string;
@@ -76,6 +80,7 @@ export function projectAtlasRoom(room: AtlasInventoryRoom, owner: AtlasOwner | u
     portfolio: room.portfolioRole ?? "unplaced",
     health: summary.health,
     label: summary.label,
+    ...(room.shapeKey ? { shape: room.shapeKey } : {}),
     ...(owner?.accountableDisplayName ? { owner: owner.accountableDisplayName } : {}),
     ...(room.stageKey ? { stage: room.stageKey } : {}),
     ...(room.trueLivenessAt ? { lastSignalAt: room.trueLivenessAt } : {}),

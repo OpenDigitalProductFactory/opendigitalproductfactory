@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
-  prisma: { taskRun: { create: vi.fn() } },
+  prisma: { taskRun: { create: vi.fn() }, agentToolGrant: { findMany: vi.fn() } },
 }));
 
 vi.mock("./delegation-authority", () => ({
@@ -26,6 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   let n = 0;
   asMock(prisma.taskRun.create).mockImplementation(async () => ({ taskRunId: `TR-${++n}` }));
+  asMock(prisma.agentToolGrant.findMany).mockResolvedValue([{ grantKey: "backlog_read" }]);
 });
 
 describe("capFanoutWidth", () => {
@@ -43,6 +44,23 @@ describe("capFanoutWidth", () => {
 
 describe("spawnSubagentFanout", () => {
   const base = { parentAgentId: "AGT-PARENT", userId: "u1", originAuthority: ["backlog_read"] };
+
+  it("caps each child at its own grants (BI-FD00E416)", async () => {
+    asMock(startChain).mockResolvedValueOnce(allowLink("chain-1", "link-1"));
+    asMock(prisma.agentToolGrant.findMany).mockResolvedValueOnce([{ grantKey: "backlog_read" }]);
+
+    await spawnSubagentFanout({
+      parentAgentId: "AGT-PARENT",
+      userId: "u1",
+      originAuthority: ["backlog_read", "backlog_write"],
+      subtasks: [{ objective: "research pricing", toAgentId: "cuid-a" }],
+    });
+
+    expect(prisma.agentToolGrant.findMany).toHaveBeenCalledWith({ where: { agentId: "cuid-a" }, select: { grantKey: true } });
+    expect(startChain).toHaveBeenCalledWith(
+      "AGT-PARENT", "cuid-a", null, "u1", ["backlog_read", "backlog_write"], [], ["backlog_read"],
+    );
+  });
 
   it("spawns a child TaskRun for each approved delegation", async () => {
     asMock(startChain)

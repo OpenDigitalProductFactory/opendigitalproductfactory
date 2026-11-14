@@ -119,6 +119,28 @@ both the initial claim and durable child; a frozen feature checkout or stale
 install-root checkout is not assumed updated. A fresh diagnostic attempt requires
 the reviewed remedy's canonical containment and ordinary lease admission.
 
+The keeper handles failed child launches before reading optional process streams,
+reports controlled error categories, and attempts owned container cleanup even
+when child termination is unverified. Failed cleanup remains unverified.
+Client loss also has an independent native safety net: the existing five-minute
+lease-wait reconciliation, capacity events and hourly expiry owner fence only
+proven ended previews, behind their normal quiescence gate. They reuse the
+durable Task owner pins, admitted source Workroom, actual development environment,
+mount and full container ID. Unknown bindings and live data services are held.
+Renewal shares the admission/release/expiry environment lock; a stale read cannot
+revive a committed terminal reservation. Gate claims are excluded because their
+separate settlement contract can revive them.
+
+The native fence uses a fixed bounded Docker socket stop, never a subprocess or
+stored cleanup command. A timeout is followed by exact-ID readback; stopped or
+absent state must be confirmed. Pending cleanup is retained as pending for normal
+reconciliation. Expiry alone is never proof of process termination, and periodic
+reconciliation does not promise an instantaneous stop.
+Each pass checks at most four unique container IDs. Sorted IDs rotate through
+bounded windows using the existing five-minute cadence, so held containers do
+not permanently hide later candidates in a stable inventory. Capacity events
+reuse the current window. A changing inventory supplies no fixed cleanup deadline.
+
 A queued claim stops its shell caller: the returned durable TaskRun resumes the
 wait. A terminal claim stops too; never scan historical `:rerun-N` keys. A new
 explicitly wanted attempt may supply a new `DPF_DEV_PORTAL_CLAIM_KEY`. Durable
@@ -130,13 +152,26 @@ uses the heartbeat lifetime (two minutes by default, at most twenty), while
 preserves the original `DPF_DEV_PORTAL_WAIT_DEADLINE`; it neither substitutes the
 short returned lease expiry nor extends the admission deadline on each resume.
 
-WWMD DI-E1203C00715D supports ordinary cleanup only for a verified principal and
-its exact owning session. Current leases lack principal provenance, so their
-release remains an authority action requiring approval. Report the exact lease
-and owning session and the returned approval link; never suppress the request.
-The existing Concierge envelope-expiry sweep settles lapsed proposed/approved
-requests using the envelope state machine. It does not silently approve or replay
-them. Restricted connections never receive grants from the client.
+WWMD DI-E1203C00715D supports ordinary cleanup for a verified owner and exact
+session. The current `routineLeaseRelease` predicate uses the canonical durable
+Task provenance to release a proven own process-free reservation; already-ended
+or lapsed reservations are also routine (BI-1986D3C1, BI-88D51B8F). Unproven or
+foreign live reservations retain authority approval. Use the returned native
+classification, surface the exact lease/session/action and any approval link,
+and never suppress a justified request or infer ownership from a session string.
+The existing obsolete-release reconciliation settles only proven obsolete
+requests; Concierge envelope expiry settles lapsed proposed/approved requests
+through the state machine. Neither silently approves or replays them. Restricted
+connections never receive grants from the client.
+
+Native preview fencing consumes the database-owned admission-history witness
+without ordering it against application admission, terminal or observer clocks.
+A finite first witness and history version1 prove admission; the committed,
+irreversible terminal state and exact owner/source/full-ID recheck authorize
+cleanup. Only retain timestamp ordering guaranteed by the writer: expiry selects
+its deadline against a supplied now and records that same now as releasedAt.
+Clock offsets or rollback never substitute for a terminal decision, and unknown
+history, gate reservations and mismatched owners/containers remain held.
 
 Preview browser authentication uses `issue_ux_verification_sign_in` with the
 admitted preview lease and active verification Workroom session. The source

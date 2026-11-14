@@ -1,0 +1,33 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-FC5E4832 (EP-0237A305, knowledge-linking spec §4.3). Migration 20261114000000_wiki_page_body_trgm_index adds WikiPage_body_trgm_idx, a GIN trigram index on WikiPage.body, so the wiki page's unlinked-mentions lookup (body ILIKE per mention term) can use an index instead of a sequential scan as the wiki grows.",
+  "affectedCopies": [
+    "WikiPage: no column, constraint or row changes. One new secondary index on body; Postgres maintains it on every insert and update of a page body."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: an index over existing wiki page bodies, readable only through the same organization-scoped queries as the table itself.",
+    "dataSubjectRights": "No new data. Deleting or editing a page updates the index with it.",
+    "reviewDisposition": "Derived access structure; it lives and dies with the WikiPage rows it indexes."
+  },
+  "migration": {
+    "name": "20261114000000_wiki_page_body_trgm_index",
+    "backfill": "None. CREATE INDEX builds from existing rows (about 1 MB at 385 pages on the dev install).",
+    "rollback": "Forward-only and additive. DROP INDEX \"WikiPage_body_trgm_idx\" returns the lookup to a sequential scan with identical results."
+  },
+  "tests": [
+    "apps/web/lib/wiki/backlinks.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:wiki-page",
+      "prismaModel": "WikiPage",
+      "lifecycleDisposition": "Unchanged: wiki pages keep their existing lifecycle. This change adds a secondary index only.",
+      "fields": [
+        { "fieldId": "data:wiki-page#body", "resolution": "inherited", "reason": "Existing field, now also indexed with gin_trgm_ops. No new data and no change to who can read it.", "provenance": "packages/db/prisma/migrations/20261114000000_wiki_page_body_trgm_index/migration.sql", "flags": [] }
+      ]
+    }
+  ]
+}

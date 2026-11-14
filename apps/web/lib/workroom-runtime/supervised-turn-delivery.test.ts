@@ -116,7 +116,16 @@ function harness(opts: {
       findUnique: vi.fn(async () => null),
     },
   };
-  const deliver = vi.fn(opts.deliver ?? (async () => ({ success: true, message: "Turn started." })));
+  // BI-C64EDA33 PR 2: the runtime commits the message's "woken" state with the turn decision, once per
+  // message id; this fake does the same, so a second hand-over of one message changes nothing.
+  const committed = new Set<string>();
+  const deliver = vi.fn(opts.deliver ?? (async (input: Parameters<SupervisedSessionPort["deliver"]>[0]) => {
+    if (input.messageId && !committed.has(input.messageId) && input.wake) {
+      committed.add(input.messageId);
+      messages.find((m) => m.id === input.wake!.messageRowId)!.structuredPayload = input.wake.structuredPayload;
+    }
+    return { success: true, message: "Turn started." };
+  }));
   const supervision: SupervisedSessionPort = { isLive: () => opts.live ?? true, deliver };
   const send = vi.fn(async (_event: unknown) => ({}));
   return { deps: { db, send, now: () => NOW, supervision }, deliver, send, messages };
@@ -152,10 +161,22 @@ describe("a message addressed to a supervised session (AC-ADB-12)", () => {
     expect(prompt).not.toContain("already handed over");
   });
 
-  it("is not delivered by a run that loses the claim to a concurrent one", async () => {
-    const h = harness({ messages: [row({}, {})], claimLost: true });
-    await expect(dispatchRoomMessage("MSG-1", h.deps)).resolves.toMatchObject({ plan: "skipped" });
-    expect(h.deliver).not.toHaveBeenCalled();
+  it("is handed over under one id per message, so a concurrent run cannot give the session a second turn", async () => {
+    const h = harness({ messages: [row({}, {})] });
+    await Promise.all([dispatchRoomMessage("MSG-1", h.deps), dispatchRoomMessage("MSG-1", h.deps)]);
+    // Both runs may reach the runtime; it commits room-message:MSG-1:deliver once and replays the other.
+    expect(new Set(h.deliver.mock.calls.map(([input]) => input.messageId))).toEqual(new Set(["MSG-1"]));
+    expect(h.deliver.mock.calls.every(([input]) => input.wake?.structuredPayload)).toBe(true);
+    expect(wakeOf(h.messages[0]!)).toMatchObject({ state: "woken", woken: [ADDRESS] });
+  });
+
+  it("a crash before the hand-over commits leaves the message pending for the sweep, not marked delivered", async () => {
+    // The process dies inside the hand-over: nothing after this point ever runs.
+    const h = harness({ messages: [row({}, {})], deliver: () => new Promise(() => {}) });
+    void dispatchRoomMessage("MSG-1", h.deps);
+    for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(h.deliver).toHaveBeenCalledTimes(1);
+    expect(wakeOf(h.messages[0]!)).toMatchObject({ state: "pending" });
   });
 
   it("is delivered once: a retried dispatch decides nothing twice", async () => {

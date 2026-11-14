@@ -73,6 +73,8 @@ type Dependencies = {
   discoverCanonicalArtifact?: DiscoverCanonicalArtifact;
   /** Principal.id of a user; used when an agent claims without OAuth. */
   resolveUserPrincipalId?: (userId: string) => Promise<string | null>;
+  /** BI-C64EDA33 PR 3: the room's setup, written in the claim's own transaction. */
+  afterClaimInTx?: (tx: CapsuleDb, claim: ClaimResult) => Promise<void>;
 };
 
 async function userPrincipalIdFromLinking(userId: string): Promise<string | null> {
@@ -655,6 +657,7 @@ export async function claimGovernedBacklogWorkspace(args: {
           actor: args.actor, capsuleId: claim.capsuleId, workIntent, now,
         }));
       }
+      await args.dependencies?.afterClaimInTx?.(tx, claim);
       await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
       return claimSuccess({ workIntent, readiness: evaluated, claim, readback });
     });

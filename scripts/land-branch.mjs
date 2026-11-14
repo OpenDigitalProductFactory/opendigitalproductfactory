@@ -142,6 +142,29 @@ export function syncAction({ base, behind }) {
   return behind === 0 ? "current" : "merge";
 }
 
+/**
+ * Whether step 6 waits for the shared local-CI slot (BI-31C988D5 follow-up).
+ * `derived-artifacts-gate.mjs push-exempt <merge-base>` is the single admission
+ * rule the pre-push hook and pregate-evidence-guard already use: exit 0 means no
+ * runtime-bound file and no stale artifact, so cloud CI and the merge queue are
+ * the gate of record. Anything else — not exempt, an error, an unreadable
+ * merge-base — waits, so this fails closed.
+ * @param {{ exitStatus: number|null }} admission
+ * @returns {"skip-local-ci"|"wait-local-ci"}
+ */
+export function localCiGateAction({ exitStatus }) {
+  return exitStatus === 0 ? "skip-local-ci" : "wait-local-ci";
+}
+
+function readLocalCiAdmission(base) {
+  if (base !== "main") return { exitStatus: null, out: "non-main base" };
+  const mergeBase = run("git", ["merge-base", "HEAD", "origin/main"], { capture: true, allowFail: true });
+  if (!mergeBase.ok || !mergeBase.out.trim()) return { exitStatus: null, out: "merge-base unreadable" };
+  const r = run("node", ["scripts/derived-artifacts-gate.mjs", "push-exempt", mergeBase.out.trim()],
+    { capture: true, allowFail: true });
+  return { exitStatus: r.status, out: r.out.trim() };
+}
+
 /** pregate:status --json, or null when the output is below its field floor. */
 export function parseGateStatus(text) {
   const start = text.indexOf("{");
@@ -550,8 +573,14 @@ function main() {
   }
 
   // ── 6. the gate, with the retry/classification policy already written ─────
-  log("running gate:wait (queue, retry and infra classification live in that script)");
-  if (!dry) {
+  const admission = readLocalCiAdmission(values.base);
+  const gateAction = localCiGateAction(admission);
+  if (gateAction === "skip-local-ci") {
+    log(`no runtime-bound change — skipping gate:wait; cloud CI and the merge queue are the gate of record (${admission.out})`);
+  } else {
+    log("running gate:wait (queue, retry and infra classification live in that script)");
+  }
+  if (!dry && gateAction === "wait-local-ci") {
     const r = run("pnpm", ["gate:wait"], { allowFail: true });
     if (r.status === 7) {
       return fail("gate", "deadline elapsed without a verdict — NOTHING was established about the "

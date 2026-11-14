@@ -97,6 +97,14 @@ export function parseClaimMarker(raw) {
     expiresAtMs: expiresAt,
     worktreePath: typeof parsed.worktreePath === "string" ? parsed.worktreePath : null,
     backlogItemId: typeof parsed.backlogItemId === "string" ? parsed.backlogItemId : null,
+    // BI-66236024: the edit-claimed paths, cached so the staged-scope guard can
+    // answer "are these paths yours?" without a network call on the commit path.
+    // Absent on markers written before that change, and on a capsule that has a
+    // claim but no scope — both read as "nothing to enforce against", never as
+    // a pass.
+    scopePaths: Array.isArray(parsed.scopePaths)
+      ? parsed.scopePaths.filter((v) => typeof v === "string" && v.trim() !== "")
+      : null,
   };
 }
 

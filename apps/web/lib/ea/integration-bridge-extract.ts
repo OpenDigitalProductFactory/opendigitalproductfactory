@@ -64,7 +64,7 @@ export function buildIntegrationModel(integrations: IntegrationFact[]): SysmlDes
     });
     relationships.push({ fromKey: INTEGRATION_PACKAGE_KEY, toKey: key, relSlug: "contains" });
     // Cross-layer: this connected application traces to the IntegrationCredential model.
-    crossLayerRelationships.push({ fromKey: key, toKey: INTEGRATION_CREDENTIAL_MODEL_KEY, relSlug: "traces" });
+    crossLayerRelationships.push({ fromKey: key, toKey: INTEGRATION_CREDENTIAL_MODEL_KEY, relSlug: "traces", traceKind: "instance-of" });
   }
 
   return {

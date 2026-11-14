@@ -466,6 +466,7 @@ model Workroom {
   outgoingRelations       WorkroomRelation[]       @relation("WorkroomRelationFrom")
   incomingRelations       WorkroomRelation[]       @relation("WorkroomRelationTo")
   asyncInferenceOps       AsyncInferenceOp[]        @relation("WorkroomAsyncInferenceOperations")
+  effects                 WorkroomEffect[]
 
   @@index([status, updatedAt])
   @@index([backlogItemId])
@@ -516,6 +517,69 @@ model WorkroomActivity {
   @@index([kind, recordedAt(sort: Desc)])
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
   @@map("WorkCapsuleActivity")
+}
+
+/// BI-C64EDA33 (plan 2026-11-14-workroom-runtime-core): the room's transactional
+/// outbox. A runtime command's decision inserts its effects in the same
+/// transaction as its activity rows, its runtimeSession projection and its
+/// receipt; the leased effect worker runs them and reports each result back as
+/// a command. Lease and attempt fields follow AsyncInferenceOp.
+enum WorkroomEffectKind {
+  start_turn                @map("start-turn")
+  steer_turn                @map("steer-turn")
+  interrupt_turn            @map("interrupt-turn")
+  answer_request            @map("answer-request")
+  hold_request              @map("hold-request")
+  close_session             @map("close-session")
+  revoke_token              @map("revoke-token")
+  announce_supervision_lost @map("announce-supervision-lost")
+  record_plan_limit         @map("record-plan-limit")
+  ensure_workitem_anchor    @map("ensure-workitem-anchor")
+}
+
+enum WorkroomEffectStatus {
+  pending
+  running
+  succeeded
+  failed
+  retired
+  cancelled
+}
+
+/// Settled effects are history of the room's runtime; unsettled ones are live work.
+/// @dpf lifecycle=telemetry-bounded retention=180d sensitivity=internal categories=telemetry owner=platform-owner steward=data-steward timeAxis=createdAt
+model WorkroomEffect {
+  id                String               @id @default(cuid())
+  workCapsuleId     String
+  /// Deterministic key of the command whose decision emitted it (an idempotency
+  /// key, like WorkroomActivity.commandKey; not a reference to another row).
+  commandKey        String
+  /// 0-based position within that decision.
+  ordinal           Int
+  /// Insert order under the room's row lock: a room's effects run in this order.
+  sequence          BigInt               @default(autoincrement())
+  kind              WorkroomEffectKind
+  /// Needs the provider process that existed when it was decided.
+  processBound      Boolean              @default(false)
+  /// runtimeSession.generation it was decided for; null when not process-bound.
+  sessionGeneration String?
+  payload           Json                 @default("{}")
+  status            WorkroomEffectStatus @default(pending)
+  attemptCount      Int                  @default(0)
+  maxAttempts       Int                  @default(5)
+  availableAt       DateTime             @default(now())
+  leaseOwner        String?
+  leaseExpiresAt    DateTime?
+  lastError         String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  settledAt         DateTime?
+  capsule           Workroom             @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
+
+  @@unique([workCapsuleId, commandKey, ordinal])
+  @@index([status, availableAt])
+  @@index([workCapsuleId, status, sequence])
+  @@index([createdAt]) // retention sweep cutoff scan
 }
 
 // BI-4CB2EF76: canonical Workroom roster. One row per (room, principal).

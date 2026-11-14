@@ -190,6 +190,9 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   // BI-B8DAEB71: the probe's verdict on one of those candidates (ADOPT,
   // KEEP_BASE or KERNEL_GAP) with its outcome, load and gate-burden deltas.
   "harness-evolution-verdict",
+  // BI-C64EDA33: process-bound runtime effects retired, not replayed, when the
+  // provider process they were decided for is gone (restart or session end).
+  "effect-retired",
 ] as const;
 
 export type WorkCapsuleActivityKind = (typeof WORK_CAPSULE_ACTIVITY_KINDS)[number];

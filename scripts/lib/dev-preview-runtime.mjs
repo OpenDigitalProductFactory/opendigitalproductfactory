@@ -13,7 +13,7 @@ import { resolveDpfStatePath } from './resolve-compose-install-context.mjs';
 import { validateComposeSafety } from './compose-safety.mjs';
 import { resolveMcpCredential } from './mcp-credential.mjs';
 import { mcpCall } from './mcp-client.mjs';
-import { superviseLeaseRun, admittedLeaseTtlMs } from './lease-supervisor.mjs';
+import { superviseLeaseRun, admittedLeaseTtlMs, createRetryableRelease } from './lease-supervisor.mjs';
 import { observePreviewReservation } from './host-reservation-observation.mjs';
 import { sampleLocalCiHostPressure } from './local-ci-host-pressure.mjs';
 import { sanitizeForLog } from './safe-log.mjs';
@@ -121,19 +121,40 @@ export async function inspectPreviewBinding({ runner, id, identity }) {
   const [container] = JSON.parse(await runner.run(['inspect', id]));
   // Read on every inspection, including renewals. Failed metadata supplies no
   // alias authority; direct POSIX and existing Windows bindings still compare.
-  const dockerOperatingSystem = await runner.run(['info', '--format', '{{.OperatingSystem}}'], { timeoutMs: 10000 }).catch(() => undefined);
+  const dockerOperatingSystem = await runner.run(['info', '--format', '{{.OperatingSystem}}'], { timeoutMs: 10000 })
+    .catch(error => { if (isPreviewHostResourceError(error)) throw error; return undefined; });
   assertPreviewContainer(container, { ...identity, dockerOperatingSystem });
 }
 
 // Output from config/inspect may contain secrets. Capture it privately and report
 // only the exit code on failure; never echo command arguments or child output.
+const HOST_RESOURCE_SPAWN_CODES = new Set(['ENFILE', 'EMFILE', 'EAGAIN', 'ENOMEM']);
+const SAFE_SPAWN_CODES = new Set([...HOST_RESOURCE_SPAWN_CODES, 'ENOENT', 'EACCES']);
+
+function previewProcessUnavailable(error) {
+  return Object.assign(new Error('preview_process_unavailable'), {
+    code: SAFE_SPAWN_CODES.has(error?.code) ? error.code : 'UNKNOWN',
+  });
+}
+
+export function isPreviewHostResourceError(error) {
+  return HOST_RESOURCE_SPAWN_CODES.has(error?.code);
+}
+
+/** Attempt both owned cleanup layers even if one fails; never claim success. */
+export async function terminateOwnedPreview({ runner, stopOwned, finish }) {
+  let failed = false;
+  try { if (await runner.terminate() === false) failed = true; } catch { failed = true; }
+  try { await stopOwned(); } catch { failed = true; } finally { finish(); }
+  if (failed) throw new Error('preview_owned_fence_unverified');
+}
+
 export function commandRunner({ docker = 'docker', env = process.env } = {}) {
   const children = new Set();
   return {
     async run(args, { capture = true, bin = docker, timeoutMs, onInitEvent } = {}) {
       return new Promise((done, fail) => {
-        const child = spawn(bin, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
-        children.add(child);
+        let child, timer, settled = false;
         let output = '';
         let lastInitEvent, observerFailed = false;
         const diagnostics = typeof onInitEvent === 'function' ? createPreviewInitEventReader(event => {
@@ -141,30 +162,70 @@ export function commandRunner({ docker = 'docker', env = process.env } = {}) {
           try { onInitEvent(event); } catch { observerFailed = true; }
         }) : null;
         let timedOut = false;
-        const timer = Number.isFinite(timeoutMs) && timeoutMs > 0
-          ? setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs) : undefined;
-        const finished = () => { clearTimeout(timer); children.delete(child); };
-        child.stdout.on('data', chunk => {
-          if (diagnostics) diagnostics.write(chunk);
-          else if (capture) output += chunk;
-        });
-        child.stderr.resume();
-        child.once('error', () => { finished(); fail(new Error('preview_process_unavailable')); });
+        const finished = (error, value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          // An error does not prove that a successfully spawned process exited.
+          // Keep that handle supervised until close/confirmed termination.
+          if (!child?.pid || child.exitCode != null || child.signalCode != null) children.delete(child);
+          if (error) fail(error); else done(value);
+        };
+        try { child = spawn(bin, args, { env, stdio: ['ignore', 'pipe', 'pipe'] }); }
+        catch (error) { finished(previewProcessUnavailable(error)); return; }
+        children.add(child);
+        // Failed spawn may leave both streams absent. Subscribe before touching
+        // stdio, and consume late errors even after the promise has settled.
+        child.on('error', error => finished(previewProcessUnavailable(error)));
+        const hasStdio = Boolean(child.stdout && child.stderr);
         child.once('close', code => {
-          finished(); diagnostics?.finish();
-          if (observerFailed) { fail(new Error('preview_init_diagnostics_unavailable')); return; }
-          if (timedOut) { fail(new Error('preview_operation_timeout')); return; }
+          children.delete(child);
+          if (settled) return;
+          diagnostics?.finish();
+          if (!hasStdio) { finished(previewProcessUnavailable()); return; }
+          if (observerFailed) { finished(new Error('preview_init_diagnostics_unavailable')); return; }
+          if (timedOut) { finished(new Error('preview_operation_timeout')); return; }
           if (code === 0) {
-            if (diagnostics && !diagnostics.completed) { fail(new Error('preview_init_completion_unverified')); return; }
-            done(output.trim()); return;
+            if (diagnostics && !diagnostics.completed) { finished(new Error('preview_init_completion_unverified')); return; }
+            finished(null, output.trim()); return;
           }
           const failure = lastInitEvent?.state === 'failed' ? lastInitEvent : null;
-          fail(new Error(failure ? `preview_initialization_failed:${failure.step}:${failure.category}${failure.exitCode === null ? '' : `-${failure.exitCode}`}`
+          finished(new Error(failure ? `preview_initialization_failed:${failure.step}:${failure.category}${failure.exitCode === null ? '' : `-${failure.exitCode}`}`
             : `preview_operation_failed:${Number.isInteger(code) ? `exit-${code}` : 'terminated'}`));
         });
+        if (Number.isFinite(timeoutMs) && timeoutMs > 0) timer = setTimeout(() => {
+          if (settled) return;
+          timedOut = true;
+          try { child.kill('SIGKILL'); } catch (error) { finished(previewProcessUnavailable(error)); }
+        }, timeoutMs);
+        try {
+          child.stdout?.on('data', chunk => {
+            if (diagnostics) diagnostics.write(chunk);
+            else if (capture) output += chunk;
+          });
+          child.stderr?.resume();
+        } catch (error) { finished(previewProcessUnavailable(error)); }
       });
     },
-    terminate() { for (const child of children) child.kill('SIGKILL'); },
+    async terminate() {
+      const results = await Promise.all([...children].map(child => {
+        if (!child.pid || child.exitCode != null || child.signalCode != null) return true;
+        return new Promise(resolve => {
+          let settled = false;
+          const finish = value => {
+            if (settled) return;
+            settled = true; clearTimeout(timer);
+            child.off('close', closed); child.off('error', failed);
+            resolve(value);
+          };
+          const closed = () => finish(true), failed = () => finish(false);
+          const timer = setTimeout(() => finish(false), 5_000);
+          child.once('close', closed); child.once('error', failed);
+          try { child.kill('SIGKILL'); } catch { finish(false); }
+        });
+      }));
+      return results.every(Boolean);
+    },
   };
 }
 
@@ -183,6 +244,9 @@ export function previewLeaseEventSummary(event) {
   let category = 'unclassified';
   if (reason === 'lease-authority-deadline') category = 'authority-deadline';
   else if (reason === 'preview_binding_changed') category = 'source-binding';
+  else if (reason === 'preview_host_resource_unavailable') category = 'host-resource';
+  else if (reason === 'preview_process_unavailable') category = 'process-unavailable';
+  else if (reason === 'preview_owned_fence_unverified') category = 'owned-cleanup';
   else if (reason === 'preview_startup_exceeded_budget' || reason === 'preview_init_not_running') category = 'startup-liveness';
   else if (/timed out|ETIMEDOUT/i.test(reason)) category = 'transport-timeout';
   else if (/ECONNRESET|ECONNREFUSED/i.test(reason)) category = 'transport-connection';
@@ -340,10 +404,10 @@ async function runAdmittedPreview(env, cleanupState) {
   const initName = `dpf-preview-init-${randomBytes(12).toString('hex')}`;
   let finish;
   const wait = new Promise(resolveWait => { finish = resolveWait; });
-  const stopOwned = async () => {
+  const stopOwned = createRetryableRelease(async () => {
     await stopDeclarationWriters({ runner, declarationPath: declaration.path, leaseId, projectName: state.composeProjectName || 'dpf', initName });
-  };
-  const terminate = async () => { runner.terminate(); try { await stopOwned(); } finally { finish(); } };
+  });
+  const terminate = () => terminateOwnedPreview({ runner, stopOwned, finish });
   const mcpUrl = env.DPF_MCP_URL || 'http://127.0.0.1:3000/api/mcp/v1';
   const call = (tool, args) => callPreviewMcp(tool, args, { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer });
 
@@ -418,7 +482,14 @@ async function runAdmittedPreview(env, cleanupState) {
             Object.assign(startup, { phase, phaseStartedAtMs: Date.now() });
           } }),
         renew: async () => {
-          try { await assertPreviewDeclarationFile(declaration); await verifySource(); if (ownedIds.size) await inspect(); } catch { return { success: false, error: 'preview_binding_changed' }; }
+          try { await assertPreviewDeclarationFile(declaration); await verifySource(); if (ownedIds.size) await inspect(); }
+          catch (error) {
+            // Lack of inspection is not evidence of drift. Do not renew without
+            // proof; bounded uncertain retries retain only the last native TTL.
+            if (isPreviewHostResourceError(error)) throw new Error('preview_host_resource_unavailable');
+            if (error?.message === 'preview_process_unavailable') throw error;
+            return { success: false, error: 'preview_binding_changed' };
+          }
           const stalled = previewStartupLiveness({ ...startup, nowMs: Date.now(), budgetMs,
             initRunning: startup.phase === 'init' ? await initRunning() : false });
           if (stalled) return { success: false, error: stalled };

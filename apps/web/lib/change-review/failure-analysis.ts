@@ -27,9 +27,37 @@ export const failureAnalysisSchema = z.object({
 export type FailureAnalysis = z.infer<typeof failureAnalysisSchema>;
 export type FailureAnalysisIdentity = Pick<FailureAnalysis, "capsuleId" | "headTreeHash" | "diffDigest">;
 
-/** Supplied by the trusted evidence adapter, never accepted from an MCP caller. */
+/**
+ * Supplied by the trusted evidence adapter, never accepted from an MCP caller.
+ *
+ * `kind` "risk-acceptance" (BI-09FB398D) is a platform-written authority for
+ * one scenario's residual risk: the escalation gate decided it, and
+ * `followUpReference` names the item that owns the mitigation. It is never
+ * verification evidence. Absent `kind` means verification.
+ */
 export interface FailureVerificationEvidence extends FailureAnalysisIdentity {
   id: string; status: string; expected: string; observed: string; completedAt: string;
+  kind?: "verification" | "risk-acceptance";
+  scenarioKey?: string;
+  followUpReference?: string;
+}
+
+/** The authority that lets a scenario's residual risk stand as accepted, or null. */
+function resolvedRiskAuthority(
+  scenario: FailureAnalysis["scenarios"][number],
+  identity: FailureAnalysisIdentity,
+  evidence: readonly FailureVerificationEvidence[],
+): FailureVerificationEvidence | null {
+  const risk = scenario.residualRisk;
+  if (risk.disposition !== "accepted" && risk.disposition !== "deferred") return null;
+  if (!risk.authorityEvidenceId || !risk.followUpReference) return null;
+  const matches = evidence.filter(e => e.id === risk.authorityEvidenceId && e.kind === "risk-acceptance");
+  const row = matches[0];
+  if (matches.length !== 1 || !row) return null;
+  const bound = row.capsuleId === identity.capsuleId && row.headTreeHash === identity.headTreeHash
+    && row.diffDigest === identity.diffDigest && row.scenarioKey === scenario.key && row.status === "accepted"
+    && Boolean(row.followUpReference) && row.followUpReference === risk.followUpReference;
+  return bound ? row : null;
 }
 
 export function validateFailureAnalysis(value: unknown, identity: FailureAnalysisIdentity,
@@ -52,14 +80,19 @@ export function validateFailureAnalysis(value: unknown, identity: FailureAnalysi
     const matches = evidence.filter(e => e.id === id);
     const row = matches[0];
     if (matches.length !== 1 || !row) { reasons.push(`missing-or-ambiguous-evidence:${id}`); continue; }
+    if (row.kind === "risk-acceptance") { reasons.push(`unverified-evidence:${id}`); continue; }
     if (row.capsuleId !== identity.capsuleId || row.headTreeHash !== identity.headTreeHash || row.diffDigest !== identity.diffDigest) reasons.push(`stale-evidence:${id}`);
     if (row.status !== "passed" || !Number.isFinite(Date.parse(row.completedAt)) || !row.expected.trim() || !row.observed.trim()) reasons.push(`unverified-evidence:${id}`);
     resolved.push(row);
   }
   for (const scenario of analysis.scenarios) {
-    // A narrative is never an authority receipt. Until an existing acceptance
-    // authority is resolved by the boundary, accepted/deferred risks stay closed.
-    if (scenario.residualRisk.disposition !== "mitigated") reasons.push(`risk-disposition-requires-authority:${scenario.key}`);
+    if (scenario.residualRisk.disposition === "mitigated") continue;
+    // A narrative is never an authority receipt. An accepted/deferred risk
+    // stands only on an authority the boundary resolved for this room, change
+    // and scenario (BI-09FB398D); "blocked" never stands.
+    const authority = resolvedRiskAuthority(scenario, identity, evidence);
+    if (!authority) reasons.push(`risk-disposition-requires-authority:${scenario.key}`);
+    else resolved.push(authority);
   }
   return { valid: reasons.length === 0, reasons,
     digest: createHash("sha256").update(canonicalJson({ analysis, evidence: resolved })).digest("hex"), analysis };

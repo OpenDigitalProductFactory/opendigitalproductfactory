@@ -567,18 +567,32 @@ export async function deleteGraphNode(key: string): Promise<void> {
 }
 
 /**
- * Delete every node carrying `label` plus all edges touching those nodes. Used by
- * the graph rebuild scripts before re-projecting from Postgres.
+ * Edge types only the reference writer removes (BI-A63A9476, spec 2026-10-14
+ * §3.3). A rebuild job's whole-label wipe leaves them, and the nodes they hang
+ * off, in place; they go only when the reference writer replaces a source's
+ * edges or when an endpoint entity is deleted.
+ */
+export const REFERENCE_OWNED_REL_TYPES = ["MENTIONS"] as const;
+
+/**
+ * Delete every node carrying `label` plus the edges touching those nodes, so a
+ * rebuild script can re-project from Postgres. Edges owned by the reference
+ * writer survive, and so does a node one of them still touches; the rebuild's
+ * re-sync merges into it.
  */
 export async function clearGraphByLabel(label: string): Promise<void> {
   await prisma.$executeRawUnsafe(
     `DELETE FROM graph_edge
-      WHERE src_key IN (SELECT key FROM graph_node WHERE $1 = ANY(labels))
-         OR dst_key IN (SELECT key FROM graph_node WHERE $1 = ANY(labels))`,
+      WHERE rel_type <> ALL($2::text[])
+        AND (src_key IN (SELECT key FROM graph_node WHERE $1 = ANY(labels))
+          OR dst_key IN (SELECT key FROM graph_node WHERE $1 = ANY(labels)))`,
     label,
+    [...REFERENCE_OWNED_REL_TYPES],
   );
   await prisma.$executeRawUnsafe(
-    `DELETE FROM graph_node WHERE $1 = ANY(labels)`,
+    `DELETE FROM graph_node n
+      WHERE $1 = ANY(n.labels)
+        AND NOT EXISTS (SELECT 1 FROM graph_edge e WHERE e.src_key = n.key OR e.dst_key = n.key)`,
     label,
   );
 }

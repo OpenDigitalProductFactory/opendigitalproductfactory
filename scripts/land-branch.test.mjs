@@ -13,7 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildGateContext } from "./lib/gate-context.mjs";
-import { STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction, parseGateStatus, gateFailureSite, recordedPassAction, publish } from "./land-branch.mjs";
+import { STEPS, bodyRequiredTrailers, missingBodyAttestations, parseContext, syncAction, parseGateStatus, gateFailureSite, recordedPassAction, publish, localCiGateAction } from "./land-branch.mjs";
 import { parseArgs as gateLocalArgs } from "./gate-local.mjs";
 import { obligationLines } from "./pregate-preflight.mjs";
 
@@ -410,4 +410,13 @@ test('real CLI rejects incomplete resume identity before invoking target command
     assert.match(result.stderr, /require --resume-publication|exact qualified commit/);
     assert.doesNotMatch(result.stdout, /pushing|opening the current PR|resuming already-pushed/);
   }
+});
+
+test("land skips the local-CI slot only when push-exempt says the diff is exempt", () => {
+  assert.equal(localCiGateAction({ exitStatus: 0 }), "skip-local-ci");
+  // not exempt (runtime-bound file or stale artifact)
+  assert.equal(localCiGateAction({ exitStatus: 1 }), "wait-local-ci");
+  // admission error, unreadable merge-base, non-main base: fail closed
+  assert.equal(localCiGateAction({ exitStatus: 2 }), "wait-local-ci");
+  assert.equal(localCiGateAction({ exitStatus: null }), "wait-local-ci");
 });

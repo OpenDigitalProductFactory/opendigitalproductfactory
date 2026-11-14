@@ -251,6 +251,13 @@ export async function handleUpdateBacklogItem(
     }
   });
 
+  // BI-A63A9476: a new body (or a new organization, which moves its scope)
+  // re-derives the item's MENTIONS edges.
+  if ("body" in data || "organizationId" in data) {
+    const { referenceWriter, syncBacklogItemReferences } = await import("@/lib/references/sync-references");
+    await syncBacklogItemReferences({ id: existing.id }, referenceWriter({ userId, agentId: context?.agentId }));
+  }
+
   // When links changed and the portfolio wasn't explicitly pinned, re-derive the
   // denormalized portfolioId cache from the links (product -> taxonomy -> epic).
   let resolvedPortfolioId: string | null = null;

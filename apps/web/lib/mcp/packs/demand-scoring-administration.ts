@@ -362,6 +362,10 @@ export async function mergeBacklogItemsHandler(
     return { success: false, error: "already_closed", message: `${duplicateItemId} was merged by another call; nothing changed.` };
   }
   await cancelSupersededMergeCards(duplicateItemId);
+  // BI-A63A9476: what referenced the duplicate now references the survivor.
+  const survivor = await prisma.backlogItem.findUnique({ where: { itemId: canonicalItemId }, select: { organizationId: true } });
+  const { repointBacklogReferences } = await import("@/lib/references/sync-references");
+  await repointBacklogReferences(duplicateItemId, { itemId: canonicalItemId, organizationId: survivor?.organizationId ?? null });
   return {
     success: true,
     entityId: canonicalItemId,

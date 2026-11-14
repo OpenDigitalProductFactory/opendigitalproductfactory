@@ -16,7 +16,14 @@
 
 import { prisma } from "./client";
 import { NETWORK_RELATIONSHIP_TYPES } from "./graph-schema";
-import { assertRelationWrite, toRelationType, type RelationType } from "./relation-vocabulary";
+import {
+  assertRelationWrite,
+  canonicalRelationKey,
+  documentReferenceRelation,
+  getRelationType,
+  toRelationType,
+  type RelationType,
+} from "./relation-vocabulary";
 
 // ─── Graph-mirror primitives ──────────────────────────────────────────────────
 
@@ -99,18 +106,66 @@ export async function upsertGraphEdge(
 export async function replaceGraphEdgesFromSource(
   srcKey: string,
   relType: RelationType,
-  dstKeys: string[],
+  edges: ReadonlyArray<string | GraphEdgeTarget>,
 ): Promise<void> {
+  const wanted = edges.map((edge) => (typeof edge === "string" ? { dstKey: edge, props: {} } : { dstKey: edge.dstKey, props: edge.props ?? {} }));
+  // Check every edge before the delete, so a refused edge never leaves the
+  // source with fewer edges than it had.
+  for (const edge of wanted) assertRelationWrite(relType, edge.props);
   await prisma.$executeRawUnsafe(
     `DELETE FROM graph_edge
       WHERE src_key = $1 AND rel_type = $2 AND NOT (dst_key = ANY($3::text[]))`,
     srcKey,
     relType,
-    dstKeys,
+    wanted.map((edge) => edge.dstKey),
   );
-  for (const dstKey of dstKeys) {
-    await upsertGraphEdge(srcKey, dstKey, relType);
+  for (const edge of wanted) {
+    await upsertGraphEdge(srcKey, edge.dstKey, relType, edge.props);
   }
+}
+
+/** One wanted edge for `replaceGraphEdgesFromSource`, with the props it carries. */
+export type GraphEdgeTarget = { dstKey: string; props?: Record<string, unknown> };
+
+/** Prop keys a content-free node never carries (spec 2026-10-14 §3.2). */
+const CONTENT_PROP_KEYS = ["title", "name", "snippet", "body", "description"] as const;
+
+export class GraphNodeLabelConflictError extends Error {
+  constructor(key: string, label: string) {
+    super(`graph_node "${key}" already exists under another label; refusing to merge it into "${label}".`);
+    this.name = "GraphNodeLabelConflictError";
+  }
+}
+
+/**
+ * Upsert a node for a gated kind (backlog item, epic, document, Workroom,
+ * message) that holds no content: only its key, label and scope props. Titles
+ * and snippets are read from the source row at read time, after the reader's
+ * access check, so the mirror never becomes a second read path (BI-A63A9476).
+ * Content keys a node carried before are removed. A key already held under a
+ * different label is refused rather than label-merged, because `graph_node.key`
+ * is one global namespace.
+ */
+export async function upsertContentFreeNode(
+  key: string,
+  label: string,
+  props: Record<string, unknown>,
+): Promise<void> {
+  const clean = Object.fromEntries(
+    Object.entries(props).filter(([prop]) => !(CONTENT_PROP_KEYS as readonly string[]).includes(prop)),
+  );
+  const written = await prisma.$executeRawUnsafe(
+    `INSERT INTO graph_node (key, labels, props)
+     VALUES ($1, $2::text[], $3::jsonb)
+     ON CONFLICT (key) DO UPDATE
+       SET props = (graph_node.props - ARRAY['title', 'name', 'snippet', 'body', 'description']::text[]) || excluded.props
+     WHERE $4 = ANY(graph_node.labels)`,
+    key,
+    [label],
+    JSON.stringify(clean),
+    label,
+  );
+  if (Number(written) === 0) throw new GraphNodeLabelConflictError(key, label);
 }
 
 /** The `LINKS_TO` projection of a wiki page's out-links (BI-23900D0A). */
@@ -276,9 +331,10 @@ export async function syncDocumentNode(doc: {
   currentState?: string | null;
   documentKind?: string | null;
 }): Promise<void> {
-  await upsertGraphNode(doc.documentId, ["Document"], {
+  // No title: a Document is a gated kind, so the mirror holds no content
+  // (BI-A63A9476, AC-KLR-7). `title` stays on the input for callers' sake.
+  await upsertContentFreeNode(doc.documentId, "Document", {
     documentId: doc.documentId,
-    title: doc.title,
     currentState: doc.currentState ?? null,
     documentKind: doc.documentKind ?? null,
     syncedAt: nowIso(),
@@ -300,24 +356,23 @@ export async function syncDocumentReference(ref: {
   anchor?: string | null;
 }): Promise<void> {
   const syncedAt = nowIso();
-  await upsertGraphNode(ref.sourceDocumentId, ["Document"], {
+  await upsertContentFreeNode(ref.sourceDocumentId, "Document", {
     documentId: ref.sourceDocumentId,
-    title: ref.sourceTitle,
     currentState: ref.sourceState ?? null,
     documentKind: ref.sourceKind ?? null,
     syncedAt,
   });
-  await upsertGraphNode(ref.targetDocumentId, ["Document"], {
+  await upsertContentFreeNode(ref.targetDocumentId, "Document", {
     documentId: ref.targetDocumentId,
-    title: ref.targetTitle,
     currentState: ref.targetState ?? null,
     documentKind: ref.targetKind ?? null,
     syncedAt,
   });
-  // DOC_REFERENCES edge. A reference is also identified by refType +
-  // source/targetVersionId; the mirror's (src,dst,rel_type) uniqueness cannot
-  // hold parallel references, so those are stored as props on the single edge.
-  await upsertGraphEdge(ref.sourceDocumentId, ref.targetDocumentId, "DOC_REFERENCES", {
+  // A typed PROV-O / schema.org edge per refType (BI-92804832); a refType with no
+  // mapping stays DOC_REFERENCES, qualified by its refType prop. A reference is also
+  // identified by source/targetVersionId; the mirror's (src,dst,rel_type) uniqueness
+  // cannot hold parallel references, so those are stored as props on the single edge.
+  await upsertGraphEdge(ref.sourceDocumentId, ref.targetDocumentId, documentReferenceRelation(ref.refType), {
     refType: ref.refType,
     sourceVersionId: ref.sourceVersionId ?? null,
     targetVersionId: ref.targetVersionId ?? null,
@@ -505,20 +560,25 @@ export async function syncInventoryEntityAsInfraCI(entity: {
   );
 }
 
-/** Relationship types that get their own typed edge instead of DEPENDS_ON. */
-const TYPED_EDGE_RELATIONSHIP_TYPES = new Set([
-  ...NETWORK_RELATIONSHIP_TYPES.map((t) => t.toUpperCase()),
-  "MONITORS",
-]);
+/** Relationship types that get their own typed edge instead of DEPENDS_ON: every registered,
+ *  writable configuration-item relation (BI-92804832; UPLINKS_TO and SAME_AS used to fall
+ *  through to DEPENDS_ON). */
+function isTypedInventoryRelation(key: string): boolean {
+  const def = getRelationType(key);
+  return (
+    (def?.status === "active" && def.domain.includes("InfraCI")) ||
+    NETWORK_RELATIONSHIP_TYPES.some((t) => t.toUpperCase() === key)
+  );
+}
 
 export async function syncInventoryRelationship(rel: {
   fromEntityKey: string;
   toEntityKey: string;
   relationshipType: string;
 }): Promise<void> {
-  const neoType = rel.relationshipType.toUpperCase();
+  const neoType = canonicalRelationKey(rel.relationshipType).toUpperCase();
 
-  if (TYPED_EDGE_RELATIONSHIP_TYPES.has(neoType)) {
+  if (isTypedInventoryRelation(neoType)) {
     await upsertGraphEdge(rel.fromEntityKey, rel.toEntityKey, toRelationType(neoType), {
       syncedAt: nowIso(),
     });
@@ -595,6 +655,19 @@ export async function syncEaRelationship(rel: {
     relationshipId: rel.id,
     notationId: rel.notationSlug,
     relationshipType: rel.relationshipTypeSlug,
+    syncedAt: nowIso(),
+  });
+}
+
+/** Product-to-product dependency (BI-92804832): ProductDependency rows had no graph edge,
+ *  so impact analysis could not see them. Keys are the products' public productIds. */
+export async function syncProductDependency(dep: {
+  fromProductId: string;
+  toProductId: string;
+  relationType: "depends_on" | "part_of";
+}): Promise<void> {
+  await upsertGraphEdge(dep.fromProductId, dep.toProductId, dep.relationType === "part_of" ? "PART_OF" : "DEPENDS_ON", {
+    source: "ProductDependency",
     syncedAt: nowIso(),
   });
 }

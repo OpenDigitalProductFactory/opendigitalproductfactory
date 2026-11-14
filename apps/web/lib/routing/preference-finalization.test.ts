@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { selectEndpointPreference } from "./preference-finalization";
 
@@ -140,5 +140,107 @@ describe("selectEndpointPreference — family successor (BI-7F2FBDA3)", () => {
       preferredModelId: retiredPin,
     });
     expect(result.resolution?.applied.some((entry) => entry.successorOf)).toBe(false);
+  });
+});
+
+describe("selectEndpointPreference — retired/unavailable pin is skipped silently", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const retiredPinned = {
+    endpointId: "ep-retired",
+    providerId: "codex",
+    modelId: "gpt-5.3-codex",
+    modelFamily: "gpt-5",
+    qualityTier: "frontier",
+    modelStatus: "retired",
+  };
+  const familySuccessor = {
+    endpointId: "ep-55",
+    providerId: "codex",
+    modelId: "gpt-5.5",
+    modelFamily: "gpt-5",
+    qualityTier: "frontier",
+  };
+  const otherCanonical = {
+    endpointId: "ep-op",
+    providerId: "anthropic",
+    modelId: "claude-opus-4-6",
+    modelFamily: "claude-4",
+    qualityTier: "frontier",
+  };
+
+  it("skips a pin at a retired ModelProfile, logs it, uses the successor, and returns no owner-facing message", () => {
+    const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const result = selectEndpointPreference(
+      [otherCanonical, familySuccessor, retiredPinned],
+      { pinnedEndpointId: "ep-retired" },
+    );
+
+    // The retired pin is skipped; the family successor stands in for it.
+    expect(result.winner).toBe(familySuccessor);
+    expect(result.resolution).toMatchObject({
+      fallbackUsed: true,
+      unavailable: [{ kind: "endpoint", value: "ep-retired" }],
+      applied: [
+        {
+          kind: "endpoint",
+          value: "ep-retired",
+          endpointId: "ep-55",
+          successorOf: "gpt-5.3-codex",
+          successorBasis: "same-family",
+        },
+      ],
+    });
+
+    // A console/telemetry log is emitted for the silent skip.
+    expect(logSpy).toHaveBeenCalledWith(
+      "[preference-finalization] skipped unavailable preference",
+      expect.objectContaining({
+        kind: "endpoint",
+        value: "ep-retired",
+        modelStatus: "retired",
+        successorModelId: "gpt-5.5",
+      }),
+    );
+
+    // No owner-facing text is generated: the result carries only the winner and
+    // the structured resolution — no message/chat string field for the skip.
+    expect(result).not.toHaveProperty("message");
+    expect(Object.keys(result).sort()).toEqual(["resolution", "winner"]);
+    expect(Object.keys(result.resolution ?? {}).sort()).toEqual([
+      "applied",
+      "fallbackUsed",
+      "requested",
+      "unavailable",
+    ]);
+  });
+
+  it("skips a pin flagged by retiredAt and falls back to the canonical winner when no successor exists", () => {
+    const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const retiredByDate = {
+      endpointId: "ep-retired-date",
+      providerId: "codex",
+      modelId: "gpt-5.3-codex",
+      modelFamily: "gpt-5",
+      retiredAt: new Date("2026-01-01T00:00:00Z"),
+    };
+
+    const result = selectEndpointPreference([otherCanonical, retiredByDate], {
+      pinnedEndpointId: "ep-retired-date",
+    });
+
+    expect(result.winner).toBe(otherCanonical);
+    expect(result.resolution).toMatchObject({
+      fallbackUsed: true,
+      unavailable: [{ kind: "endpoint", value: "ep-retired-date" }],
+      applied: [],
+    });
+    expect(logSpy).toHaveBeenCalledWith(
+      "[preference-finalization] skipped unavailable preference",
+      expect.objectContaining({ kind: "endpoint", value: "ep-retired-date", successorModelId: null }),
+    );
   });
 });

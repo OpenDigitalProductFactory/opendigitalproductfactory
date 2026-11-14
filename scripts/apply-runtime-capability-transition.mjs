@@ -6,9 +6,18 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateInstallState } from "./installer/validate-install-state.mjs";
-import { canonicalTransitionPayload, signTransitionPayload, prepareRuntimeReconciliationIntent } from "./lib/transition-signing.mjs";
-import { inspectScopeEpochWriterImage } from "./promoter-epoch-evidence.mjs";
+import { canonicalTransitionPayload, signTransitionPayload, prepareRuntimeReconciliationIntent, validateRuntimeServiceImagePlan, validateRuntimeServiceImageProof } from "./lib/transition-signing.mjs";
+import { inspectScopeEpochWriterImage, prepareRuntimeServiceImage } from "./promoter-epoch-evidence.mjs";
 import { computeCapabilityStateVersion } from "./lib/capability-state-hash.mjs";
+
+// Optional in N-1 minimum staging: absence disables image apply, while the
+// original v1/v2 actuator remains loadable. Bind both owners before v3 IO.
+function imageQualificationDigest() {
+  try {
+    return createHash("sha256").update(readFileSync(new URL("./promoter-epoch-evidence.mjs", import.meta.url)))
+      .update("\0").update(readFileSync(new URL("./lib/git.mjs", import.meta.url))).digest("hex");
+  } catch { return undefined; }
+}
 
 // strict: false keeps the old tolerance for flags this script does not read.
 const { values: flags } = utilParseArgs({ args: process.argv.slice(2), strict: false, allowPositionals: true, options: { "state-dir": { type: "string" }, "runtime-capability-protocol-info": { type: "boolean" } } });
@@ -31,12 +40,14 @@ if (flags["runtime-capability-protocol-info"]) {
       validatedSnapshotSha256 = createHash("sha256").update(bytes).digest("hex");
     } catch { process.stderr.write("runtime_protocol_snapshot_invalid\n"); process.exit(78); }
   }
+  const imageQualifierSha256 = imageQualificationDigest();
   process.stdout.write(JSON.stringify({
     schemaVersion: 1,
     sourceSha: process.env.DPF_CANDIDATE_SOURCE_SHA ?? "unknown",
-    signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [2],
+    signingVersions: [1, 2, 3], applyVersions: imageQualifierSha256 ? [1, 2, 3] : [1, 2], reconciliationVersions: imageQualifierSha256 ? [2, 3] : [2], imageReconciliationVersions: imageQualifierSha256 ? [3] : [],
     actuatorSha256: digest(new URL(import.meta.url)),
     signerSha256: digest(new URL("./lib/transition-signing.mjs", import.meta.url)),
+    ...(imageQualifierSha256 ? { imageQualifierSha256 } : {}),
     ...(validatedSnapshotSha256 ? { validatedSnapshotSha256 } : {}),
   }) + "\n");
   process.exit(0);
@@ -52,7 +63,7 @@ const stateDir = flags["state-dir"] === undefined ? (process.env.DPF_PROMOTER_ST
 const receiptDir = join(stateDir, "runtime-capability-transitions");
 const applyLock = join(stateDir, ".runtime-transition-apply.lock");
 const rotationLock = join(stateDir, ".runtime-transition-secret.lock");
-let secret = ""; let envelope;
+let secret = ""; let envelope; let imageProof;
 const atomicJson = async (target, value) => {
   const temporary = `${target}.${process.pid}.tmp`;
   await writeFile(temporary, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
@@ -60,7 +71,7 @@ const atomicJson = async (target, value) => {
 };
 const writeReceipt = async (status, failure, observedServices = [], observedHealth = {}) => {
   if (!envelope || secret.length < 32) return;
-  const unsigned = { ...envelope, status, observedServices: [...observedServices].sort(), observedHealth: Object.fromEntries(Object.entries(observedHealth).sort(([a], [b]) => a.localeCompare(b))), completedAt: new Date().toISOString(), beforeHash: envelope.previousStateHash, afterHash: status === "applied" ? envelope.desiredStateHash : envelope.previousStateHash, ...(failure ? { failure } : {}) };
+  const unsigned = { ...envelope, status, observedServices: [...observedServices].sort(), observedHealth: Object.fromEntries(Object.entries(observedHealth).sort(([a], [b]) => a.localeCompare(b))), completedAt: new Date().toISOString(), beforeHash: envelope.previousStateHash, afterHash: status === "applied" ? envelope.desiredStateHash : envelope.previousStateHash, ...(imageProof ? { imageProof } : {}), ...(failure ? { failure } : {}) };
   await mkdir(receiptDir, { recursive: true });
   const target = join(receiptDir, `${envelope.transitionId}.json`);
   await writeFile(`${target}.tmp`, JSON.stringify({ ...unsigned, signature: sign(unsigned, secret) }, null, 2) + "\n", { mode: 0o600 });
@@ -93,15 +104,19 @@ if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) await fail(
 const issued = Date.parse(envelope.issuedAt), expires = Date.parse(envelope.expiresAt), now = Date.now();
 if (envelope.version === 2 && envelope.mode !== "transition"
   && !(envelope.mode === "reconciliation" && envelope.reconciliation)) await fail("unsupported_runtime_transition_mode");
-if (![1, 2].includes(envelope.version) || argvId !== envelope.transitionId || !/^RCT-[A-Za-z0-9-]{1,48}$/.test(envelope.transitionId) || !Number.isFinite(issued) || !Number.isFinite(expires) || issued > now + 30_000 || expires < now || expires - issued > 600_000) await fail("expired_or_invalid_envelope");
+if (![1, 2, 3].includes(envelope.version) || argvId !== envelope.transitionId || !/^RCT-[A-Za-z0-9-]{1,48}$/.test(envelope.transitionId) || !Number.isFinite(issued) || !Number.isFinite(expires) || issued > now + 30_000 || expires < now || expires - issued > 600_000) await fail("expired_or_invalid_envelope");
 for (const k of ["catalogHash", "previousStateHash", "desiredStateHash"]) if (!/^[a-f0-9]{64}$/.test(envelope[k])) await fail("invalid_envelope_hash");
 for (const k of ["previousKeys", "desiredKeys", "previousProfiles", "desiredProfiles", "previousServices", "desiredServices"]) if (!Array.isArray(envelope[k]) || JSON.stringify(envelope[k]) !== JSON.stringify([...new Set(envelope[k])].sort()) || envelope[k].some((x) => typeof x !== "string" || (k.endsWith("Keys") ? !/^runtime:[a-z0-9-]+$/.test(x) : !/^[a-z0-9][a-z0-9-]*$/.test(x)))) await fail("invalid_envelope_projection");
-if (envelope.version === 2 && envelope.mode === "reconciliation") {
+if (envelope.version >= 2 && envelope.mode === "reconciliation") {
   const identity = envelope.protocolIdentity;
   if (!identity || !/^[a-f0-9]{40}$/.test(identity.sourceSha ?? "") || !/^sha256:[a-f0-9]{64}$/.test(identity.promoterDigest ?? "")
     || identity.sourceSha !== process.env.DPF_CANDIDATE_SOURCE_SHA
     || identity.actuatorSha256 !== sha(await readFile(new URL(import.meta.url)))
     || identity.signerSha256 !== sha(await readFile(new URL("./lib/transition-signing.mjs", import.meta.url)))) await fail("runtime_protocol_identity_mismatch");
+  if (envelope.version === 3 && (!imageQualificationDigest() || identity.imageQualifierSha256 !== imageQualificationDigest())) await fail("runtime_protocol_identity_mismatch");
+}
+if (envelope.version === 3) {
+  try { validateRuntimeServiceImagePlan(envelope); } catch { await fail("runtime_image_plan_invalid"); }
 }
 
 await mkdir(receiptDir, { recursive: true });
@@ -136,12 +151,12 @@ try { catalog = JSON.parse(await readFile(catalogPath, "utf8")); } catch { await
 const { catalogHash, ...catalogContent } = catalog;
 if (catalogHash !== envelope.catalogHash || sha(catalogBytes(catalogContent)) !== catalogHash) await fail("capability_catalog_mismatch");
 const byId = new Map(catalog.capabilities.map((c) => [c.capabilityId, c]));
-// Keep the v2 host projection aligned with the server and canonical catalog
+// Keep the reconciliation host projection aligned with the server and canonical catalog
 // resolver without importing bytes outside this actuator's signed closure.
-const hostPlatform = envelope.version === 2 && envelope.mode === "reconciliation"
+const hostPlatform = envelope.version >= 2 && envelope.mode === "reconciliation"
   ? new Map([["win32", "windows"], ["darwin", "macos"], ["linux", "linux"]]).get(envelope.reconciliation?.observedHost?.platform)
   : undefined;
-if (envelope.version === 2 && envelope.mode === "reconciliation" && !hostPlatform) await fail("runtime_transition_host_platform_unverifiable");
+if (envelope.version >= 2 && envelope.mode === "reconciliation" && !hostPlatform) await fail("runtime_transition_host_platform_unverifiable");
 const project = (keys) => {
   const enabled = new Set();
   const add = (id) => {
@@ -175,7 +190,7 @@ let beforeValidation;
 try { beforeValidation = await validateInstallState(before, schemaPath); } catch { await fail("install_state_schema_unreadable"); }
 if (!beforeValidation.valid) await fail("install_state_schema_invalid");
 if (before.capabilityCatalogHash !== envelope.catalogHash || before.capabilityStateVersion !== envelope.previousStateHash || canonical(before.enabledRuntimeCapabilities) !== canonical(envelope.previousKeys)) await fail("install_state_stale");
-if (envelope.version === 2 && envelope.mode === "reconciliation") {
+if (envelope.version >= 2 && envelope.mode === "reconciliation") {
   let intent;
   try { intent = prepareRuntimeReconciliationIntent(envelope.reconciliation, {
     catalogHash, capabilityIds: catalog.capabilities.map(capability => capability.capabilityId),
@@ -193,7 +208,8 @@ const compose = (args, timeout = 9 * 60 * 1000) => spawnSync(process.env.DPF_DOC
 // Match govern-capability-compose-args.mountOverride without extending the
 // signed actuator's dependency closure. Only bind overrides are persisted;
 // rendered configuration may contain credentials and must never be logged.
-try {
+let capturedImageConfiguration;
+if (!(envelope.version === 3 && journal?.images)) try {
   const profiles = [...new Set([...previous.profiles, ...desired.profiles])].sort().flatMap(profile => ["--profile", profile]);
   const rendered = compose([...profiles, "config", "--format", "json"], 30_000);
   if (rendered.status !== 0) throw new Error();
@@ -226,7 +242,14 @@ try {
       else if (within(volume.source, root)) throw new Error();
     }
     if (volumes.length) services[name] = { volumes };
+    if (envelope.version === 3 && volumes.length) {
+      config.services[name].volumes = (service.volumes ?? []).map(volume => {
+        const mapped = volumes.find(candidate => candidate.target === volume.target);
+        return mapped ? mapStrings(mapped, value => value.replaceAll("$$", "$")) : volume;
+      });
+    }
   }
+  if (envelope.version === 3) capturedImageConfiguration = mapStrings(config, value => value.replaceAll("$", () => "$$"));
   if (Object.keys(services).length) {
     const overridePath = join(receiptDir, `${envelope.transitionId}.compose-mounts.json`);
     await atomicJson(overridePath, { services });
@@ -277,6 +300,224 @@ const observe = () => {
 const transitionServices = [...new Set([...envelope.previousServices, ...envelope.desiredServices])];
 const healthSemantics = new Map(catalog.capabilities.flatMap((capability) => capability.services).map((service) => [service.service, service.healthSemantics]));
 const exact = (projection, observed, health) => projection.required.every((service) => observed.includes(service) && (healthSemantics.get(service) !== "compose-healthcheck" || health[service] === "healthy")) && transitionServices.filter((service) => !projection.required.includes(service)).every((service) => !observed.includes(service));
+
+/** Image-only work uses the same signed journal and receipt, but never the
+ * ordinary full-projection up. Unknown preparation/child outcomes are retained. */
+async function reconcileSelectedImages() {
+  const plan = validateRuntimeServiceImagePlan(envelope), selected = plan.services.map(entry => entry.service);
+  const childBudget = 105_000, recoveryReserve = childBudget * 2 + 30_000;
+  const needTime = reserve => { if (expires - Date.now() <= reserve) throw new Error("runtime_image_deadline_unavailable"); };
+  const snapshotPath = join(receiptDir, `${envelope.transitionId}.image-baseline.json`);
+  const targetPath = join(receiptDir, `${envelope.transitionId}.image-target.json`);
+  const priorPath = join(receiptDir, `${envelope.transitionId}.image-prior.json`);
+  const privatePaths = [snapshotPath, targetPath, priorPath];
+  const docker = (args, options = {}) => spawnSync(process.env.DPF_DOCKER_BIN ?? "docker", [...dockerPrefix, ...args], {
+    encoding: "utf8", timeout: options.timeoutMs ?? 30_000, maxBuffer: 2 * 1024 * 1024, input: options.input,
+    env: { ...process.env, COMPOSE_REMOVE_ORPHANS: "false", COMPOSE_IGNORE_ORPHANS: "true" },
+  });
+  const settled = result => Number.isInteger(result.status) && !result.error && !result.signal;
+  const readDocker = async (args, options) => {
+    let bounded = options;
+    if (["build", "pull"].includes(args[0])) {
+      needTime(recoveryReserve + 1_000);
+      bounded = { ...options, timeoutMs: Math.min(options?.timeoutMs ?? 300_000, expires - Date.now() - recoveryReserve) };
+    }
+    const result = docker(args, bounded);
+    if (!settled(result) && ["build", "pull"].includes(args[0])) throw new Error("runtime_image_preparation_unsettled");
+    if (!settled(result) || result.status !== 0) throw new Error("runtime_image_io_unverified");
+    return result.stdout;
+  };
+  const frozen = (path, args, timeoutMs = 30_000) => docker(["compose", "--project-name", composeProject, "-f", path, ...args], { timeoutMs });
+  const save = async images => {
+    const { signature: _signature, ...unsigned } = journal;
+    journal = { ...unsigned, images };
+    journal.signature = createHmac("sha256", secret).update(JSON.stringify(stable(journal))).digest("hex");
+    await atomicJson(journalPath, journal);
+  };
+  const inspectTemplate = '{"id":{{json .Id}},"imageId":{{json .Image}},"imageReference":{{json .Config.Image}},"running":{{json .State.Running}},"health":{{if .State.Health}}{{json .State.Health.Status}}{{else}}"none"{{end}},"project":{{json (index .Config.Labels "com.docker.compose.project")}},"service":{{json (index .Config.Labels "com.docker.compose.service")}},"recreateClass":{{json (index .Config.Labels "dpf.recreate-class")}},"configurationHash":{{json (index .Config.Labels "com.docker.compose.config-hash")}},"mounts":{{json .Mounts}},"networks":{{json .NetworkSettings.Networks}}}';
+  const observeImages = async () => {
+    const ids = String(await readDocker(["ps", "-a", "--filter", `label=com.docker.compose.project=${composeProject}`, "--no-trunc", "--format", "{{.ID}}"]))
+      .trim().split(/\r?\n/).filter(Boolean);
+    if (ids.length > 128 || new Set(ids).size !== ids.length || ids.some(id => !/^[a-f0-9]{64}$/.test(id))) throw new Error("runtime_image_selection_unproven");
+    const rows = {};
+    for (const id of ids) {
+      const bytes = await readDocker(["inspect", "--format", inspectTemplate, id]);
+      if (Buffer.byteLength(bytes) > 64 * 1024) throw new Error("runtime_image_selection_unproven");
+      const row = JSON.parse(bytes);
+      if (row.id !== id || row.project !== composeProject) throw new Error("runtime_image_selection_unproven");
+      if (!previous.required.includes(row.service)) continue;
+      if (rows[row.service] || row.running !== true || !/^sha256:[a-f0-9]{64}$/.test(row.imageId ?? "")
+        || !["healthy", "unhealthy", "starting", "none"].includes(row.health)) throw new Error("runtime_image_selection_unproven");
+      row.mounts = (row.mounts ?? []).map(mount => Object.fromEntries(["Type", "Name", "Source", "Destination", "RW", "Propagation"].filter(key => mount[key] !== undefined).map(key => [key, mount[key]])))
+        .sort((left, right) => String(left.Destination).localeCompare(String(right.Destination)));
+      row.networks = Object.fromEntries(Object.entries(row.networks ?? {}).map(([name, network]) => [name, { NetworkID: network.NetworkID }]));
+      rows[row.service] = row;
+    }
+    if (previous.required.some(service => !rows[service])) throw new Error("runtime_image_selection_unproven");
+    return rows;
+  };
+  const health = rows => Object.fromEntries(Object.entries(rows).map(([service, row]) => [service, row.health]));
+  const healthy = rows => exact(desired, Object.keys(rows), health(rows));
+  const untouched = rows => Object.fromEntries(previous.required.filter(service => !selected.includes(service)).map(service => [service, rows[service].id]));
+  const untouchedEqual = rows => sameInstallState(untouched(rows), untouched(journal.images.before));
+  const resourceHash = row => sha(JSON.stringify(stable({ mounts: row.mounts, networks: row.networks })));
+  const resourcesEqual = rows => selected.every(service => resourceHash(rows[service]) === resourceHash(journal.images.before[service]));
+  const resultProof = rows => ({ schemaVersion: 1, sourceSha: plan.sourceSha,
+    services: plan.services.map((entry, index) => ({ service: entry.service,
+      priorImageId: journal.images.before[entry.service].imageId, intendedImageId: journal.images.prepared[index].imageId,
+      observedImageId: rows[entry.service].imageId, priorContainerId: journal.images.before[entry.service].id,
+      observedContainerId: rows[entry.service].id, resourcesBeforeHash: resourceHash(journal.images.before[entry.service]),
+      resourcesAfterHash: resourceHash(rows[entry.service]), source: journal.images.prepared[index].source })),
+    untouchedBefore: untouched(journal.images.before), untouchedAfter: untouched(rows) });
+  const terminal = async (status, failure, rows) => {
+    imageProof = undefined;
+    if (rows && ["applied", "rolled_back"].includes(status)) {
+      const candidate = resultProof(rows);
+      validateRuntimeServiceImageProof({ status, observedHealth: health(rows), imageProof: candidate }, envelope);
+      imageProof = candidate;
+    }
+    await writeReceipt(status, failure, rows ? Object.keys(rows) : [], rows ? health(rows) : {});
+    if (status !== "rollback_failed") for (const path of privatePaths) await rm(path, { force: true });
+    if (["applied", "rolled_back"].includes(status)) {
+      await rm(journalPath, { force: true }); await rm(claim, { recursive: true, force: true });
+    }
+    if (status === "applied") { process.stdout.write(await readFile(receiptPath, "utf8")); return; }
+    process.stderr.write(JSON.stringify({ status, failure }) + "\n"); process.exit(78);
+  };
+  const pinResources = (config, observed) => {
+    const output = structuredClone(config), volumes = {}, networks = {};
+    output.services = Object.fromEntries(selected.map(service => {
+      const definition = structuredClone(config.services[service]);
+      if (definition.network_mode || definition.ipc || definition.pid || definition.links?.length || definition.volumes_from?.length
+        || definition.secrets?.length || definition.configs?.length) throw new Error("runtime_image_configuration_unverified");
+      for (const volume of definition.volumes ?? []) if (volume.type === "volume") {
+        const name = config.volumes?.[volume.source]?.name;
+        if (typeof name !== "string" || !observed[service].mounts?.some(mount => mount.Type === "volume" && mount.Name === name && mount.Destination === volume.target)) throw new Error("runtime_image_configuration_unverified");
+        volumes[volume.source] = { name, external: true };
+      }
+      const serviceNetworks = Object.keys(definition.networks ?? (config.networks?.default ? { default: {} } : {}));
+      for (const network of serviceNetworks) {
+        const name = config.networks?.[network]?.name;
+        if (typeof name !== "string" || !/^[a-f0-9]{64}$/.test(observed[service].networks?.[name]?.NetworkID ?? "")) throw new Error("runtime_image_configuration_unverified");
+        networks[network] = { name, external: true };
+      }
+      delete definition.build; delete definition.depends_on;
+      definition.pull_policy = "never";
+      return [service, definition];
+    }));
+    output.volumes = volumes; output.networks = networks;
+    return output;
+  };
+  try {
+    if (!sameInstallState(before, next)) throw new Error("runtime_image_plan_invalid");
+    if (!journal.images) {
+      needTime(recoveryReserve);
+      const observed = await observeImages();
+      for (const service of selected) {
+        if (observed[service].recreateClass !== "stateless" || capturedImageConfiguration?.services?.[service]?.labels?.["dpf.recreate-class"] !== "stateless") throw new Error("runtime_image_selection_unproven");
+      }
+      if (previous.required.some(service => !selected.includes(service) && healthSemantics.get(service) === "compose-healthcheck" && observed[service].health !== "healthy")) throw new Error("runtime_image_health_unverified");
+      pinResources(capturedImageConfiguration, observed);
+      // A digest is not consent to apply unrelated configuration. Hash a fixed
+      // resolved snapshot, accepting only its original or actual image spelling.
+      await atomicJson(snapshotPath, capturedImageConfiguration);
+      for (const service of selected) {
+        const matches = path => {
+          const result = frozen(path, ["config", "--hash", service]);
+          const parts = String(result.stdout ?? "").trim().split(/\s+/);
+          return settled(result) && result.status === 0 && parts.length === 2 && parts[0] === service
+            && /^[a-f0-9]{64}$/.test(parts[1]) && parts[1] === observed[service].configurationHash;
+        };
+        if (!matches(snapshotPath)) {
+          const reference = observed[service].imageReference;
+          if (typeof reference !== "string" || !reference || reference.length > 512 || /\s/.test(reference)) throw new Error("runtime_image_configuration_unverified");
+          capturedImageConfiguration.services[service].image = reference;
+          await atomicJson(snapshotPath, capturedImageConfiguration);
+          if (!matches(snapshotPath)) throw new Error("runtime_image_configuration_unverified");
+        }
+      }
+      try { await inspectScopeEpochWriterImage({ image: observed.portal.imageId, runDocker: readDocker }); }
+      catch { throw new Error("runtime_image_scope_writer_unproven"); }
+      await save({ phase: "baseline", before: observed, configurationDigest: sha(await readFile(snapshotPath)) });
+    }
+    const images = journal.images;
+    if (!images || !["baseline", "preparing", "prepared", "applying", "applied", "reverting", "reverted"].includes(images.phase)
+      || !/^[a-f0-9]{64}$/.test(images.configurationDigest ?? "")) throw new Error("runtime_image_journal_invalid");
+    const configurationBytes = await readFile(snapshotPath);
+    if (configurationBytes.length > 2 * 1024 * 1024 || sha(configurationBytes) !== images.configurationDigest) throw new Error("runtime_image_journal_invalid");
+    const configuration = JSON.parse(configurationBytes);
+    if (images.phase === "preparing") return await terminal("rollback_failed", "runtime_image_preparation_unsettled");
+    if (["applying", "reverting"].includes(images.phase)) return await terminal("rollback_failed", "runtime_image_apply_unsettled");
+    if (images.phase === "baseline") {
+      await save({ ...images, phase: "preparing" });
+      if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "image-preparing") process.exit(86);
+      const prepared = [];
+      for (const entry of plan.services) {
+        if (entry.source.kind === "restore" && images.before[entry.service].imageId !== entry.source.expectedImageId) throw new Error("runtime_image_ownership_changed");
+        prepared.push(await prepareRuntimeServiceImage({ source: entry.source, sourceSha: plan.sourceSha, platform: plan.platform, stateDir: receiptDir,
+          runDocker: readDocker, runGit: async args => {
+            const { runGit } = await import("./lib/git.mjs");
+            const result = runGit(args, { cwd: "/host-source", timeout: 30_000, maxBuffer: 64 * 1024 * 1024, binary: true });
+            if (!result.ok) throw new Error("runtime_service_image_unproven");
+            return result.stdout;
+          } }));
+      }
+      await save({ ...journal.images, phase: "prepared", prepared });
+      if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "image-prepared") process.exit(86);
+    }
+    if (!Array.isArray(journal.images.prepared) || journal.images.prepared.length !== selected.length
+      || journal.images.prepared.some(entry => !/^sha256:[a-f0-9]{64}$/.test(entry.imageId ?? ""))) throw new Error("runtime_image_journal_invalid");
+    const launch = async (path, targets) => {
+      needTime(childBudget + 15_000);
+      const config = pinResources(configuration, journal.images.before);
+      for (const service of selected) config.services[service].image = targets[service];
+      await atomicJson(path, config);
+      return frozen(path, ["up", "-d", "--no-build", "--no-deps", "--pull", "never", "--wait", "--wait-timeout", "90", ...selected], childBudget);
+    };
+    let observed = await observeImages();
+    if (!untouchedEqual(observed)) return await terminal("rollback_failed", "runtime_image_untouched_service_changed");
+    if (!resourcesEqual(observed)) return await terminal("rollback_failed", "runtime_image_resources_changed");
+    const targets = Object.fromEntries(selected.map((service, index) => [service, journal.images.prepared[index].imageId]));
+    if (journal.images.phase === "prepared") {
+      if (selected.some(service => observed[service].id !== journal.images.before[service].id || observed[service].imageId !== journal.images.before[service].imageId)) return await terminal("rollback_failed", "runtime_image_ownership_changed");
+      for (const service of selected) if ((await readDocker(["image", "inspect", targets[service], "--format", "{{.Id}}"])).trim() !== targets[service]) throw new Error("runtime_service_image_unproven");
+      if (selected.some(service => observed[service].imageId !== targets[service])) {
+        needTime(recoveryReserve);
+        // Record intent before IO and the actual normal child result after IO.
+        // A crash in between is a hold, never an inferred successful child.
+        await save({ ...journal.images, phase: "applying" });
+        if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "image-applying") process.exit(86);
+        const applied = await launch(targetPath, targets);
+        if (!settled(applied)) return await terminal("rollback_failed", "runtime_image_apply_unsettled");
+        await save({ ...journal.images, phase: "applied", applyExitCode: applied.status });
+        if (["runtime-mutated", "image-applied"].includes(process.env.DPF_TEST_CRASH_AFTER_PHASE ?? "")) process.exit(86);
+      } else await save({ ...journal.images, phase: "applied", applyExitCode: 0 });
+      observed = await observeImages();
+    }
+    if (!untouchedEqual(observed)) return await terminal("rollback_failed", "runtime_image_untouched_service_changed");
+    if (!resourcesEqual(observed)) return await terminal("rollback_failed", "runtime_image_resources_changed");
+    if (journal.images.phase === "reverted") {
+      if (!healthy(observed) || selected.some(service => observed[service].imageId !== journal.images.before[service].imageId)) return await terminal("rollback_failed", "runtime_image_restore_unverified");
+      return await terminal("rolled_back", "runtime_image_health_failed_rolled_back", observed);
+    }
+    if (journal.images.phase !== "applied") throw new Error("runtime_image_journal_invalid");
+    if (journal.images.applyExitCode === 0 && healthy(observed) && selected.every(service => observed[service].imageId === targets[service])) return await terminal("applied", undefined, observed);
+    if (selected.some(service => ![targets[service], journal.images.before[service].imageId].includes(observed[service].imageId))) return await terminal("rollback_failed", "runtime_image_ownership_changed");
+    const priorImages = Object.fromEntries(selected.map(service => [service, journal.images.before[service].imageId]));
+    for (const image of Object.values(priorImages)) if ((await readDocker(["image", "inspect", image, "--format", "{{.Id}}"])).trim() !== image) return await terminal("rollback_failed", "runtime_image_prior_unavailable");
+    await save({ ...journal.images, phase: "reverting" });
+    const restored = await launch(priorPath, priorImages);
+    if (!settled(restored)) return await terminal("rollback_failed", "runtime_image_restore_unsettled");
+    await save({ ...journal.images, phase: "reverted", restoreExitCode: restored.status });
+    if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "image-reverted") process.exit(86);
+    observed = await observeImages();
+    if (restored.status !== 0 || !untouchedEqual(observed) || !resourcesEqual(observed) || !healthy(observed) || selected.some(service => observed[service].imageId !== priorImages[service])) return await terminal("rollback_failed", "runtime_image_restore_unverified");
+    return await terminal("rolled_back", "runtime_image_health_failed_rolled_back", observed);
+  } catch (error) {
+    const reason = typeof error?.message === "string" && /^runtime_(?:image|service_image)_[a-z_]+$/.test(error.message) ? error.message : "runtime_image_evidence_unavailable";
+    return await terminal(reason === "runtime_image_preparation_unsettled" || ["applying", "applied", "reverting", "reverted"].includes(journal.images?.phase) ? "rollback_failed" : "failed", reason);
+  }
+}
 // BI-28D2919A: a portal change to an operator-decided capability is the
 // operator's decision; record it so the install stops reading as "undecided".
 // Inlined, not imported from lib/resolve-capability-compose-profiles.mjs: the
@@ -306,6 +547,7 @@ if (!journal) {
   journal = { ...journal, signature: createHmac("sha256", secret).update(JSON.stringify(stable(journal))).digest("hex") };
   await atomicJson(journalPath, journal);
 }
+if (envelope.version === 3) { await reconcileSelectedImages(); process.exit(0); }
 if (process.env.DPF_TEST_CRASH_AFTER_PHASE === "prepared") process.exit(86);
 if (journal.phase === "prepared") {
   if (!currentIsNext) await atomicJson(statePath, next);

@@ -453,7 +453,34 @@ export {
   pruneStaleEaRelationshipEdges,
   replaceGraphEdgesFromSource,
   projectWikiLinksToGraph,
+  upsertContentFreeNode,
+  GraphNodeLabelConflictError,
+  type GraphEdgeTarget,
 } from "./graph-sync";
+// BI-A63A9476: universal entity references (MENTIONS edges derived from bodies).
+export {
+  GATED_REFERENCE_LABELS,
+  REBUILD_WRITER,
+  recordScope,
+  REFERENCE_NODE_LABEL,
+  REFERENCE_PROJECTION,
+  REFERENCE_REL_TYPE,
+  referenceDirectionAllowed,
+  wikiPageScope,
+  type ReferenceCorpus,
+  type ReferenceEntityKind,
+  type ReferenceScope,
+  type ReferenceSourceField,
+} from "./entity-reference-scope";
+export {
+  removeEntityReferences,
+  repointReferenceTarget,
+  syncEntityReferences,
+  type EntityReferenceSourceInput,
+  type EntityReferenceSyncResult,
+} from "./entity-reference-sync";
+export { rebuildEntityReferences, type EntityReferenceRebuildResult } from "./entity-references-rebuild";
+export { REFERENCE_OWNED_REL_TYPES } from "./pg-graph";
 // BI-23900D0A: the one writer for a wiki page's out-links, and its backfill.
 export {
   replaceWikiPageOutLinks,
@@ -486,6 +513,7 @@ export {
   hasProjectionFault,
   PORTFOLIO_LABELS,
   reconcileGraphProjections,
+  countReferenceEdges,
   WIKI_LABEL_PREFIX,
   type ProjectionReconciliation,
   type ProjectionStatus,

@@ -4,6 +4,128 @@ status: active
 
 # Complete external-client verification repair
 
+## Spawn failure and independent preview fencing — BI-2C5E6C77, 2026-11-14 UTC
+
+Current corrective repair: Medium BI-2C5E6C77 / WC-4D65C338,
+`codex/preview-native-fence-corrective`, base
+`fb3e440e0d3f41fb2b642255793701a5e1907fa0`. Fresh research receipt
+initiative-4f3638d1-4da1-4c4b-a483-1f4453852961 and implementation admission
+IRD-C62E0E112BD1 are allowed. Funding attribution remains unresolved
+(`funding-organization-unresolved`); admission establishes no funding owner.
+
+The acceptance sweep marked original BI-10AC904B done at 05:00 UTC from delivery
+evidence, without the original eight end-to-end outcomes. The overseer archived
+WC-9BBCF628 and released its scope at 05:15:55 UTC while this repair was unfinished.
+Its dirty tree remains unchanged. The normal same-branch corrective claim was
+refused `branch_occupied` and explicitly offered a different branch. The new
+corrective branch was admitted before worktree creation, scoped and independently
+admitted for implementation before transferring the exact 16 owned files. Their
+SHA-256 manifest, patch and archive retain the original evidence. No old native
+approval is reused at the changed binding; source test results apply only where
+the bytes match. This does not accept the original eight outcomes.
+
+Corrective item-body acceptance (quoted verbatim):
+
+- AC-FENCE-1: Actual Node process tests reproduce ENFILE/missing streams before fix and verify controlled private failures, complete owncleanup attempts and terminal no-replay.
+- AC-FENCE-2: Existing native periodic/event/expiry handlers independently stop only proven terminal fullID preview/dev-init containers with client absent; active/unknown/mismatched/replaced/gate/dataowner cases held, bounded transport failure remains pending and normal quiescence preserved.
+- AC-FENCE-3: Renewal/expiry/release/admission share serialization; stale renewal after expiry loses and renewal first defeats stale expiry, with concurrent/timeout/readback coverage.
+- AC-FENCE-4: Affected tests, production/test typechecks, guards, exact-head governed integration and independent reviews pass; normal protected PR landing and canonical deployment contain the repair.
+- AC-FENCE-5: An independent reviewer verifies installed controlled failure and exact owned stop/readback with protected live service identities unchanged before closing. Source tests/merge alone do not satisfy this criterion. Remaining332route/dynamicfixture/personapermissions/fullworkflow acceptance remains separately unrun until actually executed.
+
+The existing NonProductionEnvironmentLease, durable Task and source Workroom
+provenance supply the contract; no new authority is introduced. All five criteria
+are one atomic repair. Source delivery alone cannot satisfy AC-FENCE-5.
+
+Corrective coverage: atomic, parent BI-2C5E6C77; dependencies: none for this
+bounded source repair (original end-to-end permissions acceptance remains owed).
+Receipt: blocked-by: repository provider cannot resolve the unpublished frozen
+commit's immutable provenance (HTTP 422); normal head adoption was reconciled.
+Do not substitute old BI-10AC904B coverage or claim a passing receipt. Publication
+must use the existing governed route before the one corrected coverage write.
+
+The original feature remains exactly
+`7cba454af18d0d25f0d96c8a06ac6d0fed1cf488`; no feature edits or publication.
+
+The one fresh preview NPEL-1EA02E081B completed installation, generation,
+migration and sanitization, reached READY, and established its platform-issued
+automation browser session. BI evidence cmwfwqv6l08jk0emo5i0frg79 records that
+limited success. At 04:32:53 UTC its keeper reported lost verification and failed
+fence termination, then crashed with an unhandled `spawn docker ENFILE` error.
+The expired reservation did not stop the portal. Normal cleanup verified its
+exact lease/project/service labels and stopped only that owned portal at
+04:35:01 UTC; all four protected services retained their IDs and start times.
+Evidence cmwfwyjjy09ob0emor8rb2r25 preserves the failure and the interval before
+manual cleanup. The host pressure's origin is unknown. No UI, fixture, role or
+exhaustive sweep result follows from initialization or authentication success.
+
+WWMD DI-C795B0CE86DF chose `extend-lease-owner` with high confidence, usable and
+autonomy-eligible signal, and no commandment conflict; its outcome is recorded.
+Extend the existing native lease lifecycle owner rather than putting lease
+ownership into the general substrate monitor. Client error handling alone is
+insufficient. Reuse the durable lease/Task bindings, admitted source identity,
+existing Docker socket transport and existing reconciliation/expiry owners.
+No new table, scheduler, job, tool, grant, identity, approval bypass or host
+resource policy is introduced.
+
+Ordered implementation and evidence:
+
+1. Resolve prospective scope and affected tests before Red. Use bounded fake
+   process/stream failures in an actual Node child to reproduce the keeper's
+   failure; do not exhaust the host. The current runner attaches its error
+   listener after stream access. Node documents that failed spawning may leave
+   stdout/stderr undefined: [official child-process contract](https://nodejs.org/api/child_process.html#subprocessstdout).
+   Confirm the mechanism in the regression rather than declaring it from code.
+2. Make child error, absent stdio, close and termination handling safe and
+   single-settlement. Retain only controlled error categories, not raw errors,
+   command arguments, environment values or child output. Verify the existing
+   windowkeeper and durable consumer, including no admitted/terminal replay and
+   no product-failure verdict when a command never started.
+3. Add one shared native preview-fencing operation to the existing lease
+   reconciliation/capacity/expiry owners. It operates independently of the
+   external keeper or a Docker CLI subprocess. Resolve the installation's own
+   Compose project through daemon self-inspection. Stop only exact leased
+   `dev-portal` or uniquely named `dev-init` containers with matching native
+   lease, durable owner/session/worktree/branch and admitted source identity,
+   development environment and actual workspace binding. Healthy, renewed,
+   unknown, mismatched or foreign resources are held. Never execute an arbitrary
+   stored cleanup command or stop data owners. Re-read the lease before a stop
+   so stale observations and replacement owners do not supply authority. Only a
+   committed terminal transition authorizes stopping: exclude gate claims whose
+   distinct settlement contract can revive them. Serialize renewal with the
+   existing admission/release/expiry environment lock; prove stale renewal cannot
+   revive expiry and a renewal that wins first defeats stale expiry.
+4. Extend the bounded Docker HTTP transport with a fixed validated container
+   stop operation; no shell, general command endpoint or user-supplied URL.
+   Use the [official Docker stop API](https://docs.docker.com/reference/api/engine/version/v1.51/)
+   with a full container ID and fixed timeout. Bound response bytes and total
+   deadlines, handle empty successful responses and
+   errors, and verify stopped/absent state before declaring cleanup complete.
+   A failed or unavailable cleanup remains unknown/pending for the existing
+   native reconciliation owner. Keep quiescence and existing event/cron policy;
+   do not promise instantaneous enforcement from periodic reconciliation.
+5. Test the real existing native handlers with a dead client and synthetic
+   daemon/lease facts before adding the fence, proving the missing stop action
+   rather than a missing-module import. Cover active renewals, tampered source,
+   mismatched ownership, unknown lease, foreign project, live data services,
+   partial initialization, delayed callbacks, replacement containers, repeated
+   reconciliation, transport failure and bounded private output. Exercise the
+   affected Node suites, colocated native tests, production/test typechecks,
+   doc index/diagrams and scope guard obligations, then the exact-head governed
+   integration gate, independent reviews and normal protected landing.
+6. After actual canonical containment, independently verify the installed
+   client and native owner with controlled scoped failures and exact owned
+   runtime readback. No replay of 1EA, A6 or A9. Any future preview requires a
+   fresh wanted admission under the same original acceptance scope. Preserve
+   all valid clone/auth evidence, unresolved permission-review history and the
+   current 332-route plan (262 static, 70 dynamic, all original 331 retained).
+   Dynamic fixtures must use the existing authorized workflow; missing business
+   grants do not permit SQL/Prisma, alternate credentials or identity fallback.
+
+This is one atomic repair: a client-only correction cannot satisfy the
+independent fencing requirement. Completion remains qualified installed
+behavior plus the original acceptance work; source publication is not a full
+preview/UX/persona/permissions acceptance receipt.
+
 ## Initialization diagnostics follow-up — BI-10AC904B, 2026-11-13
 
 The admitted E9 preview NPEL-A6EE52A575 exited initialization with code 1 before

@@ -731,3 +731,51 @@ describe("codex text-tool mode runs codex as inference only", () => {
     expect(prompt).toMatch(/run by the platform when you output that JSON/);
   });
 });
+
+// BI-F7D06E2D (live, 2026-11-13 05:23Z): a scheduled marketing run on codex
+// read its summary, then `codex exec` exited 0 with an empty final message.
+// The adapter held that as an uncertain native execution, which stops the
+// fallback chain, so the run failed with no draft while Claude was eligible.
+// Text-tool mode runs codex read-only with its own tools off: it cannot have
+// changed anything, so its failure is a provider error the chain moves past.
+describe("a codex text-tool failure falls through to the next provider", () => {
+  async function runTextToolFailure(outcome: { stdout?: string; stderr?: string; code: number }) {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "test-provider-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((_data: string, cb?: () => void) => { cb?.(); return true; });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else process.nextTick(() => {
+        proc.emit("spawn");
+        if (outcome.stderr) proc.stderr.emit("data", Buffer.from(outcome.stderr));
+        if (outcome.stdout) proc.stdout.emit("data", Buffer.from(outcome.stdout));
+        proc.emit("close", outcome.code);
+      });
+      return proc;
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    const error = await codexCliAdapter.execute(makeRequest({
+      messages: [{ role: "user", content: "Advance the current campaign." }],
+      tools: ["get_marketing_summary", "draft_marketing_asset"].map((name) => ({ type: "function", function: { name, parameters: { type: "object", properties: {} } } })),
+    })).catch((e: unknown) => e);
+    warn.mockRestore();
+    return error as { name: string; code?: string };
+  }
+
+  it("raises a provider error, not an uncertain execution, when codex returns no final message", async () => {
+    const error = await runTextToolFailure({ stderr: "user\nAdvance the current campaign.\ncodex\ntokens used\n41,207\n", code: 0 });
+    expect(error.name).toBe("InferenceError");
+    expect(error.code).toBe("provider_error");
+  });
+
+  it("raises a provider error when codex exits non-zero", async () => {
+    const error = await runTextToolFailure({ stderr: "ERROR: stream disconnected before completion\n", code: 1 });
+    expect(error.name).toBe("InferenceError");
+    expect(error.code).toBe("provider_error");
+  });
+});
