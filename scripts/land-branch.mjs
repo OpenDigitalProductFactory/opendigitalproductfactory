@@ -142,6 +142,29 @@ export function syncAction({ base, behind }) {
   return behind === 0 ? "current" : "merge";
 }
 
+/**
+ * Whether step 6 waits for the shared local-CI slot (BI-31C988D5 follow-up).
+ * `derived-artifacts-gate.mjs push-exempt <merge-base>` is the single admission
+ * rule the pre-push hook and pregate-evidence-guard already use: exit 0 means no
+ * runtime-bound file and no stale artifact, so cloud CI and the merge queue are
+ * the gate of record. Anything else — not exempt, an error, an unreadable
+ * merge-base — waits, so this fails closed.
+ * @param {{ exitStatus: number|null }} admission
+ * @returns {"skip-local-ci"|"wait-local-ci"}
+ */
+export function localCiGateAction({ exitStatus }) {
+  return exitStatus === 0 ? "skip-local-ci" : "wait-local-ci";
+}
+
+function readLocalCiAdmission(base) {
+  if (base !== "main") return { exitStatus: null, out: "non-main base" };
+  const mergeBase = run("git", ["merge-base", "HEAD", "origin/main"], { capture: true, allowFail: true });
+  if (!mergeBase.ok || !mergeBase.out.trim()) return { exitStatus: null, out: "merge-base unreadable" };
+  const r = run("node", ["scripts/derived-artifacts-gate.mjs", "push-exempt", mergeBase.out.trim()],
+    { capture: true, allowFail: true });
+  return { exitStatus: r.status, out: r.out.trim() };
+}
+
 /** pregate:status --json, or null when the output is below its field floor. */
 export function parseGateStatus(text) {
   const start = text.indexOf("{");
@@ -277,8 +300,11 @@ function publishPushed({ branch, base, title, body, headSha, log, runner }) {
   if (state === "unconfirmed") {
     const enabled = runner("gh", ["pr", "merge", String(pr.number), "--repo", `github.com/${repository}`,
       "--squash", "--auto", "--match-head-commit", headSha], { capture: true, allowFail: true });
+    // BI-53BED66C: an unattended client may not run `gh pr merge` (owner Codex
+    // rules make it a prompt). The governed route is the room's own executor
+    // calling queue_workroom_pull_request through its signed-in dpf connector.
     if (!enabled.ok) return { step: "auto-merge", message: "Queue request was refused; it was not retried.",
-      next: `read pnpm pr:health ${pr.number}; do not repeat the request to discover its outcome` };
+      next: `call the MCP tool queue_workroom_pull_request with this Workroom's capsuleId through your dpf connector (it queues PR #${pr.number} once the gate passed on ${headSha.slice(0, 10)}); otherwise read pnpm pr:health ${pr.number}. Do not repeat the gh request to discover its outcome` };
     state = observePublication(binding);
   }
   if (!["queued", "requested", "merged"].includes(state)) return { step: "auto-merge",
@@ -547,8 +573,14 @@ function main() {
   }
 
   // ── 6. the gate, with the retry/classification policy already written ─────
-  log("running gate:wait (queue, retry and infra classification live in that script)");
-  if (!dry) {
+  const admission = readLocalCiAdmission(values.base);
+  const gateAction = localCiGateAction(admission);
+  if (gateAction === "skip-local-ci") {
+    log(`no runtime-bound change — skipping gate:wait; cloud CI and the merge queue are the gate of record (${admission.out})`);
+  } else {
+    log("running gate:wait (queue, retry and infra classification live in that script)");
+  }
+  if (!dry && gateAction === "wait-local-ci") {
     const r = run("pnpm", ["gate:wait"], { allowFail: true });
     if (r.status === 7) {
       return fail("gate", "deadline elapsed without a verdict — NOTHING was established about the "

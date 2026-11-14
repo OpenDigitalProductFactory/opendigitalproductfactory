@@ -23,7 +23,7 @@ describe("announcePrFollowThrough", () => {
     }));
     expect(d.raiseIssue).toHaveBeenCalledWith(expect.objectContaining({
       dedupeKey: "WC-1:follow-through:repair-propose:sha1",
-      selfFixClass: "needs-human",
+      proposeBoundary: true,
     }));
 
     const again = deps();

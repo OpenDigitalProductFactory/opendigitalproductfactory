@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 687,
+  "routeCount": 688,
   "routes": [
     {
       "routePath": "/",
@@ -4319,6 +4319,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/voice/train/route.ts"
+    },
+    {
+      "routePath": "/api/wiki/link-suggest",
+      "kind": "route",
+      "segments": [
+        "api",
+        "wiki",
+        "link-suggest"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/wiki/link-suggest/route.ts",
+      "exposure": "authenticated"
     },
     {
       "routePath": "/api/work-capsules/[capsuleId]/activity-stream",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRefreshAge, windowMateriallyDiffers } from "./OperationsMapLiveShell";
+import { formatRefreshAge, shiftEvidenceWindow, windowForHistoryPreset, windowMateriallyDiffers } from "./OperationsMapLiveShell";
 
 const HOUR = 60 * 60_000;
 
@@ -40,5 +40,17 @@ describe("formatRefreshAge", () => {
     expect(formatRefreshAge(30_000)).toBe("30s ago");
     expect(formatRefreshAge(5 * 60_000)).toBe("5m ago");
     expect(formatRefreshAge(3 * HOUR)).toBe("3h ago");
+  });
+});
+
+describe("history window controls", () => {
+  it("builds a bounded named window ending now", () => {
+    expect(windowForHistoryPreset(6 * HOUR, 10 * HOUR)).toEqual({ start: 4 * HOUR, end: 10 * HOUR });
+  });
+
+  it("moves backward and forward by exactly one visible window", () => {
+    const visible = { start: 4 * HOUR, end: 10 * HOUR };
+    expect(shiftEvidenceWindow(visible, -1)).toEqual({ start: -2 * HOUR, end: 4 * HOUR });
+    expect(shiftEvidenceWindow(visible, 1)).toEqual({ start: 10 * HOUR, end: 16 * HOUR });
   });
 });

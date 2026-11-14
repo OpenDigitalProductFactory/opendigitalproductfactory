@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/components/wiki/WikiPageEditor.tsx",
+      "apps/web/components/wiki/WikiBodyField.tsx",
+      "apps/web/components/shared/Combobox.tsx"
+    ]
+  },
+  "decidedOption": "warn-then-save-again",
+  "decisionInteractionId": "DI-D0F63659E579",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "warn-then-save-again",
+      "block-save",
+      "list-only-silent-save"
+    ]
+  },
+  "authority": "BI-2F7BE778 scope manifest (docs/superpowers/specs/2026-10-14-knowledge-linking-editor-design.md, AC-KLE-1..4) and knowledge-linking design §3.5 and §7 fix the autocomplete (shared combobox at the caret, Enter or Tab inserts [[slug|title]], Escape closes) and the preview layout (Write/Preview toggle on narrow screens, side by side on wide ones, rendered by WikiBodyRenderer). The open choice was how a save treats unresolved links while the lint rule stays unchanged. DI-D0F63659E579 ranked warn-then-save-again first with high confidence (verdict proceed) over blocking the save or saving silently.",
+  "limitations": "The dangling-link list appears only when a link does not resolve. A save with unresolved links shows the wiki_lint message once, and the next press saves; no native dialog. All copy is in the wiki catalog and all colors are theme tokens. Not yet verified on the served portal, and the 200 ms p95 suggestion latency is not yet measured on the dev install."
+}

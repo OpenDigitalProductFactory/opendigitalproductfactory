@@ -71,6 +71,7 @@ export type InventoryDb = ReviewerRoomClient & {
   featureBuild: { findMany(args: unknown): Promise<any[]> };
   scheduledAgentTask?: { findMany(args: unknown): Promise<Array<{ taskId: string; agentId: string }>> };
   nonProductionEnvironmentLease?: { findMany(args: unknown): Promise<any[]> };
+  providerCapacityStatus?: { findMany(args: unknown): Promise<import("./executor-capacity").ProviderCapacityRow[]> };
 };
 
 export type CapsuleLivenessSummary = {
@@ -166,7 +167,12 @@ export async function loadCapsuleLivenessInventory(
     (normalize(row.worktreePath) && normalize(lease.worktreePath) === normalize(row.worktreePath))
     || (normalize(row.headBranch) && normalize(lease.branchName) === normalize(row.headBranch)));
 
+  // BI-53BED66C: one read for the page; a plan-limited executor's room waits visibly.
+  const { capacityWaitFor, checkpointOf, loadProviderCapacityRows } = await import("./executor-capacity");
+  const providerRows = await loadProviderCapacityRows(db);
   const capsulesAll = rows.map((row) => {
+    const capacityWait = capacityWaitFor({ executorKind: row.executorKind ?? null, leaseExpiresAt: row.leaseExpiresAt ?? null,
+      now, providerRows, checkpoint: checkpointOf(row.workspaceState) });
     const drive = args.portalSummary ? readStoredWorkroomDriveState(row.workspaceState) : null;
     const featureBuild = row.featureBuildId ? buildsById.get(row.featureBuildId) ?? null : null;
     const lease = leaseFor(row);
@@ -174,6 +180,7 @@ export async function loadCapsuleLivenessInventory(
       ...row,
       featureBuild,
       prFollowThrough: prFollowThroughOf(row.workspaceState),
+      capacityWait,
       durableWait: lease ? {
         state: lease.status,
         signaledAt: lease.heartbeatAt ?? lease.admittedAt ?? lease.queuedAt ?? lease.updatedAt ?? null,
@@ -194,6 +201,8 @@ export async function loadCapsuleLivenessInventory(
       isReapable: verdict.isReapable,
       disposition: verdict.disposition,
       livenessReason: verdict.reason,
+      ...(capacityWait ? { capacityWait: { executorKind: capacityWait.executorKind, provider: capacityWait.provider,
+        resetAt: capacityWait.resetAt.toISOString(), source: capacityWait.source, alternatives: capacityWait.alternatives } } : {}),
       trueLivenessAt: verdict.trueLivenessAt ? verdict.trueLivenessAt.toISOString() : null,
     };
   });

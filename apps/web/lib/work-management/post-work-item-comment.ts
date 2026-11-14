@@ -18,7 +18,7 @@ import {
 
 export interface PostCommentDb {
   workItemMessage: {
-    create(args: { data: Record<string, unknown> }): Promise<{ messageId: string }>;
+    create(args: { data: Record<string, unknown> }): Promise<{ messageId: string; id?: string }>;
   };
   notification: {
     create(args: { data: Record<string, unknown> }): Promise<unknown>;
@@ -41,6 +41,8 @@ export async function postWorkItemComment(args: {
   body: string;
   sender: { type: "user" | "agent"; id: string; label: string };
   roster: MentionRoster;
+  /** BI-A63A9476: project the message's entity ids as MENTIONS edges (keyed by the message row id). */
+  syncReferences?: (messageRowId: string, writtenBy: string) => Promise<void>;
   /**
    * BI-31C1FDEC: who the message is addressed to beyond its @mentions. Given
    * the coworkers the body mentions, returns what to store at
@@ -81,6 +83,10 @@ export async function postWorkItemComment(args: {
         : {}),
     },
   });
+
+  if (args.syncReferences && message.id) {
+    await args.syncReferences(message.id, `${args.sender.type}:${args.sender.id}`);
+  }
 
   // Fan out to mentioned humans; never notify the author of their own mention.
   const notifiedUserIds: string[] = [];

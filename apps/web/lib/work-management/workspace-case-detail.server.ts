@@ -45,6 +45,12 @@ export async function loadAuthorizedWorkspaceCase(input: AuthorizedCaseInput, de
       prismaClient: dependencies.prismaClient as never, sourceId: ref.sourceId, caseKey, now: new Date(), authContext, canReadWorkroomContent, handoffRecoveryLoader,
     }) : null);
   if (!detail) return null;
+  // BI-A63A9476: link the readable entity ids in the room's messages (content was authorized above).
+  if (detail.room) {
+    const { loadReferenceSurface } = await import("@/lib/references/reference-surface.server");
+    const bodies = detail.room.activity.filter((event) => event.kind === "message").map((event) => event.summary);
+    if (bodies.length > 0) detail.room.entityRefHrefs = (await loadReferenceSurface(input.user, { bodies })).hrefs;
+  }
   // Canonical identity is disclosed only after the addressed case passed content authorization.
   const canonicalCaseKey = normalizeProcessCaseKey(encodeURIComponent(detail.summary.caseId));
   if (!canonicalCaseKey) return null;

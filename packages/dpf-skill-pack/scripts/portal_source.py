@@ -412,7 +412,11 @@ def _write_refusal(report_path: Optional[str], origin: str, refusal: PortalRefus
         "refusal": {"code": refusal.code, "reason": refusal.message},
         "clients": [],
     }
-    Path(report_path).write_bytes((json.dumps(payload, indent=2) + "\n").encode("utf-8"))
+    # BI-04A16AB8: a first run's report directory may not exist yet; a refusal
+    # that cannot be written is a refusal nobody sees.
+    report = Path(report_path)
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_bytes((json.dumps(payload, indent=2) + "\n").encode("utf-8"))
 
 
 def run_from_portal(

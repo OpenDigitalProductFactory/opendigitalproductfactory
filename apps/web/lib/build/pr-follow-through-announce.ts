@@ -4,8 +4,10 @@
  * Every effect lands on the room as a WorkroomActivity, so the room's own
  * timeline carries the evidence whichever client opened the PR. A hold that
  * needs a person (a staged repair, an exhausted budget, a failure nobody can
- * classify, infrastructure that will not recover) also goes to the existing
- * escalation inbox — once per head, keyed by the record's attentionKey.
+ * classify, infrastructure that will not recover) is raised once per head,
+ * keyed by the record's attentionKey, through the routeToHuman seam: a staged
+ * repair is a propose boundary and reaches a person; the rest pass the
+ * escalation gate (BI-5E067004).
  */
 import type { ProactivityActionBoundary, ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import { resolveRoomActionBoundary } from "@/lib/work-management/room-turn-authority";
@@ -37,7 +39,10 @@ export type PrFollowThroughAnnounceDeps = {
     description: string;
     dedupeKey: string;
     featureBuildId: string | null;
-    selfFixClass: "needs-human";
+    /** What blocks the PR, for the escalation gate's blocker class. */
+    blockingFacts: string[];
+    /** A repair staged for a person to run: the room proposes, a person acts. */
+    proposeBoundary: boolean;
   }) => Promise<void>;
 };
 
@@ -140,7 +145,8 @@ export async function announcePrFollowThrough(input: {
       + "The merge queue remains the only path to main.",
     dedupeKey: `${room.capsuleId}:${key}`,
     featureBuildId: room.featureBuildId,
-    selfFixClass: "needs-human",
+    blockingFacts: [decision.kind === "repair" ? `repair staged: ${checksLine(decision)}` : `${decision.reason}: ${checksLine(decision)}`],
+    proposeBoundary: decision.kind === "repair" && decision.mode === "propose",
   });
   return "announced";
 }

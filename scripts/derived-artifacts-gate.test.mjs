@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 // Registry decisions use injected fakes. Candidate-scope regressions also use
 // isolated Git repositories and local checker commands, never runtime services.
@@ -17,6 +17,8 @@ import {
   resolveDerivedArtifactInvocation,
   classifyDerivedArtifactCheck,
   decideSandboxAdmission,
+  evaluateLocalCiAdmission,
+  runtimeBoundFiles,
   sandboxDecisionForHead,
 } from "./derived-artifacts-gate.mjs";
 
@@ -221,16 +223,23 @@ function candidateRepository(t, file) {
   writeFileSync(join(dir, "README.md"), "base\n");
   git("add", "."); git("commit", "-qm", "base");
   git("update-ref", "refs/remotes/origin/main", "HEAD");
+  mkdirSync(dirname(join(dir, file)), { recursive: true });
   writeFileSync(join(dir, file), "candidate\n");
   git("add", "."); git("commit", "-qm", "candidate");
   return dir;
 }
 
 test("sandbox admission reads the requested code candidate, not the module checkout", t => {
-  const cwd = candidateRepository(t, "runtime.mjs");
+  // E3 (BI-31C988D5): a migration is runtime-bound and still claims the slot.
+  const cwd = candidateRepository(t, "packages/db/prisma/migrations/1/migration.sql");
   const result = sandboxDecisionForHead({ cwd, registry: [] });
   assert.equal(result?.claim, true);
-  assert.match(result.message, /runtime\.mjs/);
+  assert.match(result.message, /migration\.sql/);
+});
+
+test("sandbox admission leaves a candidate with no runtime-bound file to cloud CI (BI-31C988D5)", t => {
+  const cwd = candidateRepository(t, "runtime.mjs");
+  assert.equal(sandboxDecisionForHead({ cwd, registry: [] })?.claim, false);
 });
 
 test("sandbox admission preserves the requested docs candidate exemption", t => {
@@ -317,4 +326,50 @@ test("isMergeQueueContext recognises the merge_group event and the readonly-queu
   assert.equal(isMergeQueueContext({ GITHUB_EVENT_NAME: "pull_request", GITHUB_REF: "refs/pull/5175/merge" }), false);
   assert.equal(isMergeQueueContext({ GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/main" }), false);
   assert.equal(isMergeQueueContext({}), false);
+});
+
+// EP-DELIVERY-ENGINE-V2 E3 (BI-31C988D5): cloud CI is the gate of record; the
+// local-CI slot is reserved for runtime-bound changes.
+const noConvergence = { classifyRuntime: (files) => runtimeBoundFiles(files, { classifyConvergence: () => [] }), env: {} };
+
+test("evaluateLocalCiAdmission: library code with no runtime-bound file skips the local slot", () => {
+  const result = evaluateLocalCiAdmission(["apps/web/lib/build/review-source-refresh.ts"], [DOC_INDEX], () => true, noConvergence);
+  assert.equal(result.exempt, true);
+  assert.match(result.reason, /cloud CI is the gate of record/);
+});
+
+test("evaluateLocalCiAdmission: a migration or schema change still takes the local slot", () => {
+  const result = evaluateLocalCiAdmission(["apps/web/lib/x.ts", "packages/db/prisma/migrations/1/migration.sql"], [DOC_INDEX], () => true, noConvergence);
+  assert.equal(result.exempt, false);
+  assert.deepEqual(result.files, ["packages/db/prisma/migrations/1/migration.sql"]);
+});
+
+test("evaluateLocalCiAdmission: a convergence surface (compose, image) still takes the local slot", () => {
+  const result = evaluateLocalCiAdmission(["docker-compose.yml"], [DOC_INDEX], () => true, {
+    env: {},
+    classifyRuntime: (files) => runtimeBoundFiles(files, { classifyConvergence: () => [{ kind: "compose", files: ["docker-compose.yml"] }] }),
+  });
+  assert.equal(result.exempt, false);
+  assert.deepEqual(result.files, ["docker-compose.yml"]);
+});
+
+test("evaluateLocalCiAdmission: a stale derived artifact is never exempt", () => {
+  const result = evaluateLocalCiAdmission(["apps/web/lib/x.ts", "docs/foo.md"], [DOC_INDEX], () => false, noConvergence);
+  assert.equal(result.exempt, false);
+  assert.deepEqual(result.staleArtifacts, ["doc-index"]);
+});
+
+test("evaluateLocalCiAdmission: DPF_PREPUSH_REQUIRE_LOCAL_CI=1 restores the slot for every code change", () => {
+  const result = evaluateLocalCiAdmission(["apps/web/lib/x.ts"], [DOC_INDEX], () => true, { ...noConvergence, env: { DPF_PREPUSH_REQUIRE_LOCAL_CI: "1" } });
+  assert.equal(result.exempt, false);
+  assert.equal(result.reason, "non-docs runtime changes present");
+});
+
+test("evaluateLocalCiAdmission fails closed when the runtime classifiers cannot load (BI-31C988D5)", () => {
+  const result = evaluateLocalCiAdmission(["apps/web/lib/x.ts"], [DOC_INDEX], () => true, {
+    env: {},
+    classifyRuntime: (files) => runtimeBoundFiles(files, { classifiers: null }),
+  });
+  assert.equal(result.exempt, false);
+  assert.equal(result.reason, "non-docs runtime changes present");
 });

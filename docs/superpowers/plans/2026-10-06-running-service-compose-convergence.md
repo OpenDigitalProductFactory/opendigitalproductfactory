@@ -69,6 +69,7 @@ status: active
 
 - **Change:** the `compose` surface checks the services a PR changes. `auto-converges` is valid only when each changed service is in a resolvable chain and has a `recreateClass`. Otherwise the gate refuses with the reason.
 - **Tests first:** the fixtures include #6020's shape, a `portal-tls` change before D1/D2. It is refused before and accepted after.
+- **As delivered (2026-11-14):** `composeConvergence` in `convergence-surfaces.json` names the chain files and, per recreate class, the step that recreates a changed running service. While 7e is report-only and 3c does not exist, `stateless` and `data-owner` have no mechanism. #6020's shape is therefore still refused, honestly, and a sidecar PR names an `operator-action`. When 7e enforces, `stateless` flips to step 7e and the same fixture is accepted. Removed services, and services in files outside every chain, are refused too.
 
 ## Risks and rollback
 
@@ -87,3 +88,163 @@ Decomposed. Umbrella BI-C54E691E.
 | D3 | BI-00F7D2E3 | D1, D2 |
 | D4 | BI-7F2709F9 | D2 |
 | D5 | BI-205A85C0 | D1, D2 |
+
+## D6 follow-up: selected service-image identity (BI-0282088D)
+
+The November 13 source assessment and decision DI-CAC49D437EA8 extend the
+existing spec's OBJ-IMAGE. This is a distinct image-provenance contract, not
+delivery of the remaining D4/D5 work or permission to enforce shadow step 7e.
+The existing D1-D5 mappings above remain intact. The parent coverage was renewed
+without changing its original criteria. The child has its own immutable coverage
+`cmwfow6zm0sqe0eqcd4nshyae` and implementation admission `IRD-D2A0E98FB7C3`.
+
+| Deliverable | Objectives | Contracts | Flow | Acceptance |
+|---|---|---|---|---|
+| D6 qualified service-image plan | OBJ-IMAGE | `RuntimeTransitionEnvelope`, `RuntimeTransitionReceipt`, `scripts/apply-runtime-capability-transition.mjs`, `runtime-capability-executor.ts`, packaged protocol probe | native preview, signed image preparation, apply, health, journal replay and compensation | AC-I1, AC-I2, AC-I3, AC-I4, AC-I5, AC-I6, AC-I7 |
+
+| Deliverable | Backlog item | Depends on |
+|---|---|---|
+| D6 | BI-0282088D | D1, D2 |
+
+D6's phases below are internal sequencing for one image qualification contract.
+An isolated serializer, image build or green health check cannot independently
+deliver it. Source implementation is in progress; served acceptance remains unrun.
+
+### D6 acceptance (quoted from BI-0282088D)
+
+- AC-I1: Desired service images are server-derived from immutable canonical source/release evidence; labels or portal SHA alone never qualify them.
+- AC-I2: A selected build-only stateless service has bounded native preparation with exact input/image proof and no implicit build of unrelated required services. Missing or unsupported proof holds before runtime mutation.
+- AC-I3: Actual post-apply image IDs and existing health checks must match the signed plan before applied is recorded.
+- AC-I4: Crash replay and compensation preserve/recover the exact prior qualified image IDs; uncertain ownership or settlement remains unverified.
+- AC-I5: No stateful/managed restart, stopped-service activation, volume removal, grant/policy expansion or shadow-mode enforcement is introduced by this slice.
+- AC-I6: Source/consumer and platform differences use existing runtime contracts. Old or unsupported packaged protocols fail closed before host effects, including N-1 promoter staging.
+- AC-I7: Affected production-owner tests, normal gates/independent review, governed served workflow/failure recovery and exact cleanup supply separate truthful evidence; no fixture is production acceptance.
+
+### D6 sequence
+
+1. Reconcile the parent's legacy coverage, D4/D5 statuses and the new child.
+   Quote AC-I1 through AC-I7 verbatim from its live body in its immutable
+   implementation coverage. Confirm the owning funding and scope; do not treat
+   the pending item attribution as approval. Claim exact code paths, read their
+   impact contract, and resolve related tests before Red.
+2. Extend the existing signed native plan/probe/receipt contract. Keep new
+   critical logic within its verified packaged closure, or separately deliver
+   compatibility first. Tests must fail for unsupported protocol, altered plan,
+   wrong source, caller paths/hashes and N-1 missing inputs before host effects.
+3. Reuse canonical artifact preparation for a bounded selected stateless image.
+   Exercise source and published-image install modes. Stage immutable inputs,
+   qualify the resulting actual image ID, and pin it for apply. Test that no
+   unrelated service is built and unqualified contexts never reach runtime.
+4. Extend existing journal/replay/compensation and health verification with the
+   exact prior and intended images. Test interruptions at each durable phase,
+   moved tags, missing prior images, unhealthy service, ownership loss and
+   uncertain settlement. Retain failed recovery rather than declare success.
+5. Preserve managed/data-owner/stopped-service, volume, activation and explicit
+   shadow controls. Test each boundary against the real production owners with
+   injected Docker/process adapters, without production runtime mutation.
+   Reuse the producer's shared locks and row-creation transaction to
+   fence new work throughout unchanged-key image transitions and uncertain
+   recovery. Inspect all relevant transitions, validate the persisted v3 plan,
+   and union selected catalog/saved guards. Pin malformed metadata, unrelated
+   producers, settled recovery and both producer/transition admission orders in
+   the existing unit and isolated PostgreSQL suites.
+   Serialize before the first MVCC snapshot using the existing transition table
+   lock before the advisory SELECT, with that order in admission, creation and
+   success settlement. Bind the attribution counter to that same transaction
+   connection and retain existing transaction timeouts.
+6. Run the affected protocol, actuator, coordinator, executor and promoter
+   closure tests, package typechecks, and the exact current gate-context guards.
+   Use normal exact-tree qualification, independent review and protected
+   `pnpm land`. No new provider, budget or access is implied by a phase change.
+7. Under an admitted isolated runtime, exercise native preview/apply, saved
+   proof reload, missing/unsupported inputs, actual image mismatch and bounded
+   recovery. Record fixtures as simulated, prove exact cleanup, and preserve
+   infrastructure failures as inconclusive. A live install advance remains the
+   coordinator's action; final native image and owner-workflow proof must name
+   actual deployed bytes. Do not substitute a client-built image.
+
+Expected existing seams: `apps/web/lib/platform-runtime/transition-protocol.ts`,
+`transition-coordinator.ts`, `runtime-capability-executor.ts`,
+`scripts/lib/transition-signing.mjs`,
+`scripts/apply-runtime-capability-transition.mjs` and their colocated tests.
+Image-proof and minimal promoter-context owners must be checked before any
+closure change. The implementation path set remains provisional until admission.
+
+Rollback is through protected source delivery and the existing qualified-image
+compensation path. An uncertain prior image or ownership check stops recovery;
+it does not authorize a blind rebuild, volume change or wider service restart.
+
+### D6 implementation checkpoint
+
+The v3 plan, existing artifact owner, selected-only actuator, authenticated
+compensation and native administrator selector are implemented in the child
+Workroom WC-876B044A. Source fixtures exercise published/source inputs,
+unsupported protocols, unchanged-state boundaries, exact image and resource
+proof, health rollback, crash replay and uncertain settlement. They use injected
+IO and are separate from production acceptance. Parent attribution executed;
+the distinct child attribution remains a separate recorded decision. No new
+budget, provider or grant is inferred.
+
+PR7065 was delivered as intermediate source. A subsequent production-owner
+reproduction found that the producer fence still considered only removed keys;
+it admitted new coworker work during v3 image preparation and uncertain recovery.
+The corrective source loop adds the producer owner and existing PostgreSQL suite
+to this same atomic contract. The first typed regression run had ten meaningful
+missing-rejection failures and ten control passes. Current unit green is separate
+from canonical PostgreSQL, final-tree review and served acceptance; none is
+inferred from the earlier source gate or review.
+
+Canonical regression evidence `cmwfxd19x0dgy0emojyiadhnq` then demonstrated a
+Serializable producer committing behind an uncommitted image transition while
+the ReadCommitted control rejected correctly. Preserve that failure. The
+correction adds a pre-snapshot table/advisory order, transaction-bound counter,
+actual `createAutonomousWorkRun` contention in both orders, settlement contention,
+a two-connection pool case and earlier-write Build Studio isolation controls.
+Those new PostgreSQL cases still require an observed current-source gate; source
+unit/type results alone are not the repair's acceptance.
+
+Caller inventory (all eight production `admitRuntimeGuardedWork` sites, not
+only autonomous runs and backlog promotion):
+
+| Site / transaction owner | Isolation and prior SQL | Fence placement |
+| --- | --- | --- |
+| `tak/autonomous-work-run.ts` | Serializable default; initiative review binding or explicit override may use ReadCommitted | Admission is first in the transaction. |
+| `actions/agent-threads.ts` | Serializable; parent/children reads and child writes previously preceded admission | Early lock helper before parent lookup; later admission reuses only that exact transaction's successful fence. Ownership, cancellation, child limits and lineage stay inside the same transaction. |
+| `inference/async-operation-workroom-runtime.ts` | Serializable; WorkCapsule row lock, authority and task reads previously preceded admission | Early lock before the row lock; later creation admission reenters. Existing authorized task replay still works without creating new work. |
+| `build/build-execute-helpers.ts` | Serializable; build/existing-task lookup is outside the creating transaction | Admission first inside the creating transaction. |
+| `actions/build.ts` | Default ReadCommitted | Admission first before FeatureBuild and attached Workroom creation. |
+| `build/approve-decomposition.ts` | Default ReadCommitted through its native Prisma wrapper | Admission first before Epic/child builds. |
+| `governed-backlog-tee-up.ts` | Caller-owned default ReadCommitted; backlog actions and assurance remediation can update BacklogItem first | Shared invariant checks actual transaction mode. Other callers: own tee-up loop, MCP build-ops, optimization dispatch-bet. No fixed-snapshot override exists in these wrappers. |
+| `work-capsules/work-capsule-store.ts` | Native own transactions default ReadCommitted; supplied transaction paths include Build attachment, child-room drive and federation claim | Own create/resume admission is first in its writing transaction; outer Build has already fenced. Child drive/federation may read/lock first under ReadCommitted. Shared guard refuses any future late fixed-snapshot adapter rather than trusting stale state. |
+
+The native database client has no global isolation override. Capsule `inTransaction`
+uses the supplied transaction as-is when no `$transaction` member exists, so
+it must never be assumed to create a fresh snapshot. Existing capsule reuse/
+late binding does not create guarded work and retains its behavior. No call
+changes isolation or moves authorization outside its transaction.
+
+For every source, the shared helper reads actual isolation with snapshot-free
+`SHOW`. Fixed modes additionally preserve the actual DEFERRABLE value with
+same-value `SET TRANSACTION [NOT] DEFERRABLE`; PostgreSQL's
+[`check_transaction_deferrable`](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/commands/variable.c)
+rejects any first snapshot already taken even for the same value. Same-value
+isolation SET does **not** enforce this and must not be substituted. The exact
+transaction object receives a private weak marker only after both locks succeed.
+A new transaction/proxy must acquire its own valid fence; failures do not mark it.
+`SHOW`, `SET` and `LOCK` do not take a snapshot under PostgreSQL's
+[utility command rule](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/tcop/pquery.c).
+Real PostgreSQL tests must prove this through the actual Prisma adapter, including
+fresh settings preservation, late-read rejection, reentry, and the actual spawn/
+durable-task callers' successful saved lineage/replay and transition contention.
+Source unit tests and primary-source reasoning do not replace that runtime proof.
+
+Scope-epoch enrollment takes the advisory lock but only reads the transition
+table, so its AccessShare read does not invert the new table-write order.
+Startup recovery/status writers do not acquire the advisory lock. The two
+coordinator writers that do use the same shared helper before any prior SQL.
+
+Before completion, freeze the exact tree, run its required source/runtime gates,
+obtain independent code review, deliver through protected `pnpm land`, then use
+an admitted served target for native preview/apply, saved results, holds and
+recovery. The coordinator alone advances the canonical install. Preserve the
+original D4/D5 unfinished status and step 7e shadow mode throughout.

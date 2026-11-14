@@ -96,9 +96,11 @@ Rules carried over from [upgrade service recovery](2026-10-02-upgrade-service-re
 
 Outcome: `service-converge-outcome.json` lists `recreated`, `unchanged`, `skipped-stopped` and `failed`, each with the before and after hash. It is recorded on the run like `service-reconcile-outcome.json` and shown on `/ops/self-upgrade`.
 
+Exposure guard (BI-94C4722B, from the first live shadow report): when a running service publishes a host port on a different host IP than the render, it is listed under `bindDrift` (service, port, running IP, rendered IP) and is never recreated. The first shadow report would have moved `portal-tls` from `127.0.0.1` to `0.0.0.0`, because a source install never persisted `DPF_HOST_BIND_ADDRESS`; the promoter now persists it. Recreating a service must never change who can reach it. An operator resolves a `bindDrift` row by setting `DPF_HOST_BIND_ADDRESS` to the exposure they want.
+
 ### 4. The convergence gate becomes checkable (OBJ-HONEST-GATE)
 
-The `compose` surface in `scripts/convergence-surfaces.json` gains a per-service check. When a PR changes a service that the resolved chain covers and that has a `recreateClass`, then `auto-converges` is valid and its mechanism is named (step 3c or 7e). When the service is outside every chain the resolver can produce, `auto-converges` is refused with that reason.
+The `compose` surface in `scripts/convergence-surfaces.json` gains a per-service check. When a PR changes a service that the resolved chain covers and that has a `recreateClass`, then `auto-converges` is valid and its mechanism is named (step 3c or 7e). When the service is outside every chain the resolver can produce, `auto-converges` is refused with that reason. Until step 7e enforces and step 3c exists, a changed running `stateless` or `data-owner` service has no mechanism, and `auto-converges` is refused for it too (BI-205A85C0).
 
 ## Not in scope
 
@@ -115,3 +117,208 @@ The `compose` surface in `scripts/convergence-surfaces.json` gains a per-service
 | AC-3 | OBJ-STATEFUL | A self-upgrade with no `postgres` config change leaves the `postgres` container untouched (same container id). With a change, it recreates `postgres` before the portal swap. A failed `postgres` health check aborts before the swap, and the recovery point restores the install. |
 | AC-4 | OBJ-CONVERGE | A stopped service stays stopped, and an inspection failure never recreates a container (tests). |
 | AC-5 | OBJ-HONEST-GATE | The convergence gate refuses `auto-converges` for a compose change to a service no resolved chain contains, and every service in a shipped compose file has a catalog `recreateClass` (contract test). |
+
+## Image identity follow-up (D6, BI-0282088D)
+
+Source assessment: November 13, 2026, at `f2a0b7dff478f89f9bcf8dda7f25b93eac3634e0`.
+This extends the design; it does not turn on step 7e or change data-owner policy.
+D1, D2 and the shadow D3 are delivered. D4 (BI-7F2709F9) and D5
+(BI-205A85C0) remain separate unfinished work. Finishing D6 does not establish
+the umbrella's original AC-1 through AC-5.
+
+The signed capability actuator already checks its packaged protocol, pins the
+portal writer image, journals state, compensates failures and checks service
+health. Its final `up -d --wait` does not establish an intended code image for
+build-only services. In source mode, `browser-use` has a local build context;
+the release overlay instead selects a published image. Healthy services,
+ACTIVE settings, equal config hashes and the portal SHA are insufficient image
+evidence. This finding does not diagnose a particular stale container or the
+earlier preview failures.
+
+Docker's [build contract](https://docs.docker.com/reference/cli/docker/compose/build/)
+requires rebuilding changed build inputs. Its [up contract](https://docs.docker.com/reference/cli/docker/compose/up/)
+recreates services when their image or configuration changes. These are separate
+steps; neither replaces DPF's authorization, recovery or image identity checks.
+
+**OBJ-IMAGE:** Native reconciliation runs selected stateless services on their
+qualified intended image bytes, or holds before runtime mutation with a useful
+reason. It never treats a green capability state as image proof.
+
+### Decision and authority
+
+WWMD DI-CAC49D437EA8 chose `native-image-plan` with high confidence and
+`autonomyEligible: true` for design. Alternatives were promoter-wide enforcement
+after shadow evidence, and published images for all install modes. The selected
+path extends the existing signed reconciliation protocol and receipt. No new
+table, MCP tool, agent, alternate runtime or client integration is needed.
+
+This decision grants no production build, restart, funding, permission or
+stateful-policy authority. The existing item funding attribution is pending
+cmwfngfl80hwh0eqchdgot70a; do not infer that it executed. Production remains with
+the existing coordinator and normal runtime action gates.
+
+### Intended source and image plan
+
+The server derives the selected services and expected image identity from its
+trusted canonical source or immutable release evidence. The caller supplies no
+host paths, replacement hashes, arbitrary Docker arguments or image overrides.
+The signed plan binds the source, catalog/state version, selected services,
+before images, intended inputs, preparation limits and protocol identity.
+
+Reuse the existing canonical artifact-preparation path. A source install must
+stage the exact immutable source's bounded build inputs, not a moving host
+checkout. Git object content or a qualified canonical build context may supply
+those bytes; a SHA label alone cannot. Unsupported remote, escaping, missing or
+unqualified contexts hold before runtime changes. Consumer installs use their
+existing qualified published image digests. Do not force source builds onto
+consumer installs or change service activation to obtain an image.
+
+Preparation names only the selected stateless services. It must not add
+`--build` to the current full required-service list. Record actual image IDs and
+available build-input/provenance evidence, pin the qualified output for apply,
+then compare the running containers' image IDs and existing health semantics.
+An unknown dependency, source, image or health result stays unverified.
+
+For the first bounded implementation, image reconciliation does not also change
+capability activation. Require identical before/after capability keys and states,
+an unchanged issued preview, and selected services already running and classified
+stateless in the canonical chain. A different activation request uses its existing
+separate transition. This keeps image repair from acquiring wider startup rights.
+
+Apply and compensation name only those selected services, with dependency startup
+and implicit builds disabled. Do not send the image operation through the legacy
+full required-service `up`. Check the full required-service health projection
+afterward and verify that unselected managed/data-owner container identities stayed
+unchanged. A missing container, changed ownership or unexpected dependency holds
+before effects. Reuse the signed reconciliation mode with negotiated image-plan
+support; this does not require an alternate action engine.
+
+### Recovery and compatibility
+
+Before any runtime effect, persist the exact prior image IDs and selected plan
+in the existing signed journal/receipt flow. Replay resumes that plan; it does
+not silently resolve a newer mutable tag or rebuild a different source.
+Compensation restores the prior qualified images and prior capability state.
+An unavailable prior image, changed ownership or uncertain child settlement
+retains a failed or unverified recovery result.
+
+Use the existing packaged protocol probe to negotiate image-plan support.
+Older or unsupported actuators must refuse before host effects. Do not add a
+trusted import or a candidate `COPY` requirement that the deployed N-1 minimal
+promoter context cannot supply. Extend the identity-bound closure only through negotiated support; missing optional
+image dependencies must leave ordinary v1/v2 staging loadable and refuse v3 before
+host effects.
+Do not manufacture protocol support from a portal revision.
+
+Managed services and data owners keep their existing lifecycles. Stopped
+services stay stopped unless a separate existing activation decision authorizes
+them. Volumes, recovery points, scope-writer qualification, grant intersection,
+runtime transition ownership and health checks retain their authority. Root's
+separate browser security-policy work is not authorized by this image plan.
+
+### D6 acceptance
+
+| ID | Objectives | Statement |
+|---|---|---|
+| AC-I1 | OBJ-IMAGE | Desired service images are server-derived from immutable canonical source/release evidence; labels or portal SHA alone never qualify them. |
+| AC-I2 | OBJ-IMAGE | A selected build-only stateless service has bounded native preparation with exact input/image proof and no implicit build of unrelated required services. Missing or unsupported proof holds before runtime mutation. |
+| AC-I3 | OBJ-IMAGE | Actual post-apply image IDs and existing health checks must match the signed plan before applied is recorded. |
+| AC-I4 | OBJ-IMAGE | Crash replay and compensation preserve/recover the exact prior qualified image IDs; uncertain ownership or settlement remains unverified. |
+| AC-I5 | OBJ-IMAGE | No stateful/managed restart, stopped-service activation, volume removal, grant/policy expansion or shadow-mode enforcement is introduced by this slice. |
+| AC-I6 | OBJ-IMAGE | Source/consumer and platform differences use existing runtime contracts. Old or unsupported packaged protocols fail closed before host effects, including N-1 promoter staging. |
+| AC-I7 | OBJ-IMAGE | Affected production-owner tests, normal gates/independent review, governed served workflow/failure recovery and exact cleanup supply separate truthful evidence; no fixture is production acceptance. |
+
+The child has accepted research `initiative-79ab62cd-2245-4d5b-919f-7eea0cc8f483`,
+its own immutable coverage `cmwfow6zm0sqe0eqcd4nshyae`, and implementation admission
+`IRD-D2A0E98FB7C3`. These admit source work; they are not runtime acceptance.
+
+### Bounded v3 implementation
+
+The existing administrator reconciliation tool accepts only the optional
+`imageServices: ["browser-use"]` selection. The executor derives the plan from
+its verified packaged source SHA, host platform and installed release carrier.
+Source mode archives the immutable `services/browser-use` Git tree to Docker
+stdin. These read-only Git calls use command-scoped `safe.directory=/host-source`
+for the fixed mount because the runtime-transition branch precedes the updater’s
+ordinary Git setup. No global Git configuration is changed. This follows
+[Git’s protected safe-directory contract](https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory).
+Consumer mode resolves the installed immutable release through the existing
+manifest reader, then pulls only its pinned digest. Actual image ID, platform,
+source revision and source input-tree or published digest evidence must agree.
+
+Version 3 authenticates the plan, receipt and recovery proof recursively. The
+read-only packaged probe explicitly advertises support and binds the actuator,
+signer and the combined bytes of the existing `promoter-epoch-evidence.mjs`
+artifact owner and shared `lib/git.mjs` reader. The artifact owner is already in
+the N-1 minimum promoter context. The Git reader loads only after v3 qualification;
+when an older minimum staging omits it, the probe retains v1/v2 apply and reports
+no image support. No candidate COPY dependency is added to that older closure.
+New full promoter images already copy the scripts directory. Version 1 and 2
+behavior stays intact.
+
+Before preparation, the actuator observes the running project and saves a private
+resolved Compose baseline. The installed Compose implementation must reproduce
+the selected container's configuration hash using the original or actual image
+reference. A mismatch holds; it does not enable shadow enforcement. This avoids
+reimplementing Docker's hash algorithm or treating image-only authority as consent
+to apply other configuration. Selected services use existing volumes and networks
+as external resources, with dependency startup, builds and pulls disabled at apply.
+Unselected container IDs and selected resource identities must remain unchanged.
+
+The signed journal records prior IDs, immutable preparation and each apply phase.
+A completed receipt includes exact intended/observed images, health and resource
+hashes. An interrupted preparation or child apply is `rollback_failed` with a
+durable recovery barrier; another attempt cannot erase that uncertainty. Native
+unhealthy apply restores the exact prior cached image. Database compensation
+requires the authenticated original applied receipt and a signed restore-only
+plan. Identical capability settings alone never prove that image effects were absent.
+Selected image owners retain their existing catalog and saved manifest work guards.
+The ordinary serializable receipt admission rechecks attributed tasks even though
+image-only reconciliation disables no capability; active work returns drain-required
+before a transition row or service apply is created.
+The producer half serializes inside the transaction that creates a TaskRun or
+build. Real PostgreSQL contention showed that an advisory-lock SELECT can fix a
+Serializable snapshot before the wait ends, hiding a newly committed transition.
+The shared admission helper therefore first takes a `SHARE ROW EXCLUSIVE` lock
+on the existing transition table, then the existing advisory lock. PostgreSQL's
+[utility snapshot rule](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/tcop/pquery.c)
+explicitly excludes `LOCK` and `SHOW`, so serialization precedes snapshot
+creation. `createPending` and `commitSuccess` use the same order. No host work
+or inference runs under these metadata locks; transaction timeout settings are
+not changed. The drain counter uses the existing transaction-bound attribution
+store, avoiding an outer-pool request behind producers waiting on these locks.
+It examines every active transition and the existing
+`rollback_failed`/`recoveryRequired` image barrier, so unchanged capability keys
+cannot admit new matching work after the initial drain. The persisted v3 plan
+uses the shared validator; selected catalog owners and their saved manifests
+supply the guard union. Malformed image metadata retains only the existing
+browser recipe's guards, rather than silently losing its scope or stopping
+unrelated producers. Settled recovery releases the image guard. Legacy active
+key-removal admission retains its previous behavior.
+
+All eight actual production admission sites and their outer transaction wrappers
+are inventoried in the existing plan. Autonomous/build TaskRun admission already
+comes first; coworker spawn and durable Workroom tasks now acquire the same
+helper before parent/authority reads or a WorkCapsule row lock. Later admission
+reuses only a successful fence on that exact transaction object, preserving
+transactional ownership checks and existing-task replay. Capsule stores can
+receive an already-open transaction; their wrappers must not be treated as a
+snapshot reset. Current late-read Build/Capsule wrappers use ReadCommitted.
+
+The helper verifies actual isolation for every guard. In fixed-snapshot modes,
+SHOW and same-value `SET TRANSACTION [NOT] DEFERRABLE` preserve existing settings
+and assert that no first snapshot exists. PostgreSQL's
+[deferrable check](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/commands/variable.c)
+rejects a prior snapshot even on the same value; its isolation check explicitly
+permits same-value SET and is unsuitable. An unsupported late fixed-snapshot
+caller fails before capabilities or transitions are read, rather than silently
+admitting stale state. No isolation downgrade, new persistent epoch, durable
+authority, grant, or transaction timeout change is introduced. Actual Prisma/
+PostgreSQL coverage must prove the utility ordering and real caller behavior.
+The existing ten-minute authority lifetime is preserved. Preparation reserves time
+for bounded apply and restoration; a short remaining lifetime holds before effects.
+
+Source tests use injected process adapters and isolated temporary files. Their
+passing results do not establish served owner acceptance. Exact-tree gate,
+independent review, protected delivery and governed runtime verification remain
+required before D6 is complete.

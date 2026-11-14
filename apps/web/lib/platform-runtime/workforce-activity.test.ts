@@ -27,6 +27,7 @@ function fakePrisma(data: {
   evidence?: unknown[];
   doneWeek?: unknown[];
   breakFixDone?: unknown[];
+  workrooms?: unknown[];
 }) {
   return {
     agent: {
@@ -41,6 +42,7 @@ function fakePrisma(data: {
         }),
     },
     taskRun: { findMany: async () => data.liveRuns ?? [] },
+    workroom: { findMany: async () => data.workrooms ?? [] },
     toolExecution: {
       groupBy: async (args: { by: string[] }) =>
         args.by.includes("toolName") ? (data.toolByAgentTool ?? []) : (data.lastActed ?? []),
@@ -215,6 +217,7 @@ describe("loadWorkforceActivity", () => {
         },
       },
       tokenUsage: { groupBy: async () => [] },
+      workroom: { findMany: async () => [] },
       delegationChain: { groupBy: async () => [] },
       phaseHandoff: { groupBy: async () => [] },
       backlogItemActivity: { groupBy: async () => [], findMany: async () => [] },
@@ -282,6 +285,34 @@ describe("loadWorkforceActivity", () => {
     expect(wf.pulse.costUnattributed).toBeCloseTo(2);
     // The coworker's own line is unchanged.
     expect(wf.quiet[0].tokensToday).toBe(150);
+  });
+
+  it("attributes room-scoped usage and retains current and recent Workroom context (BI-3EC91596)", async () => {
+    const prisma = fakePrisma({
+      agents: [agent({ agentId: "a1", displayName: "A1" })],
+      tokens: [
+        { agentId: "a1", contextKey: null, _sum: { inputTokens: 100, outputTokens: 50, costUsd: 0.5 } },
+        { agentId: "unknown", contextKey: "scheduled:workroom-WC-LIVE-build", _sum: { inputTokens: 700, outputTokens: 300, costUsd: 2 } },
+        { agentId: "unknown", contextKey: "coworker:/workspace/cases/work-capsule%3AWC-DONE", _sum: { inputTokens: 40, outputTokens: 10, costUsd: 0.25 } },
+        { agentId: "unknown", contextKey: null, _sum: { inputTokens: 10, outputTokens: 0, costUsd: 0 } },
+      ],
+      workrooms: [
+        { capsuleId: "WC-LIVE", title: "Unify coworker activity", objective: "Show the work", status: "claimed", executorKind: "codex", executorRef: "thread-1", taskRunId: "run-live", updatedAt: new Date(NOW - 60_000) },
+        { capsuleId: "WC-DONE", title: "Repair Workroom route", objective: "Open details", status: "complete", executorKind: "claude", executorRef: null, taskRunId: null, updatedAt: new Date(NOW - 3_600_000) },
+      ],
+    });
+
+    const wf = await loadWorkforceActivity({ prisma, now: () => NOW });
+
+    expect(wf.pulse.tokensToday).toBe(1210);
+    expect(wf.pulse.tokensRoster).toBe(150);
+    expect(wf.pulse.tokensWorkroom).toBe(1050);
+    expect(wf.pulse.tokensUnattributed).toBe(10);
+    expect(wf.workrooms).toEqual([
+      expect.objectContaining({ capsuleId: "WC-LIVE", recency: "current", tokensToday: 1000, costToday: 2 }),
+      expect.objectContaining({ capsuleId: "WC-DONE", recency: "recent", tokensToday: 50, costToday: 0.25 }),
+    ]);
+    expect(wf.platformWork).toEqual([]);
   });
 
   it("lists live runs no coworker owns as platform work rather than an empty 'working' board (BI-B3AB7FC9)", async () => {

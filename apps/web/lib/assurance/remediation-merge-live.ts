@@ -16,7 +16,7 @@ import {
   resolveGithubToken,
   resolveRepoIdentity,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
-import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
+import { routeToHuman } from "@/lib/govern/authority/route-to-human";
 import {
   enablePullRequestAutoMerge,
   resolvePullRequestNodeId,
@@ -137,6 +137,17 @@ export interface LiveMergeGateDeps {
   now?: Date;
 }
 
+/**
+ * The merge gate's own ceiling is a recorded threshold: a minor or major bump,
+ * or a change it cannot classify, needs an employee (WWMD patch-only-auto), so
+ * it reaches a person unchanged. Every other refusal (a conflict, red CI, an
+ * open advisory, a cooldown) passes the escalation gate like any other stall
+ * (BI-5E067004). Keyed on the reasons remediation-merge-gate.ts returns.
+ */
+export function mergeGateEscalationDeclarations(reason: string): { thresholdExceeded?: boolean } {
+  return /requires employee review|unclassified change/.test(reason) ? { thresholdExceeded: true } : {};
+}
+
 export async function createLiveMergeGateAdapters(deps: LiveMergeGateDeps): Promise<MergeGateAdapters> {
   const { prisma, actuationEnabled } = deps;
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -237,19 +248,23 @@ export async function createLiveMergeGateAdapters(deps: LiveMergeGateDeps): Prom
     },
 
     escalate: async (pr, reason): Promise<void> => {
-      await createPlatformIssueReport({
-        type: "build-stall-escalation",
-        source: "build-studio",
-        severity: "high",
-        title: `Assurance remediation needs an owner merge decision: PR #${pr.prNumber}`,
-        description:
-          `Remediation PR #${pr.prNumber} ("${pr.title}") for ${pr.backlogItemId} was NOT auto-merged by the ` +
-          `assurance merge gate.\n\nReason: ${reason}\n\nDecide the merge manually. ` +
-          `(Assurance remediation lane P2 — WWMD patch-only-auto gate, BI-204EE70B.)`,
-        featureBuildId: pr.buildPk,
-        triggerKind: "assurance-remediation-merge-gate",
-        dedupeKey: `assurance-merge-escalation:${pr.prNumber}`,
-        selfFixClass: "needs-human",
+      await routeToHuman({
+        producer: "assurance-merge-gate",
+        subject: { kind: "pull-request", id: `#${pr.prNumber}` },
+        blockingFacts: [reason],
+        declarations: mergeGateEscalationDeclarations(reason),
+        report: {
+          source: "build-studio",
+          severity: "high",
+          title: `Assurance remediation needs an owner merge decision: PR #${pr.prNumber}`,
+          description:
+            `Remediation PR #${pr.prNumber} ("${pr.title}") for ${pr.backlogItemId} was NOT auto-merged by the ` +
+            `assurance merge gate.\n\nReason: ${reason}\n\nDecide the merge manually. ` +
+            `(Assurance remediation lane P2 — WWMD patch-only-auto gate, BI-204EE70B.)`,
+          featureBuildId: pr.buildPk,
+          triggerKind: "assurance-remediation-merge-gate",
+          dedupeKey: `assurance-merge-escalation:${pr.prNumber}`,
+        },
       });
     },
   };

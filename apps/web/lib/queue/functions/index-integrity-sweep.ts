@@ -4,6 +4,7 @@ import { cron } from "@/lib/jobs/triggers";
 import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import type { CreatePlatformIssueReportInput } from "@/lib/quality/platform-issue-reports";
+import { routeToHuman } from "@/lib/govern/authority/route-to-human";
 import {
   checkCollationStability,
   checkIndexIntegrity,
@@ -47,17 +48,36 @@ export async function runIndexIntegritySweep(injected?: SweepDeps) {
     const blocking = collation.findings.filter((finding: { severity: string }) => finding.severity === "error");
     const failed = integrity.corrupted.length > 0 || blocking.length > 0;
     if (failed) {
-      await deps.createPlatformIssueReport({
-        type: "index-integrity-drift",
-        source: "index-integrity-sweep",
-        severity: "critical",
-        title: "Live database index integrity drift detected",
-        description: JSON.stringify({ corrupted: integrity.corrupted, collationFindings: blocking }),
-        routeContext: "/ops",
-        triggerKind: "scheduled-integrity-sweep",
-        dedupeKey: "index-integrity-sweep:live-database",
-        selfFixClass: "needs-human",
-      });
+      // Live data-integrity drift is critical risk: the escalation gate puts it
+      // to a person with that reason, and never consults (BI-5E067004).
+      await routeToHuman(
+        {
+          producer: "index-integrity-sweep",
+          subject: { kind: "platform", id: "live-database" },
+          blockingFacts: ["live database index or collation integrity drift"],
+          declarations: { riskTier: "critical" },
+          report: {
+            type: "index-integrity-drift",
+            source: "index-integrity-sweep",
+            severity: "critical",
+            title: "Live database index integrity drift detected",
+            description: JSON.stringify({ corrupted: integrity.corrupted, collationFindings: blocking }),
+            routeContext: "/ops",
+            triggerKind: "scheduled-integrity-sweep",
+            dedupeKey: "index-integrity-sweep:live-database",
+          },
+        },
+        {
+          write: {
+            createReport: async (input) => {
+              const created = await deps.createPlatformIssueReport(input as unknown as CreatePlatformIssueReportInput);
+              return { reportId: (created as { reportId?: string } | undefined)?.reportId ?? "" };
+            },
+            resolveOwner: async () => null,
+            notify: async () => {},
+          },
+        },
+      );
     }
     return {
       failed,

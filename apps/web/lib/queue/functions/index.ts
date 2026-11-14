@@ -2,6 +2,7 @@ import { prometheusPoll, fullDiscoverySweep } from "./discovery-poll";
 import { modelDiscoveryRefresh } from "./model-discovery-refresh";
 import { routingReachabilityPreflight } from "./routing-reachability-preflight";
 import { infraPrune } from "./infra-prune";
+import { entityReferencesRebuild } from "./entity-references-rebuild";
 import { rateRecovery } from "./rate-recovery";
 import { providerRecovery } from "./provider-recovery";
 import { providerPauseExpiry, providerPauseReconcile } from "./provider-operator-pause";
@@ -17,6 +18,7 @@ import { roomMessageDispatch, roomWakeRun } from "./room-message-wake";
 import { documentRenditionBackfill, documentRenditionGenerate } from "./document-renditions";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
+import { planGateStallInvariant } from "./plan-gate-stall-invariant";
 import { agentTaskDispatch, agentTaskRunNow } from "./agent-task-dispatch";
 import { foregroundWorkRun } from "./foreground-work";
 import { taskrunWatchdog } from "./taskrun-watchdog";
@@ -186,6 +188,7 @@ export const scheduledFunctions = [
   modelDiscoveryRefresh,
   routingReachabilityPreflight, // BI-E2CCFAC1: coworker routing dead-ends surface before a human hits one
   infraPrune,
+  entityReferencesRebuild,
   codeGraphReconcileScheduled,
   issueReportTriage,
   ecosystemInboundTriage,
@@ -193,6 +196,7 @@ export const scheduledFunctions = [
   ecosystemWatchdog,
   backlogTriageDrain,
   coworkerRegressionDetect,
+  planGateStallInvariant, // BI-9FA1F9CF: a passed plan stuck on PLAN_REQUIRED raises a signal
   agentTaskDispatch,
   taskrunWatchdog,
   governedBacklogTeeUpScheduled,

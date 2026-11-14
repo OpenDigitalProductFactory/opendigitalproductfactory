@@ -12,14 +12,19 @@
 // surfaces the "override in your org" path instead.
 
 import { notFound } from "next/navigation";
+import type { ComponentProps } from "react";
 import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
 import {
   WIKI_PAGE_KINDS,
   type WikiPageKind,
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { WikiPageEditor } from "@/components/wiki/WikiPageEditor";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { getT } from "@/lib/i18n/t.server";
+import { buildWikiSlugIndex, resolvableSlugs } from "@/lib/wiki/link-resolution";
 import { prepareLinkMention } from "@/lib/wiki/link-mention";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +52,20 @@ export default async function WikiPageEditRoute({
     // editor that would refuse to save.
     notFound();
   }
+
+  // BI-2F7BE778: the slugs a link on this overlay resolves against, by the
+  // dangling-xref lint rule, loaded once; the editor checks drafts against them.
+  const slugRows = await prisma.wikiPage.findMany({
+    where: { OR: [{ organizationId: null }, { organizationId: organization.id }] },
+    select: { slug: true, organizationId: true },
+  });
+  const knownSlugs = [...resolvableSlugs(buildWikiSlugIndex(slugRows), organization.id)];
+  const { language } = await getLocaleContext();
+  const renderEditor = (editorProps: Omit<ComponentProps<typeof WikiPageEditor>, "knownSlugs">) => (
+    <MessagesProvider locale={language} messages={{ wiki: namespaceMessages(language, "wiki") }}>
+      <WikiPageEditor {...editorProps} knownSlugs={knownSlugs} />
+    </MessagesProvider>
+  );
 
   // Pass A: overlay row at (org, slug)?
   const overlay = await prisma.wikiPage.findFirst({
@@ -77,21 +96,19 @@ export default async function WikiPageEditRoute({
     const notice =
       target && prepared ? t(prepared.linked ? "linkMention.added" : "linkMention.notFound", { title: target.title }) : null;
     const changeSummary = target && prepared?.linked ? t("linkMention.changeSummary", { title: target.title }) : undefined;
-    return (
-      <WikiPageEditor
-        mode="update"
-        pageId={overlay.id}
-        initialSlug={overlay.slug}
-        initialTitle={overlay.title}
-        initialBody={prepared?.body ?? overlay.body}
-        notice={notice}
-        initialChangeSummary={changeSummary}
-        initialPageKind={overlay.pageKind as WikiPageKind}
-        initialStatus={overlay.status as WikiPageStatus}
-        initialAbstract={overlay.abstract}
-        pageKindReadOnly
-      />
-    );
+    return renderEditor({
+      mode: "update",
+      pageId: overlay.id,
+      initialSlug: overlay.slug,
+      initialTitle: overlay.title,
+      initialBody: prepared?.body ?? overlay.body,
+      notice,
+      initialChangeSummary: changeSummary,
+      initialPageKind: overlay.pageKind as WikiPageKind,
+      initialStatus: overlay.status as WikiPageStatus,
+      initialAbstract: overlay.abstract,
+      pageKindReadOnly: true,
+    });
   }
 
   // Pass B: kernel row at (NULL, slug)?
@@ -109,32 +126,28 @@ export default async function WikiPageEditRoute({
   });
 
   if (kernel) {
-    return (
-      <WikiPageEditor
-        mode="override"
-        overridesKernelPageId={kernel.id}
-        initialSlug={kernel.slug}
-        initialTitle={kernel.title}
-        initialBody={kernel.body}
-        initialPageKind={kernel.pageKind as WikiPageKind}
-        initialStatus="draft"
-        initialAbstract={kernel.abstract}
-        pageKindReadOnly
-      />
-    );
+    return renderEditor({
+      mode: "override",
+      overridesKernelPageId: kernel.id,
+      initialSlug: kernel.slug,
+      initialTitle: kernel.title,
+      initialBody: kernel.body,
+      initialPageKind: kernel.pageKind as WikiPageKind,
+      initialStatus: "draft",
+      initialAbstract: kernel.abstract,
+      pageKindReadOnly: true,
+    });
   }
 
   // Pass C: no row anywhere — fresh org-original create.
-  return (
-    <WikiPageEditor
-      mode="create"
-      initialSlug={slug}
-      initialTitle={titleFromSlug(slug)}
-      initialBody={defaultBodyForSlug(slug)}
-      initialPageKind={pageKindFromSlug(slug)}
-      initialStatus="draft"
-    />
-  );
+  return renderEditor({
+    mode: "create",
+    initialSlug: slug,
+    initialTitle: titleFromSlug(slug),
+    initialBody: defaultBodyForSlug(slug),
+    initialPageKind: pageKindFromSlug(slug),
+    initialStatus: "draft",
+  });
 }
 
 // ─── Slug-driven defaults ───────────────────────────────────────────────────

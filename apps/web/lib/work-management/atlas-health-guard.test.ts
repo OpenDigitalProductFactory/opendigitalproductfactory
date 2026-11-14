@@ -17,9 +17,12 @@ const ALLOWED = new Set([
   "lib/work-management/atlas-health.ts",
   "lib/work-capsules/workroom-operator-summary.ts",
   "lib/work-capsules/delivery-task-hub.ts",
-  // Labels over the adapters; WorkroomInventory is retired by Work Atlas A2.
+  // Labels over the adapters.
   "components/build/work-control/DeliveryTaskHub.tsx",
-  "components/ops/workrooms/WorkroomInventory.tsx",
+  // The Work Atlas map orders and draws rooms by the health the projection
+  // already classified; it never classifies a room itself (BI-3791FDD8).
+  "lib/work-management/atlas-map.ts",
+  "components/ops/workrooms/atlas/AtlasGlyph.tsx",
   // Other subjects (participants, semantic review runs), not workroom health.
   "lib/work-management/room-types.ts",
   "lib/work-management/room-participation-prisma.server.ts",

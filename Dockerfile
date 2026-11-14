@@ -244,6 +244,7 @@ COPY scripts/lib/guard-bash.mjs ./scripts/lib/
 COPY scripts/lib/load-pinned-guard-typescript.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
+COPY scripts/lib/dev-preview-init-runner.mjs scripts/lib/dev-preview-init-diagnostics.mjs ./scripts/lib/
 COPY scripts/lib/local-convergence-lock.mjs ./scripts/lib/
 # check-design-grounding-decision and check-data-impact import the shared
 # unresolvable-diff helper; without this COPY the init image dies at

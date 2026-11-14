@@ -298,3 +298,54 @@ Plane 2 governed only `source: "agentic-loop"`. External coding agents reach the
 **Still true.** The consultation ledger is per process (BI-AF7CE2BC). It holds for the single-portal deployment, where the MCP route and the agentic loop share one process. A multi-instance portal needs the durable ledger before the external mode is set to enforce.
 
 **Next.** Watch the `[decision-routing-gate] … source="external-jsonrpc"` shadow lines. Set `DPF_DECISION_GATE_EXTERNAL_MODE=enforce` once they show no unconsulted decisions from agents that did consult.
+
+## 17. Addendum (2026-11-11): Gate A's prose channel — a Stop guard (BI-E4DE3825)
+
+Gate A was matched only to the `AskUserQuestion` tool. An agent that writes its
+menu as the closing prose of a turn never calls that tool, so the guard could not
+see it. This happened on 2026-08-21 (BI-E4DE3825) and again on 2026-10-01, when an
+agent ended three turns with numbered or either/or gate options for the operator.
+When finally consulted, `principle_decide` answered with high confidence and
+autonomy eligibility (DI-9D40DD9CEB58).
+
+**Design.** `decision-menu-stop-guard.mjs` runs on `Stop` on both planes (plugin
+`hooks.json` and repo `.claude/settings.json`). It reads the current turn from the
+transcript: the final reply after the last tool result, and whether any call in the
+turn was `principle_decide` (any server prefix) or the `dpf-decision-via-kernel` /
+`dpf-compare-options` skill. It blocks the stop once, with routing guidance, when all
+of these hold:
+
+- the reply hands a choice to the operator;
+- two or more options follow the hand-off, as an enumerated list or an
+  `either … or …` sentence;
+- the options carry the same platform/build signals Gate A uses;
+- there is no ledger citation, no `[operator-owned]` tag, and no kernel call in the
+  turn.
+
+Gate A and the Stop guard share one vocabulary module,
+`hooks/lib/decision-signals.mjs`, so the two channels cannot drift.
+
+**Host contract.** The guard emits the Stop event's legacy top-level `decision: "block"`, which the Claude host accepts (`lib/claude-hook-contract.mjs`, §15.1); it never emits `"deny"`. Like every client hook it is an accelerator: the server-side rule (§15 item 3, §16) remains the enforcement no client can skip.
+
+**Loop safety.** A blocking Stop hook re-prompts the model, and the next reply runs
+the hook again (BI-FC32F9A6). The guard honours `stop_hook_active`, and because some
+hosts never set it, it also blocks at most once per user turn. An exclusive-create
+marker keyed on session and turn records that block, which also stops the two planes
+from both blocking. The marker lives in a per-user, owner-only directory
+(`~/.dpf/hook-state/decision-menu-stop-guard`, mode 0700, files 0600), not the shared
+OS temp dir, where another local user could pre-create it and suppress the guard. The
+guard fails open on any error.
+
+**Measured, not assumed.** Replayed over the 2026-10-01 session's transcript (22
+turns), the guard blocks exactly the three turns that put a delivery decision to the
+operator without consulting the kernel, and none of the status reports, yes/no offers
+or click-through instructions.
+
+**Audit of the other guards for the same blind spot** (required by BI-E4DE3825):
+
+| Guard | Matcher | Shell / other write path | Backstop |
+|---|---|---|---|
+| root-clone-guard, workroom-claim-guard | Bash and Write\|Edit\|MultiEdit | inspected | — |
+| lease-guard, compose-guard, raw-tool-guard, portal-image-guard, lease-punt-guard, pregate-evidence-guard, pregate-invocation-guard | Bash | the shell is their subject | server lease, pre-push gate |
+| plan-backlog-coverage-guard, ux-fit-precheck, spec-plan-doc-precheck, design-grounding-precheck, tool-economy-precheck | Write\|Edit\|MultiEdit | **not inspected**: a file written through Bash (`sed -i`, `perl -pi`, a script) or `NotebookEdit` skips them | the matching CI and pre-push gates (`gate:local`, PR checks) re-enforce the rule; only early warning is lost |
+| decision-routing-guard | AskUserQuestion | prose reply | **this addendum** (previously none) |

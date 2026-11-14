@@ -325,19 +325,19 @@ test("a garbage payload still yields an answer and exit 0", async (t) => {
   assert.match(contextOf(result), /^DPF toolchain: /);
 });
 
-// ── host agent backstop (BI-65C17737, spec M8) ─────────────────────────────
+// ── host agent backstop (BI-65C17737, spec M8; BI-590DD63E) ─────────────────
 //
 // A stale session no longer asks the operator to approve an update when the
-// host agent can do it: the hook starts the agent once, or installs it when a
-// pinned host has none, and says only that a restart will load the result.
+// host agent can do it: the hook starts one detached agent run and says only
+// that a restart will load the result. DPF installs no OS scheduler, so the
+// hook never installs one and never asks one to run.
 
 import { agentBackstop } from "./toolchain-freshness.mjs";
 
-function agentHome(t, { pinned = true, scheduled = true, state = null, agentScript = true } = {}) {
+function agentHome(t, { pinned = true, state = null, agentScript = true } = {}) {
   const home = mkdtempSync(join(tmpdir(), "dpf-agent-home-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   if (pinned) writeJson(join(home, ".dpf", "trusted-installations.json"), { installations: { "https://localhost": { deviceId: `did_${"a".repeat(64)}` } } });
-  if (scheduled) { mkdirSync(join(home, "Library", "LaunchAgents"), { recursive: true }); writeFileSync(join(home, "Library", "LaunchAgents", "local.dpf.toolchain-agent.plist"), "<plist/>"); }
   if (state) writeJson(join(home, ".dpf", "toolchain-agent", "state.json"), state);
   if (agentScript) { const s = join(home, ".agents", "plugins", "plugins", "dpf-platform", "scripts", "toolchain_agent.py"); mkdirSync(dirname(s), { recursive: true }); writeFileSync(s, "# agent\n"); }
   return home;
@@ -345,77 +345,70 @@ function agentHome(t, { pinned = true, scheduled = true, state = null, agentScri
 
 function recorder() {
   const calls = [];
-  return { calls, run: (cmd, args) => { calls.push([cmd, ...args]); return { status: 0, stdout: "", stderr: "" }; } };
+  return { calls, start: (cmd, args) => { calls.push([cmd, ...args]); return { status: 0 }; } };
 }
 
-test("stale with a scheduled agent: the agent is started once and no approval is asked", (t) => {
+const PY = { DPF_PYTHON: "/usr/bin/python3" };
+
+test("stale on a paired host: one agent run starts and no approval is asked", (t) => {
   const home = agentHome(t);
-  const { calls, run } = recorder();
-  const lines = agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home }, { platform: "darwin", uid: 501, run, now: 1_000_000 });
-  assert.deepEqual(calls, [["launchctl", "kickstart", "gui/501/local.dpf.toolchain-agent"]]);
+  const { calls, start } = recorder();
+  const lines = agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home, ...PY }, { platform: "darwin", start, now: 1_000_000 });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], "/usr/bin/python3");
+  assert.match(calls[0][1], /toolchain_agent\.py$/);
+  assert.equal(calls[0][2], "run");
   assert.match(lines.join("\n"), /updating .* now/i);
   assert.match(lines.join("\n"), /no approval is needed/i);
   assert.match(lines.join("\n"), /\/reload-plugins|restart/);
 });
 
-test("a recent agent check is not re-kicked on every session start", (t) => {
+test("no platform asks an OS scheduler to install or run the agent", (t) => {
+  const home = agentHome(t);
+  for (const platform of ["darwin", "linux", "win32"]) {
+    const { calls, start } = recorder();
+    agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home, ...PY }, { platform, start, now: 1_000_000 });
+    assert.equal(calls.length, 1, platform);
+    assert.equal(calls[0][2], "run", platform);
+    assert.ok(!["launchctl", "systemctl", "schtasks"].includes(calls[0][0]), platform);
+    assert.ok(!calls[0].includes("install"), platform);
+  }
+});
+
+test("a recent agent check is not re-started on every session start", (t) => {
   const home = agentHome(t, { state: { status: "ok", lastCheckAt: 1_000 - 60 } });
-  const { calls, run } = recorder();
-  agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home }, { platform: "darwin", uid: 501, run, now: 1_000 * 1000 });
+  const { calls, start } = recorder();
+  agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home, ...PY }, { platform: "darwin", start, now: 1_000 * 1000 });
   assert.deepEqual(calls, []);
 });
 
-test("stale on a pinned host with no schedule: the agent is installed, then runs at load", (t) => {
-  const home = agentHome(t, { scheduled: false });
-  const { calls, run } = recorder();
-  const lines = agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home, DPF_PYTHON: "/usr/bin/python3" }, { platform: "darwin", uid: 501, run, now: 1_000_000 });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "/usr/bin/python3");
-  assert.match(calls[0][1], /toolchain_agent\.py$/);
-  assert.equal(calls[0][2], "install");
-  assert.match(lines.join("\n"), /installed/i);
-});
-
 test("an unpaired host keeps the one-time approval path", (t) => {
-  const home = agentHome(t, { pinned: false, scheduled: false });
-  const { calls, run } = recorder();
-  const lines = agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home }, { platform: "darwin", uid: 501, run, now: 1_000_000 });
+  const home = agentHome(t, { pinned: false });
+  const { calls, start } = recorder();
+  const lines = agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home, ...PY }, { platform: "darwin", start, now: 1_000_000 });
   assert.deepEqual(calls, []);
   assert.match(lines.join("\n"), /once/i);
 });
 
 test("an agent that needs the operator says exactly what, even when copies look current", (t) => {
   const home = agentHome(t, { state: { status: "needs-operator", code: "identity_changed", lastCheckAt: 0 } });
-  const { calls, run } = recorder();
-  const lines = agentBackstop({ status: "current" }, { DPF_AGENT_TOOLCHAIN_HOME: home }, { platform: "darwin", uid: 501, run, now: 1_000_000 });
+  const { calls, start } = recorder();
+  const lines = agentBackstop({ status: "current" }, { DPF_AGENT_TOOLCHAIN_HOME: home, ...PY }, { platform: "darwin", start, now: 1_000_000 });
   assert.deepEqual(calls, []);
   assert.match(lines.join("\n"), /identity changed/i);
 });
 
-test("opted out: no kick, and the approval path is named", (t) => {
+test("opted out: no run, and the approval path is named", (t) => {
   const home = agentHome(t, { state: { status: "opted-out" } });
-  const { calls, run } = recorder();
-  const lines = agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home }, { platform: "darwin", uid: 501, run, now: 1_000_000 });
+  const { calls, start } = recorder();
+  const lines = agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home, ...PY }, { platform: "darwin", start, now: 1_000_000 });
   assert.deepEqual(calls, []);
   assert.match(lines.join("\n"), /opted out/i);
 });
 
 test("current and healthy: the backstop adds nothing", (t) => {
   const home = agentHome(t, { state: { status: "ok", lastCheckAt: 999_000 } });
-  const { calls, run } = recorder();
-  assert.deepEqual(agentBackstop({ status: "current" }, { DPF_AGENT_TOOLCHAIN_HOME: home }, { platform: "darwin", uid: 501, run, now: 1_000_000 }), []);
+  const { calls, start } = recorder();
+  assert.deepEqual(agentBackstop({ status: "current" }, { DPF_AGENT_TOOLCHAIN_HOME: home, ...PY }, { platform: "darwin", start, now: 1_000_000 }), []);
   assert.deepEqual(calls, []);
-});
-
-test("linux and windows start the agent without waiting for it", (t) => {
-  const home = agentHome(t, { scheduled: false });
-  mkdirSync(join(home, ".config", "systemd", "user"), { recursive: true });
-  writeFileSync(join(home, ".config", "systemd", "user", "dpf-toolchain-agent.timer"), "[Timer]\n");
-  writeJson(join(home, ".dpf", "toolchain-agent", "schedule.json"), { python: "p", script: "s" });
-  const linux = recorder();
-  agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home }, { platform: "linux", run: linux.run, now: 1_000_000 });
-  assert.deepEqual(linux.calls, [["systemctl", "--user", "start", "--no-block", "dpf-toolchain-agent.service"]]);
-  const windows = recorder();
-  agentBackstop({ status: "stale" }, { DPF_AGENT_TOOLCHAIN_HOME: home }, { platform: "win32", run: windows.run, now: 1_000_000 });
-  assert.deepEqual(windows.calls, [["schtasks", "/Run", "/TN", "DPF Toolchain Agent"]]);
 });

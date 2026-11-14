@@ -64,7 +64,8 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
     resolvePrFollowThroughPosture,
   } = await import("@/lib/build/pr-follow-through-announce");
   const { getWorkroomPostureDefault } = await import("@/lib/work-management/workroom-posture-defaults");
-  const { createPlatformIssueReport } = await import("@/lib/quality/platform-issue-reports");
+  // Every owner hand-off below passes the escalation gate (BI-5E067004).
+  const { routeToHuman } = await import("@/lib/govern/authority/route-to-human");
   const { MAX_UNKNOWN_OBSERVATIONS, resumeClearedEscalation } = await import("@/lib/build/build-pr-delivery-recheck");
 
   const mode = resolveBuildPrReconcilerMode();
@@ -258,18 +259,23 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       if (outcome.state.unknownObservations === MAX_UNKNOWN_OBSERVATIONS) {
         // Told once per head; the room keeps observing under its backoff.
         const surface = capsule.featureBuildId ? "Build Studio" : `Workroom ${capsule.capsuleId}`;
-        await createPlatformIssueReport({
-          type: "build-stall-escalation",
-          source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
-          severity: "medium",
-          title: `${surface}: GitHub has not decided PR #${prNumber}'s merge state`,
-          description:
-            `GitHub reported an undecided merge state for PR #${prNumber} (${capsule.capsuleId}) ` +
-            `${MAX_UNKNOWN_OBSERVATIONS} times in a row at head ${outcome.state.lastObservedHeadSha ?? "unknown"}. ` +
-            `The room keeps observing at up to hourly intervals and continues on its own once GitHub decides.\nPR: ${prUrl}`,
-          featureBuildId: capsule.featureBuildId,
-          triggerKind: "build-pr-delivery-reconcile",
-          dedupeKey: `build-pr-delivery:${prNumber}:merge-state-undecided:${outcome.state.lastObservedHeadSha ?? "unknown"}`,
+        await routeToHuman({
+          producer: "build-pr-delivery",
+          subject: { kind: "pull-request", id: `#${prNumber}` },
+          blockingFacts: ["merge-state-undecided: GitHub has not decided the merge state"],
+          blockerClass: "infrastructure",
+          report: {
+            source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
+            severity: "medium",
+            title: `${surface}: GitHub has not decided PR #${prNumber}'s merge state`,
+            description:
+              `GitHub reported an undecided merge state for PR #${prNumber} (${capsule.capsuleId}) ` +
+              `${MAX_UNKNOWN_OBSERVATIONS} times in a row at head ${outcome.state.lastObservedHeadSha ?? "unknown"}. ` +
+              `The room keeps observing at up to hourly intervals and continues on its own once GitHub decides.\nPR: ${prUrl}`,
+            featureBuildId: capsule.featureBuildId,
+            triggerKind: "build-pr-delivery-reconcile",
+            dedupeKey: `build-pr-delivery:${prNumber}:merge-state-undecided:${outcome.state.lastObservedHeadSha ?? "unknown"}`,
+          },
         });
       }
 
@@ -289,16 +295,20 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
             });
           },
           raiseIssue: async (issue) => {
-            await createPlatformIssueReport({
-              type: "build-stall-escalation",
-              source: "workroom-pr-follow-through",
-              severity: "high",
-              title: issue.title,
-              description: issue.description,
-              featureBuildId: issue.featureBuildId,
-              triggerKind: "build-pr-delivery-reconcile",
-              dedupeKey: issue.dedupeKey,
-              selfFixClass: issue.selfFixClass,
+            await routeToHuman({
+              producer: "pull-request-follow-through",
+              subject: { kind: "workroom", id: capsule.capsuleId },
+              blockingFacts: issue.blockingFacts,
+              declarations: { proposeBoundary: issue.proposeBoundary },
+              report: {
+                source: "workroom-pr-follow-through",
+                severity: "high",
+                title: issue.title,
+                description: issue.description,
+                featureBuildId: issue.featureBuildId,
+                triggerKind: "build-pr-delivery-reconcile",
+                dedupeKey: issue.dedupeKey,
+              },
             });
           },
         },
@@ -324,19 +334,24 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
         state.escalationKey !== outcome.state.escalationKey
       ) {
         const surface = capsule.featureBuildId ? "Build Studio" : `Workroom ${capsule.capsuleId}`;
-        await createPlatformIssueReport({
-          type: "build-stall-escalation",
-          source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
-          severity: "high",
-          title: `${surface} needs a PR delivery decision: #${prNumber}`,
-          description:
-            `${surface} stopped autonomous PR delivery for ${capsule.capsuleId}.\n\n` +
-            `Reason: ${outcome.action.reason}\nHead: ${outcome.action.headSha ?? "unknown"}\nPR: ${prUrl}\n\n` +
-            "No direct merge, force-push, or automatic conflict edit was attempted.",
-          featureBuildId: capsule.featureBuildId,
-          triggerKind: "build-pr-delivery-reconcile",
-          dedupeKey: outcome.state.escalationKey ?? `build-pr-delivery:${prNumber}`,
-          selfFixClass: "needs-human",
+        await routeToHuman({
+          producer: "build-pr-delivery",
+          subject: { kind: "pull-request", id: `#${prNumber}` },
+          blockingFacts: [outcome.action.reason],
+          // A person closed this PR; reopening or replacing it overrides them.
+          declarations: outcome.action.reason === "pull-request-closed-unmerged" ? { consequence: "authority" } : {},
+          report: {
+            source: capsule.featureBuildId ? "build-studio" : "workroom-pr-follow-through",
+            severity: "high",
+            title: `${surface} needs a PR delivery decision: #${prNumber}`,
+            description:
+              `${surface} stopped autonomous PR delivery for ${capsule.capsuleId}.\n\n` +
+              `Reason: ${outcome.action.reason}\nHead: ${outcome.action.headSha ?? "unknown"}\nPR: ${prUrl}\n\n` +
+              "No direct merge, force-push, or automatic conflict edit was attempted.",
+            featureBuildId: capsule.featureBuildId,
+            triggerKind: "build-pr-delivery-reconcile",
+            dedupeKey: outcome.state.escalationKey ?? `build-pr-delivery:${prNumber}`,
+          },
         });
         escalated += 1;
       }

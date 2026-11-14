@@ -39,6 +39,7 @@ All dates are US Central. They assume two to four parallel delivery sessions, re
 | BI-F98BBE4F | Subscription effective-cost estimator v1: monthly fees recorded; cost per unit = fee ÷ observed usable capacity; reset-aware; hourly recheck and immediate re-enable verified |
 | BI-F039D17A | Corpus and vectors converge on update: re-embed on content change, profession corpus included |
 | BI-218A4555 / BI-995E9530 | Test-machine overseer v1: policy-ordered queue, bounded preview holds, fair share, reviews not starved |
+| BI-53BED66C | T3 as a first-class executor ([design](../specs/2026-11-13-t3-code-first-class-executor-design.md)), closing the trial's blockers: gate evidence binds to the caller's own room, same-owner handovers (including a room a coworker's lapsed lease held) need no approval, a plan-limited executor's room waits visibly with its reset and offers an alternative, the room's own executor queues its gated PR through MCP, and T3 is named as the harness. Absorbs BI-E1020AAE |
 
 **Go criteria:** the T3 trial completes one item without leaving its workroom, and its cost per unit has an estimate. Coding work can route to every provider cleared for public data. Changed corpus pages show fresh vectors after an upgrade. No test-machine hold exceeds its class bound while others wait.
 

@@ -1,7 +1,7 @@
 import type { Prisma } from "@dpf/db";
 import { ownsRoom, resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
 import { readWorkspaceRoomPolicy } from "@/lib/work-management/workspace-room-access";
-import { assertExternalSurface, type HandoffRoom } from "./bounded-handoff-authority";
+import { assertExternalSurface, databaseWallTime, lapsedLeaseLeavesRoomUnheld, readLeaseHolderKind, type HandoffRoom } from "./bounded-handoff-authority";
 import { BoundedHandoffRefusal } from "./bounded-handoff-command";
 import { assertBoundedHandoffDependencies } from "./bounded-handoff-dependencies";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
@@ -41,7 +41,12 @@ export async function assessOwnRoomTakeover(input: { db: CapsuleDb; actor: WorkC
   assertExternalSurface(actor.agentId, takeover.toExecutorKind);
   if (room.featureBuildId || room.taskRunId || room.archivedAt) return fail("handoff-build-boundary", "A linked build, native task or archived room requires its existing controlled handover.");
   if (room.leaseHolderPrincipalId && room.leaseHolderPrincipalId !== actor.principalId) {
-    return fail("takeover-other-holder", "Another person holds this room's lease, so taking it over needs the owner's decision.");
+    // BI-53BED66C: a platform coworker's lapsed lease leaves the room unheld.
+    const now = db.$queryRaw ? await databaseWallTime(db) : new Date();
+    const holderKind = await readLeaseHolderKind(db, room.leaseHolderPrincipalId, Boolean(db.$queryRaw));
+    if (!lapsedLeaseLeavesRoomUnheld(room, now, actor.principalId, holderKind)) {
+      return fail("takeover-other-holder", "Another person, or a coworker with a live lease, holds this room, so taking it over needs the owner's decision.");
+    }
   }
   if (takeover.expectedLeaseHolderPrincipalId !== undefined && takeover.expectedLeaseHolderPrincipalId !== room.leaseHolderPrincipalId) {
     return fail("handoff-source-changed", "The room's lease holder changed. Read the room and take it over again.");

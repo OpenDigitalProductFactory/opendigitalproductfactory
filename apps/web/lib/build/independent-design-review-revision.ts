@@ -227,7 +227,7 @@ export async function reviseDesignFromIndependentReview(args: {
         .findUnique({ where: { id: originatingBacklogItemId }, select: { title: true } })
         .catch(() => null))?.title ?? null;
       await log(`The independent review still fails after ${spent} revision(s): ${gates}. Handing the build to its owner.`);
-      const { escalateBuildToHuman, SELF_FIX_CLASS } = await import("@/lib/build/escalate-build-to-human");
+      const { escalateBuildToHuman } = await import("@/lib/build/escalate-build-to-human");
       await escalateBuildToHuman({
         buildPk: build.id,
         buildId,
@@ -237,7 +237,6 @@ export async function reviseDesignFromIndependentReview(args: {
         phase: "plan",
         rounds: spent,
         issues,
-        selfFixClass: SELF_FIX_CLASS.NEEDS_HUMAN,
         log,
       });
       return { kind: "resumed", via: "escalateBuildToHuman", detail: `independent design review unresolved after ${spent} revision(s): ${gates}` };

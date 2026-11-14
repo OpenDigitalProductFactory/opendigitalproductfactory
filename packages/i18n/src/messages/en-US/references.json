@@ -1,0 +1,24 @@
+{
+  "referencedBy": {
+    "heading": "Referenced by",
+    "empty": "Nothing references this yet.",
+    "kinds": {
+      "wiki": "Wiki page",
+      "backlog": "Backlog item",
+      "epic": "Epic",
+      "document": "Document",
+      "workroom": "Workroom",
+      "message": "Workroom message"
+    },
+    "scopes": {
+      "kernel": "Platform",
+      "profession": "Profession",
+      "organization": "Organization",
+      "install": "Install"
+    },
+    "loadFailed": "References could not be loaded."
+  },
+  "body": {
+    "heading": "Notes as shown"
+  }
+}

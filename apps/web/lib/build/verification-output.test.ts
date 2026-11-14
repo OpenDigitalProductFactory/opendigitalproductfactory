@@ -79,6 +79,50 @@ describe("normalizeVerificationOutput", () => {
     })).toBe(null);
   });
 
+  // BI-2E63E918: FB-11A8F6C1 passed typecheck and 215/0 tests, but stderr from the
+  // passing routing fallback fixtures ("codex failed: Rate limited") set the axis.
+  const passingRoutingLog = [
+    "Typecheck: passed. Observed tests: 215 passed, 0 failed; executed.",
+    "[callWithFallbackChain] codex failed: Rate limited",
+    "[callWithFallbackChain] provider returned 429; unauthorized; timed out",
+    " ✓ lib/routing/fallback.test.ts (42 tests)",
+    "      Tests  215 passed (215)",
+  ].join("\n");
+
+  it("reports no failure axis for a passing run whose test logs mention provider errors", () => {
+    expect(classifyVerificationFailureAxis({
+      typecheckPassed: true, testsExecuted: true, testsFailed: 0, output: passingRoutingLog,
+    })).toBeNull();
+  });
+
+  it("reports no failure axis for the observed unqualified pass", () => {
+    const normalized = normalizeVerificationOutput({
+      typecheckPassed: true, testsPassed: 215, testsFailed: 0, testsExecuted: true, testsApplicable: true,
+      testCommandPassed: true, testSummariesComplete: true, testsQualified: false, fullOutput: passingRoutingLog,
+    });
+    expect(normalized.failureAxis).toBeNull();
+    // Qualification is unchanged: an unqualified zero is still not a passing verdict.
+    expect(normalized.testsFailed).toBeNull();
+  });
+
+  it("classifies a run with failures from its counts, not from log text", () => {
+    expect(classifyVerificationFailureAxis({
+      typecheckPassed: true, testsExecuted: true, testsFailed: 2, output: passingRoutingLog,
+    })).toBe("test-failure");
+    expect(classifyVerificationFailureAxis({
+      typecheckPassed: false, testsExecuted: true, testsFailed: 0, output: passingRoutingLog,
+    })).toBe("typecheck-failure");
+  });
+
+  it("still classifies a provider failure when the runner produced no result", () => {
+    expect(classifyVerificationFailureAxis({
+      typecheckPassed: null, testsExecuted: false, testsFailed: null, output: "HTTP 429: rate limit exceeded",
+    })).toBe("rate-limit");
+    expect(classifyVerificationFailureAxis({
+      typecheckPassed: false, testsFailed: 0, output: "ERROR: You've hit your usage limit",
+    })).toBe("usage-limit");
+  });
+
   it("returns an empty verification shape for null input", () => {
     expect(normalizeVerificationOutput(null)).toEqual({
       typecheckPassed: null,

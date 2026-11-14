@@ -38,6 +38,11 @@ describe("platform-nav", () => {
     expect(getPlatformFamily("/platform/ai/build-studio").key).toBe("ai");
   });
 
+  it("links Right Now back to the canonical coworker activity view", () => {
+    const item = getPlatformFamily("/platform/ai/right-now").subItems.find((entry) => entry.label === "Right Now");
+    expect(item?.href).toBe("/workforce?view=activity");
+  });
+
   it("labels the build-studio route as configuration, not the primary studio", () => {
     const aiFamily = getPlatformFamily("/platform/ai/build-studio");
 

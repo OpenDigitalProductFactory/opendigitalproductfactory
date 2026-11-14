@@ -128,6 +128,8 @@ async function postRoomMessageHandler(
     body,
     sender: { type: "agent", id: agentId, label },
     roster: await loadWorkspaceMentionRoster(),
+    syncReferences: async (messageRowId, writtenBy) =>
+      (await import("@/lib/references/sync-references")).syncWorkroomMessageReferences(messageRowId, writtenBy),
     addressing: prepared.build,
   });
   // After commit: the wake is an accelerator, and the sweeper retries a failed send.
