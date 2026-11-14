@@ -105,9 +105,12 @@ describe("production reconciliation protocol admission", () => {
     mocks.rows.mockResolvedValue(Object.entries(input.reconciliation.observedDatabaseStates).map(([capabilityId, state]) => ({ capabilityId, state,
       manifest: capabilityId === "runtime:browser-automation" ? { runtime: { workGuards: ["task-run:coworker"] } } : {} })));
     mocks.taskCount.mockResolvedValue(2);
-    mocks.transaction.mockImplementationOnce(async operation => operation({ $executeRaw: vi.fn(), platformCapability: { findMany: mocks.rows }, runtimeCapabilityTransition: { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => null), create } }));
+    const transactionCount = vi.fn(async () => 2);
+    mocks.taskCount.mockImplementation(() => { throw new Error("drain must use the held transaction connection"); });
+    mocks.transaction.mockImplementationOnce(async operation => operation({ $executeRaw: vi.fn(), platformCapability: { findMany: mocks.rows }, taskRun: { count: transactionCount }, runtimeCapabilityTransition: { findUnique: vi.fn(async () => null), findFirst: vi.fn(async () => null), create } }));
     await expect(executeProductionRuntimeCapabilityTransition(input)).resolves.toEqual({ status: "drain_required", blockingCounts: { "task-run:coworker": 2 } });
     expect(create).not.toHaveBeenCalled();
+    expect(transactionCount).toHaveBeenCalledOnce();
     expect(mocks.promoter.mock.calls.every(([params]) => params.runtimeCapabilityEnvelope === undefined)).toBe(true);
   });
 

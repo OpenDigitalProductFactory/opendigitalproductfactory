@@ -199,7 +199,7 @@ export async function executeProductionRuntimeCapabilityTransition(input: { tran
     const runtime = row.manifest && typeof row.manifest === "object" && !Array.isArray(row.manifest) ? (row.manifest as { runtime?: { workGuards?: unknown } }).runtime : undefined;
     return Array.isArray(runtime?.workGuards) ? runtime.workGuards.filter((guard): guard is string => typeof guard === "string") : [];
   })])];
-  const recheckAttributedWork = async () => (await countAttributedWork(guards, createPrismaWorkAttributionStore(prisma))).blockingCounts;
+  const recheckAttributedWork = async (store = createPrismaWorkAttributionStore(prisma)) => (await countAttributedWork(guards, store)).blockingCounts;
   const protocolSecret = (await readFile("/dpf-state/runtime-transition.secret", "utf8")).trim();
   const hostInstallPath = process.env.DPF_HOST_INSTALL_PATH, stateDirHostPath = process.env.DPF_STATE_DIR_HOST, protocolSecretFileHostPath = process.env.DPF_RUNTIME_TRANSITION_SECRET_FILE_HOST;
   if (!hostInstallPath || !stateDirHostPath || !protocolSecretFileHostPath) throw new Error("runtime_transition_host_configuration_missing");

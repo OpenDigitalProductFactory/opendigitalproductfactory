@@ -1,6 +1,8 @@
 import type { PromoterParams, PromoterResult } from "@/lib/self-upgrade/promoter";
 import { computeCapabilityStateVersion as computeSharedCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 import { canonicalTransitionPayload, createRuntimeCompensationEnvelope, prepareRuntimeReconciliationIntent, signTransitionPayload, validateRuntimeServiceImagePlan, type RuntimeCapabilityProtocolInfo, type RuntimeCompensationPacket, type RuntimeReconciliationIntent, type RuntimeServiceImagePlan, type RuntimeTransitionEnvelope, type RuntimeTransitionReceipt, verifyHistoricalTransitionReceipt, verifyTransitionReceipt } from "./transition-protocol";
+import { lockRuntimeTransitionAdmission } from "./work-admission";
+import { createPrismaWorkAttributionStore, type WorkAttributionStore } from "./work-attribution";
 
 export const ACTIVE_RUNTIME_TRANSITION_STATUSES = ["pending", "applying", "host_applied", "compensating"] as const;
 
@@ -22,8 +24,8 @@ export type RuntimeCapabilityTransitionRequest = {
 };
 
 export interface RuntimeCapabilityTransitionReceipts {
-  /** Implementations serialize with an advisory lock + the DB partial unique index. */
-  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string; previousProfiles: string[]; desiredProfiles: string[]; previousServices?: string[]; desiredServices?: string[]; envelope: RuntimeTransitionEnvelope; envelopeSignature: string; recheckAttributedWork?: () => Promise<Readonly<Record<string, number>>> }): Promise<
+  /** Implementations serialize before the first snapshot, with an advisory lock and DB unique backstop. */
+  createPending(input: RuntimeCapabilityTransitionRequest & { previousStateHash: string; desiredStateHash: string; previousProfiles: string[]; desiredProfiles: string[]; previousServices?: string[]; desiredServices?: string[]; envelope: RuntimeTransitionEnvelope; envelopeSignature: string; recheckAttributedWork?: (store?: WorkAttributionStore) => Promise<Readonly<Record<string, number>>> }): Promise<
     | { created: true; envelope: RuntimeTransitionEnvelope; envelopeSignature: string }
     | { created: false; kind: "drain_required"; blockingCounts: Readonly<Record<string, number>> }
     | { created: false; kind: "replay"; status: string; envelope: RuntimeTransitionEnvelope; envelopeSignature: string }
@@ -47,7 +49,7 @@ export type RuntimeCapabilityCoordinatorDeps = {
   protocolSecret?: string;
   protocolSecretFileHostPath?: string;
   resolveProjection?(keys: readonly string[]): Promise<{ catalogHash: string; stateHash: string; enabledKeys: string[]; composeProfiles: string[]; requiredServices: string[] }>;
-  recheckAttributedWork?(): Promise<Readonly<Record<string, number>>>;
+  recheckAttributedWork?(store?: WorkAttributionStore): Promise<Readonly<Record<string, number>>>;
   readHostReceipt?(transitionId: string): Promise<RuntimeTransitionReceipt>;
   verifyRequiredHealth?(desiredKeys: readonly string[], observedServices: readonly string[], observedHealth?: Readonly<Record<string, string>>): Promise<boolean>;
   now?: () => number;
@@ -64,7 +66,7 @@ type TransitionModel = {
 };
 type CapabilityModel = { findMany(args: unknown): Promise<Array<{ capabilityId: string; state: string }>>; updateMany(args: unknown): Promise<{ count: number }> };
 type EventModel = { create(args: unknown): Promise<unknown> };
-type TransitionTx = { $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel; platformCapability: CapabilityModel; runtimeCapabilityTransitionEvent: EventModel };
+type TransitionTx = { $executeRaw(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown>; runtimeCapabilityTransition: TransitionModel; platformCapability: CapabilityModel; runtimeCapabilityTransitionEvent: EventModel } & Parameters<typeof createPrismaWorkAttributionStore>[0];
 type TransitionPrisma = {
   runtimeCapabilityTransition: TransitionModel;
   $transaction<T>(operation: (tx: TransitionTx) => Promise<T>, options: { isolationLevel: "Serializable" }): Promise<T>;
@@ -87,11 +89,7 @@ export function assertRuntimeCompensationDatabaseBaseline(current: Readonly<Reco
 export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma): RuntimeCapabilityTransitionReceipts {
   return {
     createPending: (input) => prisma.$transaction(async (tx) => {
-      // Fixed SQL with no interpolation: the transaction-scoped lock serializes
-      // the read/create pair before the partial unique index supplies backstop.
-      // BI-8BA6AC56: $executeRaw not $queryRaw — pg_advisory_xact_lock returns void,
-      // which Prisma 7.8's driver adapter can't deserialize from $queryRaw (P2010).
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+      await lockRuntimeTransitionAdmission(tx);
       const replay = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId: input.transitionId }, select: { status: true, requestedById: true, previousStates: true, desiredStates: true, catalogHash: true, previousStateHash: true, desiredStateHash: true, previousKeys: true, desiredKeys: true, previousProfiles: true, desiredProfiles: true, previousServices: true, desiredServices: true, envelope: true, envelopeSignature: true } });
       if (replay) {
         const same = replay.catalogHash === input.catalogHash && replay.previousStateHash === input.previousStateHash && replay.desiredStateHash === input.desiredStateHash && JSON.stringify(replay.previousKeys) === JSON.stringify([...input.previousKeys].sort()) && JSON.stringify(replay.desiredKeys) === JSON.stringify([...input.desiredKeys].sort()) && JSON.stringify(replay.previousProfiles) === JSON.stringify(input.previousProfiles) && JSON.stringify(replay.desiredProfiles) === JSON.stringify(input.desiredProfiles) && JSON.stringify(replay.previousServices) === JSON.stringify(input.previousServices ?? []) && JSON.stringify(replay.desiredServices) === JSON.stringify(input.desiredServices ?? []);
@@ -111,7 +109,9 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       }
       const active = await tx.runtimeCapabilityTransition.findFirst({ where: { status: { in: [...ACTIVE_RUNTIME_TRANSITION_STATUSES] } }, select: { transitionId: true, status: true } });
       if (active) return { created: false, kind: "active_conflict", status: active.status, transitionId: active.transitionId };
-      const blockingCounts = input.recheckAttributedWork ? await input.recheckAttributedWork() : {};
+      // Reuse this connection: an outer-pool query could wait behind producers
+      // which are themselves waiting for this transaction's admission locks.
+      const blockingCounts = input.recheckAttributedWork ? await input.recheckAttributedWork(createPrismaWorkAttributionStore(tx)) : {};
       const positive = Object.fromEntries(Object.entries(blockingCounts).filter(([, count]) => count > 0));
       if (Object.keys(positive).length) return { created: false, kind: "drain_required", blockingCounts: positive };
       const baseline = await tx.platformCapability.findMany({ where: { capabilityId: { startsWith: "runtime:" } }, select: { capabilityId: true, state: true } });
@@ -149,8 +149,7 @@ export function createPrismaRuntimeTransitionReceipts(prisma: TransitionPrisma):
       if (row?.status !== "host_applied" && row?.status !== "succeeded") throw new Error("runtime_transition_cas_failed");
     },
     commitSuccess: (transitionId, receipt, desiredStates) => prisma.$transaction(async (tx) => {
-      // BI-8BA6AC56: $executeRaw — void-returning advisory lock crashes $queryRaw under Prisma 7.8.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('runtime-capability-transition'))`;
+      await lockRuntimeTransitionAdmission(tx);
       let managed = Object.keys(desiredStates);
       let baseline: Readonly<Record<string, string>> | undefined;
       const row = await tx.runtimeCapabilityTransition.findUnique({ where: { transitionId }, select: { status: true, envelope: true, previousStates: true, desiredStates: true, hostReceipt: true } });

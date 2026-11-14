@@ -274,8 +274,18 @@ Selected image owners retain their existing catalog and saved manifest work guar
 The ordinary serializable receipt admission rechecks attributed tasks even though
 image-only reconciliation disables no capability; active work returns drain-required
 before a transition row or service apply is created.
-The producer half takes that same advisory lock inside the transaction that
-creates a TaskRun or build. It examines every active transition and the existing
+The producer half serializes inside the transaction that creates a TaskRun or
+build. Real PostgreSQL contention showed that an advisory-lock SELECT can fix a
+Serializable snapshot before the wait ends, hiding a newly committed transition.
+The shared admission helper therefore first takes a `SHARE ROW EXCLUSIVE` lock
+on the existing transition table, then the existing advisory lock. PostgreSQL's
+[utility snapshot rule](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/tcop/pquery.c)
+explicitly excludes `LOCK` and `SHOW`, so serialization precedes snapshot
+creation. `createPending` and `commitSuccess` use the same order. No host work
+or inference runs under these metadata locks; transaction timeout settings are
+not changed. The drain counter uses the existing transaction-bound attribution
+store, avoiding an outer-pool request behind producers waiting on these locks.
+It examines every active transition and the existing
 `rollback_failed`/`recoveryRequired` image barrier, so unchanged capability keys
 cannot admit new matching work after the initial drain. The persisted v3 plan
 uses the shared validator; selected catalog owners and their saved manifests
@@ -283,6 +293,12 @@ supply the guard union. Malformed image metadata retains only the existing
 browser recipe's guards, rather than silently losing its scope or stopping
 unrelated producers. Settled recovery releases the image guard. Legacy active
 key-removal admission retains its previous behavior.
+
+The actual TaskRun entry point calls admission first and retains its default
+Serializable isolation. Build Studio's current callers use ReadCommitted and
+some make earlier writes; that guard now checks the actual isolation with `SHOW`
+and refuses an unsupported fixed-snapshot override instead of silently admitting
+old data. This is a supported internal-call contract, not a new caller grant.
 The existing ten-minute authority lifetime is preserved. Preparation reserves time
 for bounded apply and restoration; a short remaining lifetime holds before effects.
 

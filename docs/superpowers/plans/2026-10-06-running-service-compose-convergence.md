@@ -141,12 +141,16 @@ deliver it. Source implementation is in progress; served acceptance remains unru
 5. Preserve managed/data-owner/stopped-service, volume, activation and explicit
    shadow controls. Test each boundary against the real production owners with
    injected Docker/process adapters, without production runtime mutation.
-   Reuse the producer's shared advisory lock and row-creation transaction to
+   Reuse the producer's shared locks and row-creation transaction to
    fence new work throughout unchanged-key image transitions and uncertain
    recovery. Inspect all relevant transitions, validate the persisted v3 plan,
    and union selected catalog/saved guards. Pin malformed metadata, unrelated
    producers, settled recovery and both producer/transition admission orders in
    the existing unit and isolated PostgreSQL suites.
+   Serialize before the first MVCC snapshot using the existing transition table
+   lock before the advisory SELECT, with that order in admission, creation and
+   success settlement. Bind the attribution counter to that same transaction
+   connection and retain existing transaction timeouts.
 6. Run the affected protocol, actuator, coordinator, executor and promoter
    closure tests, package typechecks, and the exact current gate-context guards.
    Use normal exact-tree qualification, independent review and protected
@@ -188,6 +192,27 @@ to this same atomic contract. The first typed regression run had ten meaningful
 missing-rejection failures and ten control passes. Current unit green is separate
 from canonical PostgreSQL, final-tree review and served acceptance; none is
 inferred from the earlier source gate or review.
+
+Canonical regression evidence `cmwfxd19x0dgy0emojyiadhnq` then demonstrated a
+Serializable producer committing behind an uncommitted image transition while
+the ReadCommitted control rejected correctly. Preserve that failure. The
+correction adds a pre-snapshot table/advisory order, transaction-bound counter,
+actual `createAutonomousWorkRun` contention in both orders, settlement contention,
+a two-connection pool case and earlier-write Build Studio isolation controls.
+Those new PostgreSQL cases still require an observed current-source gate; source
+unit/type results alone are not the repair's acceptance.
+
+Caller inventory for the supported isolation contract: TaskRun admission is
+first in `tak/autonomous-work-run.ts` (default Serializable, unchanged).
+`governed-backlog-tee-up.ts` owns the other guard. Its current callers in that
+file, `actions/backlog-build.ts`, `assurance/remediation-teeup.ts`,
+`mcp/packs/build-ops-pack.ts` and `optimization/dispatch-bet.ts` use default
+ReadCommitted transactions; the actions and remediation callers can write
+before promotion. The guard now verifies that isolation and fails closed on a
+future fixed-snapshot override. Scope-epoch enrollment takes the advisory lock
+but only reads the transition table, so its AccessShare read does not invert
+the new table-write order. Startup recovery/status writers do not acquire the
+advisory lock; the two coordinator writers that do use the shared helper.
 
 Before completion, freeze the exact tree, run its required source/runtime gates,
 obtain independent code review, deliver through protected `pnpm land`, then use

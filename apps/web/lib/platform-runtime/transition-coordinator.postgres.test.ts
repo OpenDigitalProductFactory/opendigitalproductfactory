@@ -7,7 +7,16 @@ import { createPrismaRuntimeTransitionReceipts } from "./transition-coordinator"
 import { computeCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
 import { createRuntimeCompensationEnvelope, signTransitionPayload, validateRuntimeServiceImagePlan, type RuntimeTransitionEnvelope } from "./transition-protocol";
 import { admitRuntimeGuardedWork } from "./work-admission";
-import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
+import { countAttributedWork } from "./work-attribution";
+import { createAutonomousWorkRun, type AutonomousWorkRunInput } from "../tak/autonomous-work-run";
+
+const producerDb = vi.hoisted(() => ({ current: null as unknown as PrismaClient, lastIsolation: "" }));
+// Forward only the real producer's database seam into this suite's namespace.
+// Its transaction ordering, isolation default, admission and insert stay real.
+vi.mock("@dpf/db", async () => ({ ...(await import("../../../../packages/db/generated/client/client")), prisma: { $transaction: (operation: (tx: unknown) => Promise<unknown>, options: { isolationLevel: string }) => {
+  producerDb.lastIsolation = options.isolationLevel;
+  return producerDb.current.$transaction(operation as never, options as never);
+} } }));
 
 // Only an explicitly supplied governed test target. All writes stay in this
 // suite's unique namespace; installed records are never fixtures or cleanup.
@@ -24,15 +33,16 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
   beforeAll(async () => {
     admin = new Pool({ connectionString: url });
     await admin.query(`CREATE SCHEMA "${schema}"`);
-    pool = new Pool({ connectionString: url, options: `-c search_path=${schema},public -c statement_timeout=5000 -c application_name=${schema}`, max: 4 });
+    pool = new Pool({ connectionString: url, options: `-c search_path=${schema},public -c statement_timeout=5000 -c application_name=${schema}`, max: 2 });
     db = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
-    for (const table of ["PlatformCapability", "RuntimeCapabilityTransition", "RuntimeCapabilityTransitionEvent", "TaskRun"]) {
+    for (const table of ["PlatformCapability", "RuntimeCapabilityTransition", "RuntimeCapabilityTransitionEvent", "TaskRun", "BacklogItem"]) {
       await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
     }
     receipts = createPrismaRuntimeTransitionReceipts(db as never);
+    producerDb.current = db;
   });
   beforeEach(async () => {
-    await pool.query('TRUNCATE "RuntimeCapabilityTransitionEvent", "RuntimeCapabilityTransition", "PlatformCapability", "TaskRun"');
+    await pool.query('TRUNCATE "RuntimeCapabilityTransitionEvent", "RuntimeCapabilityTransition", "PlatformCapability", "TaskRun", "BacklogItem"');
     for (const [capabilityId, state] of Object.entries(previousStates)) {
       await db.platformCapability.create({ data: { capabilityId, name: capabilityId, description: "isolated test", state, manifest: {} } });
     }
@@ -59,6 +69,11 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
     return { ...value, signature: signTransitionPayload(value, secret) };
   }
   const states = async () => Object.fromEntries((await db.platformCapability.findMany()).map(row => [row.capabilityId, row.state]));
+  const produce = (options: Pick<AutonomousWorkRunInput, "transactionIsolationLevel" | "admissionGuard"> = {}) => createAutonomousWorkRun({
+    trigger: "interactive", taskRunId: "TR-isolated-production-producer", userId: "fixture-owner", agentId: "fixture-coworker",
+    routeContext: "/finance", title: "isolated producer", objective: "fixture only", prompt: "isolated input; no model dispatch", ...options,
+  }).then(() => {});
+  const observeWait = async () => (await admin.query("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = $1 AND ((wait_event = 'advisory' AND query LIKE '%runtime-capability-transition%') OR (wait_event = 'relation' AND query LIKE '%RuntimeCapabilityTransition%'))) AS waiting", [schema])).rows[0].waiting as boolean;
 
   async function imageRequest() {
     await db.platformCapability.create({ data: { capabilityId: "runtime:browser-automation", name: "isolated browser", description: "isolated test", state: "active", manifest: {} } });
@@ -79,10 +94,6 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
   it("fences a real producer insert after image admission and through uncertain recovery, then releases it on settlement", async () => {
     const input = await imageRequest();
     await receipts.createPending(input);
-    const produce = () => db.$transaction(async tx => {
-      await admitRuntimeGuardedWork(tx as never, "task-run:coworker");
-      await tx.taskRun.create({ data: { taskRunId: "TR-isolated-producer", userId: "fixture-owner", title: "isolated producer", objective: "fixture only", source: "coworker" } });
-    });
     await expect(produce()).rejects.toThrow("runtime_capability_work_draining:runtime:browser-automation");
     expect(await db.taskRun.count()).toBe(0);
     await db.runtimeCapabilityTransition.update({ where: { transitionId: input.transitionId }, data: { status: "rollback_failed", failure: { recoveryRequired: true } } });
@@ -99,16 +110,11 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
     let releaseProducer!: () => void, reportAdmission!: () => void;
     const hold = new Promise<void>(resolve => { releaseProducer = resolve; });
     const admitted = new Promise<void>(resolve => { reportAdmission = resolve; });
-    const producer = db.$transaction(async tx => {
-      await admitRuntimeGuardedWork(tx as never, "task-run:coworker");
-      reportAdmission();
-      await hold;
-      await tx.taskRun.create({ data: { taskRunId: "TR-isolated-concurrent-producer", userId: "fixture-owner", title: "isolated concurrent producer", objective: "fixture only", source: "coworker" } });
-    });
+    const producer = produce({ admissionGuard: async () => { reportAdmission(); await hold; } });
     try {
       await Promise.race([admitted, producer.then(() => { throw new Error("producer finished before the admission checkpoint"); })]);
-      const transition = receipts.createPending({ ...input, recheckAttributedWork: async () =>
-        (await countAttributedWork(["task-run:coworker"], createPrismaWorkAttributionStore(db as never))).blockingCounts });
+      const transition = receipts.createPending({ ...input, recheckAttributedWork: async store =>
+        (await countAttributedWork(["task-run:coworker"], store!)).blockingCounts });
       releaseProducer();
       await producer;
       expect(await transition).toMatchObject({ created: false, kind: "drain_required", blockingCounts: { "task-run:coworker": 1 } });
@@ -138,17 +144,15 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
     let producer: Promise<void> | undefined, outcome: PromiseSettledResult<void> | undefined;
     try {
       await Promise.race([ready, transition.then(() => { throw new Error("transition finished before the commit checkpoint"); })]);
-      producer = db.$transaction(async tx => {
-        // No preceding SQL: this is the ordinary TaskRun producer's ordering.
-        await admitRuntimeGuardedWork(tx as never, "task-run:coworker");
-        await tx.taskRun.create({ data: { taskRunId: "TR-isolated-waiting-producer", userId: "fixture-owner", title: "isolated waiting producer", objective: "fixture only", source: "coworker" } });
-      }, { isolationLevel }).then(() => { outcome = { status: "fulfilled", value: undefined }; }, reason => { outcome = { status: "rejected", reason }; });
+      // Omit the override for Serializable: exercise the production default.
+      producer = produce(isolationLevel === "ReadCommitted" ? { transactionIsolationLevel: "ReadCommitted" } : {})
+        .then(() => { outcome = { status: "fulfilled", value: undefined }; }, reason => { outcome = { status: "rejected", reason }; });
       // Observe actual server lock contention, or an immediate safe refusal;
       // elapsed time alone is not evidence that the producer reached the lock.
       await vi.waitFor(async () => {
-        const observed = await admin.query("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = $1 AND wait_event = 'advisory' AND query LIKE '%runtime-capability-transition%') AS waiting", [schema]);
-        expect(observed.rows[0].waiting || outcome?.status === "rejected").toBe(true);
+        expect(await observeWait() || outcome?.status === "rejected").toBe(true);
       });
+      expect(producerDb.lastIsolation).toBe(isolationLevel);
       releaseTransition();
       expect(await transition).toMatchObject({ created: true });
       await producer;
@@ -160,6 +164,68 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
       releaseTransition();
       await Promise.allSettled([transition, ...(producer ? [producer] : [])]);
     }
+  });
+
+  it("counts on the transaction connection while both pool connections are occupied", async () => {
+    const input = await imageRequest();
+    let releaseCount!: () => void, reportCount!: () => void;
+    const hold = new Promise<void>(resolve => { releaseCount = resolve; });
+    const counting = new Promise<void>(resolve => { reportCount = resolve; });
+    const transition = receipts.createPending({ ...input, recheckAttributedWork: async store => {
+      reportCount(); await hold;
+      return (await countAttributedWork(["task-run:coworker"], store!)).blockingCounts;
+    } });
+    let producer: Promise<unknown> | undefined;
+    try {
+      await Promise.race([counting, transition.then(() => { throw new Error("transition did not reach its counter"); })]);
+      producer = produce().then(() => "inserted", reason => String(reason));
+      await vi.waitFor(async () => expect(await observeWait()).toBe(true));
+      releaseCount();
+      expect(await transition).toMatchObject({ created: true });
+      expect(await producer).toContain("runtime_capability_work_draining");
+      expect(await db.taskRun.count()).toBe(0);
+    } finally {
+      releaseCount();
+      await Promise.allSettled([transition, ...(producer ? [producer] : [])]);
+    }
+  });
+
+  it("settles a transition after an unrelated admission without inverted-lock deadlock", async () => {
+    const input = request(); await receipts.createPending(input); await receipts.markHostApplied(input.transitionId);
+    let releaseAdmission!: () => void, reportAdmission!: () => void;
+    const hold = new Promise<void>(resolve => { releaseAdmission = resolve; });
+    const admitted = new Promise<void>(resolve => { reportAdmission = resolve; });
+    const producer = db.$transaction(async tx => {
+      await admitRuntimeGuardedWork(tx as never, "task-run:unrelated");
+      reportAdmission(); await hold;
+    });
+    let settlement: Promise<unknown> | undefined;
+    try {
+      await Promise.race([admitted, producer.then(() => { throw new Error("admission did not reach its checkpoint"); })]);
+      settlement = receipts.commitSuccess!(input.transitionId, receipt(input.envelope), desiredStates);
+      await vi.waitFor(async () => expect(await observeWait()).toBe(true));
+      releaseAdmission();
+      await Promise.all([producer, settlement]);
+      expect(await states()).toEqual(desiredStates);
+      expect((await db.runtimeCapabilityTransition.findUniqueOrThrow({ where: { transitionId: input.transitionId } })).status).toBe("succeeded");
+    } finally {
+      releaseAdmission();
+      await Promise.allSettled([producer, ...(settlement ? [settlement] : [])]);
+    }
+  });
+
+  it.each(["ReadCommitted", "Serializable"] as const)("bounds earlier Build Studio writes to its supported %s contract", async isolationLevel => {
+    const itemId = "BI-AD017001";
+    await db.backlogItem.create({ data: { itemId, title: "isolated admission fixture", status: "triaging", type: "product", source: "automated-detection", workType: "bug" } });
+    const action = db.$transaction(async tx => {
+      // Match the remediation caller's earlier BacklogItem write, rather than
+      // introducing an unrelated capability-row lock before admission.
+      await tx.backlogItem.update({ where: { itemId }, data: { status: "open", triageOutcome: "build" } });
+      await admitRuntimeGuardedWork(tx as never, "build-studio-active");
+    }, { isolationLevel });
+    if (isolationLevel === "ReadCommitted") await action;
+    else await expect(action).rejects.toThrow("runtime_capability_work_isolation_unsupported:build-studio-active");
+    expect((await db.backlogItem.findUniqueOrThrow({ where: { itemId } })).status).toBe(isolationLevel === "ReadCommitted" ? "open" : "triaging");
   });
 
   it("admits at most one concurrent writer under real serializable transactions", async () => {

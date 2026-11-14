@@ -19,11 +19,13 @@ describe("runtime guarded work admission", () => {
       runtimeCapabilityTransition: { findMany: vi.fn(async () => { calls.push("transition"); return []; }) },
     };
     await admitRuntimeGuardedWork(tx, "task-run:proactive");
-    expect(calls).toEqual(["lock", "capabilities", "transition"]);
-    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(["lock", "lock", "capabilities", "transition"]);
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
     expect(tx.$queryRaw).not.toHaveBeenCalled();
     const strings = tx.$executeRaw.mock.calls[0][0] as unknown as string[];
-    expect(strings.join("")).toContain("pg_advisory_xact_lock");
+    expect(strings.join("")).toContain('LOCK TABLE "RuntimeCapabilityTransition" IN SHARE ROW EXCLUSIVE MODE');
+    const advisory = tx.$executeRaw.mock.calls[1][0] as unknown as string[];
+    expect(advisory.join("")).toContain("pg_advisory_xact_lock");
   });
 
   it("does not let an unrelated already-disabled capability suppress a shared source", async () => {
@@ -93,6 +95,12 @@ describe("runtime guarded work admission", () => {
     const tx = fakeTx({ transition: { previousKeys: ["runtime:browser-automation"], desiredKeys: ["runtime:browser-automation"] } });
     await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).resolves.toBeUndefined();
   });
+
+  it.each(["serializable", "repeatable read"])("refuses a Build Studio %s snapshot override", async isolation => {
+    const tx = fakeTx({ isolation });
+    await expect(admitRuntimeGuardedWork(tx, "build-studio-active")).rejects.toThrow("runtime_capability_work_isolation_unsupported:build-studio-active");
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+  });
 });
 
 type CapabilityRow = { capabilityId: string; state: string; manifest: unknown };
@@ -115,7 +123,7 @@ function imageTransition(status = "pending"): ActiveTransition {
   return { previousKeys: keys, desiredKeys: keys, envelope, status };
 }
 
-function fakeTx(input: { capabilities?: CapabilityRow[]; transition?: ActiveTransition; transitions?: ActiveTransition[] }) {
+function fakeTx(input: { capabilities?: CapabilityRow[]; transition?: ActiveTransition; transitions?: ActiveTransition[]; isolation?: string }) {
   const rows = (input.transitions ?? (input.transition ? [input.transition] : [])).map(row => ({ ...row, status: row.status ?? "pending", envelope: row.envelope ?? null }));
   const selected = (where: { status?: { in: string[] }; OR?: Array<{ status: string | { in: string[] }; failure?: unknown }> }) => rows.filter(row =>
     where.status?.in.includes(row.status) || where.OR?.some(clause => typeof clause.status === "string"
@@ -123,6 +131,7 @@ function fakeTx(input: { capabilities?: CapabilityRow[]; transition?: ActiveTran
       : clause.status.in.includes(row.status)));
   return {
     $executeRaw: vi.fn(async () => 1),
+    $queryRaw: vi.fn(async () => [{ transaction_isolation: input.isolation ?? "read committed" }]),
     platformCapability: { findMany: vi.fn(async () => input.capabilities ?? []) },
     runtimeCapabilityTransition: {
       findFirst: vi.fn(async ({ where }) => selected(where)[0] ?? null),
