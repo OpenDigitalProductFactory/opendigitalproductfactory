@@ -38,7 +38,6 @@ import {
   type RoomSessionRef,
   type RoomWakePlan,
 } from "./room-message-addressing";
-import { encodeRoomMessageCursor } from "./room-message-cursor";
 import { encodeWorkCaseKey } from "./case-key";
 import {
   combineSupervisedWake,
@@ -476,21 +475,12 @@ export async function runRoomWake(event: RoomWakeRequestedEvent, depsIn?: RoomWa
   if (agent.status && agent.status !== "active") return { outcome: "skipped", reason: `${event.agentId} is ${agent.status}.` };
   if (!owner) return { outcome: "skipped", reason: "The poster's account no longer exists." };
 
-  const lastOwn = await deps.db.workItemMessage.findFirst({
-    where: { workItemId: event.workItemId, senderAgentId: event.agentId },
-    orderBy: [{ createdAt: "desc" }, { messageId: "desc" }],
-    select: { createdAt: true, messageId: true },
-  });
   const now = clock(deps);
   const taskId = roomReplyTaskId(event.workItemId, event.agentId);
   const fields = {
     agentId: event.agentId,
     title: `Reply in ${event.caseKey}`,
-    prompt: buildRoomReplyPrompt({
-      caseKey: event.caseKey,
-      title: event.title,
-      sinceCursor: lastOwn ? encodeRoomMessageCursor(lastOwn) : null,
-    }),
+    prompt: buildRoomReplyPrompt({ caseKey: event.caseKey, title: event.title }),
     schedule: oneShotCronAt(now),
     ownerUserId: event.actingUserId,
     nextRunAt: now,
