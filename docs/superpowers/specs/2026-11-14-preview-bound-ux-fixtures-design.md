@@ -121,6 +121,41 @@ source assessment is advisory. WWMD DI-78D0807246E3 ranked a distinct corrective
 carrier above widening generic reachability, but returned low confidence,
 all-options-opposed and autonomy-ineligible. It is not implementation permission.
 
+### Reuse the governed cloud runtime before adding an authority bridge
+
+The original acceptance explicitly permits the governed/cloud path. The existing
+`.github/workflows/ux-route-sweep.yml` already owns an ephemeral PostgreSQL,
+source/build artifact qualification, a served portal, fixture setup, browser
+authentication and bounded route measurement with two workers by default. The reusable workflow
+is already part of protected CI. The existing foreground scenario additionally
+has an explicit CI/loopback-database target guard. This is a concrete alternative
+to adding a cross-database authority protocol for every local preview request.
+
+The current workflow is not already sufficient: its ordinary session bootstrap
+selects the CI-only administrator password, its install-state fixture does
+not declare a development/test environment class, and no approved ordinary-
+fixture MCP actor/workroom/lease bootstrap was found in the inspected workflow.
+It also publishes only the same one dynamic route. These remain design and
+verification work, not assumed capabilities.
+
+Compare two complete delivery candidates:
+
+| Candidate | Reuse | Missing mechanism to prove |
+| --- | --- | --- |
+| Same-database governed cloud verification | Existing reusable runtime, actual source/build provenance, ordinary fixture authorizer/consumer, existing domain writers and browser contexts. | Explicit isolated test classification and supported test-actor bootstrap; actual native workroom/lease admission on that isolated installation; passwordless fixture session consumption; all dynamic mappings and full target/contribution accounting. No production token or grant may be copied to the job. |
+| Preview-local personas with canonical authority | Existing canonical preview proof, disposable target client, ordinary fixture/session primitives and native fence. | Canonical-versus-target serialization, fresh exchange/request validity, bounded renewal/hard deadline and source-compatible consumer; no new general authority or credential substrate. |
+
+Cloud evidence would belong only to its admitted immutable integration target.
+The exact-7c local preview still owes its own source/mount/clone/environment/
+passwordless-session and cleanup evidence. Neither target may borrow the other's
+identity or imply that unmeasured ordinary personas worked on exact 7c. Choosing
+the cloud candidate requires approved source/fixture bootstrap and a clear
+original-scope reconciliation, not dispatching another incomplete sweep.
+
+No cloud workflow was dispatched or changed for this proposal. This comparison
+is new source evidence for the mechanism decision, not a re-score of the earlier
+carrier advisory or permission to bypass a refusal.
+
 ### Canonical authority and target transactions
 
 The canonical installation owns current actor, token, coworker, Workroom and
