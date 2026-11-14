@@ -46,6 +46,7 @@ import { COMMONS_JOB_CATALOG_ENTRIES } from "./catalog-commons";
 import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
 import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "./catalog-ecosystem";
 import { PROVIDER_PAUSE_JOB_CATALOG_ENTRY } from "./catalog-provider-pause";
+import { PLAN_GATE_STALL_JOB_CATALOG_ENTRY } from "./catalog-build-invariants";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -54,6 +55,7 @@ export type { JobCategory, ScheduledJobCatalogEntry };
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   PROVIDER_PAUSE_JOB_CATALOG_ENTRY,
+  PLAN_GATE_STALL_JOB_CATALOG_ENTRY,
   ...ECOSYSTEM_JOB_CATALOG_ENTRIES,
   ...DECISION_GOVERNANCE_JOBS,
   ...FLOW_JOB_CATALOG_ENTRIES,
@@ -370,18 +372,6 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     purpose: "Scans for coworker quality regressions. Cadence is tunable.",
     cron: "6,21,36,51 * * * *",
     cadence: "Every 15 min (at :06)",
-    category: "editable",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "plan-gate-stall-invariant",
-    inngestId: "build/plan-gate-stall-invariant",
-    honorsEnabledGate: true,
-    name: "Plan gate stall invariant",
-    purpose: "Reports Build Studio builds whose plan passed review but stay refused on PLAN_REQUIRED for 15 minutes.",
-    cron: "4,19,34,49 * * * *",
-    cadence: "Every 15 min (at :04)",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,
