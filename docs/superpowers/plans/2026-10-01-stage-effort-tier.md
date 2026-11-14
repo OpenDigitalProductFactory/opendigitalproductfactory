@@ -15,7 +15,7 @@ Objectives covered: OBJ-DECLARE, OBJ-NEVER-DEMOTE, OBJ-UNCHANGED, OBJ-ROUTE (spe
 
 | Deliverable | Files | Covers | Backlog |
 |---|---|---|---|
-| Effort in the portable GPP contract | `packages/validators/src/gpp/work-shape-contracts.ts`, `gpp-shape-schema.ts`, `emit.ts`, `decompile.ts`, `drc.ts` (D-11); notation spec rule table | AC-G7, AC-G8 | BI-B3BBF9AD |
+| Effort in the portable GPP contract | `packages/validators/src/gpp/work-shape-contracts.ts`, `gpp-shape-schema.ts`, `emit.ts`, `decompile.ts`; D-11 follows in the next dpf-workroom release (DI-3DDF29984D1D) | AC-G7, AC-G8 | BI-B3BBF9AD |
 | Stage effort and its resolver | `work-shapes.ts` (`resolveStageEffort`), standing, coworker and orchestration shape files, `shape-documents/inquiry-response-watch.gpp.json` (regenerated) | AC-G2, AC-G5, AC-G7 | BI-B3BBF9AD |
 | Declared tier beats the proxy | `tak/effort-warrant.ts` | AC-G1 | BI-B3BBF9AD |
 | Hand-off on the one stage record | `scheduling/workroom-stage-task-config.ts`, `work-management/workroom-stage-effort.ts`, `queue/functions/workroom-drive.ts`, `actions/agent-task-scheduler.ts` | AC-G3 | BI-B3BBF9AD |
