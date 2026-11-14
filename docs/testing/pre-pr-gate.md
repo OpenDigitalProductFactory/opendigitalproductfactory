@@ -100,8 +100,15 @@ Before you open a PR, in order:
 
 1. **Branch guard.** You are on a topic branch in a worktree, not on `main` and
    not in detached HEAD. (AGENTS.md §4.)
-2. **Pre-commit gates fire on every commit** — staged secret scan + affected-package
-   typecheck. They are auto-wired; do not bypass them (see [§ Pre-commit gate](#the-pre-commit-typecheck-gate)).
+2. **Pre-commit gates fire on every commit** — staged secret scan, staged-scope
+   check, and affected-package typecheck. They are auto-wired; do not bypass them
+   (see [§ Pre-commit gate](#the-pre-commit-typecheck-gate)). The staged-scope
+   check compares what you are staging against the paths your Workroom claimed
+   for edit, because a blanket `git add -A` after a tooling run is how another
+   session's work reaches your commit (BI-66236024). It is advisory until
+   `DPF_STAGED_SCOPE_ENFORCE=1`, and it reports when it is INACTIVE — a claim
+   with no scope cannot be enforced against, and an off gate must never look
+   like one that passed.
 3. **Run the gates your change requires, on the right substrate** — see
    [§ Which gate runs where](#which-gate-runs-where). Source-local checks
    (targeted `vitest`, `typecheck`) can run in a `compile-ready` worktree;
