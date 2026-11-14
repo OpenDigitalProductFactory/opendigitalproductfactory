@@ -1,7 +1,7 @@
 // BI-52934B3E — the published toolchain: one digest definition, a byte-stable
 // archive, and a manifest signed by the installation identity.
 import { createHash, createPrivateKey, createPublicKey, verify } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -83,6 +83,73 @@ describe("stamped client manifests", () => {
     const root = tree("0.2.18");
     const { manifest } = buildToolchainRelease({ packRoot: root, releaseId: null, mcpEndpoint: "https://dpf.example/api/mcp/v1" });
     expect(manifest.deliveredVersion).toBe(`0.2.18+c.${deliveredDigest(root).slice(0, 12)}`);
+  });
+});
+
+// BI-04A16AB8: an updater from before the stamp (v2026.10.27-dev-recovery.149
+// and earlier) verifies the served archive with its own delivered_digest, which
+// hashes a client manifest's version as written. It cannot be changed in place,
+// so the archive must satisfy it. This is that verifier, frozen.
+function legacyDeliveredDigest(entries: ReadonlyMap<string, Buffer>): string {
+  const digest = createHash("sha256");
+  const delivered = [...entries.keys()]
+    .map((relative) => relative.split("/"))
+    .filter((segments) => segments[0] !== ".in_use")
+    .filter((segments) => !(segments.length === 2 && segments[0] === ".codex-plugin" && segments[1] === "plugin.json"))
+    .filter((segments) => !(segments.length === 1 && segments[0]!.endsWith(".mcp.json")))
+    .sort((left, right) => {
+      for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+        if (left[index] !== right[index]) return left[index]! < right[index]! ? -1 : 1;
+      }
+      return left.length - right.length;
+    })
+    .map((segments) => segments.join("/"));
+  for (const relative of delivered) {
+    digest.update(Buffer.concat([Buffer.from(relative, "utf8"), Buffer.from([0])]));
+    digest.update(createHash("sha256").update(entries.get(relative)!).digest());
+  }
+  return digest.digest("hex");
+}
+
+function readArchive(archive: Buffer): Map<string, Buffer> {
+  const tar = gunzipSync(archive);
+  const entries = new Map<string, Buffer>();
+  for (let offset = 0; offset + 512 <= tar.length; ) {
+    const header = tar.subarray(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) break;
+    const field = (start: number, length: number) => header.subarray(start, start + length).toString("utf8").replace(/\0.*$/s, "");
+    const name = field(0, 100);
+    const prefix = field(345, 155);
+    const size = parseInt(field(124, 12).trim(), 8);
+    entries.set(prefix ? `${prefix}/${name}` : name, Buffer.from(tar.subarray(offset + 512, offset + 512 + size)));
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+  return entries;
+}
+
+describe("updaters from before the stamp", () => {
+  function release() {
+    const packRoot = mkdtempSync(join(tmpdir(), "dpf-legacy-"));
+    cpSync(STAMPED_FIXTURE, packRoot, { recursive: true });
+    writeFileSync(join(packRoot, "toolchain-version.json"), JSON.stringify({ packVersion: "0.2.18", floor: { minPackVersion: null, graceStartsAt: null } }));
+    return buildToolchainRelease({ packRoot, releaseId: null, mcpEndpoint: "https://dpf.example/api/mcp/v1" });
+  }
+
+  it("accept the served archive: their digest of it equals the published packDigest", () => {
+    const { manifest, archive } = release();
+    expect(legacyDeliveredDigest(readArchive(archive))).toBe(manifest.packDigest);
+  });
+
+  it("serve stamped manifests with a blank version and every other byte intact", () => {
+    const { archive } = release();
+    const entries = readArchive(archive);
+    for (const client of [".claude-plugin", ".grok-plugin"]) {
+      const source = readFileSync(join(STAMPED_FIXTURE, client, "plugin.json"));
+      const served = entries.get(`${client}/plugin.json`)!;
+      expect(JSON.parse(served.toString("utf8")).version).toBe("");
+      expect(served.toString("utf8")).toBe(source.toString("utf8").replace(/("version"\s*:\s*")[^"]*(")/, "$1$2"));
+    }
+    expect(entries.get("skills/hello/SKILL.md")!.equals(readFileSync(join(STAMPED_FIXTURE, "skills", "hello", "SKILL.md")))).toBe(true);
   });
 });
 

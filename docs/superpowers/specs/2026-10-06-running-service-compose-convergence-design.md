@@ -203,8 +203,9 @@ retains a failed or unverified recovery result.
 Use the existing packaged protocol probe to negotiate image-plan support.
 Older or unsupported actuators must refuse before host effects. Do not add a
 trusted import or a candidate `COPY` requirement that the deployed N-1 minimal
-promoter context cannot supply. Reuse the already hashed actuator/signer closure,
-or deliver a separately covered compatibility step before requiring new bytes.
+promoter context cannot supply. Extend the identity-bound closure only through negotiated support; missing optional
+image dependencies must leave ordinary v1/v2 staging loadable and refuse v3 before
+host effects.
 Do not manufacture protocol support from a portal revision.
 
 Managed services and data owners keep their existing lifecycles. Stopped
@@ -225,6 +226,97 @@ separate browser security-policy work is not authorized by this image plan.
 | AC-I6 | OBJ-IMAGE | Source/consumer and platform differences use existing runtime contracts. Old or unsupported packaged protocols fail closed before host effects, including N-1 promoter staging. |
 | AC-I7 | OBJ-IMAGE | Affected production-owner tests, normal gates/independent review, governed served workflow/failure recovery and exact cleanup supply separate truthful evidence; no fixture is production acceptance. |
 
-These are the follow-up's proposed acceptance contract, not executed checks or
-completed plan coverage. BI-0282088D remains triage intake until the design,
-classification and immutable coverage are reconciled through normal gates.
+The child has accepted research `initiative-79ab62cd-2245-4d5b-919f-7eea0cc8f483`,
+its own immutable coverage `cmwfow6zm0sqe0eqcd4nshyae`, and implementation admission
+`IRD-D2A0E98FB7C3`. These admit source work; they are not runtime acceptance.
+
+### Bounded v3 implementation
+
+The existing administrator reconciliation tool accepts only the optional
+`imageServices: ["browser-use"]` selection. The executor derives the plan from
+its verified packaged source SHA, host platform and installed release carrier.
+Source mode archives the immutable `services/browser-use` Git tree to Docker
+stdin. These read-only Git calls use command-scoped `safe.directory=/host-source`
+for the fixed mount because the runtime-transition branch precedes the updater’s
+ordinary Git setup. No global Git configuration is changed. This follows
+[Git’s protected safe-directory contract](https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory).
+Consumer mode resolves the installed immutable release through the existing
+manifest reader, then pulls only its pinned digest. Actual image ID, platform,
+source revision and source input-tree or published digest evidence must agree.
+
+Version 3 authenticates the plan, receipt and recovery proof recursively. The
+read-only packaged probe explicitly advertises support and binds the actuator,
+signer and the combined bytes of the existing `promoter-epoch-evidence.mjs`
+artifact owner and shared `lib/git.mjs` reader. The artifact owner is already in
+the N-1 minimum promoter context. The Git reader loads only after v3 qualification;
+when an older minimum staging omits it, the probe retains v1/v2 apply and reports
+no image support. No candidate COPY dependency is added to that older closure.
+New full promoter images already copy the scripts directory. Version 1 and 2
+behavior stays intact.
+
+Before preparation, the actuator observes the running project and saves a private
+resolved Compose baseline. The installed Compose implementation must reproduce
+the selected container's configuration hash using the original or actual image
+reference. A mismatch holds; it does not enable shadow enforcement. This avoids
+reimplementing Docker's hash algorithm or treating image-only authority as consent
+to apply other configuration. Selected services use existing volumes and networks
+as external resources, with dependency startup, builds and pulls disabled at apply.
+Unselected container IDs and selected resource identities must remain unchanged.
+
+The signed journal records prior IDs, immutable preparation and each apply phase.
+A completed receipt includes exact intended/observed images, health and resource
+hashes. An interrupted preparation or child apply is `rollback_failed` with a
+durable recovery barrier; another attempt cannot erase that uncertainty. Native
+unhealthy apply restores the exact prior cached image. Database compensation
+requires the authenticated original applied receipt and a signed restore-only
+plan. Identical capability settings alone never prove that image effects were absent.
+Selected image owners retain their existing catalog and saved manifest work guards.
+The ordinary serializable receipt admission rechecks attributed tasks even though
+image-only reconciliation disables no capability; active work returns drain-required
+before a transition row or service apply is created.
+The producer half serializes inside the transaction that creates a TaskRun or
+build. Real PostgreSQL contention showed that an advisory-lock SELECT can fix a
+Serializable snapshot before the wait ends, hiding a newly committed transition.
+The shared admission helper therefore first takes a `SHARE ROW EXCLUSIVE` lock
+on the existing transition table, then the existing advisory lock. PostgreSQL's
+[utility snapshot rule](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/tcop/pquery.c)
+explicitly excludes `LOCK` and `SHOW`, so serialization precedes snapshot
+creation. `createPending` and `commitSuccess` use the same order. No host work
+or inference runs under these metadata locks; transaction timeout settings are
+not changed. The drain counter uses the existing transaction-bound attribution
+store, avoiding an outer-pool request behind producers waiting on these locks.
+It examines every active transition and the existing
+`rollback_failed`/`recoveryRequired` image barrier, so unchanged capability keys
+cannot admit new matching work after the initial drain. The persisted v3 plan
+uses the shared validator; selected catalog owners and their saved manifests
+supply the guard union. Malformed image metadata retains only the existing
+browser recipe's guards, rather than silently losing its scope or stopping
+unrelated producers. Settled recovery releases the image guard. Legacy active
+key-removal admission retains its previous behavior.
+
+All eight actual production admission sites and their outer transaction wrappers
+are inventoried in the existing plan. Autonomous/build TaskRun admission already
+comes first; coworker spawn and durable Workroom tasks now acquire the same
+helper before parent/authority reads or a WorkCapsule row lock. Later admission
+reuses only a successful fence on that exact transaction object, preserving
+transactional ownership checks and existing-task replay. Capsule stores can
+receive an already-open transaction; their wrappers must not be treated as a
+snapshot reset. Current late-read Build/Capsule wrappers use ReadCommitted.
+
+The helper verifies actual isolation for every guard. In fixed-snapshot modes,
+SHOW and same-value `SET TRANSACTION [NOT] DEFERRABLE` preserve existing settings
+and assert that no first snapshot exists. PostgreSQL's
+[deferrable check](https://raw.githubusercontent.com/postgres/postgres/REL_17_STABLE/src/backend/commands/variable.c)
+rejects a prior snapshot even on the same value; its isolation check explicitly
+permits same-value SET and is unsuitable. An unsupported late fixed-snapshot
+caller fails before capabilities or transitions are read, rather than silently
+admitting stale state. No isolation downgrade, new persistent epoch, durable
+authority, grant, or transaction timeout change is introduced. Actual Prisma/
+PostgreSQL coverage must prove the utility ordering and real caller behavior.
+The existing ten-minute authority lifetime is preserved. Preparation reserves time
+for bounded apply and restoration; a short remaining lifetime holds before effects.
+
+Source tests use injected process adapters and isolated temporary files. Their
+passing results do not establish served owner acceptance. Exact-tree gate,
+independent review, protected delivery and governed runtime verification remain
+required before D6 is complete.

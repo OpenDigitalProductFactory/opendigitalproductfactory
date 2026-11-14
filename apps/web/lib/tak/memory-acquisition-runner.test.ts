@@ -17,7 +17,6 @@ describe("runMemoryAcquisitionSweep", () => {
     featureBuild: { findMany: findMany() },
     coworkerMemoryNote: { findMany: findMany() },
     agent: { findMany: findMany() },
-    agentThread: { findMany: findMany() },
   };
   const recordNote = vi.fn();
 
@@ -152,25 +151,34 @@ describe("runMemoryAcquisitionSweep", () => {
 });
 
 describe("runThreadCheckpointSweep", () => {
-  it("advances recent coworker and build threads with bounded recency windows", async () => {
-    const db: MemoryAcquisitionDb = {
-      phaseHandoff: { findMany: findMany() },
-      taskRun: { findMany: findMany() },
-      featureBuild: { findMany: findMany() },
-      coworkerMemoryNote: { findMany: findMany() },
-      agent: { findMany: findMany() },
-      agentThread: { findMany: findMany() },
-    };
-    vi.mocked(db.agentThread.findMany).mockResolvedValue([
-      { id: "thread-1", contextKey: "coworker", updatedAt: new Date("2026-07-22T01:00:00.000Z") },
-      { id: "thread-2", contextKey: "build:FB-1", updatedAt: new Date("2026-07-22T01:00:00.000Z") },
-    ]);
+  type Backlog = { id: string; contextKey: string; unfolded: number };
+  const finder = (rows: Backlog[]) =>
+    vi.fn<(args: { minUnfolded: number; take: number }) => Promise<Backlog[]>>().mockResolvedValue(rows);
+  const behind = (id: string, contextKey = "coworker", unfolded = 40): Backlog => ({ id, contextKey, unfolded });
+  const folded = (n: number, moreEligible: boolean) =>
+    ({ advanced: true as const, foldedCount: n, skipped: [], watermarkAt: new Date(), moreEligible });
+  const notEnough = { advanced: false as const, reason: "not-enough" as const };
+
+  // BI-546A9E36: the sweep used to pick candidates by the thread row's own
+  // timestamp with fixed caps (the 100 most recently updated, plus 25 stale ones
+  // oldest-first). On an install with 404 active threads that left 304 unswept,
+  // and a quiet thread with nothing to fold could hold a stale-set slot forever.
+  // Candidates now come from a need-ordered finder: only threads that are at
+  // least one fold behind, most-behind first.
+  it("BI-546A9E36: takes its candidates from the need-ordered finder, most-behind first", async () => {
+    const findBacklog = finder([behind("far", "scheduled:workroom-x", 145), behind("near", "coworker", 18)]);
     const advance = vi.fn().mockResolvedValue(undefined);
 
-    const result = await runThreadCheckpointSweep(db, { advance });
+    const result = await runThreadCheckpointSweep({ findBacklog, advance });
 
-    expect(advance).toHaveBeenNthCalledWith(1, "thread-1", 8);
-    expect(advance).toHaveBeenNthCalledWith(2, "thread-2", 20);
+    // 18 = the smallest keep-recent count (8) plus one fold batch (10): the
+    // least backlog any thread can fold from.
+    expect(findBacklog).toHaveBeenCalledTimes(1);
+    expect(findBacklog).toHaveBeenCalledWith({ minUnfolded: 18, take: 200 });
+    expect(advance.mock.calls).toEqual([
+      ["far", 8],
+      ["near", 8],
+    ]);
     expect(result).toEqual({
       threadsChecked: 2,
       advanceAttempts: 2,
@@ -182,27 +190,30 @@ describe("runThreadCheckpointSweep", () => {
     });
   });
 
+  it("BI-546A9E36: a build thread keeps 20 recent turns, so one below 30 unfolded is not advanced", async () => {
+    const findBacklog = finder([behind("build-ready", "build:FB-2", 30), behind("build-short", "build:FB-1", 29)]);
+    const advance = vi.fn().mockResolvedValue(notEnough);
+
+    const result = await runThreadCheckpointSweep({ findBacklog, advance });
+
+    expect(advance.mock.calls).toEqual([["build-ready", 20]]);
+    expect(result).toMatchObject({ threadsChecked: 1, advanceAttempts: 1 });
+  });
+
+  it("BI-546A9E36: the candidate take is the caller's to raise", async () => {
+    const findBacklog = finder([]);
+    const advance = vi.fn();
+
+    const result = await runThreadCheckpointSweep({ findBacklog, advance, take: 500 });
+
+    expect(findBacklog).toHaveBeenCalledWith({ minUnfolded: 18, take: 500 });
+    expect(advance).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ threadsChecked: 0, advanceAttempts: 0, foldBudgetExhausted: false });
+  });
+
   // BI-FDECBE0A re-opened: the nightly sweep is the backfill path for wedged
   // threads (~113 folds for the largest at batch 10), so it must keep advancing a
   // thread while batches remain — within a per-run cap, never interactively.
-  function sweepDb(threads: Array<{ id: string; contextKey: string }>): MemoryAcquisitionDb {
-    const db: MemoryAcquisitionDb = {
-      phaseHandoff: { findMany: findMany() },
-      taskRun: { findMany: findMany() },
-      featureBuild: { findMany: findMany() },
-      coworkerMemoryNote: { findMany: findMany() },
-      agent: { findMany: findMany() },
-      agentThread: { findMany: findMany() },
-    };
-    vi.mocked(db.agentThread.findMany).mockResolvedValue(
-      threads.map((t) => ({ ...t, updatedAt: new Date("2026-09-16T01:00:00.000Z") })),
-    );
-    return db;
-  }
-  const folded = (n: number, moreEligible: boolean) =>
-    ({ advanced: true as const, foldedCount: n, skipped: [], watermarkAt: new Date(), moreEligible });
-  const notEnough = { advanced: false as const, reason: "not-enough" as const };
-
   it("AC-6: keeps folding a thread while it reports more eligible messages, then moves on", async () => {
     const advance = vi
       .fn()
@@ -210,7 +221,10 @@ describe("runThreadCheckpointSweep", () => {
       .mockResolvedValueOnce(folded(10, true))
       .mockResolvedValueOnce(folded(7, false))
       .mockResolvedValueOnce(notEnough);
-    const result = await runThreadCheckpointSweep(sweepDb([{ id: "big", contextKey: "scheduled:x" }, { id: "small", contextKey: "coworker" }]), { advance });
+    const result = await runThreadCheckpointSweep({
+      findBacklog: finder([behind("big", "scheduled:x"), behind("small")]),
+      advance,
+    });
     expect(advance).toHaveBeenCalledTimes(4);
     expect(advance.mock.calls.map((c) => c[0])).toEqual(["big", "big", "big", "small"]);
     expect(result).toMatchObject({ threadsChecked: 2, advanceAttempts: 4, advanceFailures: 0, foldsPerformed: 3, messagesFolded: 27, foldBudgetExhausted: false });
@@ -218,7 +232,8 @@ describe("runThreadCheckpointSweep", () => {
 
   it("AC-6: caps fold work per run so a backfill converges across sweeps instead of running unbounded", async () => {
     const advance = vi.fn().mockResolvedValue(folded(10, true));
-    const result = await runThreadCheckpointSweep(sweepDb([{ id: "big", contextKey: "scheduled:x" }, { id: "next", contextKey: "coworker" }]), {
+    const result = await runThreadCheckpointSweep({
+      findBacklog: finder([behind("big", "scheduled:x"), behind("next")]),
       advance,
       maxFoldsPerRun: 5,
     });
@@ -229,7 +244,8 @@ describe("runThreadCheckpointSweep", () => {
 
   it("AC-6: a per-thread cap stops one thread from starving the rest of the sweep", async () => {
     const advance = vi.fn().mockResolvedValue(folded(10, true));
-    const result = await runThreadCheckpointSweep(sweepDb([{ id: "big", contextKey: "scheduled:x" }, { id: "next", contextKey: "coworker" }]), {
+    const result = await runThreadCheckpointSweep({
+      findBacklog: finder([behind("big", "scheduled:x"), behind("next")]),
       advance,
       maxFoldsPerRun: 100,
       maxFoldsPerThread: 3,
@@ -238,51 +254,14 @@ describe("runThreadCheckpointSweep", () => {
     expect(result).toMatchObject({ foldsPerformed: 6, foldBudgetExhausted: false });
   });
 
-  it("AC-5: an advance that returns reason:error counts as a failure (it never throws, so today it was invisible)", async () => {
-    const advance = vi.fn().mockResolvedValue({ advanced: false, reason: "error", stage: "summarize", message: "model down" });
-    const result = await runThreadCheckpointSweep(sweepDb([{ id: "t", contextKey: "coworker" }]), { advance });
-    expect(result).toMatchObject({ advanceAttempts: 1, advanceFailures: 1, foldsPerformed: 0 });
-  });
-
-  // BI-CA79DB7B: the two wedged production threads (1,150 and 855 messages)
-  // carry an updatedAt from June while receiving messages daily, so a sweep
-  // keyed on the thread's own timestamp never admits them. Message activity is
-  // the second admission path; the where clauses are the contract.
-  it("BI-CA79DB7B: admits a thread with a stale updatedAt when it received a message inside the window", async () => {
-    const now = new Date("2026-09-22T04:20:00.000Z");
-    const since = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-    const db = sweepDb([]);
-    vi.mocked(db.agentThread.findMany)
-      .mockResolvedValueOnce([{ id: "recent", contextKey: "coworker", updatedAt: new Date("2026-09-21T00:00:00.000Z") }])
-      .mockResolvedValueOnce([{ id: "wedged", contextKey: "scheduled:discovery-taxonomy-gap-triage-daily", updatedAt: new Date("2026-06-18T22:40:00.000Z") }]);
-    const advance = vi.fn().mockResolvedValue({ advanced: false, reason: "not-enough" });
-
-    const result = await runThreadCheckpointSweep(db, { advance, now });
-
-    expect(vi.mocked(db.agentThread.findMany)).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      where: { updatedAt: { gte: since }, cancelledAt: null },
-    }));
-    expect(vi.mocked(db.agentThread.findMany)).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      where: { updatedAt: { lt: since }, cancelledAt: null, messages: { some: { createdAt: { gte: since } } } },
-      orderBy: { updatedAt: "asc" },
-      take: 25,
-    }));
-    expect(advance).toHaveBeenCalledTimes(2);
-    expect(advance).toHaveBeenNthCalledWith(1, "recent", 8);
-    expect(advance).toHaveBeenNthCalledWith(2, "wedged", 8);
-    expect(result.threadsChecked).toBe(2);
-  });
-
-  it("BI-CA79DB7B: a thread returned by both admission paths is swept once", async () => {
-    const db = sweepDb([]);
-    const row = { id: "both", contextKey: "coworker", updatedAt: new Date("2026-09-21T00:00:00.000Z") };
-    vi.mocked(db.agentThread.findMany).mockResolvedValueOnce([row]).mockResolvedValueOnce([row]);
-    const advance = vi.fn().mockResolvedValue({ advanced: false, reason: "not-enough" });
-
-    const result = await runThreadCheckpointSweep(db, { advance });
-
-    expect(advance).toHaveBeenCalledTimes(1);
-    expect(result.threadsChecked).toBe(1);
+  it("AC-5: an advance that returns reason:error counts as a failure and the sweep moves on to the next thread", async () => {
+    const advance = vi
+      .fn()
+      .mockResolvedValueOnce({ advanced: false, reason: "error", stage: "summarize", message: "model down" })
+      .mockResolvedValueOnce(folded(10, false));
+    const result = await runThreadCheckpointSweep({ findBacklog: finder([behind("t"), behind("u")]), advance });
+    expect(advance.mock.calls.map((c) => c[0])).toEqual(["t", "u"]);
+    expect(result).toMatchObject({ advanceAttempts: 2, advanceFailures: 1, foldsPerformed: 1 });
   });
 
   it("counts skipped oversized messages so the sweep reports them", async () => {
@@ -290,7 +269,7 @@ describe("runThreadCheckpointSweep", () => {
     const advance = vi
       .fn()
       .mockResolvedValueOnce({ advanced: true, foldedCount: 9, skipped: [skip], watermarkAt: new Date(), moreEligible: false });
-    const result = await runThreadCheckpointSweep(sweepDb([{ id: "t", contextKey: "coworker" }]), { advance });
+    const result = await runThreadCheckpointSweep({ findBacklog: finder([behind("t")]), advance });
     expect(result).toMatchObject({ foldsPerformed: 1, messagesFolded: 9, messagesSkipped: 1 });
   });
 });

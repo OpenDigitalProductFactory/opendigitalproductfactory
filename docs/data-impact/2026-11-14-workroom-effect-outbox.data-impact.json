@@ -1,0 +1,44 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-C64EDA33 (S2 of the T3 absorption, plan 2026-11-14-workroom-runtime-core, decisions DI-BEAADBEEB92C and DI-1B6A408A5F4F). Migration 20261114060000_workroom_effect_outbox adds the Workroom runtime's transactional outbox: WorkroomEffect, one row per side effect a runtime decision emits (start a turn, answer a provider request, revoke a session credential and so on), written in the same transaction as the decision's room log rows, runtimeSession record and receipt, then run by a leased in-process worker. It also adds the WorkroomEffectKind and WorkroomEffectStatus enums. The room's runtimeSession JSON gains generation, hostId, queuedInputs, activeTurnId and inFlight.",
+  "affectedCopies": [
+    "WorkroomEffect rows: inserted, retired and settled only by apps/web/lib/workroom-runtime/runtime-commit.server.ts (inside the room's receipted command) and leased and lease-recovered by apps/web/lib/workroom-runtime/workroom-effect-store.ts through the effect worker; rows cascade away with their Workroom.",
+    "WorkCapsule.workspaceState.runtimeSession: unchanged key, five new optional fields written by the runtime commit; records written before this change read with defaults (no generation, empty queue)."
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: effect kind, status, lease and attempt bookkeeping, and a payload holding a turn's input text (what the room asked the session to do), a provider request summary, or a credential id (never the secret). Turn input already lives in the room log and the provider thread.",
+    "dataSubjectRights": "No new content about a person. Turn input is room work content, governed with the room; rows cascade with their room.",
+    "reviewDisposition": "Operational history of the room's runtime; covered by the model's telemetry-bounded lifecycle annotation (180 days on createdAt)."
+  },
+  "migration": {
+    "name": "20261114060000_workroom_effect_outbox",
+    "backfill": "None. The table starts empty; existing runtime sessions read their new fields with defaults.",
+    "rollback": "Forward-only and additive. Dropping the table loses only unsettled effects, which a restart would retire anyway."
+  },
+  "tests": [
+    "apps/web/lib/workroom-runtime/workroom-effect-store.pg.test.ts",
+    "apps/web/lib/workroom-runtime/runtime-commit.server.test.ts",
+    "apps/web/lib/workroom-runtime/runtime-decider.test.ts",
+    "apps/web/lib/workroom-runtime/effect-worker.server.test.ts",
+    "apps/web/lib/workroom-runtime/supervisor.test.ts",
+    "apps/web/lib/workroom-runtime/supervisor.durable.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:workroom-effect",
+      "prismaModel": "WorkroomEffect",
+      "lifecycleDisposition": "Telemetry-bounded: settled rows are history of the room's runtime (180 days on createdAt); unsettled rows are live work. Cascades with its Workroom.",
+      "fields": [
+        { "fieldId": "data:workroom-effect#workCapsuleId", "resolution": "inherited", "reason": "Foreign key to the room; governed by the Workroom asset.", "provenance": "runtime-commit.server.ts", "flags": [] },
+        { "fieldId": "data:workroom-effect#commandKey", "resolution": "not-applicable", "reason": "Deterministic idempotency key of the deciding command (runtime-event:<generation>:<n>, effect-result:<id>:<attempt>, session-open:<generation>), not a reference.", "provenance": "supervisor.ts, effect-worker.server.ts", "flags": [] },
+        { "fieldId": "data:workroom-effect#payload", "resolution": "not-applicable", "reason": "Effect input: turn text, provider request summary, credential id or plan-limit error text. Room work content, no secret values.", "provenance": "runtime-decider.ts", "flags": [] },
+        { "fieldId": "data:workroom-effect#sessionGeneration", "resolution": "not-applicable", "reason": "Opaque per-process generation id; process-bound effects of a dead generation are retired, not replayed.", "provenance": "supervisor.ts start()", "flags": [] },
+        { "fieldId": "data:workroom-effect#leaseOwner", "resolution": "not-applicable", "reason": "Opaque per-portal-process host id.", "provenance": "supervisor.ts hostId", "flags": [] },
+        { "fieldId": "data:workroom-effect#lastError", "resolution": "not-applicable", "reason": "Provider or runtime error text for a failed or retired effect.", "provenance": "effect-worker.server.ts", "flags": [] }
+      ]
+    }
+  ]
+}

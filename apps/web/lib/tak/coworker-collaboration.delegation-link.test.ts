@@ -85,4 +85,18 @@ describe("requestCoworker delegation link", () => {
     );
     expect(mockPrisma.taskRun.update.mock.calls[0]?.[0].data.a2aMetadata.collaboration).not.toHaveProperty("runtimeMode");
   });
+
+  // BI-0104CCB9: authority is read from the registry identity, not the alias row.
+  it("checks a `coo` caller against AGT-ORCH-000, the registry identity its persona describes", async () => {
+    mockPrisma.agent.findFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+      where["agentId"] === "AGT-ORCH-000"
+        ? { agentId: "AGT-ORCH-000", delegatesTo: ["AGT-100", "agent-mkt"], escalatesTo: null, sensitivity: null }
+        : { agentId: "agent-mkt", delegatesTo: [], escalatesTo: null, sensitivity: null });
+    await requestCoworker(
+      { parentThreadId: "parent-1", targetAgent: "agent-mkt", objective: "Draft", callerAgentId: "coo" },
+      "user-1",
+    );
+    expect(mockPrisma.agent.findFirst.mock.calls.map((call) => call[0]?.where)).toContainEqual({ agentId: "AGT-ORCH-000" });
+    expect(mockSpawn).toHaveBeenCalled();
+  });
 });

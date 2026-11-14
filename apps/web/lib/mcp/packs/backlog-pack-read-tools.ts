@@ -593,6 +593,7 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,
     data: {
       itemId: item.itemId,
+      referencedBy: await (await import("@/lib/references/mcp-referenced-by")).loadReferencedByForTool({ itemId: item.itemId, userId: currentUserId, agentId: currentAgentId }), // BI-A63A9476
       workShape: boundWorkShape,
       title: item.title,
       status: item.status,
