@@ -1,8 +1,8 @@
 """BI-65C17737 (S3 of BI-63672FBE): the host convergence service.
 
 Detection already worked; nothing remediated without a person asking an agent
-to run the updater. The service runs the same signed updater hourly and at
-login, outside any client session, against the origin and installation this
+to run the updater. The service runs the same signed updater when a client
+session finds a stale copy, and daily as a safety net (BI-590DD63E), against the origin and installation this
 host already pinned. Spec 2026-10-27-self-converging-agent-toolchain, M2.
 
 Every case builds a fake HOME and fakes the network, the updater and the
@@ -190,6 +190,27 @@ class RunOnceTest(unittest.TestCase):
             self.assertEqual(state["lastSuccessAt"], 1000.0)
             self.assertIsNone(state["failureSince"])
             self.assertEqual(offline.runs, [])
+
+    def test_an_unreachable_portal_is_offline_and_needs_no_person(self) -> None:
+        # BI-590DD63E: portal_source reports a refused connection as a refusal
+        # coded "unreachable". A portal restarting for an upgrade is that, and
+        # it must not tell the session the operator has to act.
+        import portal_source
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            Fakes().run(home, now=1000.0)
+
+            def unreachable(*_args: Any) -> dict[str, Any]:
+                raise portal_source.PortalRefusal("unreachable", "cannot reach https://localhost/api/agent-toolchain/manifest")
+
+            calls: list[list[str]] = []
+            state = agent.run_once(home, {}, now=1000.0 + 2 * HOUR, fetch_manifest=unreachable,
+                                   runner=lambda command, **_: calls.append(command), client_versions=lambda: {})
+            self.assertEqual(state["status"], "offline")
+            self.assertIsNone(state["code"])
+            self.assertEqual(state["lastSuccessAt"], 1000.0)
+            self.assertEqual(calls, [])
 
     def test_opt_out_is_honoured_and_reported(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -415,94 +436,143 @@ class PrecedenceTest(unittest.TestCase):
             self.assertEqual(len(fakes.runs), 1)
 
 
-class ScheduleTest(unittest.TestCase):
-    """The schedule is per user, idempotent, and never touched from inside the agent."""
+class NoOsScheduleTest(unittest.TestCase):
+    """BI-590DD63E: DPF installs no OS scheduler entry, and removes the one earlier packs installed.
 
-    def _calls(self) -> tuple[list[list[str]], Any]:
+    The platform owns scheduling. Earlier packs registered a launchd job, a
+    systemd user timer or a Windows scheduled task; on Windows that opened a
+    console window every hour. Every OS removes it, and nothing re-creates it.
+    """
+
+    def _calls(self, query_rc: int = 1) -> tuple[list[list[str]], Any]:
         calls: list[list[str]] = []
 
         def runner(command: list[str], **kwargs: Any) -> _Completed:
             calls.append(command)
-            return _Completed(0)
+            return _Completed(query_rc if command[:2] == ["schtasks", "/Query"] else 0)
 
         return calls, runner
 
-    def test_macos_writes_a_user_launch_agent_that_runs_hourly_and_at_login(self) -> None:
+    def test_the_agent_has_no_code_that_creates_an_os_schedule(self) -> None:
+        source = Path(agent.__file__).read_text(encoding="utf-8")
+        for creator in ('"/Create"', '"bootstrap"', '"enable"', "StartInterval", "OnUnitActiveSec"):
+            self.assertNotIn(creator, source)
+        self.assertFalse(hasattr(agent, "ensure_schedule"))
+
+    def test_macos_removes_the_old_launch_agent_file_before_booting_it_out(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            calls, runner = self._calls()
-            status = agent.ensure_schedule(home, "/usr/bin/python3", "/s/toolchain_agent.py", {}, platform="darwin",
-                                           runner=runner, uid=501)
             plist = home / "Library" / "LaunchAgents" / f"{agent.LAUNCHD_LABEL}.plist"
-            text = plist.read_text()
-            self.assertIn("<string>/usr/bin/python3</string>", text)
-            self.assertIn("<string>/s/toolchain_agent.py</string>", text)
-            self.assertIn("<string>run</string>", text)
-            self.assertIn("<key>StartInterval</key><integer>3600</integer>", text)
-            self.assertIn("<key>RunAtLoad</key><true/>", text)
-            self.assertEqual(calls[-1][:3], ["launchctl", "bootstrap", "gui/501"])
-            self.assertTrue(status.startswith("scheduled"))
+            plist.parent.mkdir(parents=True)
+            plist.write_text("<plist/>")
+            seen: list[bool] = []
 
-    def test_an_unchanged_schedule_is_a_no_op(self) -> None:
+            def runner(command: list[str], **kwargs: Any) -> _Completed:
+                # bootout of a running job terminates it, so the file must already be gone.
+                seen.append(plist.exists())
+                return _Completed(0)
+
+            status = agent.retire_schedule(home, {}, platform="darwin", runner=runner, uid=501)
+            self.assertFalse(plist.exists())
+            self.assertEqual(seen, [False])
+            self.assertTrue(status.startswith("removed"))
+
+    def test_linux_disables_and_deletes_the_old_user_timer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
+            unit_dir = home / ".config" / "systemd" / "user"
+            unit_dir.mkdir(parents=True)
+            for suffix in (".timer", ".service"):
+                (unit_dir / f"{agent.SYSTEMD_UNIT}{suffix}").write_text("[Unit]\n")
             calls, runner = self._calls()
-            agent.ensure_schedule(home, "/usr/bin/python3", "/s/toolchain_agent.py", {}, platform="darwin", runner=runner, uid=501)
-            first = len(calls)
-            status = agent.ensure_schedule(home, "/usr/bin/python3", "/s/toolchain_agent.py", {}, platform="darwin", runner=runner, uid=501)
-            self.assertEqual(len(calls), first)
-            self.assertTrue(status.startswith("unchanged"))
+            status = agent.retire_schedule(home, {}, platform="linux", runner=runner)
+            self.assertIn(["systemctl", "--user", "disable", "--now", f"{agent.SYSTEMD_UNIT}.timer"], calls)
+            self.assertEqual(calls[-1], ["systemctl", "--user", "daemon-reload"])
+            self.assertFalse(any(unit_dir.iterdir()))
+            self.assertTrue(status.startswith("removed"))
 
-    def test_inside_the_agent_the_schedule_is_never_reloaded(self) -> None:
-        # launchctl bootout of a running job terminates it: the agent must not
-        # re-register itself from the updater it is running.
+    def test_windows_deletes_the_old_task_and_its_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            calls, runner = self._calls()
-            status = agent.ensure_schedule(home, "/usr/bin/python3", "/s/toolchain_agent.py", {agent.AGENT_ENV: "1"},
-                                           platform="darwin", runner=runner, uid=501)
+            updater.write_json(agent.agent_dir(home) / "schedule.json", {"python": "p", "script": "s"})
+            calls, runner = self._calls(query_rc=0)
+            status = agent.retire_schedule(home, {}, platform="win32", runner=runner)
+            self.assertIn(["schtasks", "/Delete", "/F", "/TN", agent.WINDOWS_TASK], calls)
+            self.assertFalse((agent.agent_dir(home) / "schedule.json").exists())
+            self.assertTrue(status.startswith("removed"))
+
+    def test_windows_finds_a_task_whose_marker_was_lost(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            calls, runner = self._calls(query_rc=0)
+            agent.retire_schedule(Path(tmp), {}, platform="win32", runner=runner)
+            self.assertIn(["schtasks", "/Delete", "/F", "/TN", agent.WINDOWS_TASK], calls)
+
+    def test_a_host_with_nothing_registered_runs_nothing_but_a_query(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            for platform in ("darwin", "linux"):
+                calls, runner = self._calls()
+                self.assertTrue(agent.retire_schedule(home, {}, platform=platform, runner=runner, uid=501).startswith("none"))
+                self.assertEqual(calls, [])
+            calls, runner = self._calls(query_rc=1)
+            self.assertTrue(agent.retire_schedule(home, {}, platform="win32", runner=runner).startswith("none"))
+            self.assertEqual(calls, [["schtasks", "/Query", "/TN", agent.WINDOWS_TASK]])
+
+    def test_inside_an_updater_the_agent_started_the_schedule_is_left_to_the_agent(self) -> None:
+        # The agent removes its own registration after its run; an updater it
+        # started must not boot out the job that is running it.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            calls, runner = self._calls(query_rc=0)
+            status = agent.retire_schedule(home, {agent.AGENT_ENV: "1"}, platform="darwin", runner=runner, uid=501)
             self.assertEqual(calls, [])
             self.assertTrue(status.startswith("skipped"))
 
-    def test_opted_out_hosts_are_not_scheduled_and_lose_an_existing_schedule(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            home = Path(tmp)
-            calls, runner = self._calls()
-            agent.ensure_schedule(home, "/usr/bin/python3", "/s/toolchain_agent.py", {}, platform="darwin", runner=runner, uid=501)
-            updater.write_json(agent.config_path(home), {"enabled": False})
-            status = agent.ensure_schedule(home, "/usr/bin/python3", "/s/toolchain_agent.py", {}, platform="darwin", runner=runner, uid=501)
-            self.assertFalse((home / "Library" / "LaunchAgents" / f"{agent.LAUNCHD_LABEL}.plist").exists())
-            self.assertEqual(calls[-1][:2], ["launchctl", "bootout"])
-            self.assertTrue(status.startswith("opted-out"))
+    def test_install_registers_nothing(self) -> None:
+        from unittest.mock import patch
 
-    def test_linux_writes_a_user_timer(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            home = Path(tmp)
-            calls, runner = self._calls()
-            agent.ensure_schedule(home, "/usr/bin/python3", "/s/toolchain_agent.py", {}, platform="linux", runner=runner)
-            unit_dir = home / ".config" / "systemd" / "user"
-            service = (unit_dir / f"{agent.SYSTEMD_UNIT}.service").read_text()
-            timer = (unit_dir / f"{agent.SYSTEMD_UNIT}.timer").read_text()
-            self.assertIn("ExecStart=/usr/bin/python3 /s/toolchain_agent.py run", service)
-            self.assertIn("OnBootSec=2min", timer)
-            self.assertIn("OnUnitActiveSec=1h", timer)
-            self.assertIn(["systemctl", "--user", "enable", "--now", f"{agent.SYSTEMD_UNIT}.timer"], calls)
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}, clear=False):
+            os.environ.pop(agent.AGENT_ENV, None)
+            with patch.object(agent, "retire_schedule", return_value="none: no OS schedule") as retire:
+                self.assertEqual(agent.main(["install"]), 0)
+            retire.assert_called_once()
 
-    def test_windows_registers_an_hourly_user_task(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            home = Path(tmp)
-            calls, runner = self._calls()
-            agent.ensure_schedule(home, "C:\\Python\\python.exe", "C:\\s\\toolchain_agent.py", {}, platform="win32", runner=runner)
-            create = calls[-1]
-            self.assertEqual(create[:2], ["schtasks", "/Create"])
-            self.assertIn("/F", create)
-            self.assertEqual(create[create.index("/SC") + 1], "HOURLY")
-            self.assertEqual(create[create.index("/TN") + 1], agent.WINDOWS_TASK)
-            self.assertIn('"C:\\Python\\python.exe" "C:\\s\\toolchain_agent.py" run', create[create.index("/TR") + 1])
+    def test_a_run_retires_a_legacy_schedule_after_it_finishes(self) -> None:
+        from unittest.mock import patch
+
+        order: list[str] = []
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}, clear=False):
+            with patch.object(agent, "relaunch_windowless", return_value=False), \
+                 patch.object(agent, "run_once", side_effect=lambda *a, **k: order.append("run") or {"status": "ok"}), \
+                 patch.object(agent, "retire_schedule", side_effect=lambda *a, **k: order.append("retire") or "none"):
+                self.assertEqual(agent.main(["run"]), 0)
+        self.assertEqual(order, ["run", "retire"])
+
+    def test_a_detached_windows_run_relaunches_once_into_a_hidden_console(self) -> None:
+        launched: list[dict[str, Any]] = []
+
+        def popen(command: list[str], **kwargs: Any) -> None:
+            launched.append({"command": command, **kwargs})
+
+        self.assertTrue(agent.relaunch_windowless({}, platform="win32", has_console=lambda: False, popen=popen))
+        self.assertEqual(launched[0]["command"][-1], "run")
+        self.assertEqual(launched[0]["creationflags"], 0x08000000)
+        self.assertEqual(launched[0]["env"][agent.HIDDEN_CONSOLE_ENV], "1")
+        # The relaunched run, a run with a console, and other OSes run in place.
+        self.assertFalse(agent.relaunch_windowless({agent.HIDDEN_CONSOLE_ENV: "1"}, platform="win32",
+                                                   has_console=lambda: False, popen=popen))
+        self.assertFalse(agent.relaunch_windowless({}, platform="win32", has_console=lambda: True, popen=popen))
+        self.assertFalse(agent.relaunch_windowless({}, platform="linux", has_console=lambda: False, popen=popen))
+        self.assertEqual(len(launched), 1)
+
+    def test_windows_subprocesses_open_no_console_window(self) -> None:
+        kwargs = agent.quiet_kwargs("win32")
+        self.assertEqual(kwargs.get("creationflags"), 0x08000000)  # CREATE_NO_WINDOW
+        self.assertEqual(agent.quiet_kwargs("linux"), {})
 
 
 class UpdaterIntegrationTest(unittest.TestCase):
-    """The updater shares the agent's lock and registers the schedule after a portal run."""
+    """The updater shares the agent's lock and removes any OS schedule an earlier pack registered."""
 
     def test_a_second_convergence_exits_busy_instead_of_racing(self) -> None:
         from unittest.mock import patch
@@ -536,23 +606,21 @@ class UpdaterIntegrationTest(unittest.TestCase):
                 inner.assert_called_once()
             agent.release_lock(Path(tmp))
 
-    def test_a_portal_sourced_run_registers_the_agent_from_the_shared_copy(self) -> None:
+    def test_every_updater_run_retires_a_legacy_schedule_and_registers_none(self) -> None:
+        # Existing installs converge on every OS: a checkout bootstrap and a
+        # portal run both remove the job earlier packs registered.
         from unittest.mock import patch
 
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            script = updater.shared_managed_plugin_path(home) / "scripts" / "toolchain_agent.py"
-            script.parent.mkdir(parents=True)
-            script.write_text("# agent\n")
-            with patch.object(agent, "ensure_schedule", return_value="scheduled: launchd") as ensure:
-                line = updater.register_toolchain_agent(home, portal_sourced=True, dry_run=False, env={})
-            ensure.assert_called_once()
-            self.assertEqual(ensure.call_args[0][2], str(script))
-            self.assertIn("scheduled", line)
-            with patch.object(agent, "ensure_schedule") as ensure:
-                self.assertIsNone(updater.register_toolchain_agent(home, portal_sourced=False, dry_run=False, env={}))
-                self.assertIsNone(updater.register_toolchain_agent(home, portal_sourced=True, dry_run=True, env={}))
-                ensure.assert_not_called()
+            with patch.object(agent, "retire_schedule", return_value="removed: task") as retire:
+                self.assertEqual(updater.retire_toolchain_agent_schedule(home, dry_run=False, env={}), "removed: task")
+                self.assertEqual(updater.retire_toolchain_agent_schedule(home, dry_run=False, env={}), "removed: task")
+            self.assertEqual(retire.call_count, 2)
+            with patch.object(agent, "retire_schedule") as retire:
+                self.assertIsNone(updater.retire_toolchain_agent_schedule(home, dry_run=True, env={}))
+                retire.assert_not_called()
+            self.assertFalse(hasattr(updater, "register_toolchain_agent"))
 
 
 if __name__ == "__main__":
