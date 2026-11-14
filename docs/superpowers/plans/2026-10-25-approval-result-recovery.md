@@ -39,6 +39,47 @@ Flow refs: FLOW-APR-READ.
 Verification refs: V-APR-REGRESSION, V-APR-ISOLATION, V-APR-COMPATIBILITY, V-APR-LIVE.
 No product source implementation starts before the live coverage and implementation admission are allowed.
 
+## Runtime result successor (BI-08B1B79B)
+
+This medium atomic correction extends the existing design's OBJ-ARR-1/2 and
+AC-ARR-1 through AC-ARR-6. It does not deliver or reopen the earlier handoff,
+D6 image action, broader approval policy, or original uncertain operations.
+FLOW-ARR-READ: authenticate current reader, select owned envelope, qualify one
+bound original execution, read its exact authorized transition when available,
+project typed facts, render existing owner/API/MCP result and reload it.
+
+1. Record the unsupported-runtime reproduction on immutable source. Add RED
+   tests in the existing approval evidence suite before changing product code.
+   Keep provider/handoff controls and exclude status-audit shadowing.
+2. Extend the existing safe evidence union and shared reader. Select the
+   original `reconcile_runtime_capabilities` execution by the existing exact
+   binding. Only closed operation statuses and known refusal codes are public.
+3. Add an exact server-only transition observation through the same reader,
+   under current platform authority. Check requested owner and complete original
+   reconciliation/image selection. Reuse historical signature/receipt validation;
+   missing, contradictory, partial or unavailable proof remains unverified.
+   Never read latest history or call any mutation/recovery/execution adapter.
+4. Route owner result/history/API and caller-scoped MCP through one safe
+   projection. Extend localized concise explanation/disclosure in the existing
+   result card; retain its theme, access, routing and no-retry behavior.
+5. Run affected evidence/store/outcome/API/card regressions and both web
+   TypeScript programs. Include foreign owner/assistant, changed input/transition,
+   revoked platform access, ambiguous executions, malformed/forged/partial receipt,
+   missing row/key, private payloads and provider/handoff compatibility. Record
+   actual RED/GREEN counts; source tests are not runtime acceptance.
+6. Run canonical integration, required independent review and normal protected
+   publication. Coordinator owns deployment and original runtime action. After
+   CAN-TEST, read the original exact result without replay, verify owner result
+   and saved reload, and record exactly which operation/host facts are proven.
+
+One atomic deliverable `runtime-result-readback` maps only to BI-08B1B79B:
+requirements OBJ-ARR-1/2; contracts CT-ARR-READ and CT-APR-BOUND-EXEC/PRESENT;
+flow FLOW-ARR-READ; verification AC-ARR-1 through AC-ARR-6. The visible result
+without safe binding is unsafe; an unused extractor does not deliver the result.
+Record live plan coverage on the published immutable plan before implementation.
+No new tool, table, enum substrate, runtime, provider, grant or original action.
+Funding is unresolved and no original D6 binding or budget is transferred.
+
 ## Risks and recovery
 Overbroad evidence selection could leak a private result or attribute the wrong failure. Fail closed on ambiguous, malformed, changed or unauthorized input; return static safe copy, never raw error text. A navigation link cannot authorize room access.
 The baseline includes unknown original provider outcomes and unrelated Windows repair obligations; retain them. Do not infer end-to-end recovery success from this presentation repair.
