@@ -98,7 +98,7 @@ Outcome: `service-converge-outcome.json` lists `recreated`, `unchanged`, `skippe
 
 ### 4. The convergence gate becomes checkable (OBJ-HONEST-GATE)
 
-The `compose` surface in `scripts/convergence-surfaces.json` gains a per-service check. When a PR changes a service that the resolved chain covers and that has a `recreateClass`, then `auto-converges` is valid and its mechanism is named (step 3c or 7e). When the service is outside every chain the resolver can produce, `auto-converges` is refused with that reason.
+The `compose` surface in `scripts/convergence-surfaces.json` gains a per-service check. When a PR changes a service that the resolved chain covers and that has a `recreateClass`, then `auto-converges` is valid and its mechanism is named (step 3c or 7e). When the service is outside every chain the resolver can produce, `auto-converges` is refused with that reason. Until step 7e enforces and step 3c exists, a changed running `stateless` or `data-owner` service has no mechanism, and `auto-converges` is refused for it too (BI-205A85C0).
 
 ## Not in scope
 
