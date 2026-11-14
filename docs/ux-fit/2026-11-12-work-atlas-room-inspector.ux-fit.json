@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "url-driven-side-inspector",
+  "decisionInteractionId": "DI-AEB90F507C81",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/workrooms/atlas/AtlasInspector.tsx",
+      "apps/web/components/ops/workrooms/atlas/WorkAtlas.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "url-driven-side-inspector",
+      "navigate-to-room-page",
+      "client-modal-inspector"
+    ]
+  }
+}

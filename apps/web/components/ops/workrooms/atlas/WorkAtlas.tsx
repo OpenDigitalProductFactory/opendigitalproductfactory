@@ -11,6 +11,7 @@
 // totals, and every room in it is reachable through that group's rows.
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { MessageArgs, MessageKey } from "@dpf/i18n";
 
 import { AtlasGlyph } from "@/components/ops/workrooms/atlas/AtlasGlyph";
@@ -45,6 +46,8 @@ type Props = {
   holds: Record<string, AtlasHold>;
   locale: string;
   t: AtlasTranslate;
+  /** The selected room's inspector (A3), drawn beside the map. */
+  inspector?: ReactNode;
 };
 
 const FOCUS = "rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]";
@@ -94,8 +97,9 @@ function StageRail({ room, meta, t }: { room: AtlasRoom; meta: AtlasShapeMeta | 
   );
 }
 
-function RoomRow({ room, meta, hold, locale, t }: {
+function RoomRow({ room, meta, hold, locale, t, href, selected }: {
   room: AtlasRoom; meta: AtlasShapeMeta | undefined; hold: AtlasHold | undefined; locale: string; t: AtlasTranslate;
+  href: string; selected: boolean;
 }) {
   return (
     <li data-atlas-row={room.capsuleId}
@@ -103,7 +107,8 @@ function RoomRow({ room, meta, hold, locale, t }: {
       <span className="flex min-w-0 items-center gap-2">
         <AtlasGlyph health={room.health} />
         <span className="sr-only">{stateLabel(t, room.health)}: </span>
-        <Link href={roomHref(room.capsuleId)} className={`min-w-0 break-words text-dpf-body font-medium text-[var(--dpf-text)] hover:underline ${FOCUS}`}>
+        <Link href={href} aria-current={selected ? "true" : undefined}
+          className={`min-w-0 break-words text-dpf-body font-medium hover:underline ${selected ? "text-[var(--dpf-accent)]" : "text-[var(--dpf-text)]"} ${FOCUS}`}>
           {room.title}
         </Link>
       </span>
@@ -120,7 +125,7 @@ function RoomRow({ room, meta, hold, locale, t }: {
   );
 }
 
-export function WorkAtlas({ picture, view, basePath, shapes, holds, locale, t }: Props) {
+export function WorkAtlas({ picture, view, basePath, shapes, holds, locale, t, inspector }: Props) {
   const counts = atlasTriageCounts(picture.rooms, view);
   const answer = atlasQuestionAnswer(picture.rooms, view);
   const groups = groupAtlas(picture.rooms, view);
@@ -178,7 +183,8 @@ export function WorkAtlas({ picture, view, basePath, shapes, holds, locale, t }:
         </p>
       ) : null}
 
-      {/* 3.3 Glyph map by portfolio, then shape */}
+      {/* 3.3 Glyph map by portfolio, then shape; 3.6 the selected room's inspector beside it */}
+      <div className={`grid min-w-0 gap-4 ${inspector ? "lg:grid-cols-[minmax(0,1fr)_22rem]" : ""}`}>
       <Surface rounded="xl" aria-labelledby="live-workrooms-heading" className="min-w-0">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="live-workrooms-heading" className="text-base font-semibold text-[var(--dpf-text)]">{t("atlas.mapHeading")}</h2>
@@ -219,8 +225,9 @@ export function WorkAtlas({ picture, view, basePath, shapes, holds, locale, t }:
                           const label = t("atlas.cell", { title: room.title, state: stateLabel(t, room.health) });
                           return (
                             <li key={room.capsuleId} className={dim ? "opacity-25" : undefined}>
-                              <Link href={roomHref(room.capsuleId)} tabIndex={-1} title={label} aria-label={label}
-                                data-atlas-cell={room.capsuleId} className="flex h-4 w-4 items-center justify-center hover:ring-1 hover:ring-[var(--dpf-text)]">
+                              <Link href={atlasHref(basePath, view, { room: room.capsuleId })} tabIndex={-1} title={label} aria-label={label}
+                                data-atlas-cell={room.capsuleId}
+                                className={`flex h-4 w-4 items-center justify-center hover:ring-1 hover:ring-[var(--dpf-text)] ${view.room === room.capsuleId ? "ring-2 ring-[var(--dpf-accent)]" : ""}`}>
                                 <AtlasGlyph health={room.health} />
                               </Link>
                             </li>
@@ -231,7 +238,8 @@ export function WorkAtlas({ picture, view, basePath, shapes, holds, locale, t }:
                         <div className="mt-2 rounded-dpf-xl border border-[var(--dpf-border)] px-3">
                           <ul className="divide-y divide-[var(--dpf-border)]">
                             {visible.slice(0, ATLAS_ROWS_PER_PAGE).map((room) => (
-                              <RoomRow key={room.capsuleId} room={room} meta={shapes[shape.shape]} hold={holds[room.capsuleId]} locale={locale} t={t} />
+                              <RoomRow key={room.capsuleId} room={room} meta={shapes[shape.shape]} hold={holds[room.capsuleId]} locale={locale} t={t}
+                                href={atlasHref(basePath, view, { room: room.capsuleId })} selected={view.room === room.capsuleId} />
                             ))}
                           </ul>
                           {hidden ? (
@@ -250,6 +258,8 @@ export function WorkAtlas({ picture, view, basePath, shapes, holds, locale, t }:
           ))}
         </div>
       </Surface>
+      {inspector ? <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">{inspector}</div> : null}
+      </div>
     </div>
   );
 }
