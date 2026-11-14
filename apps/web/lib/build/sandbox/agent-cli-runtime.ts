@@ -251,6 +251,19 @@ export function dockerExecWriteStdin(params: {
  * The target `path` (and any `mkdirParents`) are single-quoted so a path can
  * never break out of the `sh -c` command either.
  */
+/**
+ * Single-quote a sandbox path for `sh -c`, expanding a leading `~` to the exec
+ * user's `$HOME`. Quoting `~` kept the shell from expanding it, so
+ * `~/.config/opencode/opencode.json` landed in a literal `/workspace/~/`,
+ * dirtying the shared workspace (BI-4F89896B). The rest stays single-quoted.
+ */
+function quoteSandboxPath(path: string): string {
+  const quote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+  if (path === "~") return `"$HOME"`;
+  if (path.startsWith("~/")) return `"$HOME"${quote(path.slice(1))}`;
+  return quote(path);
+}
+
 export async function writeSandboxFile(params: {
   containerId: string;
   path: string;
@@ -276,15 +289,16 @@ export async function writeSandboxFile(params: {
   const { containerId, path, content, mode, asNodeUser, chownNodeUser, mkdirParents, ownerOnly } = params;
   const b64 = Buffer.from(content).toString("base64");
   const umask = ownerOnly ? "umask 077 && " : "";
-  const mkdir = mkdirParents ? `mkdir -p '${mkdirParents}' && ` : "";
-  const chown = chownNodeUser ? ` && chown node:node '${path}'` : "";
+  const target = quoteSandboxPath(path);
+  const mkdir = mkdirParents ? `mkdir -p ${quoteSandboxPath(mkdirParents)} && ` : "";
+  const chown = chownNodeUser ? ` && chown node:node ${target}` : "";
   const fileMode = ownerOnly ? "600" : mode;
-  const chmod = fileMode ? ` && chmod ${fileMode} '${path}'` : "";
+  const chmod = fileMode ? ` && chmod ${fileMode} ${target}` : "";
   // Content flows over stdin (see dockerExecWriteStdin); the command string is
   // secret-free. `base64 -d` reads the payload from stdin when given no file arg.
   await dockerExecWriteStdin({
     containerId,
-    innerCommand: `${umask}${mkdir}base64 -d > '${path}'${chown}${chmod}`,
+    innerCommand: `${umask}${mkdir}base64 -d > ${target}${chown}${chmod}`,
     input: b64,
     asNodeUser,
     timeoutMs: params.timeoutMs ?? 5_000,
