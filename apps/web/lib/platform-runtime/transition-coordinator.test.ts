@@ -67,6 +67,106 @@ function reconciliationDeps() {
   return d;
 }
 
+function imageCoordinatorFixture() {
+  const ids = [...reconciliationIds, "runtime:browser-automation"], keys = ["runtime:browser-automation", "runtime:core"];
+  const states = { "runtime:core": "active", "runtime:build": "active", "runtime:local-ai": "operator-paused", "runtime:browser-automation": "active" };
+  const sourceSha = "a".repeat(40), oldImage = `sha256:${"e".repeat(64)}`, newImage = `sha256:${"f".repeat(64)}`;
+  const hostHash = computeHostStateVersion(request.catalogHash, keys, ids);
+  const input = { ...request, previousKeys: keys, desiredKeys: [...keys], previousStates: { ...states }, desiredStates: { ...states },
+    reconciliation: { observedHost: { schemaVersion: 2, installerVersion: "fixture", platform: "linux", arch: "amd64", capabilityCatalogHash: request.catalogHash, capabilityStateVersion: hostHash, enabledRuntimeCapabilities: keys },
+      observedDatabaseStates: { ...states }, desiredHostEnabledKeys: [...keys], desiredDatabaseStates: { ...states }, touchedKeys: [] },
+    imagePlan: { schemaVersion: 1 as const, sourceSha, platform: "linux/amd64" as const, operation: "prepare" as const,
+      services: [{ service: "browser-use" as const, source: { kind: "published" as const, sourceSha, reference: `ghcr.io/fixture/dpf-browser-use@sha256:${"d".repeat(64)}` } }] },
+  };
+  const d = reconciliationDeps();
+  d.catalogCapabilityIds = ids;
+  d.reconciliationProtocol = { ...d.reconciliationProtocol!, imageQualifierSha256: "d".repeat(64), signingVersions: [1, 2, 3], applyVersions: [1, 2, 3], reconciliationVersions: [2, 3], imageReconciliationVersions: [3] };
+  d.resolveProjection = vi.fn(async requested => ({ catalogHash: request.catalogHash, stateHash: computeHostStateVersion(request.catalogHash, requested, ids), enabledKeys: [...requested], composeProfiles: ["runtime-browser-automation"], requiredServices: ["browser-use", "portal", "postgres"] }));
+  d.readHostReceipt = vi.fn(async id => {
+    const primary = vi.mocked(d.receipts.createPending).mock.calls[0]![0].envelope;
+    const last = vi.mocked(d.runPromoter).mock.calls.at(-1)?.[0];
+    const envelope = id === primary.transitionId ? primary : JSON.parse(Buffer.from(last!.runtimeCapabilityEnvelope!, "base64url").toString("utf8"));
+    const restore = envelope.imagePlan?.operation === "restore";
+    const imageProof = { schemaVersion: 1 as const, sourceSha,
+      services: [{ service: "browser-use" as const, priorImageId: restore ? newImage : oldImage, intendedImageId: restore ? oldImage : newImage,
+        observedImageId: restore ? oldImage : newImage, priorContainerId: "1".repeat(64), observedContainerId: "2".repeat(64),
+        resourcesBeforeHash: "a".repeat(64), resourcesAfterHash: "a".repeat(64), source: envelope.imagePlan?.services[0].source ?? input.imagePlan.services[0]!.source }],
+      untouchedBefore: { portal: "7".repeat(64), postgres: "4".repeat(64) }, untouchedAfter: { portal: "7".repeat(64), postgres: "4".repeat(64) } };
+    const unsigned = { ...envelope, status: "applied" as const, observedServices: ["browser-use", "portal", "postgres"], observedHealth: { "browser-use": "healthy" as const, portal: "healthy" as const, postgres: "healthy" as const },
+      completedAt: new Date(1_000_001).toISOString(), beforeHash: envelope.previousStateHash, afterHash: envelope.desiredStateHash, imageProof };
+    return { ...unsigned, signature: signTransitionPayload(unsigned, d.protocolSecret!) };
+  });
+  return { d, input, oldImage, newImage };
+}
+
+describe("image-qualified runtime coordinator", () => {
+  it("never uses unchanged capability keys as proof that an interrupted image operation did nothing", async () => {
+    const { d, input } = imageCoordinatorFixture();
+    await coordinateRuntimeCapabilityTransition(input, d);
+    const pending = vi.mocked(d.receipts.createPending).mock.calls[0]![0];
+    const row = { ...pending, previousKeys: [...pending.previousKeys], desiredKeys: [...pending.desiredKeys], previousProfiles: [...pending.previousProfiles!], desiredProfiles: [...pending.desiredProfiles!], previousServices: [...pending.previousServices!], desiredServices: [...pending.desiredServices!], status: "applying", createdAt: new Date(0) };
+    expect(classifyRuntimeInstallState(input.reconciliation.observedHost, row)).toBe("unknown");
+  });
+  it("persists the recovery barrier for an uncertain image receipt", async () => {
+    const { d, input } = imageCoordinatorFixture();
+    await coordinateRuntimeCapabilityTransition(input, d);
+    const original = await d.readHostReceipt!(input.transitionId);
+    const { signature: _signature, imageProof: _proof, ...base } = original;
+    const unsigned = { ...base, status: "rollback_failed" as const, afterHash: original.beforeHash, failure: "runtime_image_apply_unsettled" };
+    const receipt = { ...unsigned, signature: signTransitionPayload(unsigned, d.protocolSecret!) };
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const tx = { runtimeCapabilityTransition: { updateMany }, runtimeCapabilityTransitionEvent: { create: vi.fn(async () => undefined) } };
+    const adapter = createPrismaRuntimeTransitionReceipts({ $transaction: async (operation: (tx: unknown) => unknown) => operation(tx) } as never);
+    await adapter.markHostOutcome!(input.transitionId, receipt);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "rollback_failed", failure: { code: "runtime_image_apply_unsettled", recoveryRequired: true } }) }));
+  });
+  it("persists and verifies the exact image plan instead of downgrading to health-only reconciliation", async () => {
+    const { d, input } = imageCoordinatorFixture();
+    expect(await coordinateRuntimeCapabilityTransition(input, d)).toEqual({ status: "succeeded" });
+    const pending = vi.mocked(d.receipts.createPending).mock.calls[0]![0];
+    expect(pending.envelope.version).toBe(3);
+    expect(pending.envelope).toMatchObject({ imagePlan: input.imagePlan, protocolIdentity: { imageQualifierSha256: "d".repeat(64) } });
+    expect(d.receipts.commitSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("refuses an old packaged actuator before persisting or launching image work", async () => {
+    const { d, input } = imageCoordinatorFixture();
+    d.reconciliationProtocol = { ...d.reconciliationProtocol!, imageReconciliationVersions: [] };
+    expect(await coordinateRuntimeCapabilityTransition(input, d)).toMatchObject({ status: "failed", failure: "runtime_service_image_protocol_unsupported" });
+    expect(d.receipts.createPending).not.toHaveBeenCalled();
+    expect(d.runPromoter).not.toHaveBeenCalled();
+  });
+
+  it("compensates a post-apply database failure using authenticated prior bytes, never the prepare plan", async () => {
+    const { d, input, oldImage, newImage } = imageCoordinatorFixture();
+    d.receipts.commitSuccess = vi.fn(async () => { throw new Error("database_commit_failed"); });
+    d.receipts.markCompensating = vi.fn(async () => undefined);
+    d.receipts.markRolledBack = vi.fn(async () => undefined);
+    d.receipts.markRollbackFailed = vi.fn(async () => undefined);
+    d.receipts.assertCompensationOwnership = vi.fn(async () => undefined);
+    expect(await coordinateRuntimeCapabilityTransition(input, d)).toMatchObject({ status: "rolled_back" });
+    const packet = vi.mocked(d.receipts.markCompensating).mock.calls[0]![2]!;
+    expect(packet.envelope).toMatchObject({ version: 3, imagePlan: { operation: "restore", services: [{ service: "browser-use", source: { kind: "restore", imageId: oldImage, expectedImageId: newImage } }] } });
+    expect(packet.imageRecoveryReceipt).toMatchObject({ status: "applied", imageProof: { services: [{ observedImageId: newImage }] } });
+    expect(d.runPromoter).toHaveBeenCalledTimes(2);
+  });
+
+  it("retains a missing host image proof without deriving or launching a blind compensation", async () => {
+    const { d, input } = imageCoordinatorFixture(), read = d.readHostReceipt!;
+    d.readHostReceipt = vi.fn(async id => {
+      const { signature: _signature, imageProof: _proof, ...unsigned } = await read(id);
+      return { ...unsigned, signature: signTransitionPayload(unsigned, d.protocolSecret!) };
+    });
+    d.receipts.markCompensating = vi.fn(async () => undefined);
+    d.receipts.markRolledBack = vi.fn(async () => undefined);
+    d.receipts.markRollbackFailed = vi.fn(async () => undefined);
+    expect(await coordinateRuntimeCapabilityTransition(input, d)).toMatchObject({ status: "host_applied_pending_verification" });
+    expect(d.receipts.markCompensating).not.toHaveBeenCalled();
+    expect(d.runPromoter).toHaveBeenCalledTimes(1);
+    expect(d.receipts.commitSuccess).not.toHaveBeenCalled();
+  });
+});
+
 describe("dual-baseline reconciliation coordinator", () => {
   it.each(["failed", "threw"])("does not compensate over a later database writer when health %s", async outcome => {
     const d = reconciliationDeps();
