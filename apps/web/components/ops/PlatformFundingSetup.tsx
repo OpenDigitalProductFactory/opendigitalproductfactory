@@ -75,7 +75,7 @@ export function PlatformFundingSetup() {
     }
   }
 
-  async function confirm() {
+  async function confirmOwnership() {
     if (inFlight.current || mustReload || view?.status !== "available" || !selected || !attested || !reason.trim()) return;
     inFlight.current = true; setBusy("confirm"); setError(null);
     try {
@@ -106,7 +106,7 @@ export function PlatformFundingSetup() {
       {view?.status === "available" && view.person && view.profile ? <>
         <p className="text-dpf-body text-dpf-text">{t("fundingSetup.intro")}</p>
         <p className="text-dpf-body"><span className="font-dpf-semibold">{t("fundingSetup.person")}: </span>{view.person.displayName}</p>
-        {view.organizations.length > 0 ? <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void confirm(); }}>
+        {view.organizations.length > 0 ? <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void confirmOwnership(); }}>
           <SelectField name="platform-funding-organization" data-surface-node-id="platform-funding-organization" label={t("fundingSetup.organization")} value={organizationId} options={view.organizations.map((organization) => ({ value: organization.id, label: organization.name }))} placeholder={t("fundingSetup.chooseOrganization")} required disabled={busy !== null} onValueChange={(value) => { setOrganizationId(value); setAttested(false); }} />
           {selected ? <>
             <p className="text-dpf-body text-dpf-text">{t("fundingSetup.consequence", { person: view.person.displayName, organization: selected.name })}</p>

@@ -4,8 +4,6 @@
   "decisionInteractionId": "DI-25BC062BCFC9",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/ops/demand/page.tsx",
-      "apps/web/components/ops/InvestmentBalance.tsx",
       "apps/web/components/ops/PlatformFundingSetup.tsx"
     ]
   },

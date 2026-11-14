@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultBalancePolicy } from "@/lib/portfolio/investment-balance";
 import type { PlatformFundingSetupView } from "@/lib/portfolio/platform-funding-setup";
 import { PLATFORM_FUNDING_SETUP_SURFACE, projectPlatformFundingSetupSurface } from "./platform-funding-setup-surface";
@@ -12,6 +12,9 @@ const view = (): PlatformFundingSetupView => ({
 });
 
 describe("platform funding setup surface projection", () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2022-01-01T00:00:00.000Z")); });
+  afterEach(() => { vi.useRealTimers(); });
+
   it("binds the existing governed confirmation with only its digest supplied directly", () => {
     const action = PLATFORM_FUNDING_SETUP_SURFACE.actions.find(({ actionId }) => actionId === "platform-funding-confirm");
     expect(action).toMatchObject({ tool: "confirm_platform_funding_owner", actionClass: "domain", risk: "high", confirmation: "required",
