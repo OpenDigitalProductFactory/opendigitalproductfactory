@@ -7,6 +7,7 @@ status: draft
 Backlog item: BI-B8437D03
 Parent: BI-06AE6833
 Related: BI-8EA5BC09 (approval/run lifecycle; separate acceptance)
+Caller follow-up: BI-BCAD9675 (preview shell adapter; Small)
 Status: proposed ordered fix; no implementation or runtime acceptance claimed
 
 ## Problem and existing substrate
@@ -28,6 +29,21 @@ starts admitted local-CI/host leases with at most two minutes. No new table,
 ledger, daemon, grant, credential or tool is needed.
 
 ## Contract
+
+### Preview caller follow-up (BI-BCAD9675)
+
+The preview shell still sent only legacy absolute expiry after LV-REL shipped.
+Its durable consumer used the returned twenty-minute queued lease expiry as the
+whole wait budget. The observed consumer exited UNRUN while its original queue
+reservation remained queued. Reuse `leaseRequestTiming`: send a short bounded
+resource TTL and an independent admission deadline, then carry that exact
+deadline through each durable resume alongside the same owner, source, lease,
+claim and TaskRun. Keep the existing two-hour consumer bound; reject invalid or
+expired timing before claims or runtime mutations. Preserve terminal-stop and
+old-server fail-closed behavior. Verify clock-controlled timing, actual shell
+request payloads, same-pin resume and no effects on refusal before ordinary
+review/publication and canonical installed verification. The expired original
+reservation remains terminal and its attempt remains UNRUN.
 
 **LV-ABS:** Legacy requests without an explicit duration keep absolute expiry
 semantics. An expired request cannot create, refresh, revive or admit a lease.

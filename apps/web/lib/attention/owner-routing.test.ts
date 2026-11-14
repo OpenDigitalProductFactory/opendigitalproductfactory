@@ -234,4 +234,41 @@ describe("work the platform already knows is not the owner's", () => {
     expect(classifyOwnerAttentionLane(stall("review")).lane).toBe("custodian");
     expect(classifyOwnerAttentionLane(stall("judgment")).lane).toBe("needs-you-now");
   });
+
+  // BI-ACE041FE: on 2026-11-13 the AI-capacity watch opened rows for Codex,
+  // xAI and the Anthropic key, and every one was hidden as "your digital team
+  // is handling it", because all platform-health items went to the custodian.
+  describe("AI-capacity items (WWMD DI-ECB244DF2109)", () => {
+    const capacity = (key: string, residueReason: AttentionItem["triage"]["residueReason"]) =>
+      item("platform-health", {
+        id: `platform-health:ai-capacity:${key}`,
+        triage: { timeToAct: "none", residueReason, decideEffort: "review", irreversible: false },
+      });
+
+    it("brings a capacity loss the operator must fix to Needs-you", () => {
+      expect(classifyOwnerAttentionLane(capacity("provider:xai", "needs-credential")).lane).toBe("needs-you-now");
+      expect(classifyOwnerAttentionLane(capacity("provider:anthropic", "no-self-heal")).lane).toBe("needs-you-now");
+      expect(classifyOwnerAttentionLane(capacity("subscriptions", "no-self-heal")).lane).toBe("needs-you-now");
+    });
+
+    it("keeps a usage limit that resets on its own with the digital team", () => {
+      expect(classifyOwnerAttentionLane(capacity("provider:codex", "self-heals")).lane).toBe("custodian");
+    });
+
+    it("brings platform downtime and a lost paired installation to Needs-you (BI-3E2F87FA, BI-85DE8EBD)", () => {
+      const continuity = (key: string) =>
+        item("platform-health", {
+          id: `platform-health:${key}`,
+          triage: { timeToAct: "none", residueReason: "no-self-heal", decideEffort: "review", irreversible: false },
+        });
+      expect(classifyOwnerAttentionLane(continuity("platform-downtime:2026-11-08T14:48:00.000Z")).lane).toBe("needs-you-now");
+      expect(classifyOwnerAttentionLane(continuity("work-sync:link:link_d0ea1f3a6cb948ad")).lane).toBe("needs-you-now");
+    });
+
+    it("leaves other platform-health alerts with the custodian", () => {
+      expect(
+        classifyOwnerAttentionLane(item("platform-health", { id: "platform-health:health_alert:x", triage: { timeToAct: "none", residueReason: "no-self-heal", decideEffort: "review", irreversible: false } })).lane,
+      ).toBe("custodian");
+    });
+  });
 });

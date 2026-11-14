@@ -56,6 +56,9 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
   standingRhythm: {
     "on-time": "success", late: "warning", missed: "danger", running: "accent", due: "neutral", "no-record": "neutral",
   },
+  // A host-posture check on the installation page (BI-3E2F87FA). Unknown stays
+  // neutral: the computer could not be read, so nothing was established.
+  hostPosture: { ok: "success", attention: "warning", unknown: "neutral" },
   providerAccountReadiness: {
     "verified-success": "success", enabled: "success", "temporary-wait": "warning", paused: "warning",
     "action-required": "danger", unverified: "neutral",

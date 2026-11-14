@@ -249,12 +249,28 @@ export function parseFrontmatter<T extends Record<string, unknown>>(
  * would have erased most of the kernel's link graph.
  */
 export function extractWikilinks(body: string): string[] {
-  const matches = stripMarkdownCode(body).matchAll(/\[\[([a-zA-Z0-9/_-]+)(?:\|[^\]\n]*)?\]\]/g);
-  const slugs = new Set<string>();
-  for (const m of matches) {
-    if (m[1]) slugs.add(m[1]);
-  }
-  return Array.from(slugs);
+  return Array.from(new Set(extractWikilinkOccurrences(body).map((link) => link.slug)));
+}
+
+/** One `[[…]]` link in a body, with the 1-based line it sits on. */
+export type WikilinkOccurrence = { slug: string; line: number };
+
+/**
+ * Every link `extractWikilinks` recognises, in order and with repeats, each
+ * with its line number (BI-2F7BE778: the editor lists unresolved links by
+ * line). Same pattern and same code skipping; `extractWikilinks` is this list
+ * deduped, so the two can never disagree.
+ */
+export function extractWikilinkOccurrences(body: string): WikilinkOccurrence[] {
+  const occurrences: WikilinkOccurrence[] = [];
+  stripMarkdownCode(body)
+    .split("\n")
+    .forEach((text, index) => {
+      for (const m of text.matchAll(/\[\[([a-zA-Z0-9/_-]+)(?:\|[^\]\n]*)?\]\]/g)) {
+        if (m[1]) occurrences.push({ slug: m[1], line: index + 1 });
+      }
+    });
+  return occurrences;
 }
 
 const SOLE_WIKILINK = /^\[\[[a-zA-Z0-9/_-]+(?:\|[^\]\n]*)?\]\]$/;

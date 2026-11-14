@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 685,
+  "routeCount": 688,
   "routes": [
     {
       "routePath": "/",
@@ -230,6 +230,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/issue-reports/page.tsx"
+    },
+    {
+      "routePath": "/admin/issue-reports/upstream",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "issue-reports",
+        "upstream"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/issue-reports/upstream/page.tsx"
     },
     {
       "routePath": "/admin/operating-hours",
@@ -4310,6 +4321,18 @@
       "file": "apps/web/app/api/voice/train/route.ts"
     },
     {
+      "routePath": "/api/wiki/link-suggest",
+      "kind": "route",
+      "segments": [
+        "api",
+        "wiki",
+        "link-suggest"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/wiki/link-suggest/route.ts",
+      "exposure": "authenticated"
+    },
+    {
       "routePath": "/api/work-capsules/[capsuleId]/activity-stream",
       "kind": "route",
       "segments": [
@@ -5733,6 +5756,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/finance/settings/setup/page.tsx"
+    },
+    {
+      "routePath": "/finance/settings/statutory-rates",
+      "kind": "page",
+      "segments": [
+        "finance",
+        "settings",
+        "statutory-rates"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/finance/settings/statutory-rates/page.tsx"
     },
     {
       "routePath": "/finance/settings/tax",

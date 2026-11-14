@@ -5,9 +5,16 @@
 // awaiting-acceptance count and its aged share beside Done instead of folding
 // either into it. Kept out of command-center.ts, which is at its module-size
 // ceiling.
+//
+// BI-17C5F43A: a work-sync mirror is accepted only at its origin installation
+// (BI-C5794F1D), so it is left out of this install's queue and shown as its own
+// count. Otherwise a peer's whole queue reads here as local stalled work.
 
 import type { Prisma } from "@dpf/db";
+import { FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } from "@dpf/db/federated-work-contract";
+import { ownedRowBodyWhere } from "@/lib/federation/federated-twins";
 import type { TileMetric, TileStatus } from "@/lib/workspace-home/types";
+import { formatDate } from "@/lib/datetime";
 import {
   ACCEPTANCE_AGED_DAYS,
   agedAcceptanceShare,
@@ -18,23 +25,35 @@ import { loadAgedAcceptanceItems } from "@/lib/backlog/acceptance-sweep/aged-acc
 
 export type AcceptanceBacklogDb = Pick<Prisma.TransactionClient, "backlogItem" | "backlogItemActivity">;
 
-/** Two bounded reads: the awaiting pool, then its entry activities. */
+/** The local share, plus awaiting items whose acceptance belongs to a peer installation. */
+export type AcceptanceBacklogShare = AgedAcceptanceShare & {
+  peerOwned?: number;
+  /** When work sync with the peer stopped succeeding; set only while it is failing (BI-85DE8EBD). */
+  peerStaleSince?: Date | null;
+};
+
+/** Bounded reads: the locally owned awaiting pool, its entry activities, and the peer-owned count. */
 export async function loadAcceptanceBacklogShare(
   db: AcceptanceBacklogDb,
   now: Date,
-): Promise<AgedAcceptanceShare> {
-  const items = await db.backlogItem.findMany({
-    where: { status: "awaiting-acceptance" },
-    select: { id: true, status: true, createdAt: true },
-  });
+): Promise<AcceptanceBacklogShare> {
+  const [items, peerOwned] = await Promise.all([
+    db.backlogItem.findMany({
+      where: { status: "awaiting-acceptance", AND: [ownedRowBodyWhere()] },
+      select: { id: true, status: true, createdAt: true },
+    }),
+    db.backlogItem.count({
+      where: { status: "awaiting-acceptance", body: { contains: FEDERATED_WORK_ORIGIN_MARKER_SQL_PREFIX } },
+    }),
+  ]);
   const aged = await loadAgedAcceptanceItems(db, items, now);
-  return agedAcceptanceShare(items, new Map(aged.map((item) => [item.id, item.ageBasis])));
+  return { ...agedAcceptanceShare(items, new Map(aged.map((item) => [item.id, item.ageBasis]))), peerOwned };
 }
 
 /** The backlog tile with awaiting acceptance (and its aged share) placed before Done. */
 export function withAcceptanceBacklogTile(
   tileStatus: Record<string, TileStatus>,
-  share: AgedAcceptanceShare,
+  share: AcceptanceBacklogShare,
 ): Record<string, TileStatus> {
   const backlog = tileStatus.backlog;
   if (!backlog?.metrics) return tileStatus;
@@ -48,6 +67,13 @@ export function withAcceptanceBacklogTile(
       value: formatAgedCount(share),
       color: share.aged > 0 ? "var(--dpf-error)" : "var(--dpf-muted)",
     });
+  }
+  if ((share.peerOwned ?? 0) > 0) {
+    // Mirrors of a peer that cannot be reached are a frozen copy, not live work.
+    const label = share.peerStaleSince
+      ? `Awaiting at peer installation (stale since ${formatDate(share.peerStaleSince)})`
+      : "Awaiting at peer installation";
+    acceptanceRows.push({ label, value: share.peerOwned!, color: share.peerStaleSince ? "var(--dpf-warning)" : "var(--dpf-muted)" });
   }
 
   const doneIndex = backlog.metrics.findIndex((metric) => metric.label === "Done");

@@ -39,3 +39,41 @@ test("Arabic/Hebrew direction marks, emoji and plain prose pass", () => {
   const commits = parseCommitLog(log(["c".repeat(40), "docs: رقم الطلب\u{200F} #4521 — הזמנה \u{2067}A-1\u{2069} 🚀 👨\u{200D}👩\u{200D}👧\n"]));
   assert.deepEqual(findHiddenInCommitText({ commits, prTitle: "feat: café", prBody: "“quoted” text" }), []);
 });
+
+const dependabotBody = 'Bumps example from 1.0 to 1.1.\n\n<details>\n<summary>Release notes</summary>\nThanks @\u200Bmaintainer for the fix.\n</details>';
+
+test("Dependabot notification-suppressed mentions pass in PR bodies", () => {
+  assert.deepEqual(findHiddenInCommitText({ prAuthor: "dependabot[bot]", prBody: dependabotBody }), []);
+});
+
+test("mention exception is limited to Dependabot bodies and U+200B immediately after @", () => {
+  for (const prAuthor of ["", "human", "dependabot", "app/dependabot"]) {
+    assert.equal(findHiddenInCommitText({ prAuthor, prBody: dependabotBody }).length, 1);
+  }
+  for (const prBody of ['prose\u200Btext', '@\u200B', '@user\u200Bname', '@\u200Buser\u200B', '@\u202Euser']) {
+    assert.equal(findHiddenInCommitText({ prAuthor: "dependabot[bot]", prBody }).length, 1);
+  }
+  assert.deepEqual(findHiddenInCommitText({ prAuthor: "dependabot[bot]", prTitle: '@\u200Buser', commits: [{ sha: 'a'.repeat(40), message: '@\u200Buser' }] }).map(f => f.source), ["commit aaaaaaaaaaaa message", "PR title"]);
+});
+
+test("CLI uses the PR author from the event, preserving source-file rejection", async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+  const { findHiddenUnicode } = await import('./check-hidden-unicode-instruction-files.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'unicode-pr-'));
+  try {
+    const eventPath = join(dir, 'event.json');
+    for (const [login, type, expected] of [['dependabot[bot]', 'Bot', 0], ['human', 'User', 1], ['dependabot[bot]', 'User', 1]]) {
+      writeFileSync(eventPath, JSON.stringify({ pull_request: { user: { login, type } } }));
+      const result = spawnSync(process.execPath, ['scripts/check-hidden-unicode-commit-text.mjs'], {
+        encoding: 'utf8', env: { ...process.env, BASE_SHA: 'HEAD', GITHUB_EVENT_PATH: eventPath, PR_BODY: dependabotBody, PR_TITLE: '' },
+      });
+      assert.equal(result.status, expected, result.stdout + result.stderr);
+    }
+    assert.equal(findHiddenUnicode(dependabotBody).length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

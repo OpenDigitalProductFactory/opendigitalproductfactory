@@ -182,6 +182,20 @@ own installations share work through work sync, never through intake.
 
 Almost every box is existing substrate. The genuinely new code is the **GitHub issue read path** and the two scheduled jobs. `dpf.demand.dispositioned` is already a declared activity with a handler — §3.5's writeback obligation is satisfied by using it rather than inventing a notification.
 
+**As realized (BI-FB03E2FD, 2026-11-12).** The audit found `arbitrate` with no
+caller. Per WWMD DI-56D5E82AD9D2 it is wired as ordering plus real decisions,
+not a capacity allocator: each commissioned intake cycle ranks the open
+`ecosystem-inbound` items and records rank and reason as an
+`ecosystem_arbitration` activity on the item (only when the position changes),
+with the top of the queue on the intake job's schedule line. The item's
+`priority` is never written, so a person's setting stands; where the capacity
+line falls stays with the accountable human. A peer submitter is answered on a
+real decision through the existing `dpf.demand.dispositioned` writeback:
+`accepted` when the item moves to `in-progress`, `rejected` when it is retired
+with a recorded reason. A retirement without a reason sends nothing and is
+named on the schedule line. `drawAgainstCapacity`/`buildDispositions` (with
+their `deferred` outcome) remain uncalled; the contract has no `deferred`.
+
 ### 4.4 Ballot composition — every participant votes, but not on everything
 
 Operator direction, 2026-09-16: the vote goes to **all** participants, prioritised on items relevant to them — their own submissions, plus archetype-aligned or common issues others have already submitted. *"We don't want to expose all issues, but smartly evaluate what's there, and scope applicability from the specific instance context."*
@@ -378,15 +392,31 @@ that never fires" failure the platform already named. There is now a weekly cron
 (`ecosystem/weekly-watchdog`, Mondays 06:05, catalogued) and a runner that asks
 the resolver for the posture rather than deciding for itself.
 
-**The delivery binding is explicit, not guessed.** Posting into a room needs two
-things this wiring must not invent: the derived room's case key and the coworker
-principal that speaks. Both room paths in the codebase resolve an agent principal
-before they will write, and fabricating one would post the ecosystem digest under
-an identity nobody authorised. So the binding is read from
-`ecosystem.watchdog-binding.v1`, and until it is set the run reports `no-room`
-with an actionable message in its run data rather than failing silently.
-**Choosing the standing room and the speaking coworker is an operator decision
-this spec does not pre-empt.**
+**Superseded 2026-11-12 (BI-8FBF58AB): the room is derived, and nothing speaks
+as a coworker.** The first cut read a PlatformConfig binding,
+`ecosystem.watchdog-binding.v1`, naming the room and a speaking coworker. Nothing
+ever wrote that key, so the digest could never post, and the promised `no-room`
+message reached no run record either (fixed by BI-6ED89EC6). It is retired. The
+digest now follows the precedent the platform already had:
+
+- the room is a **standing room derived on first use** —
+  `ecosystem-participation:weekly-digest` — exactly as the mailroom queue rooms
+  and the bookkeeping-period room are, which is what this spec required from the
+  start;
+- the digest is a **platform event message** (`senderType: "system"`), the way
+  the deliberation bridge and mailroom post, so no coworker identity is assumed;
+- it is posted **at most once per installation per ISO week**;
+- the organization's **recorded accountable human** is notified with a link to
+  the room; when none is recorded nobody is notified, rather than somebody
+  plausible.
+
+The first cut also read the ballot from backlog items tagged
+`ecosystem-inbound`, which exist only on the upstream controller, so every other
+installation saw an empty ballot. It now reads what a participant holds:
+envelopes received from peers and its own outbound demand. And its disposition
+reader decoded notices with the envelope decoder and looked for a vocabulary the
+contract does not use, so "what happened to what you backed" never appeared; it
+now maps the contract's `accepted | rejected | archived` at the boundary.
 
 **A failed delivery is reported as failed.** A digest built and lost is worse
 than one never built, because the counters suggest it arrived.
@@ -457,6 +487,31 @@ filed as an opaque issue cannot be corroborated or voted on. The federation path
 is only taken when a projector was actually injected — a declared link with no
 way to project would otherwise swallow the report silently. Installs without a
 link keep the relay/direct behaviour byte-for-byte.
+
+### 5.6 Remediation — votes now move the shared priority (BI-626A4ECA), 2026-11-12
+
+Audit on 2026-11-12 found the vote budget built but uncounted: an interest
+response reached the controller as a flat signal and no code turned it into a
+score input. Now:
+
+- `DemandResponseV1` carries an optional integer `weight` (2–4) on `interest`
+  responses only; 1 is the default and is not written. A peer on an older
+  build reads a weighted vote as plain interest.
+- The participant's `respondToFederatedDemandAction` enforces the weekly
+  budget (16 credits, cost = weight²) against this week's outbound responses,
+  read bounded on `updatedAt`. Re-weighting an item refunds its earlier weight.
+- On receipt the controller re-tallies the item (`recordEcosystemVoteTally`):
+  distinct installations become `reach`, mean weight maps onto the impact
+  ladder, written with `demandInputSource = "ai"` through the guarded update,
+  so a human or agreed score is never overwritten. A changed weight updates
+  the held response instead of being dropped as a duplicate, but only when it
+  is strictly newer (`createdAt`), so a late retry cannot revert a correction.
+- The budget is also enforced at the receiver: a peer whose weighted votes
+  received this ISO week cost more than 16 credits has its votes counted at
+  weight 1, and the item's scoring activity records how many were over budget.
+  The sender's check is a courtesy across a trust boundary; this is the bound.
+- A tally that loses the optimistic-concurrency race is retried once; a vote
+  still not counted is logged with its reason (`tallyAfterInboundVote`).
 
 ## 6. Verification
 

@@ -611,9 +611,20 @@ export async function reapStaleWorkCapsules(args: {
       baseSha: true,
       worktreePath: true,
       featureBuildId: true,
+      workspaceState: true,
     },
     take: 500,
   });
+
+  // BI-53BED66C: a room waiting on its executor's plan reset is paused, not dead.
+  {
+    const { capacityWaitFor, checkpointOf, loadProviderCapacityRows } = await import("./executor-capacity");
+    const providerRows = await loadProviderCapacityRows(args.db as never);
+    for (const capsule of capsules as Array<ReaperCapsuleRow & { workspaceState?: unknown }>) {
+      capsule.capacityWait = capacityWaitFor({ executorKind: capsule.executorKind ?? null, leaseExpiresAt: capsule.leaseExpiresAt ?? null,
+        now, providerRows, checkpoint: checkpointOf(capsule.workspaceState) });
+    }
+  }
 
   // Provider facts are the source-free/squash-safe path. Only verified exact
   // repository/PR/authored-head observations can affect lifecycle; a previous

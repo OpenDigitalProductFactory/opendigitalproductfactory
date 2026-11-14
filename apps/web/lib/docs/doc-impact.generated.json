@@ -319,12 +319,6 @@
       "docs/security/2026-05-24-shift-left-rollout.md",
       "docs/security/secrets-scan.md"
     ],
-    ".github/workflows/security-inflow-gate.yml": [
-      "docs/maintenance/staleness-report.md",
-      "docs/security/2026-05-24-shift-left-rollout.md",
-      "docs/security/README.md",
-      "docs/security/secrets-scan.md"
-    ],
     ".github/workflows/stuck-auto-merge-alarm.yml": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -638,6 +632,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/escalation-parked-return.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts": [
       "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
     ],
@@ -701,6 +698,9 @@
     "apps/web/lib/build/build-plan-paths.ts": [
       "docs/architecture/build-studio-namespace.md"
     ],
+    "apps/web/lib/build/build-pr-delivery-recheck.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/build-studio-config.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/operations/build-cost-flags-activation-runbook.md"
@@ -734,6 +734,9 @@
     "apps/web/lib/build/plan-to-build-transition-core.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/build/pr-ci-repair.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/pr-follow-through.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -756,6 +759,9 @@
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/scoped-test-failure.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "apps/web/lib/build/ship-refusal-remedy.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/unified-wip-query.ts": [
@@ -941,6 +947,12 @@
     "apps/web/lib/federation/demand-response.ts": [
       "docs/architecture/2026-08-09-portal-architecture-hardening-findings.md"
     ],
+    "apps/web/lib/federation/work-sync-health.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/federation/work-sync-watch.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "apps/web/lib/finance/finance-validation.ts": [
       "docs/testing/handoff-invoice-gaps.md"
     ],
@@ -983,6 +995,9 @@
     ],
     "apps/web/lib/govern/authority/resolve-coworker-tool-authority.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
+    "apps/web/lib/govern/authority/route-to-human.ts": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
     ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
@@ -1213,7 +1228,7 @@
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
     ],
-    "apps/web/lib/nonprod/environment-lease-preview-yield.ts": [
+    "apps/web/lib/nonprod/environment-lease-overseer.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/nonprod/gate-client-revision.ts": [
@@ -1236,6 +1251,9 @@
       "docs/operations/local-ci-sandbox-slots.md"
     ],
     "apps/web/lib/observability/monitor-source-reachability.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
+    "apps/web/lib/observability/platform-continuity-watch.ts": [
       "docs/operations/observability-coverage.md"
     ],
     "apps/web/lib/onboarding/setup-completion-seeds.ts": [
@@ -1638,6 +1656,9 @@
     "apps/web/lib/voice-synthesis/tts-health-contract.test.ts": [
       "docs/operations/observability-coverage.md"
     ],
+    "apps/web/lib/wiki/embedding-reconciliation.ts": [
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
+    ],
     "apps/web/lib/wiki/enrich-org-corpus.ts": [
       "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md"
     ],
@@ -1801,6 +1822,9 @@
     "apps/web/scripts/offload-evidence-output.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/scripts/reevaluate-escalation-parked-items.ts": [
+      "docs/architecture/backlog-and-planning-runbook.md"
+    ],
     "apps/web/tsconfig.json": [
       "docs/architecture/dependency-reduction-routine.md"
     ],
@@ -1882,9 +1906,6 @@
     "docs/professions/registry.json": [
       "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md",
       "docs/architecture/vector-decisioning-and-jsi.md"
-    ],
-    "docs/security/codeql-baseline.json": [
-      "docs/security/2026-05-24-shift-left-rollout.md"
     ],
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
@@ -2124,6 +2145,10 @@
     "packages/db/src/table-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md",
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "packages/db/src/wiki-embedding-digest.ts": [
+      "docs/founder-kernel/AUTHORING.md",
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
     ],
     "packages/db/src/wiki-frontmatter.ts": [
       "docs/founder-kernel/AUTHORING.md"
@@ -2553,6 +2578,9 @@
       "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md",
       "docs/testing/pre-pr-gate.md"
     ],
+    "scripts/check-no-unrouted-owner-escalation.mjs": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
+    ],
     "scripts/check-no-url-pathname-fs.mjs": [
       "docs/install/platform-support-watchlist.md"
     ],
@@ -2623,6 +2651,9 @@
     ],
     "scripts/convergence-surfaces.json": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/derived-artifacts-gate.mjs": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/detect-hardware-host.ts": [
       "docs/install/linux.md",
@@ -2703,10 +2734,14 @@
       "docs/install/platform-support-watchlist.md"
     ],
     "scripts/installer/dpf-start.consumer.sh": [
+      "docs/operations/observability-coverage.md",
       "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/gpp-permit-secret-contract.test.mjs": [
       "docs/architecture/gated-permissions-process.md"
+    ],
+    "scripts/installer/host-posture.mjs": [
+      "docs/operations/observability-coverage.md"
     ],
     "scripts/installer/install-release-assets.mjs": [
       "docs/architecture/build-gate-runbook.md",
@@ -2874,7 +2909,8 @@
     ],
     "scripts/portal-migrate-boot.sh": [
       "docs/architecture/data-model-stewardship-runbook.md",
-      "docs/architecture/enforced-ci-gates.md"
+      "docs/architecture/enforced-ci-gates.md",
+      "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md"
     ],
     "scripts/pr-health.mjs": [
       "docs/testing/pr-health.md",
@@ -3464,9 +3500,11 @@
     ],
     "docs/architecture/backlog-and-planning-runbook.md": [
       "apps/web/lib/backlog/deferral-contract.ts",
+      "apps/web/lib/backlog/escalation-parked-return.ts",
       "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts",
       "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/govern/data/field-classification.ts",
+      "apps/web/scripts/reevaluate-escalation-parked-items.ts",
       "packages/db/src/table-classification.ts",
       "scripts/check-no-unattributable-deferral.mjs"
     ],
@@ -3489,17 +3527,20 @@
     "docs/architecture/build-gate-runbook.md": [
       ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
+      "apps/web/lib/build/build-pr-delivery-recheck.ts",
       "apps/web/lib/build/coding-agent.ts",
       "apps/web/lib/build/failure-readiness-delivery-refresh.ts",
       "apps/web/lib/build/finalize-repair-routing.ts",
       "apps/web/lib/build/finalize-stage-runner.ts",
       "apps/web/lib/build/gauntlet-repair.ts",
+      "apps/web/lib/build/pr-ci-repair.ts",
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/build/review-source-refresh.ts",
       "apps/web/lib/build/sandbox/test-scope-guard.ts",
       "apps/web/lib/build/scoped-test-failure.ts",
-      "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
+      "apps/web/lib/build/ship-refusal-remedy.ts",
+      "apps/web/lib/nonprod/environment-lease-overseer.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "config/ci-evidence-policy.json",
@@ -3507,6 +3548,7 @@
       "scripts/check-build-script-policy.mjs",
       "scripts/check-no-server-imports-in-client.mjs",
       "scripts/check-stuck-auto-merge.mjs",
+      "scripts/derived-artifacts-gate.mjs",
       "scripts/installer/install-release-assets.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/ci-evidence-plan.mjs",
@@ -4042,6 +4084,7 @@
       "apps/web/lib/decision/golden-decisions.test.ts",
       "apps/web/lib/kernel/governing-principles.ts",
       "packages/db/src/seed-wiki-kernel.ts",
+      "packages/db/src/wiki-embedding-digest.ts",
       "packages/db/src/wiki-frontmatter.ts",
       "packages/db/src/wiki-taxonomy.ts",
       "scripts/build-kernel-embeddings.ts",
@@ -4058,11 +4101,18 @@
     "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md": [
       "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs"
     ],
+    "docs/founder-kernel/wiki/principles/corpus-and-vectors-converge-on-every-update.md": [
+      "apps/web/lib/wiki/embedding-reconciliation.ts",
+      "packages/db/src/wiki-embedding-digest.ts",
+      "scripts/portal-migrate-boot.sh"
+    ],
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
     ],
     "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": [
-      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
+      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts",
+      "apps/web/lib/govern/authority/route-to-human.ts",
+      "scripts/check-no-unrouted-owner-escalation.mjs"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
       "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts",
@@ -4186,7 +4236,6 @@
       "scripts/measure-doc-staleness-coverage.mjs"
     ],
     "docs/maintenance/staleness-report.md": [
-      ".github/workflows/security-inflow-gate.yml",
       "apps/mobile/eas.json",
       "apps/web/components/shell/SectionNav.tsx",
       "apps/web/instrumentation.ts",
@@ -4257,13 +4306,18 @@
     ],
     "docs/operations/observability-coverage.md": [
       "apps/web/lib/coworker/approval-lifetime.ts",
+      "apps/web/lib/federation/work-sync-health.ts",
+      "apps/web/lib/federation/work-sync-watch.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
+      "apps/web/lib/observability/platform-continuity-watch.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
       "apps/web/lib/routing/ai-capacity-watch.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
       "monitoring/prometheus/prometheus.yml",
-      "packages/db/src/quality-issue-registry.ts"
+      "packages/db/src/quality-issue-registry.ts",
+      "scripts/installer/dpf-start.consumer.sh",
+      "scripts/installer/host-posture.mjs"
     ],
     "docs/operations/oss-repo-identity-hygiene.md": [
       "scripts/check-no-private-identity.mjs"
@@ -4367,12 +4421,7 @@
       ".github/workflows/ci.yml",
       ".github/workflows/codeql.yml",
       ".github/workflows/secrets-scan.yml",
-      ".github/workflows/security-inflow-gate.yml",
-      "docs/security/codeql-baseline.json",
       "scripts/check-mobile-jest-pin.mjs"
-    ],
-    "docs/security/README.md": [
-      ".github/workflows/security-inflow-gate.yml"
     ],
     "docs/security/codeql-advanced-setup.md": [
       ".github/codeql/codeql-config.yml",
@@ -4382,8 +4431,7 @@
     ],
     "docs/security/secrets-scan.md": [
       ".github/workflows/codeql.yml",
-      ".github/workflows/secrets-scan.yml",
-      ".github/workflows/security-inflow-gate.yml"
+      ".github/workflows/secrets-scan.yml"
     ],
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "packages/db/data/approved_tools_registry.json",

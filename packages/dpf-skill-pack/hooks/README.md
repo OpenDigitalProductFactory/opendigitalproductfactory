@@ -62,6 +62,7 @@ A purpose in this file is not proof that an approval row displays it.
 
 - Hook 1: [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) — Warn about uncommitted work before ending the turn
 - Hook 2: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Refresh this session heartbeat to protect active work
+- Hook 3: [decision-menu-stop-guard.mjs](decision-menu-stop-guard.mjs) — Route an operator decision menu through the kernel first
 
 ## By client
 
@@ -72,15 +73,15 @@ A count here is what DPF wires, not proof the client fired it; live probes are r
 
 | Client | Delivered by | Wired | Run inside a substitute | Not wired |
 |---|---|---|---|---|
-| Claude Code | plugin hooks/hooks.json | 34 of 34 | 0 | 0 |
-| Codex | plugin hooks/hooks.json from the Codex plugin cache (~/.codex/hooks.json only as the blocking-guard fallback) | 33 of 34 | 0 | 1 |
-| Grok | ~/.grok/hooks/dpf-guards.json, generated from hooks.json (Grok ignores plugin-bundled hooks, BI-883FC2FC) | 25 of 34 | 3 | 6 |
-| Grok (Build Studio sandbox) | /home/node/.grok/hooks/dpf-guards.json in the sandbox, generated at each dispatch from the workspace pack by hooks/lib/grok-hook-plane.mjs | 25 of 34 | 3 | 6 |
-| Antigravity | none | 0 of 34 | 0 | 34 |
-| VS Code | none | 0 of 34 | 0 | 34 |
-| Cursor | none | 0 of 34 | 0 | 34 |
-| Gemini CLI | none | 0 of 34 | 0 | 34 |
-| OpenCode | none | 0 of 34 | 0 | 34 |
+| Claude Code | plugin hooks/hooks.json | 35 of 35 | 0 | 0 |
+| Codex | plugin hooks/hooks.json from the Codex plugin cache (~/.codex/hooks.json only as the blocking-guard fallback) | 34 of 35 | 0 | 1 |
+| Grok | ~/.grok/hooks/dpf-guards.json, generated from hooks.json (Grok ignores plugin-bundled hooks, BI-883FC2FC) | 26 of 35 | 3 | 6 |
+| Grok (Build Studio sandbox) | /home/node/.grok/hooks/dpf-guards.json in the sandbox, generated at each dispatch from the workspace pack by hooks/lib/grok-hook-plane.mjs | 26 of 35 | 3 | 6 |
+| Antigravity | none | 0 of 35 | 0 | 35 |
+| VS Code | none | 0 of 35 | 0 | 35 |
+| Cursor | none | 0 of 35 | 0 | 35 |
+| Gemini CLI | none | 0 of 35 | 0 | 35 |
+| OpenCode | none | 0 of 35 | 0 | 35 |
 
 | Event | Matcher | Hook | Claude Code | Codex | Grok | Grok (Build Studio sandbox) | Antigravity | VS Code | Cursor | Gemini CLI | OpenCode |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -118,6 +119,7 @@ A count here is what DPF wires, not proof the client fired it; live probes are r
 | SessionEnd | — | [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
 | Stop | — | [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
 | Stop | — | [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| Stop | — | [decision-menu-stop-guard.mjs](decision-menu-stop-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
 
 Why an entry is not wired:
 

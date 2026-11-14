@@ -39,7 +39,7 @@ vi.mock("@/lib/build/ship-on-review-approval", () => ({
   ),
 }));
 
-import { autoDispatchShipForCompletedVerification } from "./build-review-verification";
+import { autoDispatchShipForCompletedVerification, reviewVerificationSkipReason } from "./build-review-verification";
 
 beforeEach(() => {
   state.build = null;
@@ -122,5 +122,20 @@ describe("autoDispatchShipForCompletedVerification — actor resolution", () => 
       autoDispatchShipForCompletedVerification("build-4"),
     ).rejects.toThrow(/superuser/i);
     expect(state.dispatchCalls).toHaveLength(0);
+  });
+});
+
+// BI-E3C5C7E4: abandoned and in-build builds were finalized ~230 times each.
+describe("reviewVerificationSkipReason", () => {
+  const ready = { sandboxId: "c1", sandboxPort: 3100 };
+  it("runs only for a build in review", () => {
+    expect(reviewVerificationSkipReason({ ...ready, phase: "review" })).toBeNull();
+  });
+  it.each(["abandoned", "build", "ship", "failed"])("skips a build in %s", (phase) => {
+    expect(reviewVerificationSkipReason({ ...ready, phase })).toMatch(new RegExp(`in ${phase} phase`));
+  });
+  it("skips a missing build or sandbox", () => {
+    expect(reviewVerificationSkipReason(null)).toBe("sandbox or build missing");
+    expect(reviewVerificationSkipReason({ sandboxId: null, sandboxPort: 1, phase: "review" })).toBe("sandbox or build missing");
   });
 });

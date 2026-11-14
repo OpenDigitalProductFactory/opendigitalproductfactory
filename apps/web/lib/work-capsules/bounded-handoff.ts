@@ -3,7 +3,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { commandAuthorityScopeKey, commandPayloadBinding } from "./command-receipts";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import { assertBoundedHandoffDependencies } from "./bounded-handoff-dependencies";
-import { assertHandoffSnapshot, assertRequestedSource, databaseWallTime, readHandoffAuthority, snapshotHandoff, type HandoffRoom, type HandoffSnapshot } from "./bounded-handoff-authority";
+import { assertHandoffSnapshot, assertRequestedSource, databaseWallTime, readHandoffAuthority, readLeaseHolderKind, snapshotHandoff, type HandoffRoom, type HandoffSnapshot } from "./bounded-handoff-authority";
 import { BoundedHandoffRefusal, handoffDigest, parseBoundedHandoffCommand, type BoundedHandoffCommand, type BoundedHandoffRequest } from "./bounded-handoff-command";
 import { hasBoundCommandTransaction } from "./receipted-tool";
 import { reassignWorkCapsuleExecutor } from "./workroom-lease";
@@ -49,7 +49,7 @@ async function readCompletionReceipt(db: CapsuleDb, capsule: HandoffRoom, reques
   if (!receipt || receipt.state !== "completed" || receipt.requestId !== requestId || receipt.requestDigest !== handoffDigest(request) || handoffDigest(receipt) !== handoffDigest(outcome)) return fail("handoff-completion-unproven", "This activity has no matching completed handoff receipt. The executor was not transferred by this acknowledgement.");
   const fields = { fromExecutorKind: request.command.expectedExecutorKind, fromExecutorRef: request.command.expectedExecutorRef,
     toExecutorKind: request.command.toExecutorKind, toExecutorRef: request.command.toExecutorRef,
-    ownerPrincipalId: request.snapshot.leaseHolderPrincipalId, receivingAgentId: request.command.targetAgentId };
+    ownerPrincipalId: request.ownerPrincipalId, receivingAgentId: request.command.targetAgentId };
   if (Object.entries(fields).some(([key, value]) => receipt[key] !== value)) return fail("handoff-completion-unproven", "The completed receipt does not match its original request and receiving assistant.");
   const handoff = { ...receipt, ...fields, state: "completed" as const, requestId, requestDigest: handoffDigest(request) };
   return { handoff, activityId: typeof terminal.id === "string" ? terminal.id : null,
@@ -105,9 +105,10 @@ export async function assessBoundedHandoff(input: Input, options: { lock?: boole
   if (completion && request) return { capsule, request, proposed, authority, snapshot: request.snapshot, terminal: completion.handoff };
   await assertBoundedHandoffDependencies(db as unknown as Parameters<typeof assertBoundedHandoffDependencies>[0], { capsule, sourceExecutorRef: proposed.expectedExecutorRef, destinationExecutorRef: proposed.toExecutorRef });
   const now = await databaseWallTime(db);
-  const snapshot = snapshotHandoff(capsule, authority.boundary, now, request?.ownerPrincipalId ?? actor.principalId ?? null);
+  const holderKind = await readLeaseHolderKind(db, capsule.leaseHolderPrincipalId, options.lock === true);
+  const snapshot = snapshotHandoff(capsule, authority.boundary, now, request?.ownerPrincipalId ?? actor.principalId ?? null, holderKind);
   if (request) assertHandoffSnapshot(snapshot, request.snapshot);
-  else assertRequestedSource(capsule, proposed, actor.principalId);
+  else assertRequestedSource(capsule, proposed, actor.principalId, now, holderKind);
   return { capsule, request, proposed, authority, snapshot, terminal: null };
 }
 /** Runs only inside the real receipt transaction after the shared lock prefix. */
@@ -148,14 +149,14 @@ export async function executeBoundedHandoff(input: Input): Promise<ToolResult> {
   if (!request) return fail("handoff-request-invalid", "The stored handoff request could not be resolved.");
   const now = await databaseWallTime(db);
   // A long dependency/identity read cannot outlive the lease it validated.
-  snapshotHandoff(capsule, authority.boundary, now, request.ownerPrincipalId);
+  snapshotHandoff(capsule, authority.boundary, now, request.ownerPrincipalId, await readLeaseHolderKind(db, capsule.leaseHolderPrincipalId, true));
   const updated = await reassignWorkCapsuleExecutor({ db, capsuleId: capsule.capsuleId,
     toExecutorKind: proposed.toExecutorKind as WorkCapsuleExecutorKind, toExecutorRef: proposed.toExecutorRef,
     actor, expectedLeaseHolderPrincipalId: snapshot.leaseHolderPrincipalId, reason: proposed.reason,
     handoffManifest: { ...proposed.handoffManifest, boundedHandoff: { requestId: command.requestId, requestDigest: handoffDigest(request), receivingAgentId: actor.agentId, receivingAgentPrincipalId: actor.agentPrincipalId } }, now, deferPublication: true });
   const handoff = { kind: "bounded-handoff", state: "completed", commandId: command.commandId, requestId: command.requestId, requestDigest: handoffDigest(request),
     fromExecutorKind: proposed.expectedExecutorKind, fromExecutorRef: proposed.expectedExecutorRef, toExecutorKind: proposed.toExecutorKind, toExecutorRef: proposed.toExecutorRef,
-    ownerPrincipalId: snapshot.leaseHolderPrincipalId, receivingAgentId: actor.agentId, receivingAgentPrincipalId: actor.agentPrincipalId,
+    ownerPrincipalId: request.ownerPrincipalId, receivingAgentId: actor.agentId, receivingAgentPrincipalId: actor.agentPrincipalId,
     identityAssurance: "The receiving assistant endorses the destination; no external chat is authenticated." };
   await db.workroomActivity.create({ data: { workCapsuleId: capsule.id, kind: "action", summary: "Receiving assistant acknowledged; handoff completed", payload: handoff, recordedById: actor.userId, recordedByAgentId: actor.agentId } });
   return { success: true, entityId: capsule.capsuleId, message: "Receiving assistant acknowledged; handoff completed.", data: { capsule: updated, handoff, assistantAdmitted: false } };

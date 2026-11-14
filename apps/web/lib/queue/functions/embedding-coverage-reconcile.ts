@@ -26,6 +26,7 @@ import {
   EMBEDDING_COVERAGE_CRON,
   EMBEDDING_COVERAGE_INNGEST_ID,
   EMBEDDING_COVERAGE_REQUESTED_EVENT,
+  EMBEDDING_COVERAGE_RUN_BUDGET_MS,
   EMBEDDING_COVERAGE_RUN_NOW_INNGEST_ID,
 } from "@/lib/wiki/embedding-coverage-constants";
 import type { CoverageReport } from "@/lib/wiki/embedding-coverage-workroom";
@@ -37,7 +38,13 @@ export async function runEmbeddingCoverageJob(): Promise<CoverageReport> {
 
   // Full corpus: a bounded scan would let the limit silently decide which pages
   // stay invisible to retrieval.
-  const result = await reconcilePublishedWikiEmbeddings({ limit: Number.MAX_SAFE_INTEGER });
+  // Budgeted (BI-F039D17A): the first run after a release that edits many pages
+  // may need hundreds of embeds. Pages past the budget are reported as deferred
+  // and the content digest hands exactly those to the next run.
+  const result = await reconcilePublishedWikiEmbeddings({
+    limit: Number.MAX_SAFE_INTEGER,
+    budgetMs: EMBEDDING_COVERAGE_RUN_BUDGET_MS,
+  });
   return recordCoverageRun({ db: prisma as never, result });
 }
 

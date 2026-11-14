@@ -86,6 +86,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-no-bare-working-write.test.mjs"),
       // BI-903FB5F9: no checked-in recipe may drop the Docker VM page cache by hand.
       node("--test", "scripts/check-no-manual-vm-cache-drop.test.mjs"),
+      // BI-5E067004: every owner-attention write goes through the routeToHuman seam.
+      node("--test", "scripts/check-no-unrouted-owner-escalation.test.mjs"),
       node("--test", "scripts/host-resource-runner.test.mjs", "scripts/lib/host-reservation-observation.test.mjs"),
       node("--test", "scripts/lib/semantic-review-artifact.test.mjs", "scripts/semantic-review-gate.test.mjs", "scripts/semantic-review-cli-role.test.mjs"),
       // BI-2B8D67A9: run-tsc selects TS7 by default and TS6 under DPF_TSC=6,
@@ -95,6 +97,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/audit-typescript-checker-currency.test.mjs"),
       // BI-2FAE2E5C: CI Node is the exact, qualified .node-version.
       node("--test", "scripts/check-ci-node-qualified.test.mjs"),
+      // BI-8ED87FD9: the check-no-* guards another guard in this profile
+      // already runs on its own are appended below as --standalone-guard /
+      // --standalone-test, so each runs once per profile run.
       node("scripts/check-guards.mjs"),
       node("--test", "scripts/check-capability-compose-profiles.test.mjs"),
       node("scripts/check-capability-compose-profiles.mjs"),
@@ -242,6 +247,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-084F85E5: the start script and host convergence ship as release assets;
       // an existing install converges the native agent at its next logon.
       conformanceTest("scripts/installer/host-convergence.test.mjs"),
+      // BI-3E2F87FA: the sign-in autostart starts under launchd's minimal PATH,
+      // waits for Docker Desktop, and records the host posture read-only.
+      conformanceTest("scripts/installer/dpf-start-consumer.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
@@ -311,6 +319,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-31F11C37: the installers' monitoring question.
         "scripts/installer/monitoring-choice.test.mjs",
       ),
+      // BI-7EE97802: executes the actual native authority selection before effects.
+      conformanceTest("scripts/installer/native-edge-authority.test.mjs"),
       // BI-0FC727BB: scans the live installer tree for a bare host-wide sync.
       conformanceTest("scripts/installer/no-bare-host-sync.test.mjs"),
       conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
@@ -942,6 +952,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/reassessment-capability-probe.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
+        "scripts/lib/git-fetch-serialization.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
         // allowlisted OUT of CI, so nothing enforced its behaviour while it
         // destroyed run after run. The allowlist is shrink-only and its own
@@ -1084,6 +1095,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/check-plan-backlog-coverage.test.mjs",
       ),
       node("--test", "packages/dpf-skill-pack/hooks/lease-guard.test.mjs"),
+      // BI-E4DE3825: Gate A prose channel (Stop guard).
+      node("--test", "packages/dpf-skill-pack/hooks/decision-menu-stop-guard.test.mjs"),
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/lease-punt-guard.test.mjs",
@@ -1214,6 +1227,46 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
   ]),
 });
+
+const LOOP_GUARD_FILE = /^scripts\/(check-no-[^/]+\.mjs)$/;
+
+/**
+ * The scripts/check-no-*.mjs guards (and their self-tests) that a profile runs
+ * as part of a named guard other than the Repo Guard Loop (BI-8ED87FD9).
+ *
+ * The loop discovers every check-no-* file, so without this a guard registered
+ * on its own ran twice in one profile run (17 of them on 2026-11-13). The loop
+ * reads this set under --skip-standalone and runs each of those guards once.
+ */
+export function loopGuardsRunStandalone(profileName = "source") {
+  const guards = new Set();
+  const tests = new Set();
+  for (const entry of POLICY_GUARD_PROFILES[profileName] ?? []) {
+    if (entry.id === "repo-guard-loop") continue;
+    for (const [command, args] of entry.commands) {
+      if (command !== "node") continue;
+      for (const arg of args) {
+        const match = LOOP_GUARD_FILE.exec(arg);
+        if (!match) continue;
+        (match[1].endsWith(".test.mjs") ? tests : guards).add(match[1]);
+      }
+    }
+  }
+  return { guards, tests };
+}
+
+// Hand the loop its standalone set as arguments. The loop must not import this
+// registry: guards that import the loop (for discoverGuardFiles) would then pull
+// the registry, and its docs references, into their import closure.
+{
+  const loop = POLICY_GUARD_PROFILES.source.find((entry) => entry.id === "repo-guard-loop");
+  const call = loop.commands.find(([, args]) => args[0] === "scripts/check-guards.mjs");
+  const standalone = loopGuardsRunStandalone("source");
+  call[1].push(
+    ...[...standalone.guards].sort().flatMap((guard) => ["--standalone-guard", guard]),
+    ...[...standalone.tests].sort().flatMap((test) => ["--standalone-test", test]),
+  );
+}
 
 /**
  * Build the consolidated end-of-run summary for a policy-guard profile.

@@ -1,8 +1,10 @@
 "use client";
 
+import { Fragment } from "react";
+
 import { EmptyState, StatusBadge } from "@/components/ui/report-kit";
+import { LocalTime } from "@/components/ui/LocalTime";
 import { Surface } from "@/components/ui/Surface";
-import { formatDate } from "@/lib/datetime";
 import { useT } from "@/lib/i18n/use-t";
 import type { ClientStanding, ConnectedClientRow, ConnectedClientsView } from "@/lib/agent-toolchain/connected-clients";
 
@@ -14,6 +16,8 @@ import type { ClientStanding, ConnectedClientRow, ConnectedClientsView } from "@
 // lives in the "upgrade" catalog, which the page provides.
 
 const HOUR_MS = 60 * 60 * 1000;
+// Preserve translated sentence order while inserting an SSR-safe date node.
+const DATE_SLOT = "\uFFFC";
 
 const STANDING_INTENT: Record<ClientStanding, "success" | "warning" | "danger" | "neutral"> = {
   current: "success",
@@ -50,6 +54,7 @@ function Shell({ t, intro, children }: { t: T; intro: React.ReactNode; children:
 }
 
 function ClientItem({ t, row, now }: { t: T; row: ConnectedClientRow; now: Date }) {
+  const hostSince = row.hostAgent?.since;
   const details = [
     row.loadedVersion ? t("agentClients.toolsVersion", { version: row.loadedVersion }) : t("agentClients.toolsVersionUnknown"),
     t(`agentClients.signIn.${row.authMode}`),
@@ -76,8 +81,13 @@ function ClientItem({ t, row, now }: { t: T; row: ConnectedClientRow; now: Date 
       {row.hostAgent ? (
         <p className="text-xs text-[var(--dpf-muted)]" data-host-agent={row.hostAgent.status}>
           {t(`agentClients.hostAgent.${row.hostAgent.status}`)}
-          {row.hostAgent.since && (row.hostAgent.status === "failed" || row.hostAgent.status === "needs-operator")
-            ? ` ${t("agentClients.hostAgentSince", { date: formatDate(row.hostAgent.since) })}`
+          {hostSince && (row.hostAgent.status === "failed" || row.hostAgent.status === "needs-operator")
+            ? <> {t("agentClients.hostAgentSince", { date: DATE_SLOT }).split(DATE_SLOT).map((part, index) => (
+              <Fragment key={index}>
+                {index > 0 ? <LocalTime value={hostSince} mode="date" /> : null}
+                {part}
+              </Fragment>
+            ))}</>
             : null}
         </p>
       ) : null}

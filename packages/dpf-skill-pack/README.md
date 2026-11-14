@@ -335,20 +335,16 @@ The agent asks the user once before it runs this, and never shows the user the c
 
 Then the updater inside the verified pack runs, and the pin is written after it succeeds. That run (`scripts/toolchain_convergence.py`):
 
-- writes the declaration into each client's connector: the `X-DPF-Toolchain: pack=…;digest=…;client=…` header for Claude Code, Codex and Antigravity, and `dpf_pack`, `dpf_digest`, `dpf_client` on Grok's literal URL. The carrier per client is the manifest's `clients[kind].declarationCarrier`;
+- writes the declaration into each client's connector: the `X-DPF-Toolchain: pack=…;digest=…;client=…` header for Codex and Antigravity, and `dpf_pack`, `dpf_digest`, `dpf_client` on Grok's literal URL. Claude Code sends the same header from its descriptor's constant `headersHelper` (`scripts/toolchain-declaration-header.mjs`), which relays `toolchain-declaration.json` in the same copy. Claude Code files the stored sign-in under the descriptor's type, url and headers, so the descriptor itself never changes (BI-BDC94789). The carrier per client is the manifest's `clients[kind].declarationCarrier`;
   Codex merges only its managed `X-DPF-Toolchain` header into inline or nested TOML header tables, preserving custom header values. A refresh without a declaration leaves those headers intact (BI-B6641BC2).
 - converges Claude local scope and every project-scope record, retires duplicate `dpf` servers in project `.mcp.json`, user scope and each project's local scope (backup first, then `claude mcp remove`), and gives every converged record's cached descriptor a literal endpoint;
 - with `--report-json`, writes one row per client and scope: `before` and `after` (`version`, `digest`, `authMode`), `action` (`updated`, `unchanged`, `retired`, `prunable` or `failed`), `backupPath`, `restartRequired`, and the client CLI's own `--version`. The agent records it through `record_surface_readiness`. A refusal writes `result: "refused"` with its reason.
 
 ### The host keeps itself current (BI-65C17737)
 
-After one portal-sourced run has pinned the installation, the host converges on its own. That run registers `scripts/toolchain_agent.py` from the shared copy as a per-user job, with no elevation:
+After one portal-sourced run has pinned the installation, the host converges on its own. The agent runs on events, and **DPF installs no operating-system scheduler for it** (BI-590DD63E): the platform owns scheduling, and the host only executes. When a client session's SessionStart hook (`hooks/toolchain-freshness.mjs`) finds a copy behind the portal, it starts one run of `scripts/toolchain_agent.py` from the shared copy, detached and without waiting for it, so the next restart loads the new pack. On Windows that run relaunches itself once into a hidden console, so neither it nor any program it starts opens a window. A completed platform upgrade, and the platform's own daily safety net for a host that was off when a release landed, reach the host through the native edge node (BI-6ABE989B).
 
-| Platform | Mechanism | Name |
-| --- | --- | --- |
-| macOS | launchd user agent, hourly and at login | `local.dpf.toolchain-agent` |
-| Linux | systemd user timer, hourly and 2 minutes after boot | `dpf-toolchain-agent.timer` |
-| Windows | Scheduled Task, hourly | `DPF Toolchain Agent` |
+Earlier packs registered a per-user OS job instead: a launchd agent `local.dpf.toolchain-agent` on macOS, a systemd user timer `dpf-toolchain-agent.timer` on Linux, and a Windows scheduled task `DPF Toolchain Agent`, which opened a console window every hour. Every updater run, and every agent run after it finishes, removes that job on every OS, so existing installs converge with no person involved.
 
 Each run reads the signed manifest for the origin and device id already pinned in `~/.dpf/trusted-installations.json`. It never uses an identity it was not already given; a changed identity is refused and reported as `needs-operator:identity_changed`. It runs the same updater (`--from-portal … --expect-installation …`) only when something changed:
 
@@ -357,13 +353,13 @@ Each run reads the signed manifest for the origin and device id already pinned i
 - a retry, once a failure's backoff has elapsed (1, 2, 4 … up to 24 hours);
 - a daily re-verification.
 
-Otherwise it does nothing. State lands in `~/.dpf/toolchain-agent/state.json` (`status`: `ok`, `failed`, `needs-operator`, `offline`, `opted-out`, `ahead-of-portal` or `busy`, with `code`, `detail`, `failureSince`, `backoffUntil` and the client versions), and one line per run goes to `~/.dpf/toolchain-agent/agent.log`. The bootstrap's readiness record, `~/.dpf/agent-toolchain-state.json`, has its own writer and is never touched here.
+Otherwise it does nothing. State lands in `~/.dpf/toolchain-agent/state.json` (`status`: `ok`, `failed`, `needs-operator`, `offline`, `opted-out`, `ahead-of-portal` or `busy`, with `code`, `detail`, `failureSince`, `backoffUntil` and the client versions), and one line per run goes to `~/.dpf/toolchain-agent/agent.log`. A portal it cannot reach, such as one restarting for an upgrade, is `offline`, not `needs-operator`: no person has to act, and the next event retries. The bootstrap's readiness record, `~/.dpf/agent-toolchain-state.json`, has its own writer and is never touched here.
 
 - **A source checkout ahead of the portal wins (spec row X15).** On a contributor host the session bootstrap installs the pack from the source checkout. When the shared copy's `.dpf-delivery.json` says `source: checkout`, and that commit contains the portal's `releaseId`, the agent writes nothing and reports `ahead-of-portal`. If git cannot tell, a higher base version, or the same one, also counts as ahead. A checkout behind the served release converges from the portal.
 - **One convergence at a time.** The agent and every updater run share `~/.dpf/toolchain-agent/run.lock`. A second run exits 75 (`busy`). A lock held by a dead process, or older than 30 minutes, is taken over. The holder passes `DPF_TOOLCHAIN_LOCK_HELD=1` to the updater processes it starts, and read-only modes (`--dry-run`, the hook-reference checks) take no lock.
-- **The agent never re-registers itself.** Reloading a launchd job terminates the running copy, so the updater skips schedule registration when it runs under the agent (`DPF_TOOLCHAIN_AGENT=1`).
-- **Opting out.** Write `{"enabled": false}` to `~/.dpf/toolchain-agent/config.json`. The next updater run removes the schedule, and the agent reports `opted-out`. With several paired portals, `{"origin": "https://…"}` chooses one; until then the agent reports `needs-operator:ambiguous-origin`.
-- **Commands:** `toolchain_agent.py status` prints the schedule and the state; `install` and `uninstall` manage the job by hand.
+- **The agent removes its own old job last.** Booting out a launchd job terminates the running copy, so an updater the agent started (`DPF_TOOLCHAIN_AGENT=1`) leaves the old job alone, and the agent removes it after it has written its state and released the lock.
+- **Opting out.** Write `{"enabled": false}` to `~/.dpf/toolchain-agent/config.json`; the agent then reports `opted-out` and session starts ask once per update. With several paired portals, `{"origin": "https://…"}` chooses one; until then the agent reports `needs-operator:ambiguous-origin`.
+- **Commands:** `toolchain_agent.py status` reports any leftover OS job and the state. `install` and `uninstall` register nothing; both remove a leftover job.
 
 ### What a connection declares, and what it is told
 

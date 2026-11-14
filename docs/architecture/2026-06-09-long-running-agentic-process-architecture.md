@@ -171,6 +171,14 @@ The good news, and the reframe: **DPF already implements most of §2.4.** It is 
 | Unified evidence / activity timeline | **`UnifiedEvidenceTimeline`** over the agent-event-bus stream | [`UnifiedEvidenceTimeline.tsx`](../../apps/web/components/build/UnifiedEvidenceTimeline.tsx) |
 | Notification transport | **notifications API + adapter** (currently wired for self-upgrade only — *not* for build / gate / completion events) | [`app/api/v1/notifications`](../../apps/web/app/api/v1/notifications), [`notification-adapter.ts`](../../apps/web/lib/queue/notification-adapter.ts) |
 
+
+Native chat retains its assignment marker in model history and passes the original
+current text and message identity separately to the shared execution seam. Static
+workflow guidance is classified from that original text only when it exactly
+matches the full marked latest user message. Missing or mismatched provenance
+keeps conservative classification; it cannot remove live-value or action requests.
+Principal-bound surface grounding and ordinary evidence guards still apply.
+
 The marketing scheduler and deliberation runner are *already built the right way* — as Inngest functions over generic state-tracked rows. Build Studio predates this discipline and never moved onto it.
 
 ### 3.1 Why this actually survives a crash: Inngest is out-of-process

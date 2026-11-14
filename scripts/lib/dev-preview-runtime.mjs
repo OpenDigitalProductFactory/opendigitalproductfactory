@@ -17,6 +17,7 @@ import { superviseLeaseRun, admittedLeaseTtlMs } from './lease-supervisor.mjs';
 import { observePreviewReservation } from './host-reservation-observation.mjs';
 import { sampleLocalCiHostPressure } from './local-ci-host-pressure.mjs';
 import { sanitizeForLog } from './safe-log.mjs';
+import { createPreviewInitEventReader } from './dev-preview-init-diagnostics.mjs';
 
 export function supervisePreviewRun({ binding, call, ...options }) {
   return superviseLeaseRun({ ...options, release: undefined,
@@ -49,7 +50,7 @@ export function previewOverride({ worktree, sha, leaseId, cloneImage, declaratio
   if (cloneImage) {
     init.image = cloneImage;
     init.entrypoint = ['/bin/sh', '-c'];
-    init.command = ['cd /workspace && pnpm install --frozen-lockfile && pnpm --filter @dpf/db exec prisma generate && pnpm --filter @dpf/db exec node ./scripts/dev-preview-migrate-deploy.mjs && cd /app && pnpm --filter @dpf/db exec tsx src/sanitized-clone.ts'];
+    init.command = ['node /app/scripts/lib/dev-preview-init-runner.mjs'];
     init.labels['dpf.preview.clone-image'] = cloneImage;
   }
   const portal = service();
@@ -129,20 +130,38 @@ export async function inspectPreviewBinding({ runner, id, identity }) {
 export function commandRunner({ docker = 'docker', env = process.env } = {}) {
   const children = new Set();
   return {
-    async run(args, { capture = true, bin = docker, timeoutMs } = {}) {
+    async run(args, { capture = true, bin = docker, timeoutMs, onInitEvent } = {}) {
       return new Promise((done, fail) => {
         const child = spawn(bin, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
         children.add(child);
         let output = '';
+        let lastInitEvent, observerFailed = false;
+        const diagnostics = typeof onInitEvent === 'function' ? createPreviewInitEventReader(event => {
+          lastInitEvent = event;
+          try { onInitEvent(event); } catch { observerFailed = true; }
+        }) : null;
         let timedOut = false;
         const timer = Number.isFinite(timeoutMs) && timeoutMs > 0
           ? setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs) : undefined;
         const finished = () => { clearTimeout(timer); children.delete(child); };
-        child.stdout.on('data', chunk => { if (capture) output += chunk; });
+        child.stdout.on('data', chunk => {
+          if (diagnostics) diagnostics.write(chunk);
+          else if (capture) output += chunk;
+        });
         child.stderr.resume();
         child.once('error', () => { finished(); fail(new Error('preview_process_unavailable')); });
-        child.once('close', code => { finished(); timedOut ? fail(new Error('preview_operation_timeout'))
-          : code === 0 ? done(output.trim()) : fail(new Error(`preview_operation_failed:${Number.isInteger(code) ? `exit-${code}` : 'terminated'}`)); });
+        child.once('close', code => {
+          finished(); diagnostics?.finish();
+          if (observerFailed) { fail(new Error('preview_init_diagnostics_unavailable')); return; }
+          if (timedOut) { fail(new Error('preview_operation_timeout')); return; }
+          if (code === 0) {
+            if (diagnostics && !diagnostics.completed) { fail(new Error('preview_init_completion_unverified')); return; }
+            done(output.trim()); return;
+          }
+          const failure = lastInitEvent?.state === 'failed' ? lastInitEvent : null;
+          fail(new Error(failure ? `preview_initialization_failed:${failure.step}:${failure.category}${failure.exitCode === null ? '' : `-${failure.exitCode}`}`
+            : `preview_operation_failed:${Number.isInteger(code) ? `exit-${code}` : 'terminated'}`));
+        });
       });
     },
     terminate() { for (const child of children) child.kill('SIGKILL'); },
@@ -239,7 +258,7 @@ export function previewStartupLiveness({ phase, startedAtMs, phaseStartedAtMs, n
   return null;
 }
 
-export async function runPreviewLifecycle({ compose, inspect, verifySource, stopOwned, ready, wait, active, onPhase = () => {} }) {
+export async function runPreviewLifecycle({ compose, inspect, verifySource, stopOwned, ready, wait, active, onPhase = () => {}, onInitEvent = () => {} }) {
   // Preparation/configuration/image admission is completed by the caller first.
   // A failed initialization can never reach the start operation.
   await verifySource();
@@ -247,7 +266,7 @@ export async function runPreviewLifecycle({ compose, inspect, verifySource, stop
   await compose(['up', '-d', '--no-deps', '--no-recreate', '--no-build', '--wait', 'dev-postgres']);
   try {
     onPhase('init');
-    await compose(['run', '--rm', '--no-deps', '--name', active.initName, 'dev-init']);
+    await compose(['run', '--rm', '--no-deps', '--name', active.initName, 'dev-init'], { onInitEvent });
     onPhase('start');
     await verifySource();
     await compose(['up', '-d', '--no-deps', '--no-build', 'dev-portal']);
@@ -256,6 +275,14 @@ export async function runPreviewLifecycle({ compose, inspect, verifySource, stop
     onPhase('serving');
     await wait();
   } finally { await stopOwned(); }
+}
+
+export async function assertPreviewInitializerImage(runner, containerId) {
+  await runner.run(['exec', containerId, 'test', '-f', '/app/packages/db/src/sanitized-clone-batches.ts']);
+  for (const file of ['dev-preview-init-runner.mjs', 'dev-preview-init-diagnostics.mjs']) {
+    await runner.run(['exec', containerId, 'test', '-f', `/app/scripts/lib/${file}`])
+      .catch(() => { throw new Error('preview_initializer_diagnostics_unavailable'); });
+  }
 }
 
 async function runAdmittedPreview(env, cleanupState) {
@@ -290,7 +317,7 @@ async function runAdmittedPreview(env, cleanupState) {
   const [canonical] = JSON.parse(await runner.run(['inspect', portals[0]]));
   if (!canonical.State?.Running || !/^sha256:[a-f0-9]{64}$/.test(canonical.Image)) throw new Error('preview_canonical_image_unverified');
   // An install predating this repair is not ready to initialize an old feature.
-  await runner.run(['exec', portals[0], 'test', '-f', '/app/packages/db/src/sanitized-clone-batches.ts']);
+  await assertPreviewInitializerImage(runner, portals[0]);
   const declaration = await createPreviewDeclaration({ worktree, stateDirectory: dirname(statePath) });
   const identity = { worktree, sha, leaseId, cloneImage: canonical.Image, declarationPath: declaration.path };
   const overridePath = resolve(dirname(statePath), `preview-${randomBytes(12).toString('hex')}.yaml`);
@@ -301,10 +328,10 @@ async function runAdmittedPreview(env, cleanupState) {
     const ids = (await runner.run(['ps', '-aq', '--filter', `label=com.docker.compose.project=${state.composeProjectName || 'dpf'}`])).split(/\s+/).filter(Boolean);
     return ids.length ? protectedServiceIdentity(JSON.parse(await runner.run(['inspect', ...ids]))) : [];
   };
-  const compose = async args => {
+  const compose = async (args, options) => {
     const safety = validateComposeSafety({ args: base.slice(1).concat(args), env: { ...runtimeEnv, DPF_ALLOW_ROOT_COMPOSE_UP: '0', DPF_ALLOW_DESTRUCTIVE_COMPOSE: '0' } });
     if (!safety.ok) throw new Error('preview_compose_intent_refused');
-    const result = await runner.run([...base, ...args]);
+    const result = await runner.run([...base, ...args], options);
     if (protectedBefore && JSON.stringify(await protectedSnapshot()) !== JSON.stringify(protectedBefore)) throw new Error('preview_protected_service_changed');
     return result;
   };
@@ -383,6 +410,7 @@ async function runAdmittedPreview(env, cleanupState) {
             console.log(`Contributor preview bound to ${branch} @ ${sha}; initialization complete.`);
           },
           wait: () => wait, active: { initName },
+          onInitEvent: event => console.error(JSON.stringify({ type: 'preview-init-step', observedAt: new Date().toISOString(), ...event })),
           onPhase: phase => {
             // Native admission, exact configuration and image checks precede
             // this point. A failed prerequisite grants no container authority.

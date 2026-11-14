@@ -22,6 +22,18 @@ operations. The [hardware guide](../../install/hardware.md) distinguishes those
 workloads; a 32 GB operations configuration is not a guarantee for a full
 development workload.
 
+### Reading saved proof without a runner
+
+Existing saved builds remain available when no suitable AI runner is available.
+Expand **Saved builds** to select another result, then open **Review proof** to inspect recorded documents,
+verification and raw output. Missing or conflicting evidence stays unverified.
+
+Building remains unavailable. Setup guidance is under **Runner setup**; reading
+saved results does not enable a provider or start work. Formatting, decomposition,
+editing, deletion and release actions are absent from this saved-reader view.
+If saved records cannot be loaded, use **Try again**; this is different from
+having no saved builds.
+
 ### Development Workrooms
 
 From `/build/work`, open **Delivery outcomes** for the visible Workrooms created
@@ -151,6 +163,18 @@ If the repository's automated checks, the independent code review, or the build'
 ### Ship
 
 The AI Coworker prepares the promotion record and evidence. Where promotion is enabled, the platform backs up the database, builds a new version with the feature, swaps it into production, and verifies health. Where the surface is still hardening, keep the promotion record honest and finish through the supported source workflow. See [Feature Deployment](deployment.md) for the full process.
+
+Build Studio opens the build's pull request by itself. When a publication check refuses it, the build's activity trail names the reason and what Build Studio did next:
+
+- **The change was not verified as it stands now.** The build goes back to Review, where its checks run again on the current code. If an earlier check was interrupted and left the build's workspace on the wrong version, that is put right first.
+- **Main has moved on.** The build is refreshed onto the latest main and reviewed again.
+- **A repository check needs a fix in the change**, for example a missing user-guide update. The findings go back to the AI Coworker to fix, then the build is reviewed again.
+- **Something outside the change failed**, such as the workspace running out of memory or GitHub limiting requests. Build Studio waits and tries again: after 1 hour, then 2 hours, then 4, and so on up to once a day.
+- **The change is set to stay on your system.** Build Studio checks again less and less often, down to once a day, and opens the pull request after you mark the change shareable.
+
+Build Studio tries at most three fixes that move the build. If the pull request still cannot open after that, or the same unexplained refusal comes back, the build is escalated to you once with the last reason, and Build Studio stops retrying it.
+
+Once the pull request is open, a required check can still fail on the change itself, for example a failing test. When that happens, Build Studio sends the build back to the AI Coworker with the name of the failing check and the relevant part of its log. After the fix is reviewed again, Build Studio adds it to the same pull request as a new commit. It never rewrites what is already there. Build Studio makes at most two such repairs per pull request. If the checks are still red after that, or a repair changes nothing, you are told once, with the failing check named. A check that failed because of an outage rather than the change is re-run, not repaired.
 
 ## Related
 

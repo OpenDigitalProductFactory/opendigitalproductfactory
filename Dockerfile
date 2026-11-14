@@ -87,6 +87,9 @@ COPY scripts/lib/canonical-json.mjs ./scripts/lib/
 # The local-CI status set is shared by the gate scripts and the MCP evidence
 # handler, so the build stage needs it too (BI-C59AC8AF).
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
+# Build Studio carries a build's recorded gate decisions into its PR using the
+# same trailer names the readiness gates read (BI-BA6EDCDD).
+COPY scripts/lib/pr-trailer-contract.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY apps/web/ ./apps/web/
@@ -158,7 +161,7 @@ COPY scripts/installer/dpf-start.consumer.ps1 ./scripts/installer/
 COPY scripts/installer/lib/host-convergence.ps1 ./scripts/installer/lib/
 # ...and their macOS/Linux twins, plus the self-upgrade step that bridges launch
 # scripts written before them (promote.sh runs it from the install root).
-COPY scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs ./scripts/installer/
+COPY scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs scripts/installer/host-posture.mjs ./scripts/installer/
 COPY scripts/installer/lib/host-convergence.sh ./scripts/installer/lib/
 COPY scripts/bootstrap-organization-pki.ps1 scripts/bootstrap-organization-pki.sh scripts/rotate-runtime-transition-secret.mjs ./scripts/
 COPY scripts/installer/prepare-runtime-state.mjs scripts/installer/stage-ca-password.mjs ./scripts/installer/
@@ -241,6 +244,8 @@ COPY scripts/lib/guard-bash.mjs ./scripts/lib/
 COPY scripts/lib/load-pinned-guard-typescript.mjs ./scripts/lib/
 COPY scripts/lib/host-command-invocation.mjs ./scripts/lib/
 COPY scripts/lib/git-fetch-shared-safe.mjs ./scripts/lib/
+COPY scripts/lib/dev-preview-init-runner.mjs scripts/lib/dev-preview-init-diagnostics.mjs ./scripts/lib/
+COPY scripts/lib/local-convergence-lock.mjs ./scripts/lib/
 # check-design-grounding-decision and check-data-impact import the shared
 # unresolvable-diff helper; without this COPY the init image dies at
 # ERR_MODULE_NOT_FOUND (BI-20599979).
@@ -348,7 +353,7 @@ RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/install
     cp scripts/installer/install-state.v2.schema.json /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/native-edge-host.ps1 /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/dpf-start.consumer.ps1 /dpf-release-assets/dpf-start.ps1 && \
-    cp scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs /dpf-release-assets/scripts/installer/ && \
+    cp scripts/installer/dpf-start.consumer.sh scripts/installer/native-edge-host.sh scripts/installer/autostart-bridge.mjs scripts/installer/host-posture.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/installer/monitoring-choice.mjs /dpf-release-assets/scripts/installer/ && \
     cp scripts/check-compose-resource-budgets.mjs /dpf-release-assets/scripts/ && \
     cp config/install-resource-budgets.json /dpf-release-assets/config/ && \

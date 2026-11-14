@@ -142,7 +142,7 @@ The bootstrap is **idempotent** (re-running on a converged install is a no-op) a
 
 1. **Detects** which of Claude / Codex / Grok / Antigravity are installed — resolving GUI-app and non-PATH install locations, not just `which`.
 2. **Defaults supported interactive clients to OAuth**, without automatically minting a PAT while sign-in is pending. Codex supports HTTPS and HTTP loopback. Setup names clients that still require compatibility credentials. Select `-AuthMode legacy` on PowerShell, or `--auth-mode legacy` on Bash, only for explicit compatibility; Bash `--auto-mint` also selects legacy mode. Existing credentials are not revoked.
-3. **Connects the DPF MCP server** using the client-specific credential policy. Supported OAuth configuration contains the endpoint without a managed bearer override. Rerunning setup preserves that choice and unrelated client settings. The endpoint is the install's own https address, read from `PUBLIC_URL` in the install's `.env` (`<PUBLIC_URL>/api/mcp/v1?tier=full`); it is saved for your user as `DPF_MCP_URL`, beside `NODE_EXTRA_CA_CERTS` so clients trust the install's certificate. The installer saves the same two values on every run, so a fresh install needs no hand-set address. When the install names no https address and `DPF_MCP_URL` is unset, setup uses the canonical `https://localhost/api/mcp/v1` with OAuth, the same default the skill-pack updater uses; it no longer falls back to the old `http://127.0.0.1:3000` address.
+3. **Connects the DPF MCP server** using the client-specific credential policy. A credential the bootstrap issues itself (Grok's credentials client, or a compatibility token) belongs to the install's accountable person: the Foundational portfolio's owner, then the organization's. It never belongs to the setup account `admin@dpf.local`. Approvals raised through that client go to that person. Supported OAuth configuration contains the endpoint without a managed bearer override. Rerunning setup preserves that choice and unrelated client settings. The endpoint is the install's own https address, read from `PUBLIC_URL` in the install's `.env` (`<PUBLIC_URL>/api/mcp/v1?tier=full`); it is saved for your user as `DPF_MCP_URL`, beside `NODE_EXTRA_CA_CERTS` so clients trust the install's certificate. The installer saves the same two values on every run, so a fresh install needs no hand-set address. When the install names no https address and `DPF_MCP_URL` is unset, setup uses the canonical `https://localhost/api/mcp/v1` with OAuth, the same default the skill-pack updater uses; it no longer falls back to the old `http://127.0.0.1:3000` address.
 4. **Installs the `dpf-platform` plugin** for each client from its local marketplace/registry — this is the single package that carries the shared **skill pack** and the cross-client hook/MCP contracts (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below). For Codex, the bootstrap registers and verifies the qualified plugin key `dpf-platform@personal`; copying plugin files alone is not considered installed.
 5. **Seeds kernel-tier memory** so the agent is kernel-aware from the first turn, before any MCP retrieval round-trip.
 6. **Runs read-only MCP + kernel smoke probes**, checks whether the DPF-native process-spine replacement skills are installed and visible to the current session, and prints a single **readiness banner**. On Grok, this check is **verified** (`grok plugin list --json`, run automatically by the bootstrap before the health check) rather than merely inferred from install state; Codex and Antigravity have no non-interactive way to list actively loaded skills yet, so their exposure stays `unknown` until their CLIs expose one — see the [process-spine skill exposure health design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-19-process-spine-skill-exposure-health-design.md). OAuth setup reports authorization pending until the client connection is verified; a PAT probe is not proof of OAuth readiness.
@@ -301,7 +301,11 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 Setup keeps your selected https connection address for later sessions. An explicit `DPF_MCP_URL` overrides it; otherwise setup uses the saved https preference, then the installation's HTTPS default. A plain-http address is never saved for every client, because Claude's sign-in refuses plain http. Codex and Grok keep their own address in their own settings. A saved address does not grant access or prove sign-in works. If the client still uses an older address, verify its saved connection before starting another sign-in.
 
 The approval page names the assistant role this connection will act as and
-has one **Connect** button; you do not pick the role. The server chooses it
+has one **Connect {client} as {account}** button. Check the named account and
+press it once to confirm and connect; there is no separate account checkbox.
+**Use a different account** lets you switch before connecting. If your session
+changes while the page is open, nothing connects until you confirm the current
+account on the refreshed page. You do not normally pick the role. The server chooses it
 from the roles you are allowed to authorize, after checking that they carry
 the same permissions, and reuses the role you approved last time for the same
 client. A client's self-chosen name only labels the connection; it cannot
@@ -313,6 +317,11 @@ authority is preselected. All work remains within your current permissions,
 the permissions you approved, and the assistant's allowed tools. Build Studio
 access and access to each workroom are checked separately. Signing in does not
 admit the assistant to every room.
+
+If this account's work was previously handed over, the page also asks you to
+acknowledge that connecting it will bring new work back to that account. The
+platform automation account cannot authorize an interactive client; sign in
+as yourself instead.
 
 The same connection supports multiple tasks and normal token refresh without
 another sign-in. Each task keeps its own target and evidence. If an older

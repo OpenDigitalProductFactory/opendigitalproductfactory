@@ -637,7 +637,7 @@ apps/web/components/build/PhaseIndicator.tsx	physical-direction	1
 apps/web/components/build/PhaseNode.tsx	physical-direction	2
 apps/web/components/build/PreviewUrlCard.tsx	jsx-copy	3
 apps/web/components/build/ReleaseDecisionPanel.tsx	jsx-copy	8
-apps/web/components/build/ReviewPanel.tsx	jsx-copy	16
+apps/web/components/build/ReviewPanel.tsx	jsx-copy	12
 apps/web/components/build/ReviewPanel.tsx	physical-direction	9
 apps/web/components/build/ReviewReadinessStrip.tsx	jsx-copy	1
 apps/web/components/build/ReviewReadinessStrip.tsx	physical-direction	2
@@ -1394,7 +1394,6 @@ apps/web/components/wiki/OrgDecisionCaptureList.tsx	physical-direction	1
 apps/web/components/wiki/VoiceProfileSetup.tsx	jsx-copy	16
 apps/web/components/wiki/VoiceProfileSetup.tsx	physical-direction	4
 apps/web/components/wiki/WikiBodyRenderer.tsx	physical-direction	5
-apps/web/components/wiki/WikiPageEditor.tsx	jsx-copy	1
 apps/web/components/wiki/WikiPageList.tsx	physical-direction	5
 apps/web/components/wiki/WikiPageViewer.tsx	jsx-copy	4
 apps/web/components/wiki/WikiPageViewer.tsx	physical-direction	1

@@ -150,6 +150,69 @@ export function parseBuildCloneRebaseOutput(output: string): BuildCloneRebaseOut
   return { status: "unknown", output: output.slice(0, 500) };
 }
 
+const FULL_SHA = /^[0-9a-f]{40}$/;
+
+function requireFullSha(sha: string): string {
+  if (!FULL_SHA.test(sha)) throw new Error(`Not a full commit id: ${JSON.stringify(sha.slice(0, 80))}`);
+  return sha;
+}
+
+/**
+ * BI-C49EC080: where the shared repo holds a build's published PR commit, so
+ * the build's clone can fetch it from the shared remote like any other ref.
+ */
+export function publishedHeadRef(buildId: string): string {
+  return `refs/dpf/published/${buildId.replace(/[^A-Za-z0-9._-]/g, "_")}`;
+}
+
+/** Fetch the published commit from upstream into the shared repo and pin it at `ref`. */
+export function buildSandboxPublishedHeadFetchCommand(workspace: string, sha: string, ref: string): string {
+  const id = requireFullSha(sha);
+  return `cd ${q(workspace)} && git -c core.hooksPath=/dev/null fetch --quiet --no-tags origin ${id} && git update-ref ${q(ref)} ${id}`;
+}
+
+/**
+ * Put the build's clone on the exact published commit. Refused, with the branch
+ * untouched, when tracked work is uncommitted, when the shared ref does not hold
+ * that commit, or when its parent is not on `ontoRef`: the review diffs against
+ * merge-base(HEAD, ontoRef), so the parent must be that merge-base for the
+ * reviewed diff to be exactly the published one.
+ */
+export function buildSandboxBuildCloneAlignCommand(path: string, ref: string, sha: string, ontoRef: string): string {
+  const id = requireFullSha(sha);
+  const P = q(path);
+  const git = `git -C ${P} -c core.hooksPath=/dev/null`;
+  return [
+    `cd ${P}`,
+    `if [ -n "$(${git} status --porcelain --untracked-files=no)" ]; then printf 'align=dirty\\n'; ` +
+      `elif ! ${git} fetch --quiet --no-tags ${SHARED_REMOTE} ${q(`+${ref}:${ref}`)} >/dev/null 2>&1; then printf 'align=unfetched\\n'; ` +
+      `elif [ "$(${git} rev-parse ${q(ref)})" != ${id} ]; then printf 'align=mismatch\\n'; ` +
+      `elif ! ${git} merge-base --is-ancestor ${id}^ ${q(ontoRef)} >/dev/null 2>&1; then printf 'align=base-not-on-target\\n'; ` +
+      `elif ${git} reset --quiet --hard ${id} >/dev/null 2>&1; then printf 'align=ok\\nhead=%s\\n' "$(${git} rev-parse HEAD)"; ` +
+      `else printf 'align=reset-failed\\n'; fi`,
+  ].join(" && ");
+}
+
+export type BuildCloneAlignOutcome =
+  | { status: "aligned"; headSha: string }
+  | { status: "dirty" | "unfetched" | "mismatch" | "base-not-on-target" | "reset-failed" }
+  | { status: "unknown"; output: string };
+
+export function parseBuildCloneAlignOutput(output: string): BuildCloneAlignOutcome {
+  const fields = new Map<string, string>();
+  for (const line of output.split(/\r?\n/)) {
+    const index = line.indexOf("=");
+    if (index > 0) fields.set(line.slice(0, index).trim(), line.slice(index + 1).trim());
+  }
+  const status = fields.get("align");
+  const head = fields.get("head") ?? "";
+  if (status === "ok" && FULL_SHA.test(head)) return { status: "aligned", headSha: head };
+  if (status === "dirty" || status === "unfetched" || status === "mismatch" || status === "base-not-on-target" || status === "reset-failed") {
+    return { status };
+  }
+  return { status: "unknown", output: output.slice(0, 500) };
+}
+
 /** Sync the branch back, then delete the clone. Best-effort, like the worktree removal it replaces. */
 export function buildSandboxBuildCloneRemoveCommand(path: string, branchRef: string, workspace: string): string {
   return [

@@ -18,8 +18,8 @@
 
 - **Worktree canonical location = dedicated sibling `D:/DPF-worktrees/<topic>`** ⟦runtime: install-local path — Windows shape; §4 gives the macOS/Linux equivalent⟧ for all three host CLI surfaces (Claude Code, Codex, Grok). The tool-native `.claude/worktrees/<name>` nesting inside the root clone is **not** the convention — treat it as a hard error to migrate. Every worktree is born governed (topic branch off `origin/main`, MCP + toolchain seeded, `COMPOSE_PROJECT_NAME` isolated, workroom claimed) and is reaped when `idle`/`done` (janitor BI-DBF3F426). → [kernel principle](../founder-kernel/wiki/principles/worktree-selection-and-reaping.md)
 - **Tooling-upgrade = operator-triggered quiesce-reap-upgrade.** Session = claimed workroom; session end reaps its sidecars (`app-server`, `node_repl`, npx MCP children). Upgrading Claude Code / Codex (incl. the WindowsApps Store package) runs a first-class operator-triggered quiesce → reap → upgrade → resume routine; orphaned sidecars must never pin a tool against update. → [kernel principle](../founder-kernel/wiki/principles/reap-sidecars-to-upgrade-tools.md)
-- **`:3001` and every shared singleton are lease-gated.** Runtime-bound gates run only through `claim_nonprod_environment_lease(environmentKey="local-integration-ci")`; the `:3001` Contributor preview folds into that lease (§7 Q5). ⟦runtime: install-local port — the lease rule is doctrine, the number is not⟧ No per-branch CI images, no silent re-bind of a held shared singleton, no ad-hoc `docker run`/`compose up` from a surface, and **never reachable from outside the host** — no tunnel, public URL, or non-loopback bind, because the preview writes to the live database and holding the lease permits use, never exposure. Deterministic preview claim keys preserve FIFO while active or queued; released, cancelled, or expired history advances through bounded monotonic attempt keys without changing the owning session or target-worktree branch identity. → [kernel principle](../founder-kernel/wiki/principles/runtime-gates-via-shared-lease.md)
-  - **Admission reserves the work the claimant declares.** Exact gates request the canonical slot-manifest capability and therefore reserve the builder and host-stage envelopes before admission. Contributor previews request no runner slot, so they remain in the same FIFO/provider-exclusion pool but use the ordinary host-safety floor; reserving an unused build stage can deadlock the preview that owns stale-runtime cleanup.
+- **`:3001` and every shared singleton are lease-gated.** Runtime-bound gates run only through `claim_nonprod_environment_lease(environmentKey="local-integration-ci")`; the `:3001` Contributor preview folds into that lease (§7 Q5). ⟦runtime: install-local port — the lease rule is doctrine, the number is not⟧ No per-branch CI images, no silent re-bind of a held shared singleton, no ad-hoc `docker run`/`compose up` from a surface, and **never reachable from outside the host** — no tunnel, public URL, or non-loopback bind. The contributor preview uses its sanitized development clone; holding the lease permits use, never exposure. Deterministic preview claim keys preserve the queue position while active or queued (the order itself is the overseer's policy, BI-218A4555). Released, cancelled, or expired claims stop; a new explicitly wanted attempt may supply a new key, never scan or rotate historical keys automatically. → [kernel principle](../founder-kernel/wiki/principles/runtime-gates-via-shared-lease.md)
+  - **Admission reserves the work the claimant declares.** Exact gates request the canonical slot-manifest capability and therefore reserve the builder and host-stage envelopes before admission. Contributor previews request no runner slot, so they remain in the same overseer-ordered provider-exclusion pool but use the ordinary host-safety floor; reserving an unused build stage can deadlock the preview that owns stale-runtime cleanup.
   - **Contributor preview authority is live, not ceremonial.** `scripts/dev-portal-lease.sh refresh` samples host pressure through the same `local-ci-host-pressure` primitive as the gate before admission, then remains in the foreground as the preview's lease keeper. Keep that process running for the whole UX exercise. It renews below the registry heartbeat cap; a renewal refusal or an owning foreground interrupt uses the keeper's scoped writer cleanup. Finalization stops renewal and reports the exact reservation separately; missing admission remains unknown. A detached container with no keeper is not a governed preview, even if an earlier command printed a lease id.
   - **Ending a preview retains its actual control boundary.** An owning foreground terminal may interrupt its keeper through that existing handle. Detached queued consumers gain no stop/cancel handle from the finalization repair; explicit generic lease release remains governed. Never kill a detached PID or treat reservation expiry as proof its writers stopped.
   - **A keeper renews only while its preview is live.** Startup, meaning dependency install, migration, clone and first health, has a budget of 20 minutes, which an operator can change with `DPF_DEV_PORTAL_STARTUP_BUDGET_MINUTES`. While `dev-init` runs, each renewal also requires the init container to be running. When either check fails, renewal refuses and the keeper fences its owned preview, then reports reservation settlement separately. After the preview is serving, the owned `dev-portal` container is checked instead. A fresh heartbeat proves the keeper process is alive, not the preview (BI-E95458DE).
@@ -73,6 +73,30 @@ numbers. Design: [executor takeover](../superpowers/specs/2026-10-21-executor-ta
 
 While you work, send a `checkpoint` with `heartbeat_workroom` at each stage boundary, so the next executor can start from step 2.
 
+**Same owner, same scope: no approval** (BI-F1FC0B62, BI-1986D3C1, BI-53BED66C). Use `reassign_workroom_executor` with `phase: "request"`, then the receiving session acknowledges with `phase: "acknowledge"`. Between the two steps either party can raise issues on the room. Neither step reaches the owner when all of these hold:
+- the receiver is already admitted;
+- the room's lease is the owner's, or it has lapsed;
+- a lapsed lease is held by the owner or by a platform coworker, such as the Software Engineer a room's drive dispatched.
+
+A step the handler refuses comes back as a refusal with its next action, never as an approval. Approving it could not make it run. A lease held by another person, a live coworker lease, an unadmitted receiver, or a build-linked, restricted or archived room keeps the owner's decision, through the one-call path.
+
+**When your plan runs out.** Before you stop on a usage limit, send `heartbeat_workroom` with `checkpoint.capacity` (`provider` and the `resetAt` it gave). The room then reads "expected back by …" in Central time. It is not reaped before that time, and it lists the executors that can take it now. The platform also reads the provider's own capacity record, so this works if you could not send it. A stated reset is an upper bound: providers reset early, periodically and at random. Any later heartbeat clears the wait. To move the work, use the same two-step handover; it needs no approval.
+
+### Running in T3 Code
+
+T3 Code orchestrates a native client (Codex or Claude) in its own thread. Trial record: [T3 runtime trial](../superpowers/research/2026-11-12-t3-code-runtime-trial.md). Design: [T3 as a first-class executor](../superpowers/specs/2026-11-13-t3-code-first-class-executor-design.md).
+
+1. **Claim first, never adopt first.** Call `claim_backlog_item_for_work` with:
+   - `provider` set to the client T3 drives (`codex` or `claude`);
+   - `harness: "t3-code"`;
+   - `sessionRef` set to the client thread id: `CODEX_THREAD_ID` for Codex, `CLAUDE_CODE_SESSION_ID` for Claude.
+
+   `provider: "t3"` is refused with `provider_harness_only`.
+2. **Create the worktree under the canonical sibling base**, not T3's default `~/.t3/worktrees`.
+3. **Gate in the same thread** with `pnpm gate:wait`. The gate records the same thread id. If it cannot, the platform still binds a passing result to your own single live room on that branch at exactly the gated commit.
+4. **Land with `pnpm land`.** If the client may not run `gh pr merge` (an unattended Codex refuses it under the owner's rules), call `queue_workroom_pull_request` with the room's `capsuleId` through the dpf connector. It queues only when the PR head is the room head and the gate passed there, and the merge queue still runs every required check.
+5. **If the plan runs out mid-task**, record `checkpoint.capacity` as above. Hand the room to the Claude (or Codex) side with the two-step handover. T3 can drive either client from the same project.
+
 ### Contributor preview binding and cleanup
 
 Preview startup resolves the canonical install settings and overlays, then binds
@@ -82,11 +106,29 @@ mutation, and uses explicit preview services with `--no-deps`. Initialization mu
 succeed before `dev-portal` starts. Docker mount/commit labels and the served health
 identity must agree. No hand-built live image is an acceptable substitute.
 
+The canonical image must contain the bounded-clone and initialization-diagnostic
+entry files before runtime mutation. Initialization keeps the same install,
+client-generation, migration and sanitization commands. Its controller retains
+only bounded, validated step/state/category/exit records in the existing log as
+they arrive, so container removal cannot erase the failed step. Command arguments,
+environment values and raw child stdout/stderr are never diagnostic output.
+Missing or invalid records establish no inner cause. Failure still prevents
+portal startup and invokes owned cleanup. Even exit zero requires complete,
+ordered success records for all four steps. Use a qualified delivered helper for
+both the initial claim and durable child; a frozen feature checkout or stale
+install-root checkout is not assumed updated. A fresh diagnostic attempt requires
+the reviewed remedy's canonical containment and ordinary lease admission.
+
 A queued claim stops its shell caller: the returned durable TaskRun resumes the
 wait. A terminal claim stops too; never scan historical `:rerun-N` keys. A new
 explicitly wanted attempt may supply a new `DPF_DEV_PORTAL_CLAIM_KEY`. Durable
 resume supplies its original lease and task through `DPF_DEV_PORTAL_RESUME_LEASE_ID`
 and `DPF_DEV_PORTAL_TASK_RUN_ID`.
+The caller sends the existing relative lease timing contract: the resource TTL
+uses the heartbeat lifetime (two minutes by default, at most twenty), while
+`--expires-minutes` bounds admission waiting to at most two hours. Durable resume
+preserves the original `DPF_DEV_PORTAL_WAIT_DEADLINE`; it neither substitutes the
+short returned lease expiry nor extends the admission deadline on each resume.
 
 WWMD DI-E1203C00715D supports ordinary cleanup only for a verified principal and
 its exact owning session. Current leases lack principal provenance, so their

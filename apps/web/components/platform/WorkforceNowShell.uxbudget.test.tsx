@@ -20,6 +20,7 @@ import { auditUxBudget, measureUxBudget } from "@/lib/ux-budget";
 import type { WorkforceActivity, WorkforceCoworker } from "@/lib/platform-runtime/workforce-activity";
 
 import { WorkforceNowShell } from "./WorkforceNowShell";
+import { withMessages } from "@/test-support/with-messages";
 
 const NOW = "2026-09-02T18:00:00.000Z";
 
@@ -109,7 +110,7 @@ const STEWARD_DATA: WorkforceActivity = {
 afterEach(() => cleanup());
 
 function shellHtml(): string {
-  const { container } = render(<WorkforceNowShell initialData={STEWARD_DATA} />);
+  const { container } = render(withMessages(<WorkforceNowShell initialData={STEWARD_DATA} />));
   return container.innerHTML;
 }
 
@@ -121,8 +122,8 @@ describe("WorkforceNowShell UX budget", () => {
   });
 
   it("names the platform work instead of an empty board", () => {
-    const { container } = render(<WorkforceNowShell initialData={DATA} />);
-    expect(container.textContent).toContain("Platform work in flight");
+    const { container } = render(withMessages(<WorkforceNowShell initialData={DATA} />));
+    expect(container.textContent).toContain("Unattached platform runs");
     expect(container.textContent).toContain("Deliberation: review");
     expect(container.textContent).toContain("FB-FCAC756D");
     expect(container.textContent).toContain("unattributed");
@@ -132,7 +133,7 @@ describe("WorkforceNowShell UX budget", () => {
   });
 
   it("has no axe violations the harness can detect", async () => {
-    const { container } = render(<WorkforceNowShell initialData={STEWARD_DATA} />);
+    const { container } = render(withMessages(<WorkforceNowShell initialData={STEWARD_DATA} />));
     const results = await axe.run(container, {
       rules: { "color-contrast": { enabled: false } },
     });

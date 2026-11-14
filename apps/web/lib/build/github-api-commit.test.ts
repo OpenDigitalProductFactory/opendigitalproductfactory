@@ -441,3 +441,62 @@ index 1111111..2222222 100644
     expect(exec.mock.calls[1]![1]).toContain("git -C '/workspace' cat-file -e 'refs/heads/build/FB-1:src/a.ts'");
   });
 });
+
+// BI-085A37EC (WWMD DI-8172B1A35993): a CI repair of an open PR is one follow-up
+// commit on the PR head, a fast-forward. It is never forced, even though the
+// branch holds the platform's own earlier publication of the same build.
+describe("follow-up commit on an open pull request", () => {
+  const FOLLOW_UP = { commitSha: "pr-head", treeSha: "pr-head-tree", restore: [{ path: "dropped.ts", sha: null }] };
+
+  function followUpFetch(opts: { treeSha?: string; ancestor?: boolean } = {}) {
+    const calls: CapturedCall[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+      calls.push({ url, method, body });
+      const ok = (json: unknown, status = 200) => ({ ok: true, status, json: async () => json, text: async () => "" }) as unknown as Response;
+      if (method === "GET" && url.includes("/git/ref/heads/main")) return ok({ object: { sha: "base-sha-abc" } });
+      if (method === "POST" && url.endsWith("/git/blobs")) return ok({ sha: "blob-1" }, 201);
+      if (method === "POST" && url.endsWith("/git/trees")) return ok({ sha: opts.treeSha ?? "new-tree" }, 201);
+      if (method === "POST" && url.endsWith("/git/commits")) return ok({ sha: "follow-up-sha" }, 201);
+      if (method === "POST" && url.endsWith("/git/refs")) return { ok: false, status: 422, json: async () => ({}), text: async () => "Reference already exists" } as unknown as Response;
+      if (method === "GET" && url.includes("/git/refs/heads/")) return ok({ object: { sha: "pr-head" } });
+      if (method === "GET" && url.includes("/compare/")) return ok({ status: opts.ancestor === false ? "diverged" : "ahead" });
+      if (method === "GET" && url.includes("/git/commits/")) {
+        return ok({ message: "feat: tiny\n\nBuild: FB-1\n\nSigned-off-by: dpf-agent-a1b2c3d4 <agent-a1b2c3d4@hive.dpf>", author: { email: "agent-a1b2c3d4@hive.dpf" }, parents: [{ sha: "base-sha-abc" }] });
+      }
+      if (method === "PATCH") return ok({});
+      return { ok: false, status: 500, json: async () => ({}), text: async () => `unexpected ${method} ${url}` } as unknown as Response;
+    }));
+    return calls;
+  }
+
+  const publish = () => publishBranchCommit({
+    headOwner: "o", headRepo: "r", baseBranch: "main", branchName: "dpf/x", token: "t",
+    commitMessage: "feat: tiny\n\nBuild: FB-1\n\nSigned-off-by: dpf-agent-a1b2c3d4 <agent-a1b2c3d4@hive.dpf>",
+    diff: TINY_DIFF, followUpOf: FOLLOW_UP,
+  });
+
+  it("commits onto the PR head's tree with the PR head as parent, and fast-forwards without force", async () => {
+    const calls = followUpFetch();
+    await expect(publish()).resolves.toEqual({ branchName: "dpf/x", commitSha: "follow-up-sha" });
+    const tree = calls.find((c) => c.url.endsWith("/git/trees"))?.body;
+    expect(tree?.base_tree).toBe("pr-head-tree");
+    expect(tree?.tree).toEqual(expect.arrayContaining([expect.objectContaining({ path: "dropped.ts", sha: null })]));
+    expect(calls.find((c) => c.url.endsWith("/git/commits") && c.method === "POST")?.body?.parents).toEqual(["pr-head"]);
+    expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ sha: "follow-up-sha", force: false });
+  });
+
+  it("refuses rather than force when the branch moved past the PR head", async () => {
+    const calls = followUpFetch({ ancestor: false });
+    await expect(publish()).rejects.toThrow(/Refusing to overwrite/);
+    expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+  });
+
+  it("pushes nothing when the repair left the PR's tree as it was", async () => {
+    const calls = followUpFetch({ treeSha: "pr-head-tree" });
+    await expect(publish()).rejects.toThrow(/changed nothing/);
+    expect(calls.some((c) => c.url.endsWith("/git/commits") && c.method === "POST")).toBe(false);
+  });
+});

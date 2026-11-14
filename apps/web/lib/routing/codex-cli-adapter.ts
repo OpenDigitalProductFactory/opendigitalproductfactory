@@ -96,7 +96,8 @@ export function describeCliFailure(stderr: string): { hint: "quota" | "auth" | "
     : looksLikeCliUnsupportedModel(signal) ? "model" : "unclassified";
   let logLine = signal.trim();
   for (const pattern of CLI_SECRET_PATTERNS) logLine = logLine.replace(pattern, "[redacted]");
-  if (logLine.length > CLI_FAILURE_LOG_LIMIT) logLine = `${logLine.slice(0, CLI_FAILURE_LOG_LIMIT)}…`;
+  // Keep the end: the CLI writes its own verdict after the prompt it echoes.
+  if (logLine.length > CLI_FAILURE_LOG_LIMIT) logLine = `…${logLine.slice(-CLI_FAILURE_LOG_LIMIT)}`;
   return { hint, signal, logLine };
 }
 

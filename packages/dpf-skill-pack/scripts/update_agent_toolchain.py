@@ -1085,12 +1085,27 @@ def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: 
         # BI-3D2FD68C: the OAuth path needs the scope pin or the consent grants
         # read only and every write tool stays out of reach.
         server["oauth"] = {"scopes": MCP_CLIENT_OAUTH_SCOPE_PIN}
+    import toolchain_convergence as convergence
+
+    # BI-BDC94789: every Claude descriptor names the same helper, declared or
+    # not, so its bytes never change with the pack, digest or convergence
+    # status. Claude Code keys the stored sign-in on type, url and headers.
+    server["headersHelper"] = convergence.CLAUDE_HEADERS_HELPER
+    sidecar = None
     if declarations is not None:
         server = declarations.declare_server(server, "claude-code")
+        sidecar = declarations.sidecar("claude-code")
     content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
     if dry_run:
         return True
-    return write_text_if_changed(skill_pack_path / "claude.mcp.json", content)
+    sidecar_path = skill_pack_path / convergence.DECLARATION_SIDECAR
+    if sidecar is not None:
+        sidecar_changed = write_text_if_changed(sidecar_path, json.dumps(sidecar, indent=2) + "\n")
+    else:
+        # Never relay a declaration this run did not make.
+        sidecar_changed = sidecar_path.is_file()
+        sidecar_path.unlink(missing_ok=True)
+    return write_text_if_changed(skill_pack_path / "claude.mcp.json", content) or sidecar_changed
 
 
 def ensure_antigravity_plugin_descriptor(skill_pack_path: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> bool:
@@ -2612,21 +2627,19 @@ def hook_reference(skill_pack: Path) -> str:
     return "\n".join(lines)
 
 
-def register_toolchain_agent(home: Path, portal_sourced: bool, dry_run: bool, env: Mapping[str, str]) -> Optional[str]:
-    """Schedule the host convergence agent after a portal-sourced run (BI-65C17737).
+def retire_toolchain_agent_schedule(home: Path, dry_run: bool, env: Mapping[str, str]) -> Optional[str]:
+    """Remove the OS schedule earlier packs registered for the host agent (BI-590DD63E).
 
-    A portal run is what pins the installation, so only then can the host keep
-    itself current. The agent runs from the shared copy this run refreshed, so
-    it is updated by the same delivery it performs.
+    DPF installs no operating-system scheduler: the platform owns scheduling
+    and reaches the host through events. Every run, checkout or portal, on
+    every OS, removes a launchd job, systemd user timer or Windows scheduled
+    task left by an earlier pack, so existing installs converge.
     """
-    if not portal_sourced or dry_run:
+    if dry_run:
         return None
     import toolchain_agent
 
-    script = shared_managed_plugin_path(home) / "scripts" / "toolchain_agent.py"
-    if not script.is_file():
-        return "skipped: the shared copy has no toolchain_agent.py"
-    return toolchain_agent.ensure_schedule(home, sys.executable, str(script), env)
+    return toolchain_agent.retire_schedule(home, env)
 
 
 def client_hook_reference(skill_pack: Path) -> list[str]:
@@ -3083,7 +3096,7 @@ def _main(argv: list[str]) -> int:
         for line in hook_roster(skill_pack):
             print(line)
 
-    agent_status = register_toolchain_agent(home, portal_manifest is not None, args.dry_run, os.environ)
+    agent_status = retire_toolchain_agent_schedule(home, args.dry_run, os.environ)
     if agent_status:
         print(f"  Toolchain agent: {agent_status}")
     if report:
