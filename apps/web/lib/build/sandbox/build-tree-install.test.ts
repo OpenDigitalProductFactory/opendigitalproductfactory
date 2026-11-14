@@ -44,7 +44,8 @@ function buildTree(state: { install: boolean; modulesAt?: Date; lockfileAt: Date
 }
 
 // The step is POSIX shell for the Linux sandbox; on a Windows host the tmpdir paths
-// carry backslashes that sh strips, so the real-shell proof runs only on POSIX.
+// carry backslashes that sh strips, so the real-shell proof runs only on POSIX
+// until BI-759D9830 makes it portable (then remove this skip).
 describe.skipIf(process.platform === "win32")("buildTreeInstallStep", () => {
   it("reinstalls a tree whose lockfile is newer than its install", () => {
     const t = buildTree({ install: true, modulesAt: OCTOBER, lockfileAt: NOVEMBER });
