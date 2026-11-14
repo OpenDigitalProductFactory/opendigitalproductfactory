@@ -17,7 +17,7 @@ const configured = process.env.DATABASE_URL;
 const leased = (() => { try { return process.env.DPF_NONPROD_LEASE_ID && configured
   && /^\/dpf_local_ci_\d+$/.test(new URL(configured).pathname) ? configured : undefined; } catch { return undefined; } })();
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL ?? leased;
-const tables = ["NonProductionEnvironmentLease", "CoworkerActionEnvelope", "ToolExecution", "TaskRun", "PlatformConfig", "Workroom"];
+const tables = ["NonProductionEnvironmentLease", "CoworkerActionEnvelope", "ToolExecution", "TaskRun", "PlatformConfig", "WorkCapsule"];
 const schema = `review_admission_${randomUUID().replaceAll("-", "")}`;
 type Fixture = Awaited<ReturnType<typeof createReviewPostgresFixture>>;
 const attach = (f: Fixture) => f.pool.query(`CREATE TRIGGER "NonProductionEnvironmentLease_admission_history"
@@ -59,7 +59,7 @@ describe.skipIf(!url)("forward-only reservation admission history — isolated P
   let f: Fixture;
   beforeAll(async () => { f = await createReviewPostgresFixture({ url: url!, schema, tables }); await attach(f); });
   beforeEach(async () => {
-    await f.pool.query(`TRUNCATE "ToolExecution", "CoworkerActionEnvelope", "NonProductionEnvironmentLease", "TaskRun", "PlatformConfig", "Workroom"`);
+    await f.pool.query(`TRUNCATE "ToolExecution", "CoworkerActionEnvelope", "NonProductionEnvironmentLease", "TaskRun", "PlatformConfig", "WorkCapsule"`);
     await f.db.platformConfig.create({ data: { key: LOCAL_CI_POOL_CONFIG_KEY, value: derivedLocalCiPoolConfig(1) } });
   });
   afterAll(async () => { await f?.close(); });
