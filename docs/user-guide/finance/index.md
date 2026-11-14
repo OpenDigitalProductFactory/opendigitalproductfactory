@@ -186,9 +186,23 @@ If your phone could not work out the country — no signal, or you did not give 
 permission — you are still paid, at your own country's rate. You never lose a
 drive over it.
 
-**Getting paid.** Someone with finance permission turns a month of business drives
-into an expense claim. That claim can be paid on its own or added to your pay as a
-reimbursement, which is not taxed because it repays money you already spent.
+**Adding a drive yourself.** You do not need the app. Open **Add or claim** on
+`/finance/mileage` and enter the date, where you started, where you went, the
+miles, and the business purpose. The purpose is required because a mileage log
+that backs a reimbursement must say why each drive was business. A typed-in drive
+has no map position, and DPF stores it as unknown rather than inventing one.
+
+**Setting the rate.** Someone with finance permission enters the company's rate
+per mile under **Rate per mile**, with the date it starts and the web address of
+the page it came from, for example the IRS standard mileage rates page. Nothing is
+priced until a rate exists. A new rate applies from its start date; drives before
+that keep the rate they were driven at. An automated session cannot set the rate.
+
+**Getting paid.** Someone with finance permission picks the first and last day
+under **Claim reimbursement**, and every unclaimed business drive in those days
+becomes one expense claim. Claiming the same days twice does not pay twice. That
+claim can be paid on its own or added to your pay as a reimbursement, which is not
+taxed because it repays money you already spent.
 
 Mileage appears in the mobile app only on installs that use it. A business whose
 staff do not drive to customers will not see it.
@@ -255,7 +269,7 @@ authoritative accounting close and retain its reviewer evidence separately.
 - `/finance/suppliers`, `/finance/purchase-orders`, and `/finance/bills` — supplier commitments and payables
 - `/finance/expense-claims` and `/finance/my-expenses` — reviewer and employee expense workflows
 - `/finance/payroll` — what blocks payroll, W-4s, and computing and reviewing pay runs
-- `/finance/mileage` — your own captured drives, sorted business or personal
+- `/finance/mileage` — your drives, the company rate per mile, and claiming a period
 - `/finance/banking` — statement import, rules, and reconciliation
 - `/finance/reports` and `/finance/close` — reporting and close-readiness
 - `/finance/spend` — spend hub for suppliers, bills, expenses, and AI spend summary

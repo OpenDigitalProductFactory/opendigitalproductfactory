@@ -1,0 +1,31 @@
+{
+  "summary": "Add or claim",
+  "drive": {
+    "heading": "Add a drive",
+    "date": "Date",
+    "from": "From",
+    "to": "To",
+    "miles": "Miles",
+    "purpose": "Business purpose",
+    "submit": "Add drive",
+    "done": "Drive added."
+  },
+  "claim": {
+    "heading": "Claim reimbursement",
+    "start": "First day",
+    "end": "Last day",
+    "submit": "Claim these drives",
+    "done": "Claim {$claimId} created. Find it under Expense Claims."
+  },
+  "rate": {
+    "heading": "Rate per mile",
+    "current": "Current rate: {$rate} from {$from}.",
+    "none": "No rate yet. Drives cannot be priced until you set one.",
+    "sourceLink": "Source",
+    "amount": "Rate per mile",
+    "effectiveFrom": "Starts on",
+    "sourceUrl": "Web address of the source",
+    "submit": "Save rate",
+    "done": "Rate saved."
+  }
+}

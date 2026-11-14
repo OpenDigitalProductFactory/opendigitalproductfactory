@@ -130,7 +130,7 @@ export function MileageTripsTable({
         initialSort={{ key: "date", dir: "desc" }}
         empty={
           <div className="p-6 text-center text-sm text-[var(--dpf-muted)]">
-            No drives yet. Turn it on in the app.
+            No drives yet.
           </div>
         }
       />
