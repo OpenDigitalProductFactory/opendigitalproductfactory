@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/report-kit/Notice";
 import { registerActiveFormAssist } from "@/lib/agent-form-assist";
 
-import { MAILBOX_FORM_ASSIST_ID, mailboxFormAssistFields, readMailboxFormValues, sanitizeMailboxFormUpdates } from "./mailbox-form-assist";
+import { MAILBOX_FORM_ASSIST_ID, mailboxFormAssistFields, readMailboxFormValues, sanitizeMailboxFormUpdates } from "@/lib/mailroom/mailbox-form-assist";
 
 export type ExpectedMailboxOption = { purposeKey: string; label: string; examples: string[]; why: string };
 
