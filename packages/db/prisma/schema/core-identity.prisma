@@ -128,6 +128,7 @@ model User {
   workbookRowsCreated              WorkbookRow[]                       @relation("WorkbookRowCreatedBy")
   workbookViewsCreated             WorkbookView[]                      @relation("WorkbookViewCreatedBy")
   payrollTaxRulesRatified          PayrollTaxRule[]                    @relation("PayrollTaxRuleRatifiedBy")
+  withholdingElectionsRecorded     EmployeeWithholdingElection[]       @relation("EmployeeWithholdingElectionRecordedBy")
 
   @@unique([automationVerificationId, automationProfile, automationSlot], map: "User_automation_fixture_key")
   @@index([automationExpiresAt, id])

@@ -159,6 +159,18 @@ and state UI as the concrete `StatutoryDeductionFn`; contractor/1099 path.
 **Exit:** payslip withholdings match hand-computed IRS and state figures for the
 fixture set. This phase must not ship on structural verification.
 
+**Status 2026-11-14 (BI-2BC8D614).** The first pass shipped a federal model of one
+standard deduction and one bracket list, with no caller. That is not the IRS
+method. Federal withholding now follows Pub 15-T Worksheet 1A
+(`apps/web/lib/hr/federal-withholding.ts`) from the employee's Form W-4, recorded
+in `EmployeeWithholdingElection`; an employee with no W-4 is withheld on as single
+with no entries, which is the IRS rule. `PayrollTaxRule.qualifierKey` joins the
+unique key so every row of a bracket table is its own confirmed figure, and
+resolution and supersession match on it. `apps/web/lib/hr/us-payroll-rules.ts`
+assembles a pay date's federal figures from ratified rows only and names each
+missing one. Golden cases are hand-computed from the 2026 worksheet. State
+withholding, the W-4 entry screen and the run-payroll page are the next slices.
+
 ### Phase 5 — Payroll tax filing on the existing spine (EP-PAYROLL-ABSORB)
 
 Federal jurisdiction seed and payroll tax types; period-total generalization;

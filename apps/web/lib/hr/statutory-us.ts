@@ -17,17 +17,32 @@
 // source-cited data task, because publishing a number here that I cannot cite
 // would be a fabrication with money attached.
 
+import {
+  federalWithholdingWorksheet1A,
+  type FederalWithholdingTables,
+  type W4Election,
+} from "./federal-withholding";
+
+/**
+ * IRS Pub 15-T: an employee who has not furnished a Form W-4 is withheld on as
+ * single, with no entries in Steps 2, 3 or 4. That is the IRS rule, not a guess.
+ */
+export const NO_W4_FURNISHED: W4Election = {
+  filingStatus: "single",
+  step2Checked: false,
+  step3Credits: 0,
+  step4aOtherIncome: 0,
+  step4bDeductions: 0,
+  step4cExtraWithholding: 0,
+  exempt: false,
+};
+
 /** One progressive bracket. `upTo` null means "and everything above". */
 export interface TaxBracket {
   upTo: number | null;
   rate: number;
 }
 
-export interface UsFederalWithholdingRules {
-  /** Standard deduction applied before the brackets, per pay period. */
-  standardDeductionPerPeriod: number;
-  brackets: readonly TaxBracket[];
-}
 
 export interface UsFicaRules {
   socialSecurityRate: number;
@@ -56,7 +71,8 @@ export interface UsStateWithholdingRules {
 export interface UsPayrollTaxRuleSet {
   taxYear: number;
   periodsPerYear: number;
-  federal: UsFederalWithholdingRules;
+  /** Pub 15-T Annual Percentage Method tables and line 1g (BI-2BC8D614). */
+  federal: FederalWithholdingTables;
   fica: UsFicaRules;
   unemployment: UsUnemploymentRules;
   /** Omitted for a no-income-tax state (TX, FL, WA, …). */
@@ -155,17 +171,17 @@ export function computeUsStatutory(
     taxablePay: number;
     ficaWages: number;
     ytd?: YearToDate;
+    /** The employee's Form W-4 in force on the pay date; absent means none furnished. */
+    w4?: W4Election;
   },
   rules: UsPayrollTaxRuleSet,
 ): UsStatutoryResult {
   const ytd = input.ytd ?? ZERO_YTD;
   const { fica, unemployment, federal, state } = rules;
 
-  const federalWithholding = periodWithholding(
-    input.taxablePay,
-    federal.standardDeductionPerPeriod,
-    federal.brackets,
-    rules.periodsPerYear,
+  const federalWithholding = federalWithholdingWorksheet1A(
+    { periodWages: input.taxablePay, periodsPerYear: rules.periodsPerYear, w4: input.w4 ?? NO_W4_FURNISHED },
+    federal,
   );
 
   const stateWithholding = state
@@ -232,9 +248,13 @@ export function computeUsStatutory(
  * incomeTax and the FICA family into the NI slots. The full breakdown stays
  * available from computeUsStatutory for payslip lines and tax filing.
  */
-export function usStatutory(rules: UsPayrollTaxRuleSet, ytd: YearToDate = ZERO_YTD) {
+export function usStatutory(
+  rules: UsPayrollTaxRuleSet,
+  ytd: YearToDate = ZERO_YTD,
+  w4: W4Election = NO_W4_FURNISHED,
+) {
   return ({ gross, taxable }: { gross: number; taxable: number }) => {
-    const r = computeUsStatutory({ taxablePay: taxable, ficaWages: gross, ytd }, rules);
+    const r = computeUsStatutory({ taxablePay: taxable, ficaWages: gross, ytd, w4 }, rules);
     return {
       incomeTax: round2(r.federalWithholding + r.stateWithholding),
       employeeNI: round2(
