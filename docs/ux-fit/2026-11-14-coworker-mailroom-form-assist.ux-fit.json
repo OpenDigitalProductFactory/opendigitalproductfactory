@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/components/mailroom/MailboxConnectForm.tsx"
+    ]
+  },
+  "decidedOption": "register-existing-form-assist-no-visible-change",
+  "decisionInteractionId": "DI-EA7664F51E90",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "register-existing-form-assist-no-visible-change",
+      "visible-ask-coworker-button-on-form",
+      "new-mailroom-status-mcp-tool-only"
+    ]
+  },
+  "authority": "BI-2A815481 (medium). DI-EA7664F51E90 ranked the no-visible-change option first (composite 7.58, margin 2.14, high confidence, autonomy eligible).",
+  "limitations": "The change adds a ref, two effects and a form-assist registration to MailboxConnectForm; it renders no new element, copy or control, so the visible budget of /workspace/mailroom is unchanged by design. No served-route sweep was run: automation sign-in is refused on the production install and the contributor preview shares the local-CI lease this branch is queued on. CI's UX Route Budget Sweep measures the branch build. Behaviour is pinned in components/mailroom/mailbox-form-assist.test.ts."
+}
