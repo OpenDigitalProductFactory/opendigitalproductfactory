@@ -23,6 +23,10 @@ vi.mock("@/lib/work-management/atlas-projection.server", async () => {
   return { loadAtlasPicture: vi.fn(async () => projectAtlas({ rooms, owners: new Map(), limit: 2000, observedAt: new Date("2026-11-12T00:00:00.000Z") })) };
 });
 
+vi.mock("@/lib/work-management/atlas-inspector.server", () => ({
+  loadAtlasInspector: vi.fn(async () => ({ flow: null, live: { summary: "Paused by the drive", recordedAt: "2026-11-11T21:00:00.000Z" } })),
+}));
+
 vi.mock("@/lib/work-management/held-workrooms", () => ({
   loadHeldWorkrooms: vi.fn(async () => [{
     capsuleId: "WC-HELD", title: "Onboard new foster", action: "pause", reason: "conformance_pause",
@@ -104,5 +108,23 @@ describe("Work in progress leads with the Work Atlas (BI-3791FDD8)", () => {
     const { html } = await render();
     expect(html).toContain("Day-to-day operations");
     expect(html).toContain("Last 14 days for Payables watch");
+  });
+
+  it("opens the selected room's inspector beside the map from ?room (BI-94C9AFC1)", async () => {
+    const { document } = await render();
+    expect(document.querySelector("[data-atlas-inspector]")).toBeNull();
+    expect(document.querySelector('[data-atlas-cell="WC-HELD"]')!.getAttribute("href")).toBe("/ops/workrooms?room=WC-HELD");
+    const opened = await render({ room: "WC-HELD", state: "stuck" });
+    const panel = opened.document.querySelector('[data-atlas-inspector="WC-HELD"]')!;
+    expect(panel.textContent).toContain("Held: conformance pause, missing explicit coordinator.");
+    expect(panel.textContent).toContain("Latest: Paused by the drive");
+    expect(panel.querySelector("[data-inspector-open]")!.getAttribute("href")).toBe("/workspace/cases/work-capsule%3AWC-HELD");
+    expect(panel.querySelector("[data-inspector-flow]")!.getAttribute("href")).toBe("/area/delivery?view=work&shape=delivery-small");
+    expect([...panel.querySelectorAll("a")].find((a) => a.textContent === "Close")!.getAttribute("href")).toBe("/ops/workrooms?state=stuck");
+  });
+
+  it("opens no panel for a room that is not on the map", async () => {
+    const { document } = await render({ room: "WC-NOTHERE" });
+    expect(document.querySelector("[data-atlas-inspector]")).toBeNull();
   });
 });
