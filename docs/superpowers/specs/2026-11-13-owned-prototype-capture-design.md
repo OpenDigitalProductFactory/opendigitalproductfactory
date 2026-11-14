@@ -332,12 +332,23 @@ startup to work around this boundary. NNP, cgroup limits, private directories,
 no-network execution and sandbox-enabled startup remain mandatory.
 
 The canonical host is a distinct Docker Desktop 4.98.0 / Engine 29.9.2,
-Git commit `0367cbe`, ARM/kernel 7.0.14-linuxkit. A read-only public Moby commit
-lookup returned HTTP 422 for that commit; its exact maintained baseline is not
-attested by either CI source above. No canonical namespace experiment ran.
-Neither CI profile may be silently treated as its production baseline.
-Source-provenance confirmation for that Engine is a concrete release-owner
-dependency before proposing a production profile.
+Git commit `0367cbe`, ARM/kernel 7.0.14-linuxkit. The initial short-commit lookup
+returned HTTP 422; that lookup failure is now **superseded**, not an outstanding
+source-provenance blocker. The release coordinator found the official
+[`docker-v29.9.2` tag](https://github.com/moby/moby/releases/tag/docker-v29.9.2).
+This source owner independently read its annotated tag object
+`d7dfd6629b22aed77600050ab53695149b8c550d`, verified API signature status
+`verified: true`, and resolved full Engine commit
+`0367cbeb49b9d98cb0b4f51e95f7b54b4803e76c`. Its
+[vendored expected profile](https://github.com/moby/moby/blob/0367cbeb49b9d98cb0b4f51e95f7b54b4803e76c/vendor/github.com/moby/profiles/seccomp/default.json)
+was independently fetched and hashed as
+`785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`.
+Its namespace conditions match the relevant pattern described above. This
+proves expected upstream source at the advertised Engine commit, not the
+Desktop binary's compiled/effective BPF or policy approval. No canonical
+namespace experiment ran, and neither CI profile is its production baseline.
+Any production proposal must name this distinct maintained baseline and its
+exact delta, retain the observed-runtime distinction and undergo normal review.
 
 The existing owner must obtain normal independent security/architecture review
 of the concrete candidate, a genuine governed decision and admission **before**
