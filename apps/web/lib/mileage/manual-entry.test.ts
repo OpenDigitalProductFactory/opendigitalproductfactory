@@ -87,13 +87,23 @@ describe("recordCompanyMileageRate", () => {
     expect(resolveRateForTrip(resolvable, new Date("2026-03-03T00:00:00.000Z"))?.amountPerMile).toBe(0.7);
   });
 
-  it("reuses the existing company plan for a later rate", async () => {
+  it("reuses the existing company plan for a later rate, and each drive keeps the rate of its own date", async () => {
     const { db, plans, rates } = memoryDb();
     await recordCompanyMileageRate(db, { ...validRate, actor: owner, now }, "a");
     await recordCompanyMileageRate(db, { ...validRate, effectiveFrom: "2027-01-01", amountPerMile: 0.72, actor: owner, now }, "b");
 
     expect(plans).toHaveLength(1);
     expect(rates).toHaveLength(2);
+
+    const resolvable: ResolvableRate[] = rates.map((r) => ({
+      id: r.id as string, purposeKind: "business", amountPerMile: Number(r.amountPerMile),
+      currency: "USD", effectiveFrom: r.effectiveFrom as Date, effectiveTo: null,
+      isOrgOverride: true, jurisdictionCountryCode: null,
+    }));
+    // A drive between the two start dates prices at the earlier rate; one after
+    // the later start prices at the later rate. Neither rate's window was edited.
+    expect(resolveRateForTrip(resolvable, new Date("2026-12-15T12:00:00.000Z"))?.amountPerMile).toBe(0.7);
+    expect(resolveRateForTrip(resolvable, new Date("2027-02-01T12:00:00.000Z"))?.amountPerMile).toBe(0.72);
   });
 
   it("refuses the automation persona — the figure must be a person's", async () => {

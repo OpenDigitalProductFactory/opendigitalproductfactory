@@ -274,6 +274,9 @@ export async function claimMyMileageAction(input: {
   periodStart: string;
   periodEnd: string;
 }): Promise<ActionResult<{ claimId: string; total: number; skipped: number; alreadyClaimed: number }>> {
+  // Stated here as well as inside monetiseMileageAction, so the authorization
+  // of this entry point is visible without reading the action it delegates to.
+  await requireCapability("manage_finance");
   const employeeProfileId = await currentEmployeeProfileId();
   if (!employeeProfileId) return err("No employee record is linked to your account.");
   const day = /^\d{4}-\d{2}-\d{2}$/;
