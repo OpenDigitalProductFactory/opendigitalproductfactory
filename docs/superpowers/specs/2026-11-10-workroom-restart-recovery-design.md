@@ -287,3 +287,100 @@ single-start action through the producer's normal cleanup, and retains all audit
 and negative evidence. Old Windows tokens must keep their old interpretation.
 No completed test slice, code-review receipt or kernel decision closes the atomic
 repair or the separate TokenEconomizer feature.
+
+## November 14 review findings and construction feasibility
+
+The immutable spec-approval of head `6e2a6e81c8de3cd5c6e8b070c5fed207e6ebe76d`
+failed in receipt
+`initiative-review-v1-c51e34cbbf55cb360464efc713599546ae5459df6a4ce359c439214f1a5d7e67`.
+That decision remains in force. The architecture pass
+`initiative-review-v1-b211bef56c63852475ef599f4160f8484ec0acddb70f987e93203d3c0843d667`
+does not supersede it. This section records source investigation and unresolved
+construction questions; it neither requests reassessment nor declares readiness.
+The original canonical design-spec task also settled as fail in receipt
+`initiative-review-v1-430b0a0e3f56763799d6c4467a0d1e5853bdbcccccc9a9a7da2af37d6bb18717`.
+Its instruction to complete AC-3 with real production evidence before resubmission
+is retained as the reviewer's disposition, not permission to inject faults into
+production or skip the preimplementation design gate.
+
+| Recorded review premise | Applicable obligation | Disposition |
+|---|---|---|
+| Document is draft | Independent approval of a proposed design | Retain draft status until approval; changing its label supplies no evidence. |
+| Approval and covered planning precede issuer/Edge changes | Preimplementation admission | Retain the required order. No code admission is inferred from this document. |
+| Seven producer prerequisites are unimplemented | A credible construction must precede approval; implementation must precede Verify | Valid design gap: the earlier owner table is not an implementation algorithm. Resolve the interfaces and lifetime construction below before another review request. |
+| AC-3 has no completed proof | Verify and delivery acceptance | Retain the hold. The lifecycle places spec approval before implementation, but that ordering cannot excuse an infeasible design. A rubric clarification cannot supply the missing construction. |
+| Passing tests use lab markers | Evidence scope | Retain their narrow interpretation. No production atomicity, loaded-code stability or Docker isolation follows from the marker tests. |
+
+### Existing candidate artifact construction
+
+`scripts/local-ci-bounded-build.mjs` already owns a governed production build
+with a durable `production-build` stage receipt. Its identity includes
+`candidateSha`, `integrationTreeSha` and `imageTag`; a passed receipt carries
+`artifact.imageId`. `canReuseBuildReceipt` checks the complete build identity and
+reinspects the image ID. `scripts/local-ci-bounded-build.test.mjs` covers changed
+tree identity, missing artifacts and a tag resolving to different bytes.
+
+The local qualification resolver must consume that existing owner's passed
+receipt through the existing governed gate, rather than build or tag an image
+itself. Resolve the candidate commit to the recorded integration tree; validate
+the corresponding gate/lease identity and completed build stage; resolve the
+recorded image to exactly `artifact.imageId`; then bind that immutable identity
+and the runtime recipe digest in the signed admission. A missing stage, stale
+lease, different tree, moved image or incomplete provenance refuses issuance.
+The build's local image ID is not a registry distribution manifest digest: the
+resolver must retain that distinction and must not invent an OCI descriptor.
+If a remote producer needs transport, its existing artifact owner must supply
+verified transport provenance before that producer becomes eligible.
+
+`scripts/lib/local-ci-slot-manifest.mjs` supplies an admitted slot's compose
+project, PostgreSQL container/database/volume, scratch boundary and evidence
+paths. Reuse the existing lease rather than accepting a caller-supplied database
+URL. The producer must verify the lease still owns these exact resources before
+launch and before settling results. This source contract establishes resource
+identities; it does not yet implement isolated real-writer qualification.
+
+### Exact remaining lifetime and isolation gaps
+
+The actual `prepareScopeClaim` in `scope-claim-store.ts` qualifies before the
+receipt transaction and retains the proof through its `beforeRoomLock` callback.
+The claim invokes `enrollment.assertCurrent(tx)` before its room lock, writes
+scope and activity inside that transaction, and uses the bound transaction when
+called through the receipt owner. The production proof currently brands and
+freezes an object and checks PID/hostname before acquiring the two admission
+locks. Those facts identify existing insertion points; they do not establish
+the identity of every loaded function or exclude subsequent code changes.
+
+Two concrete counterexamples constrain any proposed producer:
+
+1. The canonical `portal` service currently has a writable root and a Docker
+   socket. Running an isolated candidate with a read-only root and no socket
+   does not prove the canonical writer has those properties. Production
+   acceptance requires the same established lifetime invariant, not a stronger
+   experimental recipe silently substituted for the deployed recipe.
+2. The real enrollment qualifier invokes Docker inspection and a packaged-image
+   probe through its production Docker port. Giving an isolated writer the
+   unrestricted production socket defeats the proposed production exclusion;
+   removing it makes the real default qualification path unavailable. Merely
+   injecting successful mocked port responses would repeat the rejected proof.
+
+Before implementing the local profile, its existing runtime/Edge owners must
+therefore specify both (a) a loaded-closure lifetime mechanism valid for the
+canonical writer and (b) a bounded real Docker observation/probe transport that
+cannot mutate production resources from the experiment. The mechanism must name
+all late-load and code-changing paths, the enforcement boundary, and what aborts
+the receipt transaction when that boundary changes. Static imports, PID checks,
+source hashes, chmod, a read-only socket bind, or an independent probe container
+are individually insufficient. This investigation has not established an
+existing admitted implementation of both contracts.
+
+Kernel decision `DI-35264B27B0BC` selects concrete source/design feasibility under
+the existing profile and runtime owners, with that runtime precondition retained.
+The supplied feature scores are qualitative engineering judgments, not measured
+results. The earlier unscored call `DI-AB9AEA0D18AE` was unusable and supplies no
+decision authority. Neither decision authorizes implementation or reassessment.
+
+The supported next action is to resolve these two construction contracts in this
+same design scope, reconcile the original design-spec task, and obtain the normal
+reviewer's disposition of substantive corrections. Until then the original
+approval failure and AC-3 hold remain; no new assessment key, replacement review,
+test-only merge or live upgrade can stand in for them.
