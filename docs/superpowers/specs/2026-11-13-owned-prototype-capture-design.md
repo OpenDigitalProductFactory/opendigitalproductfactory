@@ -294,18 +294,22 @@ hash `cc3e61cabda6bbc1e53e54d27ba4d55a9d3be829b6dd1a596f4a7b31b1cc7849`
 allows unrestricted clone/setns/unshare and differs elsewhere, including
 io_uring rules. It is guidance, not a minimal drop-in delta or runtime consent.
 
-A narrower **unapproved candidate for review** would retain each exact tested
-Engine baseline and add only these two argument-qualified allow rules:
+The **unapproved W candidate for review** retains each exact Engine baseline
+and adds only these two argument-qualified allow rules. Both additions are
+restricted to the two examined Linux daemon architectures; they must not alter an
+unqualified architecture's baseline:
 
 ```json
 [
   {
     "names": ["clone"], "action": "SCMP_ACT_ALLOW",
-    "args": [{"index": 0, "value": 235012096, "valueTwo": 0, "op": "SCMP_CMP_MASKED_EQ"}]
+    "args": [{"index": 0, "value": 235012096, "valueTwo": 0, "op": "SCMP_CMP_MASKED_EQ"}],
+    "includes": {"arches": ["amd64", "arm64"]}
   },
   {
     "names": ["unshare"], "action": "SCMP_ACT_ALLOW",
-    "args": [{"index": 0, "value": 268435456, "op": "SCMP_CMP_EQ"}]
+    "args": [{"index": 0, "value": 268435456, "op": "SCMP_CMP_EQ"}],
+    "includes": {"arches": ["amd64", "arm64"]}
   }
 ]
 ```
@@ -318,7 +322,8 @@ every new namespace must be paired with USER. The second permits
 only CLONE_NEWUSER unshare. Setns and clone3 behavior stay at baseline; no
 io_uring, ptrace, descriptor-transfer or other syscall permission is added.
 This is a proposed qualification hypothesis, not proven sufficient, selected,
-installed, or declared minimal. No profile file or security_opt change exists.
+installed, or declared minimal. No candidate profile file or security_opt change
+exists in source or runtime.
 
 The whole service, including ordinary root browser sessions, would acquire the
 outer profile's new syscall surface. Its kernel exposure and compatibility must
@@ -366,3 +371,171 @@ important/minor issues. The current diagnosis, bounded predicate, baseline
 comparison and layering account address its evidence requests for a new review;
 that historical receipt is not approval of these new candidate rules. Original
 Critic findings and the operator's email/MSP acceptance remain unrun.
+
+## Required changes from the c67 policy critique — unresolved before actuation
+
+Native policy critique `TR-GATE-CF2EB8214655B477A6026C8F`, receipt
+`cmwfnjfvd0ieq0eqco09ylfet`, passed the c67 source proposal/hold with no critical
+blockers and seven important/minor findings. It did not authorize a profile or
+certify the ordinary root browser. The four important obligations below are
+explicitly dispositioned as **documented, unresolved before actuation**. This
+amendment does not turn them into accepted residual risks. One review branch
+abbreviated W's mask incorrectly as `0x0E000000`; the actual c67 mask is
+`0x0E020000`, confirmed by the other branch and arithmetic checks.
+
+### Observed and inferred namespace operations
+
+| Operation | Evidence class | What is established |
+| --- | --- | --- |
+| `unshare(0)` | Actual fixed-code CI probe, both architectures | EPERM with and without the worker guard; no namespace change |
+| `unshare(CLONE_NEWUSER)` | Actual fixed-code CI probe, both architectures | EPERM with and without the worker guard; no namespace change |
+| Chromium sandbox launch | Actual browser process, both architectures | No usable sandbox; no browser pixels; exact browser syscall flag word was not traced |
+| `CLONE_NEWUSER \| SIGCHLD`, then NEWUSER unshare | Upstream Chromium 156 credentials source | Required by the cited support probe; not an observed syscall trace of the packaged browser |
+| USER/PID/NET default namespace types | Upstream Chromium 156 namespace launcher source | Default options and per-type support probes are visible; the actual capture's accepted launch flags remain unobserved |
+| `CLONE_NEWPID \| SIGCHLD` | Upstream Chromium 156 `ForkInNewPidNamespace` helper | A PID-only helper exists; its presence does not prove this capture calls it |
+
+The two unshare probes do not observe the browser's clone flags. No ptrace,
+capability addition, altered filter or host audit access was used to manufacture
+that evidence. Any future instrumentation needs its own normal admission.
+
+### U versus W: explicit tighter alternative, neither selected
+
+Candidate **U** uses exactly W's two appended rules, including the architecture
+conditions and exact NEWUSER unshare rule, except that its clone argument is:
+
+```json
+{"index": 0, "value": 503447552, "valueTwo": 268435456, "op": "SCMP_CMP_MASKED_EQ"}
+```
+
+The mask is `0x1E020000`, requiring USER and denying NEWNS/NEWCGROUP/NEWUTS/NEWIPC;
+PID/NET remain optional. Original no-namespace clone rules remain intact.
+
+| Namespace bits in clone, ignoring ordinary nonnamespace flags | U's added permission | W's added permission |
+| --- | --- | --- |
+| None | None needed; original baseline applies | None needed; original baseline applies |
+| USER; USER+PID; USER+NET; USER+PID+NET | Allowed | Allowed |
+| PID; NET; PID+NET without USER | Not added | Allowed by the added filter rule; kernel capability checks still apply |
+| Any NEWNS/NEWCGROUP/NEWUTS/NEWIPC combination | Not added | Not added |
+
+Both candidates leave setns and clone3 at baseline and permit only exact NEWUSER
+unshare. Pure arithmetic checked all 128 combinations of the seven listed
+namespace bits for each predicate. Arithmetic is not syscall execution,
+successful browser launch, minimum-necessity proof or security qualification.
+U may reject a legitimate PID-only fork after an earlier user-namespace
+transition; W may expose combinations capture never needs. Before admission,
+the independent reviewer must compare the actual required packaged-browser
+paths, both candidates' permitted combinations, ordinary-session exposure and
+the supported Engine/architecture boundary. Do not silently choose W if U fails.
+The bounded fallback is the unchanged unsupported hold or an actually eligible
+already-authorized runtime under Alternative 1, not another relaxed boundary.
+
+For reproducible review, these full candidates were assembled **in memory only**
+from each hash-verified baseline: parse its JSON, append the two stated rules,
+serialize UTF-8 with Python `json.dumps(sort_keys=True, indent=2)` plus one LF.
+Data comparison confirmed every pre-existing syscall rule and every other field
+unchanged. No candidate file was written or loaded. Byte formatting changes in
+this reproduction are not additional semantic permissions.
+
+| Expected upstream Engine source baseline | U assembled SHA-256 | W assembled SHA-256 |
+| --- | --- | --- |
+| 28.0.4; baseline `9c1025c88ccaa517b648da571961838744ea2137f176bfe6a48b21294cae9c76` | `52bb8634d9142662c1e4e4641aa9188c149d01dedae4beda269131fc736bff3b` | `59ca04ee59fd6254825a266cc305afce050467ed3fdf4266e4facd1f690454e4` |
+| 29.4.2; baseline `1a4d017730647621403920d9558aa0152adef04dd89ed7720e4abafa24551999` | `9a330d950206c7cb8dd182e6234dcc78ca2792b8b08576fdde20c93d62515c82` | `22f84e482c873a04d28eec8b2372989bf36e9d6de6542379ab2476d2e2ddebf8` |
+| 29.9.2; baseline `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334` | `24e2920d769ee9c0fd86ddd7b83d2d7689c6aa8ccfa5cc5442a90423bf533468` | `49372a24fe71c179521b3f48c4726e4fac9645a9dc11576ea7535a09a5c3c1d2` |
+
+These are six distinct source candidates, not six approved policies. A future
+qualification must bind the actual Engine/source/baseline/candidate and refuse
+an unrecognized identity; a CI baseline cannot stand in for another Engine.
+Profile selection must refuse any architecture outside amd64/arm64. The
+maintained [Engine filter reader](https://github.com/moby/moby/blob/0367cbeb49b9d98cb0b4f51e95f7b54b4803e76c/vendor/github.com/moby/profiles/seccomp/seccomp_linux.go)
+maps daemon GOARCH to those native names and omits a rule when its `includes`
+architecture list does not match. That source condition is not foreign-hardware
+qualification. The worker also rejects unsupported OS/machine pairs before
+libseccomp or browser loading. Four source-level mocked controls (Linux
+ppc64le/s390x/riscv64 and Darwin aarch64) confirmed that refusal without loading
+either library; no foreign-architecture runtime was exercised.
+
+### Named failure and residual-risk scenarios
+
+**R1 — post-actuation ordinary-session kernel exposure.** After a future admitted
+change, an attacker-controlled page in an ordinary root browser session could
+exploit the newly reachable namespace kernel paths. The capture UID's added
+filter does not protect that session, its profile credentials or host integrity.
+The CA4 delivery owner and independent security reviewer must assess the entire
+service, U versus W, the eligible-runtime alternative and the effective outer
+boundary before choosing a candidate. Required detection is actual ordinary-
+session compatibility plus positive and negative namespace/transport/descriptor
+controls, exact runtime identity, finite resources and complete cleanup.
+Recovery requires the governed last-qualified image/profile rollback; suspected
+host compromise follows existing incident/recovery authority, not an agent's
+manual host repair. **Residual unaccepted:** namespace kernel attack surface
+cannot be eliminated by these two rules or a passing screenshot. The independent
+security reviewer and release coordinator must record an accountable residual
+disposition before any production proposal; present source publication accepts
+none of that post-actuation risk.
+
+**R2 — choosing breadth without minimum-necessity evidence.** U could fail on a
+PID-only helper; W could allow unnecessary combinations. The implementer must
+separate observed flag words from upstream inferences and compare both exact
+candidate artifacts before admission. Detection requires admitted fixed-code
+controls for individual namespace combinations and actual packaged-browser
+behavior, not only the 128 arithmetic cases. A failed candidate remains failed;
+hold rather than automatically widening, selecting an unreviewed third rule or
+changing clone3/setns. **Residual unaccepted:** minimum viable permissions and
+both candidates' sufficiency are unproven. The CA4 delivery owner supplies the
+evidence; the independent security/architecture review and genuine governed
+decision select the next permitted hypothesis.
+
+**R3 — continued AppArmor denial and second-boundary pressure.** A seccomp-only
+candidate may still fail because the LSM, packaged browser or another boundary
+denies sandbox setup. Before actuation, require an AppArmor-aware hypothesis
+with the existing enforcing label preserved and a finite failed-hypothesis stop.
+Detection is the actual sandbox result and scoped diagnostic evidence; absent
+audit/trace access is unavailable evidence, not permission to obtain it by a
+different account or host path. If denial remains, **STOP changed-policy
+qualification and retain the unsupported hold**. No AppArmor relaxation,
+unconfined mode, host capability, sysctl or second-boundary change is authorized.
+The CA4 delivery owner records the failed hypothesis; the release coordinator
+and independent security reviewer own any later separately governed decision.
+**Residual unaccepted:** this source proposal does not establish that seccomp
+alone is sufficient and does not authorize widening to make the test pass.
+
+**R4 — portal update mistaken for browser delivery.** Existing C54E691E/00F7D2E3
+source reconciliation is shadow, and the capability-transition actuator's
+complete-profile `up -d --wait` has no explicit browser image build. Active saved
+settings, an unchanged capability reconciliation or a containing portal SHA
+cannot establish new browser bytes, limits or startup permissions. The existing
+C54 source owner and sole release coordinator must supply normal design,
+admission and actual image/config convergence receipts before live capture
+acceptance. Do not toggle capabilities, hand-build or replace a host container
+as a shortcut. **Residual unresolved:** this dependency is separately owned and
+not delivered by the capture proposal; no duplicate convergence case is created.
+
+### Preconditions and current review route
+
+All four important obligations are required preconditions, not optional follow-
+ups: actual-versus-inferred flag map and U/W comparison (R2); whole-service/root
+threat model, fallback, compatibility and accountable residual (R1); AppArmor-
+aware hypothesis and no-second-boundary stop (R3); and explicit minimum-
+permission independent security/architecture review covering all of these.
+Service convergence (R4), original/current task authority and actual image
+qualification remain additional delivery prerequisites. Only a genuine governed
+decision/admission may authorize a bounded nonproduction policy experiment.
+
+The latest native reads still classify this case as `delivery-medium@1.0.0`.
+Exact classification/security/architecture recovery queries expose no available
+gates or reviewer packets, only a body-baseline acceptance-completion route.
+Security and architecture offer searches returned no offers. These bounded
+results do not prove no independent reviewer exists; they establish that none
+has yet been offered/admitted through those routes. Do not invoke completion
+before delivery, manufacture an AGT-190 receipt, borrow another item's packet or
+re-size solely to mint authority. The source owner and coordinator must resolve
+legitimate scope/shape classification or obtain an actual eligible independent
+route for this privileged impact, preserving author/reviewer separation. The
+current generic/architecture policy critique is evidence, not that formal role
+or changed-policy authority. DI-94DF1EA45BD5 remains unresolved.
+
+The three minor findings are separately dispositioned: workflow concurrency
+fallback has no reported functional defect and is unchanged; a shared typed
+failure-code contract is required before producer wiring; a structured PID
+registry field would extend the existing registry schema and is not silently
+added here. Compose and the runtime qualifier still enforce 256 PIDs.
