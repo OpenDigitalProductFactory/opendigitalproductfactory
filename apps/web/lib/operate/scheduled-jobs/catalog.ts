@@ -375,6 +375,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "plan-gate-stall-invariant",
+    inngestId: "build/plan-gate-stall-invariant",
+    honorsEnabledGate: true,
+    name: "Plan gate stall invariant",
+    purpose: "Reports Build Studio builds whose plan passed review but stay refused on PLAN_REQUIRED for 15 minutes.",
+    cron: "4,19,34,49 * * * *",
+    cadence: "Every 15 min (at :04)",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "governed-backlog-tee-up",
     inngestId: "build/governed-backlog-tee-up-scheduled",
     honorsEnabledGate: true,

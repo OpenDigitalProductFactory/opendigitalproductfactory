@@ -1,5 +1,6 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
 import { type BoundWorkShapeDb, type NativeBuildRoomDb, type NativeBuildRoomBinding, readBoundEditPaths, readBoundWorkShapeRef, readNativeBuildDeliveryFacts } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { buildDesignScope } from "@/lib/backlog/initiative-readiness/build-plan-coverage";
 import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
@@ -102,6 +103,8 @@ function codes(decision: InitiativeReadinessDecision) {
 }
 
 export type BuildReadinessFactsInput = {
+  /** Names the design scope a plan without a baseline is traced to (BI-9FA1F9CF). */
+  buildId?: string;
   kind: string;
   designDoc: unknown;
   designReview: unknown;
@@ -152,6 +155,14 @@ export async function loadBuildReadinessFacts(db: BuildEntryGateDb, build: Build
     buildDesign: {
       reviewPassed: designReviewPassed(build.designReview),
       acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
+      scope: build.buildId
+        ? buildDesignScope({
+          buildId: build.buildId,
+          designDoc: build.designDoc,
+          designReviewPassed: designReviewPassed(build.designReview),
+          designDigest: build.designDoc == null ? null : `sha256:${digestBuildArtifactValue(build.designDoc)}`,
+        })?.baseline ?? null
+        : null,
     },
   };
 }

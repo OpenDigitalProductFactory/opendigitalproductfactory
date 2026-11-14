@@ -17,6 +17,7 @@ import { roomMessageDispatch, roomWakeRun } from "./room-message-wake";
 import { documentRenditionBackfill, documentRenditionGenerate } from "./document-renditions";
 import { backlogTriageDrain } from "./backlog-triage-drain";
 import { coworkerRegressionDetect } from "./coworker-regression-detect";
+import { planGateStallInvariant } from "./plan-gate-stall-invariant";
 import { agentTaskDispatch, agentTaskRunNow } from "./agent-task-dispatch";
 import { foregroundWorkRun } from "./foreground-work";
 import { taskrunWatchdog } from "./taskrun-watchdog";
@@ -193,6 +194,7 @@ export const scheduledFunctions = [
   ecosystemWatchdog,
   backlogTriageDrain,
   coworkerRegressionDetect,
+  planGateStallInvariant, // BI-9FA1F9CF: a passed plan stuck on PLAN_REQUIRED raises a signal
   agentTaskDispatch,
   taskrunWatchdog,
   governedBacklogTeeUpScheduled,
