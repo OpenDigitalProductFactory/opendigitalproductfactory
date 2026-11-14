@@ -458,6 +458,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/pregate-preflight-receipt.test.mjs",
         "scripts/gate-context.test.mjs",
         "scripts/gate-wait.test.mjs",
+        "scripts/check-staged-scope.test.mjs",
         // The landing orchestrator and the obligation banner that replaced a
         // pointer nobody followed. Listed here so CI runs them: an automation
         // whose own test does not run is the manual process with extra steps.
