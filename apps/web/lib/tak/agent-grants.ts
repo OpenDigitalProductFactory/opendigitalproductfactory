@@ -189,6 +189,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   set_portfolio_budget: ["backlog_write"],
   set_portfolio_owner: ["backlog_write"],
   get_investment_balance: ["backlog_read"], set_investment_balance: ["backlog_write"], bind_investment_funding: ["backlog_write"],
+  read_platform_funding_setup: ["admin_read"], confirm_platform_funding_owner: ["admin_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],

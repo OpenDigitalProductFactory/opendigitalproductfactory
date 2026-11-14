@@ -26,11 +26,14 @@
 
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
+import { ACTIVE_BUILD_WHERE, TERMINAL_BUILD_PHASES, isActiveBuild } from "@/lib/build/wip-cap";
 
 /** Default inert threshold: 3h with zero activity = dead-on-arrival. Override with BUILD_INERT_REAP_MS. */
 export const INERT_BUILD_REAP_MS = Number(process.env.BUILD_INERT_REAP_MS) || 3 * 60 * 60 * 1000;
 
-const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"];
+function isTerminalBuildPhase(phase: string): boolean {
+  return (TERMINAL_BUILD_PHASES as readonly string[]).includes(phase);
+}
 
 /**
  * Pure decision: is this build an inert corpse safe to abandon? No DB. Unit-tested.
@@ -40,6 +43,8 @@ const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"];
 export function isInertBuildReapable(args: {
   phase: string;
   abandonedAt: Date | null;
+  /** Parked on an owner answer (BI-B6894001): waiting, not inert. */
+  waitingOnOwnerSince?: Date | null;
   parentEpicId: string | null;
   createdAt: Date;
   activityCount: number;
@@ -49,8 +54,9 @@ export function isInertBuildReapable(args: {
 }): boolean {
   const { phase, abandonedAt, parentEpicId, createdAt, activityCount, liveTaskRunCount, now, thresholdMs } = args;
   if (abandonedAt) return false;
+  if (args.waitingOnOwnerSince) return false; // parked on an owner answer — not a corpse
   if (parentEpicId) return false; // epic-decomposed child — coordinated elsewhere
-  if (TERMINAL_BUILD_PHASES.includes(phase)) return false;
+  if (isTerminalBuildPhase(phase)) return false;
   if (activityCount > 0) return false; // did something — not inert
   if (liveTaskRunCount > 0) return false; // actively running right now
   return now.getTime() - createdAt.getTime() > thresholdMs;
@@ -84,6 +90,8 @@ export const STALLED_BUILD_REAP_MS = Number(process.env.BUILD_STALLED_REAP_MS) |
 export function isStalledBuildReapable(args: {
   phase: string;
   abandonedAt: Date | null;
+  /** Parked on an owner answer (BI-B6894001): its silence is the wait, not a stall. */
+  waitingOnOwnerSince?: Date | null;
   parentEpicId: string | null;
   activityCount: number;
   liveTaskRunCount: number;
@@ -93,6 +101,7 @@ export function isStalledBuildReapable(args: {
 }): boolean {
   const { phase, abandonedAt, parentEpicId, activityCount, liveTaskRunCount, lastActivityAt, now, staleMs } = args;
   if (abandonedAt) return false;
+  if (args.waitingOnOwnerSince) return false; // parked on an owner answer — not stalled
   if (parentEpicId) return false; // epic-decomposed child — coordinated elsewhere
   // Only the active EXECUTION phases can stall-after-activity here (matches the
   // UI stall definition, BI-46204009). ideate/plan are coworker-custody and are
@@ -125,8 +134,9 @@ export async function reapInertStuckBuilds(
   // Coarse scalar filter (indexed); per-candidate activity/taskrun checks below.
   const candidates = await prisma.featureBuild.findMany({
     where: {
-      phase: { notIn: TERMINAL_BUILD_PHASES },
-      abandonedAt: null,
+      phase: { notIn: [...TERMINAL_BUILD_PHASES] },
+      // Not abandoned and not parked on an owner answer (BI-B6894001).
+      ...ACTIVE_BUILD_WHERE,
       parentEpicId: null,
       createdAt: { lt: cutoff },
     },
@@ -181,9 +191,9 @@ export async function reapInertStuckBuilds(
         // Re-check under the row: don't reap a build that just came alive.
         const fresh = await tx.featureBuild.findUnique({
           where: { buildId: c.buildId },
-          select: { phase: true, abandonedAt: true },
+          select: { phase: true, abandonedAt: true, waitingOnOwnerSince: true },
         });
-        if (!fresh || fresh.abandonedAt || TERMINAL_BUILD_PHASES.includes(fresh.phase)) return;
+        if (!fresh || !isActiveBuild(fresh) || isTerminalBuildPhase(fresh.phase)) return;
 
         if (inert) {
           const recount = await tx.buildActivity.count({ where: { buildId: c.buildId } });
