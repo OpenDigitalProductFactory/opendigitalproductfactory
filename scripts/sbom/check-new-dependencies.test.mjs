@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { createUpdatedAllowlist, findRetiredInUse } from "./check-new-dependencies.mjs";
 import {
   externalDependencyNames,
+  markdownCell,
   matrixDrift,
   renderDependencyDispositionMatrix,
   validateDependencyDispositions,
@@ -181,4 +182,11 @@ test("rendering refuses to publish an incomplete ledger", () => {
 test("matrix drift is byte-for-byte and actionable", () => {
   assert.equal(matrixDrift("same\n", "same\n"), null);
   assert.match(matrixDrift("expected\n", "stale\n"), /--write/);
+});
+
+test("markdown cells escape backslashes before pipes so a cell cannot break out of its column", () => {
+  assert.equal(markdownCell("a|b"), "a\\|b");
+  assert.equal(markdownCell("a\\|b"), "a\\\\\\|b");
+  assert.equal(markdownCell("C:\\path"), "C:\\\\path");
+  assert.equal(markdownCell("line1\r\nline2\nline3"), "line1 line2 line3");
 });

@@ -64,8 +64,8 @@ export function validateDependencyDispositions(current, allowlist) {
   return issues.sort((a, b) => byteCompare(a.name, b.name) || byteCompare(a.code, b.code));
 }
 
-function markdownCell(value) {
-  return String(value).replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
+export function markdownCell(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 }
 
 function issueSummary(issues) {
