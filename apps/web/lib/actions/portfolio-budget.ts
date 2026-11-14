@@ -18,13 +18,20 @@ import { quarterBounds } from "@/lib/portfolio/investment-points";
 import { setPortfolioBudget } from "@/lib/portfolio/portfolio-budget";
 import { requireCapabilityContext } from "@/lib/actions/shared/guards";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import type { FundingScope } from "@/lib/portfolio/investment-balance-policy";
 import type { BalancePolicy } from "@/lib/portfolio/investment-balance";
 import { getT } from "@/lib/i18n/t.server";
 import type { PlatformFundingSetupView, PlatformFundingOwnerConfirmation } from "@/lib/portfolio/platform-funding-setup";
 
-async function runPlatformFundingTool(toolName: string, rawParams: Record<string, unknown>) {
-  const { userId, userContext } = await requireCapabilityContext("manage_platform");
+async function runPlatformFundingTool(toolName: string, rawParams: Record<string, unknown>): Promise<ToolResult> {
+  // Only the guard's known refusal proves that execution never started.
+  const authority = await requireCapabilityContext("manage_platform").catch((error: unknown) => {
+    if (error instanceof Error && error.message === "Unauthorized") return null;
+    throw error;
+  });
+  if (!authority) return { success: false, error: "funding-setup-not-authorized", message: "Platform ownership setup is not authorized." };
+  const { userId, userContext } = authority;
   return governedExecuteTool({ toolName, rawParams, userId, userContext,
     context: { routeContext: "/ops/demand" }, source: "rest" });
 }

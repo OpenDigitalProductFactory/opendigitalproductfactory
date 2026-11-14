@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const actions = vi.hoisted(() => ({ load: vi.fn(), confirm: vi.fn(), refresh: vi.fn() }));
@@ -31,7 +31,7 @@ async function openSetup() {
 
 function completeAttestation() {
   fireEvent.change(screen.getByLabelText(/Reason for recording ownership/), { target: { value: "Confirm the shared platform owner." } });
-  fireEvent.click(screen.getByLabelText("I am authorized to record this platform policy and funding owner."));
+  fireEvent.click(screen.getByLabelText(/I am authorized to record this platform policy and funding owner\./));
 }
 
 beforeEach(() => { actions.load.mockReset(); actions.confirm.mockReset(); actions.refresh.mockClear(); actions.load.mockResolvedValue({ ok: true, data: available() }); });
@@ -71,6 +71,51 @@ describe("platform funding ownership setup", () => {
     expect(actions.refresh).toHaveBeenCalledOnce();
   });
 
+  it("explains initial ownership, the correction limit and a separate authorized recovery before submission", async () => {
+    render(withMessages(<PlatformFundingSetup />));
+    await openSetup();
+    const summary = screen.getByText(/records Founder Operator as.*platform policy and funding owner for Owner Organization/).closest("summary");
+    expect(summary).not.toBeNull();
+    const notice = summary!.closest("details")!;
+    expect(notice.open).toBe(false);
+    fireEvent.click(summary!);
+    expect(within(notice).getByText("What changes")).toBeTruthy();
+    expect(within(notice).getByText(/Sets the initial platform policy and shared platform funding owner/)).toBeTruthy();
+    expect(within(notice).getByText("Founder Operator and Owner Organization on this installation.")).toBeTruthy();
+    expect(within(notice).getByText(/Ownership cannot be replaced or changed in this setup/)).toBeTruthy();
+    expect(within(notice).getByText(/separate authorized ownership correction/)).toBeTruthy();
+    expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+    expect(actions.confirm).not.toHaveBeenCalled();
+  });
+
+  it("mounts an empty polite outcome region before a confirmation starts", async () => {
+    render(withMessages(<PlatformFundingSetup />));
+    await openSetup();
+    expect(screen.getByRole("status").getAttribute("aria-live")).toBe("polite");
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+
+  it("marks a pending confirmation busy and announces its settled success", async () => {
+    let finish: (result: { ok: true; data: { status: "confirmed" } }) => void = () => {};
+    actions.confirm.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    render(withMessages(<PlatformFundingSetup />));
+    await openSetup();
+    completeAttestation();
+    const submit = screen.getByRole("button", { name: "Confirm platform owner" }) as HTMLButtonElement;
+    fireEvent.click(submit);
+    expect(submit.getAttribute("aria-busy")).toBe("true");
+    expect(submit.disabled).toBe(true);
+    expect(submit.textContent).toContain("Recording platform ownership");
+    expect(submit.getAttribute("data-surface-node-id")).toBe("platform-funding-confirm");
+    fireEvent.submit(submit.closest("form")!);
+    expect(actions.confirm).toHaveBeenCalledOnce();
+    await act(async () => finish({ ok: true, data: { status: "confirmed" } }));
+    const outcome = screen.getByRole("status");
+    expect(outcome.getAttribute("aria-live")).toBe("polite");
+    expect(outcome.textContent).toContain("Platform ownership recorded");
+    expect(screen.queryByRole("button", { name: "Confirm platform owner" })).toBeNull();
+  });
+
   it("shows an existing inactive override without replacing its target with the founder default", async () => {
     const view = available();
     view.organizations[0]!.allocation = { source: "explicit", policy: { ...view.organizations[0]!.allocation.policy, refactorPercent: 35 }, revision: null, active: false };
@@ -93,6 +138,21 @@ describe("platform funding ownership setup", () => {
     expect(actions.confirm).not.toHaveBeenCalled();
   });
 
+  it("wires the required attestation label and stable surface identity to the actual unchecked input", async () => {
+    render(withMessages(<PlatformFundingSetup />));
+    await openSetup();
+    const attestation = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(attestation.name).toBe("platform-funding-attestation");
+    expect(attestation.id).not.toBe("");
+    expect(attestation.labels?.[0]?.htmlFor).toBe(attestation.id);
+    expect(attestation.labels?.[0]?.textContent).toContain("(required)");
+    expect(attestation.required).toBe(true);
+    expect(attestation.getAttribute("aria-required")).toBe("true");
+    expect(attestation.getAttribute("data-surface-node-id")).toBe("platform-funding-attestation");
+    expect(attestation.checked).toBe(false);
+    expect(actions.confirm).not.toHaveBeenCalled();
+  });
+
   it("keeps the chosen reason after a stale refusal and requires a fresh read and attestation", async () => {
     actions.confirm.mockResolvedValue({ ok: false, error: "funding-setup-stale" });
     render(withMessages(<PlatformFundingSetup />));
@@ -103,7 +163,7 @@ describe("platform funding ownership setup", () => {
     expect((screen.getByLabelText(/Reason for recording ownership/) as HTMLInputElement).value).toBe("Confirm the shared platform owner.");
     fireEvent.click(screen.getByRole("button", { name: "Reload ownership record" }));
     await waitFor(() => expect(actions.load).toHaveBeenCalledTimes(2));
-    expect((screen.getByLabelText("I am authorized to record this platform policy and funding owner.") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText(/I am authorized to record this platform policy and funding owner\./) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole("button", { name: "Confirm platform owner" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -118,7 +178,7 @@ describe("platform funding ownership setup", () => {
     const select = screen.getByLabelText(/^Organization/) as HTMLSelectElement;
     expect(select.value).toBe("org-test");
     fireEvent.change(select, { target: { value: "org-second" } });
-    expect((screen.getByLabelText("I am authorized to record this platform policy and funding owner.") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText(/I am authorized to record this platform policy and funding owner\./) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole("button", { name: "Confirm platform owner" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -137,7 +197,7 @@ describe("platform funding ownership setup", () => {
     actions.load.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     render(withMessages(<PlatformFundingSetup />));
     fireEvent.click(screen.getByRole("button", { name: "Confirm platform ownership" }));
-    expect(screen.getByRole("status").textContent).toContain("Loading");
+    expect(screen.getByText("Loading the ownership record…").closest('[role="status"]')).toBeTruthy();
     await act(async () => finish({ ok: false, error: "funding-setup-not-authorized" }));
     expect(screen.getByRole("alert").textContent).toContain("permission");
     expect(screen.queryByText("Founder Operator")).toBeNull();
@@ -163,6 +223,22 @@ describe("platform funding ownership setup", () => {
     await screen.findByRole("alert");
     expect(screen.queryByText("Founder Operator")).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirm platform owner" })).toBeNull();
+  });
+
+  it.each(["funding-setup-not-authorized", "funding-setup-human-required"])("removes the old confirmation view when current authority refuses confirmation: %s", async (error) => {
+    actions.confirm.mockResolvedValue({ ok: false, error });
+    render(withMessages(<PlatformFundingSetup />));
+    await openSetup(); completeAttestation();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm platform owner" }));
+    const outcome = await screen.findByRole("alert");
+    expect(outcome.textContent).toContain("does not have permission");
+    expect(outcome.textContent).not.toContain("check whether it was saved");
+    expect(screen.queryByText("Founder Operator")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirm platform owner" })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Reload ownership record" })).toBeTruthy();
+    expect(actions.confirm).toHaveBeenCalledOnce();
+    expect(actions.refresh).not.toHaveBeenCalled();
   });
 
   it("keeps organization browsing within one bounded page plus the chosen prior option", async () => {

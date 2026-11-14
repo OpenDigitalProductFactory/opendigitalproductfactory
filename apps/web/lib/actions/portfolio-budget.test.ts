@@ -15,10 +15,39 @@ import * as actions from "./portfolio-budget";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.execute.mockReset();
   mocks.capability.mockResolvedValue({ userId: "signed-in-owner", userContext: { userId: "signed-in-owner" } });
 });
 
 describe("platform ownership portal actions", () => {
+  const input = { organizationId: "owned", expectedDigest: "state", attestation: true as const, reason: "My ownership." };
+  const invoke = (operation: "load" | "confirm") => operation === "load"
+    ? actions.loadPlatformFundingSetupAction()
+    : actions.confirmPlatformFundingOwnerAction(input);
+
+  it.each(["load", "confirm"] as const)("returns a known pre-execution authorization refusal from %s without dispatch or revalidation", async operation => {
+    mocks.capability.mockRejectedValue(new Error("Unauthorized"));
+    await expect(invoke(operation)).resolves.toEqual({ ok: false, error: "funding-setup-not-authorized" });
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+  });
+
+  it.each(["load", "confirm"] as const)("preserves unexpected authorization failures from %s", async operation => {
+    const failure = new Error("Session store unavailable");
+    mocks.capability.mockRejectedValue(failure);
+    await expect(invoke(operation)).rejects.toBe(failure);
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+  });
+
+  it.each(["load", "confirm"] as const)("preserves execution uncertainty from %s even when its message matches the authorization guard", async operation => {
+    const failure = new Error("Unauthorized");
+    mocks.execute.mockRejectedValue(failure);
+    await expect(invoke(operation)).rejects.toBe(failure);
+    expect(mocks.execute).toHaveBeenCalledTimes(1);
+    expect(mocks.revalidate).not.toHaveBeenCalled();
+  });
+
   it("reads through the same governed tool with authenticated platform capability", async () => {
     const data = { status: "available", organizations: [], nextCursor: null };
     mocks.execute.mockResolvedValue({ success: true, data });
