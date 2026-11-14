@@ -87,3 +87,77 @@ Decomposed. Umbrella BI-C54E691E.
 | D3 | BI-00F7D2E3 | D1, D2 |
 | D4 | BI-7F2709F9 | D2 |
 | D5 | BI-205A85C0 | D1, D2 |
+
+## D6 follow-up: selected service-image identity (BI-0282088D)
+
+The November 13 source assessment and decision DI-CAC49D437EA8 extend the
+existing spec's OBJ-IMAGE. This is a distinct image-provenance contract, not
+delivery of the remaining D4/D5 work or permission to enforce shadow step 7e.
+The existing D1-D5 mappings above remain intact. The new mapping is proposed;
+live immutable coverage must be renewed before implementation.
+
+| Deliverable | Objectives | Contracts | Flow | Acceptance |
+|---|---|---|---|---|
+| D6 qualified service-image plan | OBJ-IMAGE | `RuntimeTransitionEnvelope`, `RuntimeTransitionReceipt`, `scripts/apply-runtime-capability-transition.mjs`, `runtime-capability-executor.ts`, packaged protocol probe | native preview, signed image preparation, apply, health, journal replay and compensation | AC-I1, AC-I2, AC-I3, AC-I4, AC-I5, AC-I6, AC-I7 |
+
+| Deliverable | Backlog item | Depends on |
+|---|---|---|
+| D6 | BI-0282088D | D1, D2 |
+
+D6's phases below are internal sequencing for one image qualification contract.
+An isolated serializer, image build or green health check cannot independently
+deliver it. No implementation claim or passing evidence is asserted here.
+
+### D6 acceptance (quoted from BI-0282088D)
+
+- AC-I1: Desired service images are server-derived from immutable canonical source/release evidence; labels or portal SHA alone never qualify them.
+- AC-I2: A selected build-only stateless service has bounded native preparation with exact input/image proof and no implicit build of unrelated required services. Missing or unsupported proof holds before runtime mutation.
+- AC-I3: Actual post-apply image IDs and existing health checks must match the signed plan before applied is recorded.
+- AC-I4: Crash replay and compensation preserve/recover the exact prior qualified image IDs; uncertain ownership or settlement remains unverified.
+- AC-I5: No stateful/managed restart, stopped-service activation, volume removal, grant/policy expansion or shadow-mode enforcement is introduced by this slice.
+- AC-I6: Source/consumer and platform differences use existing runtime contracts. Old or unsupported packaged protocols fail closed before host effects, including N-1 promoter staging.
+- AC-I7: Affected production-owner tests, normal gates/independent review, governed served workflow/failure recovery and exact cleanup supply separate truthful evidence; no fixture is production acceptance.
+
+### D6 sequence
+
+1. Reconcile the parent's legacy coverage, D4/D5 statuses and the new child.
+   Quote AC-I1 through AC-I7 verbatim from its live body in its immutable
+   implementation coverage. Confirm the owning funding and scope; do not treat
+   the pending item attribution as approval. Claim exact code paths, read their
+   impact contract, and resolve related tests before Red.
+2. Extend the existing signed native plan/probe/receipt contract. Keep new
+   critical logic within its verified packaged closure, or separately deliver
+   compatibility first. Tests must fail for unsupported protocol, altered plan,
+   wrong source, caller paths/hashes and N-1 missing inputs before host effects.
+3. Reuse canonical artifact preparation for a bounded selected stateless image.
+   Exercise source and published-image install modes. Stage immutable inputs,
+   qualify the resulting actual image ID, and pin it for apply. Test that no
+   unrelated service is built and unqualified contexts never reach runtime.
+4. Extend existing journal/replay/compensation and health verification with the
+   exact prior and intended images. Test interruptions at each durable phase,
+   moved tags, missing prior images, unhealthy service, ownership loss and
+   uncertain settlement. Retain failed recovery rather than declare success.
+5. Preserve managed/data-owner/stopped-service, volume, activation and explicit
+   shadow controls. Test each boundary against the real production owners with
+   injected Docker/process adapters, without production runtime mutation.
+6. Run the affected protocol, actuator, coordinator, executor and promoter
+   closure tests, package typechecks, and the exact current gate-context guards.
+   Use normal exact-tree qualification, independent review and protected
+   `pnpm land`. No new provider, budget or access is implied by a phase change.
+7. Under an admitted isolated runtime, exercise native preview/apply, saved
+   proof reload, missing/unsupported inputs, actual image mismatch and bounded
+   recovery. Record fixtures as simulated, prove exact cleanup, and preserve
+   infrastructure failures as inconclusive. A live install advance remains the
+   coordinator's action; final native image and owner-workflow proof must name
+   actual deployed bytes. Do not substitute a client-built image.
+
+Expected existing seams: `apps/web/lib/platform-runtime/transition-protocol.ts`,
+`transition-coordinator.ts`, `runtime-capability-executor.ts`,
+`scripts/lib/transition-signing.mjs`,
+`scripts/apply-runtime-capability-transition.mjs` and their colocated tests.
+Image-proof and minimal promoter-context owners must be checked before any
+closure change. The implementation path set remains provisional until admission.
+
+Rollback is through protected source delivery and the existing qualified-image
+compensation path. An uncertain prior image or ownership check stops recovery;
+it does not authorize a blind rebuild, volume change or wider service restart.
