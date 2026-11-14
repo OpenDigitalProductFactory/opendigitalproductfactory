@@ -642,6 +642,37 @@ export function sanitizePromoterReadinessReport(report: PromoterReadinessReport)
   };
 }
 
+/**
+ * The promoter verifies the handoff the swap hands it at launch, not the one
+ * readiness signed minutes earlier (BI-2074D622: the TTL is re-stamped so it
+ * starts at launch). Record that handoff beside readiness so the run's evidence
+ * shows the window the promoter actually saw; every other key is untouched.
+ */
+export async function recordMigrationHandoffLaunchStamp(runId: string, stamp: {
+  migrationHandoff: { envelope: { issuedAt: string; expiresAt: string }; signature: string };
+  /** The window readiness signed, when the swap still holds it. */
+  readinessWindow?: { issuedAt: string; expiresAt: string };
+  /** Why the swap re-bound before stamping (`install_state_envelope_*`), when it did. */
+  reboundFor?: string;
+}): Promise<SelfUpgradeRunRow> {
+  const current = await prisma.selfUpgradeRun.findUnique({
+    where: { runId },
+    select: { completionEvidence: true },
+  });
+  const evidence = asEvidenceRecord(current?.completionEvidence);
+  const readiness = asEvidenceRecord(evidence.readiness);
+  const launchStamp = {
+    restampedAt: stamp.migrationHandoff.envelope.issuedAt,
+    expiresAt: stamp.migrationHandoff.envelope.expiresAt,
+    ...(stamp.readinessWindow ? { readinessWindow: stamp.readinessWindow } : {}),
+    ...(stamp.reboundFor ? { reboundFor: stamp.reboundFor.slice(0, 80) } : {}),
+  };
+  return prisma.selfUpgradeRun.update({
+    where: { runId },
+    data: { completionEvidence: toJson({ ...evidence, readiness: { ...readiness, migrationHandoff: stamp.migrationHandoff, launchStamp } }) },
+  });
+}
+
 /** Read/merge/write keeps recovery and rollback evidence while replacing only readiness. */
 export async function recordPromoterReadiness(runId: string, report: PromoterReadinessReport): Promise<SelfUpgradeRunRow> {
   const current = await prisma.selfUpgradeRun.findUnique({
