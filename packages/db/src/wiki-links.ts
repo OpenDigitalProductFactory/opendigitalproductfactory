@@ -52,7 +52,7 @@ export type ReplaceWikiPageOutLinksResult = {
  * partial unique index), so the kernel and profession corpora cannot both hold a
  * slug, and another organization's pages are never candidates.
  */
-async function resolveWikiLinkTargets(
+export async function resolveWikiLinkTargets(
   db: WikiLinkClient,
   organizationId: string | null,
   slugs: string[],

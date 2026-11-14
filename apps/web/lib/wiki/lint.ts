@@ -26,6 +26,7 @@ import {
   type LintPrincipleWikiPage,
 } from "./principle-lint-detectors";
 import { runPrincipleSimilarityDetectors } from "./principle-similarity";
+import type { LintReferenceEdge } from "./reference-lint-detectors";
 import { generateEmbedding } from "@/lib/inference/embedding";
 
 // ─── Input ──────────────────────────────────────────────────────────────────
@@ -74,7 +75,20 @@ export type WikiLintPrismaClient = {
     create: (args: unknown) => Promise<unknown>;
     update: (args: unknown) => Promise<unknown>;
   };
+  /** Reads stored MENTIONS edges (BI-A63A9476); a client without it skips that check. */
+  $queryRawUnsafe?: (sql: string, ...params: unknown[]) => Promise<unknown>;
 };
+
+/** MENTIONS edges whose source is a kernel or profession page: the ones R4 forbids if they reach a WWWD record. */
+async function fetchShippedCorpusReferences(prisma: WikiLintPrismaClient): Promise<LintReferenceEdge[]> {
+  if (!prisma.$queryRawUnsafe) return [];
+  const rows = (await prisma.$queryRawUnsafe(
+    `SELECT src_key, dst_key, props->>'sourceScope' AS source_scope, props->>'targetScope' AS target_scope
+       FROM graph_edge
+      WHERE rel_type = 'MENTIONS' AND props->>'sourceScope' IN ('kernel', 'profession')`,
+  )) as Array<{ src_key: string; dst_key: string; source_scope: string | null; target_scope: string | null }>;
+  return rows.map((r) => ({ srcKey: r.src_key, dstKey: r.dst_key, sourceScope: r.source_scope, targetScope: r.target_scope }));
+}
 
 // ─── Snapshot fetch ─────────────────────────────────────────────────────────
 
@@ -309,6 +323,7 @@ export async function runWikiLint(input: RunWikiLintInput): Promise<RunWikiLintR
       rawSources: snap.rawSources,
       currentKernelVersion: input.currentKernelVersion,
       staleThresholdDays: input.staleThresholdDays,
+      references: input.organizationId === null ? await fetchShippedCorpusReferences(input.prisma) : [],
     }),
     ...runPrincipleDetectors({ pages: snap.principlePages }),
     ...runPrincipleSimilarityDetectors({

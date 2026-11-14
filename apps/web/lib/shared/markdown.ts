@@ -27,6 +27,7 @@
 // through <MarkdownHtml>, the one place the HTML reaches the DOM.
 
 import MarkdownIt, { type StateCore, type StateInline, type Token } from "markdown-it";
+import { ENTITY_ID_PATTERN } from "@dpf/db/wiki-frontmatter";
 
 /** Elements a caller can give a class to. `code` is inline code; `pre` wraps a code block. */
 export type MarkdownElement =
@@ -60,6 +61,13 @@ export type RenderMarkdownOptions = {
   renderFence?: (language: string, content: string) => string | null;
   /** Turn `[[slug]]` and `[[slug|label]]` into links to this href. */
   wikilinkHref?: (slug: string) => string;
+  /**
+   * Link an entity id (`BI-…`, `EP-…`, `DOC-…`, `KA-…`, `WC-…`) written in the
+   * text (BI-A63A9476). The server resolves which ids the reader may open and
+   * answers their href; null leaves the id as plain text, so an unknown id and
+   * an unreadable id look the same (R1). Absent, every id stays text.
+   */
+  entityRefHref?: (id: string) => string | null;
 };
 
 type Env = { options: RenderMarkdownOptions };
@@ -157,7 +165,61 @@ function wikilink(state: StateInline, silent: boolean): boolean {
   return true;
 }
 
+// ─── Entity references ──────────────────────────────────────────────────────
+// A core rule, not an inline one: markdown-it's `text` rule swallows a run of
+// letters before any inline rule could see an id, so the ids are found in the
+// finished text tokens instead. Text inside a link, and code spans (their own
+// token type), are never touched. The pattern is the parser's own
+// (extractEntityIds), so a rendered link is always a stored reference.
+
+function entityRefChildren(state: StateCore, content: string, hrefFor: (id: string) => string | null): Token[] | null {
+  const out: Token[] = [];
+  let last = 0;
+  for (const match of content.matchAll(new RegExp(ENTITY_ID_PATTERN.source, "g"))) {
+    const href = hrefFor(match[0]);
+    if (!href) continue;
+    if (match.index > last) {
+      const text = new state.Token("text", "", 0);
+      text.content = content.slice(last, match.index);
+      out.push(text);
+    }
+    const open = new state.Token("link_open", "a", 1);
+    open.attrs = [["href", href]];
+    open.info = "entityref";
+    const label = new state.Token("text", "", 0);
+    label.content = match[0];
+    out.push(open, label, new state.Token("link_close", "a", -1));
+    last = match.index + match[0].length;
+  }
+  if (out.length === 0) return null;
+  if (last < content.length) {
+    const tail = new state.Token("text", "", 0);
+    tail.content = content.slice(last);
+    out.push(tail);
+  }
+  return out;
+}
+
+function entityRefs(state: StateCore): void {
+  const hrefFor = optionsOf(state.env).entityRefHref;
+  if (!hrefFor) return;
+  for (const block of state.tokens) {
+    if (block.type !== "inline" || !block.children) continue;
+    const children: Token[] = [];
+    let linkDepth = 0;
+    for (const child of block.children) {
+      if (child.type === "link_open") linkDepth += 1;
+      if (child.type === "link_close") linkDepth -= 1;
+      const replaced = child.type === "text" && linkDepth === 0 ? entityRefChildren(state, child.content, hrefFor) : null;
+      if (replaced) children.push(...replaced);
+      else children.push(child);
+    }
+    block.children = children;
+  }
+}
+
 md.core.ruler.after("inline", "dpf_task_lists", taskLists);
+md.core.ruler.after("dpf_task_lists", "dpf_entity_ref", entityRefs);
 md.core.ruler.push("dpf_decorate", decorate);
 md.inline.ruler.before("link", "dpf_wikilink", wikilink);
 
@@ -170,7 +232,7 @@ md.renderer.rules.link_open = (tokens, idx, _opts, env) => {
   const options = optionsOf(env);
   const href = attrString(token, "href");
   let external = false;
-  if (options.resolveLink && token.info !== "wikilink") {
+  if (options.resolveLink && token.info !== "wikilink" && token.info !== "entityref") {
     const resolved = options.resolveLink(href);
     token.attrSet("href", resolved.href);
     external = resolved.external === true;
