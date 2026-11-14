@@ -157,6 +157,9 @@ export function whyItMattersFor(item: AttentionItem): string {
 }
 
 export function consequenceFor(item: AttentionItem): string {
+  if (item.source === "skill-proposal") {
+    return "If you do nothing, the proposed change stays pending and coworkers keep using the current skill.";
+  }
   if (item.source === "reservation-exception") {
     return "If you do nothing, the guest is left without a confirmed reservation.";
   }
