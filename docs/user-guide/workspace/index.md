@@ -52,6 +52,15 @@ recovery. Use **Check now** after the provider recovers. A successful read then
 completes setup, including when the selected folder is empty. An empty folder
 does not prove a real business message has been processed or a reply delivered.
 
+### Bills that arrive by email
+
+When a supplier's invoice arrives in a connected mailbox, **Needs you** shows it
+straight away as a bill to record and pay. It doesn't wait for the usual
+acknowledgement window. **Record the bill** opens a new bill in Bills, where it
+is approved and paid. **Open in Mailroom** shows the email. Mailroom doesn't copy
+amounts out of the email, so check the figures against the invoice when you
+record it. Acknowledge the email once the bill is recorded.
+
 ## Checking an approval result
 
 After you approve or decline a coworker's request, the Inbox keeps its result.
