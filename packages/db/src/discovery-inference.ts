@@ -81,10 +81,11 @@ export function inferCrossCollectorRelationships(
   );
   if (hostItem && dockerHost && hostItem.externalRef !== dockerHost.externalRef) {
     // The discovered OS host and Docker host are the same physical machine
-    // but discovered by different collectors. Link them.
+    // but discovered by different collectors. Link them as one item, not as a
+    // workload running on a platform (BI-92804832; was RUNS_ON).
     addedRelationships.push({
       sourceKind: "dpf_bootstrap",
-      relationshipType: "RUNS_ON",
+      relationshipType: "SAME_AS",
       fromExternalRef: hostItem.externalRef,
       toExternalRef: dockerHost.externalRef,
       confidence: 0.90,

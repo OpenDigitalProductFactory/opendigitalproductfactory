@@ -550,6 +550,7 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 | Dev-server launch refused (a hook blocked it) | Use a lease for the shared runtime, or run in an isolated worktree compose stack |
 | Pushed branch isn't triggering promotion | That's the server-side webhook — confirm the GitHub repo webhook uses the install's `DPF_GIT_WEBHOOK_SECRET` and can reach the portal (operator task), not a per-session step. A 503 "secret is not configured" means the install predates BI-C26D5DC5; the next self-upgrade adds it |
 | Codex/Grok/Antigravity missing a hook guard | Expected on some surfaces — comply by construction: claim the lease before launching |
+| The `dpf` connector shows a letter or a globe, not the DPF logo | Expected today. The server publishes the DPF mark and website in the MCP handshake (`serverInfo.icons` and `websiteUrl`, MCP 2025-11-25), inline so nothing is fetched. Drawing it is the client's choice: Claude Code and the Claude desktop app do not draw server icons yet (upstream request `anthropics/claude-code#95558`, open on 2026-11-14); Codex, Grok and Antigravity are not verified. Nothing to fix on the install |
 
 ---
 

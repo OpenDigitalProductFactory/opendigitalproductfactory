@@ -188,8 +188,80 @@ export function missingPlatformCoverage(surfaces, decisions, registry) {
     .map(([platform]) => platform);
 }
 
+// ── Per-service compose convergence (BI-205A85C0) ──────────────────────────────
+const RECREATE_CLASS_RE = /^\s+dpf\.recreate-class:\s*['"]?([a-z-]+)['"]?\s*(?:#.*)?$/m;
+
+/** Raw text block per top-level service under `services:`, keyed by name. */
+export function composeServiceBlocks(source) {
+  const blocks = new Map();
+  let inServices = false;
+  let current = null;
+  for (const line of String(source ?? "").replace(/\r\n/g, "\n").split("\n")) {
+    if (!inServices) { if (/^services:\s*$/.test(line)) inServices = true; continue; }
+    if (/^[^\s#]/.test(line)) break;
+    const m = /^  ([a-zA-Z0-9][a-zA-Z0-9_.-]*):\s*(?:#.*)?$/.exec(line);
+    if (m) { current = m[1]; blocks.set(current, []); continue; }
+    if (current && line.trim() !== "" && !/^\s*#/.test(line)) blocks.get(current).push(line.replace(/\s+#.*$/, "").trimEnd());
+  }
+  return new Map([...blocks].map(([name, lines]) => [name, lines.join("\n")]));
+}
+
+function chainFileSet(config, readFile) {
+  const files = new Set(config.chainFiles ?? []);
+  if (config.activationTable) {
+    let table = "";
+    try { table = readFile(config.activationTable); } catch { /* the table is part of the chain contract; absent means no overlays */ }
+    for (const line of table.split(/\r?\n/)) {
+      if (!line.trim() || line.trim().startsWith("#")) continue;
+      for (const f of line.trim().split(/\s+/).slice(1)) files.add(f);
+    }
+  }
+  return files;
+}
+
+/**
+ * Services an auto-converges claim cannot carry. Returns error strings; empty
+ * when every changed service has a live mechanism.
+ */
+export function unconvergedComposeServices(changedFiles, { registry, readFile, readComposePair }) {
+  const config = registry?.composeConvergence;
+  if (!config || !readComposePair) return [];
+  const composeFiles = changedFiles.filter((f) => /^docker-compose[^/]*\.yml$/.test(f));
+  if (composeFiles.length === 0) return [];
+  const chain = chainFileSet(config, readFile);
+  const classes = new Map();
+  const pairs = new Map(composeFiles.map((f) => [f, readComposePair(f)]));
+  for (const { head } of pairs.values()) {
+    for (const [name, block] of composeServiceBlocks(head)) {
+      const cls = RECREATE_CLASS_RE.exec(block)?.[1];
+      if (cls && !classes.has(name)) classes.set(name, cls);
+    }
+  }
+  const errors = [];
+  for (const [file, { base, head }] of pairs) {
+    const before = composeServiceBlocks(base);
+    const after = composeServiceBlocks(head);
+    for (const name of new Set([...before.keys(), ...after.keys()])) {
+      if (before.get(name) === after.get(name)) continue;
+      if (!chain.has(file)) {
+        errors.push(`${name} changed in ${file}, which no compose chain the installer or promoter resolves contains; no upgrade applies it`);
+        continue;
+      }
+      if (!after.has(name)) {
+        errors.push(`${name} (${file}) is removed, and self-upgrade never stops a dropped service (BI-922EBB99)`);
+        continue;
+      }
+      if (!before.has(name)) continue; // config.newService: step 7d creates it
+      const cls = classes.get(name) ?? "unclassified";
+      if (config.mechanisms?.[cls]) continue;
+      errors.push(`${name} (${cls}, ${file}): ${config.pending?.[cls] ?? "it has no dpf.recreate-class, so no step converges it"}`);
+    }
+  }
+  return errors;
+}
+
 // ── Gate ──────────────────────────────────────────────────────────────────────
-export function evaluateConvergenceGate({ changedFiles, commitMessages = "", prBody = "", registry, readFile } = {}) {
+export function evaluateConvergenceGate({ changedFiles, commitMessages = "", prBody = "", registry, readFile, readComposePair } = {}) {
   const reg = registry ?? loadRegistry();
   const surfaces = classifyConvergenceSurfaces(changedFiles, { registry: reg, readFile });
   if (surfaces.length === 0) return { ok: true, reason: "no-convergence-surface", surfaces, decisions: [] };
@@ -204,6 +276,22 @@ export function evaluateConvergenceGate({ changedFiles, commitMessages = "", prB
   }
   if (errors.length > 0) {
     return { ok: false, reason: decisions.length === 0 ? "missing-decision" : "invalid-decision", surfaces, decisions, errors };
+  }
+  // BI-205A85C0: when auto-converges is the only claim, it must be true for
+  // every changed compose service. Any other mode accounts for the change.
+  if (decisions.every((d) => d.mode === "auto-converges")) {
+    const read = readFile ?? ((f) => fs.readFileSync(path.join(REPO_ROOT, f), "utf8"));
+    const unconverged = unconvergedComposeServices(changedFiles, { registry: reg, readFile: read, readComposePair });
+    if (unconverged.length > 0) {
+      return {
+        ok: false, reason: "compose-service-not-converged", surfaces, decisions,
+        errors: [
+          "auto-converges is not true for these changed compose services:",
+          ...unconverged.map((e) => `  ${e}`),
+          "Name the operator action (operator-action), or add the step in this PR (self-upgrade-step).",
+        ],
+      };
+    }
   }
   return { ok: true, reason: "attested", surfaces, decisions };
 }
@@ -228,7 +316,14 @@ export function runGate({ base = process.env.BASE_SHA || "origin/main", changed,
     files = listed.files;
   }
   const commits = commitMessages ?? git("log", `${base}..HEAD`, "--format=%B");
-  return evaluateConvergenceGate({ changedFiles: files, commitMessages: commits, prBody });
+  // Base from the merge base, head from the working tree the gate runs on.
+  const mergeBase = git("merge-base", base, "HEAD").trim() || base;
+  const readComposePair = (file) => {
+    let head = "";
+    try { head = fs.readFileSync(path.join(REPO_ROOT, file), "utf8"); } catch { /* deleted in this change */ }
+    return { base: git("show", `${mergeBase}:${file}`), head };
+  };
+  return evaluateConvergenceGate({ changedFiles: files, commitMessages: commits, prBody, readComposePair });
 }
 
 function describe(result) {

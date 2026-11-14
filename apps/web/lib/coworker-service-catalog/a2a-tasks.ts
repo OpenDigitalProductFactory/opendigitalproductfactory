@@ -68,6 +68,8 @@ export type CoworkerA2aTaskInput = {
   authorityBoundary?: string | null;
   riskTier?: string | null;
   requiredGrants?: string[];
+  /** The federation link that authenticated a cross-boundary submission (BI-D00C5FD4). */
+  submittingFederationLinkId?: string | null;
   routingRationale?: {
     selectedOfferReason?: string;
     alternativesConsidered?: string[];
@@ -140,6 +142,7 @@ export async function createCoworkerA2aTask(
       contextId,
       actingAgentGaid,
       delegatingAgentGaid,
+      ...(input.submittingFederationLinkId ? { submittingFederationLinkId: input.submittingFederationLinkId } : {}),
     },
     callChain: {
       actingAgentGaid,
