@@ -1394,7 +1394,6 @@ apps/web/components/wiki/OrgDecisionCaptureList.tsx	physical-direction	1
 apps/web/components/wiki/VoiceProfileSetup.tsx	jsx-copy	16
 apps/web/components/wiki/VoiceProfileSetup.tsx	physical-direction	4
 apps/web/components/wiki/WikiBodyRenderer.tsx	physical-direction	5
-apps/web/components/wiki/WikiPageEditor.tsx	jsx-copy	1
 apps/web/components/wiki/WikiPageList.tsx	physical-direction	5
 apps/web/components/wiki/WikiPageViewer.tsx	jsx-copy	4
 apps/web/components/wiki/WikiPageViewer.tsx	physical-direction	1
