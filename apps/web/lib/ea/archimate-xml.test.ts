@@ -137,7 +137,34 @@ describe("generateArchimateXml", () => {
     expect(xml).toContain('name="author"');
     const parsed = parseArchimateXml(xml);
     expect(parsed.relationships).toEqual([
-      expect.objectContaining({ archimateId: "r1", slug: "has_foreign_key_to" }),
+      expect.objectContaining({ archimateId: "r1", slug: "has_foreign_key_to", role: "author" }),
     ]);
+  });
+
+  it("keeps the export well-formed and lossless when names carry XML special characters", () => {
+    const xml = generateArchimateXml({
+      modelName: `R&D <"core">`,
+      elements: [{ archimateId: "a", name: `Sales & Marketing <EU> 'north'`, slug: "business_actor", archimateExportSlug: null, isExtension: false, ontologyRole: null }],
+      relationships: [
+        { archimateId: "r1", fromArchimateId: "a", toArchimateId: "a", slug: "associated_with", role: `owns & operates <"all">` },
+        { archimateId: "r2", fromArchimateId: "a", toArchimateId: "a", slug: "has_foreign_key_to", role: "R&D" },
+      ],
+    });
+    expect(xml).not.toMatch(/&(?!amp;|lt;|gt;|quot;|apos;)/);
+    const parsed = parseArchimateXml(xml);
+    expect(parsed.modelName).toBe(`R&D <"core">`);
+    expect(parsed.elements[0].name).toBe(`Sales & Marketing <EU> 'north'`);
+    expect(parsed.relationships.map(r => [r.slug, r.role])).toEqual([
+      ["associated_with", `owns & operates <"all">`],
+      ["has_foreign_key_to", "R&D"],
+    ]);
+  });
+
+  it("does not invent a role for a DPF type exported without one", () => {
+    const xml = generateArchimateXml({
+      modelName: "RT", elements: [],
+      relationships: [{ archimateId: "r1", fromArchimateId: "a", toArchimateId: "b", slug: "depends_on" }],
+    });
+    expect(parseArchimateXml(xml).relationships[0]).not.toHaveProperty("role");
   });
 });

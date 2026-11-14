@@ -6,8 +6,12 @@ import {
   distillMemoryNotesFromExperience,
   type MemoryExperienceSource,
 } from "./memory-acquisition";
-import type { AdvanceResult } from "./thread-checkpoint";
-import { advanceThreadCheckpointForThread } from "./thread-checkpoint-runner";
+import { checkpointLoadTake, type AdvanceResult } from "./thread-checkpoint";
+import {
+  advanceThreadCheckpointForThread,
+  findThreadsWithFoldBacklog,
+  type ThreadFoldBacklog,
+} from "./thread-checkpoint-runner";
 
 type FindMany<T> = { findMany(args?: unknown): Promise<T[]> };
 
@@ -17,7 +21,6 @@ export type MemoryAcquisitionDb = {
   featureBuild: FindMany<FeatureBuildRow>;
   coworkerMemoryNote: FindMany<{ sourceRef: string | null }>;
   agent: FindMany<{ id: string; agentId: string }>;
-  agentThread: FindMany<AgentThreadRow>;
 };
 
 export type MemoryAcquisitionResult = {
@@ -76,23 +79,20 @@ type FeatureBuildRow = {
   updatedAt: Date;
 };
 
-type AgentThreadRow = {
-  id: string;
-  contextKey: string;
-  updatedAt: Date;
-};
-
 type RecordNote = typeof recordCoworkerNote;
 
 const DEFAULT_LOOKBACK_DAYS = 14;
 const DEFAULT_EXPERIENCE_TAKE = 100;
-const DEFAULT_THREAD_TAKE = 100;
-// BI-CA79DB7B: how many threads with a stale updatedAt but recent message
-// activity one sweep admits after the recently-updated set. Appending a message
-// does not touch AgentThread.updatedAt, so the threads that have been growing
-// longest are exactly the ones the recency window never sees; this is the
-// second admission path that makes the nightly backfill reach them.
-const DEFAULT_WEDGED_THREAD_TAKE = 25;
+/**
+ * BI-546A9E36: how many behind-threads one sweep considers. Candidates come from
+ * a need-ordered finder (most unfolded messages first), so this bounds a night's
+ * bookkeeping, not who gets a turn: a thread with nothing to fold is never a
+ * candidate, and one not reached tonight is still at the front tomorrow.
+ */
+const DEFAULT_BACKLOG_THREAD_TAKE = 200;
+/** Recent turns a fold leaves verbatim: build phases carry more working state. */
+const COWORKER_KEEP_RECENT = 8;
+const BUILD_KEEP_RECENT = 20;
 /**
  * BI-FDECBE0A: the nightly sweep is the backfill path for threads whose fold
  * had wedged (the largest needs ~110 folds at batch 10). Cap the summarizer
@@ -180,48 +180,31 @@ export async function runMemoryAcquisitionSweep(
 }
 
 export async function runThreadCheckpointSweep(
-  db: MemoryAcquisitionDb = prismaMemoryDb,
   opts: {
-    now?: Date;
-    lookbackDays?: number;
+    /** How many behind-threads to consider this run. */
     take?: number;
+    /** Threads at least `minUnfolded` foldable messages behind their own watermark, most-behind first. */
+    findBacklog?: (args: { minUnfolded: number; take: number }) => Promise<ThreadFoldBacklog[]>;
     /** One bounded fold; keeps being called while it reports `moreEligible`. A void result means one attempt per thread. */
     advance?: (threadId: string, keepRecentCount: number) => Promise<AdvanceResult | void>;
     maxFoldsPerRun?: number;
     maxFoldsPerThread?: number;
-    /** BI-CA79DB7B: cap on stale-timestamp threads admitted by message activity. */
-    wedgedTake?: number;
   } = {},
 ): Promise<ThreadCheckpointSweepResult> {
-  const now = opts.now ?? new Date();
-  const since = new Date(now.getTime() - (opts.lookbackDays ?? DEFAULT_LOOKBACK_DAYS) * 24 * 60 * 60 * 1000);
   const maxFoldsPerRun = opts.maxFoldsPerRun ?? DEFAULT_MAX_FOLDS_PER_RUN;
   const maxFoldsPerThread = opts.maxFoldsPerThread ?? DEFAULT_MAX_FOLDS_PER_THREAD;
-  const recentThreads = await db.agentThread.findMany({
-    where: { updatedAt: { gte: since }, cancelledAt: null },
-    orderBy: { updatedAt: "desc" },
-    take: opts.take ?? DEFAULT_THREAD_TAKE,
-    select: { id: true, contextKey: true, updatedAt: true },
+  const findBacklog = opts.findBacklog ?? findThreadsWithFoldBacklog;
+  // BI-546A9E36: admit by need. The finder is asked for the least backlog any
+  // thread can fold from (the smaller keep-recent count plus one batch); a
+  // thread that keeps more recent turns is then held to its own threshold, so
+  // the sweep never spends an attempt on a thread the fold would turn away.
+  const candidates = await findBacklog({
+    minUnfolded: checkpointLoadTake(Math.min(COWORKER_KEEP_RECENT, BUILD_KEEP_RECENT)),
+    take: opts.take ?? DEFAULT_BACKLOG_THREAD_TAKE,
   });
-  // BI-CA79DB7B: a thread that is active by its messages but stale by its own
-  // timestamp would otherwise never be a candidate, however long it grows.
-  // Ordered oldest-first so the longest-wedged thread gets its turn first.
-  const wedgedThreads = await db.agentThread.findMany({
-    where: {
-      updatedAt: { lt: since },
-      cancelledAt: null,
-      messages: { some: { createdAt: { gte: since } } },
-    },
-    orderBy: { updatedAt: "asc" },
-    take: opts.wedgedTake ?? DEFAULT_WEDGED_THREAD_TAKE,
-    select: { id: true, contextKey: true, updatedAt: true },
-  });
-  const seen = new Set<string>();
-  const threads = [...recentThreads, ...wedgedThreads].filter((thread) => {
-    if (seen.has(thread.id)) return false;
-    seen.add(thread.id);
-    return true;
-  });
+  const threads = candidates.filter(
+    (thread) => thread.unfolded >= checkpointLoadTake(keepRecentCountForThread(thread)),
+  );
   const advance = opts.advance ?? advanceThreadCheckpointForThread;
   const result: ThreadCheckpointSweepResult = {
     threadsChecked: threads.length,
@@ -404,8 +387,8 @@ function countRecordResult(result: MemoryAcquisitionResult, recordResult: Record
   else result.notesUnchanged += 1;
 }
 
-function keepRecentCountForThread(thread: AgentThreadRow): number {
-  return /^build:/i.test(thread.contextKey) ? 20 : 8;
+function keepRecentCountForThread(thread: { contextKey: string }): number {
+  return /^build:/i.test(thread.contextKey) ? BUILD_KEEP_RECENT : COWORKER_KEEP_RECENT;
 }
 
 function isNonEmptyString(value: unknown): value is string {

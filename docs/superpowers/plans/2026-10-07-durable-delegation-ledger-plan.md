@@ -124,8 +124,9 @@ handoff matrix, and usage-limit auto-resume. Decomposed into:
 - **P7d Claude:** `claude-stream-adapter.ts`.
 - **P7e approvals:** `runtime-request-policy.ts`, `approve_runtime_permission`.
 
-Left for follow-up: usage-limit auto-resume and a provider handoff (one room
-moving a thread from one CLI to the other).
+Follow-ups delivered: holds release themselves (BI-95638941, #6677) and the
+provider handoff (BI-1687CCD2) moves a room's thread to the other CLI from its
+log.
 
 ## Traceability
 

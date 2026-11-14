@@ -50,6 +50,17 @@ function blankVersion(content: Buffer): Buffer {
   return Buffer.from(content.toString("latin1").replace(VERSION_VALUE, "$1$2"), "latin1");
 }
 
+/**
+ * A pack file's bytes as the delivered identity counts them: a stamped
+ * manifest's version value is blank. The archive serves these bytes too
+ * (BI-04A16AB8), so an updater from before the stamp, whose verifier hashes
+ * the version as written, computes the same digest; the delivering updater
+ * stamps the real version afterwards.
+ */
+export function deliveredContent(relative: string, bytes: Buffer): Buffer {
+  return STAMPED_MANIFESTS.has(relative) ? blankVersion(bytes) : bytes;
+}
+
 function compareSegments(left: readonly string[], right: readonly string[]): number {
   const length = Math.min(left.length, right.length);
   for (let index = 0; index < length; index += 1) {
@@ -89,8 +100,7 @@ export function deliveredDigest(root: string): string {
   const digest = createHash("sha256");
   for (const relative of listDeliveredFiles(root)) {
     digest.update(Buffer.concat([Buffer.from(relative, "utf8"), Buffer.from([0])]));
-    const bytes = readFileSync(join(root, ...relative.split("/")));
-    const content = STAMPED_MANIFESTS.has(relative) ? blankVersion(bytes) : bytes;
+    const content = deliveredContent(relative, readFileSync(join(root, ...relative.split("/"))));
     digest.update(createHash("sha256").update(content).digest());
   }
   return digest.digest("hex");
