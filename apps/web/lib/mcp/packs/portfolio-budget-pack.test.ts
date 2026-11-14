@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const investment = vi.hoisted(() => ({ save: vi.fn(), bind: vi.fn(), read: vi.fn() }));
+const fundingSetup = vi.hoisted(() => ({ read: vi.fn(), confirm: vi.fn() }));
+vi.mock("@/lib/portfolio/platform-funding-setup", () => ({
+  readPlatformFundingSetup: fundingSetup.read,
+  confirmPlatformFundingOwner: fundingSetup.confirm,
+}));
 const investmentActor = vi.hoisted(() => vi.fn(async () => "p1"));
 vi.mock("@/lib/identity/principal-linking", () => ({ resolvePrincipalRecordIdForSessionIdentity: investmentActor }));
 vi.mock("@/lib/portfolio/investment-balance-server", () => ({
@@ -36,6 +41,49 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-10-06T00:00:00Z"));
   db.items = [done("in", "2026-09-01T00:00:00Z"), done("old", "2026-06-01T00:00:00Z")];
   db.budgets = [];
+});
+
+describe("explicit platform funding setup tools", () => {
+  it("requires platform management and existing administrator grants for ownership setup", () => {
+    expect(portfolioBudgetPack.definitions.find(d => d.name === "read_platform_funding_setup"))
+      .toMatchObject({ requiredCapability: "manage_platform", executionMode: "immediate", sideEffect: false });
+    expect(portfolioBudgetPack.definitions.find(d => d.name === "confirm_platform_funding_owner"))
+      .toMatchObject({ requiredCapability: "manage_platform", sideEffect: true, consequence: "authority" });
+    expect(portfolioBudgetPack.grants?.read_platform_funding_setup).toEqual(["admin_read"]);
+    expect(portfolioBudgetPack.grants?.confirm_platform_funding_owner).toEqual(["admin_write"]);
+  });
+
+  it("reads the authenticated person's bounded organization page", async () => {
+    fundingSetup.read.mockResolvedValue({ ok: true, data: { status: "available", organizations: [], nextCursor: null } });
+    const result = await portfolioBudgetPack.handlers.read_platform_funding_setup!(
+      { afterOrganizationId: "organization-page-cursor", principalId: "untrusted-owner" }, "authenticated-user");
+    expect(result.success).toBe(true);
+    expect(fundingSetup.read).toHaveBeenCalledWith(expect.anything(), {
+      userId: "authenticated-user", afterOrganizationId: "organization-page-cursor",
+    });
+  });
+
+  it("rejects a malformed page cursor before reading ownership state", async () => {
+    expect(await portfolioBudgetPack.handlers.read_platform_funding_setup!({ afterOrganizationId: 4 }, "authenticated-user"))
+      .toMatchObject({ success: false, error: "invalid-funding-setup-input" });
+    expect(fundingSetup.read).not.toHaveBeenCalled();
+  });
+
+  it("preserves exact confirmation inputs and trusted execution provenance for human verification", async () => {
+    const params = { organizationId: "owned-organization", expectedDigest: "current-state-digest", attestation: true, reason: "I confirm ownership." };
+    const context = { agentId: "trusted-agent", governedSource: "external-jsonrpc" as const, approvedAuthorityEnvelopeId: "reserved-envelope" };
+    fundingSetup.confirm.mockResolvedValue({ ok: false, error: "human-approval-required" });
+    const result = await portfolioBudgetPack.handlers.confirm_platform_funding_owner!(params, "authenticated-user", context);
+    expect(result).toMatchObject({ success: false, error: "human-approval-required" });
+    expect(fundingSetup.confirm).toHaveBeenCalledWith(expect.anything(), {
+      userId: "authenticated-user", params, context,
+    });
+    expect(fundingSetup.confirm.mock.calls[0]?.[1].params).toBe(params);
+    const schema = portfolioBudgetPack.definitions.find(d => d.name === "confirm_platform_funding_owner")!.inputSchema;
+    expect(schema).toMatchObject({ additionalProperties: false, required: ["organizationId", "expectedDigest", "attestation", "reason"] });
+    expect((schema.properties as Record<string, unknown>)).not.toHaveProperty("principalId");
+    expect((schema.properties as Record<string, unknown>)).not.toHaveProperty("approvedAuthorityEnvelopeId");
+  });
 });
 
 describe("propose_portfolio_budgets", () => {

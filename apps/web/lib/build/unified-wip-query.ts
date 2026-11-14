@@ -25,7 +25,7 @@ import {
   type UnifiedWipSummary,
   type WipPool,
 } from "./unified-wip";
-import { TERMINAL_BUILD_PHASES } from "./wip-cap";
+import { ACTIVE_BUILD_WHERE, TERMINAL_BUILD_PHASES } from "./wip-cap";
 
 /**
  * Capsule statuses that have RELEASED their resource pool — a capsule in one of
@@ -73,7 +73,7 @@ export async function loadActiveUnifiedWip(
     db.featureBuild.count({
       where: {
         phase: { notIn: [...TERMINAL_BUILD_PHASES] },
-        abandonedAt: null,
+        ...ACTIVE_BUILD_WHERE,
         parentEpicId: null,
       },
     }),

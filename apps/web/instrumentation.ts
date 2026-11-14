@@ -462,7 +462,7 @@ export async function reconcileDeployedShipBuilds(
     await (await import("@/lib/build/merged-ship-room-settlement")).settleMergedShipBuildRoomsNow()
       .catch((err: unknown) => logger.error("[auto-complete] merged-room settlement failed: %s", JSON.stringify(String(err))));
     const shipBuilds = await prisma.featureBuild.findMany({
-      where: { phase: "ship" },
+      where: { phase: "ship", waitingOnOwnerSince: null }, // a build parked on its owner waits (BI-B6894001)
       select: { id: true, buildId: true },
     });
     const { mayCompleteAutonomousBuild } = await import("@/lib/build/autonomous-build-completion-gate");
@@ -612,7 +612,7 @@ export async function resumeStrandedBuildsOnBoot(
     const candidates = await prisma.featureBuild.findMany({
       where: {
         phase: { in: ["ideate", "plan", "build", "review"] },
-        updatedAt: { lt: cutoff },
+        updatedAt: { lt: cutoff }, waitingOnOwnerSince: null, // parked on its owner: not resumed or aged out (BI-B6894001)
       },
       select: {
         buildId: true,
