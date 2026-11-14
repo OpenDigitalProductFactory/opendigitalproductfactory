@@ -1536,6 +1536,7 @@
         "delivery-surfaces-runbook",
         "task-specific-operating-rules",
         "taking-over-another-executors-work",
+        "running-in-t3-code",
         "contributor-preview-binding-and-cleanup"
       ]
     },
@@ -9988,14 +9989,9 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "security-findings-workflow-and-baseline",
-        "the-two-loop-model",
-        "files",
-        "what-the-baseline-contains",
-        "when-you-need-to-regenerate-the-baseline",
-        "what-this-gate-is-not",
-        "why-workflowrun-trigger-not-pullrequest",
-        "trust-boundary-note",
+        "security-findings-how-they-are-caught-and-tracked",
+        "the-loops",
+        "retired-the-codeql-inflow-gate",
         "trust-boundary-paths"
       ]
     },

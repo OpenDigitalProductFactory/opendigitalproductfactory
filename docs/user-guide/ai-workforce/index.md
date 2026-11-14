@@ -1,5 +1,5 @@
 ---
-title: "AI Workforce"
+title: "AI Coworkers"
 area: ai-workforce
 order: 1
 ---
@@ -11,7 +11,7 @@ and aliases share one authority owner. When legacy rows disagree, use
 [permission reconciliation](../coworker-permission-reconciliation.md) to preview
 each difference and explicitly approve the desired state.
 
-AI Workforce is the directory and management home for the people-like AI roles that work in DPF. Start here to find who can help, what work they offer, whether that work is available for the current business type, and how much approval or review it requires.
+**AI Coworkers** (`/workforce`) is the single directory and activity home for the people-like AI roles that work in DPF. Start with **Coworkers** to find who can help. Open **Activity** to see what coworkers and external executors are doing, the Workrooms that retain their context, and whether today&rsquo;s model use belongs to a coworker, a Workroom, or remains unattributed. Advanced provider, routing, skill, governance, and runtime controls remain under **Platform → AI Operations**.
 
 Coworkers are grouped from customer-facing work inward:
 
@@ -38,7 +38,7 @@ outcome is reviewed. The pages in this area own the detail for each of those ste
 
 ## Find and Work With a Coworker
 
-1. Open `/platform/ai/overview`.
+1. Open `/workforce`.
 2. Search by coworker name or the work you need done.
 3. Filter by business area, interaction, availability, or attention state. Additional profession and lifecycle filters are under **More filters**.
 4. Read the three compact signals on each coworker: who they interact with, whether their declared work supports this business type, and their approval/autonomy posture.
@@ -130,8 +130,12 @@ The drift detail, along with route-level skills, observability, and the curator 
 
 ## Related Routes
 
+- `/workforce` — canonical AI Coworkers directory
+- `/workforce?view=activity` — current and recent coworker, Workroom, and platform activity
+- `/ops/workrooms` — Workroom inventory and retained execution context
+- `/platform/ai/operations-map` — live and historical operations evidence
 - `/platform/ai/skills` — the global skills catalog and observatory
-- `/platform/ai/overview` — customer-first coworker directory
+- `/platform/ai/overview` — advanced fleet administration
 - `/platform/ai/agent/[agentId]` — selected coworker record and work entry
 - `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel
 - `/platform/ai/agent/AGT-ORCH-000` — standing COO record, including its optional organization-visible conversational name

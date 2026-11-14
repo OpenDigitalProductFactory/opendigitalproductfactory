@@ -169,6 +169,15 @@ prefix through the repository provider, using `work-capsules/source-commit-resol
 They refuse an ambiguous or unknown prefix, name the recorded candidates, and return the
 caller's own call corrected. Both tool descriptions carry one complete worked call.
 
+`queue_workroom_pull_request` (BI-53BED66C) queues a room's own PR into the merge
+queue from the server, for clients that may not run `gh pr merge` unattended. It
+declares `irreversible`. Its refiner narrows the call to ordinary only for the room's
+own executor surface acting for the room's owner. The handler (`work-capsules/queue-workroom-pr.ts`)
+refuses unless the PR head is the room head and a passing, unexpired gate result is
+bound to the room there. GitHub's `expectedHeadOid` guards the head. The pack also
+gained `claim_backlog_item_for_work.harness` (`t3-code`) and `heartbeat_workroom`'s
+`checkpoint.capacity`. See the [T3 executor design](../superpowers/specs/2026-11-13-t3-code-first-class-executor-design.md).
+
 `rebind_workroom_shape` (BI-CB5C0DCE) lives in this pack, but its handler is
 its own lazy module (`work-capsules/workroom-shape-rebind-handler.ts`), so
 `mcp-handlers.ts` does not grow. It is the governed way to move a room's

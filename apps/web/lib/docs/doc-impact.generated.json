@@ -319,12 +319,6 @@
       "docs/security/2026-05-24-shift-left-rollout.md",
       "docs/security/secrets-scan.md"
     ],
-    ".github/workflows/security-inflow-gate.yml": [
-      "docs/maintenance/staleness-report.md",
-      "docs/security/2026-05-24-shift-left-rollout.md",
-      "docs/security/README.md",
-      "docs/security/secrets-scan.md"
-    ],
     ".github/workflows/stuck-auto-merge-alarm.yml": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -1910,9 +1904,6 @@
       "docs/architecture/2026-08-20-assurance-operating-loop-and-capability-completeness.md",
       "docs/architecture/vector-decisioning-and-jsi.md"
     ],
-    "docs/security/codeql-baseline.json": [
-      "docs/security/2026-05-24-shift-left-rollout.md"
-    ],
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
     ],
@@ -2654,6 +2645,9 @@
     ],
     "scripts/convergence-surfaces.json": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "scripts/derived-artifacts-gate.mjs": [
+      "docs/architecture/build-gate-runbook.md"
     ],
     "scripts/detect-hardware-host.ts": [
       "docs/install/linux.md",
@@ -3548,6 +3542,7 @@
       "scripts/check-build-script-policy.mjs",
       "scripts/check-no-server-imports-in-client.mjs",
       "scripts/check-stuck-auto-merge.mjs",
+      "scripts/derived-artifacts-gate.mjs",
       "scripts/installer/install-release-assets.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
       "scripts/lib/ci-evidence-plan.mjs",
@@ -4233,7 +4228,6 @@
       "scripts/measure-doc-staleness-coverage.mjs"
     ],
     "docs/maintenance/staleness-report.md": [
-      ".github/workflows/security-inflow-gate.yml",
       "apps/mobile/eas.json",
       "apps/web/components/shell/SectionNav.tsx",
       "apps/web/instrumentation.ts",
@@ -4419,12 +4413,7 @@
       ".github/workflows/ci.yml",
       ".github/workflows/codeql.yml",
       ".github/workflows/secrets-scan.yml",
-      ".github/workflows/security-inflow-gate.yml",
-      "docs/security/codeql-baseline.json",
       "scripts/check-mobile-jest-pin.mjs"
-    ],
-    "docs/security/README.md": [
-      ".github/workflows/security-inflow-gate.yml"
     ],
     "docs/security/codeql-advanced-setup.md": [
       ".github/codeql/codeql-config.yml",
@@ -4434,8 +4423,7 @@
     ],
     "docs/security/secrets-scan.md": [
       ".github/workflows/codeql.yml",
-      ".github/workflows/secrets-scan.yml",
-      ".github/workflows/security-inflow-gate.yml"
+      ".github/workflows/secrets-scan.yml"
     ],
     "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
       "packages/db/data/approved_tools_registry.json",
