@@ -10,7 +10,10 @@ BI-79C9523A / WC-3B029586, delivery-large@1.0.0. Native design admission
 IRD-26FA1429AA30 binds base f5dbcf027df88f5684420ff734e89a8ff8f3ffa7.
 This is a design draft, not an implementation, approved mechanism, passing
 research receipt, spec approval, architecture approval or runtime evidence.
-Funding ownership is unresolved; this document assigns no budget or grant.
+The exact item funding binding was authorized and completed on November 14 at
+20:00:24.835 UTC (envelope `cmwgsg5uk07qn0eoxuej10cvg`). Native readback resolves
+the organization/shared-platform scope and refactor classification. This records
+attribution only; this document assigns no budget increase or grant.
 
 ## Objective and retained scope
 
@@ -114,12 +117,20 @@ Ancestry and a PR title do not prove equivalent feature behavior. Exact-7c
 default-persona evidence and integration-target full-persona evidence must remain
 separate. The protected original branch does not move.
 
-## Open architecture decisions
+## Selected direction and remaining qualification
 
-These are unresolved choices for the normal Large design/approval route. Root's
-source assessment is advisory. WWMD DI-78D0807246E3 ranked a distinct corrective
+The following design direction remains subject to the normal Large independent
+design/security/architecture approval route. Root's source assessment is advisory.
+WWMD DI-78D0807246E3 ranked a distinct corrective
 carrier above widening generic reachability, but returned low confidence,
 all-options-opposed and autonomy-ineligible. It is not implementation permission.
+The subsequent, distinct mechanism decision `DI-332166C63495` selected
+`governed-ci-same-db` with high confidence, usable signal, strong structured
+coverage, stable sensitivity, no commandment conflict and autonomy eligibility.
+The agent recorded that selection through `record_decision_outcome`. Its leading
+contributors were Ground New Work In Existing Platform and Research and Use
+Standards. These qualitative comparisons are not runtime benchmarks or approval
+of the resulting specification.
 
 ### Reuse the governed cloud runtime before adding an authority bridge
 
@@ -152,11 +163,62 @@ identity or imply that unmeasured ordinary personas worked on exact 7c. Choosing
 the cloud candidate requires approved source/fixture bootstrap and a clear
 original-scope reconciliation, not dispatching another incomplete sweep.
 
-No cloud workflow was dispatched or changed for this proposal. This comparison
-is new source evidence for the mechanism decision, not a re-score of the earlier
-carrier advisory or permission to bypass a refusal.
+No cloud workflow was dispatched or changed for this proposal. The selected
+same-database direction avoids a new cross-database credential/authority bridge.
+The local preview issuer's existing mixed-target refusal remains appropriate;
+the implementation must not weaken it to make ordinary fixture tokens work on
+exact 7c. The earlier carrier advisory remains separate and unchanged.
 
-### Canonical authority and target transactions
+### Same-database runtime contract to qualify
+
+Extend the existing workflow, fixture projection and browser authentication
+bootstrap rather than adding a second sweep engine. Before a fixture write,
+the runner must prove all of the following:
+
+1. The job is an admitted verification of its immutable integration source/tree
+   and build artifact, with an explicit source contribution map back to 7c.
+   The original branch stays unchanged. An unrelated current-main build cannot
+   count as evidence about that contribution.
+2. The existing isolated CI database is loopback-only, disposable, and explicitly
+   classified `test` in its installer-owned snapshot. Both installer state and
+   the normal environment-class resolver must agree. An environment label alone
+   supplies no additional authority. A production/undeclared snapshot, remote
+   database or identity mismatch refuses before writing.
+3. The isolated installation has its own qualified test actor and existing
+   coworker identity, effective tool grants, human capabilities, exact source
+   Workroom and ordinary active lease. Bootstrap must use an approved existing
+   installation/test procedure, not a production token, an alternate auth-source
+   label, unchecked direct helper invocation or fabricated lease rows. No such
+   complete bootstrap is currently established by the inspected workflow; its
+   executable provenance is a blocking qualification prerequisite.
+4. Persona preparation uses the existing fixed profile/slot authorizer on that
+   same database; one-time sign-in uses the existing signed-link exchange and
+   actual session cookie. The browser does not fill a password form. Each
+   persona has a separate context, and storage state stays private and expires
+   with its run. Existing role removals and disabled state are preserved.
+5. Fixture output extends the existing route-parameter projection. Every one of
+   the 70 patterns has a concrete valid route, relation/visibility proof and
+   source-qualified domain factory or registry owner. A missing factory or
+   required persona prevents a passing full-scope receipt; it cannot shrink the
+   denominator or be replaced with a guessed identifier.
+6. Route cohorts fit the existing absolute fixture/run expiry. The approved
+   implementation must calculate a conservative cohort bound from measured
+   route duration and remaining admission, stop before expiry, and obtain the
+   next ordinary admission for a later cohort. It must not extend original
+   expiry, create another run on the same lease or rotate terminal claim keys
+   automatically. An incomplete cohort remains incomplete.
+7. The workflow records each route/context result, current target and persona,
+   missing/denied/redirect outcomes, expiry and cleanup independently. Reuse the
+   existing bounded worker setting and route inventory. Run retirement and
+   native reservation settlement remain separate from the UX verdict.
+
+The source findings above establish the missing prerequisites, not a functional
+RED/GREEN result. Obtain the independent reviewers' disposition of bootstrap,
+cohort bounds, role visibility and source equivalence before implementing them.
+If no approved existing bootstrap can satisfy item 3, return to the design gate
+with that exact missing contract; do not silently select the rejected bridge.
+
+### Rejected bridge: canonical authority and target transactions
 
 The canonical installation owns current actor, token, coworker, Workroom and
 native lease authority. The preview owns disposable fixture rows and its signer.
@@ -177,7 +239,7 @@ profiles and slots; concurrent redemption; partial target commit and unavailable
 canonical validation. Bound lock/transaction duration. A stale decision cannot
 turn into a signable orphan or a claimed successful cleanup.
 
-### Admission TTL, fixed lifetime and session revocation
+### Existing admission TTL, fixed lifetime and session revocation
 
 The current preview controller renews with `ttlMinutes: 2` in
 `scripts/lib/dev-preview-runtime.mjs`; the shell's 120-minute request duration
@@ -186,8 +248,9 @@ is not evidence of a two-hour active admission. Existing fixture lifetime is
 cannot extend original expiry, and the same lease cannot create a replacement
 run. Blindly reusing this path would strand a long sweep despite healthy renewal.
 
-Compare explicit bounded cohorts preserving existing lifetime with narrowly
-validated same-run renewal within an immutable hard deadline. The latter changes
+The selected direction uses explicit bounded cohorts preserving existing lifetime.
+The rejected alternative was narrowly validated same-run renewal within an
+immutable hard deadline. The latter changes
 the existing original-expiry contract and needs explicit approval; it must never
 restore removed groups, reactivate a disabled fixture or extend authority merely
 because a keeper is present. Do not lengthen native lease TTL to work around
