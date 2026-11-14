@@ -44,7 +44,7 @@ const definition: SurfaceDefinition = {
 };
 
 type RuntimeDependencies = Parameters<typeof createAuthorizedSurfaceRuntime>[0];
-function makeRuntime(options: { allowDomain?: boolean; authorityDigest?: () => string;
+function makeRuntime(options: { allowDomain?: boolean; idempotent?: boolean; authorityDigest?: () => string;
   refreshContext?: RuntimeDependencies["refreshContext"];
   authorizeAction?: RuntimeDependencies["authorizeAction"];
   executeDomainAction?: RuntimeDependencies["executeDomainAction"];
@@ -55,7 +55,9 @@ function makeRuntime(options: { allowDomain?: boolean; authorityDigest?: () => s
     return options.executeDomainAction ? options.executeDomainAction(...args) : { success: true, message: "Saved and tested" };
   });
   const observe = vi.fn();
-  const catalog = compileSurfaceDefinitions([definition], {
+  const runtimeDefinition = { ...definition, actions: definition.actions.map(action =>
+    action.actionClass === "domain" && options.idempotent !== undefined ? { ...action, idempotent: options.idempotent } : action) };
+  const catalog = compileSurfaceDefinitions([runtimeDefinition], {
     toolNames: new Set(["configure_gateway_scan"]),
     loaderIds: new Set(["discovery.loader"]),
   });
@@ -311,6 +313,25 @@ describe("Authorized Surface runtime", () => {
       idempotencyKey: "save-1",
     });
     expect(duplicate).toEqual(saved);
+    expect(executeDomainAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("rechecks explicitly uncached actions instead of returning an earlier successful key", async () => {
+    let allowed = true;
+    const { runtime, executeDomainAction } = makeRuntime({
+      idempotent: false,
+      authorizeAction: async (_context, action) => action.actionClass === "ui-local" || allowed,
+    });
+    const opened = await runtime.open({ context, selector: { surfaceId: definition.surfaceId } });
+    if (!opened.ok) throw new Error(opened.message);
+    const input = { sessionId: opened.session.sessionId, caller: context, context: { ...context },
+      actionId: "save-and-test", expectedRevision: opened.session.revision, args: {}, idempotencyKey: "current-state-required" };
+    const saved = await runtime.act(input);
+    expect(saved.ok).toBe(true); if (!saved.ok) return;
+    allowed = false;
+    // Use the current revision to isolate authorization from stale-revision refusal.
+    const repeated = await runtime.act({ ...input, context: { ...context }, expectedRevision: saved.revision });
+    expect(repeated).toMatchObject({ ok: false, code: "surface_action_not_authorized" });
     expect(executeDomainAction).toHaveBeenCalledTimes(1);
   });
 

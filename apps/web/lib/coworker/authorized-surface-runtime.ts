@@ -536,7 +536,11 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
       return operation;
     }
     const { record, context } = operation;
-    if (input.idempotencyKey) {
+    const action = record.definition.actions.find((candidate) => candidate.actionId === input.actionId);
+    // Explicit opt-out sends state-dependent actions through their current
+    // authorization and domain checks. Omitted/true retain legacy caching.
+    const cacheActionResult = action?.idempotent !== false;
+    if (input.idempotencyKey && cacheActionResult) {
       const prior = record.idempotency.get(input.idempotencyKey);
       if (prior) return prior;
     }
@@ -544,7 +548,6 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
       deps.observe?.({ operation: "act", outcome: "surface_revision_stale", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
       return failure("surface_revision_stale", "Surface revision is stale; refresh before acting.", record.session.revision);
     }
-    const action = record.definition.actions.find((candidate) => candidate.actionId === input.actionId);
     if (!action) return failure("surface_action_unmapped", `Action '${input.actionId}' is not mapped on this surface.`);
     if (!(await deps.authorizeAction(context, action))) {
       return failure("surface_action_not_authorized", `Action '${input.actionId}' is not authorized.`);
@@ -559,7 +562,7 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
       record.sequence += 1;
       record.session.revision = computeRevision(record, record.session.authorityDigest);
       const result: SurfaceActSuccess = { ok: true, revision: record.session.revision, message: `${action.label} applied to virtual surface state.` };
-      if (input.idempotencyKey) record.idempotency.set(input.idempotencyKey, result);
+      if (input.idempotencyKey && cacheActionResult) record.idempotency.set(input.idempotencyKey, result);
       deps.observe?.({ operation: "act", outcome: "success", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
       return result;
     }
@@ -584,7 +587,7 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
     });
     if (!domainResult.success) {
       const failed = failure("surface_action_failed", domainResult.message);
-      if (input.idempotencyKey) record.idempotency.set(input.idempotencyKey, failed);
+      if (input.idempotencyKey && cacheActionResult) record.idempotency.set(input.idempotencyKey, failed);
       return failed;
     }
     const loader = deps.loaders.get(record.definition.loaderId);
@@ -595,7 +598,7 @@ export function createAuthorizedSurfaceRuntime(deps: RuntimeDependencies) {
     record.cursors.clear();
     rememberGraph(record, await graph(record, context));
     const result: SurfaceActSuccess = { ok: true, revision: record.session.revision, message: domainResult.message, result: domainResult };
-    if (input.idempotencyKey) record.idempotency.set(input.idempotencyKey, result);
+    if (input.idempotencyKey && cacheActionResult) record.idempotency.set(input.idempotencyKey, result);
     deps.observe?.({ operation: "act", outcome: "success", mode: context.mode, surfaceId: record.definition.surfaceId, durationMs: Date.now() - started });
     return result;
   }

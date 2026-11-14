@@ -44,7 +44,9 @@ export const PLATFORM_FUNDING_SETUP_SURFACE: SurfaceDefinition = {
     ].map(([nodeId, label]) => ({ actionId: nodeId!, label: label!, actionClass: "ui-local" as const,
       localEffect: { kind: "set-value" as const, targetNodeId: nodeId! }, risk: "low" as const, confirmation: "none" as const })),
     { actionId: "platform-funding-confirm", label: "Confirm platform owner", actionClass: "domain", tool: "confirm_platform_funding_owner",
-      risk: "high", confirmation: "required", idempotent: true,
+      // A completed ownership receipt remains valid only while current state
+      // matches; every retry must reach authorization and the governed writer.
+      risk: "high", confirmation: "required", idempotent: false,
       description: "An agent still needs the selected person's actual human approval through the existing governed tool. A virtual attestation is not human approval.",
       argMap: { organizationId: "platform-funding-organization", reason: "platform-funding-reason", attestation: "platform-funding-attestation" },
       inputSchema: { type: "object", additionalProperties: false, properties: { expectedDigest: { type: "string", pattern: "^[a-f0-9]{64}$" } }, required: ["expectedDigest"] },

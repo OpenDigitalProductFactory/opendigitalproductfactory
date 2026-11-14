@@ -189,6 +189,37 @@ describe("platform ownership registered surface authority", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it.each(["profile ownership", "organization eligibility"])("does not replay cached confirmation success after changed %s", async changed => {
+    const recorded = { ...state(), status: "already-recorded", profile: { ...state().profile,
+      ownerPrincipalId: "owner-person", ownerOrganizationId: "org-test" } };
+    const dispatch = vi.fn(async () => {
+      funding.read.mockResolvedValue({ ok: true, data: recorded });
+      return { success: true, message: "Recorded." };
+    });
+    const opened = await authorizedSurfaceRuntime.open({ context: context(undefined, dispatch), selector: { surfaceId: "portfolio.platform-funding-setup" } });
+    expect(opened.ok).toBe(true); if (!opened.ok) return;
+    let revision = opened.session.revision;
+    for (const [actionId, value] of [["platform-funding-organization", "org-test"], ["platform-funding-reason", "Record initial ownership"], ["platform-funding-attestation", true]] as const) {
+      const drafted = await authorizedSurfaceRuntime.act({ sessionId: opened.session.sessionId, caller: raw,
+        context: context(undefined, dispatch), expectedRevision: revision, actionId, args: { value } });
+      expect(drafted.ok).toBe(true); if (!drafted.ok) return;
+      revision = drafted.revision;
+    }
+    const input = { sessionId: opened.session.sessionId, caller: raw, expectedRevision: revision,
+      actionId: "platform-funding-confirm", args: { expectedDigest: "a".repeat(64) }, idempotencyKey: "confirmed-owner-K" };
+    const saved = await authorizedSurfaceRuntime.act({ ...input, context: context(undefined, dispatch) });
+    expect(saved.ok).toBe(true); if (!saved.ok) return;
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    funding.read.mockClear().mockResolvedValue({ ok: true, data: changed === "profile ownership"
+      ? { ...recorded, status: "partial-or-conflicting", profile: { ...recorded.profile, ownerOrganizationId: "different-org" } }
+      : { ...recorded, status: "unavailable", reason: "organization-not-eligible", organizations: [] } });
+    // Fresh proof and the returned revision must not make a historical success current.
+    const repeated = await authorizedSurfaceRuntime.act({ ...input, context: context(undefined, dispatch), expectedRevision: saved.revision });
+    expect(repeated).toMatchObject({ ok: false, code: "surface_action_not_authorized" });
+    expect(funding.read).toHaveBeenCalledWith(expect.anything(), { userId: raw.delegatingUserId });
+    expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
   it("withholds confirmation without the existing writer authority", async () => {
     const opened = await authorizedSurfaceRuntime.open({ context: context(["read_platform_funding_setup"]), selector: { surfaceId: "portfolio.platform-funding-setup" } });
     expect(opened.ok).toBe(true); if (!opened.ok) return;
