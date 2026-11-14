@@ -34,6 +34,26 @@ export interface ResolvableStatutoryRule {
   /** NULL means still open. */
   effectiveTo: Date | null;
   sourceUrl?: string | null;
+  /**
+   * Distinguishes figures that share a tax, kind, side and start date, such as
+   * the rows of a withholding bracket table (BI-2BC8D614). "" for a figure that
+   * stands alone. Derived from the qualifiers by statutoryQualifierKey.
+   */
+  qualifierKey?: string;
+}
+
+/**
+ * A stable key for a rule's qualifiers, so two rows of the same table are
+ * different figures and two readings of the same row are the same figure.
+ * Keys are sorted; only scalar values take part.
+ */
+export function statutoryQualifierKey(qualifiers: unknown): string {
+  if (!qualifiers || typeof qualifiers !== "object" || Array.isArray(qualifiers)) return "";
+  return Object.entries(qualifiers as Record<string, unknown>)
+    .filter(([, v]) => typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${k}=${String(v)}`)
+    .join(";");
 }
 
 /**
@@ -53,14 +73,16 @@ export interface ResolvableStatutoryRule {
 export function resolveStatutoryRule(
   rules: readonly ResolvableStatutoryRule[],
   on: Date,
-  selector: { taxType: string; ruleKind: StatutoryRuleKind; side?: string | null },
+  selector: { taxType: string; ruleKind: StatutoryRuleKind; side?: string | null; qualifierKey?: string },
 ): ResolvableStatutoryRule | null {
   const side = selector.side ?? null;
+  const qualifierKey = selector.qualifierKey ?? "";
   const covering = rules.filter((rule) => {
     if (rule.status !== "ratified") return false;
     if (rule.taxType !== selector.taxType) return false;
     if (rule.ruleKind !== selector.ruleKind) return false;
     if ((rule.side ?? null) !== side) return false;
+    if ((rule.qualifierKey ?? "") !== qualifierKey) return false;
     if (rule.effectiveFrom.getTime() > on.getTime()) return false;
     if (rule.effectiveTo === null) return true;
     return rule.effectiveTo.getTime() > on.getTime();
@@ -197,16 +219,19 @@ export function checkStatutoryRatification(
  * figure still exists and still governs the dates it governed.
  */
 export function rulesSupersededBy(
-  incoming: Pick<ResolvableStatutoryRule, "taxType" | "ruleKind" | "side" | "effectiveFrom">,
+  incoming: Pick<ResolvableStatutoryRule, "taxType" | "ruleKind" | "side" | "effectiveFrom" | "qualifierKey">,
   existing: readonly ResolvableStatutoryRule[],
 ): ResolvableStatutoryRule[] {
   const side = incoming.side ?? null;
+  const qualifierKey = incoming.qualifierKey ?? "";
   return existing.filter(
     (rule) =>
       rule.status === "ratified" &&
       rule.taxType === incoming.taxType &&
       rule.ruleKind === incoming.ruleKind &&
       (rule.side ?? null) === side &&
+      // One bracket of a table never supersedes another bracket of it.
+      (rule.qualifierKey ?? "") === qualifierKey &&
       rule.effectiveFrom.getTime() < incoming.effectiveFrom.getTime(),
   );
 }
