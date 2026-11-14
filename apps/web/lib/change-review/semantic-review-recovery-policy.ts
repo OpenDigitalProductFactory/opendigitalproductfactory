@@ -105,8 +105,8 @@ export function semanticReviewRecoveryObservation(status: string, payload: unkno
   const reason = typeof recorded.reason === "string" ? recorded.reason : null;
   const executionUncertain = recorded.executionOutcome === "unknown" || reason?.startsWith("provider-outcome-uncertain");
   const allowanceResetAt = reason === "reviewer-daily-allowance-used" && typeof recorded.allowanceResetAt === "string" ? recorded.allowanceResetAt : null;
-  // BI-49AA6BE8: past its window, only a lineage the server proved never dispatched keeps a wait, ending in a successor.
-  const successorOnCapacity = recorded.successorOnCapacity === true && budget !== "available" && budget !== "unknown";
+  // BI-49AA6BE8: once its window or attempts are spent, only a lineage the server proved never dispatched keeps a wait, ending in a successor.
+  const successorOnCapacity = recorded.successorOnCapacity === true && budget !== "unknown";
   const capacityRecovery = status === "input-required" && (budget === "available" || successorOnCapacity)
     ? readCapacityRecoveryWait(recorded) : null;
   const classification = successorTaskRunId ? "superseded" : status === "completed" ? "completed"
