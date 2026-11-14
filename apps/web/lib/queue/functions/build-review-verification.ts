@@ -28,6 +28,21 @@ import { jobs } from "@/lib/jobs";
 import { buildPipelineConcurrency } from "../admission";
 import { shouldRunBrowserUxVerification } from "@/lib/build/ui-surface";
 
+/**
+ * BI-E3C5C7E4: review verification runs only for a build that is in review now.
+ * Every caller moves the build into review before queuing, but a stale or
+ * re-delivered event used to run the whole job anyway: from 2026-11-06 to
+ * 11-13, abandoned and in-build builds were each finalized ~230 times, and every
+ * pass spent cloud model calls on a change nobody could ship.
+ */
+export function reviewVerificationSkipReason(
+  build: { sandboxId?: string | null; sandboxPort?: number | null; phase?: string | null } | null,
+): string | null {
+  if (!build || !build.sandboxId || !build.sandboxPort) return "sandbox or build missing";
+  if (build.phase !== "review") return `build is in ${build.phase ?? "no"} phase, not review`;
+  return null;
+}
+
 export const buildReviewVerification = jobs.createFunction(
   {
     id: "build/review-verification",
@@ -56,13 +71,13 @@ export const buildReviewVerification = jobs.createFunction(
           verificationOut: true,
           buildBranch: true,
           designDoc: true,
+          phase: true,
         },
       });
     });
 
-    if (!build || !build.sandboxId || !build.sandboxPort) {
-      return { skipped: true, reason: "sandbox or build missing" };
-    }
+    const skip = reviewVerificationSkipReason(build);
+    if (skip || !build) return { skipped: true, reason: skip ?? "sandbox or build missing" };
 
     const { deriveFixUxTestCases } = await import("@/lib/explore/feature-build-types");
     const brief = build.brief as {
@@ -196,6 +211,35 @@ export const buildReviewVerification = jobs.createFunction(
           });
         });
         return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
+      }
+      // BI-09FB398D: a risk outside this change that the escalation gate found
+      // damaging (critical) cannot be repaired by the build's agent, so it goes
+      // to a person now through the same seam, not after spent repair rounds.
+      if (finalize.status === "risk-needs-owner") {
+        const escalated = await step.run("escalate-damaging-out-of-scope-risk", async () => {
+          const { prisma } = await import("@dpf/db");
+          const row = await prisma.featureBuild.findUnique({
+            where: { buildId },
+            select: { id: true, phase: true, title: true, originatingBacklogItemId: true },
+          });
+          if (!row || row.phase !== "review") return "not-in-review";
+          const { escalateBuildToHuman } = await import("@/lib/build/escalate-build-to-human");
+          await escalateBuildToHuman({
+            buildPk: row.id,
+            buildId,
+            featureTitle: row.title,
+            originatingBacklogItemId: row.originatingBacklogItemId,
+            phase: "review",
+            rounds: 0,
+            issues: finalize.risks.map((risk) => ({
+              severity: risk.severity,
+              description: `Unmitigated risk outside this change, judged damaging: ${risk.key}: ${risk.trigger} → ${risk.effect}. ${risk.rationale}`,
+            })),
+            log: (summary: string) => prisma.buildActivity.create({ data: { buildId, tool: "review-verification", summary: summary.slice(0, 1000) } }).then(() => undefined).catch(() => undefined),
+          });
+          return "escalated";
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, escalation: escalated };
       }
       // BI-33B54E4B: a confirmed scoped-test or typecheck failure goes back to
       // the coding agent with the failing tests named, through the same bound,

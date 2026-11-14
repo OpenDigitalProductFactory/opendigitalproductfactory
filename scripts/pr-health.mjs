@@ -425,11 +425,55 @@ function gh(args, { allowFail = false } = {}) {
   try {
     return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
   } catch (e) {
-    // `gh pr checks` exits non-zero when not every check passes, but still writes
-    // the JSON to stdout — capture it.
-    if (allowFail) return (e.stdout || "").toString();
+    // Only documented checks outcomes can carry a useful nonzero JSON result.
+    // Empty, partial and transport-error output is never a successful read.
+    if (allowFail) {
+      let detail = "No consistent failed or pending check result was returned.";
+      if (e.status === 1 || e.status === 8) {
+        try {
+          const output = (e.stdout || "").toString();
+          const checks = parseChecksObservation(output);
+          if (checks.some(c => e.status === 1 ? FAILING_BUCKETS.has(c.bucket) : PENDING_BUCKETS.has(c.bucket))) return output;
+        } catch (validation) { detail = validation.message; }
+      }
+      // Retain the original structured cause without echoing raw stderr or credentials.
+      throw new Error(`GitHub checks command failed (exit ${Number.isInteger(e.status) ? e.status : "unknown"}). ${detail}`, { cause: e });
+    }
     throw e;
   }
+}
+
+function parseChecksObservation(raw) {
+  let checks;
+  try { checks = JSON.parse(raw); } catch { throw new Error("GitHub checks are unreadable: missing or invalid JSON."); }
+  const buckets = new Set(["pass", "fail", "pending", "skipping", "cancel"]);
+  if (!Array.isArray(checks) || checks.some(c => !c || typeof c.name !== "string" || !c.name.trim() || !buckets.has(c.bucket))) {
+    throw new Error("GitHub checks are unreadable: incomplete check records.");
+  }
+  return checks;
+}
+
+function parseThreadObservations(raw) {
+  let pages;
+  try { pages = JSON.parse(raw); } catch { throw new Error("GitHub review threads are unreadable: missing or invalid JSON."); }
+  if (!Array.isArray(pages) || !pages.length) throw new Error("GitHub review thread pages are unavailable.");
+  const threads = [];
+  const cursors = new Set();
+  for (const [index, page] of pages.entries()) {
+    const connection = page?.data?.repository?.pullRequest?.reviewThreads;
+    const info = connection?.pageInfo;
+    if (!page || typeof page !== "object"
+      || (page.errors !== undefined && (!Array.isArray(page.errors) || page.errors.length))
+      || !Array.isArray(connection?.nodes) || connection.nodes.some(t => !t || typeof t.isResolved !== "boolean")
+      || typeof info?.hasNextPage !== "boolean"
+      || info.hasNextPage !== (index < pages.length - 1)
+      || (info.hasNextPage && (typeof info.endCursor !== "string" || !info.endCursor || cursors.has(info.endCursor)))) {
+      throw new Error("GitHub review threads are unreadable: incomplete or inconsistent pages.");
+    }
+    if (info.hasNextPage) cursors.add(info.endCursor);
+    threads.push(...connection.nodes);
+  }
+  return threads;
 }
 
 function fetchPrState(prArg) {
@@ -445,44 +489,47 @@ function fetchPrState(prArg) {
   const meta = JSON.parse(
     gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,baseRefName,headRefName,headRefOid,body,files,commits,author"]),
   );
-
-  let checks = [];
-  const rawChecks = gh(["pr", "checks", number, "--json", "name,state,bucket,workflow,startedAt"], { allowFail: true });
-  if (rawChecks.trim()) {
-    try {
-      checks = JSON.parse(rawChecks);
-    } catch {
-      /* no checks reported yet — treated as 0 checks */
-    }
+  if (!meta || !Number.isSafeInteger(meta.number) || meta.number <= 0
+    || !["OPEN", "CLOSED", "MERGED"].includes(meta.state)) {
+    throw new Error("GitHub PR metadata is unreadable: incomplete identity or state.");
   }
+  // GitHub's terminal merge fact does not need fresh readiness observations.
+  // Keep their absence explicit; this does not qualify any new publication.
+  if (meta.state === "MERGED") return { meta, checks: [], threads: [], localCi: null, readinessObserved: false };
+  if (typeof meta.isDraft !== "boolean" || typeof meta.baseRefName !== "string" || !meta.baseRefName.trim()
+    || typeof meta.headRefOid !== "string" || !/^[a-f0-9]{40}$/i.test(meta.headRefOid)
+    || !Array.isArray(meta.files) || meta.files.some(file => typeof file?.path !== "string" || !file.path.trim())) {
+    throw new Error("GitHub PR metadata is unreadable: incomplete source, draft or file observations.");
+  }
+
+  const rawChecks = gh(["pr", "checks", number, "--json", "name,state,bucket,workflow,startedAt"], { allowFail: true });
+  const checks = parseChecksObservation(rawChecks);
 
   // Review threads are NOT in `gh pr checks` — fetch via GraphQL.
-  let threads = [];
-  let repositoryFullName = null;
-  try {
-    const repo = JSON.parse(gh(["repo", "view", "--json", "owner,name"]));
-    repositoryFullName = `${repo.owner.login}/${repo.name}`;
-    const query =
-      "query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){" +
-      "reviewThreads(first:100){nodes{isResolved isOutdated path line}}}}}";
-    const data = JSON.parse(
-      gh([
-        "api",
-        "graphql",
-        "-f",
-        `query=${query}`,
-        "-F",
-        `o=${repo.owner.login}`,
-        "-F",
-        `n=${repo.name}`,
-        "-F",
-        `p=${number}`,
-      ]),
-    );
-    threads = data.data.repository.pullRequest.reviewThreads.nodes || [];
-  } catch {
-    /* threads unavailable (permissions / API) — report what we can */
+  const repo = JSON.parse(gh(["repo", "view", "--json", "owner,name"]));
+  if (typeof repo?.owner?.login !== "string" || !repo.owner.login || typeof repo.name !== "string" || !repo.name) {
+    throw new Error("GitHub repository identity is unreadable.");
   }
+  const repositoryFullName = `${repo.owner.login}/${repo.name}`;
+  const query =
+    "query($o:String!,$n:String!,$p:Int!,$endCursor:String){repository(owner:$o,name:$n){pullRequest(number:$p){" +
+    "reviewThreads(first:100,after:$endCursor){nodes{isResolved isOutdated path line}pageInfo{hasNextPage endCursor}}}}}";
+  const threads = parseThreadObservations(
+    gh([
+      "api",
+      "graphql",
+      "--paginate",
+      "--slurp",
+      "-f",
+      `query=${query}`,
+      "-F",
+      `o=${repo.owner.login}`,
+      "-F",
+      `n=${repo.name}`,
+      "-F",
+      `p=${number}`,
+    ]),
+  );
 
   // Local-CI sandbox evidence inputs (BI-C74F4DE9). The git-local gate record
   // only proves anything when pr:health runs from the branch's own worktree;
@@ -626,10 +673,14 @@ function report(state, result) {
   console.log(verdictHeadline(result));
   console.log(`PR #${meta.number}: ${meta.title}`);
   console.log(`  state=${meta.state} mergeable=${meta.mergeable} mergeStateStatus=${meta.mergeStateStatus}`);
-  console.log(
-    `  checks: ${counts.checksTotal} total — ${counts.failing} failing, ${counts.pending} pending; ` +
-      `${counts.unresolvedThreads} unresolved review thread(s)`,
-  );
+  if (state.readinessObserved === false) {
+    console.log("  readiness checks and review threads: not read — GitHub confirms this PR is already merged.");
+  } else {
+    console.log(
+      `  checks: ${counts.checksTotal} total — ${counts.failing} failing, ${counts.pending} pending; ` +
+        `${counts.unresolvedThreads} unresolved review thread(s)`,
+    );
+  }
   for (const n of result.notes) console.log(`  note: ${n}`);
   if (result.verdict === "BLOCKED-ACTION") {
     for (const a of result.actions) console.log(`   - [${a.actor}] ${a.text}`);
@@ -644,7 +695,7 @@ async function main() {
   try {
     args = parsePrHealthArgs();
   } catch (e) {
-    console.error(`pr-health: ${e.message}`);
+    console.error(`UNREADABLE — ${e.message}`);
     process.exit(PR_HEALTH_EXIT.UNREADABLE);
   }
   const durationCache = new Map();
@@ -675,7 +726,7 @@ async function main() {
       last = read();
     }
   } catch (e) {
-    console.error(`pr-health: ${e.message}`);
+    console.error(`UNREADABLE — ${e.message}`);
     process.exit(PR_HEALTH_EXIT.UNREADABLE);
   }
 

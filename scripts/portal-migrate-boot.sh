@@ -61,24 +61,30 @@ if ! pnpm --filter @dpf/db exec tsx scripts/reconcile-catalog-capabilities.ts; t
   echo "[portal-boot] WARN: catalog capability reconciliation failed — starting with the existing model catalog (see error above)" >&2
 fi
 
-# BI-D4C1E05E — self-heal the wiki vector store on every upgrade boot.
-# A self-upgrade merges upstream main and rebuilds, but published stances/overlay
-# pages that were authored while an earlier build never embedded them stay
-# invisible to the decision engine (wiki_query / principle_decide) until a manual
-# reembed. This step embeds only the MISSING pages (reconcilePublishedWikiEmbeddings
-# is coverage-gap-based and idempotent), so it is a cheap no-op once coverage is
-# complete and a loud, self-verifying self-heal when it is not.
+# BI-D4C1E05E / BI-F039D17A — converge the wiki vector store on every upgrade boot.
+# A self-upgrade merges upstream main and rebuilds. Two things can leave retrieval
+# behind the shipped corpus: a published page with no vector (authored while an
+# earlier build could not embed it), and a page whose prose CHANGED in this
+# release while its vector still encodes the old wording. Kernel principles and
+# profession pages are the doctrine expert coworkers steer by, so a stale vector
+# means steering by superseded doctrine. reconcilePublishedWikiEmbeddings embeds
+# missing pages and re-embeds any page whose content digest differs from the one
+# stamped on its vector; unchanged pages are skipped, so this is a cheap no-op
+# once the store is current.
+#
+# BUDGETED: the run stops starting new embeds after --budget-seconds and reports
+# the remainder as deferred. The digest is the only state, so the two-hourly
+# embedding-coverage job (and the next boot) resume exactly where this stopped,
+# and every run reports what it refreshed into the corpus-health Workroom.
 #
 # NON-FATAL, exactly like the catalog reconcile above: the embedding provider
 # (Docker Model Runner) may legitimately be unreachable at boot, and the script
 # EXITS 1 in that case (fail-loud precondition) — but a drifted vector index is a
 # DEGRADED retrieval state, not a correctness hazard for serving the portal, and
-# the next boot (or a manual reembed) closes the gap. Blocking boot on the embed
-# provider would crash-loop the portal the same way blocking on the model catalog
-# did (#318). Failures are logged; the write-path embed (this same BI) keeps new
-# publishes covered in the meantime.
-if ! pnpm --filter web exec tsx scripts/reembed-wiki-store.ts; then
-  echo "[portal-boot] WARN: wiki embedding self-heal did not reach full coverage — embedding provider may be unavailable; new publishes still embed on the write-path, and the next boot retries (see error above)" >&2
+# the scheduled job closes the gap. Blocking boot on the embed provider would
+# crash-loop the portal the same way blocking on the model catalog did (#318).
+if ! pnpm --filter web exec tsx scripts/reembed-wiki-store.ts --budget-seconds 180; then
+  echo "[portal-boot] WARN: wiki embedding convergence did not complete — embedding provider may be unavailable; new publishes still embed on the write-path, and the scheduled embedding-coverage job retries (see error above)" >&2
 fi
 
 echo "[portal-boot] provider catalog reconciled (or degraded); starting server"

@@ -77,6 +77,34 @@ describe("groundPromptWithAuthorizedSurface", () => {
     expect(isAuthorizedSurfaceGuidanceRequest("configure and test this connection for me")).toBe(false);
   });
 
+  it.each([
+    "Where do I enter an expense?",
+    "How do I enter an expense?",
+    "Where is expense entry?",
+    "Where exactly do I start my own expense claim, which fields are required, and how do draft and submission differ?",
+    "Which fields are required for my expense claim?",
+    "For the current operator setup, where exactly do I go to start my own expense claim, which fields are required on the native form, and what is the difference between saving a draft and submitting for approval? Please answer here once using the current Finance context. Guidance only: do not create or submit a claim, post a journal, move money, change settings or contact anyone.",
+  ])("accepts wholly static Finance workflow guidance: %s", request => {
+    expect(isAuthorizedSurfaceGuidanceRequest(request, "finance.expense-guidance")).toBe(true);
+  });
+  it.each([
+      "How much is my current expense claim total?",
+      "Where do I enter an expense and how many claims are pending?",
+      "What is my cash balance?",
+      "Is my employee profile linked?",
+      "Has my claim been approved?",
+      "Please submit my expense claim for me?",
+      "Where do I enter an expense, and list my recent claims?",
+      "Where do I enter an expense and what are my claim amounts?",
+      "Where do I enter an expense, and explain our revenue forecast?",
+      "Where do I enter an expense and show the receipts for my last claim?",
+      "What is my expense claim submission date?",
+      "Enter an expense for me.",
+      "Where do I enter an expense? And submit my claim.",
+    ])("keeps live, mixed and action Finance requests on the tool path: %s", request => {
+    expect(isAuthorizedSurfaceGuidanceRequest(request, "finance.expense-guidance")).toBe(false);
+  });
+
   it("prehydrates current authorized UX truth without exposing secret values", async () => {
     const context: SurfacePrincipalContext = {
       delegatingUserId: "user-1",

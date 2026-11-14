@@ -34,11 +34,13 @@
 // run the guards" apart from "a guard found a violation".
 
 import { readdirSync } from "node:fs";
+import { parseArgs } from "node:util";
 import { spawnSync } from "node:child_process";
 import { guardGitEnv } from "./lib/git-hook-env.mjs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPTS_DIR, "..");
@@ -120,6 +122,22 @@ export function discoverGuardFiles(entries) {
     guards: sorted.filter((f) => /^check-no-.*\.mjs$/.test(f) && !f.endsWith(".test.mjs")),
     tests: new Set(sorted.filter((f) => /^check-no-.*\.test\.mjs$/.test(f))),
   };
+}
+
+// BI-8ED87FD9: drop the guards a named policy guard already runs on its own.
+// A guard is skipped only when its self-test (if any) also runs standalone, so
+// deduplication never loses a self-test.
+export function excludeStandaloneGuards({ guards, tests }, standalone) {
+  const kept = [];
+  const skipped = [];
+  for (const guard of guards) {
+    const testFile = guard.replace(/\.mjs$/, ".test.mjs");
+    const selfTestCovered = !tests.has(testFile) || standalone.tests.has(testFile);
+    if (standalone.guards.has(guard) && selfTestCovered) skipped.push(guard);
+    else kept.push(guard);
+  }
+  const keptTests = new Set([...tests].filter((t) => kept.includes(t.replace(/\.test\.mjs$/, ".mjs"))));
+  return { guards: kept, tests: keptTests, skipped };
 }
 
 // Render a failing child's own output beneath the verdict that cites it, so the
@@ -209,7 +227,22 @@ export function summarizeGuardRun({ guards, tests, violations, runnerFailures })
 }
 
 export async function main() {
-  const { guards, tests } = discoverGuardFiles(readdirSync(SCRIPTS_DIR));
+  // BI-8ED87FD9: the policy registry passes the guards it already runs on
+  // their own. Run by hand with no arguments, the loop runs every guard.
+  const { values } = parseArgs({
+    args: scriptArgv(),
+    options: {
+      "standalone-guard": { type: "string", multiple: true },
+      "standalone-test": { type: "string", multiple: true },
+    },
+  });
+  let { guards, tests } = discoverGuardFiles(readdirSync(SCRIPTS_DIR));
+  const standalone = {
+    guards: new Set(values["standalone-guard"] ?? []),
+    tests: new Set(values["standalone-test"] ?? []),
+  };
+  let skipped = [];
+  ({ guards, tests, skipped } = excludeStandaloneGuards({ guards, tests }, standalone));
 
   if (guards.length === 0) {
     console.error("No scripts/check-no-*.mjs guards found — that is itself a failure.");
@@ -233,6 +266,9 @@ export async function main() {
   const { exitCode, lines } = summarizeGuardRun({ guards, tests, violations, runnerFailures });
 
   console.log("");
+  if (skipped.length > 0) {
+    console.log(`Guard loop: ${skipped.length} guard(s) skipped here because their own policy guard runs them: ${skipped.join(", ")}`);
+  }
   const sink = exitCode === 0 ? console.log : console.error;
   for (const line of lines) sink(line);
   // BI-FEDD8F45: spool the run's outcome record. Observation only: it never

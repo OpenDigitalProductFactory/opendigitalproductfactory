@@ -206,6 +206,7 @@ const definitions: ToolDefinition[] = [
         baseSha: { type: "string", description: "SHA of the base commit: full, or a prefix of 7+ hex characters the server expands against the repository (an ambiguous prefix is refused with its candidates). With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
         headSha: { type: "string", description: "SHA of the branch head: full, or a 7+ character prefix of a pushed commit. An unpushed head must be the full git rev-parse HEAD output." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
+        harness: { type: "string", enum: ["t3-code"], description: "The orchestrating harness when one runs the client, e.g. t3-code when T3 Code drives Codex or Claude. provider stays the model client; sessionRef is the client thread id (CODEX_THREAD_ID / CLAUDE_CODE_SESSION_ID)." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workShape: {
           type: "string",
@@ -295,6 +296,12 @@ const definitions: ToolDefinition[] = [
             headSha: { type: "string", pattern: "^[0-9a-f]{40}$" },
             pushed: { type: "boolean" },
             openRisks: { type: "array", items: { type: "string" }, maxItems: 20 },
+            capacity: {
+              type: "object",
+              description: "Your plan's usage limit is reached or about to be: the provider and when it says access returns. The room then waits visibly and offers the work to an unblocked executor. Any later heartbeat supersedes it.",
+              properties: { provider: { type: "string" }, resetAt: { type: "string", format: "date-time" }, note: { type: "string" } },
+              required: ["provider", "resetAt"],
+            },
           },
         },
       },
@@ -302,6 +309,26 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
+  },
+  {
+    name: "queue_workroom_pull_request",
+    description:
+      "Queue this Workroom's own PR into the merge queue (squash). Use after pnpm gate:wait passed on the room's head and the PR is open, " +
+      "instead of `gh pr merge --auto`, which unattended clients may not run. Refused unless the PR head is the room's head and a passing, " +
+      "unexpired gate result is bound to the room at that head. The merge queue still runs every required check. " +
+      "The room's own executor, acting for the room's owner, needs no approval.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+      },
+      required: ["capsuleId"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    consequence: "irreversible",
+    consequenceForCall: async (call) =>
+      (await import("@/lib/work-capsules/queue-workroom-pr")).queueWorkroomPrConsequenceForCall(call),
   },
   {
     name: "update_workroom_status",
@@ -597,6 +624,8 @@ export const workCapsulesPack: ToolPack = {
     correct_workroom_sensitivity: (params, userId, context) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.correctWorkroomSensitivityTool(params, userId, context)),
     list_workrooms: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
     get_workroom: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
+    queue_workroom_pull_request: (params, userId, context) =>
+      import("@/lib/work-capsules/queue-workroom-pr.server").then((m) => m.queueWorkroomPullRequestTool(params, userId, context)),
     create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
@@ -647,6 +676,7 @@ export const workCapsulesPack: ToolPack = {
     declare_break_fix: ["work_capsule_write"],
     claim_workroom_scope: ["worktree_provision"],
     heartbeat_workroom: ["work_capsule_write"],
+    queue_workroom_pull_request: ["work_capsule_write"],
     update_workroom_status: ["work_capsule_write"],
     release_workroom_scope: ["work_capsule_write"],
     rebind_workroom_shape: ["work_capsule_write"],

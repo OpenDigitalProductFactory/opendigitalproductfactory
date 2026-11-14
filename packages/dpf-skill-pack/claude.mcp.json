@@ -5,7 +5,8 @@
       "url": "${DPF_CLAUDE_MCP_URL:-https://localhost/api/mcp/v1?tier=full}",
       "oauth": {
         "scopes": "dpf.read dpf.work dpf.build"
-      }
+      },
+      "headersHelper": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/toolchain-declaration-header.mjs\""
     }
   }
 }

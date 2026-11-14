@@ -5,6 +5,10 @@ import type {
 
 import { getDiscoveryOperationsViewModel } from "@/lib/discovery-operations-view-model";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+import { currentUserContext } from "@/lib/govern/current-user-context";
+import { can } from "@/lib/govern/permissions";
+import { FINANCE_EXPENSE_GUIDANCE_ID, FINANCE_EXPENSE_GUIDANCE_LOADER, FINANCE_EXPENSE_GUIDANCE_ROUTES,
+  FINANCE_EXPENSE_GUIDANCE_SURFACE, projectExpenseWorkflowGuidance } from "./surfaces/finance-expense-guidance-surface";
 
 import { compileSurfaceDefinitions, surfaceContractDigest } from "./authorized-surface-compiler";
 import { observeAuthorizedSurface } from "./authorized-surface-observability";
@@ -18,9 +22,10 @@ import {
 import { getResponseFeedback } from "@/lib/routing/response-feedback";
 import { RESPONSE_FEEDBACK_LOADER_ID, RESPONSE_FEEDBACK_SURFACE, projectResponseFeedbackSurface } from "./surfaces/response-feedback-surface";
 
-export const ALL_SURFACE_DEFINITIONS = [DISCOVERY_OPERATIONS_SURFACE, RESPONSE_FEEDBACK_SURFACE] as const;
+export const ALL_SURFACE_DEFINITIONS = [DISCOVERY_OPERATIONS_SURFACE, RESPONSE_FEEDBACK_SURFACE, FINANCE_EXPENSE_GUIDANCE_SURFACE] as const;
 
 const loaders = new Map([
+  [FINANCE_EXPENSE_GUIDANCE_LOADER, async (context: SurfacePrincipalContext) => projectExpenseWorkflowGuidance(context.locale)],
   [RESPONSE_FEEDBACK_LOADER_ID, async (context: SurfacePrincipalContext) => {
     const ids = context.workContext?.resourceIds;
     if (!serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has("get_response_feedback")
@@ -99,10 +104,17 @@ function serverContext(context: SurfacePrincipalContext): ServerSurfaceContext {
 export const authorizedSurfaceRuntime = createAuthorizedSurfaceRuntime({
   catalog: AUTHORIZED_SURFACE_CATALOG,
   loaders,
-  authorizeSurface: async (context, definition) => definition.surfaceId !== RESPONSE_FEEDBACK_SURFACE.surfaceId
+  authorizeSurface: async (context, definition) => {
+    if (definition.surfaceId === FINANCE_EXPENSE_GUIDANCE_ID) {
+      const human = await currentUserContext(context.delegatingUserId);
+      return !!human && can(human, "view_finance") && !!context.actingAgentId?.trim()
+        && FINANCE_EXPENSE_GUIDANCE_ROUTES.some(route => route === context.route);
+    }
+    return definition.surfaceId !== RESPONSE_FEEDBACK_SURFACE.surfaceId
     || (serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has("get_response_feedback") === true
       && context.workContext?.resourceType === "agent-message" && context.workContext.resourceIds?.length === 1
-      && !!context.workContext.resourceIds[0]?.trim() && !!context.actingAgentId?.trim()),
+      && !!context.workContext.resourceIds[0]?.trim() && !!context.actingAgentId?.trim());
+  },
   authorizeAction: async (context, action) =>
     action.actionClass === "ui-local"
     || (!!action.tool && serverContext(context)[AUTHORIZED_TOOL_NAMES]?.has(action.tool)),

@@ -86,6 +86,19 @@ import { shouldExitWithLocalToolCallDiagnostic } from "./local-tool-call-diagnos
 import { assertRestrictedReassessmentTurn, restrictedReassessmentLoop, restrictedReassessmentToolCall, restrictedReassessmentReceipt, rethrowRestrictedReassessmentError, type CanonicalReviewReceiptCheck } from "./reassessment-loop";
 import { preloadFiniteReassessment, fullReassessmentToolResult } from "./reassessment-preload";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
+// DPF2-REMOVABLE: pre-DPF2 non-acting-answer failover bridge. Delete together
+// with the consumers listed in @/lib/routing/non-acting-bridge-config.ts when
+// DPF2's native acting-contract enforcement lands.
+import { detectNonActingAnswer } from "./non-acting-answer-detector";
+import { NON_ACTING_BRIDGE_CONFIG } from "@/lib/routing/non-acting-bridge-config";
+import { recordNonActingFailure } from "@/lib/routing/record-non-acting-failure";
+import {
+  resolveDispatchAdapter,
+  dispatchEndpointId,
+  denyNonActingProvider,
+  pickBetterNonActingResult,
+  annotateNonActingFailover,
+} from "./non-acting-failover";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
 // (no tool calls). This limit only catches true infinite loops from bugs.
@@ -1053,9 +1066,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a
     // short-lived JWT for `--mcp-config`, exposing platform tools as native
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
-    // adapters ignore the field. The agentic loop is the only place with
-    // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence, ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
+    // Other adapters ignore this server-owned context.
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence,
+      ...(taskRunId && params.tokenGrantScopes !== undefined && !readEvidencePolicy ? { admittedTokenGrantScopes: [...params.tokenGrantScopes] } : {}), ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -1116,6 +1129,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   const noProgressNudgedSigs = new Set<string>();
   let fabricationRetries = 0;
   let frustrationCount = 0;
+  // DPF2-REMOVABLE non-acting bridge: bounded in-turn failover off an endpoint
+  // that was handed tools but refused to act. `nonActingFailovers` caps retries;
+  // `bestNonActingResult` keeps the first non-acting answer so a non-acting retry
+  // returns the better of the two rather than regressing; `pendingNonActingFailover`
+  // carries the failed endpoint forward so the replacement dispatch can be logged.
+  let nonActingFailovers = 0;
+  let bestNonActingResult: RoutedInferenceResult | null = null;
+  let pendingNonActingFailover: { nonActingEndpoint: string; adapter: string } | null = null;
   // BI-1D144CC1: bounded continue-generation budget for max_tokens-truncated
   // turns. A truncation stop is not a natural end_turn; we ask the model to
   // finish (up to this many times) before falling through to the best partial.
@@ -1139,6 +1160,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     completeAgenticResult(content, source, { totalInputTokens, totalOutputTokens, executedTools, suppliedSourceEvidence }, extra);
   const terminalFailure = (message: string, source = lastResult): AgenticResult =>
     completeResult(message, source, { failure: { kind: "terminal-writer-missing", message } });
+  const incompleteResult = (message: string, source: AgenticCompletionSource | null = lastResult): AgenticResult =>
+    completeResult(message, source, { failure: { kind: "unknown", message }, synthetic: true });
   let bestPreNudgeContent = ""; // Preserve content and its own producer together.
   let bestPreNudgeSource: RoutedInferenceResult | null = null;
   const startTime = Date.now();
@@ -1483,6 +1506,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
 
     lastResult = result;
+    // DPF2-REMOVABLE: this dispatch is the replacement for a non-acting endpoint.
+    // Record the failover on its RouteDecisionLog now that the replacement
+    // endpoint is known — regardless of whether this retry itself acts.
+    if (pendingNonActingFailover) {
+      await annotateNonActingFailover(result, pendingNonActingFailover);
+      pendingNonActingFailover = null;
+    }
     if (resolvedMaxContextTokens == null && result.resolvedMaxContextTokens != null) {
       resolvedMaxContextTokens = result.resolvedMaxContextTokens;
     }
@@ -1516,6 +1546,55 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         `toolCalls=0 contentLen=${trimmed.length} nudges=${continuationNudges} ` +
         `executedTools=${executedTools.length} content=${JSON.stringify(trimmed.slice(0, 200))}`,
       );
+
+      // DPF2-REMOVABLE non-acting bridge: a `tool-action` turn that was handed
+      // real tools, invoked none, and closed with a guidance-only / "unavailable"
+      // reply never did the work. Fail over once to a different-adapter candidate
+      // instead of returning the prose. Only `tool-action` task types pass the
+      // detector; stripped-tool turns are excluded (the model had no tools).
+      if (
+        detectNonActingAnswer({
+          taskType: taskType ?? "",
+          attachedToolCount: result.toolsStripped ? 0 : tools.length,
+          toolCallCount: 0,
+          replyText: trimmed,
+        })
+      ) {
+        const adapter = resolveDispatchAdapter(result);
+        if (nonActingFailovers < NON_ACTING_BRIDGE_CONFIG.maxFailoverRetries) {
+          nonActingFailovers++;
+          // Keep the best non-acting answer seen so far as the floor, so the
+          // final "better of two" never regresses below an earlier attempt.
+          bestNonActingResult = pickBetterNonActingResult(bestNonActingResult, result);
+          await recordNonActingFailure({
+            providerId: result.providerId,
+            modelId: result.modelId,
+            adapter,
+            taskType: taskType ?? "",
+          });
+          // Deny the just-used provider (mirrors rotateTerminalWriterProvider) so
+          // the single re-dispatch routes to a different-adapter candidate.
+          denyNonActingProvider(routeOptions, result.providerId);
+          pendingNonActingFailover = { nonActingEndpoint: dispatchEndpointId(result), adapter };
+          // Provider switch — never chain a response id minted by the denied one.
+          previousResponseId = undefined;
+          console.warn(
+            `[agentic-loop] non-acting answer on ${result.providerId}/${result.modelId} ` +
+              `(adapter=${adapter}); failing over ` +
+              `(${nonActingFailovers}/${NON_ACTING_BRIDGE_CONFIG.maxFailoverRetries}).`,
+          );
+          continue;
+        }
+        // Failover budget spent and the retry also did not act — return the
+        // better of the two non-acting answers; no third dispatch.
+        const better = pickBetterNonActingResult(bestNonActingResult, result);
+        console.warn(
+          `[agentic-loop] non-acting retry also did not act; returning the better ` +
+            `of two answers without a third attempt.`,
+        );
+        logTurnSummary(better.providerId, better.modelId);
+        return completeResult(better.content, better);
+      }
 
       if (params.terminalToolPolicy) {
         const exit = resolveTerminalTextExit(params.terminalToolPolicy, executedTools, terminalToolNudges);
@@ -1670,7 +1749,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // Don't nudge — break immediately with a clear error.
       if (trimmed.length === 0 && executedTools.length === 0) {
         console.warn(`[agentic-loop] Empty response from ${result.providerId}/${result.modelId} on iteration ${iteration}. Model may not support tool use. Breaking.`);
-        return completeResult(`The model (${result.modelId}) returned an empty response and did not use any tools. This typically means it does not support the tool format required for this task. Try a different model or provider.`, result, { synthetic: true });
+        return incompleteResult(`The model (${result.modelId}) returned no answer or tool result. The request needs a provider or capability check before continuing.`, result);
       }
 
       // Evidence-integrity gate (INV-1). When this turn's answer depends on live
@@ -1936,7 +2015,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(
             `[agentic-loop] local model produced text-only response for tool-backed turn; returning diagnostic instead of issuing a second nudge. agent=${JSON.stringify(agentId)} route=${JSON.stringify(routeContext)}`,
           );
-          return completeResult(buildLocalToolCallFailureMessage(result), result, { synthetic: true });
+          return incompleteResult(buildLocalToolCallFailureMessage(result), result);
         }
 
         if (shouldNudgeNow) {
@@ -2441,5 +2520,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // prefer a correct answer preserved before a nudge over discarding it.
       : (lastResult?.content?.trim() ? lastResult.content : (bestPreNudgeContent || exhaustedMessage));
   const exhaustedSource = fallbackContent || !bestPreNudgeContent ? lastResult : bestPreNudgeSource;
-  return completeResult(exhaustedContent, exhaustedSource ?? { providerId: "unknown", modelId: "unknown", downgraded: false, downgradeMessage: null }, { executionPlan, synthetic: fallbackIsRawToolUse || fallbackIsFabricated || (!fallbackContent && !bestPreNudgeContent) });
+  const keptConversationalAdvice = fallbackIsFabricated && !downgraded && !BUILD_ROUTE_PATTERN.test(routeContext);
+  if (fallbackIsRawToolUse || (fallbackIsFabricated && !keptConversationalAdvice) || (!fallbackContent && !bestPreNudgeContent)) return { ...incompleteResult(exhaustedContent, exhaustedSource), executionPlan };
+  return completeResult(exhaustedContent, exhaustedSource ?? { providerId: "unknown", modelId: "unknown", downgraded: false, downgradeMessage: null }, { executionPlan });
 }

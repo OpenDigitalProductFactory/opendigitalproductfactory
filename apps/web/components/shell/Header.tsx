@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { EllipsisVertical } from "lucide-react";
 import { Surface } from "@/components/ui/Surface";
 import { useT } from "@/lib/i18n/use-t";
+import { ShellAccount } from "@/components/shell/ShellAccount";
 import Link from "next/link";
 import type { PortalAudienceMode } from "@/lib/navigation/portal-navigation-model";
 import { isSimpleNavMode } from "@/lib/navigation/nav-mode";
@@ -19,6 +20,11 @@ type Props = {
   brandLogoUrl: string | null;
   brandLogoUrlLight?: string | null;
   userId?: string | null;
+  accountName?: string | null;
+  accountEmail?: string | null;
+  accountRoleName?: string | null;
+  organizationName?: string | null;
+  isSuperuser?: boolean;
   navMode?: PortalAudienceMode;
   /**
    * Pre-formatted badge for a NON-PRODUCTION installation, e.g. `NORTHWIND DEV`
@@ -38,7 +44,7 @@ type Props = {
   installationHref?: string;
 };
 
-export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLight, userId, navMode = "operator", installationBadge = null, installationHref = "/ops/installation" }: Props) {
+export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLight, userId, accountName, accountEmail, accountRoleName, organizationName, isSuperuser, navMode = "operator", installationBadge = null, installationHref = "/ops/installation" }: Props) {
   const t = useT("shell");
   // Common Shell Action-Result Contract (BI-9C0954D0) C6 + Simple-mode delta:
   // in Simple (worker) view the header sheds builder-flavored chrome (the
@@ -172,21 +178,26 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
         <div className="relative flex shrink-0 items-center gap-1 sm:gap-2">
           <PlatformHealthIndicator />
           <span data-agent-launcher-slot="true" className="inline-flex shrink-0 empty:hidden" />
-          <button ref={accountButton} type="button" aria-label={t("nav.accountHelp")} aria-expanded={accountOpen} aria-controls="header-account-actions" onClick={() => setAccountOpen(open => !open)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--dpf-border)] text-[var(--dpf-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] lg:hidden">
-            <EllipsisVertical aria-hidden className="h-5 w-5" />
-          </button>
-          <div ref={accountPanel} className={`${accountOpen ? "block" : "hidden lg:block"} absolute end-0 top-full z-50 mt-2 w-60 max-w-[calc(100vw-2rem)] lg:static lg:mt-0 lg:w-auto lg:max-w-none`}>
-          <Surface id="header-account-actions" role="group" aria-label={t("nav.accountHelp")} padding="sm" className="flex flex-col gap-2 shadow-lg lg:flex-row lg:items-center lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
-          <ContextualDocsButton compact />
-          <HeaderFeedbackButton userId={userId ?? null} />
-          {platformRole !== null && (
-            <span className="hidden text-xs text-[var(--dpf-muted)] sm:inline">
-              {platformRole}
-            </span>
+          {accountEmail ? (
+            <ShellAccount displayName={accountName ?? accountEmail} email={accountEmail} roleName={accountRoleName ?? platformRole} organizationName={organizationName ?? null} isSuperuser={isSuperuser}>
+              <ContextualDocsButton compact />
+              <HeaderFeedbackButton userId={userId ?? null} />
+            </ShellAccount>
+          ) : (
+            <>
+              <button ref={accountButton} type="button" aria-label={t("nav.accountHelp")} aria-expanded={accountOpen} aria-controls="header-account-actions" onClick={() => setAccountOpen(open => !open)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--dpf-border)] text-[var(--dpf-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] lg:hidden">
+                <EllipsisVertical aria-hidden className="h-5 w-5" />
+              </button>
+              <div ref={accountPanel} className={`${accountOpen ? "block" : "hidden lg:block"} absolute end-0 top-full z-50 mt-2 w-60 max-w-[calc(100vw-2rem)] lg:static lg:mt-0 lg:w-auto lg:max-w-none`}>
+                <Surface id="header-account-actions" role="group" aria-label={t("nav.accountHelp")} padding="sm" className="flex flex-col gap-2 shadow-lg lg:flex-row lg:items-center lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+                  <ContextualDocsButton compact />
+                  <HeaderFeedbackButton userId={userId ?? null} />
+                  {platformRole !== null && <span className="hidden text-xs text-[var(--dpf-muted)] sm:inline">{platformRole}</span>}
+                  <ShellSignOut />
+                </Surface>
+              </div>
+            </>
           )}
-          <ShellSignOut />
-          </Surface>
-          </div>
         </div>
       </div>
     </header>

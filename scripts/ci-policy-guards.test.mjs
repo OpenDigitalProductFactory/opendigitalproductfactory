@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import {
   POLICY_GUARD_PROFILES,
   formatRunSummary,
+  loopGuardsRunStandalone,
   resolvePolicyGuardInvocation,
   runPolicyProfile,
 } from "./lib/ci-policy-guards.mjs";
@@ -299,4 +300,31 @@ it("keeps copied-package worktree acceptance in both normal host plans", () => {
     "host preflight must exercise the cold copied package");
   assert.ok(buildGatePlan().some(entry => entry.command[1].includes(fixture)),
     "PR readiness must exercise the same copied-package acceptance");
+});
+
+// BI-8ED87FD9: 17 check-no-* guards ran once as their own policy guard and again
+// inside the Repo Guard Loop of the same profile. The loop now skips them, so
+// each runs once per profile run.
+describe("Repo Guard Loop runs each standalone guard once (BI-8ED87FD9)", () => {
+  it("lists the loop guards another source-profile guard already runs", () => {
+    const { guards } = loopGuardsRunStandalone("source");
+    assert.ok(guards.has("check-no-raw-control-bytes.mjs"));
+    assert.ok(guards.has("check-no-unattributable-deferral.mjs"));
+    for (const name of guards) assert.match(name, /^check-no-[^/]+\.mjs$/);
+    assert.ok(![...guards].some((n) => n.endsWith(".test.mjs")));
+  });
+
+  it("passes the loop every standalone guard and self-test as arguments", () => {
+    const loop = POLICY_GUARD_PROFILES.source.find((g) => g.id === "repo-guard-loop");
+    const call = loop.commands.find(([, args]) => args[0] === "scripts/check-guards.mjs");
+    const passed = (flag) => call[1].flatMap((arg, i) => (call[1][i - 1] === flag ? [arg] : []));
+    const { guards, tests } = loopGuardsRunStandalone("source");
+    assert.deepEqual(passed("--standalone-guard"), [...guards].sort());
+    assert.deepEqual(passed("--standalone-test"), [...tests].sort());
+    assert.ok(guards.size >= 17);
+  });
+
+  it("returns an empty set for a profile with no loop", () => {
+    assert.equal(loopGuardsRunStandalone("no-such-profile").guards.size, 0);
+  });
 });

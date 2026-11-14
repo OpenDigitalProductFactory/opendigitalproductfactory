@@ -457,6 +457,10 @@ export async function reconcileDeployedShipBuilds(
     const { reconcileBuildCompletion, completeLocalDeliveryBuild } = await import("@/lib/build-flow-state");
     const { isFeatureBuildDeployed } = await import("@/lib/self-upgrade/completion");
 
+    // BI-8129F585: a PR that merged after its room closed is never seen by the
+    // PR reconciler; settle it from a verified GitHub observation first.
+    await (await import("@/lib/build/merged-ship-room-settlement")).settleMergedShipBuildRoomsNow()
+      .catch((err: unknown) => logger.error("[auto-complete] merged-room settlement failed: %s", JSON.stringify(String(err))));
     const shipBuilds = await prisma.featureBuild.findMany({
       where: { phase: "ship" },
       select: { id: true, buildId: true },
@@ -1011,6 +1015,7 @@ export async function register() {
       // coordinator mid-protocol — otherwise the portal refuses gated requests
       // ("portal_quiescing") forever. Must run before reconciliation.
       void resetStuckQuiescenceLevelOnBoot();
+      setTimeout(() => void import("@/lib/workroom-runtime/runtime-tools").then((m) => m.reattachSupervisedSessionsOnBoot()).catch((error) => console.error("[workroom-runtime] boot re-attach failed", error)), 60_000).unref(); // BI-F5D58F29: once the sandbox and this portal's MCP endpoint are up
 
       void reconcileSelfUpgradeAdmissions().catch((error) => console.error("[self-upgrade] admission reconcile failed", error)); void import("@/lib/jobs/postgres/start").then((m) => m.startPostgresJobWorker()).catch((error) => console.error("[jobs/postgres] worker failed to start", error)); // BI-85E6EF14: a no-op unless DPF_JOBS_ENGINE routes functions to the owned engine
       void reconcileSelfUpgradeRunsOnBoot().then(() => import("@/lib/agent-toolchain/announce-release")).then((m) => m.announceToolchainReleaseOnBoot()).catch((error) => console.error("[agent-toolchain] release announcement failed", error)); /* BI-E7974C18: after the run reconcile */ void import("@/lib/federation/boot-reconcile").then((m) => m.reconcileFederationDurableStateOnBoot()).catch((error) => console.error("[federation] durable-state reconcile failed", error)); void import("@/lib/self-upgrade/service-reconcile-attach").then((m) => m.scheduleServiceReconcileAttach()).catch((error) => console.error("[self-upgrade] service-reconcile attach scheduling failed", error)); // BI-DB87D925

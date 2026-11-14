@@ -5,7 +5,7 @@
 // for; all 93 of its stage runs were refused before dispatch.
 import { describe, expect, it } from "vitest";
 
-import { resolveExecutionEvidenceOwner } from "./execution-evidence-owner";
+import { isExecutionEvidenceLane, resolveExecutionEvidenceOwner } from "./execution-evidence-owner";
 import type { InPlatformGrants } from "./in-platform-owners";
 
 const agent = (agentId: string) => ({ agentId, displayName: agentId, status: "active", archived: false, lifecycleStage: "production" });
@@ -52,5 +52,18 @@ describe("resolveExecutionEvidenceOwner and the stage's own writer (BI-A8679D84)
       entries, authorAgentId: null, grants, satisfyingGrants: ["build_evidence", "backlog_write"],
     });
     expect(owned.reviewerRoutes.map((route) => route.targetAgentId)).toEqual(["AGT-102"]);
+  });
+});
+
+// BI-1D5FCEBE: a recorded failure owes a passing record_execution_evidence on any
+// shape; a merge does not supersede it. The medium items it holds read
+// "unresolved" while the lane only admitted small and break-fix.
+describe("isExecutionEvidenceLane for a failed delivery check (BI-1D5FCEBE)", () => {
+  const medium = { shapeDecision: { declared: "medium", effective: "medium" } } as unknown as Parameters<typeof isExecutionEvidenceLane>[0];
+  it("admits DELIVERY_EVIDENCE_REQUIRED in state fail on a medium item", () => {
+    expect(isExecutionEvidenceLane(medium, { code: "DELIVERY_EVIDENCE_REQUIRED", accountableRole: "delivery-coordinator", state: "fail" })).toBe(true);
+  });
+  it("leaves a missing medium delivery check to its delivery Workroom", () => {
+    expect(isExecutionEvidenceLane(medium, { code: "DELIVERY_EVIDENCE_REQUIRED", accountableRole: "delivery-coordinator", state: "missing" })).toBe(false);
   });
 });

@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "scope": {
+    "files": [
+      "apps/web/components/references/EntityRefText.tsx"
+    ]
+  },
+  "decidedOption": "inline-referenced-by-panel",
+  "decisionInteractionId": "DI-4FD654C14A34",
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-referenced-by-panel",
+      "central-references-page",
+      "hover-only"
+    ]
+  },
+  "authority": "BI-A63A9476 design docs/superpowers/specs/2026-10-14-knowledge-linking-entity-references-design.md (active, merged; EP-0237A305 umbrella §5) puts a Referenced by list on each entity surface. DI-4FD654C14A34 ranked the inline panel first with high confidence (verdict proceed).",
+  "limitations": "Read-only. Each surface gains a compact Referenced by list fed by the one shared reader, which shows only sources the reader may read, and entity ids in bodies render as links only when the reader may open them. No new route, control or prompt. Theme tokens and existing primitives only. Not yet verified on the served portal."
+}

@@ -238,13 +238,26 @@
       "target": "review",
       "count": 1,
       "lines": [
-        150
+        178
       ],
       "gates": [
         "ship phase",
         "clean upstream refresh; bound evidence cleared before review"
       ],
       "backlogItem": "BI-D37B2C13"
+    },
+    {
+      "file": "lib/build/ship-refusal-remedy.ts",
+      "target": "review",
+      "count": 1,
+      "lines": [
+        232
+      ],
+      "gates": [
+        "ship phase",
+        "classified PR refusal within the per-build remedy bound; tree-bound evidence cleared, gauntlet repair bound kept"
+      ],
+      "backlogItem": "BI-34A05E78"
     },
     {
       "file": "lib/mcp/build-design-review-handler.ts",

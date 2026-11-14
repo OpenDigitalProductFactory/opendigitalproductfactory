@@ -58,6 +58,10 @@ type ClaimInput = {
   overrideReason?: string | null;
   /** v3: the delivery shape resolved at the claim (`delivery-<shape>@<version>`), when any. */
   workShape?: string | null;
+  /** The item lives on the paired installation, which holds its claim
+   *  (BI-30EDDB7F). The local Workroom is created, but the local copy of the
+   *  item is a read-only mirror and records no claim of its own. */
+  claimAtHome?: boolean;
 };
 
 type ClaimResult = Awaited<ReturnType<typeof claimBacklogItemWorkspace>>;
@@ -69,6 +73,8 @@ type Dependencies = {
   discoverCanonicalArtifact?: DiscoverCanonicalArtifact;
   /** Principal.id of a user; used when an agent claims without OAuth. */
   resolveUserPrincipalId?: (userId: string) => Promise<string | null>;
+  /** BI-C64EDA33 PR 3: the room's setup, written in the claim's own transaction. */
+  afterClaimInTx?: (tx: CapsuleDb, claim: ClaimResult) => Promise<void>;
 };
 
 async function userPrincipalIdFromLinking(userId: string): Promise<string | null> {
@@ -651,6 +657,7 @@ export async function claimGovernedBacklogWorkspace(args: {
           actor: args.actor, capsuleId: claim.capsuleId, workIntent, now,
         }));
       }
+      await args.dependencies?.afterClaimInTx?.(tx, claim);
       await recordDecision({ db: tx, backlogItemRowId: item.id, decision: evaluated, workIntent, actor: args.actor });
       return claimSuccess({ workIntent, readiness: evaluated, claim, readback });
     });

@@ -12,6 +12,10 @@ import {
   INTAKE_CONTROLLER_JOB_ID,
 } from "@/lib/operate/scheduled-jobs/intake-controller-commission";
 import {
+  SUBMISSION_SWEEP_JOB_ID,
+  haltReasonOf,
+} from "@/lib/ecosystem/job-heartbeat";
+import {
   FAILING_LAST_STATUSES,
   deriveHealth,
   deriveKind,
@@ -19,6 +23,8 @@ import {
 import type { AttentionItem } from "../types";
 
 const REGISTER_PATH = "/admin/scheduled-jobs";
+// The anchor matches UPSTREAM_FEEDBACK_ANCHOR on the settings component.
+const UPSTREAM_FEEDBACK_HREF = "/admin/issue-reports/upstream#upstream-feedback";
 const NOT_CONFIGURED = "not-configured";
 const NOT_COMMISSIONED_PREFIX = "not commissioned:";
 const MAX_CONTEXT = 400;
@@ -33,6 +39,8 @@ export type ScheduledJobAttentionRow = {
   lastStatus: string | null;
   lastError: string | null;
   lastRunSummary: string | null;
+  /** Runner-owned scratch state; the submission sweep stores its typed haltReason here. */
+  metadata?: unknown;
 };
 
 export type ScheduledJobAttentionDb = {
@@ -43,6 +51,15 @@ function isUncommissionedIntake(row: ScheduledJobAttentionRow): boolean {
   return row.jobId === INTAKE_CONTROLLER_JOB_ID
     && row.lastStatus === NOT_CONFIGURED
     && (row.lastRunSummary ?? "").startsWith(NOT_COMMISSIONED_PREFIX);
+}
+
+/** BI-6ED89EC6: the sweep halted because upstream feedback is off. One standing
+ *  item for the job, never one per report — a consent request repeated per
+ *  defect is how a prompt gets permanently dismissed. */
+function isSweepAwaitingConsent(row: ScheduledJobAttentionRow): boolean {
+  return row.jobId === SUBMISSION_SWEEP_JOB_ID
+    && row.lastStatus === NOT_CONFIGURED
+    && haltReasonOf(row.metadata) === "awaiting-consent";
 }
 
 const clip = (text: string) => (text.length > MAX_CONTEXT ? `${text.slice(0, MAX_CONTEXT - 1)}…` : text);
@@ -71,6 +88,29 @@ export function scheduledJobToAttentionItem(row: ScheduledJobAttentionRow, now: 
       context: clip(
         `${row.name} did not read external submissions because this installation is not the `
         + `commissioned repository controller. ${row.lastRunSummary}`,
+      ),
+      triage: {
+        timeToAct: "none",
+        residueReason: "input-required",
+        blastRadius: row.name,
+        decideEffort: "judgment",
+        irreversible: false,
+      },
+    };
+  }
+
+  if (isSweepAwaitingConsent(row)) {
+    const detail = (row.lastRunSummary ?? "").trim();
+    return {
+      ...baseItem(row),
+      // Lead straight to the one switch that resolves it, not to the register.
+      actions: [{ kind: "open-in-context", label: "Turn on upstream feedback", href: UPSTREAM_FEEDBACK_HREF }],
+      deepLink: UPSTREAM_FEEDBACK_HREF,
+      title: "Problems found here are not reaching the ecosystem",
+      context: clip(
+        `${row.name} is ready to send this installation's triaged problems to the project team, `
+        + `but has not been allowed to.${detail ? ` ${detail}` : ""} `
+        + "Turning upstream feedback on lets them be heard and voted on; nothing is sent until you do.",
       ),
       triage: {
         timeToAct: "none",
@@ -127,6 +167,7 @@ export async function loadScheduledJobAttentionItems(
       lastStatus: true,
       lastError: true,
       lastRunSummary: true,
+      metadata: true,
     },
   });
   return rows.flatMap((row) => {

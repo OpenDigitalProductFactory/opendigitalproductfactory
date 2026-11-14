@@ -1051,8 +1051,12 @@ export async function runHostPreflight({
       // runner failure, not a deterministic guard violation — say so, or the
       // reader audits an innocent guard the loop never even reported on.
       const preflightKilled = Boolean(preflight.error) || preflight.status === null || preflight.status === 88;
+      // BI-93EECD80: a retained host receipt also exits 88; it is not host pressure.
+      const receiptRetained = preflight.status === 88 && /\(HOST_RECEIPT_RETAINED\)/.test(String(preflight.stdout ?? "") + String(preflight.stderr ?? ""));
       stderr(
-        preflightKilled
+        receiptRetained
+          ? "pregate: guard parity preflight did not run — a retained host guard receipt blocks this worktree (named above; not host pressure, not a guard violation). Run pnpm run pregate:status -- --reconcile-host-receipt (no lease was claimed).\n"
+          : preflightKilled
           ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
           : "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
       );

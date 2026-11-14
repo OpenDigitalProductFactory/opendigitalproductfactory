@@ -477,6 +477,27 @@ describe("scheduledToolsNeedingPin with a cadence's declared writes", () => {
   });
 });
 
+// BI-8747A73D — a woken coworker's reply turn named read_room_messages, but only
+// side-effect tools were pinned, so the read could be deferred under the cap and
+// the coworker answered that Work Room capabilities were unavailable.
+describe("scheduledToolsNeedingPin for a room reply", () => {
+  const READ = { name: "read_room_messages", sideEffect: false };
+  const POST = { name: "post_room_message", sideEffect: true };
+  const PROMPT = 'Read them with read_room_messages (caseKey "backlog-item:BI-1") and answer what is asked of you in the room with post_room_message.';
+  const ROOM_REPLY = { roomReply: { workItemId: "wi-1", caseKey: "backlog-item:BI-1", messageId: "MSG-1" } };
+
+  it("pins both room tools when either is deferred", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    const pinned = scheduledToolsNeedingPin({ prompt: PROMPT, attached: [POST], deferred: [READ], taskConfig: ROOM_REPLY });
+    expect(pinned).toEqual(expect.arrayContaining(["read_room_messages", "post_room_message"]));
+  });
+
+  it("pins only the room tools the coworker is authorized for", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({ prompt: PROMPT, attached: [], deferred: [READ], taskConfig: ROOM_REPLY })).toEqual(["read_room_messages"]);
+  });
+});
+
 describe("scheduledToolsNeedingPin with a stage's declared tools", () => {
   const PROMPT = "Record what you did by calling record_workroom_evidence.";
   const WRITER = { name: "record_workroom_evidence", sideEffect: true };

@@ -58,6 +58,12 @@ export type SseController = {
   send: (data: unknown) => boolean;
   /** Send a named event frame — delivered only to addEventListener(name, …). */
   sendNamed: (event: string, data: unknown) => boolean;
+  /**
+   * Send an unnamed event with an SSE `id` (and optionally `retry`), so a client
+   * can resume with Last-Event-ID. Omitting `data` sends an empty data field,
+   * the priming event MCP Streamable HTTP recommends. Returns false if closed.
+   */
+  sendEvent: (frame: { id: string; retry?: number; data?: unknown }) => boolean;
   /** Send a raw comment line (`: text`). Invisible to JS; transport keep-alive. */
   comment: (text: string) => boolean;
   /** True once the stream has been closed/cleaned up. */
@@ -145,6 +151,13 @@ export function createSseResponse(opts: CreateSseStreamOptions): Response {
         send: (data) => enqueue(`data: ${JSON.stringify(data)}\n\n`),
         sendNamed: (event, data) =>
           enqueue(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+        sendEvent: ({ id, retry, data }) => {
+          // An id or retry with a newline would split the frame; ours never do.
+          const safeId = id.replace(/[\r\n]/g, "");
+          const retryLine = typeof retry === "number" && retry > 0 ? `retry: ${Math.floor(retry)}\n` : "";
+          const dataLine = data === undefined ? "data: \n" : `data: ${JSON.stringify(data)}\n`;
+          return enqueue(`id: ${safeId}\n${retryLine}${dataLine}\n`);
+        },
         comment: (text) => enqueue(`: ${text}\n\n`),
         get closed() {
           return closed;

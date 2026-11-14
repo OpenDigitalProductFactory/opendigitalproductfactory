@@ -1,3 +1,4 @@
+import { canonicalRelationKey } from "./relation-vocabulary";
 import {
   attributeInventoryEntity,
   type RankedTaxonomyCandidate,
@@ -353,7 +354,9 @@ function normalizeRelationship(
 
   const normalizedRelationship: NormalizedInventoryRelationship = {
     relationshipKey: scopeFields ? `${scopeFields.scopeKey}:${rawKey}` : rawKey,
-    relationshipType: relationship.relationshipType,
+    // The key keeps the collector's spelling so existing rows stay matched; the stored
+    // type is the registry key (BI-92804832: "hosts" and "HOSTS" were one relation).
+    relationshipType: canonicalRelationKey(relationship.relationshipType),
     properties: {
       ...(relationship.attributes ?? {}),
       ...(scopeFields

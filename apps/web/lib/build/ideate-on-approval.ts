@@ -789,7 +789,7 @@ export async function dispatchDesignReviewFixLoop(params: {
       .catch(() => {});
 
   const escalate = async (build: { id: string; title: string; originatingBacklogItemId: string | null }, review: DesignReviewVerdict, rounds: number, expectedUpdatedAt?: string) => {
-    const { escalateBuildToHuman, SELF_FIX_CLASS } = await import("@/lib/build/escalate-build-to-human");
+    const { escalateBuildToHuman } = await import("@/lib/build/escalate-build-to-human");
     let biTitle: string | null = null;
     if (build.originatingBacklogItemId) {
       biTitle = (await prisma.backlogItem
@@ -805,7 +805,6 @@ export async function dispatchDesignReviewFixLoop(params: {
       phase: "ideate",
       rounds,
       issues: (review?.issues ?? []).map((i) => ({ severity: i.severity, description: i.description })),
-      selfFixClass: SELF_FIX_CLASS.NEEDS_HUMAN,
       expectedUpdatedAt,
       log,
     });

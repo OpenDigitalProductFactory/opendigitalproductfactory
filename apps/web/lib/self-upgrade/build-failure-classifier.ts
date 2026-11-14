@@ -12,6 +12,8 @@
 // MUST-ADVANCE → self-upgrade-failed → BLOCKED chain hands the agent the
 // diagnosis, not a raw log.
 
+import { TRANSIENT_NETWORK_LINE } from "./transient-network";
+
 export type BuildFailureClass =
   // Host build passes, Docker build fails: a transitive dep the wider CI/host
   // workspace hoists to top-level but the narrower Docker deps stage does not,
@@ -106,9 +108,12 @@ export type BuildFailureClass =
   // (`install_state_envelope_state_changed`) or the envelope's TTL lapsed
   // (`install_state_envelope_expired`). Another host-side writer touched the
   // envelope during the quiescence drain (SUR-4758058F: the agent-toolchain
-  // bootstrap, BI-95DF1BFC). The signature still verified — not tampering —
-  // so the launcher now re-binds the handoff after the drain; a run that still
-  // lands here is a writer racing the promoter's own migrate step.
+  // bootstrap, BI-95DF1BFC), or the recovery point between preflight and the
+  // promoter consumed the window (SUR-4DC82F3C: 6m19s of a 10-minute TTL,
+  // BI-2074D622). The signature still verified — not tampering — so the
+  // launcher re-binds the handoff after the drain and re-stamps its TTL at
+  // launch; a run that still lands here is a writer racing the promoter's own
+  // migrate step, or a promoter whose own pre-migrate steps outlived a fresh TTL.
   | "install-state-envelope-changed"
   // promote.sh (#3282) requires a SIGNED install-state migration handoff
   // (DPF_INSTALL_STATE_MIGRATION_ENVELOPE + _SIGNATURE) that only a #3282+
@@ -126,6 +131,14 @@ export type BuildFailureClass =
   // DEFERS on a host-memory-headroom guard and retries after reclaim; a run that
   // still reaches here should be retried once the host frees memory.
   | "host-out-of-memory"
+  // NETWORK: an outbound fetch the upgrade needs (upstream git fetch, base
+  // image pull, `apk add` in a candidate build) failed with a connectivity
+  // error. SUR-B0A4610D / SUR-FF879116 (apk) and SUR-256EAF95 (git fetch),
+  // 2026-11-11: the host dropped connections intermittently and the same
+  // commands succeeded on rerun. Each network step now retries on its own; a
+  // run that still lands here means the host stayed offline for minutes.
+  // Environment, not a main defect (BI-7FFF5CB0).
+  | "host-network-unavailable"
   | "unknown";
 
 export type BuildFailureClassification = {
@@ -286,6 +299,19 @@ export function classifyBuildFailure(
     };
   }
 
+  // Host network loss next, for the same reason as OOM: the readiness /
+  // prep-error wrapper is noise around a decisive environmental cause.
+  if (TRANSIENT_NETWORK_LINE.test(log)) {
+    return {
+      class: "host-network-unavailable",
+      summary:
+        "The upgrade could not reach the internet for a step it needs (fetching the upstream source, a base image, or an Alpine package): the connection timed out or dropped. This is the host's network, NOT a main defect — each network step already retried with backoff, so the host was offline for minutes. Nothing was deployed and the running portal is untouched. Restore the host's outbound connectivity (VPN, Wi-Fi, DNS) and retry the upgrade.",
+      playbookLink: SPEC,
+      failingTrace: traceAround(log, TRANSIENT_NETWORK_LINE),
+      isMainDefectVsEnvironment: "environment",
+    };
+  }
+
   const readinessFailure = log.match(PROMOTER_READINESS_FAILED);
   if (readinessFailure) {
     const readinessLine = log.slice(readinessFailure.index).split(/\r?\n/, 1)[0];
@@ -387,8 +413,8 @@ export function classifyBuildFailure(
     return {
       class: "install-state-envelope-changed",
       summary: expired
-        ? "promote.sh refused the governed install-state migration because the signed handoff EXPIRED before the promoter reached its migrate step — the quiescence drain outlived the envelope TTL. Nothing was deployed; the running portal was left serving traffic. The launcher now re-binds the handoff after the drain, so retry the upgrade; if it expires again the drain itself is the problem (check the QuiescenceRun blockers), not this run's code."
-        : "promote.sh refused the governed install-state migration because /dpf-state/install-state.json changed after readiness signed the handoff — another host-side writer (a client-session agent-toolchain bootstrap, an installer re-run, a capability transition) touched the envelope while the portal drained. The signature still verified, so this is a lost race, not tampering, and nothing was deployed. The launcher now re-binds the handoff after the drain; a run that STILL lands here has a writer racing the promoter's own migrate step — find it via install-state.json's mtime against the run's install-state-migrate stamp in self-upgrade-steps.log, then retry the upgrade (BI-95DF1BFC).",
+        ? "promote.sh refused the governed install-state migration because the signed handoff EXPIRED before the promoter reached its migrate step. Nothing was deployed; the running portal was left serving traffic. The envelope's 10-minute window used to start at preflight, and the recovery-point backup between preflight and the promoter scales with the database (6m19s on SUR-4DC82F3C), so the promoter could receive a handoff with seconds left. The launcher now re-stamps the handoff immediately before launching the promoter, so its full window starts at launch (BI-2074D622). Retry the upgrade; a run that STILL lands here has a promoter whose own pre-migrate steps (release-identity, compose overlays, prepare, backup) took longer than 10 minutes — read the step stamps in self-upgrade-steps.log to see which one stalled."
+        : "promote.sh refused the governed install-state migration because /dpf-state/install-state.json changed after readiness signed the handoff — another host-side writer (a client-session agent-toolchain bootstrap, an installer re-run, a capability transition) touched the envelope while the portal drained. The signature still verified, so this is a lost race, not tampering, and nothing was deployed. The launcher re-binds the handoff after the drain; a run that STILL lands here has a writer racing the promoter's own migrate step — find it via install-state.json's mtime against the run's install-state-migrate stamp in self-upgrade-steps.log, then retry the upgrade (BI-95DF1BFC).",
       playbookLink: SPEC,
       failingTrace: traceAround(log, INSTALL_STATE_ENVELOPE_CHANGED),
       isMainDefectVsEnvironment: "environment",

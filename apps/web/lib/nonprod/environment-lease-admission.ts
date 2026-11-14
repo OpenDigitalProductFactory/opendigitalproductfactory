@@ -1,4 +1,13 @@
-export type AdmissionLease = {
+import {
+  buildServiceHistory,
+  isAiTurnClaimKey,
+  orderWaiters,
+  waiterLivenessWindowMs,
+  type OverseerLease,
+  type ServiceHistory,
+} from "./environment-lease-overseer";
+
+export type AdmissionLease = OverseerLease & {
   id: string;
   status: string;
   slotKey: string | null;
@@ -12,17 +21,11 @@ export type AdmissionLease = {
 export type EnvironmentAdmissionPlan = {
   expiredLeaseIds: string[];
   admissions: Array<{ leaseId: string; slotKey: string }>;
+  /** Remaining waiters in overseer policy order (BI-218A4555), 1 = next. */
   queuePositions: Array<{ leaseId: string; position: number }>;
+  /** The service history the order was decided on, for position explanations. */
+  history: ServiceHistory;
 };
-
-function queuedTimestamp(lease: AdmissionLease): number {
-  return lease.queuedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
-}
-
-function compareQueued(left: AdmissionLease, right: AdmissionLease): number {
-  return queuedTimestamp(left) - queuedTimestamp(right)
-    || left.id.localeCompare(right.id);
-}
 
 /**
  * Can this waiter still hold a slot, or only a place in line?
@@ -77,6 +80,8 @@ export function waiterProvesLiveness(
   now: Date,
   livenessWindowMs: number | undefined,
 ): boolean {
+  // BI-218A4555: an AI turn proves life on its own, longer window.
+  livenessWindowMs = waiterLivenessWindowMs(lease, livenessWindowMs);
   if (livenessWindowMs === undefined) return true;
   const lastBeat = lease.heartbeatAt ?? lease.queuedAt ?? null;
   if (!lastBeat) return false;
@@ -87,9 +92,13 @@ export function waiterProvesLiveness(
  * Pure capacity reconciler for one governed nonproduction environment.
  *
  * PostgreSQL serializes the read/apply transaction; this function owns the
- * deterministic policy inside that transaction. Keeping policy pure makes FIFO
+ * deterministic policy inside that transaction. Keeping policy pure makes
  * ordering and slot selection independently testable without weakening the
  * database uniqueness invariant.
+ *
+ * BI-218A4555: waiters are served in overseer policy order
+ * (environment-lease-overseer.ts), not first-come. `leases` may also carry
+ * recently ended rows; they are read only as service history.
  *
  * `admissibleLeaseIds` restricts WHO may be admitted on this pass without
  * changing WHO has precedence: a live older waiter outside the set still blocks
@@ -128,9 +137,12 @@ export function planEnvironmentAdmission(input: {
       .map((lease) => lease.slotKey as string),
   );
   const freeSlots = slotKeys.filter((slotKey) => !occupiedSlots.has(slotKey));
-  const waiting = input.leases
-    .filter((lease) => lease.status === "queued" && !expired.has(lease.id))
-    .sort(compareQueued);
+  const history = buildServiceHistory(input.leases, input.now);
+  const waiting = orderWaiters(
+    input.leases.filter((lease) => lease.status === "queued" && !expired.has(lease.id)),
+    history,
+    input.leases[0]?.environmentKey,
+  );
   const admissible = input.admissibleLeaseIds
     ? new Set(input.admissibleLeaseIds)
     : null;
@@ -141,12 +153,15 @@ export function planEnvironmentAdmission(input: {
     if (!waiterProvesLiveness(lease, input.now, input.livenessWindowMs)) continue;
     const supported = new Set(lease.supportedSlotKeys ?? slotKeys);
     const slotIndex = freeSlots.findIndex((slotKey) => supported.has(slotKey));
-    // Preserve global FIFO. A later slot-aware waiter may not bypass an older
-    // legacy waiter merely because the older client cannot consume slot-1.
+    // Preserve the policy order. A later slot-aware waiter may not bypass an
+    // earlier legacy waiter merely because that client cannot consume slot-1.
     if (slotIndex < 0) break;
     // A live older waiter that is not the claimant keeps precedence: nobody is
     // admitted past it, and it is not admitted on a stranger's behalf.
     if (admissible && !admissible.has(lease.id)) break;
+    // BI-218A4555: a live AI turn holds the free slot open for the next local
+    // AI dispatch, which settles it; it never becomes an admitted lease.
+    if (isAiTurnClaimKey(lease.claimKey)) break;
     const [slotKey] = freeSlots.splice(slotIndex, 1);
     admissions.push({ leaseId: lease.id, slotKey });
   }
@@ -162,5 +177,6 @@ export function planEnvironmentAdmission(input: {
     expiredLeaseIds,
     admissions,
     queuePositions,
+    history,
   };
 }

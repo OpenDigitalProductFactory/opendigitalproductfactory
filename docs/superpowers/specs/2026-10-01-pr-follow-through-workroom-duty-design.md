@@ -268,6 +268,18 @@ Each slice is its own backlog item and PR.
   and push to an existing external branch through the governed sandbox, or does
   it only work on builds it created? This needs verification against the Build
   Studio sandbox and `start_external_work` before slice 4 is planned.
+  *Settled for Build Studio rooms (2026-11-13, WWMD `DI-8172B1A35993`,
+  BI-085A37EC):* the build repairs through its own gauntlet repair loop. The
+  failing required checks, their run URLs and a bounded tail of each failing
+  job's log go back to the coding agent (ship -> review -> build). When the
+  repaired build is in ship again with its PR still open, the publisher pushes
+  one DCO-signed follow-up commit whose parent is the PR head. It is a
+  fast-forward and is never forced. Paths the PR changed but the repair no
+  longer touches go back to their merge-base content. A repair that changes
+  nothing is escalated once and is not retried. The PR-level budget is the
+  follow-through record's own (2 per PR), and it carries across republishes.
+  Rooms outside Build Studio still have no dispatcher, so their repairs remain
+  staged for a person.
 - **Infra signal list.** Which job names and conclusions in this repository's
   workflows are infrastructure-only. Proposed source: the merge-queue churn
   script's existing classification, if it has one; otherwise a small checked-in

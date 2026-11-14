@@ -465,6 +465,22 @@ Acceptance is functional, on the two physical installations. Unit and contract t
 
 The authority/companion relationship is the July design's portfolio authority, read from attested environment class and estate, with no new role enum and no new transport.
 
+## Installation identity preview context
+
+The local identity-change preview reads the same real `FederationLink` facts
+as the canonical stance. It resolves the current and proposed paired references
+independently against one link snapshot, using `resolveInstallationPairing` and
+`pairingSupportsWorkSync`. A revoked or unmatched declaration retains the
+resolver's eligible same-organization fallback; repairing its reference must not
+report that there is nowhere to mirror when that fallback exists.
+
+The selected peer's attested class and normalized estate determine the preview's
+relationship and peer-write posture. A null class still supplies no peer-write
+authority. Missing or unreadable link evidence cannot invent a mirror. These
+are local read-model predictions, not peer contact, membership certification,
+authorization grants, or an installation declaration save. Existing capability,
+environment precedence, and preview-confirmation checks still govern saving.
+
 ## Superseded guidance
 
 - **2026-06-20 design §4.5 (cross-install claim plane in git refs on a private shared remote).** Superseded by the July design's claims over the same-organization link, as realized in §5. The 2026-06-20 rules on graceful offline degradation and on not leaking work in progress publicly still hold; nothing here puts a claim in a repository.

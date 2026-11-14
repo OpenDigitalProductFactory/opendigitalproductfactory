@@ -327,15 +327,17 @@ describe("addressed room messages", () => {
     const result = await roomMessagingPack.handlers.post_room_message(
       { caseKey: "backlog-item:BI-ROOM", body: "Can you review this?", addressedTo: ["AGT-WS-REVIEW"] },
       "alice",
-      { agentId: "agent" },
+      { agentId: "agent", apiTokenId: "tok-room" },
     );
 
     expect(result.success).toBe(true);
+    // The token id lets the server recognise a supervised session's post (BI-FDE1B10C).
     expect(mocks.prepareAddressing).toHaveBeenCalledWith({
       workItemId: "room-item",
       sender: { type: "agent", id: "agent" },
       actingUserId: "alice",
       addressedTo: ["AGT-WS-REVIEW"],
+      apiTokenId: "tok-room",
     });
     expect(mocks.postComment).toHaveBeenCalledWith(expect.objectContaining({ addressing: build }));
     expect(mocks.publishPosted).toHaveBeenCalledWith("msg-1");

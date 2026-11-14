@@ -132,7 +132,9 @@ export function normalizeVerificationOutput(value: unknown): NormalizedVerificat
     observedAt: stringOrNull(value.timestamp) ?? stringOrNull(value.updatedAt),
     failureAxis: failureAxisOrNull(value.failureAxis) ?? classifyVerificationFailureAxis({
       typecheckPassed,
-      testsFailed,
+      // The runner's observed count: an unqualified zero is still zero failures.
+      testsFailed: observedFailed,
+      testsExecuted: value.testsExecuted === true,
       output: outputExcerpt,
     }),
   };
@@ -176,12 +178,36 @@ export function projectVerificationEvidence(verification: NormalizedVerification
     summary: `${label}. Typecheck: ${typecheckLabel}. ${testsLabel}${conflictNotice ? ` ${conflictNotice}` : ""}` };
 }
 
+/**
+ * Why a verification did not pass, or null when nothing failed.
+ *
+ * Once the runner produced a result (typecheck passed, or tests executed), its
+ * output is test logs: a routing fixture printing "codex failed: Rate limited"
+ * is a passing test, not a provider failure (BI-2E63E918, FB-11A8F6C1). Such a
+ * run is classified only from its own counts. Provider axes are read from text
+ * only when the runner produced no result, so the text is its own failure.
+ * `testsFailed` is the runner's observed count, before qualification.
+ */
 export function classifyVerificationFailureAxis(args: {
   typecheckPassed: boolean | null;
   testsFailed: number | null;
+  testsExecuted?: boolean | null;
   output: string | null;
 }): BuildFailureAxis | null {
-  const output = (args.output ?? "").toLowerCase();
+  const runnerProducedResult = args.typecheckPassed === true || args.testsExecuted === true;
+  const providerAxis = runnerProducedResult ? null : classifyProviderFailureText(args.output);
+  if (providerAxis) return providerAxis;
+  if (args.typecheckPassed === false) {
+    return "typecheck-failure";
+  }
+  if (typeof args.testsFailed === "number" && args.testsFailed > 0) {
+    return "test-failure";
+  }
+  return null;
+}
+
+function classifyProviderFailureText(value: string | null): BuildFailureAxis | null {
+  const output = (value ?? "").toLowerCase();
   if (output.includes("usage limit") || output.includes("you've hit your usage limit")) {
     return "usage-limit";
   }
@@ -196,12 +222,6 @@ export function classifyVerificationFailureAxis(args: {
   }
   if (output.includes("timed out") || output.includes("timeout")) {
     return "timeout";
-  }
-  if (args.typecheckPassed === false) {
-    return "typecheck-failure";
-  }
-  if (typeof args.testsFailed === "number" && args.testsFailed > 0) {
-    return "test-failure";
   }
   return null;
 }

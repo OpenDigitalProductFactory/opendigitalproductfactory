@@ -25,6 +25,7 @@ import type { FederationIdentity } from "./demand-identity";
 import { decodeOperationalPostureOutboxPayload } from "./operational-posture-delivery";
 import { decryptPeerToken } from "./outbound";
 import { incrementVersionVector, isVersionVector, type VersionVector } from "./version-vector";
+import { applyWorkClaimDecision, isWorkClaimDecision, type WorkClaimDecision } from "./work-claim-exchange";
 import {
   ensureFederationDeliveryJob,
   ensureFederationDeliveryQueue,
@@ -389,6 +390,8 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   sendPosture?: SendPosture;
   sendDeclaration?: typeof sendDeploymentDeclarationToPeer;
   sendGuidance?: typeof sendGuidanceSnapshotToPeer;
+  /** Apply the home's answer to a claim request (BI-30EDDB7F). */
+  applyWorkClaim?: (capsuleId: string, decision: WorkClaimDecision) => Promise<void>;
 } = {}): Promise<{
   attempted: number;
   delivered: number;
@@ -600,6 +603,13 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
     }
     if (acknowledged) {
       delivered++;
+      // A claim request's answer rides its acknowledgement (BI-30EDDB7F).
+      const workClaim = payload?.envelope.specVersion === "dpf.demand-response/1" ? payload.envelope.workClaim : undefined;
+      const decision = (result.body as { workClaim?: unknown } | undefined)?.workClaim;
+      if (workClaim && isWorkClaimDecision(decision)) {
+        await (options.applyWorkClaim
+          ?? ((capsuleId, answer) => applyWorkClaimDecision(db as never, capsuleId, answer, now)))(workClaim.requesterWorkroomId, decision);
+      }
       await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: {
         syncStatus: payload?.activity === "dpf.demand.withdrawn" ? "withdrawn" : "synced",
         acknowledgedVersion: row.version, lastSyncedAt: now,

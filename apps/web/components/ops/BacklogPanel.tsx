@@ -26,6 +26,7 @@ import {
   type EpicForSelect,
 } from "@/lib/backlog";
 import { applyBacklogFormAssistUpdates } from "./backlog-form-assist";
+import { EntityReferencesSection } from "@/components/references/EntityReferencesSection";
 
 type Props = {
   isOpen: boolean;
@@ -365,6 +366,13 @@ export function BacklogPanel({
 
           <FormStatus error={error} />
         </form>
+
+        {/* BI-A63A9476: the saved notes with readable ids linked, then "Referenced by". */}
+        {item && (
+          <div className="px-5 py-3 border-t border-[var(--dpf-border)] max-h-72 overflow-y-auto">
+            <EntityReferencesSection kind="backlog" entityKey={item.itemId} body={item.body} bodyHeading />
+          </div>
+        )}
 
         {/* Metadata (read-only) */}
         {item && (

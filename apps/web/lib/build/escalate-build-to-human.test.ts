@@ -56,7 +56,7 @@ describe("guarded diagnosis escalation", () => {
     mockFn(prisma.featureBuild.updateMany).mockResolvedValueOnce({ count: 0 });
     const expectedUpdatedAt = "2026-06-19T17:00:00.000Z";
     const result = await escalateBuildToHuman(args({ phase: "ideate", expectedUpdatedAt }));
-    expect(result).toEqual({ reportId: null, wipFreed: false, backlogItemDeferred: false });
+    expect(result).toEqual({ reportId: null, wipFreed: false, backlogItemDeferred: false, route: "human" });
     expect(prisma.featureBuild.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { buildId: "FB-ABC123", phase: "ideate", abandonedAt: null,
         updatedAt: new Date(expectedUpdatedAt) },
@@ -71,7 +71,7 @@ describe("guarded diagnosis escalation", () => {
   it("claims a matching version before reporting and never abandons it a second time", async () => {
     mockFn(prisma.featureBuild.updateMany).mockResolvedValueOnce({ count: 1 });
     const result = await escalateBuildToHuman(args({ expectedUpdatedAt: "2026-06-19T17:00:00.000Z" }));
-    expect(result).toEqual({ reportId: "PIR-TEST1", wipFreed: true, backlogItemDeferred: true });
+    expect(result).toEqual({ reportId: "PIR-TEST1", wipFreed: true, backlogItemDeferred: true, route: "human" });
     expect(mockFn(prisma.featureBuild.updateMany).mock.invocationCallOrder[0]).toBeLessThan(
       mockFn(createPlatformIssueReport).mock.invocationCallOrder[0],
     );
@@ -200,6 +200,47 @@ describe("escalateBuildToHuman (orchestration)", () => {
     mockFn(prisma.$transaction).mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
     mockFn(resolveOperatorRecipient).mockResolvedValue("user-1");
     mockFn(notifyAttentionLive).mockResolvedValue(undefined);
+  });
+
+  it("states the damaging reason on the owner report (BI-5E067004 AC-4)", async () => {
+    await escalateBuildToHuman(args());
+    const input = mockFn(createPlatformIssueReport).mock.calls[0][0];
+    expect(input.description).toContain("route human, damaging-critical-risk");
+    expect(input.description).toContain("Why: This decision requires a person because it carries critical risk.");
+  });
+
+  it("routes a mechanical stall (PIR-QGQUH) to an agent: no owner report, notice, abandon or park", async () => {
+    const consult = vi.fn(async () => ({
+      recommendation: { optionId: "route-to-agent", confidence: "high" },
+      autonomyEligible: true, commandmentConflict: false, interactionId: "DI-TEST",
+    }));
+    const res = await escalateBuildToHuman(args({
+      phase: "review",
+      issues: [{ severity: "important", description: "Guard still failing after 2 repair attempt(s): Prose Lint Guard" }],
+      consult,
+    }));
+    expect(res).toEqual({ reportId: "PIR-TEST1", wipFreed: false, backlogItemDeferred: false, route: "agent" });
+    const input = mockFn(createPlatformIssueReport).mock.calls[0][0];
+    expect(input.type).toBe("routed-repair");
+    expect(input.selfFixClass).toBeUndefined();
+    expect(input.dedupeKey).toBe("build-escalation:FB-ABC123:routed");
+    expect(notifyAttentionLive).not.toHaveBeenCalled();
+    expect(prisma.featureBuild.updateMany).not.toHaveBeenCalled();
+    expect(prisma.backlogItem.update).not.toHaveBeenCalled();
+    expect(releaseSandboxForTerminalBuild).not.toHaveBeenCalled();
+    expect(prisma.buildActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ tool: "build:escalation-routed" }),
+    }));
+  });
+
+  it("sends an unconsultable non-damaging stall to independent review, not the owner", async () => {
+    const res = await escalateBuildToHuman(args({
+      issues: [{ severity: "important", description: "No test-first step for the migration" }],
+      consult: vi.fn(async () => { throw new Error("offline"); }),
+    }));
+    expect(res.route).toBe("independent-review");
+    expect(notifyAttentionLive).not.toHaveBeenCalled();
+    expect(prisma.featureBuild.updateMany).not.toHaveBeenCalled();
   });
 
   it("captures a durable, build-linked, deduped escalation report", async () => {

@@ -13,7 +13,9 @@ import deliveryAgreements from "./messages/en-US/deliveryAgreements.json";
 import deploymentSharing from "./messages/en-US/deploymentSharing.json";
 import documents from "./messages/en-US/documents.json";
 import errors from "./messages/en-US/errors.json";
+import finance from "./messages/en-US/finance.json";
 import footprint from "./messages/en-US/footprint.json";
+import statutoryRates from "./messages/en-US/statutoryRates.json";
 import geographic from "./messages/en-US/geographic.json";
 import mcpTools from "./messages/en-US/mcpTools.json";
 import organizationJoin from "./messages/en-US/organizationJoin.json";
@@ -21,6 +23,7 @@ import approvals from "./messages/en-US/approvals.json";
 import backlog from "./messages/en-US/backlog.json";
 import portfolio from "./messages/en-US/portfolio.json";
 import providerAccounts from "./messages/en-US/providerAccounts.json";
+import references from "./messages/en-US/references.json";
 import upgrade from "./messages/en-US/upgrade.json";
 import setup from "./messages/en-US/setup.json";
 import shell from "./messages/en-US/shell.json";
@@ -35,7 +38,7 @@ import { isPseudoLocale } from "./pseudo";
 import { formatSource } from "./runtime";
 
 /** The en-US source catalog, one entry per namespace. Add a namespace here and in messages/en-US/. */
-export const SOURCE_CATALOG = { admin, approvals, backlog, coworkerRecord, customerMap, deliveryAgreements, deploymentSharing, documents, errors, footprint, geographic, mcpTools, organizationJoin, portfolio, providerAccounts, routingManagement, setup, shell, storefront, upgrade, wiki, workbooks, workrooms } as const;
+export const SOURCE_CATALOG = { admin, approvals, backlog, coworkerRecord, customerMap, deliveryAgreements, deploymentSharing, documents, errors, finance, footprint, geographic, mcpTools, organizationJoin, portfolio, providerAccounts, references, routingManagement, setup, shell, statutoryRates, storefront, upgrade, wiki, workbooks, workrooms } as const;
 
 export type Namespace = keyof typeof SOURCE_CATALOG;
 

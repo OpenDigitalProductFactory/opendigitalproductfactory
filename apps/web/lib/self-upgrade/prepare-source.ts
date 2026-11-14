@@ -32,6 +32,7 @@ import {
   unmaterializedPaths,
 } from "./lfs-materialization";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { retryOnTransientNetwork } from "./transient-network";
 
 /** Result of running one git command. Never throws on non-zero exit. */
 export type GitResult = { stdout: string; stderr: string; code: number };
@@ -63,6 +64,8 @@ export type PrepareSourceInput = {
   workspacePath?: string;
   /** Delay between retries of the host-clone remote read (tests pass 0). */
   remoteReadRetryDelayMs?: number;
+  /** Base backoff between upstream-fetch retries after a network failure (tests pass 0). */
+  networkRetryDelayMs?: number;
 };
 
 export type PrepareSourceResult =
@@ -126,7 +129,8 @@ export async function prepareUpgradeSource(
   // BI-A8A7CCFD — workspace-isolated upstream merge.
   if (workspacePath) {
     return prepareUpgradeSourceInWorkspace(
-      { hostSourcePath, remote, branch, installBranch, workspacePath, remoteReadRetryDelayMs: input.remoteReadRetryDelayMs },
+      { hostSourcePath, remote, branch, installBranch, workspacePath, remoteReadRetryDelayMs: input.remoteReadRetryDelayMs,
+        networkRetryDelayMs: input.networkRetryDelayMs },
       run,
     );
   }
@@ -172,11 +176,16 @@ type WorkspaceMergeInput = {
   installBranch: string;
   workspacePath: string;
   remoteReadRetryDelayMs?: number;
+  networkRetryDelayMs?: number;
 };
 
 /** Attempts at reading the host clone's upstream URL before falling back. */
 const HOST_REMOTE_READ_ATTEMPTS = 3;
 const DEFAULT_REMOTE_READ_RETRY_DELAY_MS = 250;
+
+/** Upstream fetch attempts when the failure is a network blip (BI-7FFF5CB0). */
+const UPSTREAM_FETCH_NETWORK_ATTEMPTS = 4;
+const DEFAULT_UPSTREAM_FETCH_RETRY_DELAY_MS = 10_000;
 
 /** Internal-remote name the workspace uses for the upstream URL it pulls from.
  *  Kept distinct from `origin` (which points at the install clone) so the two
@@ -323,13 +332,23 @@ async function prepareUpgradeSourceInWorkspace(
     }
 
     // ── 2. Fetch fresh upstream + install-branch ────────────────────────────
-    const fetchUpstream = await run([
+    // SUR-256EAF95: one dropped connection to the upstream host failed the
+    // whole run. Retry only network-caused failures (BI-7FFF5CB0).
+    const fetchUpstream = await retryOnTransientNetwork(() => run([
       "-C",
       input.workspacePath,
       "fetch",
       UPSTREAM_REMOTE_IN_WORKSPACE,
       input.branch,
-    ]);
+    ]), {
+      failed: (r) => r.code !== 0,
+      output: (r) => r.stderr,
+      attempts: UPSTREAM_FETCH_NETWORK_ATTEMPTS,
+      baseDelayMs: input.networkRetryDelayMs ?? DEFAULT_UPSTREAM_FETCH_RETRY_DELAY_MS,
+      onRetry: (attempt, cause) => console.warn(
+        `[self-upgrade] upstream fetch hit a network failure (attempt ${attempt}/${UPSTREAM_FETCH_NETWORK_ATTEMPTS}); retrying: ${cause}`,
+      ),
+    });
     if (fetchUpstream.code !== 0) {
       return {
         ok: false,

@@ -3,6 +3,7 @@ import { resolve } from "path";
 import { describe, expect, it } from "vitest";
 import {
   buildKernelVectorPoints,
+  sidecarRecordsToApply,
   deriveSlug,
   extractPrinciplePayload,
   extractWikilinks,
@@ -12,6 +13,7 @@ import {
   type WikiPageFrontmatter,
 } from "./seed-wiki-kernel";
 import { isPrincipleDimension, PRINCIPLE_COST_DIMENSIONS } from "./wiki-taxonomy";
+import { wikiEmbeddingDigest } from "./wiki-embedding-digest";
 
 describe("seed-wiki-kernel: parseFrontmatter", () => {
   it("parses scalar fields", () => {
@@ -923,5 +925,43 @@ describe("seed-wiki-kernel: buildKernelVectorPoints", () => {
     expect(points[1].payload).not.toHaveProperty("principleTier");
     expect(points[1].payload).not.toHaveProperty("principleAppliesTo");
     expect(points[1].payload).not.toHaveProperty("principleRingScope");
+  });
+});
+
+// BI-F039D17A — every platform update re-runs the seed. The sidecar must never
+// overwrite a vector built from a page's current text with an older one, and a
+// sidecar vector of unknown provenance must stay unstamped so the runtime
+// reconcile re-embeds it.
+describe("seed-wiki-kernel: sidecar converges instead of regressing vectors", () => {
+  const page: SeedablePage = {
+    id: "wp_p", slug: "principles/p", title: "P", body: "Current wording.",
+    abstract: "Why.", pageKind: "principle", status: "published",
+  };
+  const current = wikiEmbeddingDigest(page);
+  const rec = (contentDigest?: string) => ({
+    slug: "principles/p", vector: [0.1], model: "m", ...(contentDigest ? { contentDigest } : {}),
+  });
+
+  it("bootstraps a page with no vector, even from an undigested record", () => {
+    expect(sidecarRecordsToApply([page], [rec()], new Map())).toHaveLength(1);
+  });
+
+  it("does not overwrite an existing vector with an undigested or outdated record", () => {
+    const existing = new Map([["wp_p", current]]);
+    expect(sidecarRecordsToApply([page], [rec()], existing)).toEqual([]);
+    expect(sidecarRecordsToApply([page], [rec("stale-digest")], existing)).toEqual([]);
+    expect(sidecarRecordsToApply([page], [rec()], new Map([["wp_p", null]]))).toEqual([]);
+  });
+
+  it("replaces a stale vector with a record built from the current text, and skips one already current", () => {
+    expect(sidecarRecordsToApply([page], [rec(current)], new Map([["wp_p", "old"]]))).toHaveLength(1);
+    expect(sidecarRecordsToApply([page], [rec(current)], new Map([["wp_p", current]]))).toEqual([]);
+  });
+
+  it("stamps the digest only when the record matches the page's current text", () => {
+    const [stamped] = buildKernelVectorPoints([page], [rec(current)], "0.4.4");
+    expect(stamped!.payload.contentDigest).toBe(current);
+    const [unstamped] = buildKernelVectorPoints([page], [rec("stale-digest")], "0.4.4");
+    expect(unstamped!.payload).not.toHaveProperty("contentDigest");
   });
 });

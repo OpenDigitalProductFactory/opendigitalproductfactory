@@ -71,7 +71,7 @@ Options:
   --worktree PATH         Worktree to bind (default: $DPF_DEV_WORKTREE).
   --owner-provider NAME   Client provider (detected by canonical identity helper).
   --owner-session-id ID   Client thread (detected by canonical identity helper).
-  --expires-minutes N     Lease expiry window (default: 120).
+  --expires-minutes N     Admission wait budget, at most 120 minutes (default: 120).
   --lease-id ID           Lease id to release (release only).
   --mcp-url URL           MCP endpoint (default: DPF_MCP_URL or local portal).
   --help                  Show this help.
@@ -272,7 +272,14 @@ claim_lease() {
       return 82
     fi
   fi
-  expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
+  request_timing="$(node --input-type=module -e '
+import { pathToFileURL } from "node:url";
+const { previewLeaseRequestTiming } = await import(pathToFileURL(process.argv[2]).href);
+process.stdout.write(JSON.stringify(previewLeaseRequestTiming({ waitMinutes: process.argv[3],
+  ttlMinutes: process.argv[4], waitDeadline: process.argv[5] })));
+' preview-request-timing "$(dirname -- "$0")/dev-preview-queue-resume.mjs" "$EXPIRES_MINUTES" "$HEARTBEAT_TTL_MINUTES" "${DPF_DEV_PORTAL_WAIT_DEADLINE:-}")" \
+    || return 64
+  wait_deadline="$(printf '%s' "$request_timing" | field waitDeadlineAt)"
   # BI-D45898C0: the claim key identifies the RESOURCE, not the claimant.
   #
   # It used to be "dev-portal:${OWNER_SESSION_ID}:${BRANCH}", and
@@ -302,7 +309,7 @@ const args = {
   purpose: `Contributor preview (:3001) bound to ${process.argv[4]} @ ${process.argv[5]} (${process.argv[13]})`,
   url: process.argv[6],
   ports: JSON.parse(process.argv[7]),
-  expiresAt: process.argv[8],
+  ...JSON.parse(process.argv[8]),
   worktreePath: process.argv[4],
   branchName: process.argv[5],
   cleanupCommand: "docker compose -p dpf --profile dev rm -sf dev-portal",
@@ -311,7 +318,7 @@ const args = {
   ...(process.argv[12] ? {taskRunId: process.argv[12]} : {}),
 };
 process.stdout.write(JSON.stringify(args));
-' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$expires_at" "$claim_key" "$host_pressure_json" "$RESUME_LEASE_ID" "$TASK_RUN_ID" "$SOURCE_SHA")"
+' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$request_timing" "$claim_key" "$host_pressure_json" "$RESUME_LEASE_ID" "$TASK_RUN_ID" "$SOURCE_SHA")"
     claim_response="$(mcp_call claim_nonprod_environment_lease "$claim_args" | extract_tool_result)"
     claim_success="$(printf '%s' "$claim_response" | field success)"
     claim_error="$(printf '%s' "$claim_response" | field error)"
@@ -331,7 +338,6 @@ process.stdout.write(JSON.stringify(args));
         fi
         task_run_id="$(printf '%s' "$claim_response" | field data.admission.taskRunId)"
         if [ "$COMMAND" = "refresh" ] && [ "${DPF_DURABLE_RESUME:-}" != "1" ]; then
-          wait_deadline="$(printf '%s' "$claim_response" | field data.lease.expiresAt)"
           node "$(dirname -- "$0")/dev-preview-queue-resume.mjs" \
             --worktree "$WORKTREE_PATH" --branch "$BRANCH" --sha "$SOURCE_SHA" \
             --owner-provider "$OWNER_PROVIDER" --owner-session-id "$OWNER_SESSION_ID" \

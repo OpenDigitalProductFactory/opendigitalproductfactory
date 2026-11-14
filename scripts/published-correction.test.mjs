@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync, existsSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -496,7 +496,7 @@ test("report reading opens before classification and rejects pathname replacemen
 
 test("real Vitest file output qualifies despite launcher noise and an old project report", { timeout: 60_000 }, () => {
   const cwd = process.cwd();
-  const fixture = mkdtempSync(join(tmpdir(), "correction-vitest fixture-"));
+  const fixture = realpathSync(mkdtempSync(join(tmpdir(), "correction-vitest fixture-")));
   try {
     const config = join(fixture, "vitest.config.mjs");
     const file = join(fixture, "report.test.mjs");

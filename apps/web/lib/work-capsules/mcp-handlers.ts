@@ -74,6 +74,8 @@ type ToolContext = {
   threadId?: string;
   taskRunId?: string;
   authorityDecisionId?: string;
+  authSource?: string;
+  approvedAuthorityEnvelopeId?: string | null;
 } | undefined;
 
 export function workCapsuleToolEnums() {
@@ -130,6 +132,10 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>, user
     return { success: false, error: "invalid_view", message: "view must be instances, definitions or atlas." };
   }
   if (params.view === "atlas") {
+    if (params.decisionScope !== undefined || params.status !== undefined) {
+      return { success: false, error: "invalid_atlas_filters",
+        message: "Atlas pages do not accept decisionScope or status filters. Use view instances for these filters." };
+    }
     // The Work Atlas picture: the same projection the portal reads (BI-7ACC31F9).
     const atlasPortfolio = stringParam(params, "portfolioRole");
     if (atlasPortfolio && !isWorkCapsulePortfolioRole(atlasPortfolio)) {
@@ -601,7 +607,10 @@ export async function reassignCapsuleExecutorTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  return reassignCapsuleExecutor({ params, db: workCapsuleDb(), resolveActor: () => actor(userId, context) });
+  return reassignCapsuleExecutor({ params, db: workCapsuleDb(), resolveActor: () => actor(userId, context),
+    // An assistant's takeover that no person approved ran only because it was
+    // classified as the owner's own room (BI-1986D3C1); prove that again here.
+    ownRoomTakeoverRecheck: context?.authSource === "oauth" && !context.approvedAuthorityEnvelopeId });
 }
 
 export async function recordCapsuleEvidenceTool(
@@ -787,3 +796,4 @@ export async function recordAgentActivityTool(
  * being dropped.
  */
 export const __testing__ = { parseScopeInput };
+

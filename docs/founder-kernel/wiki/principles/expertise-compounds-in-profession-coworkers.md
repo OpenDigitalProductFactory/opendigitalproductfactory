@@ -3,9 +3,9 @@ title: Expertise Compounds in Profession Coworkers
 slug: expertise-compounds-in-profession-coworkers
 pageKind: principle
 status: published
-abstract: A decision inside a profession's domain is made by that profession's coworker, working from its own corpus and its own decision profile, and the reviewed outcome is fed back so the expertise grows. Knowledge captured this way is shared and durable; memory in one model or one session is not. Making this loop self-sustaining on the platform comes before expanding to archetypes.
+abstract: A decision inside a profession's domain is made by that profession's coworker, working from its own corpus and its own decision profile, and the reviewed outcome is fed back so the expertise grows. Knowledge captured this way is shared and durable; memory in one model or one session is not. Making this loop self-sustaining on the platform comes before expanding to archetypes. The loop climbs a ladder whose rung 0 is coding: the platform changing its own source under governance.
 principleTier: core
-principleDirection: Route each decision to the profession coworker that owns its domain, have it decide from its own corpus and decision profile, review the outcome, and feed the result back into that profession's knowledge; make this loop self-sustaining on the platform before extending it to archetypes.
+principleDirection: Route each decision to the profession coworker that owns its domain, have it decide from its own corpus and decision profile, review the outcome, and feed the result back into that profession's knowledge; make this loop self-sustaining on the platform before extending it to archetypes, building each rung of the self-improvement ladder on the one below, starting from coding as rung 0.
 principleDimensionVector: {"long_term_maintainability": 0.9, "reusability": 0.9, "evidence_density": 0.8, "governance_compliance": 0.6, "mission_fit": 0.8, "human_cognitive_load": -0.6, "speed_to_value": -0.2}
 principleAppliesTo:
   - in_platform_coworker
@@ -29,6 +29,7 @@ authoredBy: mark-bodman
 3. **Every decision is reviewed and fed back.** The decision is recorded against the work it served, and its outcome is reviewed. What the review teaches is written back into that profession's corpus and weightings. A decision with no reviewed outcome teaches nothing.
 4. **Knowledge, not memory.** What a coworker learns lives in the governed commons, where every coworker, every executor and every install can retrieve it. It does not live in a model's training, a chat thread or one client's private notes. Those disappear, or stay with one agent.
 5. **Platform first, then archetypes.** The goal is to run any kind of company through archetypes. That only works once the loop above runs on the platform's own work, orchestrated and self-sustaining. Work that makes the loop run comes before work that extends archetypes.
+6. **Coding is rung 0.** The platform becomes self-aware and recursive one rung at a time, and the first rung is the platform changing its own source. Every higher rung depends on it. See [The ladder](#the-ladder).
 
 ## Why
 
@@ -37,6 +38,26 @@ General models are trained to do general work, and some are more capable than ot
 The owner said on 2026-11-04: "we are not building stronger expertise and accumulating critical knowledge, not memory, that we can pull from … Our whole premise is to build this as an engine of AI coworker that evolve … The archetypes are the real objective. We cannot achieve the later until this first self improvement and JSI work can be properly orchestrated and it becomes self sustaining and improving." The same day: "We need robust experts working together. Not one overarching coworker that knows all."
 
 An earlier owner ruling says the same for business work. The platform's purpose is "to earn trust and incrementally establish the JSI corpus and vectors that make AI coworkers perform accordingly" (DI-2212A75710).
+
+## The ladder
+
+The owner ruled on 2026-11-13: "coding is the baseline, rung 0 to make this platform self-aware, recursive, and iterate on itself."
+
+Each rung uses the one below it. A rung that stands on a missing rung does not hold.
+
+| Rung | What the platform can do | What it rests on |
+|------|--------------------------|------------------|
+| 0. Coding | Change its own source: coding coworkers inside the platform write, test and land changes through workrooms, the Gated Permissions Process (GPP) and expert review. | Workrooms, GPP, the merge queue, and profession experts who steer the change. |
+| 1. Self-diagnosis | Notice its own defects and gaps from its own evidence (failed runs, stalled work, drift), and file them as backlog items. | Rung 0, so a diagnosis can become a fix without leaving the platform. |
+| 2. Proactive improvement | Pick up what it diagnosed and improve itself without being asked, inside its budget and grants. | Rungs 0 and 1. |
+| 3. Learning loop | Review the outcome of each change and decision, and feed the lesson back into the owning profession's corpus and weightings (Rule 3). | Rungs 0 to 2, so there is a steady flow of reviewed outcomes to learn from. |
+| 4. Archetypes | Run other kinds of companies with the same self-improving engine. | A loop that already runs on the platform's own work (Rule 5). |
+
+What this means in practice:
+
+- **Coding sits inside the platform.** Coding presence moves inside DPF, under the same workrooms, grants and reviews as every other coworker (epic EP-INPLATFORM-CODING). An outside coding agent can still contribute, but the platform does not depend on one to change itself ([[principles/platform-function-never-depends-on-a-client]]).
+- **Coding is governed, not free.** Rung 0 means changes go through the gates, with the owning expert steering. A platform that edits itself without review is not self-aware. It is unsupervised.
+- **Fix the lower rung first.** When a higher-rung effort stalls because coding inside the platform is unreliable, repair rung 0 before pushing the higher rung further.
 
 ## Observed gap (production, week to 2026-11-04)
 
@@ -51,6 +72,7 @@ An earlier owner ruling says the same for business work. The platform's purpose 
 2. **Link each decision record to the work it served** (room, review or backlog item), so its outcome can be reviewed.
 3. **Once the outcome is known,** record whether the decision held, and route the lesson to that profession's corpus through the commons ([[principles/learnings-belong-in-the-shared-commons]]).
 4. **When prioritizing,** prefer work that makes this loop run and sustain itself over work that adds archetype breadth.
+5. **Place the work on the ladder.** Name the rung a piece of work serves. Prefer work on the lowest rung that is not yet reliable, starting with coding inside the platform.
 
 ## Related principles
 

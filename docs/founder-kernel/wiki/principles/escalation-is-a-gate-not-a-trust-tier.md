@@ -101,6 +101,8 @@ and `describeDecisionEscalationRule` export its rule sentences. The conformance
 tests in `apps/web/lib/govern/authority/escalation-gate.conformance.test.ts`
 require them verbatim, so doctrine and enforcement cannot drift apart.
 
+Background jobs pass the same gate. Build stalls, PR delivery, PR follow-through, the assurance merge gate and the index sweep all hand work to the owner through one seam, `apps/web/lib/govern/authority/route-to-human.ts`. Damage goes to a person with its reason. Anything else goes to WWMD or WWWD with a fixed feature vector for its blocker class, then to `resolveDecisionEscalation`. It becomes agent work or independent review, never the owner's inbox. The repo guard `scripts/check-no-unrouted-owner-escalation.mjs` fails CI if any other code writes an owner-attention report (BI-5E067004).
+
 ## How to apply
 
 Do not ask a person to confirm an action that is neither damaging nor unsteered — and do not write a rule into an agent's memory to make that true. Memory does not reach the next install. Put the decision in the gate, where every install runs it with no AI client present.

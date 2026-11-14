@@ -30,7 +30,63 @@ const mixed: StandingRhythmRow = {
   }),
 };
 
+const completedDays = Array.from({ length: 14 }, (_, index) => {
+  const date = new Date(now.getTime() - (13 - index) * 86_400_000).toISOString().slice(0, 10);
+  return { runKey: `fixture-watch@1.0.0:${date}`, action: "stop", reason: "success", recordedAt: `${date}T09:00:00Z` };
+});
+function rowSummary(rhythm: StandingRhythmRow["rhythm"]) {
+  const html = render([{ capsuleId: "WC-LABELLED-FIXTURE", title: "Labelled routine", rhythm }]);
+  // Read the summary beside the daily marks, not matching words in the legend.
+  const match = /<\/ol><span\b[^>]*>([^<]*)<\/span>/.exec(html);
+  expect(match).not.toBeNull();
+  return { text: match![1], html };
+}
+const history = (rows = completedDays) => classifyStandingRhythm({ rows, currentRunKey: null, now });
+
 describe("RhythmStrip", () => {
+  it("labels all-unknown history without claiming recorded days ran", () => {
+    const result = rowSummary(history([]));
+    expect(result.text).toBe("No record yet");
+    expect(result.html.match(/data-rhythm-state="no-record"/g)).toHaveLength(15);
+  });
+
+  it("distinguishes mixed unknown and completed days from a complete history", () => {
+    expect(rowSummary(history(completedDays.slice(-1))).text).toBe("Some days unrecorded");
+  });
+
+  it("does not claim completion while today's daily run is still due", () => {
+    expect(rowSummary(history(completedDays.slice(0, -1))).text).toBe("Not started today");
+  });
+
+  it("retains the positive summary for a fully recorded completed window", () => {
+    expect(rowSummary(history()).text).toBe("Every recorded day ran");
+  });
+
+  it("retains completed late marks without claiming that every run was on time", () => {
+    const rows = completedDays.map((row, index) => index === 4
+      ? { ...row, recordedAt: new Date(Date.parse(row.recordedAt) + 86_400_000).toISOString() } : row);
+    const result = rowSummary(history(rows));
+    expect(result.text).toBe("Every recorded day ran");
+    expect(result.html.match(/data-rhythm-state="late"/g)).toHaveLength(2);
+  });
+
+  it("keeps genuine missed-day warnings ahead of incomplete history", () => {
+    expect(rowSummary(history(completedDays.slice(0, 1))).text).toBe("12 days did not run");
+  });
+
+  it("cannot turn unknown marks into completion from inconsistent aggregate counts", () => {
+    expect(rowSummary({ ...history([]), counts: { "on-time": 14, late: 0, missed: 0 } }).text).toBe("No record yet");
+  });
+
+  it("does not infer a completed period from an empty slot window", () => {
+    expect(rowSummary({ ...history([]), slots: [] }).text).toBe("No record yet");
+  });
+
+  it("preserves a recorded running mark when its start date is unavailable", () => {
+    const rhythm = classifyStandingRhythm({ rows: [], currentRunKey: "fixture-watch@1.0.0:2026-11-10", now });
+    expect(rowSummary({ ...rhythm, runningSince: null }).text).toBe("Running now");
+  });
+
   it("draws 14 named marks per standing room, oldest first", () => {
     const html = render([mixed]);
     expect(html.match(/data-rhythm-state=/g)?.length).toBe(14 + 6); // 14 days plus the six-entry legend

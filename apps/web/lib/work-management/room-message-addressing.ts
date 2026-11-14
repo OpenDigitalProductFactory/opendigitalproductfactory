@@ -18,7 +18,11 @@ export type RoomWakeState =
   | "woken"
   | "held-for-executor"
   | "paused-budget"
-  | "no-recipient";
+  | "no-recipient"
+  | "cannot-reply";
+
+/** The grant post_room_message requires (TOOL_TO_GRANTS); named to the sender when it is missing. */
+export const ROOM_POST_GRANT = "work_room_write";
 
 /** Stored at structuredPayload.addressing on an addressed WorkItemMessage. */
 export interface RoomMessageAddressing {
@@ -28,6 +32,13 @@ export interface RoomMessageAddressing {
   sessions: string[];
   hop: number;
   senderGaid: string | null;
+  /**
+   * BI-FDE1B10C: set when the message was posted by the room's supervised
+   * runtime session, recognised from the room token it posted with. The
+   * session's address (`<client GAID>#session=<threadId>`), so the hop count
+   * can follow the session even though it posts as the person who started it.
+   */
+  senderSession?: string;
   /** The user whose authority the message was posted under; a wake runs under it. */
   actingUserId: string;
   wake: { state: RoomWakeState; at: string; detail?: string; woken?: string[] };
@@ -96,6 +107,7 @@ export function readRoomMessageAddressing(structuredPayload: unknown): RoomMessa
     sessions: strings(record.sessions),
     hop: typeof record.hop === "number" && Number.isFinite(record.hop) ? record.hop : 0,
     senderGaid: typeof record.senderGaid === "string" ? record.senderGaid : null,
+    ...(typeof record.senderSession === "string" ? { senderSession: record.senderSession } : {}),
     actingUserId: typeof record.actingUserId === "string" ? record.actingUserId : "",
     wake: {
       state: (typeof wake.state === "string" ? wake.state : "pending") as RoomWakeState,
@@ -125,19 +137,48 @@ export function roomMessageAddressingView(structuredPayload: unknown, fallbackSe
   };
 }
 
+/** A supervised runtime session as the room addresses it. */
+export interface RoomSessionRef {
+  /** `<client GAID>#session=<threadId>`. */
+  addressedAs: string;
+  /** The provider client agent the session runs as (AGT-EXT-CLAUDE, AGT-EXT-CODEX). */
+  clientAgentId: string;
+}
+
+/**
+ * Does this addressing name the session? Its exact qualifier does. Its
+ * provider client's agent id does too, when the message qualifies no session of
+ * that client: an unqualified address reaches the room's supervised session. A
+ * qualifier for another thread of the same client does not.
+ */
+export function addressingNamesSession(addressing: { agents: string[]; sessions: string[] }, session: RoomSessionRef): boolean {
+  if (addressing.sessions.includes(session.addressedAs)) return true;
+  const clientGaid = session.addressedAs.split("#")[0]!;
+  const qualifiesClient = addressing.sessions.some((ref) => ref.split("#")[0] === clientGaid);
+  return !qualifiesClient && addressing.agents.includes(session.clientAgentId);
+}
+
 /**
  * A human message starts an exchange at hop 0. An agent's message is one hop
  * past the newest earlier message in the room that was addressed to it, so two
- * agents answering each other climb toward the limit.
+ * agents answering each other climb toward the limit. A supervised session
+ * posts as the person who started it, so its message is also one hop past the
+ * newest earlier message that named the session (BI-FDE1B10C).
  */
 export function computeRoomMessageHop(args: {
   senderType: "user" | "agent";
   senderAgentId?: string | null;
+  /** Set when the post was made with the room's supervised-session token. */
+  senderSession?: RoomSessionRef | null;
   /** Earlier messages in the room, newest first. */
   recent: ReadonlyArray<{ addressing: RoomMessageAddressing | null }>;
 }): number {
   if (args.senderType !== "agent" || !args.senderAgentId) return 0;
-  const prior = args.recent.find((m) => m.addressing?.agents.includes(args.senderAgentId!));
+  const { senderAgentId, senderSession } = args;
+  const prior = args.recent.find(({ addressing }) => addressing && (
+    addressing.agents.includes(senderAgentId)
+    || (senderSession ? addressingNamesSession(addressing, senderSession) : false)
+  ));
   return prior?.addressing ? prior.addressing.hop + 1 : 0;
 }
 
@@ -145,6 +186,7 @@ export type RoomWakePlan =
   | { kind: "none"; state: "no-recipient"; detail: string }
   | { kind: "hold"; state: "held-for-executor"; detail: string }
   | { kind: "pause"; state: "paused-budget"; detail: string }
+  | { kind: "refuse"; state: "cannot-reply"; detail: string }
   | { kind: "wake"; state: "woken"; agents: string[]; reason: "addressed" | "hop-limit"; detail: string };
 
 /** Desktop and CLI executors work a room from outside; the platform never takes their stage. */
@@ -162,6 +204,8 @@ export function planRoomWake(args: {
   wakesLastHour: number;
   /** Agents that run outside the platform (Claude Code, Codex, Grok): reached by their own client, never a platform task. */
   externalAgentIds?: ReadonlySet<string>;
+  /** In-platform recipients without the grant to post: a reply turn could not answer, so none is spent (BI-8747A73D). */
+  cannotPost?: ReadonlySet<string>;
   hopLimit?: number;
   budgetPerHour?: number;
 }): RoomWakePlan {
@@ -194,6 +238,14 @@ export function planRoomWake(args: {
       detail: `Addressed to ${external.join(", ")}, which runs outside the platform; it sees this when it next reads the room.`,
     };
   }
+  const silent = recipients.filter((id) => args.cannotPost?.has(id));
+  recipients = recipients.filter((id) => !args.cannotPost?.has(id));
+  const silentNote = silent.length
+    ? `${silent.join(", ")} cannot reply here: ${silent.length === 1 ? "it lacks" : "they lack"} the ${ROOM_POST_GRANT} grant, which the coworker's owner grants.`
+    : "";
+  if (recipients.length === 0 && silent.length > 0) {
+    return { kind: "refuse", state: "cannot-reply", detail: `${silentNote} No reply turn was started.` };
+  }
   if (recipients.length === 0) {
     return {
       kind: "none",
@@ -215,9 +267,12 @@ export function planRoomWake(args: {
     state: "woken",
     agents: recipients,
     reason,
-    detail: reason === "hop-limit"
-      ? `Reached the hop limit (${hopLimit}); woke the coordinator instead of the addressee.`
-      : `Woke ${recipients.join(", ")}.`,
+    detail: [
+      reason === "hop-limit"
+        ? `Reached the hop limit (${hopLimit}); woke the coordinator instead of the addressee.`
+        : `Woke ${recipients.join(", ")}.`,
+      silentNote,
+    ].filter(Boolean).join(" "),
   };
 }
 

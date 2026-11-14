@@ -56,7 +56,20 @@ such as "resets Nov 3 at 10am", DPF records that time and starts routing to the
 account again when the limit resets. You do not need to do anything. DPF keeps
 renewing the account's sign-in while it waits, whatever status the account
 shows, unless you disabled or disconnected it. The Needs-you item for an account
-whose every request fails stays open until a request succeeds again.
+whose every request fails stays open until a request succeeds again, or until
+the reset time the provider gave has passed.
+
+While a provider has said it will refuse work (a usage limit with a reset time,
+a rejected sign-in, or a billing or plan block), routing does not send it work,
+even when no other provider can take the request. The request then reports that
+no AI model can handle it, instead of failing against that provider. A
+rejected sign-in, a spending limit, or every subscription being out of capacity
+appears in Needs-you, because AI capacity stays lost until you act. A single
+provider's usage limit lifts on its own at its reset while other providers carry
+the work, so it is listed by name and reset time under what your digital team is
+handling, and the bell tells you once when it starts. The nightly model refresh
+also skips such providers until they recover; a refresh you start yourself
+still checks them.
 
 For an active install-owned ChatGPT or Codex subscription account, **Check now**
 sends one short synthetic request to the model you select. It never retries the

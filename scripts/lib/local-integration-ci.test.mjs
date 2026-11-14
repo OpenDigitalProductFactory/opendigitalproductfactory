@@ -251,7 +251,7 @@ describe("createLocalIntegrationPlan", () => {
       hostPlatform: "linux",
     });
 
-    assert.equal(plan.commands[0].join(" "), "git fetch origin main");
+    assert.equal(plan.commands[0].join(" "), "node scripts/lib/git-fetch-shared-safe.mjs fetch");
     assert.equal(plan.commands[1].join(" "), "git checkout -B local-integration/feat-local-ci-content-evidence origin/main");
   });
 

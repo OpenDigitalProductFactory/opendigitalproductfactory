@@ -29,6 +29,8 @@ type RoutedScreenInput = {
   taskType: string;
   routeContext: ScreenInferencePayloadInput["routeContext"];
   activityContract?: ActivityContract;
+  /** Repository the payload's code belongs to (BI-FC94F754). */
+  sourceCodeProvenance?: ScreenInferencePayloadInput["sourceCodeProvenance"];
   policyVersionSource?: ScreenInferencePayloadInput["policyVersionSource"];
   sensitiveDetailUse?: SensitiveDetailUse;
   responseRehydration?: RehydrationRouteBinding | readonly RehydrationRouteBinding[];

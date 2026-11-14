@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildOwnerAttentionProjection } from "./owner-projection";
+import { buildOwnerAttentionProjection, namedCustodianHeadlines } from "./owner-projection";
 import type { AttentionItem, AttentionSource } from "./types";
 
 function item(
@@ -85,5 +85,30 @@ describe("buildOwnerAttentionProjection", () => {
     );
 
     expect(projection.needsYouNow.map((entry) => entry.item.id)).toEqual(["customer", "workforce"]);
+  });
+});
+
+// BI-ACE041FE: the live Codex usage-limit row (reset 2026-11-17 03:54 UTC) and
+// the xAI sign-in row were both hidden behind "your digital team is handling".
+describe("AI-capacity items in the owner projection", () => {
+  const capacity = (key: string, title: string, residueReason: AttentionItem["triage"]["residueReason"]) =>
+    item("platform-health", {
+      id: `platform-health:ai-capacity:${key}`,
+      title,
+      triage: { timeToAct: "none", residueReason, decideEffort: "review", irreversible: false },
+    });
+
+  it("puts a sign-in loss in Needs-you and names a self-resetting limit under what is being handled", () => {
+    const projection = buildOwnerAttentionProjection(
+      [
+        capacity("provider:xai", "Sign in to xAI (Grok) again", "needs-credential"),
+        capacity("provider:codex", "OpenAI Codex has hit its usage limit until 2026-11-17 03:54 UTC", "self-heals"),
+        item("platform-health", { id: "platform-health:health_alert:disk", title: "Disk filling", triage: { timeToAct: "none", residueReason: "no-self-heal", decideEffort: "review", irreversible: false } }),
+      ],
+      { nowMs: Date.parse("2026-11-13T16:00:00.000Z") },
+    );
+    expect(projection.needsYouNow.map((e) => e.card.headline)).toEqual(["Sign in to xAI (Grok) again"]);
+    expect(namedCustodianHeadlines(projection)).toEqual(["OpenAI Codex has hit its usage limit until 2026-11-17 03:54 UTC"]);
+    expect(projection.custodian).toHaveLength(2);
   });
 });

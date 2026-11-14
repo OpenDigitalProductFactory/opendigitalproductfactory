@@ -222,6 +222,8 @@ test("dev-portal-lease.sh claim claims the local-integration-ci lease for :3001"
   assert.equal(calls[0].params.name, "claim_nonprod_environment_lease");
   const args = calls[0].params.arguments;
   assert.equal(args.environmentKey, "local-integration-ci");
+  assert.equal(args.requestedTtlMs, 120_000);
+  assert.ok(Math.abs(Date.parse(args.waitDeadlineAt) - Date.parse(args.expiresAt) - 118 * 60_000) < 1000);
   assert.deepEqual(args.ports, [3001]);
   assert.equal(args.url, "http://localhost:3001");
   assert.match(args.claimKey, /^dev-portal:/);
@@ -241,7 +243,7 @@ test("dev-portal-lease.sh does not treat a queued admission as ownership", () =>
   const stubs = makeStubs(temp, "queued");
   const result = runLease(["claim"], { env: baseEnv(stubs) });
 
-  assert.equal(result.status, 3, `${result.stdout}\n${result.stderr}`);
+  assert.equal(result.status, 75, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stderr, /WAITING lease NPEL-WAIT/);
   assert.match(result.stderr, /position 2/);
   assert.match(result.stderr, /host-memory-low/);
@@ -305,13 +307,45 @@ test("dev-portal-lease.sh release releases the named lease", () => {
   assert.equal(calls[0].params.arguments.leaseId, "NPEL-MINE");
 });
 
-test("a queued refresh makes one claim, delegates durable resume and never invokes Docker", () => {
+test("an existing queued refresh consumer makes one claim and never invokes Docker", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-queued-"));
   const stubs = makeStubs(temp, "queued");
-  const result = runLease(["refresh"], { env: baseEnv(stubs) });
-  assert.equal(result.status, 3);
-  assert.match(result.stderr, /Durable task .* resumes this wait/);
+  const result = runLease(["refresh"], { env: baseEnv(stubs, { DPF_DURABLE_RESUME: '1' }) });
+  assert.equal(result.status, 75);
+  assert.match(result.stderr, /retain this same claim/);
   assert.doesNotMatch(result.stderr, /Retry this same claim/);
   assert.equal(readFileSync(stubs.callsFile, "utf8").trim().split("\n").length, 1);
   assert.equal(existsSync(stubs.dockerCallsFile), false);
+});
+
+test('the shell resumes with its original wait deadline and lease/task identity', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'dpf-preview-fixed-deadline-'));
+  const stubs = makeStubs(temp, 'queued');
+  const deadline = new Date(Date.now() + 90 * 60_000).toISOString();
+  const result = runLease(['refresh'], { env: baseEnv(stubs, { DPF_DURABLE_RESUME: '1',
+    DPF_DEV_PORTAL_WAIT_DEADLINE: deadline, DPF_DEV_PORTAL_RESUME_LEASE_ID: 'NPEL-WAIT',
+    DPF_DEV_PORTAL_TASK_RUN_ID: 'TR-NONPROD-WAIT', DPF_DEV_PORTAL_CLAIM_KEY: 'preview:fixed' }) });
+  assert.equal(result.status, 75, result.stderr);
+  const calls = readFileSync(stubs.callsFile, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(calls.length, 1);
+  const args = calls[0].params.arguments;
+  assert.equal(args.waitDeadlineAt, deadline);
+  assert.equal(args.requestedTtlMs, 120_000);
+  assert.equal(args.resumeLeaseId, 'NPEL-WAIT');
+  assert.equal(args.taskRunId, 'TR-NONPROD-WAIT');
+  assert.equal(args.claimKey, 'preview:fixed');
+  assert.equal(existsSync(stubs.dockerCallsFile), false);
+});
+
+test('invalid or expired preview timing stops before a claim or Docker mutation', () => {
+  for (const timing of [{ DPF_DEV_PORTAL_WAIT_DEADLINE: new Date(Date.now() - 1000).toISOString() },
+    { DPF_DEV_PORTAL_WAIT_DEADLINE: 'invalid' }, { DPF_DEV_PORTAL_EXPIRES_MINUTES: '121' },
+    { DPF_DEV_PORTAL_HEARTBEAT_TTL_MINUTES: '21' }]) {
+    const temp = mkdtempSync(join(tmpdir(), 'dpf-preview-invalid-timing-'));
+    const stubs = makeStubs(temp, 'queued');
+    const result = runLease(['claim'], { env: baseEnv(stubs, timing) });
+    assert.equal(result.status, 64, result.stderr);
+    assert.equal(existsSync(stubs.callsFile), false);
+    assert.equal(existsSync(stubs.dockerCallsFile), false);
+  }
 });

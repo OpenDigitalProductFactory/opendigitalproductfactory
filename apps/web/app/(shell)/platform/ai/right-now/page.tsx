@@ -11,30 +11,20 @@
 // workforce-activity loader over TaskRun/ToolExecution/TokenUsage; the
 // action->outcome map is the curated translation layer. No new contract.
 
-import { auth } from "@/lib/auth";
-import { loadWorkforceActivity } from "@/lib/platform-runtime/workforce-activity";
-import { WorkforceNowShell } from "@/components/platform/WorkforceNowShell";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function RightNowPage() {
-  await auth(); // (shell)/platform layout gates platform access; render read-only.
-  const initialData = await loadWorkforceActivity();
-  return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4">
-      <header className="space-y-1">
-        <h1 className="text-lg font-semibold text-[var(--dpf-text)]">Right Now</h1>
-        <p className="text-sm text-[var(--dpf-muted)]">
-          What each AI coworker is doing, what they&rsquo;ve gotten done today, and where nobody is
-          acting. Sensitive-data activity is shown as an aggregate flag only. Resource load lives on
-          the{" "}
-          <a className="text-[var(--dpf-accent)] underline" href="/portfolio/product/dpf-portal/health">
-            System Health
-          </a>{" "}
-          page.
-        </p>
-      </header>
-      <WorkforceNowShell initialData={initialData} />
-    </div>
-  );
+export default async function RightNowPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+} = {}) {
+  const source = searchParams ? await searchParams : {};
+  const target = new URLSearchParams({ view: "activity" });
+  for (const key of ["capsuleId", "taskRunId", "agentId"] as const) {
+    const value = source[key];
+    if (typeof value === "string") target.set(key, value);
+  }
+  redirect(`/workforce?${target.toString()}`);
 }

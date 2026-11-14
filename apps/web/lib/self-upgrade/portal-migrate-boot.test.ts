@@ -181,6 +181,9 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
       // and before the server starts.
       expect(log.indexOf("scripts/reconcile-catalog-capabilities.ts")).toBeLessThan(log.indexOf("scripts/reembed-wiki-store.ts"));
       expect(log.indexOf("scripts/reembed-wiki-store.ts")).toBeLessThan(log.indexOf("BOOT_MARKER"));
+      // BI-F039D17A: the convergence step is budgeted so a release that edits many
+      // corpus pages cannot hold the portal's start; the scheduled job resumes.
+      expect(log).toContain("scripts/reembed-wiki-store.ts --budget-seconds");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -245,7 +248,7 @@ describe.skipIf(!BASH_OK)("portal-migrate-boot.sh (BI-5322D025)", () => {
         pnpmFailMatch: "scripts/reembed-wiki-store.ts",
       });
       expect(r.status, bootDiagnostics(r)).toBe(0); // boot still succeeds
-      expect(r.stderr).toContain("wiki embedding self-heal did not reach full coverage");
+      expect(r.stderr).toContain("wiki embedding convergence did not complete");
       expect(r.stdout).toContain("BOOT_MARKER"); // server WAS started despite the failure
     } finally {
       rmSync(root, { recursive: true, force: true });

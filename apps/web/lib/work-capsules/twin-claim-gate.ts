@@ -49,8 +49,11 @@ export type TwinGateDb = FederatedTwinDb & {
 
 export type TwinGateOutcome =
   | { kind: "clear" }
+  /** The item is the paired installation's record and nobody holds it there:
+   *  claim it locally as unconfirmed and ask its home (BI-30EDDB7F). */
+  | { kind: "home-claim" }
   | { kind: "refused"; result: ToolResult }
-  | { kind: "overridden"; blockers: TwinClaimBlocker[]; reason: string };
+  | { kind: "overridden"; blockers: TwinClaimBlocker[]; reason: string; homeClaim: boolean };
 
 export async function evaluateTwinClaimGate(db: TwinGateDb, input: {
   itemId: string;
@@ -72,14 +75,20 @@ export async function evaluateTwinClaimGate(db: TwinGateDb, input: {
   });
   if (reclaim > 0) return { kind: "clear" };
 
-  const mirrorClaim = isFederatedMirror(item.body) ? await loadMirrorClaim(db, item.itemId) : null;
+  const mirror = isFederatedMirror(item.body);
+  const mirrorClaim = mirror ? await loadMirrorClaim(db, item.itemId) : null;
   const blockers = twinClaimBlockers(item, mirrorClaim, await loadFederatedTwins(db, item));
   if (blockers.length === 0) return { kind: "clear" };
-  if (input.force && input.overrideReason) return { kind: "overridden", blockers, reason: input.overrideReason };
+  // The item's home decides its claim (spec 2026-10-27 §5.2). A mirror nobody
+  // holds at its home is not a reason to refuse: the claim is asked for there.
+  if (blockers.every((b) => b.reason === "peer-mirror" && !b.claim?.active)) return { kind: "home-claim" };
+  if (input.force && input.overrideReason) return { kind: "overridden", blockers, reason: input.overrideReason, homeClaim: mirror };
 
   const named = blockers
     .map((b) => b.reason === "peer-mirror"
-      ? `${b.itemId} is the paired installation's own record (${b.status})`
+      ? b.claim?.holder
+        ? `${b.itemId} is held at its home by installation ${b.claim.holder.installationId} in ${b.claim.holder.workroomId}${b.claim.holder.leaseExpiresAt ? ` (lease to ${b.claim.holder.leaseExpiresAt})` : ""}`
+        : `${b.itemId} is the paired installation's own record (${b.status}${b.claim?.active ? ", already being worked there" : ""})`
       : `the paired installation is working the same defect as ${b.itemId} (${b.status}${b.claim?.active ? `, claimed${b.claim.workrooms ? `, ${b.claim.workrooms} live Workroom(s)` : ""}` : ""})`)
     .join("; ");
   return {

@@ -4,6 +4,7 @@ import { resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitText } from './lib/git.mjs';
 import { isEntryModule } from './lib/entry-module.mjs';
+import { leaseRequestTiming } from './lib/nonprod-lease-request.mjs';
 import { spawnDurableWaitResumer, DEFAULT_RESUME_DEADLINE_MS, RESUME_MARKER_ENV, RESUMER_DISABLE_ENV } from './lib/durable-wait-resumer.mjs';
 import { EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE } from './lib/sandbox-freshness.mjs';
 
@@ -11,6 +12,17 @@ const ownPath = fileURLToPath(import.meta.url);
 const flags = { worktree: 'worktree', branch: 'branch', sha: 'sha', ownerProvider: 'owner-provider',
   ownerSessionId: 'owner-session-id', resumeLeaseId: 'resume-lease-id', taskRunId: 'task-run-id',
   claimKey: 'claim-key', mcpUrl: 'mcp-url', waitDeadline: 'wait-deadline' };
+
+/** A fixed admission budget survives resumes; the short resource TTL starts at admission. */
+export function previewLeaseRequestTiming({ now = Date.now(), waitMinutes, ttlMinutes, waitDeadline }) {
+  const waitMs = Number(waitMinutes) * 60_000;
+  const deadline = waitDeadline ? Date.parse(waitDeadline) : now + waitMs;
+  if (!Number.isFinite(waitMs) || waitMs <= 0 || waitMs > DEFAULT_RESUME_DEADLINE_MS
+      || !Number.isFinite(deadline) || deadline - now > DEFAULT_RESUME_DEADLINE_MS) {
+    throw new Error('Preview admission wait must be positive and at most two hours.');
+  }
+  return leaseRequestTiming({ now: new Date(now), durationMs: Number(ttlMinutes) * 60_000, deadline });
+}
 
 function readSource(worktree) {
   const git = args => gitText(args, { cwd: worktree, timeout: 5000 });
@@ -53,6 +65,7 @@ export async function resumePreviewQueue(pin, deps = {}) {
         '--mcp-url', pin.mcpUrl],
       env: { ...env, DPF_DEV_PORTAL_CLAIM_KEY: pin.claimKey, DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA: pin.sha,
         DPF_DEV_PORTAL_EXPECTED_BRANCH: pin.branch,
+        DPF_DEV_PORTAL_WAIT_DEADLINE: pin.waitDeadline,
         DPF_DEV_PORTAL_RESUME_LEASE_ID: pin.resumeLeaseId, DPF_DEV_PORTAL_TASK_RUN_ID: pin.taskRunId },
     });
     return { code, reason: code === 75 ? 'still-queued' : 'child-completed' };

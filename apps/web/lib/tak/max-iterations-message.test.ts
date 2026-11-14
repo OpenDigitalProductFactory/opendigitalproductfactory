@@ -52,7 +52,8 @@ describe("buildMaxIterationsExhaustedMessage (BI-F4D3B9E9d)", () => {
     });
     expect(msg).not.toMatch(/my usual ai/i);
     expect(msg).toMatch(/^I worked through several attempts/);
-    expect(msg).toMatch(/smaller piece/i);
+    expect(msg).toMatch(/existing result/i);
+    expect(msg).not.toMatch(/try the same question again/i);
   });
 
   it("falls back to a generic work note when no tools ran", () => {
@@ -92,6 +93,18 @@ describe("buildMaxIterationsExhaustedMessage (BI-F4D3B9E9d)", () => {
     for (const downgradeReason of ["provider-unavailable", "not-eligible", null] as const) {
       const msg = buildMaxIterationsExhaustedMessage({ downgradeReason, executedTools: anyTools });
       expect(msg).toContain("safety limit");
+    }
+  });
+
+  it("never sends a retained owner request into a blind resubmission loop", () => {
+    for (const params of [
+      { downgradeReason: null },
+      { downgradeReason: "provider-unavailable" as const },
+      { downgradeReason: "not-eligible" as const, cause: "rate-limit" as const },
+      { downgradeReason: "not-eligible" as const, cause: "residency" as const },
+    ]) {
+      const msg = buildMaxIterationsExhaustedMessage({ ...params, executedTools: anyTools });
+      expect(msg).not.toMatch(/try the same question|same question in a few minutes|try a narrower question|asking the same thing somewhere/i);
     }
   });
 });

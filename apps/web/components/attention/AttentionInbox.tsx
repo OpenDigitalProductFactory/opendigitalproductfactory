@@ -1,7 +1,7 @@
 // Full owner attention queue on /workspace/inbox. The same owner projection and
 // decision cards power the workspace preview, so counts and language cannot drift.
 
-import type { OwnerAttentionProjection } from "@/lib/attention/owner-projection";
+import { namedCustodianHeadlines, type OwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import type { AttentionSource } from "@/lib/attention/types";
 import type { WeeklyDigestDisposition } from "@/lib/attention/weekly-digest-preferences";
 import { OwnerDecisionCards } from "./OwnerDecisionCards";
@@ -66,6 +66,7 @@ export function AttentionInbox({
       <DigitalTeamHandlingStrip
         custodianCount={projection.count === 0 ? 0 : projection.custodian.length}
         digestCount={digestDisposition ? 0 : projection.weeklyDigest.length}
+        named={namedCustodianHeadlines(projection)}
       />
 
       <WeeklyDigestPanel

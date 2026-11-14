@@ -38,6 +38,16 @@ export interface RouteAndCallOptions {
   deniedProviders?: string[];
   /** Hard residency boundary. Never widened by fallback. */
   residencyPolicy?: RequestContract["residencyPolicy"];
+  /**
+   * Repository the payload's source code belongs to, resolved by the caller
+   * from a trusted record such as the Workroom's repository (BI-FC94F754).
+   * Code from a repository proven public measures public, so every provider
+   * cleared for public data can take it; private or unproven code stays
+   * confidential. Omitting it keeps the fail-closed default.
+   */
+  sourceCodeProvenance?: import(
+    "@/lib/inference/data-screening/types"
+  ).SourceCodeProvenance;
   /** Optional system prompt text for side-effect-free route previews that need data screening parity. */
   screeningSystemPrompt?: string;
   /** Live governed-version reader, invoked again immediately before each provider attempt. */

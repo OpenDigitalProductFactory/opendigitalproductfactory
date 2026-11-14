@@ -126,6 +126,24 @@ beforeEach(() => {
 });
 
 describe("BI-2E479619 native-MCP tool calls are visible to the terminal-writer policy", () => {
+  it("carries the admitted task grants independently of the final writer-only provider surface", async () => {
+    const tokenGrantScopes = ["file_read", "initiative_design_review"];
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: null, dispatchClaim: null,
+      authorityDigest: null, requestDigest: "9".repeat(64) };
+    vi.mocked(routeAndCall).mockImplementation(async () => {
+      table.rows.push(nativeWriterSuccess());
+      return cliProse("Recorded the synthetic result.") as never;
+    });
+    await runAgenticLoop({ ...params, tokenGrantScopes, taskExecutionFence,
+      toolsForProvider: params.toolsForProvider.filter(tool => tool.function.name === writer),
+      terminalToolPolicy: { ...params.terminalToolPolicy, minimumSuccessfulReaderCalls: 0 } });
+    const options = vi.mocked(routeAndCall).mock.calls[0]![3];
+    expect(options?.tools).toEqual(params.toolsForProvider.filter(tool => tool.function.name === writer));
+    expect(options?.mcpSession).toMatchObject({ admittedTokenGrantScopes: tokenGrantScopes, taskExecutionFence,
+      taskRunId: TASK_RUN_ID });
+    expect(options?.mcpSession?.admittedTokenGrantScopes).not.toBe(tokenGrantScopes);
+  });
+
   it("AC-1: a CLI turn whose only tool calls were native reaches resolveTerminalTextExit with those calls in its records", async () => {
     // Rows that must NOT be folded in: an earlier attempt on the same TaskRun
     // (before this turn started) and a concurrent reviewer's run.

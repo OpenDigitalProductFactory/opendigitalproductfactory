@@ -12,6 +12,7 @@
 import { prisma as realPrisma } from "@dpf/db";
 import { summarizeOutcomes, type Outcome } from "./action-outcome-map";
 import { isLiveStatus, TASK_LIVE_STATES } from "@/lib/tak/task-states";
+import { roomOfThreadContext } from "@/lib/work-management/room-ai-spend";
 
 const QUIET_SIGNAL_DAYS = 5;
 const LAST_ACTED_LOOKBACK_DAYS = 30;
@@ -51,10 +52,26 @@ export type WorkforcePlatformRun = {
   lastHeartbeatAt: string | null;
 };
 
+export type WorkforceWorkroom = {
+  capsuleId: string;
+  title: string;
+  objective: string;
+  status: string;
+  executorKind: string | null;
+  executorRef: string | null;
+  taskRunId: string | null;
+  updatedAt: string;
+  recency: "current" | "recent";
+  tokensToday: number;
+  costToday: number;
+};
+
 export type WorkforceActivity = {
   capturedAt: string;
   working: WorkforceCoworker[];
   quiet: WorkforceCoworker[];
+  /** Governed work retained by its Workroom, including recently completed work. */
+  workrooms?: WorkforceWorkroom[];
   /** Live runs with no coworker owner, newest first. */
   platformWork: WorkforcePlatformRun[];
   pulse: {
@@ -64,6 +81,10 @@ export type WorkforceActivity = {
     /** Every TokenUsage row today — attributed or not. */
     tokensToday: number;
     costToday: number;
+    tokensRoster?: number;
+    costRoster?: number;
+    tokensWorkroom?: number;
+    costWorkroom?: number;
     /**
      * Tokens today whose agentId is not a roster coworker ("unknown", a
      * retired agent, a system caller). Non-zero means an inference path is
@@ -94,6 +115,7 @@ export { BREAK_FIX_SHARE_FINDING_THRESHOLD } from "./break-fix-share";
 type WorkforcePrisma = {
   agent: { findMany: (args: unknown) => Promise<AgentRow[]> };
   taskRun: { findMany: (args: unknown) => Promise<TaskRunRow[]> };
+  workroom: { findMany: (args: unknown) => Promise<WorkroomRow[]> };
   toolExecution: { groupBy: (args: unknown) => Promise<GroupRow[]> };
   tokenUsage: { groupBy: (args: unknown) => Promise<GroupRow[]> };
   delegationChain: { groupBy: (args: unknown) => Promise<ActorCountRow[]> };
@@ -130,8 +152,19 @@ type TaskRunRow = {
   routeContext?: string | null;
   workrooms?: Array<{ capsuleId: string }>;
 };
+type WorkroomRow = {
+  capsuleId: string;
+  title: string;
+  objective: string;
+  status: string;
+  executorKind: string | null;
+  executorRef: string | null;
+  taskRunId: string | null;
+  updatedAt: Date;
+};
 type GroupRow = {
   agentId: string;
+  contextKey?: string | null;
   toolName?: string;
   _count?: { _all: number };
   _sum?: { inputTokens: number | null; outputTokens: number | null; costUsd: number | null };
@@ -158,6 +191,7 @@ export async function loadWorkforceActivity(
     handoffRows,
     evidenceRows,
     doneWeek,
+    workroomRows,
   ] = await Promise.all([
     prisma.agent.findMany({
       where: { archived: false, type: "coworker" },
@@ -210,7 +244,7 @@ export async function loadWorkforceActivity(
       _max: { createdAt: true },
     }),
     prisma.tokenUsage.groupBy({
-      by: ["agentId"],
+      by: ["agentId", "contextKey"],
       where: { createdAt: { gte: startOfDay } },
       _sum: { inputTokens: true, outputTokens: true, costUsd: true },
     }),
@@ -236,6 +270,27 @@ export async function loadWorkforceActivity(
     prisma.backlogItem.findMany({
       where: { status: "done", completedAt: { gte: weekFloor } },
       select: { id: true },
+    }),
+    prisma.workroom.findMany({
+      where: {
+        archivedAt: null,
+        OR: [
+          { status: { notIn: ["complete", "abandoned", "archived"] } },
+          { updatedAt: { gte: startOfDay } },
+        ],
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 30,
+      select: {
+        capsuleId: true,
+        title: true,
+        objective: true,
+        status: true,
+        executorKind: true,
+        executorRef: true,
+        taskRunId: true,
+        updatedAt: true,
+      },
     }),
   ]);
   const doneWeekIds = doneWeek.map((row) => row.id);
@@ -315,15 +370,25 @@ export async function loadWorkforceActivity(
   const lastActedMap = new Map<string, Date | null>(
     lastActedByAgent.map((r) => [r.agentId, r._max?.createdAt ?? null]),
   );
-  const tokensMap = new Map<string, { tokens: number; cost: number }>(
-    tokensByAgent.map((r) => [
-      r.agentId,
-      {
-        tokens: (r._sum?.inputTokens ?? 0) + (r._sum?.outputTokens ?? 0),
-        cost: r._sum?.costUsd ?? 0,
-      },
-    ]),
-  );
+  const tokensMap = new Map<string, { tokens: number; cost: number }>();
+  const tokensByRoom = new Map<string, { tokens: number; cost: number }>();
+  for (const row of tokensByAgent) {
+    const use = {
+      tokens: (row._sum?.inputTokens ?? 0) + (row._sum?.outputTokens ?? 0),
+      cost: row._sum?.costUsd ?? 0,
+    };
+    const agentUse = tokensMap.get(row.agentId) ?? { tokens: 0, cost: 0 };
+    agentUse.tokens += use.tokens;
+    agentUse.cost += use.cost;
+    tokensMap.set(row.agentId, agentUse);
+    const room = roomOfThreadContext(row.contextKey);
+    if (room) {
+      const roomUse = tokensByRoom.get(room) ?? { tokens: 0, cost: 0 };
+      roomUse.tokens += use.tokens;
+      roomUse.cost += use.cost;
+      tokensByRoom.set(room, roomUse);
+    }
+  }
 
   const delegatedByAgent = countByActor(delegatedRows, "fromAgentId");
   const handoffsByAgent = countByActor(handoffRows, "fromAgentId");
@@ -337,14 +402,42 @@ export async function loadWorkforceActivity(
   let costToday = 0;
   let tokensUnattributed = 0;
   let costUnattributed = 0;
-  for (const [agentId, tok] of tokensMap) {
+  let tokensRoster = 0;
+  let costRoster = 0;
+  let tokensWorkroom = 0;
+  let costWorkroom = 0;
+  for (const row of tokensByAgent) {
+    const tok = {
+      tokens: (row._sum?.inputTokens ?? 0) + (row._sum?.outputTokens ?? 0),
+      cost: row._sum?.costUsd ?? 0,
+    };
     tokensToday += tok.tokens;
     costToday += tok.cost;
-    if (!rosterIds.has(agentId)) {
+    if (roomOfThreadContext(row.contextKey)) {
+      tokensWorkroom += tok.tokens;
+      costWorkroom += tok.cost;
+    } else if (rosterIds.has(row.agentId)) {
+      tokensRoster += tok.tokens;
+      costRoster += tok.cost;
+    } else {
       tokensUnattributed += tok.tokens;
       costUnattributed += tok.cost;
     }
   }
+
+  const terminalWorkroomStatuses = new Set(["complete", "abandoned", "archived"]);
+  const workrooms: WorkforceWorkroom[] = workroomRows.map((room) => {
+    const use = tokensByRoom.get(room.capsuleId) ?? { tokens: 0, cost: 0 };
+    return {
+      ...room,
+      updatedAt: room.updatedAt.toISOString(),
+      recency: terminalWorkroomStatuses.has(room.status) ? "recent" : "current",
+      tokensToday: use.tokens,
+      costToday: use.cost,
+    };
+  });
+  const workroomTaskRunIds = new Set(workroomRows.flatMap((room) => room.taskRunId ? [room.taskRunId] : []));
+  const unattachedPlatformWork = platformWork.filter((run) => !workroomTaskRunIds.has(run.taskRunId));
 
   const working: WorkforceCoworker[] = [];
   const quiet: WorkforceCoworker[] = [];
@@ -410,16 +503,21 @@ export async function loadWorkforceActivity(
     capturedAt: new Date(nowMs).toISOString(),
     working,
     quiet,
-    platformWork,
+    workrooms,
+    platformWork: unattachedPlatformWork,
     pulse: {
       workingCount: working.length,
       totalCount: agents.length,
       actionsToday,
       tokensToday,
       costToday,
+      tokensRoster,
+      costRoster,
+      tokensWorkroom,
+      costWorkroom,
       tokensUnattributed,
       costUnattributed,
-      platformWorkCount: platformWork.length,
+      platformWorkCount: unattachedPlatformWork.length,
       quietOverThresholdCount: quietOverThreshold,
       coworkersWithoutOwnerCount: withoutOwner,
       doneWeekCount: doneWeekIds.length,

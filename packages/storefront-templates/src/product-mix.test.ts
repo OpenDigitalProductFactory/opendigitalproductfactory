@@ -4,6 +4,7 @@ import type { ArchetypeDefinition } from "./types";
 import {
   parseProductMix,
   resolveProductMix,
+  toProductMixKey,
   type ProductMixDefinition,
 } from "./product-mix";
 import { ALL_ARCHETYPES } from "./archetypes";
@@ -133,5 +134,22 @@ describe("parseProductMix", () => {
     ],
   ])("rejects invalid or duplicate line metadata", (value, expected) => {
     expect(() => parseProductMix(value)).toThrow(expected);
+  });
+});
+
+describe("toProductMixKey", () => {
+  it("normalises names to lowercase hyphenated keys without edge hyphens", () => {
+    expect(toProductMixKey("  Café & Bakery!  ")).toBe("cafe-bakery");
+    expect(toProductMixKey("--Hair--Cut--")).toBe("hair-cut");
+    expect(toProductMixKey("___")).toBe("");
+    expect(toProductMixKey("a")).toBe("a");
+  });
+
+  it("trims edge hyphens without a backtracking regular expression (CodeQL #528)", () => {
+    expect(toProductMixKey.toString()).not.toMatch(/\^-\+\|-\+\$/);
+    const hostile = `${"-".repeat(50_000)}x${"!-".repeat(50_000)}`;
+    const started = performance.now();
+    expect(toProductMixKey(hostile)).toBe("x");
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 });

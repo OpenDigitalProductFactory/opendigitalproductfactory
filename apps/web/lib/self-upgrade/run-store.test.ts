@@ -45,6 +45,7 @@ import {
   startRun,
   completeRun,
   recordPromoterReadiness,
+  recordMigrationHandoffLaunchStamp,
   recordReassessmentCompatibility,
   recordRunRecoveryPoint,
   sanitizePromoterReadinessReport,
@@ -83,6 +84,21 @@ describe("self-upgrade evidence merging", () => {
     await recordPromoterReadiness("SUR-1", report);
     const evidence = mocks.update.mock.calls[0][0].data.completionEvidence;
     expect(evidence).toMatchObject({ recoveryPoint: { status: "ok" }, rollback: { status: "ok" }, future: 42, readiness: { stage: "preflight", result: "failed", attempts: [{ result: "ready", completedAt: "earlier", failureCodes: [] }] } });
+  });
+
+  it("records the launch-stamped handoff beside readiness and leaves every other key alone (BI-2074D622)", async () => {
+    // SUR-4DC82F3C's shape, relative to now: readiness signed a 10-minute window,
+    // the recovery point took most of it, the swap re-stamped a full window at launch.
+    const at = (secondsFromNow: number) => new Date(Date.now() + secondsFromNow * 1000).toISOString();
+    const readinessWindow = { issuedAt: at(-596), expiresAt: at(4) };
+    const signed = { envelope: { runId: "SUR-1", ...readinessWindow, sourceHash: "a".repeat(64) }, signature: "readiness-sig" };
+    const launched = { envelope: { ...signed.envelope, issuedAt: at(0), expiresAt: at(600) }, signature: "launch-sig" };
+    mocks.findUnique.mockResolvedValue({ completionEvidence: { readiness: { result: "ready", migrationHandoff: signed, attempts: [] }, recoveryPoint: { status: "ok" }, future: 42 } });
+    await recordMigrationHandoffLaunchStamp("SUR-1", { migrationHandoff: launched, readinessWindow });
+    expect(mocks.update.mock.calls[0][0].data.completionEvidence).toEqual({
+      recoveryPoint: { status: "ok" }, future: 42,
+      readiness: { result: "ready", attempts: [], migrationHandoff: launched, launchStamp: { restampedAt: launched.envelope.issuedAt, expiresAt: launched.envelope.expiresAt, readinessWindow } },
+    });
   });
 
   it("preserves readiness when the recovery point is recorded", async () => {

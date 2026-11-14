@@ -124,3 +124,35 @@ describe("scoped-test repair", () => {
     expect(decideGauntletRepair(afterGuards, { ...state }).action).toBe("escalate");
   });
 });
+
+// BI-2CCD5C0E: a review refresh that conflicts with upstream main is handed
+// back to the coding agent to rebase and resolve, through the same bound.
+describe("refresh-conflict repair", () => {
+  const conflict = {
+    treeSha: null,
+    recordId: null,
+    failedGuards: ["Refresh onto upstream main"],
+    source: "conflict" as const,
+    ontoRef: "client/abc",
+    findings: [{ severity: "important", description: "Conflicts with upstream main in apps/web/lib/coworker-self-assessment/assessment-service.ts" }],
+  };
+
+  it("briefs a rebase onto the named ref that resolves each conflicted file and never drops the build's commits", () => {
+    const task = repairTaskFor({ ...conflict, attempts: 1 }, "");
+    expect(task.title).toMatch(/conflict/i);
+    expect(task.implement).toContain("git rebase client/abc");
+    expect(task.implement).toContain("apps/web/lib/coworker-self-assessment/assessment-service.ts");
+    expect(task.implement).toMatch(/never.*--skip/i);
+    expect(task.verify).toMatch(/client\/abc/);
+  });
+
+  it("keeps the conflict source and its rebase target when the state is read back", () => {
+    const read = readGauntletRepairState({ gauntletRepair: { ...conflict, attempts: 1 } });
+    expect(read).toMatchObject({ source: "conflict", ontoRef: "client/abc", attempts: 1 });
+  });
+
+  it("escalates with the conflicted files named once the bound is spent", () => {
+    const issues = escalationIssuesFor(conflict, GAUNTLET_REPAIR_MAX_ATTEMPTS);
+    expect(issues[0]?.description).toMatch(/still conflicts.*assessment-service\.ts/i);
+  });
+});

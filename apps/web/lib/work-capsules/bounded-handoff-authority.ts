@@ -78,15 +78,49 @@ export async function readHandoffAuthority(input: {
  * into an owner approval (BI-F1FC0B62). The snapshot still binds the exact
  * expiry, so a renewal or reacquire between the two steps refuses.
  */
-export function snapshotHandoff(room: HandoffRoom, boundary: Record<string, unknown>, now: Date, ownerPrincipalId: string | null): HandoffSnapshot {
+export function snapshotHandoff(room: HandoffRoom, boundary: Record<string, unknown>, now: Date, ownerPrincipalId: string | null, holderKind: LeaseHolderKind = "unknown"): HandoffSnapshot {
   const lapsed = !room.leaseExpiresAt || room.leaseExpiresAt.getTime() <= now.getTime();
   if (!room.leaseHolderPrincipalId || !room.leaseExpiresAt || !room.executorKind || !room.executorRef
-    || (lapsed && room.leaseHolderPrincipalId !== ownerPrincipalId)) return fail("handoff-lease-expired", "The room needs a live source lease, or a lapsed one still held by the same owner, before requesting or acknowledging a handoff.");
+    || (lapsed && !lapsedLeaseLeavesRoomUnheld(room, now, ownerPrincipalId, holderKind))) return fail("handoff-lease-expired", "The room needs a live source lease, or a lapsed one held by the same owner or by a platform coworker, before requesting or acknowledging a handoff.");
   const snapshot = { leaseHolderPrincipalId: room.leaseHolderPrincipalId, leaseExpiresAt: room.leaseExpiresAt.toISOString(), executorKind: room.executorKind, executorRef: room.executorRef, boundary };
   return { ...snapshot, digest: handoffDigest(snapshot) };
 }
-export function assertRequestedSource(room: HandoffRoom, command: BoundedHandoffRequest, ownerPrincipalId: string | null) {
-  if (room.leaseHolderPrincipalId !== ownerPrincipalId || command.expectedLeaseHolderPrincipalId !== room.leaseHolderPrincipalId || command.expectedExecutorKind !== room.executorKind || command.expectedExecutorRef !== room.executorRef) return fail("handoff-source-changed", "The source executor or owner lease changed. Read the room and request a fresh handoff.");
+export function assertRequestedSource(room: HandoffRoom, command: BoundedHandoffRequest, ownerPrincipalId: string | null, now?: Date, holderKind: LeaseHolderKind = "unknown") {
+  const heldByOwnerOrNobody = room.leaseHolderPrincipalId === ownerPrincipalId
+    || (now !== undefined && lapsedLeaseLeavesRoomUnheld(room, now, ownerPrincipalId, holderKind));
+  if (!heldByOwnerOrNobody || command.expectedLeaseHolderPrincipalId !== room.leaseHolderPrincipalId || command.expectedExecutorKind !== room.executorKind || command.expectedExecutorRef !== room.executorRef) return fail("handoff-source-changed", "The source executor or owner lease changed. Read the room and request a fresh handoff.");
+}
+
+/** What kind of principal holds a room's lease, read from `Principal.kind`. */
+export type LeaseHolderKind = "human" | "agent" | "unknown";
+
+/**
+ * True when nobody but the owner holds the room: the lease is the owner's, or
+ * it has lapsed and its holder is a platform coworker (BI-53BED66C). A room's
+ * drive dispatches stages to coworkers such as the Software Engineer, whose
+ * lease then lapses; that coworker acts for no person, so its lapsed lease must
+ * not turn the owner's own handover into an approval (envelope
+ * cmwfdcrs400580ep4k6we4wux). A live coworker lease, or any lease held by a
+ * person other than the owner, still counts as held.
+ */
+export function lapsedLeaseLeavesRoomUnheld(
+  room: Pick<HandoffRoom, "leaseHolderPrincipalId" | "leaseExpiresAt">,
+  now: Date, ownerPrincipalId: string | null, holderKind: LeaseHolderKind,
+): boolean {
+  if (!room.leaseHolderPrincipalId) return true;
+  if (room.leaseHolderPrincipalId === ownerPrincipalId) return true;
+  const lapsed = !room.leaseExpiresAt || room.leaseExpiresAt.getTime() <= now.getTime();
+  return lapsed && holderKind === "agent";
+}
+
+/** Read the lease holder's principal kind; locked FOR SHARE inside a handoff transaction. */
+export async function readLeaseHolderKind(db: CapsuleDb, principalId: string | null, lock: boolean): Promise<LeaseHolderKind> {
+  if (!principalId || !db.$queryRaw) return "unknown";
+  const rows = (lock
+    ? await db.$queryRaw`SELECT "kind" FROM "Principal" WHERE "id" = ${principalId} FOR SHARE`
+    : await db.$queryRaw`SELECT "kind" FROM "Principal" WHERE "id" = ${principalId}`) as { kind?: unknown }[];
+  const kind = rows[0]?.kind;
+  return kind === "agent" || kind === "human" ? kind : "unknown";
 }
 export function assertHandoffSnapshot(current: HandoffSnapshot, stored: HandoffSnapshot) {
   if (current.leaseHolderPrincipalId !== stored.leaseHolderPrincipalId || current.leaseExpiresAt !== stored.leaseExpiresAt) return fail("handoff-lease-snapshot-changed", "The room lease was renewed or changed. Read current state and submit a fresh request for receiver acknowledgement.");

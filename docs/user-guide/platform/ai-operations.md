@@ -19,7 +19,7 @@ On narrow screens, the header's **Account and help** button contains page help, 
 
 ## Workflow
 
-1. Start at **AI Workforce** (`/platform/ai/overview`) when the job is to find, compare, configure, or work with a coworker. The directory leads with work, interaction, business-type availability, and approval posture.
+1. Start at **AI Coworkers** (`/workforce`) when the job is to find or work with a coworker. Use its **Activity** view for current and recent Workroom-backed execution. Open **AI Operations** when the job is fleet-wide configuration, routing, governance, or runtime diagnosis.
 2. Review Capacity Continuity when paid AI capacity is idle, blocked, or expected to keep working during holidays, vacations, business events, after-hours windows, or owner inactivity. Each mode is described by what your people are doing — **Employees are available** (coworkers assist and prepare decisions) versus **Employees are busy** (coworkers continue safe work and batch non-urgent interruptions).
 3. Use the coworker record's **Capabilities**, **Autonomy & Governance**, and **Activity** sections before opening fleet-wide technical pages.
 4. Review history or systems health when a result looks wrong, slow, or inconsistent.
