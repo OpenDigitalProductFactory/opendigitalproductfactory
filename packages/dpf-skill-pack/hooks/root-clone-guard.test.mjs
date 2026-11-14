@@ -413,7 +413,7 @@ test("a recursive delete aimed at the root clone is DENIED from a sibling-base w
   const cwd = "/Users/x/dpf-worktrees/some-slug";
   const gitCommonDir = () => "/Users/x/dpf/.git";
   for (const command of ["rm -rf /Users/x/dpf", "rm -rf /Users/x/dpf/apps", "rm -rf /Users/x/dpf/packages"]) {
-    const verdict = decide({ toolName: "Bash", toolInput: { command }, cwd, env: {}, isDir: () => false, gitCommonDir });
+    const verdict = decide({ command, cwd, env: {}, isDir: () => false, gitCommonDir });
     assert.equal(verdict.block, true, `must block from a sibling worktree: ${command}`);
   }
 });
@@ -422,7 +422,7 @@ test("no over-blocking: a delete outside the clone's shared area still passes fr
   const cwd = "/Users/x/dpf-worktrees/some-slug";
   const gitCommonDir = () => "/Users/x/dpf/.git";
   for (const command of ["rm -rf ./build", "rm -rf /tmp/whatever", "rm -rf dist"]) {
-    const verdict = decide({ toolName: "Bash", toolInput: { command }, cwd, env: {}, isDir: () => false, gitCommonDir });
+    const verdict = decide({ command, cwd, env: {}, isDir: () => false, gitCommonDir });
     assert.equal(verdict.block, false, `must not block: ${command}`);
   }
 });
