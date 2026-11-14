@@ -212,6 +212,35 @@ export const buildReviewVerification = jobs.createFunction(
         });
         return { status: "finalize-incomplete", finalize: finalize.status, repair: routed };
       }
+      // BI-09FB398D: a risk outside this change that the escalation gate found
+      // damaging (critical) cannot be repaired by the build's agent, so it goes
+      // to a person now through the same seam, not after spent repair rounds.
+      if (finalize.status === "risk-needs-owner") {
+        const escalated = await step.run("escalate-damaging-out-of-scope-risk", async () => {
+          const { prisma } = await import("@dpf/db");
+          const row = await prisma.featureBuild.findUnique({
+            where: { buildId },
+            select: { id: true, phase: true, title: true, originatingBacklogItemId: true },
+          });
+          if (!row || row.phase !== "review") return "not-in-review";
+          const { escalateBuildToHuman } = await import("@/lib/build/escalate-build-to-human");
+          await escalateBuildToHuman({
+            buildPk: row.id,
+            buildId,
+            featureTitle: row.title,
+            originatingBacklogItemId: row.originatingBacklogItemId,
+            phase: "review",
+            rounds: 0,
+            issues: finalize.risks.map((risk) => ({
+              severity: risk.severity,
+              description: `Unmitigated risk outside this change, judged damaging: ${risk.key}: ${risk.trigger} → ${risk.effect}. ${risk.rationale}`,
+            })),
+            log: (summary: string) => prisma.buildActivity.create({ data: { buildId, tool: "review-verification", summary: summary.slice(0, 1000) } }).then(() => undefined).catch(() => undefined),
+          });
+          return "escalated";
+        });
+        return { status: "finalize-incomplete", finalize: finalize.status, escalation: escalated };
+      }
       // BI-33B54E4B: a confirmed scoped-test or typecheck failure goes back to
       // the coding agent with the failing tests named, through the same bound,
       // then to the owner. Before this it ended here and the sweep re-ran the
