@@ -86,17 +86,23 @@ describe("runtime capability protocol probe", () => {
 
   it("the packaged entrypoint returns support without installing or applying", async () => {
     const dir = await mkdtemp(join(tmpdir(), "dpf-protocol-entrypoint-"));
-    const root = resolve(__dirname, "../../../..");
-    const result = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-protocol-info"], {
-      encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, DPF_CANDIDATE_SOURCE_SHA: artifact.sourceSha, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "absent-secret") },
-    });
-    expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({ sourceSha: artifact.sourceSha, signingVersions: [1, 2], applyVersions: [1, 2], reconciliationVersions: [2] });
-    expect(readdirSync(dir)).toEqual([]);
-    const mixed = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-transition", "RCT-test", "--runtime-capability-protocol-info"], { encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir } });
-    expect(mixed.status, mixed.stderr).toBe(64);
-    expect(mixed.stderr).toContain("invalid_runtime_protocol_probe_arguments");
-    expect(readdirSync(dir)).toEqual([]);
+    try {
+      const root = resolve(__dirname, "../../../..");
+      const result = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-protocol-info"], {
+        encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir, DPF_CANDIDATE_SOURCE_SHA: artifact.sourceSha, DPF_RUNTIME_TRANSITION_SECRET_FILE: join(dir, "absent-secret") },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({ sourceSha: artifact.sourceSha,
+        signingVersions: [1, 2, 3], applyVersions: [1, 2, 3], reconciliationVersions: [2, 3], imageReconciliationVersions: [3],
+        imageQualifierSha256: createHash("sha256").update(readFileSync(join(root, "scripts/promoter-epoch-evidence.mjs")))
+          .update("\0").update(readFileSync(join(root, "scripts/lib/git.mjs"))).digest("hex"),
+      });
+      expect(readdirSync(dir)).toEqual([]);
+      const mixed = spawnSync(testBash, [join(root, "scripts/promote.sh"), "--runtime-capability-transition", "RCT-test", "--runtime-capability-protocol-info"], { encoding: "utf8", env: { ...process.env, DPF_PROMOTER_STATE_DIR: dir } });
+      expect(mixed.status, mixed.stderr).toBe(64);
+      expect(mixed.stderr).toContain("invalid_runtime_protocol_probe_arguments");
+      expect(readdirSync(dir)).toEqual([]);
+    } finally { await rm(dir, { recursive: true, force: true }); }
   });
 });
 

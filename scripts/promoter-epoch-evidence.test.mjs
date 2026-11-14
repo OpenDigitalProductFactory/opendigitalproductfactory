@@ -2,11 +2,75 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { captureMaintenanceEpoch, finishMaintenanceEpoch, persistMaintenanceEpoch,
   resolveEpochDockerInvocation, runEpochDocker } from './promoter-epoch-evidence.mjs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import * as imageEvidence from './promoter-epoch-evidence.mjs';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const secret = 'a'.repeat(64);
+
+describe('selected runtime image artifact qualification', () => {
+  const sourceSha = 'a'.repeat(40), inputTreeOid = 'b'.repeat(40), imageId = `sha256:${'c'.repeat(64)}`;
+  const reference = `ghcr.io/fixture/dpf-browser-use@sha256:${'d'.repeat(64)}`;
+  const details = { id: imageId, os: 'linux', architecture: 'amd64', sourceSha, inputTreeOid, repoDigests: [reference] };
+
+  it('prepares only immutable browser source inputs and qualifies the exact resulting image ID', async () => {
+    assert.equal(typeof imageEvidence.prepareRuntimeServiceImage, 'function', 'native selected-image preparation is not implemented');
+    const stateDir = await mkdtemp(join(tmpdir(), 'dpf-image-proof-'));
+    const calls = [], gitCalls = [], archive = Buffer.from('bounded immutable source archive');
+    try {
+      const result = await imageEvidence.prepareRuntimeServiceImage({ sourceSha, platform: 'linux/amd64', stateDir,
+        source: { kind: 'source', sourceSha },
+        runGit: async args => { gitCalls.push(args); return args.includes('rev-parse') ? `${inputTreeOid}\n` : archive; },
+        runDocker: async (args, options) => {
+          calls.push(args);
+          if (args[0] === 'build') { assert.deepEqual(options.input, archive); await writeFile(args[args.indexOf('--iidfile') + 1], `${imageId}\n`); return ''; }
+          assert.deepEqual(args.slice(0, 3), ['image', 'inspect', imageId]);
+          return JSON.stringify(details);
+        },
+      });
+      assert.deepEqual(gitCalls, [['-c', 'safe.directory=/host-source', 'rev-parse', `${sourceSha}:services/browser-use`], ['-c', 'safe.directory=/host-source', 'archive', '--format=tar', `${sourceSha}:services/browser-use`]]);
+      assert.equal(calls.filter(args => args[0] === 'build').length, 1);
+      assert(calls[0].includes('--platform') && calls[0].includes('linux/amd64'));
+      assert.equal(calls[0].at(-1), '-');
+      assert(calls.every(args => !args.includes('compose') && !args.includes('up')));
+      assert.deepEqual(result, { imageId, source: { kind: 'source', sourceSha, inputTreeOid } });
+      assert.deepEqual(await readdir(stateDir), []);
+    } finally { await rm(stateDir, { recursive: true, force: true }); }
+  });
+
+  it('uses a pinned published image without source builds or mutable-tag qualification', async () => {
+    assert.equal(typeof imageEvidence.prepareRuntimeServiceImage, 'function');
+    const stateDir = await mkdtemp(join(tmpdir(), 'dpf-image-published-')), calls = [];
+    try {
+      const result = await imageEvidence.prepareRuntimeServiceImage({ sourceSha, platform: 'linux/amd64', stateDir,
+        source: { kind: 'published', sourceSha, reference },
+        runGit: async () => { throw new Error('published preparation must not read Git'); },
+        runDocker: async args => { calls.push(args); return args[0] === 'pull' ? '' : JSON.stringify(details); },
+      });
+      assert.deepEqual(calls[0], ['pull', '--platform', 'linux/amd64', reference]);
+      assert.equal(calls.some(args => args.includes('build') || args.includes('up')), false);
+      assert.deepEqual(result, { imageId, source: { kind: 'published', sourceSha, reference } });
+    } finally { await rm(stateDir, { recursive: true, force: true }); }
+  });
+
+  for (const fault of ['source', 'platform', 'image', 'manifest', 'context']) it(`refuses wrong ${fault} artifact proof`, async () => {
+    assert.equal(typeof imageEvidence.prepareRuntimeServiceImage, 'function');
+    const stateDir = await mkdtemp(join(tmpdir(), 'dpf-image-refusal-'));
+    try {
+      const wrong = { ...details };
+      if (fault === 'source') wrong.sourceSha = 'e'.repeat(40);
+      if (fault === 'platform') wrong.architecture = 'arm64';
+      if (fault === 'image') wrong.id = 'unknown';
+      if (fault === 'manifest') wrong.repoDigests = [];
+      const source = { kind: 'published', sourceSha, reference, ...(fault === 'context' ? { contextPath: '/caller-source' } : {}) };
+      await assert.rejects(imageEvidence.prepareRuntimeServiceImage({ sourceSha, platform: 'linux/amd64', stateDir, source,
+        runDocker: async () => JSON.stringify(wrong), runGit: async () => { throw new Error('not a source build'); },
+      }), /runtime_service_image_unproven/);
+      assert.deepEqual(await readdir(stateDir), []);
+    } finally { await rm(stateDir, { recursive: true, force: true }); }
+  });
+});
 const identity = { runId: 'SUR-EXAMPLE', targetSha: 'a'.repeat(40), promoterDigest: `sha256:${'b'.repeat(64)}`,
   recoveryPointDigest: 'c'.repeat(64), project: 'dpf' };
 function harness() {
