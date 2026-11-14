@@ -55,9 +55,9 @@ describe("buildNetworkTopologyModel", () => {
 
   it("traces each host/entity to its data-model element (cross-layer)", () => {
     expect(model.crossLayerRelationships).toEqual([
-      { fromKey: "network:host:n1", toKey: "prisma:model:EdgeNode", relSlug: "traces" },
-      { fromKey: "network:entity:e1", toKey: "prisma:model:InventoryEntity", relSlug: "traces" },
-      { fromKey: "network:entity:e2", toKey: "prisma:model:InventoryEntity", relSlug: "traces" },
+      { fromKey: "network:host:n1", toKey: "prisma:model:EdgeNode", relSlug: "traces", traceKind: "instance-of" },
+      { fromKey: "network:entity:e1", toKey: "prisma:model:InventoryEntity", relSlug: "traces", traceKind: "instance-of" },
+      { fromKey: "network:entity:e2", toKey: "prisma:model:InventoryEntity", relSlug: "traces", traceKind: "instance-of" },
     ]);
   });
 });

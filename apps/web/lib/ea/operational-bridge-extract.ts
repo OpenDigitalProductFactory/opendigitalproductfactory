@@ -105,7 +105,7 @@ export function buildOperationalGraphModel(targets: RuntimeTargetFact[]): SysmlD
       });
       relationships.push({ fromKey: serviceKey, toKey: instanceKey, relSlug: "contains" });
       // Cross-layer: this actual instance traces to the RuntimeTarget data-model type.
-      crossLayerRelationships.push({ fromKey: instanceKey, toKey: RUNTIME_TARGET_MODEL_KEY, relSlug: "traces" });
+      crossLayerRelationships.push({ fromKey: instanceKey, toKey: RUNTIME_TARGET_MODEL_KEY, relSlug: "traces", traceKind: "instance-of" });
     }
   }
 
