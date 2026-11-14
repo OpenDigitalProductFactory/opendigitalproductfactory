@@ -123,6 +123,11 @@ const REL_TYPES: RelTypeDef[] = [
   { slug: "aggregates",       name: "Aggregates",       neoType: "AGGREGATES",      description: "Whole groups parts that can exist without it (ArchiMate aggregation)" },
   { slug: "specializes",      name: "Specializes",      neoType: "SPECIALIZES",     description: "Source is a kind of the target (ArchiMate specialization)" },
   { slug: "associated_with",  name: "Associated With",  neoType: "ASSOCIATED_WITH", description: "ArchiMate association; requires a role naming the specific relation (BI-E487F6D9)" },
+  // BI-52280538: governance evidence is provenance (W3C PROV-O), which ArchiMate does not type.
+  // Exchanged as named associations carrying dpf:relationshipType (BI-E487F6D9).
+  { slug: "evidenced_by",     name: "Evidenced By",     neoType: "EVIDENCED_BY",    description: "The control's operation is demonstrated by the evidence record (PROV-O: evidence wasGeneratedBy the control's activity)" },
+  { slug: "generates",        name: "Generates",        neoType: "GENERATES",       description: "The coworker's activity produced the evidence record (PROV-O generated)" },
+  { slug: "attributed_to",    name: "Attributed To",    neoType: "ATTRIBUTED_TO",   description: "The evidence record is the responsibility of the actor or coworker (PROV-O wasAttributedTo)" },
   { slug: "influences",       name: "Influences",       neoType: "INFLUENCES",      description: "Motivation element influences another element" },
   { slug: "triggers",         name: "Triggers",         neoType: "TRIGGERS",        description: "Temporal or causal trigger between behaviours" },
   { slug: "flows_to",         name: "Flows To",         neoType: "FLOWS_TO",        description: "Information or material flow" },
@@ -139,7 +144,6 @@ const RULES: RuleDef[] = [
   // Application → Business
   ["application_component", "business_capability",   "realizes"],
   ["application_service",   "business_capability",   "realizes"],
-  ["application_component", "business_capability",   "associated_with"],
   // Application → Technology
   ["application_component", "technology_node",       "depends_on"],
   ["application_component", "technology_service",    "depends_on"],
@@ -157,10 +161,9 @@ const RULES: RuleDef[] = [
   ["data_object",           "data_object",           "composed_of"],
   // Business internal
   ["business_actor",        "business_role",         "assigned_to"],
-  ["business_capability",   "business_capability",   "associated_with"],
   ["business_capability",   "business_capability",   "composed_of"],
   ["value_stream",          "value_stream_stage",    "composed_of"],
-  ["value_stream",          "business_capability",   "associated_with"],
+  ["business_capability",   "value_stream",          "serves"],
   // Motivation → Strategy / Business
   ["goal",                  "business_capability",   "influences"],
   ["goal",                  "capability",            "influences"],
@@ -168,12 +171,13 @@ const RULES: RuleDef[] = [
   ["requirement",           "business_capability",   "influences"],
   ["constraint",            "application_component", "influences"],
   ["driver",                "goal",                  "influences"],
-  ["stakeholder",           "driver",                "associated_with"],
+  ["stakeholder",           "driver",                "influences"],
   ["principle",             "goal",                  "influences"],
   // Implementation & Migration
-  ["work_package",          "goal",                  "associated_with"],
-  ["work_package",          "deliverable",           "associated_with"],
-  ["plateau",               "business_capability",   "associated_with"],
+  ["work_package",          "goal",                  "influences"],
+  ["work_package",          "deliverable",           "realizes"],
+  ["plateau",               "business_capability",   "aggregates"],
+  // ArchiMate 3.2 §13.2 itself relates a gap to its plateaus by association; it needs a role.
   ["gap",                   "plateau",               "associated_with"],
   // Phase EA-2: Application behaviour rules
   ["application_function",    "application_component", "composed_of"],
@@ -191,36 +195,66 @@ const RULES: RuleDef[] = [
   ["digital_product", "technology_node",       "depends_on"],
   ["digital_product", "business_actor",        "assigned_to"],
   ["digital_product", "business_role",         "assigned_to"],
-  ["digital_product", "value_stream",          "associated_with"],
-  ["digital_product", "capability",            "associated_with"],
+  ["digital_product", "value_stream",          "serves"],
+  ["digital_product", "capability",            "realizes"],
   ["technology_service", "digital_product",    "serves"],
   // Phase EA-2 bridges to Digital Product
   ["digital_product", "business_service",      "realizes"],
   ["digital_product", "application_service",   "realizes"],
   ["digital_product", "application_function",  "composed_of"],
   ["digital_product", "information_object",    "accesses"],
-  ["digital_product", "ea_control",            "associated_with"],
+  // Complies with: an element realizes the control (ArchiMate realization of a constraint).
+  ["digital_product", "ea_control",            "realizes"],
   // Service Offering
   ["digital_product",  "service_offering",   "realizes"],
   ["service_offering", "business_actor",     "serves"],
-  ["service_offering", "contract",           "associated_with"],
+  ["service_offering", "contract",           "aggregates"],
   // Information Object / Governance
-  ["information_object", "ea_control",         "associated_with"],
+  ["information_object", "ea_control",         "realizes"],
   ["information_object", "event_evidence",     "realizes"],
-  ["ea_control",         "event_evidence",     "associated_with"],
+  ["ea_control",         "event_evidence",     "evidenced_by"],
   ["ea_control",         "digital_product",    "influences"],
   ["ea_control",         "information_object", "influences"],
   // Event/Evidence terminals (required for governance_audit traversal pattern)
-  ["event_evidence", "business_actor",  "associated_with"],
-  ["event_evidence", "ai_coworker",     "associated_with"],
+  ["event_evidence", "business_actor",  "attributed_to"],
+  ["event_evidence", "ai_coworker",     "attributed_to"],
   // AI Coworker
-  ["ai_coworker", "digital_product",       "associated_with"],
+  ["ai_coworker", "digital_product",       "serves"],
   ["ai_coworker", "application_component", "realizes"],
   ["ai_coworker", "business_role",         "assigned_to"],
-  ["ai_coworker", "ea_control",            "associated_with"],
-  ["ai_coworker", "event_evidence",        "associated_with"],
-  ["business_actor", "ai_coworker",        "associated_with"],
+  ["ai_coworker", "ea_control",            "realizes"],
+  ["ai_coworker", "event_evidence",        "generates"],
+  // The supervising human is accountable for the coworker.
+  ["business_actor", "ai_coworker",        "assigned_to"],
 ];
+
+/**
+ * Rules are upserted, never deleted, so an association rule this seed no longer declares
+ * would keep permitting a generic edge (BI-52280538). Delete only association rules of this
+ * notation that the current rule set does not contain; every other rule type is untouched.
+ */
+export async function pruneRetiredAssociationRules(
+  notationId: string,
+  associationTypeId: string | undefined,
+  rules: readonly RuleDef[],
+  etMap: ReadonlyMap<string, string>,
+  associationSlug = "associated_with",
+): Promise<number> {
+  if (!associationTypeId) return 0;
+  const keep = new Set(
+    rules.filter(([, , rel]) => rel === associationSlug).map(([from, to]) => `${etMap.get(from)}|${etMap.get(to)}`),
+  );
+  const existing = await prisma.eaRelationshipRule.findMany({
+    where: { relationshipTypeId: associationTypeId, fromElementType: { notationId } },
+    select: { id: true, fromElementTypeId: true, toElementTypeId: true },
+  });
+  const retired = existing.filter((r) => !keep.has(`${r.fromElementTypeId}|${r.toElementTypeId}`)).map((r) => r.id);
+  if (retired.length > 0) {
+    await prisma.eaRelationshipRule.deleteMany({ where: { id: { in: retired } } });
+    console.log(`Pruned ${retired.length} retired association rules`);
+  }
+  return retired.length;
+}
 
 /** Aggregation mirrors every composition rule; specialization joins each element type to itself. */
 export function derivedArchimateRules(rules: readonly RuleDef[]): RuleDef[] {
@@ -293,29 +327,29 @@ const DQ_RULES: DqRuleDef[] = [
   {
     elementTypeSlug: "information_object",
     name: "InformationObject should have a governing Control before production",
-    description: "An Information Object should be linked to a Control via associated_with before entering production",
+    description: "An Information Object should realize (comply with) a Control before entering production",
     lifecycleStage: "production",
     severity: "warn",
-    rule: { requires: { relationshipType: "associated_with", toElementType: "ea_control", minCount: 1 } },
+    rule: { requires: { relationshipType: "realizes", toElementType: "ea_control", minCount: 1 } },
   },
   {
     elementTypeSlug: "ai_coworker",
     name: "AiCoworker must have a BusinessRole and Control before production",
-    description: "An AI Coworker must be assigned_to a BusinessRole and associated_with at least one Control before entering production",
+    description: "An AI Coworker must be assigned_to a BusinessRole and realize (comply with) at least one Control before entering production",
     lifecycleStage: "production",
     severity: "error",
     rule: { requires: [
       { relationshipType: "assigned_to", toElementType: "business_role", minCount: 1 },
-      { relationshipType: "associated_with", toElementType: "ea_control", minCount: 1 },
+      { relationshipType: "realizes", toElementType: "ea_control", minCount: 1 },
     ]},
   },
   {
     elementTypeSlug: "ea_control",
     name: "Control should have at least one EventEvidence before production",
-    description: "A Control should be associated with at least one Event/Evidence record before entering production",
+    description: "A Control should be evidenced by at least one Event/Evidence record before entering production",
     lifecycleStage: "production",
     severity: "warn",
-    rule: { requires: { relationshipType: "associated_with", toElementType: "event_evidence", minCount: 1 } },
+    rule: { requires: { relationshipType: "evidenced_by", toElementType: "event_evidence", minCount: 1 } },
   },
 ];
 
@@ -448,14 +482,14 @@ const TRAVERSAL_PATTERNS: PatternDef[] = [
     description: "Trace an information object through its governing controls to evidence and responsible actors.",
     patternType: "governance_audit",
     steps: [
-      { elementTypeSlugs: ["information_object"],                refinementLevel: null,     relationshipTypeSlugs: ["associated_with"], direction: "outbound" },
-      { elementTypeSlugs: ["ea_control"],                         refinementLevel: null,     relationshipTypeSlugs: ["associated_with"], direction: "outbound" },
-      { elementTypeSlugs: ["event_evidence"],                     refinementLevel: "actual", relationshipTypeSlugs: ["associated_with"], direction: "outbound" },
+      { elementTypeSlugs: ["information_object"],                refinementLevel: null,     relationshipTypeSlugs: ["realizes"],       direction: "outbound" },
+      { elementTypeSlugs: ["ea_control"],                         refinementLevel: null,     relationshipTypeSlugs: ["evidenced_by"],   direction: "outbound" },
+      { elementTypeSlugs: ["event_evidence"],                     refinementLevel: "actual", relationshipTypeSlugs: ["attributed_to"],  direction: "outbound" },
       { elementTypeSlugs: ["business_actor", "ai_coworker"],      refinementLevel: null,     relationshipTypeSlugs: [],                 direction: "terminal" },
     ],
     forbiddenShortcuts: [
       "Any path from control to a record is not audit proof unless it passes through event_evidence with actual refinement level",
-      "Do not traverse associated_with generically — must follow the full control → event_evidence chain",
+      "Do not shortcut through a generic association — follow the full realizes → evidenced_by → attributed_to chain",
     ],
   },
   {
@@ -466,7 +500,7 @@ const TRAVERSAL_PATTERNS: PatternDef[] = [
     steps: [
       { elementTypeSlugs: ["requirement", "constraint", "principle"], refinementLevel: "conceptual", relationshipTypeSlugs: ["influences"],      direction: "outbound" },
       { elementTypeSlugs: ["application_component", "application_function"], refinementLevel: "logical", relationshipTypeSlugs: ["realizes"],  direction: "outbound" },
-      { elementTypeSlugs: ["digital_product"],                       refinementLevel: null,           relationshipTypeSlugs: ["associated_with"], direction: "outbound" },
+      { elementTypeSlugs: ["digital_product"],                       refinementLevel: null,           relationshipTypeSlugs: ["realizes"],        direction: "outbound" },
       { elementTypeSlugs: ["event_evidence"],                        refinementLevel: "actual",       relationshipTypeSlugs: [],                 direction: "terminal" },
     ],
     forbiddenShortcuts: [
@@ -480,14 +514,14 @@ const TRAVERSAL_PATTERNS: PatternDef[] = [
     description: "Trace AI coworker identity through authorization controls to permitted action scope and supervising humans.",
     patternType: "ai_oversight",
     steps: [
-      { elementTypeSlugs: ["ai_coworker"],                   refinementLevel: null, relationshipTypeSlugs: ["associated_with"], direction: "outbound" },
+      { elementTypeSlugs: ["ai_coworker"],                   refinementLevel: null, relationshipTypeSlugs: ["realizes"],        direction: "outbound" },
       { elementTypeSlugs: ["ea_control"],                     refinementLevel: null, relationshipTypeSlugs: ["influences"],      direction: "outbound" },
-      { elementTypeSlugs: ["digital_product", "resource"],   refinementLevel: null, relationshipTypeSlugs: ["associated_with"], direction: "inbound" },
+      { elementTypeSlugs: ["digital_product", "resource"],   refinementLevel: null, relationshipTypeSlugs: ["assigned_to"],     direction: "inbound" },
       { elementTypeSlugs: ["business_actor"],                 refinementLevel: null, relationshipTypeSlugs: [],                 direction: "terminal" },
     ],
     forbiddenShortcuts: [
       "Do not use broad actor adjacency to infer oversight — supervision requires an explicit business_actor → ai_coworker edge",
-      "Do not assume every ai_coworker → digital_product association implies authority to modify the product",
+      "Do not assume an ai_coworker → digital_product serves edge implies authority to modify the product",
     ],
   },
   {
@@ -497,7 +531,7 @@ const TRAVERSAL_PATTERNS: PatternDef[] = [
     patternType: "cost_rollup",
     steps: [
       { elementTypeSlugs: ["resource"],                              refinementLevel: "actual", relationshipTypeSlugs: ["assigned_to", "composed_of"],  direction: "outbound" },
-      { elementTypeSlugs: ["capability", "business_service"],        refinementLevel: null,     relationshipTypeSlugs: ["realizes", "associated_with"],  direction: "outbound" },
+      { elementTypeSlugs: ["capability", "business_service"],        refinementLevel: null,     relationshipTypeSlugs: ["realizes", "serves"],           direction: "outbound" },
       { elementTypeSlugs: ["digital_product"],                       refinementLevel: null,     relationshipTypeSlugs: [],                               direction: "terminal" },
     ],
     forbiddenShortcuts: [
@@ -513,7 +547,7 @@ const TRAVERSAL_PATTERNS: PatternDef[] = [
     steps: [
       { elementTypeSlugs: ["digital_product"],                                              refinementLevel: null, relationshipTypeSlugs: ["composed_of", "depends_on"], direction: "either" },
       { elementTypeSlugs: ["digital_product", "application_component", "technology_node"], refinementLevel: null, relationshipTypeSlugs: ["accesses"],                  direction: "outbound" },
-      { elementTypeSlugs: ["information_object"],                                           refinementLevel: null, relationshipTypeSlugs: ["associated_with"],            direction: "outbound" },
+      { elementTypeSlugs: ["information_object"],                                           refinementLevel: null, relationshipTypeSlugs: ["realizes"],                   direction: "outbound" },
       { elementTypeSlugs: ["contract"],                                                     refinementLevel: null, relationshipTypeSlugs: ["serves"],                    direction: "inbound" },
       { elementTypeSlugs: ["business_actor"],                                               refinementLevel: null, relationshipTypeSlugs: [],                            direction: "terminal" },
     ],
@@ -535,7 +569,7 @@ const TRAVERSAL_PATTERNS: PatternDef[] = [
     ],
     forbiddenShortcuts: [
       "Do not assume all business_actor nodes linked to a product are impacted customers — distinguish consumers from managers",
-      "Do not traverse associated_with into motivation layer elements when calculating consumer impact",
+      "Do not traverse influence or association edges into motivation layer elements when calculating consumer impact",
     ],
   },
 ];
@@ -607,6 +641,7 @@ export async function seedEaArchimate4(): Promise<void> {
     });
   }
   console.log(`Seeded ${RULES.length} EaRelationshipRules`);
+  await pruneRetiredAssociationRules(notation.id, rtMap.get("associated_with"), [...RULES, ...derivedArchimateRules(RULES)], etMap);
 
   // 5. Upsert DQ rules
   for (const dq of DQ_RULES) {

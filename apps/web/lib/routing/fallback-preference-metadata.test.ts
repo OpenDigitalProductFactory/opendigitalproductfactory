@@ -153,4 +153,15 @@ describe("callWithFallbackChain configured preference metadata", () => {
       ),
     });
   });
+
+  it("omits the AI Workforce settings nag from the unavailable-preference downgrade message", async () => {
+    const result = await callWithFallbackChain(
+      decision,
+      [{ role: "user", content: "hi" }],
+      "system",
+    );
+    expect(result.downgradeMessage).not.toContain(
+      "Check AI Workforce settings to fix",
+    );
+  });
 });

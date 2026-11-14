@@ -20,6 +20,7 @@
 // Pure. The writer is apps/web/lib/build/record-build-plan-coverage.ts; the
 // reader is projectPlanCoverage in entry-adapter.ts.
 
+import { buildDesignAcceptanceCriteria } from "./render-build-design-text";
 import type { ReadinessEvidenceState } from "./types";
 
 export const BUILD_PLAN_COVERAGE_SCHEMA_VERSION = 3;
@@ -73,6 +74,36 @@ export function traceBuildPlanToAcceptance(plan: unknown, acceptanceIds: readonl
 }
 
 export type BuildPlanCoverageBaseline = { baselineId: string; artifactDigest: string };
+
+/**
+ * BI-9FA1F9CF — the scope a Build Studio plan is traced to when its item holds
+ * no scope baseline of its own.
+ *
+ * A bug sized medium or large derives no delivery shape (§3.4 rules 1 and 3
+ * disagree), so its build is judged on the unshaped table. That table's fix
+ * profile owes PLAN_REQUIRED but no spec approval, so no baseline is ever
+ * minted and the coverage writer had nothing to trace the plan to: the build
+ * sat at plan forever. Live 2026-11-13: 19 builds blocked in 12 hours.
+ *
+ * The build's reviewed design is that scope. Its acceptance criteria carry the
+ * ids the plan generator names in each task's `satisfies`
+ * (buildDesignAcceptanceCriteria, the same numbering spec approval mints), and
+ * the design's digest binds the coverage, so a changed design reads stale.
+ * Null unless the design review passed and the design states criteria.
+ */
+export function buildDesignScope(args: {
+  buildId: string;
+  designDoc: unknown;
+  designReviewPassed: boolean;
+  /** `sha256:<hex>` of the stored design, as a design revision records it. */
+  designDigest: string | null;
+}): { baseline: BuildPlanCoverageBaseline; acceptanceIds: string[] } | null {
+  const doc = record(args.designDoc);
+  if (!args.designReviewPassed || !doc || !args.designDigest) return null;
+  const acceptanceIds = buildDesignAcceptanceCriteria(doc).map((criterion) => criterion.id);
+  if (acceptanceIds.length === 0) return null;
+  return { baseline: { baselineId: `build-design:${args.buildId}`, artifactDigest: args.designDigest }, acceptanceIds };
+}
 
 /** The plan_backlog_coverage payload the platform records for a traced Build Studio plan. */
 export function buildPlanCoveragePayload(args: {

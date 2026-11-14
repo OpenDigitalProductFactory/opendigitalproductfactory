@@ -207,7 +207,7 @@ describe("syncDocumentReference", () => {
     exec.mockClear();
   });
 
-  it("projects stable document nodes and a DOC_REFERENCES edge", async () => {
+  it("projects stable document nodes and a typed reference edge (cites -> CITES, BI-92804832)", async () => {
     await syncDocumentReference({
       sourceDocumentId: "DOC-AAA11111",
       sourceTitle: "Workspace pattern",
@@ -237,7 +237,7 @@ describe("syncDocumentReference", () => {
     const edge = edgeCall(exec.mock.calls[2]!);
     expect(edge.src).toBe("DOC-AAA11111");
     expect(edge.dst).toBe("DOC-BBB22222");
-    expect(edge.relType).toBe("DOC_REFERENCES");
+    expect(edge.relType).toBe("CITES");
     expect(edge.props).toMatchObject({
       refType: "cites",
       sourceVersionId: "version-a",

@@ -268,6 +268,22 @@ if [ -n "$STAGED_MIGRATION" ]; then
   fi
 fi
 
+# ─── Guard 3b: staged-scope ─────────────────────────────────────────────────
+# BI-66236024: compare what this commit STAGES against the paths the Workroom
+# CLAIMED for edit. Local marker only, no network — cheap enough to sit ahead of
+# the typecheck gate, which it must, because that gate has early-exit paths.
+#
+# Advisory until DPF_STAGED_SCOPE_ENFORCE=1. A Workroom bound at birth has a
+# claim but no scope yet, so enforcing by default would refuse commits for a
+# condition nobody has been asked to satisfy. The guard reports when it is
+# INACTIVE rather than printing nothing — an off gate must never look passed.
+if ! node scripts/check-staged-scope.mjs; then
+  echo ""
+  echo "Commit rejected: staged paths fall outside this Workroom's claim."
+  echo ""
+  exit 1
+fi
+
 # ─── Guard 4: typecheck gate ────────────────────────────────────────────────
 
 if [ "$DPF_SKIP_TYPECHECK" = "1" ]; then

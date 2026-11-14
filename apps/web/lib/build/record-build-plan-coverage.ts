@@ -23,7 +23,7 @@
 
 import type { Prisma } from "@dpf/db";
 
-import { buildPlanCoveragePayload, projectBuildPlanCoverage, traceBuildPlanToAcceptance } from "@/lib/backlog/initiative-readiness/build-plan-coverage";
+import { buildDesignScope, buildPlanCoveragePayload, projectBuildPlanCoverage, traceBuildPlanToAcceptance } from "@/lib/backlog/initiative-readiness/build-plan-coverage";
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID } from "@/lib/backlog/initiative-readiness/build-studio-owed-routes";
 import { parseReadinessBaselines, type InitiativeReadinessActivity } from "@/lib/backlog/initiative-readiness/entry-adapter";
 import { digestBuildArtifactValue, type PersistArtifactRevisionResult } from "./build-artifact-provenance";
@@ -35,6 +35,8 @@ type BuildRow = {
   phase: string;
   buildPlan: unknown;
   planReview: unknown;
+  designDoc?: unknown;
+  designReview?: unknown;
   createdById: string;
   originator: { id: string; itemId: string; activities: ActivityRow[] } | null;
 };
@@ -97,6 +99,21 @@ function latestCoverage(activities: readonly ActivityRow[]): ActivityRow | null 
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id))[0] ?? null;
 }
 
+/**
+ * BI-9FA1F9CF: the reviewed design as a plan-coverage scope. The one place its
+ * digest is computed: the writer records against it and the plan -> build gate
+ * (build-entry-gate.ts) judges against it, so the two can never drift into
+ * reading every design-scoped coverage as stale.
+ */
+export function reviewedDesignScope(build: { buildId: string; designDoc?: unknown; designReview?: unknown }) {
+  return buildDesignScope({
+    buildId: build.buildId,
+    designDoc: build.designDoc,
+    designReviewPassed: record(build.designReview)?.decision === "pass",
+    designDigest: build.designDoc == null ? null : `sha256:${digestBuildArtifactValue(build.designDoc)}`,
+  });
+}
+
 /** Record platform plan coverage for a Build Studio build whose plan passed its review. Never throws. */
 export async function recordBuildPlanCoverage(args: {
   buildId: string;
@@ -108,7 +125,7 @@ export async function recordBuildPlanCoverage(args: {
     const build = await db.featureBuild.findUnique({
       where: { buildId: args.buildId },
       select: {
-        buildId: true, phase: true, buildPlan: true, planReview: true, createdById: true,
+        buildId: true, phase: true, buildPlan: true, planReview: true, designDoc: true, designReview: true, createdById: true,
         originator: { select: { id: true, itemId: true, activities: {
           where: { kind: { in: [...COVERAGE_INPUT_KINDS] } },
           orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
@@ -124,10 +141,15 @@ export async function recordBuildPlanCoverage(args: {
     if (!item) return { recorded: false, reason: "no-backlog-subject" };
 
     // The item's OWN current baseline: an inherited parent scope is judged on
-    // the parent's coverage, which this build does not own.
+    // the parent's coverage, which this build does not own. Without one, the
+    // build's reviewed design is the scope (BI-9FA1F9CF).
     const baseline = parseReadinessBaselines(item.activities, item.itemId).current;
-    if (!baseline) return { recorded: false, reason: "no-own-scope-baseline" };
-    const acceptanceIds = acceptanceIdsOf(item.activities, baseline.baselineId);
+    const designScope = baseline ? null : reviewedDesignScope(build);
+    const scope = baseline
+      ? { baselineId: baseline.baselineId, artifactDigest: baseline.artifactDigest }
+      : designScope?.baseline ?? null;
+    if (!scope) return { recorded: false, reason: "no-scope-baseline" };
+    const acceptanceIds = baseline ? acceptanceIdsOf(item.activities, baseline.baselineId) : designScope!.acceptanceIds;
     const trace = traceBuildPlanToAcceptance(build.buildPlan, acceptanceIds);
     if (!trace.complete) {
       const detail = [...trace.uncovered, ...trace.unknownRefs].join(", ");
@@ -136,7 +158,6 @@ export async function recordBuildPlanCoverage(args: {
 
     const planHex = digestBuildArtifactValue(build.buildPlan);
     const planDigest = `sha256:${planHex}`;
-    const scope = { baselineId: baseline.baselineId, artifactDigest: baseline.artifactDigest };
     const existing = latestCoverage(item.activities);
     if (existing && projectBuildPlanCoverage(existing.payload, scope, planDigest)?.state === "pass") {
       return { recorded: false, reason: "already-covered" };
@@ -204,7 +225,7 @@ export async function recordBuildPlanCoverage(args: {
 /** Outcomes worth telling the build's owner about; the rest are routine no-ops. */
 const REPORTED_REFUSALS = new Set([
   "baseline-without-acceptance", "plan-untraced", "unknown-acceptance-ref", "acceptance-uncovered",
-  "plan-revision-not-accepted", "error",
+  "plan-revision-not-accepted", "no-scope-baseline", "error",
 ]);
 
 export function describeBuildPlanCoverageOutcome(outcome: RecordBuildPlanCoverageOutcome): string | null {
@@ -218,6 +239,8 @@ export function describeBuildPlanCoverageOutcome(outcome: RecordBuildPlanCoverag
       return `Plan coverage not recorded: no plan task satisfies${detail}.`;
     case "unknown-acceptance-ref":
       return `Plan coverage not recorded: plan tasks name acceptance ids the approved scope does not hold${detail}.`;
+    case "no-scope-baseline":
+      return "Plan coverage not recorded: there is no approved scope to trace the plan to — the item has no scope baseline and the build's design either did not pass review or states no acceptance criteria.";
     case "baseline-without-acceptance":
       return "Plan coverage not recorded: the approved scope baseline carries no acceptance ids to trace the plan to.";
     default:

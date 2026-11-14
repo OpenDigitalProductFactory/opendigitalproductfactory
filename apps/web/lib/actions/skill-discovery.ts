@@ -162,6 +162,7 @@ export async function delegateToCoworker(
       request.skillId,
       request.originUserId,
       request.originAuthority,
+      requiredCapabilities,
     );
     return {
       allowed: result.allowed,

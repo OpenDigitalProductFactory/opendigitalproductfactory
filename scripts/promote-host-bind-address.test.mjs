@@ -5,7 +5,7 @@
 // pre-existing-install rule (BI-FEE77B68) before any compose command runs.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -113,4 +113,36 @@ test("no env file, or an empty one, is a fresh install and keeps the compose loo
     assert.deepEqual(await promote(f), { bind: "unset", preserved: false });
     assert.deepEqual(await promote(f, { envFile: "\n" }), { bind: "unset", preserved: false });
   } finally { await rm(f.dir, { recursive: true, force: true }); }
+});
+
+// BI-94C4722B: a source install never ran install-release-assets, so the
+// preserved value lived only in the promoter's environment. Every host-side
+// start (compose.sh, the PKI bootstrap, an operator recreate) then fell back to
+// the compose default 127.0.0.1, and the install ended up half on 0.0.0.0, half
+// on loopback. Persisting the derived value gives every renderer one answer.
+async function persist(envFile, { bind = "0.0.0.0" } = {}) {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-promote-bind-persist-"));
+  try {
+    const path = join(dir, "install.env");
+    await writeFile(path, envFile);
+    const harness = join(dir, "harness.sh");
+    await writeFile(harness, `eval "$(sed -n '/^persist_host_bind_address()/,/^}/p' "$1")"\nDPF_HOST_BIND_ADDRESS='${bind}' persist_host_bind_address "$2"\n`);
+    const result = spawnSync(bash, [bashPath(harness), bashPath(join(root, "scripts/promote.sh")), bashPath(path)], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return { text: await readFile(path, "utf8"), stdout: result.stdout };
+  } finally { await rm(dir, { recursive: true, force: true }); }
+}
+
+test("a source install persists the preserved bind address so host-side starts render the same exposure", async () => {
+  const { text, stdout } = await persist("DPF_IMAGE_TAG=v1\nGHCR_OWNER=o");
+  assert.match(text, /^GHCR_OWNER=o\n# Kept the exposure this install had before DPF_HOST_BIND_ADDRESS existed/m);
+  assert.match(text, /^DPF_HOST_BIND_ADDRESS=0\.0\.0\.0\n$/m);
+  assert.match(stdout, /step=host-bind-address-persisted value=0\.0\.0\.0/);
+});
+
+test("persisting never touches an env file that already carries the key", async () => {
+  const before = "DPF_IMAGE_TAG=v1\nDPF_HOST_BIND_ADDRESS=127.0.0.1\n";
+  const { text, stdout } = await persist(before);
+  assert.equal(text, before);
+  assert.doesNotMatch(stdout, /persisted/);
 });

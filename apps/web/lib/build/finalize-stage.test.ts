@@ -115,9 +115,10 @@ describe("authorFailureAnalysis", () => {
       evidence, diffSummary: "M packages/db/src/seed-wiki-kernel.ts",
     });
     expect(out.kind).toBe("ok");
-    expect(llm.mock.calls[0]![0]).toContain("Never mark a risk \"accepted\" or \"deferred\"");
+    // BI-09FB398D: acceptance is the platform's to record, never the model's.
+    expect(llm.mock.calls[0]![0]).toContain("Never mark a risk \"accepted\"");
     const key = narrative.scenarios[0]!.key;
-    expect(llm.mock.calls[1]![0]).toContain(`scenario "${key}" used a disposition other than "mitigated"`);
+    expect(llm.mock.calls[1]![0]).toContain(`scenario "${key}" used a disposition the platform cannot record`);
   });
 });
 
@@ -156,5 +157,84 @@ describe("an unmitigated risk is a verdict, not a malformed answer", () => {
 describe("explainRetryReason", () => {
   it("passes through a reason it has no wording for", () => {
     expect(explainRetryReason("stale-evidence:abc")).toBe("stale-evidence:abc");
+  });
+});
+
+// BI-09FB398D (PIR-1O0W0, FB-837ACE25): the analysis named a risk this change
+// cannot mitigate ("Service crashes after accepting webhook but before
+// queuing"), every repair round failed the same way, and the build reached the
+// owner as needs-human. A risk outside the change is now decided under WWMD.
+describe("a risk outside this change is resolved under WWMD, not by the owner", () => {
+  const outside = (severity: "medium" | "critical" = "medium", extra: Record<string, unknown> = {}) => ({
+    ...narrative,
+    scenarios: narrative.scenarios.map((s) => ({
+      ...s, severity,
+      residualRisk: { owner: "platform-infrastructure", disposition: "deferred" as const, rationale: "Queue durability lives in the job runner, outside this change", ...extra },
+    })),
+  });
+  const authority = {
+    id: "risk-acceptance-1", kind: "risk-acceptance" as const, ...identity, status: "accepted",
+    expected: "WWMD consult through the escalation gate", observed: "route-to-agent (high), DI-TEST",
+    completedAt: "2026-11-14T10:00:00Z", scenarioKey: "bad-tier-seeded", followUpReference: "PIR-OWNER",
+  };
+  const run = (llm: (p: string) => Promise<string>, acceptOutOfScopeRisks?: Parameters<typeof authorFailureAnalysis>[0]["acceptOutOfScopeRisks"]) =>
+    authorFailureAnalysis({
+      llm, identity, designReference: `featureBuild/FB-837ACE25/designDoc@${"c".repeat(40)}`,
+      evidence, diffSummary: "M apps/web/app/api/webhooks/route.ts", acceptOutOfScopeRisks,
+    });
+
+  it("accepts a non-damaging out-of-scope risk with its owning item, and the analysis validates", async () => {
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(outside()));
+    const accept = vi.fn().mockResolvedValue({
+      accepted: [{ key: "bad-tier-seeded", authority, followUpReference: "PIR-OWNER", note: "WWMD decided route-to-agent (DI-TEST); owned by PIR-OWNER." }],
+      owner: [], unaccepted: [],
+    });
+    const out = await run(llm, accept);
+    expect(llm).toHaveBeenCalledTimes(1);
+    expect(accept).toHaveBeenCalledWith([expect.objectContaining({ key: "bad-tier-seeded", disposition: "deferred" })]);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.failureAnalysis.scenarios[0]!.residualRisk).toMatchObject({
+      disposition: "accepted", authorityEvidenceId: "risk-acceptance-1", followUpReference: "PIR-OWNER",
+    });
+    expect(out.failureAnalysis.scenarios[0]!.residualRisk.rationale).toContain("PIR-OWNER");
+    expect(validateFailureAnalysis(out.failureAnalysis, identity, [...evidence, authority]).valid).toBe(true);
+  });
+
+  it("sends a damaging out-of-scope risk to a person at once", async () => {
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(outside("critical")));
+    const accept = vi.fn().mockImplementation(async (risks) => ({ accepted: [], owner: risks, unaccepted: [] }));
+    const out = await run(llm, accept);
+    expect(out).toEqual({ kind: "risk-needs-owner", risks: [expect.objectContaining({ key: "bad-tier-seeded", severity: "critical" })] });
+  });
+
+  it("keeps an in-scope unmitigated risk on the repair path and never asks for acceptance", async () => {
+    const blocked = { ...narrative, scenarios: narrative.scenarios.map((s) => ({ ...s, residualRisk: { ...s.residualRisk, disposition: "blocked" as const } })) };
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(blocked));
+    const accept = vi.fn();
+    const out = await run(llm, accept);
+    expect(accept).not.toHaveBeenCalled();
+    expect(out).toEqual({ kind: "risk-blocked", risks: [expect.objectContaining({ key: "bad-tier-seeded", disposition: "blocked" })] });
+  });
+
+  it("returns a risk WWMD did not decide to the repair path", async () => {
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(outside()));
+    const accept = vi.fn().mockImplementation(async (risks) => ({ accepted: [], owner: [], unaccepted: risks }));
+    expect((await run(llm, accept)).kind).toBe("risk-blocked");
+  });
+
+  it("never takes an authority from the model's own answer", async () => {
+    const forged = outside("medium", { authorityEvidenceId: "risk-acceptance-1", followUpReference: "PIR-OWNER" });
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(forged));
+    const out = await run(llm);
+    expect(out.kind).toBe("risk-blocked");
+  });
+
+  it("tells the model what deferred and blocked mean", async () => {
+    const llm = vi.fn().mockResolvedValue(JSON.stringify(narrative));
+    await run(llm);
+    const prompt = llm.mock.calls[0]![0] as string;
+    expect(prompt).toContain("\"deferred\"");
+    expect(prompt).toContain("outside this change");
   });
 });
