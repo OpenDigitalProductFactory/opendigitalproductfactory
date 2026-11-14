@@ -1,4 +1,4 @@
-import { projectCurrentScopeBaselineTraceability, readPlanDeliveryScope, type PlanDeliveryScope } from "./plan-coverage-delivery-scope";
+import { projectCurrentScopeBaselineTraceability, type PlanDeliveryScope } from "./plan-coverage-delivery-scope";
 export { projectCurrentScopeBaselineTraceability } from "./plan-coverage-delivery-scope";
 import type { BoundWorkShapeDb } from "@/lib/backlog/initiative-readiness/bound-work-shape";
 
@@ -8,7 +8,7 @@ import { resolveRepositoryArtifact } from "@/lib/backlog/initiative-readiness/re
 import type { InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import { deriveAuthoritativeReadinessProfile } from "@/lib/backlog/initiative-readiness/profiles";
 import { projectMissingBaselineRecovery } from "./plan-coverage-recovery";
-import { loadBaselineSourceForItem, type BaselineSourceDb } from "@/lib/backlog/initiative-readiness/baseline-source";
+import { resolveCoverageBaseline } from "./plan-coverage-baseline";
 
 export {
   projectPlanBacklogDependencies,
@@ -406,25 +406,6 @@ export type BranchPlanBacklogGateDb = {
   };
 };
 
-/**
- * The scope baseline a coverage receipt binds to (BI-86B638F7). The item's own
- * baseline when it has one; otherwise, when no proportional delivery scope
- * applies, the baseline it inherits from the parent whose coverage maps it,
- * resolved exactly as readiness resolves it (baseline-source.ts). Coverage is
- * never recordable without some approved baseline: with neither an own nor an
- * inherited one, this returns no rows and the caller refuses as before.
- */
-async function loadCoverageBaselineRows(
-  db: unknown,
-  item: { id: string; itemId: string },
-  ownRows: Array<{ payload: unknown }>,
-  deliveryScope: unknown,
-): Promise<Array<{ payload: unknown }>> {
-  if (ownRows.length > 0 || deliveryScope) return ownRows;
-  const source = await loadBaselineSourceForItem(db as BaselineSourceDb, { id: item.id, itemId: item.itemId });
-  return source.origin === "inherited" ? source.baselineRows : [];
-}
-
 export async function checkBranchPlanBacklogGate(args: {
   branchName: string;
   db?: BranchPlanBacklogGateDb;
@@ -496,13 +477,8 @@ export async function checkBranchPlanBacklogGate(args: {
   if (!resolved.ok) {
     return { ok: false, required: true, code: "receipt-invalid", error: resolved.error, itemId: parent.itemId };
   }
-  const ownBaselineRows = await db.backlogItemActivity.findMany({
-    where: { backlogItemId: parent.id, kind: "initiative_scope_baseline" },
-    orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-    select: { payload: true },
-  });
   const baseline = projectCurrentScopeBaselineTraceability(
-    await loadCoverageBaselineRows(db, parent, ownBaselineRows, null),
+    (await resolveCoverageBaseline(db, parent, { deliveryScope: false })).rows,
   );
   const validation = validatePlanBacklogCoverageReceipt({
     receipt: payload,
@@ -607,13 +583,7 @@ export async function checkPlanBacklogCoverage(args: {
     if (!resolved.ok) {
       return { ok: false, valid: false, code: "receipt-invalid", error: resolved.error };
     }
-    const ownBaselineRows = await db.backlogItemActivity.findMany({
-      where: { backlogItemId: parent.id, kind: "initiative_scope_baseline" },
-      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-      select: { payload: true },
-    });
-    const checkDeliveryScope = ownBaselineRows.length ? null : await readPlanDeliveryScope(db, parent);
-    const baselineRows = await loadCoverageBaselineRows(db, parent, ownBaselineRows, checkDeliveryScope);
+    const { rows: baselineRows, deliveryScope: checkDeliveryScope } = await resolveCoverageBaseline(db, parent, { deliveryScope: true });
     const baseline = projectCurrentScopeBaselineTraceability(baselineRows);
     const governed = validatePlanBacklogCoverageReceipt({
       receipt: payload,
@@ -743,15 +713,10 @@ export async function recordPlanBacklogCoverage(args: {
           select: { itemId: true, status: true, workType: true },
         })
       : [];
-    const ownBaselineRows = await tx.backlogItemActivity.findMany({
-      where: { backlogItemId: currentParent.id, kind: "initiative_scope_baseline" },
-      orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
-      select: { payload: true },
-    });
-    const ownDeliveryScope = ownBaselineRows.length ? null : await readPlanDeliveryScope(tx, currentParent);
-    const baselineRows = await loadCoverageBaselineRows(tx, currentParent, ownBaselineRows, ownDeliveryScope);
+    const resolved = await resolveCoverageBaseline(tx, currentParent, { deliveryScope: true });
+    const baselineRows = resolved.rows;
     const baseline = projectCurrentScopeBaselineTraceability(baselineRows);
-    const deliveryScope = baselineRows.length ? null : ownDeliveryScope;
+    const deliveryScope = baselineRows.length ? null : resolved.deliveryScope;
     if (!baseline && !deliveryScope) {
       const { recovery, instruction } = projectMissingBaselineRecovery({
         item: currentParent,
