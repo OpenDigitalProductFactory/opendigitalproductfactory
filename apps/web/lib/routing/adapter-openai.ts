@@ -9,6 +9,7 @@ import {
   DEFAULT_DIMENSION_SCORES,
 } from "./model-card-types";
 import { referenceCardPricing } from "./model-pricing-reference";
+import { referenceCodexTransportCapacity } from "./model-capacity-reference";
 import { classifyModel } from "./model-classifier";
 import { computeMetadataHash } from "./metadata-hash";
 
@@ -98,6 +99,7 @@ export const openAIAdapter: ProviderAdapter = {
       && raw.inputModalities.every(value => value === "text" || value === "image")
       ? [...new Set(raw.inputModalities)] as Array<"text" | "image"> : null;
     const inputModalities = catalogModalities ?? ["text"];
+    const codexCapacity = raw.source === "codex_cli_model_list" ? referenceCodexTransportCapacity(modelId) : null;
     // codex provider routes to api.openai.com/v1/responses and supports custom
     // function tools. chatgpt provider routes to chatgpt.com/backend-api and
     // only supports built-in Codex tools (apply_patch, shell, etc.).
@@ -133,8 +135,10 @@ export const openAIAdapter: ProviderAdapter = {
         output: ["text"],
       }),
 
-      maxInputTokens: raw.max_tokens ?? null,
-      maxOutputTokens: null,
+      // BI-F0ECD797: the Codex catalog publishes no token limits; take the
+      // researched capacity for the slug, or leave it unknown.
+      maxInputTokens: raw.max_tokens ?? codexCapacity?.maxContextTokens ?? null,
+      maxOutputTokens: codexCapacity?.maxOutputTokens ?? null,
 
       inputModalities,
       outputModalities: ["text"],

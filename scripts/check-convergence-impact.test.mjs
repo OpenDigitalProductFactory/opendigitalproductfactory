@@ -234,3 +234,100 @@ test("gate passes a host-runtime change that says how every platform converges",
   });
   assert.equal(notHostSide.ok, true, "platform coverage applies only to host-runtime changes");
 });
+
+// ── per-service compose convergence (BI-205A85C0, D5 of BI-C54E691E) ──
+// #6020 gave portal-tls a reaping init and attested auto-converges, but no
+// self-upgrade step recreates a running stateless sidecar (step 7e only
+// reports, WWMD DI-C04ABC76BBF4), so the fix never arrived. The gate now checks
+// an auto-converges claim per changed service: the file must be in a compose
+// chain the installer or promoter can resolve, and the service's recreate
+// class must have a live convergence mechanism.
+const TLS_BEFORE = `services:
+  portal-tls:
+    image: caddy:2
+    labels:
+      dpf.recreate-class: stateless
+`;
+const TLS_AFTER = `services:
+  portal-tls:
+    image: caddy:2
+    init: true
+    labels:
+      dpf.recreate-class: stateless
+`;
+const pair = (files) => (file) => files[file] ?? { base: "", head: "" };
+const autoConverges = `${TRAILER_NAME}: auto-converges — promote.sh composes from the new release assets on the next self-upgrade`;
+
+test("#6020's shape: a running stateless sidecar change cannot claim auto-converges while step 7e is report-only", () => {
+  const r = evaluateConvergenceGate({
+    changedFiles: ["docker-compose.tls.yml"],
+    prBody: autoConverges,
+    registry,
+    readComposePair: pair({ "docker-compose.tls.yml": { base: TLS_BEFORE, head: TLS_AFTER } }),
+  });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, "compose-service-not-converged");
+  assert.match(r.errors.join("\n"), /portal-tls \(stateless, docker-compose\.tls\.yml\)/);
+  assert.match(r.errors.join("\n"), /7e/);
+});
+
+test("the same change passes when the PR names an operator action or the step it adds", () => {
+  for (const decision of [
+    `${TRAILER_NAME}: operator-action — recreate portal-tls on each install; docs/operations/self-upgrade-runbook.md`,
+    `${TRAILER_NAME}: self-upgrade-step — this PR makes step 7e recreate changed stateless services`,
+  ]) {
+    const r = evaluateConvergenceGate({
+      changedFiles: ["docker-compose.tls.yml"], prBody: decision, registry,
+      readComposePair: pair({ "docker-compose.tls.yml": { base: TLS_BEFORE, head: TLS_AFTER } }),
+    });
+    assert.equal(r.ok, true, decision);
+  }
+});
+
+test("a managed service change and a newly added service can claim auto-converges", () => {
+  const portalBefore = "services:\n  portal:\n    image: a\n    labels:\n      dpf.recreate-class: managed\n";
+  const portalAfter = "services:\n  portal:\n    image: b\n    labels:\n      dpf.recreate-class: managed\n  newbie:\n    image: n\n    labels:\n      dpf.recreate-class: stateless\n";
+  const r = evaluateConvergenceGate({
+    changedFiles: ["docker-compose.yml"], prBody: autoConverges, registry,
+    readComposePair: pair({ "docker-compose.yml": { base: portalBefore, head: portalAfter } }),
+  });
+  assert.equal(r.ok, true, r.errors?.join("\n"));
+});
+
+test("a data-owner change cannot claim auto-converges until a step converges data owners", () => {
+  const before = "services:\n  postgres:\n    image: pg:16\n    labels:\n      dpf.recreate-class: data-owner\n";
+  const r = evaluateConvergenceGate({
+    changedFiles: ["docker-compose.yml"], prBody: autoConverges, registry,
+    readComposePair: pair({ "docker-compose.yml": { base: before, head: before.replace("pg:16", "pg:17") } }),
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join("\n"), /postgres \(data-owner, docker-compose\.yml\)/);
+});
+
+test("a service changed in a file no resolved chain contains cannot claim auto-converges", () => {
+  const before = "services:\n  ci-db:\n    image: a\n    labels:\n      dpf.recreate-class: stateless\n";
+  const r = evaluateConvergenceGate({
+    changedFiles: ["docker-compose.local-ci.yml"], prBody: autoConverges, registry,
+    readComposePair: pair({ "docker-compose.local-ci.yml": { base: before, head: before.replace("image: a", "image: b") } }),
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join("\n"), /docker-compose\.local-ci\.yml.*no compose chain/);
+});
+
+test("a removed service cannot claim auto-converges: self-upgrade never stops a dropped service", () => {
+  const before = "services:\n  old:\n    image: a\n    labels:\n      dpf.recreate-class: stateless\n  keep:\n    image: k\n";
+  const r = evaluateConvergenceGate({
+    changedFiles: ["docker-compose.yml"], prBody: autoConverges, registry,
+    readComposePair: pair({ "docker-compose.yml": { base: before, head: "services:\n  keep:\n    image: k\n" } }),
+  });
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join("\n"), /old.*removed/);
+});
+
+test("the chain file list matches the installer's resolver and the activation table", () => {
+  const chain = registry.composeConvergence.chainFiles;
+  for (const f of ["docker-compose.yml", "docker-compose.release.yml", "docker-compose.macos.yml", "docker-compose.linux.yml", "docker-compose.edge.yml"]) {
+    assert.ok(chain.includes(f), f);
+    assert.match(readFileSync(new URL("./installer/lib/compose.sh", import.meta.url), "utf8"), new RegExp(f.replace(/\./g, "\\.")));
+  }
+});

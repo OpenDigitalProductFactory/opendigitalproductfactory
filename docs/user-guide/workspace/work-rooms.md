@@ -11,6 +11,7 @@ relatedCode:
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
+  - apps/web/components/ops/workrooms/atlas/WorkAtlas.tsx
   - apps/web/components/ops/workrooms/atlas/RhythmStrip.tsx
   - apps/web/components/workspace-home/MainStreamHero.tsx
   - apps/web/lib/work-management/room-ai-spend.ts
@@ -45,7 +46,7 @@ Coworker service engagements can also appear as Work Cases. When a requested cow
 
 A human decision shows its recorded question and condition from the room's declared process. A delivery status alone does not mean the owner must approve something, and a waiting lease does not establish progress. Open the original room to review its evidence and use its supported decision controls.
 
-Shared recovery groups retain every room link. A shared action appears only when the rooms agree; different remedies remain on their own rows. **Technical evidence** links to the room's recorded evidence, while cycle and supervision details remain disclosed. The inventory does not preload branch, session and lease diagnostics for every row.
+Held rooms appear under **Stuck or held** on **Operations > Work in progress** (the Work Atlas), and each one's row gives the drive's recorded cause. Open the room for its evidence, cycle and supervision details. The Atlas does not preload branch, session and lease diagnostics for every room.
 
 ### Delivery outcomes
 

@@ -96,9 +96,11 @@ Rules carried over from [upgrade service recovery](2026-10-02-upgrade-service-re
 
 Outcome: `service-converge-outcome.json` lists `recreated`, `unchanged`, `skipped-stopped` and `failed`, each with the before and after hash. It is recorded on the run like `service-reconcile-outcome.json` and shown on `/ops/self-upgrade`.
 
+Exposure guard (BI-94C4722B, from the first live shadow report): when a running service publishes a host port on a different host IP than the render, it is listed under `bindDrift` (service, port, running IP, rendered IP) and is never recreated. The first shadow report would have moved `portal-tls` from `127.0.0.1` to `0.0.0.0`, because a source install never persisted `DPF_HOST_BIND_ADDRESS`; the promoter now persists it. Recreating a service must never change who can reach it. An operator resolves a `bindDrift` row by setting `DPF_HOST_BIND_ADDRESS` to the exposure they want.
+
 ### 4. The convergence gate becomes checkable (OBJ-HONEST-GATE)
 
-The `compose` surface in `scripts/convergence-surfaces.json` gains a per-service check. When a PR changes a service that the resolved chain covers and that has a `recreateClass`, then `auto-converges` is valid and its mechanism is named (step 3c or 7e). When the service is outside every chain the resolver can produce, `auto-converges` is refused with that reason.
+The `compose` surface in `scripts/convergence-surfaces.json` gains a per-service check. When a PR changes a service that the resolved chain covers and that has a `recreateClass`, then `auto-converges` is valid and its mechanism is named (step 3c or 7e). When the service is outside every chain the resolver can produce, `auto-converges` is refused with that reason. Until step 7e enforces and step 3c exists, a changed running `stateless` or `data-owner` service has no mechanism, and `auto-converges` is refused for it too (BI-205A85C0).
 
 ## Not in scope
 
@@ -320,3 +322,28 @@ Source tests use injected process adapters and isolated temporary files. Their
 passing results do not establish served owner acceptance. Exact-tree gate,
 independent review, protected delivery and governed runtime verification remain
 required before D6 is complete.
+
+## Shadow inventory qualification prerequisite (BI-BD708C80)
+
+DI-9546056ED84F sequences this independently shippable correction before D4
+enforcement. The existing shadow report reads full container IDs from the
+project-filtered inventory and groups observations before judging a service.
+Duplicate service owners, reused or malformed IDs and missing or malformed
+running config hashes produce a failed/degraded report, never a change candidate.
+Stopped data owners are skipped before hash comparison; unchanged running data
+owners join `unchanged`. Qualified changed data owners remain report-only.
+Managed and out-of-chain exclusions, published-bind drift protection and sorted
+output remain intact. No service is started, removed, restarted or recreated.
+
+The motivating read-only observation on deployed 62368996 was a shadow entry
+for postgres with an empty prior hash, although the canonical container already
+matched the target hash. A separate diagnostic container shared the project and
+service labels without a config hash. That proves ambiguous observations, not
+that either container should change. The correction never cleans up that
+container and does not turn the report into D6 image proof.
+
+D4 remains incomplete until its stable-render, recovery and pre-swap health
+requirements are independently satisfied. Source delivery of this prerequisite
+does not deliver D4, enable shadow enforcement, or supersede existing recovery
+restrictions. Its existing fake-Docker dry-run harness must prove classification
+and no effects; a later governed canonical report supplies separate live evidence.
