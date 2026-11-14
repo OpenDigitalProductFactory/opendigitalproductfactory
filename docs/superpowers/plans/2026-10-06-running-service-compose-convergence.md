@@ -141,6 +141,12 @@ deliver it. Source implementation is in progress; served acceptance remains unru
 5. Preserve managed/data-owner/stopped-service, volume, activation and explicit
    shadow controls. Test each boundary against the real production owners with
    injected Docker/process adapters, without production runtime mutation.
+   Reuse the producer's shared advisory lock and row-creation transaction to
+   fence new work throughout unchanged-key image transitions and uncertain
+   recovery. Inspect all relevant transitions, validate the persisted v3 plan,
+   and union selected catalog/saved guards. Pin malformed metadata, unrelated
+   producers, settled recovery and both producer/transition admission orders in
+   the existing unit and isolated PostgreSQL suites.
 6. Run the affected protocol, actuator, coordinator, executor and promoter
    closure tests, package typechecks, and the exact current gate-context guards.
    Use normal exact-tree qualification, independent review and protected
@@ -170,8 +176,18 @@ compensation and native administrator selector are implemented in the child
 Workroom WC-876B044A. Source fixtures exercise published/source inputs,
 unsupported protocols, unchanged-state boundaries, exact image and resource
 proof, health rollback, crash replay and uncertain settlement. They use injected
-IO and are separate from production acceptance. The original funding envelope
-remains pending; no new funding, provider or grant is inferred.
+IO and are separate from production acceptance. Parent attribution executed;
+the distinct child attribution remains a separate recorded decision. No new
+budget, provider or grant is inferred.
+
+PR7065 was delivered as intermediate source. A subsequent production-owner
+reproduction found that the producer fence still considered only removed keys;
+it admitted new coworker work during v3 image preparation and uncertain recovery.
+The corrective source loop adds the producer owner and existing PostgreSQL suite
+to this same atomic contract. The first typed regression run had ten meaningful
+missing-rejection failures and ten control passes. Current unit green is separate
+from canonical PostgreSQL, final-tree review and served acceptance; none is
+inferred from the earlier source gate or review.
 
 Before completion, freeze the exact tree, run its required source/runtime gates,
 obtain independent code review, deliver through protected `pnpm land`, then use

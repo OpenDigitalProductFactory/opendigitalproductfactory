@@ -5,7 +5,9 @@ import { PrismaClient } from "../../../../packages/db/generated/client/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createPrismaRuntimeTransitionReceipts } from "./transition-coordinator";
 import { computeCapabilityStateVersion } from "../../../../scripts/lib/capability-state-hash.mjs";
-import { createRuntimeCompensationEnvelope, signTransitionPayload, type RuntimeTransitionEnvelope } from "./transition-protocol";
+import { createRuntimeCompensationEnvelope, signTransitionPayload, validateRuntimeServiceImagePlan, type RuntimeTransitionEnvelope } from "./transition-protocol";
+import { admitRuntimeGuardedWork } from "./work-admission";
+import { countAttributedWork, createPrismaWorkAttributionStore } from "./work-attribution";
 
 // Only an explicitly supplied governed test target. All writes stay in this
 // suite's unique namespace; installed records are never fixtures or cleanup.
@@ -24,13 +26,13 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
     await admin.query(`CREATE SCHEMA "${schema}"`);
     pool = new Pool({ connectionString: url, options: `-c search_path=${schema},public -c statement_timeout=5000`, max: 4 });
     db = new PrismaClient({ adapter: new PrismaPg(pool, { schema }) });
-    for (const table of ["PlatformCapability", "RuntimeCapabilityTransition", "RuntimeCapabilityTransitionEvent"]) {
+    for (const table of ["PlatformCapability", "RuntimeCapabilityTransition", "RuntimeCapabilityTransitionEvent", "TaskRun"]) {
       await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
     }
     receipts = createPrismaRuntimeTransitionReceipts(db as never);
   });
   beforeEach(async () => {
-    await pool.query('TRUNCATE "RuntimeCapabilityTransitionEvent", "RuntimeCapabilityTransition", "PlatformCapability"');
+    await pool.query('TRUNCATE "RuntimeCapabilityTransitionEvent", "RuntimeCapabilityTransition", "PlatformCapability", "TaskRun"');
     for (const [capabilityId, state] of Object.entries(previousStates)) {
       await db.platformCapability.create({ data: { capabilityId, name: capabilityId, description: "isolated test", state, manifest: {} } });
     }
@@ -57,6 +59,66 @@ describe.skipIf(!url)("runtime reconciliation transactions on PostgreSQL", () =>
     return { ...value, signature: signTransitionPayload(value, secret) };
   }
   const states = async () => Object.fromEntries((await db.platformCapability.findMany()).map(row => [row.capabilityId, row.state]));
+
+  async function imageRequest() {
+    await db.platformCapability.create({ data: { capabilityId: "runtime:browser-automation", name: "isolated browser", description: "isolated test", state: "active", manifest: {} } });
+    const base = request("RCT-producer-image");
+    const keys = ["runtime:browser-automation", "runtime:core"];
+    const bothStates = { ...previousStates, "runtime:browser-automation": "active" };
+    const sourceSha = "a".repeat(40);
+    const envelope: RuntimeTransitionEnvelope = { ...base.envelope, version: 3, kind: "runtime-capability-transition", mode: "reconciliation",
+      previousKeys: keys, desiredKeys: keys, previousServices: ["browser-use", "portal"], desiredServices: ["browser-use", "portal"],
+      protocolIdentity: { ...base.envelope.protocolIdentity!, imageQualifierSha256: "e".repeat(64) },
+      imagePlan: { schemaVersion: 1, sourceSha, platform: "linux/amd64", operation: "prepare", services: [{ service: "browser-use", source: { kind: "source", sourceSha } }] },
+      reconciliation: { observedHost: { schemaVersion: 2, installerVersion: "isolated-producer-test", platform: "linux", arch: "amd64", capabilityCatalogHash: catalogHash, capabilityStateVersion: base.previousStateHash, enabledRuntimeCapabilities: keys }, observedDatabaseStates: bothStates, desiredHostEnabledKeys: keys, desiredDatabaseStates: bothStates, touchedKeys: [] },
+    };
+    validateRuntimeServiceImagePlan(envelope);
+    return { ...base, ...envelope, previousStates: bothStates, desiredStates: bothStates, envelope, envelopeSignature: signTransitionPayload(envelope, secret) };
+  }
+
+  it("fences a real producer insert after image admission and through uncertain recovery, then releases it on settlement", async () => {
+    const input = await imageRequest();
+    await receipts.createPending(input);
+    const produce = () => db.$transaction(async tx => {
+      await admitRuntimeGuardedWork(tx as never, "task-run:coworker");
+      await tx.taskRun.create({ data: { taskRunId: "TR-isolated-producer", userId: "fixture-owner", title: "isolated producer", objective: "fixture only", source: "coworker" } });
+    });
+    await expect(produce()).rejects.toThrow("runtime_capability_work_draining:runtime:browser-automation");
+    expect(await db.taskRun.count()).toBe(0);
+    await db.runtimeCapabilityTransition.update({ where: { transitionId: input.transitionId }, data: { status: "rollback_failed", failure: { recoveryRequired: true } } });
+    await expect(produce()).rejects.toThrow("runtime_capability_work_draining:runtime:browser-automation");
+    expect(await db.taskRun.count()).toBe(0);
+    await db.runtimeCapabilityTransition.update({ where: { transitionId: input.transitionId }, data: { status: "rolled_back", failure: { recoveryRequired: false } } });
+    await produce();
+    expect(await db.taskRun.count()).toBe(1);
+    expect(await states()).toEqual(input.previousStates);
+  });
+
+  it("lets a producer admitted first commit before the transition drain recheck", async () => {
+    const input = await imageRequest();
+    let releaseProducer!: () => void, reportAdmission!: () => void;
+    const hold = new Promise<void>(resolve => { releaseProducer = resolve; });
+    const admitted = new Promise<void>(resolve => { reportAdmission = resolve; });
+    const producer = db.$transaction(async tx => {
+      await admitRuntimeGuardedWork(tx as never, "task-run:coworker");
+      reportAdmission();
+      await hold;
+      await tx.taskRun.create({ data: { taskRunId: "TR-isolated-concurrent-producer", userId: "fixture-owner", title: "isolated concurrent producer", objective: "fixture only", source: "coworker" } });
+    });
+    try {
+      await Promise.race([admitted, producer.then(() => { throw new Error("producer finished before the admission checkpoint"); })]);
+      const transition = receipts.createPending({ ...input, recheckAttributedWork: async () =>
+        (await countAttributedWork(["task-run:coworker"], createPrismaWorkAttributionStore(db as never))).blockingCounts });
+      releaseProducer();
+      await producer;
+      expect(await transition).toMatchObject({ created: false, kind: "drain_required", blockingCounts: { "task-run:coworker": 1 } });
+      expect(await db.runtimeCapabilityTransition.count()).toBe(0);
+      expect(await db.taskRun.count()).toBe(1);
+    } finally {
+      releaseProducer();
+      await producer;
+    }
+  });
 
   it("admits at most one concurrent writer under real serializable transactions", async () => {
     const results = await Promise.allSettled([receipts.createPending(request("RCT-writer-a")), receipts.createPending(request("RCT-writer-b"))]);

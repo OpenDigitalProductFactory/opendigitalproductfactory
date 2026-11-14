@@ -274,6 +274,15 @@ Selected image owners retain their existing catalog and saved manifest work guar
 The ordinary serializable receipt admission rechecks attributed tasks even though
 image-only reconciliation disables no capability; active work returns drain-required
 before a transition row or service apply is created.
+The producer half takes that same advisory lock inside the transaction that
+creates a TaskRun or build. It examines every active transition and the existing
+`rollback_failed`/`recoveryRequired` image barrier, so unchanged capability keys
+cannot admit new matching work after the initial drain. The persisted v3 plan
+uses the shared validator; selected catalog owners and their saved manifests
+supply the guard union. Malformed image metadata retains only the existing
+browser recipe's guards, rather than silently losing its scope or stopping
+unrelated producers. Settled recovery releases the image guard. Legacy active
+key-removal admission retains its previous behavior.
 The existing ten-minute authority lifetime is preserved. Preparation reserves time
 for bounded apply and restoration; a short remaining lifetime holds before effects.
 

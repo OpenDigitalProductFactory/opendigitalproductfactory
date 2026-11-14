@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { admitRuntimeGuardedWork } from "./work-admission";
+import { validateRuntimeServiceImagePlan, type RuntimeTransitionEnvelope } from "./transition-protocol";
 
 describe("runtime guarded work admission", () => {
   it("takes the transition advisory lock (via $executeRaw) before checking disabled and draining capabilities", async () => {
@@ -15,7 +16,7 @@ describe("runtime guarded work admission", () => {
         throw new Error("advisory lock must use $executeRaw (void column crashes $queryRaw under Prisma 7.8)");
       }),
       platformCapability: { findMany: vi.fn(async () => { calls.push("capabilities"); return []; }) },
-      runtimeCapabilityTransition: { findFirst: vi.fn(async () => { calls.push("transition"); return null; }) },
+      runtimeCapabilityTransition: { findMany: vi.fn(async () => { calls.push("transition"); return []; }) },
     };
     await admitRuntimeGuardedWork(tx, "task-run:proactive");
     expect(calls).toEqual(["lock", "capabilities", "transition"]);
@@ -39,15 +40,93 @@ describe("runtime guarded work admission", () => {
     const tx = fakeTx({ capabilities: [{ capabilityId: "runtime:build", state: "active", manifest: { runtime: { workGuards: ["build-studio-active"] } } }], transition: { previousKeys: ["runtime:build"], desiredKeys: [] } });
     await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).resolves.toBeUndefined();
   });
+
+  it.each(["pending", "applying", "host_applied", "compensating"])("fences canonical image-owner work during %s without a saved guard", async status => {
+    const tx = fakeTx({ transition: imageTransition(status) });
+    await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).rejects.toThrow("runtime_capability_work_draining:runtime:browser-automation");
+  });
+
+  it("also fences the selected image owner's saved manifest guards", async () => {
+    const tx = fakeTx({ capabilities: [{ capabilityId: "runtime:browser-automation", state: "active", manifest: { runtime: { workGuards: ["task-run:proactive"] } } }], transition: imageTransition() });
+    await expect(admitRuntimeGuardedWork(tx, "task-run:proactive")).rejects.toThrow("runtime_capability_work_draining:runtime:browser-automation");
+  });
+
+  it("retains the producer fence while v3 image recovery is uncertain", async () => {
+    const tx = fakeTx({ transition: { ...imageTransition("rollback_failed"), failure: { recoveryRequired: true } } });
+    await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).rejects.toThrow("runtime_capability_work_draining:runtime:browser-automation");
+  });
+
+  it.each(["succeeded", "rolled_back", "failed", "rollback_failed"])("releases the image guard after settled %s", async status => {
+    const tx = fakeTx({ transition: { ...imageTransition(status), failure: { recoveryRequired: false } } });
+    await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).resolves.toBeUndefined();
+  });
+
+  it("does not let an older unrelated recovery row hide active image work", async () => {
+    const tx = fakeTx({ transitions: [
+      { previousKeys: ["runtime:build"], desiredKeys: [], status: "rollback_failed", failure: { recoveryRequired: true }, envelope: { version: 2 } },
+      imageTransition(),
+    ] });
+    await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).rejects.toThrow("runtime_capability_work_draining:runtime:browser-automation");
+    expect(tx.runtimeCapabilityTransition.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [
+      { status: { in: ["pending", "applying", "host_applied", "compensating"] } },
+      { status: "rollback_failed", failure: { path: ["recoveryRequired"], equals: true } },
+    ] } }));
+  });
+
+  it("does not expand an image transition to unrelated saved guards", async () => {
+    const tx = fakeTx({ capabilities: [{ capabilityId: "runtime:build", state: "active", manifest: { runtime: { workGuards: ["build-studio-active"] } } }], transition: imageTransition() });
+    await expect(admitRuntimeGuardedWork(tx, "build-studio-active")).resolves.toBeUndefined();
+  });
+
+  it.each(["missing-plan", "wrong-service", "wrong-source"])("holds bounded image-owner work for %s metadata", async fault => {
+    const transition = imageTransition();
+    const envelope = transition.envelope as Extract<RuntimeTransitionEnvelope, { version: 3 }>;
+    if (fault === "missing-plan") delete (envelope as unknown as Record<string, unknown>).imagePlan;
+    if (fault === "wrong-service") (envelope.imagePlan.services[0]! as { service: string }).service = "postgres";
+    if (fault === "wrong-source") envelope.imagePlan.sourceSha = "f".repeat(40);
+    const tx = fakeTx({ transition });
+    await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).rejects.toThrow("runtime_capability_work_scope_unproven:runtime:browser-automation");
+    await expect(admitRuntimeGuardedWork(tx, "build-studio-active")).resolves.toBeUndefined();
+  });
+
+  it("preserves a legacy unchanged-key transition without image metadata", async () => {
+    const tx = fakeTx({ transition: { previousKeys: ["runtime:browser-automation"], desiredKeys: ["runtime:browser-automation"] } });
+    await expect(admitRuntimeGuardedWork(tx, "task-run:coworker")).resolves.toBeUndefined();
+  });
 });
 
 type CapabilityRow = { capabilityId: string; state: string; manifest: unknown };
-type ActiveTransition = { previousKeys: string[]; desiredKeys: string[] };
+type ActiveTransition = { previousKeys: string[]; desiredKeys: string[]; status?: string; envelope?: unknown; failure?: { recoveryRequired?: boolean } };
 
-function fakeTx(input: { capabilities?: CapabilityRow[]; transition?: ActiveTransition }) {
+function imageTransition(status = "pending"): ActiveTransition {
+  const sourceSha = "a".repeat(40), hash = "b".repeat(64);
+  const keys = ["runtime:browser-automation", "runtime:core"];
+  const states = { "runtime:browser-automation": "active", "runtime:core": "active" };
+  const envelope: RuntimeTransitionEnvelope = {
+    version: 3, kind: "runtime-capability-transition", mode: "reconciliation", transitionId: "RCT-producer-test",
+    issuedAt: new Date(1000).toISOString(), expiresAt: new Date(601000).toISOString(), catalogHash: hash,
+    previousStateHash: hash, desiredStateHash: hash, previousKeys: keys, desiredKeys: keys,
+    previousProfiles: ["runtime-browser-automation"], desiredProfiles: ["runtime-browser-automation"], previousServices: ["browser-use", "portal"], desiredServices: ["browser-use", "portal"],
+    protocolIdentity: { sourceSha, promoterDigest: `sha256:${hash}`, actuatorSha256: hash, signerSha256: hash, imageQualifierSha256: hash },
+    imagePlan: { schemaVersion: 1, sourceSha, platform: "linux/amd64", operation: "prepare", services: [{ service: "browser-use", source: { kind: "source", sourceSha } }] },
+    reconciliation: { observedHost: { schemaVersion: 2, installerVersion: "test", platform: "linux", arch: "amd64", capabilityCatalogHash: hash, capabilityStateVersion: hash, enabledRuntimeCapabilities: keys }, observedDatabaseStates: states, desiredHostEnabledKeys: keys, desiredDatabaseStates: states, touchedKeys: [] },
+  };
+  validateRuntimeServiceImagePlan(envelope);
+  return { previousKeys: keys, desiredKeys: keys, envelope, status };
+}
+
+function fakeTx(input: { capabilities?: CapabilityRow[]; transition?: ActiveTransition; transitions?: ActiveTransition[] }) {
+  const rows = (input.transitions ?? (input.transition ? [input.transition] : [])).map(row => ({ ...row, status: row.status ?? "pending", envelope: row.envelope ?? null }));
+  const selected = (where: { status?: { in: string[] }; OR?: Array<{ status: string | { in: string[] }; failure?: unknown }> }) => rows.filter(row =>
+    where.status?.in.includes(row.status) || where.OR?.some(clause => typeof clause.status === "string"
+      ? row.status === clause.status && row.failure?.recoveryRequired === true
+      : clause.status.in.includes(row.status)));
   return {
     $executeRaw: vi.fn(async () => 1),
     platformCapability: { findMany: vi.fn(async () => input.capabilities ?? []) },
-    runtimeCapabilityTransition: { findFirst: vi.fn(async () => input.transition ?? null) },
+    runtimeCapabilityTransition: {
+      findFirst: vi.fn(async ({ where }) => selected(where)[0] ?? null),
+      findMany: vi.fn(async ({ where }) => selected(where)),
+    },
   };
 }
