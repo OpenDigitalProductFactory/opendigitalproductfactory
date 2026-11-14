@@ -16,16 +16,30 @@ import { computePayslip } from "./payroll";
 // seeded from a cited source rather than printed into code, and these fixtures
 // exist to prove the MECHANISM (caps, thresholds, annualization, employer
 // asymmetry) independent of any year's published numbers.
+const SYNTHETIC_TABLE = [
+  { over: 0, rate: 0.1 },
+  { over: 20_000, rate: 0.2 },
+  { over: 60_000, rate: 0.3 },
+];
+
+const FIXTURE_BRACKETS = [
+  { upTo: 20_000, rate: 0.1 },
+  { upTo: 60_000, rate: 0.2 },
+  { upTo: null, rate: 0.3 },
+];
+
 const RULES: UsPayrollTaxRuleSet = {
   taxYear: 2026,
   periodsPerYear: 12,
+  // Synthetic Pub 15-T-shaped tables: a 12,000 line 1g (the old 1,000 per
+  // monthly period) and three bands over the adjusted annual wage.
   federal: {
-    standardDeductionPerPeriod: 1000,
-    brackets: [
-      { upTo: 20_000, rate: 0.1 },
-      { upTo: 60_000, rate: 0.2 },
-      { upTo: null, rate: 0.3 },
-    ],
+    line1g: { married_jointly: 24_000, other: 12_000 },
+    schedules: {
+      single: { standard: SYNTHETIC_TABLE, step2: SYNTHETIC_TABLE },
+      married_jointly: { standard: SYNTHETIC_TABLE, step2: SYNTHETIC_TABLE },
+      head_of_household: { standard: SYNTHETIC_TABLE, step2: SYNTHETIC_TABLE },
+    },
   },
   fica: {
     socialSecurityRate: 0.062,
@@ -70,16 +84,16 @@ describe("cappedWages", () => {
 describe("bracketTax", () => {
   it("taxes each band at its own rate, not the top rate on everything", () => {
     // 20,000 @ 10% = 2,000; next 10,000 @ 20% = 2,000 -> 4,000
-    expect(bracketTax(30_000, RULES.federal.brackets)).toBe(4_000);
+    expect(bracketTax(30_000, FIXTURE_BRACKETS)).toBe(4_000);
   });
 
   it("applies the open top band above the last ceiling", () => {
     // 2,000 + 8,000 + (40,000 @ 30% = 12,000) = 22,000
-    expect(bracketTax(100_000, RULES.federal.brackets)).toBe(22_000);
+    expect(bracketTax(100_000, FIXTURE_BRACKETS)).toBe(22_000);
   });
 
   it("taxes nothing at zero", () => {
-    expect(bracketTax(0, RULES.federal.brackets)).toBe(0);
+    expect(bracketTax(0, FIXTURE_BRACKETS)).toBe(0);
   });
 });
 

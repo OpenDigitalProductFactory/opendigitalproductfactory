@@ -68,6 +68,7 @@ function memoryDb(initial: StatutoryRuleRow[]) {
           && r.taxType === where.taxType
           && r.ruleKind === where.ruleKind
           && r.side === where.side
+          && (r.qualifierKey ?? "") === ((where as { qualifierKey?: string }).qualifierKey ?? "")
           && r.status === where.status)) as never,
       create: create as never,
       update: update as never,
@@ -158,6 +159,26 @@ describe("ratifyStatutoryRule", () => {
     await ratifyStatutoryRule(db, { payrollTaxRuleId: "PTR-1", actor: person, now });
 
     expect(rows.find((r) => r.id === "r-old")!.effectiveTo).toEqual(new Date("2025-01-01T00:00:00.000Z"));
+  });
+});
+
+describe("bracket tables (BI-2BC8D614)", () => {
+  it("confirming one bracket never closes another bracket of the same table", async () => {
+    const lowBand = row({
+      id: "r-low", payrollTaxRuleId: "PTR-LOW", status: "ratified", taxType: "federal_withholding",
+      value: 0.1, qualifierKey: "filingStatus=single;over=7500;schedule=standard",
+      effectiveFrom: new Date("2025-01-01T00:00:00.000Z"),
+    });
+    const highBand = row({
+      taxType: "federal_withholding", value: 0.12,
+      qualifierKey: "filingStatus=single;over=19900;schedule=standard",
+    });
+    const { db, rows } = memoryDb([lowBand, highBand]);
+
+    const result = await ratifyStatutoryRule(db, { payrollTaxRuleId: "PTR-1", actor: person, now });
+
+    expect(result).toMatchObject({ ok: true, data: { closedWindows: [] } });
+    expect(rows.find((r) => r.id === "r-low")!.effectiveTo).toBeNull();
   });
 });
 

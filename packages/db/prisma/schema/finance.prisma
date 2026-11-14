@@ -188,6 +188,10 @@ model PayrollTaxRule {
   /// publishes alongside the figure. Shapeless on purpose: the authorities do
   /// not agree on a shape, and forcing one would lose detail.
   qualifiers         Json                @default("{}")
+  /// Stable key derived from the scalar qualifiers (sorted k=v pairs), "" when
+  /// none. Part of the unique key so the rows of one bracket table, which share
+  /// a tax, kind, side and start date, are distinct figures (BI-2BC8D614).
+  qualifierKey       String              @default("")
   effectiveFrom      DateTime
   effectiveTo        DateTime?
 
@@ -222,7 +226,7 @@ model PayrollTaxRule {
   ratifiedByUser        User?                    @relation("PayrollTaxRuleRatifiedBy", fields: [ratifiedByUserId], references: [id], onDelete: SetNull)
 
   /// One rule per jurisdiction, tax type, kind, side and start date.
-  @@unique([jurisdictionRefId, taxType, ruleKind, side, effectiveFrom])
+  @@unique([jurisdictionRefId, taxType, ruleKind, side, qualifierKey, effectiveFrom], map: "PayrollTaxRule_jur_taxType_ruleKind_side_qual_effectiveFrom_key")
   // FK-leading (jurisdictionRefId): resolve the figures in force on a pay date.
   @@index([jurisdictionRefId, taxType, status, effectiveFrom, effectiveTo])
   // Drives the review queue: what is waiting on a human, oldest first.
