@@ -569,6 +569,26 @@ else
   _host_bind_preserved=0
 fi
 
+# BI-94C4722B: release mode writes the preserved value into the install .env
+# (install-release-assets updateEnv). A source install never ran that, so the
+# value lived only in this process: every host-side start (compose.sh, the PKI
+# bootstrap, an operator recreate) fell back to the compose default 127.0.0.1
+# and the install ended up half on 0.0.0.0, half on loopback (live, 2026-11-14:
+# portal on 0.0.0.0, portal-tls on 127.0.0.1). Persist the same value with the
+# same comment so every renderer agrees. Appends in place: the env file can be
+# a single-file bind mount, which a rename would detach.
+persist_host_bind_address() {
+  local env_file="$1"
+  [[ -n "$env_file" && -f "$env_file" && -n "${DPF_HOST_BIND_ADDRESS:-}" ]] || return 0
+  grep -q '^DPF_HOST_BIND_ADDRESS=' "$env_file" && return 0
+  {
+    [[ -z "$(tail -c 1 "$env_file")" ]] || printf '\n'
+    printf '# Kept the exposure this install had before DPF_HOST_BIND_ADDRESS existed (BI-FEE77B68). Set 127.0.0.1 to serve this machine only.\n'
+    printf 'DPF_HOST_BIND_ADDRESS=%s\n' "$DPF_HOST_BIND_ADDRESS"
+  } >> "$env_file" || { printf 'warn: could not persist DPF_HOST_BIND_ADDRESS to %s\n' "$env_file" >&2; return 0; }
+  printf 'step=host-bind-address-persisted value=%s\n' "$DPF_HOST_BIND_ADDRESS"
+}
+
 # BI-C26D5DC5: the Git update receiver refuses every delivery in production
 # without DPF_GIT_WEBHOOK_SECRET, and no install ever wrote one. Same shape as
 # the bind address above: the portal is recreated in step 4 but the install
@@ -1634,7 +1654,9 @@ fi
 # the promoter's render hash identically is only provable on a live upgrade;
 # once one run shows only genuinely changed services as would-recreate, a
 # follow-up makes stateless ones converge. Read-only, so it also runs under
-# --dry-run. Never fails the promotion.
+# --dry-run. Never fails the promotion. A service whose published host IP
+# differs from the render is reported as bindDrift and is never a recreate
+# candidate (BI-94C4722B): converging must not change who can reach it.
 emit_step sidecar-converge
 _converge_ok=1
 _converge_f_args=("${_f_args[@]}")
@@ -1659,19 +1681,37 @@ docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_
 docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
   "${_converge_f_args[@]}" config --hash '*' > "$_converge_hashes" 2>/dev/null || _converge_ok=0
 docker ps -a --filter "label=com.docker.compose.project=$_project" \
-  --format '{{.Label "com.docker.compose.service"}}	{{.Label "com.docker.compose.config-hash"}}	{{.State}}' \
+  --format '{{.Label "com.docker.compose.service"}}	{{.Label "com.docker.compose.config-hash"}}	{{.State}}	{{.Ports}}' \
   > "$_converge_running" 2>/dev/null || _converge_ok=0
 _converge_summary="$(node -e '
   const fs = require("node:fs");
   const [target, ok, renderedPath, hashesPath, runningPath, dir] = process.argv.slice(1);
   const out = { mode: "shadow", targetSha: target, at: new Date().toISOString(), outcome: "current",
-    wouldRecreate: [], unchanged: [], skippedStopped: [], dataOwnerChanged: [], unclassified: [], failed: [] };
+    wouldRecreate: [], unchanged: [], skippedStopped: [], dataOwnerChanged: [], unclassified: [], failed: [], bindDrift: [] };
+  // BI-94C4722B: published host IP per host port, running vs rendered. A
+  // difference means the render disagrees with how the container was created,
+  // and recreating would silently widen or narrow its exposure.
+  const runningBinds = (ports) => {
+    const map = new Map();
+    for (const m of (ports ?? "").matchAll(/(?:^|,\s*)([0-9.]+):(\d+)->/g)) map.set(m[2], m[1]);
+    return map;
+  };
+  const bindDrift = (service, spec, ports) => {
+    const running = runningBinds(ports);
+    const drift = [];
+    for (const p of spec.ports ?? []) {
+      const port = String(p.published ?? "");
+      const rendered = p.host_ip || "0.0.0.0";
+      if (running.has(port) && running.get(port) !== rendered) drift.push({ service, port, running: running.get(port), rendered });
+    }
+    return drift;
+  };
   try {
     if (ok !== "1") throw new Error("render");
     const services = JSON.parse(fs.readFileSync(renderedPath, "utf8")).services ?? {};
     const desired = new Map(fs.readFileSync(hashesPath, "utf8").split("\n").map((l) => l.trim().split(/\s+/)).filter((p) => p.length === 2));
     for (const line of fs.readFileSync(runningPath, "utf8").split("\n").filter(Boolean)) {
-      const [service, current, state] = line.split("\t");
+      const [service, current, state, ports] = line.split("\t");
       const spec = services[service];
       if (!spec) continue; // a container outside this chain is not ours to judge
       const cls = spec.labels?.["dpf.recreate-class"];
@@ -1679,6 +1719,8 @@ _converge_summary="$(node -e '
       if (!cls) { out.unclassified.push(service); continue; }
       if (cls === "managed") continue;
       if (!want) { out.failed.push(service); continue; }
+      const drift = bindDrift(service, spec, ports);
+      if (drift.length) { out.bindDrift.push(...drift); continue; }
       const change = { service, from: current, to: want };
       if (cls === "data-owner") { if (want !== current) out.dataOwnerChanged.push(change); continue; }
       if (state !== "running") { out.skippedStopped.push(service); continue; }
@@ -1687,16 +1729,23 @@ _converge_summary="$(node -e '
     out.outcome = out.failed.length ? "degraded" : out.wouldRecreate.length ? "would-recreate" : "current";
   } catch { out.outcome = "degraded"; }
   const byName = (a, b) => (a.service ?? a).localeCompare(b.service ?? b);
-  for (const key of ["wouldRecreate", "unchanged", "skippedStopped", "dataOwnerChanged", "unclassified", "failed"]) out[key].sort(byName);
+  for (const key of ["wouldRecreate", "unchanged", "skippedStopped", "dataOwnerChanged", "unclassified", "failed", "bindDrift"]) out[key].sort(byName);
   if (dir) {
     try { fs.writeFileSync(`${dir}/service-converge-outcome.json.tmp`, JSON.stringify(out) + "\n"); fs.renameSync(`${dir}/service-converge-outcome.json.tmp`, `${dir}/service-converge-outcome.json`); } catch {}
   }
   const names = (list) => list.map((e) => e.service ?? e).join(",") || "none";
-  process.stdout.write(`outcome=${out.outcome} would-recreate=${names(out.wouldRecreate)} data-owner-changed=${names(out.dataOwnerChanged)} unclassified=${names(out.unclassified)}`);
+  process.stdout.write(`outcome=${out.outcome} would-recreate=${names(out.wouldRecreate)} data-owner-changed=${names(out.dataOwnerChanged)} unclassified=${names(out.unclassified)} bind-drift=${names([...new Set(out.bindDrift.map((d) => d.service))])}`);
 ' "$PROMOTE_TARGET_SHA" "$_converge_ok" "$_converge_rendered" "$_converge_hashes" "$_converge_running" "${DPF_PROMOTER_STATE_DIR:-}" 2>/dev/null)" \
   || _converge_summary="outcome=degraded"
 printf 'step=sidecar-converge-shadow target=%s %s\n' "${_built_sha:-$PROMOTE_TARGET_SHA}" "$_converge_summary"
 rm -f "$_converge_rendered" "$_converge_hashes" "$_converge_running" ${_converge_mounts:+"$_converge_mounts"}
+
+# BI-94C4722B: a verified source upgrade persists the bind address it served
+# with, so host-side starts render the same exposure (release mode already
+# committed it in its .env transaction).
+if [[ $_dry_run -eq 0 && $_release_mode -eq 0 && $_host_bind_preserved -eq 1 ]]; then
+  persist_host_bind_address "${PROMOTE_COMPOSE_ENV_FILE:-}"
+fi
 
 # Source upgrades have no release-assets transaction. Persist only this derived
 # default through the selected single-file bind, after runtime verification.

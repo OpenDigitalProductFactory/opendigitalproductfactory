@@ -1,4 +1,4 @@
-import { projectBuildPlanCoverage } from "./build-plan-coverage";
+import { type BuildPlanCoverageBaseline, projectBuildPlanCoverage } from "./build-plan-coverage";
 import { validString, validStringArray, validAuthoritySnapshot, validInitiativeGateReceipt, normalizeInitiativeGate as normalizeGate } from "./receipt-validation";
 import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evidence";
 
@@ -358,6 +358,8 @@ function projectPlanCoverage(
   activities: readonly InitiativeReadinessActivity[],
   baseline: Baseline | null,
   buildPlanDigest?: string | null,
+  /** BI-9FA1F9CF: the reviewed build design, the scope a Build Studio plan traces to without a baseline. */
+  buildDesignScope?: BuildPlanCoverageBaseline | null,
 ): { state: ReadinessEvidenceState; planDigest: string | null; planArtifact: InitiativePlanArtifact | null } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "plan_backlog_coverage")
@@ -365,7 +367,7 @@ function projectPlanCoverage(
   if (!latest) return { state: "missing", planDigest: null, planArtifact: null };
   // BI-6F2872FC: a Build Studio plan is covered by the platform, bound to the
   // plan's accepted revision rather than to a committed plan document.
-  const buildPlanCoverage = projectBuildPlanCoverage(latest.payload, baseline, buildPlanDigest);
+  const buildPlanCoverage = projectBuildPlanCoverage(latest.payload, baseline ?? buildDesignScope ?? null, buildPlanDigest);
   if (buildPlanCoverage) return { ...buildPlanCoverage, planArtifact: null };
   const payload = object(latest.payload);
   const artifact = object(payload?.planArtifactRef);
@@ -448,7 +450,15 @@ export function projectBacklogItemReadiness(args: {
    * transition — whether its reviewers passed it, and how many acceptance
    * criteria it states. Consulted only on the proportional shapes.
    */
-  buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
+  buildDesign?: {
+    reviewPassed: boolean;
+    acceptanceCriteriaCount: number;
+    /**
+     * BI-9FA1F9CF: the reviewed design as a plan-coverage scope (buildDesignScope).
+     * Read only when the item holds no baseline of its own and inherits none.
+     */
+    scope?: BuildPlanCoverageBaseline | null;
+  } | null;
   /**
    * BI-6F2872FC: the digest of the Build Studio build's current plan. Coverage
    * recorded for an earlier plan revision reads stale against it.
@@ -488,7 +498,8 @@ export function projectBacklogItemReadiness(args: {
   // retroactively stale author research against the previously recorded source.
   const digest = baseline.current?.origin === "item-body" ? null : baseline.current?.artifactDigest ?? null;
   const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current,
-    args.buildPlanDigest);
+    args.buildPlanDigest,
+    !inherited && !baseline.current && args.buildDesign?.reviewPassed === true ? args.buildDesign.scope ?? null : null);
   // Only the scope owner can amend its design. A child that inherits the
   // parent's scope keeps judging the parent's baseline: it cannot re-approve it.
   const judged = inherited
@@ -714,7 +725,15 @@ export function projectBacklogItemReadinessSummary(args: {
    */
   completionDecision?: InitiativeReadinessDecision | null;
   /** The active build's reviewed design, as its build gates pass it (BI-6F2872FC AC-6). */
-  buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
+  buildDesign?: {
+    reviewPassed: boolean;
+    acceptanceCriteriaCount: number;
+    /**
+     * BI-9FA1F9CF: the reviewed design as a plan-coverage scope (buildDesignScope).
+     * Read only when the item holds no baseline of its own and inherits none.
+     */
+    scope?: BuildPlanCoverageBaseline | null;
+  } | null;
 }) {
   const terminalCompletion = persistedTerminalCompletionDecision(args.activities, args.item) ?? args.completionDecision ?? null;
   const decisions = Object.fromEntries((["design", "plan", "implementation", "completion"] as const).map((target) => {

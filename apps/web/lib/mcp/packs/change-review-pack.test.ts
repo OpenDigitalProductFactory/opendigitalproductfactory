@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   enqueueSemanticReview: vi.fn(),
   retryPersistedSemanticReview: vi.fn(),
   readReviewArtifactFromSource: vi.fn(),
+  readCommitTree: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
@@ -31,6 +32,7 @@ vi.mock("@/lib/change-review/semantic-review-background", () => ({ enqueueSemant
 vi.mock("@/lib/change-review/review-artifact-source", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/change-review/review-artifact-source")>(),
   readReviewArtifactFromSource: mocks.readReviewArtifactFromSource,
+  readCommitTree: mocks.readCommitTree,
 }));
 
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
@@ -65,6 +67,7 @@ describe("change-review MCP pack", () => {
     vi.clearAllMocks();
     taskRows.length = 0;
     mocks.prisma.workroom.findUnique.mockResolvedValue({ id: "capsule-row-1" });
+    mocks.readCommitTree.mockResolvedValue(null);
     mocks.prisma.externalEvidenceRecord.findFirst.mockResolvedValue(null);
     mocks.prisma.externalEvidenceRecord.findUnique.mockResolvedValue(null);
     mocks.recordExternalEvidence.mockResolvedValue({ id: "outcome-evidence-1" });
@@ -278,6 +281,28 @@ describe("change-review MCP pack", () => {
       expect(mocks.enqueueSemanticReview).not.toHaveBeenCalled();
       expect(taskRows).toHaveLength(0);
     });
+
+  // BI-7430A9CC: re-signing or cleanly rebasing a gated head keeps its tree, and
+  // local-CI reuses the PASS by that tree. The review must accept the reused
+  // record rather than demand a throwaway commit to mint a new tree.
+  it("admits a same-tree rebuilt head on the reused local-CI pass", async () => {
+    const { input, row } = validReviewInput();
+    row.details.evidence.sha = "d".repeat(40);
+    mocks.readCommitTree.mockResolvedValue(input.headTreeHash);
+    const out = await changeReviewPack.handlers.review_semantic_change!(input, "user-1", { agentId: "codex" });
+    expect(out).toMatchObject({ success: true, data: { disposition: "admitted" } });
+    expect(mocks.readCommitTree).toHaveBeenCalledWith("c".repeat(40));
+    expect(mocks.enqueueSemanticReview).toHaveBeenCalledOnce();
+  });
+
+  it("still refuses a prior commit's pass when the head's tree changed", async () => {
+    const { input, row } = validReviewInput();
+    row.details.evidence.sha = "d".repeat(40);
+    mocks.readCommitTree.mockResolvedValue("e".repeat(40));
+    const out = await changeReviewPack.handlers.review_semantic_change!(input, "user-1", { agentId: "codex" });
+    expect(out).toMatchObject({ success: false, error: "invalid_failure_analysis" });
+    expect(mocks.enqueueSemanticReview).not.toHaveBeenCalled();
+  });
 
   it("records infrastructure-inconclusive correlation without semantic quality counts", async () => {
     mocks.prisma.externalEvidenceRecord.findFirst

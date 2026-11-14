@@ -47,10 +47,10 @@ describe("buildOperationalGraphModel", () => {
   it("traces each actual instance to the RuntimeTarget data-model element (cross-layer)", () => {
     // one traces edge per instance → prisma:model:RuntimeTarget; resolved by the applier
     expect(model.crossLayerRelationships).toEqual([
-      { fromKey: "operational:instance:d", toKey: "prisma:model:RuntimeTarget", relSlug: "traces" }, // service "edge"
-      { fromKey: "operational:instance:a", toKey: "prisma:model:RuntimeTarget", relSlug: "traces" },
-      { fromKey: "operational:instance:b", toKey: "prisma:model:RuntimeTarget", relSlug: "traces" },
-      { fromKey: "operational:instance:c", toKey: "prisma:model:RuntimeTarget", relSlug: "traces" },
+      { fromKey: "operational:instance:d", toKey: "prisma:model:RuntimeTarget", relSlug: "traces", traceKind: "instance-of" }, // service "edge"
+      { fromKey: "operational:instance:a", toKey: "prisma:model:RuntimeTarget", relSlug: "traces", traceKind: "instance-of" },
+      { fromKey: "operational:instance:b", toKey: "prisma:model:RuntimeTarget", relSlug: "traces", traceKind: "instance-of" },
+      { fromKey: "operational:instance:c", toKey: "prisma:model:RuntimeTarget", relSlug: "traces", traceKind: "instance-of" },
     ]);
   });
 
