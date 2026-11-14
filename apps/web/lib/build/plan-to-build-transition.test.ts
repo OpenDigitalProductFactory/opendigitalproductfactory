@@ -22,6 +22,10 @@ const ensureCoverageMock = vi.fn(async () => ({ recorded: false, reason: "alread
 vi.mock("@/lib/build/record-build-plan-coverage", () => ({
   ensureBuildPlanCoverage: (...a: unknown[]) => ensureCoverageMock(...(a as [])),
 }));
+const healShapeMock = vi.fn(async () => ({ healed: false, detail: "delivery shape already bound" }));
+vi.mock("@/lib/build/heal-build-workroom-shape", () => ({
+  healBuildWorkroomShape: (...a: unknown[]) => healShapeMock(...(a as [])),
+}));
 
 vi.mock("@dpf/db", () => {
   const prisma = {
@@ -325,5 +329,27 @@ describe("plan coverage before the readiness gate (BI-6F2872FC)", () => {
     findUniqueMock.mockResolvedValueOnce(planBuild({ buildExecState: { planAdvance: { failures: 3, escalatedAt: "2026-09-23T00:00:00Z" } } }));
     await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
     expect(ensureCoverageMock).not.toHaveBeenCalled();
+  });
+
+  // BI-9FA1F9CF: a decomposition child arrives here with no Workroom; judged
+  // before its shape is bound, it is refused on receipts its shape does not owe.
+  it("binds the delivery shape before recording coverage and judging readiness", async () => {
+    healShapeMock.mockClear();
+    ensureCoverageMock.mockClear();
+    const order: string[] = [];
+    healShapeMock.mockImplementationOnce(async () => { order.push("heal"); return { healed: true, detail: "attached" }; });
+    ensureCoverageMock.mockImplementationOnce(async () => { order.push("coverage"); return { recorded: false, reason: "already-covered" }; });
+    findUniqueMock.mockResolvedValueOnce(planBuild());
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(healShapeMock).toHaveBeenCalledWith({ buildId: "FB-X", userId: "u1" });
+    expect(order).toEqual(["heal", "coverage"]);
+  });
+
+  it("still records coverage when the shape heal throws", async () => {
+    ensureCoverageMock.mockClear();
+    healShapeMock.mockRejectedValueOnce(new Error("db down"));
+    findUniqueMock.mockResolvedValueOnce(planBuild());
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(ensureCoverageMock).toHaveBeenCalledWith("FB-X");
   });
 });

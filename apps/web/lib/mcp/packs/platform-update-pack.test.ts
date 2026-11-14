@@ -68,6 +68,29 @@ describe("platform-update pack", () => {
     expect(result.success, JSON.stringify(result)).toBe(true);
     vi.doUnmock("@/lib/platform-runtime/runtime-capability-commands");
   });
+  it("offers only the bounded service selector and forwards no caller image proof", async () => {
+    const definition = platformUpdatePack.definitions.find(d => d.name === "reconcile_runtime_capabilities")!;
+    expect((definition.inputSchema.properties as Record<string, unknown>).imageServices).toEqual({ type: "array", minItems: 1, maxItems: 1, uniqueItems: true, items: { type: "string", enum: ["browser-use"] } });
+    const request = vi.fn(async () => ({ status: "succeeded" }));
+    vi.doMock("@/lib/platform-runtime/runtime-capability-commands", () => ({ requestRuntimeCapabilityTransitionForActor: request }));
+    const intent = { observedHost: {}, observedDatabaseStates: {}, desiredHostEnabledKeys: ["runtime:core"], desiredDatabaseStates: {}, touchedKeys: [] };
+    await platformUpdatePack.handlers.reconcile_runtime_capabilities({ transitionId: "RCT-image", reconciliation: intent, imageServices: ["browser-use"], imagePlan: { sourceSha: "forged" }, requestedById: "forged-user" }, "verified-user");
+    expect(request).toHaveBeenCalledWith({ transitionId: "RCT-image", desiredKeys: ["runtime:core"], mode: "reconciliation", reconciliation: intent, imageServices: ["browser-use"] }, "verified-user");
+    vi.doUnmock("@/lib/platform-runtime/runtime-capability-commands");
+  });
+  it.each([
+    ["failed", "runtime_service_image_protocol_unsupported", "platform update"],
+    ["failed", "runtime_image_configuration_unverified", "configuration"],
+    ["rollback_failed", "runtime_image_apply_unsettled", "recovery"],
+  ])("gives a concrete next action for %s/%s", async (status, failure, nextAction) => {
+    vi.doMock("@/lib/platform-runtime/runtime-capability-commands", () => ({ requestRuntimeCapabilityTransitionForActor: vi.fn(async () => ({ status, failure })) }));
+    const intent = { observedHost: {}, observedDatabaseStates: {}, desiredHostEnabledKeys: ["runtime:core"], desiredDatabaseStates: {}, touchedKeys: [] };
+    const result = await platformUpdatePack.handlers.reconcile_runtime_capabilities({ transitionId: "RCT-hold", reconciliation: intent, imageServices: ["browser-use"] }, "verified-user");
+    expect(result.success).toBe(false);
+    expect(result.message).toContain(nextAction);
+    expect(result.message).not.toMatch(/resend|try again|no changes/i);
+    vi.doUnmock("@/lib/platform-runtime/runtime-capability-commands");
+  });
   it("registers both platform-update tools with handlers", () => {
     const names = platformUpdatePack.definitions.map((d) => d.name).sort();
     expect(names).toEqual([...ALL_TOOLS].sort());

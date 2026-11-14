@@ -1,5 +1,6 @@
 "use client";
 import type { WorkroomProcessSnapshot, WorkroomRefreshTarget } from "@/lib/work-management/workroom-process-snapshot";
+import { EntityRefText } from "@/components/references/EntityRefText";
 
 import {
   Activity,
@@ -59,7 +60,7 @@ const BOUNDARY_GAP_LABEL: Record<WorkroomBoundaryGap, string> = {
   "closure-rule": "Closure rule not defined",
 };
 
-function ActivityEvent({ event }: { event: WorkroomActivityView }) {
+function ActivityEvent({ event, entityRefHrefs }: { event: WorkroomActivityView; entityRefHrefs?: Record<string, string> }) {
   const label = ACTIVITY_KIND_LABEL[event.kind];
 
   return (
@@ -78,7 +79,7 @@ function ActivityEvent({ event }: { event: WorkroomActivityView }) {
           ) : null}
         </div>
         <p className={`mt-2 text-sm leading-6 ${event.emphasis === "quiet" ? "text-[var(--dpf-muted)]" : "text-[var(--dpf-text)]"}`}>
-          {event.summary}
+          {event.kind === "message" ? <EntityRefText text={event.summary} hrefs={entityRefHrefs} /> : event.summary}
         </p>
       </div>
     </li>
@@ -292,7 +293,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
           </div>
           {room.activity.length > 0 ? (
             <ol className="divide-y divide-[var(--dpf-border)]">
-              {room.activity.map((event) => <ActivityEvent key={event.eventId} event={event} />)}
+              {room.activity.map((event) => <ActivityEvent key={event.eventId} event={event} entityRefHrefs={room.entityRefHrefs} />)}
             </ol>
           ) : (
             <EmptyState

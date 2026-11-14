@@ -1,11 +1,28 @@
 import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
+import { verifyTransitionSignature } from "../../../../../scripts/lib/transition-signing.mjs";
 import { ok } from "@/lib/shared/action-result";
 // Mocked by self-upgrade.test.ts, which registers these tests.
 import { prePullReleaseDoctoolsImage } from "@/lib/self-upgrade/doctools-release-image";
 
 type TestContext = { mocks: any; runSelfUpgrade: (input: any) => Promise<any>; installState: string; installStateHash: string };
+
+/** The runtime-transition secret the suite's readFile mock serves for every non-state path. */
+const TEST_TRANSITION_SECRET = "s".repeat(32);
+
+/**
+ * The promoter is handed the handoff readiness signed, re-stamped at launch
+ * (BI-2074D622): every binding field is carried verbatim, only the window moves
+ * and the signature follows it. Asserts exactly that, in place of identity.
+ */
+function expectLaunchStampOf(launched: any, recorded: any) {
+  const binding = ({ envelope }: any) => { const { issuedAt: _i, expiresAt: _e, ...rest } = envelope; return rest; };
+  expect(binding(launched)).toEqual(binding(recorded));
+  expect(Date.parse(launched.envelope.issuedAt)).toBeGreaterThanOrEqual(Date.parse(recorded.envelope.issuedAt));
+  expect(Date.parse(launched.envelope.expiresAt)).toBeGreaterThanOrEqual(Date.parse(recorded.envelope.expiresAt));
+  expect(() => verifyTransitionSignature(launched.envelope, launched.signature, TEST_TRANSITION_SECRET)).not.toThrow();
+}
 
 export function registerSelfUpgradeFunctionTests(input: {
   allFunctions: unknown[];
@@ -140,9 +157,17 @@ export function registerInstallStateHandoffTests({ mocks, runSelfUpgrade, instal
     mocks.runPromoterReadiness.mockImplementation(async () => { order.push("readiness"); return { exitCode: 0, stdout: JSON.stringify({ failures: [], sourceHash: installStateHash, projectionHash: "b".repeat(64), fromSchemaVersion: 1, toSchemaVersion: 2 }), stderr: "" }; });
     mocks.recordPromoterReadiness.mockImplementation(async (_runId: string, report: any) => { order.push("evidence"); persistedHandoff = report.migrationHandoff; return {}; });
     mocks.startQuiescence.mockImplementation(async () => { order.push("quiescence"); return { runId: "QR-1", awaitReady: async () => ({ ...ok(), outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }) }; });
-    mocks.runPromoter.mockImplementation(async (params: any) => { order.push("promotion"); expect(params.promoterImage).toBe(`sha256:${"d".repeat(64)}`); expect(params.installStateMigrationHandoff).toBe(persistedHandoff); return { exitCode: 0, stdout: "", stderr: "" }; });
-    await runSelfUpgrade({ triggeredBy: "ops" });
+    let launchedHandoff: unknown;
+    mocks.runPromoter.mockImplementation(async (params: any) => { order.push("promotion"); expect(params.promoterImage).toBe(`sha256:${"d".repeat(64)}`); launchedHandoff = params.installStateMigrationHandoff; return { exitCode: 0, stdout: "", stderr: "" }; });
+    const result = await runSelfUpgrade({ triggeredBy: "ops" });
+    expect(result).toMatchObject({ status: "succeeded" });
     expect(order).toEqual(["resolve", "readiness", "evidence", "quiescence", "promotion"]);
+    expectLaunchStampOf(launchedHandoff, persistedHandoff);
+    // The launch stamp is evidence too: the run shows the window the promoter verified.
+    expect(mocks.recordMigrationHandoffLaunchStamp).toHaveBeenCalledWith("SUR-AAAABBBB", expect.objectContaining({
+      migrationHandoff: launchedHandoff,
+      readinessWindow: { issuedAt: (persistedHandoff as any).envelope.issuedAt, expiresAt: (persistedHandoff as any).envelope.expiresAt },
+    }));
   });
 
   it("re-binds the handoff after the drain when a host-side writer moved install-state.json, then promotes (BI-95DF1BFC)", async () => {
@@ -167,16 +192,21 @@ export function registerInstallStateHandoffTests({ mocks, runSelfUpgrade, instal
       order.push("quiescence");
       return { runId: "QR-1", awaitReady: async () => { currentState = movedState; order.push("state-moved"); return { ...ok(), outcome: "ready-to-swap", runId: "QR-1", finalSnapshot: null }; } };
     });
+    let launchedHandoff: any;
     mocks.runPromoter.mockImplementation(async (params: any) => {
       order.push("promotion");
-      expect(params.installStateMigrationHandoff).toBe(handoffs[1]);
-      expect(params.installStateMigrationHandoff.envelope.sourceHash).toBe(movedHash);
+      launchedHandoff = params.installStateMigrationHandoff;
       return { exitCode: 0, stdout: "", stderr: "" };
     });
     const result = await runSelfUpgrade({ triggeredBy: "ops" });
     expect(result).toMatchObject({ status: "succeeded" });
     expect(order).toEqual(["readiness", "quiescence", "state-moved", "readiness", "promotion"]);
     expect(handoffs).toHaveLength(2);
+    expect(launchedHandoff.envelope.sourceHash).toBe(movedHash);
+    expectLaunchStampOf(launchedHandoff, handoffs[1]);
+    expect(mocks.recordMigrationHandoffLaunchStamp).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      migrationHandoff: launchedHandoff, reboundFor: "install_state_envelope_state_changed",
+    }));
     expect(mocks.failRun).not.toHaveBeenCalled();
   });
 
