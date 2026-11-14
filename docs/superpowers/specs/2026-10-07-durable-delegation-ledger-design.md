@@ -320,6 +320,20 @@ and a supervisor that writes every event to the room's sequenced log. A live
 session is process-bound: after a restart the next start records
 `cancelled_after_process_loss` and resumes the stored provider thread.
 
+**Runtime core, 2026-11-14** (`BI-C64EDA33`, plan
+`docs/superpowers/plans/2026-11-14-workroom-runtime-core.md`): the supervisor
+is now the process host only.
+- Each runtime command is decided without I/O (`runtime-decider.ts`).
+- The decision commits in one transaction (`runtime-commit.server.ts`, inside
+  the room's receipted command): its log rows, the `runtimeSession` record,
+  the receipt and its `WorkroomEffect` outbox rows.
+- A leased effect worker (`effect-worker.server.ts`) runs the effects in
+  per-room order and reports each result as a command with a deterministic id.
+- Each provider process is a generation. Effects decided for a dead
+  generation are retired, not replayed.
+- Input a session has not received is kept in `runtimeSession.queuedInputs`
+  and runs after a re-attach.
+
 An executor adapter contract with DPF-owned ids and provider ids as references:
 `openSession`, `ensureThread`, `resumeThread`, `startTurn`, `steerTurn`,
 `interruptTurn`, `respondToRuntimeRequest`. First adapters: the Claude Agent

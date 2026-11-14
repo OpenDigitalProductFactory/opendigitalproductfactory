@@ -1,17 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // BI-05715F4C: the Workroom runtime supervisor. A fake adapter plays the CLI;
-// the room, its log and the credential store are mocked.
+// the room and the credential store are mocked. BI-C64EDA33: every change goes
+// through the runtime commit and every side effect through the room outbox,
+// here over memory (__fixtures__/memory-runtime-store.ts).
 
-const { db, recordActivity } = vi.hoisted(() => ({
-  db: { workroom: { findUnique: vi.fn(), update: vi.fn() }, $executeRaw: vi.fn() },
-  recordActivity: vi.fn(async (..._args: unknown[]) => ({ id: "act" })),
-}));
+const { db } = vi.hoisted(() => ({ db: { workroom: { findUnique: vi.fn() } } }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
-vi.mock("@/lib/work-capsules/work-capsule-activity-store", () => ({ recordWorkCapsuleActivity: recordActivity }));
 
 import { decideClaudeToolCall, decideCodexRequest } from "./runtime-request-policy";
 import { createMemoryHeldRequestStore } from "./__fixtures__/memory-held-request-store";
+import { createMemoryRuntimeStore } from "./__fixtures__/memory-runtime-store";
 import { createRuntimeSupervisor } from "./supervisor";
 import { createCodexAdapter } from "./codex-app-server-adapter";
 import { autoRespond, fakeProcess } from "./__fixtures__/fake-process";
@@ -19,6 +18,7 @@ import type { ExecutorAdapter, RuntimeEvent, RuntimeSession } from "./types";
 
 const actor = { userId: "user-1", agentId: "agent-1", principalId: "prn-1" };
 let room: { id: string; status: string; archivedAt: Date | null; workspaceState: Record<string, unknown>; taskRunId: string | null };
+let store: ReturnType<typeof createMemoryRuntimeStore>;
 
 function harness() {
   let emit: (event: RuntimeEvent) => void = () => {};
@@ -40,20 +40,27 @@ function harness() {
   };
   const issueToken = vi.fn(async () => ({ tokenId: "tok-1", plaintext: "dpfroom_x" }));
   const revokeTokens = vi.fn(async () => 1);
-  const runtime = createRuntimeSupervisor({ adapters: { codex: adapter, claude: adapter }, mcpUrl: "http://portal/api/mcp/v1", issueToken, revokeTokens, held: createMemoryHeldRequestStore(), clientGaid: async () => "gaid:priv:dpf.internal:agt-ext-codex" });
-  return { runtime, session, adapter, issueToken, revokeTokens, emit: (event: RuntimeEvent) => emit(event) };
+  const runtime = createRuntimeSupervisor({ adapters: { codex: adapter, claude: adapter }, mcpUrl: "http://portal/api/mcp/v1", issueToken, revokeTokens,
+    held: createMemoryHeldRequestStore(), clientGaid: async () => "gaid:priv:dpf.internal:agt-ext-codex", commit: store.commit, effects: store.effects });
+  const emitted = (event: RuntimeEvent) => emit(event);
+  return { runtime, session, adapter, issueToken, revokeTokens, emit: emitted, settle: () => settle(runtime) };
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-const kinds = () => recordActivity.mock.calls.map((call) => (call as unknown as [unknown, { kind: string }])[1].kind);
+/** Let event commits land and the outbox run what they decided. */
+async function settle(runtime: { drainEffects(): Promise<number> }) {
+  for (let i = 0; i < 4; i += 1) {
+    await flush();
+    await runtime.drainEffects();
+  }
+}
+const kinds = () => store.kinds();
 
 beforeEach(() => {
   vi.clearAllMocks();
   room = { id: "row-1", status: "working", archivedAt: null, workspaceState: {}, taskRunId: "TR-1" };
+  store = createMemoryRuntimeStore((capsuleId) => (capsuleId === "WC-1" ? room : null));
   db.workroom.findUnique.mockImplementation(async () => room);
-  db.workroom.update.mockImplementation(async ({ data }: { data: { workspaceState: Record<string, unknown> } }) => { room.workspaceState = data.workspaceState; return room; });
-  // writeSession sets only the runtimeSession key: jsonb_set(..., ${json}::jsonb) WHERE id = ${roomId}.
-  db.$executeRaw.mockImplementation(async (_sql: TemplateStringsArray, json: string) => { room.workspaceState = { ...room.workspaceState, runtimeSession: JSON.parse(json) }; return 1; });
 });
 
 describe("start", () => {
@@ -61,6 +68,9 @@ describe("start", () => {
     const h = harness();
     const result = await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor, prompt: "begin" });
     expect(result).toMatchObject({ success: true, data: { threadId: "thr-1" } });
+    // Acknowledged once the intent committed; the turn runs from the outbox.
+    expect(store.effectRows).toEqual([expect.objectContaining({ kind: "start-turn", processBound: true, payload: { prompt: "begin" } })]);
+    await h.settle();
     expect(h.issueToken).toHaveBeenCalledWith({ userId: "user-1", agentId: "agent-1", capsuleId: "WC-1", runRef: "TR-1" });
     expect(h.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ mcp: { url: "http://portal/api/mcp/v1", bearerToken: "dpfroom_x" }, cwd: "/workspace" }), expect.any(Function));
     expect(room.workspaceState["runtimeSession"]).toMatchObject({ provider: "codex", threadId: "thr-1", tokenId: "tok-1", status: "supervised" });
@@ -77,8 +87,9 @@ describe("start", () => {
     room.workspaceState = { runtimeSession: { provider: "codex", threadId: "thr-old", tokenId: "tok-old", status: "open", openedAt: "x", cwd: "/workspace/app" } };
     const h = harness();
     await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
+    await h.settle();
     expect(h.revokeTokens).toHaveBeenCalledWith({ capsuleId: "WC-1", reason: "cancelled_after_process_loss", tokenId: "tok-old" });
-    expect(recordActivity.mock.calls[0]?.[1]).toMatchObject({ kind: "error", summary: expect.stringMatching(/^cancelled_after_process_loss/) });
+    expect(store.activities[0]).toMatchObject({ kind: "error", summary: expect.stringMatching(/^cancelled_after_process_loss/) });
     expect(h.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ resumeThreadId: "thr-old", cwd: "/workspace/app" }), expect.any(Function));
   });
 
@@ -95,11 +106,19 @@ describe("a live session", () => {
     const h = harness();
     await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor, prompt: "first" });
     await expect(h.runtime.turn({ capsuleId: "WC-1", prompt: "next" })).resolves.toMatchObject({ data: { outcome: "queued" } });
-    await expect(h.runtime.turn({ capsuleId: "WC-1", prompt: "also", steer: true })).resolves.toMatchObject({ data: { outcome: "steered" } });
+    expect(room.workspaceState["runtimeSession"]).toMatchObject({ queuedInputs: [{ prompt: "next" }] });
+    await h.settle();
+    h.emit({ type: "turn-started", turnId: "turn-1" });
+    await h.settle();
+    await expect(h.runtime.turn({ capsuleId: "WC-1", prompt: "also", steer: true })).resolves.toMatchObject({ data: { outcome: "steer-requested" } });
+    await h.settle();
+    expect(h.session.steerTurn).toHaveBeenCalledWith("also");
+    expect(kinds()).toContain("action");
     h.session.turn = null;
     h.emit({ type: "turn-completed", turnId: "turn-1", status: "completed" });
-    await flush();
+    await h.settle();
     expect(h.session.startTurn).toHaveBeenLastCalledWith("next");
+    expect(room.workspaceState["runtimeSession"]).toMatchObject({ queuedInputs: [], turnPending: true });
   });
 
   it("accepts a workspace command, holds an outward one for the room, and answers it when decided", async () => {
@@ -107,12 +126,13 @@ describe("a live session", () => {
     await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     h.emit({ type: "runtime-request", request: { requestId: "r-local", kind: "command", turnId: "t", summary: "pnpm test", detail: {} } });
     h.emit({ type: "runtime-request", request: { requestId: "r-push", kind: "command", turnId: "t", summary: "git push origin main", detail: {} } });
-    await flush();
+    await h.settle();
     expect(h.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-local", "accept");
     expect(h.session.respondToRuntimeRequest).not.toHaveBeenCalledWith("r-push", expect.anything());
     await expect(h.runtime.status("WC-1")).resolves.toMatchObject({ held: [{ requestId: "r-push" }] });
     expect(kinds()).toContain("question");
     await h.runtime.decide({ capsuleId: "WC-1", requestId: "r-push", decision: "decline", reason: "not this branch", actor });
+    await h.settle();
     expect(h.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-push", "decline");
   });
 
@@ -134,12 +154,13 @@ describe("a live session", () => {
     const h = harness();
     await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     h.emit({ type: "session-exited", code: 1, reason: "the runtime exited with 1" });
-    await flush();
+    await h.settle();
     expect(h.revokeTokens).toHaveBeenCalledWith(expect.objectContaining({ capsuleId: "WC-1", tokenId: "tok-1" }));
     expect(room.workspaceState["runtimeSession"]).toMatchObject({ status: "closed" });
     await expect(h.runtime.status("WC-1")).resolves.toMatchObject({ live: false });
     await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     await h.runtime.stop({ capsuleId: "WC-1", reason: "done", actor });
+    await h.settle();
     expect(h.session.close).toHaveBeenCalled();
     await expect(h.runtime.turn({ capsuleId: "WC-1", prompt: "x" })).resolves.toMatchObject({ error: "no_session" });
   });
@@ -185,7 +206,10 @@ it("advances queued room input only after the real adapter settles its root turn
     clientGaid: async () => null,
     issueToken: async () => ({ tokenId: "tok-root", plaintext: "dpfroom_test" }),
     revokeTokens: async () => 1,
+    commit: store.commit,
+    effects: store.effects,
   });
+  const flush = () => settle(runtime);
   try {
     await runtime.start({ capsuleId: "WC-1", provider: "codex", actor, prompt: "first" });
     await runtime.turn({ capsuleId: "WC-1", prompt: "second" });

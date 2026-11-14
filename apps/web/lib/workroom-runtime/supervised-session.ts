@@ -36,7 +36,23 @@ export type StoredRuntimeSession = {
   /** The newest room message already handed to the session, as a turn or as its context. */
   deliveredCursor?: string | null;
   lostReason?: string;
+  /**
+   * BI-C64EDA33: the provider process this record describes. A new process is
+   * a new generation; outbox effects decided for an older one are retired, not
+   * replayed.
+   */
+  generation?: string | null;
+  /** The portal process that holds the live session. */
+  hostId?: string | null;
+  /** Input that arrived while a turn ran: durable, so a restart keeps it. */
+  queuedInputs?: QueuedInput[];
+  /** The provider turn in progress, from the session's own turn events. */
+  activeTurnId?: string | null;
+  /** A turn was requested and has not reported started yet. */
+  turnPending?: boolean;
 };
+
+export type QueuedInput = { commandId: string; prompt: string };
 
 /** The provider client agent a session runs as; a session qualifier hangs from its GAID. */
 export function providerClientAgentId(provider: RuntimeProvider): "AGT-EXT-CLAUDE" | "AGT-EXT-CODEX" {
@@ -85,7 +101,21 @@ export function readStoredRuntimeSession(workspaceState: unknown): StoredRuntime
     ...(str("lastHeartbeatAt") ? { lastHeartbeatAt: str("lastHeartbeatAt") } : {}),
     deliveredCursor: str("deliveredCursor") ?? null,
     ...(str("lostReason") ? { lostReason: str("lostReason") } : {}),
+    generation: str("generation") ?? null,
+    hostId: str("hostId") ?? null,
+    queuedInputs: readQueuedInputs(record["queuedInputs"]),
+    activeTurnId: str("activeTurnId") ?? null,
+    turnPending: record["turnPending"] === true,
   };
+}
+
+function readQueuedInputs(value: unknown): QueuedInput[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const { commandId, prompt } = item as Record<string, unknown>;
+    return typeof commandId === "string" && typeof prompt === "string" ? [{ commandId, prompt }] : [];
+  });
 }
 
 /** The addressing fields a supervised-session decision reads. */

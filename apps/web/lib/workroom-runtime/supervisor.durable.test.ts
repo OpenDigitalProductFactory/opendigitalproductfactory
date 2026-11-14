@@ -1,17 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // BI-F5D58F29 (agent dialog broker item D, §7.1): supervision outlives the
-// portal process. A second supervisor over the same room and the same held
-// store stands in for the portal after a restart.
+// portal process. A second supervisor over the same room, the same held store
+// and the same room outbox stands in for the portal after a restart.
+// BI-C64EDA33: effects decided for the old process are retired, not replayed,
+// and input it never received stays queued (AC-4).
 
-const { db, recordActivity } = vi.hoisted(() => ({
-  db: { workroom: { findUnique: vi.fn(), update: vi.fn() }, $executeRaw: vi.fn() },
-  recordActivity: vi.fn(async (..._args: unknown[]) => ({ id: "act" })),
-}));
+const { db } = vi.hoisted(() => ({ db: { workroom: { findUnique: vi.fn() } } }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
-vi.mock("@/lib/work-capsules/work-capsule-activity-store", () => ({ recordWorkCapsuleActivity: recordActivity }));
 
 import { createMemoryHeldRequestStore } from "./__fixtures__/memory-held-request-store";
+import { createMemoryRuntimeStore } from "./__fixtures__/memory-runtime-store";
 import { createRuntimeSupervisor, REATTACH_HORIZON_MS, type RuntimeSupervisorDeps } from "./supervisor";
 import type { ExecutorAdapter, RuntimeEvent, RuntimeSession } from "./types";
 
@@ -19,6 +18,7 @@ const NOW = new Date("2026-11-11T05:00:00.000Z");
 const actor = { userId: "user-1", agentId: "agent-1", principalId: "prn-1" };
 const GAID = "gaid:priv:dpf.internal:agt-ext-codex";
 let room: { id: string; capsuleId: string; status: string; archivedAt: Date | null; workspaceState: Record<string, unknown>; taskRunId: string | null };
+let store: ReturnType<typeof createMemoryRuntimeStore>;
 
 function portal(held = createMemoryHeldRequestStore(), over: Partial<RuntimeSupervisorDeps> = {}) {
   let emit: (event: RuntimeEvent) => void = () => {};
@@ -50,21 +50,26 @@ function portal(held = createMemoryHeldRequestStore(), over: Partial<RuntimeSupe
     listSupervisedRooms: async () => [{ capsuleId: room.capsuleId, workspaceState: room.workspaceState }],
     onSupervisionLost,
     now: () => NOW,
+    commit: store.commit,
+    effects: store.effects,
     ...over,
   });
-  return { runtime, session, adapter, held, onSupervisionLost, revokeTokens, emit: (event: RuntimeEvent) => emit(event) };
+  const settle = async () => {
+    for (let i = 0; i < 4; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await runtime.drainEffects();
+    }
+  };
+  return { runtime, session, adapter, held, onSupervisionLost, revokeTokens, settle, emit: (event: RuntimeEvent) => emit(event) };
 }
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const stored = () => room.workspaceState["runtimeSession"] as Record<string, unknown>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   room = { id: "row-1", capsuleId: "WC-1", status: "working", archivedAt: null, workspaceState: {}, taskRunId: "TR-1" };
+  store = createMemoryRuntimeStore((capsuleId) => (capsuleId === "WC-1" ? room : null), () => NOW.getTime());
   db.workroom.findUnique.mockImplementation(async () => room);
-  db.workroom.update.mockImplementation(async ({ data }: { data: { workspaceState: Record<string, unknown> } }) => { room.workspaceState = data.workspaceState; return room; });
-  // writeSession sets only the runtimeSession key: jsonb_set(..., ${json}::jsonb) WHERE id = ${roomId}.
-  db.$executeRaw.mockImplementation(async (_sql: TemplateStringsArray, json: string) => { room.workspaceState = { ...room.workspaceState, runtimeSession: JSON.parse(json) }; return 1; });
 });
 
 describe("the supervision record", () => {
@@ -76,13 +81,14 @@ describe("the supervision record", () => {
       status: "supervised", addressedAs: `${GAID}#session=thr-1`, lastHeartbeatAt: NOW.toISOString(),
       actor: { userId: "user-1", agentId: "agent-1", principalId: "prn-1" },
     });
-    expect(recordActivity.mock.calls.some((call) => String((call as unknown as [unknown, { summary: string }])[1].summary).includes(`${GAID}#session=thr-1`))).toBe(true);
+    expect(store.activities.some((a) => a.summary.includes(`${GAID}#session=thr-1`))).toBe(true);
   });
 
   it("delivers a turn, moves the cursor, and queues behind a running turn", async () => {
     const before = portal();
     await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     await expect(before.runtime.deliver({ capsuleId: "WC-1", prompt: "room says hi", deliveredCursor: "cur-1" })).resolves.toMatchObject({ data: { outcome: "started" } });
+    await before.settle();
     expect(before.session.startTurn).toHaveBeenCalledWith("room says hi");
     expect(stored()).toMatchObject({ deliveredCursor: "cur-1" });
     await expect(before.runtime.deliver({ capsuleId: "WC-1", prompt: "and again", deliveredCursor: "cur-2" })).resolves.toMatchObject({ data: { outcome: "queued" } });
@@ -95,11 +101,13 @@ describe("after a portal restart (AC-ADB-13)", () => {
     const before = portal();
     await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     await before.runtime.deliver({ capsuleId: "WC-1", prompt: "x", deliveredCursor: "cur-1" });
+    await before.settle();
     const oldToken = stored()["tokenId"];
 
     const after = portal(before.held);
     expect(after.runtime.isLive("WC-1")).toBe(false);
     await expect(after.runtime.reattachSupervised()).resolves.toEqual({ reattached: ["WC-1"], lost: [], closed: [] });
+    await after.settle();
     expect(after.runtime.isLive("WC-1")).toBe(true);
     expect(after.adapter.openSession).toHaveBeenCalledWith(expect.objectContaining({ resumeThreadId: "thr-1" }), expect.any(Function));
     expect(after.revokeTokens).toHaveBeenCalledWith(expect.objectContaining({ tokenId: oldToken }));
@@ -112,6 +120,7 @@ describe("after a portal restart (AC-ADB-13)", () => {
     await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     const after = portal(before.held, { adapters: {} });
     await expect(after.runtime.reattachSupervised()).resolves.toMatchObject({ lost: ["WC-1"] });
+    await after.settle();
     expect(stored()).toMatchObject({ status: "supervision-lost", lostReason: expect.stringContaining("No codex runtime") });
     expect(after.onSupervisionLost).toHaveBeenCalledWith(expect.objectContaining({
       capsuleId: "WC-1", actingUserId: "user-1", addressedAs: `${GAID}#session=thr-1`, wakeCoordinator: true,
@@ -123,6 +132,7 @@ describe("after a portal restart (AC-ADB-13)", () => {
     room.workspaceState = { runtimeSession: { provider: "codex", threadId: "thr-old", tokenId: "tok-old", status: "open", openedAt: NOW.toISOString(), cwd: "/workspace" } };
     const after = portal();
     await expect(after.runtime.reattachSupervised()).resolves.toMatchObject({ lost: ["WC-1"] });
+    await after.settle();
     expect(after.adapter.openSession).not.toHaveBeenCalled();
     expect(after.revokeTokens).toHaveBeenCalledWith(expect.objectContaining({ tokenId: "tok-old" }));
   });
@@ -132,6 +142,7 @@ describe("after a portal restart (AC-ADB-13)", () => {
     room.workspaceState = { runtimeSession: { provider: "codex", threadId: "t", tokenId: "k", status: "supervised", openedAt: stale, lastHeartbeatAt: stale, cwd: "/workspace", actor } };
     const after = portal();
     await after.runtime.reattachSupervised();
+    await after.settle();
     expect(after.adapter.openSession).not.toHaveBeenCalled();
     expect(after.onSupervisionLost).toHaveBeenCalledWith(expect.objectContaining({ wakeCoordinator: false }));
   });
@@ -142,6 +153,7 @@ describe("after a portal restart (AC-ADB-13)", () => {
     room.status = "complete";
     const after = portal(before.held);
     await expect(after.runtime.reattachSupervised()).resolves.toMatchObject({ closed: ["WC-1"] });
+    await after.settle();
     expect(stored()).toMatchObject({ status: "closed" });
     expect(after.onSupervisionLost).not.toHaveBeenCalled();
   });
@@ -152,7 +164,7 @@ describe("a held request survives the restart and is still decidable (AC-3)", ()
     const before = portal();
     await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     before.emit({ type: "runtime-request", request: { requestId: "r-push", kind: "command", turnId: "t", summary: "git push origin feat", detail: {} } });
-    await flush();
+    await before.settle();
     expect(before.session.respondToRuntimeRequest).not.toHaveBeenCalled();
 
     const after = portal(before.held);
@@ -162,8 +174,9 @@ describe("a held request survives the restart and is still decidable (AC-3)", ()
     await expect(after.runtime.decide({ capsuleId: "WC-1", requestId: "r-push", decision: "decline", reason: "x", actor })).resolves.toMatchObject({ error: "already_decided" });
 
     await after.runtime.reattachSupervised();
+    await after.settle();
     after.emit({ type: "runtime-request", request: { requestId: "r-push-2", kind: "command", turnId: "t2", summary: "git push origin feat", detail: {} } });
-    await flush();
+    await after.settle();
     expect(after.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-push-2", "accept");
   });
 
@@ -172,17 +185,18 @@ describe("a held request survives the restart and is still decidable (AC-3)", ()
     await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     const fileChange = (requestId: string, path: string) => ({ type: "runtime-request" as const, request: { requestId, kind: "permission" as const, turnId: "t", summary: "widen its access", detail: { path } } });
     before.emit(fileChange("r-a", "/etc/hosts"));
-    await flush();
+    await before.settle();
     await before.runtime.decide({ capsuleId: "WC-1", requestId: "r-a", decision: "accept", reason: "ok", actor });
     before.emit(fileChange("r-b", "/root/.ssh"));
-    await flush();
+    await before.settle();
     expect(before.session.respondToRuntimeRequest).not.toHaveBeenCalledWith("r-b", "accept");
 
     await before.runtime.stop({ capsuleId: "WC-1", reason: "handover", actor });
+    await before.settle();
     const other = portal(before.held);
     await other.runtime.start({ capsuleId: "WC-1", provider: "codex", actor: { ...actor, userId: "user-2" } });
     other.emit(fileChange("r-c", "/etc/hosts"));
-    await flush();
+    await other.settle();
     expect(other.session.respondToRuntimeRequest).not.toHaveBeenCalledWith("r-c", "accept");
   });
 
@@ -190,10 +204,11 @@ describe("a held request survives the restart and is still decidable (AC-3)", ()
     const h = portal();
     await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     h.emit({ type: "runtime-request", request: { requestId: "r-in", kind: "command", turnId: "t", summary: "git push origin x", detail: {} } });
-    await flush();
+    await h.settle();
     h.held.rows.find((r) => r.request.requestId === "r-in")!.status = "declined"; // the inbox route's decision
     await expect(h.runtime.decide({ capsuleId: "WC-1", requestId: "r-in", decision: "accept", reason: "late", actor }))
       .resolves.toMatchObject({ success: true, message: expect.stringContaining("already decided decline") });
+    await h.settle();
     expect(h.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-in", "decline");
   });
 
@@ -201,8 +216,9 @@ describe("a held request survives the restart and is still decidable (AC-3)", ()
     const h = portal();
     await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
     h.emit({ type: "runtime-request", request: { requestId: "r-1", kind: "command", turnId: "t", summary: "curl https://x", detail: {} } });
-    await flush();
+    await h.settle();
     await h.runtime.decide({ capsuleId: "WC-1", requestId: "r-1", decision: "decline", reason: "no network", actor });
+    await h.settle();
     expect(h.session.respondToRuntimeRequest).toHaveBeenCalledWith("r-1", "decline");
   });
 
@@ -215,6 +231,50 @@ describe("a held request survives the restart and is still decidable (AC-3)", ()
     const after = portal(before.held);
     await after.runtime.decide({ capsuleId: "WC-1", requestId: row!.request.requestId, decision: "accept", reason: "docs", actor });
     await after.runtime.reattachSupervised();
+    await after.settle();
     await expect(after.runtime.claudePermission({ capsuleId: "WC-1", toolName: "WebFetch", toolInput: { url: "https://x" } })).resolves.toMatchObject({ behavior: "allow" });
+  });
+});
+
+describe("the room outbox across a restart (BI-C64EDA33, AC-4)", () => {
+  it("retires effects decided for the dead process, keeps unsent input queued, and runs it once the session is back", async () => {
+    const before = portal();
+    await before.runtime.start({ capsuleId: "WC-1", provider: "codex", actor, prompt: "first" });
+    await before.settle();
+    before.emit({ type: "turn-started", turnId: "turn-1" });
+    await before.settle();
+    // The portal dies while turn-1 runs: the next input is kept, never sent.
+    await before.runtime.turn({ capsuleId: "WC-1", prompt: "unsent" });
+    // And a step it was running when it died (an answer to its provider) never finished.
+    before.session.respondToRuntimeRequest.mockImplementationOnce(() => new Promise<void>(() => {}));
+    before.emit({ type: "runtime-request", request: { requestId: "r-local", kind: "command", turnId: "turn-1", summary: "pnpm test", detail: {} } });
+    for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    const answer = store.effectRows.find((e) => e.kind === "answer-request")!;
+    // Decided, and not yet answered (still queued, or in flight) when the process died.
+    expect(["pending", "running"]).toContain(answer.status);
+    expect(stored()["queuedInputs"]).toEqual([expect.objectContaining({ prompt: "unsent" })]);
+
+    const after = portal(before.held);
+    await after.runtime.reattachSupervised();
+    await after.settle();
+    // The dead process's answer is retired, not replayed into the new session.
+    expect(answer.status).toBe("retired");
+    expect(after.session.respondToRuntimeRequest).not.toHaveBeenCalled();
+    expect(store.kinds()).toContain("effect-retired");
+    // The kept input runs as the re-attached session's first turn.
+    expect(after.session.startTurn).toHaveBeenCalledWith("unsent");
+    expect(stored()).toMatchObject({ queuedInputs: [], status: "supervised" });
+  });
+
+  it("a retried command acts once: the same command id replays its reply and adds no effect", async () => {
+    const h = portal();
+    await h.runtime.start({ capsuleId: "WC-1", provider: "codex", actor });
+    await h.settle();
+    const first = await h.runtime.turn({ capsuleId: "WC-1", prompt: "once", commandId: "cmd-1" });
+    const again = await h.runtime.turn({ capsuleId: "WC-1", prompt: "once", commandId: "cmd-1" });
+    expect(again).toEqual(first);
+    await h.settle();
+    expect(h.session.startTurn).toHaveBeenCalledTimes(1);
+    expect(store.effectRows.filter((e) => e.kind === "start-turn")).toHaveLength(1);
   });
 });
