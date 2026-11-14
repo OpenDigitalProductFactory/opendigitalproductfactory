@@ -384,3 +384,152 @@ same design scope, reconcile the original design-spec task, and obtain the norma
 reviewer's disposition of substantive corrections. Until then the original
 approval failure and AC-3 hold remain; no new assessment key, replacement review,
 test-only merge or live upgrade can stand in for them.
+
+## Unselected construction: closed protected-claim worker
+
+This is a substantive production-dispatch alternative for decision and review,
+not an approved implementation plan. Kernel comparison `DI-6DC15A3648AE` ranked
+it highest with low confidence and `autonomyEligible: false`; operator ratification
+is required before selecting it. Do not rescore unchanged facts to evade that
+condition. The earlier feasibility decision does not approve this alternative.
+
+### Scope and actual entrypoint
+
+Source search found one non-test direct caller of `claimWorkCapsuleScope`:
+`mcp-handlers.ts`, within `claimCapsuleScopeTool`. The public MCP pack's
+`claimScope` currently creates the outer `receiptedWorkroomTool` wrapper. The
+alternative relocates that *entire* wrapped invocation into one closed worker;
+it cannot start a parent receipt transaction and then dispatch the child.
+The source worker becomes the declared actual production writer for this path.
+Its TypeScript import graph must be built, bound and tested as that writer;
+presence of `web-src` or a `tsx` binary proves neither compatibility nor
+equivalence to the existing Next.js standalone graph.
+
+All public calls, including refreshes, must use the selected dispatch path; no
+fallback may publish a new epoch in the parent. The core requires independently
+validated worker process/runtime evidence in addition to its current actor,
+lease, authorization, scope, retirement and transaction checks. An environment
+flag or caller-supplied context cannot establish worker authority. Add a source
+invariant for every non-test direct caller and test refusal of a parent-process
+attempt to invoke the core. These changes require review of the production
+writer contract, not just qualification-profile approval.
+
+### Parent, child and authority boundaries
+
+Keep the authentic canonical portal ID, project, image and retirement evidence
+separate from the child writer ID, image and process generation. Never label a
+child as the canonical portal or substitute its ID into a retirement receipt.
+The existing server owner validates canonical evidence and launches the child
+from the exact admitted image. A reviewed proof extension must bind both
+identities and their relationship; the current PID/hostname brand is insufficient.
+The child receives no retirement signing secret and cannot manufacture a matching
+SelfUpgradeRun. Qualification binds its candidate separately from the canonical
+parent rather than pretending an uninstalled candidate was already deployed.
+
+The inherited, producer-owned channel carries one bounded invocation: original
+user/principal/agent and authority-decision references, original stable command
+identity, normalized payload digest, exact room row, source/profile identities,
+deadline and a producer challenge. It carries no caller-authored command, module
+path, executable, Docker arguments or database URL. The standard server boundary
+and child both revalidate their applicable current authority; the child reads
+current lease and preconditions before the actual write. A prior authorization
+decision or valid channel is not a grant. The reviewed implementation must name
+the existing token/session and grant checks used for this revalidation, including
+revocation and actor-confusion tests, before the design is ready for approval.
+
+### Closed real observation transport
+
+Extend the existing Docker adapter/Edge action and result owners, without adding
+a generic service or shell tool. The child has no Docker socket or host mount.
+Its producer-owned inherited channel supports only the typed observations the
+existing qualifier needs: daemon identity, bounded inventory, the exact admitted
+project's container identities, exact full-ID inspection, canonical-actuator
+absence, and a pinned-image packaged probe. The producer constructs the argument
+vectors from immutable binding fields and fixed templates. It returns actual
+daemon responses and bounded observation references, never successful fixtures.
+
+Only the producer can create the probe. Its immutable recipe has a producer-owned
+name, pinned image ID, no network or mounts, read-only root, dropped capabilities,
+no privilege escalation and fixed resource limits. Inspection, termination and
+cleanup accept only that owned probe's full ID. Unknown operations, arbitrary
+filters, paths, image overrides, volume declarations and commands refuse before
+Docker invocation. Production and qualification use the same typed observation
+algorithm and validation; their resource/authority bindings remain distinct.
+Protocol, adapter and daemon error paths must preserve negative or inconclusive
+results, with no substitution of a host-authored test log for machine evidence.
+
+### Whole transaction, lost replies and process closure
+
+Only the child owns `prepareScopeClaim`, `receiptedWorkroomTool` and the actual
+claim/activity/receipt transaction. Preserve the existing command authority scope,
+payload binding and command/admission/room lock order. Use the original stable
+command ID across process or transport recovery. A request lacking a stable
+server-validated identity cannot use a fresh random ID on each retry; its normal
+entry boundary must supply the existing tool-execution identity or refuse safely.
+
+The producer observes child identity and owned resource closure independently.
+Parent death, child death, deadline, lost reply and late completion are distinct
+outcomes. A lost reply is unknown until current authorization permits readback of
+the original durable receipt and the owned child's state. A matching committed
+receipt settles that original command; a conflicting payload refuses. Absent a
+receipt, do not start another child until original process closure and transaction
+abort are established. Existing command serialization prevents duplicate effects
+but does not, by itself, prove single-start or resource cleanup. The design must
+resolve that launch/recovery ownership through the existing action lifecycle;
+no new ledger or optimistic retry is proposed.
+
+The candidate worker recipe must exclude writable application code, host mounts,
+unreviewed preloads/loaders, inspector access, executable writable paths and
+unadmitted code-changing writers for its entire lifetime. Bind all runtime and
+native dependencies, not just TypeScript files. Producer-enforced database and
+network reservations give the qualification worker access only to its test
+resources; the production worker uses its independently authorized production
+binding. Merely omitting an environment variable does not enforce this separation.
+
+### Additional source checks and explicit unsupported reuse
+
+`workCapsuleActor` resolves the OAuth human principal independently of the shared
+assistant and retains `apiTokenId` as `taskAuthorityTokenId`. Preserve that
+distinction in any delegation. `mcp-task-background-worker.ts` already rechecks
+the submitting credential's user, revocation and capability, using
+`OAUTH_EXECUTION_AUTHORITY_SELECT` and `isCurrentOAuthExecutionAuthority` for OAuth.
+Those are source anchors for a shared credential revalidation function, not a
+claim that an ordinary tool call can use TaskRun reconstruction unchanged.
+Session JWT and internal coworker calls need their own currently authenticated
+context retained and revalidated through the existing governed tool preflight;
+do not invent a PAT or replace their actor with the producer's identity.
+
+`RemoteAction` has a unique action key, existing approval state, signed dispatch
+identity and terminal result. `claimActionsForNode` enforces current trusted-node
+and action-policy admission. These are candidate launch-ownership primitives,
+not automatic approval for a new protected writer action. Its
+`timeoutStaleClaims` updates a status: that does not prove the external process
+stopped or its transaction rolled back. A reviewed action extension must
+reconcile actual owned-process closure and original receipt before permitting a
+second launch. No generic timeout-to-retry rule is acceptable.
+
+The dispatcher's current secret-decryption branch is specific to organization
+join imports. It is not a general database-credential delivery facility and must
+not be reused under another action's parameters. The closed writer proposal
+still needs a reviewed machine-owned credential channel and destination-bound
+database reservation. No database secret may be persisted in ordinary action
+parameters, tool history, model context or shared evidence. These concrete
+unsupported interfaces are design work still owed, not permission to add a
+generic secret-export or execution capability.
+
+### Decision and verification still owed
+
+Before selection, finish the exact authority-revalidation, packaged-entrypoint
+and launch/recovery contracts above and assess the startup/latency/resource cost
+against the original in-process path. No measured cost or feasible import-closure
+fit is currently claimed. Compare this bounded writer change against a qualified
+in-process closure mechanism and the broader immutable-portal alternative using
+new evidence, not more favorable scores for unchanged facts.
+
+If selected and normally approved, planned verification includes real served
+MCP dispatch, the actual child-owned claim and receipt transaction, both transition
+lock orders, meaningful post-qualification code/cohort mutation, every named
+crash boundary, parent-death/lost-reply/late-child reconciliation, refusal of
+forged actor/command/runtime bindings and production-resource exclusion. Canonical
+deployment and real acquisition/refusal evidence remain AC-4 obligations. A
+successful design decision would authorize neither those executions nor delivery.
