@@ -144,3 +144,11 @@ Guards: `work-capsules/mcp-handlers.ts` is at 800 LOC, so nothing is added there
 - **AC-4:** restart retires process-bound effects and keeps unsent input (PR 1).
 - **AC-5:** claim, worktree and session form one resumable saga (PR 3).
 - **Room rows:** the broker's existing wake, push and supervised-turn tests pass after PR 2.
+
+The item's criteria, word for word:
+
+- AC-1: Runtime commands are decided without I/O. Activity rows, the room projection, the receipt and any outbox rows commit in one transaction.
+- AC-2: A leased effect worker runs side effects and reports back as commands. An acknowledgement means only that the intent committed.
+- AC-3: Server-originated commands use deterministic ids, so a retry is idempotent.
+- AC-4: On restart, effects tied to a lost provider process are retired, not replayed. Unsent input stays queued.
+- AC-5: Claim, worktree and session start form one resumable saga. An adopt-then-claim cannot leave a half-made room.
