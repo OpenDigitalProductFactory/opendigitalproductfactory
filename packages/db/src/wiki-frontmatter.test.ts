@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveSlug,
+  entityKindOfId,
+  extractEntityIds,
   extractWikilinks,
   kernelWikiPageSlug,
   parseFrontmatter,
@@ -120,5 +122,46 @@ describe("extractWikilinks — the one link extractor (BI-23900D0A)", () => {
 
   it("still ignores malformed brackets and slugs with spaces", () => {
     expect(extractWikilinks("[[ spaced slug ]] [[ok|label]] [[|no-slug]]")).toEqual(["ok"]);
+  });
+});
+
+describe("extractEntityIds — the one entity-id extractor (BI-A63A9476)", () => {
+  it("finds backlog, epic, document, knowledge-article and Workroom ids in first-seen order, deduped", () => {
+    const body = "See BI-A63A9476 and EP-0237A305, then DOC-12AB, KA-001, WC-PIR-825D3487 and BI-A63A9476 again.";
+    expect(extractEntityIds(body)).toEqual(["BI-A63A9476", "EP-0237A305", "DOC-12AB", "KA-001", "WC-PIR-825D3487"]);
+  });
+
+  it("keeps multi-segment ids whole", () => {
+    expect(extractEntityIds("Owned by BI-MCP-EFF-4F823E5B.")).toEqual(["BI-MCP-EFF-4F823E5B"]);
+  });
+
+  it("does not match inside another key or a mixed-case word", () => {
+    expect(extractEntityIds("ACT-WC-123 xBI-123 BI-12ab foo-EP-9")).toEqual([]);
+  });
+
+  it("skips fenced code, inline code and URLs", () => {
+    const body = [
+      "Real: BI-AAA111",
+      "```",
+      "BI-CODE01",
+      "```",
+      "Inline `EP-CODE02` here.",
+      "Link https://example.com/items/BI-URL003 and [text](https://x.test/EP-URL004).",
+      "Bare www.example.com/DOC-URL005 too.",
+    ].join("\n");
+    expect(extractEntityIds(body)).toEqual(["BI-AAA111"]);
+  });
+
+  it("never claims @mentions", () => {
+    expect(extractEntityIds("@BI-123 asked")).toEqual([]);
+  });
+
+  it("maps an id prefix to its entity kind", () => {
+    expect(entityKindOfId("BI-1")).toBe("backlog");
+    expect(entityKindOfId("EP-1")).toBe("epic");
+    expect(entityKindOfId("DOC-1")).toBe("document");
+    expect(entityKindOfId("KA-1")).toBe("knowledge-article");
+    expect(entityKindOfId("WC-1")).toBe("workroom");
+    expect(entityKindOfId("XX-1")).toBeNull();
   });
 });

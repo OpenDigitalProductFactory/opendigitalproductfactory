@@ -495,6 +495,11 @@ export async function saveManagedDocument(input: SaveManagedDocumentInput, db: D
   }
 
   await projectDocumentReferencesToGraph(projected.id, db).catch(() => null);
+  // BI-A63A9476: entity ids in the new current version become MENTIONS edges.
+  if (db === prisma) {
+    const { referenceWriter, syncDocumentReferences } = await import("@/lib/references/sync-references");
+    await syncDocumentReferences(projected.documentId, referenceWriter({ principalId: input.actorPrincipalId }));
+  }
 
   // An office file is a blob nothing can search or preview until the rendition
   // job derives its PDF and text (BI-9D43CBEF). Best effort: never fails the save.

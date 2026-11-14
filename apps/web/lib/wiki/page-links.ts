@@ -10,6 +10,7 @@
 import { projectWikiLinksToGraph } from "@dpf/db/graph-sync";
 import { replaceWikiPageOutLinks, type WikiLinkClient } from "@dpf/db/wiki-store";
 
+import { syncWikiPageReferences } from "@/lib/references/sync-references";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
@@ -19,8 +20,11 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
  */
 export async function syncWikiPageLinks(
   db: WikiLinkClient,
-  page: { pageId: string; organizationId: string | null; body: string },
+  page: { pageId: string; organizationId: string | null; body: string; slug?: string },
+  writtenBy: string | null = null,
 ): Promise<{ error: string | null }> {
+  // BI-A63A9476: the body's entity ids become MENTIONS edges (never fails the write).
+  await syncWikiPageReferences(page, writtenBy);
   try {
     const result = await replaceWikiPageOutLinks(db, page, projectWikiLinksToGraph);
     if (result.projectionError) {

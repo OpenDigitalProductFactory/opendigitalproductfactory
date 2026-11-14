@@ -17,6 +17,8 @@
 // could disagree about what a page links to.
 import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
 
+import { detectKernelEntityCitations, detectScopeCrossingReferences, type LintReferenceEdge } from "./reference-lint-detectors";
+
 // ─── Finding shape ──────────────────────────────────────────────────────────
 
 /** Mirrors the `WikiLintFinding.findingKind` enum on the Prisma model. */
@@ -45,7 +47,10 @@ export type LintFindingKind =
   | "principle-ring-scope-unknown"
   | "principle-ring-scope-overuse"
   // ─── Profession corpus (WSID Phase 2, BI-871126F9) ────────────────────────
-  | "profession-unsourced-page";
+  | "profession-unsourced-page"
+  // ─── Entity references (BI-A63A9476) ──────────────────────────────────────
+  | "scope-crossing-reference"
+  | "kernel-entity-citation";
 
 /** Mirrors the `WikiLintFinding.severity` enum. */
 export type LintSeverity = "info" | "warn" | "error";
@@ -413,8 +418,12 @@ export function runDetectors(input: {
   currentKernelVersion: string;
   staleThresholdDays?: number;
   now?: Date;
+  /** Stored MENTIONS edges (BI-A63A9476); omitted, the edge check is skipped. */
+  references?: LintReferenceEdge[];
 }): LintFinding[] {
   return [
+    ...detectKernelEntityCitations({ pages: input.pages }),
+    ...detectScopeCrossingReferences({ references: input.references ?? [] }),
     ...detectOrphans({
       pages: input.pages,
       links: input.links,

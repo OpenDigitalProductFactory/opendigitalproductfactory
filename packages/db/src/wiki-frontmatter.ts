@@ -259,9 +259,54 @@ export function extractWikilinks(body: string): string[] {
 
 const SOLE_WIKILINK = /^\[\[[a-zA-Z0-9/_-]+(?:\|[^\]\n]*)?\]\]$/;
 
+// ─── Entity-id extractor ────────────────────────────────────────────────────
+
+/** The entity kinds an id written in a body can name (spec 2026-10-14 §3.2). */
+export type EntityIdKind = "backlog" | "epic" | "document" | "knowledge-article" | "workroom";
+
+const ENTITY_ID_KINDS: Record<string, EntityIdKind> = {
+  BI: "backlog",
+  EP: "epic",
+  DOC: "document",
+  KA: "knowledge-article",
+  WC: "workroom",
+};
+
+/**
+ * One entity id (spec §3.4). The lookbehind stops a match inside a longer key
+ * such as `ACT-WC-…` and never claims an `@` mention (people mentions belong to
+ * EP-D7361FCF). The lookahead stops a match that runs into a lower-case word,
+ * so `BI-12ab` is not read as `BI-1`.
+ */
+export const ENTITY_ID_PATTERN = /(?<![A-Za-z0-9@_-])(BI|EP|DOC|KA|WC)-[A-Z0-9]+(?:-[A-Z0-9]+)*(?![A-Za-z0-9_])/g;
+
+const URL_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>()]+/gi;
+const LINK_DESTINATION = /\]\([^)\n]*\)/g;
+
+/** The kind an entity id names, or null for an id this parser does not know. */
+export function entityKindOfId(id: string): EntityIdKind | null {
+  return ENTITY_ID_KINDS[id.slice(0, id.indexOf("-"))] ?? null;
+}
+
+/**
+ * Extract every entity id (`BI-…`, `EP-…`, `DOC-…`, `KA-…`, `WC-…`) written in a
+ * body, deduped in first-seen order (BI-A63A9476). The sibling of
+ * `extractWikilinks`: the reference writer, the renderer's id resolution and
+ * lint all call it. Ids inside fenced code, inline code and URLs are not
+ * references and are skipped.
+ */
+export function extractEntityIds(body: string): string[] {
+  const text = stripMarkdownCode(body ?? "", () => false)
+    .replace(LINK_DESTINATION, "]")
+    .replace(URL_TEXT, " ");
+  const ids = new Set<string>();
+  for (const m of text.matchAll(ENTITY_ID_PATTERN)) ids.add(m[0]);
+  return Array.from(ids);
+}
+
 /** Blank out fenced code blocks (``` or ~~~) and inline code spans, keeping a
- *  span whose whole content is one wikilink. */
-function stripMarkdownCode(body: string): string {
+ *  span whose whole content is one wikilink (or what `keepSpan` keeps). */
+function stripMarkdownCode(body: string, keepSpan: (inner: string) => boolean = (inner) => SOLE_WIKILINK.test(inner.trim())): string {
   const lines = body.split("\n");
   let fence: string | null = null;
   const kept: string[] = [];
@@ -277,7 +322,7 @@ function stripMarkdownCode(body: string): string {
       kept.push("");
       continue;
     }
-    kept.push(line.replace(/`([^`\n]*)`/g, (_span, inner: string) => (SOLE_WIKILINK.test(inner.trim()) ? inner : "")));
+    kept.push(line.replace(/`([^`\n]*)`/g, (_span, inner: string) => (keepSpan(inner) ? inner : "")));
   }
   return kept.join("\n");
 }

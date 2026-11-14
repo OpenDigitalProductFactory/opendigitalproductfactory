@@ -120,3 +120,31 @@ describe("renderMarkdown", () => {
     expect(renderMarkdown("# a")).toBe("<h1>a</h1>\n");
   });
 });
+
+describe("renderMarkdown — entity references (BI-A63A9476, dpf_entity_ref)", () => {
+  const readable: Record<string, string> = { "BI-AAA111": "/ops?itemId=BI-AAA111", "EP-BBB222": "/ops#EP-BBB222" };
+  const entityRefHref = (id: string) => readable[id] ?? null;
+
+  it("links an id the reader can open", () => {
+    const html = renderMarkdown("Blocked by BI-AAA111 under EP-BBB222.", { entityRefHref });
+    expect(html).toContain('<a href="/ops?itemId=BI-AAA111">BI-AAA111</a>');
+    expect(html).toContain('<a href="/ops#EP-BBB222">EP-BBB222</a>');
+  });
+
+  it("renders an unknown id and an unreadable id identically, as plain text", () => {
+    const unknown = renderMarkdown("See BI-UNKNOWN9.", { entityRefHref });
+    const unreadable = renderMarkdown("See BI-HIDDEN99.", { entityRefHref });
+    expect(unknown).toBe("<p>See BI-UNKNOWN9.</p>\n");
+    expect(unreadable).toBe("<p>See BI-HIDDEN99.</p>\n");
+    expect(unknown.replace("UNKNOWN9", "X")).toBe(unreadable.replace("HIDDEN99", "X"));
+  });
+
+  it("without a resolver (kernel pages) every id stays text", () => {
+    expect(renderMarkdown("Cites BI-AAA111.")).toBe("<p>Cites BI-AAA111.</p>\n");
+  });
+
+  it("leaves ids in code, inside existing links and inside longer keys alone", () => {
+    const html = renderMarkdown("`BI-AAA111` [label BI-AAA111](https://x.test) ACT-BI-AAA111", { entityRefHref });
+    expect(html).not.toContain('href="/ops?itemId=BI-AAA111"');
+  });
+});
