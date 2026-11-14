@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Plan — Situational LLM Call Parameterization
@@ -18,6 +18,8 @@ status: draft
 | BI-DBAFEC10 | Effort expression across all providers, proportional budgets | §3 | landed |
 | BI-5C48438C | Sampling and constrained decoding reach local | §4 | landed (partial — see below) |
 | BI-8B2DB9E8 | Native `/api/chat` for `top_k`, `min_p`, per-request `num_ctx` | §4 | request builder landed, transport off by default |
+| BI-B4081AA1 | The audit log records how a model was called, with provenance | §5 | landed |
+| BI-4690CB37 | Route-audit panels read their copy from the message catalog | §5 | landed |
 | BI-B4081AA1 | Parameters and provenance in the explanation | §6 | landed — persisted on the audit record and shown in the audit row |
 
 Every spec section maps to at least one item; no item is spec-less.
@@ -121,3 +123,51 @@ Last, because it displays what Phases 2–4 produce. Parameter line in `formatDe
 Local serving-engine work — speculative decoding, KV-cache quantization, prefix caching — is real and adjacent but is a serving concern, not a call-parameter concern. It deserves its own design against the local-stack specs.
 
 A learned/semantic router is evaluated and rejected in the design's Research & Benchmarking section; revisit when production reward data exists to train on.
+
+---
+
+## Acceptance coverage — BI-B4081AA1 and BI-4690CB37 (Phase 5)
+
+Phase 5's acceptance criteria, quoted from `BI-B4081AA1`, each against the deliverable that satisfies it. Two deliverables, both independently shippable; the second depends on the first.
+
+### `call-parameter-receipt` — a route decision records its call parameters with per-value provenance
+
+Satisfies AC-1 through AC-6 and AC-8.
+
+- **AC-1** A persisted route decision carries the wire parameters actually sent — temperature, top_p, top_k and the effort expression — and not a recomputation of them.
+- **AC-2** Each recorded parameter names the layer that set it: vendor floor, contract family, recipe, or operator override. A reader can tell an operator's choice from a vendor default without reading code.
+- **AC-3** A route decision states the resulting determinism in words, so a non-technical operator can read variability without interpreting a temperature number.
+- **AC-4** A run that routed below the quality floor is countable from the log. `qualityFloorRelaxed` reaches a persisted column instead of being discarded mid-flight.
+- **AC-5** Parameters that a local provider's OpenAI-compatible endpoint silently discards are either delivered by a transport that carries them, or the loss is recorded. Neither is silent.
+- **AC-6** The native local transport is off by default, so local dispatch does not change behaviour on merge.
+- **AC-8** Two migrations add the columns, each with a data-impact attestation under `changes/`.
+
+Contracts: [`call-parameter-receipt.ts`](../../../apps/web/lib/routing/call-parameter-receipt.ts) · [`local-native-request.ts`](../../../apps/web/lib/routing/local-native-request.ts) · `packages/db/prisma/migrations/20260923010000_route_decision_call_parameters/migration.sql` · `packages/db/prisma/migrations/20260924010000_route_decision_routing_confidence/migration.sql`
+
+Flows: [`loader.ts`](../../../apps/web/lib/routing/loader.ts) · [`RouteDecisionLogClient.tsx`](../../../apps/web/components/platform/RouteDecisionLogClient.tsx)
+
+Verification: local-CI gate PASS on `d7e2da70186155e87c5f00604e7729e1dd080a49` · `changes/route-decision-call-parameters.data-impact.json` · `changes/route-decision-routing-confidence.data-impact.json`
+
+### `route-audit-localization` — the route-audit panels read their copy from the message catalog
+
+Satisfies AC-7. Depends on `call-parameter-receipt`.
+
+- **AC-7** Both audit panels read their copy from the message catalog; no user-facing string is hard-coded in JSX.
+
+Contracts: `packages/i18n/src/messages/en-US/routeAudit.json` · `packages/i18n/src/catalog.ts`
+
+Flows: `apps/web/app/(shell)/platform/audit/routes/page.tsx`
+
+Verification: `scripts/check-no-unlocalized-ui.mjs` · `scripts/prose-lint-baseline.json`
+
+### Across both
+
+- **AC-9** The full unit suite and package typecheck pass, and the local-CI gate passes on the exact pushed head.
+
+2824 tests passing, typecheck clean, gate PASS on `d7e2da70186155e87c5f00604e7729e1dd080a49`.
+
+### What Phase 5 did not deliver
+
+A true UX measurement. Production refuses `issue_ux_verification_sign_in` until an operator records `automation.signIn.enabled`. The UX-Fit gate's silence on this branch is structural — localizing the copy moved it out of JSX, so the detector no longer trips — which is an argument, not a measurement. Phase 5's §4.3 gate is therefore **unrun, not passed**.
+
+The parameter line is on the audit panels rather than in `formatDecisionForUser` as this plan first sketched: that function was found to have zero callers, so wiring it would have added a surface nobody reads. The provenance display landed on the route-audit log, not `platform/ai/routing`; the newer `RoutingManagementInspector` is the intended second consumer and should read `callParameters` rather than recompute it.
