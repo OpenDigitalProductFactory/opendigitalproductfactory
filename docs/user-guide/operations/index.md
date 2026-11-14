@@ -26,7 +26,15 @@ Below it are five counts, each with the mark it uses on the map:
 
 Select a count to highlight those rooms and dim the rest. Select it again to show every state. A renewed session lease alone does not mean work is progressing.
 
-The map draws one square per room. Rooms group by portfolio (Manufacturing and Delivery first, **Not yet placed** last), then by delivery shape (**Unshaped** when a room declares none). Within a shape, rooms that need a look sit at the left. Each portfolio heading gives its totals, for example "118 rooms · 18 need you · 7 stuck". Select a portfolio name to show only that portfolio. Select any square to open its room.
+The map draws one square per room. Rooms group by portfolio (Manufacturing and Delivery first, **Not yet placed** last), then by delivery shape (**Unshaped** when a room declares none). Within a shape, rooms that need a look sit at the left. Each portfolio heading gives its totals, for example "118 rooms · 18 need you · 7 stuck". Select a portfolio name to show only that portfolio.
+
+Select any square, or a room in the rows, to open the **room inspector** beside the map (below it on a phone). It shows the room's steps as a checklist: done, the current step, and still to do. The steps are the same ones the room's own page shows. Below the checklist are:
+- the latest thing recorded in the room;
+- who the room is waiting on, or, for a held room, the recorded cause and recovery condition;
+- the accountable person and portfolio;
+- how long the room has been at this step against the usual time, once enough rooms have passed through it.
+
+**Open room** goes to the room's page, **Show in flow map** goes to the shape's map in the area's Work view, and **Close** returns to the map. The selected room is part of the address (`?room=WC-…`), so you can share it.
 
 Select a shape's name to open its rows. Each row shows the room, its stage rail (done, current, still to do) and what it is doing or why it is held, with its accountable person. A held room shows the drive's recorded cause and since when. Rows show eight at a time; filter by state to narrow the rest. **Not assigned** accountability means no person has been resolved; the page does not guess from who started the session.
 
